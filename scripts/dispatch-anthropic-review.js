@@ -23,7 +23,7 @@
 // schemes should be added behind explicit adapter configuration, not by default.
 //
 // OUTPUT: one JSON object on stdout (same shape as dispatch-review.sh):
-//   { runner, model, status, verdict, findings, raw_log, error }
+//   { runner, model, status, verdict, findings, no_finding_proof, raw_log, error }
 // In --raw mode, outputs ONLY the raw model response text to stdout; NO review JSON.
 //
 // EXIT: 0 = reviewed ; 1 = no_verdict (HTTP/timeout/unparseable) ; 2 = precondition_failed
@@ -254,6 +254,7 @@ function buildPrompt(diffText) {
     'Output your verdict in EXACTLY this format and nothing else:',
     'VERDICT: <SHIP-AS-IS | FIX-THEN-SHIP>',
     'FINDINGS: <one finding per line, or the single word none>',
+    'NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>',
     '',
     'Bounded convergence contract:',
     '- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.',
@@ -261,6 +262,7 @@ function buildPrompt(diffText) {
     '- Prefix every item MUST-FIX or CUT/FOLLOW-UP. MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks.',
     '- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.',
     '- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.',
+    '- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.',
     '',
     'Diff under review:',
     '```',
@@ -299,7 +301,9 @@ function emitResult(result) {
   process.stdout.write(
     `{ "runner": ${jsonField(result.runner)}, "model": ${jsonField(result.model)}, `
     + `"status": ${jsonField(result.status)}, "verdict": ${jsonField(result.verdict)}, `
-    + `"findings": ${jsonField(result.findings)}, "raw_log": ${jsonField(result.raw_log)}, `
+    + `"findings": ${jsonField(result.findings)}, `
+    + `"no_finding_proof": ${jsonField(result.no_finding_proof)}, `
+    + `"raw_log": ${jsonField(result.raw_log)}, `
     + `"error": ${jsonField(result.error)} }\n`,
   );
 }
@@ -311,6 +315,7 @@ function diePrecondition(model, error) {
     status: 'precondition_failed',
     verdict: null,
     findings: '',
+    no_finding_proof: null,
     raw_log: null,
     error,
   });
@@ -324,6 +329,7 @@ function dieNoVerdict(model, rawLog, error) {
     status: 'no_verdict',
     verdict: null,
     findings: '',
+    no_finding_proof: null,
     raw_log: rawLog,
     error,
   });
@@ -333,6 +339,7 @@ function dieNoVerdict(model, rawLog, error) {
 function parseVerdict(text) {
   const lines = text.split(/\r?\n/);
   const verdictLines = [];
+  const proofLines = [];
   let findingsIndex = -1;
   let inFence = false;
 
@@ -348,6 +355,10 @@ function parseVerdict(text) {
     }
     if (findingsIndex < 0 && /^\s*FINDINGS:/.test(line)) {
       findingsIndex = index;
+      return;
+    }
+    if (/^NO-FINDING-PROOF:/.test(line)) {
+      proofLines.push(line);
     }
   });
 
@@ -373,13 +384,50 @@ function parseVerdict(text) {
         findingsFence = !findingsFence;
         continue;
       }
-      if (!findingsFence && /^\s*VERDICT:/.test(line)) break;
+      if (!findingsFence && (/^\s*VERDICT:/.test(line) || /^NO-FINDING-PROOF:/.test(line))) break;
       if (line.trim()) collected.push(line.trim());
     }
     findings = collected.length ? collected.join('\n') : 'none';
   }
 
-  return { verdict, findings, hasFindings };
+  const noFindingProof = proofLines.length === 1
+    ? proofLines[0].replace(/^NO-FINDING-PROOF:\s*/, '').trim()
+    : '';
+  return {
+    verdict,
+    findings,
+    hasFindings,
+    proofLineCount: proofLines.length,
+    noFindingProof,
+  };
+}
+
+function validateNoFindingProof(proof) {
+  const match = /^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$/.exec(proof);
+  if (!match) return false;
+  const tautologies = new Set([
+    '',
+    'none',
+    'no finding',
+    'no findings',
+    'no must-fix',
+    'no must-fix remains',
+    'n/a',
+    'na',
+    'checked',
+    'all passed',
+    'looks good',
+    'diff',
+    'tests',
+    'spec',
+    'code',
+    'acceptance criteria',
+    'requirements satisfied',
+  ]);
+  return match.slice(1).every((value) => {
+    const normalized = value.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
+    return !tautologies.has(normalized);
+  });
 }
 
 function extractResponseText(body) {
@@ -609,7 +657,13 @@ async function main() {
     process.stdout.write(text);
     process.exit(0);
   }
-  const { verdict, findings, hasFindings } = parseVerdict(text);
+  const {
+    verdict,
+    findings,
+    hasFindings,
+    proofLineCount,
+    noFindingProof,
+  } = parseVerdict(text);
   if (verdict !== 'SHIP-AS-IS' && verdict !== 'FIX-THEN-SHIP') {
     failNoVerdict(
       rawLog,
@@ -619,6 +673,19 @@ async function main() {
   if (!hasFindings) {
     failNoVerdict(rawLog, 'missing parseable FINDINGS line — fail-closed, NOT a pass');
   }
+  if (verdict === 'SHIP-AS-IS') {
+    if (proofLineCount !== 1) {
+      failNoVerdict(rawLog, 'SHIP-AS-IS requires exactly one anchored NO-FINDING-PROOF line');
+    }
+    if (!validateNoFindingProof(noFindingProof)) {
+      failNoVerdict(
+        rawLog,
+        'NO-FINDING-PROOF must contain non-tautological checked, evidence, and conclusion fields',
+      );
+    }
+  } else if (proofLineCount !== 0) {
+    failNoVerdict(rawLog, 'FIX-THEN-SHIP must omit NO-FINDING-PROOF');
+  }
 
   emitResult({
     runner: RUNNER,
@@ -626,6 +693,9 @@ async function main() {
     status: 'reviewed',
     verdict,
     findings: redactForLog(findings || 'none', token),
+    no_finding_proof: verdict === 'SHIP-AS-IS'
+      ? redactForLog(noFindingProof, token)
+      : null,
     raw_log: rawLog,
     error: null,
   });

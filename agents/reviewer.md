@@ -57,6 +57,10 @@ hunt for more defects.
 - When the **MUST-FIX list is empty** and the supplied acceptance evidence passes, the review is
   finished and the verdict must pass. Never prolong the loop with new wish-list items or renamed
   versions of requirements the current artifact already satisfies.
+- A no-finding verdict must carry a concrete **no-finding proof receipt** naming the acceptance
+  surfaces checked, evidence observed, and why no MUST-FIX remains. `none`, `no findings`, `looks
+  good`, or `all passed` alone are invalid. This receipt is an auditable reviewer attestation, not
+  proof of hidden cognition; downstream gates validate its structure and concrete trace.
 
 ## Workflow
 

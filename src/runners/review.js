@@ -8,10 +8,46 @@ const { createRunnerTransportEnvelope } = require('../transport/runner-envelope'
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DISPATCH_REVIEW = path.join(REPO_ROOT, 'scripts', 'dispatch-review.sh');
-const REVIEW_RESULT_FIELDS = ['runner', 'model', 'status', 'verdict', 'findings', 'raw_log', 'error'];
+const REVIEW_RESULT_FIELDS = [
+  'runner',
+  'model',
+  'status',
+  'verdict',
+  'findings',
+  'no_finding_proof',
+  'raw_log',
+  'error',
+];
 const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
 const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
+const NO_FINDING_TAUTOLOGIES = new Set([
+  '',
+  'none',
+  'no finding',
+  'no findings',
+  'no must-fix',
+  'no must-fix remains',
+  'n/a',
+  'na',
+  'checked',
+  'all passed',
+  'looks good',
+  'diff',
+  'tests',
+  'spec',
+  'code',
+  'acceptance criteria',
+  'requirements satisfied',
+]);
 
+function isValidNoFindingProof(value) {
+  const match = /^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$/.exec(value);
+  if (!match) return false;
+  return match.slice(1).every((part) => {
+    const normalized = part.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
+    return !NO_FINDING_TAUTOLOGIES.has(normalized);
+  });
+}
 
 function validateReviewResult(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -41,6 +77,21 @@ function validateReviewResult(value) {
   }
   if (typeof value.findings !== 'string') {
     throw new Error('review output JSON field findings must be a string');
+  }
+  if (value.no_finding_proof !== null
+    && (typeof value.no_finding_proof !== 'string' || value.no_finding_proof.length === 0)) {
+    throw new Error('review output JSON field no_finding_proof must be null or non-empty string');
+  }
+  if (value.verdict === 'SHIP-AS-IS' && value.no_finding_proof === null) {
+    throw new Error('review output JSON SHIP-AS-IS requires no_finding_proof');
+  }
+  if (value.verdict === 'SHIP-AS-IS' && !isValidNoFindingProof(value.no_finding_proof)) {
+    throw new Error(
+      'review output JSON no_finding_proof must contain non-tautological checked, evidence, and conclusion fields',
+    );
+  }
+  if (value.verdict !== 'SHIP-AS-IS' && value.no_finding_proof !== null) {
+    throw new Error('review output JSON no_finding_proof must be null unless verdict is SHIP-AS-IS');
   }
   if (value.raw_log !== null && (typeof value.raw_log !== 'string' || value.raw_log.length === 0)) {
     throw new Error('review output JSON field raw_log must be null or non-empty string');

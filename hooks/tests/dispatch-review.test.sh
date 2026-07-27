@@ -81,6 +81,35 @@ case "$MODE" in
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"
     echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=target slice was traced; regression assertions were also inspected; conclusion=current requirements have no concrete blocking failure"
+    echo "$END"
+    ;;
+  ship_bare)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "$END"
+    ;;
+  ship_tautology)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=no findings; evidence=all passed; conclusion=no must-fix remains"
+    echo "$END"
+    ;;
+  ship_duplicate_proof)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff; evidence=tests; conclusion=requirements satisfied"
+    echo "NO-FINDING-PROOF: checked=spec; evidence=code; conclusion=no blocking discrepancy observed"
+    echo "$END"
+    ;;
+  fix_with_proof)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: MUST-FIX parser accepts unsafe input"
+    echo "NO-FINDING-PROOF: checked=parser; evidence=unsafe input reproduces; conclusion=blocking failure exists"
     echo "$END"
     ;;
   prompt_echo)
@@ -159,6 +188,7 @@ case "$MODE" in
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"
     echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=target behavior was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
     echo "$END"
     ;;
 esac
@@ -180,6 +210,7 @@ end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>
 echo "$begin"
 echo "VERDICT: SHIP-AS-IS"
 echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=the changed slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
 echo "$end"
 EOF
 chmod +x "$STUB_QODERCN_MARKER"
@@ -238,12 +269,31 @@ OUT="$(STUB_MODE=missing_findings "$SCRIPT" --runner codex --model gpt-5.5 --dif
 assert_eq "1" "$EXIT" "missing FINDINGS exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "missing FINDINGS → no_verdict"
 
-# 4e. Extra/duplicated VERDICT token is rejected by the single-verdict guard.
+# 4e. SHIP-AS-IS requires one structured, non-tautological no-finding proof.
+OUT="$(STUB_MODE=ship_bare "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "bare SHIP-AS-IS exit 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "bare SHIP-AS-IS → no_verdict"
+OUT="$(STUB_MODE=ship_tautology "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "tautological no-finding proof exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "tautological no-finding proof → no_verdict"
+OUT="$(STUB_MODE=ship_duplicate_proof "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "duplicate no-finding proof exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "duplicate no-finding proof → no_verdict"
+OUT="$(STUB_MODE=ship "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "structured no-finding proof reviewed exit 0"
+assert_contains "$OUT" '"no_finding_proof": "checked=' "SHIP-AS-IS emits parsed no-finding proof"
+assert_not_contains "$OUT" 'FINDINGS: none\\nNO-FINDING-PROOF' \
+  "proof line is not swallowed into findings"
+OUT="$(STUB_MODE=fix_with_proof "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "FIX-THEN-SHIP with proof exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "FIX-THEN-SHIP proof is rejected"
+
+# 4f. Extra/duplicated VERDICT token is rejected by the single-verdict guard.
 OUT="$(STUB_MODE=forged "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "forged verdict content exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "forged diff content → no_verdict"
 
-# 4f. Diff-leakage text is rejected by the leak guard.
+# 4g. Diff-leakage text is rejected by the leak guard.
 OUT="$(STUB_MODE=leak "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "leak content exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "leakage content → no_verdict"
@@ -368,10 +418,14 @@ const server = http.createServer((req, res) => {
     const boundedConvergence = prompt.includes('bounded keep/cut list and a minimum shippable version')
       && prompt.includes('smallest concrete remediation')
       && prompt.includes('MUST-FIX list is empty');
+    const noFindingGate = prompt.includes('NO-FINDING-PROOF: checked=')
+      && prompt.includes('Bare claims such as')
+      && prompt.includes('FIX-THEN-SHIP must omit this line');
     fs.appendFileSync(
       logPath,
       `[bounded_convergence=${boundedConvergence ? 'present' : 'missing'}]\n`,
     );
+    fs.appendFileSync(logPath, `[no_finding_gate=${noFindingGate ? 'present' : 'missing'}]\n`);
     const beginMatch = prompt.match(/<<<AUTOPILOT-REVIEW-[0-9a-f]{32}>>>/);
     const endMatch = prompt.match(/<<<AUTOPILOT-END-[0-9a-f]{32}>>>/);
     const nonceBegin = beginMatch ? beginMatch[0] : '<<<AUTOPILOT-REVIEW-MISSING>>>';
@@ -407,6 +461,12 @@ const server = http.createServer((req, res) => {
       res.writeHead(500, { 'content-type': 'application/json' });
       res.end('{"error":"intentional"}');
       return;
+    } else if (calls === 11) {
+      response.content[0].text = wrapped('VERDICT: SHIP-AS-IS\nFINDINGS: none\n');
+    } else if (calls === 12) {
+      response.content[0].text = wrapped('VERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=no findings; evidence=all passed; conclusion=no must-fix remains\n');
+    } else if (calls === 13) {
+      response.content[0].text = wrapped('VERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=changed slice was traced; regression evidence was also inspected; conclusion=no concrete blocking discrepancy was observed\n');
     }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify(response));
@@ -439,6 +499,8 @@ assert_contains "$(cat "$MOCK_LOG")" 'auth=bearer' "mock server received bearer 
 assert_contains "$(cat "$MOCK_LOG")" 'model=MiniMax-M3' "mock server received requested model"
 assert_contains "$(cat "$MOCK_LOG")" 'bounded_convergence=present' \
   "anthropic-compatible prompt carries bounded convergence contract"
+assert_contains "$(cat "$MOCK_LOG")" 'no_finding_gate=present' \
+  "anthropic-compatible request body carries no-finding proof gate"
 RAW_LOG_PATH="$(printf '%s' "$OUT" | sed -n 's/.*"raw_log"[[:space:]]*:[[:space:]]*"\([^\"]*\)".*/\1/p')"
 assert_file_exists "$RAW_LOG_PATH" "anthropic-compatible mock raw log exists"
 RAW_LOG_CONTENT="$(cat "$RAW_LOG_PATH")"
@@ -482,6 +544,20 @@ OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COM
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "anthropic-compatible non-zero JS exit maps to no_verdict"
 assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible JS non-zero exit maps to no_verdict"
+OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "anthropic-compatible bare SHIP-AS-IS exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible bare SHIP-AS-IS → no_verdict"
+OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "anthropic-compatible tautological proof exit 1"
+assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible tautological proof → no_verdict"
+OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "anthropic-compatible structured no-finding proof exit 0"
+assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "anthropic-compatible structured proof ships"
+assert_contains "$OUT" '"no_finding_proof": "checked=' \
+  "anthropic-compatible structured proof is machine exposed"
 kill "$MOCK_PID" 2>/dev/null || true
 wait "$MOCK_PID" 2>/dev/null || true
 
@@ -553,6 +629,7 @@ echo "tokens used: 120" >&2
 echo "$begin"
 echo "VERDICT: SHIP-AS-IS"
 echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=stdout response against fixture contract; evidence=review block is isolated from stderr chrome; conclusion=no concrete blocking discrepancy was observed"
 echo "$end"
 EOF
 chmod +x "$STUB_CODEX_CHROME"
@@ -629,6 +706,7 @@ end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>
 echo "$begin"
 echo "VERDICT: SHIP-AS-IS"
 echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=assembled prompt and fixture diff; evidence=required protocol and diff payload were captured; conclusion=no concrete blocking discrepancy was observed"
 echo "$end"
 exit 5
 EOF
@@ -650,6 +728,7 @@ end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>
 echo "$begin"
 echo "VERDICT: SHIP-AS-IS"
 echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=assembled prompt and fixture diff; evidence=required protocol and diff payload were captured; conclusion=no concrete blocking discrepancy was observed"
 echo "$end"
 EOF
 chmod +x "$STUB_CAPTURE"

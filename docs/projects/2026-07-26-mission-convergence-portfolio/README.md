@@ -65,7 +65,7 @@ blocking finding. A transport failure never counts as a verdict.
 | 11 | WLB P3 exact branch + residue receipt | WLB P2 | READY | `788f72e..07295f4` | [wlb-p3.md](reviews/wlb-p3.md) |
 | 12 | WLB P4 compatibility dogfood | WLB P3 | READY | `cf6d84e..79bc881` | [wlb-p4.md](reviews/wlb-p4.md) |
 | 13 | Mission P0 integration oracle + enforcement probe | ICC P3 + PRO/WLB cores | READY | `21ba802..bacdf7b` | [mission-p0.md](reviews/mission-p0.md) |
-| 14 | Mission P1 reducer + shadow ledger | Mission P0 | Pending | pending | pending |
+| 14 | Mission P1 reducer + shadow ledger | Mission P0 | READY | `066d190..7fe0a50` | [mission-p1.md](reviews/mission-p1.md) |
 | 15 | Mission P2 ICC binding + Codex enforcement | Mission P1 | Pending | pending | pending |
 | 16 | LSM P1 task-status aggregation | Mission P2 + ICC/WLB receipts | Pending | pending | pending |
 | 17 | LSM P2 merge-intent preflight | LSM P1 | Pending | pending | pending |

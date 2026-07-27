@@ -1476,6 +1476,12 @@ if (createMissionState && reduceMissionState && stateHash) {
     });
     console.log(`restore-rejects-enforcement-mode-mismatch\t${
       errEnforce === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
+
+    const errLineageBinding = tamperAndRestore((t) => {
+      t.config_snapshot.lineage_binding.policy_hash = 'b'.repeat(64);
+    });
+    console.log(`restore-rejects-lineage-binding-policy-hash-mismatch\t${
+      errLineageBinding === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
   }
 }
 NODE
@@ -1580,7 +1586,8 @@ for id in \
   source-ref-minimal-no-undefined-keys source-ref-minimal-restore-passes \
   source-ref-closed-shape-malformed-rejects \
   restore-rejects-lineage-id-mismatch restore-rejects-task-authority-mismatch \
-  restore-rejects-policy-hash-mismatch restore-rejects-enforcement-mode-mismatch
+  restore-rejects-policy-hash-mismatch restore-rejects-enforcement-mode-mismatch \
+  restore-rejects-lineage-binding-policy-hash-mismatch
 do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done

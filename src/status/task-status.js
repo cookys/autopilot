@@ -156,6 +156,7 @@ const TERMINAL_RECEIPT_KEYS = Object.freeze([
   'follow_up',
   'rejected_findings',
   'unresolved_final_findings',
+  'lifecycle_receipt_ref',
   'trace',
   'receipt_digest',
 ]);
@@ -518,6 +519,21 @@ function validateTerminalReceipt(terminalReceipt) {
       || !Array.isArray(terminalReceipt.follow_up)
       || !Array.isArray(terminalReceipt.rejected_findings)
       || !Array.isArray(terminalReceipt.unresolved_final_findings)
+      || !(
+        terminalReceipt.lifecycle_receipt_ref === 'unknown'
+        || (
+          isPlainObject(terminalReceipt.lifecycle_receipt_ref)
+          && hasExactKeySet(
+            terminalReceipt.lifecycle_receipt_ref,
+            ['path', 'root_run_id', 'receipt_digest'],
+          )
+          && typeof terminalReceipt.lifecycle_receipt_ref.path === 'string'
+          && terminalReceipt.lifecycle_receipt_ref.path.length > 0
+          && typeof terminalReceipt.lifecycle_receipt_ref.root_run_id === 'string'
+          && terminalReceipt.lifecycle_receipt_ref.root_run_id.length > 0
+          && isSha256(terminalReceipt.lifecycle_receipt_ref.receipt_digest)
+        )
+      )
       || !Array.isArray(terminalReceipt.trace)
       || !terminalReceipt.trace.every((item) => typeof item === 'string' && item.length > 0)) {
     return { ok: false, reason: 'campaign_terminal_receipt_invalid' };
@@ -615,14 +631,19 @@ function validateTerminalEvent(events, terminalReceipt) {
   const payloadKeys = terminalReceipt.status === 'follow_up'
     ? [
       'registry_complete', 'registry_digest', 'convergence_digest',
-      'follow_up_digest', 'reason',
+      'follow_up_digest', 'lifecycle_receipt_ref', 'reason',
     ]
-    : ['registry_complete', 'registry_digest', 'convergence_digest', 'reason'];
+    : [
+      'registry_complete', 'registry_digest', 'convergence_digest',
+      'lifecycle_receipt_ref', 'reason',
+    ];
   if (!isPlainObject(terminalEvent)
       || terminalEvent.event_type !== expectedType
       || terminalEvent.output_artifact_digest !== terminalReceipt.receipt_digest
       || !hasExactKeySet(terminalEvent.payload, payloadKeys)
       || terminalEvent.payload.registry_complete !== true
+      || canonicalDigest(terminalEvent.payload.lifecycle_receipt_ref)
+        !== canonicalDigest(terminalReceipt.lifecycle_receipt_ref)
       || !isSha256(terminalEvent.payload.registry_digest)
       || !isSha256(terminalEvent.payload.convergence_digest)
       || typeof terminalEvent.payload.reason !== 'string'

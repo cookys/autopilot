@@ -118,6 +118,22 @@ function reviewFindingIds(review) {
   });
 }
 
+function reviewFindings(review) {
+  const ids = reviewFindingIds(review);
+  if (ids.length === 0) return [];
+  const findings = JSON.parse(review.findings);
+  return findings.map((finding, index) => {
+    if (typeof finding.claim !== 'string' || finding.claim.trim().length === 0) {
+      throw new Error(`campaign review finding ${ids[index]} has no claim`);
+    }
+    return finding;
+  });
+}
+
+function normalizeAcceptanceText(value) {
+  return String(value).trim().replace(/\s+/gu, ' ').toLowerCase();
+}
+
 function compileCampaignDispositionProvider(rawAuthority) {
   const authority = validateCampaignDispositionAuthority(rawAuthority);
   const reviews = new Map(authority.reviews.map((review) => [
@@ -160,14 +176,53 @@ function compileCampaignDispositionProvider(rawAuthority) {
 }
 
 function compileCampaignDispositionPolicy(name) {
-  if (name !== 'deny-nonempty') {
+  if (!new Set(['deny-nonempty', 'acceptance-bound']).has(name)) {
     throw new Error(`unknown campaign disposition policy: ${name}`);
   }
-  return ({ review }) => {
+  if (name === 'deny-nonempty') return ({ review }) => {
     if (reviewFindingIds(review).length > 0) {
       throw new Error('deny-nonempty policy refuses reviewer-authored disposition authority');
     }
     return null;
+  };
+  return ({ review, contract }) => {
+    const findings = reviewFindings(review);
+    if (findings.length === 0) return null;
+    if (!review || !/^[0-9a-f]{64}$/.test(review.review_digest || '')
+        || !contract || !Array.isArray(contract.vertical_acceptance)) {
+      throw new Error('acceptance-bound policy requires a bound review and sealed acceptance');
+    }
+    const acceptance = contract.vertical_acceptance.map(normalizeAcceptanceText);
+    const matched = findings.map((finding) => {
+      const claim = normalizeAcceptanceText(finding.claim);
+      return acceptance.findIndex((criterion) => criterion === claim);
+    });
+    if (matched.some((acceptanceIndex) => acceptanceIndex < 0)) {
+      throw new Error(
+        'acceptance-bound policy requires explicit depth-0 authority for every non-exact finding',
+      );
+    }
+    return {
+      authority: 'deterministic-policy',
+      actor_id: 'policy:acceptance-bound',
+      review_digest: review.review_digest,
+      decisions: findings.map((finding, findingIndex) => {
+        const acceptanceIndex = matched[findingIndex];
+        return {
+          finding_id: finding.finding_id,
+          evidence: {
+            kind: 'trace',
+            trace_chain: [`contract.vertical_acceptance[${acceptanceIndex}]`],
+            confirmed_by: 'policy:acceptance-bound',
+          },
+          disposition: {
+            disposition: 'must-fix-now',
+            acceptance_id: `vertical_acceptance[${acceptanceIndex}]`,
+            deferral_harm: 'deferral would leave an explicit frozen acceptance criterion unsatisfied',
+          },
+        };
+      }),
+    };
   };
 }
 

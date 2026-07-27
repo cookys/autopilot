@@ -113,6 +113,7 @@ const EVENT_PAYLOAD_KEYS = Object.freeze({
     'registry_complete',
     'registry_digest',
     'convergence_digest',
+    'lifecycle_receipt_ref',
   ],
   [CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP]: [
     'reason',
@@ -120,6 +121,7 @@ const EVENT_PAYLOAD_KEYS = Object.freeze({
     'registry_digest',
     'convergence_digest',
     'follow_up_digest',
+    'lifecycle_receipt_ref',
   ],
   [CAMPAIGN_EVENTS.TERMINAL_STOP]: ['reason', 'stop_receipt_digest'],
   [CAMPAIGN_EVENTS.RESUMED]: [],
@@ -479,15 +481,34 @@ function requireScopeCheck(event) {
   }
 }
 
+function validateLifecycleReceiptReference(value, campaignId) {
+  if (value === 'unknown') return;
+  if (!isPlainObject(value)
+      || Object.keys(value).length !== 3
+      || typeof value.path !== 'string'
+      || value.path.length === 0
+      || value.root_run_id !== campaignId
+      || !isSha256(value.receipt_digest)) {
+    fail(
+      'INVALID_LIFECYCLE_RECEIPT_REF',
+      'terminal lifecycle receipt reference must be exact or unknown',
+    );
+  }
+}
+
 function reduceCampaignState(currentState, event) {
   if (!isPlainObject(currentState)) fail('INVALID_STATE', 'campaign state must be an object');
   const common = validateCommonEvent(currentState, event);
   if (common.duplicate) return currentState;
-  assertExactKeys(
-    event.payload,
-    new Set(EVENT_PAYLOAD_KEYS[event.event_type]),
-    `${event.event_type}.payload`,
-  );
+  const payloadKeys = new Set(EVENT_PAYLOAD_KEYS[event.event_type]);
+  const terminalEvent = new Set([
+    CAMPAIGN_EVENTS.TERMINAL_READY,
+    CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP,
+  ]).has(event.event_type);
+  assertExactKeys(event.payload, payloadKeys, `${event.event_type}.payload`);
+  if (terminalEvent) {
+    validateLifecycleReceiptReference(event.payload.lifecycle_receipt_ref, event.campaign_id);
+  }
   if (TERMINAL_STATES.has(currentState.phase)) {
     fail('TERMINAL_CAMPAIGN', 'terminal campaign cannot accept another event');
   }

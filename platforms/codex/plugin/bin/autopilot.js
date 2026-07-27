@@ -20,7 +20,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty] [--mission-state <file>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
+  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-state <file>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
@@ -77,6 +77,7 @@ function parseImplementReviewArgs(rawArgs) {
     campaignLedger: null,
     campaignDispositionAuthority: null,
     campaignDispositionPolicy: null,
+    lifecycleReceipt: null,
     missionState: null,
     campaignManaged: true,
     legacyUnmanaged: false,
@@ -120,6 +121,15 @@ function parseImplementReviewArgs(rawArgs) {
         return { error: '--campaign-ledger requires a value' };
       }
       output.campaignLedger = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--lifecycle-receipt') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--lifecycle-receipt requires a value' };
+      }
+      output.lifecycleReceipt = value;
       i += 2;
       continue;
     }
@@ -257,6 +267,9 @@ function parseImplementReviewArgs(rawArgs) {
       && (output.campaignDispositionAuthority || output.campaignDispositionPolicy)) {
     return { error: 'campaign disposition controls require --campaign-contract' };
   }
+  if (output.legacyUnmanaged && output.lifecycleReceipt) {
+    return { error: '--lifecycle-receipt requires --campaign-contract' };
+  }
 
   return output;
 }
@@ -334,6 +347,7 @@ if (args[0] === 'engine') {
             status: 'legacy_unmanaged_rejected',
             deprecated: true,
             removal_release: 'v2.35.0',
+            removal_deadline: '2026-08-31',
           },
         })}\n`);
         process.exit(1);

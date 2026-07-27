@@ -247,6 +247,7 @@ function projectCampaign(rows, campaignId) {
   let lastArtifactReference = null;
   let candidateReference = null;
   let initialCandidateReference = null;
+  let lifecycleReceiptRef = null;
   for (const row of owned) {
     if (row.kind === 'stage' && row.stage === 'campaign') {
       if (row.state === 'leased') {
@@ -276,6 +277,29 @@ function projectCampaign(rows, campaignId) {
     }
     validateCampaignJournalLease(row, currentLease);
     state = reduceCampaignState(state, payload.event);
+    if (TERMINAL.has(state.phase)) {
+      const reference = Object.prototype.hasOwnProperty.call(
+        payload.event.payload,
+        'lifecycle_receipt_ref',
+      )
+        ? payload.event.payload.lifecycle_receipt_ref
+        : 'unknown';
+      if (!(reference === 'unknown'
+          || (
+            reference
+            && typeof reference === 'object'
+            && !Array.isArray(reference)
+            && Object.keys(reference).length === 3
+            && typeof reference.path === 'string'
+            && reference.path.length > 0
+            && reference.root_run_id === campaignId
+            && typeof reference.receipt_digest === 'string'
+            && /^[0-9a-f]{64}$/u.test(reference.receipt_digest)
+          ))) {
+        throw new Error('campaign terminal lifecycle receipt reference is invalid');
+      }
+      lifecycleReceiptRef = reference;
+    }
     if (Object.prototype.hasOwnProperty.call(payload, 'artifact_reference')) {
       const reference = payload.artifact_reference;
       if (reference !== null) {
@@ -312,7 +336,7 @@ function projectCampaign(rows, campaignId) {
     last_artifact_reference: lastArtifactReference,
     candidate_reference: candidateReference,
     initial_candidate_reference: initialCandidateReference,
-    lifecycle_receipt_ref: null,
+    lifecycle_receipt_ref: lifecycleReceiptRef,
   };
 }
 

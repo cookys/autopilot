@@ -139,11 +139,21 @@ state = apply(state, E.REVIEW_COMPLETED, 1, { review_digest: D }, {
   changed: 2,
   churn: 4,
 });
+expectCode('MISSING_FIELD', () => apply(state, E.TERMINAL_READY, 1, {
+  reason: 'must not omit lifecycle provenance',
+  registry_complete: true,
+  registry_digest: D,
+  convergence_digest: D,
+}, {
+  changed: 2,
+  churn: 4,
+}));
 const terminalEvent = event(E.TERMINAL_READY, 1, {
   reason: 'acceptance verified',
   registry_complete: true,
   registry_digest: D,
   convergence_digest: D,
+  lifecycle_receipt_ref: 'unknown',
 }, {
   changed: 2,
   churn: 4,
@@ -202,6 +212,7 @@ followUp = apply(
     registry_digest: D,
     convergence_digest: D,
     follow_up_digest: D,
+    lifecycle_receipt_ref: 'unknown',
   },
   { changed: 1, churn: 2 },
 );
@@ -381,6 +392,7 @@ expectCode('REGISTRY_INCOMPLETE', () => apply(
     registry_complete: false,
     registry_digest: D,
     convergence_digest: D,
+    lifecycle_receipt_ref: 'unknown',
   },
   { changed: 1, churn: 2 },
 ));

@@ -47,6 +47,9 @@ const {
 } = require('./campaign-verification');
 const { adjudicateCampaignReview } = require('./campaign-adjudication');
 const { evaluateLoopConvergence } = require('../../scripts/check-loop-convergence');
+const {
+  inspectLifecycleReceipt,
+} = require('../../scripts/lifecycle-residue-receipt');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 
@@ -1376,6 +1379,11 @@ class AutopilotEngine {
     this.campaignDispositionProvider = options.campaignDispositionProvider || null;
     this.campaignScopeChecker = options.campaignScopeChecker || checkCampaignScope;
     this.campaignTreeResolver = options.campaignTreeResolver || defaultCampaignTreeResolver;
+    this.campaignLifecycleInspector = options.campaignLifecycleInspector
+      || inspectLifecycleReceipt;
+    this.campaignPostCommitCheckpoint = typeof options.campaignPostCommitCheckpoint === 'function'
+      ? options.campaignPostCommitCheckpoint
+      : null;
     // Trusted Mission campaign adapter configuration. The engine builds
     // adapters internally and passes them as the second argument to
     // campaignIntake — callers never inject a free-form claim predicate.
@@ -2365,6 +2373,7 @@ class AutopilotEngine {
           status: 'campaign_mode_conflict',
           deprecated: true,
           removal_release: 'v2.35.0',
+          removal_deadline: '2026-08-31',
         },
       };
     }
@@ -2405,6 +2414,7 @@ class AutopilotEngine {
           status: 'legacy_unmanaged_rejected',
           deprecated: true,
           removal_release: 'v2.35.0',
+          removal_deadline: '2026-08-31',
         },
       };
     }
@@ -2446,6 +2456,53 @@ class AutopilotEngine {
     let latestVerification = null;
     let implementationRound = 0;
     let resumeSetupError = null;
+    let lifecycleSetupError = null;
+    let lifecycleReceiptRef = 'unknown';
+
+    if (input.lifecycleReceipt) {
+      const receiptPath = path.resolve(loopCwd, input.lifecycleReceipt);
+      try {
+        const inspected = this.campaignLifecycleInspector({
+          repo: loopCwd,
+          rootRunId: campaignControl.campaign_id,
+          receipt: receiptPath,
+        });
+        if (!inspected || inspected.status !== 'valid'
+            || !/^[0-9a-f]{64}$/u.test(inspected.receipt_digest || '')) {
+          throw new Error('lifecycle receipt is not valid for this campaign root');
+        }
+        lifecycleReceiptRef = {
+          path: receiptPath,
+          root_run_id: campaignControl.campaign_id,
+          receipt_digest: inspected.receipt_digest,
+        };
+      } catch (error) {
+        lifecycleSetupError = error.message || String(error);
+      }
+    }
+    if (lifecycleSetupError !== null) {
+      releaseCampaignNoEffect({
+        owner: 'worktree_lifecycle',
+        status: 'rejected',
+        code: 'campaign_lifecycle_receipt_invalid',
+        reason: lifecycleSetupError,
+      });
+      return {
+        status: 'blocked',
+        phase: 'campaign_lifecycle_receipt',
+        reason: lifecycleSetupError,
+        rounds: 0,
+        verdict: null,
+        roster,
+        resolveResult,
+        base,
+        implementation: null,
+        review: null,
+        implementationChain,
+        reviewChain,
+        ledger,
+      };
+    }
 
     const recordCampaignEvent = (eventInput) => {
       if (!durableJournal) return null;
@@ -2627,6 +2684,7 @@ class AutopilotEngine {
     );
     const composition = this.campaignComposer({
       maxRepairGenerations,
+      lifecycleReceiptRef,
       resume: resumeCandidate && !resumeSetupError
         ? {
           phase: campaignControl.initial_state.phase,
@@ -2636,8 +2694,8 @@ class AutopilotEngine {
         : null,
     }, {
       preflight: () => ({
-        passed: resumeSetupError === null,
-        reason: resumeSetupError,
+        passed: resumeSetupError === null && lifecycleSetupError === null,
+        reason: resumeSetupError || lifecycleSetupError,
         intake: campaignControl,
       }),
       implement: ({
@@ -2844,6 +2902,15 @@ class AutopilotEngine {
                 writer_fence: candidate.writer_fence,
               },
             });
+            if (this.campaignPostCommitCheckpoint) {
+              this.campaignPostCommitCheckpoint({
+                campaign_id: campaignControl.campaign_id,
+                candidate: { ...candidate },
+                checkpoint,
+                generation: campaignControl.initial_state.generation,
+                phase: campaignControl.initial_state.phase,
+              });
+            }
           } catch (error) {
             receipt = {
               ...receipt,
@@ -3173,6 +3240,7 @@ class AutopilotEngine {
         registry_complete: true,
         registry_digest: registryDigest,
         convergence_digest: composition.receipt_digest,
+        lifecycle_receipt_ref: composition.lifecycle_receipt_ref,
       };
       if (terminalEvent === CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP) {
         payload.follow_up_digest = campaignCanonicalDigest({
@@ -3259,6 +3327,7 @@ class AutopilotEngine {
         status: 'legacy_unmanaged',
         deprecated: true,
         removal_release: 'v2.35.0',
+        removal_deadline: '2026-08-31',
         full_enforcement: false,
       }
       : null;

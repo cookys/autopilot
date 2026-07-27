@@ -47,6 +47,8 @@ const REMOTE_SHA = '5'.repeat(40);
 const TARGET_REF = 'refs/heads/develop';
 const CONSUMER_REF = 'refs/heads/consumer';
 const REMOTE_REF = 'refs/remotes/origin/develop';
+const LIFECYCLE_PATH = '/tmp/canonical-lifecycle-receipt.json';
+const LIFECYCLE_DIGEST = mission.sha256('canonical-lifecycle-receipt');
 
 function missionContract() {
   const policyHash = mission.sha256('lsm-policy');
@@ -392,6 +394,7 @@ function buildCampaignBundle({
       registry_complete: true,
       registry_digest: mission.sha256('registry'),
       convergence_digest: mission.sha256('convergence'),
+      lifecycle_receipt_ref: terminal.lifecycle_receipt_ref,
       reason: 'canonical terminal',
   };
   if (status === 'follow_up') {
@@ -431,7 +434,7 @@ function makeInput(overrides = {}) {
       terminal_receipt: missionBundle.terminal_receipt,
     },
     campaigns: [campaignBundle],
-    lifecycle_receipt_path: '/tmp/canonical-lifecycle-receipt.json',
+    lifecycle_receipt_path: LIFECYCLE_PATH,
     integration: {
       target_ref: TARGET_REF,
       consumer_ref: CONSUMER_REF,
@@ -451,7 +454,7 @@ function makeAdapters(overrides = {}) {
     inspectLifecycleReceipt: () => ({
       status: 'valid',
       zero_residue: true,
-      receipt_digest: mission.sha256('canonical-lifecycle-receipt'),
+      receipt_digest: LIFECYCLE_DIGEST,
       active_owned_worktrees: 0,
       active_owned_branches: 0,
     }),

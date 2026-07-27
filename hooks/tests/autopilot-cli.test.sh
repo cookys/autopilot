@@ -107,9 +107,32 @@ OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-
 assert_eq "2" "$EXIT" "implement-review without a campaign contract exits 2"
 assert_contains "$OUT" "--campaign-contract is required" "implement-review fails closed on missing campaign contract"
 
-OUT="$(AUTOPILOT_LEVEL=l6 node "$CLI" engine implement-review --legacy-unmanaged --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base "$BASE_SHA" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "L6 rejects the legacy unmanaged compatibility rail"
-assert_contains "$OUT" '"legacy_unmanaged_rejected"' "L6 legacy rejection is machine-readable"
+legacy_ledger_count() {
+  local ledger_dir="$HOOK_HOME/.autopilot/run-ledger"
+  if [ ! -d "$ledger_dir" ]; then
+    printf '0\n'
+    return
+  fi
+  find "$ledger_dir" -type f | wc -l | tr -d ' '
+}
+for level in l5 l6; do
+  BEFORE_LEGACY_LEDGER="$(legacy_ledger_count)"
+  OUT="$(AUTOPILOT_LEVEL="$level" node "$CLI" engine implement-review \
+    --legacy-unmanaged \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" 2>&1)"
+  EXIT=$?
+  AFTER_LEGACY_LEDGER="$(legacy_ledger_count)"
+  assert_eq "1" "$EXIT" "${level^^} rejects the legacy unmanaged compatibility rail"
+  assert_contains "$OUT" '"legacy_unmanaged_rejected"' \
+    "${level^^} legacy rejection is machine-readable"
+  assert_contains "$OUT" '"removal_release":"v2.35.0"' \
+    "${level^^} rejection retains the dated removal release"
+  assert_contains "$OUT" '"removal_deadline":"2026-08-31"' \
+    "${level^^} rejection retains the dated removal deadline"
+  assert_eq "$BEFORE_LEGACY_LEDGER" "$AFTER_LEGACY_LEDGER" \
+    "${level^^} legacy rejection occurs before any durable runner spend"
+done
 
 OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
 assert_contains "$OUT" "--resume" "autopilot help documents the --resume flag"

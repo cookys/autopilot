@@ -62,6 +62,7 @@
         "follow_up",
         "rejected_findings",
         "unresolved_final_findings",
+        "lifecycle_receipt_ref",
         "trace",
         "receipt_digest"
       ],
@@ -84,6 +85,21 @@
         "unresolved_final_findings": {
           "type": "array",
           "items": { "$ref": "#/$defs/adjudicatedFinding" }
+        },
+        "lifecycle_receipt_ref": {
+          "oneOf": [
+            { "type": "string", "const": "unknown" },
+            {
+              "type": "object",
+              "required": ["path", "root_run_id", "receipt_digest"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "root_run_id": { "type": "string", "minLength": 1 },
+                "receipt_digest": { "$ref": "#/$defs/sha256" }
+              },
+              "additionalProperties": false
+            }
+          ]
         },
         "trace": {
           "type": "array",

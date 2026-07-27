@@ -35,6 +35,21 @@ function blocked(phase, reason, trace, detail = {}) {
   };
 }
 
+function normalizeLifecycleReceiptRef(value) {
+  if (value === undefined || value === null || value === 'unknown') return 'unknown';
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).length !== 3
+      || typeof value.path !== 'string' || value.path.length === 0
+      || typeof value.root_run_id !== 'string' || value.root_run_id.length === 0
+      || !/^[0-9a-f]{64}$/u.test(value.receipt_digest || '')) {
+    throw new CampaignCompositionError(
+      'INVALID_LIFECYCLE_RECEIPT_REF',
+      'campaign lifecycle receipt reference must be exact or unknown',
+    );
+  }
+  return { ...value };
+}
+
 function validateRetainedFinding(item, classification) {
   if (!item || typeof item !== 'object' || Array.isArray(item)
       || typeof item.id !== 'string' || item.id.length === 0
@@ -91,6 +106,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       'maxRepairGenerations must be a non-negative safe integer',
     );
   }
+  const lifecycleReceiptRef = normalizeLifecycleReceiptRef(input.lifecycleReceiptRef);
   const preflight = requireAdapter(adapters, 'preflight');
   const implement = requireAdapter(adapters, 'implement');
   const scopeCheck = requireAdapter(adapters, 'scopeCheck');
@@ -117,6 +133,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
     throw new CampaignCompositionError(
       'INVALID_RESUME_CHECKPOINT',
       'campaign resume requires one committed VERTICAL_VERIFICATION candidate',
+    );
+  }
+  if (resume && resume.repair_generation > maxRepairs) {
+    throw new CampaignCompositionError(
+      'REPAIR_BUDGET_EXCEEDED',
+      'campaign resume repair generation exceeds the frozen repair ceiling',
     );
   }
   let repairGeneration = resume ? resume.repair_generation : 0;
@@ -383,6 +405,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
     follow_up: followUps,
     rejected_findings: rejectedFindings,
     unresolved_final_findings: finalMustFix,
+    lifecycle_receipt_ref: lifecycleReceiptRef,
     trace,
   };
   return {

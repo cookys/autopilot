@@ -128,6 +128,7 @@ function fromCampaign(value, sourceFile) {
       'follow_up',
       'rejected_findings',
       'unresolved_final_findings',
+      'lifecycle_receipt_ref',
       'trace',
       'receipt_digest',
     ])

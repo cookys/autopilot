@@ -150,6 +150,47 @@ assert.throws(() => denyNonempty({
     }]),
   },
 }), /refuses reviewer-authored/i);
+const acceptanceBound = compileCampaignDispositionPolicy('acceptance-bound');
+const policyReview = (claim) => ({
+  review_digest: 'f'.repeat(64),
+  findings: JSON.stringify([{
+    finding_id: 'icc-p3-policy',
+    claim,
+    severity: '🟠',
+    source: 'fixture',
+  }]),
+});
+const policyContract = (criterion) => ({ vertical_acceptance: [criterion] });
+const policyDisposition = (claim, criterion) => acceptanceBound({
+  review: policyReview(claim),
+  contract: policyContract(criterion),
+}).decisions[0].disposition.disposition;
+assert.strictEqual(
+  policyDisposition('  Authenticated   Device Publication ', 'authenticated device publication'),
+  'must-fix-now',
+);
+assert.throws(
+  () => policyDisposition('auth', 'must reject unauthenticated publication'),
+  /explicit depth-0 authority/,
+);
+assert.throws(
+  () => policyDisposition(
+    'authenticated device publication subsystem',
+    'authenticated device publication',
+  ),
+  /explicit depth-0 authority/,
+);
+assert.throws(
+  () => policyDisposition(
+    'authenticated device publication',
+    'must reject authenticated device publication',
+  ),
+  /explicit depth-0 authority/,
+);
+assert.throws(() => acceptanceBound({
+  review: policyReview('   '),
+  contract: policyContract('authenticated device publication'),
+}), /has no claim/);
 
 let implementationCalls = 0;
 const candidate = {

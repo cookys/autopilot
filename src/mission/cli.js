@@ -120,8 +120,31 @@ function cmdInit(flags) {
   return 0;
 }
 
+function reduceOrReject(state, event, label) {
+  let result;
+  try {
+    result = mission.reduceMissionState(state, event);
+  } catch (error) {
+    const code = error && error.code ? error.code : 'MISSION_REDUCER_INVALID';
+    throw new MissionCliError(
+      `${label}: ${error.message || String(error)}`,
+      code === 'MISSION_STATE_TERMINAL' ? 1 : 1,
+    );
+  }
+  return result;
+}
+
 function cmdGrant(flags) {
   const state = loadState(requireFlag(flags, 'state'));
+  if (state.terminal || mission.TERMINAL_STATES.has(state.state)) {
+    emit({
+      status: 'rejected',
+      code: 'mission_state_terminal',
+      reason: 'cannot claim a grant against a terminal Mission state',
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
   const reserved = flags.reserved === undefined ? 1 : Number.parseInt(flags.reserved, 10);
   if (!Number.isSafeInteger(reserved) || reserved < 0) {
     throw new MissionCliError('--reserved must be a non-negative integer', 2);
@@ -144,13 +167,18 @@ function cmdGrant(flags) {
       expires_at: flags.expires || DEFAULT_EXPIRY,
     },
   };
-  const result = mission.reduceMissionState(state, event);
-  const rejected = result.receipt.artifact_type === 'mission_grant_rejected';
+  const result = reduceOrReject(state, event, 'grant');
+  const rejected = !result
+    || !result.receipt
+    || result.receipt.artifact_type === 'mission_grant_rejected';
+  // Never persist rejected or mismatched state.
   if (!rejected) writeState(requireFlag(flags, 'out'), result.state);
   emit({
     status: rejected ? 'rejected' : 'claimed',
+    code: rejected ? (result.receipt.reason || 'mission_grant_rejected') : undefined,
     reason: rejected ? result.receipt.reason : undefined,
     claim_id: rejected ? undefined : result.receipt.claim_id,
+    binding_digest: rejected ? undefined : result.receipt.binding_digest,
     state_hash: mission.stateHash(rejected ? state : result.state),
     receipt: result.receipt,
   });
@@ -159,9 +187,35 @@ function cmdGrant(flags) {
 
 function cmdConsume(flags) {
   const state = loadState(requireFlag(flags, 'state'));
+  if (state.terminal || mission.TERMINAL_STATES.has(state.state)) {
+    emit({
+      status: 'rejected',
+      code: 'mission_state_terminal',
+      reason: 'cannot consume a claim against a terminal Mission state',
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
   const claimId = requireFlag(flags, 'claim-id');
   const claim = state.claims[claimId];
-  if (!claim) throw new MissionCliError(`consume: no such claim ${claimId}`);
+  if (!claim) {
+    emit({
+      status: 'rejected',
+      code: 'mission_claim_missing',
+      reason: `consume: no such claim ${claimId}`,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  if (claim.released) {
+    emit({
+      status: 'rejected',
+      code: 'mission_claim_released',
+      reason: `consume: claim ${claimId} was already released`,
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
   const reserved = flags.reserved === undefined
     ? (claim.reservation.tool_calls ? claim.reservation.tool_calls.reserved_active : 0)
     : Number.parseInt(flags.reserved, 10);
@@ -177,11 +231,14 @@ function cmdConsume(flags) {
       actual_usage: buildReservation(state, reserved),
     },
   };
-  const result = mission.reduceMissionState(state, event);
-  const rejected = result.receipt.artifact_type === 'mission_grant_rejected';
+  const result = reduceOrReject(state, event, 'consume');
+  const rejected = !result
+    || !result.receipt
+    || result.receipt.artifact_type === 'mission_grant_rejected';
   if (!rejected) writeState(requireFlag(flags, 'out'), result.state);
   emit({
     status: rejected ? 'rejected' : 'reconciled',
+    code: rejected ? (result.receipt.reason || 'mission_consume_rejected') : undefined,
     reason: rejected ? result.receipt.reason : undefined,
     replay: result.receipt.replay,
     state_hash: mission.stateHash(rejected ? state : result.state),
@@ -192,25 +249,56 @@ function cmdConsume(flags) {
 
 function cmdControl(flags) {
   const state = loadState(requireFlag(flags, 'state'));
+  if (state.terminal || mission.TERMINAL_STATES.has(state.state)) {
+    emit({
+      status: 'rejected',
+      code: 'mission_state_terminal',
+      reason: 'cannot apply control against a terminal Mission state',
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
   const authority = flags.authority || 'authenticated_user';
-  const adapter = new AuthenticatedControlAdapter({
-    verifier: () => ({ verified: true, authority }),
-  });
-  const canonical = adapter.acceptEvent({
-    mission_lineage_id: state.mission_lineage_id,
-    action: requireFlag(flags, 'action'),
-    authority,
-    sequence: Number.parseInt(requireFlag(flags, 'sequence'), 10),
-    issued_at: flags.now || DEFAULT_NOW,
-    reason: flags.reason || 'mission cli control',
-  });
+  let canonical;
+  try {
+    const adapter = new AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority }),
+    });
+    canonical = adapter.acceptEvent({
+      mission_lineage_id: state.mission_lineage_id,
+      action: requireFlag(flags, 'action'),
+      authority,
+      sequence: Number.parseInt(requireFlag(flags, 'sequence'), 10),
+      issued_at: flags.now || DEFAULT_NOW,
+      reason: flags.reason || 'mission cli control',
+    });
+  } catch (error) {
+    emit({
+      status: 'rejected',
+      code: error.code || 'mission_control_rejected',
+      reason: error.message || String(error),
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
   const event = {
     event_type: 'control_event',
     sequence: state.events.length + 1,
     mission_lineage_id: state.mission_lineage_id,
     payload: { event: canonical },
   };
-  const result = mission.reduceMissionState(state, event);
+  const result = reduceOrReject(state, event, 'control');
+  const rejected = !result || !result.state;
+  if (rejected) {
+    emit({
+      status: 'rejected',
+      code: 'mission_control_rejected',
+      reason: (result && result.receipt && result.receipt.reason) || 'mission_control_rejected',
+      state_hash: mission.stateHash(state),
+      receipt: result && result.receipt,
+    });
+    return 1;
+  }
   writeState(requireFlag(flags, 'out'), result.state);
   emit({
     status: 'controlled',
@@ -229,6 +317,7 @@ function cmdCheck(flags) {
     status: 'ok',
     state: state.state,
     terminal: state.terminal || null,
+    mission_terminal: !!(state.terminal && mission.TERMINAL_STATES.has(state.state)),
     mission_lineage_id: state.mission_lineage_id,
     control_sequence: state.control_sequence,
     state_hash: mission.stateHash(state),
@@ -238,10 +327,42 @@ function cmdCheck(flags) {
 
 function cmdReceipt(flags) {
   const state = loadState(requireFlag(flags, 'state'));
+  const isTerminal = !!(state.terminal && mission.TERMINAL_STATES.has(state.state));
   if (flags.residue) {
     const residue = readJson(flags.residue, 'residue');
-    const receipt = mission.buildMissionTerminalReceipt(state, residue);
-    emit({ status: 'terminal', receipt });
+    let receipt;
+    try {
+      receipt = mission.buildMissionTerminalReceipt(state, residue);
+    } catch (error) {
+      emit({
+        status: 'rejected',
+        code: error.code || 'mission_terminal_receipt_rejected',
+        reason: error.message || String(error),
+        mission_terminal: isTerminal,
+        state_hash: mission.stateHash(state),
+      });
+      return 1;
+    }
+    emit({
+      status: 'terminal',
+      mission_terminal: true,
+      state_hash: mission.stateHash(state),
+      receipt,
+    });
+    return 0;
+  }
+  // Terminal state without residue is an explicit machine-readable outcome:
+  // projection is still available, but the terminal receipt requires residue.
+  if (isTerminal) {
+    const projection = mission.buildProjection(state);
+    emit({
+      status: 'terminal_projection',
+      mission_terminal: true,
+      code: 'mission_terminal_residue_required',
+      reason: 'terminal Mission receipt requires --residue; projection is returned without closeout authority',
+      state_hash: mission.stateHash(state),
+      projection,
+    });
     return 0;
   }
   const projection = mission.buildProjection(state);

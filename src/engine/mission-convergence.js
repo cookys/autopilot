@@ -3357,44 +3357,27 @@ function applyMissionCampaignReceipt(state, receipt) {
   return Object.freeze({ status: 'applied', state: Object.freeze({ ...result.state, receipts: Object.freeze(receipts) }) });
 }
 
-// Module-private identity attestation for Codex enforcement disposition
-// receipts. The Symbol key never leaves this module and the attestation is a
-// keyed digest bound to the receipt content, so a caller cannot forge, clone,
-// or re-key a disposition receipt into a usable enforcement adapter. The
-// attestation is attached as a NON-enumerable property: object spread / clone
-// (the forging vector) drops it, while the genuine receipt returned by
-// evaluateCodexEnforcementDisposition retains it. No public token, registry,
-// verifier predicate, or mutable global state is exported.
-const CODEX_DISPOSITION_ATTESTATION = Symbol('mission.codex.enforcement.disposition');
-const CODEX_DISPOSITION_ATTESTATION_SEED = 'mission-convergence/codex-disposition-attestation/v1';
-
-function codexDispositionAttestationDigest(receipt) {
-  return sha256({
-    seed: CODEX_DISPOSITION_ATTESTATION_SEED,
-    enforceable: receipt.enforceable,
-    mode: receipt.mode,
-    reason: receipt.reason,
-    harness_id: receipt.harness_id,
-    artifact_digest: receipt.artifact_digest,
-    receipt_digest: receipt.receipt_digest,
-  });
-}
+// Module-private object-identity attestation for Codex enforcement disposition
+// receipts. Genuine receipts minted by evaluateCodexEnforcementDisposition are
+// registered in a closed WeakSet; a caller cannot forge, clone (including
+// descriptor-preserving Object.create clones), or re-key a disposition into a
+// usable enforcement adapter. Receipts carry zero own Symbols — identity is
+// the only authentication key. No public token, registry, verifier predicate,
+// or mutable global state is exported.
+const CODEX_DISPOSITION_REGISTRY = new WeakSet();
 
 function attestCodexDispositionReceipt(receipt) {
-  Object.defineProperty(receipt, CODEX_DISPOSITION_ATTESTATION, {
-    value: codexDispositionAttestationDigest(receipt),
-    enumerable: false,
-    configurable: false,
-    writable: false,
-  });
+  // Registry keys on the exact frozen object identity. Clones and spreads are
+  // different objects and will not pass codexDispositionReceiptAttested.
+  CODEX_DISPOSITION_REGISTRY.add(receipt);
   return receipt;
 }
 
 function codexDispositionReceiptAttested(receipt) {
-  if (!isPlainObject(receipt)) return false;
-  const attestation = receipt[CODEX_DISPOSITION_ATTESTATION];
-  return typeof attestation === 'string'
-    && attestation === codexDispositionAttestationDigest(receipt);
+  if (receipt === null || typeof receipt !== 'object' || Array.isArray(receipt)) {
+    return false;
+  }
+  return CODEX_DISPOSITION_REGISTRY.has(receipt);
 }
 
 function evaluateCodexEnforcementDisposition({ artifact, capability, expected_harness_id } = {}) {
@@ -3411,15 +3394,72 @@ function evaluateCodexEnforcementDisposition({ artifact, capability, expected_ha
   const enforceable = artifact.codex_enforcement_outcome !== 'unenforceable-now';
   const mode = enforceable ? 'enforce' : 'shadow';
   const reason = enforceable ? artifact.codex_enforcement_outcome : 'unenforceable-now';
-  const receipt = {
+  const receipt = Object.freeze({
     enforceable,
     mode,
     reason,
     harness_id: expected_harness_id,
     artifact_digest: sha256(artifact),
     receipt_digest: sha256({ enforceable, mode, reason, harness_id: expected_harness_id, artifact_digest: sha256(artifact) }),
-  };
-  return Object.freeze(attestCodexDispositionReceipt(receipt));
+  });
+  return attestCodexDispositionReceipt(receipt);
+}
+
+function sortedAcceptanceIds(ids) {
+  return Array.isArray(ids) ? [...ids].map(String).sort() : [];
+}
+
+function claimBindingTupleMatches(claim, payload, state) {
+  if (!claim || !isPlainObject(payload) || !state) return false;
+  if (state.mission_lineage_id !== payload.mission_lineage_id) return false;
+  if (state.task_authority_id !== payload.task_authority_id) return false;
+  if (claim.campaign_id !== payload.campaign_id) return false;
+  if (claim.campaign_contract_digest !== payload.campaign_contract_digest) return false;
+  if (claim.base_sha !== payload.base_sha) return false;
+  const leftIds = sortedAcceptanceIds(claim.acceptance_ids);
+  const rightIds = sortedAcceptanceIds(payload.acceptance_ids);
+  if (leftIds.length !== rightIds.length) return false;
+  for (let i = 0; i < leftIds.length; i += 1) {
+    if (leftIds[i] !== rightIds[i]) return false;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'expires_at')
+      && payload.expires_at !== undefined
+      && claim.expires_at !== payload.expires_at) {
+    return false;
+  }
+  let requestedReservation;
+  try {
+    requestedReservation = reservationFor(payload, 'payload');
+  } catch (_error) {
+    return false;
+  }
+  if (!claim.reservation || !sameReservation(claim.reservation, requestedReservation)) {
+    return false;
+  }
+  return true;
+}
+
+function persistMissionStateCas(store, expected, next) {
+  let saved;
+  try {
+    saved = store.save(expected, next);
+  } catch (error) {
+    return {
+      ok: false,
+      code: 'mission_state_cas_failed',
+      reason: error.message || String(error),
+    };
+  }
+  // Only an explicit boolean true is a successful CAS write. false, undefined,
+  // null, or any other return is a CAS failure — never treat as success.
+  if (saved !== true) {
+    return {
+      ok: false,
+      code: 'mission_state_cas_failed',
+      reason: 'Mission state compare-and-swap save did not confirm success',
+    };
+  }
+  return { ok: true };
 }
 
 function createMissionCampaignAdapters(options = {}) {
@@ -3468,11 +3508,22 @@ function createMissionCampaignAdapters(options = {}) {
         return { owner: 'mission', status: 'rejected', code: 'mission_lineage_mismatch', reason: 'Mission state lineage does not match the requested lineage' };
       }
       const payload = claimPayload(state, input);
-      // Exact retry adopts the already-stored claim instead of re-reserving.
+      // Exact retry adopts the already-stored claim only when the complete
+      // binding tuple matches. A same-key changed binding fails closed with a
+      // distinct code so callers cannot silently rebind a reservation.
       if (typeof payload.idempotency_key === 'string'
           && state.claim_idempotency_index
           && state.claim_idempotency_index[payload.idempotency_key]) {
         const existingClaimId = state.claim_idempotency_index[payload.idempotency_key];
+        const existing = state.claims[existingClaimId];
+        if (!claimBindingTupleMatches(existing, payload, state)) {
+          return {
+            owner: 'mission',
+            status: 'rejected',
+            code: 'mission_idempotency_binding_mismatch',
+            reason: 'idempotency key is already bound to a different campaign binding tuple',
+          };
+        }
         return {
           owner: 'mission',
           status: 'claimed',
@@ -3501,8 +3552,9 @@ function createMissionCampaignAdapters(options = {}) {
           reason: (result && result.receipt && result.receipt.reason) || 'mission_grant_rejected',
         };
       }
-      try { store.save(state, result.state); } catch (error) {
-        return { owner: 'mission', status: 'rejected', code: 'mission_state_cas_failed', reason: error.message || String(error) };
+      const cas = persistMissionStateCas(store, state, result.state);
+      if (!cas.ok) {
+        return { owner: 'mission', status: 'rejected', code: cas.code, reason: cas.reason };
       }
       return {
         owner: 'mission',
@@ -3515,17 +3567,57 @@ function createMissionCampaignAdapters(options = {}) {
     releaseMission(input = {}) {
       const missionClaim = input.missionClaim;
       const claimId = missionClaim && missionClaim.claim_id;
+      // Release requires the same atomic store as claim. Without it there is
+      // no durable pre-spawn claim to free, so fail closed rather than
+      // reporting a phantom release.
       if (!hasAtomicStore) {
-        return { owner: 'mission_release', status: 'released', claim_id: claimId };
+        return {
+          owner: 'mission_release',
+          status: 'rejected',
+          code: 'mission_state_store_required',
+          reason: 'atomic Mission state load/compare-and-swap save is required to release a grant',
+          claim_id: claimId,
+        };
       }
       let state;
       try { state = store.load(); } catch (error) {
         return { owner: 'mission_release', status: 'rejected', code: 'mission_state_load_failed', reason: error.message || String(error) };
       }
+      let stateValid = true;
+      try { validateMissionState(state); } catch (_error) { stateValid = false; }
+      if (!stateValid) {
+        return {
+          owner: 'mission_release',
+          status: 'rejected',
+          code: 'mission_state_invalid',
+          reason: 'loaded Mission state failed validation',
+          claim_id: claimId,
+        };
+      }
       const claim = state && state.claims && claimId ? state.claims[claimId] : null;
-      // Already terminal: release is idempotent and must not double-free.
-      if (!claim || claim.released || claim.reconciled) {
+      // Already released: release is idempotent and must not double-free.
+      if (claim && claim.released) {
         return { owner: 'mission_release', status: 'released', claim_id: claimId };
+      }
+      // Only a proven pre-spawn no-effect claim may be released. Reconciled /
+      // partially consumed claims must not have durable consumption erased.
+      if (!claim) {
+        return {
+          owner: 'mission_release',
+          status: 'rejected',
+          code: 'mission_release_claim_missing',
+          reason: 'no-effect release requires a proven pre-spawn Mission claim',
+          claim_id: claimId,
+        };
+      }
+      if (claim.reconciled || claim.terminal) {
+        return {
+          owner: 'mission_release',
+          status: 'rejected',
+          code: 'mission_release_not_pre_spawn',
+          reason: 'release is limited to pre-spawn no-effect claims; partial or durable consumption cannot be erased',
+          claim_id: claimId,
+        };
       }
       const event = {
         event_type: 'no_effect_release',
@@ -3538,7 +3630,7 @@ function createMissionCampaignAdapters(options = {}) {
               axis: axisName,
               authorized_ceiling: state.axes[axisName].authorized_ceiling,
               reserved_active: 0,
-              durable_consumed: 0,
+              durable_consumed: state.axes[axisName].durable_consumed,
               known: true,
             })),
           },
@@ -3548,23 +3640,38 @@ function createMissionCampaignAdapters(options = {}) {
       try { result = reduceMissionState(state, event); } catch (error) {
         return { owner: 'mission_release', status: 'rejected', code: 'mission_release_invalid', reason: error.message || String(error) };
       }
-      try { store.save(state, result.state); } catch (error) {
-        return { owner: 'mission_release', status: 'rejected', code: 'mission_state_cas_failed', reason: error.message || String(error) };
+      if (!result || !result.state || !result.receipt
+          || result.receipt.artifact_type === 'mission_grant_rejected') {
+        return {
+          owner: 'mission_release',
+          status: 'rejected',
+          code: 'mission_release_rejected',
+          reason: (result && result.receipt && result.receipt.reason) || 'mission_release_rejected',
+          claim_id: claimId,
+        };
+      }
+      const cas = persistMissionStateCas(store, state, result.state);
+      if (!cas.ok) {
+        return { owner: 'mission_release', status: 'rejected', code: cas.code, reason: cas.reason, claim_id: claimId };
       }
       return { owner: 'mission_release', status: 'released', claim_id: claimId };
     },
   };
 }
 
-function createCodexMissionEnforcementAdapter({ mission_state, grant_receipt, disposition_receipt, request_identity } = {}) {
+function createCodexMissionEnforcementAdapter({ mission_state, grant_receipt, disposition_receipt } = {}) {
   const reject = (reason) => Object.freeze({ rejected: true, reason });
   let stateValid = true;
   try { validateMissionState(mission_state); } catch (_error) { stateValid = false; }
   if (!stateValid) return reject('binding_mismatch');
-  // The disposition receipt must be a genuine, attested, enforceable receipt
-  // emitted by evaluateCodexEnforcementDisposition. Forged or cloned receipts
-  // lose the non-enumerable attestation (or mismatch its content binding).
-  if (!codexDispositionReceiptAttested(disposition_receipt) || disposition_receipt.enforceable !== true) {
+  // The disposition receipt must be a genuine, WeakSet-attested, enforceable
+  // receipt emitted by evaluateCodexEnforcementDisposition. Descriptor-
+  // preserving clones and forged objects have no registry identity.
+  if (!codexDispositionReceiptAttested(disposition_receipt)
+      || disposition_receipt.enforceable !== true
+      || typeof disposition_receipt.harness_id !== 'string'
+      || disposition_receipt.harness_id.length === 0
+      || typeof disposition_receipt.receipt_digest !== 'string') {
     return reject('invalid_or_tampered_disposition');
   }
   // The grant receipt must bind exactly to a validated, non-released claim
@@ -3584,7 +3691,11 @@ function createCodexMissionEnforcementAdapter({ mission_state, grant_receipt, di
   const boundLineage = mission_state.mission_lineage_id;
   const boundSequence = mission_state.control_sequence;
   const boundDispositionDigest = disposition_receipt.receipt_digest;
-  const boundIdentity = request_identity;
+  // Request identity is derived solely from the attested disposition's
+  // harness binding. A caller-supplied request_identity option is ignored
+  // so an attacker cannot rebind a genuine Codex disposition to a chosen
+  // identity string.
+  const boundIdentity = disposition_receipt.harness_id;
   const mode = disposition_receipt.mode;
   return Object.freeze({
     enforce(request, effect) {

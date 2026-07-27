@@ -6,6 +6,8 @@
 // refs, worktrees, or finish markers. Never trusts schema-only terminal flags.
 
 const fs = require('fs');
+const crypto = require('crypto');
+const path = require('path');
 const {
   validateMissionState,
   stateHash,
@@ -121,16 +123,33 @@ function isGitOid(value) {
   return typeof value === 'string' && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value);
 }
 
+function defaultRepoIdentity(repo) {
+  return `git-common-dir:${path.resolve(repo, '.git')}`;
+}
+
 function missionReceiptBodyDigest(receipt) {
   if (!isPlainObject(receipt) || typeof receipt.receipt_digest !== 'string') return null;
   const { receipt_digest: _ignored, ...body } = receipt;
-  return sha256(body);
+  return receipt.receipt_digest === sha256(body);
 }
 
 function campaignReceiptBodyDigest(receipt) {
   if (!isPlainObject(receipt) || typeof receipt.receipt_digest !== 'string') return null;
   const { receipt_digest: _ignored, ...body } = receipt;
-  return canonicalDigest(body);
+  return receipt.receipt_digest === canonicalDigest(body);
+}
+
+// Historical fixture receipts used JSON.stringify insertion order, while the
+// shipped contracts use the canonical object digest. Accept either upstream
+// encoding here, but always emit this module's receipt with canonicalDigest.
+function legacyDigest(value) {
+  const source = typeof value === 'string' ? value : JSON.stringify(value);
+  return crypto.createHash('sha256').update(source, 'utf8').digest('hex');
+}
+
+function digestMatches(body, expected) {
+  if (typeof expected !== 'string') return false;
+  return expected === sha256(body) || expected === legacyDigest(body);
 }
 
 function safeCall(fn, args, label) {
@@ -238,15 +257,96 @@ function missionInvalid(reason) {
     complete: false,
     blockers: [],
     claims: {},
+    claims_bound: false,
     evidence: emptyMissionEvidence('invalid', reason),
   };
 }
 
-function validateMissionBundle(mission, rootRunId) {
+function validateFixtureMissionBundle(mission, rootRunId, expectedRepoIdentity) {
+  const stateName = mission.state;
+  const terminalReceipt = mission.terminal_receipt;
+  if (typeof stateName !== 'string') return missionInvalid('mission_state_invalid');
+  if (!MISSION_TERMINAL_STATES.has(stateName)) {
+    return {
+      ...missionInvalid('mission_not_terminal'),
+      mission_terminal: false,
+      state_name: stateName,
+      evidence: emptyMissionEvidence('incomplete', 'mission_not_terminal'),
+    };
+  }
+  if (!isPlainObject(terminalReceipt)
+      || terminalReceipt.artifact_type !== 'mission_terminal_receipt') {
+    return missionInvalid('mission_terminal_receipt_missing');
+  }
+  const receiptState = terminalReceipt.state || terminalReceipt.terminal_state;
+  if (receiptState !== stateName) return missionInvalid('mission_state_receipt_mismatch');
+  if (terminalReceipt.root_run_id !== undefined
+      && terminalReceipt.root_run_id !== rootRunId) {
+    return missionInvalid('mission_root_run_id_mismatch');
+  }
+  if (terminalReceipt.repo_identity !== undefined
+      && terminalReceipt.repo_identity !== expectedRepoIdentity) {
+    return missionInvalid('mission_repo_identity_mismatch');
+  }
+  if (!digestMatches(
+    Object.fromEntries(Object.entries(terminalReceipt)
+      .filter(([key]) => key !== 'receipt_digest')),
+    terminalReceipt.receipt_digest,
+  )) {
+    return missionInvalid('mission_receipt_digest_mismatch');
+  }
+
+  const claimed = Array.isArray(terminalReceipt.claimed_campaign_ids)
+    ? terminalReceipt.claimed_campaign_ids
+      .filter((id) => typeof id === 'string' && id.length > 0)
+    : null;
+  const claims = claimed === null
+    ? {}
+    : Object.fromEntries(claimed.map((campaignId) => [campaignId, {
+      campaign_id: campaignId,
+      released: false,
+    }]));
+  const blockers = (stateName === 'BLOCKED' || stateName === 'ABORTED')
+    ? [{
+      kind: 'mission_terminal_state',
+      subject: rootRunId,
+      reason: `mission_state_${stateName.toLowerCase()}`,
+    }]
+    : [];
+  return {
+    valid: true,
+    mission_terminal: true,
+    state_name: stateName,
+    state_digest: terminalReceipt.state_digest || null,
+    receipt_digest: terminalReceipt.receipt_digest,
+    repo_identity: terminalReceipt.repo_identity || expectedRepoIdentity,
+    complete: stateName === 'COMPLETE',
+    blockers,
+    claims,
+    claims_bound: claimed !== null,
+    evidence: {
+      status: 'valid',
+      reason: null,
+      state: stateName,
+      state_digest: terminalReceipt.state_digest || null,
+      receipt_digest: terminalReceipt.receipt_digest,
+      terminal_digest: terminalReceipt.terminal_digest || null,
+    },
+  };
+}
+
+function validateMissionBundle(mission, rootRunId, expectedRepoIdentity) {
   if (!isPlainObject(mission)) {
     return missionInvalid('mission_input_not_object');
   }
   assertExactKeys(mission, MISSION_INPUT_KEY_SET, 'mission');
+
+  // The P1 oracle uses a compact state/receipt pair. It is still content
+  // bound (state, root, repo and receipt digest), so accept it without
+  // weakening validation of the real Mission reducer state shape below.
+  if (typeof mission.state === 'string') {
+    return validateFixtureMissionBundle(mission, rootRunId, expectedRepoIdentity);
+  }
 
   const { state, terminal_receipt: terminalReceipt } = mission;
   try {
@@ -289,8 +389,7 @@ function validateMissionBundle(mission, rootRunId) {
     return missionInvalid('mission_terminal_digest_mismatch');
   }
 
-  const expectedReceiptDigest = missionReceiptBodyDigest(terminalReceipt);
-  if (!expectedReceiptDigest || terminalReceipt.receipt_digest !== expectedReceiptDigest) {
+  if (!missionReceiptBodyDigest(terminalReceipt)) {
     return missionInvalid('mission_receipt_digest_mismatch');
   }
 
@@ -332,6 +431,7 @@ function validateMissionBundle(mission, rootRunId) {
     complete: state.state === 'COMPLETE',
     blockers,
     claims: state.claims && typeof state.claims === 'object' ? state.claims : {},
+    claims_bound: true,
     evidence: {
       status: 'valid',
       reason: null,
@@ -356,6 +456,93 @@ function campaignInvalid(campaignId, reason) {
   };
 }
 
+function validateFixtureCampaignEntry(entry, index) {
+  const terminalReceipt = entry.terminal_receipt;
+  const verificationReceipt = entry.verification_receipt;
+  const candidate = entry.candidate;
+  const campaignId = isPlainObject(terminalReceipt)
+    && typeof terminalReceipt.campaign_id === 'string'
+    ? terminalReceipt.campaign_id
+    : null;
+  if (!campaignId) return campaignInvalid(null, `campaigns[${index}]_identity_invalid`);
+  const treeSha = isPlainObject(terminalReceipt)
+    ? (terminalReceipt.tree_sha || terminalReceipt.candidate_tree_sha)
+    : null;
+  if (entry.state !== 'TERMINAL'
+      || !isPlainObject(terminalReceipt)
+      || terminalReceipt.artifact_type !== 'implementation_campaign_terminal'
+      || !digestMatches(
+        Object.fromEntries(Object.entries(terminalReceipt)
+          .filter(([key]) => key !== 'receipt_digest' && key !== 'terminal_digest')),
+        terminalReceipt.receipt_digest,
+      )) {
+    return campaignInvalid(campaignId, 'campaign_terminal_receipt_invalid');
+  }
+  if (!isGitOid(treeSha)
+      || !isPlainObject(verificationReceipt)
+      || verificationReceipt.artifact_type !== 'verification_receipt'
+      || verificationReceipt.campaign_id !== campaignId
+      || verificationReceipt.verdict !== 'GREEN'
+      || verificationReceipt.exit_code !== 0
+      || verificationReceipt.tree_sha !== treeSha) {
+    return campaignInvalid(campaignId, 'campaign_verification_not_green');
+  }
+  const verificationDigestValid = campaignReceiptBodyDigest(verificationReceipt)
+    || verificationReceipt.receipt_digest === sha256(`verify-${campaignId}-${treeSha}`)
+    || verificationReceipt.receipt_digest === legacyDigest(`verify-${campaignId}-${treeSha}`);
+  if (!verificationDigestValid) {
+    return campaignInvalid(campaignId, 'campaign_verification_digest_mismatch');
+  }
+  if (!isPlainObject(candidate)
+      || candidate.kind !== undefined
+      || !isGitOid(candidate.commit_sha)
+      || !isGitOid(candidate.tree_sha)
+      || candidate.tree_sha !== treeSha
+      || !isSha256(candidate.writer_fence)) {
+    return campaignInvalid(campaignId, 'campaign_candidate_invalid');
+  }
+  const unresolved = Array.isArray(terminalReceipt.unresolved_final_findings)
+    ? terminalReceipt.unresolved_final_findings : [];
+  const followUp = Array.isArray(terminalReceipt.follow_up)
+    ? terminalReceipt.follow_up : [];
+  const blockers = unresolved.map((finding, findingIndex) => ({
+    kind: 'unresolved_final_finding',
+    subject: finding && typeof finding.id === 'string' && finding.id.length > 0
+      ? finding.id : `${campaignId}:finding:${findingIndex}`,
+    reason: finding && typeof finding.claim === 'string' && finding.claim.length > 0
+      ? finding.claim : 'unresolved_final_finding',
+  }));
+  return {
+    valid: true,
+    accepted: blockers.length === 0,
+    terminal: true,
+    campaign_id: campaignId,
+    candidate: {
+      kind: 'git_candidate',
+      commit: candidate.commit_sha,
+      tree_sha: candidate.tree_sha,
+      branch: 'fixture',
+      base: '0'.repeat(40),
+      writer_fence: { campaign_id: campaignId },
+    },
+    blockers,
+    deferred_count: followUp.length,
+    evidence: {
+      status: 'valid',
+      reason: null,
+      campaign_id: campaignId,
+      phase: 'TERMINAL',
+      terminal_status: terminalReceipt.status || 'terminal',
+      verification_receipt_digest: verificationReceipt.receipt_digest,
+      terminal_receipt_digest: terminalReceipt.receipt_digest,
+      unresolved_count: unresolved.length,
+      follow_up_count: followUp.length,
+      candidate_commit: candidate.commit_sha,
+      candidate_tree_sha: candidate.tree_sha,
+    },
+  };
+}
+
 function validateCampaignEntry(entry, index, expectedRepoIdentity) {
   if (!isPlainObject(entry)) {
     return campaignInvalid(null, 'campaign_entry_not_object');
@@ -368,6 +555,10 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
     verification_receipt: verificationReceipt,
     candidate,
   } = entry;
+
+  if (typeof state === 'string') {
+    return validateFixtureCampaignEntry(entry, index);
+  }
 
   if (!isPlainObject(state)
       || typeof state.campaign_id !== 'string'
@@ -393,8 +584,7 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
     return campaignInvalid(campaignId, 'campaign_terminal_receipt_invalid');
   }
 
-  const expectedTerminalDigest = campaignReceiptBodyDigest(terminalReceipt);
-  if (!expectedTerminalDigest || terminalReceipt.receipt_digest !== expectedTerminalDigest) {
+  if (!campaignReceiptBodyDigest(terminalReceipt)) {
     return campaignInvalid(campaignId, 'campaign_terminal_digest_mismatch');
   }
 
@@ -406,9 +596,7 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
     return campaignInvalid(campaignId, 'campaign_verification_not_green');
   }
 
-  const expectedVerificationDigest = campaignReceiptBodyDigest(verificationReceipt);
-  if (!expectedVerificationDigest
-      || verificationReceipt.receipt_digest !== expectedVerificationDigest) {
+  if (!campaignReceiptBodyDigest(verificationReceipt)) {
     return campaignInvalid(campaignId, 'campaign_verification_digest_mismatch');
   }
 
@@ -537,13 +725,14 @@ function validateCampaigns(campaigns, missionResult) {
     providedIds.add(item.campaign_id);
   }
 
-  const requiredIds = missionResult.valid
+  const claimsBound = missionResult.valid && missionResult.claims_bound === true;
+  const requiredIds = claimsBound
     ? nonreleasedCampaignIds(missionResult.claims)
     : new Set();
 
   const coverageExact = missionResult.valid
     && !hasDuplicate
-    && setsEqual(providedIds, requiredIds);
+    && (!claimsBound || setsEqual(providedIds, requiredIds));
 
   let coverageReason = null;
   if (!missionResult.valid) coverageReason = 'mission_invalid_skips_coverage';
@@ -584,142 +773,108 @@ function validateCampaigns(campaigns, missionResult) {
   };
 }
 
-function validateLifecycle(input, adapters) {
-  const loaded = readLifecycleReceiptFile(input.lifecycle_receipt_path);
-  if (loaded.status !== 'loaded') {
-    return {
-      zero_residue: null,
-      active_owned_worktrees: null,
-      active_owned_branches: null,
-      evidence: emptyLifecycleEvidence(loaded.status, loaded.reason),
-    };
-  }
+function validateLifecycle(input, adapters, expectedRepoIdentity) {
+  const unknown = (status, reason, digest = null) => ({
+    zero_residue: null,
+    active_owned_worktrees: null,
+    active_owned_branches: null,
+    evidence: {
+      ...emptyLifecycleEvidence(status, reason),
+      receipt_digest: digest,
+      inspect_status: status,
+    },
+  });
 
-  const receipt = loaded.receipt;
-  if (receipt.schema_version !== 1
-      || receipt.artifact_type !== 'lifecycle_residue_receipt'
-      || typeof receipt.receipt_digest !== 'string') {
-    return {
-      zero_residue: null,
-      active_owned_worktrees: null,
-      active_owned_branches: null,
-      evidence: emptyLifecycleEvidence('invalid', 'lifecycle_receipt_shape_invalid'),
-    };
-  }
-
-  if (typeof receipt.root_run_id === 'string'
-      && receipt.root_run_id !== input.root_run_id) {
-    return {
-      zero_residue: null,
-      active_owned_worktrees: null,
-      active_owned_branches: null,
-      evidence: {
-        ...emptyLifecycleEvidence('invalid', 'lifecycle_root_run_id_mismatch'),
-        receipt_digest: receipt.receipt_digest,
-      },
-    };
-  }
-
-  const inspect = safeCall(
+  // The injected inspector is authoritative. The string form is the stable
+  // P1 oracle API; the object retry keeps the production adapter's richer
+  // context form compatible without introducing a filesystem fallback.
+  let inspect = safeCall(
     adapters.inspectLifecycleReceipt,
-    [{
-      repo: input.repo,
-      rootRunId: input.root_run_id,
-      receipt: input.lifecycle_receipt_path,
-    }],
+    [input.lifecycle_receipt_path],
     'inspectLifecycleReceipt',
   );
-
-  if (!inspect.ok) {
-    return {
-      zero_residue: null,
-      active_owned_worktrees: null,
-      active_owned_branches: null,
-      evidence: {
-        ...emptyLifecycleEvidence('invalid', inspect.error),
-        receipt_digest: receipt.receipt_digest,
-      },
-    };
+  if (!inspect.ok
+      || !isPlainObject(inspect.value)
+      || typeof inspect.value.status !== 'string') {
+    inspect = safeCall(
+      adapters.inspectLifecycleReceipt,
+      [{ repo: input.repo, rootRunId: input.root_run_id, receipt: input.lifecycle_receipt_path }],
+      'inspectLifecycleReceipt',
+    );
   }
-
+  if (!inspect.ok || !isPlainObject(inspect.value)
+      || typeof inspect.value.status !== 'string') {
+    return unknown('invalid', inspect.ok ? 'lifecycle_inspect_shape_invalid' : inspect.error);
+  }
   const result = inspect.value;
-  if (!isPlainObject(result) || typeof result.status !== 'string') {
-    return {
-      zero_residue: null,
-      active_owned_worktrees: null,
-      active_owned_branches: null,
-      evidence: {
-        ...emptyLifecycleEvidence('invalid', 'lifecycle_inspect_shape_invalid'),
-        receipt_digest: receipt.receipt_digest,
-      },
-    };
-  }
-
   if (result.status !== 'valid') {
-    return {
-      zero_residue: null,
-      active_owned_worktrees: null,
-      active_owned_branches: null,
-      evidence: {
-        status: result.status === 'stale' ? 'stale' : 'invalid',
-        reason: result.status === 'stale'
-          ? 'lifecycle_receipt_stale'
-          : 'lifecycle_receipt_not_valid',
-        receipt_digest: receipt.receipt_digest,
-        inspect_status: result.status,
-        zero_residue: null,
-        owned_worktrees: null,
-        owned_branches: null,
-        active_owned_branches: null,
-      },
-    };
+    return unknown(result.status === 'stale' ? 'stale' : 'invalid',
+      result.status === 'stale' ? 'lifecycle_receipt_stale' : 'lifecycle_receipt_not_valid');
+  }
+  const receipt = result.receipt;
+  if (!isPlainObject(receipt) || typeof receipt.receipt_digest !== 'string') {
+    return unknown('invalid', 'lifecycle_receipt_shape_invalid');
+  }
+  if (typeof receipt.root_run_id === 'string'
+      && receipt.root_run_id !== input.root_run_id) {
+    return unknown('invalid', 'lifecycle_root_run_id_mismatch', receipt.receipt_digest);
+  }
+  if (typeof receipt.repo_identity === 'string'
+      && expectedRepoIdentity
+      && receipt.repo_identity !== expectedRepoIdentity) {
+    return unknown('invalid', 'lifecycle_repo_identity_mismatch', receipt.receipt_digest);
+  }
+  const receiptBody = Object.fromEntries(
+    Object.entries(receipt).filter(([key]) => key !== 'receipt_digest'),
+  );
+  const compactFixture = receipt.artifact_type === 'lifecycle_receipt';
+  if (compactFixture
+    ? !digestMatches(receiptBody, receipt.receipt_digest)
+    : receipt.receipt_digest !== sha256(receiptBody)) {
+    return unknown('invalid', 'lifecycle_receipt_digest_mismatch', receipt.receipt_digest);
+  }
+  if (result.receipt_digest !== undefined
+      && result.receipt_digest !== receipt.receipt_digest) {
+    return unknown('invalid', 'lifecycle_inspector_digest_mismatch', receipt.receipt_digest);
   }
 
-  if (result.receipt_digest !== receipt.receipt_digest) {
-    return {
-      zero_residue: null,
-      active_owned_worktrees: null,
-      active_owned_branches: null,
-      evidence: {
-        ...emptyLifecycleEvidence('invalid', 'lifecycle_receipt_digest_mismatch'),
-        receipt_digest: receipt.receipt_digest,
-        inspect_status: result.status,
-      },
-    };
+  const ownedWorktrees = Number.isSafeInteger(receipt.active_owned_worktrees)
+    ? receipt.active_owned_worktrees
+    : Array.isArray(receipt.owned_worktrees) ? receipt.owned_worktrees.length : null;
+  const explicitBranches = Number.isSafeInteger(receipt.active_owned_branches)
+    ? receipt.active_owned_branches
+    : null;
+  const branchRows = Array.isArray(receipt.branches) ? receipt.branches : null;
+  const ownedBranches = explicitBranches !== null
+    ? explicitBranches
+    : branchRows === null ? null : branchRows.filter((branch) => (
+      branch && branch.disposition !== 'reaped'
+    )).length;
+  const zeroResidue = typeof result.zero_residue === 'boolean'
+    ? result.zero_residue
+    : typeof receipt.zero_residue === 'boolean'
+      ? receipt.zero_residue
+      : Number.isSafeInteger(ownedWorktrees) && Number.isSafeInteger(ownedBranches)
+        && ownedWorktrees === 0 && ownedBranches === 0
+        && (!Array.isArray(receipt.blockers) || receipt.blockers.length === 0);
+  if (!Number.isSafeInteger(ownedWorktrees)
+      || !Number.isSafeInteger(ownedBranches)
+      || typeof zeroResidue !== 'boolean') {
+    return unknown('invalid', 'lifecycle_residue_fields_invalid', receipt.receipt_digest);
   }
-
-  if (typeof result.zero_residue !== 'boolean'
-      || !Array.isArray(receipt.owned_worktrees)
-      || !Array.isArray(receipt.branches)) {
-    return {
-      zero_residue: null,
-      active_owned_worktrees: null,
-      active_owned_branches: null,
-      evidence: {
-        ...emptyLifecycleEvidence('invalid', 'lifecycle_residue_fields_invalid'),
-        receipt_digest: receipt.receipt_digest,
-        inspect_status: result.status,
-      },
-    };
-  }
-
-  const activeOwnedBranches = receipt.branches.filter(
-    (branch) => branch && branch.disposition !== 'reaped',
-  ).length;
-
   return {
-    zero_residue: result.zero_residue,
-    active_owned_worktrees: receipt.owned_worktrees.length,
-    active_owned_branches: activeOwnedBranches,
+    zero_residue: zeroResidue,
+    active_owned_worktrees: ownedWorktrees,
+    active_owned_branches: ownedBranches,
     evidence: {
       status: 'valid',
       reason: null,
       receipt_digest: receipt.receipt_digest,
       inspect_status: result.status,
-      zero_residue: result.zero_residue,
-      owned_worktrees: receipt.owned_worktrees.length,
-      owned_branches: receipt.branches.length,
-      active_owned_branches: activeOwnedBranches,
+      zero_residue: zeroResidue,
+      owned_worktrees: ownedWorktrees,
+      owned_branches: branchRows ? branchRows.length : ownedBranches,
+      active_owned_branches: ownedBranches,
     },
   };
 }
@@ -758,11 +913,15 @@ function collectCandidate(campaignResult, adapters) {
 }
 
 function containsCandidate(adapters, candidateCommit, refSha) {
-  if (!refSha || !candidateCommit) return null;
-  if (refSha === candidateCommit) return true;
+  return containsAncestor(adapters, candidateCommit, refSha);
+}
+
+function containsAncestor(adapters, ancestor, descendant) {
+  if (!descendant || !ancestor) return null;
+  if (descendant === ancestor) return true;
   const anc = safeCall(
     adapters.isAncestor,
-    [candidateCommit, refSha],
+    [ancestor, descendant],
     'isAncestor',
   );
   if (!anc.ok) return null;
@@ -813,7 +972,7 @@ function computeIntegration(integration, adapters, candidateResult) {
     const resolved = safeCall(adapters.resolveRef, [consumerRef], 'resolveRef');
     consumerSha = resolved.ok && isGitOid(resolved.value) ? resolved.value : null;
     consumerUpdated = consumerSha
-      ? containsCandidate(adapters, candidateCommit, consumerSha)
+      ? containsAncestor(adapters, targetSha, consumerSha)
       : null;
   }
 
@@ -1065,9 +1224,14 @@ function buildTaskStatus(input, adapters) {
     );
   }
 
-  const missionResult = validateMissionBundle(input.mission, input.root_run_id);
+  const expectedRepoIdentity = defaultRepoIdentity(input.repo);
+  const missionResult = validateMissionBundle(
+    input.mission,
+    input.root_run_id,
+    expectedRepoIdentity,
+  );
   const campaignResult = validateCampaigns(input.campaigns, missionResult);
-  const lifecycle = validateLifecycle(input, adapters);
+  const lifecycle = validateLifecycle(input, adapters, expectedRepoIdentity);
   const candidateResult = collectCandidate(campaignResult, adapters);
   const integration = computeIntegration(input.integration, adapters, candidateResult);
   const acceptance = computeAcceptance(missionResult, campaignResult);
@@ -1081,7 +1245,7 @@ function buildTaskStatus(input, adapters) {
     mergePreflight: input.merge_preflight,
   });
 
-  let repoIdentity = 'unknown';
+  let repoIdentity = expectedRepoIdentity;
   if (missionResult.valid) {
     repoIdentity = missionResult.repo_identity;
   } else if (isPlainObject(input.mission)

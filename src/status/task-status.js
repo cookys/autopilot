@@ -17,7 +17,9 @@ const {
   CAMPAIGN_STATES,
   campaignIdFor,
   canonicalDigest,
+  createCampaignState,
   normalizeCampaignArtifactReference,
+  replayCampaignEvents,
   CampaignStateError,
 } = require('../engine/implementation-campaign');
 
@@ -62,6 +64,8 @@ const MISSION_TERMINAL_RECEIPT_KEYS = Object.freeze([
 ]);
 
 const CAMPAIGN_INPUT_KEYS = Object.freeze([
+  'contract',
+  'events',
   'state',
   'terminal_receipt',
   'verification_receipt',
@@ -591,17 +595,44 @@ function validateCampaignEntry(entry, index, expectedRepoIdentity) {
   assertExactKeys(entry, CAMPAIGN_INPUT_KEY_SET, `campaigns[${index}]`);
 
   const {
+    contract,
+    events,
     state,
     terminal_receipt: terminalReceipt,
     verification_receipt: verificationReceipt,
     candidate,
   } = entry;
 
+  if (!isPlainObject(contract) || !Array.isArray(events)) {
+    return campaignInvalid(null, 'campaign_replay_evidence_missing');
+  }
   const stateOk = validateDurableCampaignState(state);
   if (!stateOk.ok) {
     return campaignInvalid(null, 'campaign_state_identity_invalid');
   }
   const campaignId = state.campaign_id;
+
+  const contractDigest = canonicalDigest(contract);
+  if (contractDigest !== state.contract_digest) {
+    return campaignInvalid(campaignId, 'campaign_contract_digest_mismatch');
+  }
+  try {
+    const initial = createCampaignState({
+      contract,
+      contractDigest,
+      repoIdentity: state.repo_identity,
+      startedAt: state.started_at,
+    });
+    const replayed = replayCampaignEvents(initial, events);
+    if (canonicalDigest(replayed) !== canonicalDigest(state)) {
+      return campaignInvalid(campaignId, 'campaign_state_replay_mismatch');
+    }
+  } catch (error) {
+    if (error instanceof CampaignStateError || error instanceof TypeError) {
+      return campaignInvalid(campaignId, 'campaign_state_replay_invalid');
+    }
+    throw error;
+  }
 
   if (typeof state.repo_identity !== 'string'
       || state.repo_identity.length === 0
@@ -962,7 +993,7 @@ function validateCampaigns(campaigns, missionResult, adapters) {
       status: coverageExact && allValid ? 'valid' : (missionResult.valid ? 'invalid' : 'unknown'),
       reason: coverageReason || (allValid ? null : 'campaign_entry_invalid'),
       coverage_exact: coverageExact,
-      provided_campaign_ids: [...providedIccIds].sort(),
+      provided_campaign_ids: [...providedMissionIds].sort(),
       required_campaign_ids: [...requiredMissionIds].sort(),
       campaigns: items.map((item) => item.evidence),
     },

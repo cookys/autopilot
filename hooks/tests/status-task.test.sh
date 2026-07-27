@@ -239,6 +239,7 @@ function buildCampaignBundle({
     repoIdentity: REPO_IDENTITY,
     startedAt: '2026-07-27T00:00:00.000Z',
   });
+  const events = [];
   const writerFence = campaignVerification.createWriterFence({
     campaignId: state.campaign_id,
     stageIdentity: 'lsm-implementer',
@@ -346,30 +347,35 @@ function buildCampaignBundle({
     },
     payload,
   });
-  state = icc.reduceCampaignState(state, event(
+  const applyEvent = (eventType, output, payload, second) => {
+    const nextEvent = event(eventType, output, payload, second);
+    events.push(nextEvent);
+    state = icc.reduceCampaignState(state, nextEvent);
+  };
+  applyEvent(
     icc.CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
     mission.sha256('implementation-started'),
     { sealed_contract: true },
     1,
-  ));
-  state = icc.reduceCampaignState(state, event(
+  );
+  applyEvent(
     icc.CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED,
     mission.sha256('implementation-completed'),
     { scope_check_passed: true, scope_check_digest: mission.sha256('scope') },
     2,
-  ));
-  state = icc.reduceCampaignState(state, event(
+  );
+  applyEvent(
     icc.CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
     verification.receipt_digest,
     { passed: true, evidence_digest: verification.receipt_digest },
     3,
-  ));
-  state = icc.reduceCampaignState(state, event(
+  );
+  applyEvent(
     icc.CAMPAIGN_EVENTS.REVIEW_COMPLETED,
     mission.sha256('review-completed'),
     { review_digest: mission.sha256('review') },
     4,
-  ));
+  );
   const terminalEvent = status === 'ready'
     ? icc.CAMPAIGN_EVENTS.TERMINAL_READY
     : (status === 'follow_up'
@@ -387,13 +393,20 @@ function buildCampaignBundle({
       reason: 'canonical terminal',
     };
   if (status === 'follow_up') terminalPayload.follow_up_digest = mission.sha256(followUp);
-  state = icc.reduceCampaignState(state, event(
+  applyEvent(
     terminalEvent,
     terminal.receipt_digest,
     terminalPayload,
     5,
-  ));
-  return { state, terminal_receipt: terminal, verification_receipt: verification, candidate };
+  );
+  return {
+    contract,
+    events,
+    state,
+    terminal_receipt: terminal,
+    verification_receipt: verification,
+    candidate,
+  };
 }
 
 const missionBundle = buildMissionBundle();
@@ -475,9 +488,30 @@ group('canonical-green', () => {
   const { receipt_digest: receiptDigest, ...receiptBody } = receipt;
   check('receipt-digest-canonical',
     receiptDigest === icc.canonicalDigest(receiptBody));
+  check('coverage-evidence-uses-one-namespace',
+    JSON.stringify(receipt.evidence.campaigns.provided_campaign_ids)
+      === JSON.stringify(receipt.evidence.campaigns.required_campaign_ids));
 });
 
 group('durable-state-authority', () => {
+  const contractDrift = clone(campaignBundle);
+  contractDrift.contract.max_wall_seconds += 1;
+  const contractDriftResult = buildTaskStatus(
+    makeInput({ campaigns: [contractDrift] }),
+    makeAdapters(),
+  );
+  check('icc-contract-state-digest-drift-rejected',
+    contractDriftResult.acceptance_verdict === 'unknown');
+
+  const ledgerDrift = clone(campaignBundle);
+  ledgerDrift.events[0].output_artifact_digest = mission.sha256('ledger-drift');
+  const ledgerDriftResult = buildTaskStatus(
+    makeInput({ campaigns: [ledgerDrift] }),
+    makeAdapters(),
+  );
+  check('icc-event-ledger-replay-drift-rejected',
+    ledgerDriftResult.acceptance_verdict === 'unknown');
+
   const extra = clone(campaignBundle);
   extra.state.untrusted = true;
   const extraResult = buildTaskStatus(makeInput({ campaigns: [extra] }), makeAdapters());

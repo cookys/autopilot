@@ -19,6 +19,10 @@ const {
   reduceCampaignState,
 } = require('./implementation-campaign');
 const {
+  missionCampaignIdFor,
+  missionSubjectDigest,
+} = require('./mission-campaign-identity');
+const {
   loadRows,
   processLiveness,
   projectCampaign,
@@ -1283,6 +1287,55 @@ function runCampaignIntake(input = {}, adapters = {}) {
     ));
   }
   const contract = inspection.contract;
+  // mission-subject-v2: recompute subject + campaign-v2 id from the sealed
+  // contract (excluding mission_grant_ref) and require exact seal identity.
+  // Raw contract_sha256 above remains final-byte provenance.
+  if (inspection.identity_scheme === 'mission-subject-v2') {
+    let subject;
+    let v2CampaignId;
+    try {
+      subject = missionSubjectDigest(contract);
+      v2CampaignId = missionCampaignIdFor(
+        inspection.repo_identity,
+        contract.ticket,
+        subject,
+      );
+    } catch (error) {
+      return releaseAfterRejection(rejected(
+        'campaign_contract',
+        'mission_subject_identity_invalid',
+        error.message || String(error),
+      ));
+    }
+    if (inspection.mission_subject_digest !== subject
+        || inspection.campaign_id !== v2CampaignId) {
+      return releaseAfterRejection(rejected(
+        'campaign_contract',
+        'mission_subject_identity_mismatch',
+        'sealed mission-subject-v2 identity does not match recomputed subject/campaign id',
+      ));
+    }
+    if (missionClaim.status === 'claimed') {
+      if (typeof missionClaim.campaign_id === 'string'
+          && missionClaim.campaign_id.length > 0
+          && missionClaim.campaign_id !== v2CampaignId) {
+        return releaseAfterRejection(rejected(
+          'mission',
+          'mission_campaign_id_mismatch',
+          'Mission claim campaign_id does not match sealed campaign-v2 id',
+        ));
+      }
+      if (typeof inspection.claim_id === 'string'
+          && inspection.claim_id.length > 0
+          && missionClaim.claim_id !== inspection.claim_id) {
+        return releaseAfterRejection(rejected(
+          'mission',
+          'mission_claim_id_mismatch',
+          'Mission claim_id does not match the sealed grant claim',
+        ));
+      }
+    }
+  }
   if (contract.base_sha !== input.base || contract.branch !== input.branch) {
     return releaseAfterRejection(rejected(
       'campaign_contract',

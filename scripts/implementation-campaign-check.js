@@ -470,11 +470,15 @@ function grantBindingMatchesRef(bindingDigest, grantRef) {
 
 // Module-private mint. Reads the Mission state file, validates it, finds the
 // unique live claim whose binding_digest equals the campaign grant ref, and
-// checks that claim's contract digest and the state's repo identity against
-// the campaign being sealed. Never exported.
+// validates claim identity against the campaign being sealed:
+//   * v2 (mission-subject-v2): recomputed subject + campaign-v2 id, base SHA,
+//     acceptance IDs, repo/lineage/authority — never raw final-byte digest
+//   * v1/legacy: campaign_contract_digest must equal raw contract digest
+// Never exported.
 function mintMissionGrantBindingFromStateFile({
   missionStatePath,
   grantRef,
+  contract,
   contractDigest,
   repoIdentity,
 }) {
@@ -498,8 +502,10 @@ function mintMissionGrantBindingFromStateFile({
     throw new CliError(`--mission-state is not valid JSON: ${error.message}`, 3);
   }
   let mission;
+  let identity;
   try {
     mission = require(path.resolve(__dirname, '..', 'src', 'engine', 'mission-convergence'));
+    identity = require(path.resolve(__dirname, '..', 'src', 'engine', 'mission-campaign-identity'));
   } catch (error) {
     throw new CliError(
       `mission grant binding cannot load Mission engine: ${error.message}`,
@@ -548,7 +554,75 @@ function mintMissionGrantBindingFromStateFile({
       3,
     );
   }
-  if (typeof contractDigest === 'string'
+
+  let subjectDigest = null;
+  let campaignId = null;
+  let identityScheme = null;
+  const isV2 = identity.isMissionSubjectV2Claim(claim);
+
+  if (isV2) {
+    if (!contract || typeof contract !== 'object' || Array.isArray(contract)) {
+      throw new CliError(
+        'mission_grant_ref: enforce-mode seal requires the campaign contract for subject identity',
+        3,
+      );
+    }
+    try {
+      subjectDigest = identity.missionSubjectDigest(contract);
+      campaignId = identity.missionCampaignIdFor(
+        repoIdentity,
+        contract.ticket,
+        subjectDigest,
+      );
+    } catch (error) {
+      throw new CliError(
+        `mission_grant_ref: cannot recompute mission subject identity: ${error.message}`,
+        3,
+      );
+    }
+    const claimSubject = identity.claimMissionSubjectDigest(claim);
+    if (claimSubject !== subjectDigest) {
+      throw new CliError(
+        'mission_grant_ref: claim mission_subject_digest does not match recomputed subject',
+        3,
+      );
+    }
+    if (claim.campaign_id !== campaignId) {
+      throw new CliError(
+        'mission_grant_ref: claim campaign_id does not match recomputed campaign-v2 id',
+        3,
+      );
+    }
+    if (typeof contract.base_sha === 'string'
+        && claim.base_sha !== contract.base_sha) {
+      throw new CliError(
+        'mission_grant_ref: claim base_sha does not match the sealed contract',
+        3,
+      );
+    }
+    const claimAccept = Array.isArray(claim.acceptance_ids)
+      ? [...claim.acceptance_ids].map(String).sort()
+      : [];
+    const contractAccept = Array.isArray(contract.rubric_ids)
+      ? [...contract.rubric_ids].map(String).sort()
+      : [];
+    if (claimAccept.length !== contractAccept.length
+        || claimAccept.some((id, i) => id !== contractAccept[i])) {
+      throw new CliError(
+        'mission_grant_ref: claim acceptance_ids do not match the sealed contract rubric_ids',
+        3,
+      );
+    }
+    if (typeof state.mission_lineage_id === 'string'
+        && typeof claim.mission_lineage_id === 'string'
+        && claim.mission_lineage_id !== state.mission_lineage_id) {
+      throw new CliError(
+        'mission_grant_ref: claim mission_lineage_id does not match Mission state',
+        3,
+      );
+    }
+    identityScheme = identity.IDENTITY_SCHEME_V2;
+  } else if (typeof contractDigest === 'string'
       && /^[0-9a-f]{64}$/.test(contractDigest)
       && claim.campaign_contract_digest !== contractDigest) {
     throw new CliError(
@@ -556,13 +630,20 @@ function mintMissionGrantBindingFromStateFile({
       3,
     );
   }
+
   const binding = Object.freeze({
     kind: 'mission_grant_binding',
     verified: true,
     binding_digest: grantRef,
     claim_id: typeof claim.claim_id === 'string' ? claim.claim_id : null,
-    campaign_contract_digest:
-      typeof claim.campaign_contract_digest === 'string' ? claim.campaign_contract_digest : null,
+    campaign_contract_digest: isV2
+      ? subjectDigest
+      : (typeof claim.campaign_contract_digest === 'string'
+        ? claim.campaign_contract_digest
+        : null),
+    identity_scheme: identityScheme,
+    mission_subject_digest: subjectDigest,
+    campaign_id: campaignId || (typeof claim.campaign_id === 'string' ? claim.campaign_id : null),
   });
   MISSION_GRANT_BINDING_REGISTRY.add(binding);
   return binding;
@@ -661,7 +742,10 @@ function loadSeal(sealPath, contractFile) {
   } catch (error) {
     throw new CliError(`seal file is not valid JSON: ${error.message}`, 3);
   }
-  const allowed = new Set([
+  // Core provenance fields (always required). v2 enforce seals may also carry
+  // mission-subject-v2 identity fields; raw contract_sha256 remains the
+  // final-byte drift seal and is never replaced by the subject digest.
+  const required = new Set([
     'schema_version',
     'contract_sha256',
     'contract_path',
@@ -669,13 +753,21 @@ function loadSeal(sealPath, contractFile) {
     'mission_mode',
     'sealed_at',
   ]);
+  const optionalV2 = new Set([
+    'identity_scheme',
+    'mission_subject_digest',
+    'campaign_id',
+    'claim_id',
+    'mission_grant_ref',
+  ]);
+  const allowed = new Set([...required, ...optionalV2]);
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new CliError('seal file must contain an object', 3);
   }
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) throw new CliError(`seal file has unknown field '${key}'`, 3);
   }
-  for (const key of allowed) {
+  for (const key of required) {
     if (!hasOwn(value, key)) throw new CliError(`seal file is missing '${key}'`, 3);
   }
   if (value.schema_version !== 1
@@ -687,6 +779,23 @@ function loadSeal(sealPath, contractFile) {
       || typeof value.sealed_at !== 'string'
       || !Number.isFinite(Date.parse(value.sealed_at))) {
     throw new CliError('seal file has invalid field values', 3);
+  }
+  if (hasOwn(value, 'identity_scheme')
+      || hasOwn(value, 'mission_subject_digest')
+      || hasOwn(value, 'campaign_id')
+      || hasOwn(value, 'claim_id')
+      || hasOwn(value, 'mission_grant_ref')) {
+    if (value.identity_scheme !== 'mission-subject-v2'
+        || typeof value.mission_subject_digest !== 'string'
+        || !/^[0-9a-f]{64}$/.test(value.mission_subject_digest)
+        || typeof value.campaign_id !== 'string'
+        || !/^campaign-v2-[0-9a-f]{64}$/.test(value.campaign_id)
+        || typeof value.claim_id !== 'string'
+        || value.claim_id.length === 0
+        || typeof value.mission_grant_ref !== 'string'
+        || !/^[0-9a-f]{64}$/.test(value.mission_grant_ref)) {
+      throw new CliError('seal file has invalid mission-subject-v2 identity fields', 3);
+    }
   }
   return value;
 }
@@ -730,6 +839,40 @@ function inspectSealedCampaignContract({
   if (seal.contract_path !== contractFile.path) drift.push('contract_path');
   if (seal.repo_identity !== repoIdentity) drift.push('repo_identity');
   if (seal.mission_mode !== missionMode) drift.push('mission_mode');
+
+  // Recompute and re-check v2 subject identity when the seal carries it.
+  // Subject is semantic (excludes mission_grant_ref); raw contract_sha256
+  // remains the final-byte provenance above.
+  let recomputedSubject = null;
+  let recomputedCampaignId = null;
+  if (seal.identity_scheme === 'mission-subject-v2') {
+    let identity;
+    try {
+      identity = require(path.resolve(__dirname, '..', 'src', 'engine', 'mission-campaign-identity'));
+      recomputedSubject = identity.missionSubjectDigest(contractFile.value);
+      recomputedCampaignId = identity.missionCampaignIdFor(
+        repoIdentity,
+        contractFile.value.ticket,
+        recomputedSubject,
+      );
+    } catch (error) {
+      throw new CliError(
+        `seal mission subject identity cannot be recomputed: ${error.message}`,
+        3,
+      );
+    }
+    if (seal.mission_subject_digest !== recomputedSubject) {
+      drift.push('mission_subject_digest');
+    }
+    if (seal.campaign_id !== recomputedCampaignId) {
+      drift.push('campaign_id');
+    }
+    if (typeof contractFile.value.mission_grant_ref === 'string'
+        && seal.mission_grant_ref !== contractFile.value.mission_grant_ref) {
+      drift.push('mission_grant_ref');
+    }
+  }
+
   if (drift.length > 0) {
     return {
       ok: false,
@@ -750,6 +893,11 @@ function inspectSealedCampaignContract({
     repo_identity: repoIdentity,
     mission_mode: missionMode,
     contract: contractFile.value,
+    identity_scheme: seal.identity_scheme || null,
+    mission_subject_digest: seal.mission_subject_digest || recomputedSubject || null,
+    campaign_id: seal.campaign_id || recomputedCampaignId || null,
+    claim_id: seal.claim_id || null,
+    mission_grant_ref: seal.mission_grant_ref || null,
   };
 }
 
@@ -789,16 +937,17 @@ function main() {
     }
 
     if (options.command === 'seal') {
+      let missionGrantBinding = null;
       if (options.missionMode === 'enforce') {
         // Only the real CLI seal path may mint an identity-attested binding,
         // and only after reading --mission-state. Without a state file the
         // verifier fails closed; plain receipts/predicates never authorize.
-        let missionGrantBinding = null;
         if (options.missionState) {
           try {
             missionGrantBinding = mintMissionGrantBindingFromStateFile({
               missionStatePath: options.missionState,
               grantRef: contractFile.value.mission_grant_ref,
+              contract: contractFile.value,
               contractDigest: contractFile.digest,
               repoIdentity,
             });
@@ -827,6 +976,8 @@ function main() {
         }
       }
       const output = resolveOutputPath(options.out, contractFile);
+      // Raw contract_sha256 is always final-byte provenance. Enforce seals that
+      // mint a v2 grant binding also record subject identity + campaign-v2 id.
       const seal = {
         schema_version: 1,
         contract_sha256: contractFile.digest,
@@ -835,6 +986,14 @@ function main() {
         mission_mode: options.missionMode,
         sealed_at: new Date().toISOString(),
       };
+      if (missionGrantBinding
+          && missionGrantBinding.identity_scheme === 'mission-subject-v2') {
+        seal.identity_scheme = 'mission-subject-v2';
+        seal.mission_subject_digest = missionGrantBinding.mission_subject_digest;
+        seal.campaign_id = missionGrantBinding.campaign_id;
+        seal.claim_id = missionGrantBinding.claim_id;
+        seal.mission_grant_ref = missionGrantBinding.binding_digest;
+      }
       atomicWriteJson(output, seal);
       emit({
         verdict: 'SEALED',

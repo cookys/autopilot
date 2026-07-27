@@ -52,6 +52,13 @@ const {
   sha256,
   verifySequence,
 } = require('./authenticated-control');
+const {
+  IDENTITY_SCHEME_V2,
+  claimMissionSubjectDigest,
+  isMissionSubjectV2Claim,
+  missionCampaignIdFor,
+  missionSubjectDigest,
+} = require('./mission-campaign-identity');
 
 const MISSION_SCHEMA_VERSION = 1;
 const MISSION_RECEIPT_SCHEMA_VERSION = 1;
@@ -102,6 +109,7 @@ const GRANT_BINDING_FIELDS = Object.freeze([
   'task_authority_id',
   'campaign_id',
   'campaign_contract_digest',
+  'mission_subject_digest',
   'base_sha',
   'acceptance_ids',
 ]);
@@ -1015,6 +1023,27 @@ function checkBindings(state, payload) {
     }
     if (!(binding in payload)) return 'binding_mismatch';
   }
+  // v2 subject identity: exact scheme, subject digest, campaign-v2 id, and
+  // optional campaign_contract_digest alias (must equal subject, never raw).
+  if (payload.identity_scheme === IDENTITY_SCHEME_V2
+      || (typeof payload.mission_subject_digest === 'string'
+        && payload.mission_subject_digest.length > 0)) {
+    if (payload.identity_scheme !== IDENTITY_SCHEME_V2) return 'binding_mismatch';
+    if (typeof payload.mission_subject_digest !== 'string'
+        || !/^[0-9a-f]{64}$/.test(payload.mission_subject_digest)) {
+      return 'binding_mismatch';
+    }
+    if (typeof payload.campaign_id !== 'string'
+        || !/^campaign-v2-[0-9a-f]{64}$/.test(payload.campaign_id)) {
+      return 'binding_mismatch';
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'campaign_contract_digest')
+        && payload.campaign_contract_digest !== undefined
+        && payload.campaign_contract_digest !== null
+        && payload.campaign_contract_digest !== payload.mission_subject_digest) {
+      return 'binding_mismatch';
+    }
+  }
   return null;
 }
 
@@ -1074,6 +1103,19 @@ function bindingDigest(payload) {
   const acceptance = Array.isArray(payload.acceptance_ids)
     ? [...payload.acceptance_ids].sort()
     : [];
+  if (payload.identity_scheme === IDENTITY_SCHEME_V2) {
+    // v2 binds subject (not raw final-byte digest) so grant-ref insertion is
+    // non-circular. campaign_contract_digest may alias subject only.
+    return sha256({
+      identity_scheme: IDENTITY_SCHEME_V2,
+      mission_lineage_id: payload.mission_lineage_id,
+      campaign_id: payload.campaign_id,
+      mission_subject_digest: payload.mission_subject_digest,
+      base_sha: payload.base_sha,
+      acceptance_ids: acceptance,
+    });
+  }
+  // v1 / legacy: campaign_contract_digest remains the binding field.
   return sha256({
     mission_lineage_id: payload.mission_lineage_id,
     campaign_id: payload.campaign_id,
@@ -1179,12 +1221,25 @@ function applyGrantClaim(state, event, payload, grant) {
       enforced: cur.enforced,
     });
   }
+  const subjectDigest = payload.identity_scheme === IDENTITY_SCHEME_V2
+    ? payload.mission_subject_digest
+    : null;
+  // v2: campaign_contract_digest is a compatibility alias of the subject only.
+  const contractDigestField = payload.identity_scheme === IDENTITY_SCHEME_V2
+    ? (payload.campaign_contract_digest != null
+      ? payload.campaign_contract_digest
+      : subjectDigest)
+    : payload.campaign_contract_digest;
   const claim = {
     claim_id: claimId,
     idempotency_key: idempotencyKey,
     binding_digest: bindingHash,
+    identity_scheme: payload.identity_scheme === IDENTITY_SCHEME_V2
+      ? IDENTITY_SCHEME_V2
+      : (payload.identity_scheme || null),
     campaign_id: payload.campaign_id,
-    campaign_contract_digest: payload.campaign_contract_digest,
+    campaign_contract_digest: contractDigestField,
+    mission_subject_digest: subjectDigest,
     base_sha: payload.base_sha,
     acceptance_ids: [...(payload.acceptance_ids || [])].sort(),
     control_sequence: payload.control_sequence || state.control_sequence,
@@ -1224,6 +1279,8 @@ function applyGrantClaim(state, event, payload, grant) {
     next_state: 'ACTIVE',
     reservation_consumed: reservation,
     binding_digest: bindingHash,
+    identity_scheme: claim.identity_scheme,
+    mission_subject_digest: subjectDigest,
     receipt_digest: sha256({
       kind: 'mission_campaign_grant_claimed',
       claim_id: claimId,
@@ -1264,12 +1321,24 @@ function shadowOrBlock(state, event, reason, evidence = {}, grant = null) {
     // receipt is recorded for operator review. Repeated shadow admissions are
     // auditable and cumulative: each evidence receipt is stored under its own
     // event-digest key so prior evidence is never overwritten.
+    const shadowSubject = event.payload.identity_scheme === IDENTITY_SCHEME_V2
+      ? event.payload.mission_subject_digest
+      : null;
+    const shadowContractDigest = event.payload.identity_scheme === IDENTITY_SCHEME_V2
+      ? (event.payload.campaign_contract_digest != null
+        ? event.payload.campaign_contract_digest
+        : shadowSubject)
+      : event.payload.campaign_contract_digest;
     const claim = {
       claim_id: grant.claimId,
       idempotency_key: grant.idempotencyKey,
       binding_digest: grant.bindingHash,
+      identity_scheme: event.payload.identity_scheme === IDENTITY_SCHEME_V2
+        ? IDENTITY_SCHEME_V2
+        : (event.payload.identity_scheme || null),
       campaign_id: event.payload.campaign_id,
-      campaign_contract_digest: event.payload.campaign_contract_digest,
+      campaign_contract_digest: shadowContractDigest,
+      mission_subject_digest: shadowSubject,
       base_sha: event.payload.base_sha,
       acceptance_ids: [...(event.payload.acceptance_ids || [])].sort(),
       control_sequence: event.payload.control_sequence || state.control_sequence,
@@ -3416,7 +3485,16 @@ function claimBindingTupleMatches(claim, payload, state) {
   if (state.mission_lineage_id !== payload.mission_lineage_id) return false;
   if (state.task_authority_id !== payload.task_authority_id) return false;
   if (claim.campaign_id !== payload.campaign_id) return false;
-  if (claim.campaign_contract_digest !== payload.campaign_contract_digest) return false;
+  if (isMissionSubjectV2Claim(claim) || payload.identity_scheme === IDENTITY_SCHEME_V2) {
+    const claimSubject = claimMissionSubjectDigest(claim);
+    const payloadSubject = claimMissionSubjectDigest(payload);
+    if (!claimSubject || !payloadSubject || claimSubject !== payloadSubject) return false;
+    const claimScheme = claim.identity_scheme || IDENTITY_SCHEME_V2;
+    const payloadScheme = payload.identity_scheme || IDENTITY_SCHEME_V2;
+    if (claimScheme !== payloadScheme) return false;
+  } else if (claim.campaign_contract_digest !== payload.campaign_contract_digest) {
+    return false;
+  }
   if (claim.base_sha !== payload.base_sha) return false;
   const leftIds = sortedAcceptanceIds(claim.acceptance_ids);
   const rightIds = sortedAcceptanceIds(payload.acceptance_ids);
@@ -3627,7 +3705,7 @@ function resolveLiveClaimByGrantRef(state, grantRef) {
 
 function claimPayloadFromExistingClaim(state, claim) {
   const reservation = rebuildReservationPerAxis(claim.reservation);
-  return {
+  const payload = {
     idempotency_key: claim.idempotency_key,
     mission_lineage_id: state.mission_lineage_id,
     task_authority_id: state.task_authority_id,
@@ -3639,6 +3717,16 @@ function claimPayloadFromExistingClaim(state, claim) {
     issued_at: claim.issued_at,
     expires_at: claim.expires_at,
   };
+  if (claim.identity_scheme === IDENTITY_SCHEME_V2
+      || typeof claim.mission_subject_digest === 'string') {
+    payload.identity_scheme = claim.identity_scheme || IDENTITY_SCHEME_V2;
+    payload.mission_subject_digest = claimMissionSubjectDigest(claim);
+    // Compatibility alias only: must equal subject for v2.
+    if (payload.campaign_contract_digest == null) {
+      payload.campaign_contract_digest = payload.mission_subject_digest;
+    }
+  }
+  return payload;
 }
 
 function createMissionCampaignAdapters(options = {}) {
@@ -3648,10 +3736,16 @@ function createMissionCampaignAdapters(options = {}) {
     && typeof store.save === 'function';
   const lineageId = typeof options.mission_lineage_id === 'string' ? options.mission_lineage_id : null;
   const grantRef = typeof options.grant_ref === 'string' ? options.grant_ref : null;
+  const expectedSubject = typeof options.mission_subject_digest === 'string'
+    ? options.mission_subject_digest
+    : null;
+  const expectedCampaignId = typeof options.campaign_id === 'string'
+    ? options.campaign_id
+    : null;
 
   function claimPayload(state, input) {
     const grant = isPlainObject(options.grant) ? options.grant : options;
-    return {
+    const payload = {
       idempotency_key: grant.idempotency_key,
       mission_lineage_id: state.mission_lineage_id,
       task_authority_id: state.task_authority_id,
@@ -3663,6 +3757,21 @@ function createMissionCampaignAdapters(options = {}) {
       issued_at: grant.issued_at || input.observedAt,
       expires_at: grant.expires_at,
     };
+    if (grant.identity_scheme === IDENTITY_SCHEME_V2
+        || typeof grant.mission_subject_digest === 'string') {
+      payload.identity_scheme = IDENTITY_SCHEME_V2;
+      payload.mission_subject_digest = grant.mission_subject_digest
+        || input.mission_subject_digest
+        || expectedSubject;
+      // Alias only — never the raw final-byte digest for v2.
+      if (payload.mission_subject_digest) {
+        payload.campaign_contract_digest = payload.mission_subject_digest;
+      }
+      if (!payload.campaign_id && expectedCampaignId) {
+        payload.campaign_id = expectedCampaignId;
+      }
+    }
+    return payload;
   }
 
   return {
@@ -3703,7 +3812,38 @@ function createMissionCampaignAdapters(options = {}) {
           };
         }
         const claim = resolved.claim;
-        if (typeof input.contractDigest === 'string'
+        const v2 = isMissionSubjectV2Claim(claim);
+        if (v2) {
+          // v2: subject is independent of raw final-byte contract digest.
+          // Never require claim.campaign_contract_digest === raw contractDigest.
+          const claimSubject = claimMissionSubjectDigest(claim);
+          if (expectedSubject !== null && claimSubject !== expectedSubject) {
+            return {
+              owner: 'mission',
+              status: 'rejected',
+              code: 'mission_grant_ref_mismatch',
+              reason: 'grant_ref claim mission_subject_digest does not match expected subject',
+            };
+          }
+          if (typeof input.mission_subject_digest === 'string'
+              && input.mission_subject_digest.length > 0
+              && claimSubject !== input.mission_subject_digest) {
+            return {
+              owner: 'mission',
+              status: 'rejected',
+              code: 'mission_grant_ref_mismatch',
+              reason: 'grant_ref claim mission_subject_digest does not match intake subject',
+            };
+          }
+          if (expectedCampaignId !== null && claim.campaign_id !== expectedCampaignId) {
+            return {
+              owner: 'mission',
+              status: 'rejected',
+              code: 'mission_grant_ref_mismatch',
+              reason: 'grant_ref claim campaign_id does not match expected campaign-v2 id',
+            };
+          }
+        } else if (typeof input.contractDigest === 'string'
             && input.contractDigest.length > 0
             && claim.campaign_contract_digest !== input.contractDigest) {
           return {
@@ -3740,6 +3880,9 @@ function createMissionCampaignAdapters(options = {}) {
           resumed: true,
           mission_lineage_id: state.mission_lineage_id,
           control_sequence: state.control_sequence,
+          identity_scheme: claim.identity_scheme || null,
+          mission_subject_digest: claimMissionSubjectDigest(claim),
+          campaign_id: claim.campaign_id,
         };
       }
 
@@ -4087,6 +4230,9 @@ module.exports = {
   validateMissionState,
   validateSourceRef,
   validateSourceRefs,
+  IDENTITY_SCHEME_V2,
+  missionCampaignIdFor,
+  missionSubjectDigest,
   // legacy exports retained for callers
   evaluateClaimSequence: () => { fail('evaluateClaimSequence is deprecated; use createMissionState + reduceMissionState'); },
   evaluateClosureRatio: () => { fail('evaluateClosureRatio is deprecated; use closure_evaluated event'); },

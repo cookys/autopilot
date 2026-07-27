@@ -190,6 +190,7 @@ const localDeployment = require('./local-deployment');
 const roles = require('./roles');
 const authenticatedControl = require('./authenticated-control');
 const missionConvergence = require('./mission-convergence');
+const missionCampaignIdentity = require('./mission-campaign-identity');
 const missionInterface = require('../mission/interface');
 
 module.exports = {
@@ -398,6 +399,8 @@ module.exports = {
   evaluateMissionIntegrationFixture: missionConvergence.evaluateMissionIntegrationFixture,
   evaluateMissionReducerFixture: missionConvergence.evaluateMissionReducerFixture,
   isNonSerializableVerifier: authenticatedControl.isNonSerializableVerifier,
+  missionCampaignIdFor: missionCampaignIdentity.missionCampaignIdFor,
+  missionSubjectDigest: missionCampaignIdentity.missionSubjectDigest,
   normalizeControlEvent: authenticatedControl.normalizeControlEvent,
   reduceMissionState: missionConvergence.reduceMissionState,
   remainingForAxis: missionConvergence.remainingForAxis,

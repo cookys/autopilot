@@ -43,9 +43,17 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const [root, fake, tmp] = process.argv.slice(2);
-const { MODEL, inspectKimiSurface, runKimiAuthor } = require(
-  path.join(root, 'src', 'runners', 'kimi'),
-);
+const adapterPath = path.join(root, 'src', 'runners', 'kimi');
+let adapter;
+try {
+  adapter = require(adapterPath);
+} catch (error) {
+  if (error && error.code === 'MODULE_NOT_FOUND' && error.message.includes(adapterPath)) {
+    assert.fail(`Kimi adapter contract unavailable: ${adapterPath}`);
+  }
+  throw error;
+}
+const { MODEL, inspectKimiSurface, runKimiAuthor } = adapter;
 const capture = path.join(tmp, 'capture');
 const marker = path.join(tmp, 'shell-injection-marker');
 const prompt = `literal $(touch ${marker}) ; "quotes" \n second line`;

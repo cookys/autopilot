@@ -92,7 +92,7 @@ function reservation(state, reserved) {
     per_axis: ['campaigns', 'wall_seconds', 'tool_calls', 'engine_attempts', 'external_wait_seconds', 'canonical_changed_files', 'output_bytes'].map((axisName) => ({
       axis: axisName,
       authorized_ceiling: state.axes[axisName].authorized_ceiling,
-      reserved_active: axisName === 'tool_calls' ? reserved : 0,
+      reserved_active: axisName === 'tool_calls' ? reserved : (axisName === 'campaigns' ? 1 : 0),
       durable_consumed: state.axes[axisName].durable_consumed,
       known: true,
     })),
@@ -183,7 +183,10 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`terminal-reconcile-replay-noop-direct\t${r2.receipt.replay === 'replay_noop' ? 'PASS' : 'FAIL'}`);
   }
   {
-    // Successor inheritance: new state inherits durable_consumed.
+    // Successor inheritance: new state inherits durable_consumed and
+    // every nonterminal claim/reservation. The successor MUST agree on
+    // task_authority_id and policy_hash (conflicting lineage/policy
+    // binding fails closed).
     const predecessor = makeContract();
     const s0 = createMissionState(predecessor);
     const a = reduceMissionState(s0, claimEvent(s0, { idempotency_key: 'succ-direct', reserved: 5 }));
@@ -196,12 +199,10 @@ if (createMissionState && reduceMissionState && stateHash) {
     const succ = createMissionState({
       ...predecessor,
       mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('SUCC').digest('hex'),
-      task_authority_id: require('crypto').createHash('sha256').update('TA-SUCC').digest('hex'),
-      policy_hash: require('crypto').createHash('sha256').update('P-SUCC').digest('hex'),
       lineage_binding: {
-        task_authority_id: require('crypto').createHash('sha256').update('TA-SUCC').digest('hex'),
+        task_authority_id: predecessor.task_authority_id,
         root_run_id: 'root-succ',
-        policy_hash: require('crypto').createHash('sha256').update('P-SUCC').digest('hex'),
+        policy_hash: predecessor.policy_hash,
         successor_inherits_durable_consumed: true,
       },
     }, { inheritFrom: r.state });

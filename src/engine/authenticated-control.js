@@ -136,6 +136,8 @@ function canonicalJson(value) {
     const keys = Object.keys(value).sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
   }
+  if (typeof value === 'symbol') return JSON.stringify(value.toString());
+  if (typeof value === 'function') return JSON.stringify(`__function__:${value.name || 'anonymous'}`);
   fail('canonicalJson: unsupported type');
 }
 
@@ -290,6 +292,11 @@ function invokeVerifier(verifier, rawEvent) {
 
 // ─── Adapter ───────────────────────────────────────────────────────────────
 
+// The capability registry is shared with the reducer (mission-convergence.js)
+// so that only adapter-minted capabilities validate. Plain JSON objects and
+// caller-created functions cannot fabricate an entry.
+const ADAPTER_CAPABILITY_REGISTRY = new WeakSet();
+
 class AuthenticatedControlAdapter {
   constructor({ source, verifier } = {}) {
     // The verifier is mandatory at construction. The adapter cannot be built
@@ -300,21 +307,41 @@ class AuthenticatedControlAdapter {
       ? source
       : 'host-boundary';
     this._verifier = validateVerifier(verifier, 'AuthenticatedControlAdapter.verifier');
+    // Mint an unforgeable process-local capability. The capability is the
+    // ONLY way an event can acquire authenticated_user/DOA authority over
+    // the reducer. The symbol lives in a WeakSet keyed by the adapter
+    // instance; serialization (JSON.stringify) drops the symbol, so the
+    // capability cannot travel through a serializable channel. The
+    // capability object intentionally holds NO reference back to the
+    // adapter instance — that would create a self-cycle in any caller
+    // that serializes the canonical event.
+    this._capabilitySymbol = Symbol('AuthenticatedControlAdapter.capability');
+    ADAPTER_CAPABILITY_REGISTRY.add(this._capabilitySymbol);
+    this._capability = Object.freeze({
+      mint: 'AuthenticatedControlAdapter',
+      symbol: this._capabilitySymbol,
+    });
   }
 
   get verifier() {
     return this._verifier;
   }
 
+  get capability() {
+    return this._capability;
+  }
+
   // The ONLY path from a raw event to a canonical event. The verifier is the
   // gatekeeper. The adapter normalizes AFTER the verifier approves, so a
-  // rejected event never reaches the reducer.
-  acceptEvent(rawEvent, { verifier } = {}) {
-    const active = validateVerifier(verifier || this._verifier, 'acceptEvent.verifier');
+  // rejected event never reaches the reducer. `acceptEvent` does NOT allow
+  // a caller to override the constructor-injected verifier — the verifier
+  // is bound at adapter construction and is the only authority over the
+  // adapter's canonicalization.
+  acceptEvent(rawEvent) {
     if (!isPlainObject(rawEvent)) {
       fail('acceptEvent requires a raw event object', REJECTION_REASONS.AUTHENTICATED_CONTROL_INVALID);
     }
-    const decision = invokeVerifier(active, rawEvent);
+    const decision = invokeVerifier(this._verifier, rawEvent);
     if (!isPlainObject(decision)) {
       fail('verifier must return a plain object decision', REJECTION_REASONS.AUTHENTICATED_CONTROL_INVALID);
     }
@@ -326,7 +353,10 @@ class AuthenticatedControlAdapter {
           REJECTION_REASONS.AUTHENTICATED_CONTROL_AUTHORITY_OVERRIDE_MISMATCH,
         );
       }
-      return normalizeControlEvent(rawEvent);
+      const canonical = normalizeControlEvent(rawEvent);
+      // Attach the unforgeable capability so the reducer can validate it.
+      canonical._adapter_capability = this._capability;
+      return canonical;
     }
     const reason = requireStableReason(
       decision.reason || REJECTION_REASONS.AUTHENTICATED_CONTROL_VERIFIER_REJECTED,
@@ -399,7 +429,15 @@ function classifyControlEffect(event, options = {}) {
   return { ok: true };
 }
 
+function hasAdapterCapability(registry, capability) {
+  if (!capability || typeof capability !== 'object') return false;
+  if (typeof capability.mint !== 'string') return false;
+  if (typeof capability.symbol !== 'symbol') return false;
+  return registry.has(capability.symbol);
+}
+
 module.exports = {
+  ADAPTER_CAPABILITY_REGISTRY,
   AUTHENTICATED_AUTHORITY_SET,
   AuthenticatedControlAdapter,
   AuthenticatedControlError,
@@ -414,6 +452,7 @@ module.exports = {
   authorizeCeilingAdjust,
   canonicalJson,
   classifyControlEffect,
+  hasAdapterCapability,
   isNonSerializableVerifier,
   normalizeControlEvent,
   sha256,

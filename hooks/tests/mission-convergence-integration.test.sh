@@ -42,23 +42,6 @@ function same(left, right) {
   return JSON.stringify(stable(left)) === JSON.stringify(stable(right));
 }
 
-// Frozen expectations match the real reducer behavior. The reducer is the
-// source of truth; the integration adapter is a translation layer. The
-// expected objects are inclusive: every field the adapter must emit is
-// declared here, and `subset` requires the actual to contain them all.
-const frozen = {
-  'successor-model-branch-reset': { state: 'BLOCKED', reason: 'resource_ceiling', effect_count: 0 },
-  'direct-no-agent-stagnation': { state: 'BLOCKED', reason: 'stagnation', grant_authorized: false, effect_count: 0 },
-  'ignored-user-finish': { state: 'CLOSING', reason: 'control_sequence_stale', effect_count: 0 },
-  'provider-maintenance-leakage': { state: 'ACTIVE', reason: 'PRESPEND_REJECTED/provider_readiness', reservation_released: true, maintenance_candidate_only: true, effect_count: 0 },
-  'closure-ratio': { state: 'CLOSING', reason: 'resource_ratio:tool_calls', unknown_axis_decisive: false, effect_count: 0 },
-  'invalid-review-authority': { state: 'ACTIVE', reason: 'review_authority_invalid', mission_progress_delta: 0, grant_authorized: false, effect_count: 0 },
-  'identity-preserves-remaining': { state: 'ACTIVE', effect_count: 1 },
-  'real-progress-resets-stagnation': { state: 'ACTIVE', grant_authorized: true, effect_count: 1 },
-  'current-control-sequence': { state: 'CLOSING', reason: 'finish_requested', effect_count: 0 },
-  'known-axis-below-ratio': { state: 'ACTIVE', unknown_axis_decisive: false, effect_count: 0 },
-};
-
 // `subset(left, right)`: every key/value in `right` must be present in `left`.
 // This lets the reducer emit auxiliary fields (e.g. `remaining_tool_calls`,
 // `stagnant_campaigns`) without breaking the comparison.
@@ -79,16 +62,16 @@ function subset(left, right) {
   return true;
 }
 
+// The P0 integration oracle compares against the frozen corpus expectations
+// (`fixture.expected`) rather than an inline `frozen` map. The corpus is the
+// single source of truth — no ID-specific manufactured outputs are kept in
+// the oracle itself.
 for (const fixture of [...corpus.fixtures, ...corpus.healthy_controls]) {
-  const expected = frozen[fixture.id];
+  const expected = fixture.expected;
   if (!expected) {
-    console.log(`${fixture.id}\tINVALID_FIXTURE\tno frozen expectation`);
+    console.log(`${fixture.id}\tINVALID_FIXTURE\tno frozen corpus expectation`);
     continue;
   }
-  // The corpus fixtures retain the legacy `expected` block (a frozen oracle
-  // reference for the P0/P1 surface). The integration oracle now derives its
-  // expectation from the real P1 reducer, not from the corpus literal, so we
-  // do not gate on the legacy literal here.
   const actual = evaluate
     ? evaluate(fixture)
     : { state: 'UNSUPERVISED', reason: 'mission_convergence_unavailable', effect_count: null };
@@ -173,7 +156,7 @@ function reservation(state, reserved) {
     per_axis: m.SUPPORTED_AXES.map((axisName) => ({
       axis: axisName,
       authorized_ceiling: state.axes[axisName].authorized_ceiling,
-      reserved_active: axisName === 'tool_calls' ? reserved : 0,
+      reserved_active: axisName === 'tool_calls' ? reserved : (axisName === 'campaigns' ? 1 : 0),
       durable_consumed: state.axes[axisName].durable_consumed,
       known: true,
     })),
@@ -317,14 +300,14 @@ try {
     mission_lineage_id: s0.mission_lineage_id,
     payload: { claim_id: a.receipt.claim_id, actual_usage: actualUsage },
   });
+  // Successor MUST agree on task_authority_id and policy_hash with the
+  // predecessor (conflicting lineage/policy binding fails closed).
   const succ = m.createMissionState(makeContract({
     mission_lineage_id: 'lineage-v1-' + m.sha256('SUCC'),
-    task_authority_id: m.sha256('TA-SUCC'),
-    policy_hash: m.sha256('P-SUCC'),
     lineage_binding: {
-      task_authority_id: m.sha256('TA-SUCC'),
+      task_authority_id: s0.task_authority_id,
       root_run_id: 'root-succ',
-      policy_hash: m.sha256('P-SUCC'),
+      policy_hash: s0.policy_hash,
       successor_inherits_durable_consumed: true,
     },
   }), { inheritFrom: r.state });

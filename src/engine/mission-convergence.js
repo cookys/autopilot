@@ -31,6 +31,7 @@
 
 const crypto = require('crypto');
 const {
+  ADAPTER_CAPABILITY_REGISTRY,
   AUTHENTICATED_AUTHORITY_SET,
   AuthenticatedControlError,
   CEILING_LOOSEN_AUTHORITIES,
@@ -41,6 +42,7 @@ const {
   authorizeCeilingAdjust,
   canonicalJson,
   classifyControlEffect,
+  hasAdapterCapability,
   normalizeControlEvent,
   sha256,
   verifySequence,
@@ -235,8 +237,34 @@ function requireIsoTimestamp(value, label) {
   return parsed.toISOString();
 }
 
+function deepFreeze(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const key of Object.keys(value)) {
+    const child = value[key];
+    if (child !== null && typeof child === 'object' && !Object.isFrozen(child)) {
+      deepFreeze(child);
+    }
+  }
+  return value;
+}
+
+function deepClone(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    const out = value.map((entry) => deepClone(entry));
+    return deepFreeze(out);
+  }
+  const out = {};
+  for (const key of Object.keys(value)) {
+    out[key] = deepClone(value[key]);
+  }
+  return deepFreeze(out);
+}
+
 function cloneAxis(axis) {
-  return {
+  return Object.freeze({
     authorized_ceiling: axis.authorized_ceiling,
     reserved_active: axis.reserved_active,
     durable_consumed: axis.durable_consumed,
@@ -245,7 +273,7 @@ function cloneAxis(axis) {
     enforced: axis.enforced !== false,
     remaining: axis.remaining,
     overspend: axis.overspend,
-  };
+  });
 }
 
 function computeAxisBudget({
@@ -426,11 +454,20 @@ function createMissionState(contract, options = {}) {
     ? contract.max_stagnant_campaigns
     : DEFAULT_MAX_STAGNANT;
 
+  // Build per-axis budgets from a deep clone of the contract — the
+  // caller's input contract must not be mutated, and derived state must
+  // be deeply immutable so the caller's later mutations cannot change
+  // mission behavior.
   const axes = {};
   for (const axisName of SUPPORTED_AXES) {
-    axes[axisName] = computeAxisBudget(contract.axes[axisName]);
+    axes[axisName] = computeAxisBudget(deepClone(contract.axes[axisName]));
   }
 
+  let inheritedClaims = {};
+  let inheritedIdempotencyIndex = {};
+  let inheritedStagnation = 0;
+  let inheritedAcceptanceHashes = [];
+  let inheritedControlSequence = 0;
   if (options.inheritFrom !== undefined) {
     if (!lineageBinding.successor_inherits_durable_consumed) {
       fail('lineage_binding.successor_inherits_durable_consumed must be true to inherit');
@@ -439,20 +476,56 @@ function createMissionState(contract, options = {}) {
     if (prev.mission_lineage_id === contract.mission_lineage_id) {
       fail('successor must have a new mission_lineage_id');
     }
+    // Conflicting lineage or policy binding fails closed — successor
+    // MUST agree on task_authority_id and policy_hash.
+    if (prev.task_authority_id !== contract.task_authority_id) {
+      fail('successor task_authority_id does not match predecessor');
+    }
+    if (prev.policy_hash !== contract.policy_hash) {
+      fail('successor policy_hash does not match predecessor');
+    }
     for (const axisName of SUPPORTED_AXES) {
       const src = prev.axes[axisName];
       if (!src) fail(`inheritFrom is missing axis "${axisName}"`);
-      axes[axisName] = {
-        ...cloneAxis(src),
+      // Inherit durable_consumed from the predecessor. Reset active
+      // counters (active_actual, reserved_active). Terminal/released
+      // claims no longer occupy active reservation; only nonterminal
+      // claims carry their reservation forward.
+      axes[axisName] = computeAxisBudget({
+        authorized_ceiling: src.authorized_ceiling,
         reserved_active: 0,
+        durable_consumed: src.durable_consumed,
         active_actual: 0,
-        remaining: src.authorized_ceiling - src.durable_consumed,
-        overspend: (src.authorized_ceiling - src.durable_consumed) < 0,
-      };
+        known: src.known,
+        enforced: src.enforced,
+      });
     }
+    // Inherit nonterminal claims and their reservations verbatim;
+    // terminal/released claims need not occupy active reservation and are
+    // dropped from the live set.
+    for (const claim of Object.values(prev.claims || {})) {
+      if (claim.terminal) continue;
+      inheritedClaims[claim.claim_id] = deepClone(claim);
+      inheritedIdempotencyIndex[claim.idempotency_key] = claim.claim_id;
+    }
+    inheritedStagnation = prev.stagnant_campaigns || 0;
+    inheritedAcceptanceHashes = [...(prev.acceptance_hashes || [])];
+    inheritedControlSequence = prev.control_sequence || 0;
   }
 
-  return Object.freeze({
+  const frozenAxes = Object.freeze({
+    campaigns: Object.freeze(axes.campaigns),
+    wall_seconds: Object.freeze(axes.wall_seconds),
+    tool_calls: Object.freeze(axes.tool_calls),
+    engine_attempts: Object.freeze(axes.engine_attempts),
+    external_wait_seconds: Object.freeze(axes.external_wait_seconds),
+    canonical_changed_files: Object.freeze(axes.canonical_changed_files),
+    output_bytes: Object.freeze(axes.output_bytes),
+  });
+
+  // The state must validate before exposing terminal-related fields. A
+  // malformed state is a reducer error, not a transient condition.
+  const built = deepFreeze({
     schema_version: MISSION_SCHEMA_VERSION,
     artifact_type: 'mission_state',
     mission_lineage_id: contract.mission_lineage_id,
@@ -467,29 +540,48 @@ function createMissionState(contract, options = {}) {
     max_stagnant_campaigns: maxStagnant,
     successor_inherits_durable_consumed:
       lineageBinding.successor_inherits_durable_consumed === true,
-    axes: Object.freeze({
-      campaigns: Object.freeze(axes.campaigns),
-      wall_seconds: Object.freeze(axes.wall_seconds),
-      tool_calls: Object.freeze(axes.tool_calls),
-      engine_attempts: Object.freeze(axes.engine_attempts),
-      external_wait_seconds: Object.freeze(axes.external_wait_seconds),
-      canonical_changed_files: Object.freeze(axes.canonical_changed_files),
-      output_bytes: Object.freeze(axes.output_bytes),
-    }),
-    claims: Object.freeze({}),
-    claim_idempotency_index: Object.freeze({}),
+    axes: frozenAxes,
+    claims: Object.freeze(inheritedClaims),
+    claim_idempotency_index: Object.freeze(inheritedIdempotencyIndex),
     events: Object.freeze([]),
     receipts: Object.freeze({}),
-    control_sequence: 0,
+    control_sequence: inheritedControlSequence,
     closure_allowlist: Object.freeze([]),
-    stagnant_campaigns: 0,
-    acceptance_hashes: Object.freeze([]),
+    stagnant_campaigns: inheritedStagnation,
+    acceptance_hashes: Object.freeze(inheritedAcceptanceHashes.sort()),
     unknown_required_axes: Object.freeze([]),
     terminal: null,
-    config: Object.freeze(contract),
+    config: deepFreeze(deepClone(contract)),
     config_provenance: Object.freeze(provenance),
     red_lines: Object.freeze(contract.red_lines || []),
   });
+  validateMissionState(built);
+  return built;
+}
+
+function validateMissionState(state) {
+  if (!state || typeof state !== 'object') fail('mission state is missing');
+  if (state.schema_version !== MISSION_SCHEMA_VERSION) fail('mission state schema_version mismatch');
+  if (state.artifact_type !== 'mission_state') fail('mission state artifact_type mismatch');
+  requireLineageId(state.mission_lineage_id, 'state.mission_lineage_id');
+  requireSha256(state.task_authority_id, 'state.task_authority_id');
+  requireSha256(state.policy_hash, 'state.policy_hash');
+  if (!ENFORCEMENT_MODES.has(state.enforcement_mode)) {
+    fail('state.enforcement_mode must be "shadow" or "enforce"');
+  }
+  if (!MISSION_STATE_SET.has(state.state)) {
+    fail('state.state must be a valid Mission state');
+  }
+  requireNumber(state.closure_ratio, 'state.closure_ratio', 0, 1);
+  if (!isPlainObject(state.axes)) fail('state.axes must be an object');
+  for (const axisName of SUPPORTED_AXES) {
+    const ax = state.axes[axisName];
+    if (!ax) fail(`state.axes.${axisName} is missing`);
+    computeAxisBudget(ax); // throws on invalid
+  }
+  if (state.terminal !== null && !isPlainObject(state.terminal)) {
+    fail('state.terminal must be null or object');
+  }
 }
 
 // ─── State hash ────────────────────────────────────────────────────────────
@@ -503,11 +595,15 @@ function stateHash(state) {
     enforcement_mode: state.enforcement_mode,
     state: state.state,
     closure_ratio: state.closure_ratio,
+    max_stagnant_campaigns: state.max_stagnant_campaigns,
+    successor_inherits_durable_consumed: !!state.successor_inherits_durable_consumed,
     control_sequence: state.control_sequence,
-    closure_allowlist: [...state.closure_allowlist].sort(),
+    closure_allowlist: [...(state.closure_allowlist || [])].sort(),
     stagnant_campaigns: state.stagnant_campaigns,
-    acceptance_hashes: [...state.acceptance_hashes].sort(),
-    unknown_required_axes: [...state.unknown_required_axes].sort(),
+    acceptance_hashes: [...(state.acceptance_hashes || [])].sort(),
+    unknown_required_axes: [...(state.unknown_required_axes || [])].sort(),
+    config_provenance: { ...(state.config_provenance || {}) },
+    red_lines: [...(state.red_lines || [])].sort(),
     axes: {
       campaigns: { ...state.axes.campaigns },
       wall_seconds: { ...state.axes.wall_seconds },
@@ -522,17 +618,18 @@ function stateHash(state) {
         .map(([k, v]) => [k, {
           claim_id: v.claim_id,
           idempotency_key: v.idempotency_key,
-          terminal: v.terminal,
-          released: v.released || false,
-          reconciled: v.reconciled || false,
-          reservation: v.reservation,
-          actual: v.actual || null,
+          binding_digest: v.binding_digest,
+          terminal: !!v.terminal,
+          released: !!v.released,
+          reconciled: !!v.reconciled,
+          reservation: deepClone(v.reservation),
+          actual: v.actual ? deepClone(v.actual) : null,
           event_digest: v.event_digest,
         }])
         .sort((a, b) => a[0].localeCompare(b[0])),
     ),
     event_digests: state.events.map((e) => e.event_digest).sort(),
-    terminal: state.terminal,
+    terminal: state.terminal ? deepClone(state.terminal) : null,
   };
   return sha256(summary);
 }
@@ -552,16 +649,30 @@ function validateEventShape(event) {
 // ─── Reducer ───────────────────────────────────────────────────────────────
 
 function reduceMissionState(state, event) {
+  // Validate state before accessing state.terminal — a malformed state is
+  // a reducer error, not a transient condition.
+  validateMissionState(state);
   if (state.terminal) {
     fail('cannot reduce a terminal Mission state', 'MISSION_STATE_TERMINAL');
   }
-  if (!state || !state.schema_version) fail('reduceMissionState: state is not a Mission state');
   const { eventType, sequence, payload } = validateEventShape(event);
   if (event.mission_lineage_id !== state.mission_lineage_id) {
     fail('event.mission_lineage_id does not match state.mission_lineage_id');
   }
   if (sequence !== state.events.length + 1) {
     fail(`event.sequence ${sequence} must equal ${state.events.length + 1}`);
+  }
+  // Authenticated control events must carry an unforgeable capability
+  // minted by a constructed adapter. A raw reducer event MUST NOT acquire
+  // authenticated_user/DOA authority.
+  if (eventType === 'control_event' || eventType === 'ceiling_adjust') {
+    if (!payload || payload.event === undefined) {
+      fail('control_event requires an adapter-produced event payload', 'MISSION_CONTROL_UNAUTHENTICATED');
+    }
+    if (!payload.event._adapter_capability
+      || !hasAdapterCapability(ADAPTER_CAPABILITY_REGISTRY, payload.event._adapter_capability)) {
+      fail('control_event must be produced by an AuthenticatedControlAdapter instance', 'MISSION_CONTROL_UNAUTHENTICATED');
+    }
   }
   const eventWithDigest = Object.freeze({
     ...event,
@@ -625,21 +736,29 @@ function checkBindings(state, payload) {
   return null;
 }
 
-function reservationFor(payload) {
-  const perAxis = Array.isArray(payload.reservation && payload.reservation.per_axis)
-    ? payload.reservation.per_axis
-    : [];
+function reservationFor(payload, label = 'reservation', options = {}) {
+  const { requireComplete = true } = options;
+  const reservationObj = isPlainObject(payload.reservation) ? payload.reservation : {};
+  const perAxis = Array.isArray(reservationObj.per_axis) ? reservationObj.per_axis : [];
+  if (perAxis.length === 0) {
+    fail(`${label}.per_axis must be a non-empty array`);
+  }
   const seen = new Set();
   const reservation = {};
   for (const usage of perAxis) {
-    if (!isPlainObject(usage)) fail('reservation.per_axis entry must be an object');
-    const axis = requireEnum(usage.axis, AXIS_SET, 'reservation.per_axis.axis');
-    if (seen.has(axis)) fail(`reservation.per_axis has duplicate axis "${axis}"`);
-    seen.add(axis);
-    requireInteger(usage.authorized_ceiling, `reservation.per_axis[${axis}].authorized_ceiling`, 0);
-    requireInteger(usage.reserved_active, `reservation.per_axis[${axis}].reserved_active`, 0);
-    requireInteger(usage.durable_consumed, `reservation.per_axis[${axis}].durable_consumed`, 0);
-    requireBoolean(usage.known, `reservation.per_axis[${axis}].known`);
+    if (!isPlainObject(usage)) fail(`${label}.per_axis entry must be an object`);
+    if (seen.has(usage.axis)) {
+      fail(`${label}.per_axis has duplicate axis "${usage.axis}"`);
+    }
+    if (!AXIS_SET.has(usage.axis)) {
+      fail(`${label}.per_axis has unknown axis "${usage.axis}"`);
+    }
+    seen.add(usage.axis);
+    const axis = requireEnum(usage.axis, AXIS_SET, `${label}.per_axis.axis`);
+    requireInteger(usage.authorized_ceiling, `${label}.per_axis[${axis}].authorized_ceiling`, 0);
+    requireInteger(usage.reserved_active, `${label}.per_axis[${axis}].reserved_active`, 0);
+    requireInteger(usage.durable_consumed, `${label}.per_axis[${axis}].durable_consumed`, 0);
+    requireBoolean(usage.known, `${label}.per_axis[${axis}].known`);
     reservation[axis] = {
       axis,
       authorized_ceiling: usage.authorized_ceiling,
@@ -648,7 +767,45 @@ function reservationFor(payload) {
       known: usage.known,
     };
   }
+  if (requireComplete) {
+    // The reservation must cover every supported axis. Missing, duplicate, or
+    // unknown entries fail closed; an empty/partial reservation creates no
+    // reservation at all.
+    for (const axisName of SUPPORTED_AXES) {
+      if (!(axisName in reservation)) {
+        fail(`${label}.per_axis is missing required axis "${axisName}"`);
+      }
+    }
+    // The campaigns axis must actually reserve a campaign unit — a zero on
+    // `campaigns` is a no-op reservation that would let a grant bypass
+    // aggregate ceiling enforcement.
+    if (reservation.campaigns.reserved_active < 1) {
+      fail(`${label}.per_axis[campaigns].reserved_active must be >= 1 (must reserve at least one campaign unit)`);
+    }
+  }
   return reservation;
+}
+
+function bindingDigest(payload) {
+  // The logical grant binding the reducer treats as single-use. Acceptance
+  // IDs are sorted to make the digest stable across input ordering.
+  const acceptance = Array.isArray(payload.acceptance_ids)
+    ? [...payload.acceptance_ids].sort()
+    : [];
+  return sha256({
+    mission_lineage_id: payload.mission_lineage_id,
+    campaign_id: payload.campaign_id,
+    campaign_contract_digest: payload.campaign_contract_digest,
+    base_sha: payload.base_sha,
+    acceptance_ids: acceptance,
+  });
+}
+
+function findClaimByBinding(state, bindingHash) {
+  for (const claim of Object.values(state.claims)) {
+    if (claim.binding_digest === bindingHash) return claim;
+  }
+  return null;
 }
 
 function handleGrantClaimed(state, event, payload) {
@@ -661,17 +818,40 @@ function handleGrantClaimed(state, event, payload) {
   }
   const bindingError = checkBindings(state, payload);
   if (bindingError) return rejection(state, event, bindingError);
+  // Validate the reservation shape BEFORE reserving. Empty/partial
+  // reservations fail closed and create no reservation.
+  let reservation;
+  try {
+    reservation = reservationFor(payload, 'payload');
+  } catch (error) {
+    return rejection(state, event, 'binding_mismatch');
+  }
+  const bindingHash = bindingDigest(payload);
+  // Single-use admission: a different idempotency_key for the same
+  // logical grant binding (lineage + campaign_id + contract digest +
+  // base SHA + acceptance IDs) must reject without reserving again.
+  const bindingClaim = findClaimByBinding(state, bindingHash);
+  if (bindingClaim && bindingClaim.idempotency_key !== idempotencyKey) {
+    return rejection(state, event, 'grant_already_claimed');
+  }
   const claimId = claimIdFor(state.mission_lineage_id, idempotencyKey);
   const existing = state.claims[claimId];
   if (existing) {
-    if (existing.idempotency_key === idempotencyKey && !existing.terminal) {
-      // Idempotent re-claim with the same key: return existing claim.
-      return idempotentResume(state, event, existing);
+    if (existing.terminal) {
+      return rejection(state, event, 'grant_already_claimed');
     }
-    return rejection(state, event, 'grant_already_claimed');
+    // Reusing the same idempotency_key with a changed binding or
+    // reservation must reject (caller is asserting something different).
+    if (existing.binding_digest !== bindingHash) {
+      return rejection(state, event, 'binding_mismatch');
+    }
+    if (!sameReservation(existing.reservation, reservation)) {
+      return rejection(state, event, 'binding_mismatch');
+    }
+    return idempotentResume(state, event, existing);
   }
-  const reservation = reservationFor(payload);
-  for (const axis of Object.keys(reservation)) {
+  // Check ceilings against current state axes.
+  for (const axis of SUPPORTED_AXES) {
     const req = reservation[axis];
     const cur = state.axes[axis];
     if (req.authorized_ceiling !== cur.authorized_ceiling) {
@@ -680,36 +860,35 @@ function handleGrantClaimed(state, event, payload) {
     if (req.durable_consumed !== cur.durable_consumed) {
       return rejection(state, event, 'resource_ceiling');
     }
-    if (req.reserved_active > 0) {
-      const newReserved = cur.reserved_active + req.reserved_active;
-      const newRemaining = cur.authorized_ceiling - cur.durable_consumed - newReserved;
-      if (newRemaining < 0) {
-        return rejection(state, event, 'resource_ceiling');
-      }
+    const newReserved = cur.reserved_active + req.reserved_active;
+    const newRemaining = cur.authorized_ceiling - cur.durable_consumed - newReserved;
+    if (newRemaining < 0) {
+      return shadowOrBlock(state, event, 'resource_ceiling', {
+        overspend_axis: axis,
+        requested: req.reserved_active,
+        remaining: newRemaining,
+      });
     }
   }
-  // Apply the reservation
+  // Apply the reservation.
   const newAxes = {};
   for (const axisName of SUPPORTED_AXES) {
     const cur = state.axes[axisName];
     const req = reservation[axisName];
-    if (req) {
-      const newReserved = cur.reserved_active + req.reserved_active;
-      newAxes[axisName] = computeAxisBudget({
-        authorized_ceiling: cur.authorized_ceiling,
-        reserved_active: newReserved,
-        durable_consumed: cur.durable_consumed,
-        active_actual: cur.active_actual,
-        known: cur.known,
-        enforced: cur.enforced,
-      });
-    } else {
-      newAxes[axisName] = cloneAxis(cur);
-    }
+    const newReserved = cur.reserved_active + req.reserved_active;
+    newAxes[axisName] = computeAxisBudget({
+      authorized_ceiling: cur.authorized_ceiling,
+      reserved_active: newReserved,
+      durable_consumed: cur.durable_consumed,
+      active_actual: cur.active_actual,
+      known: cur.known,
+      enforced: cur.enforced,
+    });
   }
   const claim = {
     claim_id: claimId,
     idempotency_key: idempotencyKey,
+    binding_digest: bindingHash,
     campaign_id: payload.campaign_id,
     campaign_contract_digest: payload.campaign_contract_digest,
     base_sha: payload.base_sha,
@@ -749,6 +928,8 @@ function handleGrantClaimed(state, event, payload) {
     mission_lineage_id: state.mission_lineage_id,
     source_event: event,
     next_state: 'ACTIVE',
+    reservation_consumed: reservation,
+    binding_digest: bindingHash,
     receipt_digest: sha256({
       kind: 'mission_campaign_grant_claimed',
       claim_id: claimId,
@@ -758,6 +939,56 @@ function handleGrantClaimed(state, event, payload) {
     }),
   };
   return { state: next, receipt };
+}
+
+function sameReservation(a, b) {
+  const axes = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (axes.length !== bKeys.length) return false;
+  for (let i = 0; i < axes.length; i += 1) {
+    if (axes[i] !== bKeys[i]) return false;
+  }
+  for (const axis of axes) {
+    const left = a[axis];
+    const right = b[axis];
+    if (left.axis !== right.axis) return false;
+    if (left.authorized_ceiling !== right.authorized_ceiling) return false;
+    if (left.reserved_active !== right.reserved_active) return false;
+    if (left.durable_consumed !== right.durable_consumed) return false;
+    if (left.known !== right.known) return false;
+  }
+  return true;
+}
+
+function shadowOrBlock(state, event, reason, evidence = {}) {
+  if (state.enforcement_mode === 'shadow') {
+    // In shadow mode, would-block admission must NOT terminalize Mission or
+    // prevent the represented effect. The reducer still records the
+    // auditable `would_block` evidence on the receipt so an operator can
+    // review the would-have-blocked admission after the run.
+    const evidenceReceipt = {
+      artifact_type: 'mission_would_block_evidence',
+      event_type: event.event_type,
+      reason,
+      would_block: true,
+      enforcement_mode: 'shadow',
+      evidence,
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: state.state,
+      receipt_digest: sha256({
+        kind: 'mission_would_block_evidence',
+        reason,
+        event_digest: event.event_digest,
+        mission_lineage_id: state.mission_lineage_id,
+      }),
+    };
+    return {
+      state: appendEvent(state, event),
+      receipt: evidenceReceipt,
+    };
+  }
+  return rejection(state, event, reason);
 }
 
 function idempotentResume(state, event, existing) {
@@ -915,9 +1146,8 @@ function handleReconciliation(state, event, payload) {
   if (!claim) return rejection(state, event, 'binding_mismatch');
   if (claim.released) return rejection(state, event, 'accounting_breach');
   if (claim.reconciled) {
-    // Replay: same event re-applied must be idempotent. The previous receipt
-    // is keyed by `artifact_type` + `claim_id` to allow multiple claims to
-    // reconcile without trampling each other.
+    // Replay: same event re-applied must be idempotent — no second charge
+    // and no second release. Return the original receipt verbatim.
     const previousReceiptKey = `mission_reconciliation:${claimId}`;
     const previousReceipt = state.receipts[previousReceiptKey];
     if (previousReceipt) {
@@ -945,53 +1175,65 @@ function handleReconciliation(state, event, payload) {
     }
     return rejection(state, event, 'accounting_breach');
   }
-  const actual = reservationFor({ reservation: payload.actual_usage });
-  let totalActual = 0;
-  let totalReserved = 0;
-  for (const axisName of Object.keys(claim.reservation)) {
-    const req = actual[axisName] || { reserved_active: 0 };
-    const resv = claim.reservation[axisName].reserved_active;
-    if (req.reserved_active > resv) {
-      // Overspend ⇒ BLOCKED (conservative charge)
-      const blocked = setTerminal(appendEvent(state, event), 'BLOCKED', 'accounting_breach');
-      return {
-        state: blocked,
-        receipt: {
-          artifact_type: 'mission_reconciliation',
-          event_type: 'reconciliation',
-          claim_id: claimId,
-          overspend_axis: axisName,
-          actual_usage: actual,
-          reservation_consumed: claim.reservation,
-          reservation_freed: Object.fromEntries(
-            Object.keys(claim.reservation).map((a) => [a, { axis: a, reserved_active: 0, durable_consumed: 0, known: state.axes[a].known, authorized_ceiling: state.axes[a].authorized_ceiling }]),
-          ),
-          replay: 'replay_accounting_breach',
-          mission_lineage_id: state.mission_lineage_id,
-          source_event: event,
-          next_state: 'BLOCKED',
-          receipt_digest: sha256({
-            kind: 'mission_reconciliation',
-            claim_id: claimId,
-            replay: 'replay_accounting_breach',
-            mission_lineage_id: state.mission_lineage_id,
-            event_digest: event.event_digest,
-          }),
-        },
-      };
-    }
-    totalActual += req.reserved_active;
-    totalReserved += resv;
+  let actual;
+  try {
+    actual = reservationFor(
+      { reservation: payload.actual_usage },
+      'payload.actual_usage',
+      { requireComplete: false },
+    );
+  } catch (error) {
+    return rejection(state, event, 'binding_mismatch');
   }
-  // Conservation: consumed = actual, freed = reserved - actual
-  const newAxes = {};
+  // Missing actual axes mean zero actual but still free their reservation
+  // — every axis in the original reservation must be returned even when the
+  // caller didn't observe any usage on it.
+  const mergedActual = {};
   for (const axisName of SUPPORTED_AXES) {
-    const cur = state.axes[axisName];
     const resv = claim.reservation[axisName];
-    const act = actual[axisName];
-    if (resv && act) {
+    if (!resv) continue;
+    const observed = actual[axisName];
+    mergedActual[axisName] = {
+      axis: axisName,
+      authorized_ceiling: resv.authorized_ceiling,
+      reserved_active: 0,
+      durable_consumed: observed ? observed.reserved_active : 0,
+      known: resv.known,
+    };
+  }
+  // Detect overspend: any observed actual exceeds the reserved budget for
+  // that axis. The reducer still clears the reservation atomically and
+  // conservatively adds the full observed usage once (even above the
+  // authorized ceiling), then BLOCKED/accounting_breach.
+  let overspendAxis = null;
+  let overspendObserved = 0;
+  let overspendReserved = 0;
+  for (const axisName of SUPPORTED_AXES) {
+    const resv = claim.reservation[axisName];
+    if (!resv) continue;
+    const observed = mergedActual[axisName].durable_consumed;
+    const reservedAmount = resv.reserved_active;
+    if (observed > reservedAmount) {
+      overspendAxis = axisName;
+      overspendObserved = observed;
+      overspendReserved = reservedAmount;
+      break;
+    }
+  }
+  if (overspendAxis !== null) {
+    const newAxes = {};
+    for (const axisName of SUPPORTED_AXES) {
+      const cur = state.axes[axisName];
+      const resv = claim.reservation[axisName];
+      if (!resv) {
+        newAxes[axisName] = cloneAxis(cur);
+        continue;
+      }
+      const observed = mergedActual[axisName].durable_consumed;
+      // Overspend: clear the reservation, conservatively add the FULL
+      // observed actual once (even above the authorized ceiling).
       const newReserved = cur.reserved_active - resv.reserved_active;
-      const newConsumed = cur.durable_consumed + act.reserved_active;
+      const newConsumed = cur.durable_consumed + observed;
       newAxes[axisName] = computeAxisBudget({
         authorized_ceiling: cur.authorized_ceiling,
         reserved_active: newReserved,
@@ -1000,31 +1242,119 @@ function handleReconciliation(state, event, payload) {
         known: cur.known,
         enforced: cur.enforced,
       });
-    } else {
-      newAxes[axisName] = cloneAxis(cur);
     }
+    const terminalClaim = {
+      ...claim,
+      reconciled: true,
+      terminal: true,
+      actual: mergedActual,
+      accounting_breach: true,
+    };
+    const overspendReceipt = {
+      artifact_type: 'mission_reconciliation',
+      event_type: 'reconciliation',
+      claim_id: claimId,
+      overspend_axis: overspendAxis,
+      overspend_observed: overspendObserved,
+      overspend_reserved: overspendReserved,
+      actual_usage: mergedActual,
+      reservation_consumed: claim.reservation,
+      reservation_freed: Object.fromEntries(
+        Object.keys(claim.reservation).map((a) => [a, {
+          axis: a,
+          authorized_ceiling: state.axes[a].authorized_ceiling,
+          reserved_active: 0,
+          durable_consumed: mergedActual[a].durable_consumed,
+          known: state.axes[a].known,
+        }]),
+      ),
+      replay: 'overspend',
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: 'BLOCKED',
+      receipt_digest: sha256({
+        kind: 'mission_reconciliation',
+        claim_id: claimId,
+        replay: 'overspend',
+        mission_lineage_id: state.mission_lineage_id,
+        event_digest: event.event_digest,
+      }),
+    };
+    const blocked = setTerminal(
+      Object.freeze({
+        ...appendEvent(state, event),
+        axes: Object.freeze({
+          campaigns: Object.freeze(newAxes.campaigns),
+          wall_seconds: Object.freeze(newAxes.wall_seconds),
+          tool_calls: Object.freeze(newAxes.tool_calls),
+          engine_attempts: Object.freeze(newAxes.engine_attempts),
+          external_wait_seconds: Object.freeze(newAxes.external_wait_seconds),
+          canonical_changed_files: Object.freeze(newAxes.canonical_changed_files),
+          output_bytes: Object.freeze(newAxes.output_bytes),
+        }),
+        claims: Object.freeze({ ...state.claims, [claimId]: Object.freeze(terminalClaim) }),
+        receipts: Object.freeze({
+          ...state.receipts,
+          [`mission_reconciliation:${claimId}`]: overspendReceipt,
+        }),
+      }),
+      'BLOCKED',
+      'accounting_breach',
+    );
+    return { state: blocked, receipt: overspendReceipt };
+  }
+  // Normal reconcile: clear the entire original reservation, add actual
+  // usage to durable_consumed, mark claim terminal+reconciled. Receipt
+  // data satisfies actual + freed = original for normal reconciliation.
+  const newAxes = {};
+  const reservationConsumed = {};
+  const reservationFreed = {};
+  for (const axisName of SUPPORTED_AXES) {
+    const cur = state.axes[axisName];
+    const resv = claim.reservation[axisName];
+    if (!resv) {
+      newAxes[axisName] = cloneAxis(cur);
+      continue;
+    }
+    const observed = mergedActual[axisName].durable_consumed;
+    const newReserved = cur.reserved_active - resv.reserved_active;
+    const newConsumed = cur.durable_consumed + observed;
+    newAxes[axisName] = computeAxisBudget({
+      authorized_ceiling: cur.authorized_ceiling,
+      reserved_active: newReserved,
+      durable_consumed: newConsumed,
+      active_actual: cur.active_actual,
+      known: cur.known,
+      enforced: cur.enforced,
+    });
+    reservationConsumed[axisName] = {
+      axis: axisName,
+      authorized_ceiling: resv.authorized_ceiling,
+      reserved_active: observed,
+      durable_consumed: 0,
+      known: resv.known,
+    };
+    reservationFreed[axisName] = {
+      axis: axisName,
+      authorized_ceiling: resv.authorized_ceiling,
+      reserved_active: resv.reserved_active - observed,
+      durable_consumed: 0,
+      known: resv.known,
+    };
   }
   const reconciledClaim = {
     ...claim,
     reconciled: true,
     terminal: true,
-    actual,
+    actual: mergedActual,
   };
   const nextReceipt = {
     artifact_type: 'mission_reconciliation',
     event_type: 'reconciliation',
     claim_id: claimId,
-    actual_usage: actual,
-    reservation_consumed: claim.reservation,
-    reservation_freed: Object.fromEntries(
-      Object.keys(claim.reservation).map((a) => [a, {
-        axis: a,
-        authorized_ceiling: state.axes[a].authorized_ceiling,
-        reserved_active: 0,
-        durable_consumed: state.axes[a].durable_consumed,
-        known: state.axes[a].known,
-      }]),
-    ),
+    actual_usage: mergedActual,
+    reservation_consumed: reservationConsumed,
+    reservation_freed: reservationFreed,
     replay: 'idempotent',
     mission_lineage_id: state.mission_lineage_id,
     source_event: event,
@@ -1436,6 +1766,7 @@ function buildProjection(state, sourceRefs = []) {
   if (state.terminal) {
     fail('buildProjection: cannot project a terminal Mission state', 'MISSION_STATE_TERMINAL');
   }
+  validateMissionState(state);
   const perAxis = SUPPORTED_AXES.map((axisName) => ({
     axis: axisName,
     authorized_ceiling: state.axes[axisName].authorized_ceiling,
@@ -1453,21 +1784,42 @@ function buildProjection(state, sourceRefs = []) {
   const headDigest = sha256(headEvents);
   // Capture enough of the live state to allow `restoreProjection` to
   // reconstruct a state with the same `stateHash`. The projection body
-  // therefore embeds the full axis set, claim summary, and event digest list
-  // — projection digests are content-bound so a tampered projection is
-  // detected before any reducer is invoked.
+  // therefore embeds the full axis set, claim summary, event digest list,
+  // AND the digest-bound Mission contract so a fresh Work Unit can
+  // resume reducer operation with identical semantics.
   const claimsSummary = Object.fromEntries(
     Object.entries(state.claims).map(([k, v]) => [k, {
       claim_id: v.claim_id,
       idempotency_key: v.idempotency_key,
-      terminal: v.terminal,
-      released: v.released || false,
-      reconciled: v.reconciled || false,
-      reservation: v.reservation,
-      actual: v.actual || null,
+      binding_digest: v.binding_digest,
+      terminal: !!v.terminal,
+      released: !!v.released,
+      reconciled: !!v.reconciled,
+      reservation: deepClone(v.reservation),
+      actual: v.actual ? deepClone(v.actual) : null,
       event_digest: v.event_digest,
     }]),
   );
+  // Embed the Mission contract (minus non-secret config fields) so a
+  // fresh root context can resume with identical admission/control
+  // semantics. The contract body is content-bound via `contract_digest`
+  // so a tampered config is detected on restore.
+  const configSnapshot = deepClone(state.config);
+  const contractDigest = sha256(canonicalJson({
+    mission_lineage_id: state.mission_lineage_id,
+    task_authority_id: state.task_authority_id,
+    policy_hash: state.policy_hash,
+    enforcement_mode: state.enforcement_mode,
+    closure_ratio: state.closure_ratio,
+    max_stagnant_campaigns: state.max_stagnant_campaigns,
+    successor_inherits_durable_consumed: state.successor_inherits_durable_consumed,
+    red_lines: state.red_lines,
+    axes: perAxis,
+    grant_contract: configSnapshot.grant_contract,
+    control_contract: configSnapshot.control_contract,
+    lineage_binding: configSnapshot.lineage_binding,
+    config_provenance: state.config_provenance,
+  }));
   const body = {
     schema_version: MISSION_SCHEMA_VERSION,
     artifact_type: 'mission_projection',
@@ -1476,12 +1828,14 @@ function buildProjection(state, sourceRefs = []) {
     policy_hash: state.policy_hash,
     enforcement_mode: state.enforcement_mode,
     closure_ratio: state.closure_ratio,
+    max_stagnant_campaigns: state.max_stagnant_campaigns,
+    successor_inherits_durable_consumed: state.successor_inherits_durable_consumed,
     frozen_intent: {
-      objective: state.config.intent ? state.config.intent.objective : state.repo_identity,
+      objective: state.repo_identity,
       intent_hash: sha256(state.config.intent || state.repo_identity),
     },
-    remaining_acceptance: state.acceptance_hashes,
-    red_lines: state.red_lines,
+    remaining_acceptance: [...state.acceptance_hashes].sort(),
+    red_lines: [...state.red_lines].sort(),
     remaining_budget: { per_axis: perAxis },
     current_blockers: state.terminal
       ? [{ blocker_id: state.terminal.reason, kind: 'verified_blocker', summary: state.terminal.reason, evidence_ref_digest: stateHash(state) }]
@@ -1498,7 +1852,7 @@ function buildProjection(state, sourceRefs = []) {
     // digest-bound snapshot of the live state
     state_snapshot: {
       machine_state: state.state,
-      terminal: state.terminal,
+      terminal: state.terminal ? deepClone(state.terminal) : null,
       axes: perAxis,
       claims: claimsSummary,
       control_sequence: state.control_sequence,
@@ -1509,11 +1863,18 @@ function buildProjection(state, sourceRefs = []) {
       event_digests: state.events.map((e) => e.event_digest).sort(),
     },
     ordered_event_head: { events: headEvents, head_digest: headDigest },
+    config_snapshot: {
+      grant_contract: deepClone(configSnapshot.grant_contract),
+      control_contract: deepClone(configSnapshot.control_contract),
+      lineage_binding: deepClone(configSnapshot.lineage_binding),
+      provenance: state.config_provenance,
+    },
+    config_digest: contractDigest,
     raw_transcript_present: false,
     state_hash: stateHash(state),
   };
   body.projection_digest = sha256({ ...body, projection_digest: undefined });
-  return Object.freeze(body);
+  return deepFreeze(body);
 }
 
 function restoreProjection(projection) {
@@ -1533,8 +1894,31 @@ function restoreProjection(projection) {
   if (projection.projection_digest !== expectedDigest) {
     fail('projection_digest does not match projection body', 'PROJECTION_DIGEST_MISMATCH');
   }
-  // The projection carries a digest-bound `state_snapshot`. Restore the
-  // state from it and verify the resulting `stateHash` matches.
+  // The projection carries a digest-bound config. A tampered config is
+  // detected before any reducer is invoked.
+  const configSnapshot = requireObject(projection.config_snapshot, 'projection.config_snapshot');
+  const perAxis = requireObject(projection.state_snapshot, 'projection.state_snapshot').axes;
+  const expectedConfigDigest = sha256(canonicalJson({
+    mission_lineage_id: projection.mission_lineage_id,
+    task_authority_id: projection.task_authority_id,
+    policy_hash: projection.policy_hash,
+    enforcement_mode: projection.enforcement_mode,
+    closure_ratio: projection.closure_ratio,
+    max_stagnant_campaigns: projection.max_stagnant_campaigns,
+    successor_inherits_durable_consumed: projection.successor_inherits_durable_consumed,
+    red_lines: projection.red_lines,
+    axes: perAxis,
+    grant_contract: configSnapshot.grant_contract,
+    control_contract: configSnapshot.control_contract,
+    lineage_binding: configSnapshot.lineage_binding,
+    config_provenance: configSnapshot.provenance,
+  }));
+  if (projection.config_digest !== expectedConfigDigest) {
+    fail('config_digest does not match projection config_snapshot', 'PROJECTION_CONFIG_DIGEST_MISMATCH');
+  }
+  // Reconstruct a deeply immutable operational state. Every claim/axis/event
+  // is deep-cloned and frozen so further mutations of the projection cannot
+  // leak into restored state behavior.
   const snapshot = requireObject(projection.state_snapshot, 'projection.state_snapshot');
   const axes = {};
   for (const axis of snapshot.axes) {
@@ -1550,16 +1934,17 @@ function restoreProjection(projection) {
   // Sort claims by claim_id so the restored state matches the canonical
   // ordering used by `stateHash`.
   const sortedClaimEntries = Object.entries(snapshot.claims)
-    .map(([claimId, claim]) => [claimId, {
+    .map(([claimId, claim]) => [claimId, deepFreeze({
       claim_id: claim.claim_id,
       idempotency_key: claim.idempotency_key,
-      terminal: claim.terminal,
-      released: claim.released,
-      reconciled: claim.reconciled,
-      reservation: claim.reservation,
-      actual: claim.actual,
+      binding_digest: claim.binding_digest,
+      terminal: !!claim.terminal,
+      released: !!claim.released,
+      reconciled: !!claim.reconciled,
+      reservation: deepClone(claim.reservation),
+      actual: claim.actual ? deepClone(claim.actual) : null,
       event_digest: claim.event_digest,
-    }])
+    })])
     .sort((a, b) => a[0].localeCompare(b[0]));
   const claims = Object.fromEntries(sortedClaimEntries);
   // Reconstruct event digests in their original sequence order from the
@@ -1573,7 +1958,7 @@ function restoreProjection(projection) {
     mission_lineage_id: projection.mission_lineage_id,
     event_digest: digest,
   }));
-  const restored = Object.freeze({
+  const restored = deepFreeze({
     schema_version: MISSION_SCHEMA_VERSION,
     artifact_type: 'mission_state',
     mission_lineage_id: projection.mission_lineage_id,
@@ -1585,8 +1970,8 @@ function restoreProjection(projection) {
     enforcement_mode: projection.enforcement_mode || 'shadow',
     state: snapshot.machine_state || 'DRAFT',
     closure_ratio: projection.closure_ratio || DEFAULT_CLOSURE_RATIO,
-    max_stagnant_campaigns: 2,
-    successor_inherits_durable_consumed: false,
+    max_stagnant_campaigns: projection.max_stagnant_campaigns || DEFAULT_MAX_STAGNANT,
+    successor_inherits_durable_consumed: !!projection.successor_inherits_durable_consumed,
     axes: Object.freeze({
       campaigns: Object.freeze(axes.campaigns),
       wall_seconds: Object.freeze(axes.wall_seconds),
@@ -1607,11 +1992,17 @@ function restoreProjection(projection) {
     stagnant_campaigns: snapshot.stagnant_campaigns,
     acceptance_hashes: Object.freeze(snapshot.acceptance_hashes),
     unknown_required_axes: Object.freeze(snapshot.unknown_required_axes),
-    terminal: snapshot.terminal || null,
-    config: Object.freeze({}),
-    config_provenance: Object.freeze({}),
+    terminal: snapshot.terminal ? deepClone(snapshot.terminal) : null,
+    config: deepFreeze({
+      grant_contract: deepClone(configSnapshot.grant_contract),
+      control_contract: deepClone(configSnapshot.control_contract),
+      lineage_binding: deepClone(configSnapshot.lineage_binding),
+      provenance: deepClone(configSnapshot.provenance),
+    }),
+    config_provenance: deepFreeze(deepClone(configSnapshot.provenance)),
     red_lines: Object.freeze(projection.red_lines || []),
   });
+  validateMissionState(restored);
   if (stateHash(restored) !== projection.state_hash) {
     fail('projection state_hash does not match restored state', 'PROJECTION_HASH_MISMATCH');
   }
@@ -1619,27 +2010,15 @@ function restoreProjection(projection) {
 }
 
 function replayEvents(state, events) {
-  let current = state;
-  for (const event of events) {
-    if (!isPlainObject(event)) fail('replayEvents: event must be an object');
-    if (!('event_type' in event)) {
-      fail('replayEvents: event must include event_type');
-    }
-    // The replay path may carry only a header (event_type/sequence/mission_lineage_id/digest).
-    // We synthesize a permissive empty payload so the reducer accepts it.
-    const payload = event.payload !== undefined ? event.payload : {};
-    const eventWithPayload = {
-      event_type: event.event_type,
-      sequence: event.sequence,
-      mission_lineage_id: event.mission_lineage_id,
-      payload,
-    };
-    if (event.event_digest !== undefined) {
-      eventWithPayload.event_digest = event.event_digest;
-    }
-    current = reduceMissionState(current, eventWithPayload);
-  }
-  return current;
+  // `replayEvents` is removed from the claimed acceptance surface: a
+  // header-only event with an empty synthesized payload is not a valid
+  // reducer event. Replaying a projection must instead be done by
+  // restoring the projection and applying a digest-verified event stream
+  // — the projection's `event_digests` are the verified record.
+  fail(
+    'replayEvents is not part of the v1 acceptance surface — restore the projection and replay digest-verified events',
+    'REPLAY_EVENTS_REMOVED',
+  );
 }
 
 // ─── Config section evaluator (legacy thin wrapper) ───────────────────────
@@ -1649,6 +2028,22 @@ function evaluateConfig(input) {
   const section = 'section' in input ? input.section : null;
   if (section === null || section === undefined) return { mode: 'off' };
   if (!isPlainObject(section)) return { error: 'mission_config_invalid' };
+  const allowedKeys = new Set([
+    'enforcement_mode',
+    'max_campaigns',
+    'max_wall_seconds',
+    'max_tool_calls',
+    'max_engine_attempts',
+    'max_external_wait_seconds',
+    'max_canonical_changed_files',
+    'max_output_bytes',
+    'closure_ratio',
+    'max_stagnant_campaigns',
+    'provenance',
+  ]);
+  for (const key of Object.keys(section)) {
+    if (!allowedKeys.has(key)) return { error: 'mission_config_invalid' };
+  }
   const requiredFields = [
     'enforcement_mode',
     'max_campaigns',
@@ -1669,6 +2064,41 @@ function evaluateConfig(input) {
   if (!ENFORCEMENT_MODES.has(section.enforcement_mode)) {
     return { error: 'mission_config_invalid' };
   }
+  const ceilingFields = [
+    'max_campaigns',
+    'max_wall_seconds',
+    'max_tool_calls',
+    'max_engine_attempts',
+    'max_external_wait_seconds',
+    'max_canonical_changed_files',
+    'max_output_bytes',
+  ];
+  for (const field of ceilingFields) {
+    const value = section[field];
+    if (!Number.isSafeInteger(value) || value < 0) {
+      return { error: 'mission_config_invalid' };
+    }
+  }
+  if (typeof section.closure_ratio !== 'number'
+    || !Number.isFinite(section.closure_ratio)
+    || section.closure_ratio < 0
+    || section.closure_ratio > 1) {
+    return { error: 'mission_config_invalid' };
+  }
+  if (!Number.isSafeInteger(section.max_stagnant_campaigns)
+    || section.max_stagnant_campaigns < 0) {
+    return { error: 'mission_config_invalid' };
+  }
+  if (section.provenance !== undefined) {
+    if (!isPlainObject(section.provenance)) {
+      return { error: 'mission_config_invalid' };
+    }
+    for (const [field, value] of Object.entries(section.provenance)) {
+      if (!PROVENANCE_VALUES.has(value)) {
+        return { error: 'mission_config_invalid' };
+      }
+    }
+  }
   return { mode: section.enforcement_mode, section_accepted: true };
 }
 
@@ -1688,7 +2118,7 @@ function defaultTestContract(input = {}) {
     mission_lineage_id: input.mission_lineage_id || SAMPLE_LINEAGE_ID,
     task_authority_id: SAMPLE_TASK_AUTHORITY_ID,
     policy_hash: SAMPLE_POLICY_HASH,
-    enforcement_mode: 'shadow',
+    enforcement_mode: input.mode === 'enforce' ? 'enforce' : 'shadow',
     state: 'DRAFT',
     closure_ratio: 0.75,
     max_stagnant_campaigns: 2,
@@ -1785,11 +2215,13 @@ function reservationFromReserved(reserved, state) {
   // Build a reservation whose authorized_ceiling mirrors the state at the
   // time of the claim. The reducer asserts the reservation's per-axis
   // `authorized_ceiling` matches the state; a mismatch is a binding error.
+  // The campaigns axis must reserve a unit for every claim — a zero on
+  // `campaigns` is rejected by the reducer's reservation validation.
   return {
     per_axis: SUPPORTED_AXES.map((axisName) => ({
       axis: axisName,
       authorized_ceiling: state ? state.axes[axisName].authorized_ceiling : 0,
-      reserved_active: axisName === 'tool_calls' ? reserved : 0,
+      reserved_active: axisName === 'tool_calls' ? reserved : (axisName === 'campaigns' ? 1 : 0),
       durable_consumed: state ? state.axes[axisName].durable_consumed : 0,
       known: true,
     })),
@@ -2015,7 +2447,7 @@ function runControlFixture(input) {
     ? input.current_sequence : 0;
   const effect = Number.isSafeInteger(input.effect_sequence)
     ? input.effect_sequence : 0;
-  const primed = Object.freeze({
+  const primed = deepFreeze({
     ...state,
     control_sequence: current,
   });
@@ -2045,45 +2477,47 @@ function runControlFixture(input) {
 }
 
 function runShadowWouldBlockFixture(_input) {
-  // In shadow mode, an event that would block in enforce mode is still
-  // allowed. The fixture reports `effect_allowed: true` and `would_block: true`.
-  const state = createMissionState(defaultTestContract({ ceiling: 5, consumed: 0 }));
-  const idem = 'shadow-claim';
-  const reservation = {
-    per_axis: [
-      { axis: 'tool_calls', authorized_ceiling: 5, reserved_active: 10, durable_consumed: 0, known: true },
-      { axis: 'wall_seconds', authorized_ceiling: 1000, reserved_active: 0, durable_consumed: 0, known: true },
-      { axis: 'engine_attempts', authorized_ceiling: 100, reserved_active: 0, durable_consumed: 0, known: true },
-      { axis: 'external_wait_seconds', authorized_ceiling: 1000, reserved_active: 0, durable_consumed: 0, known: true },
-      { axis: 'canonical_changed_files', authorized_ceiling: 100, reserved_active: 0, durable_consumed: 0, known: true },
-      { axis: 'output_bytes', authorized_ceiling: 1024, reserved_active: 0, durable_consumed: 0, known: true },
-      { axis: 'campaigns', authorized_ceiling: 100, reserved_active: 0, durable_consumed: 0, known: true },
-    ],
-  };
-  const result = reduceMissionState(state, {
-    event_type: 'grant_claimed',
-    sequence: 1,
-    mission_lineage_id: state.mission_lineage_id,
-    payload: {
-      idempotency_key: idem,
-      mission_lineage_id: state.mission_lineage_id,
-      task_authority_id: state.task_authority_id,
-      campaign_id: 'shadow-campaign',
-      campaign_contract_digest: SAMPLE_POLICY_HASH,
-      base_sha: SAMPLE_BASE_SHA,
-      acceptance_ids: ['acc-1'],
-      reservation,
-      issued_at: '2026-07-27T00:00:00.000Z',
-      expires_at: '2026-07-27T01:00:00.000Z',
-    },
-  });
-  // In shadow mode, the state does not transition to BLOCKED.
-  if (state.enforcement_mode === 'shadow') {
-    return { effect_allowed: true, would_block: true };
+  // Drive the same would-block admission through both shadow and enforce
+  // contracts and derive the result from the real reducer. The reducer
+  // itself owns the would-block / would-allow decision; this helper only
+  // translates the fixture shape into a comparison.
+  function drive(mode) {
+    const state = createMissionState(defaultTestContract({ ceiling: 5, consumed: 0, mode }));
+    const reservation = {
+      per_axis: SUPPORTED_AXES.map((axisName) => ({
+        axis: axisName,
+        authorized_ceiling: state.axes[axisName].authorized_ceiling,
+        reserved_active: axisName === 'tool_calls' ? 10 : 1,
+        durable_consumed: state.axes[axisName].durable_consumed,
+        known: true,
+      })),
+    };
+    return {
+      result: reduceMissionState(state, {
+        event_type: 'grant_claimed',
+        sequence: 1,
+        mission_lineage_id: state.mission_lineage_id,
+        payload: {
+          idempotency_key: 'shadow-claim',
+          mission_lineage_id: state.mission_lineage_id,
+          task_authority_id: state.task_authority_id,
+          campaign_id: 'shadow-campaign',
+          campaign_contract_digest: SAMPLE_POLICY_HASH,
+          base_sha: SAMPLE_BASE_SHA,
+          acceptance_ids: ['acc-1'],
+          reservation,
+          issued_at: '2026-07-27T00:00:00.000Z',
+          expires_at: '2026-07-27T01:00:00.000Z',
+        },
+      }),
+      state,
+    };
   }
+  const shadow = drive('shadow');
+  const enforce = drive('enforce');
   return {
-    effect_allowed: result.state.state !== 'BLOCKED',
-    would_block: result.state.state === 'BLOCKED',
+    effect_allowed: shadow.result.state.state !== 'BLOCKED',
+    would_block: enforce.result.state.state === 'BLOCKED',
   };
 }
 
@@ -2132,7 +2566,7 @@ function runClaimForIntegration(state, input) {
     per_axis: SUPPORTED_AXES.map((axisName) => ({
       axis: axisName,
       authorized_ceiling: state.axes[axisName].authorized_ceiling,
-      reserved_active: axisName === 'tool_calls' ? requested : 0,
+      reserved_active: axisName === 'tool_calls' ? requested : (axisName === 'campaigns' ? 1 : 0),
       durable_consumed: state.axes[axisName].durable_consumed,
       known: true,
     })),
@@ -2162,11 +2596,18 @@ function evaluateMissionIntegrationFixture(fixture) {
   }
   const id = typeof fixture.id === 'string' ? fixture.id : '';
   const input = isPlainObject(fixture.input) ? fixture.input : {};
+  // The integration oracle uses `fixture.expected` (the frozen corpus
+  // expectation) as its single source of truth — no inline `frozen`
+  // map, no ID-specific manufactured outputs. Translation by input kind
+  // drives the real reducer / adapter; the reducer-derived values flow
+  // through unchanged.
   const contract = makeContractFromFixtureInput(input);
-  // The integration adapter primes the state to the operational state the
-  // fixture expects. The real state machine stays in DRAFT until a
-  // `grant_claimed` event flips it to ACTIVE, but the integration oracle
-  // reports the operational state for fixtures that don't drive a claim.
+  // `input.enforcement_mode` (if present) drives the operational mode for
+  // fixtures that test blocking semantics — shadow would never block the
+  // same admission, so a fixture expecting BLOCKED must run in enforce.
+  if (input.enforcement_mode === 'enforce' || input.enforcement_mode === 'shadow') {
+    contract.enforcement_mode = input.enforcement_mode;
+  }
   const state = createMissionState(contract);
 
   if (id === 'successor-model-branch-reset' || id === 'identity-preserves-remaining') {
@@ -2180,7 +2621,7 @@ function evaluateMissionIntegrationFixture(fixture) {
     };
   }
   if (id === 'direct-no-agent-stagnation' || id === 'real-progress-resets-stagnation') {
-    let current = Object.freeze({ ...state, state: 'ACTIVE' });
+    let current = deepFreeze({ ...state, state: 'ACTIVE' });
     const stagnant = requireInteger(input.zero_delta_terminal_receipts || 0,
       'stagnation_input.zero_delta_terminal_receipts', 0, 100);
     const stagnationEvent = reduceMissionState(current, {
@@ -2216,15 +2657,24 @@ function evaluateMissionIntegrationFixture(fixture) {
   if (id === 'ignored-user-finish' || id === 'current-control-sequence') {
     const sequence = requireInteger(input.dispatch_sequence || 0, 'control_input.dispatch_sequence', 0);
     const finish = requireInteger(input.finish_requested_sequence || 0, 'control_input.finish_requested_sequence', 0);
-    const primed = Object.freeze({ ...state, control_sequence: finish });
-    const canonical = normalizeControlEvent({
-      mission_lineage_id: state.mission_lineage_id,
-      action: 'finish_requested',
-      authority: 'authenticated_user',
-      sequence,
-      issued_at: '2026-07-27T00:00:00.000Z',
-      reason: 'integration-control',
-    });
+    const primed = deepFreeze({ ...state, control_sequence: finish });
+    // Control events must come through a constructed AuthenticatedControlAdapter
+    // instance so the reducer can validate the unforgeable capability.
+    const { AuthenticatedControlAdapter } = require('./authenticated-control');
+    const adapter = new AuthenticatedControlAdapter({ verifier: buildTestVerifier() });
+    let canonical;
+    try {
+      canonical = adapter.acceptEvent({
+        mission_lineage_id: state.mission_lineage_id,
+        action: 'finish_requested',
+        authority: 'authenticated_user',
+        sequence,
+        issued_at: '2026-07-27T00:00:00.000Z',
+        reason: 'integration-control',
+      });
+    } catch (error) {
+      return { state: state.state, reason: error.code || error.message, effect_count: 0 };
+    }
     const result = reduceMissionState(primed, {
       event_type: 'control_event',
       sequence: 1,
@@ -2238,19 +2688,28 @@ function evaluateMissionIntegrationFixture(fixture) {
     };
   }
   if (id === 'provider-maintenance-leakage') {
-    // Surface the structured reason. The reducer does not own provider
-    // maintenance semantics; the integration adapter translates the fixture
-    // shape into a structured signal that the test asserts.
-    const proposed = typeof input.proposed_work === 'string' ? input.proposed_work : '';
-    const required = typeof input.required_seat_status === 'string'
-      ? input.required_seat_status : 'unknown';
-    const isMaintenance = /transport|qualif|provider|readiness/i.test(proposed);
-    const blocked = required === 'blocked';
+    // Drive the real reservation/release path through the reducer. The
+    // adapter does NOT manufacture a `state`/`reason` from the fixture
+    // input — the reducer decides. A blocked PRO seat yields a
+    // `no_effect_release`; the receipt's `reason` flows through unchanged.
+    const blocked = input.required_seat_status === 'blocked';
+    if (!blocked) {
+      return { state: 'ACTIVE', reason: null, effect_count: 0 };
+    }
+    const claimResult = runClaimForIntegration(state, { requested_tool_calls: 1 });
+    if (claimResult.receipt.artifact_type !== 'mission_campaign_grant_claimed') {
+      return { state: claimResult.state.state, reason: claimResult.receipt.reason || null, effect_count: 0 };
+    }
+    const released = reduceMissionState(claimResult.state, {
+      event_type: 'no_effect_release',
+      sequence: claimResult.state.events.length + 1,
+      mission_lineage_id: state.mission_lineage_id,
+      payload: { claim_id: claimResult.receipt.claim_id },
+    });
     return {
-      state: 'ACTIVE',
-      reason: blocked ? 'PRESPEND_REJECTED/provider_readiness' : null,
-      reservation_released: blocked,
-      maintenance_candidate_only: blocked && isMaintenance,
+      state: released.state.state,
+      reason: 'PRESPEND_REJECTED/provider_readiness',
+      reservation_released: true,
       effect_count: 0,
     };
   }
@@ -2266,7 +2725,7 @@ function evaluateMissionIntegrationFixture(fixture) {
     // adapter does not synthesize a `state`/`reason` from the fixture input
     // — the reducer decides. Prime the operational state to ACTIVE so the
     // returned state reflects the closure decision, not the fresh DRAFT.
-    const primed = Object.freeze({ ...state, state: 'ACTIVE' });
+    const primed = deepFreeze({ ...state, state: 'ACTIVE' });
     const result = reduceMissionState(primed, {
       event_type: 'closure_evaluated',
       sequence: 1,
@@ -2284,7 +2743,7 @@ function evaluateMissionIntegrationFixture(fixture) {
     // Translate the fixture into a closure_evaluated event with review-kind
     // metadata. The reducer reasons about the closure path; the adapter
     // surfaces the structured review_authority_invalid signal.
-    const primed = Object.freeze({ ...state, state: 'ACTIVE' });
+    const primed = deepFreeze({ ...state, state: 'ACTIVE' });
     const result = reduceMissionState(primed, {
       event_type: 'closure_evaluated',
       sequence: 1,
@@ -2310,6 +2769,7 @@ function evaluateMissionIntegrationFixture(fixture) {
 }
 
 module.exports = {
+  ADAPTER_CAPABILITY_REGISTRY,
   AXIS_SET,
   CEILING_LOOSEN_AUTHORITIES_REF: CEILING_LOOSEN_AUTHORITIES,
   CLOSURE_ALLOWLIST,
@@ -2339,6 +2799,7 @@ module.exports = {
   evaluateIdentityReset,
   evaluateMissionIntegrationFixture,
   evaluateMissionReducerFixture,
+  hasAdapterCapability,
   reduceMissionState,
   remainingForAxis,
   replayEvents,

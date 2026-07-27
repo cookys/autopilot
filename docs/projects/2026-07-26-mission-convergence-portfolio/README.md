@@ -2,9 +2,9 @@
 
 > Status: In progress
 >
-> Progress: 20/34 phases READY
+> Progress: 21/34 phases READY
 >
-> Current phase: seq 21 — ICC P4 057 dogfood + ship integration (`IN_PROGRESS`; not READY)
+> Current phase: seq 22 — PRO P3 native Kimi transport (`IN_PROGRESS`; not READY)
 >
 > Target: v2.34.0
 >
@@ -74,8 +74,8 @@ blocking finding. A transport failure never counts as a verdict.
 | 18 | LSM P3 merge execution receipts | LSM P2 | READY | `a401f35` | [lsm-p3.md](reviews/lsm-p3.md) |
 | 19 | LSM P4 finish-flow + CEO reporting | LSM P3 | READY | `f77866a` | [lsm-p4.md](reviews/lsm-p4.md) |
 | 20 | LSM P5 docs/package integration | LSM P4 | READY | `27d43a8` | [lsm-p5.md](reviews/lsm-p5.md) |
-| 21 | ICC P4 057 dogfood + ship integration | Mission/LSM integration | IN_PROGRESS | pending | pending |
-| 22 | PRO P3 native Kimi transport | PRO core; independent | Pending | pending | pending |
+| 21 | ICC P4 057 dogfood + ship integration | Mission/LSM integration | READY | `cc8c227` | [icc-p4.md](reviews/icc-p4.md) |
+| 22 | PRO P3 native Kimi transport | PRO core; independent | IN_PROGRESS | pending | pending |
 | 23 | PRO P5 docs/package integration | PRO P3 | Pending | pending | pending |
 | 24 | PRS P1 manifest + artifact contracts | ICC transport boundary | Pending | pending | pending |
 | 25 | PRS P2 normalization + bounded retry | PRS P1 | Pending | pending | pending |

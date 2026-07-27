@@ -737,10 +737,18 @@ function inspectLifecycleReceipt(options) {
   if (drift.length !== 0) {
     return { status: 'stale', drift };
   }
+  // Authenticated current scan + dispositions are already bound above.
+  // Expose active-owned counts for LSM without re-scanning or name inference.
+  const activeOwnedWorktrees = Array.isArray(scan.owned) ? scan.owned.length : 0;
+  const activeOwnedBranches = receipt.branches.filter(
+    (branch) => branch && branch.disposition !== 'reaped',
+  ).length;
   return {
     status: 'valid',
     zero_residue: receipt.zero_residue,
     receipt_digest: receipt.receipt_digest,
+    active_owned_worktrees: activeOwnedWorktrees,
+    active_owned_branches: activeOwnedBranches,
   };
 }
 

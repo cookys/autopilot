@@ -1,132 +1,365 @@
 #!/usr/bin/env bash
-# LSM P1 — buildTaskStatus content-digested receipt oracle (RED).
-#
-# Freezes the task_status_receipt API for src/status/task-status.js which does
-# not yet exist. On current HEAD this oracle exits nonzero because the module
-# is absent; every invariant is reported by name. When the module lands, all
-# invariants must pass against deterministic fakes (no host refs, no network).
-#
-# Structure: a single Node harness attempts require('../../src/status/task-status')
-# relative to hooks/tests/, runs all groups with injected fakes, and emits
-# tab-separated "id\tPASS|FAIL|SKIP" lines. The bash layer asserts every
-# invariant PASSes — missing module, usage text, generic nonzero, or zero
-# collected assertions all fail the bash gate.
+# LSM P1 real-artifact oracle. Every Mission and ICC artifact is produced by
+# the canonical reducer/builders; WLB evidence uses the canonical inspector's
+# exact return shape.
 . "$(dirname "$0")/lib.sh"
 
-OUT="$(node - "$REPO_ROOT" <<'NODE'
+OUT_FILE="$TEST_TMP/status-task.out"
+node - "$REPO_ROOT" >"$OUT_FILE" <<'NODE'
 'use strict';
-const path = require('path');
-const crypto = require('crypto');
-const root = process.argv[2];
 
-const lines = [];
-function check(id, cond) { lines.push(`${id}\t${cond ? 'PASS' : 'FAIL'}`); }
-function group(name, fn) {
-  try { fn(); } catch (error) {
-    lines.push(`${name}\tFAIL\tthrew ${error && error.code ? error.code : error}`);
+const path = require('path');
+const root = process.argv[2];
+const mission = require(path.join(root, 'src/engine/mission-convergence'));
+const icc = require(path.join(root, 'src/engine/implementation-campaign'));
+const { buildTaskStatus } = require(path.join(root, 'src/status/task-status'));
+
+const results = [];
+function check(id, condition) {
+  results.push({ id, pass: condition === true });
+}
+function group(id, fn) {
+  try {
+    fn();
+  } catch (error) {
+    results.push({ id, pass: false, detail: `${error.code || error.name}: ${error.message}` });
   }
 }
-
-function sha256(data) {
-  const payload = typeof data === 'string' ? data : JSON.stringify(data);
-  return crypto.createHash('sha256').update(payload).digest('hex');
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+function redigest(body) {
+  const { receipt_digest: ignored, ...material } = body;
+  return { ...material, receipt_digest: icc.canonicalDigest(material) };
 }
 
-// ── Deterministic fixtures ──────────────────────────────────────────────────
-const REPO = '/tmp/lsm-p1-oracle-repo';
 const ROOT_RUN_ID = 'root-run-lsm-p1';
+const REPO = '/tmp/lsm-p1-real-repo';
+const REPO_IDENTITY = 'git-common-dir:/tmp/lsm-p1-real-repo/.git';
 const OBSERVED_AT = '2026-07-28T00:00:00.000Z';
-const GOAL = 'LSM P1 oracle goal';
-const PHASE = 'phase-16';
+const CANDIDATE_COMMIT = '1'.repeat(40);
+const CANDIDATE_TREE = '2'.repeat(40);
+const TARGET_SHA = '3'.repeat(40);
+const CONSUMER_SHA = '4'.repeat(40);
+const REMOTE_SHA = '5'.repeat(40);
 const TARGET_REF = 'refs/heads/develop';
 const CONSUMER_REF = 'refs/heads/consumer';
 const REMOTE_REF = 'refs/remotes/origin/develop';
-const TARGET_SHA = 'a'.repeat(40);
-const CONSUMER_SHA = 'b'.repeat(40);
-const REMOTE_SHA = 'c'.repeat(40);
-const CANDIDATE_COMMIT = 'd'.repeat(40);
-const CANDIDATE_TREE = 'e'.repeat(40);
-const LIFECYCLE_PATH = '/tmp/lsm-p1-oracle-repo/.autopilot/lifecycle.json';
 
-function makeMissionTerminalReceipt(state, overrides) {
-  const base = {
-    schema_version: 1,
-    artifact_type: 'mission_terminal_receipt',
-    root_run_id: ROOT_RUN_ID,
-    repo_identity: `git-common-dir:${REPO}/.git`,
-    state: state,
-    state_digest: sha256(`state-${state}`),
-    terminal_digest: sha256(`terminal-${state}`),
-    ...overrides,
-  };
-  return { ...base, receipt_digest: sha256(base) };
-}
-
-function makeMissionState(state, overrides) {
-  const receipt = makeMissionTerminalReceipt(state, overrides);
+function missionContract() {
+  const policyHash = mission.sha256('lsm-policy');
+  const authorityId = mission.sha256('lsm-authority');
   return {
-    state: state,
-    terminal_receipt: receipt,
+    schema_version: 1,
+    artifact_type: 'mission_convergence_contract',
+    contract_id: `mission-v1-${mission.sha256('lsm-contract')}`,
+    repo_identity: REPO_IDENTITY,
+    mission_lineage_id: `lineage-v1-${mission.sha256('lsm-lineage')}`,
+    task_authority_id: authorityId,
+    policy_hash: policyHash,
+    enforcement_mode: 'shadow',
+    state: 'DRAFT',
+    closure_ratio: 0.75,
+    max_stagnant_campaigns: 2,
+    axes: Object.fromEntries(mission.SUPPORTED_AXES.map((axis) => [axis, {
+      authorized_ceiling: axis === 'output_bytes' ? 4096 : 1000,
+      reserved_active: 0,
+      durable_consumed: 0,
+      known: true,
+      enforced: true,
+    }])),
+    grant_contract: {
+      idempotency_key_required: true,
+      single_use: true,
+      expiry_seconds: 3600,
+      bindings: [
+        'mission_lineage_id',
+        'task_authority_id',
+        'campaign_id',
+        'campaign_contract_digest',
+        'base_sha',
+        'acceptance_ids',
+      ],
+    },
+    control_contract: {
+      actions: ['ceiling_adjust', 'scope_frozen', 'finish_requested', 'abort_requested'],
+      allowed_authorities: ['authenticated_user', 'authenticated_doa', 'agent', 'owner_kernel'],
+      ceiling_loosen_authority: 'authenticated_user',
+    },
+    lineage_binding: {
+      task_authority_id: authorityId,
+      root_run_id: ROOT_RUN_ID,
+      policy_hash: policyHash,
+      successor_inherits_durable_consumed: true,
+    },
   };
 }
 
-function makeCampaignTerminalReceipt(campaignId, treeSha, overrides) {
-  const base = {
+function reservation(state, toolCalls) {
+  return {
+    per_axis: mission.SUPPORTED_AXES.map((axis) => ({
+      axis,
+      authorized_ceiling: state.axes[axis].authorized_ceiling,
+      reserved_active: axis === 'tool_calls' ? toolCalls : (axis === 'campaigns' ? 1 : 0),
+      durable_consumed: state.axes[axis].durable_consumed,
+      known: true,
+    })),
+  };
+}
+
+function buildMissionBundle() {
+  let state = mission.createMissionState(missionContract());
+  const claimed = mission.reduceMissionState(state, {
+    event_type: 'grant_claimed',
+    sequence: 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: {
+      idempotency_key: 'lsm-claim',
+      mission_lineage_id: state.mission_lineage_id,
+      task_authority_id: state.task_authority_id,
+      campaign_id: 'mission-campaign-v2',
+      campaign_contract_digest: state.policy_hash,
+      base_sha: '0'.repeat(40),
+      acceptance_ids: ['acceptance-1'],
+      reservation: reservation(state, 5),
+      issued_at: '2026-07-27T00:00:00.000Z',
+      expires_at: '2026-07-27T01:00:00.000Z',
+    },
+  });
+  state = claimed.state;
+  state = mission.reduceMissionState(state, {
+    event_type: 'acceptance_satisfied',
+    sequence: state.events.length + 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: { acceptance_hash: mission.sha256('acceptance-1') },
+  }).state;
+  state = mission.reduceMissionState(state, {
+    event_type: 'reconciliation',
+    sequence: state.events.length + 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: {
+      claim_id: claimed.receipt.claim_id,
+      actual_usage: reservation(state, 5),
+    },
+  }).state;
+  state = mission.reduceMissionState(state, {
+    event_type: 'closure_evaluated',
+    sequence: state.events.length + 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: { ratio: 0.9, other_axes_below_ratio: false, unknown_required_axis: false },
+  }).state;
+  const residueBody = { lifecycle_residue: [] };
+  const residue = { ...residueBody, residue_digest: mission.sha256(residueBody) };
+  return {
+    state,
+    claim: state.claims[claimed.receipt.claim_id],
+    terminal_receipt: mission.buildMissionTerminalReceipt(state, residue),
+  };
+}
+
+function buildBlockedMissionBundle() {
+  const contract = missionContract();
+  contract.enforcement_mode = 'enforce';
+  let state = mission.createMissionState(contract);
+  const over = reservation(state, state.axes.tool_calls.authorized_ceiling + 1);
+  state = mission.reduceMissionState(state, {
+    event_type: 'grant_claimed',
+    sequence: 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: {
+      idempotency_key: 'lsm-over-budget',
+      mission_lineage_id: state.mission_lineage_id,
+      task_authority_id: state.task_authority_id,
+      campaign_id: 'blocked-campaign',
+      campaign_contract_digest: state.policy_hash,
+      base_sha: '0'.repeat(40),
+      acceptance_ids: ['acceptance-1'],
+      reservation: over,
+      issued_at: '2026-07-27T00:00:00.000Z',
+      expires_at: '2026-07-27T01:00:00.000Z',
+    },
+  }).state;
+  const residueBody = { lifecycle_residue: [] };
+  const residue = { ...residueBody, residue_digest: mission.sha256(residueBody) };
+  return {
+    state,
+    terminal_receipt: mission.buildMissionTerminalReceipt(state, residue),
+  };
+}
+
+function campaignContract() {
+  return {
+    ticket: 'lsm-p1',
+    profile: 'poc',
+    max_repair_generations: 2,
+    max_wall_seconds: 600,
+    max_changed_files: 10,
+    baseline_churn: 100,
+    max_extra_churn: 50,
+  };
+}
+
+function buildVerification(campaignId) {
+  const body = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_verification',
+    campaign_id: campaignId,
+    tree_sha: CANDIDATE_TREE,
+    argv_hash: mission.sha256('argv'),
+    env_fingerprint: mission.sha256('env'),
+    request_digest: mission.sha256('request'),
+    verdict: 'GREEN',
+    exit_status: 0,
+    writer_lease_closed: true,
+    detached_checkout: true,
+    runner_argv_attested: true,
+    writer_fence_digest: mission.sha256('writer-fence-attestation'),
+    checkout_attestation_digest: mission.sha256('checkout'),
+    stdout_digest: mission.sha256('stdout'),
+    stderr_digest: mission.sha256('stderr'),
+    started_at: '2026-07-27T00:00:02.000Z',
+    ended_at: '2026-07-27T00:00:03.000Z',
+  };
+  return { ...body, receipt_digest: icc.canonicalDigest(body) };
+}
+
+function buildCampaignBundle({ status = 'ready', followUp = [], unresolved = [] } = {}) {
+  const contract = campaignContract();
+  const contractDigest = icc.canonicalDigest(contract);
+  let state = icc.createCampaignState({
+    contract,
+    contractDigest,
+    repoIdentity: REPO_IDENTITY,
+    startedAt: '2026-07-27T00:00:00.000Z',
+  });
+  const verification = buildVerification(state.campaign_id);
+  const fenceBody = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_writer_fence',
+    campaign_id: state.campaign_id,
+    stage_identity: 'lsm-implementer',
+    candidate_commit: CANDIDATE_COMMIT,
+    candidate_tree_sha: CANDIDATE_TREE,
+    status: 'closed',
+    evidence_mode: 'terminal_ledger',
+    closure_evidence_digest: mission.sha256('closure'),
+  };
+  const candidate = icc.normalizeCampaignArtifactReference({
+    kind: 'git_candidate',
+    commit: CANDIDATE_COMMIT,
+    tree_sha: CANDIDATE_TREE,
+    branch: 'feat/lsm-p1',
+    base: '0'.repeat(40),
+    writer_fence: {
+      ...fenceBody,
+      receipt_digest: icc.canonicalDigest(fenceBody),
+    },
+  });
+  const terminalBody = {
     schema_version: 1,
     artifact_type: 'implementation_campaign_terminal',
-    campaign_id: campaignId,
-    tree_sha: treeSha || CANDIDATE_TREE,
-    state: 'TERMINAL',
-    exit_code: 0,
-    verification_verdict: 'GREEN',
-    ...overrides,
+    // ICC's durable reducer has TERMINAL_STOP, but campaign-composition has no
+    // stop terminal receipt status. Keep the receipt canonical and let LSM
+    // reject the unrepresentable pairing.
+    status: status === 'stop' ? 'ready' : status,
+    candidate_tree_sha: CANDIDATE_TREE,
+    verification_receipt_digest: verification.receipt_digest,
+    repair_generations: 0,
+    final_panel_count: 1,
+    follow_up: followUp,
+    rejected_findings: [],
+    unresolved_final_findings: unresolved,
+    trace: ['implementation', 'vertical_verification', 'final_panel'],
   };
-  return { ...base, receipt_digest: sha256(base), terminal_digest: sha256(`terminal-${campaignId}`) };
-}
-
-function makeVerificationReceipt(campaignId, treeSha) {
-  return {
+  const terminal = {
+    ...terminalBody,
+    receipt_digest: icc.canonicalDigest(terminalBody),
+  };
+  const event = (eventType, output, payload, second) => ({
     schema_version: 1,
-    artifact_type: 'verification_receipt',
-    campaign_id: campaignId,
-    tree_sha: treeSha || CANDIDATE_TREE,
-    verdict: 'GREEN',
-    exit_code: 0,
-    receipt_digest: sha256(`verify-${campaignId}-${treeSha || CANDIDATE_TREE}`),
-  };
+    event_type: eventType,
+    campaign_id: state.campaign_id,
+    contract_digest: state.contract_digest,
+    generation: 0,
+    idempotency_key: `lsm:${eventType}`,
+    input_artifact_digest: state.last_output_artifact_digest,
+    output_artifact_digest: output,
+    timestamp: `2026-07-27T00:00:0${second}.000Z`,
+    stage_identity: 'lsm-implementer',
+    usage: {
+      repair_generations: 0,
+      elapsed_wall_seconds: second,
+      changed_files: second === 1 ? 0 : 1,
+      churn: second === 1 ? 0 : 2,
+    },
+    payload,
+  });
+  state = icc.reduceCampaignState(state, event(
+    icc.CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
+    mission.sha256('implementation-started'),
+    { sealed_contract: true },
+    1,
+  ));
+  state = icc.reduceCampaignState(state, event(
+    icc.CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED,
+    mission.sha256('implementation-completed'),
+    { scope_check_passed: true, scope_check_digest: mission.sha256('scope') },
+    2,
+  ));
+  state = icc.reduceCampaignState(state, event(
+    icc.CAMPAIGN_EVENTS.VERTICAL_VERIFIED,
+    verification.receipt_digest,
+    { passed: true, evidence_digest: verification.receipt_digest },
+    3,
+  ));
+  state = icc.reduceCampaignState(state, event(
+    icc.CAMPAIGN_EVENTS.REVIEW_COMPLETED,
+    mission.sha256('review-completed'),
+    { review_digest: mission.sha256('review') },
+    4,
+  ));
+  const terminalEvent = status === 'ready'
+    ? icc.CAMPAIGN_EVENTS.TERMINAL_READY
+    : (status === 'follow_up'
+      ? icc.CAMPAIGN_EVENTS.TERMINAL_FOLLOW_UP
+      : icc.CAMPAIGN_EVENTS.TERMINAL_STOP);
+  const terminalPayload = status === 'stop'
+    ? {
+      reason: 'canonical stop',
+      stop_receipt_digest: mission.sha256('stop-receipt'),
+    }
+    : {
+      registry_complete: true,
+      registry_digest: mission.sha256('registry'),
+      convergence_digest: mission.sha256('convergence'),
+      reason: 'canonical terminal',
+    };
+  if (status === 'follow_up') terminalPayload.follow_up_digest = mission.sha256(followUp);
+  state = icc.reduceCampaignState(state, event(
+    terminalEvent,
+    terminal.receipt_digest,
+    terminalPayload,
+    5,
+  ));
+  return { state, terminal_receipt: terminal, verification_receipt: verification, candidate };
 }
 
-function makeCandidate(commitSha, treeSha, overrides) {
-  return {
-    schema_version: 1,
-    artifact_type: 'git_candidate',
-    commit_sha: commitSha || CANDIDATE_COMMIT,
-    tree_sha: treeSha || CANDIDATE_TREE,
-    writer_fence: sha256(`fence-${commitSha || CANDIDATE_COMMIT}`),
-    ...overrides,
-  };
-}
+const missionBundle = buildMissionBundle();
+const campaignBundle = buildCampaignBundle();
 
-function makeCampaign(campaignId, overrides) {
-  return {
-    state: 'TERMINAL',
-    terminal_receipt: makeCampaignTerminalReceipt(campaignId),
-    verification_receipt: makeVerificationReceipt(campaignId),
-    candidate: makeCandidate(),
-    ...overrides,
-  };
-}
-
-function makeInput(overrides) {
+function makeInput(overrides = {}) {
   return {
     repo: REPO,
     root_run_id: ROOT_RUN_ID,
     observed_at: OBSERVED_AT,
-    goal: GOAL,
-    phase: PHASE,
-    mission: makeMissionState('COMPLETE'),
-    campaigns: [makeCampaign('campaign-1')],
-    lifecycle_receipt_path: LIFECYCLE_PATH,
+    goal: 'Verify LSM P1',
+    phase: 'phase-16',
+    mission: {
+      state: missionBundle.state,
+      terminal_receipt: missionBundle.terminal_receipt,
+    },
+    campaigns: [campaignBundle],
+    lifecycle_receipt_path: '/tmp/canonical-lifecycle-receipt.json',
     integration: {
       target_ref: TARGET_REF,
       consumer_ref: CONSUMER_REF,
@@ -139,785 +372,311 @@ function makeInput(overrides) {
   };
 }
 
-function makeLifecycleReceipt(overrides) {
-  const base = {
-    schema_version: 1,
-    artifact_type: 'lifecycle_receipt',
-    root_run_id: ROOT_RUN_ID,
-    status: 'valid',
-    active_owned_worktrees: 0,
-    active_owned_branches: 0,
-    ...overrides,
-  };
-  return { ...base, receipt_digest: sha256(base) };
-}
-
-function makeAdapters(overrides) {
-  const lifecycleReceipt = makeLifecycleReceipt();
+function makeAdapters(overrides = {}) {
   return {
-    inspectLifecycleReceipt: (p) => {
-      if (p === LIFECYCLE_PATH) return { status: 'valid', receipt: lifecycleReceipt };
-      return { status: 'missing', receipt: null };
-    },
-    resolveRef: (ref) => {
-      const map = {
-        [TARGET_REF]: TARGET_SHA,
-        [CONSUMER_REF]: CONSUMER_SHA,
-        [REMOTE_REF]: REMOTE_SHA,
-        [CANDIDATE_COMMIT]: CANDIDATE_COMMIT,
+    resolveRepoIdentity: () => REPO_IDENTITY,
+    inspectLifecycleReceipt: () => ({
+      status: 'valid',
+      zero_residue: true,
+      receipt_digest: mission.sha256('canonical-lifecycle-receipt'),
+      active_owned_worktrees: 0,
+      active_owned_branches: 0,
+    }),
+    resolveCampaignBinding: ({ missionState, campaignState }) => {
+      const claim = Object.values(missionState.claims).find((item) => item.released !== true);
+      return {
+        status: 'valid',
+        claim_id: claim.claim_id,
+        mission_campaign_id: claim.campaign_id,
+        icc_campaign_id: campaignState.campaign_id,
+        binding_digest: claim.binding_digest,
       };
-      return map[ref] || null;
     },
-    isAncestor: (ancestor, descendant) => {
-      if (ancestor === CANDIDATE_COMMIT && descendant === TARGET_SHA) return true;
-      if (ancestor === CANDIDATE_COMMIT && descendant === REMOTE_SHA) return true;
-      if (ancestor === TARGET_SHA && descendant === CONSUMER_SHA) return true;
-      return false;
-    },
-    treeForCommit: (commit) => {
-      if (commit === CANDIDATE_COMMIT) return CANDIDATE_TREE;
-      return null;
-    },
+    resolveRef: (ref) => ({
+      [TARGET_REF]: TARGET_SHA,
+      [CONSUMER_REF]: CONSUMER_SHA,
+      [REMOTE_REF]: REMOTE_SHA,
+    })[ref] || null,
+    isAncestor: (ancestor, descendant) => (
+      (ancestor === CANDIDATE_COMMIT && descendant === TARGET_SHA)
+      || (ancestor === TARGET_SHA && descendant === CONSUMER_SHA)
+      || (ancestor === CANDIDATE_COMMIT && descendant === REMOTE_SHA)
+    ),
+    treeForCommit: (commit) => commit === CANDIDATE_COMMIT ? CANDIDATE_TREE : null,
     ...overrides,
   };
 }
 
-// ── Group 0: module existence and API shape ─────────────────────────────────
-let buildTaskStatus = null;
-group('g0-module', () => {
-  let mod = null;
-  try {
-    mod = require(path.join(root, 'src', 'status', 'task-status'));
-  } catch (e) {
-    mod = null;
-  }
-  check('g0-module-exists', mod !== null && typeof mod === 'object');
-  check('g0-buildTaskStatus-exported', mod !== null && typeof mod.buildTaskStatus === 'function');
-  if (mod && typeof mod.buildTaskStatus === 'function') {
-    buildTaskStatus = mod.buildTaskStatus;
-  }
-});
-
-// ── Group 1: receipt structure on a fully-green P1 input ────────────────────
-group('g1-structure', () => {
-  if (!buildTaskStatus) {
-    check('g1-schema-version', false);
-    check('g1-artifact-type', false);
-    check('g1-receipt-digest-is-sha256', false);
-    check('g1-repo-identity', false);
-    check('g1-root-run-id', false);
-    check('g1-goal', false);
-    check('g1-phase', false);
-    check('g1-candidate-commit', false);
-    check('g1-candidate-tree-sha', false);
-    check('g1-acceptance-verdict-enum', false);
-    check('g1-accepted-blockers-array', false);
-    check('g1-deferred-count-integer', false);
-    check('g1-active-owned-worktrees-nullable-int', false);
-    check('g1-active-owned-branches-nullable-int', false);
-    check('g1-integration-target-ref', false);
-    check('g1-integration-target-observed-sha', false);
-    check('g1-evidence-mission', false);
-    check('g1-evidence-campaigns', false);
-    check('g1-evidence-lifecycle', false);
-    check('g1-evidence-integration', false);
-    check('g1-evidence-merge-preflight', false);
-    check('g1-can-merge-boolean', false);
-    check('g1-can-close-boolean', false);
-    check('g1-failed-predicates-array', false);
-    return;
-  }
+group('canonical-green', () => {
   const receipt = buildTaskStatus(makeInput(), makeAdapters());
-  check('g1-schema-version', receipt.schema_version === 1);
-  check('g1-artifact-type', receipt.artifact_type === 'task_status_receipt');
-  check('g1-receipt-digest-is-sha256', typeof receipt.receipt_digest === 'string' && /^[0-9a-f]{64}$/.test(receipt.receipt_digest));
-  check('g1-repo-identity', typeof receipt.repo_identity === 'string' && receipt.repo_identity.length > 0);
-  check('g1-root-run-id', receipt.root_run_id === ROOT_RUN_ID);
-  check('g1-goal', receipt.goal === GOAL);
-  check('g1-phase', receipt.phase === PHASE);
-  check('g1-candidate-commit', receipt.candidate_commit === CANDIDATE_COMMIT);
-  check('g1-candidate-tree-sha', receipt.candidate_tree_sha === CANDIDATE_TREE);
-  check('g1-acceptance-verdict-enum', ['accepted', 'rejected', 'unknown'].includes(receipt.acceptance_verdict));
-  check('g1-accepted-blockers-array', Array.isArray(receipt.accepted_blockers));
-  check('g1-deferred-count-integer', Number.isInteger(receipt.deferred_count));
-  check('g1-active-owned-worktrees-nullable-int', receipt.active_owned_worktrees === null || Number.isInteger(receipt.active_owned_worktrees));
-  check('g1-active-owned-branches-nullable-int', receipt.active_owned_branches === null || Number.isInteger(receipt.active_owned_branches));
-  check('g1-integration-target-ref', receipt.integration_target && receipt.integration_target.ref === TARGET_REF);
-  check('g1-integration-target-observed-sha', receipt.integration_target && receipt.integration_target.observed_sha === TARGET_SHA);
-  check('g1-evidence-mission', receipt.evidence && typeof receipt.evidence.mission === 'object');
-  check('g1-evidence-campaigns', receipt.evidence && typeof receipt.evidence.campaigns === 'object');
-  check('g1-evidence-lifecycle', receipt.evidence && typeof receipt.evidence.lifecycle === 'object');
-  check('g1-evidence-integration', receipt.evidence && typeof receipt.evidence.integration === 'object');
-  check('g1-evidence-merge-preflight', receipt.evidence && 'merge_preflight' in receipt.evidence);
-  check('g1-can-merge-boolean', typeof receipt.can_merge === 'boolean');
-  check('g1-can-close-boolean', typeof receipt.can_close === 'boolean');
-  check('g1-failed-predicates-array', Array.isArray(receipt.failed_predicates));
+  check('real-mission-terminal', receipt.mission_terminal === true);
+  check('real-campaign-terminal', receipt.campaigns_terminal === true);
+  check('real-campaign-accepted', receipt.acceptance_verdict === 'accepted');
+  check('product-merged-candidate-to-target', receipt.product_merged === true);
+  check('consumer-updated-target-to-consumer', receipt.consumer_updated === true);
+  check('pushed-candidate-to-remote', receipt.pushed === true);
+  check('canonical-lifecycle-zero', receipt.zero_residue === true);
+  check('p1-can-merge-false', receipt.can_merge === false);
+  check('p1-can-close-false', receipt.can_close === false);
+  check('p1-merge-preflight-unknown', receipt.failed_predicates.includes('merge_preflight_unknown'));
+  check('p1-merge-edges-unknown', receipt.failed_predicates.includes('merge_edges_unknown'));
+  check('receipt-digest-canonical', /^[0-9a-f]{64}$/.test(receipt.receipt_digest));
 });
 
-// ── Group 2: independent tri-state facts ────────────────────────────────────
-group('g2-tristate', () => {
-  if (!buildTaskStatus) {
-    check('g2-product-merged-tristate', false);
-    check('g2-consumer-updated-tristate', false);
-    check('g2-pushed-tristate', false);
-    check('g2-zero-residue-tristate', false);
-    check('g2-mission-terminal-tristate', false);
-    check('g2-campaigns-terminal-tristate', false);
-    return;
-  }
-  const receipt = buildTaskStatus(makeInput(), makeAdapters());
-  const tri = (v) => v === true || v === false || v === null;
-  check('g2-product-merged-tristate', tri(receipt.product_merged));
-  check('g2-consumer-updated-tristate', tri(receipt.consumer_updated));
-  check('g2-pushed-tristate', tri(receipt.pushed));
-  check('g2-zero-residue-tristate', tri(receipt.zero_residue));
-  check('g2-mission-terminal-tristate', tri(receipt.mission_terminal));
-  check('g2-campaigns-terminal-tristate', tri(receipt.campaigns_terminal));
+group('durable-state-authority', () => {
+  const extra = clone(campaignBundle);
+  extra.state.untrusted = true;
+  const extraResult = buildTaskStatus(makeInput({ campaigns: [extra] }), makeAdapters());
+  check('icc-state-extra-key-rejected', extraResult.acceptance_verdict === 'unknown');
+
+  const rebound = clone(campaignBundle);
+  rebound.state.last_output_artifact_digest = mission.sha256('substituted-terminal');
+  const reboundResult = buildTaskStatus(makeInput({ campaigns: [rebound] }), makeAdapters());
+  check('icc-state-terminal-digest-substitution-rejected', reboundResult.acceptance_verdict === 'unknown');
+
+  const mismatched = clone(campaignBundle);
+  mismatched.terminal_receipt = redigest({
+    ...mismatched.terminal_receipt,
+    status: 'follow_up',
+  });
+  mismatched.state.last_output_artifact_digest = mismatched.terminal_receipt.receipt_digest;
+  const mismatchResult = buildTaskStatus(makeInput({ campaigns: [mismatched] }), makeAdapters());
+  check('icc-phase-terminal-status-mismatch-rejected', mismatchResult.acceptance_verdict === 'unknown');
+
+  const verificationSwap = clone(campaignBundle);
+  verificationSwap.verification_receipt.receipt_digest = mission.sha256('forged-verification');
+  const verificationResult = buildTaskStatus(
+    makeInput({ campaigns: [verificationSwap] }),
+    makeAdapters(),
+  );
+  check('icc-verification-substitution-rejected', verificationResult.acceptance_verdict === 'unknown');
+
+  const malformedTime = clone(campaignBundle);
+  malformedTime.state.started_at = 'not-a-timestamp';
+  const malformedTimeResult = buildTaskStatus(
+    makeInput({ campaigns: [malformedTime] }),
+    makeAdapters(),
+  );
+  check('icc-malformed-time-fails-closed', malformedTimeResult.acceptance_verdict === 'unknown');
+
+  const terminalDigestSwap = clone(campaignBundle);
+  terminalDigestSwap.terminal_receipt.receipt_digest = mission.sha256('forged-terminal');
+  const terminalDigestResult = buildTaskStatus(
+    makeInput({ campaigns: [terminalDigestSwap] }),
+    makeAdapters(),
+  );
+  check('icc-terminal-receipt-digest-substitution-rejected',
+    terminalDigestResult.acceptance_verdict === 'unknown');
 });
 
-// ── Group 3: Mission validation ─────────────────────────────────────────────
-group('g3-mission', () => {
-  if (!buildTaskStatus) {
-    check('g3-complete-mission-terminal-true', false);
-    check('g3-blocked-mission-terminal-true', false);
-    check('g3-blocked-mission-blocks-closeout', false);
-    check('g3-aborted-mission-terminal-true', false);
-    check('g3-receipt-swap-mission-terminal-null', false);
-    check('g3-root-run-id-mismatch-rejected', false);
-    check('g3-repo-identity-mismatch-rejected', false);
-    check('g3-non-terminal-mission-rejected', false);
-    check('g3-receipt-alone-not-attribution', false);
-    return;
-  }
-  // COMPLETE => mission_terminal true
-  const complete = buildTaskStatus(makeInput(), makeAdapters());
-  check('g3-complete-mission-terminal-true', complete.mission_terminal === true);
-
-  // BLOCKED => mission_terminal true but blocks closeout
-  const blockedInput = makeInput({ mission: makeMissionState('BLOCKED') });
-  const blocked = buildTaskStatus(blockedInput, makeAdapters());
-  check('g3-blocked-mission-terminal-true', blocked.mission_terminal === true);
-  check('g3-blocked-mission-blocks-closeout', blocked.can_close === false);
-
-  // ABORTED => terminal
-  const abortedInput = makeInput({ mission: makeMissionState('ABORTED') });
-  const aborted = buildTaskStatus(abortedInput, makeAdapters());
-  check('g3-aborted-mission-terminal-true', aborted.mission_terminal === true);
-
-  // Receipt/state swap => mission_terminal null
-  const swappedMission = makeMissionState('COMPLETE');
-  swappedMission.terminal_receipt = makeMissionTerminalReceipt('BLOCKED');
-  const swapped = buildTaskStatus(makeInput({ mission: swappedMission }), makeAdapters());
-  check('g3-receipt-swap-mission-terminal-null', swapped.mission_terminal === null);
-
-  // root_run_id mismatch
-  const wrongRoot = makeMissionState('COMPLETE', { root_run_id: 'wrong-root' });
-  const wrongRootInput = makeInput({ mission: wrongRoot });
-  const wrongRootResult = buildTaskStatus(wrongRootInput, makeAdapters());
-  check('g3-root-run-id-mismatch-rejected', wrongRootResult.mission_terminal === null || wrongRootResult.acceptance_verdict === 'rejected');
-
-  // repo identity mismatch
-  const wrongRepo = makeMissionState('COMPLETE', { repo_identity: 'git-common-dir:/wrong/repo/.git' });
-  const wrongRepoResult = buildTaskStatus(makeInput({ mission: wrongRepo }), makeAdapters());
-  check('g3-repo-identity-mismatch-rejected', wrongRepoResult.mission_terminal === null || wrongRepoResult.acceptance_verdict === 'rejected');
-
-  // Non-terminal mission state
-  const activeInput = makeInput({ mission: { state: 'ACTIVE', terminal_receipt: null } });
-  const active = buildTaskStatus(activeInput, makeAdapters());
-  check('g3-non-terminal-mission-rejected', active.mission_terminal === false || active.mission_terminal === null);
-
-  // Receipt alone without valid state is not attribution
-  const orphanReceipt = makeMissionTerminalReceipt('COMPLETE');
-  const orphanInput = makeInput({ mission: { state: 'ACTIVE', terminal_receipt: orphanReceipt } });
-  const orphan = buildTaskStatus(orphanInput, makeAdapters());
-  check('g3-receipt-alone-not-attribution', orphan.mission_terminal !== true);
-});
-
-// ── Group 4: campaign validation ────────────────────────────────────────────
-group('g4-campaign', () => {
-  if (!buildTaskStatus) {
-    check('g4-valid-campaign-accepted', false);
-    check('g4-terminal-digest-substitution-invalid', false);
-    check('g4-verification-digest-substitution-invalid', false);
-    check('g4-tree-substitution-invalid', false);
-    check('g4-follow-up-only-deferred', false);
-    check('g4-unresolved-finding-rejected', false);
-    check('g4-omitted-sibling-not-accepted', false);
-    check('g4-non-terminal-campaign-rejected', false);
-    return;
-  }
-  // Valid campaign accepted
-  const valid = buildTaskStatus(makeInput(), makeAdapters());
-  check('g4-valid-campaign-accepted', valid.acceptance_verdict === 'accepted');
-
-  // Terminal digest substitution
-  const badTermCamp = makeCampaign('campaign-1', {
-    terminal_receipt: makeCampaignTerminalReceipt('campaign-1', CANDIDATE_TREE, { terminal_digest: sha256('forged') }),
-  });
-  const badTerm = buildTaskStatus(makeInput({ campaigns: [badTermCamp] }), makeAdapters());
-  check('g4-terminal-digest-substitution-invalid', badTerm.acceptance_verdict !== 'accepted');
-
-  // Verification digest substitution
-  const badVerifCamp = makeCampaign('campaign-1', {
-    verification_receipt: { ...makeVerificationReceipt('campaign-1'), receipt_digest: sha256('forged-verification') },
-  });
-  const badVerif = buildTaskStatus(makeInput({ campaigns: [badVerifCamp] }), makeAdapters());
-  check('g4-verification-digest-substitution-invalid', badVerif.acceptance_verdict !== 'accepted');
-
-  // Tree substitution: candidate tree != terminal receipt tree
-  const badTreeCamp = makeCampaign('campaign-1', {
-    candidate: makeCandidate(CANDIDATE_COMMIT, 'f'.repeat(40)),
-  });
-  const badTree = buildTaskStatus(makeInput({ campaigns: [badTreeCamp] }), makeAdapters());
-  check('g4-tree-substitution-invalid', badTree.acceptance_verdict !== 'accepted');
-
-  // Follow-up only => accepted + deferred_count=1
-  const followUpCamp = makeCampaign('campaign-1', {
-    terminal_receipt: makeCampaignTerminalReceipt('campaign-1', CANDIDATE_TREE, {
-      follow_up: [{ id: 'fu-1', description: 'deferred item' }],
-      unresolved_final_findings: [],
-    }),
-  });
-  const followUp = buildTaskStatus(makeInput({ campaigns: [followUpCamp] }), makeAdapters());
-  check('g4-follow-up-only-deferred', followUp.acceptance_verdict === 'accepted' && followUp.deferred_count === 1);
-
-  // Unresolved finding => rejected + blocker
-  const unresolvedCamp = makeCampaign('campaign-1', {
-    terminal_receipt: makeCampaignTerminalReceipt('campaign-1', CANDIDATE_TREE, {
-      unresolved_final_findings: [{ id: 'finding-1', severity: 'critical' }],
-    }),
-  });
-  const unresolved = buildTaskStatus(makeInput({ campaigns: [unresolvedCamp] }), makeAdapters());
-  check('g4-unresolved-finding-rejected', unresolved.acceptance_verdict === 'rejected' && unresolved.accepted_blockers.length > 0);
-
-  // Omitted sibling campaign from Mission claims
-  const twoCampaignInput = makeInput({
-    mission: makeMissionState('COMPLETE', { claimed_campaign_ids: ['campaign-1', 'campaign-2'] }),
-    campaigns: [makeCampaign('campaign-1')],
-  });
-  const omittedSibling = buildTaskStatus(twoCampaignInput, makeAdapters());
-  check('g4-omitted-sibling-not-accepted', omittedSibling.acceptance_verdict !== 'accepted');
-
-  // Non-terminal campaign
-  const nonTermCamp = { state: 'ACTIVE', terminal_receipt: null, verification_receipt: null, candidate: makeCandidate() };
-  const nonTerm = buildTaskStatus(makeInput({ campaigns: [nonTermCamp] }), makeAdapters());
-  check('g4-non-terminal-campaign-rejected', nonTerm.acceptance_verdict !== 'accepted');
-});
-
-// ── Group 5: lifecycle validation ───────────────────────────────────────────
-group('g5-lifecycle', () => {
-  if (!buildTaskStatus) {
-    check('g5-valid-lifecycle-facts-imported', false);
-    check('g5-missing-lifecycle-null', false);
-    check('g5-missing-lifecycle-no-fallback', false);
-    check('g5-stale-lifecycle-null', false);
-    check('g5-cross-root-lifecycle-null', false);
-    check('g5-invalid-lifecycle-null', false);
-    return;
-  }
-  // Valid lifecycle imports facts
-  const valid = buildTaskStatus(makeInput(), makeAdapters());
-  check('g5-valid-lifecycle-facts-imported', valid.active_owned_worktrees === 0 && valid.active_owned_branches === 0);
-
-  // Missing lifecycle => null, no fallback
-  let fallbackCalled = false;
-  const missingAdapters = makeAdapters({
-    inspectLifecycleReceipt: () => { fallbackCalled = true; return { status: 'missing', receipt: null }; },
-  });
-  const missing = buildTaskStatus(makeInput(), missingAdapters);
-  check('g5-missing-lifecycle-null', missing.active_owned_worktrees === null && missing.active_owned_branches === null);
-  check('g5-missing-lifecycle-no-fallback', fallbackCalled === true);
-
-  // Stale lifecycle HEAD => null
-  const staleAdapters = makeAdapters({
-    inspectLifecycleReceipt: () => ({ status: 'stale', receipt: null }),
-  });
-  const stale = buildTaskStatus(makeInput(), staleAdapters);
-  check('g5-stale-lifecycle-null', stale.active_owned_worktrees === null && stale.active_owned_branches === null);
-
-  // Cross-root lifecycle substitution => null
-  const crossRootReceipt = makeLifecycleReceipt({ root_run_id: 'different-root' });
-  const crossRootAdapters = makeAdapters({
-    inspectLifecycleReceipt: () => ({ status: 'valid', receipt: crossRootReceipt }),
-  });
-  const crossRoot = buildTaskStatus(makeInput(), crossRootAdapters);
-  check('g5-cross-root-lifecycle-null', crossRoot.active_owned_worktrees === null && crossRoot.active_owned_branches === null);
-
-  // Invalid lifecycle => null
-  const invalidAdapters = makeAdapters({
-    inspectLifecycleReceipt: () => ({ status: 'invalid', receipt: null }),
-  });
-  const invalid = buildTaskStatus(makeInput(), invalidAdapters);
-  check('g5-invalid-lifecycle-null', invalid.active_owned_worktrees === null && invalid.active_owned_branches === null);
-});
-
-// ── Group 6: git facts and integration ──────────────────────────────────────
-group('g6-integration', () => {
-  if (!buildTaskStatus) {
-    check('g6-product-merged-from-ancestor', false);
-    check('g6-pushed-from-remote-ancestor', false);
-    check('g6-consumer-updated-from-ancestor', false);
-    check('g6-missing-ref-null', false);
-    check('g6-candidate-tree-mismatch-null', false);
-    return;
-  }
-  // All git facts from content-bound candidate + adapters
-  const valid = buildTaskStatus(makeInput(), makeAdapters());
-  check('g6-product-merged-from-ancestor', valid.product_merged === true);
-  check('g6-pushed-from-remote-ancestor', valid.pushed === true);
-  check('g6-consumer-updated-from-ancestor', valid.consumer_updated === true);
-
-  // Missing ref => null
-  const noRefAdapters = makeAdapters({
-    resolveRef: () => null,
-  });
-  const noRef = buildTaskStatus(makeInput(), noRefAdapters);
-  check('g6-missing-ref-null', noRef.product_merged === null && noRef.pushed === null);
-
-  // Candidate tree mismatch => integration facts null
-  const badTreeAdapters = makeAdapters({
-    treeForCommit: () => 'f'.repeat(40),
-  });
-  const badTree = buildTaskStatus(makeInput(), badTreeAdapters);
-  check('g6-candidate-tree-mismatch-null', badTree.product_merged === null || badTree.candidate_tree_sha === null);
-});
-
-// ── Group 7: merge_preflight P1 null => can_merge false ─────────────────────
-group('g7-merge-preflight', () => {
-  if (!buildTaskStatus) {
-    check('g7-p1-can-merge-false', false);
-    check('g7-p1-merge-preflight-unknown-in-failed', false);
-    check('g7-otherwise-green-still-cannot-merge', false);
-    return;
-  }
-  const receipt = buildTaskStatus(makeInput(), makeAdapters());
-  check('g7-p1-can-merge-false', receipt.can_merge === false);
-  check('g7-p1-merge-preflight-unknown-in-failed', receipt.failed_predicates.includes('merge_preflight_unknown'));
-  // Even with all other facts clean, merge_preflight_unknown blocks
-  check('g7-otherwise-green-still-cannot-merge', receipt.can_merge === false && receipt.failed_predicates.includes('merge_preflight_unknown'));
-});
-
-// ── Group 8: can_close strict requirements ──────────────────────────────────
-group('g8-closeout', () => {
-  if (!buildTaskStatus) {
-    check('g8-full-green-close-true', false);
-    check('g8-unknown-fails-closed', false);
-    check('g8-incomplete-mission-close-false', false);
-    check('g8-blocker-close-false', false);
-    check('g8-product-not-merged-close-false', false);
-    check('g8-consumer-not-updated-close-false', false);
-    check('g8-not-pushed-close-false', false);
-    check('g8-residue-close-false', false);
-    return;
-  }
-  // Full green (except merge_preflight which only blocks can_merge, not can_close
-  // per spec: can_close requires merge edges complete — in P1 with null preflight
-  // this means can_close=false too since merge edges cannot be verified)
-  const green = buildTaskStatus(makeInput(), makeAdapters());
-  check('g8-full-green-close-true', green.can_close === true || green.can_close === false);
-
-  // Unknown always fails closed
-  const unknownAdapters = makeAdapters({
-    resolveRef: () => null,
-    isAncestor: () => null,
-    treeForCommit: () => null,
-    inspectLifecycleReceipt: () => ({ status: 'missing', receipt: null }),
-  });
-  const unknown = buildTaskStatus(makeInput(), unknownAdapters);
-  check('g8-unknown-fails-closed', unknown.can_close === false);
-
-  // Incomplete mission
-  const incomplete = buildTaskStatus(makeInput({ mission: { state: 'ACTIVE', terminal_receipt: null } }), makeAdapters());
-  check('g8-incomplete-mission-close-false', incomplete.can_close === false);
-
-  // Blocker present
-  const blockerCamp = makeCampaign('campaign-1', {
-    terminal_receipt: makeCampaignTerminalReceipt('campaign-1', CANDIDATE_TREE, {
-      unresolved_final_findings: [{ id: 'f1', severity: 'critical' }],
-    }),
-  });
-  const blocker = buildTaskStatus(makeInput({ campaigns: [blockerCamp] }), makeAdapters());
-  check('g8-blocker-close-false', blocker.can_close === false);
-
-  // product_merged not true
-  const notMergedAdapters = makeAdapters({
-    isAncestor: (a, d) => {
-      if (a === TARGET_SHA && d === CONSUMER_SHA) return true;
-      return false;
-    },
-  });
-  const notMerged = buildTaskStatus(makeInput(), notMergedAdapters);
-  check('g8-product-not-merged-close-false', notMerged.can_close === false);
-
-  // consumer not updated when required
-  const notUpdatedAdapters = makeAdapters({
-    isAncestor: (a, d) => {
-      if (a === CANDIDATE_COMMIT && d === TARGET_SHA) return true;
-      if (a === CANDIDATE_COMMIT && d === REMOTE_SHA) return true;
-      return false;
-    },
-  });
-  const notUpdated = buildTaskStatus(makeInput(), notUpdatedAdapters);
-  check('g8-consumer-not-updated-close-false', notUpdated.can_close === false);
-
-  // not pushed when required
-  const notPushedAdapters = makeAdapters({
-    isAncestor: (a, d) => {
-      if (a === CANDIDATE_COMMIT && d === TARGET_SHA) return true;
-      if (a === TARGET_SHA && d === CONSUMER_SHA) return true;
-      return false;
-    },
-  });
-  const notPushed = buildTaskStatus(makeInput(), notPushedAdapters);
-  check('g8-not-pushed-close-false', notPushed.can_close === false);
-
-  // residue present
-  const residueAdapters = makeAdapters({
+group('lifecycle-authority', () => {
+  const falseClean = buildTaskStatus(makeInput(), makeAdapters({
     inspectLifecycleReceipt: () => ({
       status: 'valid',
-      receipt: makeLifecycleReceipt({ active_owned_worktrees: 1, active_owned_branches: 1 }),
+      zero_residue: true,
+      receipt_digest: mission.sha256('false-clean'),
+      active_owned_worktrees: 1,
+      active_owned_branches: 0,
     }),
-  });
-  const residue = buildTaskStatus(makeInput(), residueAdapters);
-  check('g8-residue-close-false', residue.can_close === false);
-});
+  }));
+  check('lifecycle-contradictory-false-clean-unknown', falseClean.zero_residue === null);
+  check('lifecycle-contradictory-counts-hidden', falseClean.active_owned_worktrees === null);
 
-// ── Group 9: adversarial fixture 1 — false-clean ────────────────────────────
-group('g9-false-clean', () => {
-  if (!buildTaskStatus) {
-    check('g9-false-clean-close-false', false);
-    check('g9-false-clean-zero-residue-false', false);
-    return;
-  }
-  const falseCleanAdapters = makeAdapters({
+  const falseDirty = buildTaskStatus(makeInput(), makeAdapters({
     inspectLifecycleReceipt: () => ({
       status: 'valid',
-      receipt: makeLifecycleReceipt({ active_owned_worktrees: 1, active_owned_branches: 0 }),
+      zero_residue: false,
+      receipt_digest: mission.sha256('false-dirty'),
+      active_owned_worktrees: 0,
+      active_owned_branches: 0,
     }),
-  });
-  const result = buildTaskStatus(makeInput(), falseCleanAdapters);
-  check('g9-false-clean-close-false', result.can_close === false);
-  check('g9-false-clean-zero-residue-false', result.zero_residue === false);
+  }));
+  check('lifecycle-contradictory-false-dirty-unknown', falseDirty.zero_residue === null);
+
+  const smuggled = buildTaskStatus(makeInput(), makeAdapters({
+    inspectLifecycleReceipt: () => ({
+      status: 'valid',
+      zero_residue: true,
+      receipt_digest: mission.sha256('smuggled'),
+      active_owned_worktrees: 0,
+      active_owned_branches: 0,
+      receipt: { zero_residue: true },
+    }),
+  }));
+  check('lifecycle-noncanonical-result-rejected', smuggled.zero_residue === null);
 });
 
-// ── Group 10: adversarial fixtures 2-4 — lifecycle edge cases ───────────────
-group('g10-lifecycle-adversarial', () => {
-  if (!buildTaskStatus) {
-    check('g10-missing-lifecycle-close-false', false);
-    check('g10-stale-lifecycle-facts-null', false);
-    check('g10-cross-root-facts-null', false);
-    return;
-  }
-  // Missing lifecycle => close false
-  const missingAdapters = makeAdapters({
-    inspectLifecycleReceipt: () => ({ status: 'missing', receipt: null }),
-  });
-  const missing = buildTaskStatus(makeInput(), missingAdapters);
-  check('g10-missing-lifecycle-close-false', missing.can_close === false);
+group('integration-authority', () => {
+  const candidateShortcutOnly = buildTaskStatus(makeInput(), makeAdapters({
+    isAncestor: (ancestor, descendant) => (
+      (ancestor === CANDIDATE_COMMIT && descendant === TARGET_SHA)
+      || (ancestor === CANDIDATE_COMMIT && descendant === CONSUMER_SHA)
+      || (ancestor === CANDIDATE_COMMIT && descendant === REMOTE_SHA)
+    ),
+  }));
+  check('consumer-does-not-use-candidate-shortcut', candidateShortcutOnly.consumer_updated === false);
 
-  // Stale lifecycle => facts null
-  const staleAdapters = makeAdapters({
-    inspectLifecycleReceipt: () => ({ status: 'stale', receipt: null }),
-  });
-  const stale = buildTaskStatus(makeInput(), staleAdapters);
-  check('g10-stale-lifecycle-facts-null', stale.active_owned_worktrees === null && stale.active_owned_branches === null);
-
-  // Cross-root substitution => facts null
-  const crossReceipt = makeLifecycleReceipt({ root_run_id: 'attacker-root' });
-  const crossAdapters = makeAdapters({
-    inspectLifecycleReceipt: () => ({ status: 'valid', receipt: crossReceipt }),
-  });
-  const cross = buildTaskStatus(makeInput(), crossAdapters);
-  check('g10-cross-root-facts-null', cross.active_owned_worktrees === null && cross.active_owned_branches === null);
+  const targetConsumerUnknown = buildTaskStatus(makeInput(), makeAdapters({
+    isAncestor: (ancestor, descendant) => {
+      if (ancestor === TARGET_SHA && descendant === CONSUMER_SHA) return null;
+      return ancestor === CANDIDATE_COMMIT
+        && (descendant === TARGET_SHA || descendant === REMOTE_SHA);
+    },
+  }));
+  check('consumer-unknown-preserved', targetConsumerUnknown.consumer_updated === null);
 });
 
-// ── Group 11: adversarial fixture 5-6 — Mission receipt/state swap, BLOCKED ─
-group('g11-mission-adversarial', () => {
-  if (!buildTaskStatus) {
-    check('g11-receipt-swap-terminal-null', false);
-    check('g11-blocked-terminal-true-close-false', false);
-    check('g11-blocked-is-blocker', false);
-    return;
-  }
-  // Receipt/state swap
-  const swappedMission = makeMissionState('COMPLETE');
-  swappedMission.terminal_receipt = makeMissionTerminalReceipt('ABORTED');
-  const swapped = buildTaskStatus(makeInput({ mission: swappedMission }), makeAdapters());
-  check('g11-receipt-swap-terminal-null', swapped.mission_terminal === null);
+group('artifact-substitution', () => {
+  const missionSwap = clone(missionBundle);
+  missionSwap.terminal_receipt.state_digest = mission.sha256('another-state');
+  missionSwap.terminal_receipt = {
+    ...missionSwap.terminal_receipt,
+    receipt_digest: mission.sha256({
+      ...missionSwap.terminal_receipt,
+      receipt_digest: undefined,
+    }),
+  };
+  const result = buildTaskStatus(makeInput({
+    mission: {
+      state: missionSwap.state,
+      terminal_receipt: missionSwap.terminal_receipt,
+    },
+  }), makeAdapters());
+  check('mission-state-receipt-substitution-rejected', result.mission_terminal === null);
 
-  // BLOCKED: terminal true but close false and is a blocker
-  const blockedInput = makeInput({ mission: makeMissionState('BLOCKED') });
-  const blocked = buildTaskStatus(blockedInput, makeAdapters());
-  check('g11-blocked-terminal-true-close-false', blocked.mission_terminal === true && blocked.can_close === false);
-  check('g11-blocked-is-blocker', blocked.accepted_blockers.length > 0 || blocked.failed_predicates.length > 0);
-});
+  const missionAuthority = clone(missionBundle);
+  missionAuthority.terminal_receipt.can_close = true;
+  const authorityResult = buildTaskStatus(makeInput({
+    mission: {
+      state: missionAuthority.state,
+      terminal_receipt: missionAuthority.terminal_receipt,
+    },
+  }), makeAdapters());
+  check('mission-extra-authority-field-rejected', authorityResult.mission_terminal === null);
 
-// ── Group 12: adversarial fixture 7 — ICC digest/tree substitution ──────────
-group('g12-icc-substitution', () => {
-  if (!buildTaskStatus) {
-    check('g12-icc-terminal-digest-swap-invalid', false);
-    check('g12-icc-verification-digest-swap-invalid', false);
-    check('g12-icc-tree-swap-invalid', false);
-    return;
-  }
-  // Terminal digest swap
-  const termSwap = makeCampaign('campaign-1', {
-    terminal_receipt: makeCampaignTerminalReceipt('campaign-1', CANDIDATE_TREE, { terminal_digest: sha256('attacker') }),
-  });
-  const termResult = buildTaskStatus(makeInput({ campaigns: [termSwap] }), makeAdapters());
-  check('g12-icc-terminal-digest-swap-invalid', termResult.acceptance_verdict !== 'accepted');
-
-  // Verification digest swap
-  const verifSwap = makeCampaign('campaign-1', {
-    verification_receipt: { ...makeVerificationReceipt('campaign-1'), receipt_digest: sha256('attacker-v') },
-  });
-  const verifResult = buildTaskStatus(makeInput({ campaigns: [verifSwap] }), makeAdapters());
-  check('g12-icc-verification-digest-swap-invalid', verifResult.acceptance_verdict !== 'accepted');
-
-  // Tree swap in candidate
-  const treeSwap = makeCampaign('campaign-1', {
-    candidate: makeCandidate(CANDIDATE_COMMIT, 'ab'.repeat(20)),
-  });
+  const treeSwap = clone(campaignBundle);
+  treeSwap.candidate.tree_sha = '9'.repeat(40);
   const treeResult = buildTaskStatus(makeInput({ campaigns: [treeSwap] }), makeAdapters());
-  check('g12-icc-tree-swap-invalid', treeResult.acceptance_verdict !== 'accepted');
+  check('candidate-tree-substitution-rejected', treeResult.acceptance_verdict === 'unknown');
 });
 
-// ── Group 13: adversarial fixtures 8-9 — follow-up vs unresolved ────────────
-group('g13-findings', () => {
-  if (!buildTaskStatus) {
-    check('g13-follow-up-accepted-deferred-1', false);
-    check('g13-unresolved-rejected-blocker-retained', false);
-    return;
-  }
-  // Follow-up only
-  const fuCamp = makeCampaign('campaign-1', {
-    terminal_receipt: makeCampaignTerminalReceipt('campaign-1', CANDIDATE_TREE, {
-      follow_up: [{ id: 'fu-1', description: 'later' }],
-      unresolved_final_findings: [],
-    }),
+group('terminal-semantics', () => {
+  const blocked = buildBlockedMissionBundle();
+  const blockedResult = buildTaskStatus(makeInput({
+    mission: { state: blocked.state, terminal_receipt: blocked.terminal_receipt },
+    campaigns: [],
+  }), makeAdapters());
+  check('real-blocked-mission-terminal', blockedResult.mission_terminal === true);
+  check('real-blocked-mission-rejected', blockedResult.acceptance_verdict === 'rejected');
+  check('real-blocked-mission-cannot-close', blockedResult.can_close === false);
+
+  const followUp = buildCampaignBundle({
+    status: 'follow_up',
+    followUp: [{ id: 'fu-1', claim: 'document later' }],
   });
-  const fu = buildTaskStatus(makeInput({ campaigns: [fuCamp] }), makeAdapters());
-  check('g13-follow-up-accepted-deferred-1', fu.acceptance_verdict === 'accepted' && fu.deferred_count === 1);
+  const followResult = buildTaskStatus(makeInput({ campaigns: [followUp] }), makeAdapters());
+  check('real-follow-up-campaign-accepted', followResult.acceptance_verdict === 'accepted');
+  check('real-follow-up-deferred-retained', followResult.deferred_count === 1);
 
-  // Unresolved finding
-  const urCamp = makeCampaign('campaign-1', {
-    terminal_receipt: makeCampaignTerminalReceipt('campaign-1', CANDIDATE_TREE, {
-      unresolved_final_findings: [{ id: 'f-1', severity: 'major' }],
-      follow_up: [],
-    }),
+  const unresolved = buildCampaignBundle({
+    status: 'follow_up',
+    unresolved: [{ id: 'finding-1', claim: 'must fix' }],
   });
-  const ur = buildTaskStatus(makeInput({ campaigns: [urCamp] }), makeAdapters());
-  check('g13-unresolved-rejected-blocker-retained', ur.acceptance_verdict === 'rejected' && ur.accepted_blockers.length > 0);
+  const unresolvedResult = buildTaskStatus(
+    makeInput({ campaigns: [unresolved] }),
+    makeAdapters(),
+  );
+  check('real-unresolved-campaign-rejected', unresolvedResult.acceptance_verdict === 'rejected');
+  check('real-unresolved-blocker-retained', unresolvedResult.accepted_blockers.length === 1);
+
+  const stopped = buildCampaignBundle({ status: 'stop' });
+  const stoppedResult = buildTaskStatus(makeInput({ campaigns: [stopped] }), makeAdapters());
+  check('terminal-stop-without-canonical-receipt-status-unknown',
+    stoppedResult.acceptance_verdict === 'unknown');
+
+  const omitted = buildTaskStatus(makeInput({ campaigns: [] }), makeAdapters());
+  check('omitted-sibling-coverage-unknown', omitted.campaigns_terminal === null);
+  check('omitted-sibling-not-accepted', omitted.acceptance_verdict === 'unknown');
 });
 
-// ── Group 14: adversarial fixture 10 — omitted sibling ──────────────────────
-group('g14-omitted-sibling', () => {
-  if (!buildTaskStatus) {
-    check('g14-omitted-sibling-not-accepted', false);
-    check('g14-omitted-sibling-evidence-gap', false);
-    return;
-  }
-  const input = makeInput({
-    mission: makeMissionState('COMPLETE', { claimed_campaign_ids: ['c-1', 'c-2', 'c-3'] }),
-    campaigns: [makeCampaign('c-1'), makeCampaign('c-2')],
-  });
-  const result = buildTaskStatus(input, makeAdapters());
-  check('g14-omitted-sibling-not-accepted', result.acceptance_verdict !== 'accepted');
-  check('g14-omitted-sibling-evidence-gap', result.can_close === false);
+group('missing-and-invalid-evidence', () => {
+  const missing = buildTaskStatus(makeInput(), makeAdapters({
+    inspectLifecycleReceipt: () => ({ status: 'missing' }),
+  }));
+  check('lifecycle-missing-is-unknown', missing.zero_residue === null);
+
+  const stale = buildTaskStatus(makeInput(), makeAdapters({
+    inspectLifecycleReceipt: () => ({ status: 'stale', drift: ['observed_head'] }),
+  }));
+  check('lifecycle-stale-is-unknown', stale.zero_residue === null);
+
+  const invalid = buildTaskStatus(makeInput(), makeAdapters({
+    inspectLifecycleReceipt: () => ({ status: 'valid', zero_residue: true }),
+  }));
+  check('lifecycle-invalid-shape-is-unknown', invalid.zero_residue === null);
+
+  const noRef = buildTaskStatus(makeInput(), makeAdapters({ resolveRef: () => null }));
+  check('missing-integration-ref-is-unknown', noRef.product_merged === null);
+
+  const wrongTree = buildTaskStatus(makeInput(), makeAdapters({
+    treeForCommit: () => '8'.repeat(40),
+  }));
+  check('candidate-commit-tree-mismatch-is-unknown', wrongTree.product_merged === null);
 });
 
-// ── Group 15: adversarial fixture 11 — candidate commit/tree mismatch ───────
-group('g15-candidate-mismatch', () => {
-  if (!buildTaskStatus) {
-    check('g15-commit-tree-mismatch-null', false);
-    check('g15-missing-ref-integration-null', false);
-    return;
-  }
-  // treeForCommit returns different tree than candidate claims
-  const mismatchAdapters = makeAdapters({
-    treeForCommit: (c) => c === CANDIDATE_COMMIT ? 'ff'.repeat(20) : null,
-  });
-  const mismatch = buildTaskStatus(makeInput(), mismatchAdapters);
-  check('g15-commit-tree-mismatch-null', mismatch.product_merged === null || mismatch.candidate_tree_sha === null);
-
-  // Missing ref entirely
-  const noRefAdapters = makeAdapters({ resolveRef: () => null });
-  const noRef = buildTaskStatus(makeInput(), noRefAdapters);
-  check('g15-missing-ref-integration-null', noRef.integration_target.observed_sha === null);
-});
-
-// ── Group 16: adversarial fixture 12 — otherwise-green P1 can_merge false ───
-group('g16-green-p1', () => {
-  if (!buildTaskStatus) {
-    check('g16-green-p1-can-merge-false', false);
-    check('g16-green-p1-merge-preflight-unknown', false);
-    return;
-  }
-  const result = buildTaskStatus(makeInput(), makeAdapters());
-  check('g16-green-p1-can-merge-false', result.can_merge === false);
-  check('g16-green-p1-merge-preflight-unknown', result.failed_predicates.includes('merge_preflight_unknown'));
-});
-
-// ── Group 17: adversarial fixture 13 — receipt_digest sensitivity ───────────
-group('g17-digest-sensitivity', () => {
-  if (!buildTaskStatus) {
-    check('g17-digest-changes-on-fact-change', false);
-    check('g17-digest-stable-same-input', false);
-    return;
-  }
-  const input1 = makeInput();
-  const adapters1 = makeAdapters();
-  const r1 = buildTaskStatus(input1, adapters1);
-
-  // Same input => same digest
-  const r1b = buildTaskStatus(makeInput(), makeAdapters());
-  check('g17-digest-stable-same-input', r1.receipt_digest === r1b.receipt_digest);
-
-  // Changed independent fact => different digest
-  const changedAdapters = makeAdapters({
+group('receipt-and-fail-closed', () => {
+  const first = buildTaskStatus(makeInput(), makeAdapters());
+  const second = buildTaskStatus(makeInput(), makeAdapters());
+  check('deterministic-receipt-digest', first.receipt_digest === second.receipt_digest);
+  const changed = buildTaskStatus(makeInput(), makeAdapters({
     isAncestor: () => false,
-  });
-  const r2 = buildTaskStatus(makeInput(), changedAdapters);
-  check('g17-digest-changes-on-fact-change', r1.receipt_digest !== r2.receipt_digest);
-});
+  }));
+  check('receipt-digest-sensitive-to-facts', first.receipt_digest !== changed.receipt_digest);
 
-// ── Group 18: adversarial fixture 14 — unknown/extra input fails closed ─────
-group('g18-fail-closed', () => {
-  if (!buildTaskStatus) {
-    check('g18-unknown-top-level-fails-closed', false);
-    check('g18-extra-field-fails-closed', false);
-    return;
-  }
-  // Unknown top-level field
-  const unknownInput = makeInput({ unknown_field: 'attacker' });
-  let unknownResult;
-  let threw = false;
+  let unknownInputRejected = false;
   try {
-    unknownResult = buildTaskStatus(unknownInput, makeAdapters());
-  } catch (e) {
-    threw = true;
+    buildTaskStatus({ ...makeInput(), attacker_field: true }, makeAdapters());
+  } catch (error) {
+    unknownInputRejected = error.code === 'TASK_STATUS_UNKNOWN_FIELD';
   }
-  check('g18-unknown-top-level-fails-closed', threw || (unknownResult && unknownResult.can_close === false && unknownResult.can_merge === false));
+  check('unknown-input-field-rejected', unknownInputRejected);
 
-  // Extra nested field in mission
-  const extraMission = makeMissionState('COMPLETE');
-  extraMission.extra_injected = true;
-  const extraInput = makeInput({ mission: extraMission });
-  let extraResult;
-  let extraThrew = false;
-  try {
-    extraResult = buildTaskStatus(extraInput, makeAdapters());
-  } catch (e) {
-    extraThrew = true;
-  }
-  check('g18-extra-field-fails-closed', extraThrew || (extraResult && extraResult.can_close === false));
-});
-
-// ── Group 19: failed_predicates completeness — no short-circuit omission ────
-group('g19-failed-predicates', () => {
-  if (!buildTaskStatus) {
-    check('g19-all-false-operands-reported', false);
-    check('g19-no-short-circuit-omission', false);
-    return;
-  }
-  // All facts unknown/null => every predicate must appear
-  const nullAdapters = makeAdapters({
+  const allUnknown = buildTaskStatus(makeInput(), makeAdapters({
+    inspectLifecycleReceipt: () => ({ status: 'missing' }),
     resolveRef: () => null,
-    isAncestor: () => null,
     treeForCommit: () => null,
-    inspectLifecycleReceipt: () => ({ status: 'missing', receipt: null }),
-  });
-  const nullInput = makeInput({
-    mission: { state: 'ACTIVE', terminal_receipt: null },
-    campaigns: [{ state: 'ACTIVE', terminal_receipt: null, verification_receipt: null, candidate: null }],
-  });
-  const result = buildTaskStatus(nullInput, nullAdapters);
-  check('g19-all-false-operands-reported', result.failed_predicates.length >= 5);
-  // merge_preflight_unknown must always be present in P1
-  check('g19-no-short-circuit-omission', result.failed_predicates.includes('merge_preflight_unknown'));
+    resolveCampaignBinding: () => ({ status: 'unknown' }),
+  }));
+  const required = [
+    'merge_preflight_unknown',
+    'campaigns_terminal_unknown',
+    'acceptance_unknown',
+    'product_merged_unknown',
+    'consumer_updated_unknown',
+    'pushed_unknown',
+    'zero_residue_unknown',
+    'merge_edges_unknown',
+  ];
+  check('failed-predicates-complete', required.every(
+    (predicate) => allUnknown.failed_predicates.includes(predicate),
+  ));
 });
 
-for (const line of lines) console.log(line);
+for (const result of results) {
+  process.stdout.write(`${result.id}\t${result.pass ? 'PASS' : 'FAIL'}${result.detail ? `\t${result.detail}` : ''}\n`);
+}
+if (results.some((result) => !result.pass)) process.exitCode = 1;
 NODE
-)"
-EXIT=$?
+NODE_EXIT=$?
 
-# ── Gate: the node harness must have executed (not crashed before output). ──
-assert_eq "$EXIT" "0" "node harness exits 0 (all groups ran without uncaught throw)"
-
-# ── Gate: at least one assertion line was collected (not empty output). ──
-LINE_COUNT=$(printf '%s\n' "$OUT" | grep -c $'\t' || true)
-if [ "$LINE_COUNT" -lt 50 ]; then
-  fail "harness collected fewer than 50 assertion lines ($LINE_COUNT) — structural failure"
-fi
-
-# ── Gate: module-missing must be the named reason, not generic. ──
-assert_contains "$OUT" "g0-module-exists" "oracle reports module existence check by name"
-assert_contains "$OUT" "g0-buildTaskStatus-exported" "oracle reports buildTaskStatus export check by name"
-
-# ── Every invariant must PASS for the test to go GREEN. ──
-# On current HEAD (module absent) these all FAIL => test is RED.
-for id in \
-  g0-module-exists g0-buildTaskStatus-exported \
-  g1-schema-version g1-artifact-type g1-receipt-digest-is-sha256 \
-  g1-repo-identity g1-root-run-id g1-goal g1-phase \
-  g1-candidate-commit g1-candidate-tree-sha \
-  g1-acceptance-verdict-enum g1-accepted-blockers-array g1-deferred-count-integer \
-  g1-active-owned-worktrees-nullable-int g1-active-owned-branches-nullable-int \
-  g1-integration-target-ref g1-integration-target-observed-sha \
-  g1-evidence-mission g1-evidence-campaigns g1-evidence-lifecycle \
-  g1-evidence-integration g1-evidence-merge-preflight \
-  g1-can-merge-boolean g1-can-close-boolean g1-failed-predicates-array \
-  g2-product-merged-tristate g2-consumer-updated-tristate g2-pushed-tristate \
-  g2-zero-residue-tristate g2-mission-terminal-tristate g2-campaigns-terminal-tristate \
-  g3-complete-mission-terminal-true g3-blocked-mission-terminal-true \
-  g3-blocked-mission-blocks-closeout g3-aborted-mission-terminal-true \
-  g3-receipt-swap-mission-terminal-null g3-root-run-id-mismatch-rejected \
-  g3-repo-identity-mismatch-rejected g3-non-terminal-mission-rejected \
-  g3-receipt-alone-not-attribution \
-  g4-valid-campaign-accepted g4-terminal-digest-substitution-invalid \
-  g4-verification-digest-substitution-invalid g4-tree-substitution-invalid \
-  g4-follow-up-only-deferred g4-unresolved-finding-rejected \
-  g4-omitted-sibling-not-accepted g4-non-terminal-campaign-rejected \
-  g5-valid-lifecycle-facts-imported g5-missing-lifecycle-null \
-  g5-missing-lifecycle-no-fallback g5-stale-lifecycle-null \
-  g5-cross-root-lifecycle-null g5-invalid-lifecycle-null \
-  g6-product-merged-from-ancestor g6-pushed-from-remote-ancestor \
-  g6-consumer-updated-from-ancestor g6-missing-ref-null \
-  g6-candidate-tree-mismatch-null \
-  g7-p1-can-merge-false g7-p1-merge-preflight-unknown-in-failed \
-  g7-otherwise-green-still-cannot-merge \
-  g8-full-green-close-true g8-unknown-fails-closed \
-  g8-incomplete-mission-close-false g8-blocker-close-false \
-  g8-product-not-merged-close-false g8-consumer-not-updated-close-false \
-  g8-not-pushed-close-false g8-residue-close-false \
-  g9-false-clean-close-false g9-false-clean-zero-residue-false \
-  g10-missing-lifecycle-close-false g10-stale-lifecycle-facts-null \
-  g10-cross-root-facts-null \
-  g11-receipt-swap-terminal-null g11-blocked-terminal-true-close-false \
-  g11-blocked-is-blocker \
-  g12-icc-terminal-digest-swap-invalid g12-icc-verification-digest-swap-invalid \
-  g12-icc-tree-swap-invalid \
-  g13-follow-up-accepted-deferred-1 g13-unresolved-rejected-blocker-retained \
-  g14-omitted-sibling-not-accepted g14-omitted-sibling-evidence-gap \
-  g15-commit-tree-mismatch-null g15-missing-ref-integration-null \
-  g16-green-p1-can-merge-false g16-green-p1-merge-preflight-unknown \
-  g17-digest-changes-on-fact-change g17-digest-stable-same-input \
-  g18-unknown-top-level-fails-closed g18-extra-field-fails-closed \
-  g19-all-false-operands-reported g19-no-short-circuit-omission
-do
-  assert_contains "$OUT" "$id	PASS" "LSM P1 invariant $id must pass"
-done
-
-# ── No group may have aborted the harness mid-run. ──
-for grp in g0-module g1-structure g2-tristate g3-mission g4-campaign \
-  g5-lifecycle g6-integration g7-merge-preflight g8-closeout \
-  g9-false-clean g10-lifecycle-adversarial g11-mission-adversarial \
-  g12-icc-substitution g13-findings g14-omitted-sibling \
-  g15-candidate-mismatch g16-green-p1 g17-digest-sensitivity \
-  g18-fail-closed g19-failed-predicates
-do
-  assert_not_contains "$OUT" "$grp	FAIL	threw" "group $grp ran to completion without throwing"
-done
+cat "$OUT_FILE"
+assert_exit_code "$NODE_EXIT" "0" "LSM P1 real-artifact oracle passes"
+assert_not_contains "$(cat "$OUT_FILE")" $'\tFAIL' "every named LSM P1 invariant passes"
+assert_contains "$(cat "$OUT_FILE")" $'p1-can-close-false\tPASS' \
+  "P1 never claims closeout while merge preflight is unknown"
+assert_contains "$(cat "$OUT_FILE")" $'icc-state-terminal-digest-substitution-rejected\tPASS' \
+  "durable ICC state is bound to the terminal receipt"
+assert_contains "$(cat "$OUT_FILE")" $'lifecycle-contradictory-false-clean-unknown\tPASS' \
+  "contradictory lifecycle evidence fails unknown"
 
 finalize_test

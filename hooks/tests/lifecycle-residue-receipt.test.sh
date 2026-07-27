@@ -105,6 +105,13 @@ const result = inspectLifecycleReceipt({
   rootRunId: "wlb-p3-root",
 });
 if (result.status !== "valid" || result.zero_residue !== true) process.exit(1);
+if (result.active_owned_worktrees !== 0 || result.active_owned_branches !== 0) process.exit(2);
+if (typeof result.receipt_digest !== "string" || !/^[0-9a-f]{64}$/.test(result.receipt_digest)) {
+  process.exit(3);
+}
+// Backward-compatible extension: counts come from authenticated scan/dispositions,
+// never a nested receipt object for LSM consumers.
+if (Object.prototype.hasOwnProperty.call(result, "receipt")) process.exit(4);
 NODE
 assert_exit_code "$?" "0" "LSM can import the receipt consumer without computing can_close"
 

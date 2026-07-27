@@ -809,3 +809,24 @@ onto v2.32.48 by grok-4.5.
 - **Fix direction**: 在 dispatch-review/roster resolver 加 engine-id→agy 顯示名映射，或改
   config 值 + 更新 references/model-routing.md；加一條 agy 模型名 probe 到 harness-maintenance。
 - **Effort**: S。**Source**: 2026-07-17 /l6 QC panel gemini 席 no_verdict 診斷。
+
+<!-- autopilot-follow-up:fd4e5ef9e4a86709fb80a378b69cc780160e2e9701d83472daf5f7a8fc16cd64 -->
+### Durable merge execution crash recovery
+- **Trigger**: When a caller-owned durable merge receipt directory and recovery authority are standardized.
+- **Context**: A process crash after one ordered merge edge can lose the in-memory aggregate receipt; P3 intentionally omitted a WAL because its frozen contract supplied no storage-path authority.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0; p3-risk
+
+<!-- autopilot-follow-up:9cc8a47d292bb3f8ad6d8182f7199566e000a2e99aefe54bb9af469652871b0d -->
+### Bind dirty content continuity from preflight to execution
+- **Trigger**: When merge preflight schema v2 is designed or a consumer requires cross-phase content-continuity proof.
+- **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0; p3-risk
+
+<!-- autopilot-follow-up:bedd809a7d1d5a413e90813c5902beba396099a1588e47494ba3cb9876d8bd7d -->
+### Recover stale backlog admission locks safely
+- **Trigger**: When a backlog admission is interrupted or the lock directory exists without a live owning admission process.
+- **Context**: Backlog admission correctly fails closed on a held lock, but an uncatchable process crash can leave the lock directory behind and block all later admissions until manual recovery.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0; qwen-p4

@@ -38,6 +38,7 @@ const INPUT_KEYS = Object.freeze([
   'lifecycle_receipt_path',
   'integration',
   'merge_preflight',
+  'merge_execution',
 ]);
 const INPUT_KEY_SET = new Set(INPUT_KEYS);
 
@@ -1572,11 +1573,119 @@ function validateMergePreflight(value) {
   return {
     valid: true,
     safe,
+    raw_edges: value.edges,
     evidence: {
       status: 'valid',
       reason: safe ? null : `merge_preflight_${value.status}`,
       manifest_seal: value.manifest_seal,
       preflight_status: value.status,
+    },
+  };
+}
+
+function validateMergeExecution(value, rootRunId, preflight) {
+  const unknown = (reason, status = 'unknown') => ({
+    valid: false,
+    complete: false,
+    evidence: {
+      status,
+      reason,
+      receipt_digest: null,
+      execution_status: null,
+      edge_count: null,
+    },
+  });
+  if (value === null) return unknown('merge_execution_unknown');
+  if (!isPlainObject(value)
+      || !hasExactKeySet(value, [
+        'schema_version', 'artifact_type', 'manifest_seal', 'root_run_id',
+        'status', 'halt_reason', 'halt_edge', 'edges', 'receipt_digest',
+      ])
+      || value.schema_version !== 1
+      || value.artifact_type !== 'merge_execution_receipt'
+      || !isSha256(value.receipt_digest)
+      || !isSha256(value.manifest_seal)
+      || value.root_run_id !== rootRunId
+      || !['complete', 'halted'].includes(value.status)
+      || !Array.isArray(value.edges)) {
+    return unknown('merge_execution_shape_invalid', 'invalid');
+  }
+  const { receipt_digest: ignored, ...body } = value;
+  if (canonicalDigest(body) !== value.receipt_digest) {
+    return unknown('merge_execution_digest_invalid', 'invalid');
+  }
+  if (!preflight.valid || value.manifest_seal !== preflight.evidence.manifest_seal) {
+    return unknown('merge_execution_manifest_mismatch', 'invalid');
+  }
+  const preflightEdgeCount = Array.isArray(preflight.raw_edges)
+    ? preflight.raw_edges.length
+    : null;
+  const edgesValid = preflightEdgeCount !== null
+    && value.edges.length === preflightEdgeCount
+    && value.edges.every((edge, index) => {
+      const declared = preflight.raw_edges[index];
+      if (!isPlainObject(edge)
+          || !isPlainObject(declared)
+          || !hasExactKeySet(edge, [
+            'sequence', 'source_ref', 'target_ref', 'mode', 'status',
+            'source_validation', 'target_validation', 'before_sha', 'after_sha',
+            'merge_commit', 'conflicts', 'error', 'preservation', 'edge_receipt_digest',
+          ])
+          || edge.sequence !== index + 1
+          || edge.source_ref !== declared.source_ref
+          || edge.target_ref !== declared.target_ref
+          || edge.mode !== declared.mode
+          || edge.status !== 'executed'
+          || !['no-ff', 'ff-only'].includes(edge.mode)
+          || !isPlainObject(edge.source_validation)
+          || !hasExactKeySet(edge.source_validation, [
+            'ref', 'expected_sha', 'actual_sha', 'from_edge',
+          ])
+          || edge.source_validation.ref !== edge.source_ref
+          || !isGitOid(edge.source_validation.expected_sha)
+          || !isGitOid(edge.source_validation.actual_sha)
+          || edge.source_validation.expected_sha !== edge.source_validation.actual_sha
+          || !isPlainObject(edge.target_validation)
+          || !hasExactKeySet(edge.target_validation, [
+            'ref', 'expected_sha', 'actual_sha', 'from_edge',
+          ])
+          || edge.target_validation.ref !== edge.target_ref
+          || !isGitOid(edge.target_validation.expected_sha)
+          || !isGitOid(edge.target_validation.actual_sha)
+          || edge.target_validation.expected_sha !== edge.target_validation.actual_sha
+          || edge.target_validation.actual_sha !== edge.before_sha
+          || !isGitOid(edge.before_sha)
+          || !isGitOid(edge.after_sha)
+          || (edge.mode === 'no-ff' && edge.merge_commit !== edge.after_sha)
+          || (edge.mode === 'ff-only' && edge.merge_commit !== null)
+          || !Array.isArray(edge.conflicts)
+          || edge.conflicts.length !== 0
+          || edge.error !== null
+          || !isPlainObject(edge.preservation)
+          || !hasExactKeySet(edge.preservation, [
+            'approved_paths', 'protected_paths', 'action', 'restored', 'verification',
+          ])
+          || edge.preservation.restored !== true
+          || edge.preservation.verification !== 'exact'
+          || !isSha256(edge.edge_receipt_digest)) {
+        return false;
+      }
+      const { edge_receipt_digest: edgeDigest, ...edgeBody } = edge;
+      return canonicalDigest(edgeBody) === edgeDigest;
+    });
+  const complete = value.status === 'complete'
+    && value.halt_reason === null
+    && value.halt_edge === null
+    && edgesValid;
+  return {
+    valid: true,
+    complete,
+    evidence: {
+      status: 'valid',
+      reason: complete ? null : 'merge_execution_incomplete',
+      receipt_digest: value.receipt_digest,
+      execution_status: value.status,
+      edge_count: value.edges.length,
     },
   };
 }
@@ -1589,13 +1698,16 @@ function computePredicates({
   integration,
   integrationInput,
   mergePreflight,
+  mergeExecution,
+  rootRunId,
 }) {
   const failed = [];
   const preflight = validateMergePreflight(mergePreflight);
+  const execution = validateMergeExecution(mergeExecution, rootRunId, preflight);
 
   if (!preflight.valid) {
     pushFailed(failed, 'merge_preflight_unknown');
-  } else if (!preflight.safe) {
+  } else if (!preflight.safe && !execution.complete) {
     pushFailed(failed, 'merge_preflight_not_safe');
   }
 
@@ -1669,12 +1781,15 @@ function computePredicates({
     );
   }
 
-  if (!preflight.valid) {
-    pushFailed(failed, 'merge_edges_unknown');
-  } else {
-    // P2 proves permission to merge, not execution. P3 replaces this with a
-    // sealed execution receipt before task closeout can become true.
-    pushFailed(failed, 'merge_execution_unknown');
+  if (!execution.valid) {
+    pushFailed(
+      failed,
+      preflight.valid && execution.evidence.reason === 'merge_execution_unknown'
+        ? 'merge_execution_unknown'
+        : 'merge_edges_unknown',
+    );
+  } else if (!execution.complete) {
+    pushFailed(failed, 'merge_edges_incomplete');
   }
 
   const canMerge = preflight.safe
@@ -1685,6 +1800,7 @@ function computePredicates({
     can_close: failed.length === 0,
     failed_predicates: failed,
     merge_preflight: preflight,
+    merge_execution: execution,
   };
 }
 
@@ -1750,6 +1866,9 @@ function buildTaskStatus(input, adapters) {
   if (input.merge_preflight !== null && !isPlainObject(input.merge_preflight)) {
     throw new TaskStatusError('merge_preflight must be an object or null', 'TASK_STATUS_SHAPE');
   }
+  if (input.merge_execution !== null && !isPlainObject(input.merge_execution)) {
+    throw new TaskStatusError('merge_execution must be an object or null', 'TASK_STATUS_SHAPE');
+  }
 
   if (input.lifecycle_receipt_path !== null
       && typeof input.lifecycle_receipt_path !== 'string') {
@@ -1789,6 +1908,8 @@ function buildTaskStatus(input, adapters) {
     integration,
     integrationInput: input.integration,
     mergePreflight: input.merge_preflight,
+    mergeExecution: input.merge_execution,
+    rootRunId: input.root_run_id,
   });
 
   let repoIdentity = 'unknown';
@@ -1834,6 +1955,9 @@ function buildTaskStatus(input, adapters) {
       integration: integration.evidence,
       merge_preflight: {
         ...predicates.merge_preflight.evidence,
+      },
+      merge_execution: {
+        ...predicates.merge_execution.evidence,
       },
     },
     can_merge: predicates.can_merge,

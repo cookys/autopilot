@@ -59,18 +59,27 @@ check "clear exit 0" 0 "$RC"
 node "$CLI" clear >/dev/null 2>&1; RC=$?
 check "clear idempotent exit 0" 0 "$RC"
 
-# 7. session-id isolation: marker for A invisible to session B
+# 7. non-ENOENT removal errors fail closed instead of reporting a false clear
+mkdir -p "$TMP/markers/test-session-aaa.json"
+node "$CLI" clear >/dev/null 2>&1; RC=$?
+check "clear removal error exit 1" 1 "$RC"
+[ -d "$TMP/markers/test-session-aaa.json" ] \
+  && ok "clear removal error leaves target intact" \
+  || fail "clear removal error leaves target intact"
+rmdir "$TMP/markers/test-session-aaa.json"
+
+# 8. session-id isolation: marker for A invisible to session B
 node "$CLI" set --level l5 --repo-root "$REPO_ROOT" >/dev/null 2>&1
 OUT=$(CLAUDE_CODE_SESSION_ID="test-session-bbb" node "$CLI" status)
 echo "$OUT" | grep -q '"active": *false' && ok "session-id isolation" || fail "session-id isolation ($OUT)"
 
-# 8. corrupt marker → status active:false, exit 0 (fail-open)
+# 9. corrupt marker → status active:false, exit 0 (fail-open)
 echo 'not json{{{' > "$TMP/markers/test-session-aaa.json"
 OUT=$(node "$CLI" status 2>/dev/null); RC=$?
 check "corrupt marker exit 0" 0 "$RC"
 echo "$OUT" | grep -q '"active": *false' && ok "corrupt marker → active:false" || fail "corrupt marker → active:false ($OUT)"
 
-# 9. set defaults repo_root to cwd git toplevel when omitted
+# 10. set defaults repo_root to cwd git toplevel when omitted
 cd "$REPO_ROOT"
 node "$CLI" set --level l6 >/dev/null 2>&1; RC=$?
 check "set without --repo-root exit 0" 0 "$RC"

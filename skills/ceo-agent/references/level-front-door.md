@@ -593,6 +593,22 @@ reaper grammar remain explicit preserve-first harness cleanup responsibility.
 
 ### 5. Worktree GC
 
+At every L5/L6 phase transition, run the task status surface. Run it again before merge, after
+merge, and immediately before finish-flow clears the session marker:
+
+```bash
+node "$autopilot_root/bin/autopilot.js" status task --root-run-id "$root_run_id"
+```
+
+The caller persists the exact LSM input bundle as
+`${AUTOPILOT_TASK_STATUS_DIR:-${TMPDIR:-/tmp}/autopilot-task-status}/<root_run_id>.json`;
+the CLI rejects a mismatched/unsafe root id and recomputes live Git/WLB observations rather than
+trusting cached booleans.
+
+The four labels `product_merged`, `consumer_updated`, `pushed`, and `zero_residue` are independent.
+Only `can_close=true` is `DONE`; Mission terminal or a successful merge alone is never a clean
+closeout.
+
 Every non-success outcome (`dirty` / `no_op` / `question_suspected` / `failure`)
 **keeps** its worktree by design (caller's cleanup). The CEO reaps kept worktrees
 and branches immediately after handling the outcome. For managed schema-2

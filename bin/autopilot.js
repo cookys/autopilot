@@ -24,6 +24,7 @@ function printHelp() {
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
+  node bin/autopilot.js status task --root-run-id <id> [--json]
   node bin/autopilot.js campaign <inspect|status|resume> --campaign-id <id> [--ledger <file>]
   node bin/autopilot.js merge execute --request <file> [--json]
 
@@ -47,7 +48,7 @@ Commands:
                     self-authorize.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
-  status            State overview: quota, runs, roster, or exact-seat readiness receipt (--json; readiness --probe may spend one bounded minimal request per stale exact tuple).
+  status            State overview or task DONE/NOT DONE from authoritative receipts.
   campaign          Inspect/status durable campaign state or determine whether it is resumable.
   merge             Execute only an explicitly sealed merge request and emit a receipt.
   mission           Mission convergence control: init|grant|consume|control|check|receipt

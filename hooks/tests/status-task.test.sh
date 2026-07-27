@@ -440,6 +440,7 @@ function makeInput(overrides = {}) {
       required_consumer_update: true,
     },
     merge_preflight: null,
+    merge_execution: null,
     ...overrides,
   };
 }
@@ -488,6 +489,9 @@ function mergePreflightFixture(overrides = {}) {
     can_merge: true,
     edges: [{
       sequence: 1,
+      source_ref: 'refs/heads/feature',
+      target_ref: TARGET_REF,
+      mode: 'no-ff',
       status: 'safe',
       dirty: { staged: [], unstaged: [], untracked: [], ambiguous: [] },
       incoming_paths: ['src/status/merge-intent.js'],
@@ -495,6 +499,53 @@ function mergePreflightFixture(overrides = {}) {
       preservation_proposal: [],
     }],
     blockers: [],
+    ...overrides,
+  };
+  return { ...body, receipt_digest: icc.canonicalDigest(body) };
+}
+
+function mergeExecutionFixture(preflight = mergePreflightFixture(), overrides = {}) {
+  const edgeBody = {
+    sequence: 1,
+    source_ref: 'refs/heads/feature',
+    target_ref: TARGET_REF,
+    mode: 'no-ff',
+    status: 'executed',
+    source_validation: {
+      ref: 'refs/heads/feature',
+      expected_sha: CANDIDATE_COMMIT,
+      actual_sha: CANDIDATE_COMMIT,
+      from_edge: null,
+    },
+    target_validation: {
+      ref: TARGET_REF,
+      expected_sha: '0'.repeat(40),
+      actual_sha: '0'.repeat(40),
+      from_edge: null,
+    },
+    before_sha: '0'.repeat(40),
+    after_sha: TARGET_SHA,
+    merge_commit: TARGET_SHA,
+    conflicts: [],
+    error: null,
+    preservation: {
+      approved_paths: [],
+      protected_paths: [],
+      action: 'none',
+      restored: true,
+      verification: 'exact',
+    },
+  };
+  const edge = { ...edgeBody, edge_receipt_digest: icc.canonicalDigest(edgeBody) };
+  const body = {
+    schema_version: 1,
+    artifact_type: 'merge_execution_receipt',
+    manifest_seal: preflight.manifest_seal,
+    root_run_id: ROOT_RUN_ID,
+    status: 'complete',
+    halt_reason: null,
+    halt_edge: null,
+    edges: [edge],
     ...overrides,
   };
   return { ...body, receipt_digest: icc.canonicalDigest(body) };
@@ -611,6 +662,65 @@ group('p2-merge-preflight', () => {
   );
   check('p2-flat-preflight-boundary-consumed', flatReceipt.can_merge === true
     && flatReceipt.evidence.merge_preflight.status === 'valid');
+});
+
+group('p3-merge-execution', () => {
+  const preflight = mergePreflightFixture();
+  const execution = mergeExecutionFixture(preflight);
+  const receipt = buildTaskStatus(makeInput({
+    merge_preflight: preflight,
+    merge_execution: execution,
+  }), makeAdapters());
+  check('p3-complete-execution-can-close', receipt.can_close === true);
+  check('p3-execution-evidence-bound', receipt.evidence.merge_execution.status === 'valid'
+    && receipt.evidence.merge_execution.edge_count === 1);
+
+  const rootDrift = mergeExecutionFixture(preflight, { root_run_id: 'different-root' });
+  const rootRejected = buildTaskStatus(makeInput({
+    merge_preflight: preflight,
+    merge_execution: rootDrift,
+  }), makeAdapters());
+  check('p3-execution-root-drift-rejected', rootRejected.can_close === false
+    && rootRejected.evidence.merge_execution.reason === 'merge_execution_shape_invalid');
+
+  const edgeDrift = mergeExecutionFixture(preflight);
+  edgeDrift.edges[0].after_sha = '9'.repeat(40);
+  edgeDrift.receipt_digest = icc.canonicalDigest(
+    Object.fromEntries(Object.entries(edgeDrift).filter(([key]) => key !== 'receipt_digest')),
+  );
+  const edgeRejected = buildTaskStatus(makeInput({
+    merge_preflight: preflight,
+    merge_execution: edgeDrift,
+  }), makeAdapters());
+  check('p3-edge-digest-drift-rejected', edgeRejected.can_close === false
+    && edgeRejected.failed_predicates.includes('merge_edges_incomplete'));
+
+  const declaredEdgeDrift = mergeExecutionFixture(preflight);
+  declaredEdgeDrift.edges[0].source_ref = 'refs/heads/other';
+  declaredEdgeDrift.edges[0].source_validation.ref = 'refs/heads/other';
+  const { edge_receipt_digest: ignoredEdgeDigest, ...declaredEdgeBody }
+    = declaredEdgeDrift.edges[0];
+  declaredEdgeDrift.edges[0].edge_receipt_digest = icc.canonicalDigest(declaredEdgeBody);
+  const { receipt_digest: ignoredReceiptDigest, ...declaredReceiptBody } = declaredEdgeDrift;
+  declaredEdgeDrift.receipt_digest = icc.canonicalDigest(declaredReceiptBody);
+  const declaredEdgeRejected = buildTaskStatus(makeInput({
+    merge_preflight: preflight,
+    merge_execution: declaredEdgeDrift,
+  }), makeAdapters());
+  check('p3-receipt-edge-must-match-sealed-preflight',
+    declaredEdgeRejected.can_close === false
+      && declaredEdgeRejected.failed_predicates.includes('merge_edges_incomplete'));
+
+  const overlapPreflight = mergePreflightFixture({
+    status: 'overlapping',
+    can_merge: false,
+  });
+  const overlapExecution = mergeExecutionFixture(overlapPreflight);
+  const overlapClosed = buildTaskStatus(makeInput({
+    merge_preflight: overlapPreflight,
+    merge_execution: overlapExecution,
+  }), makeAdapters());
+  check('p3-restored-approved-overlap-can-close', overlapClosed.can_close === true);
 });
 
 group('durable-state-authority', () => {

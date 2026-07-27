@@ -50,6 +50,10 @@ Hard rules:
   `zero_residue` field to be exactly `true`; `false` is a resource blocker.
   This rail proves resource disposition only and never computes task
   `can_close`, generation advance, or finish authority.
+- **Terminal status gate**: run `autopilot status task --root-run-id <campaign-root> --json`
+  before merge, after merge, and before marker clear. Finish-flow may clear an L5 marker only with
+  that final fresh, digest-valid receipt and `can_close=true`; lifecycle `zero_residue=true` alone
+  is not task completion.
 - Review is DECORRELATED: the reviewer is a different engine family than the implementer.
 - `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
 

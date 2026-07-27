@@ -455,14 +455,48 @@
         "campaigns",
         "lifecycle",
         "integration",
-        "merge_preflight"
+        "merge_preflight",
+        "merge_execution"
       ],
       "properties": {
         "mission": { "$ref": "#/$defs/missionEvidence" },
         "campaigns": { "$ref": "#/$defs/campaignsEvidence" },
         "lifecycle": { "$ref": "#/$defs/lifecycleEvidence" },
         "integration": { "$ref": "#/$defs/integrationEvidence" },
-        "merge_preflight": { "$ref": "#/$defs/mergePreflightEvidence" }
+        "merge_preflight": { "$ref": "#/$defs/mergePreflightEvidence" },
+        "merge_execution": { "$ref": "#/$defs/mergeExecutionEvidence" }
+      }
+    },
+    "mergeExecutionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "receipt_digest", "execution_status", "edge_count"],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "receipt_digest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
+        "execution_status": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "enum": ["complete", "halted"] }
+          ]
+        },
+        "edge_count": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0 }
+          ]
+        }
       }
     }
   }

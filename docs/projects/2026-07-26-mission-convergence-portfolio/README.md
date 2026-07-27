@@ -31,6 +31,7 @@ runner, reviewer, branch, or successor to reset authority or resource ceilings.
 | Existing project policy: strong and weak models coexist through profiles | ICC and PRO consume the shipped capability/guidance profile contracts without splitting the repository. |
 | Existing project policy: no unbounded topic expansion | Review discoveries outside the frozen phase rubric go to `docs/BACKLOG.md`; they do not grow the active phase. |
 | Valuable reviewer follow-ups must not be lost | ICC/PRS emit evidence-bound follow-up candidates; LSM P4 makes depth-0 dedupe and admit them to backlog before closeout, while `/next` may reopen them only as a new ticket/contract/budget after their trigger is true. |
+| "直接放寬" Kimi transport | Seq 22 permits Kimi 0.28.0 direct-vector `--prompt` transport with scratch-cwd isolation and public-output redaction; it does not claim role qualification or a CLI-enforced no-effect guarantee. |
 
 ## Scope Completeness Audit
 

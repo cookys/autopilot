@@ -130,15 +130,22 @@ lookup inside TTL, and reruns after an injected clock crosses TTL.
 1. Feature-detect the installed `kimi` CLI and its non-interactive/headless surface; fail closed when
    the required flags are absent.
 2. Add an explicit model mapping for `kimi-code/k3`; do not guess a default model.
-3. Pass the prompt on stdin or a private file according to the detected CLI contract. Never build a
-   shell command from prompt/model text.
+3. Pass the prompt through the installed CLI's detected non-interactive contract. Kimi 0.28.0 may
+   use a direct argv vector with `--prompt <prompt>` because it exposes neither stdin nor a prompt
+   file flag. Never build a shell command or use evaluation/interpolation; run from an isolated
+   scratch cwd, redact the prompt from public receipts/errors, and keep argv/raw transcript evidence
+   private.
 4. Return exit, timeout, and private raw reference through the shared runner envelope; validate the
    Kimi-specific semantic body only inside PRO. Empty/malformed semantic output never changes the
    mechanical transport SSOT.
 5. Admit `kimi` in `dispatch-author.sh` and the resolver schema.
 
 **Acceptance:** `bash hooks/tests/dispatch-author-kimi.test.sh` passes against a fake CLI capturing
-argv/stdin, and a local opt-in smoke returns a non-empty read-only response from `kimi-code/k3`.
+the direct argv vector and cwd, proving the exact `kimi-code/k3` alias, isolated scratch execution,
+no shell evaluation, public-output prompt redaction, bounded timeout/exit behavior, and fail-closed
+empty or malformed semantic output. A local opt-in smoke returns a non-empty response from
+`kimi-code/k3`; transport support alone never asserts role qualification or a hard no-effect
+guarantee absent a CLI-enforced read-only flag.
 
 ### Phase 4 — Receipt and CLI integration (L)
 

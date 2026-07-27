@@ -8,6 +8,7 @@ const { runHarnessCli } = require('../src/harness/cli');
 const { runEndpointsCli } = require('../src/endpoints/cli');
 const { runStatusCli } = require('../src/status/cli');
 const { runCampaignCli } = require('../src/campaign/cli');
+const { runMergeCli } = require('../src/merge/cli');
 const {
   AutopilotEngine,
   compileCampaignDispositionPolicy,
@@ -24,6 +25,7 @@ function printHelp() {
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
   node bin/autopilot.js campaign <inspect|status|resume> --campaign-id <id> [--ledger <file>]
+  node bin/autopilot.js merge execute --request <file> [--json]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
@@ -47,6 +49,7 @@ Commands:
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
   status            State overview: quota, runs, roster, or exact-seat readiness receipt (--json; readiness --probe may spend one bounded minimal request per stale exact tuple).
   campaign          Inspect/status durable campaign state or determine whether it is resumable.
+  merge             Execute only an explicitly sealed merge request and emit a receipt.
   mission           Mission convergence control: init|grant|consume|control|check|receipt
                     over the canonical pure Mission reducer (no task DONE/closeout authority).
                     tokens never printed, never read from argv).
@@ -277,6 +280,14 @@ if (args[0] === 'status') {
 
 if (args[0] === 'campaign') {
   process.exit(runCampaignCli(args.slice(1), { cwd: process.cwd() }));
+}
+
+if (args[0] === 'merge') {
+  process.exit(runMergeCli(args.slice(1), {
+    cwd: process.cwd(),
+    stdout: process.stdout,
+    stderr: process.stderr,
+  }));
 }
 
 if (args[0] === 'mission') {

@@ -63,6 +63,8 @@ assert_contains "$PROBE_SOURCE" "exactCommands.has(command.trim())" \
   "Request binding requires an exact harmless shell command"
 assert_contains "$PROBE_SOURCE" "process.once('exit', cleanup)" \
   "Copied credentials are removed on handled failure"
+assert_contains "$PROBE_SOURCE" "process.kill(Number(pid),0)" \
+  "Detached guardian cleans scratch credentials after abrupt parent death"
 
 STUB_BIN="$TEST_TMP/bin"
 STUB_ARTIFACT="$TEST_TMP/invalid-probe.json"

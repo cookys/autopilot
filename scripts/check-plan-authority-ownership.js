@@ -87,40 +87,47 @@ function main() {
   }
 
   const markerOwners = new Map();
+  const plansDir = path.join(repoRoot, 'docs', 'plans');
+  for (const basename of fs.readdirSync(plansDir)) {
+    if (!basename.startsWith('2026-07-26-') || !basename.endsWith('.md')) continue;
+    const plan = path.posix.join('docs/plans', basename);
+    const body = fs.readFileSync(path.join(plansDir, basename), 'utf8');
+    const matches = [...body.matchAll(/<!-- autopilot-authority-claims: (\[[^\n]*\]) -->/g)];
+    for (const match of matches) {
+      let declared;
+      try {
+        declared = JSON.parse(match[1]);
+      } catch (error) {
+        fail(`active plan ${plan} has an invalid authority marker: ${error.message}`);
+        continue;
+      }
+      if (!Array.isArray(declared) || declared.some((item) => typeof item !== 'string')) {
+        fail(`active plan ${plan} authority marker must be a string array`);
+        continue;
+      }
+      for (const authority of declared) {
+        if (!REQUIRED_AUTHORITIES.has(authority)) {
+          fail(`active plan ${plan} marker names unknown "${authority}"`);
+          continue;
+        }
+        if (markerOwners.has(authority)) {
+          fail(`duplicate active-plan marker for "${authority}"`);
+        } else {
+          markerOwners.set(authority, plan);
+        }
+      }
+    }
+  }
   for (const [plan, expected] of claimsByPlan) {
-    const planPath = path.resolve(repoRoot, plan);
-    if (!fs.existsSync(planPath)) continue;
-    const body = fs.readFileSync(planPath, 'utf8');
-    const match = body.match(/<!-- autopilot-authority-claims: (\[[^\n]*\]) -->/);
-    if (!match) {
-      fail(`active plan ${plan} has no machine-readable authority marker`);
-      continue;
-    }
-    let declared;
-    try {
-      declared = JSON.parse(match[1]);
-    } catch (error) {
-      fail(`active plan ${plan} has an invalid authority marker: ${error.message}`);
-      continue;
-    }
-    if (!Array.isArray(declared) || declared.some((item) => typeof item !== 'string')) {
-      fail(`active plan ${plan} authority marker must be a string array`);
-      continue;
-    }
-    const declaredSet = new Set(declared);
-    for (const authority of declaredSet) {
-      if (markerOwners.has(authority)) {
-        fail(`duplicate active-plan marker for "${authority}"`);
-      }
-      markerOwners.set(authority, plan);
-      if (!expected.has(authority)) {
-        fail(`active plan ${plan} marker adds unowned "${authority}"`);
-      }
-    }
     for (const authority of expected) {
-      if (!declaredSet.has(authority)) {
-        fail(`active plan ${plan} marker omits "${authority}"`);
+      if (markerOwners.get(authority) !== plan) {
+        fail(`active plan marker for "${authority}" does not match ${plan}`);
       }
+    }
+  }
+  for (const [authority, plan] of markerOwners) {
+    if (!claimsByPlan.get(plan)?.has(authority)) {
+      fail(`active plan ${plan} marker is absent from the ownership manifest`);
     }
   }
 

@@ -13,6 +13,18 @@ const path = require('path');
 
 const [root, fixturePath] = process.argv.slice(2);
 const corpus = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+const frozen = {
+  'successor-model-branch-reset': ['BLOCKED', 'resource_ceiling:tool_calls'],
+  'direct-no-agent-stagnation': ['BLOCKED', 'stagnation'],
+  'ignored-user-finish': ['CLOSING', 'control_sequence_stale'],
+  'provider-maintenance-leakage': ['ACTIVE', 'PRESPEND_REJECTED/provider_readiness'],
+  'closure-ratio': ['CLOSING', 'resource_ratio:tool_calls'],
+  'invalid-review-authority': ['ACTIVE', 'review_authority_invalid'],
+  'identity-preserves-remaining': ['ACTIVE', null],
+  'real-progress-resets-stagnation': ['ACTIVE', null],
+  'current-control-sequence': ['CLOSING', 'finish_requested'],
+  'known-axis-below-ratio': ['ACTIVE', null],
+};
 let evaluate = null;
 try {
   ({ evaluateMissionIntegrationFixture: evaluate } = require(
@@ -33,6 +45,13 @@ function same(left, right) {
 }
 
 for (const fixture of [...corpus.fixtures, ...corpus.healthy_controls]) {
+  const ceiling = frozen[fixture.id];
+  if (!ceiling
+      || fixture.expected.state !== ceiling[0]
+      || (fixture.expected.reason || null) !== ceiling[1]) {
+    console.log(`${fixture.id}\tINVALID_FIXTURE\t${JSON.stringify(ceiling)}\t${JSON.stringify(fixture.expected)}`);
+    continue;
+  }
   const actual = evaluate
     ? evaluate(fixture)
     : {
@@ -76,5 +95,7 @@ done
 
 assert_contains "$OUT" '"state":"UNSUPERVISED"' \
   "RED is current unsupervised behavior, not a fixture setup failure"
+assert_not_contains "$OUT" "INVALID_FIXTURE" \
+  "Incident reasons and terminal ceilings match the independent frozen oracle"
 
 finalize_test

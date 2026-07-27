@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -66,6 +66,22 @@ function main() {
       process.exit(128 + os.constants.signals[signal]);
     });
   }
+  const guardian = spawn(process.execPath, [
+    '-e',
+    [
+      "const fs=require('fs');",
+      'const [pid,root]=process.argv.slice(1);',
+      'const timer=setInterval(()=>{',
+      "  try { process.kill(Number(pid),0); } catch {",
+      '    clearInterval(timer);',
+      '    fs.rmSync(root,{recursive:true,force:true});',
+      '  }',
+      '},100);',
+    ].join(''),
+    String(process.pid),
+    root,
+  ], { detached: true, stdio: 'ignore' });
+  guardian.unref();
   fs.mkdirSync(path.join(plugin, '.codex-plugin'), { recursive: true });
   fs.mkdirSync(path.join(plugin, 'hooks'), { recursive: true });
   fs.mkdirSync(path.join(marketplace, '.agents', 'plugins'), { recursive: true });

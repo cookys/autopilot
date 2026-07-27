@@ -1568,6 +1568,58 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`control-payload-canonical-still-unconsumed\t${
       legitResult && legitResult.state ? 'PASS' : 'FAIL'}`);
   }
+  {
+    // ─── normalizeLineageBinding fail-closed validation ─────────────────
+    const baseContract = makeContract();
+    const taId = baseContract.task_authority_id;
+    const phId = baseContract.policy_hash;
+
+    // Missing successor_inherits_durable_consumed rejects.
+    let missingSuccRejected = false;
+    try {
+      createMissionState({ ...baseContract, lineage_binding: {
+        task_authority_id: taId, root_run_id: 'root-ms', policy_hash: phId,
+      }});
+    } catch (e) { missingSuccRejected = e.code === 'LINEAGE_BINDING_MISSING_KEY'; }
+    console.log(`lineage-binding-missing-successor-rejects\t${missingSuccRejected ? 'PASS' : 'FAIL'}`);
+
+    // Successor flag supplied only via prototype inheritance rejects.
+    let protoInheritRejected = false;
+    try {
+      Object.defineProperty(Object.prototype, 'successor_inherits_durable_consumed', {
+        value: true, configurable: true, enumerable: true, writable: true,
+      });
+      const protoObj = { task_authority_id: taId, root_run_id: 'root-proto', policy_hash: phId };
+      createMissionState({ ...baseContract, lineage_binding: protoObj });
+    } catch (e) { protoInheritRejected = e.code === 'LINEAGE_BINDING_MISSING_KEY'; }
+    finally { delete Object.prototype.successor_inherits_durable_consumed; }
+    console.log(`lineage-binding-proto-inherited-successor-rejects\t${protoInheritRejected ? 'PASS' : 'FAIL'}`);
+
+    // Accessor property rejects.
+    let accessorRejected = false;
+    try {
+      const accessorObj = { task_authority_id: taId, root_run_id: 'root-acc', policy_hash: phId };
+      Object.defineProperty(accessorObj, 'successor_inherits_durable_consumed', {
+        get() { return true; }, enumerable: true, configurable: true,
+      });
+      createMissionState({ ...baseContract, lineage_binding: accessorObj });
+    } catch (e) { accessorRejected = e.code === 'LINEAGE_BINDING_ACCESSOR_KEY'; }
+    console.log(`lineage-binding-accessor-rejects\t${accessorRejected ? 'PASS' : 'FAIL'}`);
+
+    // Valid plain four-field object is accepted and projection roundtrip succeeds.
+    const validLB = {
+      task_authority_id: taId, root_run_id: 'root-valid', policy_hash: phId,
+      successor_inherits_durable_consumed: false,
+    };
+    const sValid = createMissionState({ ...baseContract, lineage_binding: validLB });
+    console.log(`lineage-binding-valid-four-field-accepted\t${
+      sValid.config.lineage_binding.successor_inherits_durable_consumed === false
+      && sValid.config.lineage_binding.root_run_id === 'root-valid' ? 'PASS' : 'FAIL'}`);
+    const projValid = buildProjection(sValid);
+    const restoredValid = restoreProjection(projValid);
+    console.log(`lineage-binding-valid-projection-roundtrip\t${
+      stateHash(restoredValid) === projValid.state_hash ? 'PASS' : 'FAIL'}`);
+  }
 }
 NODE
 )"
@@ -1678,7 +1730,12 @@ for id in \
   restore-rejects-lineage-binding-successor-flag-mismatch \
   control-payload-symbol-key-alias-rejects \
   control-payload-non-enumerable-alias-rejects \
-  control-payload-canonical-still-unconsumed
+  control-payload-canonical-still-unconsumed \
+  lineage-binding-missing-successor-rejects \
+  lineage-binding-proto-inherited-successor-rejects \
+  lineage-binding-accessor-rejects \
+  lineage-binding-valid-four-field-accepted \
+  lineage-binding-valid-projection-roundtrip
 do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done

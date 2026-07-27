@@ -475,25 +475,39 @@ const LINEAGE_BINDING_CLOSED_KEYS = Object.freeze([
 ]);
 
 function normalizeLineageBinding(lb, label) {
-  const obj = requireObject(lb, label || 'lineage_binding');
-  const keys = Reflect.ownKeys(obj);
-  for (const k of keys) {
-    if (typeof k !== 'string' || !LINEAGE_BINDING_CLOSED_KEYS.includes(k)) {
-      fail(`${label || 'lineage_binding'} contains unsupported key "${String(k)}"`, 'LINEAGE_BINDING_UNSUPPORTED_KEY');
+  const tag = label || 'lineage_binding';
+  const obj = requireObject(lb, tag);
+  const ownKeys = Reflect.ownKeys(obj);
+  for (const k of ownKeys) {
+    if (typeof k !== 'string') {
+      fail(`${tag} contains unsupported key "${String(k)}"`, 'LINEAGE_BINDING_UNSUPPORTED_KEY');
+    }
+    const desc = Object.getOwnPropertyDescriptor(obj, k);
+    if (!desc.enumerable) {
+      fail(`${tag} contains non-enumerable key "${k}"`, 'LINEAGE_BINDING_UNSUPPORTED_KEY');
+    }
+    if (desc.get || desc.set) {
+      fail(`${tag} contains accessor key "${k}"`, 'LINEAGE_BINDING_ACCESSOR_KEY');
+    }
+    if (!LINEAGE_BINDING_CLOSED_KEYS.includes(k)) {
+      fail(`${tag} contains unsupported key "${k}"`, 'LINEAGE_BINDING_UNSUPPORTED_KEY');
     }
   }
-  requireSha256(obj.task_authority_id, `${label || 'lineage_binding'}.task_authority_id`);
-  requireString(obj.root_run_id, `${label || 'lineage_binding'}.root_run_id`, 1, 256);
-  requireSha256(obj.policy_hash, `${label || 'lineage_binding'}.policy_hash`);
-  if (obj.successor_inherits_durable_consumed !== undefined) {
-    requireBoolean(obj.successor_inherits_durable_consumed,
-      `${label || 'lineage_binding'}.successor_inherits_durable_consumed`);
+  for (const k of LINEAGE_BINDING_CLOSED_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(obj, k)) {
+      fail(`${tag} missing required key "${k}"`, 'LINEAGE_BINDING_MISSING_KEY');
+    }
   }
+  requireSha256(obj.task_authority_id, `${tag}.task_authority_id`);
+  requireString(obj.root_run_id, `${tag}.root_run_id`, 1, 256);
+  requireSha256(obj.policy_hash, `${tag}.policy_hash`);
+  requireBoolean(obj.successor_inherits_durable_consumed,
+    `${tag}.successor_inherits_durable_consumed`);
   return Object.freeze({
     task_authority_id: obj.task_authority_id,
     root_run_id: obj.root_run_id,
     policy_hash: obj.policy_hash,
-    successor_inherits_durable_consumed: obj.successor_inherits_durable_consumed === true,
+    successor_inherits_durable_consumed: obj.successor_inherits_durable_consumed,
   });
 }
 

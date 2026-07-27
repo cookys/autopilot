@@ -55,10 +55,14 @@ function usage() {
   return `Usage:
   node scripts/implementation-campaign-check.js seal \\
     --contract <file> --repo <git-repo> --mission-mode <off|shadow|enforce> \\
-    --out <seal-file>
+    --out <seal-file> [--mission-state <file>]
   node scripts/implementation-campaign-check.js check \\
     --contract <file> --repo <git-repo> --mission-mode <off|shadow|enforce> \\
     --seal <seal-file>
+
+  --mission-state is optional for seal under shadow/off and required for
+  enforce-mode seal authorization (reads a Mission state file, never a
+  caller-supplied receipt or predicate).
 
 Exit codes:
   0 = SEALED or VALID
@@ -82,6 +86,7 @@ function parseArgs(argv) {
     ['--out', 'out'],
     ['--seal', 'seal'],
     ['--mission-mode', 'missionMode'],
+    ['--mission-state', 'missionState'],
   ]);
   for (let index = 1; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -107,6 +112,9 @@ function parseArgs(argv) {
   if (command === 'check' && !options.seal) throw new CliError('--seal is required for check');
   if (command === 'seal' && options.seal) throw new CliError('--seal is not valid for seal');
   if (command === 'check' && options.out) throw new CliError('--out is not valid for check');
+  if (command === 'check' && options.missionState) {
+    throw new CliError('--mission-state is only valid for seal');
+  }
   return options;
 }
 
@@ -438,31 +446,20 @@ function validateContract(contract, context) {
   return errors;
 }
 
-// Module-private registry for attested Mission grant verifier adapters. Only
-// adapters minted through createMissionGrantVerifierAdapter may authorize
-// enforce-mode sealing. Arbitrary caller-supplied functions are never trusted.
-const MISSION_GRANT_VERIFIER_REGISTRY = new WeakSet();
+// Module-private object-identity attestation for enforce-mode Mission grant
+// bindings. Only the real CLI/checker seal path may mint an entry after reading
+// a Mission state file and resolving the exact live claim. Callers cannot mint,
+// clone, or forge a usable binding — there is no public factory.
+const MISSION_GRANT_BINDING_REGISTRY = new WeakSet();
 
-function createMissionGrantVerifierAdapter(handler) {
-  if (typeof handler !== 'function') {
-    throw new TypeError('createMissionGrantVerifierAdapter requires a function handler');
-  }
-  const adapter = Object.freeze({
-    kind: 'mission_grant_verifier_adapter',
-    verify(input) {
-      return handler(input);
-    },
-  });
-  MISSION_GRANT_VERIFIER_REGISTRY.add(adapter);
-  return adapter;
-}
-
-function isAttestedMissionGrantVerifier(value) {
+function isAttestedMissionGrantBinding(value) {
   return value !== null
     && typeof value === 'object'
     && !Array.isArray(value)
-    && MISSION_GRANT_VERIFIER_REGISTRY.has(value)
-    && typeof value.verify === 'function';
+    && MISSION_GRANT_BINDING_REGISTRY.has(value)
+    && value.verified === true
+    && typeof value.binding_digest === 'string'
+    && /^[0-9a-f]{64}$/.test(value.binding_digest);
 }
 
 function grantBindingMatchesRef(bindingDigest, grantRef) {
@@ -471,12 +468,111 @@ function grantBindingMatchesRef(bindingDigest, grantRef) {
     && /^[0-9a-f]{64}$/.test(bindingDigest);
 }
 
+// Module-private mint. Reads the Mission state file, validates it, finds the
+// unique live claim whose binding_digest equals the campaign grant ref, and
+// checks that claim's contract digest and the state's repo identity against
+// the campaign being sealed. Never exported.
+function mintMissionGrantBindingFromStateFile({
+  missionStatePath,
+  grantRef,
+  contractDigest,
+  repoIdentity,
+}) {
+  if (typeof missionStatePath !== 'string' || missionStatePath.length === 0) {
+    throw new CliError(
+      'mission_grant_ref: enforce-mode seal requires --mission-state <file>',
+      3,
+    );
+  }
+  if (typeof grantRef !== 'string' || !/^[0-9a-f]{64}$/.test(grantRef)) {
+    throw new CliError(
+      'mission_grant_ref: enforce mode requires a content-bound SHA-256 Mission grant digest',
+      3,
+    );
+  }
+  const stateFile = canonicalFile(missionStatePath, '--mission-state');
+  let state;
+  try {
+    state = JSON.parse(fs.readFileSync(stateFile.path, 'utf8'));
+  } catch (error) {
+    throw new CliError(`--mission-state is not valid JSON: ${error.message}`, 3);
+  }
+  let mission;
+  try {
+    mission = require(path.resolve(__dirname, '..', 'src', 'engine', 'mission-convergence'));
+  } catch (error) {
+    throw new CliError(
+      `mission grant binding cannot load Mission engine: ${error.message}`,
+      3,
+    );
+  }
+  try {
+    mission.validateMissionState(state);
+  } catch (error) {
+    throw new CliError(
+      `mission_grant_ref: Mission state failed validation: ${error.message || String(error)}`,
+      3,
+    );
+  }
+  if (typeof state.repo_identity === 'string'
+      && typeof repoIdentity === 'string'
+      && state.repo_identity !== repoIdentity) {
+    throw new CliError(
+      'mission_grant_ref: Mission state repo_identity does not match the campaign repository',
+      3,
+    );
+  }
+  const matches = [];
+  const claims = state.claims && typeof state.claims === 'object' ? state.claims : {};
+  for (const claim of Object.values(claims)) {
+    if (claim && grantBindingMatchesRef(claim.binding_digest, grantRef)) {
+      matches.push(claim);
+    }
+  }
+  if (matches.length === 0) {
+    throw new CliError(
+      'mission_grant_ref: no live Mission claim matches the campaign grant digest',
+      3,
+    );
+  }
+  if (matches.length > 1) {
+    throw new CliError(
+      'mission_grant_ref: Mission grant digest is ambiguous across multiple claims',
+      3,
+    );
+  }
+  const claim = matches[0];
+  if (claim.released === true || claim.terminal === true) {
+    throw new CliError(
+      'mission_grant_ref: matching Mission claim is released or terminal',
+      3,
+    );
+  }
+  if (typeof contractDigest === 'string'
+      && /^[0-9a-f]{64}$/.test(contractDigest)
+      && claim.campaign_contract_digest !== contractDigest) {
+    throw new CliError(
+      'mission_grant_ref: claim campaign_contract_digest does not match the sealed contract',
+      3,
+    );
+  }
+  const binding = Object.freeze({
+    kind: 'mission_grant_binding',
+    verified: true,
+    binding_digest: grantRef,
+    claim_id: typeof claim.claim_id === 'string' ? claim.claim_id : null,
+    campaign_contract_digest:
+      typeof claim.campaign_contract_digest === 'string' ? claim.campaign_contract_digest : null,
+  });
+  MISSION_GRANT_BINDING_REGISTRY.add(binding);
+  return binding;
+}
+
 // Enforce-mode sealing verifies a content-bound Mission grant. Structural shape
-// is checked by validateContract. Authorization accepts only:
-//   1. an internally content-bound Mission grant receipt (binding_digest === ref)
-//   2. a Mission state whose claims include that binding digest
-//   3. a canonical module-private attested verifier adapter
-// Arbitrary context.missionGrantVerifier functions cannot authorize sealing.
+// is checked by validateContract. Authorization accepts ONLY a module-private
+// identity-attested binding minted by the real seal path after reading a
+// Mission state file. Plain missionGrantReceipt, plain missionState, arbitrary
+// functions, and any publicly constructible adapter/object cannot authorize.
 // Without a trusted Mission binding, sealing fails closed.
 function verifyEnforcedMissionGrant(contract, context = {}) {
   const grantRef = contract ? contract.mission_grant_ref : null;
@@ -484,51 +580,13 @@ function verifyEnforcedMissionGrant(contract, context = {}) {
     return 'mission_grant_ref: enforce mode requires a content-bound SHA-256 Mission grant digest';
   }
 
-  const receipt = context.missionGrantReceipt;
-  if (receipt && typeof receipt === 'object' && !Array.isArray(receipt)) {
-    if (receipt.verified === true && grantBindingMatchesRef(receipt.binding_digest, grantRef)) {
-      return null;
-    }
-    if (receipt.artifact_type === 'mission_campaign_grant_claimed'
-        && grantBindingMatchesRef(receipt.binding_digest, grantRef)) {
-      return null;
-    }
-  }
-
-  const missionState = context.missionState;
-  if (missionState && typeof missionState === 'object' && !Array.isArray(missionState)
-      && missionState.claims && typeof missionState.claims === 'object') {
-    for (const claim of Object.values(missionState.claims)) {
-      if (claim && grantBindingMatchesRef(claim.binding_digest, grantRef)
-          && claim.released !== true) {
-        return null;
-      }
-    }
-  }
-
-  // Only a WeakSet-attested adapter may run as a verifier. Plain functions
-  // (including any context.missionGrantVerifier function) are ignored.
-  const attested = isAttestedMissionGrantVerifier(context.missionGrantVerifier)
-    ? context.missionGrantVerifier
-    : (isAttestedMissionGrantVerifier(context.missionGrantVerifierAdapter)
-      ? context.missionGrantVerifierAdapter
-      : null);
-  if (attested) {
-    let attestation;
-    try {
-      attestation = attested.verify({
-        mission_grant_ref: grantRef,
-        campaign_contract_digest: context.contractDigest || null,
-        repo_identity: context.repoIdentity || null,
-      });
-    } catch (_error) {
-      attestation = null;
-    }
-    if (attestation && typeof attestation === 'object'
-        && attestation.verified === true
-        && grantBindingMatchesRef(attestation.binding_digest, grantRef)) {
-      return null;
-    }
+  // Reject every caller-supplied plain receipt / plain state / function. Only
+  // the WeakSet-attested binding minted by mintMissionGrantBindingFromStateFile
+  // may authorize; nothing else is consulted.
+  const binding = context.missionGrantBinding;
+  if (isAttestedMissionGrantBinding(binding)
+      && grantBindingMatchesRef(binding.binding_digest, grantRef)) {
+    return null;
   }
 
   return 'mission_grant_ref: enforced grant verification is unavailable until Mission integration';
@@ -732,10 +790,33 @@ function main() {
 
     if (options.command === 'seal') {
       if (options.missionMode === 'enforce') {
+        // Only the real CLI seal path may mint an identity-attested binding,
+        // and only after reading --mission-state. Without a state file the
+        // verifier fails closed; plain receipts/predicates never authorize.
+        let missionGrantBinding = null;
+        if (options.missionState) {
+          try {
+            missionGrantBinding = mintMissionGrantBindingFromStateFile({
+              missionStatePath: options.missionState,
+              grantRef: contractFile.value.mission_grant_ref,
+              contractDigest: contractFile.digest,
+              repoIdentity,
+            });
+          } catch (error) {
+            if (error instanceof CliError) {
+              emit({
+                verdict: 'REJECTED',
+                contract_sha256: contractFile.digest,
+                errors: [error.message],
+              }, 3);
+            }
+            throw error;
+          }
+        }
         const grantError = verifyEnforcedMissionGrant(contractFile.value, {
           repoIdentity,
           contractDigest: contractFile.digest,
-          missionGrantVerifier: options.missionGrantVerifier,
+          missionGrantBinding,
         });
         if (grantError) {
           emit({
@@ -788,7 +869,6 @@ if (require.main === module) main();
 module.exports = {
   PROFILE_REPAIR_CEILINGS,
   canonicalRepoIdentity,
-  createMissionGrantVerifierAdapter,
   inspectSealedCampaignContract,
   isWindowsReservedSegment,
   normalizeAllowedPrefix,

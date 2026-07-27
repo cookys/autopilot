@@ -19,7 +19,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
+  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty] [--mission-state <file>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
@@ -73,6 +73,7 @@ function parseImplementReviewArgs(rawArgs) {
     campaignLedger: null,
     campaignDispositionAuthority: null,
     campaignDispositionPolicy: null,
+    missionState: null,
     campaignManaged: true,
     legacyUnmanaged: false,
   };
@@ -115,6 +116,15 @@ function parseImplementReviewArgs(rawArgs) {
         return { error: '--campaign-ledger requires a value' };
       }
       output.campaignLedger = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--mission-state') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--mission-state requires a value' };
+      }
+      output.missionState = value;
       i += 2;
       continue;
     }
@@ -338,10 +348,22 @@ if (args[0] === 'engine') {
         })}\n`);
         process.exit(1);
       }
-      const result = new AutopilotEngine({
+      // Trusted host constructs the file-backed Mission CAS store from
+      // --mission-state; free-form load/save callbacks are never accepted
+      // from CLI input. The engine reads mission_grant_ref from the sealed
+      // campaign contract and builds canonical adapters itself.
+      const engineOptions = {
         cwd: parsed.cwd || process.cwd(),
         campaignDispositionProvider,
-      }).runImplementationReviewLoop(parsed);
+      };
+      if (parsed.missionState) {
+        engineOptions.missionStatePath = path.resolve(
+          parsed.cwd || process.cwd(),
+          parsed.missionState,
+        );
+      }
+      const result = new AutopilotEngine(engineOptions)
+        .runImplementationReviewLoop(parsed);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

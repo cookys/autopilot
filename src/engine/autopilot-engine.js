@@ -25,6 +25,7 @@ const {
   projectMissionMode,
 } = require('../../scripts/implementation-campaign-check');
 const {
+  createFileBackedMissionStateStore,
   createMissionCampaignAdapters,
 } = require('./mission-convergence');
 const { runCampaignComposition } = require('./campaign-composition');
@@ -1378,7 +1379,22 @@ class AutopilotEngine {
     // Trusted Mission campaign adapter configuration. The engine builds
     // adapters internally and passes them as the second argument to
     // campaignIntake — callers never inject a free-form claim predicate.
-    this.missionCampaignStore = options.missionCampaignStore || null;
+    // Runtime input to runImplementationReviewLoop cannot override the
+    // constructor's store/factory (host-trusted only).
+    this.missionStatePath = typeof options.missionStatePath === 'string'
+      && options.missionStatePath.length > 0
+      ? path.resolve(options.missionStatePath)
+      : null;
+    if (options.missionCampaignStore
+        && typeof options.missionCampaignStore === 'object'
+        && typeof options.missionCampaignStore.load === 'function'
+        && typeof options.missionCampaignStore.save === 'function') {
+      this.missionCampaignStore = options.missionCampaignStore;
+    } else if (this.missionStatePath) {
+      this.missionCampaignStore = createFileBackedMissionStateStore(this.missionStatePath);
+    } else {
+      this.missionCampaignStore = null;
+    }
     this.missionCampaignGrant = options.missionCampaignGrant || null;
     this.missionCampaignAdapterOptions = isPlainObject(options.missionCampaignAdapterOptions)
       ? options.missionCampaignAdapterOptions
@@ -1388,28 +1404,44 @@ class AutopilotEngine {
       : createMissionCampaignAdapters;
   }
 
-  buildMissionCampaignAdapters(input = {}) {
-    const store = Object.prototype.hasOwnProperty.call(input, 'missionCampaignStore')
-      ? input.missionCampaignStore
-      : this.missionCampaignStore;
-    const grant = Object.prototype.hasOwnProperty.call(input, 'missionCampaignGrant')
-      ? input.missionCampaignGrant
-      : this.missionCampaignGrant;
-    const extra = isPlainObject(input.missionCampaignAdapterOptions)
-      ? input.missionCampaignAdapterOptions
-      : this.missionCampaignAdapterOptions;
+  // Constructor-owned adapters only. Free-form runtime input cannot replace
+  // the store or factory; grant_ref is taken from the sealed campaign contract.
+  buildMissionCampaignAdapters({ grant_ref: grantRef = null } = {}) {
+    const store = this.missionCampaignStore;
+    const grant = this.missionCampaignGrant;
+    const extra = this.missionCampaignAdapterOptions;
     const hasAtomicStore = store !== null
       && typeof store === 'object'
       && typeof store.load === 'function'
       && typeof store.save === 'function';
-    if (!hasAtomicStore && grant === null && Object.keys(extra).length === 0) {
+    const hasGrantRef = typeof grantRef === 'string' && /^[0-9a-f]{64}$/.test(grantRef);
+    if (!hasAtomicStore && grant === null && !hasGrantRef && Object.keys(extra).length === 0) {
       return null;
     }
     return this.missionAdapterFactory({
       ...extra,
       store: hasAtomicStore ? store : undefined,
       grant: isPlainObject(grant) ? grant : (isPlainObject(extra.grant) ? extra.grant : grant),
+      grant_ref: hasGrantRef
+        ? grantRef
+        : (typeof extra.grant_ref === 'string' ? extra.grant_ref : undefined),
     });
+  }
+
+  readCampaignMissionGrantRef(contractPath, cwd) {
+    if (typeof contractPath !== 'string' || contractPath.length === 0) return null;
+    const absolute = path.isAbsolute(contractPath)
+      ? contractPath
+      : path.resolve(cwd || this.cwd, contractPath);
+    let value;
+    try {
+      value = JSON.parse(fs.readFileSync(absolute, 'utf8'));
+    } catch (_error) {
+      return null;
+    }
+    if (!isPlainObject(value)) return null;
+    const ref = value.mission_grant_ref;
+    return typeof ref === 'string' && /^[0-9a-f]{64}$/.test(ref) ? ref : null;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -3540,8 +3572,10 @@ class AutopilotEngine {
       let intake;
       try {
         // Resolve project Mission enforcement mode. Enforce mode requires a
-        // trusted atomic Mission state store before any implementation
-        // dispatch; missing store fails closed here rather than after spend.
+        // trusted atomic Mission state store and the sealed campaign's
+        // mission_grant_ref before any implementation dispatch; missing
+        // store/ref fails closed here rather than after spend. Runtime input
+        // cannot override the constructor's store/factory.
         let missionMode = 'off';
         try {
           missionMode = projectMissionMode(loopCwd);
@@ -3557,10 +3591,12 @@ class AutopilotEngine {
             steps: [],
           };
         }
+        const missionGrantRef = this.readCampaignMissionGrantRef(
+          input.campaignContract,
+          loopCwd,
+        );
         if (!intake && missionMode === 'enforce') {
-          const store = Object.prototype.hasOwnProperty.call(input, 'missionCampaignStore')
-            ? input.missionCampaignStore
-            : this.missionCampaignStore;
+          const store = this.missionCampaignStore;
           const hasAtomicStore = store !== null
             && typeof store === 'object'
             && typeof store.load === 'function'
@@ -3576,10 +3612,23 @@ class AutopilotEngine {
               },
               steps: [],
             };
+          } else if (typeof missionGrantRef !== 'string') {
+            intake = {
+              status: 'blocked',
+              reason: 'enforce-mode Mission campaign intake requires mission_grant_ref on the campaign contract',
+              rejection: {
+                owner: 'mission',
+                code: 'mission_grant_ref_required',
+                reason: 'sealed campaign contract must carry a content-bound mission_grant_ref under enforce mode',
+              },
+              steps: [],
+            };
           }
         }
         if (!intake) {
-          const missionAdapters = this.buildMissionCampaignAdapters(input);
+          const missionAdapters = this.buildMissionCampaignAdapters({
+            grant_ref: missionGrantRef,
+          });
           intake = this.campaignIntake({
             repo: loopCwd,
             contractPath: input.campaignContract,

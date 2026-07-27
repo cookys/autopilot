@@ -12,6 +12,7 @@ test_default_config() {
     assert_contains "$output" '"teardown_hook": ""' "default hook should be empty"
     assert_contains "$output" '"stale_reaper_age_days": 0' "default age should be 0"
     assert_contains "$output" '"reaper_scope": "marker-only"' "default scope should be marker-only"
+    assert_contains "$output" '"max_leaf_worktrees_per_root": 4' "default leaf budget should be 4"
     assert_contains "$output" '"source": "template"' "source should be template"
     
     echo "$output" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8"))' 2>/dev/null
@@ -78,6 +79,19 @@ test_json_node_parse() {
     assert_eq "0" "$parsed" "node should parse JSON and extract age"
 }
 
+test_leaf_budget_bounds() {
+    local config="$TEST_TMP/budget-config.md" output
+    echo '- max_leaf_worktrees_per_root: 12' > "$config"
+    output=$(WORKTREE_TEARDOWN_CONFIG_OVERRIDE="$config" bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh")
+    assert_contains "$output" '"max_leaf_worktrees_per_root": 12' "valid leaf budget should resolve"
+
+    for value in 0 33 banana; do
+        echo "- max_leaf_worktrees_per_root: $value" > "$config"
+        output=$(WORKTREE_TEARDOWN_CONFIG_OVERRIDE="$config" bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field max_leaf_worktrees_per_root)
+        assert_eq "4" "$output" "invalid leaf budget $value should fail closed"
+    done
+}
+
 # invoke all cases (depth-0 recorded deviation: author omitted invocations)
 test_default_config
 test_field_age
@@ -86,4 +100,5 @@ test_config_override
 test_garbage_age_fallback
 test_override_field_query
 test_json_node_parse
+test_leaf_budget_bounds
 finalize_test

@@ -17,6 +17,7 @@ build artifacts or named Docker volumes inside hetero worktrees.
 - teardown_hook:
 - stale_reaper_age_days: 0
 - reaper_scope: marker-only
+- max_leaf_worktrees_per_root: 4
 
 ## Field reference
 
@@ -25,6 +26,7 @@ build artifacts or named Docker volumes inside hetero worktrees.
 | `teardown_hook` | path (empty = none) | Project script invoked as `timeout 120 <hook> <worktree_path>` **before** `git worktree remove --force` on the success path and on `--gc`. Must realpath-resolve **inside the consuming repo root**, be a regular executable file. Outside-repo paths are refused (no override bypass). Hook failure/timeout is **fail-open** (remove still attempted). Not run from the INT/TERM abort trap. |
 | `stale_reaper_age_days` | non-negative integer | Age threshold for `dispatch-hetero.sh --gc`. **`0` = disabled** (default — the reaper logs and exits 0 without enumerating). Age is measured from the marker's `created_at` epoch, not filesystem mtime. Negative age (clock skew) is treated as eligible. |
 | `reaper_scope` | `marker-only` | Only worktrees bearing `$WT/.autopilot-worktree` are eligible for routine `--gc`. Unmarked recovery is a separate CLI escape hatch (`--gc --reap-unmarked --yes`, basename `hetero-*` only, still flock-gated). |
+| `max_leaf_worktrees_per_root` | integer `1..32` | Maximum simultaneously retained schema-2 worktrees for one managed root run. Invalid or missing values fail closed to `4`. Direct one-shot dispatches without inherited lineage are not budgeted. |
 
 ## Defaults & safe fallback
 
@@ -39,6 +41,7 @@ different uid inside the worktree.
 - teardown_hook: .claude/hooks/worktree-teardown.sh
 - stale_reaper_age_days: 3
 - reaper_scope: marker-only
+- max_leaf_worktrees_per_root: 4
 ```
 
 The hook receives the absolute worktree path as `$1` and should reclaim project-owned
@@ -50,4 +53,5 @@ resources (root-owned `target/`, named volumes, …) best-effort, then exit 0. S
 - Per-worktree liveness = `flock -n` on `$WT/.autopilot-worktree.lock` (no pid checks).
 - `--gc` never runs `git branch -D` (branch-delete only in the INT/TERM abort trap).
 - Global `--gc` serialization via `$TMPDIR/.autopilot-gc.lock`.
+- Managed leaf creation is serialized by `$GIT_COMMON_DIR/autopilot-worktree-budget.lock`.
 - Hook argv-exec only; `$WT` with control characters is refused.

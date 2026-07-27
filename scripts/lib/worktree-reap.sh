@@ -155,6 +155,89 @@ _wt_open_lock_fd() {
   return 0
 }
 
+# --- schema-2 ownership -------------------------------------------------------
+# Parse one flat marker into _WT_MARKER_* globals. Every required key must occur
+# exactly once and pass a narrow grammar; callers must treat any failure as
+# unknown ownership.
+_wt_read_schema2_marker() {
+  local marker="$1" key val fd fd_path
+  _WT_MARKER_CREATED_AT=""
+  _WT_MARKER_BRANCH=""
+  _WT_MARKER_BASE_SHA=""
+  _WT_MARKER_RUN_ID=""
+  _WT_MARKER_ROOT_RUN_ID=""
+  _WT_MARKER_LOOP_ID=""
+  [ -f "$marker" ] && [ ! -L "$marker" ] && [ -O "$marker" ] || return 1
+  exec {fd}<"$marker" || return 1
+  fd_path="/proc/$$/fd/$fd"
+  [ -e "$fd_path" ] || fd_path="/dev/fd/$fd"
+  if [ ! -f "$fd_path" ] || [ ! -O "$fd_path" ] || ! [ "$fd_path" -ef "$marker" ]; then
+    exec {fd}>&-
+    return 1
+  fi
+
+  for key in created_at branch base_sha run_id root_run_id loop_id schema; do
+    if [ "$(grep -c "^${key}=" "$fd_path" 2>/dev/null)" -ne 1 ]; then
+      exec {fd}>&-
+      return 1
+    fi
+  done
+  if [ "$(wc -l < "$fd_path" | tr -d ' ')" -ne 7 ]; then
+    exec {fd}>&-
+    return 1
+  fi
+
+  val="$(sed -n 's/^schema=//p' "$fd_path")"
+  _WT_MARKER_CREATED_AT="$(sed -n 's/^created_at=//p' "$fd_path")"
+  _WT_MARKER_BRANCH="$(sed -n 's/^branch=//p' "$fd_path")"
+  _WT_MARKER_BASE_SHA="$(sed -n 's/^base_sha=//p' "$fd_path")"
+  _WT_MARKER_RUN_ID="$(sed -n 's/^run_id=//p' "$fd_path")"
+  _WT_MARKER_ROOT_RUN_ID="$(sed -n 's/^root_run_id=//p' "$fd_path")"
+  _WT_MARKER_LOOP_ID="$(sed -n 's/^loop_id=//p' "$fd_path")"
+  if ! [ "$fd_path" -ef "$marker" ]; then
+    exec {fd}>&-
+    return 1
+  fi
+  exec {fd}>&-
+
+  [ "$val" = "2" ] || return 1
+  [[ "$_WT_MARKER_CREATED_AT" =~ ^[0-9]+$ ]] || return 1
+  [[ "$_WT_MARKER_BASE_SHA" =~ ^[0-9a-f]{40,64}$ ]] || return 1
+  [[ "$_WT_MARKER_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  [[ "$_WT_MARKER_ROOT_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  [[ "$_WT_MARKER_LOOP_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  git check-ref-format --branch "$_WT_MARKER_BRANCH" >/dev/null 2>&1 || return 1
+  return 0
+}
+
+_wt_resolve_common_dir() {
+  local repo="${1:-.}" raw
+  raw="$(git -C "$repo" rev-parse --git-common-dir 2>/dev/null)" || return 1
+  case "$raw" in
+    /*) realpath -e "$raw" 2>/dev/null ;;
+    *) realpath -e "$repo/$raw" 2>/dev/null ;;
+  esac
+}
+
+_wt_is_registered_path() {
+  local repo="$1" expected="$2" line list
+  _WT_REGISTRATION_ERROR=0
+  list="$(git -C "$repo" worktree list --porcelain 2>/dev/null)" || {
+    _WT_REGISTRATION_ERROR=1
+    return 2
+  }
+  while IFS= read -r line; do
+    [ "${line#worktree }" = "$expected" ] && return 0
+  done < <(printf '%s\n' "$list" | sed -n '/^worktree /p')
+  return 1
+}
+
+_wt_is_clean() {
+  local wt="$1" status
+  status="$(git -C "$wt" status --porcelain=v1 2>/dev/null)" || return 1
+  [ -z "$status" ]
+}
+
 # --- _wt_is_live --------------------------------------------------------------
 # Atomic ownership probe via flock -n on $WT/.autopilot-worktree.lock.
 # Side effect on "owned" (dead owner): sets _WT_PROBE_FD to the held probe fd

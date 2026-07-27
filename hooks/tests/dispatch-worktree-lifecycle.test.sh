@@ -102,6 +102,12 @@ for index in 1 2 3 4; do
   assert_neq "$worktree" "" "sequential leaf $index reports its retained worktree"
   assert_file_exists "$worktree/.autopilot-worktree.lock" \
     "sequential leaf $index has a lifetime lock"
+  assert_contains "$(cat "$worktree/.autopilot-worktree")" "schema=2" \
+    "sequential leaf $index publishes a schema-2 marker"
+  assert_contains "$(cat "$worktree/.autopilot-worktree")" "root_run_id=$ROOT_RUN_ID" \
+    "sequential leaf $index records exact root lineage"
+  assert_contains "$(cat "$worktree/.autopilot-worktree")" "run_id=wlb-sequential-$index" \
+    "sequential leaf $index records exact run lineage"
   exec {held_fd}>>"$worktree/.autopilot-worktree.lock"
   flock -x "$held_fd"
   SEQ_LOCK_FDS+=("$held_fd")
@@ -124,6 +130,16 @@ assert_contains "$SEQ_FIFTH_TEXT" '"status": "precondition_failed"' \
   "RED: fifth leaf reports precondition failure"
 assert_contains "$SEQ_FIFTH_TEXT" '"resource_budget"' \
   "RED: fifth leaf names the worktree resource budget"
+printf '%s\n' "$SEQ_FIFTH_TEXT" | tail -n 1 | node -e '
+const value = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (value.status !== "precondition_failed"
+    || value.run_id !== "wlb-sequential-5"
+    || value.resource_budget.resource !== "leaf_worktrees"
+    || value.resource_budget.count !== 4
+    || value.resource_budget.limit !== 4) process.exit(1);
+'
+assert_exit_code "$?" "0" \
+  "budget rejection is parseable JSON with exact machine-readable details"
 FIFTH_REF="$(
   git -C "$SEQ_REPO" rev-parse --verify --quiet \
     refs/heads/hetero/wlb-sequential-5 2>/dev/null || true
@@ -214,6 +230,92 @@ assert_eq "$budget_rejected" "4" \
 assert_eq "$unexpected" "0" "concurrent fixture has no unrelated failures"
 assert_eq "$(linked_worktree_count "$CONCURRENT_REPO")" "4" \
   "RED: concurrent root retains exactly four registered leaves"
+
+# Crash-window polarity: an exact pending record makes an add-before-marker
+# worktree attributable. A dead, clean, unmoved artifact is reclaimed before
+# the replacement leaf is admitted. An unmarked worktree without a record is
+# not ownership evidence and must survive.
+RECOVERY_REPO="$TEST_TMP/recovery-repo"
+init_repo "$RECOVERY_REPO"
+RECOVERY_BASE="$(git -C "$RECOVERY_REPO" rev-parse HEAD)"
+RECOVERY_COMMON="$(git -C "$RECOVERY_REPO" rev-parse --path-format=absolute --git-common-dir)"
+RECOVERY_PENDING_DIR="$RECOVERY_COMMON/autopilot-worktree-creation"
+mkdir -p "$RECOVERY_PENDING_DIR"
+
+CRASH_WT="$TEST_TMP/recovery-crash-window"
+CRASH_BRANCH="wlb/recovery-crash"
+git -C "$RECOVERY_REPO" worktree add -q -b "$CRASH_BRANCH" "$CRASH_WT" develop
+: > "$CRASH_WT/.autopilot-worktree.lock"
+CRASH_RECORD="$RECOVERY_PENDING_DIR/recovery-crash.json"
+printf \
+  '{"schema":1,"root_run_id":"%s","run_id":"%s","loop_id":"%s","branch":"%s","base_sha":"%s","planned_path":"%s"}\n' \
+  "$ROOT_RUN_ID" "recovery-crash" "recovery-loop" "$CRASH_BRANCH" \
+  "$RECOVERY_BASE" "$CRASH_WT" > "$CRASH_RECORD"
+
+UNOWNED_WT="$TEST_TMP/recovery-unowned"
+git -C "$RECOVERY_REPO" worktree add -q -b "wlb/recovery-unowned" "$UNOWNED_WT" develop
+
+CONFLICT_WT="$TEST_TMP/recovery-marker-conflict"
+CONFLICT_BRANCH="wlb/recovery-marker-conflict"
+git -C "$RECOVERY_REPO" worktree add -q -b "$CONFLICT_BRANCH" "$CONFLICT_WT" develop
+printf 'created_at=%s\nbranch=%s\nschema=1\n' \
+  "$(date +%s)" "$CONFLICT_BRANCH" > "$CONFLICT_WT/.autopilot-worktree"
+: > "$CONFLICT_WT/.autopilot-worktree.lock"
+CONFLICT_RECORD="$RECOVERY_PENDING_DIR/recovery-marker-conflict.json"
+printf \
+  '{"schema":1,"root_run_id":"%s","run_id":"%s","loop_id":"%s","branch":"%s","base_sha":"%s","planned_path":"%s"}\n' \
+  "$ROOT_RUN_ID" "recovery-conflict" "recovery-loop" "$CONFLICT_BRANCH" \
+  "$RECOVERY_BASE" "$CONFLICT_WT" > "$CONFLICT_RECORD"
+
+MISMATCH_WT="$TEST_TMP/recovery-identity-mismatch"
+MISMATCH_BRANCH="wlb/recovery-identity-mismatch"
+git -C "$RECOVERY_REPO" worktree add -q -b "$MISMATCH_BRANCH" "$MISMATCH_WT" develop
+{
+  printf 'created_at=%s\n' "$(date +%s)"
+  printf 'branch=%s\n' "wlb/not-the-checked-out-branch"
+  printf 'base_sha=%s\n' "$RECOVERY_BASE"
+  printf 'run_id=%s\n' "recovery-mismatch"
+  printf 'root_run_id=%s\n' "$ROOT_RUN_ID"
+  printf 'loop_id=%s\n' "recovery-loop"
+  printf 'schema=2\n'
+} > "$MISMATCH_WT/.autopilot-worktree"
+: > "$MISMATCH_WT/.autopilot-worktree.lock"
+
+# Simulate a consuming repository's first-ever dispatch. Production must install
+# the common excludes before opening the add-before-marker crash window.
+: > "$RECOVERY_COMMON/info/exclude"
+
+RECOVERY_OUT="$TEST_TMP/recovery-dispatch.out"
+dispatch_leaf \
+  "$RECOVERY_REPO" \
+  "hetero/wlb-recovery-replacement" \
+  "wlb-recovery-replacement" \
+  "$STUB_AGY" >"$RECOVERY_OUT" 2>&1
+RECOVERY_RC=$?
+assert_exit_code "$RECOVERY_RC" "0" \
+  "replacement leaf is admitted after exact crash-window reconciliation"
+assert_contains "$(cat "$RECOVERY_OUT")" '"status": "committed"' \
+  "replacement leaf commits after reconciliation"
+assert_file_absent "$CRASH_RECORD" \
+  "reconciled pending record is removed"
+if git -C "$RECOVERY_REPO" worktree list --porcelain | grep -qxF "worktree $CRASH_WT"; then
+  fail "reconciled crash-window worktree remains registered"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+assert_eq "$(
+  git -C "$RECOVERY_REPO" rev-parse --verify --quiet "refs/heads/$CRASH_BRANCH" 2>/dev/null || true
+)" "" "exact unmoved crash-window branch is removed"
+assert_file_exists "$UNOWNED_WT/.git" \
+  "unmarked worktree without pending ownership survives reconciliation"
+assert_file_exists "$CONFLICT_RECORD" \
+  "pending record with a conflicting legacy marker is preserved"
+assert_file_exists "$CONFLICT_WT/.git" \
+  "legacy marker conflict is never treated as an absent-marker crash window"
+assert_file_exists "$MISMATCH_WT/.git" \
+  "schema-2 marker with mismatched checked-out branch is preserved"
+assert_contains "$(cat "$RECOVERY_COMMON/info/exclude")" ".autopilot-worktree.lock" \
+  "first dispatch installs bookkeeping exclusions before recovery"
 
 # Retained-state fixture inventory. P0 proves these states can be constructed
 # without claiming that the not-yet-implemented lifecycle scanner handles them.
@@ -330,6 +432,43 @@ CUSTOM_TIP="$(
 )"
 assert_eq "$CUSTOM_TIP" "$STATE_BASE" \
   "custom hetero branch fixture preserves its exact tip"
+
+STATE_RECONCILE_OUT="$TEST_TMP/state-reconcile.out"
+ORIGINAL_ROOT_RUN_ID="$ROOT_RUN_ID"
+ROOT_RUN_ID="$STATE_ROOT"
+dispatch_leaf \
+  "$STATE_REPO" \
+  "hetero/wlb-state-replacement" \
+  "wlb-state-replacement" \
+  "$STUB_AGY" >"$STATE_RECONCILE_OUT" 2>&1
+STATE_RECONCILE_RC=$?
+ROOT_RUN_ID="$ORIGINAL_ROOT_RUN_ID"
+assert_exit_code "$STATE_RECONCILE_RC" "2" \
+  "five preserved negative states exhaust the four-leaf budget"
+assert_contains "$(cat "$STATE_RECONCILE_OUT")" '"resource_budget"' \
+  "preserved negative states block replacement with a resource receipt"
+assert_file_absent "$CLEAN_WT/.git" \
+  "dead clean schema-2 worktree is reclaimed during occupancy reconciliation"
+assert_file_absent "$PENDING_WT/.git" \
+  "exact dead clean add-before-marker worktree is reclaimed"
+assert_file_absent "$PENDING_RECORD" \
+  "reconciled add-before-marker pending record is removed"
+assert_file_exists "$DIRTY_WT/.git" \
+  "dirty schema-2 worktree is preserved"
+assert_file_exists "$LIVE_WT/.git" \
+  "live schema-2 worktree is preserved"
+assert_file_exists "$UNSUPPORTED_WT/.git" \
+  "lock-unsupported schema-2 worktree is preserved"
+assert_file_exists "$MALFORMED_WT/.git" \
+  "malformed schema-2 worktree is preserved"
+assert_file_exists "$LEGACY_WT/.git" \
+  "legacy schema-1 worktree is preserved"
+assert_eq "$(
+  git -C "$STATE_REPO" rev-parse --verify --quiet refs/heads/wlb/state-pending 2>/dev/null || true
+)" "" "unmoved add-before-marker branch is removed"
+assert_eq "$(
+  git -C "$STATE_REPO" rev-parse --verify --quiet refs/heads/hetero/custom-p0 2>/dev/null || true
+)" "$CUSTOM_TIP" "normal schema-2 reclamation preserves the exact branch tip"
 
 if [ ! -x "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" ]; then
   printf '%s\n' \

@@ -300,10 +300,11 @@ try {
     mission_lineage_id: s0.mission_lineage_id,
     payload: { claim_id: a.receipt.claim_id, actual_usage: actualUsage },
   });
-  // Successor MUST agree on task_authority_id and policy_hash with the
-  // predecessor (conflicting lineage/policy binding fails closed).
+  // Successor MUST stay in the same mission_lineage_id and agree on
+  // task_authority_id and policy_hash with the predecessor (Finding 1 —
+  // conflicting lineage/policy binding fails closed; the lineage budget
+  // cannot be reopened under a new mission_lineage_id).
   const succ = m.createMissionState(makeContract({
-    mission_lineage_id: 'lineage-v1-' + m.sha256('SUCC'),
     lineage_binding: {
       task_authority_id: s0.task_authority_id,
       root_run_id: 'root-succ',
@@ -312,6 +313,9 @@ try {
     },
   }), { inheritFrom: r.state });
   check('successor-inherits-tool-calls', succ.axes.tool_calls.durable_consumed === 5);
+  check('successor-inherits-lineage', succ.mission_lineage_id === s0.mission_lineage_id);
+  check('successor-inherits-task-authority', succ.task_authority_id === s0.task_authority_id);
+  check('successor-inherits-policy-hash', succ.policy_hash === s0.policy_hash);
 }
 
 for (const line of lines) console.log(line);
@@ -321,7 +325,9 @@ NODE
 for id in \
   replay-same-claim-id replay-no-double-reserve double-release-second-rejected \
   binding-mismatch-rejected forgery-no-verifier forgery-plain-object-verifier \
-  forgery-verifier-rejects terminal-reconcile-replay-noop successor-inherits-tool-calls
+  forgery-verifier-rejects terminal-reconcile-replay-noop successor-inherits-tool-calls \
+  successor-inherits-lineage successor-inherits-task-authority \
+  successor-inherits-policy-hash
 do
   assert_contains "$NEG_OUT" "$id	PASS" "RED: generic negative $id must hold"
 done

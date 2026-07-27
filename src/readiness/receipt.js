@@ -236,7 +236,7 @@ function selectedCandidate(source, fallbackOrder, family, tuple) {
 
 function buildReceiptSeat(seat, policy, now) {
   const decision = evaluate(seat.tuple, seat.observations, now);
-  const fallbacks = seat.fallbacks.map((fallback, index) => {
+  const evaluatedFallbacks = seat.fallbacks.map((fallback, index) => {
     const fallbackDecision = evaluate(fallback.tuple, fallback.observations, now);
     const allowed = familyAllowed(seat.family, fallback.family, policy);
     const eligible = allowed && fallbackDecision.usable_now;
@@ -255,7 +255,7 @@ function buildReceiptSeat(seat, policy, now) {
   if (decision.usable_now) {
     selected = selectedCandidate('primary', null, seat.family, decision.tuple);
   } else if (decision.blocking_reasons.length > 0) {
-    const firstEligible = fallbacks.find((fallback) => fallback.eligible);
+    const firstEligible = evaluatedFallbacks.find((fallback) => fallback.eligible);
     if (firstEligible) {
       selected = selectedCandidate(
         'fallback',
@@ -269,6 +269,7 @@ function buildReceiptSeat(seat, policy, now) {
   const status = selected
     ? 'usable'
     : (decision.probe_required ? 'probe-needed' : 'blocked');
+  const eligibleFallbacks = evaluatedFallbacks.filter((fallback) => fallback.eligible);
   const failingAxes = AXES
     .filter((axis) => decision.axes[axis].status !== 'ready')
     .map((axis) => ({
@@ -282,7 +283,7 @@ function buildReceiptSeat(seat, policy, now) {
     required: seat.required,
     family: seat.family,
     decision,
-    fallbacks,
+    fallbacks: eligibleFallbacks,
     selected,
     status,
     failing_axes: failingAxes,

@@ -268,11 +268,13 @@ assert.deepStrictEqual(
     row.exclusion_reason,
   ]),
   [
-    [1, false, 'family_constraint'],
-    [2, false, 'not_usable'],
     [3, true, null],
     [4, true, null],
   ],
+);
+assert.deepStrictEqual(
+  fallbackSeat.fallbacks.map((row) => row.decision.tuple.model),
+  ['MiniMax-M3', 'Qwen3.8-Max-Preview'],
 );
 const fallbackResult = consumeProviderReadinessReceipt(fallbackReceipt, {
   roster: fallbackRoster,

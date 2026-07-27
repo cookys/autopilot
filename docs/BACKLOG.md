@@ -39,6 +39,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Readiness gate 的 session-local qualification provider
+- **Trigger**: `ICC P4` 或 Mission integration 要把 `ProviderReadinessReceipt` 接到 effectful pre-spend gate 之前；具體而言，只要該 gate 需要 implementer、verification-author 或 QC seat 從 `probe-needed` 合法升到 `usable`，此項就必須先完成。
+- **Context**: PRO P4 嚴格保持三軸獨立：transport/live probe 不得推論 role qualification，而 disk-backed `engine-scorecard.js` 依治理規則只是 `untrusted_telemetry`。目前 reviewer 可由既有 live qualifier 取得 session-local authority，但 implementer／verification-author 尚無可自動升格的 role corpus/verifier，QC 也需明確綁定 reviewer-role authority。正規修法是新增 host-injected、不可序列化或外部簽章的 exact-tuple qualification provider，讓 readiness 只消費 authority-bound observation；不得把 provisional scorecard row 或 probe 成功當 qualification。
+- **Effort**: L（含 implementer／verification-author role eval、QC reviewer-role mapping、ICC intake red/green）
+- **Source**: PRO P4 Heto generation 1，GPT-5.6 Sol finding R2/R6；candidate `d0a05f7`
+
 ### CLAUDE.md 逼近 40k 硬上限（餘裕 54 bytes）— 每個新 script 都要加 row，下一個必撞
 - **Trigger**: 下次任何人要在 Scripts inventory 加 row 時（幾乎等於「下一個新 script」）；或 `check-claude-md-inventory.js` 再次在 CI 變紅時。
 - **Context**: v2.32.57 才剛把 CLAUDE.md 從 81KB 瘦到 38.5KB 並加上 40000 bytes 硬 cap。三週後（v2.32.58）就回到 **39946/40000，只剩 54 bytes 餘裕** —— 因為兩條並行管線各加一個 inventory row 就直接撞破（40223），CI 紅。這次靠把新 row 縮回索引形態（783→~420 bytes）救回，但那是一次性的：**inventory 是單調成長的（每個新 script 一列），而 cap 是固定的**，所以這個閘會週期性地在「兩人同時加 row」時炸掉，且炸的是無辜的第二個 push 者。可能修法：(a) 把 inventory 拆成 `references/scripts-inventory.md` 由 CLAUDE.md 單行引用（CLAUDE.md 回到真正的 session-entry 內容）；(b) cap 改成隨 script 數線性放寬並保留 per-line cap；(c) 維持現狀但把 Row shape rule 的字數上限機械化（目前只有 per-line 800 bytes，太寬）。**(a) 最貼近 40k 存在的理由**（harness 每 session 吞它），但要確認被引用的 reference 不會反而每 session 都被載入。

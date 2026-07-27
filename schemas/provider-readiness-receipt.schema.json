@@ -184,16 +184,8 @@
       "properties": {
         "order": { "type": "integer", "minimum": 1 },
         "family": { "$ref": "#/$defs/code" },
-        "eligible": { "type": "boolean" },
-        "exclusion_reason": {
-          "oneOf": [
-            { "type": "null" },
-            {
-              "type": "string",
-              "enum": ["family_constraint", "not_usable"]
-            }
-          ]
-        },
+        "eligible": { "type": "boolean", "const": true },
+        "exclusion_reason": { "type": "null" },
         "decision": { "$ref": "#/$defs/decision" }
       },
       "additionalProperties": false

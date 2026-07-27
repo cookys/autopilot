@@ -418,6 +418,13 @@ function validateMissionContract(contract) {
 
   // lineage_binding
   const lb = requireObject(contract.lineage_binding, 'contract.lineage_binding');
+  const lbKeys = Reflect.ownKeys(lb);
+  const LB_ALLOWED = new Set(['task_authority_id', 'root_run_id', 'policy_hash', 'successor_inherits_durable_consumed']);
+  for (const k of lbKeys) {
+    if (typeof k !== 'string' || !LB_ALLOWED.has(k)) {
+      fail(`lineage_binding contains unsupported key "${String(k)}"`, 'LINEAGE_BINDING_UNSUPPORTED_KEY');
+    }
+  }
   requireSha256(lb.task_authority_id, 'lineage_binding.task_authority_id');
   requireString(lb.root_run_id, 'lineage_binding.root_run_id', 1, 256);
   requireSha256(lb.policy_hash, 'lineage_binding.policy_hash');
@@ -463,6 +470,33 @@ function computeProvenance(contract) {
   return provenance;
 }
 
+const LINEAGE_BINDING_CLOSED_KEYS = Object.freeze([
+  'task_authority_id', 'root_run_id', 'policy_hash', 'successor_inherits_durable_consumed',
+]);
+
+function normalizeLineageBinding(lb, label) {
+  const obj = requireObject(lb, label || 'lineage_binding');
+  const keys = Reflect.ownKeys(obj);
+  for (const k of keys) {
+    if (typeof k !== 'string' || !LINEAGE_BINDING_CLOSED_KEYS.includes(k)) {
+      fail(`${label || 'lineage_binding'} contains unsupported key "${String(k)}"`, 'LINEAGE_BINDING_UNSUPPORTED_KEY');
+    }
+  }
+  requireSha256(obj.task_authority_id, `${label || 'lineage_binding'}.task_authority_id`);
+  requireString(obj.root_run_id, `${label || 'lineage_binding'}.root_run_id`, 1, 256);
+  requireSha256(obj.policy_hash, `${label || 'lineage_binding'}.policy_hash`);
+  if (obj.successor_inherits_durable_consumed !== undefined) {
+    requireBoolean(obj.successor_inherits_durable_consumed,
+      `${label || 'lineage_binding'}.successor_inherits_durable_consumed`);
+  }
+  return Object.freeze({
+    task_authority_id: obj.task_authority_id,
+    root_run_id: obj.root_run_id,
+    policy_hash: obj.policy_hash,
+    successor_inherits_durable_consumed: obj.successor_inherits_durable_consumed === true,
+  });
+}
+
 // `computeConfigDigest` produces a stable, content-bound digest of the
 // normalized operational config. The digest is computed over the COMPLETE
 // set of fields affecting future admission/control, with the cross-field
@@ -501,7 +535,7 @@ function computeConfigDigest(contract, provenance) {
     axes: perAxis,
     grant_contract: contract.grant_contract,
     control_contract: contract.control_contract,
-    lineage_binding: contract.lineage_binding,
+    lineage_binding: normalizeLineageBinding(contract.lineage_binding, 'config.lineage_binding'),
     config_provenance: provenance,
   }));
 }
@@ -781,6 +815,7 @@ function stateHash(state) {
     mission_lineage_id: state.mission_lineage_id,
     task_authority_id: state.task_authority_id,
     policy_hash: state.policy_hash,
+    root_run_id: state.root_run_id,
     enforcement_mode: state.enforcement_mode,
     state: state.state,
     closure_ratio: state.closure_ratio,
@@ -873,9 +908,13 @@ function reduceMissionState(state, event) {
     if (!payload || payload.event === undefined) {
       fail('control_event requires an adapter-produced event payload', 'MISSION_CONTROL_UNAUTHENTICATED');
     }
-    const payloadKeys = Object.keys(payload);
-    if (payloadKeys.length !== 1 || payloadKeys[0] !== 'event') {
+    const ownKeys = Reflect.ownKeys(payload);
+    if (ownKeys.length !== 1 || ownKeys[0] !== 'event') {
       fail('control_event payload must be a closed shape containing exactly the "event" property', 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED');
+    }
+    const eventDesc = Object.getOwnPropertyDescriptor(payload, 'event');
+    if (!eventDesc || !eventDesc.enumerable || typeof eventDesc.get === 'function' || typeof eventDesc.set === 'function') {
+      fail('control_event payload "event" must be an enumerable data property', 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED');
     }
     const consume = consumeAuthenticatedControlEvent(payload.event);
     if (!consume || consume.ok !== true || !consume.event) {
@@ -2283,12 +2322,22 @@ function restoreProjection(projection) {
     !== !!projection.successor_inherits_durable_consumed) {
     fail('config_snapshot lineage_binding.successor_inherits_durable_consumed does not match projection', 'PROJECTION_BINDING_MISMATCH');
   }
-  // Cross-field lineage/task/policy binding check.
-  if (reconstructedConfig.lineage_binding.task_authority_id !== reconstructedConfig.task_authority_id) {
+  // Cross-field lineage/task/policy binding check. Normalize the
+  // lineage_binding to the closed 4-field shape; reject missing, unknown,
+  // wrong-type, or altered fields.
+  const normalizedLB = normalizeLineageBinding(
+    reconstructedConfig.lineage_binding, 'config_snapshot.lineage_binding');
+  if (normalizedLB.task_authority_id !== reconstructedConfig.task_authority_id) {
     fail('config lineage_binding.task_authority_id does not match task_authority_id', 'PROJECTION_BINDING_MISMATCH');
   }
-  if (reconstructedConfig.lineage_binding.policy_hash !== reconstructedConfig.policy_hash) {
+  if (normalizedLB.policy_hash !== reconstructedConfig.policy_hash) {
     fail('config lineage_binding.policy_hash does not match policy_hash', 'PROJECTION_BINDING_MISMATCH');
+  }
+  if (normalizedLB.task_authority_id !== projection.task_authority_id) {
+    fail('config lineage_binding.task_authority_id does not match projection.task_authority_id', 'PROJECTION_BINDING_MISMATCH');
+  }
+  if (normalizedLB.policy_hash !== projection.policy_hash) {
+    fail('config lineage_binding.policy_hash does not match projection.policy_hash', 'PROJECTION_BINDING_MISMATCH');
   }
   const reconstructedProvenance = configSnapshot.provenance || {};
   const expectedConfigDigest = computeConfigDigest(reconstructedConfig, reconstructedProvenance);
@@ -2345,7 +2394,7 @@ function restoreProjection(projection) {
     policy_hash: projection.policy_hash,
     repo_identity: projection.frozen_intent.objective.slice(0, 1024),
     contract_id: `mission-v1-${sha256(projection.mission_lineage_id)}`,
-    root_run_id: 'projection-restore',
+    root_run_id: normalizedLB.root_run_id,
     enforcement_mode: projection.enforcement_mode || 'shadow',
     state: snapshot.machine_state || 'DRAFT',
     closure_ratio: projection.closure_ratio !== undefined

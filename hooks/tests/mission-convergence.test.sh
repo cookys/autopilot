@@ -1171,7 +1171,12 @@ if (createMissionState && reduceMissionState && stateHash) {
       axes: tamperedBinding.config_snapshot.axes,
       grant_contract: tamperedBinding.config_snapshot.grant_contract,
       control_contract: tamperedBinding.config_snapshot.control_contract,
-      lineage_binding: tamperedBinding.config_snapshot.lineage_binding,
+      lineage_binding: {
+        task_authority_id: tamperedBinding.config_snapshot.lineage_binding.task_authority_id,
+        root_run_id: tamperedBinding.config_snapshot.lineage_binding.root_run_id,
+        policy_hash: tamperedBinding.config_snapshot.lineage_binding.policy_hash,
+        successor_inherits_durable_consumed: tamperedBinding.config_snapshot.lineage_binding.successor_inherits_durable_consumed === true,
+      },
     }, tamperedBinding.config_snapshot.provenance);
     tamperedBinding.config_digest = newCfgDigest;
     // Recompute only the outer projection_digest to pass the outer
@@ -1213,7 +1218,12 @@ if (createMissionState && reduceMissionState && stateHash) {
       axes: tamperedX.config_snapshot.axes,
       grant_contract: tamperedX.config_snapshot.grant_contract,
       control_contract: tamperedX.config_snapshot.control_contract,
-      lineage_binding: tamperedX.config_snapshot.lineage_binding,
+      lineage_binding: {
+        task_authority_id: tamperedX.config_snapshot.lineage_binding.task_authority_id,
+        root_run_id: tamperedX.config_snapshot.lineage_binding.root_run_id,
+        policy_hash: tamperedX.config_snapshot.lineage_binding.policy_hash,
+        successor_inherits_durable_consumed: tamperedX.config_snapshot.lineage_binding.successor_inherits_durable_consumed === true,
+      },
     }, tamperedX.config_snapshot.provenance);
     tamperedX.config_digest = newCfgDigestX;
     tamperedX.projection_digest = m.sha256({ ...tamperedX, projection_digest: undefined });
@@ -1447,7 +1457,12 @@ if (createMissionState && reduceMissionState && stateHash) {
         axes: t.config_snapshot.axes,
         grant_contract: t.config_snapshot.grant_contract,
         control_contract: t.config_snapshot.control_contract,
-        lineage_binding: t.config_snapshot.lineage_binding,
+        lineage_binding: {
+          task_authority_id: t.config_snapshot.lineage_binding.task_authority_id,
+          root_run_id: t.config_snapshot.lineage_binding.root_run_id,
+          policy_hash: t.config_snapshot.lineage_binding.policy_hash,
+          successor_inherits_durable_consumed: t.config_snapshot.lineage_binding.successor_inherits_durable_consumed === true,
+        },
       }, t.config_snapshot.provenance);
       t.projection_digest = m.sha256({ ...t, projection_digest: undefined });
       try { restoreProjection(t); return null; } catch (e) { return e.code; }
@@ -1482,6 +1497,76 @@ if (createMissionState && reduceMissionState && stateHash) {
     });
     console.log(`restore-rejects-lineage-binding-policy-hash-mismatch\t${
       errLineageBinding === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
+
+    const errLBTaskAuth = tamperAndRestore((t) => {
+      t.config_snapshot.lineage_binding.task_authority_id = 'a'.repeat(64);
+    });
+    console.log(`restore-rejects-lineage-binding-task-authority-mismatch\t${
+      errLBTaskAuth === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
+
+    const errLBRootRun = tamperAndRestore((t) => {
+      t.config_snapshot.lineage_binding.root_run_id = 'tampered-root';
+    });
+    console.log(`restore-rejects-lineage-binding-root-run-id-mismatch\t${
+      errLBRootRun === 'PROJECTION_HASH_MISMATCH' ? 'PASS' : 'FAIL'}`);
+
+    const errLBSucc = tamperAndRestore((t) => {
+      t.config_snapshot.lineage_binding.successor_inherits_durable_consumed = false;
+    });
+    console.log(`restore-rejects-lineage-binding-successor-flag-mismatch\t${
+      errLBSucc === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── Fix #2: symbol-key and non-enumerable-key alias attacks ────────
+    const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
+    const symAdapter = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const sSym = createMissionState(makeContract());
+    const symCanonical = symAdapter.acceptEvent({
+      mission_lineage_id: sSym.mission_lineage_id,
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'sym-attack',
+    });
+    // Symbol-key aliasing the canonical event
+    let symRejected = false;
+    let symErrCode = null;
+    try {
+      const symPayload = { event: symCanonical };
+      symPayload[Symbol('alias')] = symCanonical;
+      reduceMissionState(sSym, {
+        event_type: 'control_event', sequence: 1,
+        mission_lineage_id: sSym.mission_lineage_id,
+        payload: symPayload,
+      });
+    } catch (e) { symRejected = true; symErrCode = e.code; }
+    console.log(`control-payload-symbol-key-alias-rejects\t${
+      symRejected && symErrCode === 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED' ? 'PASS' : 'FAIL'}`);
+    // Non-enumerable key aliasing the canonical event
+    let nonEnumRejected = false;
+    let nonEnumErrCode = null;
+    try {
+      const nonEnumPayload = { event: symCanonical };
+      Object.defineProperty(nonEnumPayload, 'hidden', {
+        value: symCanonical, enumerable: false, writable: true, configurable: true,
+      });
+      reduceMissionState(sSym, {
+        event_type: 'control_event', sequence: 1,
+        mission_lineage_id: sSym.mission_lineage_id,
+        payload: nonEnumPayload,
+      });
+    } catch (e) { nonEnumRejected = true; nonEnumErrCode = e.code; }
+    console.log(`control-payload-non-enumerable-alias-rejects\t${
+      nonEnumRejected && nonEnumErrCode === 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED' ? 'PASS' : 'FAIL'}`);
+    // The canonical event must still be unconsumed: a legitimate exact
+    // payload can still use it once.
+    const legitResult = reduceMissionState(sSym, {
+      event_type: 'control_event', sequence: 1,
+      mission_lineage_id: sSym.mission_lineage_id,
+      payload: { event: symCanonical },
+    });
+    console.log(`control-payload-canonical-still-unconsumed\t${
+      legitResult && legitResult.state ? 'PASS' : 'FAIL'}`);
   }
 }
 NODE
@@ -1587,7 +1672,13 @@ for id in \
   source-ref-closed-shape-malformed-rejects \
   restore-rejects-lineage-id-mismatch restore-rejects-task-authority-mismatch \
   restore-rejects-policy-hash-mismatch restore-rejects-enforcement-mode-mismatch \
-  restore-rejects-lineage-binding-policy-hash-mismatch
+  restore-rejects-lineage-binding-policy-hash-mismatch \
+  restore-rejects-lineage-binding-task-authority-mismatch \
+  restore-rejects-lineage-binding-root-run-id-mismatch \
+  restore-rejects-lineage-binding-successor-flag-mismatch \
+  control-payload-symbol-key-alias-rejects \
+  control-payload-non-enumerable-alias-rejects \
+  control-payload-canonical-still-unconsumed
 do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done

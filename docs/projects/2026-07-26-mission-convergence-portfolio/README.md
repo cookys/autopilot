@@ -2,7 +2,7 @@
 
 > Status: In progress
 >
-> Progress: 7/34 phases READY
+> Progress: 8/34 phases READY
 >
 > Target: v2.34.0
 >
@@ -58,7 +58,7 @@ blocking finding. A transport failure never counts as a verdict.
 | 4 | ICC P3 routing + transport envelope + status | ICC P2 | READY | `dba2668..d2020dc` | [icc-p3.md](reviews/icc-p3.md) |
 | 5 | PRO P1 pure readiness identity | ICC transport boundary | READY | `71f1594..e99b912` | [pro-p1.md](reviews/pro-p1.md) |
 | 6 | PRO P2 bounded probe coordinator | PRO P1 | READY | `55ec3f0..1edd145` | [pro-p2.md](reviews/pro-p2.md) |
-| 7 | PRO P4 readiness receipt + CLI | PRO P2 | Pending | pending | pending |
+| 7 | PRO P4 readiness receipt + CLI | PRO P2 | READY | `38da972..8f1daa3` | [pro-p4.md](reviews/pro-p4.md) |
 | 8 | WLB P0 RED lifecycle oracle | baseline | Pending | pending | pending |
 | 9 | WLB P1 marker + occupancy budget | WLB P0 | Pending | pending | pending |
 | 10 | WLB P2 lifecycle controller | WLB P1 | Pending | pending | pending |

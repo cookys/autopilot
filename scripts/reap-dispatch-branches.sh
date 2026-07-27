@@ -6,9 +6,9 @@ set -uo pipefail
 usage() {
   printf '%s\n' \
     'usage: reap-dispatch-branches.sh scan|check|reap [options]' \
-    '  shared: --repo <dir> --into <ref> --pattern <bash-ere>' \
+    '  shared: --repo <dir> --into <ref> --pattern <bash-ere> --inventory-file <json>' \
     '  check:  --ack <integration-candidate-branch>' \
-    '  reap:   --dry-run --yes --reap-superseded --bundle-dir <dir>' >&2
+    '  reap:   --dry-run --yes --reap-superseded --bundle-dir <dir> --ack-preserved <branch@tip>' >&2
   exit 2
 }
 
@@ -27,18 +27,22 @@ yes=0
 dry_run=0
 reap_superseded=0
 bundle_dir=""
+inventory_file=""
 declare -a extra_patterns=()
+declare -a preserve_ack_specs=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo) [ "$#" -ge 2 ] || usage; repo="$2"; shift 2 ;;
     --into) [ "$#" -ge 2 ] || usage; into="$2"; shift 2 ;;
     --pattern) [ "$#" -ge 2 ] || usage; extra_patterns+=("$2"); shift 2 ;;
+    --inventory-file) [ "$#" -ge 2 ] || usage; inventory_file="$2"; shift 2 ;;
     --ack) [ "$command_name" = check ] && [ "$#" -ge 2 ] || usage; ack_branch="$2"; shift 2 ;;
     --dry-run) [ "$command_name" = reap ] || usage; dry_run=1; shift ;;
     --yes) [ "$command_name" = reap ] || usage; yes=1; shift ;;
     --reap-superseded) [ "$command_name" = reap ] || usage; reap_superseded=1; shift ;;
     --bundle-dir) [ "$command_name" = reap ] && [ "$#" -ge 2 ] || usage; bundle_dir="$2"; shift 2 ;;
+    --ack-preserved) [ "$command_name" = reap ] && [ "$#" -ge 2 ] || usage; preserve_ack_specs+=("$2"); shift 2 ;;
     --help|-h) usage ;;
     *) usage ;;
   esac
@@ -46,6 +50,12 @@ done
 
 repo="$(cd "$repo" 2>/dev/null && pwd -P)" || die_env "repository directory is not readable"
 git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || die_env "not a git repository: $repo"
+common_raw="$(git -C "$repo" rev-parse --git-common-dir 2>/dev/null)" \
+  || die_env "cannot resolve git common dir"
+common_dir="$(cd "$repo" && cd "$common_raw" 2>/dev/null && pwd -P)" \
+  || die_env "cannot canonicalize git common dir"
+repo_identity="git-common-dir:$common_dir"
+disposition_dir="$common_dir/autopilot-branch-dispositions"
 case "$into" in
   refs/heads/*) into_name="${into#refs/heads/}" ;;
   refs/*) die_env "integration target must be an exact local branch: $into" ;;
@@ -74,6 +84,60 @@ declare -A round=() sibling_key=() canonical_for_tip=() is_maximal_candidate=()
 declare -A highest_round=() highest_name=() partition=()
 declare -A snapshot_tip=()
 declare -a local_branch_names=()
+declare -A inventory_expected=()
+declare -A inventory_preserve_ack=()
+declare -A inventory_reaped_bundle=()
+declare -a inventory_names=()
+declare -a recovered_reaped_names=()
+inventory_root_run_id=""
+inventory_digest=""
+
+recover_reaped_inventory() {
+  local branch="$1" expected="$2" key record recovered_bundle heads
+  local verifier object_format
+  key="$(
+    printf '%s\0%s\0%s\0' "$inventory_root_run_id" "$branch" "$expected" \
+      | sha256sum | awk '{print $1}'
+  )"
+  record="$disposition_dir/$key.json"
+  [ -f "$record" ] && [ ! -L "$record" ] || return 1
+  recovered_bundle="$(
+    node - "$record" "$repo_identity" "$inventory_root_run_id" \
+      "$branch" "$expected" "$inventory_digest" <<'NODE'
+const fs = require("fs");
+const [file, repoIdentity, rootRunId, branch, tip, inventoryDigest] =
+  process.argv.slice(2);
+const value = JSON.parse(fs.readFileSync(file, "utf8"));
+if (Object.keys(value).sort().join(",")
+      !== "acknowledged,branch,bundle,disposition,inventory_digest,recorded_at,repo_identity,root_run_id,schema,tip"
+    || value.schema !== 1 || value.repo_identity !== repoIdentity
+    || value.root_run_id !== rootRunId || value.branch !== branch
+    || value.tip !== tip || value.inventory_digest !== inventoryDigest
+    || value.disposition !== "reaped" || value.acknowledged !== false
+    || typeof value.bundle !== "string") process.exit(2);
+process.stdout.write(value.bundle);
+NODE
+  )" || return 1
+  [ -f "$recovered_bundle" ] && [ ! -L "$recovered_bundle" ] || return 1
+  git -C "$repo" bundle verify "$recovered_bundle" >/dev/null 2>&1 || return 1
+  heads="$(git -C "$repo" bundle list-heads "$recovered_bundle" 2>/dev/null)" \
+    || return 1
+  printf '%s\n' "$heads" \
+    | grep -Fqx "$expected refs/heads/$branch" || return 1
+  object_format="$(git -C "$repo" rev-parse --show-object-format 2>/dev/null)" \
+    || return 1
+  verifier="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-bundle-recovery.XXXXXX")" \
+    || return 1
+  if ! git init --bare -q --object-format="$object_format" "$verifier" \
+      || ! git --git-dir="$verifier" bundle unbundle "$recovered_bundle" \
+        >/dev/null 2>&1; then
+    rm -rf "$verifier"
+    return 1
+  fi
+  rm -rf "$verifier"
+  inventory_reaped_bundle["$branch"]="$recovered_bundle"
+  recovered_reaped_names+=("$branch")
+}
 
 initial_heads_snapshot=""
 check_heads_final=""
@@ -114,13 +178,187 @@ into_sha="${snapshot_tip[$into_name]:-}"
 [ -n "$into_sha" ] || die_env "integration target local branch does not resolve: $into_ref"
 git -C "$repo" cat-file -e "${into_sha}^{commit}" 2>/dev/null || die_env "integration target local branch is not a commit: $into_ref"
 
+if [ -n "$inventory_file" ]; then
+  inventory_file="$(realpath -e "$inventory_file" 2>/dev/null)" \
+    || die_env "exact inventory file is not readable"
+  [ -f "$inventory_file" ] && [ ! -L "$inventory_file" ] \
+    || die_env "exact inventory must be a regular file"
+  inventory_parse="$(mktemp "${TMPDIR:-/tmp}/autopilot-branch-inventory.XXXXXX")" \
+    || die_env "cannot create exact inventory parse file"
+  if ! node - "$inventory_file" > "$inventory_parse" <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const file = process.argv[2];
+const value = JSON.parse(fs.readFileSync(file, "utf8"));
+let repoIdentity;
+let rootRunId;
+let branches;
+if (value && value.schema === 1
+    && (Array.isArray(value.journal_branch_inventory) || Array.isArray(value.branch_inventory))
+    && typeof value.git_common_dir === "string"
+    && typeof value.root_run_id === "string") {
+  repoIdentity = `git-common-dir:${fs.realpathSync(value.git_common_dir)}`;
+  rootRunId = value.root_run_id;
+  const source = Array.isArray(value.journal_branch_inventory)
+    ? value.journal_branch_inventory : value.branch_inventory;
+  branches = source.map((item) => ({
+    name: item && item.branch,
+    tip: item && item.tip,
+  }));
+} else {
+  const keys = Object.keys(value || {}).sort().join(",");
+  if (keys !== "branches,repo_identity,root_run_id,schema" || value.schema !== 1
+      || typeof value.repo_identity !== "string"
+      || typeof value.root_run_id !== "string"
+      || !Array.isArray(value.branches)) process.exit(2);
+  repoIdentity = value.repo_identity;
+  rootRunId = value.root_run_id;
+  branches = value.branches;
+}
+if (!/^[A-Za-z0-9._-]+$/.test(rootRunId) || branches.length === 0) process.exit(2);
+const seen = new Set();
+for (const item of branches) {
+  if (!item || Object.keys(item).sort().join(",") !== "name,tip"
+      || typeof item.name !== "string" || typeof item.tip !== "string"
+      || !/^[0-9a-f]{40,64}$/.test(item.tip)
+      || /[\u0000-\u001f\u007f]/.test(item.name)
+      || seen.has(item.name)) process.exit(2);
+  seen.add(item.name);
+}
+function canonicalize(input) {
+  if (Array.isArray(input)) return input.map(canonicalize);
+  if (!input || typeof input !== "object") return input;
+  return Object.fromEntries(
+    Object.keys(input).sort().map((key) => [key, canonicalize(input[key])]),
+  );
+}
+const canonical = JSON.stringify(canonicalize({
+  repo_identity: repoIdentity,
+  root_run_id: rootRunId,
+  branches: branches.map(({ name, tip }) => ({ name, tip })),
+}));
+const digest = crypto.createHash("sha256").update(canonical).digest("hex");
+process.stdout.write(`META\t${repoIdentity}\t${rootRunId}\t${digest}\n`);
+for (const item of branches) process.stdout.write(`BRANCH\t${item.name}\t${item.tip}\n`);
+NODE
+  then
+    rm -f "$inventory_parse"
+    die_env "exact inventory is malformed or contains duplicate entries"
+  fi
+  while IFS=$'\t' read -r record_kind field1 field2 field3; do
+    case "$record_kind" in
+      META)
+        [ "$field1" = "$repo_identity" ] || {
+          rm -f "$inventory_parse"
+          die_env "exact inventory repository identity does not match --repo"
+        }
+        inventory_root_run_id="$field2"
+        inventory_digest="$field3"
+        ;;
+      BRANCH)
+        git check-ref-format --branch "$field1" >/dev/null 2>&1 || {
+          rm -f "$inventory_parse"
+          die_env "exact inventory contains an invalid branch: $field1"
+        }
+        [ "$field1" != "$into_name" ] || {
+          rm -f "$inventory_parse"
+          die_env "integration target cannot enter exact inventory"
+        }
+        inventory_expected["$field1"]="$field2"
+        inventory_names+=("$field1")
+        if [ "${snapshot_tip[$field1]:-}" != "$field2" ]; then
+          if [ -z "${snapshot_tip[$field1]:-}" ] \
+             && recover_reaped_inventory "$field1" "$field2"; then
+            :
+          else
+            rm -f "$inventory_parse"
+            die_env "exact inventory branch is missing or moved: $field1"
+          fi
+        fi
+        ;;
+      *) rm -f "$inventory_parse"; die_env "exact inventory parser returned malformed output" ;;
+    esac
+  done < "$inventory_parse"
+  rm -f "$inventory_parse"
+  [ -n "$inventory_root_run_id" ] && [ -n "$inventory_digest" ] \
+    || die_env "exact inventory metadata is missing"
+  journal_args=()
+  for inventory_name in "${inventory_names[@]}"; do
+    journal_args+=("$inventory_name" "${inventory_expected[$inventory_name]}")
+  done
+  if ! node - "$common_dir/autopilot-worktree-branch-inventory" \
+      "$inventory_root_run_id" "${journal_args[@]}" <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const [directory, rootRunId, ...pairs] = process.argv.slice(2);
+if (pairs.length === 0 || pairs.length % 2 !== 0
+    || !fs.existsSync(directory)) process.exit(2);
+const directoryStat = fs.lstatSync(directory);
+if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) process.exit(2);
+const expected = new Map();
+for (let index = 0; index < pairs.length; index += 2) {
+  expected.set(pairs[index], pairs[index + 1]);
+}
+const journal = new Map();
+for (const name of fs.readdirSync(directory).sort()) {
+  if (!/^[0-9a-f]{64}\.json$/.test(name)) continue;
+  const file = path.join(directory, name);
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink()) process.exit(2);
+  const value = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (value.root_run_id !== rootRunId) continue;
+  if (Object.keys(value).sort().join(",")
+        !== "branch,captured_at,marker_sha256,path,root_run_id,schema,tip"
+      || value.schema !== 1 || typeof value.branch !== "string"
+      || /[\u0000-\u001f\u007f]/.test(value.branch)
+      || typeof value.path !== "string" || !path.isAbsolute(value.path)
+      || /\u0000/.test(value.path)
+      || !/^[0-9a-f]{40,64}$/.test(value.tip)
+      || !/^[0-9a-f]{64}$/.test(value.marker_sha256)
+      || !Number.isSafeInteger(value.captured_at) || value.captured_at < 1
+      || journal.has(value.branch)) process.exit(2);
+  const expectedName = `${crypto.createHash("sha256")
+    .update(`${rootRunId}\0${value.path}\0${value.branch}\0${value.tip}\0`)
+    .digest("hex")}.json`;
+  if (name !== expectedName) process.exit(2);
+  journal.set(value.branch, value.tip);
+}
+for (const [branch, tip] of expected) {
+  if (journal.get(branch) !== tip) process.exit(2);
+}
+NODE
+  then
+    die_env "exact inventory is not bound to the canonical branch inventory journal"
+  fi
+fi
+
+for preserve_ack_spec in "${preserve_ack_specs[@]}"; do
+  preserve_ack_name="${preserve_ack_spec%@*}"
+  preserve_ack_tip="${preserve_ack_spec##*@}"
+  [ "$preserve_ack_name" != "$preserve_ack_spec" ] \
+    && [ -n "$preserve_ack_name" ] \
+    && [[ "$preserve_ack_tip" =~ ^[0-9a-f]{40,64}$ ]] \
+    || die_env "--ack-preserved requires exact branch@tip"
+  [ "${inventory_expected[$preserve_ack_name]:-}" = "$preserve_ack_tip" ] \
+    || die_env "--ack-preserved does not match exact inventory: $preserve_ack_name"
+  [ -z "${inventory_preserve_ack[$preserve_ack_name]:-}" ] \
+    || die_env "duplicate --ack-preserved entry: $preserve_ack_name"
+  inventory_preserve_ack["$preserve_ack_name"]="$preserve_ack_tip"
+done
+
 for name in "${local_branch_names[@]}"; do
   [ -n "$name" ] || continue
   # Defense in depth: even a custom catch-all pattern cannot classify the
   # authoritative integration branch as dispatch-owned.
   [ "$name" = "$into_name" ] && continue
   matched=0
-  if [[ "$name" =~ $candidate_re ]]; then
+  if [ -n "$inventory_file" ]; then
+    [ -n "${inventory_expected[$name]:-}" ] || continue
+    family["$name"]="inventory"
+    matched=1
+  elif [[ "$name" =~ $candidate_re ]]; then
     family["$name"]="candidate"
     round["$name"]=$((10#${BASH_REMATCH[1]}))
     candidates+=("$name")
@@ -266,6 +504,18 @@ emit_scan_json() {
   printf ',"reapable":'; emit_branch_array "${reapable[@]}"
   printf ',"superseded":'; emit_branch_array "${superseded[@]}"
   printf ',"kept":'; emit_branch_array "${kept[@]}"
+  printf ',"repo_identity":"%s","root_run_id":' "$(json_escape "$repo_identity")"
+  if [ -n "$inventory_root_run_id" ]; then
+    printf '"%s"' "$(json_escape "$inventory_root_run_id")"
+  else
+    printf 'null'
+  fi
+  printf ',"inventory_digest":'
+  if [ -n "$inventory_digest" ]; then
+    printf '"%s"' "$inventory_digest"
+  else
+    printf 'null'
+  fi
   printf '}\n'
 }
 
@@ -273,9 +523,6 @@ if [ "$command_name" = scan ]; then
   emit_scan_json
   exit 0
 fi
-
-common_raw="$(git -C "$repo" rev-parse --git-common-dir 2>/dev/null)" || die_env "cannot resolve git common dir"
-common_dir="$(cd "$repo" && cd "$common_raw" 2>/dev/null && pwd -P)" || die_env "cannot canonicalize git common dir"
 
 if [ "$command_name" = check ]; then
   ack_file="$common_dir/autopilot-reap-ack"
@@ -370,18 +617,149 @@ emit_name_array() {
   printf ']'
 }
 
+emit_reaped_objects() {
+  local first=1 value
+  printf '['
+  for value in "$@"; do
+    [ "$first" -eq 1 ] || printf ','
+    first=0
+    printf '{"branch":"%s","bundle":"%s"}' \
+      "$(json_escape "$value")" "$(json_escape "${inventory_reaped_bundle[$value]}")"
+  done
+  printf ']'
+}
+
+persist_inventory_outcomes() {
+  local mode="$1" inventory_name disposition acknowledged bundle_value candidate found
+  [ "${#inventory_names[@]}" -ne 0 ] || return 0
+  if [ -e "$disposition_dir" ] || [ -L "$disposition_dir" ]; then
+    [ -d "$disposition_dir" ] && [ ! -L "$disposition_dir" ] && [ -O "$disposition_dir" ] \
+      || return 1
+  else
+    (umask 077; mkdir "$disposition_dir") || return 1
+  fi
+  for inventory_name in "${inventory_names[@]}"; do
+    disposition="preserved"
+    acknowledged=false
+    bundle_value=""
+    found=0
+    if [ -n "${inventory_reaped_bundle[$inventory_name]:-}" ]; then
+      disposition="reaped"
+      bundle_value="${inventory_reaped_bundle[$inventory_name]}"
+      found=1
+    elif [ "$mode" = "intent" ]; then
+      for candidate in "${eligible[@]}"; do
+        if [ "$candidate" = "$inventory_name" ]; then
+          disposition="reaped"; bundle_value="$bundle"; found=1; break
+        fi
+      done
+    elif [ "$mode" = "final" ]; then
+      for candidate in "${reaped_names[@]}"; do
+        if [ "$candidate" = "$inventory_name" ]; then
+          disposition="reaped"; bundle_value="$bundle"; found=1; break
+        fi
+      done
+      if [ "$found" -eq 0 ]; then
+        for candidate in "${failure_names[@]}"; do
+          if [ "$candidate" = "$inventory_name" ]; then
+            disposition="failed"; found=1; break
+          fi
+        done
+      fi
+    elif [ "$mode" = "failed" ]; then
+      for candidate in "${eligible[@]}"; do
+        [ "$candidate" = "$inventory_name" ] && disposition="failed"
+      done
+    fi
+    if [ "$disposition" = "preserved" ] \
+       && [ "${inventory_preserve_ack[$inventory_name]:-}" = "${inventory_expected[$inventory_name]}" ]; then
+      acknowledged=true
+    fi
+    disposition_key="$(
+      printf '%s\0%s\0%s\0' "$inventory_root_run_id" "$inventory_name" \
+        "${inventory_expected[$inventory_name]}" | sha256sum | awk '{print $1}'
+    )"
+    disposition_record="$disposition_dir/$disposition_key.json"
+    disposition_tmp="$(mktemp "$disposition_dir/.disposition.XXXXXX")" || return 1
+    if [ -n "$bundle_value" ]; then
+      bundle_json="\"$(json_escape "$bundle_value")\""
+    else
+      bundle_json="null"
+    fi
+    printf \
+      '{"schema":1,"repo_identity":"%s","root_run_id":"%s","branch":"%s","tip":"%s","disposition":"%s","bundle":%s,"acknowledged":%s,"inventory_digest":"%s","recorded_at":%s}\n' \
+      "$(json_escape "$repo_identity")" "$(json_escape "$inventory_root_run_id")" \
+      "$(json_escape "$inventory_name")" "${inventory_expected[$inventory_name]}" \
+      "$disposition" "$bundle_json" "$acknowledged" "$inventory_digest" "$(date +%s)" \
+      > "$disposition_tmp" || { rm -f "$disposition_tmp"; return 1; }
+    chmod 600 "$disposition_tmp" || { rm -f "$disposition_tmp"; return 1; }
+    mv -f "$disposition_tmp" "$disposition_record" \
+      || { rm -f "$disposition_tmp"; return 1; }
+  done
+}
+
+emit_exact_inventory_fields() {
+  local failure_mode="${1:-0}" inventory_name disposition is_eligible candidate acknowledged
+  printf ',"repo_identity":"%s","root_run_id":' "$(json_escape "$repo_identity")"
+  if [ -n "$inventory_root_run_id" ]; then
+    printf '"%s"' "$(json_escape "$inventory_root_run_id")"
+  else
+    printf 'null'
+  fi
+  printf ',"inventory_digest":'
+  if [ -n "$inventory_digest" ]; then
+    printf '"%s"' "$inventory_digest"
+  else
+    printf 'null'
+  fi
+  printf ',"inventory_dispositions":['
+  local first_inventory=1
+  for inventory_name in "${inventory_names[@]}"; do
+    disposition="preserved"
+    disposition_bundle="null"
+    is_eligible=0
+    for candidate in "${eligible[@]}"; do
+      [ "$candidate" = "$inventory_name" ] && is_eligible=1
+    done
+    if [ -n "${inventory_reaped_bundle[$inventory_name]:-}" ]; then
+      disposition="reaped"
+      disposition_bundle="\"$(json_escape "${inventory_reaped_bundle[$inventory_name]}")\""
+    elif [ "$failure_mode" -eq 1 ] && [ "$is_eligible" -eq 1 ]; then
+      disposition="failed"
+    fi
+    acknowledged=false
+    if [ "$disposition" = "preserved" ] \
+       && [ "${inventory_preserve_ack[$inventory_name]:-}" = "${inventory_expected[$inventory_name]}" ]; then
+      acknowledged=true
+    fi
+    [ "$first_inventory" -eq 1 ] || printf ','
+    first_inventory=0
+    printf '{"name":"%s","tip":"%s","disposition":"%s","bundle":%s,"acknowledged":%s}' \
+      "$(json_escape "$inventory_name")" "${inventory_expected[$inventory_name]}" \
+      "$disposition" "$disposition_bundle" "$acknowledged"
+  done
+  printf ']'
+}
+
 declare -a preserved_superseded=()
 [ "$reap_superseded" -eq 1 ] && preserved_superseded+=("${superseded[@]}")
 
 if [ "$dry_run" -eq 1 ]; then
   printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
-  printf ',"failures":[],"dry_run":true}\n'
+  printf ',"failures":[],"dry_run":true'
+  emit_exact_inventory_fields 0
+  printf '}\n'
   exit 0
 fi
 
 if [ "${#eligible[@]}" -eq 0 ]; then
-  printf '{"reaped":[],"kept":'; emit_name_array "${preserved_superseded[@]}"
-  printf ',"failures":[],"dry_run":false}\n'
+  persist_inventory_outcomes preserved \
+    || die_env "cannot persist exact branch disposition"
+  printf '{"reaped":'; emit_reaped_objects "${recovered_reaped_names[@]}"
+  printf ',"kept":'; emit_name_array "${preserved_superseded[@]}"
+  printf ',"failures":[],"dry_run":false'
+  emit_exact_inventory_fields 0
+  printf '}\n'
   exit 0
 fi
 
@@ -395,9 +773,13 @@ config_rc=$?
 if [ "$config_rc" -ne 0 ] && [ "$config_rc" -ne 1 ]; then
   config_error="$(<"$config_err")"
   rm -f "$config_list" "$config_err"
+  persist_inventory_outcomes failed \
+    || die_env "cannot persist failed exact branch disposition"
   printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
-  printf ',"failures":[{"branch":null,"stage":"config-query","error":"%s"}],"dry_run":false}\n' \
+  printf ',"failures":[{"branch":null,"stage":"config-query","error":"%s"}],"dry_run":false' \
     "$(json_escape "${config_error:-cannot enumerate local branch config}")"
+  emit_exact_inventory_fields 1
+  printf '}\n'
   exit 1
 fi
 rm -f "$config_err"
@@ -407,15 +789,19 @@ rm -f "$config_list"
 declare -a refs=()
 bundle_error=""
 for name in "${eligible[@]}"; do
-  if [[ ! "${tip[$name]}" =~ ^[0-9a-f]{40}$ ]]; then
+  if [[ ! "${tip[$name]}" =~ ^[0-9a-f]{40,64}$ ]]; then
     bundle_error="invalid recorded tip for $name"
     break
   fi
   refs+=("refs/heads/$name")
 done
 if [ -n "$bundle_error" ]; then
+  persist_inventory_outcomes failed \
+    || die_env "cannot persist failed exact branch disposition"
   printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
-  printf ',"failures":[{"branch":null,"stage":"bundle","error":"%s"}],"dry_run":false}\n' "$(json_escape "$bundle_error")"
+  printf ',"failures":[{"branch":null,"stage":"bundle","error":"%s"}],"dry_run":false' "$(json_escape "$bundle_error")"
+  emit_exact_inventory_fields 1
+  printf '}\n'
   exit 1
 fi
 
@@ -425,8 +811,12 @@ elif [[ "$bundle_dir" != /* ]]; then
   bundle_dir="$repo/$bundle_dir"
 fi
 mkdir -p "$bundle_dir" 2>/dev/null || {
+  persist_inventory_outcomes failed \
+    || die_env "cannot persist failed exact branch disposition"
   printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
-  printf ',"failures":[{"branch":null,"stage":"bundle-create","error":"%s"}],"dry_run":false}\n' "$(json_escape "cannot create bundle directory: $bundle_dir")"
+  printf ',"failures":[{"branch":null,"stage":"bundle-create","error":"%s"}],"dry_run":false' "$(json_escape "cannot create bundle directory: $bundle_dir")"
+  emit_exact_inventory_fields 1
+  printf '}\n'
   exit 1
 }
 bundle="$bundle_dir/reap-$(date -u +%Y%m%dT%H%M%SZ)-$$.bundle"
@@ -451,12 +841,19 @@ if [ -z "$bundle_error" ]; then
   fi
 fi
 if [ -n "$bundle_error" ]; then
+  persist_inventory_outcomes failed \
+    || die_env "cannot persist failed exact branch disposition"
   printf '{"reaped":[],"kept":'; emit_name_array "${eligible[@]}" "${preserved_superseded[@]}"
-  printf ',"failures":[{"branch":null,"stage":"bundle","error":"%s"}],"dry_run":false}\n' "$(json_escape "$bundle_error")"
+  printf ',"failures":[{"branch":null,"stage":"bundle","error":"%s"}],"dry_run":false' "$(json_escape "$bundle_error")"
+  emit_exact_inventory_fields 1
+  printf '}\n'
   exit 1
 fi
 
-declare -a reaped_names=() kept_names=("${preserved_superseded[@]}") failure_names=() failure_stages=() failure_errors=()
+persist_inventory_outcomes intent \
+  || die_env "cannot persist write-ahead exact branch disposition"
+
+declare -a reaped_names=("${recovered_reaped_names[@]}") kept_names=("${preserved_superseded[@]}") failure_names=() failure_stages=() failure_errors=()
 
 record_failure() {
   kept_names+=("$1")
@@ -528,6 +925,9 @@ restore_deleted_ref() {
   local branch="$1" expected="$2" ref="refs/heads/$1" current=""
   local tx_dir tx_in tx_out tx_err tx_pid response action="" wait_rc=1
   local in_open=0 out_open=0 protocol_ok=1
+  local zero_oid
+  printf -v zero_oid '%*s' "${#expected}" ''
+  zero_oid="${zero_oid// /0}"
   tx_dir="$(mktemp -d "${TMPDIR:-/tmp}/autopilot-reap-restore.XXXXXX")" || return 1
   tx_in="$tx_dir/in"; tx_out="$tx_dir/out"; tx_err="$tx_dir/err"
   if ! mkfifo "$tx_in" "$tx_out"; then rm -rf "$tx_dir"; return 1; fi
@@ -539,7 +939,7 @@ restore_deleted_ref() {
     if exec 8<"$tx_out"; then out_open=1; else protocol_ok=0; fi
   fi
   if [ "$protocol_ok" -eq 1 ] && ! printf 'start\noption no-deref\nupdate %s %s %s\nprepare\n' \
-      "$ref" "$expected" 0000000000000000000000000000000000000000 >&7; then
+      "$ref" "$expected" "$zero_oid" >&7; then
     protocol_ok=0
   fi
   if [ "$protocol_ok" -eq 1 ]; then
@@ -638,6 +1038,7 @@ for name in "${eligible[@]}"; do
   fi
 
   reaped_names+=("$name")
+  inventory_reaped_bundle["$name"]="$bundle"
   config_present=0
   for config_key in "${branch_config_keys[@]}"; do
     case "$config_key" in "branch.$name."*) config_present=1; break ;; esac
@@ -647,11 +1048,15 @@ for name in "${eligible[@]}"; do
   fi
 done
 
+persist_inventory_outcomes final \
+  || die_env "cannot persist exact branch disposition"
+
 printf '{"reaped":['
 first=1
 for name in "${reaped_names[@]}"; do
   [ "$first" -eq 1 ] || printf ','; first=0
-  printf '{"branch":"%s","bundle":"%s"}' "$(json_escape "$name")" "$(json_escape "$bundle")"
+  printf '{"branch":"%s","bundle":"%s"}' \
+    "$(json_escape "$name")" "$(json_escape "${inventory_reaped_bundle[$name]}")"
 done
 printf '],"kept":'; emit_name_array "${kept_names[@]}"
 printf ',"failures":['
@@ -660,5 +1065,48 @@ for ((i=0; i<${#failure_names[@]}; i++)); do
   printf '{"branch":"%s","stage":"%s","error":"%s"}' \
     "$(json_escape "${failure_names[$i]}")" "${failure_stages[$i]}" "$(json_escape "${failure_errors[$i]}")"
 done
-printf '],"dry_run":false}\n'
+printf '],"dry_run":false'
+printf ',"repo_identity":"%s","root_run_id":' "$(json_escape "$repo_identity")"
+if [ -n "$inventory_root_run_id" ]; then
+  printf '"%s"' "$(json_escape "$inventory_root_run_id")"
+else
+  printf 'null'
+fi
+printf ',"inventory_digest":'
+if [ -n "$inventory_digest" ]; then
+  printf '"%s"' "$inventory_digest"
+else
+  printf 'null'
+fi
+printf ',"inventory_dispositions":['
+first=1
+for inventory_name in "${inventory_names[@]}"; do
+  disposition="preserved"
+  disposition_bundle="null"
+  disposition_acknowledged=false
+  for reaped_name in "${reaped_names[@]}"; do
+    if [ "$reaped_name" = "$inventory_name" ]; then
+      disposition="reaped"
+      disposition_bundle="\"$(json_escape "${inventory_reaped_bundle[$inventory_name]}")\""
+      break
+    fi
+  done
+  for ((i=0; i<${#failure_names[@]}; i++)); do
+    if [ "${failure_names[$i]}" = "$inventory_name" ]; then
+      disposition="failed"
+      disposition_bundle="null"
+      break
+    fi
+  done
+  if [ "$disposition" = "preserved" ] \
+     && [ "${inventory_preserve_ack[$inventory_name]:-}" = "${inventory_expected[$inventory_name]}" ]; then
+    disposition_acknowledged=true
+  fi
+  [ "$first" -eq 1 ] || printf ','
+  first=0
+  printf '{"name":"%s","tip":"%s","disposition":"%s","bundle":%s,"acknowledged":%s}' \
+    "$(json_escape "$inventory_name")" "${inventory_expected[$inventory_name]}" \
+    "$disposition" "$disposition_bundle" "$disposition_acknowledged"
+done
+printf ']}\n'
 [ "${#failure_names[@]}" -eq 0 ]

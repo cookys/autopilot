@@ -53,6 +53,7 @@ self_dir="$(cd "$(dirname "$0")" && pwd)"
 
 common_dir="$(_wt_resolve_common_dir "$repo")" \
   || die_env "cannot resolve canonical git common directory"
+repo_identity="git-common-dir:$common_dir"
 
 git_common() {
   git --git-dir="$common_dir" "$@"
@@ -123,6 +124,99 @@ persist_branch_inventory() {
   chmod 600 "$tmp" || { rm -f "$tmp"; return 1; }
   mv -f "$tmp" "$record" || { rm -f "$tmp"; return 1; }
   _INVENTORY_RECORD_PATH="$record"
+}
+
+load_journal_branch_inventory() {
+  _JOURNAL_BRANCH_INVENTORY='[]'
+  [ -e "$inventory_dir" ] || [ -L "$inventory_dir" ] || return 0
+  [ -d "$inventory_dir" ] && [ ! -L "$inventory_dir" ] && [ -O "$inventory_dir" ] \
+    || return 1
+  _JOURNAL_BRANCH_INVENTORY="$(
+    node - "$inventory_dir" "$root_run_id" "$common_dir/autopilot-branch-dispositions" \
+      "$repo_identity" <<'NODE'
+const crypto = require("crypto");
+const { spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const directory = process.argv[2];
+const rootRunId = process.argv[3];
+const dispositionDirectory = process.argv[4];
+const repoIdentity = process.argv[5];
+const branches = new Map();
+for (const name of fs.readdirSync(directory).sort()) {
+  if (!/^[0-9a-f]{64}\.json$/.test(name)) continue;
+  const file = path.join(directory, name);
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink()) process.exit(2);
+  const value = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (value.root_run_id !== rootRunId) continue;
+  const keys = Object.keys(value).sort().join(",");
+  if (keys !== "branch,captured_at,marker_sha256,path,root_run_id,schema,tip"
+      || value.schema !== 1 || typeof value.branch !== "string"
+      || /[\u0000-\u001f\u007f]/.test(value.branch)
+      || typeof value.path !== "string" || !path.isAbsolute(value.path)
+      || /\u0000/.test(value.path)
+      || !/^[0-9a-f]{40,64}$/.test(value.tip)
+      || !/^[0-9a-f]{64}$/.test(value.marker_sha256)
+      || !Number.isSafeInteger(value.captured_at) || value.captured_at < 1) process.exit(2);
+  const expectedName = `${crypto.createHash("sha256")
+    .update(`${rootRunId}\0${value.path}\0${value.branch}\0${value.tip}\0`)
+    .digest("hex")}.json`;
+  if (name !== expectedName) process.exit(2);
+  if (branches.has(value.branch)) process.exit(2);
+  branches.set(value.branch, value.tip);
+}
+const resolved = new Map();
+if (fs.existsSync(dispositionDirectory)) {
+  const directoryStat = fs.lstatSync(dispositionDirectory);
+  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) process.exit(2);
+  for (const name of fs.readdirSync(dispositionDirectory).sort()) {
+    if (!/^[0-9a-f]{64}\.json$/.test(name)) continue;
+    const file = path.join(dispositionDirectory, name);
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink()) process.exit(2);
+    const value = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (value.root_run_id !== rootRunId) continue;
+    const keys = Object.keys(value).sort().join(",");
+    if (keys !== "acknowledged,branch,bundle,disposition,inventory_digest,recorded_at,repo_identity,root_run_id,schema,tip"
+        || value.schema !== 1 || value.repo_identity !== repoIdentity
+        || !branches.has(value.branch) || branches.get(value.branch) !== value.tip
+        || !["reaped", "preserved", "failed"].includes(value.disposition)
+        || typeof value.acknowledged !== "boolean"
+        || (value.disposition !== "preserved" && value.acknowledged)
+        || !(value.bundle === null || typeof value.bundle === "string")
+        || !/^[0-9a-f]{64}$/.test(value.inventory_digest)
+        || !Number.isSafeInteger(value.recorded_at) || value.recorded_at < 1) process.exit(2);
+    const expectedName = `${crypto.createHash("sha256")
+      .update(`${rootRunId}\0${value.branch}\0${value.tip}\0`)
+      .digest("hex")}.json`;
+    if (name !== expectedName || resolved.has(value.branch)) process.exit(2);
+    resolved.set(value.branch, value);
+  }
+}
+process.stdout.write(JSON.stringify(
+  [...branches.entries()]
+    .filter(([branch]) => {
+      const value = resolved.get(branch);
+      let refExists = false;
+      if (value?.disposition === "reaped") {
+        const ref = `refs/heads/${branch}`;
+        refExists = spawnSync("git", [
+          "--git-dir", path.dirname(directory),
+          "show-ref", "--verify", "--quiet", ref,
+        ]).status === 0 || spawnSync("git", [
+          "--git-dir", path.dirname(directory),
+          "symbolic-ref", "-q", ref,
+        ]).status === 0;
+      }
+      return !value || refExists || !(value.disposition === "reaped"
+        || (value.disposition === "preserved" && value.acknowledged));
+    })
+    .map(([branch, tip]) => ({ branch, tip }))
+    .sort((left, right) => left.branch.localeCompare(right.branch)),
+));
+NODE
+  )" || return 1
 }
 
 load_worktree_snapshot() {
@@ -263,7 +357,7 @@ for path in "${snapshot_paths[@]}"; do
   observed_owned_count=$((observed_owned_count + 1))
   marker_branch="$_WT_MARKER_BRANCH"
   marker_base="$_WT_MARKER_BASE_SHA"
-  marker_digest="$(sha256sum "$marker" 2>/dev/null | awk '{print $1}')"
+  marker_digest="$(sha256sum < "$marker" 2>/dev/null | awk '{print $1}')"
   path_common="$(_wt_resolve_common_dir "$path" 2>/dev/null || true)"
   ref_tip="$(git_common rev-parse --verify --quiet "refs/heads/$marker_branch" 2>/dev/null || true)"
 
@@ -363,7 +457,7 @@ for path in "${snapshot_paths[@]}"; do
     || [ "$(git_common rev-parse --verify --quiet "refs/heads/$branch" 2>/dev/null || true)" = "$tip" ] \
     || raced_reason="branch_tip_changed"
   [ -n "$raced_reason" ] \
-    || [ "$(sha256sum "$marker" 2>/dev/null | awk '{print $1}')" = "$marker_digest" ] \
+    || [ "$(sha256sum < "$marker" 2>/dev/null | awk '{print $1}')" = "$marker_digest" ] \
     || raced_reason="marker_changed"
   if [ -z "$raced_reason" ]; then
     if ! _wt_read_schema2_marker "$marker" \
@@ -398,6 +492,9 @@ for path in "${snapshot_paths[@]}"; do
   _WT_PROBE_FD=""
 done
 
+load_journal_branch_inventory \
+  || die_env "cannot reconstruct exact branch inventory journal"
+
 printf '{"schema":1,"command":"%s","repo":"%s","git_common_dir":"%s","root_run_id":"%s","observed_owned_count":%s,"owned_worktree_count":%s,"unresolved_pending_count":%s,"owned":' \
   "$command_name" "$(json_escape "$repo")" "$(json_escape "$common_dir")" \
   "$(json_escape "$root_run_id")" "$observed_owned_count" "$remaining_owned_count" \
@@ -415,6 +512,7 @@ printf ',"raced":'; emit_array raced_items
 printf ',"reaped":'; emit_array reaped_items
 printf ',"branch_inventory":'; emit_array reaped_items
 printf ',"branch_inventory_records":'; emit_array inventory_record_items
+printf ',"journal_branch_inventory":%s' "$_JOURNAL_BRANCH_INVENTORY"
 printf '}\n'
 
 exec {lifecycle_fd}>&-

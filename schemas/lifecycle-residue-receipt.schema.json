@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/lifecycle-residue-receipt.schema.json",
+  "title": "lifecycle-residue-receipt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "issued_at",
+    "repo_identity",
+    "root_run_id",
+    "observed_head",
+    "worktree_observation_digest",
+    "journal_digest",
+    "disposition_digest",
+    "branch_inventory_digest",
+    "owned_worktrees",
+    "branches",
+    "blockers",
+    "zero_residue",
+    "receipt_digest"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "lifecycle_residue_receipt" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "repo_identity": { "type": "string", "pattern": "^git-common-dir:/.+$" },
+    "root_run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+    "observed_head": { "$ref": "#/$defs/gitOid" },
+    "worktree_observation_digest": { "$ref": "#/$defs/sha256" },
+    "journal_digest": { "$ref": "#/$defs/sha256" },
+    "disposition_digest": { "$ref": "#/$defs/sha256" },
+    "branch_inventory_digest": { "$ref": "#/$defs/sha256" },
+    "owned_worktrees": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/worktree" }
+    },
+    "branches": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/branch" }
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/blocker" }
+    },
+    "zero_residue": { "type": "boolean" },
+    "receipt_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitOid": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+    "worktree": {
+      "type": "object",
+      "required": ["path", "branch", "tip", "state", "reason"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string" },
+        "tip": { "type": "string" },
+        "state": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "branch": {
+      "type": "object",
+      "required": ["name", "tip", "disposition", "bundle", "acknowledged"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "tip": { "$ref": "#/$defs/gitOid" },
+        "disposition": {
+          "type": "string",
+          "enum": ["reaped", "preserved", "failed"]
+        },
+        "bundle": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
+        "acknowledged": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "blocker": {
+      "type": "object",
+      "required": ["kind", "subject", "reason", "instruction"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "subject": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "instruction": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

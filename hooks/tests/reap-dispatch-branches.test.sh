@@ -3,6 +3,7 @@
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/reap-dispatch-branches.sh"
+WORKTREE_REAPER="$REPO_ROOT/scripts/reap-dispatch-worktrees.sh"
 
 new_repo() {
   local repo="$1"
@@ -19,6 +20,23 @@ child_commit() {
 
 json_valid() {
   node -e 'JSON.parse(process.argv[1])' "$1" >/dev/null 2>&1
+}
+
+write_inventory_journal() {
+  local repo="$1" root="$2" branch="$3" tip="$4" origin="$5"
+  local common directory key
+  common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
+  directory="$common/autopilot-worktree-branch-inventory"
+  mkdir -p "$directory"
+  key="$(
+    printf '%s\0%s\0%s\0%s\0' "$root" "$origin" "$branch" "$tip" \
+      | sha256sum | awk '{print $1}'
+  )"
+  printf \
+    '{"schema":1,"root_run_id":"%s","path":"%s","branch":"%s","tip":"%s","marker_sha256":"%s","captured_at":1}\n' \
+    "$root" "$origin" "$branch" "$tip" \
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" \
+    > "$directory/$key.json"
 }
 
 test_scan_check_and_ack() {
@@ -210,7 +228,7 @@ test_environment_errors() {
 
 test_environment_errors
 
-test_malformed_recorded_tip_is_bundle_failure() {
+test_sha256_recorded_tip_is_reaped_with_bundle() {
   local repo="$TEST_TMP/sha256-repo" out rc
   git init -q --object-format=sha256 -b develop "$repo"
   git -C "$repo" config user.email test@example.com
@@ -221,17 +239,232 @@ test_malformed_recorded_tip_is_bundle_failure() {
   set +e
   out=$(bash "$SCRIPT" reap --repo "$repo" --into develop --yes --bundle-dir "$TEST_TMP/sha256-bundles" 2>/dev/null); rc=$?
   set -e
-  assert_eq "$rc" 1 "non-40-hex recorded tip is a bundle-stage failure"
-  if json_valid "$out"; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "recorded-tip failure emits valid JSON"; fi
-  assert_contains "$out" '"stage":"bundle"' "recorded-tip failure names bundle stage"
+  assert_eq "$rc" 0 "SHA-256 recorded tip is accepted"
+  if json_valid "$out"; then __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); else fail "SHA-256 reap emits valid JSON"; fi
+  assert_contains "$out" '"branch":"agent/contained-r1-20260715"' "SHA-256 branch is reaped"
   if git -C "$repo" show-ref --verify --quiet refs/heads/agent/contained-r1-20260715; then
+    fail "SHA-256 eligible branch must be removed"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+  if find "$TEST_TMP/sha256-bundles" -name '*.bundle' -type f | grep -q .; then
     __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
   else
-    fail "recorded-tip failure must preserve the eligible branch"
+    fail "SHA-256 branch is preserved in a verified bundle"
   fi
 }
 
-test_malformed_recorded_tip_is_bundle_failure
+test_sha256_recorded_tip_is_reaped_with_bundle
+
+test_exact_inventory_recovers_after_post_delete_crash() {
+  local repo="$TEST_TMP/post-delete-crash" base common identity inventory hook out rc
+  new_repo "$repo"
+  base=$(git -C "$repo" rev-parse HEAD)
+  common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
+  identity="git-common-dir:$(realpath "$common")"
+  git -C "$repo" branch hetero/post-delete-crash develop
+  write_inventory_journal "$repo" post-delete-crash \
+    hetero/post-delete-crash "$base" "$TEST_TMP/post-delete-crash-origin"
+  inventory="$TEST_TMP/post-delete-crash-inventory.json"
+  printf \
+    '{"schema":1,"repo_identity":"%s","root_run_id":"post-delete-crash","branches":[{"name":"hetero/post-delete-crash","tip":"%s"}]}\n' \
+    "$identity" "$base" > "$inventory"
+  hook="$TEST_TMP/kill-reaper-after-delete.sh"
+  cat > "$hook" <<'EOF'
+#!/usr/bin/env bash
+kill -KILL "$PPID"
+EOF
+  chmod +x "$hook"
+
+  set +e
+  AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" \
+    bash "$SCRIPT" reap --repo "$repo" --into develop \
+      --inventory-file "$inventory" --yes \
+      --bundle-dir "$TEST_TMP/post-delete-crash-bundles" >/dev/null 2>&1
+  rc=$?
+  set -e
+  assert_neq "$rc" 0 "fault injection kills reaper after exact ref deletion"
+  if git -C "$repo" show-ref --verify --quiet refs/heads/hetero/post-delete-crash; then
+    fail "post-delete crash fixture must leave the ref absent"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
+
+  set +e
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop \
+    --inventory-file "$inventory" --yes \
+    --bundle-dir "$TEST_TMP/post-delete-crash-bundles" 2>/dev/null)
+  rc=$?
+  set -e
+  assert_eq "$rc" 0 "same exact inventory recovers from write-ahead disposition"
+  assert_contains "$out" '"branch":"hetero/post-delete-crash"' \
+    "recovery returns the verified reaped disposition"
+}
+
+test_exact_inventory_recovers_after_post_delete_crash
+
+test_write_ahead_reaped_ref_remains_unresolved_while_live() {
+  local repo="$TEST_TMP/pre-delete-crash" base common identity inventory hook scan rc
+  new_repo "$repo"
+  base=$(git -C "$repo" rev-parse HEAD)
+  common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
+  identity="git-common-dir:$(realpath "$common")"
+  git -C "$repo" branch hetero/pre-delete-crash develop
+  write_inventory_journal "$repo" pre-delete-crash \
+    hetero/pre-delete-crash "$base" "$TEST_TMP/pre-delete-crash-origin"
+  inventory="$TEST_TMP/pre-delete-crash-inventory.json"
+  printf \
+    '{"schema":1,"repo_identity":"%s","root_run_id":"pre-delete-crash","branches":[{"name":"hetero/pre-delete-crash","tip":"%s"}]}\n' \
+    "$identity" "$base" > "$inventory"
+  hook="$TEST_TMP/kill-reaper-before-delete.sh"
+  cat > "$hook" <<'EOF'
+#!/usr/bin/env bash
+kill -KILL "$PPID"
+EOF
+  chmod +x "$hook"
+
+  set +e
+  AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE="$hook" \
+    bash "$SCRIPT" reap --repo "$repo" --into develop \
+      --inventory-file "$inventory" --yes \
+      --bundle-dir "$TEST_TMP/pre-delete-crash-bundles" >/dev/null 2>&1
+  rc=$?
+  set -e
+  assert_neq "$rc" 0 "fault injection kills reaper after write-ahead persistence"
+  assert_eq "$(git -C "$repo" rev-parse refs/heads/hetero/pre-delete-crash)" \
+    "$base" "pre-delete crash leaves the exact ref live"
+  scan=$("$WORKTREE_REAPER" scan --repo "$repo" --root-run-id pre-delete-crash)
+  assert_contains "$scan" '"branch":"hetero/pre-delete-crash"' \
+    "journal reconstruction does not hide a live write-ahead reaped ref"
+}
+
+test_write_ahead_reaped_ref_remains_unresolved_while_live
+
+test_exact_inventory_requires_canonical_journal_ownership() {
+  local repo="$TEST_TMP/unowned-inventory" base common identity inventory out rc
+  new_repo "$repo"
+  base=$(git -C "$repo" rev-parse HEAD)
+  common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
+  identity="git-common-dir:$(realpath "$common")"
+  git -C "$repo" branch hetero/unowned-inventory develop
+  inventory="$TEST_TMP/unowned-inventory.json"
+  printf \
+    '{"schema":1,"repo_identity":"%s","root_run_id":"unowned-inventory","branches":[{"name":"hetero/unowned-inventory","tip":"%s"}]}\n' \
+    "$identity" "$base" > "$inventory"
+  set +e
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop \
+    --inventory-file "$inventory" --yes 2>&1)
+  rc=$?
+  set -e
+  assert_eq "$rc" 2 "caller-authored inventory without ownership journal is rejected"
+  assert_contains "$out" "canonical branch inventory journal" \
+    "unowned inventory rejection names missing provenance"
+  assert_eq "$(git -C "$repo" rev-parse refs/heads/hetero/unowned-inventory)" \
+    "$base" "unowned contained branch survives exact inventory rejection"
+}
+
+test_exact_inventory_requires_canonical_journal_ownership
+
+test_exact_inventory_recovery_rejects_thin_bundle() {
+  local repo="$TEST_TMP/thin-recovery" common identity base tip bundle inventory
+  local inventory_digest disposition_dir disposition_key out rc empty
+  new_repo "$repo"
+  common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)
+  identity="git-common-dir:$(realpath "$common")"
+  base=$(git -C "$repo" rev-parse refs/heads/develop)
+  git -C "$repo" checkout -q -b hetero/thin-recovery
+  git -C "$repo" commit -q --allow-empty -m dispatch
+  tip=$(git -C "$repo" rev-parse HEAD)
+  git -C "$repo" checkout -q develop
+  bundle="$TEST_TMP/thin-recovery.bundle"
+  git -C "$repo" bundle create "$bundle" \
+    "^refs/heads/develop" refs/heads/hetero/thin-recovery
+  git -C "$repo" bundle verify "$bundle" >/dev/null 2>&1
+  assert_exit_code "$?" "0" "thin recovery fixture verifies only in its source repo"
+  empty="$TEST_TMP/thin-recovery-empty.git"
+  git init --bare -q "$empty"
+  set +e
+  git --git-dir="$empty" bundle unbundle "$bundle" >/dev/null 2>&1
+  rc=$?
+  set -e
+  assert_neq "$rc" 0 "thin recovery fixture is not independently restorable"
+
+  inventory="$TEST_TMP/thin-recovery-inventory.json"
+  printf \
+    '{"schema":1,"repo_identity":"%s","root_run_id":"thin-recovery","branches":[{"name":"hetero/thin-recovery","tip":"%s"}]}\n' \
+    "$identity" "$tip" > "$inventory"
+  write_inventory_journal "$repo" thin-recovery \
+    hetero/thin-recovery "$tip" "$TEST_TMP/thin-recovery-origin"
+  inventory_digest="$(
+    node - "$identity" "$tip" <<'NODE'
+const crypto = require("crypto");
+const [repoIdentity, tip] = process.argv.slice(2);
+const value = {
+  branches: [{ name: "hetero/thin-recovery", tip }],
+  repo_identity: repoIdentity,
+  root_run_id: "thin-recovery",
+};
+process.stdout.write(
+  crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex"),
+);
+NODE
+  )"
+  disposition_dir="$common/autopilot-branch-dispositions"
+  mkdir -p "$disposition_dir"
+  disposition_key="$(
+    printf '%s\0%s\0%s\0' \
+      thin-recovery hetero/thin-recovery "$tip" | sha256sum | awk '{print $1}'
+  )"
+  printf \
+    '{"schema":1,"repo_identity":"%s","root_run_id":"thin-recovery","branch":"hetero/thin-recovery","tip":"%s","disposition":"reaped","bundle":"%s","acknowledged":false,"inventory_digest":"%s","recorded_at":1}\n' \
+    "$identity" "$tip" "$bundle" "$inventory_digest" \
+    > "$disposition_dir/$disposition_key.json"
+  git -C "$repo" update-ref -d refs/heads/hetero/thin-recovery "$tip"
+
+  set +e
+  out=$(bash "$SCRIPT" reap --repo "$repo" --into develop \
+    --inventory-file "$inventory" --yes 2>&1)
+  rc=$?
+  set -e
+  assert_eq "$rc" 2 "crash recovery rejects a source-dependent thin bundle"
+  assert_contains "$out" "missing or moved" \
+    "thin recovery cannot masquerade as a safe reaped disposition"
+}
+
+test_exact_inventory_recovery_rejects_thin_bundle
+
+test_sha256_post_delete_race_restores_exact_ref() {
+  local repo="$TEST_TMP/sha256-restore" base unrelated hook out rc
+  git init -q --object-format=sha256 -b develop "$repo"
+  git -C "$repo" config user.email test@example.com
+  git -C "$repo" config user.name "Test User"
+  git -C "$repo" commit -q --allow-empty -m base
+  base=$(git -C "$repo" rev-parse HEAD)
+  unrelated=$(printf '%s\n' unrelated | git -C "$repo" commit-tree "${base}^{tree}")
+  git -C "$repo" branch agent/sha256-restore-r1-20260727 develop
+  hook="$TEST_TMP/move-sha256-target-after-delete.sh"
+  cat > "$hook" <<EOF
+#!/usr/bin/env bash
+git -C "$repo" update-ref refs/heads/develop "$unrelated" "$base"
+EOF
+  chmod +x "$hook"
+
+  set +e
+  out=$(AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" \
+    bash "$SCRIPT" reap --repo "$repo" --into develop --yes \
+      --bundle-dir "$TEST_TMP/sha256-restore-bundles" 2>/dev/null)
+  rc=$?
+  set -e
+  assert_eq "$rc" 1 "SHA-256 post-delete target race fails closed"
+  assert_contains "$out" '"stage":"post-delete-race"' \
+    "SHA-256 race reports successful exact restoration"
+  assert_not_contains "$out" '"stage":"restore-failed"' \
+    "SHA-256 rollback does not use a 40-digit zero OID"
+  assert_eq "$(git -C "$repo" rev-parse refs/heads/agent/sha256-restore-r1-20260727)" \
+    "$base" "SHA-256 branch is restored at the exact pre-delete tip"
+}
+
+test_sha256_post_delete_race_restores_exact_ref
 
 test_exact_local_target_and_defense_assertion() {
   local repo="$TEST_TMP/exact-target" base target_tip tag_tip out rc

@@ -195,6 +195,9 @@ mkdir -p "$LINKED_REPO"
 git -C "$LINKED_REPO" init -q -b develop
 git -C "$LINKED_REPO" -c user.email=wlb@test -c user.name=wlb \
   commit -q --allow-empty -m "linked fixture"
+mkdir -p "$LINKED_REPO/.git/info"
+printf '%s\n' ".autopilot-worktree" ".autopilot-worktree.lock" \
+  >> "$LINKED_REPO/.git/info/exclude"
 LINKED_WT="$TEST_TMP/"$'linked\nowned'
 git -C "$LINKED_REPO" worktree add -q -b "wlb/p2-linked-owned" "$LINKED_WT" develop
 LINKED_BASE="$(git -C "$LINKED_WT" rev-parse HEAD)"
@@ -217,6 +220,16 @@ const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 if (value.owned_worktree_count !== 1 || value.owned[0].path !== process.argv[3]) process.exit(1);
 NODE
 assert_exit_code "$?" "0" "NUL porcelain preserves an exact control-character path"
+"$CONTROLLER" reap --repo "$LINKED_REPO" --root-run-id "$ROOT_ID" --yes \
+  > "$TEST_TMP/linked-root-reap.json"
+assert_exit_code "$?" "0" "newline worktree path is journaled and reaped"
+node - "$TEST_TMP/linked-root-reap.json" "$LINKED_WT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (value.reaped[0].path !== process.argv[3]
+    || value.journal_branch_inventory[0].branch !== "wlb/p2-linked-owned") process.exit(1);
+NODE
+assert_exit_code "$?" "0" "newline path journal remains valid canonical JSON"
 
 EMPTY_REPO="$TEST_TMP/empty-repo"
 mkdir -p "$EMPTY_REPO"

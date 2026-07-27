@@ -83,17 +83,285 @@ if (value.branches.length !== 1
 NODE
 assert_exit_code "$?" "0" "fresh exact receipt proves zero lifecycle residue"
 
-node "$RECEIPT" check --repo "$REPO" --receipt "$FRESH_RECEIPT" >/dev/null
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$ROOT_ID" --receipt "$FRESH_RECEIPT" >/dev/null
 assert_exit_code "$?" "0" "fresh receipt validates against current repository state"
+node "$RECEIPT" check --repo "$REPO" --root-run-id wrong-root \
+  --receipt "$FRESH_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" "1" "receipt cannot be substituted across expected root runs"
+node - "$REPO_ROOT" "$REPO" "$FRESH_RECEIPT" <<'NODE'
+const path = require("path");
+const { inspectLifecycleReceipt } = require(
+  path.join(process.argv[2], "scripts", "lifecycle-residue-receipt"),
+);
+const result = inspectLifecycleReceipt({
+  repo: process.argv[3],
+  receipt: process.argv[4],
+  rootRunId: "wlb-p3-root",
+});
+if (result.status !== "valid" || result.zero_residue !== true) process.exit(1);
+NODE
+assert_exit_code "$?" "0" "LSM can import the receipt consumer without computing can_close"
+
+ORPHAN_BRANCH="hetero/p3-orphan-disposition"
+ORPHAN_KEY="$(
+  printf '%s\0%s\0%s\0' "$ROOT_ID" "$ORPHAN_BRANCH" "$BASE" \
+    | sha256sum | awk '{print $1}'
+)"
+ORPHAN_DIR="$COMMON/autopilot-branch-dispositions"
+printf \
+  '{"schema":1,"repo_identity":"%s","root_run_id":"%s","branch":"%s","tip":"%s","disposition":"failed","bundle":null,"acknowledged":false,"inventory_digest":"%s","recorded_at":1}\n' \
+  "$IDENTITY" "$ROOT_ID" "$ORPHAN_BRANCH" "$BASE" \
+  "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" \
+  > "$ORPHAN_DIR/$ORPHAN_KEY.json"
+node "$RECEIPT" issue --repo "$REPO" --root-run-id "$ROOT_ID" \
+  --worktree-result "$WORKTREE_RESULT" --branch-result "$BRANCH_RESULT" \
+  --out "$TEST_TMP/orphan-receipt.json" >/dev/null 2>&1
+assert_exit_code "$?" "2" "orphan disposition cannot issue a zero-residue receipt"
+rm -f "$ORPHAN_DIR/$ORPHAN_KEY.json"
+
+TAMPERED_RECEIPT="$TEST_TMP/tampered-receipt.json"
+node - "$FRESH_RECEIPT" "$TAMPERED_RECEIPT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+value.zero_residue = false;
+fs.writeFileSync(process.argv[3], JSON.stringify(value));
+NODE
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$ROOT_ID" --receipt "$TAMPERED_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" "1" "receipt digest rejects content tampering"
+
+IMPOSSIBLE_RECEIPT="$TEST_TMP/impossible-receipt.json"
+node - "$FRESH_RECEIPT" "$IMPOSSIBLE_RECEIPT" <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const canonicalize = (value) => {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]),
+  );
+};
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+value.branches[0].disposition = "failed";
+value.branches[0].acknowledged = true;
+const { receipt_digest: ignored, ...material } = value;
+value.receipt_digest = crypto.createHash("sha256")
+  .update(JSON.stringify(canonicalize(material))).digest("hex");
+fs.writeFileSync(process.argv[3], JSON.stringify(value));
+NODE
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$ROOT_ID" --receipt "$IMPOSSIBLE_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" "1" "rehashed impossible disposition semantics are rejected"
+
+FORGED_RECEIPT="$TEST_TMP/forged-receipt.json"
+node - "$DIRTY_RECEIPT" "$FORGED_RECEIPT" <<'NODE'
+const crypto = require("crypto");
+const fs = require("fs");
+const canonicalize = (value) => {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]),
+  );
+};
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+value.zero_residue = true;
+value.blockers = [];
+const { receipt_digest: ignored, ...material } = value;
+value.receipt_digest = crypto.createHash("sha256")
+  .update(JSON.stringify(canonicalize(material))).digest("hex");
+fs.writeFileSync(process.argv[3], JSON.stringify(value));
+NODE
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$ROOT_ID" --receipt "$FORGED_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" "1" "recomputed digest cannot forge dirty lifecycle semantics"
+
+MARKER_DRIFT_WT="$TEST_TMP/marker-drift"
+git -C "$REPO" worktree add -q -b hetero/p3-marker-drift "$MARKER_DRIFT_WT" develop
+{
+  printf 'created_at=%s\n' "$(date +%s)"
+  printf 'branch=%s\n' "hetero/p3-marker-drift"
+  printf 'base_sha=%s\n' "$BASE"
+  printf 'run_id=%s\n' "p3-marker-drift"
+  printf 'root_run_id=%s\n' "$ROOT_ID"
+  printf 'loop_id=%s\n' "p3-loop"
+  printf 'schema=2\n'
+} > "$MARKER_DRIFT_WT/.autopilot-worktree"
+: > "$MARKER_DRIFT_WT/.autopilot-worktree.lock"
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$ROOT_ID" --receipt "$FRESH_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" "1" "receipt is stale after owned marker inventory changes"
+git -C "$REPO" worktree remove --force "$MARKER_DRIFT_WT"
+git -C "$REPO" branch -D hetero/p3-marker-drift >/dev/null
+
+JOURNAL_DIR="$COMMON/autopilot-worktree-branch-inventory"
+JOURNAL_DRIFT="$JOURNAL_DIR/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"
+printf \
+  '{"schema":1,"root_run_id":"%s","path":"%s","branch":"hetero/p3-journal-drift","tip":"%s","marker_sha256":"%s","captured_at":1}\n' \
+  "$ROOT_ID" "$TEST_TMP/journal-drift" "$BASE" \
+  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+  > "$JOURNAL_DRIFT"
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$ROOT_ID" --receipt "$FRESH_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" "2" "malformed branch inventory journal fails closed"
+rm -f "$JOURNAL_DRIFT"
 
 git -C "$REPO" commit -q --allow-empty -m drift
-node "$RECEIPT" check --repo "$REPO" --receipt "$FRESH_RECEIPT" >/dev/null 2>&1
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$ROOT_ID" --receipt "$FRESH_RECEIPT" >/dev/null 2>&1
 assert_exit_code "$?" "1" "receipt is stale after observed HEAD changes"
 git -C "$REPO" reset -q --hard "$BASE"
-git -C "$REPO" update-ref refs/heads/hetero/p3-custom "$BASE"
-node "$RECEIPT" check --repo "$REPO" --receipt "$FRESH_RECEIPT" >/dev/null 2>&1
-assert_exit_code "$?" "1" "receipt is stale when a dispositioned exact branch reappears"
-git -C "$REPO" update-ref -d refs/heads/hetero/p3-custom "$BASE"
+REAPPEARED_TIP="$(
+  printf '%s\n' reappeared \
+    | git -C "$REPO" commit-tree "${BASE}^{tree}" -p "$BASE"
+)"
+git -C "$REPO" update-ref refs/heads/hetero/p3-custom "$REAPPEARED_TIP"
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$ROOT_ID" --receipt "$FRESH_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" "1" "receipt is stale when a reaped ref reappears at a different tip"
+git -C "$REPO" update-ref -d refs/heads/hetero/p3-custom "$REAPPEARED_TIP"
+
+HANDOFF_ROOT_ID="wlb-p3-handoff-root"
+HANDOFF_TIP="$(
+  printf '%s\n' handoff \
+    | git -C "$REPO" commit-tree "${BASE}^{tree}" -p "$BASE"
+)"
+git -C "$REPO" update-ref refs/heads/hetero/p3-handoff "$HANDOFF_TIP"
+git -C "$REPO" branch agent/unrelated-r1-20260727 develop
+HANDOFF_INVENTORY="$TEST_TMP/handoff-inventory.json"
+printf \
+  '{"schema":1,"git_common_dir":"%s","root_run_id":"%s","branch_inventory":[{"branch":"hetero/p3-handoff","tip":"%s"}]}\n' \
+  "$COMMON" "$HANDOFF_ROOT_ID" "$HANDOFF_TIP" > "$HANDOFF_INVENTORY"
+HANDOFF_PATH="$TEST_TMP/handoff-origin"
+HANDOFF_KEY="$(
+  printf '%s\0%s\0%s\0%s\0' \
+    "$HANDOFF_ROOT_ID" "$HANDOFF_PATH" "hetero/p3-handoff" "$HANDOFF_TIP" \
+    | sha256sum | awk '{print $1}'
+)"
+printf \
+  '{"schema":1,"root_run_id":"%s","path":"%s","branch":"hetero/p3-handoff","tip":"%s","marker_sha256":"%s","captured_at":1}\n' \
+  "$HANDOFF_ROOT_ID" "$HANDOFF_PATH" "$HANDOFF_TIP" \
+  "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
+  > "$JOURNAL_DIR/$HANDOFF_KEY.json"
+HANDOFF_RESULT="$TEST_TMP/handoff-result.json"
+"$BRANCH_REAPER" reap --repo "$REPO" --into develop \
+  --inventory-file "$HANDOFF_INVENTORY" \
+  --ack-preserved "hetero/p3-handoff@$HANDOFF_TIP" --yes \
+  > "$HANDOFF_RESULT"
+assert_exit_code "$?" "0" "exact-tip handoff acknowledgement preserves uncontained branch"
+assert_eq "$(git -C "$REPO" rev-parse refs/heads/hetero/p3-handoff)" "$HANDOFF_TIP" \
+  "acknowledged handoff branch remains at its exact tip"
+if git -C "$REPO" show-ref --verify --quiet refs/heads/agent/unrelated-r1-20260727; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "exact inventory mode must not classify an unrelated regex branch"
+fi
+HANDOFF_RECEIPT="$TEST_TMP/handoff-receipt.json"
+node "$RECEIPT" issue --repo "$REPO" --root-run-id "$HANDOFF_ROOT_ID" \
+  --worktree-result "$HANDOFF_INVENTORY" --branch-result "$HANDOFF_RESULT" \
+  --out "$HANDOFF_RECEIPT" >/dev/null
+assert_exit_code "$?" "0" "acknowledged exact-tip preservation issues a receipt"
+node - "$HANDOFF_RECEIPT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (!value.zero_residue || value.branches[0].disposition !== "preserved"
+    || value.branches[0].acknowledged !== true) process.exit(1);
+NODE
+assert_exit_code "$?" "0" "exact preservation acknowledgement satisfies branch disposition"
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$HANDOFF_ROOT_ID" --receipt "$HANDOFF_RECEIPT" >/dev/null
+assert_exit_code "$?" "0" "acknowledged handoff receipt stays fresh at the exact tip"
+git -C "$REPO" update-ref refs/heads/hetero/p3-handoff "$BASE" "$HANDOFF_TIP"
+node "$RECEIPT" check --repo "$REPO" --root-run-id "$HANDOFF_ROOT_ID" --receipt "$HANDOFF_RECEIPT" >/dev/null 2>&1
+assert_exit_code "$?" "1" "acknowledged handoff receipt is stale after tip drift"
+git -C "$REPO" update-ref -d refs/heads/hetero/p3-handoff "$BASE"
+git -C "$REPO" branch -D agent/unrelated-r1-20260727 >/dev/null
+
+SEQUENTIAL_ROOT_ID="wlb-p3-sequential-root"
+for SEQUENTIAL_NAME in a b; do
+  SEQUENTIAL_BRANCH="hetero/p3-sequential-$SEQUENTIAL_NAME"
+  SEQUENTIAL_WT="$TEST_TMP/sequential-$SEQUENTIAL_NAME"
+  git -C "$REPO" worktree add -q -b "$SEQUENTIAL_BRANCH" "$SEQUENTIAL_WT" develop
+  {
+    printf 'created_at=%s\n' "$(date +%s)"
+    printf 'branch=%s\n' "$SEQUENTIAL_BRANCH"
+    printf 'base_sha=%s\n' "$BASE"
+    printf 'run_id=%s\n' "p3-sequential-$SEQUENTIAL_NAME"
+    printf 'root_run_id=%s\n' "$SEQUENTIAL_ROOT_ID"
+    printf 'loop_id=%s\n' "p3-sequential-loop"
+    printf 'schema=2\n'
+  } > "$SEQUENTIAL_WT/.autopilot-worktree"
+  : > "$SEQUENTIAL_WT/.autopilot-worktree.lock"
+  SEQUENTIAL_WORKTREE_RESULT="$TEST_TMP/sequential-$SEQUENTIAL_NAME-worktree.json"
+  "$WORKTREE_REAPER" reap --repo "$REPO" --root-run-id "$SEQUENTIAL_ROOT_ID" --yes \
+    > "$SEQUENTIAL_WORKTREE_RESULT"
+  assert_exit_code "$?" "0" "sequential worktree $SEQUENTIAL_NAME is reaped"
+  if [ "$SEQUENTIAL_NAME" = "b" ]; then
+    node - "$SEQUENTIAL_WORKTREE_RESULT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (value.journal_branch_inventory.length !== 1
+    || value.journal_branch_inventory[0].branch !== "hetero/p3-sequential-b") {
+  process.exit(1);
+}
+NODE
+    assert_exit_code "$?" "0" "resolved batch A does not poison sequential batch B inventory"
+  fi
+  SEQUENTIAL_BRANCH_RESULT="$TEST_TMP/sequential-$SEQUENTIAL_NAME-branch.json"
+  "$BRANCH_REAPER" reap --repo "$REPO" --into develop \
+    --inventory-file "$SEQUENTIAL_WORKTREE_RESULT" --yes \
+    --bundle-dir "$TEST_TMP/sequential-bundles" > "$SEQUENTIAL_BRANCH_RESULT"
+  assert_exit_code "$?" "0" "sequential branch $SEQUENTIAL_NAME is dispositioned"
+done
+SEQUENTIAL_RECEIPT="$TEST_TMP/sequential-receipt.json"
+node "$RECEIPT" issue --repo "$REPO" --root-run-id "$SEQUENTIAL_ROOT_ID" \
+  --worktree-result "$SEQUENTIAL_WORKTREE_RESULT" \
+  --branch-result "$SEQUENTIAL_BRANCH_RESULT" --out "$SEQUENTIAL_RECEIPT" >/dev/null
+assert_exit_code "$?" "0" "sequential lifecycle history issues one cumulative receipt"
+node - "$SEQUENTIAL_RECEIPT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (!value.zero_residue || value.branches.length !== 2
+    || !value.branches.every((item) => item.disposition === "reaped")) process.exit(1);
+NODE
+assert_exit_code "$?" "0" "cumulative receipt proves both sequential batches dispositioned"
+
+SHA_REPO="$TEST_TMP/sha256-receipt-repo"
+SHA_WT="$TEST_TMP/sha256-receipt-worktree"
+SHA_ROOT_ID="wlb-p3-sha256-root"
+git init -q --object-format=sha256 -b develop "$SHA_REPO"
+git -C "$SHA_REPO" config user.email test@example.com
+git -C "$SHA_REPO" config user.name "Test User"
+git -C "$SHA_REPO" commit -q --allow-empty -m base
+SHA_BASE="$(git -C "$SHA_REPO" rev-parse HEAD)"
+SHA_COMMON="$(git -C "$SHA_REPO" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$SHA_COMMON/info"
+printf '%s\n' ".autopilot-worktree" ".autopilot-worktree.lock" >> "$SHA_COMMON/info/exclude"
+git -C "$SHA_REPO" worktree add -q -b hetero/p3-sha256 "$SHA_WT" develop
+{
+  printf 'created_at=%s\n' "$(date +%s)"
+  printf 'branch=%s\n' "hetero/p3-sha256"
+  printf 'base_sha=%s\n' "$SHA_BASE"
+  printf 'run_id=%s\n' "p3-sha256"
+  printf 'root_run_id=%s\n' "$SHA_ROOT_ID"
+  printf 'loop_id=%s\n' "p3-sha256-loop"
+  printf 'schema=2\n'
+} > "$SHA_WT/.autopilot-worktree"
+: > "$SHA_WT/.autopilot-worktree.lock"
+SHA_WORKTREE_RESULT="$TEST_TMP/sha256-worktree.json"
+"$WORKTREE_REAPER" reap --repo "$SHA_REPO" --root-run-id "$SHA_ROOT_ID" --yes \
+  > "$SHA_WORKTREE_RESULT"
+SHA_BRANCH_RESULT="$TEST_TMP/sha256-branch.json"
+"$BRANCH_REAPER" reap --repo "$SHA_REPO" --into develop \
+  --inventory-file "$SHA_WORKTREE_RESULT" --yes \
+  --bundle-dir "$TEST_TMP/sha256-receipt-bundles" > "$SHA_BRANCH_RESULT"
+SHA_RECEIPT="$TEST_TMP/sha256-receipt.json"
+node "$RECEIPT" issue --repo "$SHA_REPO" --root-run-id "$SHA_ROOT_ID" \
+  --worktree-result "$SHA_WORKTREE_RESULT" --branch-result "$SHA_BRANCH_RESULT" \
+  --out "$SHA_RECEIPT" >/dev/null
+assert_exit_code "$?" "0" "SHA-256 lifecycle receipt is issued"
+node - "$SHA_RECEIPT" <<'NODE'
+const fs = require("fs");
+const value = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (!value.zero_residue || value.blockers.length !== 0
+    || value.branches[0].disposition !== "reaped"
+    || value.branches[0].tip.length !== 64) process.exit(1);
+NODE
+assert_exit_code "$?" "0" "SHA-256 bundle is independently restorable for zero residue"
+node "$RECEIPT" check --repo "$SHA_REPO" --root-run-id "$SHA_ROOT_ID" --receipt "$SHA_RECEIPT" >/dev/null
+assert_exit_code "$?" "0" "SHA-256 lifecycle receipt stays fresh"
 
 write_inventory() {
   local file="$1" branches="$2"
@@ -102,30 +370,64 @@ write_inventory() {
     "$IDENTITY" "$ROOT_ID" "$branches" > "$file"
 }
 
+write_test_journal() {
+  local branch="$1" tip="$2" origin="$3" key
+  key="$(
+    printf '%s\0%s\0%s\0%s\0' "$ROOT_ID" "$origin" "$branch" "$tip" \
+      | sha256sum | awk '{print $1}'
+  )"
+  printf \
+    '{"schema":1,"root_run_id":"%s","path":"%s","branch":"%s","tip":"%s","marker_sha256":"%s","captured_at":1}\n' \
+    "$ROOT_ID" "$origin" "$branch" "$tip" \
+    "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" \
+    > "$JOURNAL_DIR/$key.json"
+}
+
 MISSING="$TEST_TMP/missing.json"
 write_inventory "$MISSING" '[{"name":"hetero/missing","tip":"0000000000000000000000000000000000000000"}]'
-"$BRANCH_REAPER" reap --repo "$REPO" --into develop --inventory-file "$MISSING" \
-  --yes --bundle-dir "$TEST_TMP/missing-bundles" >/dev/null 2>&1
+write_test_journal hetero/missing \
+  0000000000000000000000000000000000000000 "$TEST_TMP/missing-origin"
+MISSING_ERROR="$(
+  "$BRANCH_REAPER" reap --repo "$REPO" --into develop --inventory-file "$MISSING" \
+    --yes --bundle-dir "$TEST_TMP/missing-bundles" 2>&1
+)"
 assert_exit_code "$?" "2" "missing exact inventory branch is rejected"
+assert_contains "$MISSING_ERROR" "missing or moved" "missing inventory rejection is specific"
 
 DUPLICATE="$TEST_TMP/duplicate.json"
 write_inventory "$DUPLICATE" \
   '[{"name":"hetero/duplicate","tip":"0000000000000000000000000000000000000000"},{"name":"hetero/duplicate","tip":"0000000000000000000000000000000000000000"}]'
-"$BRANCH_REAPER" scan --repo "$REPO" --into develop --inventory-file "$DUPLICATE" \
-  >/dev/null 2>&1
+DUPLICATE_ERROR="$(
+  "$BRANCH_REAPER" scan --repo "$REPO" --into develop --inventory-file "$DUPLICATE" 2>&1
+)"
 assert_exit_code "$?" "2" "duplicate exact inventory branch is rejected"
+assert_contains "$DUPLICATE_ERROR" "malformed or contains duplicate" \
+  "duplicate inventory rejection is specific"
 
 TARGET="$TEST_TMP/target.json"
 write_inventory "$TARGET" "[{\"name\":\"develop\",\"tip\":\"$BASE\"}]"
-"$BRANCH_REAPER" scan --repo "$REPO" --into develop --inventory-file "$TARGET" \
-  >/dev/null 2>&1
+TARGET_ERROR="$(
+  "$BRANCH_REAPER" scan --repo "$REPO" --into develop --inventory-file "$TARGET" 2>&1
+)"
 assert_exit_code "$?" "2" "integration target cannot enter exact inventory"
+assert_contains "$TARGET_ERROR" "integration target cannot enter" \
+  "integration-target rejection is specific"
 
 git -C "$REPO" update-ref refs/heads/hetero/moved "$BASE"
 MOVED="$TEST_TMP/moved.json"
 write_inventory "$MOVED" '[{"name":"hetero/moved","tip":"0000000000000000000000000000000000000000"}]'
-"$BRANCH_REAPER" scan --repo "$REPO" --into develop --inventory-file "$MOVED" \
-  >/dev/null 2>&1
+write_test_journal hetero/moved \
+  0000000000000000000000000000000000000000 "$TEST_TMP/moved-origin"
+MOVED_ERROR="$(
+  "$BRANCH_REAPER" scan --repo "$REPO" --into develop --inventory-file "$MOVED" 2>&1
+)"
 assert_exit_code "$?" "2" "moved exact inventory tip is rejected"
+assert_contains "$MOVED_ERROR" "missing or moved" "moved-tip rejection is specific"
+
+RECEIPT_SOURCE="$(cat "$RECEIPT")"
+assert_not_contains "$RECEIPT_SOURCE" "can_close" \
+  "WLB receipt implementation never computes task close authority"
+assert_not_contains "$RECEIPT_SOURCE" "session-mode.js clear" \
+  "WLB receipt implementation never clears the session marker"
 
 finalize_test

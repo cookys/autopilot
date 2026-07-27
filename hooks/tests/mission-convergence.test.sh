@@ -895,9 +895,14 @@ if (createMissionState && reduceMissionState && stateHash) {
     for (const k of Object.keys(canonical)) fieldCopy[k] = canonical[k];
     const fieldCopyResult = ac.consumeAuthenticatedControlEvent(fieldCopy);
     console.log(`consume-field-copy-fails\t${fieldCopyResult.ok === false ? 'PASS' : 'FAIL'}`);
-    // Reflect.ownKeys
+    // Reflect.ownKeys: copy every own key/descriptor into a fresh object
     const reflectedKeys = Reflect.ownKeys(canonical);
-    const reflectResult = ac.consumeAuthenticatedControlEvent({ ...canonical });
+    const reflectReplica = {};
+    for (const key of reflectedKeys) {
+      Object.defineProperty(reflectReplica, key, Reflect.getOwnPropertyDescriptor(canonical, key));
+    }
+    Object.freeze(reflectReplica);
+    const reflectResult = ac.consumeAuthenticatedControlEvent(reflectReplica);
     console.log(`consume-reflect-replica-fails\t${reflectResult.ok === false ? 'PASS' : 'FAIL'}`);
     // JSON roundtrip
     const roundtrip = JSON.parse(JSON.stringify(canonical));
@@ -1314,6 +1319,164 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`source-ref-restore-tamper-rejects\t${
       restoreRefTamperRejected ? 'PASS' : 'FAIL'}`);
   }
+  {
+    // ─── Fix #1: closed-shape control payload alias attack ─────────────
+    const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
+    const aliasAdapter = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const sAlias = createMissionState(makeContract());
+    const aliasCanonical = aliasAdapter.acceptEvent({
+      mission_lineage_id: sAlias.mission_lineage_id,
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'alias-attack',
+    });
+    // Payload with an extra alias property referencing the same canonical event
+    let aliasRejected = false;
+    let aliasErrCode = null;
+    try {
+      reduceMissionState(sAlias, {
+        event_type: 'control_event', sequence: 1,
+        mission_lineage_id: sAlias.mission_lineage_id,
+        payload: { event: aliasCanonical, alias: aliasCanonical },
+      });
+    } catch (e) { aliasRejected = true; aliasErrCode = e.code; }
+    console.log(`control-payload-alias-attack-rejects\t${
+      aliasRejected && aliasErrCode === 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED' ? 'PASS' : 'FAIL'}`);
+    // Payload with any extra key (not an alias) also rejects
+    let extraKeyRejected = false;
+    try {
+      reduceMissionState(sAlias, {
+        event_type: 'control_event', sequence: 1,
+        mission_lineage_id: sAlias.mission_lineage_id,
+        payload: { event: aliasCanonical, hint: 'something' },
+      });
+    } catch (e) { extraKeyRejected = e.code === 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED'; }
+    console.log(`control-payload-extra-key-rejects\t${
+      extraKeyRejected ? 'PASS' : 'FAIL'}`);
+    // Valid single-key payload still works and recursively contains no
+    // authenticated object identity.
+    const aliasAdapter2 = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const goodCanonical = aliasAdapter2.acceptEvent({
+      mission_lineage_id: sAlias.mission_lineage_id,
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'clean',
+    });
+    const aliasResult = reduceMissionState(sAlias, {
+      event_type: 'control_event', sequence: 1,
+      mission_lineage_id: sAlias.mission_lineage_id,
+      payload: { event: goodCanonical },
+    });
+    // Recursively inspect live stored objects: no nested field may be the
+    // original canonical identity.
+    let noIdentityLeak = true;
+    const walkIdentity = (value, seen = new WeakSet()) => {
+      if (value === null || typeof value !== 'object') return;
+      if (seen.has(value)) return;
+      seen.add(value);
+      if (value === goodCanonical) noIdentityLeak = false;
+      for (const k of Reflect.ownKeys(value)) {
+        if (typeof k === 'string') walkIdentity(value[k], seen);
+      }
+    };
+    walkIdentity(aliasResult.state);
+    walkIdentity(aliasResult.receipt);
+    console.log(`control-payload-no-identity-leak\t${
+      noIdentityLeak ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── Fix #2: isAuthenticatedAdapterCapability not in barrel export ──
+    const engineIndex = require(path.join(root, 'src', 'engine', 'index.js'));
+    console.log(`predicate-not-in-barrel-export\t${
+      engineIndex.isAuthenticatedAdapterCapability === undefined ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── Fix #3: minimal source-ref (no optional keys) build/restore ────
+    const sMinRef = createMissionState(makeContract());
+    const minRef = {
+      kind: 'commit',
+      locator: 'abc123',
+      label: 'minimal ref',
+      digest: m.computeSourceRefDigest({ kind: 'commit', locator: 'abc123', label: 'minimal ref' }),
+    };
+    const minProj = buildProjection(sMinRef, [minRef]);
+    const minRefStored = minProj.source_refs[0];
+    const noUndefinedKeys = !Object.prototype.hasOwnProperty.call(minRefStored, 'evidence_kind')
+      && !Object.prototype.hasOwnProperty.call(minRefStored, 'ref_class');
+    console.log(`source-ref-minimal-no-undefined-keys\t${
+      noUndefinedKeys ? 'PASS' : 'FAIL'}`);
+    const minRestored = restoreProjection(minProj);
+    console.log(`source-ref-minimal-restore-passes\t${
+      minRestored !== null ? 'PASS' : 'FAIL'}`);
+    // Closed-shape: unsupported key rejects
+    let closedShapeRejected = false;
+    try {
+      buildProjection(sMinRef, [{
+        kind: 'commit', locator: 'x', label: 'y', extra_field: 'bad',
+        digest: m.computeSourceRefDigest({ kind: 'commit', locator: 'x', label: 'y' }),
+      }]);
+    } catch (e) { closedShapeRejected = e.code === 'SOURCE_REF_UNSUPPORTED_KEY'; }
+    console.log(`source-ref-closed-shape-malformed-rejects\t${
+      closedShapeRejected ? 'PASS' : 'FAIL'}`);
+  }
+  {
+    // ─── Fix #4: cross-binding family negative tests ───────────────────
+    // Each test tampers one config_snapshot identity field, recomputes
+    // digests, and verifies restore rejects with PROJECTION_BINDING_MISMATCH.
+    const sBind = createMissionState(makeContract());
+    const projBind = buildProjection(sBind);
+
+    function tamperAndRestore(mutate) {
+      const t = JSON.parse(JSON.stringify(projBind));
+      mutate(t);
+      t.config_digest = m.computeConfigDigest({
+        schema_version: t.config_snapshot.schema_version,
+        artifact_type: t.config_snapshot.artifact_type,
+        contract_id: t.config_snapshot.contract_id,
+        repo_identity: t.config_snapshot.repo_identity,
+        mission_lineage_id: t.config_snapshot.mission_lineage_id,
+        task_authority_id: t.config_snapshot.task_authority_id,
+        policy_hash: t.config_snapshot.policy_hash,
+        enforcement_mode: t.config_snapshot.enforcement_mode,
+        state: t.config_snapshot.contract_state,
+        closure_ratio: t.config_snapshot.closure_ratio,
+        max_stagnant_campaigns: t.config_snapshot.max_stagnant_campaigns,
+        red_lines: t.config_snapshot.red_lines,
+        axes: t.config_snapshot.axes,
+        grant_contract: t.config_snapshot.grant_contract,
+        control_contract: t.config_snapshot.control_contract,
+        lineage_binding: t.config_snapshot.lineage_binding,
+      }, t.config_snapshot.provenance);
+      t.projection_digest = m.sha256({ ...t, projection_digest: undefined });
+      try { restoreProjection(t); return null; } catch (e) { return e.code; }
+    }
+
+    const errLineage = tamperAndRestore((t) => {
+      t.config_snapshot.mission_lineage_id = 'lineage-v1-' + 'f'.repeat(64);
+    });
+    console.log(`restore-rejects-lineage-id-mismatch\t${
+      errLineage === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
+
+    const errTask = tamperAndRestore((t) => {
+      t.config_snapshot.task_authority_id = 'e'.repeat(64);
+    });
+    console.log(`restore-rejects-task-authority-mismatch\t${
+      errTask === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
+
+    const errPolicy = tamperAndRestore((t) => {
+      t.config_snapshot.policy_hash = 'd'.repeat(64);
+    });
+    console.log(`restore-rejects-policy-hash-mismatch\t${
+      errPolicy === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
+
+    const errEnforce = tamperAndRestore((t) => {
+      t.config_snapshot.enforcement_mode = 'enforce';
+    });
+    console.log(`restore-rejects-enforcement-mode-mismatch\t${
+      errEnforce === 'PROJECTION_BINDING_MISMATCH' ? 'PASS' : 'FAIL'}`);
+  }
 }
 NODE
 )"
@@ -1410,7 +1573,14 @@ for id in \
   source-ref-positive-passes source-ref-positive-restore-passes \
   source-ref-missing-digest-rejects source-ref-wrong-digest-rejects \
   source-ref-duplicate-locator-rejects source-ref-unknown-kind-rejects \
-  source-ref-restore-tamper-rejects
+  source-ref-restore-tamper-rejects \
+  control-payload-alias-attack-rejects control-payload-extra-key-rejects \
+  control-payload-no-identity-leak \
+  predicate-not-in-barrel-export \
+  source-ref-minimal-no-undefined-keys source-ref-minimal-restore-passes \
+  source-ref-closed-shape-malformed-rejects \
+  restore-rejects-lineage-id-mismatch restore-rejects-task-authority-mismatch \
+  restore-rejects-policy-hash-mismatch restore-rejects-enforcement-mode-mismatch
 do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done

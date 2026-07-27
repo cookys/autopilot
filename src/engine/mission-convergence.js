@@ -495,6 +495,8 @@ function computeConfigDigest(contract, provenance) {
     closure_ratio: contract.closure_ratio,
     max_stagnant_campaigns: contract.max_stagnant_campaigns !== undefined
       ? contract.max_stagnant_campaigns : DEFAULT_MAX_STAGNANT,
+    successor_inherits_durable_consumed: !!(contract.lineage_binding
+      && contract.lineage_binding.successor_inherits_durable_consumed),
     red_lines: [...(contract.red_lines || [])].sort(),
     axes: perAxis,
     grant_contract: contract.grant_contract,
@@ -580,14 +582,15 @@ function validateSourceRef(rawRef, label) {
   if (claimedDigest !== expected) {
     fail(`${label}.digest does not match the ref content`, 'SOURCE_REF_DIGEST_MISMATCH');
   }
-  return Object.freeze({
+  const validated = {
     kind,
     locator: rawRef.locator,
     label: rawRef.label,
-    evidence_kind: rawRef.evidence_kind,
-    ref_class: rawRef.ref_class,
-    digest: claimedDigest,
-  });
+  };
+  if (rawRef.evidence_kind !== undefined) validated.evidence_kind = rawRef.evidence_kind;
+  if (rawRef.ref_class !== undefined) validated.ref_class = rawRef.ref_class;
+  validated.digest = claimedDigest;
+  return Object.freeze(validated);
 }
 
 function validateSourceRefs(rawRefs, label = 'source_refs') {
@@ -870,20 +873,19 @@ function reduceMissionState(state, event) {
     if (!payload || payload.event === undefined) {
       fail('control_event requires an adapter-produced event payload', 'MISSION_CONTROL_UNAUTHENTICATED');
     }
+    const payloadKeys = Object.keys(payload);
+    if (payloadKeys.length !== 1 || payloadKeys[0] !== 'event') {
+      fail('control_event payload must be a closed shape containing exactly the "event" property', 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED');
+    }
     const consume = consumeAuthenticatedControlEvent(payload.event);
     if (!consume || consume.ok !== true || !consume.event) {
       fail('control_event must be produced by an AuthenticatedControlAdapter instance', 'MISSION_CONTROL_UNAUTHENTICATED');
     }
     sanitizedControlEvent = consume.event;
   }
-  // Build the digest input payload. For control/ceiling events we replace
-  // the raw canonical event with the sanitized snapshot, so the identity-
-  // bearing object (and any field that could carry it) is excluded from
-  // the digest. For other event types, the digest input is the payload as
-  // submitted, with all enumerable own keys.
   let digestPayload;
   if (sanitizedControlEvent) {
-    digestPayload = { ...payload, event: sanitizedControlEvent };
+    digestPayload = { event: sanitizedControlEvent };
   } else {
     digestPayload = payload;
   }
@@ -2263,6 +2265,24 @@ function restoreProjection(projection) {
     control_contract: configSnapshot.control_contract,
     lineage_binding: configSnapshot.lineage_binding,
   };
+  // Cross-field binding: config snapshot identity fields must match the
+  // projection's top-level trusted fields.
+  if (configSnapshot.mission_lineage_id !== projection.mission_lineage_id) {
+    fail('config_snapshot.mission_lineage_id does not match projection.mission_lineage_id', 'PROJECTION_BINDING_MISMATCH');
+  }
+  if (configSnapshot.task_authority_id !== projection.task_authority_id) {
+    fail('config_snapshot.task_authority_id does not match projection.task_authority_id', 'PROJECTION_BINDING_MISMATCH');
+  }
+  if (configSnapshot.policy_hash !== projection.policy_hash) {
+    fail('config_snapshot.policy_hash does not match projection.policy_hash', 'PROJECTION_BINDING_MISMATCH');
+  }
+  if (configSnapshot.enforcement_mode !== projection.enforcement_mode) {
+    fail('config_snapshot.enforcement_mode does not match projection.enforcement_mode', 'PROJECTION_BINDING_MISMATCH');
+  }
+  if (!!(configSnapshot.lineage_binding && configSnapshot.lineage_binding.successor_inherits_durable_consumed)
+    !== !!projection.successor_inherits_durable_consumed) {
+    fail('config_snapshot lineage_binding.successor_inherits_durable_consumed does not match projection', 'PROJECTION_BINDING_MISMATCH');
+  }
   // Cross-field lineage/task/policy binding check.
   if (reconstructedConfig.lineage_binding.task_authority_id !== reconstructedConfig.task_authority_id) {
     fail('config lineage_binding.task_authority_id does not match task_authority_id', 'PROJECTION_BINDING_MISMATCH');

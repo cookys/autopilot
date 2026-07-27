@@ -385,7 +385,6 @@ module.exports = {
   evaluateIdentityReset: missionConvergence.evaluateIdentityReset,
   evaluateMissionIntegrationFixture: missionConvergence.evaluateMissionIntegrationFixture,
   evaluateMissionReducerFixture: missionConvergence.evaluateMissionReducerFixture,
-  isAuthenticatedAdapterCapability: authenticatedControl.isAuthenticatedAdapterCapability,
   isNonSerializableVerifier: authenticatedControl.isNonSerializableVerifier,
   normalizeControlEvent: authenticatedControl.normalizeControlEvent,
   reduceMissionState: missionConvergence.reduceMissionState,

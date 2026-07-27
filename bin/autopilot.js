@@ -22,7 +22,7 @@ function printHelp() {
   node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
-  node bin/autopilot.js status [quota|runs|roster] [--json] [--probe]
+  node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
   node bin/autopilot.js campaign <inspect|status|resume> --campaign-id <id> [--ledger <file>]
 
 Commands:
@@ -45,7 +45,7 @@ Commands:
                     self-authorize.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
-  status            Read-only state overview: per-pool quota (recorded, per-MODEL pools), live dispatch runs, resolved roster seats (quota|runs|roster; --json; --probe = safe surface refresh, no model spend).
+  status            State overview: quota, runs, roster, or exact-seat readiness receipt (--json; readiness --probe may spend one bounded minimal request per stale exact tuple).
   campaign          Inspect/status durable campaign state or determine whether it is resumable.
                     tokens never printed, never read from argv).
 

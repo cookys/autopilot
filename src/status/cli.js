@@ -10,17 +10,22 @@
 //   autopilot status quota [--json] [--probe]
 //   autopilot status runs  [--json]
 //   autopilot status roster [--json]
+//   autopilot status readiness [--json] [--probe]
 //
 // HONESTY CONTRACT: subscription CLIs (codex/grok/agy) expose no "remaining %"
 // programmatically — what we CAN show is the recorded per-pool status, its
 // reset_at, and HOW OLD the observation is (quota pools are per-model, not
 // per-vendor: the 2026-07-14 lesson — gpt-5.3-codex-spark stayed available
-// while gpt-5.5/gpt-5.6-sol were exhausted). `--probe` refreshes via
+// while gpt-5.5/gpt-5.6-sol were exhausted). `quota --probe` refreshes via
 // probe-engine-capability.sh --safe (binary/auth surface only, NO model spend).
-// Stale rows are flagged, never silently trusted.
+// `readiness --probe` is explicit bounded live spend through the readiness
+// coordinator. Stale rows are flagged, never silently trusted.
 
 const path = require('path');
 const { spawnSync } = require('child_process');
+const {
+  collectProviderReadiness,
+} = require('../readiness/status');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -300,6 +305,24 @@ function rosterHuman(ro, stdout) {
   stdout.write(`  qc panel:           ${JSON.stringify(ro.qc_panel)}\n`);
 }
 
+// --- readiness ----------------------------------------------------------------
+
+function readinessHuman(receipt, stdout) {
+  stdout.write(`READINESS (${receipt.overall_status})\n`);
+  for (const seat of receipt.seats) {
+    const selected = seat.selected
+      ? ` via ${seat.selected.source}:${seat.selected.tuple.runner}/${seat.selected.tuple.model}`
+      : '';
+    const axes = seat.failing_axes.length === 0
+      ? 'all axes ready'
+      : seat.failing_axes
+        .map((axis) => `${axis.axis}=${axis.status}:${axis.reason}`)
+        .join(', ');
+    stdout.write(`  ${seat.seat_id}: ${seat.status}${selected} (${axes})\n`);
+  }
+  stdout.write(`  receipt: ${receipt.receipt_digest} expires ${receipt.expires_at}\n`);
+}
+
 // --- entry --------------------------------------------------------------------
 
 function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, cwd = process.cwd() } = {}) {
@@ -335,6 +358,18 @@ function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, 
     else rosterHuman(ro, stdout);
     return 0;
   }
+  if (sub === 'readiness') {
+    let receipt;
+    try {
+      receipt = collectProviderReadiness({ cwd, probe });
+    } catch (error) {
+      stderr.write(`readiness: ${error.code || 'unavailable'}\n`);
+      return 1;
+    }
+    if (json) stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
+    else readinessHuman(receipt, stdout);
+    return 0;
+  }
   if (sub === 'overview') {
     if (json) {
       stdout.write(`${JSON.stringify({ quota: collectQuota(), runs: collectRuns(), roster: collectRoster(cwd) }, null, 2)}\n`);
@@ -347,7 +382,7 @@ function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, 
     rosterHuman(collectRoster(cwd), stdout);
     return 0;
   }
-  stderr.write(`unknown status subcommand: ${sub} (quota|runs|roster or no subcommand for overview)\n`);
+  stderr.write(`unknown status subcommand: ${sub} (quota|runs|roster|readiness or no subcommand for overview)\n`);
   return 2;
 }
 

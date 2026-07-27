@@ -73,9 +73,14 @@ DEF_HARNESS="on"
 # Terminal depth-0 qc panel (v2.25.9): a DISJOINT-FAMILY panel, not a single reviewer.
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
 DEF_QC_PANEL="gpt-5.5, claude-opus, gemini-flash"
+DEF_QC_PANEL_RUNNERS="codex, claude-native, agy"
+DEF_QC_PANEL_EFFORTS="xhigh, high, high"
+DEF_QC_PANEL_ENDPOINTS="@none, @none, @none"
 # Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated roster)
 QC_ALL_CALIBRATED="gpt-5.5, claude-opus, gemini-flash, grok-4.5, MiniMax-M3"
 DEF_QC_AGG="union-on-verified-critical"
+DEF_PROVIDER_READINESS_RECEIPT_TTL_SECONDS="300"
+DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT="different"
 # review_diff_scope: how much the per-round reviewer reads.
 #   full                  — re-read the whole base..HEAD diff every round (safe; cost
 #                           grows O(n) with the accumulating diff). DEFAULT.
@@ -383,7 +388,27 @@ case "$CAPABILITY_STATE" in
 esac
 HARNESS="$(read_field "$CONFIG" independent_harness "$DEF_HARNESS")"
 QC_PANEL_RAW="$(read_field "$CONFIG" qc_panel "$DEF_QC_PANEL")"
+if config_has_field "$CONFIG" qc_panel; then
+  QC_PANEL_RUNNERS_RAW="$(read_field "$CONFIG" qc_panel_runners "")"
+  QC_PANEL_EFFORTS_RAW="$(read_field "$CONFIG" qc_panel_efforts "")"
+  QC_PANEL_ENDPOINTS_RAW="$(read_field "$CONFIG" qc_panel_endpoints "")"
+else
+  QC_PANEL_RUNNERS_RAW="$DEF_QC_PANEL_RUNNERS"
+  QC_PANEL_EFFORTS_RAW="$DEF_QC_PANEL_EFFORTS"
+  QC_PANEL_ENDPOINTS_RAW="$DEF_QC_PANEL_ENDPOINTS"
+fi
 QC_AGG="$(read_field "$CONFIG" qc_panel_aggregation "$DEF_QC_AGG")"
+PROVIDER_READINESS_RECEIPT_TTL_SECONDS="$(read_field "$CONFIG" provider_readiness_receipt_ttl_seconds "$DEF_PROVIDER_READINESS_RECEIPT_TTL_SECONDS")"
+if ! [[ "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS" =~ ^[0-9]+$ ]] \
+    || [[ "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS" -lt 1 ]] \
+    || [[ "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS" -gt 86400 ]]; then
+  PROVIDER_READINESS_RECEIPT_TTL_SECONDS="$DEF_PROVIDER_READINESS_RECEIPT_TTL_SECONDS"
+fi
+PROVIDER_READINESS_FAMILY_CONSTRAINT="$(read_field "$CONFIG" provider_readiness_fallback_family_constraint "$DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT")"
+case "$PROVIDER_READINESS_FAMILY_CONSTRAINT" in
+  any|different) ;;
+  *) PROVIDER_READINESS_FAMILY_CONSTRAINT="$DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT" ;;
+esac
 DIFF_SCOPE="$(read_field "$CONFIG" review_diff_scope "$DEF_DIFF_SCOPE")"
 MIN_PANEL_SIZE="$(read_field "$CONFIG" min_panel_size "$DEF_MIN_PANEL_SIZE")"
 # Fail-safe: must be an integer >= 1, else fall back to the safe default. Standalone —
@@ -439,6 +464,65 @@ for _p in "${_parts[@]}"; do
 done
 QC_PANEL_JSON+="]"
 [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
+
+# Exact QC companion metadata is positional and fail-closed. A model-only
+# qc_panel remains valid for the legacy review controller, but readiness cannot
+# invent its runner/effort/endpoint and therefore emits complete=false.
+QC_PANEL_RUNNERS=()
+QC_PANEL_EFFORTS=()
+QC_PANEL_ENDPOINTS=()
+for _raw_name in QC_PANEL_RUNNERS_RAW QC_PANEL_EFFORTS_RAW QC_PANEL_ENDPOINTS_RAW; do
+  _raw_value="${!_raw_name}"
+  _parsed=()
+  IFS=',' read -ra _raw_parts <<< "$_raw_value"
+  for _raw_part in "${_raw_parts[@]}"; do
+    _raw_part="$(printf '%s' "$_raw_part" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    [[ -n "$_raw_part" ]] && _parsed+=("$_raw_part")
+  done
+  case "$_raw_name" in
+    QC_PANEL_RUNNERS_RAW) QC_PANEL_RUNNERS=("${_parsed[@]}") ;;
+    QC_PANEL_EFFORTS_RAW) QC_PANEL_EFFORTS=("${_parsed[@]}") ;;
+    QC_PANEL_ENDPOINTS_RAW) QC_PANEL_ENDPOINTS=("${_parsed[@]}") ;;
+  esac
+done
+
+QC_PANEL_SEATS_COMPLETE="true"
+QC_PANEL_SEATS_JSON="[]"
+if [[ ${#QC_PANEL_RUNNERS[@]} -ne ${#QC_PANEL[@]} \
+      || ${#QC_PANEL_EFFORTS[@]} -ne ${#QC_PANEL[@]} \
+      || ${#QC_PANEL_ENDPOINTS[@]} -ne ${#QC_PANEL[@]} ]]; then
+  QC_PANEL_SEATS_COMPLETE="false"
+fi
+if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
+  for _i in "${!QC_PANEL[@]}"; do
+    case "${QC_PANEL_RUNNERS[$_i]}" in
+      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;;
+      *) QC_PANEL_SEATS_COMPLETE="false" ;;
+    esac
+    case "${QC_PANEL_EFFORTS[$_i]}" in
+      low|medium|high|xhigh|max) ;;
+      *) QC_PANEL_SEATS_COMPLETE="false" ;;
+    esac
+    if [[ "${QC_PANEL_ENDPOINTS[$_i]}" != "@none" \
+          && ! "${QC_PANEL_ENDPOINTS[$_i]}" =~ ^[A-Za-z0-9_]+$ ]]; then
+      QC_PANEL_SEATS_COMPLETE="false"
+    fi
+  done
+fi
+if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
+  QC_PANEL_SEATS_JSON="["
+  _first=1
+  for _i in "${!QC_PANEL[@]}"; do
+    [[ $_first -eq 0 ]] && QC_PANEL_SEATS_JSON+=","
+    _endpoint_json="null"
+    if [[ "${QC_PANEL_ENDPOINTS[$_i]}" != "@none" ]]; then
+      _endpoint_json="\"$(json_escape "${QC_PANEL_ENDPOINTS[$_i]}")\""
+    fi
+    QC_PANEL_SEATS_JSON+="{\"role\":\"qc\",\"runner\":\"$(json_escape "${QC_PANEL_RUNNERS[$_i]}")\",\"model\":\"$(json_escape "${QC_PANEL[$_i]}")\",\"effort\":\"$(json_escape "${QC_PANEL_EFFORTS[$_i]}")\",\"endpoint\":${_endpoint_json},\"family\":\"$(json_escape "$(family_of "${QC_PANEL[$_i]}")")\"}"
+    _first=0
+  done
+  QC_PANEL_SEATS_JSON+="]"
+fi
 
 # Runner identity selects the actual transport. Unknown or blank explicit values
 # fail loudly: silently substituting a different runner misattributes the review.
@@ -1091,7 +1175,11 @@ if [[ -n "$FIELD" ]]; then
     plan_review_growth_stop_ratio) printf '%s\n' "$PLAN_GROWTH_STOP_RATIO" ;;
     independent_harness) printf '%s\n' "$HARNESS" ;;
     qc_panel) printf '%s\n' "${QC_PANEL[*]}" ;;
+    qc_panel_seats) printf '%s\n' "$QC_PANEL_SEATS_JSON" ;;
+    qc_panel_seats_complete) printf '%s\n' "$QC_PANEL_SEATS_COMPLETE" ;;
     qc_panel_aggregation) printf '%s\n' "$QC_AGG" ;;
+    provider_readiness_receipt_ttl_seconds) printf '%s\n' "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS" ;;
+    provider_readiness_fallback_family_constraint) printf '%s\n' "$PROVIDER_READINESS_FAMILY_CONSTRAINT" ;;
     review_risk) printf '%s\n' "$REVIEW_RISK" ;;
     required_review_families) printf '%s\n' "$REQUIRED_REVIEW_FAMILIES" ;;
     l1_required) printf '%s\n' "$L1_REQUIRED" ;;
@@ -1167,6 +1255,13 @@ fi
 
 FMT_SUFFIX=" }\n"
 ARGS_SUFFIX=()
+READINESS_FMT=', "qc_panel_seats": %s, "qc_panel_seats_complete": %s, "provider_readiness_receipt_ttl_seconds": %s, "provider_readiness_fallback_family_constraint": "%s"'
+READINESS_ARGS=(
+  "$QC_PANEL_SEATS_JSON"
+  "$QC_PANEL_SEATS_COMPLETE"
+  "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS"
+  "$PROVIDER_READINESS_FAMILY_CONSTRAINT"
+)
 PLAN_FMT=', "plan_review": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(
   "$PLAN_REVIEW"
@@ -1189,7 +1284,7 @@ if [[ "$DENSITY_SOURCE" != "off" ]]; then
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${PLAN_FMT}""${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -1198,9 +1293,9 @@ if [[ "$CHECK_SCORECARD" == "1" ]]; then
     "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" "$IMPL_FAMILY" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
     "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
-    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
+    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${PLAN_FMT}""${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -1208,6 +1303,6 @@ else
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
     "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
-    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
+    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 fi
 exit "$ENFORCE_EXIT"

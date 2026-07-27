@@ -8,11 +8,11 @@
 # message, a missing file, or a generic nonzero exit as a passing P2 behavior.
 #
 # Groups 1/3/4/5 exercise REAL existing exports (recorded P0 disposition,
-# capability record, pure reducer, projection). Groups 2 and 6 plus the
-# `p2-*-present` assertions freeze the exact P2 enforcement/publication surface
-# that does not exist yet, so this file exits nonzero on current HEAD for
-# explicit missing-P2 acceptance. Dependent subcases are skipped; every
-# independent group still runs.
+# capability record, pure reducer, projection). Groups 2/6 plus the canonical
+# P2 export assertions freeze the exact enforcement/publication surface that
+# does not exist yet, so this file exits nonzero on current HEAD for explicit
+# missing-P2 acceptance. Dependent subcases are skipped; every independent
+# group still runs.
 . "$(dirname "$0")/lib.sh"
 
 ARTIFACT="$REPO_ROOT/docs/projects/2026-07-26-mission-convergence-portfolio/mission-p0-codex-enforcement.json"
@@ -54,7 +54,6 @@ const [root, artifactPath, capabilityPath] = process.argv.slice(2);
 const m = require(path.join(root, 'src', 'engine', 'mission-convergence'));
 const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
 const engine = require(path.join(root, 'src', 'engine'));
-const capabilities = require(path.join(root, 'src', 'harness', 'capabilities'));
 
 const lines = [];
 function check(id, cond) { lines.push(`${id}\t${cond ? 'PASS' : 'FAIL'}`); }
@@ -144,8 +143,7 @@ function mintControl(adapter, lineage, action, sequence) {
 }
 
 // ── Group 1: validate the ACTUAL recorded P0 disposition schema, digest, and
-// binding. Only block-capable / wrapper-required may enable current-Codex
-// enforcement; unenforceable-now must not.
+// binding; then evaluate enforcement disposition through the canonical export.
 group('g1', () => {
   const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
   const capability = JSON.parse(fs.readFileSync(capabilityPath, 'utf8'));
@@ -164,47 +162,154 @@ group('g1', () => {
   check('g1-capability-binding', capability.id === 'codex'
     && capability.capabilities
     && new Set(['verified', 'warning', 'unverified']).has(capability.capabilities.blocking_gate));
-  // The disposition gate: a pure predicate mapping the recorded outcome to
-  // whether current-Codex enforcement may be enabled. block-capable and
-  // wrapper-required => true; unenforceable-now => false.
-  const gateCandidates = [
-    capabilities.codexEnforcementEnabled,
-    capabilities.dispositionEnablesEnforcement,
-    engine.codexEnforcementEnabled,
-    engine.missionCodexEnforcementAllowed,
-    m.codexEnforcementEnabled,
-  ];
-  const gate = gateCandidates.find((fn) => typeof fn === 'function');
-  check('p2-disposition-enforcement-gate-present', typeof gate === 'function');
-  if (typeof gate === 'function') {
-    check('p2-gate-block-capable-allowed', gate('block-capable') === true);
-    check('p2-gate-wrapper-required-allowed', gate('wrapper-required') === true);
-    check('p2-gate-unenforceable-denied', gate('unenforceable-now') === false);
+
+  // Canonical P2 export: evaluateCodexEnforcementDisposition
+  const evaluate = engine.evaluateCodexEnforcementDisposition;
+  check('p2-evaluate-codex-enforcement-disposition-present', typeof evaluate === 'function');
+  if (typeof evaluate === 'function') {
+    // block-capable and wrapper-required may enforce
+    const blockResult = evaluate(artifact, capability);
+    check('p2-disposition-block-capable-may-enforce', blockResult === true
+      || (blockResult && blockResult.enforceable === true));
+    const wrapperArtifact = { ...artifact, codex_enforcement_outcome: 'wrapper-required' };
+    const wrapperResult = evaluate(wrapperArtifact, capability);
+    check('p2-disposition-wrapper-required-may-enforce', wrapperResult === true
+      || (wrapperResult && wrapperResult.enforceable === true));
+    // unenforceable-now may NOT enforce
+    const unenforceable = { ...artifact, codex_enforcement_outcome: 'unenforceable-now' };
+    const unResult = evaluate(unenforceable, capability);
+    check('p2-disposition-unenforceable-denied', unResult === false
+      || (unResult && unResult.enforceable === false));
+    // malformed artifact may NOT enforce
+    const malformedResult = evaluate({ schema_version: 99 }, capability);
+    check('p2-disposition-malformed-denied', malformedResult === false
+      || (malformedResult && malformedResult.enforceable === false));
+    // digest mismatch may NOT enforce
+    const digestMismatch = { ...artifact, evidence: { ...artifact.evidence, stdout_sha256: '0'.repeat(64) } };
+    const digestResult = evaluate(digestMismatch, capability);
+    check('p2-disposition-digest-mismatch-denied', digestResult === false
+      || (digestResult && digestResult.enforceable === false));
+    // identity mismatch may NOT enforce
+    const identityMismatchCap = { ...capability, id: 'not-codex' };
+    const identityResult = evaluate(artifact, identityMismatchCap);
+    check('p2-disposition-identity-mismatch-denied', identityResult === false
+      || (identityResult && identityResult.enforceable === false));
+    // unsupported harness may NOT enforce
+    const unsupportedCap = { ...capability, harness_level: 'H0' };
+    const unsupportedResult = evaluate(artifact, unsupportedCap);
+    check('p2-disposition-unsupported-harness-denied', unsupportedResult === false
+      || (unsupportedResult && unsupportedResult.enforceable === false));
   } else {
-    lines.push('p2-gate-block-capable-allowed\tSKIP');
-    lines.push('p2-gate-wrapper-required-allowed\tSKIP');
-    lines.push('p2-gate-unenforceable-denied\tSKIP');
+    lines.push('p2-disposition-block-capable-may-enforce\tSKIP');
+    lines.push('p2-disposition-wrapper-required-may-enforce\tSKIP');
+    lines.push('p2-disposition-unenforceable-denied\tSKIP');
+    lines.push('p2-disposition-malformed-denied\tSKIP');
+    lines.push('p2-disposition-digest-mismatch-denied\tSKIP');
+    lines.push('p2-disposition-identity-mismatch-denied\tSKIP');
+    lines.push('p2-disposition-unsupported-harness-denied\tSKIP');
   }
 });
 
-// ── Group 2 RED: a verified Mission grant must enable the P0-selected
-// current-Codex blocking adapter. The capability record itself states P2 must
-// still bind Mission identity and control sequence; assert the missing adapter.
+// ── Group 2: the verified Mission grant must enable the P0-selected
+// current-Codex blocking adapter via createCodexMissionEnforcementAdapter.
+// The adapter must bind verified claim, lineage, control sequence, P0
+// disposition digest, and request identity; mismatches block before effect.
 group('g2', () => {
   const capability = JSON.parse(fs.readFileSync(capabilityPath, 'utf8'));
   check('g2-capability-notes-pending-binding', Array.isArray(capability.notes)
     && capability.notes.some((n) => /P2 must still bind Mission identity/.test(n)));
-  const adapterCandidates = [
-    engine.createCodexMissionBlockAdapter,
-    engine.codexMissionEnforcementAdapter,
-    engine.createMissionEnforcementAdapter,
-    capabilities.createCodexMissionBlockAdapter,
-    m.createCodexMissionBlockAdapter,
-  ];
-  const present = adapterCandidates.some((fn) => typeof fn === 'function');
-  check('p2-codex-blocking-adapter-binds-grant-present', present);
-  if (!present) {
-    lines.push('p2-codex-block-receipt-bound-to-grant\tSKIP');
+
+  const createAdapter = engine.createCodexMissionEnforcementAdapter;
+  check('p2-codex-mission-enforcement-adapter-present', typeof createAdapter === 'function');
+  if (typeof createAdapter === 'function') {
+    const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    const lineage = 'lineage-v1-' + m.sha256('L');
+    const binding = {
+      claim_id: 'claim-g2',
+      mission_lineage_id: lineage,
+      control_sequence: 7,
+      disposition_digest: m.sha256(JSON.stringify(artifact)),
+      request_identity: 'codex',
+    };
+    const adapter = createAdapter(binding);
+    check('p2-adapter-returns-object', adapter !== null && typeof adapter === 'object');
+
+    // Correct binding passes through to the injected effect
+    const effectCalls = [];
+    const effect = () => { effectCalls.push('ran'); return { blocked: false }; };
+    const validRequest = {
+      claim_id: 'claim-g2',
+      mission_lineage_id: lineage,
+      control_sequence: 7,
+      disposition_digest: m.sha256(JSON.stringify(artifact)),
+      request_identity: 'codex',
+    };
+    if (typeof adapter.enforce === 'function') {
+      adapter.enforce(validRequest, effect);
+      check('p2-adapter-valid-request-effect-runs', effectCalls.length === 1);
+    } else if (typeof adapter.evaluate === 'function') {
+      adapter.evaluate(validRequest, effect);
+      check('p2-adapter-valid-request-effect-runs', effectCalls.length === 1);
+    } else {
+      check('p2-adapter-valid-request-effect-runs', false);
+    }
+
+    // Mismatched lineage blocks BEFORE the injected effect
+    const mismatchCalls = [];
+    const mismatchEffect = () => { mismatchCalls.push('ran'); return { blocked: false }; };
+    const badLineage = { ...validRequest, mission_lineage_id: 'wrong-lineage' };
+    if (typeof adapter.enforce === 'function') {
+      adapter.enforce(badLineage, mismatchEffect);
+    } else if (typeof adapter.evaluate === 'function') {
+      adapter.evaluate(badLineage, mismatchEffect);
+    }
+    check('p2-adapter-lineage-mismatch-blocks-before-effect', mismatchCalls.length === 0);
+
+    // Mismatched control sequence blocks before effect
+    const seqCalls = [];
+    const seqEffect = () => { seqCalls.push('ran'); };
+    const badSeq = { ...validRequest, control_sequence: 999 };
+    if (typeof adapter.enforce === 'function') {
+      adapter.enforce(badSeq, seqEffect);
+    } else if (typeof adapter.evaluate === 'function') {
+      adapter.evaluate(badSeq, seqEffect);
+    }
+    check('p2-adapter-sequence-mismatch-blocks-before-effect', seqCalls.length === 0);
+
+    // Mismatched disposition digest blocks before effect
+    const digCalls = [];
+    const digEffect = () => { digCalls.push('ran'); };
+    const badDigest = { ...validRequest, disposition_digest: 'f'.repeat(64) };
+    if (typeof adapter.enforce === 'function') {
+      adapter.enforce(badDigest, digEffect);
+    } else if (typeof adapter.evaluate === 'function') {
+      adapter.evaluate(badDigest, digEffect);
+    }
+    check('p2-adapter-digest-mismatch-blocks-before-effect', digCalls.length === 0);
+
+    // Mismatched request identity blocks before effect
+    const idCalls = [];
+    const idEffect = () => { idCalls.push('ran'); };
+    const badIdentity = { ...validRequest, request_identity: 'not-codex' };
+    if (typeof adapter.enforce === 'function') {
+      adapter.enforce(badIdentity, idEffect);
+    } else if (typeof adapter.evaluate === 'function') {
+      adapter.evaluate(badIdentity, idEffect);
+    }
+    check('p2-adapter-identity-mismatch-blocks-before-effect', idCalls.length === 0);
+
+    // Exact effect-call counts: only the single valid request ran the effect
+    check('p2-adapter-exact-effect-call-count', effectCalls.length === 1
+      && mismatchCalls.length === 0 && seqCalls.length === 0
+      && digCalls.length === 0 && idCalls.length === 0);
+  } else {
+    lines.push('p2-adapter-returns-object\tSKIP');
+    lines.push('p2-adapter-valid-request-effect-runs\tSKIP');
+    lines.push('p2-adapter-lineage-mismatch-blocks-before-effect\tSKIP');
+    lines.push('p2-adapter-sequence-mismatch-blocks-before-effect\tSKIP');
+    lines.push('p2-adapter-digest-mismatch-blocks-before-effect\tSKIP');
+    lines.push('p2-adapter-identity-mismatch-blocks-before-effect\tSKIP');
+    lines.push('p2-adapter-exact-effect-call-count\tSKIP');
   }
 });
 
@@ -215,54 +320,24 @@ group('g3', () => {
   const adapter = new ac.AuthenticatedControlAdapter({
     verifier: () => ({ verified: true, authority: 'authenticated_user' }),
   });
-  // finish_requested -> CLOSING with the control sequence recorded.
   const sFin = m.createMissionState(makeContract());
   const fin = m.reduceMissionState(sFin, controlEvent(sFin, mintControl(adapter, sFin.mission_lineage_id, 'finish_requested', 7)));
   check('g3-finish-closing', fin.state.state === 'CLOSING' && fin.state.control_sequence === 7);
   check('g3-finish-no-terminal', !fin.state.terminal);
-  // scope_frozen -> CLOSING.
   const sScope = m.createMissionState(makeContract());
   const scope = m.reduceMissionState(sScope, controlEvent(sScope, mintControl(adapter, sScope.mission_lineage_id, 'scope_frozen', 4)));
   check('g3-scope-closing', scope.state.state === 'CLOSING' && scope.state.control_sequence === 4);
-  // abort_requested -> terminal ABORTING.
   const sAbort = m.createMissionState(makeContract());
   const abort = m.reduceMissionState(sAbort, controlEvent(sAbort, mintControl(adapter, sAbort.mission_lineage_id, 'abort_requested', 2)));
   check('g3-abort-terminal', abort.state.terminal && abort.state.terminal.reason === 'abort_requested');
-  // Stale sequence (3 < current 7) is fenced to CLOSING with the stale reason
-  // and creates no new grant/effect authority.
   const stale = m.reduceMissionState(fin.state, controlEvent(fin.state, mintControl(adapter, fin.state.mission_lineage_id, 'finish_requested', 3)));
   check('g3-stale-fenced', stale.receipt.reason === 'control_sequence_stale'
     && stale.receipt.next_state === 'CLOSING');
-  // A new grant claim after a closing control is not allowlisted (zero spawn).
   const postClaim = m.reduceMissionState(fin.state, claimEvent(fin.state, { idempotency_key: 'post-finish', campaign_id: 'c-late' }));
   check('g3-post-control-claim-rejected', postClaim.receipt.artifact_type === 'mission_grant_rejected'
     && postClaim.receipt.reason === 'effect_class_not_allowlisted');
-  // Closure allowlist is the fixed effect-class set.
   check('g3-closure-allowlist-fixed', m.CLOSURE_ALLOWLIST.join(',') ===
     'frozen_acceptance,blocker_repair,targeted_verification,required_docs_version,receipt_production');
-});
-
-// ── Group 3 RED: the pre-effect stale fence (zero runner/worktree/reviewer
-// effect for a stale dispatch) and the receipt-bound closure-allowlist effect
-// recorder are P2 surfaces that do not exist yet.
-group('g3red', () => {
-  const fenceCandidates = [
-    engine.fenceStaleMissionEffect,
-    engine.missionEffectFence,
-    engine.classifyMissionEffectAllowed,
-    m.fenceStaleEffect,
-  ];
-  const fencePresent = fenceCandidates.some((fn) => typeof fn === 'function');
-  check('p2-pre-effect-stale-fence-present', fencePresent);
-  const closureCandidates = [
-    engine.recordClosureAllowlistEffect,
-    engine.createClosureAllowlistReceipt,
-    m.recordClosureEffect,
-  ];
-  const closurePresent = closureCandidates.some((fn) => typeof fn === 'function');
-  check('p2-closure-allowlist-receipt-binding-present', closurePresent);
-  if (!fencePresent) lines.push('p2-stale-dispatch-zero-effect-proven\tSKIP');
-  if (!closurePresent) lines.push('p2-closure-effect-receipt-bound\tSKIP');
 });
 
 // ── Group 4: shadow rollback never blocks the injected live effect and
@@ -298,7 +373,6 @@ group('g4', () => {
     && sh.receipt.evidence.requested === 200
     && typeof sh.receipt.evidence.remaining_before === 'number'
     && typeof sh.receipt.evidence.remaining_after === 'number');
-  // Enforce blocks the identical request and creates no claim.
   const sEnforce = m.createMissionState(makeContract({ enforcement_mode: 'enforce' }));
   const ef = m.reduceMissionState(sEnforce, {
     event_type: 'grant_claimed', sequence: 1, mission_lineage_id: sEnforce.mission_lineage_id,
@@ -352,39 +426,112 @@ group('g5', () => {
   state = closure.state;
   check('g5-two-campaigns-terminal-complete', state.state === 'COMPLETE'
     && state.terminal && state.terminal.reason === 'closure_evaluated');
-  // The terminal Mission state itself carries no task-closeout authority.
   const terminalSerialized = JSON.stringify(state.terminal);
   check('g5-terminal-no-task-closeout', !/can_close|can_merge/.test(terminalSerialized)
     && !/"state"\s*:\s*"DONE"/.test(terminalSerialized));
-  // Evidence of the P2 gap: the operational projection cannot represent a
-  // terminal Mission today — buildProjection fails closed on terminal state, so
-  // no published terminal receipt/projection can say mission_terminal=true.
-  let terminalProjectionError = null;
-  try { m.buildProjection(state); } catch (error) { terminalProjectionError = error.code; }
-  check('g5-no-terminal-projection-path', terminalProjectionError === 'MISSION_STATE_TERMINAL');
+
+  // Nonterminal buildProjection must explicitly expose mission_terminal=false.
+  const freshState = m.createMissionState(makeContract());
+  const projection = m.buildProjection(freshState);
+  const hasNonterminalFlag = Object.prototype.hasOwnProperty.call(projection, 'mission_terminal')
+    && projection.mission_terminal === false;
+  check('p2-nonterminal-projection-mission-terminal-false', hasNonterminalFlag);
+
+  // Canonical P2 export: buildMissionTerminalReceipt
+  const buildReceipt = engine.buildMissionTerminalReceipt;
+  check('p2-build-mission-terminal-receipt-present', typeof buildReceipt === 'function');
+  if (typeof buildReceipt === 'function') {
+    const residue = { lifecycle_residue: ['sibling-campaign-1'], residue_digest: m.sha256('residue') };
+    const receipt = buildReceipt(state, residue);
+    check('p2-terminal-receipt-mission-terminal-true', receipt
+      && receipt.mission_terminal === true);
+    check('p2-terminal-receipt-no-task-closeout', receipt
+      && !/can_close|can_merge/.test(JSON.stringify(receipt))
+      && !/"state"\s*:\s*"DONE"/.test(JSON.stringify(receipt)));
+    check('p2-terminal-receipt-schema-version', receipt
+      && receipt.schema_version === 1);
+    check('p2-terminal-receipt-digests', receipt
+      && isHex64(receipt.state_digest || receipt.terminal_digest));
+    check('p2-terminal-receipt-residue-binding', receipt
+      && (receipt.residue_digest === residue.residue_digest
+        || (receipt.residue && receipt.residue.residue_digest === residue.residue_digest)));
+  } else {
+    lines.push('p2-terminal-receipt-mission-terminal-true\tSKIP');
+    lines.push('p2-terminal-receipt-no-task-closeout\tSKIP');
+    lines.push('p2-terminal-receipt-schema-version\tSKIP');
+    lines.push('p2-terminal-receipt-digests\tSKIP');
+    lines.push('p2-terminal-receipt-residue-binding\tSKIP');
+  }
 });
 
-// ── Group 6 RED: the published terminal receipt/projection interface must say
-// mission_terminal=true (without can_close/can_merge/DONE) even when sibling
-// lifecycle residue exists. The projection carries no mission_terminal field
-// today; assert the exact required publication surface.
+// ── Group 6: fenceMissionEffect and recordMissionClosureEffect — the pre-effect
+// stale fence proves zero runner/worktree/reviewer effect for stale dispatches;
+// the closure recorder accepts allowlisted effects and rejects stale/non-listed.
 group('g6', () => {
-  const state = m.createMissionState(makeContract());
-  const projection = m.buildProjection(state);
-  const hasMissionTerminal = Object.prototype.hasOwnProperty.call(projection, 'mission_terminal')
-    || (projection.state_snapshot
-      && Object.prototype.hasOwnProperty.call(projection.state_snapshot, 'mission_terminal'));
-  check('p2-published-terminal-receipt-mission-terminal-present', hasMissionTerminal);
-  const publisherCandidates = [
-    engine.publishMissionTerminalReceipt,
-    engine.buildMissionTerminalReceipt,
-    m.buildMissionTerminalReceipt,
-    m.publishTerminalReceipt,
-  ];
-  const publisherPresent = publisherCandidates.some((fn) => typeof fn === 'function');
-  check('p2-terminal-receipt-publisher-present', publisherPresent);
-  if (!hasMissionTerminal && !publisherPresent) {
-    lines.push('p2-terminal-receipt-with-residue-says-mission-terminal\tSKIP');
+  const fence = engine.fenceMissionEffect;
+  check('p2-fence-mission-effect-present', typeof fence === 'function');
+  if (typeof fence === 'function') {
+    const runnerCalls = [];
+    const worktreeCalls = [];
+    const reviewerCalls = [];
+    const effects = {
+      runner: () => { runnerCalls.push('ran'); },
+      worktree: () => { worktreeCalls.push('ran'); },
+      reviewer: () => { reviewerCalls.push('ran'); },
+    };
+    // Stale finish dispatch (sequence below current control_sequence)
+    const staleFinish = { action: 'finish_requested', control_sequence: 2, current_sequence: 7 };
+    fence(staleFinish, effects);
+    check('p2-fence-stale-finish-zero-effects', runnerCalls.length === 0
+      && worktreeCalls.length === 0 && reviewerCalls.length === 0);
+    // Stale scope dispatch
+    const staleScope = { action: 'scope_frozen', control_sequence: 1, current_sequence: 4 };
+    fence(staleScope, effects);
+    check('p2-fence-stale-scope-zero-effects', runnerCalls.length === 0
+      && worktreeCalls.length === 0 && reviewerCalls.length === 0);
+    // Stale abort dispatch
+    const staleAbort = { action: 'abort_requested', control_sequence: 3, current_sequence: 9 };
+    fence(staleAbort, effects);
+    check('p2-fence-stale-abort-zero-effects', runnerCalls.length === 0
+      && worktreeCalls.length === 0 && reviewerCalls.length === 0);
+  } else {
+    lines.push('p2-fence-stale-finish-zero-effects\tSKIP');
+    lines.push('p2-fence-stale-scope-zero-effects\tSKIP');
+    lines.push('p2-fence-stale-abort-zero-effects\tSKIP');
+  }
+
+  const record = engine.recordMissionClosureEffect;
+  check('p2-record-mission-closure-effect-present', typeof record === 'function');
+  if (typeof record === 'function') {
+    // Accepts a current allowlisted effect and emits a content-bound receipt
+    const allowlisted = { effect_class: 'frozen_acceptance', control_sequence: 7, current_sequence: 7 };
+    const receipt = record(allowlisted);
+    check('p2-closure-allowlisted-effect-accepted', receipt !== null
+      && typeof receipt === 'object'
+      && receipt.effect_class === 'frozen_acceptance');
+    check('p2-closure-receipt-content-bound', receipt
+      && isHex64(receipt.receipt_digest || receipt.content_digest));
+    // Rejects a stale effect
+    let staleRejected = false;
+    try {
+      const staleResult = record({ effect_class: 'frozen_acceptance', control_sequence: 2, current_sequence: 7 });
+      staleRejected = staleResult === null || staleResult === false
+        || (staleResult && staleResult.rejected === true);
+    } catch (e) { staleRejected = true; }
+    check('p2-closure-stale-effect-rejected', staleRejected);
+    // Rejects a non-allowlisted effect class
+    let nonListedRejected = false;
+    try {
+      const nonListedResult = record({ effect_class: 'arbitrary_spawn', control_sequence: 7, current_sequence: 7 });
+      nonListedRejected = nonListedResult === null || nonListedResult === false
+        || (nonListedResult && nonListedResult.rejected === true);
+    } catch (e) { nonListedRejected = true; }
+    check('p2-closure-non-allowlisted-rejected', nonListedRejected);
+  } else {
+    lines.push('p2-closure-allowlisted-effect-accepted\tSKIP');
+    lines.push('p2-closure-receipt-content-bound\tSKIP');
+    lines.push('p2-closure-stale-effect-rejected\tSKIP');
+    lines.push('p2-closure-non-allowlisted-rejected\tSKIP');
   }
 });
 
@@ -403,32 +550,29 @@ for id in \
   g3-stale-fenced g3-post-control-claim-rejected g3-closure-allowlist-fixed \
   g4-shadow-does-not-block g4-shadow-live-effect-granted g4-shadow-evidence-exact \
   g4-enforce-blocks-identical g4-enforce-creates-no-claim \
-  g5-two-campaigns-terminal-complete g5-terminal-no-task-closeout \
-  g5-no-terminal-projection-path
+  g5-two-campaigns-terminal-complete g5-terminal-no-task-closeout
 do
   assert_contains "$OUT" "$id	PASS" "enforcement runtime invariant $id must hold on HEAD"
 done
 
 # ── No group may have aborted the harness mid-run. ──
-for grp in g1 g2 g3 g3red g4 g5 g6; do
+for grp in g1 g2 g3 g4 g5 g6; do
   assert_not_contains "$OUT" "$grp	FAIL	threw" "enforcement group $grp ran to completion"
 done
 
-# ── Missing-P2 acceptance: assert the P2 surface PASSES; absent on HEAD so the
-# oracle exits nonzero. These go green when P2 publishes the surface. ──
-assert_contains "$OUT" "p2-disposition-enforcement-gate-present	PASS" \
-  "RED: no disposition->enforcement gate maps block-capable/wrapper-required to enable"
-assert_contains "$OUT" "p2-codex-blocking-adapter-binds-grant-present	PASS" \
-  "RED: no current-Codex blocking adapter binds a verified Mission grant"
-assert_contains "$OUT" "p2-pre-effect-stale-fence-present	PASS" \
-  "RED: no pre-effect stale fence stops stale runner/worktree/reviewer effects"
-assert_contains "$OUT" "p2-closure-allowlist-receipt-binding-present	PASS" \
-  "RED: no receipt-bound closure-allowlist effect recorder exists"
-assert_contains "$OUT" "p2-published-terminal-receipt-mission-terminal-present	PASS" \
-  "RED: published projection/receipt carries no mission_terminal=true field"
-assert_contains "$OUT" "p2-terminal-receipt-publisher-present	PASS" \
-  "RED: no published Mission terminal receipt publisher exists"
-assert_contains "$OUT" "p2-terminal-receipt-with-residue-says-mission-terminal	SKIP" \
-  "dependent subcase skipped while the publication surface is absent"
+# ── Missing-P2 acceptance: assert the canonical P2 surface PASSES; absent on
+# HEAD so the oracle exits nonzero. These go green when P2 ships the surface. ──
+assert_contains "$OUT" "p2-evaluate-codex-enforcement-disposition-present	PASS" \
+  "RED: evaluateCodexEnforcementDisposition not exported from engine"
+assert_contains "$OUT" "p2-codex-mission-enforcement-adapter-present	PASS" \
+  "RED: createCodexMissionEnforcementAdapter not exported from engine"
+assert_contains "$OUT" "p2-fence-mission-effect-present	PASS" \
+  "RED: fenceMissionEffect not exported from engine"
+assert_contains "$OUT" "p2-record-mission-closure-effect-present	PASS" \
+  "RED: recordMissionClosureEffect not exported from engine"
+assert_contains "$OUT" "p2-build-mission-terminal-receipt-present	PASS" \
+  "RED: buildMissionTerminalReceipt not exported from engine"
+assert_contains "$OUT" "p2-nonterminal-projection-mission-terminal-false	PASS" \
+  "RED: nonterminal buildProjection does not expose mission_terminal=false"
 
 finalize_test

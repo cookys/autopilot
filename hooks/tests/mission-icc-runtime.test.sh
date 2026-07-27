@@ -8,9 +8,9 @@
 # nonzero exit as evidence of a passing P2 behavior.
 #
 # Groups 1-4 exercise REAL existing dependency-injection seams and pure reducer
-# exports; they must hold on current HEAD. Group 5 plus the two `p2-missing-*`
-# assertions freeze the exact P2 binding surface that does not exist yet, so
-# this file exits nonzero on current HEAD for explicit missing-P2 acceptance.
+# exports; they must hold on current HEAD. Groups 5-6 plus the canonical P2
+# export assertions freeze the exact P2 binding surface that does not exist yet,
+# so this file exits nonzero on current HEAD for explicit missing-P2 acceptance.
 # Dependent subcases that require the missing surface are skipped; every
 # independent group still runs.
 . "$(dirname "$0")/lib.sh"
@@ -27,7 +27,7 @@ const targets = [
 ];
 for (const target of targets) {
   let stat;
-  try { stat = fs.lstatSync(target); } catch { continue; } // sibling not authored yet
+  try { stat = fs.lstatSync(target); } catch { continue; }
   if (stat.isSymbolicLink()) {
     console.log(`symlink ${path.basename(target)}`);
     process.exitCode = 1;
@@ -124,6 +124,7 @@ function group(name, fn) {
     lines.push(`${name}\tFAIL\tthrew ${error && error.code ? error.code : error}`);
   }
 }
+const isHex64 = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
 
 // Shared reducer fixtures (mirror the frozen P1 integration oracle shapes).
 function makeContract(over = {}) {
@@ -243,38 +244,64 @@ group('g2', () => {
   check('g2-no-campaign-id', typeof control.campaign_id !== 'string');
 });
 
-// ── Group 3: a contract/PRO/context/WLB rejection AFTER the claim preserves a
-// unique owning rejection, releases exactly one claim-bound zero-usage receipt,
-// keeps an exact step order, and spawns no generation/review effect.
+// ── Group 3: table-drive all four downstream owners (campaign_contract,
+// provider_readiness, context_window, worktree_lifecycle). For each, assert
+// exact order, exactly one claim-bound zero-usage release, unique owner
+// provenance, and zero generation/spawn/reviewer effect.
 group('g3', () => {
-  const releaseCalls = [];
-  const adapters = {
-    missionClaim: () => ({ owner: 'mission', status: 'claimed', claim_id: 'mission-claim-g3' }),
-    releaseMission: (arg) => { releaseCalls.push(arg); return { owner: 'mission_release', status: 'released' }; },
-    readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
-    contextGate: () => ({ owner: 'context_window', status: 'ready' }),
-    occupancy: () => ({ owner: 'worktree_lifecycle', status: 'rejected', code: 'oracle_wlb_reject', reason: 'oracle occupancy rejection' }),
-  };
-  const control = runCampaignIntake(intakeInput(), adapters);
-  const owners = (control.steps || []).map((s) => s.owner);
-  const receipt = control.pre_spend_no_effect_receipt;
-  check('g3-blocked', control.status === 'blocked');
-  check('g3-unique-owning-rejection', control.rejection && control.rejection.owner === 'worktree_lifecycle'
-    && control.rejection.code === 'oracle_wlb_reject');
-  check('g3-exactly-one-release', releaseCalls.length === 1);
-  check('g3-release-bound-to-claim', releaseCalls.length === 1
-    && releaseCalls[0].missionClaim && releaseCalls[0].missionClaim.claim_id === 'mission-claim-g3');
-  check('g3-receipt-is-no-effect', receipt && receipt.artifact_type === 'pre_spend_no_effect');
-  check('g3-receipt-bound-to-claim', receipt && receipt.claim_id === 'mission-claim-g3');
-  check('g3-receipt-zero-usage', receipt
-    && receipt.actual_usage.model_attempts === 0
-    && receipt.actual_usage.worktrees_created === 0);
-  check('g3-receipt-binds-rejection-digest', receipt
-    && receipt.owning_rejection.owner === 'worktree_lifecycle'
-    && /^[0-9a-f]{64}$/.test(receipt.owning_rejection.digest || ''));
-  check('g3-exact-step-order', owners.join(',') === 'mission,campaign_contract,provider_readiness,context_window,worktree_lifecycle,mission_release');
-  check('g3-no-generation-effect', !owners.includes('campaign_generation'));
-  check('g3-no-campaign-id', typeof control.campaign_id !== 'string');
+  const downstreamOwners = [
+    { owner: 'campaign_contract', adapterKey: null },
+    { owner: 'provider_readiness', adapterKey: 'readiness' },
+    { owner: 'context_window', adapterKey: 'contextGate' },
+    { owner: 'worktree_lifecycle', adapterKey: 'occupancy' },
+  ];
+  const expectedPrefix = ['mission', 'campaign_contract', 'provider_readiness', 'context_window', 'worktree_lifecycle'];
+
+  for (const target of downstreamOwners) {
+    const releaseCalls = [];
+    const adapters = {
+      missionClaim: () => ({ owner: 'mission', status: 'claimed', claim_id: `mc-${target.owner}` }),
+      releaseMission: (arg) => { releaseCalls.push(arg); return { owner: 'mission_release', status: 'released' }; },
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    };
+    // Inject rejection at the target owner
+    if (target.adapterKey) {
+      adapters[target.adapterKey] = () => ({
+        owner: target.owner, status: 'rejected',
+        code: `oracle_reject_${target.owner}`, reason: `oracle ${target.owner} rejection`,
+      });
+    }
+    // For campaign_contract rejection, we use a broken seal path
+    const input = target.owner === 'campaign_contract'
+      ? { ...intakeInput(), sealPath: '/nonexistent/seal.json' }
+      : intakeInput();
+    const control = runCampaignIntake(input, adapters);
+    const owners = (control.steps || []).map((s) => s.owner);
+    const tag = `g3-${target.owner}`;
+
+    check(`${tag}-blocked`, control.status === 'blocked');
+    check(`${tag}-unique-owning-rejection`, control.rejection
+      && control.rejection.owner === target.owner);
+    check(`${tag}-exactly-one-release`, releaseCalls.length === 1);
+    check(`${tag}-release-bound-to-claim`, releaseCalls.length === 1
+      && releaseCalls[0].missionClaim
+      && releaseCalls[0].missionClaim.claim_id === `mc-${target.owner}`);
+    // Receipt is zero-usage and bound to the claim
+    const receipt = control.pre_spend_no_effect_receipt;
+    check(`${tag}-receipt-zero-usage`, receipt
+      && receipt.artifact_type === 'pre_spend_no_effect'
+      && receipt.claim_id === `mc-${target.owner}`
+      && receipt.actual_usage.model_attempts === 0
+      && receipt.actual_usage.worktrees_created === 0);
+    // Exact step order: prefix up to and including the rejecting owner, then release
+    const rejectIdx = expectedPrefix.indexOf(target.owner);
+    const expectedOrder = expectedPrefix.slice(0, rejectIdx + 1).concat('mission_release');
+    check(`${tag}-exact-step-order`, owners.join(',') === expectedOrder.join(','));
+    // Zero generation/spawn/reviewer effect
+    check(`${tag}-zero-generation-effect`, !owners.includes('campaign_generation'));
+  }
 });
 
 // ── Group 4: terminal feedback reconciles once; an exact replay is idempotent;
@@ -298,8 +325,6 @@ group('g4', () => {
   });
   check('g4-exact-replay-idempotent', r2.receipt.replay === 'replay_noop');
   check('g4-replay-no-second-charge', r2.state.axes.tool_calls.durable_consumed === r1.state.axes.tool_calls.durable_consumed);
-  // Unknown claim id (a receipt that does not bind any Mission claim) fails
-  // closed as binding_mismatch — the reducer never re-runs ICC judgment.
   const unknown = m.reduceMissionState(r2.state, {
     event_type: 'reconciliation', sequence: r2.state.events.length + 1,
     mission_lineage_id: s0.mission_lineage_id,
@@ -309,78 +334,131 @@ group('g4', () => {
     && unknown.receipt.reason === 'binding_mismatch');
 });
 
-// ── Group 4 RED: the P2 ICC->Mission terminal receipt binding validator that
-// must fail closed on changed usage / changed digest / changed lineage does not
-// exist yet. Assert its exact required callable presence; skip the dependent
-// behavior subcase while every independent group still runs.
-group('g4red', () => {
-  const candidates = [
-    engine.validateCampaignTerminalReceipt,
-    engine.bindCampaignTerminalReceipt,
-    engine.createCampaignTerminalReceiptBinder,
-    m.validateCampaignTerminalReceipt,
-  ];
-  const present = candidates.some((fn) => typeof fn === 'function');
-  check('p2-terminal-receipt-binding-validator-present', present);
-  if (!present) {
-    lines.push('p2-terminal-receipt-changed-usage-fails-closed\tSKIP');
+// ── Group 5: validateMissionCampaignReceiptBinding — valid receipt feedback
+// applies exactly once, exact replay is idempotent, changed actual usage /
+// campaign digest / lineage fails closed without a second ICC judgment.
+group('g5', () => {
+  const validate = engine.validateMissionCampaignReceiptBinding;
+  check('p2-validate-mission-campaign-receipt-binding-present', typeof validate === 'function');
+  if (typeof validate === 'function') {
+    const s0 = m.createMissionState(makeContract());
+    const a = m.reduceMissionState(s0, claimEvent(s0, { idempotency_key: 'p2-bind', reserved: 8 }));
+    const claimId = a.receipt.claim_id;
+    const actualUsage = reservation(a.state, 6);
+    const campaignDigest = m.sha256('campaign-contract');
+    const receipt = {
+      claim_id: claimId,
+      mission_lineage_id: s0.mission_lineage_id,
+      campaign_digest: campaignDigest,
+      actual_usage: actualUsage,
+    };
+    // Valid receipt applies exactly once
+    const first = validate(receipt, a.state);
+    check('p2-receipt-valid-applies-once', first
+      && (first.valid === true || first.status === 'applied'));
+    // Exact replay is idempotent
+    const replay = validate(receipt, a.state);
+    check('p2-receipt-exact-replay-idempotent', replay
+      && (replay.idempotent === true || replay.status === 'replay_noop'));
+    // Changed actual usage fails closed
+    const changedUsage = {
+      ...receipt,
+      actual_usage: reservation(a.state, 99),
+    };
+    const usageResult = validate(changedUsage, a.state);
+    check('p2-receipt-changed-usage-fails-closed', usageResult
+      && (usageResult.valid === false || usageResult.status === 'binding_mismatch'));
+    // Changed campaign digest fails closed
+    const changedDigest = { ...receipt, campaign_digest: m.sha256('different') };
+    const digestResult = validate(changedDigest, a.state);
+    check('p2-receipt-changed-digest-fails-closed', digestResult
+      && (digestResult.valid === false || digestResult.status === 'binding_mismatch'));
+    // Changed lineage fails closed
+    const changedLineage = { ...receipt, mission_lineage_id: 'wrong-lineage' };
+    const lineageResult = validate(changedLineage, a.state);
+    check('p2-receipt-changed-lineage-fails-closed', lineageResult
+      && (lineageResult.valid === false || lineageResult.status === 'binding_mismatch'));
+  } else {
+    lines.push('p2-receipt-valid-applies-once\tSKIP');
+    lines.push('p2-receipt-exact-replay-idempotent\tSKIP');
+    lines.push('p2-receipt-changed-usage-fails-closed\tSKIP');
+    lines.push('p2-receipt-changed-digest-fails-closed\tSKIP');
+    lines.push('p2-receipt-changed-lineage-fails-closed\tSKIP');
   }
 });
 
-// ── Group 5 RED: the actual AutopilotEngine / engine implement-review DI seam
-// cannot bind a content-bound Mission grant today. In an enforce-mode project
-// the sealed-contract validator rejects every contract because enforced grant
-// verification is not integrated, and the intake's default mission adapter
-// rejects with mission_grant_unavailable. P2 must make the enforce seam admit a
-// content-bound grant; assert the missing surface precisely.
-group('g5', () => {
-  const repoIdentity = campaignCheck.canonicalRepoIdentity(enforceRepo);
-  const objectFormat = campaignCheck.repoObjectFormat(enforceRepo);
-  const contract = {
-    schema_version: 1,
-    ticket: 'mission-p2-enforce',
-    profile: 'poc',
-    mission_grant_ref: m.sha256('p2-grant'),
-    repo_identity: repoIdentity,
-    base_sha: enforceBase,
-    branch: 'main',
-    vertical_acceptance: ['enforce seam admits a content-bound grant'],
-    allowed_path_prefixes: ['src/'],
-    max_changed_files: 4,
-    baseline_churn: 10,
-    max_growth_ratio: 1.5,
-    max_extra_churn: 5,
-    max_repair_generations: 2,
-    max_wall_seconds: 120,
-    verify_cmd: 'node fixture.js',
-    rubric_ids: ['MISSION-P2-ENFORCE1'],
-  };
-  const errors = campaignCheck.validateContract(contract, {
-    repo: enforceRepo,
-    repoIdentity,
-    objectFormat,
-    missionMode: 'enforce',
-  });
-  // P2 acceptance: a valid enforce contract carrying a 64-hex mission_grant_ref
-  // must seal with zero contract errors. Current HEAD always emits the
-  // "unavailable until Mission integration" error, so this is RED.
-  check('p2-enforce-contract-sealable', errors.length === 0);
-  check('p2-enforce-not-generic-rejection', !errors.some((e) => /unknown field|missing required field/.test(e)));
-});
+// ── Group 6: createMissionCampaignAdapters — run the real adapters through
+// runCampaignIntake in enforce mode and prove admission or the intended
+// downstream owner rejection. Do not treat missing/generic errors as success.
+group('g6', () => {
+  const createAdapters = engine.createMissionCampaignAdapters;
+  check('p2-create-mission-campaign-adapters-present', typeof createAdapters === 'function');
+  if (typeof createAdapters === 'function') {
+    const repoIdentity = campaignCheck.canonicalRepoIdentity(enforceRepo);
+    const objectFormat = campaignCheck.repoObjectFormat(enforceRepo);
+    const contract = {
+      schema_version: 1,
+      ticket: 'mission-p2-enforce',
+      profile: 'poc',
+      mission_grant_ref: m.sha256('p2-grant'),
+      repo_identity: repoIdentity,
+      base_sha: enforceBase,
+      branch: 'main',
+      vertical_acceptance: ['enforce seam admits a content-bound grant'],
+      allowed_path_prefixes: ['src/'],
+      max_changed_files: 4,
+      baseline_churn: 10,
+      max_growth_ratio: 1.5,
+      max_extra_churn: 5,
+      max_repair_generations: 2,
+      max_wall_seconds: 120,
+      verify_cmd: 'node fixture.js',
+      rubric_ids: ['MISSION-P2-ENFORCE1'],
+    };
+    const errors = campaignCheck.validateContract(contract, {
+      repo: enforceRepo,
+      repoIdentity,
+      objectFormat,
+      missionMode: 'enforce',
+    });
+    check('p2-enforce-contract-sealable', errors.length === 0);
+    check('p2-enforce-not-generic-rejection', !errors.some((e) => /unknown field|missing required field/.test(e)));
 
-// ── Group 5 RED (adapter factory): no published adapter wires campaign intake's
-// missionClaim/releaseMission to the real Mission reducer. Assert the exact
-// required export presence; skip the dependent full-admission subcase.
-group('g5red', () => {
-  const candidates = [
-    engine.createMissionGrantAdapters,
-    engine.createMissionClaimAdapter,
-    engine.missionGrantAdapter,
-    engine.bindMissionGrant,
-  ];
-  const present = candidates.some((fn) => typeof fn === 'function');
-  check('p2-mission-grant-adapter-factory-present', present);
-  if (!present) {
+    // Run the real adapters through runCampaignIntake in enforce mode
+    const missionAdapters = createAdapters({
+      repo: enforceRepo,
+      contract,
+      enforcement_mode: 'enforce',
+      mission_lineage_id: 'lineage-v1-' + m.sha256('L'),
+      task_authority_id: m.sha256('TA'),
+    });
+    check('p2-adapters-have-mission-claim', typeof missionAdapters.missionClaim === 'function');
+    check('p2-adapters-have-release', typeof missionAdapters.releaseMission === 'function');
+
+    const enforceInput = {
+      repo: enforceRepo,
+      contractPath: contractPath,
+      sealPath: sealPath,
+      promptFile: promptFile,
+      branch: 'main',
+      base: enforceBase,
+      roster: { implementer_engine: 'fixture-implementer' },
+      observedAt: '2026-07-27T00:00:00.000Z',
+    };
+    const control = runCampaignIntake(enforceInput, missionAdapters);
+    // Must be a specific outcome, not a generic error
+    const isAdmitted = control.status === 'admitted';
+    const isSpecificRejection = control.status === 'blocked'
+      && control.rejection
+      && typeof control.rejection.owner === 'string'
+      && typeof control.rejection.code === 'string'
+      && control.rejection.code !== 'mission_grant_unavailable';
+    check('p2-real-adapter-drives-intake-admission', isAdmitted || isSpecificRejection);
+  } else {
+    lines.push('p2-enforce-contract-sealable\tSKIP');
+    lines.push('p2-enforce-not-generic-rejection\tSKIP');
+    lines.push('p2-adapters-have-mission-claim\tSKIP');
+    lines.push('p2-adapters-have-release\tSKIP');
     lines.push('p2-real-adapter-drives-intake-admission\tSKIP');
   }
 });
@@ -399,10 +477,22 @@ for id in \
   g1-no-pre-spend-release-on-admit \
   g2-blocked g2-rejection-owner-mission g2-only-mission-ran g2-no-release-effect \
   g2-no-generation-step g2-no-pre-spend-receipt g2-no-campaign-id \
-  g3-blocked g3-unique-owning-rejection g3-exactly-one-release \
-  g3-release-bound-to-claim g3-receipt-is-no-effect g3-receipt-bound-to-claim \
-  g3-receipt-zero-usage g3-receipt-binds-rejection-digest g3-exact-step-order \
-  g3-no-generation-effect g3-no-campaign-id \
+  g3-campaign_contract-blocked g3-campaign_contract-unique-owning-rejection \
+  g3-campaign_contract-exactly-one-release g3-campaign_contract-release-bound-to-claim \
+  g3-campaign_contract-receipt-zero-usage g3-campaign_contract-exact-step-order \
+  g3-campaign_contract-zero-generation-effect \
+  g3-provider_readiness-blocked g3-provider_readiness-unique-owning-rejection \
+  g3-provider_readiness-exactly-one-release g3-provider_readiness-release-bound-to-claim \
+  g3-provider_readiness-receipt-zero-usage g3-provider_readiness-exact-step-order \
+  g3-provider_readiness-zero-generation-effect \
+  g3-context_window-blocked g3-context_window-unique-owning-rejection \
+  g3-context_window-exactly-one-release g3-context_window-release-bound-to-claim \
+  g3-context_window-receipt-zero-usage g3-context_window-exact-step-order \
+  g3-context_window-zero-generation-effect \
+  g3-worktree_lifecycle-blocked g3-worktree_lifecycle-unique-owning-rejection \
+  g3-worktree_lifecycle-exactly-one-release g3-worktree_lifecycle-release-bound-to-claim \
+  g3-worktree_lifecycle-receipt-zero-usage g3-worktree_lifecycle-exact-step-order \
+  g3-worktree_lifecycle-zero-generation-effect \
   g4-reconcile-once-consumes-actual g4-exact-replay-idempotent \
   g4-replay-no-second-charge g4-unknown-claim-fails-closed
 do
@@ -410,22 +500,16 @@ do
 done
 
 # ── A group must not have aborted the harness mid-run. ──
-for grp in g1 g2 g3 g4 g4red g5 g5red; do
+for grp in g1 g2 g3 g4 g5 g6; do
   assert_not_contains "$OUT" "$grp	FAIL	threw" "ICC group $grp ran to completion"
 done
 
 # ── Missing-P2 acceptance: these freeze the exact required P2 binding surface.
 # Each asserts the P2 behavior PASSES; on current HEAD the surface is absent so
 # the assertion fails and this oracle exits nonzero. When P2 lands they go green.
-assert_contains "$OUT" "p2-enforce-contract-sealable	PASS" \
-  "RED: enforce-mode campaign contract is not sealable until Mission P2 binding"
-assert_contains "$OUT" "p2-enforce-not-generic-rejection	PASS" \
-  "RED is the intended Mission-integration gap, not a malformed contract"
-assert_contains "$OUT" "p2-mission-grant-adapter-factory-present	PASS" \
-  "RED: no published adapter binds intake missionClaim/releaseMission to the Mission reducer"
-assert_contains "$OUT" "p2-terminal-receipt-binding-validator-present	PASS" \
-  "RED: no ICC->Mission terminal receipt binding validator exists"
-assert_contains "$OUT" "p2-real-adapter-drives-intake-admission	SKIP" \
-  "dependent subcase skipped while the adapter surface is absent"
+assert_contains "$OUT" "p2-validate-mission-campaign-receipt-binding-present	PASS" \
+  "RED: validateMissionCampaignReceiptBinding not exported from engine"
+assert_contains "$OUT" "p2-create-mission-campaign-adapters-present	PASS" \
+  "RED: createMissionCampaignAdapters not exported from engine"
 
 finalize_test

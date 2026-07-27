@@ -544,6 +544,7 @@ function validateTerminalReceipt(terminalReceipt) {
       return hasExactKeySet(item.disposition, [
         'disposition', 'context', 'trigger', 'proposed_backlog_title',
       ])
+        && item.evidence.classification === 'actionable'
         && item.disposition.disposition === 'follow-up'
         && ['context', 'trigger', 'proposed_backlog_title'].every(
           (key) => typeof item.disposition[key] === 'string'
@@ -552,9 +553,15 @@ function validateTerminalReceipt(terminalReceipt) {
     }
     if (classification === 'must_fix_now') {
       return isPlainObject(item.disposition)
+        && item.evidence.classification === 'actionable'
         && item.disposition.disposition === 'must-fix-now'
         && Object.keys(item.disposition).every((key) => (
           new Set(['disposition', 'acceptance_id', 'deferral_harm']).has(key)
+        ))
+        && ['acceptance_id', 'deferral_harm'].every((key) => (
+          item.disposition[key] === undefined
+          || (typeof item.disposition[key] === 'string'
+            && item.disposition[key].length > 0)
         ));
     }
     if (item.evidence.classification === 'refuted') return item.disposition === null;
@@ -562,7 +569,10 @@ function validateTerminalReceipt(terminalReceipt) {
       && item.disposition.disposition === 'reject-out-of-scope'
       && Object.keys(item.disposition).every((key) => (
         new Set(['disposition', 'rationale']).has(key)
-      ));
+      ))
+      && (item.disposition.rationale === undefined
+        || (typeof item.disposition.rationale === 'string'
+          && item.disposition.rationale.length > 0));
   };
   if (!terminalReceipt.follow_up.every((item) => findingShapeValid(item, 'follow_up'))
       || !terminalReceipt.unresolved_final_findings.every(
@@ -1205,11 +1215,15 @@ function validateLifecycle(input, adapters) {
   };
 }
 
-function resolveCandidateTree(adapters, candidate) {
+function resolveCandidateTree(adapters, candidate, gitContext) {
   if (!candidate || !isGitOid(candidate.commit) || !isGitOid(candidate.tree_sha)) {
     return { ok: false, reason: 'candidate_identity_missing' };
   }
-  const tree = safeCall(adapters.treeForCommit, [candidate.commit], 'treeForCommit');
+  const tree = safeCall(
+    adapters.treeForCommit,
+    [{ ...gitContext, commit: candidate.commit }],
+    'treeForCommit',
+  );
   if (!tree.ok) {
     return { ok: false, reason: tree.error };
   }
@@ -1219,7 +1233,7 @@ function resolveCandidateTree(adapters, candidate) {
   return { ok: true, commit: candidate.commit, tree_sha: candidate.tree_sha };
 }
 
-function collectCandidate(campaignResult, adapters) {
+function collectCandidate(campaignResult, adapters, gitContext) {
   if (!campaignResult.coverageExact || !campaignResult.all_valid) {
     return { ok: false, reason: 'campaign_coverage_incomplete' };
   }
@@ -1238,15 +1252,15 @@ function collectCandidate(campaignResult, adapters) {
     }
   }
 
-  return resolveCandidateTree(adapters, first);
+  return resolveCandidateTree(adapters, first, gitContext);
 }
 
-function containsCandidate(adapters, candidateCommit, refSha) {
+function containsCandidate(adapters, candidateCommit, refSha, gitContext) {
   if (!refSha || !candidateCommit) return null;
   if (refSha === candidateCommit) return true;
   const anc = safeCall(
     adapters.isAncestor,
-    [candidateCommit, refSha],
+    [{ ...gitContext, ancestor: candidateCommit, descendant: refSha }],
     'isAncestor',
   );
   if (!anc.ok) return null;
@@ -1255,7 +1269,7 @@ function containsCandidate(adapters, candidateCommit, refSha) {
   return null;
 }
 
-function computeIntegration(integration, adapters, candidateResult) {
+function computeIntegration(integration, adapters, candidateResult, gitContext) {
   const targetRef = integration.target_ref;
   const consumerRef = integration.consumer_ref;
   const remoteRef = integration.remote_ref;
@@ -1263,7 +1277,7 @@ function computeIntegration(integration, adapters, candidateResult) {
   const requiredConsumerUpdate = integration.required_consumer_update === true;
 
   const targetResolved = typeof targetRef === 'string' && targetRef.length > 0
-    ? safeCall(adapters.resolveRef, [targetRef], 'resolveRef')
+    ? safeCall(adapters.resolveRef, [{ ...gitContext, ref: targetRef }], 'resolveRef')
     : { ok: false, error: 'target_ref_missing' };
   const targetSha = targetResolved.ok && isGitOid(targetResolved.value)
     ? targetResolved.value
@@ -1289,26 +1303,34 @@ function computeIntegration(integration, adapters, candidateResult) {
 
   const candidateCommit = candidateResult.commit;
   const productMerged = targetSha
-    ? containsCandidate(adapters, candidateCommit, targetSha)
+    ? containsCandidate(adapters, candidateCommit, targetSha, gitContext)
     : null;
 
   let consumerSha = null;
   let consumerUpdated = null;
   if (typeof consumerRef === 'string' && consumerRef.length > 0) {
-    const resolved = safeCall(adapters.resolveRef, [consumerRef], 'resolveRef');
+    const resolved = safeCall(
+      adapters.resolveRef,
+      [{ ...gitContext, ref: consumerRef }],
+      'resolveRef',
+    );
     consumerSha = resolved.ok && isGitOid(resolved.value) ? resolved.value : null;
     consumerUpdated = consumerSha && targetSha
-      ? containsCandidate(adapters, targetSha, consumerSha)
+      ? containsCandidate(adapters, targetSha, consumerSha, gitContext)
       : null;
   }
 
   let remoteSha = null;
   let pushed = null;
   if (typeof remoteRef === 'string' && remoteRef.length > 0) {
-    const resolved = safeCall(adapters.resolveRef, [remoteRef], 'resolveRef');
+    const resolved = safeCall(
+      adapters.resolveRef,
+      [{ ...gitContext, ref: remoteRef }],
+      'resolveRef',
+    );
     remoteSha = resolved.ok && isGitOid(resolved.value) ? resolved.value : null;
     pushed = remoteSha
-      ? containsCandidate(adapters, candidateCommit, remoteSha)
+      ? containsCandidate(adapters, candidateCommit, remoteSha, gitContext)
       : null;
   }
 
@@ -1343,6 +1365,7 @@ function computeAcceptance(missionResult, campaignResult) {
 
   if (missionResult.valid) blockers.push(...missionResult.blockers);
   for (const item of campaignResult.items) {
+    if (!item.valid || !item.binding) continue;
     blockers.push(...item.blockers);
     deferredCount += item.deferred_count;
   }
@@ -1560,8 +1583,17 @@ function buildTaskStatus(input, adapters) {
 
   const campaignResult = validateCampaigns(input.campaigns, missionResult, adapters);
   const lifecycle = validateLifecycle(input, adapters);
-  const candidateResult = collectCandidate(campaignResult, adapters);
-  const integration = computeIntegration(input.integration, adapters, candidateResult);
+  const gitContext = {
+    repo: input.repo,
+    repo_identity: expectedRepoIdentity,
+  };
+  const candidateResult = collectCandidate(campaignResult, adapters, gitContext);
+  const integration = computeIntegration(
+    input.integration,
+    adapters,
+    candidateResult,
+    gitContext,
+  );
   const acceptance = computeAcceptance(missionResult, campaignResult);
   const predicates = computePredicates({
     missionResult,

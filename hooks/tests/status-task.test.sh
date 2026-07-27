@@ -299,6 +299,8 @@ function buildCampaignBundle({
   }));
   const retainedUnresolved = unresolved.map((item) => retainedFinding(item, {
     disposition: 'must-fix-now',
+    acceptance_id: 'lsm-p1-acceptance',
+    deferral_harm: 'blocks the frozen LSM P1 acceptance contract',
   }));
   const compositionCandidate = { ...candidate, committed: true };
   const terminal = runCampaignComposition({ maxRepairGenerations: 0 }, {
@@ -457,17 +459,17 @@ function makeAdapters(overrides = {}) {
         binding_digest: claim.binding_digest,
       };
     },
-    resolveRef: (ref) => ({
+    resolveRef: ({ ref }) => ({
       [TARGET_REF]: TARGET_SHA,
       [CONSUMER_REF]: CONSUMER_SHA,
       [REMOTE_REF]: REMOTE_SHA,
     })[ref] || null,
-    isAncestor: (ancestor, descendant) => (
+    isAncestor: ({ ancestor, descendant }) => (
       (ancestor === CANDIDATE_COMMIT && descendant === TARGET_SHA)
       || (ancestor === TARGET_SHA && descendant === CONSUMER_SHA)
       || (ancestor === CANDIDATE_COMMIT && descendant === REMOTE_SHA)
     ),
-    treeForCommit: (commit) => commit === CANDIDATE_COMMIT ? CANDIDATE_TREE : null,
+    treeForCommit: ({ commit }) => commit === CANDIDATE_COMMIT ? CANDIDATE_TREE : null,
     ...overrides,
   };
 }
@@ -651,6 +653,59 @@ group('durable-state-authority', () => {
   check('icc-malformed-terminal-finding-rejected',
     malformedFindingResult.acceptance_verdict === 'unknown');
 
+  const refutedFollowUp = buildCampaignBundle({
+    status: 'follow_up',
+    followUp: [{ id: 'refuted-follow-up', claim: 'must remain actionable' }],
+  });
+  refutedFollowUp.terminal_receipt.follow_up[0].evidence.classification = 'refuted';
+  refutedFollowUp.terminal_receipt = redigest(refutedFollowUp.terminal_receipt);
+  rebindTerminalLedger(refutedFollowUp);
+  const refutedFollowUpResult = buildTaskStatus(
+    makeInput({ campaigns: [refutedFollowUp] }),
+    makeAdapters(),
+  );
+  check('icc-refuted-follow-up-rejected',
+    refutedFollowUpResult.acceptance_verdict === 'unknown');
+
+  const malformedMustFix = buildCampaignBundle({
+    status: 'follow_up',
+    unresolved: [{ id: 'malformed-must-fix', claim: 'must bind frozen acceptance' }],
+  });
+  malformedMustFix.terminal_receipt
+    .unresolved_final_findings[0].disposition.acceptance_id = 42;
+  malformedMustFix.terminal_receipt = redigest(malformedMustFix.terminal_receipt);
+  rebindTerminalLedger(malformedMustFix);
+  const malformedMustFixResult = buildTaskStatus(
+    makeInput({ campaigns: [malformedMustFix] }),
+    makeAdapters(),
+  );
+  check('icc-malformed-must-fix-disposition-rejected',
+    malformedMustFixResult.acceptance_verdict === 'unknown');
+
+  const refutedFollowUp = clone(campaignBundle);
+  const invalidFollowUp = retainedFinding(
+    { id: 'refuted-follow-up', claim: 'must not defer refuted evidence' },
+    {
+      disposition: 'follow-up',
+      context: 'invalid',
+      trigger: 'never',
+      proposed_backlog_title: 'invalid',
+    },
+  );
+  invalidFollowUp.evidence.classification = 'refuted';
+  refutedFollowUp.terminal_receipt = redigest({
+    ...refutedFollowUp.terminal_receipt,
+    status: 'follow_up',
+    follow_up: [invalidFollowUp],
+  });
+  rebindTerminalLedger(refutedFollowUp);
+  const refutedFollowUpResult = buildTaskStatus(
+    makeInput({ campaigns: [refutedFollowUp] }),
+    makeAdapters(),
+  );
+  check('icc-refuted-follow-up-rejected',
+    refutedFollowUpResult.acceptance_verdict === 'unknown');
+
   const overBudget = clone(campaignBundle);
   overBudget.state.usage.changed_files = overBudget.state.limits.max_changed_files + 1;
   const overBudgetResult = buildTaskStatus(
@@ -745,6 +800,19 @@ group('mission-campaign-authorization', () => {
   check('partial-coverage-candidate-hidden', partial.candidate_commit === null);
   check('partial-coverage-integration-unknown',
     partial.product_merged === null && partial.pushed === null);
+
+  const unboundFollowUp = buildCampaignBundle({
+    status: 'follow_up',
+    followUp: [{ id: 'unbound-deferred', claim: 'must not influence task status' }],
+  });
+  const unboundResult = buildTaskStatus(
+    makeInput({ campaigns: [unboundFollowUp] }),
+    makeAdapters({ resolveCampaignBinding: () => ({ status: 'unknown' }) }),
+  );
+  check('unbound-campaign-deferred-not-aggregated',
+    unboundResult.acceptance_verdict === 'unknown'
+      && unboundResult.deferred_count === 0
+      && unboundResult.accepted_blockers.length === 0);
 });
 
 group('lifecycle-authority', () => {
@@ -785,8 +853,34 @@ group('lifecycle-authority', () => {
 });
 
 group('integration-authority', () => {
+  const gitQueries = [];
+  buildTaskStatus(makeInput(), makeAdapters({
+    resolveRef: (query) => {
+      gitQueries.push(query);
+      return ({
+        [TARGET_REF]: TARGET_SHA,
+        [CONSUMER_REF]: CONSUMER_SHA,
+        [REMOTE_REF]: REMOTE_SHA,
+      })[query.ref] || null;
+    },
+    isAncestor: (query) => {
+      gitQueries.push(query);
+      return (query.ancestor === CANDIDATE_COMMIT && query.descendant === TARGET_SHA)
+        || (query.ancestor === TARGET_SHA && query.descendant === CONSUMER_SHA)
+        || (query.ancestor === CANDIDATE_COMMIT && query.descendant === REMOTE_SHA);
+    },
+    treeForCommit: (query) => {
+      gitQueries.push(query);
+      return query.commit === CANDIDATE_COMMIT ? CANDIDATE_TREE : null;
+    },
+  }));
+  check('git-adapters-receive-repo-context', gitQueries.length > 0
+    && gitQueries.every((query) => (
+      query.repo === REPO && query.repo_identity === REPO_IDENTITY
+    )));
+
   const candidateShortcutOnly = buildTaskStatus(makeInput(), makeAdapters({
-    isAncestor: (ancestor, descendant) => (
+    isAncestor: ({ ancestor, descendant }) => (
       (ancestor === CANDIDATE_COMMIT && descendant === TARGET_SHA)
       || (ancestor === CANDIDATE_COMMIT && descendant === CONSUMER_SHA)
       || (ancestor === CANDIDATE_COMMIT && descendant === REMOTE_SHA)
@@ -795,7 +889,7 @@ group('integration-authority', () => {
   check('consumer-does-not-use-candidate-shortcut', candidateShortcutOnly.consumer_updated === false);
 
   const targetConsumerUnknown = buildTaskStatus(makeInput(), makeAdapters({
-    isAncestor: (ancestor, descendant) => {
+    isAncestor: ({ ancestor, descendant }) => {
       if (ancestor === TARGET_SHA && descendant === CONSUMER_SHA) return null;
       return ancestor === CANDIDATE_COMMIT
         && (descendant === TARGET_SHA || descendant === REMOTE_SHA);
@@ -875,6 +969,19 @@ group('terminal-semantics', () => {
   const omitted = buildTaskStatus(makeInput({ campaigns: [] }), makeAdapters());
   check('omitted-sibling-coverage-unknown', omitted.campaigns_terminal === null);
   check('omitted-sibling-not-accepted', omitted.acceptance_verdict === 'unknown');
+
+  const unbound = buildCampaignBundle({
+    status: 'follow_up',
+    followUp: [{ id: 'unbound-follow-up', claim: 'must not become task authority' }],
+    unresolved: [{ id: 'unbound-blocker', claim: 'must not become task authority' }],
+  });
+  const unboundResult = buildTaskStatus(makeInput({ campaigns: [unbound] }), makeAdapters({
+    resolveCampaignBinding: () => ({ status: 'invalid' }),
+  }));
+  check('unbound-campaign-blockers-not-authoritative',
+    unboundResult.accepted_blockers.length === 0);
+  check('unbound-campaign-deferred-not-authoritative',
+    unboundResult.deferred_count === 0);
 });
 
 group('missing-and-invalid-evidence', () => {
@@ -895,6 +1002,32 @@ group('missing-and-invalid-evidence', () => {
 
   const noRef = buildTaskStatus(makeInput(), makeAdapters({ resolveRef: () => null }));
   check('missing-integration-ref-is-unknown', noRef.product_merged === null);
+
+  const gitCalls = [];
+  buildTaskStatus(makeInput(), makeAdapters({
+    resolveRef: (...args) => {
+      gitCalls.push(['resolveRef', ...args]);
+      const ref = args[args.length - 1];
+      return ({
+        [TARGET_REF]: TARGET_SHA,
+        [CONSUMER_REF]: CONSUMER_SHA,
+        [REMOTE_REF]: REMOTE_SHA,
+      })[ref] || null;
+    },
+    isAncestor: (...args) => {
+      gitCalls.push(['isAncestor', ...args]);
+      const [ancestor, descendant] = args.slice(-2);
+      return (ancestor === CANDIDATE_COMMIT && descendant === TARGET_SHA)
+        || (ancestor === TARGET_SHA && descendant === CONSUMER_SHA)
+        || (ancestor === CANDIDATE_COMMIT && descendant === REMOTE_SHA);
+    },
+    treeForCommit: (...args) => {
+      gitCalls.push(['treeForCommit', ...args]);
+      return args[args.length - 1] === CANDIDATE_COMMIT ? CANDIDATE_TREE : null;
+    },
+  }));
+  check('git-evidence-queries-bound-to-repo',
+    gitCalls.length > 0 && gitCalls.every((call) => call[1] === REPO));
 
   const wrongTree = buildTaskStatus(makeInput(), makeAdapters({
     treeForCommit: () => '8'.repeat(40),

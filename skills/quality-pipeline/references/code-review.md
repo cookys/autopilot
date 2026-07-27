@@ -88,6 +88,21 @@ Whichever reviewer the chain selects, the agent (canonical scope also consumed b
 
 (Non-autopilot reviewers may use another shape — see "Handoff Consumption" for enum vocabulary; foreign shapes → quality-pipeline inline interpretation.)
 
+### Bounded convergence contract
+
+Reviewer output is a **bounded keep/cut list and a minimum shippable version**, not an unbounded
+search for further defects.
+
+- Grade only against the frozen task/spec and actual current artifact/baseline. Preferences,
+  nitpicks, ideal-architecture deltas, and invented requirements are not defects.
+- Classify every item as `MUST-FIX` or `CUT/FOLLOW-UP`. A `MUST-FIX` item names a concrete
+  in-scope failure and impact plus the smallest concrete remediation. `CUT/FOLLOW-UP` records why
+  optional hardening or aspiration is excluded from this version and never blocks.
+- An attack or edge case without a concrete failure and smallest concrete remediation is invalid.
+- When the `MUST-FIX` list is empty and the supplied acceptance evidence passes, the review is
+  complete and must return a passing verdict. Do not extend the loop with a new wish list or a
+  renamed version of a requirement the current artifact already satisfies.
+
 ## Handoff Consumption
 
 Read `### Handoff`; route by enum.

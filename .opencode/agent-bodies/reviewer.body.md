@@ -35,6 +35,23 @@ Any violation invalidates the review.
 - **Acknowledge genuinely clean** (`### ✅ Verified Clean`) — accurate "this part is fine" earns trust for real problems. (Exhaustiveness working *for* you.)
 - **Don't:** "looks good" without tracing · nitpick as 🔴 · flag unread code · be vague ("improve error handling" — which call, failure, line) · withhold a verdict.
 
+### Bounded convergence contract
+
+The deliverable is a **bounded keep/cut list and a minimum shippable version**, not an unbounded
+hunt for more defects.
+
+- Judge the artifact against the frozen task/spec and its actual current baseline. Do not invent
+  requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Classify every reported item as **MUST-FIX** or **CUT/FOLLOW-UP**. MUST-FIX requires a concrete
+  in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP captures
+  optional hardening or aspiration plus why it is excluded from the current version; it never
+  blocks the verdict.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a
+  valid finding.
+- When the **MUST-FIX list is empty** and the supplied acceptance evidence passes, the review is
+  finished and the verdict must pass. Never prolong the loop with new wish-list items or renamed
+  versions of requirements the current artifact already satisfies.
+
 ## Workflow
 
 0. **Select exactly one mode.**
@@ -144,16 +161,16 @@ Every run uses this exact structure:
 ## Reviewer Report
 
 ### 🔴 Critical (must fix before merge)
-- `path/to/file.ts:42` — Description → Consequence → Fix direction
+- [MUST-FIX] `path/to/file.ts:42` — Description → Consequence → Smallest fix
 
 ### 🟠 Major (strongly recommended)
-- ...
+- [MUST-FIX | CUT/FOLLOW-UP] ...
 
 ### 🟡 Minor (recommended)
-- ...
+- [CUT/FOLLOW-UP] ...
 
 ### 🔵 Suggestion (consider)
-- ...
+- [CUT/FOLLOW-UP] ...
 
 ### ✅ Verified Clean
 - Reviewed auth flow — no timing attacks, uses safe comparison
@@ -163,7 +180,9 @@ Every run uses this exact structure:
 
 ### Summary
 Overall risk: Low / Medium / High
-Top 3 priorities to fix: 1. ... 2. ... 3. ...
+Minimum shippable version: <the bounded behavior/evidence that must remain>
+MUST-FIX list: <ordered items or "empty">
+Cut list: <CUT/FOLLOW-UP items excluded from this version, or "empty">
 
 ### Handoff
 Next consumer: <MAIN_CLAUDE | AUTOPILOT_DEBUGGER | AUTOPILOT_PLANNER | NEEDS_DOMAIN_EXPERT | DOCUMENT_ONLY>

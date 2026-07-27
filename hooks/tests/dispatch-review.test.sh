@@ -365,6 +365,13 @@ const server = http.createServer((req, res) => {
       return;
     }
     const prompt = String(payload.messages[0].content[0].text || '');
+    const boundedConvergence = prompt.includes('bounded keep/cut list and a minimum shippable version')
+      && prompt.includes('smallest concrete remediation')
+      && prompt.includes('MUST-FIX list is empty');
+    fs.appendFileSync(
+      logPath,
+      `[bounded_convergence=${boundedConvergence ? 'present' : 'missing'}]\n`,
+    );
     const beginMatch = prompt.match(/<<<AUTOPILOT-REVIEW-[0-9a-f]{32}>>>/);
     const endMatch = prompt.match(/<<<AUTOPILOT-END-[0-9a-f]{32}>>>/);
     const nonceBegin = beginMatch ? beginMatch[0] : '<<<AUTOPILOT-REVIEW-MISSING>>>';
@@ -430,6 +437,8 @@ assert_not_contains "$OUT" "$TEST_AUTH_TOKEN" "mock success output does not leak
 assert_contains "$(cat "$MOCK_LOG")" 'POST /v1/messages' "mock server received /v1/messages POST"
 assert_contains "$(cat "$MOCK_LOG")" 'auth=bearer' "mock server received bearer auth"
 assert_contains "$(cat "$MOCK_LOG")" 'model=MiniMax-M3' "mock server received requested model"
+assert_contains "$(cat "$MOCK_LOG")" 'bounded_convergence=present' \
+  "anthropic-compatible prompt carries bounded convergence contract"
 RAW_LOG_PATH="$(printf '%s' "$OUT" | sed -n 's/.*"raw_log"[[:space:]]*:[[:space:]]*"\([^\"]*\)".*/\1/p')"
 assert_file_exists "$RAW_LOG_PATH" "anthropic-compatible mock raw log exists"
 RAW_LOG_CONTENT="$(cat "$RAW_LOG_PATH")"

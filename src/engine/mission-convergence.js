@@ -1088,10 +1088,12 @@ function handleGrantClaimed(state, event, payload) {
     const newReserved = cur.reserved_active + req.reserved_active;
     const newRemaining = cur.authorized_ceiling - cur.durable_consumed - newReserved;
     if (newRemaining < 0) {
+      const remainingBefore = cur.authorized_ceiling - cur.durable_consumed - cur.reserved_active;
       return shadowOrBlock(state, event, 'resource_ceiling', {
-        overspend_axis: axis,
+        axis,
         requested: req.reserved_active,
-        remaining: newRemaining,
+        remaining_before: remainingBefore,
+        remaining_after: newRemaining,
       }, { claimId, idempotencyKey, bindingHash, reservation });
     }
   }
@@ -2949,7 +2951,7 @@ function runLineageBudgetInvariantFixture(input) {
   });
   const wouldBlock = result.receipt.artifact_type === 'mission_would_block_evidence';
   const effectiveRemaining = wouldBlock
-    ? preClaimRemaining
+    ? result.receipt.evidence.remaining_before
     : Math.max(0, result.state.axes.tool_calls.authorized_ceiling
       - result.state.axes.tool_calls.durable_consumed
       - result.state.axes.tool_calls.reserved_active);
@@ -3051,20 +3053,16 @@ function evaluateMissionIntegrationFixture(fixture) {
   const state = createMissionState(contract);
 
   if (isPlainObject(input.identity_change)) {
-    const preClaimRemaining = Math.max(0,
-      state.axes.tool_calls.authorized_ceiling
-      - state.axes.tool_calls.durable_consumed
-      - state.axes.tool_calls.reserved_active);
     const result = runClaimForIntegration(state, input);
     const tc = result.state.axes.tool_calls;
     let derivedState = result.state.state;
     let derivedReason = result.receipt.reason || null;
     let remaining = Math.max(0, tc.authorized_ceiling - tc.durable_consumed - tc.reserved_active);
     if (result.receipt.artifact_type === 'mission_would_block_evidence'
-      && result.receipt.evidence && result.receipt.evidence.overspend_axis) {
+      && result.receipt.evidence && result.receipt.evidence.axis) {
       derivedState = 'BLOCKED';
-      derivedReason = `${result.receipt.reason}:${result.receipt.evidence.overspend_axis}`;
-      remaining = preClaimRemaining;
+      derivedReason = `${result.receipt.reason}:${result.receipt.evidence.axis}`;
+      remaining = result.receipt.evidence.remaining_before;
     }
     return {
       state: derivedState,

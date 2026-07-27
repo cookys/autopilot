@@ -348,7 +348,10 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`shadow-would-block-evidence-recorded\t${
       sh.state.receipts && sh.state.receipts.mission_would_block_evidence ? 'PASS' : 'FAIL'}`);
     console.log(`shadow-evidence-has-overspend-axis\t${
-      sh.receipt.evidence && sh.receipt.evidence.overspend_axis === 'tool_calls' ? 'PASS' : 'FAIL'}`);
+      sh.receipt.evidence && sh.receipt.evidence.axis === 'tool_calls'
+      && typeof sh.receipt.evidence.remaining_before === 'number'
+      && typeof sh.receipt.evidence.remaining_after === 'number'
+      && typeof sh.receipt.evidence.requested === 'number' ? 'PASS' : 'FAIL'}`);
     // Finding 5: the represented grant is NOT prevented — a claim is durably
     // created carrying the full requested reservation for later release/
     // reconciliation, even though the shadow ledger is over its ceiling.
@@ -829,7 +832,13 @@ if (createMissionState && reduceMissionState && stateHash) {
       const smokeAdapter = new ac.AuthenticatedControlAdapter({
         verifier: () => ({ verified: true, authority: 'authenticated_user' }),
       });
-      adapterConstructed = smokeAdapter.verifier !== undefined;
+      const smokeEvent = smokeAdapter.acceptEvent({
+        mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('smoke-consume').digest('hex'),
+        action: 'finish_requested', authority: 'authenticated_user',
+        sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'smoke-lifecycle',
+      });
+      const smokeConsume = ac.consumeAuthenticatedControlEvent(smokeEvent);
+      adapterConstructed = smokeConsume.ok === true && smokeConsume.event.action === 'finish_requested';
     } catch (e) { adapterConstructed = false; }
     console.log(`adapter-construction-smoke\t${adapterConstructed ? 'PASS' : 'FAIL'}`);
 
@@ -915,6 +924,43 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`consume-null-fails\t${ac.consumeAuthenticatedControlEvent(null).ok === false ? 'PASS' : 'FAIL'}`);
     console.log(`consume-undefined-fails\t${ac.consumeAuthenticatedControlEvent(undefined).ok === false ? 'PASS' : 'FAIL'}`);
     console.log(`consume-array-fails\t${ac.consumeAuthenticatedControlEvent([]).ok === false ? 'PASS' : 'FAIL'}`);
+    // Sanitized consume snapshot must have exactly the closed allowlisted
+    // keys — no symbols, no extra provenance fields.
+    const closedKeysAdapter = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const closedKeysCanonical = closedKeysAdapter.acceptEvent({
+      mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('closed-keys').digest('hex'),
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'closed-keys',
+    });
+    const closedKeysConsume = ac.consumeAuthenticatedControlEvent(closedKeysCanonical);
+    const ALLOWED_SNAPSHOT_KEYS = ['mission_lineage_id', 'action', 'authority', 'sequence', 'issued_at', 'reason', 'ceiling_before', 'ceiling_after', 'event_digest'];
+    const actualKeys = Object.keys(closedKeysConsume.event).sort();
+    const expectedKeys = [...ALLOWED_SNAPSHOT_KEYS].sort();
+    const noSymbols = Object.getOwnPropertySymbols(closedKeysConsume.event).length === 0;
+    console.log(`consume-snapshot-closed-keys\t${
+      JSON.stringify(actualKeys) === JSON.stringify(expectedKeys) && noSymbols ? 'PASS' : 'FAIL'}`);
+    // Two adapters producing identical content must mint distinct event
+    // identities; consuming one must not consume/collide with the other.
+    const adapterA = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const adapterB = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const identicalInput = {
+      mission_lineage_id: 'lineage-v1-' + require('crypto').createHash('sha256').update('identical').digest('hex'),
+      action: 'finish_requested', authority: 'authenticated_user',
+      sequence: 1, issued_at: '2026-07-27T00:00:00.000Z', reason: 'identical-content',
+    };
+    const eventA = adapterA.acceptEvent({ ...identicalInput });
+    const eventB = adapterB.acceptEvent({ ...identicalInput });
+    const distinctIdentity = eventA !== eventB;
+    const consumeA = ac.consumeAuthenticatedControlEvent(eventA);
+    const consumeBAfterA = ac.consumeAuthenticatedControlEvent(eventB);
+    console.log(`two-adapters-distinct-identities\t${
+      distinctIdentity && consumeA.ok === true && consumeBAfterA.ok === true ? 'PASS' : 'FAIL'}`);
   }
   {
     // ─── P1 repair: no identity-bearing event object retained ──────────
@@ -985,27 +1031,19 @@ if (createMissionState && reduceMissionState && stateHash) {
       noCanonicalIdentityInState ? 'PASS' : 'FAIL'}`);
     console.log(`receipt-no-canonical-identity\t${
       noCanonicalIdentityInReceipt ? 'PASS' : 'FAIL'}`);
-    // The event_digest in the stored event is computed from the
-    // sanitized snapshot's content (event_type, sequence,
-    // mission_lineage_id, payload) — the same digest as the original
-    // canonical's, because the content is identical and the digest is
-    // content-bound. The KEY property is that the stored object is a
-    // different identity from the canonical, not that the digest
-    // differs.
-    // 5. The event_digest in the stored event is computed from the
-    //    sanitized snapshot, not the original canonical.
-    const sanitizedEventDigest = require('crypto').createHash('sha256').update(JSON.stringify({
-      mission_lineage_id: payloadEvent.mission_lineage_id,
-      action: payloadEvent.action,
-      authority: payloadEvent.authority,
-      sequence: payloadEvent.sequence,
-      issued_at: payloadEvent.issued_at,
-      reason: payloadEvent.reason,
-      ceiling_before: payloadEvent.ceiling_before,
-      ceiling_after: payloadEvent.ceiling_after,
-    })).digest('hex');
+    // 5. The event_digest in the stored event is independently verifiable
+    //    from the stored sanitized event shape (event_type, sequence,
+    //    mission_lineage_id, payload). Recomputing over the stored object
+    //    must yield the same digest — proving the digest is bound to the
+    //    sanitized snapshot content, not the original canonical identity.
+    const independentDigest = ac.sha256({
+      event_type: storedEvent.event_type,
+      sequence: storedEvent.sequence,
+      mission_lineage_id: storedEvent.mission_lineage_id,
+      payload: storedEvent.payload,
+    });
     console.log(`event-digest-bound-to-sanitized-snapshot\t${
-      storedEvent.event_digest !== canonical2.event_digest ? 'PASS' : 'FAIL'}`);
+      storedEvent.event_digest === independentDigest ? 'PASS' : 'FAIL'}`);
   }
   {
     // ─── P1 repair: shadow over-ceiling admission durability + clearing ─
@@ -1043,8 +1081,7 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`shadow-overspend-flag-true\t${
       sh.state.axes.tool_calls.overspend === true ? 'PASS' : 'FAIL'}`);
     console.log(`shadow-evidence-keyed-by-digest\t${
-      sh.state.receipts[`mission_would_block_evidence:${sh.receipt.event_digest || ''}`] !== undefined
-      || Object.keys(sh.state.receipts).some((k) => k.startsWith('mission_would_block_evidence:'))
+      sh.state.receipts[`mission_would_block_evidence:${sh.receipt.source_event.event_digest}`] !== undefined
       ? 'PASS' : 'FAIL'}`);
     // Release clears exactly the reservation. No negative counter.
     const claimId = sh.receipt.claim_id;
@@ -1217,7 +1254,7 @@ if (createMissionState && reduceMissionState && stateHash) {
       buildProjection(sRefs, [{
         kind: 'evidence', locator: 'docs/missing.md', label: 'missing', evidence_kind: 'frozen_spec',
       }]);
-    } catch (e) { missingDigestRejected = e.code === 'SOURCE_REF_DIGEST_MISSING' || e.code === 'SOURCE_REF_DIGEST_MISMATCH' || e.code === 'MissionReducerError'; }
+    } catch (e) { missingDigestRejected = e.code === 'SOURCE_REF_DIGEST_MISSING'; }
     console.log(`source-ref-missing-digest-rejects\t${
       missingDigestRejected ? 'PASS' : 'FAIL'}`);
 
@@ -1228,7 +1265,7 @@ if (createMissionState && reduceMissionState && stateHash) {
         kind: 'evidence', locator: 'docs/wrong.md', label: 'wrong',
         evidence_kind: 'frozen_spec', digest: 'a'.repeat(64),
       }]);
-    } catch (e) { wrongDigestRejected = e.code === 'SOURCE_REF_DIGEST_MISMATCH' || e.code === 'MissionReducerError'; }
+    } catch (e) { wrongDigestRejected = e.code === 'SOURCE_REF_DIGEST_MISMATCH'; }
     console.log(`source-ref-wrong-digest-rejects\t${
       wrongDigestRejected ? 'PASS' : 'FAIL'}`);
 
@@ -1241,7 +1278,7 @@ if (createMissionState && reduceMissionState && stateHash) {
         { kind: 'snapshot', locator: 'docs/dup.md', label: 'b', evidence_kind: 'frozen_spec',
           digest: m.computeSourceRefDigest({ kind: 'snapshot', locator: 'docs/dup.md', label: 'b', evidence_kind: 'frozen_spec' }) },
       ]);
-    } catch (e) { duplicateRejected = e.code === 'SOURCE_REF_DUPLICATE_LOCATOR' || e.code === 'MissionReducerError'; }
+    } catch (e) { duplicateRejected = e.code === 'SOURCE_REF_DUPLICATE_LOCATOR'; }
     console.log(`source-ref-duplicate-locator-rejects\t${
       duplicateRejected ? 'PASS' : 'FAIL'}`);
 
@@ -1253,7 +1290,7 @@ if (createMissionState && reduceMissionState && stateHash) {
         evidence_kind: 'frozen_spec',
         digest: m.computeSourceRefDigest({ kind: 'mystery', locator: 'docs/mystery.md', label: 'mystery', evidence_kind: 'frozen_spec' }),
       }]);
-    } catch (e) { unknownKindRejected = e.code === 'SOURCE_REF_KIND_INVALID' || e.code === 'MissionReducerError'; }
+    } catch (e) { unknownKindRejected = e.code === 'SOURCE_REF_KIND_INVALID'; }
     console.log(`source-ref-unknown-kind-rejects\t${
       unknownKindRejected ? 'PASS' : 'FAIL'}`);
 
@@ -1355,6 +1392,7 @@ for id in \
   consume-json-roundtrip-fails consume-receipt-reuse-fails \
   consume-raw-unfrozen-fails consume-null-fails \
   consume-undefined-fails consume-array-fails \
+  consume-snapshot-closed-keys two-adapters-distinct-identities \
   state-event-not-original-canonical \
   state-event-snapshot-frozen state-event-snapshot-no-cap-field \
   receipt-source-event-not-original-canonical \

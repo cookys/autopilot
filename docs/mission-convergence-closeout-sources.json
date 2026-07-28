@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-26-l6-status-merge-contract.md",
+      "rubric_path": "plans/2026-07-26-l6-status-merge-contract.rubric.md",
+      "plan_sha256": "7bf74c9685b0fd98320c860a68f886367767967b95f661fb72435e97107952b4",
+      "rubric_sha256": "77f17dff39be90e1cac5b0345957e948a2951b1e18de3a310c700bfda09709ac"
+    }
+  ]
+}

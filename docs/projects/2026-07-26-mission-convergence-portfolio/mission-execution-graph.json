@@ -2,7 +2,7 @@
   "artifact_type": "mission_execution_graph",
   "calculated_batches": 2,
   "calculated_depth": 2,
-  "graph_digest": "b281d81e545cb201d9b82ecfdad3a03a6fdc12a241de9ed6f0e923acfa18fa79",
+  "graph_digest": "1e51fa23bcfe6c4b3c68270704e1f53148a46ac0c5d0f1f30122b41eaaeed37e",
   "nodes": [
     {
       "acceptance_ids": [
@@ -106,9 +106,10 @@
           ".claude-plugin",
           "CHANGELOG.md",
           "CLAUDE.md",
+          "README.md",
+          "README.zh-TW.md",
           "docs",
           "hooks",
-          "marketplace.json",
           "platforms",
           "plugin.json",
           "scripts",
@@ -121,10 +122,16 @@
         "max_repair_generations": 2,
         "max_wall_seconds": 3600,
         "output_paths": [
+          ".claude-plugin/marketplace.json",
           ".claude-plugin/plugin.json",
+          "CHANGELOG.md",
+          "README.md",
+          "README.zh-TW.md",
+          "docs/BACKLOG.md",
           "docs/projects/2026-07-26-mission-convergence-portfolio/README.md",
           "docs/projects/INDEX.md",
-          "marketplace.json",
+          "platforms/codex/.agents/plugins/marketplace.json",
+          "platforms/codex/plugin/.codex-plugin/plugin.json",
           "plugin.json"
         ],
         "profile": "high",

@@ -15,7 +15,7 @@
 
 | Requirement | Coverage |
 |---|---|
-| Use Kimi K3, GLM 5.2, MiniMax 3, and Qwen 3.8 Max because Opus quota is unavailable. | Four independent review seats inside the single deliverable. |
+| Use Kimi K3, GLM 5.2, MiniMax 3, and Qwen 3.8 Max because Opus quota is unavailable; replace Qwen with Grok 4.5 after the re-logged account proved credit-blocked. | Four independent authored review seats inside the single deliverable; Qwen failure remains recorded and is not a no-finding. |
 | Replace unbounded defect finding with a cut list and minimum version. | Frozen rubric R4, R6, R9, R10. |
 | Require proof for genuine no-finding. | Frozen rubric R8 and final artifact gate. |
 | Score sub-items and form an MVP union. | Frozen rubric R1–R7 and R11. |
@@ -36,7 +36,7 @@
 
 | Deliverable | Dependencies | Status | Output |
 |---|---|---|---|
-| `bounded-backlog-intake` | none | ADMISSION BOOTSTRAP | `reviews/joint-review.md` |
+| `bounded-backlog-intake` | none | COMPLETE — bounded MVP selected | `reviews/joint-review.md` |
 
 Reviewer seats, transport attempts, synthesis, and validation consume this deliverable's single
 gate; they are not phases.
@@ -46,12 +46,12 @@ gate; they are not phases.
 Objective verification:
 
 ```bash
-test -s docs/projects/2026-07-29-bounded-backlog-intake/reviews/joint-review.md
+test -s docs/projects/_archive/2026-07-29-bounded-backlog-intake/reviews/joint-review.md
 ```
 
 The report must additionally enumerate C1–C11 exactly once and record all four engine outcomes.
 
 ## Links
 
-- [Frozen intake](../../plans/2026-07-29-bounded-backlog-intake.md)
-- [Frozen rubric](../../plans/2026-07-29-bounded-backlog-intake.rubric.md)
+- [Frozen intake](../../../plans/2026-07-29-bounded-backlog-intake.md)
+- [Frozen rubric](../../../plans/2026-07-29-bounded-backlog-intake.rubric.md)

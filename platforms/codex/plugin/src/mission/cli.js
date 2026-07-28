@@ -8,6 +8,8 @@
 // `node bin/autopilot.js mission ...` route share one implementation.
 //
 // Subcommands:
+//   prepare --repo <git-repo> --authority <file> --graph <file> --out <receipt>
+//   grant   --repo <git-repo> --prepared <receipt> --node <graph-node>
 //   init    --contract <file> --out <state>
 //   grant   --state <file> --out <file> --idempotency-key <k> --campaign-id <id>
 //           --contract-digest <sha256> --base-sha <sha> --acceptance-ids <a,b>
@@ -21,6 +23,7 @@
 const fs = require('fs');
 const path = require('path');
 const mission = require('../engine/mission-convergence');
+const runtime = require('./runtime');
 
 const DEFAULT_NOW = '2026-07-27T00:00:00.000Z';
 const DEFAULT_EXPIRY = '2026-07-27T01:00:00.000Z';
@@ -102,8 +105,78 @@ function requireFlag(flags, name) {
   return flags[name];
 }
 
+function rejectUnknownFlags(flags, allowed, label) {
+  const unexpected = Object.keys(flags).filter((name) => !allowed.has(name));
+  if (unexpected.length > 0) {
+    throw new MissionCliError(
+      `${label} rejects unsupported flags: ${unexpected.map((name) => `--${name}`).join(', ')}`,
+      2,
+    );
+  }
+}
+
 function emit(payload) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function emitTo(payload, options = {}) {
+  const stdout = options.stdout || process.stdout;
+  stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function cmdPrepare(flags, options = {}) {
+  rejectUnknownFlags(
+    flags,
+    new Set(['repo', 'authority', 'graph', 'governance', 'out', 'now']),
+    'prepared Mission prepare',
+  );
+  const repo = path.resolve(flags.repo || options.cwd || process.cwd());
+  const authority = readJson(requireFlag(flags, 'authority'), 'task authority');
+  const graph = readJson(requireFlag(flags, 'graph'), 'execution graph');
+  const governancePath = flags.governance
+    ? path.resolve(repo, flags.governance)
+    : path.join(repo, '.claude', 'owner-kernel-governance.json');
+  const governance = readJson(governancePath, 'authoritative governance');
+  const prepare = options.testOnlyDependencies
+    ? runtime.prepareMissionRuntimeForTest
+    : runtime.prepareMissionRuntime;
+  const prepared = prepare({
+    repo,
+    taskAuthority: authority,
+    executionGraph: graph,
+    authoritativeGovernance: governance,
+    preparedAt: flags.now,
+  }, options.testOnlyDependencies);
+  runtime.atomicWriteJson(requireFlag(flags, 'out'), prepared.receipt);
+  emitTo({
+    status: 'prepared',
+    adopted: prepared.adopted,
+    mission_lineage_id: prepared.receipt.mission_lineage_id,
+    adoption_key: prepared.receipt.adoption_key,
+    mission_policy_digest: prepared.receipt.mission_policy_digest,
+    mission_graph_digest: prepared.receipt.mission_graph_digest,
+    state_hash: prepared.receipt.state_hash,
+    receipt: prepared.receipt,
+  }, options);
+  return 0;
+}
+
+function cmdGrantV2(flags, options = {}) {
+  rejectUnknownFlags(
+    flags,
+    new Set(['repo', 'prepared', 'node', 'now']),
+    'prepared Mission grant',
+  );
+  const repo = path.resolve(flags.repo || options.cwd || process.cwd());
+  const preparedReceipt = readJson(requireFlag(flags, 'prepared'), 'Mission prepare receipt');
+  const granted = runtime.grantMissionCampaign({
+    repo,
+    preparedReceipt,
+    nodeId: requireFlag(flags, 'node'),
+    now: flags.now,
+  });
+  emitTo(granted, options);
+  return 0;
 }
 
 function cmdInit(flags) {
@@ -133,7 +206,8 @@ function reduceOrReject(state, event, label) {
   return result;
 }
 
-function cmdGrant(flags) {
+function cmdGrant(flags, options = {}) {
+  if (flags.prepared !== undefined) return cmdGrantV2(flags, options);
   const state = loadState(requireFlag(flags, 'state'));
   if (state.terminal || mission.TERMINAL_STATES.has(state.state)) {
     emit({
@@ -386,6 +460,7 @@ function cmdReceipt(flags) {
 }
 
 const COMMANDS = {
+  prepare: cmdPrepare,
   init: cmdInit,
   grant: cmdGrant,
   consume: cmdConsume,
@@ -395,10 +470,14 @@ const COMMANDS = {
 };
 
 function runMissionCli(argv, options = {}) {
+  const stdout = options.stdout || process.stdout;
+  const stderr = options.stderr || process.stderr;
   const command = argv[0];
   if (!command || command === '-h' || command === '--help' || command === 'help') {
-    process.stdout.write(`${[
-      'usage: mission <init|grant|consume|control|check|receipt> [flags]',
+    stdout.write(`${[
+      'usage: mission <prepare|init|grant|consume|control|check|receipt> [flags]',
+      '  prepare --repo <git-repo> --authority <file> --graph <file> --out <receipt>',
+      '  grant   --repo <git-repo> --prepared <receipt> --node <graph-node> [--now <iso>]',
       '  init    --contract <file> --out <state>',
       '  grant   --state <file> --out <file> --idempotency-key <k> --campaign-id <id>',
       '          --contract-digest <sha256> --base-sha <sha> --acceptance-ids <a,b> [--reserved <n>] [--now <iso>]',
@@ -411,21 +490,22 @@ function runMissionCli(argv, options = {}) {
   }
   const handler = COMMANDS[command];
   if (!handler) {
-    process.stderr.write(`mission: unknown subcommand: ${command}\n`);
+    stderr.write(`mission: unknown subcommand: ${command}\n`);
     return 2;
   }
   let flags;
   try {
     flags = parseFlags(argv.slice(1));
   } catch (error) {
-    process.stderr.write(`mission: ${error.message}\n`);
+    stderr.write(`mission: ${error.message}\n`);
     return error instanceof MissionCliError ? error.exitCode : 2;
   }
   try {
     return handler(flags, options);
   } catch (error) {
     const code = error instanceof MissionCliError ? error.exitCode : 1;
-    process.stderr.write(`mission: ${error.message}\n`);
+    const runtimeCode = error && error.code ? `[${error.code}] ` : '';
+    stderr.write(`mission: ${runtimeCode}${error.message}\n`);
     return code;
   }
 }

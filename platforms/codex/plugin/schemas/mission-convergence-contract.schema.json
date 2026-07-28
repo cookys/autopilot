@@ -29,6 +29,31 @@
     "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
     "task_authority_id": { "$ref": "#/$defs/sha256" },
     "policy_hash": { "$ref": "#/$defs/sha256" },
+    "mission_policy_digest": { "$ref": "#/$defs/sha256" },
+    "mission_graph_digest": { "$ref": "#/$defs/sha256" },
+    "initial_required_acceptance_hashes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "required_acceptance_hashes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "execution_graph": { "type": "object" },
+    "red_lines": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$" }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["project-default", "task-override"]
+      }
+    },
     "enforcement_mode": { "type": "string", "enum": ["shadow", "enforce"] },
     "state": {
       "type": "string",
@@ -91,6 +116,7 @@
               "task_authority_id",
               "campaign_id",
               "campaign_contract_digest",
+              "mission_subject_digest",
               "base_sha",
               "acceptance_ids"
             ]

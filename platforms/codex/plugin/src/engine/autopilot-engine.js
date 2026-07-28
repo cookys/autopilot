@@ -29,6 +29,10 @@ const {
   createFileBackedMissionStateStore,
   createMissionCampaignAdapters,
 } = require('./mission-convergence');
+const {
+  openPreparedMissionStateStore,
+  reconcileMissionCampaignTerminal,
+} = require('../mission/runtime');
 const { runCampaignComposition } = require('./campaign-composition');
 const {
   CAMPAIGN_EVENTS,
@@ -1499,15 +1503,42 @@ class AutopilotEngine {
     // constructor's store/factory (host-trusted only).
     this.missionStatePath = typeof options.missionStatePath === 'string'
       && options.missionStatePath.length > 0
-      ? path.resolve(options.missionStatePath)
+      ? path.resolve(this.cwd, options.missionStatePath)
       : null;
-    if (options.missionCampaignStore
+    this.missionPreparedReceiptPath = typeof options.missionPreparedReceiptPath === 'string'
+      && options.missionPreparedReceiptPath.length > 0
+      ? path.resolve(this.cwd, options.missionPreparedReceiptPath)
+      : null;
+    this.missionPreparedReceipt = isPlainObject(options.missionPreparedReceipt)
+      ? options.missionPreparedReceipt
+      : null;
+    this.missionPreparedError = null;
+    this.missionStoreAuthority = 'none';
+    if (this.missionPreparedReceiptPath || this.missionPreparedReceipt) {
+      try {
+        const preparedReceipt = this.missionPreparedReceipt || JSON.parse(
+          fs.readFileSync(this.missionPreparedReceiptPath, 'utf8'),
+        );
+        this.missionCampaignStore = openPreparedMissionStateStore({
+          repo: this.cwd,
+          preparedReceipt,
+        });
+        this.missionPreparedReceipt = preparedReceipt;
+        this.missionStoreAuthority = 'prepared_registry';
+      } catch (error) {
+        this.missionCampaignStore = null;
+        this.missionPreparedError = error;
+        this.missionStoreAuthority = 'invalid_prepared';
+      }
+    } else if (options.missionCampaignStore
         && typeof options.missionCampaignStore === 'object'
         && typeof options.missionCampaignStore.load === 'function'
         && typeof options.missionCampaignStore.save === 'function') {
       this.missionCampaignStore = options.missionCampaignStore;
+      this.missionStoreAuthority = 'host_injected';
     } else if (this.missionStatePath) {
       this.missionCampaignStore = createFileBackedMissionStateStore(this.missionStatePath);
+      this.missionStoreAuthority = 'legacy_state_path';
     } else {
       this.missionCampaignStore = null;
     }
@@ -1518,6 +1549,9 @@ class AutopilotEngine {
     this.missionAdapterFactory = typeof options.missionAdapterFactory === 'function'
       ? options.missionAdapterFactory
       : createMissionCampaignAdapters;
+    this.missionTerminalReconciler = typeof options.missionTerminalReconciler === 'function'
+      ? options.missionTerminalReconciler
+      : reconcileMissionCampaignTerminal;
   }
 
   // Constructor-owned adapters only. Free-form runtime input cannot replace
@@ -1544,20 +1578,229 @@ class AutopilotEngine {
     });
   }
 
-  readCampaignMissionGrantRef(contractPath, cwd) {
+  readCampaignContract(contractPath, cwd) {
     if (typeof contractPath !== 'string' || contractPath.length === 0) return null;
     const absolute = path.isAbsolute(contractPath)
       ? contractPath
       : path.resolve(cwd || this.cwd, contractPath);
-    let value;
     try {
-      value = JSON.parse(fs.readFileSync(absolute, 'utf8'));
+      const value = JSON.parse(fs.readFileSync(absolute, 'utf8'));
+      return isPlainObject(value) ? value : null;
     } catch (_error) {
       return null;
     }
-    if (!isPlainObject(value)) return null;
+  }
+
+  readCampaignMissionGrantRef(contractPath, cwd) {
+    const value = this.readCampaignContract(contractPath, cwd);
+    if (!value) return null;
     const ref = value.mission_grant_ref;
     return typeof ref === 'string' && /^[0-9a-f]{64}$/.test(ref) ? ref : null;
+  }
+
+  rawCampaignContractDigest(contractPath, cwd) {
+    if (typeof contractPath !== 'string' || contractPath.length === 0) return null;
+    const absolute = path.isAbsolute(contractPath)
+      ? contractPath
+      : path.resolve(cwd || this.cwd, contractPath);
+    try {
+      return crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  reconcileManagedMissionTerminal({
+    campaignControl,
+    outcome,
+    observedAt,
+    cwd,
+  }) {
+    const claim = campaignControl && campaignControl.mission_claim;
+    const contract = campaignControl && campaignControl.contract;
+    if (!contract || !contract.mission_runtime) {
+      return { status: 'not_applicable' };
+    }
+    if (!claim) return { status: 'rejected', reason: 'mission_claim_missing' };
+    const store = this.missionCampaignStore;
+    if (!store
+        || typeof store.load !== 'function'
+        || typeof store.save !== 'function'
+        || typeof store.journalTerminal !== 'function'
+        || typeof store.markTerminalApplied !== 'function') {
+      return { status: 'rejected', reason: 'terminal_journal_store_required' };
+    }
+    const rawDigest = this.rawCampaignContractDigest(
+      campaignControl.contract_path,
+      cwd,
+    );
+    if (!rawDigest) {
+      return { status: 'rejected', reason: 'campaign_contract_digest_unavailable' };
+    }
+    if (rawDigest !== campaignControl.contract_digest) {
+      return { status: 'rejected', reason: 'campaign_contract_changed_before_terminal' };
+    }
+    return this.missionTerminalReconciler({
+      store,
+      grantRef: contract.mission_grant_ref,
+      claimId: claim.claim_id,
+      iccCampaignId: campaignControl.campaign_id,
+      rawCampaignContractDigest: rawDigest,
+      outcome,
+      possiblyEffectful: true,
+      observedAt,
+    });
+  }
+
+  completeManagedCampaignTerminal({
+    campaignControl,
+    outcome,
+    observedAt,
+    cwd,
+  }) {
+    let missionTerminal;
+    try {
+      missionTerminal = this.reconcileManagedMissionTerminal({
+        campaignControl,
+        outcome,
+        observedAt,
+        cwd,
+      });
+    } catch (error) {
+      missionTerminal = {
+        status: 'rejected',
+        reason: error.code || error.message || String(error),
+      };
+    }
+    campaignControl.mission_terminal_reconciliation = missionTerminal;
+
+    let completion;
+    try {
+      completion = this.campaignAdmissionCompleter({
+        repo: cwd,
+        campaignControl,
+      });
+    } catch (error) {
+      completion = {
+        status: 'blocked',
+        reason: error.code || error.message || String(error),
+      };
+    }
+    campaignControl.completion = completion;
+
+    if (!new Set(['applied', 'replay_noop', 'not_applicable']).has(missionTerminal.status)) {
+      return {
+        status: 'blocked',
+        phase: 'mission_terminal_reconciliation',
+        reason: missionTerminal.reason || 'Mission terminal reconciliation failed',
+      };
+    }
+    if (!completion || completion.status !== 'completed') {
+      return {
+        status: 'blocked',
+        phase: 'campaign_terminal_completion',
+        reason: (completion && (completion.reason || completion.error))
+          || 'campaign admission completion failed',
+      };
+    }
+    return {
+      status: 'completed',
+      mission_terminal_reconciliation: missionTerminal,
+      completion,
+    };
+  }
+
+  terminalizeManagedCampaignFailure({
+    campaignControl,
+    reason,
+    phase,
+    cwd,
+    observedAt = null,
+  }) {
+    const state = campaignControl && campaignControl.initial_state;
+    if (!campaignControl || campaignControl.status !== 'admitted'
+        || !state || !campaignControl.generation_claim
+        || campaignControl.generation_claim.durable_journal !== true) {
+      return { status: 'not_applicable' };
+    }
+    const possiblyEffectful = state.event_count > 0
+      || state.phase !== CAMPAIGN_STATES.PREPARED
+      || state.live_lease !== null;
+    if (!possiblyEffectful) return { status: 'no_effect' };
+    const terminalAt = observedAt || this.now();
+    const terminalReason = typeof reason === 'string' && reason.trim().length > 0
+      ? reason
+      : 'managed campaign stopped after a possibly-effectful attempt';
+    const receiptBody = {
+      schema_version: 1,
+      artifact_type: 'implementation_campaign_failure',
+      campaign_id: campaignControl.campaign_id,
+      contract_digest: campaignControl.contract_digest,
+      generation: state.generation,
+      phase: typeof phase === 'string' && phase.length > 0 ? phase : state.phase,
+      reason: terminalReason,
+      possibly_effectful: true,
+      observed_at: terminalAt,
+    };
+    const receiptDigest = campaignCanonicalDigest(receiptBody);
+    const hasLiveLease = state.live_lease !== null;
+    let appended;
+    try {
+      appended = this.campaignEventAppender({
+        repo: cwd,
+        campaignControl,
+        observedAt: terminalAt,
+        eventType: hasLiveLease
+          ? CAMPAIGN_EVENTS.MUTATION_FAILED
+          : CAMPAIGN_EVENTS.TERMINAL_STOP,
+        generation: state.generation,
+        stageIdentity: hasLiveLease
+          ? state.live_lease.stage_identity
+          : `campaign-terminal-stop:${state.generation}`,
+        payload: hasLiveLease
+          ? {
+            reason: terminalReason,
+            failure_receipt_digest: receiptDigest,
+            possibly_effectful: true,
+          }
+          : {
+            reason: terminalReason,
+            stop_receipt_digest: receiptDigest,
+          },
+        artifactReference: {
+          kind: 'campaign_terminal',
+          digest: receiptDigest,
+        },
+      });
+    } catch (error) {
+      return {
+        status: 'blocked',
+        phase: 'campaign_terminal_journal',
+        reason: error.code || error.message || String(error),
+      };
+    }
+    if (!appended || appended.status !== 'appended' || !appended.state || !appended.event) {
+      return {
+        status: 'blocked',
+        phase: 'campaign_terminal_journal',
+        reason: 'campaign event appender did not return durable terminal state',
+      };
+    }
+    campaignControl.initial_state = appended.state;
+    campaignControl.terminal_event = appended.event;
+    campaignControl.failure_receipt = {
+      ...receiptBody,
+      receipt_digest: receiptDigest,
+    };
+    const completed = this.completeManagedCampaignTerminal({
+      campaignControl,
+      outcome: 'blocked',
+      observedAt: appended.event.timestamp,
+      cwd,
+    });
+    return completed.status === 'completed'
+      ? { ...completed, status: 'terminalized', event: appended.event }
+      : completed;
   }
 
   ledgerEntry(unit, status, startedAt, detail = {}) {
@@ -2880,14 +3123,6 @@ class AutopilotEngine {
         const budgetAt = this.now();
         const budget = campaignMutationBudgetStatus(campaignControl, budgetAt);
         if (budget.exhausted) {
-          if (implementationChain.length === 0) {
-            releaseCampaignNoEffect({
-              owner: 'campaign_generation',
-              status: 'rejected',
-              code: 'campaign_budget_exhausted',
-              reason: 'campaign has no mutation budget remaining',
-            });
-          }
           return {
             committed: false,
             phase: 'campaign_wall_budget',
@@ -2967,14 +3202,6 @@ class AutopilotEngine {
         ledger.push(...implementation.ledger);
         implementationChain.push(implementation);
         if (implementation.status !== 'committed') {
-          if (implementationChain.length === 1 && isCampaignPreSpendRejection(implementation)) {
-            releaseCampaignNoEffect({
-              owner: 'implementation_dispatch',
-              status: 'rejected',
-              code: 'campaign_leaf_pre_spend_rejected',
-              reason: implementation.reason || 'implementation pre-spend rejection',
-            });
-          }
           return {
             committed: false,
             reason: implementation.reason || `implementation status ${implementation.status}`,
@@ -3420,6 +3647,55 @@ class AutopilotEngine {
       finalPanel: (reviewInput) => performReview({ ...reviewInput, scope: 'final' }),
     });
 
+    if (!durableJournal && !new Set(['ready', 'follow_up']).has(composition.status)) {
+      const finalImplementation = implementationChain.at(-1) || null;
+      if (implementationChain.length === 0
+          || (implementationChain.length === 1
+            && isCampaignPreSpendRejection(finalImplementation))) {
+        releaseCampaignNoEffect({
+          owner: 'campaign_composition',
+          status: 'rejected',
+          code: 'campaign_pre_effect_blocked',
+          reason: composition.reason || 'campaign composition blocked before mutation',
+        });
+      }
+    }
+
+    if (durableJournal && !new Set(['ready', 'follow_up']).has(composition.status)) {
+      const failure = this.terminalizeManagedCampaignFailure({
+        campaignControl,
+        reason: composition.reason,
+        phase: composition.phase,
+        cwd: loopCwd,
+      });
+      campaignControl.terminal_failure = failure;
+      if (failure.status === 'no_effect') {
+        releaseCampaignNoEffect({
+          owner: 'campaign_composition',
+          status: 'rejected',
+          code: 'campaign_pre_effect_blocked',
+          reason: composition.reason || 'campaign composition blocked before mutation',
+        });
+      } else if (failure.status !== 'terminalized') {
+        return {
+          status: 'blocked',
+          phase: failure.phase || 'campaign_terminal_reconciliation',
+          reason: failure.reason || 'managed campaign failure terminalization failed',
+          rounds: implementationChain.length,
+          verdict: latestReview ? latestReview.verdict : null,
+          roster,
+          resolveResult,
+          base,
+          implementation: implementationChain.at(-1) || null,
+          review: latestReview,
+          implementationChain,
+          reviewChain,
+          campaign_receipt: composition,
+          ledger,
+        };
+      }
+    }
+
     if (durableJournal && new Set(['ready', 'follow_up']).has(composition.status)) {
       const terminalEvent = composition.status === 'ready'
         ? CAMPAIGN_EVENTS.TERMINAL_READY
@@ -3445,7 +3721,8 @@ class AutopilotEngine {
         });
       }
       try {
-        recordCampaignEvent({
+        const terminalObservedAt = this.now();
+        const appended = recordCampaignEvent({
           eventType: terminalEvent,
           generation: campaignControl.initial_state.generation,
           stageIdentity: `campaign-terminal:${campaignControl.initial_state.generation}`,
@@ -3454,11 +3731,33 @@ class AutopilotEngine {
             kind: 'campaign_terminal',
             digest: composition.receipt_digest,
           },
+          observedAt: terminalObservedAt,
         });
-        campaignControl.completion = this.campaignAdmissionCompleter({
-          repo: loopCwd,
+        campaignControl.terminal_event = appended.event;
+        const completed = this.completeManagedCampaignTerminal({
           campaignControl,
+          outcome: composition.status,
+          observedAt: appended.event.timestamp,
+          cwd: loopCwd,
         });
+        if (completed.status !== 'completed') {
+          return {
+            status: 'blocked',
+            phase: completed.phase,
+            reason: completed.reason,
+            rounds: implementationChain.length,
+            verdict: latestReview ? latestReview.verdict : null,
+            roster,
+            resolveResult,
+            base,
+            implementation: implementationChain.at(-1) || null,
+            review: latestReview,
+            implementationChain,
+            reviewChain,
+            campaign_receipt: composition,
+            ledger,
+          };
+        }
       } catch (error) {
         return {
           status: 'blocked',
@@ -3860,13 +4159,47 @@ class AutopilotEngine {
           input.campaignContract,
           loopCwd,
         );
+        const preliminaryContract = this.readCampaignContract(
+          input.campaignContract,
+          loopCwd,
+        );
         if (!intake && missionMode === 'enforce') {
           const store = this.missionCampaignStore;
           const hasAtomicStore = store !== null
             && typeof store === 'object'
             && typeof store.load === 'function'
             && typeof store.save === 'function';
-          if (!hasAtomicStore) {
+          const requiresDurableRuntime = Boolean(
+            preliminaryContract && preliminaryContract.mission_runtime,
+          );
+          const hasTerminalJournal = hasAtomicStore
+            && typeof store.journalTerminal === 'function'
+            && typeof store.markTerminalApplied === 'function';
+          if (this.missionPreparedError) {
+            intake = {
+              status: 'blocked',
+              reason: `enforce-mode Mission prepared receipt is invalid: ${
+                this.missionPreparedError.message || String(this.missionPreparedError)
+              }`,
+              rejection: {
+                owner: 'mission',
+                code: this.missionPreparedError.code || 'mission_prepared_receipt_invalid',
+                reason: 'Mission prepared receipt failed canonical registry validation',
+              },
+              steps: [],
+            };
+          } else if (this.missionStoreAuthority === 'legacy_state_path') {
+            intake = {
+              status: 'blocked',
+              reason: 'enforce-mode Mission cannot trust an arbitrary state path',
+              rejection: {
+                owner: 'mission',
+                code: 'mission_prepared_receipt_required',
+                reason: 'use the canonical Mission prepared receipt and Git common-dir registry',
+              },
+              steps: [],
+            };
+          } else if (!hasAtomicStore) {
             intake = {
               status: 'blocked',
               reason: 'enforce-mode Mission campaign intake requires an atomic Mission state store',
@@ -3874,6 +4207,17 @@ class AutopilotEngine {
                 owner: 'mission',
                 code: 'mission_state_store_required',
                 reason: 'atomic Mission state load/compare-and-swap save is required under enforce mode',
+              },
+              steps: [],
+            };
+          } else if (requiresDurableRuntime && !hasTerminalJournal) {
+            intake = {
+              status: 'blocked',
+              reason: 'durable Mission v2 campaign requires a terminal journal store',
+              rejection: {
+                owner: 'mission',
+                code: 'mission_terminal_journal_required',
+                reason: 'Mission terminal reconciliation requires the canonical Git common-dir journal',
               },
               steps: [],
             };
@@ -3988,6 +4332,15 @@ class AutopilotEngine {
 
     const releaseCampaignNoEffect = (rejection) => {
       if (!campaignControl || campaignControl.status !== 'admitted') return null;
+      const state = campaignControl.initial_state;
+      if (state && (state.event_count > 0
+          || state.phase !== CAMPAIGN_STATES.PREPARED
+          || state.live_lease !== null)) {
+        return {
+          status: 'blocked',
+          error: 'campaign_effect_possible',
+        };
+      }
       const releaseStartedAt = this.now();
       let release;
       try {
@@ -4032,11 +4385,22 @@ class AutopilotEngine {
         code: 'campaign_resume_phase_unsupported',
         reason: `campaign resume from ${campaignControl.initial_state.phase} cannot dispatch implementation`,
       };
-      releaseCampaignNoEffect(rejection);
+      const terminalFailure = this.terminalizeManagedCampaignFailure({
+        campaignControl,
+        reason: rejection.reason,
+        phase: 'campaign_resume',
+        cwd: loopCwd,
+      });
+      campaignControl.terminal_failure = terminalFailure;
+      if (new Set(['no_effect', 'not_applicable']).has(terminalFailure.status)) {
+        releaseCampaignNoEffect(rejection);
+      }
       return finish({
         status: 'blocked',
-        phase: 'campaign_resume',
-        reason: rejection.reason,
+        phase: terminalFailure.status === 'blocked'
+          ? terminalFailure.phase : 'campaign_resume',
+        reason: terminalFailure.status === 'blocked'
+          ? terminalFailure.reason : rejection.reason,
         rounds: 0,
         verdict: null,
         roster,

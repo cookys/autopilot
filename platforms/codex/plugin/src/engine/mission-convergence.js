@@ -212,6 +212,16 @@ function requireSha256(value, label) {
   return requirePattern(value, label, /^[a-f0-9]{64}$/);
 }
 
+function normalizeSha256List(value, label, { optional = false } = {}) {
+  if ((value === undefined || value === null) && optional) return Object.freeze([]);
+  if (!Array.isArray(value)) fail(`${label} must be an array`);
+  const normalized = value.map((entry, index) => requireSha256(entry, `${label}[${index}]`));
+  if (new Set(normalized).size !== normalized.length) {
+    fail(`${label} must not contain duplicates`);
+  }
+  return Object.freeze([...normalized].sort());
+}
+
 function requireLineageId(value, label) {
   return requirePattern(value, label, /^lineage-v1-[0-9a-f]{64}$/);
 }
@@ -366,6 +376,18 @@ function validateMissionContract(contract) {
   requireLineageId(contract.mission_lineage_id, 'contract.mission_lineage_id');
   requireSha256(contract.task_authority_id, 'contract.task_authority_id');
   requireSha256(contract.policy_hash, 'contract.policy_hash');
+  if (contract.mission_policy_digest !== undefined) {
+    requireSha256(contract.mission_policy_digest, 'contract.mission_policy_digest');
+  }
+  if (contract.mission_graph_digest !== undefined) {
+    requireSha256(contract.mission_graph_digest, 'contract.mission_graph_digest');
+    requireObject(contract.execution_graph, 'contract.execution_graph');
+  }
+  normalizeSha256List(
+    contract.initial_required_acceptance_hashes,
+    'contract.initial_required_acceptance_hashes',
+    { optional: true },
+  );
   if (!ENFORCEMENT_MODES.has(contract.enforcement_mode)) {
     fail('contract.enforcement_mode must be "shadow" or "enforce"');
   }
@@ -376,6 +398,11 @@ function validateMissionContract(contract) {
   if (contract.max_stagnant_campaigns !== undefined) {
     requireInteger(contract.max_stagnant_campaigns, 'contract.max_stagnant_campaigns', 0, 100);
   }
+  normalizeSha256List(
+    contract.required_acceptance_hashes,
+    'contract.required_acceptance_hashes',
+    { optional: true },
+  );
   if (contract.red_lines !== undefined) {
     if (!Array.isArray(contract.red_lines)) fail('contract.red_lines must be an array');
     for (const [i, line] of contract.red_lines.entries()) {
@@ -548,11 +575,24 @@ function computeConfigDigest(contract, provenance) {
     mission_lineage_id: contract.mission_lineage_id,
     task_authority_id: contract.task_authority_id,
     policy_hash: contract.policy_hash,
+    mission_policy_digest: contract.mission_policy_digest || contract.policy_hash,
+    mission_graph_digest: contract.mission_graph_digest || null,
+    initial_required_acceptance_hashes: normalizeSha256List(
+      contract.initial_required_acceptance_hashes,
+      'contract.initial_required_acceptance_hashes',
+      { optional: true },
+    ),
+    execution_graph: contract.execution_graph || null,
     enforcement_mode: contract.enforcement_mode,
     contract_state: contract.state,
     closure_ratio: contract.closure_ratio,
     max_stagnant_campaigns: contract.max_stagnant_campaigns !== undefined
       ? contract.max_stagnant_campaigns : DEFAULT_MAX_STAGNANT,
+    required_acceptance_hashes: normalizeSha256List(
+      contract.required_acceptance_hashes,
+      'contract.required_acceptance_hashes',
+      { optional: true },
+    ),
     successor_inherits_durable_consumed: !!(contract.lineage_binding
       && contract.lineage_binding.successor_inherits_durable_consumed),
     red_lines: [...(contract.red_lines || [])].sort(),
@@ -701,6 +741,11 @@ function createMissionState(contract, options = {}) {
   let inheritedIdempotencyIndex = {};
   let inheritedStagnation = 0;
   let inheritedAcceptanceHashes = [];
+  let requiredAcceptanceHashes = normalizeSha256List(
+    contract.required_acceptance_hashes,
+    'contract.required_acceptance_hashes',
+    { optional: true },
+  );
   let inheritedControlSequence = 0;
   if (options.inheritFrom !== undefined) {
     if (!lineageBinding.successor_inherits_durable_consumed) {
@@ -756,6 +801,15 @@ function createMissionState(contract, options = {}) {
     }
     inheritedStagnation = prev.stagnant_campaigns || 0;
     inheritedAcceptanceHashes = [...(prev.acceptance_hashes || [])];
+    const previousRequired = normalizeSha256List(
+      prev.required_acceptance_hashes,
+      'inheritFrom.required_acceptance_hashes',
+      { optional: true },
+    );
+    if (canonicalJson(previousRequired) !== canonicalJson(requiredAcceptanceHashes)) {
+      fail('successor required_acceptance_hashes do not match predecessor');
+    }
+    requiredAcceptanceHashes = previousRequired;
     inheritedControlSequence = prev.control_sequence || 0;
   }
 
@@ -777,6 +831,29 @@ function createMissionState(contract, options = {}) {
     mission_lineage_id: contract.mission_lineage_id,
     task_authority_id: contract.task_authority_id,
     policy_hash: contract.policy_hash,
+    mission_policy_digest: contract.mission_policy_digest || contract.policy_hash,
+    mission_graph_digest: contract.mission_graph_digest || null,
+    initial_required_acceptance_hashes: normalizeSha256List(
+      contract.initial_required_acceptance_hashes,
+      'contract.initial_required_acceptance_hashes',
+      { optional: true },
+    ),
+    execution_graph: contract.execution_graph
+      ? deepClone(contract.execution_graph)
+      : null,
+    graph_progress: Object.freeze(Object.fromEntries(
+      contract.execution_graph && Array.isArray(contract.execution_graph.nodes)
+        ? contract.execution_graph.nodes.map((node) => [
+          node.id,
+          Object.freeze({
+            status: 'pending',
+            attempts: 0,
+            terminal_count: 0,
+            active_claim_id: null,
+          }),
+        ])
+        : [],
+    )),
     repo_identity: contract.repo_identity,
     contract_id: contract.contract_id,
     root_run_id: lineageBinding.root_run_id,
@@ -794,6 +871,7 @@ function createMissionState(contract, options = {}) {
     control_sequence: inheritedControlSequence,
     closure_allowlist: Object.freeze([]),
     stagnant_campaigns: inheritedStagnation,
+    required_acceptance_hashes: requiredAcceptanceHashes,
     acceptance_hashes: Object.freeze(inheritedAcceptanceHashes.sort()),
     unknown_required_axes: Object.freeze([]),
     terminal: null,
@@ -813,6 +891,14 @@ function validateMissionState(state) {
   requireLineageId(state.mission_lineage_id, 'state.mission_lineage_id');
   requireSha256(state.task_authority_id, 'state.task_authority_id');
   requireSha256(state.policy_hash, 'state.policy_hash');
+  if (state.mission_policy_digest !== undefined) {
+    requireSha256(state.mission_policy_digest, 'state.mission_policy_digest');
+  }
+  if (state.mission_graph_digest !== undefined && state.mission_graph_digest !== null) {
+    requireSha256(state.mission_graph_digest, 'state.mission_graph_digest');
+    requireObject(state.execution_graph, 'state.execution_graph');
+    requireObject(state.graph_progress, 'state.graph_progress');
+  }
   if (!ENFORCEMENT_MODES.has(state.enforcement_mode)) {
     fail('state.enforcement_mode must be "shadow" or "enforce"');
   }
@@ -820,6 +906,20 @@ function validateMissionState(state) {
     fail('state.state must be a valid Mission state');
   }
   requireNumber(state.closure_ratio, 'state.closure_ratio', 0, 1);
+  const requiredAcceptance = normalizeSha256List(
+    state.required_acceptance_hashes,
+    'state.required_acceptance_hashes',
+    { optional: true },
+  );
+  const satisfiedAcceptance = normalizeSha256List(
+    state.acceptance_hashes,
+    'state.acceptance_hashes',
+    { optional: true },
+  );
+  if (requiredAcceptance.length > 0
+      && satisfiedAcceptance.some((hash) => !requiredAcceptance.includes(hash))) {
+    fail('state.acceptance_hashes must be a subset of required_acceptance_hashes');
+  }
   if (!isPlainObject(state.axes)) fail('state.axes must be an object');
   for (const axisName of SUPPORTED_AXES) {
     const ax = state.axes[axisName];
@@ -839,6 +939,12 @@ function stateHash(state) {
     mission_lineage_id: state.mission_lineage_id,
     task_authority_id: state.task_authority_id,
     policy_hash: state.policy_hash,
+    mission_policy_digest: state.mission_policy_digest || state.policy_hash,
+    mission_graph_digest: state.mission_graph_digest || null,
+    initial_required_acceptance_hashes:
+      [...(state.initial_required_acceptance_hashes || [])].sort(),
+    execution_graph: state.execution_graph ? deepClone(state.execution_graph) : null,
+    graph_progress: state.graph_progress ? deepClone(state.graph_progress) : {},
     root_run_id: state.root_run_id,
     enforcement_mode: state.enforcement_mode,
     state: state.state,
@@ -848,6 +954,7 @@ function stateHash(state) {
     control_sequence: state.control_sequence,
     closure_allowlist: [...(state.closure_allowlist || [])].sort(),
     stagnant_campaigns: state.stagnant_campaigns,
+    required_acceptance_hashes: [...(state.required_acceptance_hashes || [])].sort(),
     acceptance_hashes: [...(state.acceptance_hashes || [])].sort(),
     unknown_required_axes: [...(state.unknown_required_axes || [])].sort(),
     config_provenance: { ...(state.config_provenance || {}) },
@@ -874,6 +981,20 @@ function stateHash(state) {
           claim_id: v.claim_id,
           idempotency_key: v.idempotency_key,
           binding_digest: v.binding_digest,
+          identity_scheme: v.identity_scheme || null,
+          mission_lineage_id: v.mission_lineage_id || null,
+          task_authority_id: v.task_authority_id || null,
+          campaign_id: v.campaign_id || null,
+          campaign_contract_digest: v.campaign_contract_digest || null,
+          mission_subject_digest: v.mission_subject_digest || null,
+          base_sha: v.base_sha || null,
+          acceptance_ids: [...(v.acceptance_ids || [])].sort(),
+          acceptance_hashes: [...(v.acceptance_hashes || [])].sort(),
+          graph_node_id: v.graph_node_id || null,
+          graph_attempt: v.graph_attempt || null,
+          campaign_contract_draft: v.campaign_contract_draft
+            ? deepClone(v.campaign_contract_draft)
+            : null,
           terminal: !!v.terminal,
           released: !!v.released,
           reconciled: !!v.reconciled,
@@ -1044,6 +1165,24 @@ function checkBindings(state, payload) {
         && payload.campaign_contract_digest !== payload.mission_subject_digest) {
       return 'binding_mismatch';
     }
+    if (payload.graph_node_id !== undefined) {
+      if (typeof payload.graph_node_id !== 'string' || payload.graph_node_id.length === 0
+          || !Number.isSafeInteger(payload.graph_attempt) || payload.graph_attempt < 1
+          || !Array.isArray(payload.acceptance_hashes)
+          || payload.acceptance_hashes.some((hash) => (
+            typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)
+          ))
+          || !isPlainObject(payload.campaign_contract_draft)) {
+        return 'binding_mismatch';
+      }
+      let projectedSubject;
+      try {
+        projectedSubject = missionSubjectDigest(payload.campaign_contract_draft);
+      } catch (_error) {
+        return 'binding_mismatch';
+      }
+      if (projectedSubject !== payload.mission_subject_digest) return 'binding_mismatch';
+    }
   } else if (typeof payload.mission_subject_digest === 'string'
       && payload.mission_subject_digest.length > 0
       && payload.identity_scheme !== IDENTITY_SCHEME_V2) {
@@ -1122,6 +1261,11 @@ function bindingDigest(payload) {
       mission_subject_digest: payload.mission_subject_digest,
       base_sha: payload.base_sha,
       acceptance_ids: acceptance,
+      graph_node_id: payload.graph_node_id || null,
+      graph_attempt: payload.graph_attempt || null,
+      acceptance_hashes: Array.isArray(payload.acceptance_hashes)
+        ? [...payload.acceptance_hashes].sort()
+        : [],
     });
   }
   // v1 / legacy: campaign_contract_digest remains the binding field.
@@ -1141,6 +1285,61 @@ function findClaimByBinding(state, bindingHash) {
   return null;
 }
 
+function graphGrantContext(state, payload) {
+  if (payload.graph_node_id === undefined) return { node: null, progress: null, error: null };
+  const graph = state.execution_graph;
+  const nodes = graph && Array.isArray(graph.nodes) ? graph.nodes : [];
+  const node = nodes.find((entry) => entry.id === payload.graph_node_id);
+  const progress = state.graph_progress && state.graph_progress[payload.graph_node_id];
+  if (!node || !progress) return { node: null, progress: null, error: 'binding_mismatch' };
+  if (payload.graph_attempt > node.gate_attempt_budget) {
+    return { node, progress, error: 'grant_already_claimed' };
+  }
+  const acceptance = Array.isArray(payload.acceptance_ids)
+    ? [...payload.acceptance_ids].sort()
+    : [];
+  if (canonicalJson(acceptance) !== canonicalJson([...node.acceptance_ids].sort())) {
+    return { node, progress, error: 'binding_mismatch' };
+  }
+  for (const dependency of node.dependencies || []) {
+    const dependencyProgress = state.graph_progress[dependency];
+    if (!dependencyProgress || dependencyProgress.status !== 'ready') {
+      return { node, progress, error: 'binding_mismatch' };
+    }
+  }
+  const draft = payload.campaign_contract_draft;
+  const expectedRuntime = {
+    schema_version: 1,
+    root_run_id: state.root_run_id,
+    mission_lineage_id: state.mission_lineage_id,
+    mission_policy_digest: state.mission_policy_digest || state.policy_hash,
+    mission_graph_digest: state.mission_graph_digest,
+    graph_node_id: node.id,
+    graph_node_digest: sha256(canonicalJson(node)),
+  };
+  const expectedDispatch = {
+    schema_version: 1,
+    spec: node.campaign.spec,
+    required_paths: node.campaign.required_paths,
+    output_paths: node.campaign.output_paths,
+    allowed_path_prefixes: node.campaign.allowed_path_prefixes,
+    budget: {
+      max_changed_files: node.campaign.max_changed_files,
+      max_wall_seconds: node.campaign.max_wall_seconds,
+      max_output_bytes: node.reservation.output_bytes,
+      max_tool_calls: node.reservation.tool_calls,
+      max_engine_attempts: node.reservation.engine_attempts,
+    },
+    verification_commands: node.verification_commands,
+  };
+  if (!draft
+      || canonicalJson(draft.mission_runtime) !== canonicalJson(expectedRuntime)
+      || canonicalJson(draft.strict_dispatch) !== canonicalJson(expectedDispatch)) {
+    return { node, progress, error: 'binding_mismatch' };
+  }
+  return { node, progress, error: null };
+}
+
 function handleGrantClaimed(state, event, payload) {
   const idempotencyKey = requireString(payload.idempotency_key, 'payload.idempotency_key', 1, 256);
   if (state.state !== 'DRAFT' && state.state !== 'ACTIVE') {
@@ -1151,6 +1350,8 @@ function handleGrantClaimed(state, event, payload) {
   }
   const bindingError = checkBindings(state, payload);
   if (bindingError) return rejection(state, event, bindingError);
+  const graphGrant = graphGrantContext(state, payload);
+  if (graphGrant.error) return rejection(state, event, graphGrant.error);
   // Validate the reservation shape BEFORE reserving. Empty/partial
   // reservations fail closed and create no reservation.
   let reservation;
@@ -1182,6 +1383,14 @@ function handleGrantClaimed(state, event, payload) {
       return rejection(state, event, 'binding_mismatch');
     }
     return idempotentResume(state, event, existing);
+  }
+  if (graphGrant.progress) {
+    if (graphGrant.progress.status === 'ready' || graphGrant.progress.status === 'active') {
+      return rejection(state, event, 'grant_already_claimed');
+    }
+    if (payload.graph_attempt !== (graphGrant.progress.attempts || 0) + 1) {
+      return rejection(state, event, 'binding_mismatch');
+    }
   }
   // Check ceilings against current state axes.
   for (const axis of SUPPORTED_AXES) {
@@ -1253,6 +1462,12 @@ function applyGrantClaim(state, event, payload, grant) {
     mission_subject_digest: subjectDigest,
     base_sha: payload.base_sha,
     acceptance_ids: [...(payload.acceptance_ids || [])].sort(),
+    acceptance_hashes: [...(payload.acceptance_hashes || [])].sort(),
+    graph_node_id: payload.graph_node_id || null,
+    graph_attempt: payload.graph_attempt || null,
+    campaign_contract_draft: payload.campaign_contract_draft
+      ? deepClone(payload.campaign_contract_draft)
+      : null,
     control_sequence: payload.control_sequence || state.control_sequence,
     reservation,
     issued_at: payload.issued_at,
@@ -1262,6 +1477,17 @@ function applyGrantClaim(state, event, payload, grant) {
     reconciled: false,
     event_digest: event.event_digest,
   };
+  const graphProgress = state.graph_progress && claim.graph_node_id
+    ? Object.freeze({
+      ...state.graph_progress,
+      [claim.graph_node_id]: Object.freeze({
+        ...(state.graph_progress[claim.graph_node_id] || {}),
+        status: 'active',
+        attempts: claim.graph_attempt,
+        active_claim_id: claimId,
+      }),
+    })
+    : state.graph_progress;
   const next = Object.freeze({
     ...appendEvent(state, event),
     state: 'ACTIVE',
@@ -1279,6 +1505,7 @@ function applyGrantClaim(state, event, payload, grant) {
       ...state.claim_idempotency_index,
       [idempotencyKey]: claimId,
     }),
+    graph_progress: graphProgress,
   });
   const receipt = {
     artifact_type: 'mission_campaign_grant_claimed',
@@ -1637,20 +1864,24 @@ function handleReconciliation(state, event, payload) {
   } catch (error) {
     return rejection(state, event, 'binding_mismatch');
   }
-  // Missing actual axes mean zero actual but still free their reservation
-  // — every axis in the original reservation must be returned even when the
-  // caller didn't observe any usage on it.
+  // Unknown or missing exact usage is never silently converted to a known
+  // zero. Enforce mode conservatively charges the frozen reservation; shadow
+  // mode preserves an explicit unknown observation without charging it.
   const mergedActual = {};
   for (const axisName of SUPPORTED_AXES) {
     const resv = claim.reservation[axisName];
     if (!resv) continue;
     const observed = actual[axisName];
+    const known = !!(observed && observed.known === true);
+    const durableConsumed = known
+      ? observed.reserved_active
+      : (state.enforcement_mode === 'enforce' ? resv.reserved_active : 0);
     mergedActual[axisName] = {
       axis: axisName,
       authorized_ceiling: resv.authorized_ceiling,
       reserved_active: 0,
-      durable_consumed: observed ? observed.reserved_active : 0,
-      known: resv.known,
+      durable_consumed: durableConsumed,
+      known,
     };
   }
   // Detect overspend: any observed actual exceeds the reserved budget for
@@ -1692,7 +1923,7 @@ function handleReconciliation(state, event, payload) {
         reserved_active: candidateReserved < 0 ? 0 : candidateReserved,
         durable_consumed: newConsumed,
         active_actual: cur.active_actual,
-        known: cur.known,
+        known: cur.known && mergedActual[axisName].known,
         enforced: cur.enforced,
       });
     }
@@ -1777,7 +2008,7 @@ function handleReconciliation(state, event, payload) {
       reserved_active: candidateReserved < 0 ? 0 : candidateReserved,
       durable_consumed: newConsumed,
       active_actual: cur.active_actual,
-      known: cur.known,
+      known: cur.known && mergedActual[axisName].known,
       enforced: cur.enforced,
     });
     reservationConsumed[axisName] = {
@@ -1785,14 +2016,14 @@ function handleReconciliation(state, event, payload) {
       authorized_ceiling: resv.authorized_ceiling,
       reserved_active: observed,
       durable_consumed: 0,
-      known: resv.known,
+      known: mergedActual[axisName].known,
     };
     reservationFreed[axisName] = {
       axis: axisName,
       authorized_ceiling: resv.authorized_ceiling,
       reserved_active: resv.reserved_active - observed,
       durable_consumed: 0,
-      known: resv.known,
+      known: mergedActual[axisName].known,
     };
   }
   const reconciledClaim = {
@@ -1999,6 +2230,10 @@ function handleStagnationObservation(state, event, payload) {
 
 function handleAcceptanceSatisfied(state, event, payload) {
   const hash = requireSha256(payload.acceptance_hash, 'payload.acceptance_hash');
+  if (state.required_acceptance_hashes.length > 0
+      && !state.required_acceptance_hashes.includes(hash)) {
+    return rejection(state, event, 'binding_mismatch');
+  }
   if (state.acceptance_hashes.includes(hash)) {
     return {
       state: appendEvent(state, event),
@@ -2245,6 +2480,20 @@ function buildProjection(state, sourceRefs = []) {
       claim_id: v.claim_id,
       idempotency_key: v.idempotency_key,
       binding_digest: v.binding_digest,
+      identity_scheme: v.identity_scheme || null,
+      mission_lineage_id: v.mission_lineage_id || null,
+      task_authority_id: v.task_authority_id || null,
+      campaign_id: v.campaign_id || null,
+      campaign_contract_digest: v.campaign_contract_digest || null,
+      mission_subject_digest: v.mission_subject_digest || null,
+      base_sha: v.base_sha || null,
+      acceptance_ids: [...(v.acceptance_ids || [])].sort(),
+      acceptance_hashes: [...(v.acceptance_hashes || [])].sort(),
+      graph_node_id: v.graph_node_id || null,
+      graph_attempt: v.graph_attempt || null,
+      campaign_contract_draft: v.campaign_contract_draft
+        ? deepClone(v.campaign_contract_draft)
+        : null,
       terminal: !!v.terminal,
       released: !!v.released,
       reconciled: !!v.reconciled,
@@ -2271,6 +2520,10 @@ function buildProjection(state, sourceRefs = []) {
     mission_lineage_id: state.mission_lineage_id,
     task_authority_id: state.task_authority_id,
     policy_hash: state.policy_hash,
+    mission_policy_digest: state.mission_policy_digest || state.policy_hash,
+    mission_graph_digest: state.mission_graph_digest || null,
+    initial_required_acceptance_hashes:
+      [...(state.initial_required_acceptance_hashes || [])].sort(),
     enforcement_mode: state.enforcement_mode,
     closure_ratio: state.closure_ratio,
     max_stagnant_campaigns: state.max_stagnant_campaigns,
@@ -2279,7 +2532,9 @@ function buildProjection(state, sourceRefs = []) {
       objective: state.repo_identity,
       intent_hash: sha256(state.config.intent || state.repo_identity),
     },
-    remaining_acceptance: [...state.acceptance_hashes].sort(),
+    remaining_acceptance: [...(state.required_acceptance_hashes || [])]
+      .filter((hash) => !state.acceptance_hashes.includes(hash))
+      .sort(),
     red_lines: [...state.red_lines].sort(),
     remaining_budget: { per_axis: perAxis },
     current_blockers: state.terminal
@@ -2303,7 +2558,9 @@ function buildProjection(state, sourceRefs = []) {
       control_sequence: state.control_sequence,
       closure_allowlist: [...state.closure_allowlist].sort(),
       stagnant_campaigns: state.stagnant_campaigns,
+      required_acceptance_hashes: [...(state.required_acceptance_hashes || [])].sort(),
       acceptance_hashes: [...state.acceptance_hashes].sort(),
+      graph_progress: state.graph_progress ? deepClone(state.graph_progress) : {},
       unknown_required_axes: [...state.unknown_required_axes].sort(),
       event_digests: state.events.map((e) => e.event_digest).sort(),
     },
@@ -2328,6 +2585,12 @@ function buildProjection(state, sourceRefs = []) {
       contract_state: state.config.state,
       closure_ratio: state.config.closure_ratio,
       max_stagnant_campaigns: state.config.max_stagnant_campaigns,
+      required_acceptance_hashes: [...(state.required_acceptance_hashes || [])].sort(),
+      mission_policy_digest: state.mission_policy_digest || state.policy_hash,
+      mission_graph_digest: state.mission_graph_digest || null,
+      initial_required_acceptance_hashes:
+        [...(state.initial_required_acceptance_hashes || [])].sort(),
+      execution_graph: state.execution_graph ? deepClone(state.execution_graph) : null,
       axes: deepClone(configSnapshot.axes),
       red_lines: deepClone(state.red_lines),
     },
@@ -2394,10 +2657,16 @@ function restoreProjection(projection) {
     mission_lineage_id: configSnapshot.mission_lineage_id,
     task_authority_id: configSnapshot.task_authority_id,
     policy_hash: configSnapshot.policy_hash,
+    mission_policy_digest: configSnapshot.mission_policy_digest,
+    mission_graph_digest: configSnapshot.mission_graph_digest,
+    initial_required_acceptance_hashes:
+      configSnapshot.initial_required_acceptance_hashes || [],
+    execution_graph: configSnapshot.execution_graph || null,
     enforcement_mode: configSnapshot.enforcement_mode,
     state: configSnapshot.contract_state,
     closure_ratio: configSnapshot.closure_ratio,
     max_stagnant_campaigns: configSnapshot.max_stagnant_campaigns,
+    required_acceptance_hashes: configSnapshot.required_acceptance_hashes || [],
     red_lines: configSnapshot.red_lines || [],
     axes: configSnapshot.axes,
     grant_contract: configSnapshot.grant_contract,
@@ -2414,6 +2683,12 @@ function restoreProjection(projection) {
   }
   if (configSnapshot.policy_hash !== projection.policy_hash) {
     fail('config_snapshot.policy_hash does not match projection.policy_hash', 'PROJECTION_BINDING_MISMATCH');
+  }
+  if ((configSnapshot.mission_policy_digest || configSnapshot.policy_hash)
+      !== (projection.mission_policy_digest || projection.policy_hash)
+      || (configSnapshot.mission_graph_digest || null)
+        !== (projection.mission_graph_digest || null)) {
+    fail('config_snapshot Mission policy/graph digest does not match projection', 'PROJECTION_BINDING_MISMATCH');
   }
   if (configSnapshot.enforcement_mode !== projection.enforcement_mode) {
     fail('config_snapshot.enforcement_mode does not match projection.enforcement_mode', 'PROJECTION_BINDING_MISMATCH');
@@ -2466,6 +2741,20 @@ function restoreProjection(projection) {
       claim_id: claim.claim_id,
       idempotency_key: claim.idempotency_key,
       binding_digest: claim.binding_digest,
+      identity_scheme: claim.identity_scheme || null,
+      mission_lineage_id: claim.mission_lineage_id || null,
+      task_authority_id: claim.task_authority_id || null,
+      campaign_id: claim.campaign_id || null,
+      campaign_contract_digest: claim.campaign_contract_digest || null,
+      mission_subject_digest: claim.mission_subject_digest || null,
+      base_sha: claim.base_sha || null,
+      acceptance_ids: Object.freeze([...(claim.acceptance_ids || [])].sort()),
+      acceptance_hashes: Object.freeze([...(claim.acceptance_hashes || [])].sort()),
+      graph_node_id: claim.graph_node_id || null,
+      graph_attempt: claim.graph_attempt || null,
+      campaign_contract_draft: claim.campaign_contract_draft
+        ? deepClone(claim.campaign_contract_draft)
+        : null,
       terminal: !!claim.terminal,
       released: !!claim.released,
       reconciled: !!claim.reconciled,
@@ -2492,6 +2781,15 @@ function restoreProjection(projection) {
     mission_lineage_id: projection.mission_lineage_id,
     task_authority_id: projection.task_authority_id,
     policy_hash: projection.policy_hash,
+    mission_policy_digest: projection.mission_policy_digest || projection.policy_hash,
+    mission_graph_digest: projection.mission_graph_digest || null,
+    initial_required_acceptance_hashes: Object.freeze(
+      [...(projection.initial_required_acceptance_hashes || [])].sort(),
+    ),
+    execution_graph: configSnapshot.execution_graph
+      ? deepClone(configSnapshot.execution_graph)
+      : null,
+    graph_progress: deepFreeze(deepClone(snapshot.graph_progress || {})),
     repo_identity: projection.frozen_intent.objective.slice(0, 1024),
     contract_id: `mission-v1-${sha256(projection.mission_lineage_id)}`,
     root_run_id: normalizedLB.root_run_id,
@@ -2520,6 +2818,9 @@ function restoreProjection(projection) {
     control_sequence: snapshot.control_sequence,
     closure_allowlist: Object.freeze(snapshot.closure_allowlist),
     stagnant_campaigns: snapshot.stagnant_campaigns,
+    required_acceptance_hashes: Object.freeze(
+      [...(snapshot.required_acceptance_hashes || [])].sort(),
+    ),
     acceptance_hashes: Object.freeze(snapshot.acceptance_hashes),
     unknown_required_axes: Object.freeze(snapshot.unknown_required_axes),
     terminal: snapshot.terminal ? deepClone(snapshot.terminal) : null,
@@ -2538,6 +2839,16 @@ function restoreProjection(projection) {
         ? configSnapshot.task_authority_id : projection.task_authority_id,
       policy_hash: configSnapshot.policy_hash !== undefined
         ? configSnapshot.policy_hash : projection.policy_hash,
+      mission_policy_digest: configSnapshot.mission_policy_digest !== undefined
+        ? configSnapshot.mission_policy_digest : projection.policy_hash,
+      mission_graph_digest: configSnapshot.mission_graph_digest !== undefined
+        ? configSnapshot.mission_graph_digest : null,
+      initial_required_acceptance_hashes: Object.freeze(
+        [...(configSnapshot.initial_required_acceptance_hashes || [])].sort(),
+      ),
+      execution_graph: configSnapshot.execution_graph
+        ? deepClone(configSnapshot.execution_graph)
+        : null,
       enforcement_mode: configSnapshot.enforcement_mode !== undefined
         ? configSnapshot.enforcement_mode : projection.enforcement_mode,
       state: configSnapshot.contract_state !== undefined
@@ -2546,6 +2857,9 @@ function restoreProjection(projection) {
         ? configSnapshot.closure_ratio : projection.closure_ratio,
       max_stagnant_campaigns: configSnapshot.max_stagnant_campaigns !== undefined
         ? configSnapshot.max_stagnant_campaigns : projection.max_stagnant_campaigns,
+      required_acceptance_hashes: Object.freeze(
+        [...(configSnapshot.required_acceptance_hashes || [])].sort(),
+      ),
       axes: configSnapshot.axes ? deepClone(configSnapshot.axes) : deepClone(snapshot.axes),
       grant_contract: deepClone(configSnapshot.grant_contract),
       control_contract: deepClone(configSnapshot.control_contract),
@@ -3400,9 +3714,64 @@ function applyMissionCampaignReceipt(state, receipt) {
   try { validateMissionState(state); } catch (_error) {
     return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
   }
-  if (!isPlainObject(receipt) || receipt.schema_version !== 1
+  const legacyKeys = new Set([
+    'schema_version',
+    'artifact_type',
+    'claim_id',
+    'mission_lineage_id',
+    'campaign_id',
+    'campaign_contract_digest',
+    'actual_usage',
+    'receipt_digest',
+  ]);
+  const v2Keys = new Set([
+    'schema_version',
+    'artifact_type',
+    'claim_id',
+    'mission_lineage_id',
+    'campaign_id',
+    'mission_campaign_id',
+    'icc_campaign_id',
+    'campaign_contract_digest',
+    'raw_campaign_contract_digest',
+    'graph_node_id',
+    'graph_attempt',
+    'outcome',
+    'possibly_effectful',
+    'actual_usage',
+    'satisfied_acceptance_hashes',
+    'observed_at',
+    'receipt_digest',
+  ]);
+  const receiptKeys = isPlainObject(receipt) ? Object.keys(receipt) : [];
+  const exactKeys = (allowed) => (
+    receiptKeys.length === allowed.size && receiptKeys.every((key) => allowed.has(key))
+  );
+  const legacyReceipt = exactKeys(legacyKeys);
+  const missionV2Receipt = exactKeys(v2Keys);
+  if (!isPlainObject(receipt) || (!legacyReceipt && !missionV2Receipt)
+      || receipt.schema_version !== 1
       || receipt.artifact_type !== 'campaign_terminal_receipt'
       || typeof receipt.receipt_digest !== 'string'
+      || (missionV2Receipt
+        && (!new Set(['ready', 'follow_up', 'blocked', 'abort', 'unknown']).has(receipt.outcome)
+          || receipt.possibly_effectful !== true
+          || !/^campaign-v2-[a-f0-9]{64}$/.test(receipt.campaign_id)
+          || !/^campaign-v2-[a-f0-9]{64}$/.test(receipt.mission_campaign_id)
+          || !/^campaign-v1-[a-f0-9]{64}$/.test(receipt.icc_campaign_id)
+          || typeof receipt.raw_campaign_contract_digest !== 'string'
+          || !/^[a-f0-9]{64}$/.test(receipt.raw_campaign_contract_digest)
+          || typeof receipt.graph_node_id !== 'string'
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(receipt.graph_node_id)
+          || !Number.isSafeInteger(receipt.graph_attempt)
+          || receipt.graph_attempt < 1
+          || !Array.isArray(receipt.satisfied_acceptance_hashes)
+          || receipt.satisfied_acceptance_hashes.some((hash) => (
+            typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)
+          ))
+          || typeof receipt.observed_at !== 'string'
+          || !receipt.observed_at.endsWith('Z')
+          || !Number.isFinite(Date.parse(receipt.observed_at))))
       || sha256(Object.fromEntries(Object.entries(receipt).filter(([k]) => k !== 'receipt_digest'))) !== receipt.receipt_digest) {
     return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
   }
@@ -3410,8 +3779,25 @@ function applyMissionCampaignReceipt(state, receipt) {
   if (!claim || claim.released
       || receipt.mission_lineage_id !== state.mission_lineage_id
       || receipt.campaign_id !== claim.campaign_id
+      || (legacyReceipt && claim.identity_scheme === IDENTITY_SCHEME_V2)
+      || (missionV2Receipt && receipt.mission_campaign_id !== claim.campaign_id)
+      || (missionV2Receipt && claim.graph_node_id
+        && receipt.graph_node_id !== claim.graph_node_id)
+      || (missionV2Receipt && claim.graph_attempt
+        && receipt.graph_attempt !== claim.graph_attempt)
       || receipt.campaign_contract_digest !== claim.campaign_contract_digest) {
     return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+  }
+  if (missionV2Receipt) {
+    const satisfied = receipt.satisfied_acceptance_hashes;
+    const canonicalSatisfied = [...new Set(satisfied)].sort();
+    const claimAcceptance = [...(claim.acceptance_hashes || [])].sort();
+    if (canonicalJson(satisfied) !== canonicalJson(canonicalSatisfied)
+        || (receipt.outcome === 'ready'
+          && canonicalJson(satisfied) !== canonicalJson(claimAcceptance))
+        || (receipt.outcome !== 'ready' && satisfied.length !== 0)) {
+      return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+    }
   }
   // Fail closed on a malformed/partial per-axis usage shape, but feed the
   // reducer the original {per_axis} payload it expects: reservationFor returns
@@ -3438,8 +3824,91 @@ function applyMissionCampaignReceipt(state, receipt) {
   if (!result || !result.state || result.receipt.artifact_type === 'mission_grant_rejected') {
     return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
   }
-  const receipts = { ...(result.state.receipts || {}), [`mission_campaign_receipt:${claim.claim_id}`]: deepFreeze(deepClone(receipt)) };
-  return Object.freeze({ status: 'applied', state: Object.freeze({ ...result.state, receipts: Object.freeze(receipts) }) });
+  let next = result.state;
+  if (missionV2Receipt && claim.graph_node_id && next.graph_progress) {
+    const priorProgress = next.graph_progress[claim.graph_node_id] || {};
+    next = Object.freeze({
+      ...next,
+      graph_progress: Object.freeze({
+        ...next.graph_progress,
+        [claim.graph_node_id]: Object.freeze({
+          ...priorProgress,
+          status: receipt.outcome,
+          attempts: claim.graph_attempt || priorProgress.attempts || 0,
+          terminal_count: (priorProgress.terminal_count || 0) + 1,
+          active_claim_id: null,
+          last_outcome: receipt.outcome,
+          last_receipt_digest: receipt.receipt_digest,
+        }),
+      }),
+    });
+  }
+
+  const satisfied = missionV2Receipt && Array.isArray(receipt.satisfied_acceptance_hashes)
+    ? [...receipt.satisfied_acceptance_hashes]
+    : [];
+  const claimAcceptance = new Set(claim.acceptance_hashes || []);
+  if (satisfied.some((hash) => (
+    typeof hash !== 'string'
+      || !/^[a-f0-9]{64}$/.test(hash)
+      || !claimAcceptance.has(hash)
+      || (next.required_acceptance_hashes.length > 0
+        && !next.required_acceptance_hashes.includes(hash))
+  ))) {
+    return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+  }
+  let progressDelta = 0;
+  for (const acceptanceHash of satisfied) {
+    if (!next.acceptance_hashes.includes(acceptanceHash)) progressDelta += 1;
+    const accepted = reduceMissionState(next, {
+      event_type: 'acceptance_satisfied',
+      sequence: next.events.length + 1,
+      mission_lineage_id: next.mission_lineage_id,
+      payload: { acceptance_hash: acceptanceHash },
+    });
+    if (!accepted || !accepted.state
+        || accepted.receipt.artifact_type === 'mission_grant_rejected') {
+      return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
+    }
+    next = accepted.state;
+  }
+  const remaining = next.required_acceptance_hashes
+    .filter((hash) => !next.acceptance_hashes.includes(hash));
+  if (missionV2Receipt && remaining.length > 0 && progressDelta === 0) {
+    const stagnation = reduceMissionState(next, {
+      event_type: 'stagnation_observation',
+      sequence: next.events.length + 1,
+      mission_lineage_id: next.mission_lineage_id,
+      payload: {
+        stagnant_campaigns: next.stagnant_campaigns + 1,
+        acceptance_unresolved: true,
+        request_third_grant: false,
+      },
+    });
+    next = stagnation.state;
+  } else if (missionV2Receipt && remaining.length === 0 && !next.terminal) {
+    const closed = reduceMissionState(next, {
+      event_type: 'closure_evaluated',
+      sequence: next.events.length + 1,
+      mission_lineage_id: next.mission_lineage_id,
+      payload: {
+        ratio: 1,
+        other_axes_below_ratio: false,
+        unknown_required_axis: false,
+      },
+    });
+    next = closed.state;
+  }
+  const receipts = {
+    ...(next.receipts || {}),
+    [`mission_campaign_receipt:${claim.claim_id}`]: deepFreeze(deepClone(receipt)),
+  };
+  return Object.freeze({
+    status: 'applied',
+    progress_delta: progressDelta,
+    remaining_acceptance: Object.freeze(remaining),
+    state: Object.freeze({ ...next, receipts: Object.freeze(receipts) }),
+  });
 }
 
 // Module-private object-identity attestation for Codex enforcement disposition

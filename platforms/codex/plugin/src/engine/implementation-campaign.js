@@ -17,6 +17,7 @@ const CAMPAIGN_STATES = Object.freeze({
 const CAMPAIGN_EVENTS = Object.freeze({
   IMPLEMENTATION_STARTED: 'implementation_started',
   IMPLEMENTATION_COMPLETED: 'implementation_completed',
+  MUTATION_FAILED: 'mutation_failed',
   VERTICAL_VERIFIED: 'vertical_verified',
   REVIEW_COMPLETED: 'review_completed',
   REPAIR_AUTHORIZED: 'repair_authorized',
@@ -94,6 +95,11 @@ const EVENT_PAYLOAD_KEYS = Object.freeze({
   [CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED]: [
     'scope_check_passed',
     'scope_check_digest',
+  ],
+  [CAMPAIGN_EVENTS.MUTATION_FAILED]: [
+    'reason',
+    'failure_receipt_digest',
+    'possibly_effectful',
   ],
   [CAMPAIGN_EVENTS.VERTICAL_VERIFIED]: ['passed', 'evidence_digest'],
   [CAMPAIGN_EVENTS.REVIEW_COMPLETED]: ['review_digest'],
@@ -407,7 +413,7 @@ function validateInitialCampaignState(state) {
   return true;
 }
 
-function validateUsage(state, event, expectedGeneration) {
+function validateUsage(state, event, expectedGeneration, options = {}) {
   assertExactKeys(event.usage, USAGE_KEYS, 'event.usage');
   for (const key of USAGE_KEYS) {
     if (!Number.isSafeInteger(event.usage[key]) || event.usage[key] < 0) {
@@ -430,13 +436,15 @@ function validateUsage(state, event, expectedGeneration) {
   if (event.usage.repair_generations !== expectedGeneration) {
     fail('GENERATION_RESET', 'repair generation usage must equal the durable generation');
   }
-  if (event.usage.elapsed_wall_seconds > state.limits.max_wall_seconds) {
+  if (!options.allowBudgetOverrun
+      && event.usage.elapsed_wall_seconds > state.limits.max_wall_seconds) {
     fail('WALL_BUDGET_EXCEEDED', 'campaign wall-clock ceiling exceeded');
   }
-  if (event.usage.changed_files > state.limits.max_changed_files) {
+  if (!options.allowBudgetOverrun
+      && event.usage.changed_files > state.limits.max_changed_files) {
     fail('FILE_BUDGET_EXCEEDED', 'campaign changed-file ceiling exceeded');
   }
-  if (event.usage.churn > state.limits.max_churn) {
+  if (!options.allowBudgetOverrun && event.usage.churn > state.limits.max_churn) {
     fail('CHURN_BUDGET_EXCEEDED', 'campaign churn ceiling exceeded');
   }
 }
@@ -551,7 +559,12 @@ function reduceCampaignState(currentState, event) {
   if (event.generation !== expectedGeneration) {
     fail('GENERATION_MISMATCH', `event generation must equal ${expectedGeneration}`);
   }
-  validateUsage(currentState, event, expectedGeneration);
+  validateUsage(currentState, event, expectedGeneration, {
+    allowBudgetOverrun: new Set([
+      CAMPAIGN_EVENTS.MUTATION_FAILED,
+      CAMPAIGN_EVENTS.TERMINAL_STOP,
+    ]).has(event.event_type),
+  });
   if (MUTATION_START_EVENTS.has(event.event_type)
       && event.usage.elapsed_wall_seconds >= currentState.limits.max_wall_seconds) {
     fail('WALL_BUDGET_EXHAUSTED', 'mutation cannot start without remaining wall-clock budget');
@@ -578,6 +591,27 @@ function reduceCampaignState(currentState, event) {
     requireScopeCheck(event);
     next.live_lease = null;
     next.phase = CAMPAIGN_STATES.VERTICAL_VERIFICATION;
+  } else if (new Set([
+    CAMPAIGN_STATES.IMPLEMENTING,
+    CAMPAIGN_STATES.REPAIRING,
+  ]).has(currentState.phase)
+      && event.event_type === CAMPAIGN_EVENTS.MUTATION_FAILED) {
+    requireLease(currentState, event);
+    if (event.payload.possibly_effectful !== true
+        || !isSha256(event.payload.failure_receipt_digest)
+        || event.output_artifact_digest !== canonicalDigest({
+          kind: 'campaign_terminal',
+          digest: event.payload.failure_receipt_digest,
+        })
+        || typeof event.payload.reason !== 'string'
+        || event.payload.reason.trim() === '') {
+      fail(
+        'MUTATION_FAILURE_EVIDENCE_REQUIRED',
+        'mutation failure requires possibly-effectful digest-bound failure evidence',
+      );
+    }
+    next.live_lease = null;
+    next.phase = CAMPAIGN_STATES.TERMINAL_STOP;
   } else if (currentState.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION
       && event.event_type === CAMPAIGN_EVENTS.VERTICAL_VERIFIED) {
     if (event.payload.passed !== true || !isSha256(event.payload.evidence_digest)) {

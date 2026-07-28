@@ -119,6 +119,10 @@ CAMPAIGN_CONTRACT_FILE=""
 CAMPAIGN_CONTRACT_SHA256=""
 CAMPAIGN_SEAL_FILE=""
 CAMPAIGN_CONTRACT_SNAPSHOT=""
+CAMPAIGN_ID=""
+CAMPAIGN_MISSION_MODE=""
+CAMPAIGN_STRICT_AUTHORITY=0
+CAMPAIGN_PROJECTION_BOUND=0
 RUNNER="auto"
 EFFORT="xhigh"
 ENDPOINT=""          # optional named endpoint (cc-shim only) → resolve-endpoint.sh
@@ -612,6 +616,10 @@ emit() { # status commit files ins del worktree error
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_fields=", \"unit_id\": $strict_unit_json, \"contract_sha256\": $strict_contract_sha_json, \"spec_sha256\": $strict_spec_sha_json, \"go\": $strict_go_json"
   fi
+  local campaign_fields=""
+  if [ "${CAMPAIGN_PROJECTION_BOUND:-0}" -eq 1 ]; then
+    campaign_fields=", \"campaign_contract_sha256\": \"$(_flat_json_escape "$CAMPAIGN_CONTRACT_SHA256")\", \"unit_contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\""
+  fi
   local strict_boundary_fields=""
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ] && [ "$1" = "committed" ] && [ "${STRICT_POSTCHECK_OK:-0}" -eq 1 ]; then
     strict_boundary_fields=', "boundary": "ok", "acceptance": "ok"'
@@ -621,26 +629,73 @@ emit() { # status commit files ins del worktree error
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     identity_fields=', "identity_drift": true'
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s%s%s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
-    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields" "$strict_boundary_fields" "$identity_fields"
+    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$identity_fields"
 }
 
 check_session_mode_gate() {
   local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
-  local marker level consumed_repo normalized_repo
+  local marker marker_state marker_rc consumed_repo normalized_repo
+  local markers
   consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ "$marker_dir" != "/.autopilot/session-mode" ] || return 0
   [ -d "$marker_dir" ] || return 0
   [ -n "$consumed_repo" ] || return 0
+  [ -r "$marker_dir" ] && [ -x "$marker_dir" ] \
+    || die_precondition "authoritative session-mode marker directory is unreadable"
   normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"
-  for marker in "$marker_dir"/*.json; do
-    [ -f "$marker" ] || continue
-    if level="$(node -e 'const fs = require("fs"); const path = require("path"); const file = process.argv[1]; const root = path.resolve(process.argv[2] || ""); const now = Date.now(); try { const data = JSON.parse(fs.readFileSync(file, "utf8")); if (!data || typeof data !== "object") process.exit(1); if (data.level !== "l5" && data.level !== "l6") process.exit(1); if (!data.expires_at) process.exit(1); const exp = Date.parse(data.expires_at); if (!Number.isFinite(exp) || exp <= now) process.exit(1); if (path.resolve(String(data.repo_root || "")) !== root) process.exit(1); process.stdout.write(String(data.level || "")); process.exit(0); } catch (e) { process.exit(1); }' "$marker" "$normalized_repo")"; then
-      die_precondition "active session-mode=$level blocks non-strict dispatch (repo=$consumed_repo)"
+  markers=("$marker_dir"/*.json)
+  for marker in "${markers[@]}"; do
+    if [ "$marker" = "$marker_dir/*.json" ] && [ ! -e "$marker" ]; then
+      continue
+    fi
+    [ -f "$marker" ] \
+      || die_precondition "authoritative session-mode marker is not a regular file: $marker"
+    marker_state="$(
+      node - "$marker" "$normalized_repo" <<'NODE' 2>&1
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const [file, repo] = process.argv.slice(2);
+try {
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new TypeError('marker must be an object');
+  }
+  if (!new Set(['l3', 'l4', 'l5', 'l6']).has(data.level)) {
+    throw new TypeError('marker level is invalid');
+  }
+  if (typeof data.repo_root !== 'string' || !path.isAbsolute(data.repo_root)) {
+    throw new TypeError('marker repo_root is invalid');
+  }
+  const startedAt = Date.parse(data.started_at);
+  const expiresAt = Date.parse(data.expires_at);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(expiresAt)) {
+    throw new TypeError('marker timestamps are invalid');
+  }
+  if (expiresAt <= Date.now()
+      || path.resolve(data.repo_root) !== path.resolve(repo)
+      || (data.level !== 'l5' && data.level !== 'l6')) {
+    process.stdout.write('INACTIVE');
+  } else {
+    process.stdout.write(`ACTIVE:${data.level}`);
+  }
+} catch (error) {
+  process.stdout.write(error.message || String(error));
+  process.exit(3);
+}
+NODE
+    )"
+    marker_rc=$?
+    if [ "$marker_rc" -ne 0 ]; then
+      die_precondition "authoritative session-mode marker is invalid: $marker_state"
+    fi
+    if [[ "$marker_state" == ACTIVE:* ]]; then
+      die_precondition "active session-mode=${marker_state#ACTIVE:} requires a sealed campaign strict projection (repo=$consumed_repo)"
     fi
   done
 }
@@ -753,6 +808,7 @@ run_campaign_contract_preflight() {
     node - "$SELF_DIR/implementation-campaign-check.js" \
       "$CAMPAIGN_CONTRACT_FILE" "$CAMPAIGN_SEAL_FILE" "$CONSUMING_REPO_ROOT" <<'NODE' 2>&1
 'use strict';
+const path = require('path');
 const [checkerPath, contractPath, sealPath, repoPath] = process.argv.slice(2);
 try {
   const { inspectSealedCampaignContract } = require(checkerPath);
@@ -761,9 +817,33 @@ try {
     sealPath,
     repoPath,
   });
+  let campaignId = result.campaign_id || null;
+  const strictAuthority = Boolean(
+    result.contract
+      && typeof result.contract === 'object'
+      && result.contract.mission_runtime
+      && result.contract.strict_dispatch,
+  );
+  if (!campaignId && result.ok === true) {
+    const { campaignIdFor } = require(path.resolve(
+      path.dirname(checkerPath),
+      '..',
+      'src',
+      'engine',
+      'implementation-campaign',
+    ));
+    campaignId = campaignIdFor(
+      result.repo_identity,
+      result.contract.ticket,
+      result.contract_sha256,
+    );
+  }
   process.stdout.write(`${JSON.stringify({
     verdict: result.verdict,
     contract_sha256: result.contract_sha256 || null,
+    campaign_id: campaignId,
+    mission_mode: result.mission_mode || null,
+    strict_authority: strictAuthority,
     reasons: result.errors || result.drift || [],
   })}\n`);
   process.exit(result.ok === true ? 0 : 3);
@@ -793,6 +873,119 @@ NODE
   checked_digest="$(extract_json_value "$campaign_check_json" contract_sha256 2>/dev/null || true)"
   [ "$checked_digest" = "$CAMPAIGN_CONTRACT_SHA256" ] \
     || die_precondition "campaign contract digest changed after intake"
+  CAMPAIGN_ID="$(extract_json_value "$campaign_check_json" campaign_id 2>/dev/null || true)"
+  CAMPAIGN_MISSION_MODE="$(extract_json_value "$campaign_check_json" mission_mode 2>/dev/null || true)"
+  [ "$(extract_json_value "$campaign_check_json" strict_authority 2>/dev/null || true)" = "true" ] \
+    && CAMPAIGN_STRICT_AUTHORITY=1
+  case "$CAMPAIGN_MISSION_MODE" in
+    off|shadow|enforce) ;;
+    *) die_precondition "campaign contract checker returned invalid mission mode" ;;
+  esac
+  [[ "$CAMPAIGN_ID" =~ ^campaign-v[12]-[0-9a-f]{64}$ ]] \
+    || die_precondition "campaign contract checker returned invalid campaign identity"
+}
+
+run_campaign_projection_preflight() {
+  local projection_out="" projection_rc=0
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] || return 0
+  if [ "$STRICT_CONTRACT" -ne 1 ]; then
+    [ "$CAMPAIGN_STRICT_AUTHORITY" -ne 1 ] || \
+      die_precondition "sealed strict campaign dispatch requires --strict-contract"
+    return 0
+  fi
+  [ -n "$RUN_ID" ] || die_precondition "sealed campaign strict projection requires --run-id"
+  [ -n "$STAGE" ] || die_precondition "sealed campaign strict projection requires --stage"
+  [ "$RUN_ID" = "$CAMPAIGN_ID" ] \
+    || die_precondition "caller --run-id disagrees with sealed campaign identity"
+  projection_out="$(
+    node - "$SELF_DIR/../src/engine/campaign-dispatch-projection.js" \
+      "$CAMPAIGN_CONTRACT_FILE" "$CONTRACT_FILE" "$CAMPAIGN_CONTRACT_SHA256" \
+      "$CAMPAIGN_ID" "$BRANCH" "$BASE" "$RUNNER" "$MODEL" "$STAGE" "$LINEAGE_ROOT" <<'NODE' 2>&1
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const [
+  helperPath,
+  campaignPath,
+  unitPath,
+  campaignContractSha256,
+  campaignId,
+  branch,
+  base,
+  runner,
+  model,
+  stage,
+  rootRunId,
+] = process.argv.slice(2);
+try {
+  const campaignBytes = fs.readFileSync(campaignPath);
+  const actualCampaignDigest = crypto.createHash('sha256').update(campaignBytes).digest('hex');
+  if (actualCampaignDigest !== campaignContractSha256) {
+    throw new TypeError('campaign contract digest changed before projection');
+  }
+  const campaignContract = JSON.parse(campaignBytes.toString('utf8'));
+  const unitContract = JSON.parse(fs.readFileSync(unitPath, 'utf8'));
+  const { verifyCampaignDispatchUnit } = require(helperPath);
+  verifyCampaignDispatchUnit({
+    campaignContract,
+    campaignContractSha256,
+    campaignId,
+    branch,
+    base,
+    runner,
+    model,
+    stage,
+    rootRunId,
+    unitContract,
+  });
+  process.stdout.write('BOUND\n');
+} catch (error) {
+  process.stderr.write(`${error.message || String(error)}\n`);
+  process.exit(3);
+}
+NODE
+  )" || projection_rc=$?
+  if [ "$projection_rc" -ne 0 ] || [ "$projection_out" != "BOUND" ]; then
+    projection_out="$(printf '%s' "$projection_out" | tr '\n' ' ')"
+    [ -n "$projection_out" ] || projection_out="campaign dispatch projection check failed"
+    die_precondition "campaign dispatch projection rejected: $projection_out"
+  fi
+  CAMPAIGN_PROJECTION_BOUND=1
+}
+
+check_mission_enforcement_gate() {
+  local consumed_repo mission_mode mission_rc
+  consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$consumed_repo" ] || return 0
+  if [ ! -e "$consumed_repo/.claude/owner-kernel-governance.json" ] \
+      && [ ! -L "$consumed_repo/.claude/owner-kernel-governance.json" ]; then
+    return 0
+  fi
+  mission_mode="$(
+    node - "$SELF_DIR/implementation-campaign-check.js" "$consumed_repo" <<'NODE' 2>/dev/null
+'use strict';
+const [checkerPath, repo] = process.argv.slice(2);
+try {
+  const { projectMissionMode } = require(checkerPath);
+  process.stdout.write(projectMissionMode(repo));
+} catch (error) {
+  process.stdout.write(error.message || String(error));
+  process.exit(3);
+}
+NODE
+  )"
+  mission_rc=$?
+  [ "$mission_rc" -eq 0 ] \
+    || die_precondition "authoritative Mission governance is invalid: $mission_mode"
+  case "$mission_mode" in
+    off|shadow) ;;
+    enforce)
+      die_precondition "Mission enforce mode requires a sealed campaign strict projection"
+      ;;
+    *)
+      die_precondition "authoritative Mission governance returned invalid mode: $mission_mode"
+      ;;
+  esac
 }
 
 die_precondition() {
@@ -1066,14 +1259,18 @@ fi
 [ "$STRICT_CONTRACT" -eq 1 ] && [ "$CONTRACT_FILE_SUPPLIED" -eq 0 ] && die_precondition "--contract-file requires --strict-contract"
 [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] && [ "$STRICT_CONTRACT" -eq 0 ] && die_precondition "--strict-contract requires --contract-file"
 
+if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
+  run_campaign_contract_preflight
+fi
 if [ "$STRICT_CONTRACT" -eq 1 ]; then
   run_strict_contract_preflight
 fi
 if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
-  run_campaign_contract_preflight
+  run_campaign_projection_preflight
 fi
-if [ "$STRICT_CONTRACT" -eq 0 ] && [ -z "$CAMPAIGN_CONTRACT_FILE" ]; then
+if [ "$CAMPAIGN_PROJECTION_BOUND" -ne 1 ]; then
   check_session_mode_gate
+  check_mission_enforcement_gate
 fi
 set_runner_flags
 
@@ -2385,6 +2582,7 @@ dispatch_detached_run() {
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
+      CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_PROJECTION_BOUND \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       CLASSIFIED_ERROR \
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \

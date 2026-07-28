@@ -192,6 +192,26 @@ function createWriterFence({
     }
   }
   const reconciledFromTerminalLedger = ledgerReconciliation !== null;
+  const hasAnyCampaignDigest = Boolean(
+    implementation
+      && (implementation.campaign_contract_sha256
+        || implementation.unit_contract_sha256
+        || implementation.contract_sha256),
+  );
+  const hasCampaignDigestChain = Boolean(
+    implementation
+      && implementation.campaign_contract_sha256
+      && implementation.unit_contract_sha256,
+  );
+  if (hasAnyCampaignDigest
+      && (!hasCampaignDigestChain
+        || !/^[0-9a-f]{64}$/.test(implementation.campaign_contract_sha256)
+        || !/^[0-9a-f]{64}$/.test(implementation.unit_contract_sha256)
+        || implementation.contract_sha256 !== implementation.unit_contract_sha256
+        || implementation.boundary !== 'ok'
+        || implementation.acceptance !== 'ok')) {
+    throw new TypeError('writer fence campaign dispatch digest chain is invalid');
+  }
   if (!implementationResult
       || implementationResult.status !== 'committed'
       || !implementation
@@ -215,6 +235,10 @@ function createWriterFence({
         signal: transport.signal || null,
         candidate_commit: candidateCommit,
       }),
+    ...(hasCampaignDigestChain ? {
+      campaign_contract_sha256: implementation.campaign_contract_sha256,
+      unit_contract_sha256: implementation.unit_contract_sha256,
+    } : {}),
   };
   return {
     ...body,

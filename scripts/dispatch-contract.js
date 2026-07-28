@@ -230,6 +230,7 @@ function validateSchema(contract, errors, repoPath = '') {
     'output',
     'acceptance',
     'budget',
+    'campaign_projection',
   ]);
   assertNoExtra('contract', contract, rootAllowed, errors);
 
@@ -526,6 +527,93 @@ function validateSchema(contract, errors, repoPath = '') {
       errors.push('budget.max_context_files: must be integer 1..20');
     }
   }
+
+  if (hasKey(contract, 'campaign_projection')) {
+    const projection = contract.campaign_projection;
+    const allowed = new Set([
+      'schema_version',
+      'campaign_contract_sha256',
+      'strict_dispatch_sha256',
+      'campaign_id',
+      'ticket',
+      'campaign_base_sha',
+      'branch',
+      'stage',
+      'generation',
+      'root_run_id',
+      'mission_lineage_id',
+      'mission_policy_digest',
+      'mission_graph_digest',
+      'graph_node_id',
+      'graph_node_digest',
+      'runner',
+      'model',
+    ]);
+    assertNoExtra('campaign_projection', projection, allowed, errors);
+    for (const key of allowed) {
+      if (!projection || !hasKey(projection, key)) {
+        errors.push(`campaign_projection: missing required key '${key}'`);
+      }
+    }
+    if (projection && typeof projection === 'object' && !Array.isArray(projection)) {
+      const shaFields = [
+        'campaign_contract_sha256',
+        'strict_dispatch_sha256',
+        'mission_policy_digest',
+        'mission_graph_digest',
+        'graph_node_digest',
+      ];
+      if (projection.schema_version !== 1) {
+        errors.push('campaign_projection.schema_version: must be 1');
+      }
+      for (const key of shaFields) {
+        if (typeof projection[key] !== 'string' || !/^[0-9a-f]{64}$/.test(projection[key])) {
+          errors.push(`campaign_projection.${key}: must be lowercase SHA-256`);
+        }
+      }
+      if (typeof projection.campaign_id !== 'string'
+          || !/^campaign-v[12]-[0-9a-f]{64}$/.test(projection.campaign_id)) {
+        errors.push('campaign_projection.campaign_id: invalid campaign id');
+      }
+      if (typeof projection.ticket !== 'string'
+          || !/^[A-Za-z0-9._-]{1,128}$/.test(projection.ticket)) {
+        errors.push('campaign_projection.ticket: invalid ticket');
+      }
+      if (typeof projection.campaign_base_sha !== 'string'
+          || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(projection.campaign_base_sha)) {
+        errors.push('campaign_projection.campaign_base_sha: invalid Git object');
+      }
+      if (!isNonEmptyString(projection.branch)) {
+        errors.push('campaign_projection.branch: must be non-empty string');
+      }
+      const stageMatch = typeof projection.stage === 'string'
+        ? /^campaign-implementation(?:#r((?:[2-9]|[1-9][0-9]+)))?$/.exec(
+          projection.stage,
+        )
+        : null;
+      if (!stageMatch) {
+        errors.push('campaign_projection.stage: invalid campaign stage');
+      }
+      const round = projection.stage === 'campaign-implementation'
+        ? 0
+        : (stageMatch && stageMatch[1] ? Number(stageMatch[1]) - 1 : null);
+      if (!Number.isSafeInteger(projection.generation)
+          || projection.generation < 0
+          || round === null
+          || projection.generation !== round) {
+        errors.push('campaign_projection.generation: disagrees with stage');
+      }
+      if (typeof projection.root_run_id !== 'string'
+          || !/^[A-Za-z0-9._-]+$/.test(projection.root_run_id)) {
+        errors.push('campaign_projection.root_run_id: invalid root run id');
+      }
+      for (const key of ['mission_lineage_id', 'graph_node_id', 'runner', 'model']) {
+        if (!isNonEmptyString(projection[key])) {
+          errors.push(`campaign_projection.${key}: must be non-empty string`);
+        }
+      }
+    }
+  }
 }
 
 function escapeRegExp(raw) {
@@ -729,6 +817,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
   const baseSha = contract.base_sha;
   const requiredEngineRole = contract.go.required_engine_role;
   const storeRole = normalizeStoreRole(requiredEngineRole);
+  const campaignProjection = contract.campaign_projection || null;
 
   let headSha = '';
   let baseAtHead = false;
@@ -880,6 +969,12 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     if (cap && (!cap.capability || !cap.capability.quota || cap.capability.quota.status !== 'available')) {
       reasons.push(`quota: quota unavailable for ${resolvedEngine.model} as ${requiredEngineRole}`);
     }
+  }
+
+  if (campaignProjection
+      && (campaignProjection.runner !== resolvedEngine.runner
+        || campaignProjection.model !== resolvedEngine.model)) {
+    reasons.push('engine: campaign projection disagrees with resolved runner/model');
   }
 
   return { reasons, specSha, headSha, baseAtHead };

@@ -245,6 +245,15 @@ function appendCampaignEvent(input = {}) {
       'campaign candidate writer fence belongs to another campaign',
     );
   }
+  if (artifactReference
+      && artifactReference.kind === 'git_candidate'
+      && artifactReference.campaign_contract_sha256
+      && artifactReference.campaign_contract_sha256 !== control.contract_digest) {
+    throw new CampaignIntakeError(
+      'campaign_event_artifact_invalid',
+      'campaign candidate digest chain belongs to another contract',
+    );
+  }
   const generation = Number.isSafeInteger(input.generation)
     ? input.generation
     : state.generation;
@@ -450,6 +459,11 @@ function verifyResumeCandidate({ projection, repo, base }) {
       || writerFence.campaign_id !== projection.state.campaign_id
       || writerFence.candidate_commit !== reference.commit
       || writerFence.candidate_tree_sha !== reference.tree_sha
+      || (reference.campaign_contract_sha256
+        && (reference.campaign_contract_sha256 !== projection.state.contract_digest
+          || reference.campaign_contract_sha256
+            !== writerFence.campaign_contract_sha256
+          || reference.unit_contract_sha256 !== writerFence.unit_contract_sha256))
       || !/^[0-9a-f]{64}$/.test(writerFence.receipt_digest || '')
       || canonicalDigest(writerFenceBody) !== writerFence.receipt_digest) {
     throw new CampaignIntakeError(
@@ -494,6 +508,10 @@ function verifyResumeCandidate({ projection, repo, base }) {
     tree_sha: reference.tree_sha,
     branch: reference.branch,
     writer_fence: writerFence,
+    ...(reference.campaign_contract_sha256 ? {
+      campaign_contract_sha256: reference.campaign_contract_sha256,
+      unit_contract_sha256: reference.unit_contract_sha256,
+    } : {}),
     scope_implementation_sha: initial.commit,
   };
 }

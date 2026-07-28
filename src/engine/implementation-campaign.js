@@ -187,9 +187,22 @@ function normalizeCampaignArtifactReference(value) {
   if (value.kind !== 'git_candidate') {
     fail('INVALID_ARTIFACT_REFERENCE', `unsupported campaign artifact kind "${value.kind}"`);
   }
+  const hasDigestChain = Object.prototype.hasOwnProperty.call(
+    value,
+    'campaign_contract_sha256',
+  ) || Object.prototype.hasOwnProperty.call(value, 'unit_contract_sha256');
+  const candidateKeys = new Set([
+    'kind',
+    'commit',
+    'tree_sha',
+    'branch',
+    'base',
+    'writer_fence',
+    ...(hasDigestChain ? ['campaign_contract_sha256', 'unit_contract_sha256'] : []),
+  ]);
   assertExactKeys(
     value,
-    new Set(['kind', 'commit', 'tree_sha', 'branch', 'base', 'writer_fence']),
+    candidateKeys,
     'campaign git candidate reference',
   );
   if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value.commit)
@@ -201,6 +214,10 @@ function normalizeCampaignArtifactReference(value) {
     fail('INVALID_ARTIFACT_REFERENCE', 'campaign Git candidate identity is invalid');
   }
   const fence = value.writer_fence;
+  const fenceHasDigestChain = Object.prototype.hasOwnProperty.call(
+    fence,
+    'campaign_contract_sha256',
+  ) || Object.prototype.hasOwnProperty.call(fence, 'unit_contract_sha256');
   assertExactKeys(fence, new Set([
     'schema_version',
     'artifact_type',
@@ -212,11 +229,15 @@ function normalizeCampaignArtifactReference(value) {
     'evidence_mode',
     'closure_evidence_digest',
     'receipt_digest',
+    ...(fenceHasDigestChain ? [
+      'campaign_contract_sha256',
+      'unit_contract_sha256',
+    ] : []),
   ]), 'campaign writer fence reference');
   const { receipt_digest: receiptDigest, ...fenceBody } = fence;
   if (fence.schema_version !== 1
       || fence.artifact_type !== 'implementation_campaign_writer_fence'
-      || !/^campaign-v1-[0-9a-f]{64}$/.test(fence.campaign_id)
+      || !/^campaign-v[12]-[0-9a-f]{64}$/.test(fence.campaign_id)
       || typeof fence.stage_identity !== 'string'
       || fence.stage_identity.length === 0
       || fence.candidate_commit !== value.commit
@@ -225,6 +246,12 @@ function normalizeCampaignArtifactReference(value) {
       || !new Set(['dispatch_exit', 'terminal_ledger']).has(fence.evidence_mode)
       || !isSha256(fence.closure_evidence_digest)
       || !isSha256(receiptDigest)
+      || hasDigestChain !== fenceHasDigestChain
+      || (hasDigestChain
+        && (!isSha256(value.campaign_contract_sha256)
+          || !isSha256(value.unit_contract_sha256)
+          || fence.campaign_contract_sha256 !== value.campaign_contract_sha256
+          || fence.unit_contract_sha256 !== value.unit_contract_sha256))
       || canonicalDigest(fenceBody) !== receiptDigest) {
     fail('INVALID_ARTIFACT_REFERENCE', 'campaign writer fence reference is invalid');
   }

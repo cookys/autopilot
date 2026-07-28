@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -50,6 +51,10 @@ const { evaluateLoopConvergence } = require('../../scripts/check-loop-convergenc
 const {
   inspectLifecycleReceipt,
 } = require('../../scripts/lifecycle-residue-receipt');
+const {
+  hasCampaignDispatchAuthority,
+  writeCampaignDispatchUnit,
+} = require('./campaign-dispatch-projection');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 
@@ -532,6 +537,31 @@ function implementationResultBlocked(result) {
   return null;
 }
 
+function campaignStrictResultBlocked(result, expected) {
+  if (!expected || !result || result.status !== 'committed') return null;
+  const expectedUnitId = expected.contract.unit_id;
+  const required = {
+    campaign_contract_sha256: expected.campaign_contract_sha256,
+    contract_sha256: expected.contract_sha256,
+    unit_contract_sha256: expected.contract_sha256,
+    unit_id: expectedUnitId,
+    go: 'GO',
+    boundary: 'ok',
+    acceptance: 'ok',
+    branch: expected.branch,
+    base: expected.base,
+    run_id: expected.campaign_id,
+    runner: expected.contract.campaign_projection.runner,
+    model: expected.contract.campaign_projection.model,
+  };
+  for (const [field, value] of Object.entries(required)) {
+    if (result[field] !== value) {
+      return `managed strict implementation result has invalid ${field}`;
+    }
+  }
+  return null;
+}
+
 // --- on_engine_unavailable policy wiring (2026-07-17 run E residual) ------------------
 // dispatch-hetero (v2.32.53) marks quota/rate/auth/overload worker deaths with status
 // engine_unavailable and embeds the classify-error kind in its error string as
@@ -740,6 +770,7 @@ function buildImplementationArgs({
   campaignContractFile = null,
   campaignContractDigest = null,
   campaignSealFile = null,
+  campaignUnitContractFile = null,
 }) {
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
@@ -761,6 +792,8 @@ function buildImplementationArgs({
     '--campaign-contract',
     '--campaign-contract-sha256',
     '--campaign-seal',
+    '--strict-contract',
+    '--contract-file',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
   if (campaignContractFile !== null
@@ -776,6 +809,11 @@ function buildImplementationArgs({
       && (typeof campaignSealFile !== 'string' || campaignSealFile.length === 0)) {
     throw new TypeError('campaignSealFile must be a non-empty string');
   }
+  if (campaignUnitContractFile !== null
+      && (typeof campaignUnitContractFile !== 'string'
+        || campaignUnitContractFile.length === 0)) {
+    throw new TypeError('campaignUnitContractFile must be a non-empty string');
+  }
   const campaignBoundaryFields = [
     campaignContractFile,
     campaignContractDigest,
@@ -785,6 +823,9 @@ function buildImplementationArgs({
     throw new TypeError(
       'campaignContractFile, campaignContractDigest, and campaignSealFile must be supplied together',
     );
+  }
+  if (campaignUnitContractFile !== null && campaignBoundaryFields !== 3) {
+    throw new TypeError('campaignUnitContractFile requires the sealed campaign boundary');
   }
 
   const args = [
@@ -810,6 +851,13 @@ function buildImplementationArgs({
     args.push('--campaign-contract-sha256', campaignContractDigest);
     args.push('--campaign-seal', path.resolve(cwd || process.cwd(), campaignSealFile));
   }
+  if (campaignUnitContractFile) {
+    args.push('--strict-contract');
+    args.push('--contract-file', path.resolve(
+      cwd || process.cwd(),
+      campaignUnitContractFile,
+    ));
+  }
   args.push(...extraImplementationArgs);
   return args;
 }
@@ -817,15 +865,21 @@ function buildImplementationArgs({
 function deriveCampaignLifecycleRoot({
   campaignContractFile,
   campaignContractDigest,
+  campaignSealFile,
   runId,
   cwd,
 }) {
   const contractPath = path.resolve(cwd || process.cwd(), campaignContractFile);
+  const sealPath = path.resolve(cwd || process.cwd(), campaignSealFile);
   let contract;
+  let contractBytes;
+  let seal;
   try {
-    contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+    contractBytes = fs.readFileSync(contractPath);
+    contract = JSON.parse(contractBytes.toString('utf8'));
+    seal = JSON.parse(fs.readFileSync(sealPath, 'utf8'));
   } catch (error) {
-    throw new TypeError(`managed campaign contract is unreadable: ${error.message}`);
+    throw new TypeError(`managed campaign authority is unreadable: ${error.message}`);
   }
   const common = spawnSync(
     'git',
@@ -845,17 +899,32 @@ function deriveCampaignLifecycleRoot({
   if (!contract || contract.repo_identity !== repoIdentity) {
     throw new TypeError('managed campaign contract repository identity does not match cwd');
   }
-  const expected = campaignIdFor(
-    repoIdentity,
-    contract.ticket,
-    campaignContractDigest,
-  );
+  const strictAuthority = hasCampaignDispatchAuthority(contract);
+  if (strictAuthority) {
+    const actualDigest = crypto.createHash('sha256').update(contractBytes).digest('hex');
+    if (actualDigest !== campaignContractDigest
+        || !seal
+        || seal.contract_sha256 !== campaignContractDigest) {
+      throw new TypeError('managed campaign contract digest does not match its seal');
+    }
+  }
+  const expected = strictAuthority
+    ? seal.campaign_id
+    : campaignIdFor(repoIdentity, contract.ticket, campaignContractDigest);
+  if (typeof expected !== 'string' || !/^campaign-v[12]-[0-9a-f]{64}$/.test(expected)) {
+    throw new TypeError('managed campaign seal is missing campaign identity');
+  }
   if (runId !== expected) {
     throw new TypeError(
       'managed campaign run id does not match the sealed contract identity',
     );
   }
-  return expected;
+  return {
+    campaign_id: expected,
+    contract,
+    root_run_id: strictAuthority ? contract.mission_runtime.root_run_id : expected,
+    strict: strictAuthority,
+  };
 }
 
 function buildRepairBranchName({ branch, round, previousCommit }) {
@@ -989,6 +1058,31 @@ function checkCampaignScope({ session, repo, head }) {
     reason: result.verdict === 'PASS' && fileCapPassed
       ? null
       : (fileCapPassed ? 'repair scope gate tripped' : 'changed-file cap exceeded'),
+  };
+}
+
+function bindCampaignScopeReceipt({
+  receipt,
+  candidate,
+  campaignContractSha256,
+}) {
+  const campaignDigest = candidate && candidate.campaign_contract_sha256;
+  const unitDigest = candidate && candidate.unit_contract_sha256;
+  if (!campaignDigest && !unitDigest) return receipt;
+  if (!/^[0-9a-f]{64}$/.test(campaignDigest || '')
+      || !/^[0-9a-f]{64}$/.test(unitDigest || '')
+      || campaignDigest !== campaignContractSha256) {
+    throw new TypeError('campaign scope receipt digest chain is invalid');
+  }
+  const { receipt_digest: _priorDigest, ...body } = receipt;
+  const bound = {
+    ...body,
+    campaign_contract_sha256: campaignDigest,
+    unit_contract_sha256: unitDigest,
+  };
+  return {
+    ...bound,
+    receipt_digest: campaignCanonicalDigest(bound),
   };
 }
 
@@ -2101,8 +2195,16 @@ class AutopilotEngine {
       };
     }
 
+    const implementationBaseEnv = Object.prototype.hasOwnProperty.call(
+      implementationOptionsInput,
+      'env',
+    )
+      ? implementationOptionsInput.env
+      : process.env;
     let resolvedImplementationStage;
     let campaignLifecycleRoot = null;
+    let campaignAuthority = null;
+    let campaignUnit = null;
     try {
       resolvedImplementationStage = resolveImplementationLedgerStage({
         implementationStage: input.implementationStage,
@@ -2110,12 +2212,43 @@ class AutopilotEngine {
         runId: input.runId,
       });
       if (input.campaignContractFile) {
-        campaignLifecycleRoot = deriveCampaignLifecycleRoot({
+        campaignAuthority = deriveCampaignLifecycleRoot({
           campaignContractFile: input.campaignContractFile,
           campaignContractDigest: input.campaignContractDigest,
+          campaignSealFile: input.campaignSealFile,
           runId: input.runId,
           cwd: resolvedTaskCwd,
         });
+        campaignLifecycleRoot = campaignAuthority.campaign_id;
+        if (!implementationBaseEnv || typeof implementationBaseEnv !== 'object'
+            || Array.isArray(implementationBaseEnv)) {
+          throw new TypeError('managed implementation env must be an object');
+        }
+        if (campaignAuthority.strict) {
+          if (!Object.prototype.hasOwnProperty.call(
+            implementationBaseEnv,
+            'AUTOPILOT_ROOT_RUN_ID',
+          )) {
+            throw new TypeError('managed strict implementation requires AUTOPILOT_ROOT_RUN_ID');
+          }
+          if (implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID
+              !== campaignAuthority.root_run_id) {
+            throw new TypeError(
+              'managed strict implementation root run id disagrees with sealed campaign',
+            );
+          }
+          campaignUnit = writeCampaignDispatchUnit({
+            campaignContract: campaignAuthority.contract,
+            campaignContractSha256: input.campaignContractDigest,
+            campaignId: campaignAuthority.campaign_id,
+            branch: input.branch,
+            base: input.base,
+            runner: roster.implementer_runner,
+            model: roster.implementer_engine,
+            stage: resolvedImplementationStage,
+            rootRunId: implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID,
+          });
+        }
       }
       implementationArgs = buildImplementationArgs({
         roster,
@@ -2136,8 +2269,16 @@ class AutopilotEngine {
         campaignContractFile: input.campaignContractFile || null,
         campaignContractDigest: input.campaignContractDigest || null,
         campaignSealFile: input.campaignSealFile || null,
+        campaignUnitContractFile: campaignUnit ? campaignUnit.contract_path : null,
       });
     } catch (error) {
+      if (campaignUnit) {
+        try {
+          campaignUnit.cleanup();
+        } catch (_cleanupError) {
+          // The original pre-dispatch rejection remains authoritative.
+        }
+      }
       const startedAt = this.now();
       ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', startedAt));
       return {
@@ -2155,12 +2296,6 @@ class AutopilotEngine {
 
     const startedAt = this.now();
     let implementationResult;
-    const implementationBaseEnv = Object.prototype.hasOwnProperty.call(
-      implementationOptionsInput,
-      'env',
-    )
-      ? implementationOptionsInput.env
-      : process.env;
     if (campaignLifecycleRoot
         && (!implementationBaseEnv || typeof implementationBaseEnv !== 'object'
           || Array.isArray(implementationBaseEnv))) {
@@ -2200,8 +2335,9 @@ class AutopilotEngine {
       : null;
     const managedTraceRoot = campaignLifecycleRoot
       ? (
-        implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID
-        || managedTraceParent
+        campaignAuthority && campaignAuthority.strict
+          ? campaignAuthority.root_run_id
+          : (implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID || managedTraceParent)
       )
       : null;
     const implementationOptions = {
@@ -2217,6 +2353,7 @@ class AutopilotEngine {
         },
       } : {}),
     };
+    let campaignUnitCleanupError = null;
     try {
       implementationResult = this.implementationDispatcher(
         implementationArgs,
@@ -2232,11 +2369,22 @@ class AutopilotEngine {
         result: null,
         parseError: null,
       };
+    } finally {
+      if (campaignUnit) {
+        try {
+          campaignUnit.cleanup();
+        } catch (error) {
+          campaignUnitCleanupError = error.message || String(error);
+        }
+      }
     }
     let blockedReason = implementationResultBlocked(implementationResult);
     let parsed = implementationResult && implementationResult.result ? implementationResult.result : null;
     let reconciledByLedger = false;
     let reconcileDetails = null;
+    if (!blockedReason && campaignUnitCleanupError) {
+      blockedReason = `campaign dispatch-unit cleanup failed: ${campaignUnitCleanupError}`;
+    }
     if (blockedReason && (!parsed || implementationResult.result === null)) {
       const recovered = resolveImplementationFromLedger({
         implementationOptions,
@@ -2260,6 +2408,16 @@ class AutopilotEngine {
           reconcile_run_id: recovered._reconciled_run_id,
         };
       }
+    }
+    if (!blockedReason && campaignUnit && parsed && parsed.status === 'committed') {
+      blockedReason = campaignStrictResultBlocked(parsed, {
+        campaign_contract_sha256: input.campaignContractDigest,
+        contract_sha256: campaignUnit.contract_sha256,
+        contract: campaignUnit.contract,
+        campaign_id: campaignAuthority.campaign_id,
+        branch: input.branch,
+        base: input.base,
+      });
     }
 
     const misplacedWriteEvidence = parsed
@@ -2865,6 +3023,10 @@ class AutopilotEngine {
           commit,
           branch: currentBranch,
           writer_fence: writerFence,
+          ...(writerFence.campaign_contract_sha256 ? {
+            campaign_contract_sha256: writerFence.campaign_contract_sha256,
+            unit_contract_sha256: writerFence.unit_contract_sha256,
+          } : {}),
           authorized_repair_finding_ids: findingIds,
           raw: implementation,
         };
@@ -2876,6 +3038,20 @@ class AutopilotEngine {
           head: candidate.commit,
           checkpoint,
         });
+        try {
+          receipt = bindCampaignScopeReceipt({
+            receipt,
+            candidate,
+            campaignContractSha256: campaignControl.contract_digest,
+          });
+        } catch (error) {
+          return {
+            ...receipt,
+            passed: false,
+            reason: error.message || String(error),
+            phase: 'campaign_scope_digest',
+          };
+        }
         ledger.push(this.ledgerEntry(
           'campaign_scope',
           receipt.passed === true ? 'passed' : 'blocked',
@@ -2916,6 +3092,10 @@ class AutopilotEngine {
                 branch: candidate.branch,
                 base,
                 writer_fence: candidate.writer_fence,
+                ...(candidate.campaign_contract_sha256 ? {
+                  campaign_contract_sha256: candidate.campaign_contract_sha256,
+                  unit_contract_sha256: candidate.unit_contract_sha256,
+                } : {}),
               },
             });
             if (this.campaignPostCommitCheckpoint) {
@@ -4505,6 +4685,7 @@ class AutopilotEngine {
 module.exports = {
   AUTOPILOT_ENGINE_CONTROL_SINKS,
   AutopilotEngine,
+  bindCampaignScopeReceipt,
   buildImplementationArgs,
   buildReviewArgs,
   implementationResultBlocked,

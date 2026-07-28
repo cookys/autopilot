@@ -32,7 +32,7 @@ Identical to `/l5` — canonical text in
 dispatch too, not only the implementation dispatch, because that leaf runs on a different engine whose
 quota and skill-transport state is what the roster is reporting.
 
-## Machinery (existing only — /l6 adds no new scripts)
+## Machinery
 
 - [`../../../bin/autopilot.js`](../../../bin/autopilot.js) (`engine implement-review`, canonical)
 - [`../../../scripts/dispatch-hetero.sh`](../../../scripts/dispatch-hetero.sh) (write rail)
@@ -51,8 +51,10 @@ deviation; bench 2026-07-07 showed verify-first avoids 4-12x cost/regression.
 1. Resolve the roster ONCE with `resolve-review-loop.sh` and treat its output as the
    only source of truth.
 2. Dispatch implementation via `engine implement-review` (internally
-   `dispatch-hetero.sh`) with immutable `--base` and outcome-driven worktree commit
-   logic. The CLI fails closed on absent/false reviewer qualification by default
+   `dispatch-hetero.sh`) with the sealed campaign and its exact projected
+   dispatch-unit contract. The projection binds ticket, base, branch, paths, budget,
+   verification commands, Mission lineage, runner, and model before the worker
+   starts. The CLI fails closed on absent/false reviewer qualification by default
    (`--require-qualified-reviewer` is accepted for explicitness/backward
    compatibility); use `--allow-unqualified-reviewer` only as an explicit, recorded
    escape hatch.
@@ -65,19 +67,19 @@ deviation; bench 2026-07-07 showed verify-first avoids 4-12x cost/regression.
 6. Convergence-by-verification gates continue/rework; merge only after the
    QC-Verdict is earned.
 
-The `/l6` verification-author handoff is strict roster-only and must use:
+The `/l6` verification-author handoff is strict dispatch-unit-only and must use:
 
-`scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>`
+`scripts/dispatch-author.sh --strict-contract --contract-file <unit.json> --repo-root <consuming-repo> --prompt-file <file>`
 
 `--bin <test-seam>` is only a test seam. `/l6` never passes `--runner`, `--model`,
-`--effort`, or `--endpoint` to that call. The authorized tuple, derived family tags,
-and named endpoint ID come from `<consuming-repo>/.claude/review-loop-config.md`
-via `resolve-review-loop.sh`; named-endpoint readiness and credentials are resolved
-separately after authorization, and secret values never enter result provenance.
+`--effort`, or `--endpoint` to that call. The dispatch-unit checker resolves the
+authorized tuple against capability state and rejects caller disagreement. Named
+endpoint readiness and credentials are resolved separately after authorization,
+and secret values never enter result provenance.
 
-Failure modes are fail-closed: unresolved/malformed strict roster state (including
-same-family, unknown-family, or endpoint-unready) preconditions abort before runner
-start and emit `status=precondition_failed`.
+Failure modes are fail-closed: an absent, malformed, drifted, or NO-GO dispatch unit
+(including same-family, unknown-family, or endpoint-unready resolution) aborts
+before runner start and emits `status=precondition_failed`.
 
 ### Outcome → action table (R3 recovery branch)
 

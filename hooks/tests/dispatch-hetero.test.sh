@@ -19,6 +19,8 @@ git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 
 PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
+EMPTY_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"
+mkdir -p "$EMPTY_SESSION_MODE_DIR"
 
 # --- stub agy: commits one file (ignores all flags, like a cooperative agent) ---
 STUB_OK="$TEST_TMP/agy-ok"
@@ -94,13 +96,19 @@ assert_contains "$OUT" "effort must be one of" "bad --effort error text"
 # only *gpt-5.5* to codex, so gpt-5.3-codex-spark silently fell through to the agy branch).
 # Route to codex and make codex absent (PATH without ~/.local/bin, keeping system tools);
 # the codex precondition must fire — proving routing did NOT fall through to agy.
-OUT="$(cd "$SBX" && PATH=/usr/bin:/bin "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
+  --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
 assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
 
 # 3c. qoder routing: a Qwen model auto-routes to qoderclicn (not agy). Route via auto and make
 # qoder absent (PATH without ~/.local/bin) — the qoder precondition must fire, proving routing.
-OUT="$(cd "$SBX" && PATH=/usr/bin:/bin "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
+  --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes Qwen3.8-Max-Preview to qoder (not agy)"
 assert_contains "$OUT" "qoder binary not found" "qwen routing does not fall through to agy"
 
@@ -415,8 +423,8 @@ assert_file_exists "$TEST_TMP/captured_prompt.txt" "captured prompt file exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "=== SKILL: autopilot:dev-flow ===" "prompt contains skill delimiter"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evaluation" "prompt contains skill content"
 
-# 12a. A managed campaign contract is an explicit leaf input and is prepended before
-# the original task so paths and budgets reach the mutating model process.
+# 12a. A sealed v1 campaign is not itself a strict leaf projection. Under L6 it
+# must fail before the runner instead of treating prompt text as authority.
 CAMPAIGN_CONTRACT="$TEST_TMP/campaign-boundary.json"
 CAMPAIGN_SEAL="$TEST_TMP/campaign-boundary.seal.json"
 CAMPAIGN_BASE="$(git -C "$SBX" rev-parse develop)"
@@ -441,6 +449,18 @@ CAMPAIGN_CONTRACT_SHA="$(node -e '
 ' "$CAMPAIGN_CONTRACT")"
 CAMPAIGN_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode"
 mkdir -p "$CAMPAIGN_SESSION_MODE_DIR"
+
+# A legacy v1 campaign remains admissible outside strict Mission/L5/L6 policy.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
+  "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "sealed v1 campaign remains compatible outside strict governance"
+assert_file_exists "$TEST_TMP/captured_prompt.txt" \
+  "legacy v1 shadow/off campaign still reaches its runner"
+
 printf '%s\n' \
   "{\"level\":\"l6\",\"repo_root\":\"$(cd "$SBX" && pwd -P)\",\"started_at\":\"2026-07-28T00:00:00Z\",\"expires_at\":\"2099-01-01T00:00:00Z\"}" \
   > "$CAMPAIGN_SESSION_MODE_DIR/l6.json"
@@ -450,14 +470,11 @@ OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
   --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
   --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "seal-bound campaign dispatch succeeds under active L6"
-assert_file_exists "$TEST_TMP/captured_prompt.txt" "campaign boundary prompt capture exists"
-assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
-  "=== MACHINE-OWNED CAMPAIGN BOUNDARY ===" "campaign boundary delimiter reaches implementer"
-assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
-  '"max_changed_files":2' "campaign file budget reaches implementer"
-assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
-  "create ok.txt" "campaign boundary retains the original task prompt"
+assert_eq "2" "$EXIT" "sealed v1 campaign cannot bypass active L6 strict projection"
+assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
+  "sealed v1 campaign names the active strict admission requirement"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "sealed v1 campaign rejection spawns no runner"
 
 # 12b. A contract changed after intake is rejected before the runner or worktree exists.
 rm -f "$TEST_TMP/captured_prompt.txt"
@@ -517,8 +534,36 @@ OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
   "$SCRIPT" --branch feat/campaign-non-strict --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "non-strict dispatch remains blocked under active L6"
-assert_contains "$OUT" "active session-mode=l6 blocks non-strict dispatch" \
-  "non-strict L6 diagnostic remains unchanged"
+assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
+  "non-strict L6 diagnostic names the required authority"
+
+# 12g. A malformed marker in the authoritative namespace fails closed.
+MALFORMED_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode-malformed"
+mkdir -p "$MALFORMED_SESSION_MODE_DIR"
+printf '%s\n' 'not-json' > "$MALFORMED_SESSION_MODE_DIR/corrupt.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MALFORMED_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-malformed-marker --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "malformed authoritative session marker fails closed"
+assert_contains "$OUT" "authoritative session-mode marker is invalid" \
+  "malformed marker rejection names the authoritative namespace"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "malformed marker rejection spawns no runner"
+
+# 12h. Invalid authoritative Mission governance cannot become an implicit off mode.
+mkdir -p "$SBX/.claude" "$TEST_TMP/empty-session-mode"
+printf '%s\n' '{"mission_convergence":' > "$SBX/.claude/owner-kernel-governance.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
+  "$SCRIPT" --branch feat/campaign-invalid-governance --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "invalid authoritative Mission governance fails closed"
+assert_contains "$OUT" "authoritative Mission governance is invalid" \
+  "Mission admission preserves the governance projection error"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "invalid governance rejection spawns no runner"
+rm -f "$SBX/.claude/owner-kernel-governance.json"
 
 # 13. --skill-mode prompt with non-existent skill fails with exit 2
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?

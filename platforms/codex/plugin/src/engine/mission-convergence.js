@@ -1058,6 +1058,30 @@ function abortDrainPreconditions(state) {
   return { ok: true, reason: null };
 }
 
+// Canonical ABORTED terminal suitable for idempotent finalize-abort replay.
+// Requires reducer-owned provenance (setTerminal ABORTED/abort_finalized) and
+// the same drain preconditions as abort_finalized — never a weaker CLI check.
+function evaluateCanonicalAbortedTerminal(state) {
+  try {
+    validateMissionState(state);
+  } catch (_error) {
+    return { ok: false, reason: 'invalid_mission_state' };
+  }
+  if (state.state !== 'ABORTED' || !TERMINAL_STATES.has(state.state)) {
+    return { ok: false, reason: 'not_aborted' };
+  }
+  if (!isPlainObject(state.terminal)
+      || state.terminal.state !== 'ABORTED'
+      || state.terminal.reason !== 'abort_finalized') {
+    return { ok: false, reason: 'noncanonical_abort_terminal' };
+  }
+  const drain = abortDrainPreconditions(state);
+  if (!drain.ok) {
+    return { ok: false, reason: drain.reason };
+  }
+  return { ok: true, reason: null };
+}
+
 function reduceMissionState(state, event) {
   // Validate state before accessing state.terminal — a malformed state is
   // a reducer error, not a transient condition.
@@ -4852,6 +4876,7 @@ module.exports = {
   computeConfigDigest,
   computeSourceRefDigest,
   createMissionState,
+  evaluateCanonicalAbortedTerminal,
   evaluateConfig,
   evaluateIdentityReset,
   evaluateMissionIntegrationFixture,

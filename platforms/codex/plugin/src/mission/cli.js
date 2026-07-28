@@ -401,9 +401,19 @@ function cmdFinalizeAbort(flags) {
   const state = loadState(requireFlag(flags, 'state'));
   const outPath = requireFlag(flags, 'out');
 
-  // Idempotent success: already-canonical ABORTED is a no-op write of the
-  // same terminal state. receipt never mutates; this command owns the write.
-  if (state.state === 'ABORTED' && state.terminal && mission.TERMINAL_STATES.has(state.state)) {
+  // Idempotent success only for reducer-owned canonical ABORTED that is fully
+  // drained. A truthy terminal marker alone must not bypass drain provenance.
+  if (state.state === 'ABORTED') {
+    const canonical = mission.evaluateCanonicalAbortedTerminal(state);
+    if (!canonical.ok) {
+      emit({
+        status: 'rejected',
+        code: canonical.reason || 'mission_abort_rejected',
+        reason: canonical.reason || 'abort finalization rejected',
+        state_hash: mission.stateHash(state),
+      });
+      return 1;
+    }
     writeState(outPath, state);
     emit({
       status: 'aborted',

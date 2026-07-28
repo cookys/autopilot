@@ -886,6 +886,84 @@ group('g8', () => {
       && idempPayload.idempotent === true
       && idempPayload.next_state === 'ABORTED');
 
+  // Negative idempotent path: forged/undrained ABORTED must reject and not write.
+  function runFinalizeAbort(stateObj, outFile) {
+    const inPath = path.join(dir, `neg-${path.basename(outFile)}.json`);
+    fs.writeFileSync(inPath, `${JSON.stringify(stateObj)}\n`, { mode: 0o600 });
+    if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+    let captured = '';
+    process.stdout.write = (chunk) => { captured += String(chunk); return true; };
+    let code;
+    try {
+      code = missionCli.runMissionCli([
+        'finalize-abort', '--state', inPath, '--out', outFile,
+      ]);
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    let payload = null;
+    try { payload = JSON.parse(captured); } catch (_e) { payload = null; }
+    return { code, payload, wrote: fs.existsSync(outFile) };
+  }
+
+  // Canonical ABORTED helper must accept the real written terminal.
+  const helperOk = m.evaluateCanonicalAbortedTerminal(written);
+  check('g8-canonical-aborted-helper-accepts',
+    helperOk && helperOk.ok === true);
+
+  // Live claim under forged ABORTED.
+  const liveClaimed = m.reduceMissionState(
+    initial,
+    claimEvent(initial, { idempotency_key: 'cli-aborted-live' }),
+  );
+  const abortedLive = JSON.parse(JSON.stringify(liveClaimed.state));
+  abortedLive.state = 'ABORTED';
+  abortedLive.terminal = { state: 'ABORTED', reason: 'abort_finalized', at_event: 1 };
+  const liveNegOut = path.join(dir, 'neg-live-out.json');
+  const liveNeg = runFinalizeAbort(abortedLive, liveNegOut);
+  check('g8-cli-reject-aborted-live-claim-no-write',
+    liveNeg.code === 1
+      && liveNeg.wrote === false
+      && liveNeg.payload
+      && liveNeg.payload.status === 'rejected'
+      && liveNeg.payload.code === 'live_claims_remain');
+
+  // Nonzero reserved_active under forged ABORTED.
+  const abortedReserved = JSON.parse(JSON.stringify(written));
+  abortedReserved.axes.tool_calls.reserved_active = 3;
+  const reservedNegOut = path.join(dir, 'neg-reserved-out.json');
+  const reservedNeg = runFinalizeAbort(abortedReserved, reservedNegOut);
+  check('g8-cli-reject-aborted-reserved-no-write',
+    reservedNeg.code === 1
+      && reservedNeg.wrote === false
+      && reservedNeg.payload
+      && reservedNeg.payload.status === 'rejected'
+      && reservedNeg.payload.code === 'resource_axes_not_drained');
+
+  // Nonzero active_actual under forged ABORTED.
+  const abortedActive = JSON.parse(JSON.stringify(written));
+  abortedActive.axes.tool_calls.active_actual = 2;
+  const activeNegOut = path.join(dir, 'neg-active-out.json');
+  const activeNeg = runFinalizeAbort(abortedActive, activeNegOut);
+  check('g8-cli-reject-aborted-active-no-write',
+    activeNeg.code === 1
+      && activeNeg.wrote === false
+      && activeNeg.payload
+      && activeNeg.payload.status === 'rejected'
+      && activeNeg.payload.code === 'resource_axes_not_drained');
+
+  // Forged/noncanonical terminal marker under ABORTED.
+  const abortedForged = JSON.parse(JSON.stringify(written));
+  abortedForged.terminal = { state: 'ABORTED', reason: 'forged_terminal', at_event: 1 };
+  const forgedNegOut = path.join(dir, 'neg-forged-out.json');
+  const forgedNeg = runFinalizeAbort(abortedForged, forgedNegOut);
+  check('g8-cli-reject-forged-aborted-terminal-no-write',
+    forgedNeg.code === 1
+      && forgedNeg.wrote === false
+      && forgedNeg.payload
+      && forgedNeg.payload.status === 'rejected'
+      && forgedNeg.payload.code === 'noncanonical_abort_terminal');
+
   // Terminal receipt accepted only after finalization.
   const residuePayload = { lifecycle_residue: ['g8-cleanup'] };
   const residue = { ...residuePayload, residue_digest: m.sha256(residuePayload) };
@@ -995,7 +1073,10 @@ for id in \
   p2-terminal-receipt-residue-binding p2-terminal-receipt-tampered-residue-rejected \
   p2-cli-control-without-host-auth-rejected \
   g8-abort-control-sequence g8-cli-reject-live-claim-no-write g8-cli-finalize-success \
-  g8-cli-idempotent-aborted g8-terminal-receipt-after-finalize g8-receipt-cli-no-mutate
+  g8-cli-idempotent-aborted g8-canonical-aborted-helper-accepts \
+  g8-cli-reject-aborted-live-claim-no-write g8-cli-reject-aborted-reserved-no-write \
+  g8-cli-reject-aborted-active-no-write g8-cli-reject-forged-aborted-terminal-no-write \
+  g8-terminal-receipt-after-finalize g8-receipt-cli-no-mutate
 do
   assert_contains "$OUT" "$id	PASS" "Mission P2 enforcement behavior $id must pass"
 done

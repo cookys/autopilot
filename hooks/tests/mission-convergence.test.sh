@@ -1802,6 +1802,23 @@ if (createMissionState && reduceMissionState && stateHash) {
         && receiptAfter
         && receiptAfter.mission_terminal === true
         && receiptAfter.artifact_type === 'mission_terminal_receipt' ? 'PASS' : 'FAIL'}`);
+
+    // Canonical ABORTED replay helper: accept real finalization; reject undrained/forged.
+    const helperAccept = m.evaluateCanonicalAbortedTerminal(finalizedOk.state);
+    console.log(`abort-canonical-helper-accepts-finalized\t${
+      helperAccept && helperAccept.ok === true ? 'PASS' : 'FAIL'}`);
+    const forgedMarker = JSON.parse(JSON.stringify(finalizedOk.state));
+    forgedMarker.terminal = { state: 'ABORTED', reason: 'forged', at_event: 1 };
+    const helperForged = m.evaluateCanonicalAbortedTerminal(forgedMarker);
+    console.log(`abort-canonical-helper-rejects-forged\t${
+      helperForged && helperForged.ok === false
+        && helperForged.reason === 'noncanonical_abort_terminal' ? 'PASS' : 'FAIL'}`);
+    const undrained = JSON.parse(JSON.stringify(finalizedOk.state));
+    undrained.axes.tool_calls.reserved_active = 1;
+    const helperUndrained = m.evaluateCanonicalAbortedTerminal(undrained);
+    console.log(`abort-canonical-helper-rejects-undrained\t${
+      helperUndrained && helperUndrained.ok === false
+        && helperUndrained.reason === 'resource_axes_not_drained' ? 'PASS' : 'FAIL'}`);
   }
 }
 NODE
@@ -1928,7 +1945,10 @@ for id in \
   abort-live-claim-rejects \
   abort-nonzero-reservation-rejects \
   abort-unrelated-event-rejects \
-  abort-terminal-receipt-only-after-finalization
+  abort-terminal-receipt-only-after-finalization \
+  abort-canonical-helper-accepts-finalized \
+  abort-canonical-helper-rejects-forged \
+  abort-canonical-helper-rejects-undrained
 do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done

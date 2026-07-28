@@ -14,6 +14,7 @@ const root = process.argv[2];
 const tmp = process.argv[3];
 const {
   admitMissionRouting,
+  atxHeadingMatchesSection,
   isAuthoritativeGitObjectId,
 } = require(path.join(root, 'scripts/mission-routing-admission'));
 const {
@@ -34,6 +35,13 @@ assert.equal(isAuthoritativeGitObjectId('e'.repeat(63)), false);
 assert.equal(isAuthoritativeGitObjectId('f'.repeat(65)), false);
 assert.equal(isAuthoritativeGitObjectId('A'.repeat(40)), false);
 assert.equal(isAuthoritativeGitObjectId(null), false);
+
+// ATX headings allow 0..3 leading ASCII spaces; four spaces is code, not a heading.
+assert.equal(atxHeadingMatchesSection('## Phase 0', 'Phase 0'), true);
+assert.equal(atxHeadingMatchesSection('   ## Phase 0', 'Phase 0'), true);
+assert.equal(atxHeadingMatchesSection('    ## Phase 0', 'Phase 0'), false);
+assert.equal(atxHeadingMatchesSection('\t## Phase 0', 'Phase 0'), false);
+assert.equal(atxHeadingMatchesSection('## Other', 'Phase 0'), false);
 
 const routes = [
   ['l3', 'none'],

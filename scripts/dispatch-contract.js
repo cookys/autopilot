@@ -832,7 +832,8 @@ function getBaseSpecSection(baseSha, contract, repo) {
   }
 
   const section = String(contract.spec.section || '');
-  const heading = `^\\s*#{1,6}\\s+${escapeRegExp(section)}\\s*$`;
+  // CommonMark ATX: at most 3 leading ASCII spaces (not tabs / arbitrary WS).
+  const heading = `^ {0,3}#{1,6}\\s+${escapeRegExp(section)}\\s*$`;
   const found = specText.split('\n').some((line) => new RegExp(heading).test(line));
 
   if (!found) {

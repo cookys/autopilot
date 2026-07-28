@@ -168,6 +168,12 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// CommonMark ATX: at most 3 leading ASCII spaces. Four-space indent is code.
+function atxHeadingMatchesSection(line, section) {
+  if (typeof line !== 'string' || typeof section !== 'string') return false;
+  return new RegExp(`^ {0,3}#{1,6}\\s+${escapeRegExp(section)}\\s*$`).test(line);
+}
+
 // Git object IDs: SHA-1 (40) or SHA-256 (64), lowercase hex only.
 function isAuthoritativeGitObjectId(baseSha) {
   return typeof baseSha === 'string' && /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(baseSha);
@@ -215,8 +221,9 @@ function validateGraphSpecsAtBase(repoRoot, graph) {
         'MISSION_GRAPH_SPEC_INVALID',
       );
     }
-    const heading = new RegExp(`^\\s*#{1,6}\\s+${escapeRegExp(spec.section)}\\s*$`);
-    if (!String(specText).split(/\r?\n/).some((line) => heading.test(line))) {
+    if (!String(specText).split(/\r?\n/).some((line) => (
+      atxHeadingMatchesSection(line, spec.section)
+    ))) {
       fail(
         `graph node ${node.id} missing heading '${spec.section}' in ${spec.path}`,
         'MISSION_GRAPH_SPEC_INVALID',
@@ -370,6 +377,7 @@ if (require.main === module) main();
 module.exports = {
   MissionRoutingAdmissionError,
   admitMissionRouting,
+  atxHeadingMatchesSection,
   isAuthoritativeGitObjectId,
   normalizeRoute,
   observeMarker,

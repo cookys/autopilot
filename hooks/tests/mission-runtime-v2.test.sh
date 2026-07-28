@@ -278,6 +278,43 @@ if (runtime) {
     && /missing heading/.test(badHeadingError.message)
     && !fs.existsSync(registryPath));
 
+  // Four-space indented ATX is code, not a heading — pre-spend must reject.
+  const indentedHeadingGraph = JSON.parse(JSON.stringify(graph));
+  // Keep section name that exists only under 4-space indent in the fixture file.
+  fs.writeFileSync(path.join(repo, 'src', 'value.txt'), [
+    '    ## Runtime control',
+    'base',
+    '    ## Release closeout',
+    '',
+  ].join('\n'));
+  execFileSync('git', ['-C', repo, 'add', 'src/value.txt']);
+  execFileSync('git', ['-C', repo, 'commit', '-qm', 'indent headings as code']);
+  let indentedHeadingError = null;
+  try {
+    runtime.prepareMissionRuntimeForTest({
+      repo,
+      taskAuthority: authority,
+      authoritativeGovernance: projectGovernance,
+      executionGraph: graph,
+      preparedAt: '2026-07-28T00:00:00.500Z',
+    }, dependencies);
+  } catch (error) {
+    indentedHeadingError = error;
+  }
+  check('prepare-rejects-four-space-indented-heading',
+    indentedHeadingError
+    && indentedHeadingError.code === 'MISSION_GRAPH_SPEC_INVALID'
+    && /missing heading/.test(indentedHeadingError.message));
+  // Restore real ATX headings for the rest of the oracle.
+  fs.writeFileSync(path.join(repo, 'src', 'value.txt'), [
+    '## Runtime control',
+    'base',
+    '## Release closeout',
+    '',
+  ].join('\n'));
+  execFileSync('git', ['-C', repo, 'add', 'src/value.txt']);
+  execFileSync('git', ['-C', repo, 'commit', '-qm', 'restore atx headings']);
+
   let productionInjectionRejected = false;
   try {
     runtime.prepareMissionRuntime({
@@ -689,16 +726,101 @@ if (runtime) {
     throw new Error(`unexpected durable leaf event ${input.eventType}`);
   };
 
-  // Fail-closed first: enforce precheck needs a store, but adapter factory
+  // Grant-ref mismatch: sealed binding used for adapters differs from the
+  // admitted control contract. Fail closed without releasing Mission/campaign.
+  const sealedGrantRef = granted.payload.mission_grant_ref;
+  const mismatchGrantRef = 'f'.repeat(64);
+  check('mismatch-fixture-differs-from-seal',
+    typeof sealedGrantRef === 'string'
+    && sealedGrantRef.length === 64
+    && sealedGrantRef !== mismatchGrantRef);
+  let mismatchAdapterBuilds = 0;
+  const stagnationBeforeMismatch = store.load().stagnant_campaigns;
+  const claimReleasedBeforeMismatch = Boolean(
+    store.load().claims[granted.payload.claim_id]
+    && store.load().claims[granted.payload.claim_id].released,
+  );
+  const mismatchEngine = new AutopilotEngine({
+    cwd: repo,
+    clock: () => '2026-07-28T00:00:01.250Z',
+    missionCampaignStore: store,
+    missionAdapterFactory: (options) => {
+      mismatchAdapterBuilds += 1;
+      return mission.createMissionCampaignAdapters(options);
+    },
+    campaignIntake() {
+      const control = preparedControlForEngine();
+      return {
+        ...control,
+        contract: {
+          ...control.contract,
+          mission_grant_ref: mismatchGrantRef,
+        },
+      };
+    },
+    campaignEventAppender() {
+      throw new Error('grant-ref mismatch must not start composition');
+    },
+    implementationDispatcher() {
+      throw new Error('grant-ref mismatch must not dispatch implementation');
+    },
+  });
+  const mismatchResult = mismatchEngine.runImplementationReviewLoop(loopInput);
+  const afterMismatch = store.load();
+  check('grant-ref-mismatch-blocks-intake',
+    mismatchResult.status === 'blocked'
+    && mismatchResult.phase === 'campaign_intake'
+    && /mission_grant_ref/.test(mismatchResult.reason || '')
+    && mismatchResult.campaign_control
+    && mismatchResult.campaign_control.rejection
+    && mismatchResult.campaign_control.rejection.code === 'mission_grant_ref_mismatch');
+  check('grant-ref-mismatch-builds-adapters-once',
+    mismatchAdapterBuilds === 1);
+  check('grant-ref-mismatch-does-not-release-mission',
+    afterMismatch.claims[granted.payload.claim_id]
+    && afterMismatch.claims[granted.payload.claim_id].released === claimReleasedBeforeMismatch
+    && afterMismatch.claims[granted.payload.claim_id].released !== true);
+  check('grant-ref-mismatch-keeps-campaign-lease-live',
+    !mismatchResult.campaign_control
+    || !mismatchResult.campaign_control.admission_release
+    || mismatchResult.campaign_control.admission_release.status !== 'released');
+  check('grant-ref-mismatch-stagnation-unchanged',
+    afterMismatch.stagnant_campaigns === stagnationBeforeMismatch);
+  // Prove the generation lease remains live after mismatch (exclusive-live acquire fails).
+  let mismatchLeaseStillLive = false;
+  try {
+    runLedgerJson([
+      'stage-acquire',
+      '--ledger', durableLeafControl.generation_claim.ledger,
+      '--run-id', durableLeafControl.campaign_id,
+      '--stage', 'campaign',
+      '--pid', String(process.pid),
+      '--resources', `campaign:${durableLeafControl.campaign_id}`,
+      '--exclusive-live',
+    ]);
+  } catch (error) {
+    mismatchLeaseStillLive = /already has a live lease/.test(error.message || '');
+  }
+  check('grant-ref-mismatch-generation-lease-still-live', mismatchLeaseStillLive);
+
+  // Fail-closed: enforce precheck needs a store, but adapter factory
   // omits releaseMission so admission release fails closed.
+  let noAdapterBuilds = 0;
   const noAdapterEngine = new AutopilotEngine({
     cwd: repo,
     clock: () => '2026-07-28T00:00:01.500Z',
     missionCampaignStore: store,
-    missionAdapterFactory: () => ({
-      missionClaim: () => ({ owner: 'mission', status: 'claimed', claim_id: granted.payload.claim_id }),
-      // intentionally no releaseMission
-    }),
+    missionAdapterFactory: () => {
+      noAdapterBuilds += 1;
+      return {
+        missionClaim: () => ({
+          owner: 'mission',
+          status: 'claimed',
+          claim_id: granted.payload.claim_id,
+        }),
+        // intentionally no releaseMission
+      };
+    },
     campaignIntake() {
       return preparedControlForEngine();
     },
@@ -708,6 +830,7 @@ if (runtime) {
     },
   });
   const noAdapterResult = noAdapterEngine.runImplementationReviewLoop(loopInput);
+  check('zero-effect-adapter-factory-once', noAdapterBuilds === 1);
   const noAdapterRelease = noAdapterResult.campaign_control
     && noAdapterResult.campaign_control.admission_release;
   check('zero-effect-adapter-missing-blocks-release',
@@ -728,15 +851,32 @@ if (runtime) {
     ));
 
   // Real managed composition path: constructor-owned Mission store + default
-  // releaseCampaignAdmission. Engine must supply trusted adapters from the
-  // sealed mission_grant_ref (never from runtime input). Reuses the same live
-  // generation lease so a successful release can mark it dead.
+  // releaseCampaignAdmission. Adapters are built exactly once at intake and
+  // the same object is threaded into release (never rebuilt).
+  let zeroEffectAdapterBuilds = 0;
+  let retainedIntakeAdapters = null;
+  let retainedReleaseAdapters = null;
+  const defaultFactory = mission.createMissionCampaignAdapters;
   const zeroEffectEngine = new AutopilotEngine({
     cwd: repo,
     clock: () => '2026-07-28T00:00:02.000Z',
     missionCampaignStore: store,
-    campaignIntake() {
+    missionAdapterFactory: (options) => {
+      zeroEffectAdapterBuilds += 1;
+      const adapters = defaultFactory(options);
+      if (zeroEffectAdapterBuilds === 1) retainedIntakeAdapters = adapters;
+      return adapters;
+    },
+    campaignIntake(input, adapters) {
+      retainedIntakeAdapters = adapters || retainedIntakeAdapters;
       return preparedControlForEngine();
+    },
+    campaignAdmissionReleaser(input, adapters) {
+      retainedReleaseAdapters = adapters;
+      const { releaseCampaignAdmission } = require(
+        path.join(root, 'src', 'engine', 'campaign-intake'),
+      );
+      return releaseCampaignAdmission(input, adapters || {});
     },
     campaignEventAppender(input) {
       return intentOnlyAppender(input, durableLeafEvents);
@@ -753,6 +893,11 @@ if (runtime) {
     },
   });
   const zeroEffectResult = zeroEffectEngine.runImplementationReviewLoop(loopInput);
+  check('zero-effect-adapters-built-once', zeroEffectAdapterBuilds === 1);
+  check('zero-effect-release-threads-exact-adapter-object',
+    retainedIntakeAdapters !== null
+    && retainedReleaseAdapters !== null
+    && retainedIntakeAdapters === retainedReleaseAdapters);
   const afterZeroEffect = store.load();
   const zeroEffectEvents = (afterZeroEffect.events || []).map((event) => event.event_type);
   const zeroRelease = zeroEffectResult.campaign_control
@@ -1079,6 +1224,7 @@ for id in \
   runtime-module-present prepare-api-present prepare-test-seam-explicit \
   production-prepare-rejects-dependency-injection grant-api-present prepared-store-api-present \
   test-seam-requires-explicit-process-opt-in prepare-rejects-missing-spec-heading \
+  prepare-rejects-four-space-indented-heading \
   terminal-api-present engine-cli-advertises-prepared-receipt \
   engine-cli-rejects-arbitrary-state-path cli-prepare-created cli-prepare-adopts-same-lineage \
   stale-dead-process-lock-recovered live-lock-not-reaped registry-rejects-extra-fields \
@@ -1091,8 +1237,13 @@ for id in \
   recomputed-unkeyed-prepared-bindings-rejected recomputed-prepared-extra-field-rejected \
   enforce-arbitrary-state-rejected prepared-grant-rejects-caller-identity-flags \
   sealed-v2-engine-intake-admitted intake-keeps-both-campaign-identities \
+  grant-ref-mismatch-blocks-intake grant-ref-mismatch-builds-adapters-once \
+  grant-ref-mismatch-does-not-release-mission grant-ref-mismatch-keeps-campaign-lease-live \
+  grant-ref-mismatch-stagnation-unchanged grant-ref-mismatch-generation-lease-still-live \
+  zero-effect-adapter-factory-once \
   zero-effect-adapter-missing-blocks-release zero-effect-adapter-missing-keeps-lease-live \
   zero-effect-adapter-missing-mission-code \
+  zero-effect-adapters-built-once zero-effect-release-threads-exact-adapter-object \
   durable-zero-effect-blocks durable-zero-effect-records-intent-only \
   durable-zero-effect-releases-admission durable-zero-effect-mission-release-via-trusted-adapter \
   durable-zero-effect-lease-marked-dead durable-zero-effect-emits-mission-no-effect-release \

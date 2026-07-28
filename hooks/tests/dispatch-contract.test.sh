@@ -372,6 +372,43 @@ out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --c
 assert_eq "$rc" "3"
 assert_nogo_json "$out" "section"
 
+echo "--- Case 2.2b: Four-space indented ATX is not a heading ---"
+# CommonMark: 0..3 leading spaces only. Four spaces is code, so section is missing.
+cp specs/feat/core.md "$TEST_TMP/core-atx.md.bak"
+# Rewrite the API heading under four-space indent only.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('specs/feat/core.md')
+text = p.read_text()
+# Ensure a bare API heading exists, then indent it four spaces.
+lines = []
+for line in text.splitlines(True):
+    if line.lstrip().startswith('#') and 'API' in line and not line.startswith('    #'):
+        lines.append('    ' + line.lstrip())
+    else:
+        lines.append(line)
+p.write_text(''.join(lines))
+PY
+git add specs/feat/core.md
+git commit -qm "indent API heading as code" >/dev/null 2>&1 || true
+# Point contract base to HEAD so the indented blob is authoritative.
+HEAD_SHA=$(git rev-parse HEAD)
+python3 - <<PY
+import json
+from pathlib import Path
+contract = json.loads(Path("$CONTRACT_DIR/valid.json").read_text())
+contract["base_sha"] = "$HEAD_SHA"
+Path("$CONTRACT_DIR/indented_section.json").write_text(json.dumps(contract, indent=2) + "\n")
+PY
+out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/indented_section.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "section"
+# restore
+cp "$TEST_TMP/core-atx.md.bak" specs/feat/core.md
+git add specs/feat/core.md
+git commit -qm "restore API heading" >/dev/null 2>&1 || true
+# also restore valid contract base if needed via later tests using valid.json's original base
+
 echo "--- Case 2.3: Hidden clean spec drift ---"
 # use assume-unchanged, then unset and restore
 cp specs/feat/core.md "$TEST_TMP/core.md.bak"

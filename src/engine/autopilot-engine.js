@@ -4272,6 +4272,12 @@ class AutopilotEngine {
       }));
     }
 
+    // Constructor-owned Mission adapters: built exactly once for campaign
+    // intake from the sealed mission_grant_ref, then threaded unchanged into
+    // releaseCampaignAdmission. Never rebuild; never accept runtime adapters.
+    let trustedMissionAdapters = null;
+    let trustedMissionGrantRef = null;
+
     if (campaignRequested) {
       const intakeStartedAt = this.now();
       let intake;
@@ -4296,10 +4302,15 @@ class AutopilotEngine {
             steps: [],
           };
         }
+        // Bind grant_ref only from the sealed campaign contract on disk — never
+        // from admitted runtime control or caller-supplied adapter payloads.
         const missionGrantRef = this.readCampaignMissionGrantRef(
           input.campaignContract,
           loopCwd,
         );
+        if (typeof missionGrantRef === 'string' && /^[0-9a-f]{64}$/.test(missionGrantRef)) {
+          trustedMissionGrantRef = missionGrantRef;
+        }
         const preliminaryContract = this.readCampaignContract(
           input.campaignContract,
           loopCwd,
@@ -4376,8 +4387,9 @@ class AutopilotEngine {
           }
         }
         if (!intake) {
-          const missionAdapters = this.buildMissionCampaignAdapters({
-            grant_ref: missionGrantRef,
+          // Build once for this managed loop; release reuses this exact object.
+          trustedMissionAdapters = this.buildMissionCampaignAdapters({
+            grant_ref: trustedMissionGrantRef,
           });
           intake = this.campaignIntake({
             repo: loopCwd,
@@ -4391,7 +4403,7 @@ class AutopilotEngine {
             roster,
             resume: input.resume === true,
             observedAt: intakeStartedAt,
-          }, missionAdapters || undefined);
+          }, trustedMissionAdapters || undefined);
         }
       } catch (error) {
         intake = {
@@ -4430,6 +4442,54 @@ class AutopilotEngine {
           reviewChain: [],
           ledger,
         });
+      }
+      // Fail closed when the admitted control's grant ref differs from the
+      // sealed binding used to construct trusted adapters. Do not release.
+      const admittedGrantRef = intake.contract
+        && typeof intake.contract.mission_grant_ref === 'string'
+        && /^[0-9a-f]{64}$/.test(intake.contract.mission_grant_ref)
+        ? intake.contract.mission_grant_ref
+        : null;
+      if (trustedMissionGrantRef !== null || admittedGrantRef !== null) {
+        if (trustedMissionGrantRef === null
+            || admittedGrantRef === null
+            || admittedGrantRef !== trustedMissionGrantRef) {
+          const mismatchReason = 'admitted campaign mission_grant_ref does not match sealed Mission grant binding';
+          campaignControl = {
+            ...intake,
+            status: 'blocked',
+            reason: mismatchReason,
+            rejection: {
+              owner: 'mission',
+              code: 'mission_grant_ref_mismatch',
+              reason: mismatchReason,
+            },
+          };
+          ledger.push(this.ledgerEntry(
+            'campaign_intake',
+            'blocked',
+            this.now(),
+            {
+              campaign_id: intake.campaign_id || null,
+              rejection_owner: 'mission',
+              rejection_code: 'mission_grant_ref_mismatch',
+            },
+          ));
+          return finish({
+            status: 'blocked',
+            phase: 'campaign_intake',
+            reason: mismatchReason,
+            rounds: 0,
+            verdict: null,
+            roster,
+            resolveResult,
+            implementation: null,
+            review: null,
+            implementationChain: [],
+            reviewChain: [],
+            ledger,
+          });
+        }
       }
       if (!verifyCmdProvided) {
         verifyCmd = intake.contract.verify_cmd;
@@ -4485,25 +4545,32 @@ class AutopilotEngine {
       const releaseStartedAt = this.now();
       let release;
       try {
-        // Supply constructor-owned Mission adapters derived from the sealed
-        // mission_grant_ref — never from runtime input. Missing adapters stay
-        // fail-closed inside releaseCampaignAdmission.
-        const sealedGrantRef = (
-          campaignControl.contract
+        // Thread the exact constructor-owned adapter object from intake.
+        // Never rebuild; never fall back to runtime contract/adapters.
+        const liveGrantRef = campaignControl.contract
           && typeof campaignControl.contract.mission_grant_ref === 'string'
           && /^[0-9a-f]{64}$/.test(campaignControl.contract.mission_grant_ref)
-        )
           ? campaignControl.contract.mission_grant_ref
-          : this.readCampaignMissionGrantRef(input.campaignContract, loopCwd);
-        const releaseAdapters = this.buildMissionCampaignAdapters({
-          grant_ref: sealedGrantRef,
-        });
-        release = this.campaignAdmissionReleaser({
-          repo: loopCwd,
-          campaignControl,
-          rejection,
-          observedAt: releaseStartedAt,
-        }, releaseAdapters || undefined);
+          : null;
+        if (trustedMissionGrantRef !== null || liveGrantRef !== null) {
+          if (trustedMissionGrantRef === null
+              || liveGrantRef === null
+              || liveGrantRef !== trustedMissionGrantRef) {
+            release = {
+              status: 'blocked',
+              error: 'mission_grant_ref_mismatch',
+              reason: 'campaign mission_grant_ref does not match sealed Mission grant binding',
+            };
+          }
+        }
+        if (!release) {
+          release = this.campaignAdmissionReleaser({
+            repo: loopCwd,
+            campaignControl,
+            rejection,
+            observedAt: releaseStartedAt,
+          }, trustedMissionAdapters || undefined);
+        }
       } catch (error) {
         release = {
           status: 'blocked',

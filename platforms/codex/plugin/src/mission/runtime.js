@@ -372,7 +372,8 @@ function validateGraphSpecsAtBase(repo, graph, baseSha) {
       );
     }
     const specText = String(raw.stdout || '');
-    const heading = new RegExp(`^\\s*#{1,6}\\s+${escapeRegExp(spec.section)}\\s*$`);
+    // CommonMark ATX: at most 3 leading ASCII spaces (reject 4-space code indent).
+    const heading = new RegExp(`^ {0,3}#{1,6}\\s+${escapeRegExp(spec.section)}\\s*$`);
     const found = specText.split(/\r?\n/).some((line) => heading.test(line));
     if (!found) {
       fail(

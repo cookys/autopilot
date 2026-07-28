@@ -45,7 +45,8 @@ if ! ENGINE_SCORECARD_DIR="$SCORES" node "$REPO_ROOT/scripts/engine-scorecard.js
 fi
 
 OBSERVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-ENGINE_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+# Exact resolver tuple: implementer_effort defaults to high; endpoint "" → null/@none.
+ENGINE_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
 printf '%s\n' "$ENGINE_EVENT" > "$TEST_TMP/engine-event.json"
 if ! ENGINE_CAPABILITY_DIR="$CAPS" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$TEST_TMP/engine-event.json" > /dev/null; then
   fail "Infrastructure error: capability seeding failed"

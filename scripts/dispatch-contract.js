@@ -199,6 +199,38 @@ function getResolverFieldPrefix(requiredEngineRole) {
   return requiredEngineRole === 'verification-author' ? 'verification_author' : 'implementer';
 }
 
+// Capability-state endpoint partition selector for an exact resolver tuple.
+// Resolver emits "" for "no named endpoint"; capability-state uses "@none" for
+// the explicit null wallet. Named endpoints pass through exactly as emitted —
+// no trim/normalize here (resolve-review-loop owns endpoint validation).
+// Never omit --endpoint: empty/legacy omission would query the ambiguous partition.
+// Non-string (including null/undefined) means unresolved: callers must fail closed
+// before invoking this helper.
+function capabilityEndpointSelector(resolvedEndpoint) {
+  if (typeof resolvedEndpoint !== 'string') {
+    throw new Error('resolver tuple missing exact endpoint partition');
+  }
+  return resolvedEndpoint === '' ? '@none' : resolvedEndpoint;
+}
+
+// Build fail-closed exact capability `current` argv from the resolver tuple.
+// Always includes --effort and --endpoint so admission never silently falls
+// back to the legacy ambiguous (runner, model, role)-only partition.
+function capabilityCurrentArgs(resolvedEngine, storeRole) {
+  const effort = String(resolvedEngine.effort || '').trim();
+  if (!effort) {
+    throw new Error('resolver tuple missing exact effort partition');
+  }
+  return [
+    'current',
+    '--runner', resolvedEngine.runner,
+    '--model', resolvedEngine.model,
+    '--role', storeRole,
+    '--effort', effort,
+    '--endpoint', capabilityEndpointSelector(resolvedEngine.endpoint),
+  ];
+}
+
 function hasKey(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
@@ -804,10 +836,27 @@ function resolveEngine(repo, reasons, resolvedEngine, requiredEngineRole = 'impl
   const model = String(resolvedConfig[`${prefix}_engine`] || '').trim();
   const runner = String(resolvedConfig[`${prefix}_runner`] || '').trim();
   const family = String(resolvedConfig[`${prefix}_family`] || '').trim();
+  // Effort/endpoint are part of the exact admission identity.
+  // Endpoint "" is a real value (explicit no named endpoint → capability @none).
+  // Property absence is NOT equivalent to "" — fail closed so a future resolver
+  // drift cannot silently authorize the @none wallet.
+  const effort = String(resolvedConfig[`${prefix}_effort`] || '').trim();
+  const endpointKey = `${prefix}_endpoint`;
+  let endpoint = null; // non-string sentinel: unresolved (never maps to @none)
+  if (!Object.prototype.hasOwnProperty.call(resolvedConfig, endpointKey)) {
+    reasons.push('engine: missing endpoint in canonical resolver output');
+  } else if (typeof resolvedConfig[endpointKey] !== 'string') {
+    reasons.push('engine: invalid endpoint in canonical resolver output');
+  } else {
+    // Forward exactly as emitted — resolver already validated the name or "".
+    endpoint = resolvedConfig[endpointKey];
+  }
 
   resolvedEngine.model = model;
   resolvedEngine.runner = runner;
   resolvedEngine.family = family;
+  resolvedEngine.effort = effort;
+  resolvedEngine.endpoint = endpoint;
 
   if (!model) {
     reasons.push('engine: missing model in .claude/review-loop-config.md');
@@ -817,6 +866,9 @@ function resolveEngine(repo, reasons, resolvedEngine, requiredEngineRole = 'impl
   }
   if (!family) {
     reasons.push('engine: missing family in .claude/review-loop-config.md');
+  }
+  if (!effort) {
+    reasons.push('engine: missing effort in .claude/review-loop-config.md');
   }
 }
 
@@ -1001,20 +1053,27 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
   }
 
   if (reasons.length === 0) {
-    const capScript = path.join(REPO_ROOT, 'scripts', 'engine-capability-state.js');
-    let cap;
-    try {
-      cap = runNodeJson(
-        repo,
-        capScript,
-        ['current', '--runner', resolvedEngine.runner, '--model', resolvedEngine.model, '--role', storeRole],
-      );
-    } catch (err) {
-      reasons.push('quota: failed to read capability state');
-    }
+    // Endpoint must be a string (including "") before any capability partition
+    // query. A non-string means unresolved — never fall through to @none/legacy.
+    if (typeof resolvedEngine.endpoint !== 'string') {
+      reasons.push('engine: missing endpoint in canonical resolver output');
+    } else {
+      const capScript = path.join(REPO_ROOT, 'scripts', 'engine-capability-state.js');
+      let cap;
+      try {
+        // Exact tuple only — never omit effort/endpoint (legacy ambiguous partition).
+        cap = runNodeJson(
+          repo,
+          capScript,
+          capabilityCurrentArgs(resolvedEngine, storeRole),
+        );
+      } catch (err) {
+        reasons.push('quota: failed to read capability state');
+      }
 
-    if (cap && (!cap.capability || !cap.capability.quota || cap.capability.quota.status !== 'available')) {
-      reasons.push(`quota: quota unavailable for ${resolvedEngine.model} as ${requiredEngineRole}`);
+      if (cap && (!cap.capability || !cap.capability.quota || cap.capability.quota.status !== 'available')) {
+        reasons.push(`quota: quota unavailable for ${resolvedEngine.model} as ${requiredEngineRole}`);
+      }
     }
   }
 
@@ -1088,7 +1147,8 @@ function parseArgs(argv) {
 
   const contract = parsed.contract;
   const contractSha = parsed.loaded.hash;
-  const resolvedEngine = { runner: '', model: '', family: '' };
+  // endpoint null = unresolved (not the explicit "" → @none wallet).
+  const resolvedEngine = { runner: '', model: '', family: '', effort: '', endpoint: null };
   const reasons = [];
 
   resolveEngine(repoPath, reasons, resolvedEngine, contract.go.required_engine_role);

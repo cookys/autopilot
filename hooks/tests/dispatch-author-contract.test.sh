@@ -41,14 +41,16 @@ process.stdout.write('Fake deterministic author output.\n');
 EOF
 
 IMPL_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
-IMPL_EVENT='{"schema_version":1,"observed_at":"OLD","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+# Exact resolver tuples: implementer effort defaults to high / endpoint null;
+# VA config pins verification_author_effort=high / endpoint "".
+IMPL_EVENT='{"schema_version":1,"observed_at":"OLD","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
 
 VA_ROW='{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
-VA_EVENT='{"schema_version":1,"observed_at":"OLD","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+VA_EVENT='{"schema_version":1,"observed_at":"OLD","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
 
 OBSERVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-IMPL_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
-VA_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+IMPL_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+VA_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
 printf '%s\n' "$IMPL_ROW"  > "$TEST_TMP/impl-row.json"
 printf '%s\n' "$IMPL_EVENT" > "$TEST_TMP/impl-event.json"
 printf '%s\n' "$VA_ROW"    > "$TEST_TMP/va-row.json"

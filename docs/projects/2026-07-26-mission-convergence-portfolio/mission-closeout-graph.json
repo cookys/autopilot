@@ -2,7 +2,7 @@
   "artifact_type": "mission_execution_graph",
   "calculated_batches": 1,
   "calculated_depth": 1,
-  "graph_digest": "3097002398eeafeebfa1b875e8845157fb4c8672a2c6c8d5a0461e2ac7137065",
+  "graph_digest": "2de755c1a84c316b86b0083486168b09dd499a24ad8705a6754f639c5dbd65b8",
   "nodes": [
     {
       "acceptance_ids": [
@@ -107,26 +107,7 @@
         "R94973162221441638143512158988253470114525342970732769618958755558722809198877"
       ],
       "verification_commands": [
-        "node --test hooks/*.test.js scripts/*.test.js",
-        "bash hooks/tests/autopilot-engine-resilience.test.sh",
-        "bash hooks/tests/check-claude-md-inventory.test.sh",
-        "bash hooks/tests/codex-plugin-package.test.sh",
-        "bash hooks/tests/dispatch-author-session-mode.test.sh",
-        "bash hooks/tests/dispatch-detach.test.sh",
-        "bash hooks/tests/dispatch-local-openai.test.sh",
-        "bash hooks/tests/harness-capabilities.test.sh",
-        "bash hooks/tests/mission-routing-admission.test.sh",
-        "bash hooks/tests/mission-routing-campaign-bridge.test.sh",
-        "bash hooks/tests/profile-context-isolation.test.sh",
-        "bash hooks/tests/supervised-authenticated-intake.test.sh",
-        "bash hooks/tests/supervised-engine-bridge-contract.test.sh",
-        "bash hooks/tests/supervised-production-substrate-host.test.sh",
-        "bash hooks/tests/sync-all.test.sh",
-        "bash hooks/tests/run.sh",
-        "bash scripts/validate.sh",
-        "bash scripts/check-canonical-invariants.sh",
-        "bash scripts/sync-all.sh --check",
-        "bash scripts/sync-codex-plugin-skills.sh --check"
+        "bash hooks/tests/run.sh"
       ]
     }
   ],

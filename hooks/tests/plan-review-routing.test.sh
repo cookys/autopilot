@@ -35,6 +35,10 @@ assert_contains "$REVIEWER_BODY" '"blocks_next_slice_or_immediate_integrity": tr
 assert_contains "$REVIEWER_BODY" '"cannot_defer_to_spike": true' "POC blocker deferral predicate is explicit"
 assert_contains "$RESEARCH_BODY" "run \`scripts/dispatch-plan-review.js\`" "research-to-ship uses the bounded controller"
 assert_contains "$RESEARCH_BODY" "never run generation 3" "research-to-ship carries the hard generation stop"
+assert_contains "$RESEARCH_BODY" "plan-review-manifest" "research-to-ship freezes the seat manifest"
+assert_contains "$RESEARCH_BODY" "logical_plan_id" "research-to-ship preserves logical review identity"
+assert_contains "$RESEARCH_BODY" "Depth 0 must disposition" "research-to-ship requires owner adjudication"
+assert_contains "$RESEARCH_BODY" "Transport exhaustion" "transport failure stays non-semantic"
 assert_not_contains "$RESEARCH_BODY" "loop until it converges" "research-to-ship no longer promises unbounded convergence"
 
 finalize_test

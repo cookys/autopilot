@@ -2,17 +2,12 @@
 'use strict';
 
 /**
- * Bounded, read-only plan-review controller.
+ * Durable heterogeneous plan-review session controller.
  *
- * The durable budget key is canonical git identity + ticket. session_id,
- * runner, model, cwd and terminal process identity are metadata only and cannot
- * reset the generation or wall-clock budget.
- *
- * Exit codes:
- *   0 accepted READY/CONDITIONAL result
- *   2 usage or local precondition failure
- *   3 policy STOP (cap, deadline, growth, rubric/scope failure)
- *   4 reviewer transport/response failure
+ * Identity: canonical git repository + caller-stable logical_plan_id. A ticket,
+ * runner, model, process, cwd, or session change cannot open another budget.
+ * Width: 1-4 frozen seats in one generation. Each seat gets at most two
+ * transport/parser attempts. Generation 2 is the hard semantic terminal cap.
  */
 
 const crypto = require('crypto');
@@ -20,6 +15,19 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const {
+  createRunnerTransportEnvelope,
+} = require('../src/transport/runner-envelope');
+const {
+  normalizePlanReviewPayload,
+} = require('./lib/plan-review-normalize');
+const {
+  applyDispositions,
+  backlogCandidates,
+  loadDispositionFile,
+  normalizeAndDedupeFindings,
+  unresolvedCandidateFingerprints,
+} = require('./lib/plan-review-findings');
 
 const SCRIPT_DIR = __dirname;
 const DISPATCH_AUTHOR = path.join(SCRIPT_DIR, 'dispatch-author.sh');
@@ -43,8 +51,6 @@ const RUNNERS = new Set([
   'qoderclicn',
 ]);
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
-const CLASSES = new Set(['decision-now', 'implementation-spike', 'future']);
-const SEVERITIES = new Set(['blocking', 'non-blocking']);
 
 class CliError extends Error {
   constructor(message, exitCode = 2) {
@@ -57,20 +63,16 @@ function usage() {
   return `Usage:
   node scripts/dispatch-plan-review.js \\
     --repo-root <repo> --plan-file <plan> --rubric-file <rubric> \\
-    --ticket <id> --session-id <id> --generation <1|2|...> \\
-    --runner <runner> --model <model> [--effort high] [--timeout 5m] \\
-    [--endpoint <name>] \\
-    [--deep-runner <runner> --deep-model <model> --deep-effort <effort>] \\
-    [--deep-endpoint <name>] [--state-dir <dir>] [--max-generations 2] \\
-    [--max-wall-seconds 7200] [--growth-warn-ratio 1.25] \\
-    [--growth-stop-ratio 1.50] [--now <ISO-8601>]
+    --ticket <id> --session-id <id> --generation <1|2> \\
+    --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
+    [--state-dir <dir>] [--now <ISO-8601>]
 
-The reviewer must return strict JSON:
-  {"verdict":"READY|CONDITIONAL|STOP","findings":[...]}
+Legacy compatibility:
+  replace --manifest-file with --runner/--model/--effort/--endpoint and optional
+  --deep-* flags. --logical-plan-id is recommended; omitted legacy calls use a
+  frozen ticket-bound compatibility identity.
 
-For a blocking finding, the two POC admission booleans must both be true:
-  blocks_next_slice_or_immediate_integrity
-  cannot_defer_to_spike`;
+Hard limits: 1-4 seats, two attempts per seat, two semantic generations, 7200s.`;
 }
 
 function parseArgs(argv) {
@@ -83,10 +85,13 @@ function parseArgs(argv) {
     growthStopRatio: DEFAULTS.growthStopRatio,
     stateDir: process.env.AUTOPILOT_PLAN_REVIEW_STATE_DIR || DEFAULT_STATE_ROOT,
   };
-  const valueFlags = new Map([
+  const flags = new Map([
     ['--repo-root', 'repoRoot'],
     ['--plan-file', 'planFile'],
     ['--rubric-file', 'rubricFile'],
+    ['--manifest-file', 'manifestFile'],
+    ['--disposition-file', 'dispositionFile'],
+    ['--logical-plan-id', 'logicalPlanId'],
     ['--ticket', 'ticket'],
     ['--session-id', 'sessionId'],
     ['--generation', 'generation'],
@@ -106,65 +111,37 @@ function parseArgs(argv) {
     ['--growth-stop-ratio', 'growthStopRatio'],
     ['--now', 'now'],
   ]);
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
     if (arg === '-h' || arg === '--help') {
       process.stdout.write(`${usage()}\n`);
       process.exit(0);
     }
-    const key = valueFlags.get(arg);
+    const key = flags.get(arg);
     if (!key) throw new CliError(`unknown argument: ${arg}`);
-    if (i + 1 >= argv.length || argv[i + 1] === '') {
+    if (index + 1 >= argv.length || argv[index + 1] === '') {
       throw new CliError(`${arg} requires a non-empty value`);
     }
-    opts[key] = argv[++i];
+    opts[key] = argv[++index];
   }
-
-  for (const key of [
-    'repoRoot',
-    'planFile',
-    'rubricFile',
-    'ticket',
-    'sessionId',
-    'generation',
-    'runner',
-    'model',
-  ]) {
-    if (opts[key] === undefined || opts[key] === '') {
-      throw new CliError(`missing required option: ${key}`);
-    }
+  for (const key of ['repoRoot', 'planFile', 'rubricFile', 'ticket', 'sessionId', 'generation']) {
+    if (!opts[key]) throw new CliError(`missing required option: ${key}`);
   }
-
-  opts.generation = parsePositiveInteger(opts.generation, '--generation');
-  opts.maxGenerations = parsePositiveInteger(opts.maxGenerations, '--max-generations');
-  opts.maxWallSeconds = parsePositiveInteger(opts.maxWallSeconds, '--max-wall-seconds');
-  opts.growthWarnRatio = parsePositiveNumber(opts.growthWarnRatio, '--growth-warn-ratio');
-  opts.growthStopRatio = parsePositiveNumber(opts.growthStopRatio, '--growth-stop-ratio');
-  if (opts.growthWarnRatio >= opts.growthStopRatio) {
-    throw new CliError('--growth-warn-ratio must be smaller than --growth-stop-ratio');
-  }
-  if (opts.maxGenerations > DEFAULTS.maxGenerations) {
-    throw new CliError(`--max-generations cannot exceed hard cap ${DEFAULTS.maxGenerations}`);
-  }
-  if (opts.maxWallSeconds > DEFAULTS.maxWallSeconds) {
-    throw new CliError(`--max-wall-seconds cannot exceed hard cap ${DEFAULTS.maxWallSeconds}`);
-  }
-  if (opts.growthWarnRatio > DEFAULTS.growthWarnRatio) {
-    throw new CliError(`--growth-warn-ratio cannot exceed hard cap ${DEFAULTS.growthWarnRatio}`);
-  }
-  if (opts.growthStopRatio > DEFAULTS.growthStopRatio) {
-    throw new CliError(`--growth-stop-ratio cannot exceed hard cap ${DEFAULTS.growthStopRatio}`);
-  }
-  if (!RUNNERS.has(opts.runner)) {
-    throw new CliError(`unsupported --runner: ${opts.runner}`);
-  }
-  if (!EFFORTS.has(opts.effort)) {
-    throw new CliError(`unsupported --effort: ${opts.effort}`);
+  opts.generation = positiveInteger(opts.generation, '--generation');
+  opts.maxGenerations = positiveInteger(opts.maxGenerations, '--max-generations');
+  opts.maxWallSeconds = positiveInteger(opts.maxWallSeconds, '--max-wall-seconds');
+  opts.growthWarnRatio = positiveNumber(opts.growthWarnRatio, '--growth-warn-ratio');
+  opts.growthStopRatio = positiveNumber(opts.growthStopRatio, '--growth-stop-ratio');
+  if (opts.generation > 2) throw new CliError('generation exceeds hard cap 2', 3);
+  if (opts.maxGenerations > 2) throw new CliError('max-generations cannot exceed hard cap 2');
+  if (opts.maxWallSeconds > 7200) throw new CliError('max-wall-seconds cannot exceed hard cap 7200');
+  if (opts.growthWarnRatio > 1.25 || opts.growthStopRatio > 1.5
+      || opts.growthWarnRatio >= opts.growthStopRatio) {
+    throw new CliError('plan growth ratios exceed or contradict hard ceilings');
   }
   opts.timeoutSeconds = parseTimeoutSeconds(opts.timeout);
   if (opts.timeoutSeconds > opts.maxWallSeconds) {
-    throw new CliError('--timeout cannot exceed the frozen plan-review wall-clock budget');
+    throw new CliError('--timeout cannot exceed the wall-clock budget');
   }
   if (!/^[A-Za-z0-9._-]+$/.test(opts.ticket)) {
     throw new CliError('--ticket must match [A-Za-z0-9._-]+');
@@ -172,93 +149,54 @@ function parseArgs(argv) {
   if (!/^[A-Za-z0-9._:-]+$/.test(opts.sessionId)) {
     throw new CliError('--session-id must match [A-Za-z0-9._:-]+');
   }
-  if (opts.endpoint && !/^[A-Za-z0-9_]+$/.test(opts.endpoint)) {
-    throw new CliError('--endpoint must match [A-Za-z0-9_]+');
+  if (opts.logicalPlanId && !/^[A-Za-z0-9._:-]+$/.test(opts.logicalPlanId)) {
+    throw new CliError('--logical-plan-id must match [A-Za-z0-9._:-]+');
   }
-  const hasDeepSeat = ['deepRunner', 'deepModel', 'deepEffort', 'deepEndpoint']
-    .some((key) => opts[key] !== undefined);
-  if (hasDeepSeat) {
-    for (const [key, flag] of [
-      ['deepRunner', '--deep-runner'],
-      ['deepModel', '--deep-model'],
-      ['deepEffort', '--deep-effort'],
-    ]) {
-      if (!opts[key]) throw new CliError(`${flag} is required for a deep-reviewer seat`);
-    }
-    if (!RUNNERS.has(opts.deepRunner)) {
-      throw new CliError(`unsupported --deep-runner: ${opts.deepRunner}`);
-    }
-    if (!EFFORTS.has(opts.deepEffort)) {
-      throw new CliError(`unsupported --deep-effort: ${opts.deepEffort}`);
-    }
-    if (opts.deepEndpoint && !/^[A-Za-z0-9_]+$/.test(opts.deepEndpoint)) {
-      throw new CliError('--deep-endpoint must match [A-Za-z0-9_]+');
-    }
+  if (opts.now !== undefined
+      && (!Number.isFinite(Date.parse(opts.now))
+        || process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS !== '1')) {
+    throw new CliError('--now is valid only under the explicit test seam');
   }
-  if (opts.now !== undefined && !Number.isFinite(Date.parse(opts.now))) {
-    throw new CliError('--now must be valid ISO-8601');
+  const hasManifest = Boolean(opts.manifestFile);
+  const hasLegacy = Boolean(opts.runner || opts.model || opts.deepRunner || opts.deepModel);
+  if (hasManifest && hasLegacy) {
+    throw new CliError('--manifest-file cannot be combined with legacy reviewer flags');
   }
-  if (
-    opts.now !== undefined
-    && process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS !== '1'
-  ) {
-    throw new CliError('--now is available only under the explicit test seam');
+  if (!hasManifest && (!opts.runner || !opts.model)) {
+    throw new CliError('provide --manifest-file or the legacy --runner and --model tuple');
   }
-
   opts.repoRoot = canonicalDirectory(opts.repoRoot, '--repo-root');
-  opts.planFile = canonicalReadableFile(opts.planFile, '--plan-file');
-  opts.rubricFile = canonicalReadableFile(opts.rubricFile, '--rubric-file');
-  opts.stateDir = path.resolve(opts.stateDir);
-  opts.reviewers = [{
-    seat: 'chair',
-    runner: opts.runner,
-    model: opts.model,
-    effort: opts.effort,
-      endpoint: opts.endpoint,
-      timeoutSeconds: opts.timeoutSeconds,
-  }];
-  if (hasDeepSeat) {
-    opts.reviewers.push({
-      seat: 'deep',
-      runner: opts.deepRunner,
-      model: opts.deepModel,
-      effort: opts.deepEffort,
-      endpoint: opts.deepEndpoint,
-      timeoutSeconds: opts.timeoutSeconds,
-    });
+  opts.planFile = canonicalFile(opts.planFile, '--plan-file');
+  opts.rubricFile = canonicalFile(opts.rubricFile, '--rubric-file');
+  if (opts.manifestFile) opts.manifestFile = canonicalFile(opts.manifestFile, '--manifest-file');
+  if (opts.dispositionFile) {
+    opts.dispositionFile = canonicalFile(opts.dispositionFile, '--disposition-file');
   }
+  opts.stateDir = path.resolve(opts.stateDir);
   return opts;
 }
 
-function parsePositiveInteger(value, label) {
+function positiveInteger(value, label) {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
     throw new CliError(`${label} must be a positive integer`);
   }
   return parsed;
 }
 
-function parsePositiveNumber(value, label) {
+function positiveNumber(value, label) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new CliError(`${label} must be a positive number`);
+    throw new CliError(`${label} must be positive`);
   }
   return parsed;
 }
 
 function parseTimeoutSeconds(value) {
-  const raw = String(value || '').trim().toLowerCase();
-  let seconds;
-  if (/^[1-9][0-9]*s$/.test(raw)) {
-    seconds = Number.parseInt(raw.slice(0, -1), 10);
-  } else if (/^[1-9][0-9]*m$/.test(raw)) {
-    seconds = Number.parseInt(raw.slice(0, -1), 10) * 60;
-  } else {
-    throw new CliError('--timeout must use positive Ns or Nm syntax');
-  }
-  if (!Number.isSafeInteger(seconds) || seconds < 1) {
-    throw new CliError('--timeout is outside the supported range');
-  }
+  const match = /^([1-9][0-9]*)(s|m)$/.exec(String(value || '').trim().toLowerCase());
+  if (!match) throw new CliError('--timeout must use positive Ns or Nm syntax');
+  const seconds = Number(match[1]) * (match[2] === 'm' ? 60 : 1);
+  if (!Number.isSafeInteger(seconds)) throw new CliError('--timeout is outside the supported range');
   return seconds;
 }
 
@@ -269,369 +207,891 @@ function canonicalDirectory(raw, label) {
   } catch (error) {
     throw new CliError(`${label} is not readable: ${raw}`);
   }
-  if (!fs.statSync(resolved).isDirectory()) {
-    throw new CliError(`${label} must be a directory: ${raw}`);
-  }
+  if (!fs.statSync(resolved).isDirectory()) throw new CliError(`${label} must be a directory`);
   return resolved;
 }
 
-function canonicalReadableFile(raw, label) {
+function canonicalFile(raw, label) {
   let resolved;
   try {
     resolved = fs.realpathSync(raw);
   } catch (error) {
     throw new CliError(`${label} is not readable: ${raw}`);
   }
-  if (!fs.statSync(resolved).isFile()) {
-    throw new CliError(`${label} must be a regular file: ${raw}`);
-  }
+  if (!fs.statSync(resolved).isFile()) throw new CliError(`${label} must be a regular file`);
   return resolved;
 }
 
-function gitOutput(repoRoot, args) {
-  const run = spawnSync('git', ['-C', repoRoot, ...args], {
+function canonicalRepoIdentity(repoRoot) {
+  const run = spawnSync('git', ['-C', repoRoot, 'rev-parse', '--git-common-dir'], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  if (run.status !== 0) {
-    throw new CliError(`--repo-root must be a git repository: ${repoRoot}`);
-  }
-  return run.stdout.trim();
+  if (run.status !== 0) throw new CliError('--repo-root must be a git repository');
+  const raw = run.stdout.trim();
+  const common = path.isAbsolute(raw) ? raw : path.resolve(repoRoot, raw);
+  return `git-common-dir:${fs.realpathSync(common)}`;
 }
 
-function canonicalRepoIdentity(repoRoot) {
-  const commonRaw = gitOutput(repoRoot, ['rev-parse', '--git-common-dir']);
-  const commonPath = path.isAbsolute(commonRaw)
-    ? commonRaw
-    : path.resolve(repoRoot, commonRaw);
-  let canonicalCommon;
-  try {
-    canonicalCommon = fs.realpathSync(commonPath);
-  } catch (error) {
-    throw new CliError(`unable to canonicalize git common dir: ${commonPath}`);
-  }
-  return `git-common-dir:${canonicalCommon}`;
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-function sha256(data) {
-  return crypto.createHash('sha256').update(data).digest('hex');
-}
-
-function nowDate(opts) {
-  return new Date(opts.now === undefined ? Date.now() : Date.parse(opts.now));
-}
-
-function emitAndExit(payload, code) {
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-  process.exit(code);
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  const output = {};
+  for (const key of Object.keys(value).sort()) output[key] = canonical(value[key]);
+  return output;
 }
 
 function atomicWriteJson(filePath, value) {
-  const temp = `${filePath}.tmp-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const temp = `${filePath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   fs.renameSync(temp, filePath);
 }
 
-function withLock(sessionDir, fn) {
-  fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
-  const lockPath = path.join(sessionDir, '.claim.lock');
-  try {
-    fs.mkdirSync(lockPath, { mode: 0o700 });
-  } catch (error) {
-    if (error && error.code === 'EEXIST') {
-      throw new CliError('plan-review session is busy; generation claim not acquired', 3);
+function readProcessStart(pid) {
+  if (fs.existsSync('/proc/self/stat')) {
+    try {
+      const raw = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+      const suffix = raw.slice(raw.lastIndexOf(') ') + 2).trim().split(/\s+/);
+      if (suffix.length < 20 || !/^[0-9]+$/.test(suffix[19])) {
+        return { status: 'unknown' };
+      }
+      return { status: 'live', process_start: suffix[19] };
+    } catch (error) {
+      if (error.code === 'ENOENT' || error.code === 'ESRCH') return { status: 'dead' };
+      return { status: 'unknown' };
     }
+  }
+  const observed = spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (observed.status !== 0 || !String(observed.stdout || '').trim()) {
+    try {
+      process.kill(pid, 0);
+      return { status: 'unknown' };
+    } catch (error) {
+      return error.code === 'ESRCH' ? { status: 'dead' } : { status: 'unknown' };
+    }
+  }
+  return {
+    status: 'live',
+    process_start: sha256(`ps-lstart:${String(observed.stdout).trim()}`),
+  };
+}
+
+function directoryInode(directory) {
+  return String(fs.lstatSync(directory).ino);
+}
+
+function exactOwner(value, inodeKey) {
+  const allowed = new Set(['pid', 'process_start', 'nonce', inodeKey]);
+  return Boolean(value)
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.keys(value).length === allowed.size
+    && Object.keys(value).every((key) => allowed.has(key))
+    && Number.isSafeInteger(value.pid)
+    && value.pid > 0
+    && typeof value.process_start === 'string'
+    && /^(?:[0-9]+|[0-9a-f]{64})$/.test(value.process_start)
+    && typeof value.nonce === 'string'
+    && /^[0-9a-f]{32}$/.test(value.nonce)
+    && typeof value[inodeKey] === 'string'
+    && /^[0-9]+$/.test(value[inodeKey]);
+}
+
+function ownerLiveness(owner, expectedInode, inodeKey) {
+  if (!exactOwner(owner, inodeKey) || owner[inodeKey] !== String(expectedInode)) {
+    return 'unknown';
+  }
+  const observed = readProcessStart(owner.pid);
+  if (observed.status === 'unknown') return 'unknown';
+  if (observed.status === 'dead') return 'dead';
+  return observed.process_start === owner.process_start ? 'live' : 'dead';
+}
+
+function currentOwner(inode, inodeKey, nonce = crypto.randomBytes(16).toString('hex')) {
+  const observed = readProcessStart(process.pid);
+  if (observed.status !== 'live') {
+    throw new CliError('cannot establish durable process identity', 3);
+  }
+  return {
+    pid: process.pid,
+    process_start: observed.process_start,
+    nonce,
+    [inodeKey]: String(inode),
+  };
+}
+
+function readLockOwner(lock) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(lock, 'owner.json'), 'utf8'));
+  } catch (error) {
+    throw new CliError('plan-review durable lock owner is unverifiable', 3);
+  }
+}
+
+function publishLock(lock) {
+  const candidate = `${lock}.acquire-${process.pid}-${crypto.randomBytes(8).toString('hex')}`;
+  fs.mkdirSync(candidate, { mode: 0o700 });
+  const inode = directoryInode(candidate);
+  const owner = currentOwner(inode, 'lock_inode');
+  atomicWriteJson(path.join(candidate, 'owner.json'), owner);
+  try {
+    fs.renameSync(candidate, lock);
+  } catch (error) {
+    fs.rmSync(candidate, { recursive: true, force: true });
     throw error;
   }
-  try {
-    return fn();
-  } finally {
-    fs.rmdirSync(lockPath);
-  }
+  return { lock, inode, owner };
 }
 
-function loadState(statePath) {
-  let parsed;
+function acquireLock(directory, name) {
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const lock = path.join(directory, name);
   try {
-    parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    return publishLock(lock);
   } catch (error) {
-    throw new CliError(`plan-review state is unreadable: ${statePath}`, 3);
+    if (!['EEXIST', 'ENOTEMPTY'].includes(error.code)) throw error;
+    let inode;
+    try {
+      inode = directoryInode(lock);
+    } catch (statError) {
+      throw new CliError('plan-review durable lock changed during inspection', 3);
+    }
+    const existing = readLockOwner(lock);
+    const liveness = ownerLiveness(existing, inode, 'lock_inode');
+    if (liveness === 'live') throw new CliError('plan-review durable identity is busy', 3);
+    if (liveness !== 'dead') {
+      throw new CliError('plan-review durable lock owner is unverifiable', 3);
+    }
+    const quarantine = `${lock}.recovering`;
+    try {
+      fs.renameSync(lock, quarantine);
+    } catch (renameError) {
+      throw new CliError('plan-review durable lock changed during recovery', 3);
+    }
+    if (directoryInode(quarantine) !== inode
+        || ownerLiveness(readLockOwner(quarantine), inode, 'lock_inode') !== 'dead') {
+      if (!fs.existsSync(lock)) fs.renameSync(quarantine, lock);
+      throw new CliError('plan-review durable lock failed stale-owner proof', 3);
+    }
+    let replacement;
+    try {
+      replacement = publishLock(lock);
+    } catch (retryError) {
+      if (['EEXIST', 'ENOTEMPTY'].includes(retryError.code)) {
+        throw new CliError('plan-review durable identity is busy', 3);
+      }
+      throw retryError;
+    }
+    fs.rmSync(quarantine, { recursive: true, force: true });
+    return replacement;
   }
-  if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.claims)) {
-    throw new CliError(`plan-review state has an unsupported shape: ${statePath}`, 3);
-  }
-  return parsed;
 }
 
-function freezeRubric(command, rubricFile, sealPath) {
-  const args = command === 'seal'
-    ? [RUBRIC_FREEZE, 'seal', rubricFile, '--out', sealPath]
-    : [RUBRIC_FREEZE, 'check', rubricFile, sealPath, '--json'];
-  const run = spawnSync(process.execPath, args, {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (run.status !== 0) {
-    throw new CliError(
-      command === 'seal'
-        ? `unable to seal plan-review rubric: ${run.stderr.trim()}`
-        : 'frozen plan-review rubric drifted',
-      3,
-    );
+function releaseLock(handle) {
+  let observed;
+  try {
+    observed = readLockOwner(handle.lock);
+  } catch (error) {
+    throw new CliError('plan-review durable lock ownership changed before release', 3);
   }
-  if (command === 'seal') {
-    return JSON.parse(fs.readFileSync(sealPath, 'utf8')).spec_sha256;
+  if (directoryInode(handle.lock) !== handle.inode
+      || !exactOwner(observed, 'lock_inode')
+      || observed.nonce !== handle.owner.nonce
+      || observed.pid !== handle.owner.pid
+      || observed.process_start !== handle.owner.process_start
+      || observed.lock_inode !== handle.owner.lock_inode) {
+    throw new CliError('plan-review durable lock ownership changed before release', 3);
   }
-  return JSON.parse(run.stdout).spec_sha256;
+  const released = `${handle.lock}.released-${handle.owner.nonce}`;
+  fs.renameSync(handle.lock, released);
+  fs.rmSync(released, { recursive: true, force: true });
+}
+
+function exactKeys(value, allowed, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).length !== allowed.size
+      || Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new CliError(`${label} has an invalid shape`);
+  }
+}
+
+function boundedString(value, label, maxLength, pattern = null) {
+  if (typeof value !== 'string' || value.length < 1 || value.length > maxLength
+      || (pattern && !pattern.test(value))) {
+    throw new CliError(`${label} must be a 1-${maxLength} character string`);
+  }
+  return value;
+}
+
+function normalizeTuple(value, label, includeSeatFields) {
+  const keys = new Set([
+    'id', 'runner', 'model', 'effort', 'endpoint', 'role', 'family',
+    'readiness_status', 'qualification_status',
+  ]);
+  if (includeSeatFields) {
+    keys.add('required');
+    keys.add('excluded_families');
+    keys.add('fallbacks');
+  }
+  exactKeys(value, keys, label);
+  boundedString(value.id, `${label}.id`, 64, /^[A-Za-z][A-Za-z0-9_-]*$/);
+  boundedString(value.runner, `${label}.runner`, 64);
+  boundedString(value.model, `${label}.model`, 256);
+  boundedString(value.endpoint, `${label}.endpoint`, 128);
+  boundedString(value.role, `${label}.role`, 128);
+  boundedString(value.family, `${label}.family`, 128);
+  if (!RUNNERS.has(value.runner)
+      || !EFFORTS.has(value.effort)
+      || !['ready', 'unavailable'].includes(value.readiness_status)
+      || !['qualified', 'unqualified'].includes(value.qualification_status)) {
+    throw new CliError(`${label} has an invalid exact tuple`);
+  }
+  const tuple = {
+    id: value.id,
+    runner: value.runner,
+    model: value.model,
+    effort: value.effort,
+    endpoint: value.endpoint,
+    role: value.role,
+    family: value.family,
+    readiness_status: value.readiness_status,
+    qualification_status: value.qualification_status,
+  };
+  if (!includeSeatFields) return tuple;
+  if (typeof value.required !== 'boolean'
+      || !Array.isArray(value.excluded_families)
+      || value.excluded_families.length > 16
+      || !Array.isArray(value.fallbacks)
+      || value.fallbacks.length > 4) {
+    throw new CliError(`${label} has invalid seat policy fields`);
+  }
+  const excludedFamilies = value.excluded_families.map(
+    (family, index) => boundedString(
+      family,
+      `${label}.excluded_families[${index}]`,
+      128,
+    ),
+  );
+  if (new Set(excludedFamilies).size !== excludedFamilies.length) {
+    throw new CliError(`${label}.excluded_families must contain unique values`);
+  }
+  return {
+    ...tuple,
+    required: value.required,
+    excluded_families: excludedFamilies,
+    fallbacks: value.fallbacks.map(
+      (fallback, index) => normalizeTuple(fallback, `${label}.fallbacks[${index}]`, false),
+    ),
+  };
+}
+
+function validateManifest(value) {
+  const keys = new Set([
+    'schema_version', 'artifact_type', 'logical_plan_id',
+    'minimum_distinct_families', 'max_attempts_per_seat', 'seats',
+  ]);
+  exactKeys(value, keys, 'manifest');
+  if (value.schema_version !== 1 || value.artifact_type !== 'plan_review_manifest'
+      || typeof value.logical_plan_id !== 'string'
+      || value.logical_plan_id.length > 256
+      || !/^[A-Za-z0-9._:-]+$/.test(value.logical_plan_id)
+      || !Number.isInteger(value.minimum_distinct_families)
+      || value.minimum_distinct_families < 1
+      || value.minimum_distinct_families > 4
+      || value.max_attempts_per_seat !== 2
+      || !Array.isArray(value.seats)
+      || value.seats.length < 1
+      || value.seats.length > 4) {
+    throw new CliError('manifest identity or limits are invalid');
+  }
+  const seats = value.seats.map(
+    (seat, index) => normalizeTuple(seat, `manifest.seats[${index}]`, true),
+  );
+  const ids = new Set();
+  for (const seat of seats) {
+    if (ids.has(seat.id)) throw new CliError(`duplicate manifest seat id: ${seat.id}`);
+    ids.add(seat.id);
+    for (const fallback of seat.fallbacks) {
+      if (ids.has(fallback.id)) {
+        throw new CliError(`duplicate seat/fallback id: ${fallback.id}`);
+      }
+      ids.add(fallback.id);
+    }
+  }
+  if (new Set(seats.map((seat) => seat.family)).size < value.minimum_distinct_families) {
+    throw new CliError('manifest primary panel violates minimum distinct-family count');
+  }
+  return {
+    schema_version: 1,
+    artifact_type: 'plan_review_manifest',
+    logical_plan_id: value.logical_plan_id,
+    minimum_distinct_families: value.minimum_distinct_families,
+    max_attempts_per_seat: 2,
+    seats,
+  };
+}
+
+function legacyManifest(opts) {
+  function tuple(id, runner, model, effort, endpoint, role) {
+    if (!RUNNERS.has(runner) || !EFFORTS.has(effort)) {
+      throw new CliError(`legacy ${id} tuple is invalid`);
+    }
+    return {
+      id,
+      runner,
+      model,
+      effort,
+      endpoint: endpoint || 'default',
+      role,
+      family: `legacy-${model}`,
+      readiness_status: 'ready',
+      qualification_status: 'qualified',
+      required: true,
+      excluded_families: [],
+      fallbacks: [],
+    };
+  }
+  const seats = [
+    tuple('chair', opts.runner, opts.model, opts.effort, opts.endpoint, 'chair'),
+  ];
+  const hasDeep = [opts.deepRunner, opts.deepModel, opts.deepEffort, opts.deepEndpoint]
+    .some((value) => value !== undefined);
+  if (hasDeep) {
+    if (!opts.deepRunner || !opts.deepModel || !opts.deepEffort) {
+      throw new CliError('legacy deep seat requires runner, model, and effort');
+    }
+    seats.push(tuple(
+      'deep',
+      opts.deepRunner,
+      opts.deepModel,
+      opts.deepEffort,
+      opts.deepEndpoint,
+      'deep',
+    ));
+  }
+  return {
+    schema_version: 1,
+    artifact_type: 'plan_review_manifest',
+    logical_plan_id: opts.logicalPlanId || `legacy-ticket:${opts.ticket}`,
+    minimum_distinct_families: 1,
+    max_attempts_per_seat: 2,
+    seats,
+  };
+}
+
+function loadManifest(opts) {
+  if (!opts.manifestFile) {
+    const manifest = legacyManifest(opts);
+    return {
+      manifest,
+      bytes: Buffer.from(`${JSON.stringify(canonical(manifest))}\n`),
+      legacy: true,
+    };
+  }
+  let parsed;
+  const bytes = fs.readFileSync(opts.manifestFile);
+  try {
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch (error) {
+    throw new CliError(`manifest is not valid JSON: ${error.message}`);
+  }
+  return { manifest: validateManifest(parsed), bytes, legacy: false };
 }
 
 function extractRubricIds(bytes) {
-  const text = bytes.toString('utf8');
   const ids = new Set();
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of bytes.toString('utf8').split(/\r?\n/)) {
     const match = line.match(
       /^\s*(?:(?:#{1,6})\s*|[-*]\s*)?\[?([A-Za-z][A-Za-z0-9_-]*\d+)\]?\s*(?::|[.)-]\s|[—–]\s)/,
     );
     if (match) ids.add(match[1]);
   }
-  if (ids.size === 0) {
-    throw new CliError(
-      'rubric must contain stable IDs such as "- R1: scope" or "## R2 — safety"',
-    );
-  }
+  if (ids.size === 0) throw new CliError('rubric contains no stable IDs');
   return ids;
 }
 
-function buildPrompt(opts, planBytes, rubricBytes, rubricIds) {
-  const nonce = crypto.randomBytes(12).toString('hex');
-  return `You are the ${opts.seat || 'chair'} plan-readiness reviewer, not a code reviewer and not a dispatcher.
-Review only against the frozen rubric IDs: ${[...rubricIds].join(', ')}.
-Current implementation absence is not a defect in a future plan.
-Do not request, schedule, or suggest another review generation. The controller owns termination.
-
-Return EXACTLY one JSON object and no markdown:
-{
-  "verdict": "READY|CONDITIONAL|STOP",
-  "findings": [
-    {
-      "rubric_id": "R1",
-      "class": "decision-now|implementation-spike|future",
-      "severity": "blocking|non-blocking",
-      "evidence": "specific plan section or premise",
-      "repair": "smallest bounded repair",
-      "blocks_next_slice_or_immediate_integrity": true,
-      "cannot_defer_to_spike": true
-    }
-  ]
+function sealSpec(command, specFile, sealPath) {
+  const args = command === 'seal'
+    ? [RUBRIC_FREEZE, 'seal', specFile, '--out', sealPath]
+    : [RUBRIC_FREEZE, 'check', specFile, sealPath, '--json'];
+  const run = spawnSync(process.execPath, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (run.status !== 0) {
+    throw new CliError(command === 'seal' ? 'unable to seal frozen input' : 'frozen input drifted', 3);
+  }
+  return command === 'seal'
+    ? JSON.parse(fs.readFileSync(sealPath, 'utf8')).spec_sha256
+    : JSON.parse(run.stdout).spec_sha256;
 }
 
-A finding can block only when it maps to a frozen rubric ID, is class decision-now,
-would block the next vertical slice (or cause immediate data/authorization damage),
-and cannot safely defer to an implementation spike. Otherwise mark it non-blocking
-and classify it implementation-spike or future.
+function withLock(directory, name, fn) {
+  const handle = acquireLock(directory, name);
+  try {
+    return fn();
+  } finally {
+    releaseLock(handle);
+  }
+}
+
+function loadState(statePath) {
+  let state;
+  try {
+    state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  } catch (error) {
+    throw new CliError('plan-review state is unreadable', 3);
+  }
+  if (!state || state.version !== 2 || !Array.isArray(state.claims)) {
+    throw new CliError('plan-review state has unsupported shape', 3);
+  }
+  return state;
+}
+
+function logicalBinding(opts, repoIdentity, manifest, sessionKey) {
+  const logicalDir = path.join(opts.stateDir, 'logical');
+  const logicalKey = sha256(`${repoIdentity}\0${manifest.logical_plan_id}`);
+  const indexPath = path.join(logicalDir, `${logicalKey}.json`);
+  return {
+    logicalDir,
+    logicalKey,
+    indexPath,
+    lockName: `${logicalKey}.lock`,
+    value: {
+      schema_version: 1,
+      repo_identity: repoIdentity,
+      logical_plan_id: manifest.logical_plan_id,
+      ticket: opts.ticket,
+      session_key: sessionKey,
+    },
+  };
+}
+
+function validateBinding(value, label) {
+  const keys = new Set([
+    'schema_version', 'repo_identity', 'logical_plan_id', 'ticket', 'session_key',
+  ]);
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).length !== keys.size
+      || Object.keys(value).some((key) => !keys.has(key))
+      || value.schema_version !== 1
+      || typeof value.repo_identity !== 'string'
+      || typeof value.logical_plan_id !== 'string'
+      || typeof value.ticket !== 'string'
+      || typeof value.session_key !== 'string'
+      || !/^[0-9a-f]{64}$/.test(value.session_key)
+      || value.session_key !== sha256(`${value.repo_identity}\0${value.ticket}`)) {
+    throw new CliError(`${label} is unreadable`, 3);
+  }
+  return value;
+}
+
+function readBinding(filePath, label) {
+  try {
+    return validateBinding(JSON.parse(fs.readFileSync(filePath, 'utf8')), label);
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    throw new CliError(`${label} is unreadable`, 3);
+  }
+}
+
+function bindingFromState(statePath) {
+  try {
+    const state = loadState(statePath);
+    return validateBinding({
+      schema_version: 1,
+      repo_identity: state.repo_identity,
+      logical_plan_id: state.logical_plan_id,
+      ticket: state.ticket,
+      session_key: state.session_key,
+    }, 'plan-review orphan identity');
+  } catch (error) {
+    return null;
+  }
+}
+
+function findLogicalOrphan(opts, repoIdentity, logicalPlanId) {
+  if (!fs.existsSync(opts.stateDir)) return null;
+  const matches = [];
+  for (const entry of fs.readdirSync(opts.stateDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === 'logical' || !/^[0-9a-f]{64}$/.test(entry.name)) {
+      continue;
+    }
+    const directory = path.join(opts.stateDir, entry.name);
+    const identityPath = path.join(directory, 'session-identity.json');
+    const statePath = path.join(directory, 'state.json');
+    let candidate = null;
+    if (fs.existsSync(identityPath)) {
+      try {
+        candidate = readBinding(identityPath, 'plan-review orphan identity');
+      } catch (error) {
+        candidate = fs.existsSync(statePath) ? bindingFromState(statePath) : null;
+      }
+    } else if (fs.existsSync(statePath)) {
+      candidate = bindingFromState(statePath);
+    }
+    if (candidate
+        && candidate.session_key === entry.name
+        && candidate.repo_identity === repoIdentity
+        && candidate.logical_plan_id === logicalPlanId) {
+      matches.push(candidate);
+    }
+  }
+  if (matches.length > 1
+      && new Set(matches.map((item) => item.session_key)).size > 1) {
+    throw new CliError('logical plan has conflicting orphan session identities', 3);
+  }
+  return matches[0] || null;
+}
+
+function assertSameBinding(actual, expected) {
+  if (actual.repo_identity !== expected.repo_identity
+      || actual.logical_plan_id !== expected.logical_plan_id
+      || actual.ticket !== expected.ticket
+      || actual.session_key !== expected.session_key) {
+    throw new CliError(
+      `logical plan already bound to canonical ticket ${actual.ticket} (${actual.session_key})`,
+      3,
+    );
+  }
+}
+
+function prepareLogicalBinding(binding, sessionDir) {
+  let canonicalBinding = null;
+  if (fs.existsSync(binding.indexPath)) {
+    canonicalBinding = readBinding(binding.indexPath, 'logical plan index');
+  } else {
+    canonicalBinding = findLogicalOrphan(
+      { stateDir: path.dirname(binding.logicalDir) },
+      binding.value.repo_identity,
+      binding.value.logical_plan_id,
+    );
+    if (canonicalBinding) {
+      atomicWriteJson(binding.indexPath, canonicalBinding);
+    }
+  }
+  if (canonicalBinding) {
+    assertSameBinding(canonicalBinding, binding.value);
+  }
+
+  fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+  const identityPath = path.join(sessionDir, 'session-identity.json');
+  if (fs.existsSync(identityPath)) {
+    assertSameBinding(readBinding(identityPath, 'plan-review session identity'), binding.value);
+  } else {
+    const statePath = path.join(sessionDir, 'state.json');
+    if (fs.existsSync(statePath)) {
+      const recovered = bindingFromState(statePath);
+      if (!recovered) throw new CliError('plan-review orphan state identity is unreadable', 3);
+      assertSameBinding(recovered, binding.value);
+    }
+    atomicWriteJson(identityPath, binding.value);
+  }
+}
+
+function commitLogicalBinding(binding) {
+  if (fs.existsSync(binding.indexPath)) {
+    assertSameBinding(readBinding(binding.indexPath, 'logical plan index'), binding.value);
+    return;
+  }
+  atomicWriteJson(binding.indexPath, binding.value);
+}
+
+function buildPrompt(seat, planBytes, rubricBytes, rubricIds) {
+  const nonce = crypto.randomBytes(12).toString('hex');
+  return `You are the ${seat.role} seat (${seat.id}) in one frozen plan-review generation.
+Review only against frozen rubric IDs: ${[...rubricIds].join(', ')}.
+Do not schedule another review generation. The controller owns attempts and termination.
+
+Return one JSON object with only verdict and findings. Each finding uses:
+rubric_id, class, severity, affected_surface, claim, evidence, evidence_reference,
+repair, blocks_next_slice_or_immediate_integrity, cannot_defer_to_spike.
 
 <FROZEN_RUBRIC_${nonce}>
 ${rubricBytes.toString('utf8')}
 </FROZEN_RUBRIC_${nonce}>
-
 <PLAN_UNDER_REVIEW_${nonce}>
 ${planBytes.toString('utf8')}
 </PLAN_UNDER_REVIEW_${nonce}>
 `;
 }
 
-function normalizeRawModelOutput(raw) {
-  return raw
-    .replace(/\r/g, '')
-    .split('\n')
-    .filter((line) => !/^Script (started|done) on /.test(line))
-    .join('\n')
-    .trim();
+function testSequence() {
+  const raw = process.env.AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE;
+  if (!raw) return null;
+  if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS !== '1') {
+    throw new CliError('response sequence requires explicit test-seam opt-in', 4);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new CliError('response sequence is invalid JSON', 4);
+  }
 }
 
-function dispatchReviewer(opts, prompt, responseEnv) {
-  const seam = process.env[responseEnv];
+function seamEntry(sequence, seatId, attempt, legacyEnv) {
+  if (sequence && Array.isArray(sequence[seatId])) return sequence[seatId][attempt - 1];
+  if (attempt === 1 && process.env[legacyEnv]) return process.env[legacyEnv];
+  if (attempt === 2 && process.env[legacyEnv]) return process.env[legacyEnv];
+  return null;
+}
+
+function sleepMilliseconds(milliseconds) {
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < 0 || milliseconds > 10000) {
+    throw new CliError('response seam delay_ms must be an integer from 0 to 10000', 4);
+  }
+  if (milliseconds > 0) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  }
+}
+
+function dispatchSeat(target, prompt, attempt, sequence, legacyEnv, sequenceAttempt = attempt) {
+  const seam = seamEntry(sequence, target.id, sequenceAttempt, legacyEnv);
   if (seam) {
     if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS !== '1') {
-      throw new CliError(
-        `${responseEnv} requires explicit test-seam opt-in`,
-        4,
-      );
+      throw new CliError('response file requires explicit test-seam opt-in', 4);
     }
-    return {
-      raw: fs.readFileSync(
-        canonicalReadableFile(seam, responseEnv),
-        'utf8',
-      ),
-      transport: {
-        status: 'test-seam',
-        runner: opts.runner,
-        model: opts.model,
-      },
+    const descriptor = typeof seam === 'string' ? { file: seam } : seam;
+    if (descriptor.delay_ms !== undefined) sleepMilliseconds(descriptor.delay_ms);
+    const rawPath = canonicalFile(descriptor.file, 'response seam');
+    const raw = fs.readFileSync(rawPath);
+    const classification = descriptor.classification || 'success';
+    const child = {
+      status: classification === 'success' ? 0 : 1,
+      signal: classification === 'interrupted' ? 'SIGTERM' : null,
+      error: classification === 'unavailable' ? { code: 'ENOENT' } : null,
+      stdout: raw,
+      stderr: '',
     };
+    const envelope = createRunnerTransportEnvelope({
+      runner: target.runner,
+      model: target.model,
+      operation: 'plan-review',
+      argv: ['test-seam', target.id, String(attempt)],
+      cwd: process.cwd(),
+      child,
+      outcomeHints: {
+        timedOut: classification === 'timeout',
+        quota: classification === 'quota',
+        unavailable: classification === 'unavailable',
+      },
+      privateRawReference: {
+        kind: 'private-file',
+        locator: rawPath,
+        digest: sha256(raw),
+      },
+    });
+    return { envelope, raw };
   }
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-plan-review-'), {
-    encoding: 'utf8',
-  });
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-plan-review-'));
   fs.chmodSync(tempDir, 0o700);
   const promptPath = path.join(tempDir, 'prompt.txt');
   fs.writeFileSync(promptPath, prompt, { mode: 0o600 });
+  const args = [
+    '--runner', target.runner,
+    '--model', target.model,
+    '--prompt-file', promptPath,
+    '--effort', target.effort,
+    '--timeout', `${target.timeoutSeconds}s`,
+  ];
+  if (target.endpoint !== 'default') args.push('--endpoint', target.endpoint);
   try {
-    const args = [
-      '--runner', opts.runner,
-      '--model', opts.model,
-      '--prompt-file', promptPath,
-      '--effort', opts.effort,
-      '--timeout', `${opts.timeoutSeconds}s`,
-    ];
-    if (opts.endpoint) args.push('--endpoint', opts.endpoint);
     const run = spawnSync(DISPATCH_AUTHOR, args, {
       cwd: tempDir,
-      env: {
-        ...process.env,
-        DISPATCH_QUIET: '1',
-        DISPATCH_DETACH: '0',
-      },
+      env: { ...process.env, DISPATCH_QUIET: '1', DISPATCH_DETACH: '0' },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 16 * 1024 * 1024,
     });
-    let envelope;
+    let authorEnvelope = null;
     try {
-      envelope = JSON.parse(run.stdout.trim());
+      authorEnvelope = JSON.parse(String(run.stdout || '').trim());
     } catch (error) {
-      throw new CliError(
-        `plan reviewer transport returned an invalid envelope (exit ${run.status})`,
-        4,
-      );
+      // Mechanical failure remains in the shared transport envelope.
     }
-    if (run.status !== 0 || envelope.status !== 'authored' || !envelope.raw_log) {
-      throw new CliError(
-        `plan reviewer transport failed: ${envelope.error || envelope.status || `exit ${run.status}`}`,
-        4,
-      );
-    }
-    if (envelope.runner !== opts.runner || envelope.model !== opts.model) {
-      throw new CliError(
-        `plan reviewer transport identity mismatch: requested ${opts.runner}/${opts.model}, got ${envelope.runner}/${envelope.model}`,
-        4,
-      );
-    }
-    return {
-      raw: fs.readFileSync(envelope.raw_log, 'utf8'),
-      transport: {
-        status: envelope.status,
-        runner: envelope.runner,
-        model: envelope.model,
-        raw_log: envelope.raw_log,
+    const rawPath = authorEnvelope && authorEnvelope.raw_log
+      ? canonicalFile(authorEnvelope.raw_log, 'dispatch-author raw_log')
+      : path.join(tempDir, 'missing.raw');
+    const raw = fs.existsSync(rawPath) ? fs.readFileSync(rawPath) : Buffer.alloc(0);
+    const success = run.status === 0
+      && authorEnvelope
+      && authorEnvelope.status === 'authored'
+      && authorEnvelope.runner === target.runner
+      && authorEnvelope.model === target.model
+      && raw.length > 0;
+    const envelope = createRunnerTransportEnvelope({
+      runner: target.runner,
+      model: target.model,
+      operation: 'plan-review',
+      argv: args,
+      cwd: tempDir,
+      child: {
+        status: success ? 0 : (Number.isInteger(run.status) ? run.status : 1),
+        signal: run.signal || null,
+        error: run.error || null,
+        stdout: raw,
+        stderr: run.stderr || '',
       },
-    };
+      privateRawReference: raw.length > 0 ? {
+        kind: 'private-file',
+        locator: rawPath,
+        digest: sha256(raw),
+      } : null,
+    });
+    return { envelope, raw };
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(promptPath, { force: true });
+    try {
+      fs.rmdirSync(tempDir);
+    } catch (error) {
+      // A retained raw artifact can keep the private directory alive.
+    }
   }
 }
 
-function validateReviewerResponse(raw, rubricIds) {
-  const normalized = normalizeRawModelOutput(raw);
-  let response;
-  try {
-    response = JSON.parse(normalized);
-  } catch (error) {
-    throw new CliError('plan reviewer response must be one strict JSON object', 4);
-  }
-  if (!response || typeof response !== 'object' || Array.isArray(response)) {
-    throw new CliError('plan reviewer response must be a JSON object', 4);
-  }
-  const unknownTopKeys = Object.keys(response).filter(
-    (key) => !['verdict', 'findings'].includes(key),
-  );
-  if (unknownTopKeys.length) {
-    throw new CliError(
-      `plan reviewer response has unsupported field(s): ${unknownTopKeys.join(', ')}`,
-      4,
-    );
-  }
-  if (!['READY', 'CONDITIONAL', 'STOP'].includes(response.verdict)) {
-    throw new CliError('plan reviewer verdict must be READY|CONDITIONAL|STOP', 4);
-  }
-  if (!Array.isArray(response.findings)) {
-    throw new CliError('plan reviewer findings must be an array', 4);
-  }
+function fallbackEligible(manifest, seat, fallback, selectedTargets) {
+  if (fallback.readiness_status !== 'ready'
+      || fallback.qualification_status !== 'qualified'
+      || seat.excluded_families.includes(fallback.family)) return false;
+  const families = new Set(manifest.seats
+    .map((candidate) => {
+      if (candidate.id === seat.id) return fallback.family;
+      const selected = selectedTargets.has(candidate.id)
+        ? selectedTargets.get(candidate.id)
+        : candidate;
+      return selected ? selected.family : null;
+    })
+    .filter(Boolean));
+  return families.size >= manifest.minimum_distinct_families;
+}
 
-  const findings = [];
-  const scopeExpansions = [];
-  for (let index = 0; index < response.findings.length; index += 1) {
-    const rawFinding = response.findings[index];
-    if (!rawFinding || typeof rawFinding !== 'object' || Array.isArray(rawFinding)) {
-      throw new CliError(`finding ${index + 1} must be an object`, 4);
+function reviewSeat({
+  manifest,
+  seat,
+  planBytes,
+  rubricBytes,
+  rubricIds,
+  timeoutSeconds,
+  sequence,
+  selectedTargets,
+  deadlineMs,
+  clockNow,
+}) {
+  const attempts = [];
+  let selected = seat;
+  let substitution = null;
+  for (let attempt = 1; attempt <= manifest.max_attempts_per_seat; attempt += 1) {
+    const remainingSeconds = Math.floor((deadlineMs - clockNow()) / 1000);
+    if (remainingSeconds < 1) {
+      return {
+        seat_id: seat.id,
+        target_id: selected.id,
+        runner: selected.runner,
+        model: selected.model,
+        family: selected.family,
+        verdict: null,
+        findings: [],
+        attempts,
+        substitution,
+        exhausted: true,
+        deadline_exhausted: true,
+      };
     }
-    const allowedFindingKeys = new Set([
-      'rubric_id',
-      'class',
-      'severity',
-      'evidence',
-      'repair',
-      'blocks_next_slice_or_immediate_integrity',
-      'cannot_defer_to_spike',
-    ]);
-    const unknownFindingKeys = Object.keys(rawFinding).filter(
-      (key) => !allowedFindingKeys.has(key),
-    );
-    if (unknownFindingKeys.length) {
-      throw new CliError(
-        `finding ${index + 1} has unsupported field(s): ${unknownFindingKeys.join(', ')}`,
-        4,
+    if (attempt === 1 && (seat.readiness_status !== 'ready'
+        || seat.qualification_status !== 'qualified')) {
+      selected = seat.fallbacks.find(
+        (candidate) => fallbackEligible(manifest, seat, candidate, selectedTargets),
       );
-    }
-    for (const key of ['severity', 'evidence', 'repair']) {
-      if (typeof rawFinding[key] !== 'string' || rawFinding[key].trim() === '') {
-        throw new CliError(`finding ${index + 1} has invalid ${key}`, 4);
+      if (!selected) break;
+      selectedTargets.set(seat.id, selected);
+      substitution = {
+        seat_id: seat.id,
+        from_id: seat.id,
+        to_id: selected.id,
+        attempt,
+        reason: 'primary_unavailable',
+      };
+    } else if (attempt === 2) {
+      const fallback = seat.fallbacks.find(
+        (candidate) => fallbackEligible(manifest, seat, candidate, selectedTargets),
+      );
+      if (fallback) {
+        selected = fallback;
+        selectedTargets.set(seat.id, selected);
+        substitution = {
+          seat_id: seat.id,
+          from_id: seat.id,
+          to_id: fallback.id,
+          attempt,
+          reason: 'retry_substitution',
+        };
       }
     }
-    if (!SEVERITIES.has(rawFinding.severity)) {
-      throw new CliError(`finding ${index + 1} severity must be blocking|non-blocking`, 4);
-    }
-
-    const validRubric = typeof rawFinding.rubric_id === 'string'
-      && rubricIds.has(rawFinding.rubric_id);
-    const validClass = typeof rawFinding.class === 'string'
-      && CLASSES.has(rawFinding.class);
-    const scopeExpansionReasons = [];
-    if (!validRubric) scopeExpansionReasons.push('missing_or_unfrozen_rubric_id');
-    if (!validClass) scopeExpansionReasons.push('missing_or_invalid_class');
-
-    const admittedBlocker = scopeExpansionReasons.length === 0
-      && rawFinding.severity === 'blocking'
-      && rawFinding.class === 'decision-now'
-      && rawFinding.blocks_next_slice_or_immediate_integrity === true
-      && rawFinding.cannot_defer_to_spike === true;
-    const finding = {
-      rubric_id: typeof rawFinding.rubric_id === 'string' ? rawFinding.rubric_id : null,
-      class: typeof rawFinding.class === 'string' ? rawFinding.class : null,
-      severity: rawFinding.severity,
-      evidence: rawFinding.evidence,
-      repair: rawFinding.repair,
-      blocks_next_slice_or_immediate_integrity:
-        rawFinding.blocks_next_slice_or_immediate_integrity === true,
-      cannot_defer_to_spike: rawFinding.cannot_defer_to_spike === true,
-      admission: scopeExpansionReasons.length
-        ? 'scope-expansion'
-        : admittedBlocker
-          ? 'blocking'
-          : 'non-blocking',
-      admitted_blocker: admittedBlocker,
+    const bounded = {
+      ...selected,
+      timeoutSeconds: Math.min(timeoutSeconds, remainingSeconds),
     };
-    if (scopeExpansionReasons.length) {
-      finding.admission_reasons = scopeExpansionReasons;
-      scopeExpansions.push(index);
+    const legacyEnv = seat.id === 'chair'
+      ? 'AUTOPILOT_PLAN_REVIEW_RESPONSE_FILE'
+      : seat.id === 'deep'
+        ? 'AUTOPILOT_PLAN_REVIEW_DEEP_RESPONSE_FILE'
+        : `AUTOPILOT_PLAN_REVIEW_${seat.id.toUpperCase()}_RESPONSE_FILE`;
+    const dispatched = dispatchSeat(
+      bounded,
+      buildPrompt(bounded, planBytes, rubricBytes, rubricIds),
+      attempt,
+      sequence,
+      legacyEnv,
+      selected.id === seat.id ? attempt : 1,
+    );
+    const normalized = normalizePlanReviewPayload({
+      envelope: dispatched.envelope,
+      raw: dispatched.raw,
+      expected: bounded,
+    });
+    attempts.push({
+      seat_id: seat.id,
+      target_id: selected.id,
+      attempt,
+      transport_envelope: dispatched.envelope,
+      transport_status: normalized.transport_status,
+      parser_status: normalized.parser_status,
+      semantic_status: normalized.semantic_status,
+    });
+    if (normalized.payload) {
+      return {
+        seat_id: seat.id,
+        target_id: selected.id,
+        runner: selected.runner,
+        model: selected.model,
+        family: selected.family,
+        verdict: normalized.payload.verdict,
+        findings: normalized.payload.findings,
+        attempts,
+        substitution,
+      };
     }
-    findings.push(finding);
   }
   return {
-    reviewerVerdict: response.verdict,
-    findings,
-    scopeExpansions,
+    seat_id: seat.id,
+    target_id: selected ? selected.id : seat.id,
+    runner: selected ? selected.runner : seat.runner,
+    model: selected ? selected.model : seat.model,
+    family: selected ? selected.family : seat.family,
+    verdict: null,
+    findings: [],
+    attempts,
+    substitution,
+    exhausted: true,
   };
 }
 
@@ -639,15 +1099,130 @@ function artifactPath(sessionDir, generation) {
   return path.join(sessionDir, `generation-${String(generation).padStart(2, '0')}.json`);
 }
 
-function terminalPolicyArtifact(base, reason, details = {}) {
+function greatestCommonDivisor(left, right) {
+  let a = left;
+  let b = right;
+  while (b !== 0) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+  return a;
+}
+
+function growthRatioValue(planBytes, baselineBytes) {
+  if (!Number.isSafeInteger(planBytes) || planBytes < 1
+      || !Number.isSafeInteger(baselineBytes) || baselineBytes < 1) {
+    throw new CliError('plan growth ratio requires non-empty safe byte counts', 3);
+  }
+  const divisor = greatestCommonDivisor(planBytes, baselineBytes);
   return {
-    ...base,
+    numerator: planBytes / divisor,
+    denominator: baselineBytes / divisor,
+  };
+}
+
+function publicArtifact(base) {
+  return base;
+}
+
+function policyArtifact(context, reason, details = {}) {
+  return {
+    schema_version: 1,
+    artifact_type: 'plan_review_artifact',
+    ticket: context.opts.ticket,
+    logical_plan_id: context.manifest.logical_plan_id,
+    session_id: context.opts.sessionId,
+    session_key: context.sessionKey,
+    generation: context.opts.generation,
     verdict: 'STOP',
+    semantic_verdict: null,
     terminal: true,
     policy_reason: reason,
+    rubric_sha256: context.rubricSha,
+    manifest_sha256: context.manifestSha,
+    plan_sha256: context.planSha,
+    growth_ratio: context.growthRatioValue || { numerator: 1, denominator: 1 },
+    growth_warning: Boolean(context.growthWarning),
+    transport_status: 'policy_stop',
+    attempts: [],
+    substitutions: [],
+    reviewer_verdicts: [],
     findings: [],
+    backlog_candidates: [],
+    accepted_blocker_count: 0,
+    repair_authorized: false,
+    next_generation: null,
+    reviewed_at: context.now.toISOString(),
     ...details,
   };
+}
+
+function artifactExitCode(artifact) {
+  if (artifact.transport_status === 'transport_exhausted') return 4;
+  return artifact.verdict === 'STOP' ? 3 : 0;
+}
+
+function finish(payload, code) {
+  process.stdout.write(`${JSON.stringify(publicArtifact(payload), null, 2)}\n`);
+  process.exit(code);
+}
+
+function createClock(nowOverride) {
+  const actualStartedAt = Date.now();
+  const logicalStartedAt = nowOverride === undefined
+    ? actualStartedAt
+    : Date.parse(nowOverride);
+  return {
+    now: () => logicalStartedAt + (Date.now() - actualStartedAt),
+  };
+}
+
+function claimOwner(sessionDir, nonce) {
+  return currentOwner(directoryInode(sessionDir), 'session_inode', nonce);
+}
+
+function claimOwnerLiveness(claim, sessionDir) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)
+      || !exactOwner(claim.owner, 'session_inode')
+      || claim.owner.nonce !== claim.claim_id) {
+    return 'unknown';
+  }
+  return ownerLiveness(claim.owner, directoryInode(sessionDir), 'session_inode');
+}
+
+function crashAt(testPoint) {
+  const requested = process.env.AUTOPILOT_TEST_PLAN_REVIEW_CRASH_AT;
+  if (requested !== testPoint) return;
+  if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS !== '1') {
+    throw new CliError('crash point requires explicit test-seam opt-in', 4);
+  }
+  process.exit(86);
+}
+
+/**
+ * Controlled post-claim failures must not leave an in-flight claim that the next
+ * invocation would misclassify as orphaned transport exhaustion. Unexpected
+ * crashes intentionally leave the claim for dead-owner recovery.
+ */
+function abortInFlightClaim(sessionDir, statePath, claimId, reason) {
+  withLock(sessionDir, '.claim.lock', () => {
+    if (!fs.existsSync(statePath)) return;
+    const state = loadState(statePath);
+    if (!state || !state.active_claim || state.active_claim.claim_id !== claimId) return;
+    state.active_claim = null;
+    const claim = state.claims.find((item) => item.claim_id === claimId);
+    if (claim && claim.status === 'in-flight') {
+      claim.status = 'aborted';
+      claim.abort_reason = String(reason || 'controlled_post_claim_failure').slice(0, 512);
+    }
+    atomicWriteJson(statePath, state);
+  });
+}
+
+function exitControlledError(error) {
+  process.stderr.write(`dispatch-plan-review: ${error.message}\n`);
+  process.exit(error instanceof CliError ? error.exitCode : 2);
 }
 
 function main() {
@@ -661,43 +1236,62 @@ function main() {
     }
     throw error;
   }
-
+  const loaded = loadManifest(opts);
+  const manifest = loaded.manifest;
+  const manifestSha = sha256(loaded.bytes);
   const repoIdentity = canonicalRepoIdentity(opts.repoRoot);
   const sessionKey = sha256(`${repoIdentity}\0${opts.ticket}`);
   const sessionDir = path.join(opts.stateDir, sessionKey);
   const statePath = path.join(sessionDir, 'state.json');
-  const sealPath = path.join(sessionDir, 'rubric-seal.json');
+  const rubricSeal = path.join(sessionDir, 'rubric-seal.json');
+  const manifestCopy = path.join(sessionDir, 'manifest.json');
+  const manifestSeal = path.join(sessionDir, 'manifest-seal.json');
   const planBytes = fs.readFileSync(opts.planFile);
+  if (planBytes.length === 0 || planBytes.toString('utf8').trim() === '') {
+    throw new CliError('plan file must contain non-whitespace content');
+  }
   const rubricBytes = fs.readFileSync(opts.rubricFile);
-  if (planBytes.length === 0) throw new CliError('plan file must not be empty');
-  if (rubricBytes.length === 0) throw new CliError('rubric file must not be empty');
-  const rubricIds = extractRubricIds(rubricBytes);
   const planSha = sha256(planBytes);
   const rubricSha = sha256(rubricBytes);
-  const now = nowDate(opts);
-  const claimId = crypto.randomUUID();
+  const rubricIds = extractRubricIds(rubricBytes);
+  const clock = createClock(opts.now);
+  const now = new Date(clock.now());
+  const claimId = crypto.randomBytes(16).toString('hex');
+  const binding = logicalBinding(opts, repoIdentity, manifest, sessionKey);
   let state;
-  let growthRatio;
-  let growthWarning;
-  let earlyArtifact = null;
-  let earlyExitCode = null;
+  let growthRatio = 1;
+  let growthWarning = false;
+  const context = {
+    opts,
+    manifest,
+    sessionKey,
+    manifestSha,
+    rubricSha,
+    planSha,
+    now,
+    growthRatioValue: { numerator: 1, denominator: 1 },
+    growthWarning,
+  };
 
-  try {
-    withLock(sessionDir, () => {
+  let early = null;
+  withLock(binding.logicalDir, binding.lockName, () => {
+    prepareLogicalBinding(binding, sessionDir);
+    withLock(sessionDir, '.claim.lock', () => {
       if (!fs.existsSync(statePath)) {
-        if (opts.generation !== 1) {
-          throw new CliError('new plan-review session must acquire generation 1', 3);
-        }
-        const sealedSha = freezeRubric('seal', opts.rubricFile, sealPath);
-        if (sealedSha !== rubricSha) {
-          throw new CliError('rubric seal hash mismatch', 3);
+        if (opts.generation !== 1) throw new CliError('new session must acquire generation 1', 3);
+        fs.writeFileSync(manifestCopy, loaded.bytes, { mode: 0o600 });
+        if (sealSpec('seal', opts.rubricFile, rubricSeal) !== rubricSha
+            || sealSpec('seal', manifestCopy, manifestSeal) !== manifestSha) {
+          throw new CliError('frozen rubric/manifest seal mismatch', 3);
         }
         state = {
-          version: 1,
+          version: 2,
           session_key: sessionKey,
           repo_identity: repoIdentity,
+          logical_plan_id: manifest.logical_plan_id,
           ticket: opts.ticket,
           rubric_sha256: rubricSha,
+          manifest_sha256: manifestSha,
           baseline_plan_sha256: planSha,
           baseline_plan_bytes: planBytes.length,
           started_at: now.toISOString(),
@@ -710,300 +1304,399 @@ function main() {
           active_claim: null,
           terminal: false,
           terminal_verdict: null,
+          repair_authorized: false,
           claims: [],
           artifacts: [],
         };
         atomicWriteJson(statePath, state);
+        crashAt('after_session_init');
       } else {
         state = loadState(statePath);
       }
-
-      if (state.repo_identity !== repoIdentity || state.ticket !== opts.ticket) {
-        throw new CliError('durable plan-review state identity mismatch', 3);
+      if (state.repo_identity !== repoIdentity
+          || state.session_key !== sessionKey
+          || state.ticket !== opts.ticket
+          || state.logical_plan_id !== manifest.logical_plan_id
+          || state.rubric_sha256 !== rubricSha
+          || state.manifest_sha256 !== manifestSha
+          || !Number.isSafeInteger(state.baseline_plan_bytes)
+          || state.baseline_plan_bytes < 1) {
+        throw new CliError('durable identity or frozen rubric/manifest drifted', 3);
       }
-      if (
-        state.max_generations !== opts.maxGenerations
-        || state.max_wall_seconds !== opts.maxWallSeconds
-        || state.growth_warn_ratio !== opts.growthWarnRatio
-        || state.growth_stop_ratio !== opts.growthStopRatio
-      ) {
-        throw new CliError('plan-review budget differs from the frozen session budget', 3);
+      if (sealSpec('check', opts.rubricFile, rubricSeal) !== rubricSha
+          || sealSpec('check', manifestCopy, manifestSeal) !== manifestSha) {
+        throw new CliError('frozen rubric/manifest drifted', 3);
       }
+      commitLogicalBinding(binding);
       if (state.terminal) {
-        throw new CliError(
-          `plan-review session already terminal: ${state.terminal_verdict || 'STOP'}`,
-          3,
-        );
+        throw new CliError(`plan-review session already terminal: ${state.terminal_verdict}`, 3);
       }
-      if (state.active_claim) {
-        throw new CliError(
-          `plan-review generation ${state.active_claim.generation} is already claimed`,
-          3,
-        );
+      if (!Number.isInteger(state.max_generations)
+          || state.max_generations < 1
+          || state.max_generations > DEFAULTS.maxGenerations) {
+        throw new CliError('durable generation ceiling is invalid', 3);
       }
-      if (opts.generation > state.max_generations) {
-        throw new CliError(
-          `generation ${opts.generation} exceeds frozen cap ${state.max_generations}`,
-          3,
-        );
+      if (opts.maxGenerations > state.max_generations) {
+        throw new CliError('max-generations cannot broaden the frozen session ceiling', 3);
       }
-      if (opts.generation !== state.next_generation) {
-        throw new CliError(
-          `generation ${opts.generation} cannot acquire; next generation is ${state.next_generation}`,
-          3,
-        );
-      }
-      if (now.getTime() > Date.parse(state.deadline_at)) {
-        const artifact = terminalPolicyArtifact({
-          ticket: opts.ticket,
-          session_id: opts.sessionId,
-          session_key: sessionKey,
-          generation: opts.generation,
-          rubric_sha256: state.rubric_sha256,
-          plan_sha256: planSha,
-          plan_bytes: planBytes.length,
-        }, 'wall_clock_expired');
-        const outPath = path.join(sessionDir, 'terminal-wall-clock.json');
-        atomicWriteJson(outPath, artifact);
-        state.terminal = true;
-        state.terminal_verdict = 'STOP';
-        state.terminal_reason = 'wall_clock_expired';
-        state.artifacts.push(outPath);
+      if (opts.maxGenerations < state.max_generations) {
+        state.max_generations = opts.maxGenerations;
         atomicWriteJson(statePath, state);
-        earlyArtifact = artifact;
-        earlyExitCode = 3;
-        return;
       }
 
-      const checkedSha = freezeRubric('check', opts.rubricFile, sealPath);
-      if (checkedSha !== state.rubric_sha256) {
-        throw new CliError('frozen rubric hash differs from session state', 3);
-      }
       growthRatio = planBytes.length / state.baseline_plan_bytes;
       growthWarning = growthRatio >= state.growth_warn_ratio;
-      if (growthRatio > state.growth_stop_ratio) {
-        const artifact = terminalPolicyArtifact({
-          ticket: opts.ticket,
-          session_id: opts.sessionId,
-          session_key: sessionKey,
-          generation: opts.generation,
-          rubric_sha256: state.rubric_sha256,
-          plan_sha256: planSha,
-          plan_bytes: planBytes.length,
-          baseline_plan_bytes: state.baseline_plan_bytes,
-          growth_ratio: growthRatio,
-          growth_warning: true,
-        }, 'plan_growth_hard_stop');
-        const outPath = path.join(sessionDir, 'terminal-plan-growth.json');
-        atomicWriteJson(outPath, artifact);
-        state.terminal = true;
-        state.terminal_verdict = 'STOP';
-        state.terminal_reason = 'plan_growth_hard_stop';
+      context.growthRatioValue = growthRatioValue(planBytes.length, state.baseline_plan_bytes);
+      context.growthWarning = growthWarning;
+
+      if (state.active_claim) {
+        const liveness = claimOwnerLiveness(state.active_claim, sessionDir);
+        if (liveness === 'live') {
+          throw new CliError('plan-review generation is already claimed by a live owner', 3);
+        }
+        if (liveness !== 'dead') {
+          throw new CliError('active plan-review claim owner is unverifiable', 3);
+        }
+        const orphan = state.active_claim;
+        early = {
+          ...policyArtifact(context, 'orphaned_active_claim_transport_exhausted'),
+          session_id: orphan.session_id,
+          generation: orphan.generation,
+          plan_sha256: orphan.plan_sha256,
+          verdict: 'CONDITIONAL',
+          semantic_verdict: null,
+          transport_status: 'transport_exhausted',
+        };
+        const outPath = artifactPath(sessionDir, orphan.generation);
+        if (fs.existsSync(outPath)) {
+          throw new CliError('orphaned claim conflicts with an existing generation artifact', 3);
+        }
+        atomicWriteJson(outPath, early);
+        state.active_claim = null;
         state.artifacts.push(outPath);
+        const claim = state.claims.find((item) => item.claim_id === orphan.claim_id);
+        if (!claim || claim.status !== 'in-flight') {
+          throw new CliError('orphaned claim journal is inconsistent', 3);
+        }
+        claim.status = 'transport-exhausted';
+        claim.artifact = outPath;
+        claim.attempt_count = manifest.max_attempts_per_seat * manifest.seats.length;
+        claim.attempt_accounting = 'unknown_conservatively_exhausted';
+        state.terminal = true;
+        state.terminal_verdict = early.verdict;
+        state.terminal_reason = early.policy_reason;
         atomicWriteJson(statePath, state);
-        earlyArtifact = artifact;
-        earlyExitCode = 3;
         return;
       }
 
+      if (state.next_generation > state.max_generations
+          || opts.generation > state.max_generations) {
+        early = {
+          ...policyArtifact(context, 'caller_generation_cap_reached'),
+          verdict: 'CONDITIONAL',
+          semantic_verdict: 'CONDITIONAL',
+        };
+      } else if (opts.generation !== state.next_generation) {
+        throw new CliError(
+          `generation ${opts.generation} cannot acquire; next is ${state.next_generation}`,
+          3,
+        );
+      }
+      if (!early && clock.now() >= Date.parse(state.deadline_at)) {
+        context.now = new Date(clock.now());
+        early = policyArtifact(context, 'wall_clock_expired');
+      }
+      if (!early && growthRatio > state.growth_stop_ratio) {
+        early = policyArtifact(context, 'plan_growth_hard_stop');
+      }
+
+      if (!early && opts.generation === 2 && !state.repair_authorized) {
+        const previous = JSON.parse(fs.readFileSync(artifactPath(sessionDir, 1), 'utf8'));
+        const decisions = loadDispositionFile(opts.dispositionFile, {
+          logicalPlanId: manifest.logical_plan_id,
+          generation: 1,
+        });
+        if (!decisions) throw new CliError('generation 2 requires depth-0 disposition input', 3);
+        applyDispositions(previous.findings, decisions);
+        const unresolved = unresolvedCandidateFingerprints(previous.findings);
+        if (unresolved.length > 0) {
+          throw new CliError(
+            'generation 2 requires disposition for every blocker candidate',
+            3,
+          );
+        }
+        const accepted = previous.findings.filter(
+          (finding) => finding.disposition === 'accepted_blocker',
+        );
+        if (accepted.length === 0) {
+          early = {
+            ...policyArtifact(context, 'no_accepted_blocker_authorizes_generation_2'),
+            verdict: 'CONDITIONAL',
+            semantic_verdict: 'CONDITIONAL',
+          };
+        } else {
+          state.repair_authorized = true;
+          state.accepted_blocker_fingerprints = accepted.map((finding) => finding.fingerprint);
+        }
+      }
+      if (early) {
+        state.terminal = true;
+        state.terminal_verdict = early.verdict;
+        state.terminal_reason = early.policy_reason;
+        const outPath = path.join(sessionDir, `terminal-${early.policy_reason}.json`);
+        atomicWriteJson(outPath, early);
+        state.artifacts.push(outPath);
+        atomicWriteJson(statePath, state);
+        return;
+      }
       const claim = {
         claim_id: claimId,
         generation: opts.generation,
         session_id: opts.sessionId,
-        runner: opts.runner,
-        model: opts.model,
-        effort: opts.effort,
-        reviewers: opts.reviewers,
         claimed_at: now.toISOString(),
         plan_sha256: planSha,
-        plan_bytes: planBytes.length,
+        manifest_sha256: manifestSha,
+        owner: claimOwner(sessionDir, claimId),
       };
       state.active_claim = claim;
       state.claims.push({ ...claim, status: 'in-flight' });
       atomicWriteJson(statePath, state);
     });
-  } catch (error) {
-    if (error instanceof CliError) {
-      emitAndExit({
-        ticket: opts.ticket,
-        session_id: opts.sessionId,
-        session_key: sessionKey,
-        generation: opts.generation,
-        verdict: 'STOP',
-        terminal: true,
-        policy_reason: error.message,
-      }, error.exitCode);
-    }
-    throw error;
-  }
+  });
+  if (early) finish(early, artifactExitCode(early));
+  crashAt('after_claim');
 
-  if (earlyArtifact) {
-    emitAndExit(earlyArtifact, earlyExitCode);
-  }
-
-  let dispatches;
-  let reviewed;
-  try {
-    dispatches = [];
-    const reviewedSeats = [];
-    for (let index = 0; index < opts.reviewers.length; index += 1) {
-      const reviewer = opts.reviewers[index];
-      const dispatchNow = opts.now === undefined ? Date.now() : now.getTime();
-      const remainingSeconds = Math.floor((Date.parse(state.deadline_at) - dispatchNow) / 1000);
-      if (remainingSeconds < 1) {
-        throw new CliError('plan-review wall clock expired before reviewer dispatch', 3);
+  // Validate disposition shape/identity before dispatch when possible so a bad
+  // file cannot acquire a durable claim and then escape through the outer catch.
+  // Fingerprint binding still runs after findings exist (applyDispositions).
+  if (opts.generation === 1 && opts.dispositionFile) {
+    try {
+      loadDispositionFile(opts.dispositionFile, {
+        logicalPlanId: manifest.logical_plan_id,
+        generation: 1,
+      });
+    } catch (error) {
+      if (error instanceof CliError || error instanceof TypeError) {
+        abortInFlightClaim(sessionDir, statePath, claimId, error.message);
+        exitControlledError(error);
       }
-      const boundedReviewer = {
-        ...reviewer,
-        timeoutSeconds: Math.min(reviewer.timeoutSeconds, remainingSeconds),
-      };
-      const prompt = buildPrompt(boundedReviewer, planBytes, rubricBytes, rubricIds);
-      const responseEnv = index === 0
-        ? 'AUTOPILOT_PLAN_REVIEW_RESPONSE_FILE'
-        : 'AUTOPILOT_PLAN_REVIEW_DEEP_RESPONSE_FILE';
-      const dispatch = dispatchReviewer(boundedReviewer, prompt, responseEnv);
-      const seatReview = validateReviewerResponse(dispatch.raw, rubricIds);
-      dispatches.push({ seat: reviewer.seat, ...dispatch.transport });
-      reviewedSeats.push({
-        seat: reviewer.seat,
-        verdict: seatReview.reviewerVerdict,
-        findings: seatReview.findings.map((finding) => ({
-          ...finding,
-          reviewer_seat: reviewer.seat,
-        })),
-        scopeExpansions: seatReview.scopeExpansions,
-      });
+      throw error;
     }
-    reviewed = {
-      reviewerVerdict: reviewedSeats[0].verdict,
-      reviewerVerdicts: reviewedSeats.map(({ seat, verdict }) => ({ seat, verdict })),
-      findings: reviewedSeats.flatMap((seat) => seat.findings),
-      scopeExpansions: reviewedSeats.flatMap((seat) => seat.scopeExpansions),
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const code = error instanceof CliError ? error.exitCode : 4;
+  }
+
+  try {
+    const deadlineMs = Date.parse(state.deadline_at);
+    const sequence = testSequence();
+    const selectedTargets = new Map(manifest.seats.map((seat) => [seat.id, seat]));
+    const seatReviews = [];
+    for (const seat of manifest.seats) {
+      const seatReview = reviewSeat({
+        manifest,
+        seat,
+        planBytes,
+        rubricBytes,
+        rubricIds,
+        timeoutSeconds: opts.timeoutSeconds,
+        sequence,
+        selectedTargets,
+        deadlineMs,
+        clockNow: clock.now,
+      });
+      seatReviews.push(seatReview);
+      if (seatReview.exhausted) selectedTargets.set(seat.id, null);
+    }
+    const attempts = seatReviews.flatMap((seat) => seat.attempts);
+    const substitutions = seatReviews
+      .map((seat) => seat.substitution)
+      .filter(Boolean);
+    const completedReviews = seatReviews.filter((seat) => !seat.exhausted);
+    const requiredExhausted = seatReviews.filter((seat) => {
+      const policy = manifest.seats.find((candidate) => candidate.id === seat.seat_id);
+      return seat.exhausted && policy.required;
+    });
+    const familyCount = new Set(completedReviews.map((seat) => seat.family)).size;
+    context.now = new Date(clock.now());
     let artifact;
-    withLock(sessionDir, () => {
-      state = loadState(statePath);
-      artifact = terminalPolicyArtifact({
+    if (clock.now() >= deadlineMs || seatReviews.some((seat) => seat.deadline_exhausted)) {
+      artifact = {
+        ...policyArtifact(context, 'wall_clock_expired'),
+        attempts,
+        substitutions,
+        reviewer_verdicts: completedReviews.map((seat) => ({
+          seat_id: seat.seat_id,
+          target_id: seat.target_id,
+          family: seat.family,
+          verdict: seat.verdict,
+        })),
+      };
+    } else if (requiredExhausted.length > 0) {
+      artifact = {
+        ...policyArtifact(context, 'required_seat_transport_exhausted'),
+        verdict: 'CONDITIONAL',
+        semantic_verdict: null,
+        transport_status: 'transport_exhausted',
+        attempts,
+        substitutions,
+      };
+    } else if (familyCount < manifest.minimum_distinct_families) {
+      artifact = {
+        ...policyArtifact(context, 'panel_family_diversity_exhausted'),
+        // Public verdict stays CONDITIONAL for schema consumers; transport
+        // exhaustion has no semantic plan verdict.
+        verdict: 'CONDITIONAL',
+        semantic_verdict: null,
+        transport_status: 'transport_exhausted',
+        attempts,
+        substitutions,
+        reviewer_verdicts: completedReviews.map((seat) => ({
+          seat_id: seat.seat_id,
+          target_id: seat.target_id,
+          family: seat.family,
+          verdict: seat.verdict,
+        })),
+      };
+    } else {
+      let findings = normalizeAndDedupeFindings(completedReviews, rubricIds);
+      const decisions = opts.generation === 1
+        ? loadDispositionFile(opts.dispositionFile, {
+          logicalPlanId: manifest.logical_plan_id,
+          generation: 1,
+        })
+        : null;
+      findings = applyDispositions(findings, decisions, {
+        legacyAutoAdmit: loaded.legacy,
+      });
+      const accepted = findings.filter((finding) => finding.disposition === 'accepted_blocker');
+      const unresolved = unresolvedCandidateFingerprints(findings);
+      // Preserve whether any blocker candidates existed before disposition. Fully
+      // dispositioned zero-accept sets must not leak READY merely because seats
+      // also reported READY — READY is reserved for runs with no blocker candidates.
+      const hadBlockerCandidates = findings.some((finding) => finding.candidate_blocker);
+      const allReady = completedReviews.every((seat) => seat.verdict === 'READY');
+      const atGenerationCap = opts.generation >= state.max_generations;
+      let verdict;
+      let terminal;
+      let reason;
+      // Authorize repair only when every blocker candidate has a disposition and
+      // at least one was accepted. Partial disposition must not open generation 2.
+      let repairAuthorized = accepted.length > 0 && unresolved.length === 0;
+      if (atGenerationCap) {
+        terminal = true;
+        repairAuthorized = false;
+        if (accepted.length > 0 && unresolved.length === 0) {
+          verdict = 'STOP';
+          reason = 'generation_cap_with_accepted_blockers';
+        } else if (unresolved.length > 0 && !loaded.legacy) {
+          verdict = 'CONDITIONAL';
+          reason = 'generation_cap_requires_depth_0_adjudication';
+        } else {
+          // Zero-accept at cap: READY only when no blocker candidates existed.
+          verdict = (allReady && !hadBlockerCandidates) ? 'READY' : 'CONDITIONAL';
+          reason = opts.generation === 2
+            ? 'generation_2_terminal'
+            : 'caller_generation_cap_terminal';
+        }
+      } else if (unresolved.length > 0 && !loaded.legacy) {
+        // Incomplete disposition (or none): every candidate still needs depth-0.
+        verdict = 'CONDITIONAL';
+        terminal = false;
+        reason = 'depth_0_adjudication_required';
+        repairAuthorized = false;
+      } else if (accepted.length > 0) {
+        verdict = 'CONDITIONAL';
+        terminal = false;
+        reason = 'accepted_blockers_authorize_generation_2';
+      } else if (allReady && !hadBlockerCandidates) {
+        // No blocker candidates and all seats READY → terminal READY.
+        verdict = 'READY';
+        terminal = true;
+        reason = 'no_accepted_blockers';
+      } else {
+        // Fully dispositioned with zero accepts (including rejected blocker
+        // candidates) or non-READY seats → terminal CONDITIONAL. Do not emit
+        // depth_0_adjudication_required once no candidates remain unresolved.
+        verdict = 'CONDITIONAL';
+        terminal = true;
+        reason = 'nonblocking_conditional';
+      }
+      artifact = {
+        schema_version: 1,
+        artifact_type: 'plan_review_artifact',
         ticket: opts.ticket,
+        logical_plan_id: manifest.logical_plan_id,
         session_id: opts.sessionId,
         session_key: sessionKey,
         generation: opts.generation,
-        rubric_sha256: state.rubric_sha256,
+        verdict,
+        semantic_verdict: verdict,
+        terminal,
+        policy_reason: reason,
+        rubric_sha256: rubricSha,
+        manifest_sha256: manifestSha,
         plan_sha256: planSha,
-        plan_bytes: planBytes.length,
-        baseline_plan_bytes: state.baseline_plan_bytes,
-        growth_ratio: growthRatio,
+        growth_ratio: context.growthRatioValue,
         growth_warning: growthWarning,
-        runner: opts.runner,
-        model: opts.model,
-        reviewers: opts.reviewers,
-      }, code === 4 ? 'reviewer_transport_or_response_failure' : 'review_policy_failure', {
-        error: message,
-      });
+        transport_status: 'complete',
+        attempts,
+        substitutions,
+        reviewer_verdicts: completedReviews.map((seat) => ({
+          seat_id: seat.seat_id,
+          target_id: seat.target_id,
+          family: seat.family,
+          verdict: seat.verdict,
+        })),
+        findings,
+        backlog_candidates: backlogCandidates(findings),
+        accepted_blocker_count: accepted.length,
+        repair_authorized: repairAuthorized,
+        next_generation: terminal ? null : opts.generation + 1,
+        reviewed_at: context.now.toISOString(),
+      };
+    }
+
+    withLock(sessionDir, '.claim.lock', () => {
+      state = loadState(statePath);
+      if (!state.active_claim || state.active_claim.claim_id !== claimId) {
+        throw new CliError('active plan-review claim changed before completion', 3);
+      }
       const outPath = artifactPath(sessionDir, opts.generation);
       atomicWriteJson(outPath, artifact);
       state.active_claim = null;
-      state.terminal = true;
-      state.terminal_verdict = 'STOP';
-      state.terminal_reason = artifact.policy_reason;
       state.artifacts.push(outPath);
       const claim = state.claims.find((item) => item.claim_id === claimId);
-      if (claim) claim.status = 'failed';
+      if (claim) {
+        claim.status = artifact.transport_status === 'transport_exhausted'
+          ? 'transport-exhausted'
+          : 'complete';
+        claim.artifact = outPath;
+        claim.attempt_count = attempts.length;
+      }
+      if (artifact.terminal) {
+        state.terminal = true;
+        state.terminal_verdict = artifact.verdict;
+        state.terminal_reason = artifact.policy_reason;
+      } else {
+        state.next_generation = opts.generation + 1;
+        state.repair_authorized = artifact.repair_authorized;
+      }
       atomicWriteJson(statePath, state);
     });
-    emitAndExit(artifact, code);
+    finish(artifact, artifactExitCode(artifact));
+  } catch (error) {
+    if (error instanceof CliError || error instanceof TypeError) {
+      abortInFlightClaim(sessionDir, statePath, claimId, error.message);
+      exitControlledError(error);
+    }
+    throw error;
   }
-
-  const admittedBlockers = reviewed.findings.filter((finding) => finding.admitted_blocker);
-  let verdict;
-  let terminal;
-  let policyReason;
-  if (reviewed.scopeExpansions.length > 0) {
-    verdict = 'STOP';
-    terminal = true;
-    policyReason = 'scope_expansion_requires_human_adjudication';
-  } else if (admittedBlockers.length > 0 && opts.generation >= state.max_generations) {
-    verdict = 'STOP';
-    terminal = true;
-    policyReason = 'generation_cap_with_open_blockers';
-  } else if (admittedBlockers.length > 0) {
-    verdict = 'CONDITIONAL';
-    terminal = false;
-    policyReason = 'admitted_blockers_allow_one_bounded_repair_generation';
-  } else if (reviewed.reviewerVerdicts.every((seat) => seat.verdict === 'READY')) {
-    verdict = 'READY';
-    terminal = true;
-    policyReason = 'no_admitted_blockers';
-  } else {
-    verdict = 'CONDITIONAL';
-    terminal = true;
-    policyReason = 'reviewer_claim_has_no_admitted_blocker';
-  }
-
-  const artifact = {
-    ticket: opts.ticket,
-    session_id: opts.sessionId,
-    session_key: sessionKey,
-    generation: opts.generation,
-    verdict,
-    reviewer_verdict: reviewed.reviewerVerdict,
-    terminal,
-    policy_reason: policyReason,
-    rubric_sha256: state.rubric_sha256,
-    plan_sha256: planSha,
-    plan_bytes: planBytes.length,
-    baseline_plan_bytes: state.baseline_plan_bytes,
-    growth_ratio: growthRatio,
-    growth_warning: growthWarning,
-    runner: dispatches[0].runner,
-    model: dispatches[0].model,
-    transport_status: dispatches[0].status,
-    reviewers: dispatches,
-    reviewer_verdicts: reviewed.reviewerVerdicts,
-    findings: reviewed.findings,
-    scope_expansion_count: reviewed.scopeExpansions.length,
-    admitted_blocker_count: admittedBlockers.length,
-    next_generation: terminal ? null : opts.generation + 1,
-    reviewed_at: now.toISOString(),
-  };
-
-  withLock(sessionDir, () => {
-    state = loadState(statePath);
-    if (!state.active_claim || state.active_claim.claim_id !== claimId) {
-      throw new CliError('active plan-review claim changed before completion', 3);
-    }
-    const outPath = artifactPath(sessionDir, opts.generation);
-    atomicWriteJson(outPath, artifact);
-    state.active_claim = null;
-    state.artifacts.push(outPath);
-    const claim = state.claims.find((item) => item.claim_id === claimId);
-    if (claim) {
-      claim.status = 'complete';
-      claim.verdict = verdict;
-      claim.artifact = outPath;
-    }
-    if (terminal) {
-      state.terminal = true;
-      state.terminal_verdict = verdict;
-      state.terminal_reason = policyReason;
-    } else {
-      state.next_generation = opts.generation + 1;
-    }
-    atomicWriteJson(statePath, state);
-  });
-
-  emitAndExit(artifact, verdict === 'STOP' ? 3 : 0);
 }
 
 try {
   main();
 } catch (error) {
-  if (error instanceof CliError) {
+  if (error instanceof CliError || error instanceof TypeError) {
     process.stderr.write(`dispatch-plan-review: ${error.message}\n`);
-    process.exit(error.exitCode);
+    process.exit(error instanceof CliError ? error.exitCode : 2);
   }
   process.stderr.write(`dispatch-plan-review: ${error.stack || error.message || String(error)}\n`);
   process.exit(2);

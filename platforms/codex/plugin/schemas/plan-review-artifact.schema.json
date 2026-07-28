@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/plan-review-artifact.schema.json",
+  "title": "PlanReviewArtifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "ticket",
+    "logical_plan_id",
+    "session_id",
+    "session_key",
+    "generation",
+    "verdict",
+    "rubric_sha256",
+    "manifest_sha256",
+    "plan_sha256",
+    "growth_ratio",
+    "growth_warning",
+    "transport_status",
+    "semantic_verdict",
+    "terminal",
+    "policy_reason",
+    "attempts",
+    "substitutions",
+    "reviewer_verdicts",
+    "findings",
+    "backlog_candidates",
+    "accepted_blocker_count",
+    "repair_authorized",
+    "next_generation",
+    "reviewed_at"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "plan_review_artifact" },
+    "ticket": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "logical_plan_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "session_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "session_key": { "$ref": "#/$defs/sha256" },
+    "generation": { "type": "integer", "enum": [1, 2] },
+    "verdict": {
+      "type": "string",
+      "enum": ["READY", "CONDITIONAL", "STOP"]
+    },
+    "rubric_sha256": { "$ref": "#/$defs/sha256" },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "plan_sha256": { "$ref": "#/$defs/sha256" },
+    "growth_ratio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numerator", "denominator"],
+      "properties": {
+        "numerator": { "type": "integer", "minimum": 1 },
+        "denominator": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "growth_warning": { "type": "boolean" },
+    "transport_status": {
+      "type": "string",
+      "enum": ["complete", "transport_exhausted", "policy_stop"]
+    },
+    "semantic_verdict": {
+      "type": ["string", "null"],
+      "enum": ["READY", "CONDITIONAL", "STOP", null]
+    },
+    "terminal": { "type": "boolean" },
+    "policy_reason": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "attempts": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "object" }
+    },
+    "substitutions": {
+      "type": "array",
+      "maxItems": 4,
+      "items": { "type": "object" }
+    },
+    "reviewer_verdicts": {
+      "type": "array",
+      "maxItems": 4,
+      "items": { "type": "object" }
+    },
+    "findings": { "type": "array", "items": { "type": "object" } },
+    "backlog_candidates": { "type": "array", "items": { "type": "object" } },
+    "accepted_blocker_count": { "type": "integer", "minimum": 0 },
+    "repair_authorized": { "type": "boolean" },
+    "next_generation": { "type": ["integer", "null"], "enum": [2, null] },
+    "reviewed_at": { "type": "string", "minLength": 1, "maxLength": 64 }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

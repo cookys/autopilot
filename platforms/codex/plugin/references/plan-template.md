@@ -37,8 +37,20 @@ never invent one).
 ## 6. Risks + inversion       — what guarantees failure (discipline #4)
 ## 7. Out of scope            — focus-as-subtraction: what you deliberately do NOT do
 ## 8. Open questions          — only the Board (user) can answer
-## Review log                 — R0 author + any dialectic rounds
+## Review log                 — R0 author + manifest, controller generations, and depth-0 dispositions
 ```
+
+## Bounded review identity
+
+Before plan-readiness review, assign one stable `logical_plan_id` and write a
+`plan-review-manifest` beside the plan. Record its path and the frozen rubric path in the Review log.
+The manifest declares 1–4 reviewer seats, budgets, qualifications, excluded families, and only the
+fallbacks allowed on attempt 2. A new ticket or session must not reset the same logical plan.
+
+For each controller generation, record the artifact path, verdict, finding fingerprints, and the
+depth-0 disposition for every blocker candidate. Reviewer suggestions never amend the plan by
+themselves: accepted blockers authorize the bounded repair; other findings remain explicit backlog
+candidates. Generation 2 is terminal.
 
 ## Global Constraints (§2.5 — verbatim propagation)
 

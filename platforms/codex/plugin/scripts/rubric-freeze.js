@@ -2,7 +2,7 @@
 /**
  * rubric-freeze.js
  *
- * Node-based helper for gate-2 rubric sealing.
+ * Byte-level sealing helper for frozen review inputs such as rubrics and manifests.
  *
  * Limitation (honest): this detects drift by byte-level hash only (sha256 of the
  * spec file bytes). It does not analyze whether review findings semantically match

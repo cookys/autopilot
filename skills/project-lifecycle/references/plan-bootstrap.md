@@ -86,7 +86,7 @@ headings remain provenance/coverage; they are never copied directly into impleme
   "planCopyPath": "docs/projects/2026-03-18-my-feature/plan.md",
   "branch": "feature/my-feature",
   "sourceAuthoringUnitsFound": 34,
-  "deliverablesAdmitted": 4,
+  "deliverablesAdmitted": 3,
   "deliverableDeps": {
     "plan-review": [],
     "transcript-retro": [],

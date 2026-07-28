@@ -60,6 +60,33 @@ assert.match(
   retiredNodes['runtime-control'].reason,
   /historical-output_paths|successor|bootstrap/i,
 );
+const retiredAuthorizedPaths = retiredNodes['runtime-control'].authorized_paths;
+assert.ok(Array.isArray(retiredAuthorizedPaths), 'retired runtime-control authorized_paths retained');
+assert.deepEqual(
+  retiredAuthorizedPaths,
+  sortedUnique(retiredAuthorizedPaths),
+  'retired authorized_paths must be sorted and unique',
+);
+assert.ok(
+  retiredAuthorizedPaths.length <= retiredNodes['runtime-control'].max_changed_files,
+  'retired authorized_paths must respect the 200-file ceiling',
+);
+
+/**
+ * Bind bridge (or probe) paths to the retired node's explicit authorization set.
+ * Every path must be a member; fabricated paths fail closed.
+ */
+function assertBridgePathsAuthorized(paths, authorizedPaths, label) {
+  assert.ok(Array.isArray(paths), `${label}: paths must be an array`);
+  assert.ok(Array.isArray(authorizedPaths), `${label}: authorizedPaths must be an array`);
+  const authorized = new Set(authorizedPaths);
+  for (const bridgePath of paths) {
+    assert.ok(
+      authorized.has(bridgePath),
+      `${label}: bridge path not in retired authorization set: ${bridgePath}`,
+    );
+  }
+}
 
 /**
  * Classify a candidate or bridge attachment against the successor graph.
@@ -229,6 +256,22 @@ assert.equal(classifyAttachment(bridge, 'expected_post_c_bridge'), 'historical')
 assert.deepEqual(bridge.paths, sortedUnique(bridge.paths));
 const bridgeCeiling = retiredNodes[bridge.node_id].max_changed_files;
 assert.ok(bridge.paths.length <= bridgeCeiling);
+// Mechanical bind: every post-C bridge path must belong to the retired
+// authorization set before we report post_c_bridge_authorized.
+assertBridgePathsAuthorized(
+  bridge.paths,
+  retiredNodes[bridge.node_id].authorized_paths,
+  'expected_post_c_bridge',
+);
+// Negative oracle: same production assertion rejects a fabricated bridge path.
+assert.throws(
+  () => assertBridgePathsAuthorized(
+    ['hooks/tests/fabricated-bridge-path.test.sh'],
+    retiredNodes[bridge.node_id].authorized_paths,
+    'fabricated_bridge_probe',
+  ),
+  /bridge path not in retired authorization set: hooks\/tests\/fabricated-bridge-path\.test\.sh/,
+);
 // Post-integration bridge remains authorized as historical evidence only —
 // not as active-node path ownership.
 for (const bridgePath of bridge.paths) {
@@ -250,6 +293,8 @@ console.log(JSON.stringify({
   historical_ranges_recomputed: rangesChecked,
   exclusions_documented: excluded,
   post_c_bridge_authorized: true,
+  post_c_bridge_bound_to_retired_authorization: true,
+  fabricated_bridge_path_fails_closed: true,
   max_changed_files_respected: true,
   runtime_control_retained_historical: true,
   runtime_control_not_active_owner: true,
@@ -268,6 +313,8 @@ assert_contains "$OUT" '"candidates_authorized_exactly_once":true' "candidate pa
 assert_contains "$OUT" '"historical_ranges_consistent":true' "available historical ranges match frozen path sets"
 assert_contains "$OUT" '"exclusions_documented":5' "pre-admission shared paths have explicit exclusions"
 assert_contains "$OUT" '"post_c_bridge_authorized":true' "post-C bridge surfaces are pre-authorized"
+assert_contains "$OUT" '"post_c_bridge_bound_to_retired_authorization":true' "bridge paths bound to retired authorization set"
+assert_contains "$OUT" '"fabricated_bridge_path_fails_closed":true' "fabricated bridge path fails closed"
 assert_contains "$OUT" '"max_changed_files_respected":true' "all output sets stay inside file ceilings"
 assert_contains "$OUT" '"runtime_control_retained_historical":true' "runtime-control evidence retained as historical"
 assert_contains "$OUT" '"runtime_control_not_active_owner":true' "runtime-control is not an active path owner"

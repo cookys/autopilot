@@ -1,6 +1,6 @@
 # Plan — Durable Heterogeneous Plan-Review Session Controller
 <!-- autopilot-authority-claims: ["plan_review"] -->
-> Status: Ownership boundary clarified; semantic reviewers READY but controller recorded transport STOP on fenced JSON / Owner: CEO / Branch: to be created at execution / Frame: independent L-size follow-up
+> Status: ✅ Shipped in v2.34.0 — merged as `c66349e` / Owner: CEO / Frame: independent L-size follow-up
 
 ## 0. Context / thesis
 

@@ -219,7 +219,8 @@ When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.
   first deduplicates and freezes the candidate union, then every roster member scores that exact
   same matrix. Run `scripts/review-mvp-portfolio.js` to union verified `MUST-FIX` items, satisfy
   frozen prerequisites, and select the deterministic maximum-score portfolio; unselected eligible
-  items become nonblocking backlog candidates. Do not auto-implement the union. Canonical input,
+  items become nonblocking backlog candidates only when they carry `follow_up` metadata and have
+  positive aggregate value. Do not auto-implement the union. Canonical input,
   scoring, tie-break, and backlog handoff:
   [`references/reviewer-mvp-portfolio.md`](../../../references/reviewer-mvp-portfolio.md).
 - **No-verdict = FAIL-CLOSED.** Empty/unparseable (e.g. `dispatch-review.sh` `status:no_verdict` from agy stdout-drop) = **"did not clear"**, never silent pass. Re-dispatch or treat as blocking unknown.

@@ -27,6 +27,7 @@ function printHelp() {
   node bin/autopilot.js status task --root-run-id <id> [--json]
   node bin/autopilot.js campaign <inspect|status|resume> --campaign-id <id> [--ledger <file>]
   node bin/autopilot.js merge execute --request <file> [--json]
+  node bin/autopilot.js mission <prepare|init|grant|consume|control|finalize-abort|check|receipt> [mission args...]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
@@ -47,13 +48,13 @@ Commands:
                     depth-0 disposition authority; reviewer output cannot
                     self-authorize.
   harness report    Emit read-only harness capability state and stale flags.
-  endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
+  endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.
   campaign          Inspect/status durable campaign state or determine whether it is resumable.
   merge             Execute only an explicitly sealed merge request and emit a receipt.
-  mission           Mission convergence control: init|grant|consume|control|check|receipt
-                    over the canonical pure Mission reducer (no task DONE/closeout authority).
-                    tokens never printed, never read from argv).
+  mission           Mission convergence control: prepare|init|grant|consume|control|
+                    finalize-abort|check|receipt over the canonical Mission runtime/reducer
+                    (no task DONE/closeout authority; tokens are never printed or read from argv).
 
 Exit codes:
   Delegated commands preserve the wrapped command exit code.

@@ -1,6 +1,6 @@
 # Plan — Provider Readiness Orchestrator
 <!-- autopilot-authority-claims: ["provider_readiness"] -->
-> Status: Ownership-consolidated revision; prior generation-1 READY is historical / Owner: CEO / Branch: to be created at execution / Frame: independent readiness core with optional Kimi transport follow-up
+> Status: ✅ Shipped in v2.34.0 — merged as `c66349e` / Owner: CEO / Frame: independent readiness core with optional Kimi transport follow-up
 
 ## 0. Context / thesis
 

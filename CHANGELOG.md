@@ -29,8 +29,9 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 **Headline**: Autopilot can run an unattended Mission through bounded implementation campaigns,
 exact provider/readiness admission, worktree lifecycle receipts, authenticated abort finalization,
 task-status merge gates, bounded plan-review sessions, and privacy-safe cross-harness transcript
-retro. Implementation is release-ready on this branch; final depth-0 merge, archive, lifecycle
-residue receipts, and remote push remain finish-flow work and are not claimed by this release note.
+retro. The implementation was merged locally to `develop` as `c66349e` and its project record was
+archived on 2026-07-29. L5/L6 lifecycle receipts and remote push are not claimed by this release
+note.
 
 ### Added
 - Project-authoritative Mission policy, content-bound source manifest, and execution-graph
@@ -81,10 +82,11 @@ residue receipts, and remote push remain finish-flow work and are not claimed by
   Mission while an unreleased nonterminal claim remains live.
 
 ### Boundary
-- This release publishes implementation and version mirrors only. It does **not** claim a remote
-  push, production deployment, project archive, L6 marker clear, or `zero_residue=true`.
-- Final merge onto the integration target, project archive, lifecycle/status receipts, and marker
-  clear remain depth-0 finish-flow after this campaign is accepted.
+- This release includes the local `develop` merge and project archive. It does **not** claim a
+  remote push, production deployment, L5/L6 lifecycle/status receipt, or `zero_residue=true`.
+- The `/l6` entry degraded explicitly to effective `/l3` after verification-author admission
+  failed; the blocked over-broad Mission lineage remains honest rather than being rewritten into a
+  false successful receipt.
 - Framework defects observed during the real L6 run (legacy quota partition vs exact
   effort/endpoint admission, gate-budget consumption by precondition/no-effect attempts, missing
   finding-disposition resume, pre-spend output-path/version-mirror validation, `boundary_rejected`

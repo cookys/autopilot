@@ -1,15 +1,14 @@
 # Mission Convergence Portfolio
 
-> Status: In progress
+> Status: ✅ Shipped in v2.34.0 — merged to `develop` as `c66349e`
 >
-> Progress: 2/3 integrated; release-closeout in progress
+> Progress: 3/3 deliverables integrated; project archived 2026-07-29
 >
-> Current deliverable: `release-closeout` (PRS and CTR are canonically integrated)
+> Current deliverable: none — follow-ups are trigger-conditioned in `docs/BACKLOG.md`
 >
 > Target: v2.34.0
 >
-> Branch: `mission/85ee4e69a24a/release-closeout-a2` (implementation branch for this campaign;
-> integration target remains depth-0 finish-flow)
+> Branch: merged from `feat/v2.34.0-mission-convergence-portfolio`
 >
 > Owner mode: `owner-led`, scope `Hold`
 >
@@ -86,17 +85,17 @@ transport failure never counts as a verdict.
 The source portfolio originally contained 32 `Phase`/`P0` authoring headings; the old tracker also
 added a baseline and closeout row, producing 34 sequential rows. Those units are coverage metadata.
 After the `runtime-control` bootstrap landed its required mutations in candidate history, the
-**successor executable graph** retained outstanding deliverables. PRS and CTR are now canonically
-integrated; only release closeout remains.
+**successor executable graph** retained three deliverables. This archived record shows their final
+integrated state.
 
 | Node | Included source work | Dependencies | Status | Integration evidence |
 |---|---|---|---|---|
 | `plan-review` | PRS P1-P5 | completed core + runtime-control bootstrap | INTEGRATED | canonical integration at `a775262` (`test(plan-review): enforce Codex mirror parity`) |
 | `transcript-retro` | CTR P1-P4 | completed core + runtime-control bootstrap | INTEGRATED | canonical integration at `070b7a0` (CTR campaign leaf on sealed base) |
-| `release-closeout` | Joint QC, version sync, docs/backlog honesty, prepare for depth-0 merge | exactly `plan-review` + `transcript-retro` | IN PROGRESS | this campaign prepares the branch for depth-0 finish-flow; it does **not** itself merge, push, archive, clear the L6 marker, or claim zero lifecycle residue |
+| `release-closeout` | Joint QC, version sync, docs/backlog honesty, depth-0 merge and archive | exactly `plan-review` + `transcript-retro` | INTEGRATED | full suite 246/246; bounded closure reviewer emitted `NO-FINDING-PROOF`; merged to `develop` as `c66349e` |
 
 Maximum active implementation width was two on the successor graph (`plan-review` ∥
-`transcript-retro`). `release-closeout` remains the only sequential terminal node.
+`transcript-retro`). `release-closeout` was the only sequential terminal node.
 
 ### Closeout graph correction
 
@@ -112,7 +111,7 @@ Authoritative artifacts:
   (`graph_digest` `6547db664c5818a115347abd3b37b06ecdfc9e93f56d851c6b07c8e45df4b54f`)
 - [mission-execution-graph.json](mission-execution-graph.json) — successor three-node DAG used for
   PRS/CTR admission (historical relative to this closeout campaign)
-- [content-bound source manifest](../../mission-convergence-portfolio-sources.json) — narrowed to
+- [content-bound source manifest](../../../mission-convergence-portfolio-sources.json) — narrowed to
   the three remaining source plans/rubrics required for exact coverage of the successor graph.
   The historical seven-plan portfolio set remains recoverable from git history and the historical
   ledger above; hashes are never fabricated.
@@ -136,17 +135,17 @@ version mirrors, CHANGELOG, project tracking, and backlog honesty within its sea
 
 | Claim | State |
 |---|---|
-| Implementation (ICC/Mission/PRO/WLB/LSM/PRS/CTR) | Release-ready on this branch; version mirrors at `2.34.0` |
+| Implementation (ICC/Mission/PRO/WLB/LSM/PRS/CTR) | Shipped locally on `develop`; version mirrors at `2.34.0` |
 | PRS canonical integration | `a775262` |
 | CTR canonical integration | `070b7a0` |
-| Final product merge onto integration target | Pending depth-0 finish-flow |
-| Project archive under `docs/projects/_archive/` | Pending depth-0 finish-flow |
-| Lifecycle / task-status receipts (`can_close`, residue) | Pending depth-0 finish-flow |
+| Final product merge onto integration target | Merged locally to `develop` as `c66349e` |
+| Project archive under `docs/projects/_archive/` | Complete on 2026-07-29 |
+| Lifecycle / task-status receipts (`can_close`, residue) | Not claimed: entry `/l6` degraded explicitly to effective `/l3` after verification-author precondition failure; the blocked over-broad Mission lineage was not rewritten into a false success |
 | Remote push / marketplace publish | Not claimed |
-| L6 session marker clear | Not claimed by this campaign |
+| Session marker | Cleared by depth-0 finish-flow after local closeout |
 
-This README is a review snapshot only. Authoritative completion is recorded only in closeout
-receipts produced by finish-flow after this campaign is accepted.
+This README is the archived project record. It distinguishes the completed local product merge
+from the explicitly unclaimed L5/L6 lifecycle receipt and remote publication.
 
 ## Deliverable Gate
 
@@ -170,13 +169,13 @@ immediately in v2.34.0.
 
 ## Plans
 
-- [Implementation Campaign Convergence Control](../../plans/2026-07-26-implementation-campaign-convergence-control.md)
-- [Mission Convergence Supervisor](../../plans/2026-07-26-task-convergence-contract.md)
-- [Provider Readiness Orchestrator](../../plans/2026-07-26-provider-readiness-orchestrator.md)
-- [Dispatch Worktree Lifecycle Budget](../../plans/2026-07-26-dispatch-worktree-lifecycle-budget.md)
-- [L6 Status and Merge Contract](../../plans/2026-07-26-l6-status-merge-contract.md)
-- [Plan Review Session Controller](../../plans/2026-07-26-plan-review-session-controller.md)
-- [Cross-Harness Transcript Retro](../../plans/2026-07-26-cross-harness-transcript-retro.md)
+- [Implementation Campaign Convergence Control](../../../plans/2026-07-26-implementation-campaign-convergence-control.md)
+- [Mission Convergence Supervisor](../../../plans/2026-07-26-task-convergence-contract.md)
+- [Provider Readiness Orchestrator](../../../plans/2026-07-26-provider-readiness-orchestrator.md)
+- [Dispatch Worktree Lifecycle Budget](../../../plans/2026-07-26-dispatch-worktree-lifecycle-budget.md)
+- [L6 Status and Merge Contract](../../../plans/2026-07-26-l6-status-merge-contract.md)
+- [Plan Review Session Controller](../../../plans/2026-07-26-plan-review-session-controller.md)
+- [Cross-Harness Transcript Retro](../../../plans/2026-07-26-cross-harness-transcript-retro.md)
 
 ## Out Of Scope
 
@@ -188,5 +187,6 @@ immediately in v2.34.0.
 - Mechanized resume-projection judgment (historical-output replay rejection before grant) — tracked
   as a high-priority backlog item; this successor-graph edit is an explicit human correction, not a
   claim that the gate already exists.
-- This release-closeout campaign does not merge, push, archive the project directory, clear the L6
-  marker, or issue a zero-lifecycle-residue claim; those remain depth-0 finish-flow.
+- The release-closeout campaign itself did not merge, push, archive, clear a marker, or issue a
+  zero-lifecycle-residue claim. Depth-0 subsequently performed the local merge and archive under
+  effective `/l3`; remote publication and an L5/L6 zero-residue receipt remain unclaimed.

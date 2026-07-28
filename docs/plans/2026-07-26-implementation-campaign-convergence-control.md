@@ -1,7 +1,7 @@
 # Plan — Implementation Campaign Convergence Control
 <!-- autopilot-authority-claims: ["campaign_generation","runner_transport_envelope"] -->
 
-> **Status**: depth-0 aligned with the capped portfolio union; previous standalone READY reviews remain historical
+> **Status**: ✅ Shipped in v2.34.0 — merged as `c66349e`
 >
 > **Owner**: Core / depth-0
 >

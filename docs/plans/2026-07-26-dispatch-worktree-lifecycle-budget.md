@@ -1,6 +1,6 @@
 # Plan — Dispatch Worktree Lifecycle Budget and Zero-Residue Receipt
 <!-- autopilot-authority-claims: ["worktree_lifecycle"] -->
-> Status: Ownership-consolidated revision; awaiting bounded hetero review
+> Status: ✅ Shipped in v2.34.0 — merged as `c66349e`
 > Owner: Autopilot maintainers
 > Target branch: `fix/dispatch-worktree-lifecycle-budget`
 > Frame: Fix — the root cause is known; implementation spans orchestration, lifecycle tooling, tests, and docs

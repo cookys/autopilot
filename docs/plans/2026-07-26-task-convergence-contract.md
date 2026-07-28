@@ -1,6 +1,6 @@
 # Plan — Mission Convergence Supervisor（任務收斂監督器）
 
-> **Status**: depth-0 READY after capped heterogeneous review and same-hash supplemental union; no generation 3 opened
+> **Status**: ✅ Shipped in v2.34.0 — merged as `c66349e`
 > **Owner**: Autopilot CEO / Owner Kernel
 > **Implementation branch**: `feat/mission-convergence-supervisor`（開始實作時才建立）
 > **Frame**: 只處理跨 campaign、agent、model、session 的 Mission 收斂；不重做 campaign、provider、worktree、plan-review、transcript、merge 或 finish controller

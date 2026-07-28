@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "durable-continuation-identity",
+      "source_plan_ids": [
+        "plan-790dba51cb581d8e22df22fe52c4101008eaf6411454ba0b819665b558d5f021"
+      ],
+      "source_rubric_ids": [
+        "R24150908089094566915397497662385630280580016115406413251661381983569007182296",
+        "R78029458080070000539042036712487457448568139861406370704000025359152480904163",
+        "R42976760010776883936100531475489434236833210047828512032198774433893996511275",
+        "R113664373127862425606850490327010514549723136657306771851413762107378720896082",
+        "R91827935785097473314028873415988284264027634461874591186307922265575638249700",
+        "R110769476249316191565208584947787827516991793514119665021295865887138044179263",
+        "R38412970810654758181240776939513099680055092955148684875594817952304337152564"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "rotation-aware-active-view",
+        "compaction-authoritative-rehydrate",
+        "zero-duplicate-dispatch"
+      ],
+      "verification_commands": [
+        "bash scripts/tests/run-ledger.test.sh",
+        "bash hooks/tests/run-ledger-rotation.test.sh",
+        "bash hooks/tests/codex-compaction-rehydration.test.sh",
+        "bash hooks/tests/implementation-campaign-dogfood.test.sh"
+      ],
+      "gate_attempt_budget": 2,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 180,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 12,
+        "output_bytes": 2000000
+      },
+      "campaign": {
+        "profile": "standard",
+        "allowed_path_prefixes": [
+          "docs",
+          "hooks",
+          "scripts",
+          "src"
+        ],
+        "max_changed_files": 12,
+        "baseline_churn": 1800,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 900,
+        "max_repair_generations": 1,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-07-29-durable-continuation-identity.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "scripts/run-ledger.sh",
+          "src/campaign/cli.js",
+          "src/engine/autopilot-engine.js",
+          "scripts/dispatch-hetero.sh"
+        ],
+        "output_paths": [
+          "hooks/tests/codex-compaction-rehydration.test.sh",
+          "hooks/tests/implementation-campaign-dogfood.test.sh",
+          "hooks/tests/run-ledger-rotation.test.sh",
+          "scripts/compaction-rehydrate.js",
+          "scripts/dispatch-hetero.sh",
+          "scripts/run-ledger.sh",
+          "src/campaign/cli.js",
+          "src/engine/autopilot-engine.js",
+          "src/engine/continuation-admission.js"
+        ]
+      }
+    },
+    {
+      "id": "qc-panel-honesty",
+      "source_plan_ids": [
+        "plan-754a875ca9ffc8a55cf05b164008b4a42abd24824d3f693915c1ff89e8cd1b64"
+      ],
+      "source_rubric_ids": [
+        "R72288050801202210502669776875812572884775844787952722064587209717707317540266",
+        "R24014770708240079192666554674610948041562148710205749529047080948891599498176",
+        "R100123773877322262425862374971785358594859984542044386531573098481114869882488",
+        "R36825008349877804461926360430365768129236494696092402201167689170868604486262",
+        "R48190397738581104367422379284150233771154394142771304198940727964666553033098",
+        "R20024042045295453023479640129945900637243897681303232441109295090077779281361"
+      ],
+      "dependencies": [
+        "durable-continuation-identity"
+      ],
+      "acceptance_ids": [
+        "panel-minimum-enforced",
+        "panel-shortfall-distinct",
+        "single-seat-explicit-compatible"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/autopilot-engine.test.sh",
+        "bash hooks/tests/implementation-campaign-receipt.test.sh",
+        "bash hooks/tests/status-task.test.sh"
+      ],
+      "gate_attempt_budget": 2,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 180,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 10,
+        "output_bytes": 2000000
+      },
+      "campaign": {
+        "profile": "standard",
+        "allowed_path_prefixes": [
+          "docs",
+          "hooks",
+          "src"
+        ],
+        "max_changed_files": 10,
+        "baseline_churn": 1600,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 800,
+        "max_repair_generations": 1,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-07-29-qc-panel-honesty.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "src/engine/autopilot-engine.js",
+          "src/engine/campaign-composition.js",
+          "src/status/task-status.js"
+        ],
+        "output_paths": [
+          "hooks/tests/autopilot-engine.test.sh",
+          "hooks/tests/implementation-campaign-receipt.test.sh",
+          "hooks/tests/status-task.test.sh",
+          "src/engine/autopilot-engine.js",
+          "src/engine/campaign-composition.js",
+          "src/status/task-status.js"
+        ]
+      }
+    }
+  ]
+}

@@ -46,10 +46,12 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - Strict `/l6` verification-author admission accepts exact provisional scorecard rows for
   `raw-artifact` authoring labor only (`assurance: provisional`); depth-0 remains sole
   verification/merge authority. Reviewer and other authority-bearing roles stay fail-closed.
-- Managed pre-spend lifecycle: missing/mismatched sealed root identity after durable
-  `implementation_started` uses ICC + Mission zero-effect release (no `mutation_failed`,
-  unknown usage, or stagnation). Stagnation threshold no longer terminalizes Mission while an
-  unreleased nonterminal claim remains live.
+- Managed pre-spend lifecycle: missing/malformed/mismatched sealed root identity after durable
+  `implementation_started` uses ICC + Mission zero-effect release only when the prepare
+  rejection carries an explicit identity code and mechanical `dispatcher_called === false`
+  proof (no `mutation_failed`, unknown usage, or stagnation). Same-shaped prepare failures
+  without that proof remain fail-closed possibly effectful. Stagnation threshold no longer
+  terminalizes Mission while an unreleased nonterminal claim remains live.
 
 ## v2.33.0 — Capability-adaptive execution profiles
 

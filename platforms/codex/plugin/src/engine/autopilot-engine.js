@@ -979,15 +979,56 @@ function reviewerQualificationViable(roster) {
     }) !== null;
 }
 
+// Stable codes for managed-strict sealed root-identity precondition failures.
+// Zero-effect release after IMPLEMENTATION_STARTED is gated on these codes —
+// never on prepare shape or free-text reason alone.
+const MANAGED_STRICT_ROOT_IDENTITY_CODES = new Set([
+  'managed_strict_root_identity_missing',
+  'managed_strict_root_identity_malformed',
+  'managed_strict_root_identity_mismatch',
+]);
+// Same pattern as campaign-dispatch-projection ROOT_RUN_ID (kept local so the
+// prepare classifier does not import non-exported projection internals).
+const MANAGED_STRICT_ROOT_RUN_ID = /^[A-Za-z0-9._-]+$/;
+
+function classifyManagedStrictRootIdentity(env, sealedRootRunId) {
+  if (!Object.prototype.hasOwnProperty.call(env, 'AUTOPILOT_ROOT_RUN_ID')) {
+    return {
+      code: 'managed_strict_root_identity_missing',
+      reason: 'managed strict implementation requires AUTOPILOT_ROOT_RUN_ID',
+    };
+  }
+  const value = env.AUTOPILOT_ROOT_RUN_ID;
+  if (typeof value !== 'string'
+      || value.length === 0
+      || value.trim() !== value
+      || !MANAGED_STRICT_ROOT_RUN_ID.test(value)) {
+    return {
+      code: 'managed_strict_root_identity_malformed',
+      reason: 'managed strict implementation AUTOPILOT_ROOT_RUN_ID is malformed',
+    };
+  }
+  if (value !== sealedRootRunId) {
+    return {
+      code: 'managed_strict_root_identity_mismatch',
+      reason: 'managed strict implementation root run id disagrees with sealed campaign',
+    };
+  }
+  return null;
+}
+
 function isNeverDispatchedPrepareRejection(result) {
-  // Mechanical proof the implementation dispatcher was never called: prepare
-  // blocked with null dispatcher result and null parsed implementation leaf.
-  // Ambiguous post-dispatch failures keep a non-null implementationResult.
+  // Narrow zero-effect proof: only sealed root-identity prepare rejections
+  // with mechanical dispatcher_called === false and null implementation fields.
+  // Same-shaped prepare failures with any other/absent code, absent or
+  // ambiguous proof, or any dispatcher call remain possibly effectful.
   return Boolean(result)
     && result.status === 'blocked'
     && result.phase === 'prepare_implementation'
     && result.implementationResult === null
-    && result.implementation === null;
+    && result.implementation === null
+    && result.dispatcher_called === false
+    && MANAGED_STRICT_ROOT_IDENTITY_CODES.has(result.code);
 }
 
 function zeroEffectLeafFacts(result) {
@@ -1003,9 +1044,10 @@ function zeroEffectLeafFacts(result) {
       deletions: leaf.deletions,
     };
   }
-  // Never-dispatched prepare rejections (e.g. missing/mismatched
-  // AUTOPILOT_ROOT_RUN_ID) produce no leaf; synthesize the exact zero-effect
-  // shape so ICC + Mission release can bind deterministic leaf facts.
+  // Sealed root-identity prepare rejections (missing/malformed/mismatched
+  // AUTOPILOT_ROOT_RUN_ID with dispatcher_called === false) produce no leaf;
+  // synthesize the exact zero-effect shape so ICC + Mission release can bind
+  // deterministic leaf facts. Message text alone never qualifies.
   if (isNeverDispatchedPrepareRejection(result)) {
     return {
       status: 'precondition_failed',
@@ -1076,8 +1118,9 @@ function isCampaignAdmissionReleasable(state, claim, leafProof) {
     return true;
   }
   // Post-IMPLEMENTATION_STARTED durable release requires the exact zero-effect
-  // leaf proof (dispatcher precondition_failed, or never-dispatched prepare
-  // with synthesized null-mutation facts) plus intent-only journal state.
+  // leaf proof (dispatcher precondition_failed, or sealed root-identity
+  // prepare with dispatcher_called === false and synthesized null-mutation
+  // facts) plus intent-only journal state.
   return isExactZeroEffectLeafProof(leafProof)
     && isIntentOnlyImplementationStartedState(state, claim);
 }
@@ -2600,17 +2643,31 @@ class AutopilotEngine {
           throw new TypeError('managed implementation env must be an object');
         }
         if (campaignAuthority.strict) {
-          if (!Object.prototype.hasOwnProperty.call(
+          const identityRejection = classifyManagedStrictRootIdentity(
             implementationBaseEnv,
-            'AUTOPILOT_ROOT_RUN_ID',
-          )) {
-            throw new TypeError('managed strict implementation requires AUTOPILOT_ROOT_RUN_ID');
-          }
-          if (implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID
-              !== campaignAuthority.root_run_id) {
-            throw new TypeError(
-              'managed strict implementation root run id disagrees with sealed campaign',
-            );
+            campaignAuthority.root_run_id,
+          );
+          if (identityRejection) {
+            const blockedAt = this.now();
+            ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', blockedAt, {
+              rejection_code: identityRejection.code,
+              dispatcher_called: false,
+            }));
+            return {
+              status: 'blocked',
+              phase: 'prepare_implementation',
+              code: identityRejection.code,
+              reason: identityRejection.reason,
+              // Mechanical never-dispatched proof — required for zero-effect
+              // release; do not infer from null implementation fields alone.
+              dispatcher_called: false,
+              roster,
+              resolveResult,
+              implementationResult: null,
+              implementationArgs: null,
+              implementation: null,
+              ledger,
+            };
           }
           campaignUnit = writeCampaignDispatchUnit({
             campaignContract: campaignAuthority.contract,
@@ -3785,9 +3842,10 @@ class AutopilotEngine {
         || (implementationChain.length === 1
           && isCampaignPreSpendRejection(finalImplementation));
       // Exact zero-effect after sole initial leaf (durable only): either a
-      // dispatcher precondition_failed with null mutation facts, or a never-
-      // dispatched prepare_implementation rejection (e.g. missing root id).
-      // Ambiguous / post-dispatch failures remain fail-closed possibly effectful.
+      // dispatcher precondition_failed with null mutation facts, or a sealed
+      // root-identity prepare_implementation rejection (explicit code +
+      // dispatcher_called === false). Ambiguous / post-dispatch / other-code
+      // prepare failures remain fail-closed possibly effectful.
       const soleInitialExactZeroEffectLeaf = implementationChain.length === 1
         && isExactZeroEffectLeafProof(finalImplementation);
       if (!durableJournal && soleInitialPreSpend) {

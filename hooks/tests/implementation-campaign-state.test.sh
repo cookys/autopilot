@@ -1497,36 +1497,96 @@ console.log(`durable_release_fail_no_mutation=${
   !durableReleaseFail.events.includes('mutation_failed')
 }`);
 
-// Durable never-dispatched prepare (missing sealed root identity): after
-// IMPLEMENTATION_STARTED, prepare_implementation blocks with null dispatcher
-// result. Must release ICC+Mission zero-effect path — no mutation_failed,
-// no terminal reconcile, no dispatcher call.
-const durableNeverDispatched = (() => {
+// Production-path sealed root-identity zero-effect: real managed-strict
+// validation (no implementTask mock). Missing / malformed / mismatch each
+// release ICC+Mission with zero dispatcher calls; non-identity prepare and
+// ambiguous post-dispatch remain possibly effectful.
+const sealedRootRunId = 'sealed-root-identity-v1';
+const strictBranch = 'impl/icc-p1-intake';
+const strictContractPath = path.join(repo, 'strict-root-identity-campaign.json');
+const strictSealPath = path.join(repo, 'strict-root-identity-campaign.seal.json');
+const strictContract = {
+  schema_version: 1,
+  ticket: 'icc-p1-intake',
+  profile: 'poc',
+  mission_grant_ref: 'a'.repeat(64),
+  repo_identity: admitted.initial_state.repo_identity,
+  base_sha: base,
+  branch: strictBranch,
+  vertical_acceptance: ['root identity zero-effect'],
+  allowed_path_prefixes: ['src/'],
+  max_changed_files: 4,
+  baseline_churn: 10,
+  max_growth_ratio: 1.5,
+  max_extra_churn: 5,
+  max_repair_generations: 2,
+  max_wall_seconds: 120,
+  verify_cmd: 'node fixture.js',
+  rubric_ids: ['R1'],
+  mission_runtime: {
+    schema_version: 1,
+    root_run_id: sealedRootRunId,
+    mission_lineage_id: 'lineage-v1-root-identity',
+    mission_policy_digest: 'b'.repeat(64),
+    mission_graph_digest: 'c'.repeat(64),
+    graph_node_id: 'root-identity-node',
+    graph_node_digest: 'd'.repeat(64),
+  },
+  strict_dispatch: {
+    schema_version: 1,
+    spec: { path: 'src/spec.md', section: 'Root identity' },
+    required_paths: ['src/spec.md'],
+    output_paths: ['src/out.txt'],
+    allowed_path_prefixes: ['src/'],
+    budget: {
+      max_changed_files: 4,
+      max_wall_seconds: 120,
+      max_output_bytes: 4096,
+      max_tool_calls: 10,
+      max_engine_attempts: 2,
+    },
+    verification_commands: ['node fixture.js'],
+  },
+};
+const strictContractBytes = `${JSON.stringify(strictContract, null, 2)}\n`;
+fs.writeFileSync(strictContractPath, strictContractBytes);
+const strictContractDigest = crypto.createHash('sha256')
+  .update(strictContractBytes)
+  .digest('hex');
+const strictCampaignId = campaignIdFor(
+  admitted.initial_state.repo_identity,
+  strictContract.ticket,
+  strictContractDigest,
+);
+fs.writeFileSync(strictSealPath, `${JSON.stringify({
+  schema_version: 1,
+  contract_sha256: strictContractDigest,
+  campaign_id: strictCampaignId,
+}, null, 2)}\n`);
+
+function durableStrictRootIdentityControl(nonce) {
+  const control = durableManagedControl(nonce);
+  return {
+    ...control,
+    campaign_id: strictCampaignId,
+    contract_digest: strictContractDigest,
+    contract: strictContract,
+    contract_path: strictContractPath,
+    seal_path: strictSealPath,
+  };
+}
+
+function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
   const events = [];
   let dispatchCalls = 0;
   let releaseRejection = null;
   let terminalCalls = 0;
   let mutationFailed = false;
-  class NeverDispatchedEngine extends AutopilotEngine {
-    implementTask() {
-      return {
-        status: 'blocked',
-        phase: 'prepare_implementation',
-        reason: 'managed strict implementation requires AUTOPILOT_ROOT_RUN_ID',
-        roster,
-        resolveResult: null,
-        implementationResult: null,
-        implementationArgs: null,
-        implementation: null,
-        ledger: [],
-      };
-    }
-  }
-  const engine = new NeverDispatchedEngine({
+  const engine = new AutopilotEngine({
     cwd: repo,
     clock: () => '2026-07-26T00:00:04.000Z',
     campaignIntake() {
-      return durableManagedControl('durable-never-dispatched');
+      return durableStrictRootIdentityControl(`durable-identity-${label}`);
     },
     campaignEventAppender(input) {
       events.push(input.eventType);
@@ -1581,21 +1641,22 @@ const durableNeverDispatched = (() => {
     },
     implementationDispatcher() {
       dispatchCalls += 1;
-      throw new Error('never-dispatched prepare must not call implementationDispatcher');
+      throw new Error(`strict identity ${label} must not call implementationDispatcher`);
     },
   });
   const result = engine.runImplementationReviewLoop({
     promptFile,
-    branch: 'impl/icc-p1-intake',
+    branch: strictBranch,
     base,
     roster,
-    campaignContract: contractPath,
+    campaignContract: strictContractPath,
     implementationOptions: {
-      // Explicitly omit AUTOPILOT_ROOT_RUN_ID — classification still uses the
-      // never-dispatched prepare leaf shape from implementTask override.
-      env: { PATH: process.env.PATH || '' },
+      env,
     },
+    ...loopOverrides,
   });
+  const leaf = result.implementation;
+  const prepare = leaf || null;
   return {
     result,
     events,
@@ -1603,38 +1664,127 @@ const durableNeverDispatched = (() => {
     terminalCalls,
     mutationFailed,
     dispatchCalls,
+    prepareCode: prepare && prepare.code,
+    preparePhase: prepare && prepare.phase,
+    dispatcherCalled: prepare && prepare.dispatcher_called,
   };
-})();
-console.log(`durable_never_dispatched_status=${durableNeverDispatched.result.status}`);
-console.log(`durable_never_dispatched_events=${durableNeverDispatched.events.join(',')}`);
-console.log(`durable_never_dispatched_release_status=${
-  durableNeverDispatched.result.campaign_control
-  && durableNeverDispatched.result.campaign_control.admission_release
-    ? durableNeverDispatched.result.campaign_control.admission_release.status
-    : null
+}
+
+function logDurableIdentityCase(prefix, caseResult, expectRelease) {
+  const leafBound = Boolean(
+    caseResult.releaseRejection
+    && caseResult.releaseRejection.zero_effect_leaf
+    && caseResult.releaseRejection.zero_effect_leaf.status === 'precondition_failed'
+    && caseResult.releaseRejection.zero_effect_leaf.commit === null
+    && caseResult.releaseRejection.zero_effect_leaf.worktree === null
+    && caseResult.releaseRejection.zero_effect_leaf.agent_log === null
+    && caseResult.releaseRejection.zero_effect_leaf.files_changed === 0
+    && caseResult.releaseRejection.zero_effect_leaf.insertions === 0
+    && caseResult.releaseRejection.zero_effect_leaf.deletions === 0
+  );
+  const releaseStatus = caseResult.result.campaign_control
+    && caseResult.result.campaign_control.admission_release
+    ? caseResult.result.campaign_control.admission_release.status
+    : null;
+  console.log(`${prefix}_status=${caseResult.result.status}`);
+  console.log(`${prefix}_events=${caseResult.events.join(',')}`);
+  console.log(`${prefix}_prepare_code=${caseResult.prepareCode}`);
+  console.log(`${prefix}_prepare_phase=${caseResult.preparePhase}`);
+  console.log(`${prefix}_dispatcher_called=${caseResult.dispatcherCalled}`);
+  console.log(`${prefix}_release_status=${releaseStatus}`);
+  console.log(`${prefix}_release_code=${
+    caseResult.releaseRejection && caseResult.releaseRejection.code
+  }`);
+  console.log(`${prefix}_leaf_bound=${leafBound}`);
+  console.log(`${prefix}_terminal_calls=${caseResult.terminalCalls}`);
+  console.log(`${prefix}_mutation_failed=${caseResult.mutationFailed}`);
+  console.log(`${prefix}_dispatch_calls=${caseResult.dispatchCalls}`);
+  console.log(`${prefix}_no_terminal_failure=${
+    !caseResult.result.campaign_control
+    || !caseResult.result.campaign_control.terminal_failure
+  }`);
+  console.log(`${prefix}_zero_effect=${Boolean(
+    expectRelease
+    && caseResult.result.status === 'blocked'
+    && caseResult.events.join(',') === 'implementation_started'
+    && releaseStatus === 'released'
+    && caseResult.releaseRejection
+    && caseResult.releaseRejection.code === 'campaign_pre_effect_blocked'
+    && leafBound
+    && caseResult.terminalCalls === 0
+    && caseResult.mutationFailed === false
+    && caseResult.dispatchCalls === 0
+    && caseResult.dispatcherCalled === false
+    && (!caseResult.result.campaign_control
+      || !caseResult.result.campaign_control.terminal_failure)
+  )}`);
+}
+
+const durableIdentityMissing = runDurableStrictIdentityCase(
+  'missing',
+  // Explicit restricted env: omit AUTOPILOT_ROOT_RUN_ID entirely.
+  { PATH: process.env.PATH || '' },
+);
+logDurableIdentityCase('durable_identity_missing', durableIdentityMissing, true);
+console.log(`durable_identity_missing_code_ok=${
+  durableIdentityMissing.prepareCode === 'managed_strict_root_identity_missing'
 }`);
-console.log(`durable_never_dispatched_release_code=${
-  durableNeverDispatched.releaseRejection
-  && durableNeverDispatched.releaseRejection.code
+
+const durableIdentityMalformed = runDurableStrictIdentityCase(
+  'malformed',
+  {
+    PATH: process.env.PATH || '',
+    // Present but not a valid root-run-id token.
+    AUTOPILOT_ROOT_RUN_ID: 'bad root id with spaces',
+  },
+);
+logDurableIdentityCase('durable_identity_malformed', durableIdentityMalformed, true);
+console.log(`durable_identity_malformed_code_ok=${
+  durableIdentityMalformed.prepareCode === 'managed_strict_root_identity_malformed'
 }`);
-console.log(`durable_never_dispatched_leaf_bound=${Boolean(
-  durableNeverDispatched.releaseRejection
-  && durableNeverDispatched.releaseRejection.zero_effect_leaf
-  && durableNeverDispatched.releaseRejection.zero_effect_leaf.status === 'precondition_failed'
-  && durableNeverDispatched.releaseRejection.zero_effect_leaf.commit === null
-  && durableNeverDispatched.releaseRejection.zero_effect_leaf.worktree === null
-  && durableNeverDispatched.releaseRejection.zero_effect_leaf.agent_log === null
-  && durableNeverDispatched.releaseRejection.zero_effect_leaf.files_changed === 0
-  && durableNeverDispatched.releaseRejection.zero_effect_leaf.insertions === 0
-  && durableNeverDispatched.releaseRejection.zero_effect_leaf.deletions === 0
+
+const durableIdentityMismatch = runDurableStrictIdentityCase(
+  'mismatch',
+  {
+    PATH: process.env.PATH || '',
+    AUTOPILOT_ROOT_RUN_ID: 'other-valid-root-id',
+  },
+);
+logDurableIdentityCase('durable_identity_mismatch', durableIdentityMismatch, true);
+console.log(`durable_identity_mismatch_code_ok=${
+  durableIdentityMismatch.prepareCode === 'managed_strict_root_identity_mismatch'
+}`);
+
+// Same-shaped non-identity prepare_implementation: identity passes, then
+// writeCampaignDispatchUnit rejects a stage branch mismatch. Null fields alone
+// must not zero-effect-release — no identity code / dispatcher_called proof.
+const durableNonIdentityPrepare = runDurableStrictIdentityCase(
+  'non-identity-prepare',
+  {
+    PATH: process.env.PATH || '',
+    AUTOPILOT_ROOT_RUN_ID: sealedRootRunId,
+  },
+  { branch: 'impl/wrong-stage-branch' },
+);
+logDurableIdentityCase('durable_non_identity_prepare', durableNonIdentityPrepare, false);
+console.log(`durable_non_identity_prepare_effectful=${Boolean(
+  durableNonIdentityPrepare.result.status === 'blocked'
+  && durableNonIdentityPrepare.preparePhase === 'prepare_implementation'
+  && durableNonIdentityPrepare.prepareCode == null
+  && durableNonIdentityPrepare.dispatcherCalled !== false
+  && durableNonIdentityPrepare.dispatchCalls === 0
+  && !(
+    durableNonIdentityPrepare.result.campaign_control
+    && durableNonIdentityPrepare.result.campaign_control.admission_release
+    && durableNonIdentityPrepare.result.campaign_control.admission_release.status
+      === 'released'
+  )
+  && (
+    durableNonIdentityPrepare.mutationFailed
+    || (durableNonIdentityPrepare.result.campaign_control
+      && durableNonIdentityPrepare.result.campaign_control.terminal_failure)
+  )
 )}`);
-console.log(`durable_never_dispatched_terminal_calls=${durableNeverDispatched.terminalCalls}`);
-console.log(`durable_never_dispatched_mutation_failed=${durableNeverDispatched.mutationFailed}`);
-console.log(`durable_never_dispatched_dispatch_calls=${durableNeverDispatched.dispatchCalls}`);
-console.log(`durable_never_dispatched_no_terminal_failure=${
-  !durableNeverDispatched.result.campaign_control
-  || !durableNeverDispatched.result.campaign_control.terminal_failure
-}`);
 
 // Ambiguous post-dispatch failure (dispatcher returned a non-zero-effect shape)
 // remains possibly effectful — terminalize, never zero-effect release.
@@ -2158,24 +2308,26 @@ assert_contains "$INTAKE_OUT" "durable_release_fail_terminal_calls=0" \
   "failed zero-effect release does not claim Mission terminal success"
 assert_contains "$INTAKE_OUT" "durable_release_fail_no_mutation=true" \
   "failed zero-effect release never writes MUTATION_FAILED"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_status=blocked" \
-  "never-dispatched prepare remains a blocked campaign result"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_events=implementation_started" \
-  "never-dispatched prepare records only IMPLEMENTATION_STARTED intent"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_release_status=released" \
-  "never-dispatched prepare releases campaign admission"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_release_code=campaign_pre_effect_blocked" \
-  "never-dispatched prepare uses the pre-effect rejection code"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_leaf_bound=true" \
-  "never-dispatched rejection digests bind exact zero-effect leaf facts"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_terminal_calls=0" \
-  "never-dispatched prepare never reconciles a Mission terminal receipt"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_mutation_failed=false" \
-  "never-dispatched prepare never appends MUTATION_FAILED"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_dispatch_calls=0" \
-  "never-dispatched prepare never calls the implementation dispatcher"
-assert_contains "$INTAKE_OUT" "durable_never_dispatched_no_terminal_failure=true" \
-  "never-dispatched prepare never stores a campaign terminal failure"
+assert_contains "$INTAKE_OUT" "durable_identity_missing_zero_effect=true" \
+  "missing sealed root identity releases ICC+Mission zero-effect on production path"
+assert_contains "$INTAKE_OUT" "durable_identity_missing_code_ok=true" \
+  "missing sealed root identity emits managed_strict_root_identity_missing"
+assert_contains "$INTAKE_OUT" "durable_identity_missing_dispatch_calls=0" \
+  "missing sealed root identity never calls the implementation dispatcher"
+assert_contains "$INTAKE_OUT" "durable_identity_malformed_zero_effect=true" \
+  "malformed sealed root identity releases ICC+Mission zero-effect on production path"
+assert_contains "$INTAKE_OUT" "durable_identity_malformed_code_ok=true" \
+  "malformed sealed root identity emits managed_strict_root_identity_malformed"
+assert_contains "$INTAKE_OUT" "durable_identity_malformed_dispatch_calls=0" \
+  "malformed sealed root identity never calls the implementation dispatcher"
+assert_contains "$INTAKE_OUT" "durable_identity_mismatch_zero_effect=true" \
+  "mismatched sealed root identity releases ICC+Mission zero-effect on production path"
+assert_contains "$INTAKE_OUT" "durable_identity_mismatch_code_ok=true" \
+  "mismatched sealed root identity emits managed_strict_root_identity_mismatch"
+assert_contains "$INTAKE_OUT" "durable_identity_mismatch_dispatch_calls=0" \
+  "mismatched sealed root identity never calls the implementation dispatcher"
+assert_contains "$INTAKE_OUT" "durable_non_identity_prepare_effectful=true" \
+  "same-shaped non-identity prepare remains possibly effectful"
 assert_contains "$INTAKE_OUT" "durable_ambiguous_terminalizes=true" \
   "ambiguous post-dispatch failure remains possibly effectful"
 assert_contains "$INTAKE_OUT" "durable_ambiguous_release_calls=0" \

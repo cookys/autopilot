@@ -2,15 +2,14 @@
 
 > Status: In progress
 >
-> Progress: 0/3 current deliverables canonically READY; `runtime-control` bootstrap is integrated
-> on candidate history and omitted from the successor executable graph
+> Progress: 2/3 integrated; release-closeout in progress
 >
-> Current deliverable: successor graph — `plan-review` + `transcript-retro` (parallel), then
-> `release-closeout`
+> Current deliverable: `release-closeout` (PRS and CTR are canonically integrated)
 >
 > Target: v2.34.0
 >
-> Branch: `feat/v2.34.0-mission-convergence-portfolio`
+> Branch: `mission/85ee4e69a24a/release-closeout-a2` (implementation branch for this campaign;
+> integration target remains depth-0 finish-flow)
 >
 > Owner mode: `owner-led`, scope `Hold`
 >
@@ -87,21 +86,32 @@ transport failure never counts as a verdict.
 The source portfolio originally contained 32 `Phase`/`P0` authoring headings; the old tracker also
 added a baseline and closeout row, producing 34 sequential rows. Those units are coverage metadata.
 After the `runtime-control` bootstrap landed its required mutations in candidate history, the
-**successor executable graph** retains only outstanding deliverables:
+**successor executable graph** retained outstanding deliverables. PRS and CTR are now canonically
+integrated; only release closeout remains.
 
-| Node | Included source work | Dependencies | Status | Candidate/integration evidence |
+| Node | Included source work | Dependencies | Status | Integration evidence |
 |---|---|---|---|---|
-| `plan-review` | PRS P1-P5 | completed core + runtime-control bootstrap | REPAIR/REVIEW IN_PROGRESS | candidate commits `c076d94`, `7e9ba5f`; branch `feat/prs-complete-track`; no canonical acceptance yet |
-| `transcript-retro` | CTR P1-P4 | completed core + runtime-control bootstrap | REPAIR/REVIEW IN_PROGRESS | candidate commit `446956241b3906f3a3ab5399b7be8cb60670bc0c`; branch `feat/ctr-complete-track`; no canonical acceptance yet |
-| `release-closeout` | Joint QC, version sync, canonical merge, worktree/branch cleanup, archive | exactly `plan-review` + `transcript-retro` | BLOCKED | starts only after both predecessors are canonically integrated |
+| `plan-review` | PRS P1-P5 | completed core + runtime-control bootstrap | INTEGRATED | canonical integration at `a775262` (`test(plan-review): enforce Codex mirror parity`) |
+| `transcript-retro` | CTR P1-P4 | completed core + runtime-control bootstrap | INTEGRATED | canonical integration at `070b7a0` (CTR campaign leaf on sealed base) |
+| `release-closeout` | Joint QC, version sync, docs/backlog honesty, prepare for depth-0 merge | exactly `plan-review` + `transcript-retro` | IN PROGRESS | this campaign prepares the branch for depth-0 finish-flow; it does **not** itself merge, push, archive, clear the L6 marker, or claim zero lifecycle residue |
 
-Maximum active implementation width is two on the successor graph (`plan-review` ∥
+Maximum active implementation width was two on the successor graph (`plan-review` ∥
 `transcript-retro`). `release-closeout` remains the only sequential terminal node.
+
+### Closeout graph correction
+
+The original release-closeout contract listed an impossible non-existent `marketplace.json` output
+path (not the real Claude/Codex marketplace mirrors) and was **superseded before model spend**.
+The corrected one-node closeout graph is recorded in
+[mission-closeout-graph.json](mission-closeout-graph.json) with
+`graph_digest` `6547db664c5818a115347abd3b37b06ecdfc9e93f56d851c6b07c8e45df4b54f`.
 
 Authoritative artifacts:
 
-- [mission-execution-graph.json](mission-execution-graph.json) — successor three-node DAG
-  (`graph_digest` `b281d81e…`)
+- [mission-closeout-graph.json](mission-closeout-graph.json) — corrected one-node closeout DAG
+  (`graph_digest` `6547db664c5818a115347abd3b37b06ecdfc9e93f56d851c6b07c8e45df4b54f`)
+- [mission-execution-graph.json](mission-execution-graph.json) — successor three-node DAG used for
+  PRS/CTR admission (historical relative to this closeout campaign)
 - [content-bound source manifest](../../mission-convergence-portfolio-sources.json) — narrowed to
   the three remaining source plans/rubrics required for exact coverage of the successor graph.
   The historical seven-plan portfolio set remains recoverable from git history and the historical
@@ -119,8 +129,24 @@ a historical boundary. The bootstrap implementation itself is complete and its f
 green at candidate `b9a3f55…`; resume projection therefore **omits** the integrated deliverable
 from the successor graph rather than redispatches it.
 
-PRS and CTR `required_paths` / `output_paths` contracts are unchanged: they still match the
-complete diffs from their frozen source-plan bases and must not be weakened into broad allowlists.
+PRS and CTR required mutations are on the sealed base; this release-closeout node only updates
+version mirrors, CHANGELOG, project tracking, and backlog honesty within its sealed output set.
+
+## Release readiness (honest)
+
+| Claim | State |
+|---|---|
+| Implementation (ICC/Mission/PRO/WLB/LSM/PRS/CTR) | Release-ready on this branch; version mirrors at `2.34.0` |
+| PRS canonical integration | `a775262` |
+| CTR canonical integration | `070b7a0` |
+| Final product merge onto integration target | Pending depth-0 finish-flow |
+| Project archive under `docs/projects/_archive/` | Pending depth-0 finish-flow |
+| Lifecycle / task-status receipts (`can_close`, residue) | Pending depth-0 finish-flow |
+| Remote push / marketplace publish | Not claimed |
+| L6 session marker clear | Not claimed by this campaign |
+
+Do **not** read this README as `DONE`, merged, archived, pushed, or `zero_residue=true`. Those are
+finish-flow predicates after this campaign is accepted.
 
 ## Deliverable Gate
 
@@ -162,3 +188,5 @@ immediately in v2.34.0.
 - Mechanized resume-projection judgment (historical-output replay rejection before grant) — tracked
   as a high-priority backlog item; this successor-graph edit is an explicit human correction, not a
   claim that the gate already exists.
+- This release-closeout campaign does not merge, push, archive the project directory, clear the L6
+  marker, or issue a zero-lifecycle-residue claim; those remain depth-0 finish-flow.

@@ -1,10 +1,17 @@
 {
   "schema_version": 1,
   "artifact_type": "mission_candidate_path_audit",
+  "retired_nodes": {
+    "runtime-control": {
+      "max_changed_files": 200,
+      "reason": "Bootstrap integrated at candidate b9a3f55cf2904c71a276cbaa5f19d5d9fc67ed0d; omitted from the successor executable graph after historical-output_paths campaign rejection. Path sets and post-C bridge remain auditable historical evidence only."
+    }
+  },
   "candidates": [
     {
       "id": "runtime-correction-main",
       "node_id": "runtime-control",
+      "status": "historical",
       "evidence_range": {
         "base": "07fa2c9",
         "head": "ffd2fb0"
@@ -73,6 +80,7 @@
     {
       "id": "routing-dogfood-precommit",
       "node_id": "runtime-control",
+      "status": "historical",
       "evidence_range": null,
       "observed_paths": [
         ".claude/dev-flow-config.md",
@@ -138,6 +146,7 @@
     {
       "id": "plan-review-candidate",
       "node_id": "plan-review",
+      "status": "active",
       "evidence_range": {
         "base": "c076d94^",
         "head": "7e9ba5f"
@@ -188,6 +197,7 @@
     {
       "id": "transcript-retro-candidate",
       "node_id": "transcript-retro",
+      "status": "active",
       "evidence_range": {
         "base": "4469562^",
         "head": "4469562"
@@ -237,6 +247,7 @@
   ],
   "expected_post_c_bridge": {
     "node_id": "runtime-control",
+    "status": "historical",
     "paths": [
       "bin/autopilot.js",
       "hooks/tests/campaign-dispatch-projection.test.sh",

@@ -32,8 +32,9 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - `mission-routing-admission.js` and an L3-L6/solo/fallback adversarial matrix that reject
   deliverable-count, critical-path, and aggregate-reservation overflow before effects.
 - A frozen candidate-path audit that recomputes available historical ranges, records five
-  pre-admission shared-document exclusions, and proves every remaining candidate or post-C bridge
-  path has exactly one active deliverable owner.
+  pre-admission shared-document exclusions, classifies removed-node evidence
+  (`runtime-control`) as historical/retired, and proves every active candidate path has
+  exactly one successor-graph implementation owner (`plan-review` / `transcript-retro`).
 
 ### Changed
 - Dev-flow, project bootstrap, CEO mode, and L3-L6 now treat plan phases, modules, tests, reviewer

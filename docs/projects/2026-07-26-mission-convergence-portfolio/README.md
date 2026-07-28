@@ -107,7 +107,8 @@ Authoritative artifacts:
   The historical seven-plan portfolio set remains recoverable from git history and the historical
   ledger above; hashes are never fabricated.
 - [candidate path audit](candidate-path-audit.json) — frozen mechanically observed path sets from
-  the four-node era, retained as audit evidence.
+  the four-node era; `runtime-control` candidates and the post-C bridge are classified
+  `historical` under `retired_nodes` and are excluded from active path-ownership calculations.
 
 ### Why `runtime-control` was removed from the executable graph
 

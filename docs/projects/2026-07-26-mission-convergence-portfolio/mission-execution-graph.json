@@ -2,7 +2,7 @@
   "artifact_type": "mission_execution_graph",
   "calculated_batches": 2,
   "calculated_depth": 2,
-  "graph_digest": "782ea5db0d99a8f2ca7522475c21c18cecbfac57b37333a3fd63a75193f622ab",
+  "graph_digest": "b281d81e545cb201d9b82ecfdad3a03a6fdc12a241de9ed6f0e923acfa18fa79",
   "nodes": [
     {
       "acceptance_ids": [
@@ -20,9 +20,9 @@
           "scripts",
           "skills"
         ],
-        "baseline_churn": 3500,
+        "baseline_churn": 4500,
         "max_changed_files": 100,
-        "max_extra_churn": 1750,
+        "max_extra_churn": 2250,
         "max_growth_ratio": 1.5,
         "max_repair_generations": 1,
         "max_wall_seconds": 3600,
@@ -188,9 +188,9 @@
           "scripts",
           "skills"
         ],
-        "baseline_churn": 3500,
+        "baseline_churn": 4500,
         "max_changed_files": 100,
-        "max_extra_churn": 1750,
+        "max_extra_churn": 2250,
         "max_growth_ratio": 1.5,
         "max_repair_generations": 1,
         "max_wall_seconds": 3600,

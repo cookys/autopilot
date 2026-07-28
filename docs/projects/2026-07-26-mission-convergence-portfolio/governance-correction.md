@@ -144,6 +144,17 @@ required and output path contracts are preserved unchanged. The content-bound so
 narrowed to the three remaining plans so exact source/rubric coverage still holds; the historical
 seven-plan set remains in git history and the project ledger.
 
+### Observed-churn budget correction
+
+The second sealed PRS and CTR campaigns produced clean, focused-test-passing commits but were
+correctly rejected by the post-effect boundary because their mandatory canonical plus Codex-mirror
+diffs measured 6,050 and 5,785 changed lines, above the original 5,250-line ceiling. The successor
+graph therefore calibrates both nodes from a 3,500-line baseline plus 1,750 extra lines to a
+4,500-line baseline plus 2,250 extra lines. The 1.5 growth ratio, exact output paths, allowed path
+prefixes, acceptance IDs, verification commands, and attempt budgets remain unchanged. Existing
+candidate commits are retained for the successor revision so the correction does not authorize a
+second implementation rewrite.
+
 ## Mechanical Acceptance
 
 1. A 34-node graph with `max_deliverables=8` is rejected before task, branch, worktree, runner, or

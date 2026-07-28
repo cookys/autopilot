@@ -101,7 +101,7 @@ Maximum active implementation width is two on the successor graph (`plan-review`
 Authoritative artifacts:
 
 - [mission-execution-graph.json](mission-execution-graph.json) — successor three-node DAG
-  (`graph_digest` `782ea5db…`)
+  (`graph_digest` `b281d81e…`)
 - [content-bound source manifest](../../mission-convergence-portfolio-sources.json) — narrowed to
   the three remaining source plans/rubrics required for exact coverage of the successor graph.
   The historical seven-plan portfolio set remains recoverable from git history and the historical

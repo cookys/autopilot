@@ -1,5 +1,5 @@
 {
   "schema_version": 1,
-  "graph_path": "docs/projects/2026-07-26-mission-convergence-portfolio/mission-closeout-graph.json",
-  "sources_path": "docs/mission-convergence-closeout-sources.json"
+  "graph_path": "docs/projects/2026-07-29-bounded-backlog-intake/mission-execution-graph.json",
+  "sources_path": "docs/mission-bounded-backlog-intake-sources.json"
 }

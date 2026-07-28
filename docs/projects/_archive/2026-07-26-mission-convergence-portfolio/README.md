@@ -92,7 +92,7 @@ integrated state.
 |---|---|---|---|---|
 | `plan-review` | PRS P1-P5 | completed core + runtime-control bootstrap | INTEGRATED | canonical integration at `a775262` (`test(plan-review): enforce Codex mirror parity`) |
 | `transcript-retro` | CTR P1-P4 | completed core + runtime-control bootstrap | INTEGRATED | canonical integration at `070b7a0` (CTR campaign leaf on sealed base) |
-| `release-closeout` | Joint QC, version sync, docs/backlog honesty, depth-0 merge and archive | exactly `plan-review` + `transcript-retro` | INTEGRATED | full suite 246/246; bounded closure reviewer emitted `NO-FINDING-PROOF`; merged to `develop` as `c66349e` |
+| `release-closeout` | Joint QC, version sync, docs/backlog honesty, depth-0 merge and archive | exactly `plan-review` + `transcript-retro` | INTEGRATED | full suite 246/246; bounded closure reviewer emitted [NO-FINDING-PROOF](reviews/release-closeout.md); merged to `develop` as `c66349e` |
 
 Maximum active implementation width was two on the successor graph (`plan-review` ∥
 `transcript-retro`). `release-closeout` was the only sequential terminal node.

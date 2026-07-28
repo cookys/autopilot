@@ -36,15 +36,29 @@ git show "HEAD@{${DAYS} days ago}:docs/projects/INDEX.md" 2>/dev/null | grep -c 
 ```bash
 node scripts/retro-review-loop.js --days "${DAYS}" --json
 ```
-Deterministic (NO LLM). Recovers the hetero-engine **dispatch / decorrelated-review /
-debate** effort that mostly never becomes a commit (reviews, harness runs) or is SQUASHED
-into one — invisible to Steps 1a–1e. Reads THIS machine's session transcripts
-(`~/.claude/projects/<encoded-cwd>/*.jsonl`) counting **real Bash `tool_use` invocations**
-by dispatch/review pattern (so CLAUDE.md / reference-doc content mentioning those script
-names never inflates it), plus git commit-message loop markers (review-round / QC-verdict /
-converged, counted per-commit). Fail-safe: a missing transcript dir yields zero counts,
-never an error. **Honesty**: `review_dispatch` includes ad-hoc harness/debug runs (not only
-decorrelated reviews) — the git `review_rounds` / `qc_verdicts` are the cleaner cycle count;
-covers only local transcripts (fleet work elsewhere is unseen). If the JSON's
-`transcript.sessions` is 0 (no local transcripts / different machine), SKIP the Review-Loop
-Lens report section rather than reporting zeros.
+Deterministic (NO LLM), local-only, and read-only. Separate Claude Code and Codex adapters scan
+`~/.claude/projects/<encoded-worktree>/*.jsonl` and
+`~/.codex/sessions/YYYY/MM/DD/*.jsonl`, then feed the normalized event contract at
+`schemas/normalized-transcript-event.schema.json`. The default Claude scan covers the canonical
+repo and its currently registered worktrees. Codex discovery prunes date directories before
+opening files.
+
+Inclusion requires canonical repo/worktree attribution and the requested time window. The additive
+`provenance` block reports each root, adapter, candidate/included/excluded/error counts, bounds, and
+exclusion reasons. A present supported root with recent candidates but zero included sessions emits
+`coverage.warnings`; never turn that state into a silent zero. A missing root is `not_present`.
+
+`loop_metrics.deterministic` reports only structured tool/controller evidence. Heuristic user
+correction and status-reversal patterns are isolated under `loop_metrics.heuristic`. Each metric is
+`known` or `unknown`; absence of evidence is never rendered as numeric zero. Evidence references
+contain only session ID, timestamp, event class, and line number.
+
+Reads are bounded by candidate, per-file byte/line, aggregate-byte, and wall-clock limits. Default
+output never contains message, prompt, reasoning, command, or tool-output bodies. For deterministic
+synthetic tests, inject `--claude-root`, `--codex-root`, `--repo`, and `--now`; do not point tests at
+real user transcripts. `--transcript-dir` remains the backward-compatible, explicitly trusted
+Claude-only fixture override.
+
+The compatibility `transcript.*`, `hetero_dispatch_total`, and `git_signals.*` fields remain
+available. **Honesty**: `review_dispatch` includes ad-hoc harness/debug runs; git review/QC markers
+are the cleaner cycle proxy, and fleet work on other machines remains unseen.

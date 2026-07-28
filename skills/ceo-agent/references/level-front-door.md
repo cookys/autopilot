@@ -74,7 +74,7 @@ to plan / decompose / synthesize / verify — the things that actually need it:
 | `-x <csv>` | Add run-specific red lines, e.g. `-x payments,auth`; project red lines cannot be removed. |
 | `--mode owner-led\|milestone-led` | Override the project governance mode for this run only. |
 | `--expand` | Scope mode = Expand instead of Hold. |
-| `--solo` | `/l4`/`/l5`/`/l6` autonomy **without** offload — CEO runs inline (the `/l3` engine) but keeps Level-4/5/6 posture respectively. Also the **automatic degradation fallback** when the foreman cannot start (`precondition_failed`). |
+| `--solo` | `/l4`/`/l5`/`/l6` autonomy **without** offload — CEO runs inline (the `/l3` engine) but keeps Level-4/5/6 posture respectively. Also the **automatic degradation fallback** when the foreman cannot start (`precondition_failed`). This changes topology only; Mission admission and later prepare/grant identity are reused unchanged. |
 
 ## The foreman (`/l4`, `/l5` and `/l6`)
 
@@ -93,7 +93,7 @@ CEO (depth 0, this session)
   `scripts/resolve-dispatch.sh --tree --role sub-orchestrator` (→ `opus`). The
   `--tree` flag is **required** — `sub-orchestrator` lives only in the task-tree
   role table; without `--tree` the command exits 1 "unknown role".
-- **The foreman runs dev-flow's phases INLINE at depth 1** (planning + gating it
+- **The foreman runs dev-flow's admitted deliverables INLINE at depth 1** (planning + gating it
   does itself). It only **leaf-dispatches** the implementer and the first-pass
   reviewer to **depth-2 workers**. It does NOT dispatch plan/qc as further
   subagents.
@@ -152,7 +152,13 @@ REACTING too fast, not from seeing too little):
    (`${TMPDIR}/autopilot-dispatch-runs/<foreman-run-id>.ledger.jsonl` by
    convention), exports the foreman lineage (`AUTOPILOT_PARENT_RUN_ID=<foreman-run-id>`,
    `AUTOPILOT_ROOT_RUN_ID=<foreman-run-id>`, `AUTOPILOT_DISPATCH_DEPTH=1`), and writes both
-   the foreman run-id + watcher arg into the foreman prompt.
+   the foreman run-id + watcher arg into the foreman prompt. This is the outer
+   foreman/watcher lineage and remains the leaf manifest's trace root. On
+   L5/L6 managed implementation dispatches, the canonical campaign controller
+   separately injects the sealed `campaign_id` as
+   `AUTOPILOT_WORKTREE_ROOT_RUN_ID`; initial, repair, and resumed leaves
+   therefore share one durable worktree-budget identity even if the foreman
+   session changes, while each remains visible to its current foreman watcher.
 2. **Foreman duties** (in the prompt, non-optional): `run-ledger.sh
    stage-acquire` when starting a phase, `stage-transition` at phase
    boundaries, `stage-heartbeat` at least every 5 minutes inside long stages.
@@ -161,7 +167,7 @@ REACTING too fast, not from seeing too little):
 3. **Depth-0 arms ONE watcher** right after dispatch:
    `node scripts/watch-foreman.js --ledger <path> --root <foreman-run-id>` behind the Monitor tool
    (CC; `persistent: false`, timeout ≈ expected run length) — events: `STAGE`
-   (phase transitions), `LEAF_START/LEAF_END` (hetero dispatches), `QUIET` /
+   (deliverable transitions), `LEAF_START/LEAF_END` (hetero dispatches), `QUIET` /
    `LEAF_STALL` (silence beyond `--quiet-secs`, default 600). Non-CC fallback:
    run the same tool with `--once` as a manual snapshot poller.
 4. **Report-only discipline** (R6): `QUIET`/`LEAF_STALL` are observations,
@@ -347,16 +353,51 @@ The control loop is enforced at **depth 0** — the child cannot be trusted to
 police its own budget (fox/henhouse, Round-2 Ops 🔴 fix). The CEO wraps the
 foreman dispatch in a guard it owns:
 
+### -2. Mission routing admission (before every topology effect)
+
+At `/l3` through `/l6` entry, `session-mode.js set` first resolves the consuming repository's
+authoritative Owner Kernel config and runs `mission-routing-admission.js` against the configured
+graph and content-bound source manifest. The admission uses the canonical Mission policy resolver
+and execution-graph checker. It binds canonical Git-common-dir repository identity, Mission policy
+digest, graph digest, source coverage digest, deliverable count, critical path, batches, and
+aggregate reservations before the marker is written.
+
+```bash
+# normal entry
+node <plugin>/scripts/session-mode.js set --level lN --repo-root <repo>
+
+# topology-only degradation; entry authority remains lN
+node <plugin>/scripts/session-mode.js set --level l3 --entry-level lN \
+  --fallback solo --repo-root <repo>
+node <plugin>/scripts/session-mode.js set --level l3 --entry-level lN \
+  --fallback precondition_failed --repo-root <repo>
+```
+
+This command must complete before TaskCreate, branch, worktree, runner, model, or inline
+implementation effects. `READY` is required in enforce mode. `SHADOW` records `admitted` and
+`would_block` but is not authority. `LEGACY` preserves off-mode execution. Corrupt, expired,
+absent, or foreign prior session markers are observations only and can never replace the fresh
+policy/graph/source check.
+
+Source `Phase`/`P0..PN` headings, modules, tests, verification authoring, reviewer seats, and
+retries are provenance/coverage or gates inside caller-authored bounded deliverables. Only
+admitted graph nodes become implementation TaskCreates. A fallback, failed test, review round,
+or repair consumes the same node's gate-attempt budget; it cannot create a new node or reset
+admission. Routing admission is not the durable Mission grant: forward its exact policy/graph
+binding into `mission prepare`/`grant` when that runtime is active, without inventing lineage,
+root-run, state-path, or grant fields.
+
 ### -1. Session-mode marker + depth-0 context discipline (v2.32.27)
 
-At /l4 /l5 /l6 entry, depth-0 runs `node <plugin>/scripts/session-mode.js set
---level lN` (and `set --level l3` on `--solo` degradation; `clear` happens in
-finish-flow closing). The marker arms two opt-in hooks:
+At `/l3` through `/l6` entry, depth-0 runs the admitted command above (`clear` happens in
+finish-flow closing). The marker preserves its existing `level`, `repo_root`, `started_at`, and
+`expires_at` fields and adds the admission/entry topology binding when Mission is configured. It
+arms two opt-in hooks:
 
 - **orchestrator-edit-gate**: depth-0 Edit/Write of product files is a protocol
   violation — dispatch instead. Subagents/foremen pass (hook payload identity).
 - **context-budget**: measures the REAL context size. Once T1 (100k) has fired,
-  depth-0 MUST checkpoint + `autopilot:handoff` at the next phase boundary
+  depth-0 MUST checkpoint + `autopilot:handoff` at the next deliverable boundary
   (after a merged unit / qc verdict) and continue in a fresh session — context
   cost ≈ length × remaining messages, quadratic in session length (2026-07-14
   transcript study: 96%+ of tokens were cache_read on unsplit depth-0 sessions).
@@ -488,7 +529,7 @@ a JSON outcome.
 | `dirty` | Escalate (worker committed then left the tree dirty — not reviewable). |
 | `failure` | Escalate (clean commit but abnormal exit — run not trustworthy). |
 | `question_suspected` | Escalate (worker likely paused on a clarifying question). |
-| `precondition_failed` | **Gated on `on_engine_unavailable`** (from `resolve-review-loop.sh`): `ask` / `wait-reset` → escalate to the user (record in ledger; do **not** auto-`--solo`); `solo-fallback` → fall back to `--solo` (the foreman could not start; run inline). For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
+| `precondition_failed` | **Gated on `on_engine_unavailable`** (from `resolve-review-loop.sh`): `ask` / `wait-reset` → escalate to the user (record in ledger; do **not** auto-`--solo`); `solo-fallback` → run `session-mode.js set --level l3 --entry-level lN --fallback precondition_failed --repo-root <repo>` and fall back inline only if the same Mission admission digest remains. For `/l5`/`/l6` this is a `dispatch-hetero.sh` JSON status; for native `/l4` it is any `Agent()` call failure (a tool error, not JSON). |
 | `killed` (budget cap — CEO state, not a script status) | Escalate (see §1). |
 | `failed`/`killed` (foreman died before normal outcome emission) | run `run-ledger.sh resume --ledger <path> --run-id <run_id> --idempotency-key <key>` and let it perform recovery: locate last ledger stage, bump generation (`stage-acquire --allow-reopen`), hold resource lock, reconcile by `stage-reconcile` before any redo, adopt git-truth when available, and report `review_round_owed`. If `status=already_applied`, caller must treat as a true no-op recovery replay. On `quarantined`/D resources, resume must refuse the old resource and request a new resource path. |
 
@@ -587,30 +628,86 @@ reaper grammar remain explicit preserve-first harness cleanup responsibility.
 
 ### 5. Worktree GC
 
-Every non-success outcome (`dirty` / `no_op` / `question_suspected` / `failure`)
-**keeps** its worktree by design (caller's cleanup). The CEO reaps kept worktrees
-and branches after handling the outcome:
+At every L5/L6 deliverable transition, run the task status surface. Run it again before merge, after
+merge, and immediately before finish-flow clears the session marker:
 
 ```bash
-git worktree remove --force <path>        # `prune` ALONE is a no-op on an on-disk worktree
-# Preserve an out-of-grammar branch tip in a verified bundle, then depth 0 may
-# compare-delete that exact ref. Never use a bare branch -D.
-git worktree prune
+node "$autopilot_root/bin/autopilot.js" status task --root-run-id "$root_run_id"
 ```
 
+The caller persists the exact LSM input bundle as
+`${AUTOPILOT_TASK_STATUS_DIR:-${TMPDIR:-/tmp}/autopilot-task-status}/<root_run_id>.json`;
+the CLI rejects a mismatched/unsafe root id and recomputes live Git/WLB observations rather than
+trusting cached booleans.
+
+The four labels `product_merged`, `consumer_updated`, `pushed`, and `zero_residue` are independent.
+Only `can_close=true` is `DONE`; Mission terminal or a successful merge alone is never a clean
+closeout.
+
+Every non-success outcome (`dirty` / `no_op` / `question_suspected` / `failure`)
+**keeps** its worktree by design (caller's cleanup). The CEO reaps kept worktrees
+and branches immediately after handling the outcome. For managed schema-2
+L5/L6 leaves, keep the campaign `root_run_id` unchanged and use the canonical
+controller sequence; manual removal would discard the write-ahead branch
+inventory:
+
+```bash
+: "${lifecycle_artifact_dir:?set a caller-owned durable artifact directory}"
+: "${campaign_id:?bind the admitted sealed campaign_id}"
+[[ "$campaign_id" =~ ^campaign-v1-[0-9a-f]{64}$ ]] \
+  || { printf '%s\n' 'invalid lifecycle campaign_id' >&2; exit 2; }
+root_run_id="$campaign_id"
+lifecycle_dir="$(mktemp -d "$lifecycle_artifact_dir/root-$root_run_id.XXXXXX")" \
+  || exit 2
+bash "$autopilot_root/scripts/reap-dispatch-worktrees.sh" reap \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" --yes \
+  >"$lifecycle_dir/worktrees.json" || exit $?
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap \
+  --repo "$consumer_repo" --into "$integration_target" \
+  --inventory-file "$lifecycle_dir/worktrees.json" --yes \
+  >"$lifecycle_dir/branches.json" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" issue \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --worktree-result "$lifecycle_dir/worktrees.json" \
+  --branch-result "$lifecycle_dir/branches.json" \
+  --out "$lifecycle_dir/residue-receipt.json" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" check \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --receipt "$lifecycle_dir/residue-receipt.json" || exit $?
+node -e '
+const value = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (value.zero_residue !== true) process.exit(1);
+' "$lifecycle_dir/residue-receipt.json" \
+  || { printf '%s\n' 'lifecycle residue remains' >&2; exit 1; }
+```
+
+- Persist the artifact directory outside every leaf and record it in the run
+  summary for LSM. Each attempt gets a unique mode-0700 directory, and every
+  command is fail-fast so a failed attempt cannot validate a stale prior
+  receipt. Bind `root_run_id` explicitly from the admitted sealed
+  `campaign_id`; never read the outer foreman lineage or a leaf result for this
+  value. Validate the id and add the fixed `root-` prefix before path
+  construction. A
+  successful `check` proves freshness only; inspect
+  `zero_residue` separately. `false` blocks resource closure and names the
+  dirty/live/unknown state that must be resolved before rerunning.
 - For the `/l5`/`/l6` agy path, the worktree path is in the outcome JSON (`worktree`
-  field) and the branch in the `branch` field — reap **both**:
-  `git worktree remove --force <worktree>` (if non-null). For a dated branch covered
-  by `reap-dispatch-branches.sh`, let the reaper prove containment, create and verify
-  its bundle, then delete it; do not use an unchecked `git branch -D`. On a
+  field) and the branch in the `branch` field. For a retained managed leaf, the
+  controller sequence above reaps **both** or emits exact blockers; never
+  force-remove past a dirty, live, malformed, legacy, unsupported, pending, or
+  raced state. For a dated branch covered by `reap-dispatch-branches.sh`, let
+  the reaper prove containment, create and verify its bundle, then delete it;
+  do not use an unchecked `git branch -D`. On a
   `committed` outcome the worktree is already auto-removed (`worktree: null`); after
   an identity-preserving merge run the contained reaper pass above. After a
   cherry-pick, keep + ack/handoff the uncontained source. Out-of-grammar
   `hetero/<name>` branches require explicit preserve-first inspected cleanup.
-- For a killed native Claude foreman, the path is deterministic
+- Native Claude foreman worktrees are not schema-2 managed leaves. For a killed
+  native foreman, the path is deterministic
   (`.claude/worktrees/agent-<agentId>`); if unknown, discover via a
   `git worktree list` diff (worktree base ≠ HEAD — see memory
-  `worktree-dispatch-gotchas`).
+  `worktree-dispatch-gotchas`). Preserve its exact branch tip first, then
+  `git worktree remove --force <path>` and `git worktree prune`. Never use a bare branch -D.
 
 ### Quality-floor conventions (v2.31.11)
 
@@ -733,5 +830,6 @@ one row per step:
 - **`git worktree prune` alone is a no-op** on an on-disk worktree — `remove
   --force` first.
 - **Cross-platform**: `/lN`, `Agent(run_in_background)`, `TaskStop`, and `Monitor`
-  are Claude-Code-deep. On other agents the front-door degrades to `--solo`
-  (inline CEO) — the offload is the part that needs the CC primitives.
+  are Claude-Code-deep. On other agents the front-door may degrade to `--solo`
+  (inline CEO), but it still runs the same Mission routing admission first. Only the
+  offload topology depends on the CC primitives.

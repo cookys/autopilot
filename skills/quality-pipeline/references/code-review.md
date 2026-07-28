@@ -88,6 +88,25 @@ Whichever reviewer the chain selects, the agent (canonical scope also consumed b
 
 (Non-autopilot reviewers may use another shape — see "Handoff Consumption" for enum vocabulary; foreign shapes → quality-pipeline inline interpretation.)
 
+### Bounded convergence contract
+
+Reviewer output is a **bounded keep/cut list and a minimum shippable version**, not an unbounded
+search for further defects.
+
+- Grade only against the frozen task/spec and actual current artifact/baseline. Preferences,
+  nitpicks, ideal-architecture deltas, and invented requirements are not defects.
+- Classify every item as `MUST-FIX` or `CUT/FOLLOW-UP`. A `MUST-FIX` item names a concrete
+  in-scope failure and impact plus the smallest concrete remediation. `CUT/FOLLOW-UP` records why
+  optional hardening or aspiration is excluded from this version and never blocks.
+- An attack or edge case without a concrete failure and smallest concrete remediation is invalid.
+- When the `MUST-FIX` list is empty and the supplied acceptance evidence passes, the review is
+  complete and must return a passing verdict. Do not extend the loop with a new wish list or a
+  renamed version of a requirement the current artifact already satisfies.
+- A no-finding verdict must include a concrete no-finding proof receipt: acceptance surfaces
+  checked, evidence observed, and why no `MUST-FIX` remains. Bare `none`, `no findings`, `looks
+  good`, or `all passed` claims fail closed. This is an auditable reviewer attestation, not proof
+  of hidden cognition; the gate proves that a structured, non-tautological review trace exists.
+
 ## Handoff Consumption
 
 Read `### Handoff`; route by enum.
@@ -195,6 +214,14 @@ When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.
 
 - **Any panelist's _verified_ Critical/Major blocks.** Correlated-blind-spot catches appear to ONE reviewer (often cross-family). **Majority would suppress exactly the finding the panel exists for** — majority **forbidden** (`resolve-review-loop.sh` rejects `qc_panel_aggregation: majority` → `union-on-verified-critical`).
 - **"Verified" gates the union, not raw count.** Before a single-track finding blocks: reproduce it — **executable** via `independent_harness` (execution = decorrelation ceiling, zero shared LLM lineage); non-executable (design/spec-fit) → depth-0 second-look. Stops noisy false-blocks; never lets a real single-track Critical through.
+- **MVP portfolio selection is a separate bounded two-pass synthesis, never raw suggestion
+  union.** When a panel is asked to prioritize explicit subitems under a fixed budget, depth-0
+  first deduplicates and freezes the candidate union, then every roster member scores that exact
+  same matrix. Run `scripts/review-mvp-portfolio.js` to union verified `MUST-FIX` items, satisfy
+  frozen prerequisites, and select the deterministic maximum-score portfolio; unselected eligible
+  items become nonblocking backlog candidates. Do not auto-implement the union. Canonical input,
+  scoring, tie-break, and backlog handoff:
+  [`references/reviewer-mvp-portfolio.md`](../../../references/reviewer-mvp-portfolio.md).
 - **No-verdict = FAIL-CLOSED.** Empty/unparseable (e.g. `dispatch-review.sh` `status:no_verdict` from agy stdout-drop) = **"did not clear"**, never silent pass. Re-dispatch or treat as blocking unknown.
 - **Decorrelate by _family_, not just lens.** Same-vendor N share failure modes; panel needs **≥1 family ≠ implementer's** (`cross_family_required`/`cross_family_satisfied` from `resolve-review-loop.sh`; **unknown-family** fails closed = unsatisfied). Grounding: PoLL (disjoint families beat one large judge + cut intra-model bias) + same-family self-preference/familiarity bias.
 - **Risk-tiered depth, honest terminals (v2.25.11).** Depth follows deterministic `implementation_review_risk` (NOT source-trust alone — diff risk, oracle availability, security surface; `resolve-review-loop.sh`), not who implemented. **High risk**: cross-family hard-required + **decorrelated execution oracle (`l1_required`) mandatory** — absence → `block`/non-automerge (`--enforce` exit 3). Terminals, never forged softer: **`verified`** (decorrelated oracle/reviewer cleared), **`unverified-nonblocking`** (low-risk, proceeds but HONESTLY unverified — NOT green), **`unverified-blocking`** (high-risk missing L1/cross-family — blocked). `warn`/`off` may suppress BLOCKING but **never** relabel `unverified` as `verified`. Design (honest-but-weak only, not malicious-proof): [`docs/plans/2026-06-26-trust-tiered-review-policy.md`](../../../docs/plans/2026-06-26-trust-tiered-review-policy.md).

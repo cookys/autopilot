@@ -8,6 +8,7 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-07-27 | arch | Absence 不等於 zero：先用 repo registry admission 記住資源曾存在，再以 Git-ref CAS authority 防 ordinary-file rollback、anchor/registry forward-repair 防 torn write；先凍結 attack matrix、穩定 diff 後才跑昂貴外審 | [architecture.md](architecture.md) |
 | 2026-07-26 | arch | Severity 不等於當票修復權；同模型新 context 是 peer、不是 Heto；主席不可用時改走全部合格異質席聯審，逐票排除 implementation lineage／能力與 context 不足席 | [architecture.md](architecture.md) |
 | 2026-07-24 | arch | Merge 完成後 cleanup 是 terminal invariant：驗證 worktree inactive/clean 與 branch containment，移除 worktree，再用 preserve-first reaper 或 `git branch -d`，最後重新列舉確認零殘留 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |
 | 2026-07-16 | debug | Silent-retry 假死（CLI×z.ai 確定性 529）— 分層診斷四步 + logging proxy 定位；readiness 探針要同傳輸同 payload | [debug-patterns.md](debug-patterns.md) |

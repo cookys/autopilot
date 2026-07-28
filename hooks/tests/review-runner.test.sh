@@ -77,6 +77,12 @@ console.log(`parse=${run.parseError ? 'error' : 'ok'}`);
 console.log(`result_status=${run.result && run.result.status}`);
 console.log(`verdict=${run.result && run.result.verdict}`);
 console.log(`findings=${run.result && run.result.findings}`);
+console.log(`transport_artifact=${run.transportEnvelope.artifact_type}`);
+console.log(`transport_outcome=${run.transportEnvelope.outcome.classification}`);
+console.log(`transport_has_verdict=${Object.prototype.hasOwnProperty.call(
+  run.transportEnvelope,
+  'verdict',
+)}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "review runner JS capture process exits 0"
@@ -85,6 +91,12 @@ assert_contains "$OUT" "parse=ok" "review runner parses JSON"
 assert_contains "$OUT" "result_status=reviewed" "review runner captures reviewed status"
 assert_contains "$OUT" "verdict=FIX-THEN-SHIP" "review runner captures verdict"
 assert_contains "$OUT" "findings=parsed by JS runner" "review runner captures findings"
+assert_contains "$OUT" "transport_artifact=runner_transport_envelope" \
+  "review runner returns the shared mechanical transport envelope"
+assert_contains "$OUT" "transport_outcome=success" \
+  "review runner transport records the mechanical child outcome"
+assert_contains "$OUT" "transport_has_verdict=false" \
+  "review runner transport does not extract semantic verdict authority"
 
 OUT="$(node - "$REPO_ROOT" "$DIFF" "$STUB_EMPTY" <<'NODE'
 const path = require('path');
@@ -132,7 +144,7 @@ const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'
 const parsed = parseReviewOutput([
   '{not valid json}',
   '{"foo":1}',
-  '{"runner":"codex","model":"gpt-5.5","status":"reviewed","verdict":"SHIP-AS-IS","findings":"none","raw_log":"/tmp/log","error":null}',
+  '{"runner":"codex","model":"gpt-5.5","status":"reviewed","verdict":"SHIP-AS-IS","findings":"none","no_finding_proof":"checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains","raw_log":"/tmp/log","error":null}',
 ].join('\n'));
 console.log(parsed.status);
 console.log(parsed.verdict);
@@ -152,6 +164,7 @@ const parsed = parseReviewOutput(JSON.stringify({
   status: 'reviewed',
   verdict: 'SHIP-AS-IS',
   findings: 'none',
+  no_finding_proof: 'checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains',
   raw_log: '/tmp/log',
   error: null,
 }, null, 2));
@@ -171,9 +184,34 @@ try {
   parseReviewOutput(JSON.stringify({
     runner: 'codex',
     model: 'gpt-5.5',
+    status: 'reviewed',
+    verdict: 'SHIP-AS-IS',
+    findings: 'none',
+    no_finding_proof: null,
+    raw_log: '/tmp/log',
+    error: null,
+  }));
+  console.log('unexpected-ok');
+} catch (err) {
+  console.log('proof-required');
+}
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "review output proof-validation process exits 0"
+assert_contains "$OUT" "proof-required" "review runner rejects SHIP-AS-IS without proof"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+try {
+  parseReviewOutput(JSON.stringify({
+    runner: 'codex',
+    model: 'gpt-5.5',
     status: 'done',
     verdict: 'SHIP-AS-IS',
     findings: 'none',
+    no_finding_proof: 'checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains',
     raw_log: '/tmp/log',
     error: null,
   }));
@@ -197,6 +235,7 @@ try {
     status: 'reviewed',
     verdict: 'PASS',
     findings: 'none',
+    no_finding_proof: null,
     raw_log: '/tmp/log',
     error: null,
   }));
@@ -220,6 +259,7 @@ try {
     status: 'reviewed',
     verdict: 'SHIP-AS-IS',
     findings: 'none',
+    no_finding_proof: 'checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains',
     raw_log: '/tmp/log',
     error: null,
     extra: true,

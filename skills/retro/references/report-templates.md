@@ -54,7 +54,13 @@ refactor ████████░░░░░░░░░░░░  23%  (10)
 ### Hotspot Analysis
 Top 10 most-changed files with touch count. Flag files touched >5 times as potential refactor candidates.
 
-### Review-Loop Lens (from 1f — omit entirely if `transcript.sessions == 0`)
+### Transcript Coverage (from 1f — always render)
+Lead with one row per scanned root: harness/adapter, root status, candidate count, included count,
+excluded count, parse-error count, and exclusion-reason tally. Render every `coverage.warnings`
+entry prominently. A missing root is `not_present`; a present supported root with candidates but
+zero inclusion is a coverage gap, not "zero activity."
+
+### Review-Loop Lens (from 1f)
 The hetero-engine dispatch / decorrelated-review / debate effort that git history can't see
 (reviews and harness runs aren't commits; multi-round `/l5` work is squashed into one). Show
 the transcript invocation counts (`impl_dispatch`, `review_dispatch`, `codex_exec`, agy/grok/
@@ -65,6 +71,13 @@ invocations behind them. **Carry the 1f honesty caveat**: `review_dispatch` incl
 harness/debug runs (the git review-round / QC markers are the cleaner cycle count), and only
 local-machine transcripts are counted. Do NOT invent a "review-per-impl ratio" as if precise —
 the harness/debug noise makes it approximate; characterize, don't over-quantify.
+
+Then render `loop_metrics.deterministic` and `loop_metrics.heuristic` separately. Show provider
+dispatch/results/reroutes, transport failures, ticket continuations/generations, paired worktree
+high-water, code-ready-to-merge-ready duration, user corrections, and status reversals. Preserve
+the metric's `known`/`unknown` state and missing-evidence reason. Label heuristic counts explicitly;
+never present them as deterministic blame. Evidence references may show session ID, timestamp,
+event class, and line only.
 
 ### Ship of the Week
 The single commit (or day) with the highest net LOC change. Show commit hash, message, and stats.

@@ -1334,7 +1334,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch,
   base,
@@ -1358,10 +1358,12 @@ const result = engine.runImplementationReviewLoop({
 
 console.log(`status=${result.status}`);
 console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
 console.log(`rounds=${result.rounds}`);
 console.log(`implementation_calls=${result.implementationChain.length}`);
 console.log(`review_calls=${result.reviewChain.length}`);
 console.log(`reconciled=${result.implementationChain[0].implementation && result.implementationChain[0].implementation.reconcile_by_ledger}`);
+console.log(`reconcile_receipt=${result.implementationChain[0].implementation && result.implementationChain[0].implementation.reconciliation_receipt && result.implementationChain[0].implementation.reconciliation_receipt.receipt_digest}`);
 console.log(`dispatch_row=${result.ledger.find((entry) => entry.unit === 'dispatch_implementation').status}`);
 NODE
 )"; EXIT=$?
@@ -1372,6 +1374,8 @@ assert_contains "$OUT" "rounds=1" "AutopilotEngine split-brain path runs one rou
 assert_contains "$OUT" "implementation_calls=1" "AutopilotEngine split-brain path does not re-dispatch implementation"
 assert_contains "$OUT" "review_calls=1" "AutopilotEngine split-brain path dispatches a single review"
 assert_contains "$OUT" "reconciled=true" "AutopilotEngine split-brain path reconciles from ledger"
+assert_contains "$OUT" "reconcile_receipt=" "AutopilotEngine binds ledger reconciliation to a receipt"
+assert_not_contains "$OUT" "reconcile_receipt=undefined" "AutopilotEngine reconciliation receipt is concrete"
 assert_contains "$OUT" "dispatch_row=committed" "AutopilotEngine split-brain path reaches committed dispatch state from ledger"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-loop-prompt.txt" <<'NODE'
@@ -1487,7 +1491,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
   base: '1111111111111111111111111111111111111111',
@@ -1543,7 +1547,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
   base: 'develop',
@@ -1609,7 +1613,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
   base: '1111111111111111111111111111111111111111',
@@ -1701,7 +1705,7 @@ const baseRoster = {
 function run(extra) {
   const counters = { impl: 0, review: 0 };
   const engine = makeEngine(counters);
-  const result = engine.runImplementationReviewLoop({
+  const result = engine.runLegacyImplementationReviewLoop({
     promptFile: prompt,
     branch: 'impl-loop',
     base: '1111111111111111111111111111111111111111',
@@ -1779,7 +1783,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
   base: '1111111111111111111111111111111111111111',
@@ -1901,7 +1905,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: 'prompt.txt',
   branch: 'cwd-loop',
   base: '1111111111111111111111111111111111111111',
@@ -1980,7 +1984,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'feature/slash-branch',
   base: head,
@@ -2084,7 +2088,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'large-diff',
   base,
@@ -2183,7 +2187,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'repair-loop',
   base: '1111111111111111111111111111111111111111',
@@ -2388,7 +2392,7 @@ function runScenario(name, options) {
     input.noVerifyFirst = true;
   }
 
-  const result = engine.runImplementationReviewLoop(input);
+  const result = engine.runLegacyImplementationReviewLoop(input);
   const verifyEntries = result.ledger.filter((entry) => entry.unit === 'verify_round');
   const ratchetSelectEntries = result.ledger.filter((entry) => entry.unit === 'ratchet_select');
   const ratchetEntries = result.ledger.filter((entry) => entry.ratchet_reverted === true);
@@ -2464,7 +2468,7 @@ function runTopLevelReviewFindingsScenario() {
     };
   };
 
-  const result = engine.runImplementationReviewLoop({
+  const result = engine.runLegacyImplementationReviewLoop({
     promptFile: prompt,
     branch: 'top-level-findings-branch',
     base: '1111111111111111111111111111111111111111',
@@ -2714,7 +2718,7 @@ const engine = new AutopilotEngine({
 });
 
 const beforeWorktrees = run('git', ['worktree', 'list', '--porcelain'], { cwd: repo }).split('\n').filter((line) => line.startsWith('worktree ')).length;
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'unit-verify-regression',
   base,
@@ -2865,7 +2869,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'add-fail-branch',
   base: '1111111111111111111111111111111111111111',
@@ -3012,7 +3016,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'remove-fail-branch',
   base: '1111111111111111111111111111111111111111',
@@ -3194,7 +3198,7 @@ function runSignalScenario(name, options) {
     input.verifyCmd = 'true';
   }
 
-  const result = engine.runImplementationReviewLoop(input);
+  const result = engine.runLegacyImplementationReviewLoop(input);
   const signalEntries = result.ledger.filter((entry) => entry.unit === 'verify_first_signal');
   console.log(`${name}_status=${result.status}`);
   console.log(`${name}_unused_key=${Object.prototype.hasOwnProperty.call(result, 'verify_first_signal_unused') ? result.verify_first_signal_unused : 'absent'}`);
@@ -3264,6 +3268,10 @@ const validPayload = {
   independent_harness: 'off',
   qc_panel: ['test-reviewer'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  qc_panel_seats: [],
+  qc_panel_seats_complete: false,
+  provider_readiness_receipt_ttl_seconds: 300,
+  provider_readiness_fallback_family_constraint: 'different',
   review_risk: 'low',
   required_review_families: 1,
   l1_required: false,
@@ -3584,18 +3592,18 @@ const loopArgs = {
   roster,
 };
 
-createEngine(false).runImplementationReviewLoop(loopArgs);
-createEngine(true).runImplementationReviewLoop({ ...loopArgs, noReviewSpec: true });
+createEngine(false).runLegacyImplementationReviewLoop(loopArgs);
+createEngine(true).runLegacyImplementationReviewLoop({ ...loopArgs, noReviewSpec: true });
 
 console.log(`default_has_spec=${reviewArgsDefault.includes('--spec-file')}`);
 console.log(`default_spec_value=${reviewArgsDefault[reviewArgsDefault.indexOf('--spec-file') + 1] === path.resolve('/tmp/some-prompt.md')}`);
 console.log(`no_spec_has_spec=${reviewArgsNoSpec.includes('--spec-file')}`);
 NODE
 )"; EXIT=$?
-assert_eq "0" "$EXIT" "AutopilotEngine runImplementationReviewLoop spec-file tests exit 0"
-assert_contains "$OUT" "default_has_spec=true" "runImplementationReviewLoop passes spec-file by default"
-assert_contains "$OUT" "default_spec_value=true" "runImplementationReviewLoop uses prompt file as spec file by default"
-assert_contains "$OUT" "no_spec_has_spec=false" "runImplementationReviewLoop suppresses spec-file when noReviewSpec is true"
+assert_eq "0" "$EXIT" "AutopilotEngine runLegacyImplementationReviewLoop spec-file tests exit 0"
+assert_contains "$OUT" "default_has_spec=true" "runLegacyImplementationReviewLoop passes spec-file by default"
+assert_contains "$OUT" "default_spec_value=true" "runLegacyImplementationReviewLoop uses prompt file as spec file by default"
+assert_contains "$OUT" "no_spec_has_spec=false" "runLegacyImplementationReviewLoop suppresses spec-file when noReviewSpec is true"
 
 OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
 const fs = require('fs');
@@ -4255,7 +4263,7 @@ function mk(inspect, counter) {
 // REVIEW leg MUST fire (a mutation short-circuiting resume→converged without
 // review is caught by d_review_calls / d_review_chain).
 let cd = { n: 0, r: 0 };
-let d = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cd).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+let d = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cd).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`d_status=${d.status}`);
 console.log(`d_impl_calls=${cd.n}`);
 console.log(`d_review_calls=${cd.r}`);
@@ -4268,7 +4276,7 @@ console.log(`d_ledger=${d.ledger.map((e) => `${e.unit}:${e.status}`).join(',')}`
 
 // (e1) missing branch -> resume_invalid, nothing dispatched
 let e1 = { n: 0 };
-let r1 = mk({ error: null, exists: false, tipSha: null, baseAncestor: false }, e1).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+let r1 = mk({ error: null, exists: false, tipSha: null, baseAncestor: false }, e1).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`e1_status=${r1.status}`);
 console.log(`e1_phase=${r1.phase}`);
 console.log(`e1_impl_calls=${e1.n}`);
@@ -4276,21 +4284,21 @@ console.log(`e1_rounds=${r1.rounds}`);
 
 // (e2) not ahead (tip === base) -> resume_invalid
 let e2 = { n: 0 };
-let r2 = mk({ error: null, exists: true, tipSha: BASE, baseAncestor: true }, e2).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+let r2 = mk({ error: null, exists: true, tipSha: BASE, baseAncestor: true }, e2).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`e2_status=${r2.status}`);
 console.log(`e2_phase=${r2.phase}`);
 console.log(`e2_impl_calls=${e2.n}`);
 
 // (e3) base not ancestor -> resume_invalid
 let e3 = { n: 0 };
-let r3 = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: false }, e3).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+let r3 = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: false }, e3).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`e3_status=${r3.status}`);
 console.log(`e3_phase=${r3.phase}`);
 console.log(`e3_impl_calls=${e3.n}`);
 
 // (f) no --resume -> today's behavior: implementation IS dispatched
 let cf = { n: 0 };
-let f = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cf).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster });
+let f = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cf).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster });
 console.log(`f_status=${f.status}`);
 console.log(`f_impl_calls=${cf.n}`);
 NODE
@@ -4446,7 +4454,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-branch',
   base: '1111111111111111111111111111111111111111',

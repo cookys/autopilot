@@ -18,9 +18,11 @@ qc verdict**.
 
 Hard rules:
 - Startup presets identical to `/l3`; engine all-Claude (hetero implementer → `/l5`).
-- At entry run `node <plugin>/scripts/session-mode.js set --level l4` (`--solo` ⇒
-  `set --level l3`) — arms the orchestrator-edit-gate + context-budget hooks
-  (level-front-door § "Session-mode marker").
+- Before any TaskCreate, branch, worktree, runner, or model effect, run
+  `node <plugin>/scripts/session-mode.js set --level l4 --repo-root <repo>`. `--solo` uses
+  `set --level l3 --entry-level l4 --fallback solo`; a recorded precondition degradation uses
+  `--fallback precondition_failed`. The command admits canonical Mission policy/graph/source
+  coverage before writing the marker. Topology may change; its admission digest may not.
 - **qc@depth-0 is THE gate**: reviewer families/panel come from
   `scripts/resolve-review-loop.sh` (`qc_panel` / `required_review_families` /
   `min_panel_size`); resolver unavailable → fall back to 3 reviewers. A
@@ -34,6 +36,8 @@ Hard rules:
   (`TaskStop` + escalate). Record the run-summary ledger in the final CEO Report.
 - `--solo` → the `/l3` inline engine (also the automatic degradation when the
   foreman returns `precondition_failed`).
+- Only admitted graph nodes become implementation tasks. Plan phase headings, modules, tests,
+  review seats, and retries stay inside the owning deliverable.
 
 **Capability profile (shadow):** `/l4` fixes foreman topology only. When the host supplies a current
 verified envelope/grant/profile payload, forward it unchanged; never infer guidance density from

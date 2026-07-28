@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/mission-execution-graph.schema.json",
+  "title": "MissionExecutionGraph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "nodes",
+    "calculated_depth",
+    "calculated_batches",
+    "graph_digest"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "const": "mission_execution_graph" },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/node" }
+    },
+    "calculated_depth": { "type": "integer", "minimum": 1 },
+    "calculated_batches": { "type": "integer", "minimum": 1 },
+    "graph_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "tokens": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/token" }
+    },
+    "non_empty_tokens": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/token" }
+    },
+    "reservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "campaigns",
+        "wall_seconds",
+        "tool_calls",
+        "engine_attempts",
+        "external_wait_seconds",
+        "canonical_changed_files",
+        "output_bytes"
+      ],
+      "properties": {
+        "campaigns": { "type": "integer", "minimum": 1 },
+        "wall_seconds": { "type": "integer", "minimum": 0 },
+        "tool_calls": { "type": "integer", "minimum": 1 },
+        "engine_attempts": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "external_wait_seconds": { "type": "integer", "minimum": 0 },
+        "canonical_changed_files": { "type": "integer", "minimum": 0 },
+        "output_bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "allowed_path_prefixes",
+        "max_changed_files",
+        "baseline_churn",
+        "max_growth_ratio",
+        "max_extra_churn",
+        "max_repair_generations",
+        "max_wall_seconds",
+        "spec",
+        "required_paths",
+        "output_paths"
+      ],
+      "properties": {
+        "profile": { "enum": ["poc", "standard", "high"] },
+        "allowed_path_prefixes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 }
+        },
+        "spec": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "section"],
+          "properties": {
+            "path": { "$ref": "#/$defs/relative_path" },
+            "section": { "type": "string", "minLength": 1, "maxLength": 512 }
+          }
+        },
+        "required_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relative_path" }
+        },
+        "output_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relative_path" }
+        },
+        "max_changed_files": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "baseline_churn": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+        "max_growth_ratio": { "type": "number", "minimum": 1, "maximum": 1.5 },
+        "max_extra_churn": { "type": "integer", "minimum": 0, "maximum": 5000000 },
+        "max_repair_generations": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "max_wall_seconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+      }
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*[?*\\\\]).+"
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source_plan_ids",
+        "source_rubric_ids",
+        "dependencies",
+        "acceptance_ids",
+        "verification_commands",
+        "gate_attempt_budget",
+        "reservation",
+        "campaign"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/token" },
+        "source_plan_ids": { "$ref": "#/$defs/non_empty_tokens" },
+        "source_rubric_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*[0-9]+$"
+          }
+        },
+        "dependencies": { "$ref": "#/$defs/tokens" },
+        "acceptance_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/token" }
+        },
+        "verification_commands": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        },
+        "gate_attempt_budget": { "type": "integer", "minimum": 1 },
+        "reservation": { "$ref": "#/$defs/reservation" },
+        "campaign": { "$ref": "#/$defs/campaign" }
+      }
+    }
+  }
+}

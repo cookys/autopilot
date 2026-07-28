@@ -35,12 +35,14 @@ git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
 
-# --- stub agy: commits one file AND dumps its own AUTOPILOT_* env to a file (env test) ---
+# --- stub agy: commits one file AND dumps its own AUTOPILOT_* env to files (env test) ---
 ENVDUMP="$TEST_TMP/worker-env.txt"
+MARKERDUMP="$TEST_TMP/worker-marker.txt"
 STUB_OK="$TEST_TMP/agy-ok"
 cat > "$STUB_OK" <<EOF
 #!/usr/bin/env bash
-env | grep -E '^AUTOPILOT_(PARENT|ROOT|DISPATCH_DEPTH)' > "$ENVDUMP" 2>/dev/null || true
+env | grep -E '^AUTOPILOT_(PARENT|ROOT|WORKTREE_ROOT|DISPATCH_DEPTH)' > "$ENVDUMP" 2>/dev/null || true
+cp .autopilot-worktree "$MARKERDUMP" 2>/dev/null || true
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: smoke"
@@ -85,6 +87,23 @@ M_C2="$RUNS/child2.manifest.json"
 assert_eq "foreman-B" "$(json_field "$M_C2" parent_run_id)" "child2: parent set"
 assert_eq "foreman-B" "$(json_field "$M_C2" root_run_id)" "child2: root falls back to parent"
 assert_eq "1" "$(json_field "$M_C2" depth)" "child2: depth default 1 (parent set, depth unset)"
+
+# 2c. Worktree resource identity is independent from watcher lineage. The
+# manifest stays under the foreman root while the marker uses the campaign root.
+CAMPAIGN_ROOT="campaign-v1-$(printf 'a%.0s' {1..64})"
+run_hetero child-resource \
+  AUTOPILOT_PARENT_RUN_ID=foreman-resource \
+  AUTOPILOT_ROOT_RUN_ID=foreman-resource \
+  AUTOPILOT_WORKTREE_ROOT_RUN_ID="$CAMPAIGN_ROOT" \
+  AUTOPILOT_DISPATCH_DEPTH=1
+M_RESOURCE="$RUNS/child-resource.manifest.json"
+assert_eq "foreman-resource" "$(json_field "$M_RESOURCE" root_run_id)" \
+  "resource split: manifest preserves watcher lineage root"
+assert_contains "$(cat "$MARKERDUMP")" "root_run_id=$CAMPAIGN_ROOT" \
+  "resource split: marker carries the stable campaign worktree root"
+assert_contains "$(cat "$ENVDUMP")" \
+  "AUTOPILOT_WORKTREE_ROOT_RUN_ID=$CAMPAIGN_ROOT" \
+  "resource split: worker descendants inherit campaign worktree root"
 
 # =========================================================================
 # 3. non-numeric depth coerced to 1
@@ -253,7 +272,21 @@ assert_eq "8" "$D08" "depth 08 coerced base-10 to 8 in valid manifest JSON"
 assert_contains "$(cat "$ENVDUMP")" "AUTOPILOT_DISPATCH_DEPTH=9" "worker depth incremented past 08 (9, not octal-stuck)"
 
 # =========================================================================
-# 13. control chars in inherited parent id → sanitized, manifest stays valid JSON
+# 13. hostile huge/zero depths normalize before fixed-width shell arithmetic
+# =========================================================================
+run_hetero huge-depth AUTOPILOT_PARENT_RUN_ID=foreman-huge \
+  AUTOPILOT_DISPATCH_DEPTH=999999999999999999999999999999999999
+M_HUGE="$RUNS/huge-depth.manifest.json"
+assert_eq "1" "$(node -e 'const m=require(process.argv[1]);process.stdout.write(String(m.depth))' "$M_HUGE")" \
+  "huge inherited depth normalizes to managed depth 1"
+assert_contains "$(cat "$ENVDUMP")" "AUTOPILOT_DISPATCH_DEPTH=2" \
+  "worker receives bounded child depth after huge inherited value"
+run_hetero zero-depth AUTOPILOT_PARENT_RUN_ID=foreman-zero AUTOPILOT_DISPATCH_DEPTH=0
+assert_eq "1" "$(node -e 'const m=require(process.argv[1]);process.stdout.write(String(m.depth))' "$RUNS/zero-depth.manifest.json")" \
+  "managed zero depth cannot bypass lifecycle admission"
+
+# =========================================================================
+# 14. control chars in inherited parent id → sanitized, manifest stays valid JSON
 # =========================================================================
 run_hetero ctlparent AUTOPILOT_PARENT_RUN_ID="$(printf 'evil\tid')"
 M_CTL="$RUNS/ctlparent.manifest.json"

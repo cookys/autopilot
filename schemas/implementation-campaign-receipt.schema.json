@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/implementation-campaign-receipt.schema.json",
+  "title": "implementation-campaign-receipt",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "campaign_id",
+        "tree_sha",
+        "argv_hash",
+        "env_fingerprint",
+        "request_digest",
+        "verdict",
+        "exit_status",
+        "writer_lease_closed",
+        "detached_checkout",
+        "runner_argv_attested",
+        "writer_fence_digest",
+        "checkout_attestation_digest",
+        "stdout_digest",
+        "stderr_digest",
+        "started_at",
+        "ended_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "implementation_campaign_verification" },
+        "campaign_id": { "type": "string", "minLength": 1 },
+        "tree_sha": { "$ref": "#/$defs/gitObject" },
+        "argv_hash": { "$ref": "#/$defs/sha256" },
+        "env_fingerprint": { "$ref": "#/$defs/sha256" },
+        "request_digest": { "$ref": "#/$defs/sha256" },
+        "verdict": { "type": "string", "enum": ["GREEN", "RED"] },
+        "exit_status": { "type": "integer" },
+        "writer_lease_closed": { "type": "boolean", "const": true },
+        "detached_checkout": { "type": "boolean", "const": true },
+        "runner_argv_attested": { "type": "boolean", "const": true },
+        "writer_fence_digest": { "$ref": "#/$defs/sha256" },
+        "checkout_attestation_digest": { "$ref": "#/$defs/sha256" },
+        "stdout_digest": { "$ref": "#/$defs/sha256" },
+        "stderr_digest": { "$ref": "#/$defs/sha256" },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "status",
+        "candidate_tree_sha",
+        "verification_receipt_digest",
+        "repair_generations",
+        "final_panel_count",
+        "follow_up",
+        "rejected_findings",
+        "unresolved_final_findings",
+        "lifecycle_receipt_ref",
+        "trace",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "implementation_campaign_terminal" },
+        "status": { "type": "string", "enum": ["ready", "follow_up"] },
+        "candidate_tree_sha": { "$ref": "#/$defs/gitObject" },
+        "verification_receipt_digest": { "$ref": "#/$defs/sha256" },
+        "repair_generations": { "type": "integer", "minimum": 0 },
+        "final_panel_count": { "type": "integer", "const": 1 },
+        "follow_up": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/adjudicatedFinding" }
+        },
+        "rejected_findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/adjudicatedFinding" }
+        },
+        "unresolved_final_findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/adjudicatedFinding" }
+        },
+        "lifecycle_receipt_ref": {
+          "oneOf": [
+            { "type": "string", "const": "unknown" },
+            {
+              "type": "object",
+              "required": ["path", "root_run_id", "receipt_digest"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "root_run_id": { "type": "string", "minLength": 1 },
+                "receipt_digest": { "$ref": "#/$defs/sha256" }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "trace": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitObject": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["classification", "digest"],
+      "properties": {
+        "classification": { "type": "string", "enum": ["actionable", "refuted"] },
+        "digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "adjudicationAuthority": {
+      "type": "object",
+      "required": ["authority", "actor_id", "review_digest"],
+      "properties": {
+        "authority": {
+          "type": "string",
+          "enum": ["depth-0", "deterministic-policy"]
+        },
+        "actor_id": { "type": "string", "minLength": 1 },
+        "review_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "disposition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["disposition", "deferral_harm"],
+          "properties": {
+            "disposition": { "type": "string", "const": "must-fix-now" },
+            "acceptance_id": { "type": "string", "minLength": 1 },
+            "rubric_id": { "type": "string", "minLength": 1 },
+            "task_surface": { "type": "string", "minLength": 1 },
+            "deferral_harm": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "disposition",
+            "context",
+            "trigger",
+            "proposed_backlog_title"
+          ],
+          "properties": {
+            "disposition": { "type": "string", "const": "follow-up" },
+            "context": { "type": "string", "minLength": 1 },
+            "trigger": { "type": "string", "minLength": 1 },
+            "proposed_backlog_title": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["disposition", "rationale"],
+          "properties": {
+            "disposition": { "type": "string", "const": "reject-out-of-scope" },
+            "rationale": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "adjudicatedFinding": {
+      "type": "object",
+      "required": [
+        "id",
+        "claim",
+        "severity",
+        "source",
+        "evidence",
+        "adjudication_authority"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "claim": { "type": "string", "minLength": 1 },
+        "severity": { "type": "string", "enum": ["🔴", "🟠", "🟡", "🔵"] },
+        "source": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/evidence" },
+        "adjudication_authority": { "$ref": "#/$defs/adjudicationAuthority" },
+        "disposition": { "$ref": "#/$defs/disposition" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

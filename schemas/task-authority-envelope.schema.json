@@ -184,7 +184,13 @@
         "data_egress": { "enum": ["local-only", "allowlisted", "online"] },
         "data_egress_source": { "enum": ["project-default", "task-override"] }
       }
-    }
+    },
+    "mission_lineage_id": {
+      "type": "string",
+      "pattern": "^lineage-v1-[0-9a-f]{64}$"
+    },
+    "mission_policy_digest": { "$ref": "#/$defs/sha256" },
+    "mission_graph_digest": { "$ref": "#/$defs/sha256" }
   },
   "$defs": {
     "sha256": {

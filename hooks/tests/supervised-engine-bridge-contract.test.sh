@@ -31,6 +31,42 @@ const {
 const hash = (value) => sha256(value);
 
 const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
+  'campaign-intake': {
+    operation: 'engine_campaign_intake',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
+  'campaign-admission-release': {
+    operation: 'engine_campaign_admission_release',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
+  'campaign-event-append': {
+    operation: 'engine_campaign_event_append',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
+  'campaign-admission-complete': {
+    operation: 'engine_campaign_admission_complete',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
+  'campaign-post-commit-checkpoint': {
+    operation: 'engine_campaign_post_commit_checkpoint',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'irreversible',
+    requires_mediator: true,
+  },
+  'mission-terminal-reconcile': {
+    operation: 'engine_mission_terminal_reconcile',
+    tool_class: 'mission_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
   'review-dispatch': {
     operation: 'engine_review_dispatch',
     tool_class: 'model_runner',
@@ -89,6 +125,17 @@ const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
 };
 
 const EXPECTED_CONTROL_SINKS = [
+  ['campaign-intake', 'campaignIntake', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
+  ['campaign-admission-release', 'campaignAdmissionReleaser', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
+  ['campaign-event-append', 'campaignEventAppender', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
+  ['campaign-admission-complete', 'campaignAdmissionCompleter', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
+  ['campaign-composition', 'campaignComposer', 'campaign_control', [], false],
+  ['campaign-adjudication', 'campaignAdjudicator', 'campaign_control', [], false],
+  ['campaign-disposition', 'campaignDispositionProvider', 'campaign_control', [], false],
+  ['campaign-scope-check', 'campaignScopeChecker', 'campaign_control', [], false],
+  ['campaign-tree-resolve', 'campaignTreeResolver', 'campaign_control', [], false],
+  ['campaign-lifecycle-inspect', 'campaignLifecycleInspector', 'campaign_control', [], false],
+  ['campaign-post-commit-checkpoint', 'campaignPostCommitCheckpoint', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['review-loop-resolution', 'reviewLoopResolver', 'policy_read', [], false],
   ['review-dispatch', 'reviewDispatcher', 'challenge_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate', 'recordChallenge'], true],
   ['implementation-dispatch', 'implementationDispatcher', 'worker_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate'], true],
@@ -102,6 +149,8 @@ const EXPECTED_CONTROL_SINKS = [
   ['resume-inspection', 'gitResumeInspect', 'resume_read', ['resume'], false],
   ['diff-risk-classification', 'classifyDiffRisk', 'policy_read', [], false],
   ['lifecycle-observation', 'lifecycleObserver', 'non_authoritative_observation', [], false],
+  ['mission-adapter-factory', 'missionAdapterFactory', 'mission_control', [], false],
+  ['mission-terminal-reconcile', 'missionTerminalReconciler', 'mission_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
 ];
 
 function attestation(identity) {
@@ -337,7 +386,16 @@ assert.deepEqual(
   ),
   EXPECTED_ACTION_CATALOG_REQUIREMENTS,
 );
-assert.deepEqual([...AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS], ['clock', 'cwd']);
+assert.deepEqual([...AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS].sort(), [
+  'clock',
+  'cwd',
+  'missionCampaignAdapterOptions',
+  'missionCampaignGrant',
+  'missionCampaignStore',
+  'missionPreparedReceipt',
+  'missionPreparedReceiptPath',
+  'missionStatePath',
+].sort());
 assert.equal(validateAutopilotEngineControlSinkInventory(getAutopilotEngineControlSinkInventory()), true);
 const duplicateSinkInventory = getAutopilotEngineControlSinkInventory();
 duplicateSinkInventory[1] = { ...duplicateSinkInventory[0] };
@@ -351,7 +409,10 @@ assert.throws(() => validateAutopilotEngineControlSinkInventory(duplicateDestina
 const truncatedInventory = getAutopilotEngineControlSinkInventory().slice(1);
 assert.throws(() => validateAutopilotEngineControlSinkInventory(truncatedInventory), /missing or has an unexpected required sink/i);
 const nonActionAuthorityInventory = getAutopilotEngineControlSinkInventory();
-nonActionAuthorityInventory[0].kernel_destinations = ['mintActionDecision'];
+const nonActionIndex = nonActionAuthorityInventory.findIndex(
+  (sink) => sink.requires_action_catalog_binding === false,
+);
+nonActionAuthorityInventory[nonActionIndex].kernel_destinations = ['mintActionDecision'];
 assert.throws(() => validateAutopilotEngineControlSinkInventory(nonActionAuthorityInventory), /cannot route through/i);
 
 const requiredSeams = new Set(AUTOPILOT_ENGINE_CONTROL_SINKS.map((sink) => sink.seam));
@@ -436,6 +497,60 @@ const secondRequiredSink = AUTOPILOT_ENGINE_CONTROL_SINKS
   .filter((sink) => sink.requires_action_catalog_binding)[1];
 reusedBinding.actionCatalogBindings[secondRequiredSink.id] = firstRequiredSink.id;
 assert.throws(() => compileSupervisedEngineBridgeContract(reusedBinding), /distinct frozen policy entry/i);
+
+const newlyMediatedSinkIds = [
+  'campaign-event-append',
+  'campaign-admission-complete',
+  'campaign-post-commit-checkpoint',
+  'mission-terminal-reconcile',
+];
+for (const sinkId of newlyMediatedSinkIds) {
+  const sink = AUTOPILOT_ENGINE_CONTROL_SINKS.find((item) => item.id === sinkId);
+  assert.ok(sink && sink.requires_action_catalog_binding);
+
+  const missing = input();
+  delete missing.actionCatalogBindings[sinkId];
+  assert.throws(
+    () => compileSupervisedEngineBridgeContract(missing),
+    /missing action catalog binding/i,
+  );
+
+  const unmediated = input();
+  unmediated.governanceConfig.governance.action_catalog
+    .find((entry) => entry.id === sinkId).requires_mediator = false;
+  assert.throws(
+    () => compileSupervisedEngineBridgeContract(unmediated),
+    /requires a mediated/i,
+  );
+
+  const downgraded = input();
+  downgraded.governanceConfig.governance.action_catalog
+    .find((entry) => entry.id === sinkId).action_class = sinkId === 'campaign-post-commit-checkpoint'
+      ? 'external'
+      : 'read_only';
+  assert.throws(
+    () => compileSupervisedEngineBridgeContract(downgraded),
+    /cannot lower/i,
+  );
+
+  for (const destination of ['mintActionDecision', 'executeAuthorizedAction']) {
+    const missingDestination = getAutopilotEngineControlSinkInventory();
+    const target = missingDestination.find((item) => item.id === sinkId);
+    target.kernel_destinations = target.kernel_destinations
+      .filter((item) => item !== destination);
+    assert.throws(
+      () => validateAutopilotEngineControlSinkInventory(missingDestination),
+      new RegExp(`must route through ${destination}`, 'i'),
+    );
+  }
+
+  const reused = input();
+  reused.actionCatalogBindings[sinkId] = firstRequiredSink.id;
+  assert.throws(
+    () => compileSupervisedEngineBridgeContract(reused),
+    /distinct frozen policy entry/i,
+  );
+}
 
 const nonV2 = input({ acceptanceContract: {
   schema_version: 1,
@@ -706,8 +821,8 @@ NODE
 NODE_STATUS=$?
 
 assert_eq "$NODE_STATUS" "0" "supervised engine bridge contract node fixture exits successfully"
-assert_contains "$OUT" "sink_inventory=13" "all injected engine control sinks are covered"
-assert_contains "$OUT" "action_catalog_bindings=9" "every mutable sink requires a frozen catalog binding"
+assert_contains "$OUT" "sink_inventory=26" "all injected engine control sinks are covered"
+assert_contains "$OUT" "action_catalog_bindings=15" "every mutable sink requires a frozen catalog binding"
 assert_contains "$OUT" "sensitive_inputs_omitted=true" "compiled contract contains hashes rather than raw sensitive inputs"
 assert_contains "$OUT" "contract_only=true" "bridge remains explicitly non-authoritative"
 assert_contains "$OUT" "mutation_rejected=true" "frozen inputs and compiled contract tampering fail closed"

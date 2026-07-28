@@ -1,5 +1,6 @@
 # Plan — L6 Status, Merge, and Honest Closeout Contract
-> Status: Heterogeneous review READY (generation 1) / Owner: CEO / Branch: to be created at execution / Frame: independent L-size follow-up
+<!-- autopilot-authority-claims: ["task_can_close"] -->
+> Status: Ownership-consolidated revision; prior generation-1 READY is historical / Owner: CEO / Branch: to be created at execution / Frame: downstream closeout owner
 
 ## 0. Context / thesis
 
@@ -10,8 +11,9 @@ several closing steps separately. Neither produces one task-level answer to:
 
 `what is merged, what remains, and may this task be called complete?`
 
-This plan adds a read-only task status contract and an explicit merge-intent preflight. It consumes,
-rather than duplicates, the durable lifecycle ledger from the worktree lifecycle plan.
+This plan adds a read-only task status contract and an explicit merge-intent preflight. It is the
+sole owner of task-level `can_merge`, `can_close`, human `DONE|NOT DONE`, and finish-marker
+clearing. It consumes, rather than duplicates, Mission, campaign, readiness and lifecycle receipts.
 
 ## 1. Problem
 
@@ -26,7 +28,7 @@ and committed-tip merge analysis does not account for staged/unstaged/untracked 
 
 - **R1 / KR1 — task status:** Given a `root_run_id`, emit goal, phase, candidate commit, acceptance
   verdict, open blockers, deferred count, active owned worktrees, active owned branches, integration
-  target, push state, `can_merge`, and `can_close`.
+  target, push state, `mission_terminal`, `can_merge`, and `can_close`.
 - **R2 / KR2 — honest meanings:** `product_merged`, `consumer_updated`, `pushed`, and `zero_residue`
   are separate booleans. Human output never summarizes them as “clean” unless `can_close=true`.
 - **R3 / KR3 — exact ownership:** Worktree/branch counts come from the lifecycle ledger and creation
@@ -40,7 +42,8 @@ and committed-tip merge analysis does not account for staged/unstaged/untracked 
   explicit sealed manifest and emits before/after evidence without deleting branches/worktrees.
 - **R7 / KR7 — finish integration:** L5/L6 finish-flow cannot clear its session marker or claim
   completion while owned blockers, worktrees, branches, unpushed required integration, or an
-  unexecuted required merge edge remains.
+  unexecuted required merge edge remains. LSM is the only plan that wires this predicate into
+  `finish-flow`.
 - **R8 / KR8 — plain CEO output:** Default human output begins with `DONE|NOT DONE`, followed by at
   most the current blocker and next action; `--json` retains full evidence.
 
@@ -48,8 +51,11 @@ and committed-tip merge analysis does not account for staged/unstaged/untracked 
 
 - `product_merged`, `consumer_updated`, `pushed`, and `zero_residue` are independent booleans; never summarize them as one inferred state.
 - `can_close=true` requires zero owned worktrees, zero owned unintegrated branches, zero accepted blockers, and every required merge edge complete.
-- `can_merge=true` requires an accepted terminal review verdict, zero accepted blockers, a sealed merge manifest whose source and target refs still match their pinned SHAs, and no unresolved dirty-path overlap or forbidden edge; push state and post-merge residue do not affect `can_merge`.
-- Worktree and branch ownership comes only from the durable lifecycle ledger and creation journal, never from branch-name regex.
+- `can_close=true` also requires a valid `mission_terminal=true` receipt and terminal campaign
+  receipts. Mission terminal alone is never task closeout.
+- `can_merge=true` requires an accepted terminal review verdict, zero accepted blockers, a sealed merge manifest whose source and target refs still match their pinned SHAs (or, for an endpoint explicitly produced by an earlier ordered edge, that predecessor's sealed execution result), and no unresolved dirty-path overlap or forbidden edge; push state and post-merge residue do not affect `can_merge`.
+- Worktree and branch ownership comes only from a valid WLB lifecycle receipt bound to the current
+  repository/root state, never from branch-name regex or LSM re-scanning.
 - Merge intent is an ordered sealed list of explicit `{source,target,mode}` edges plus explicit forbidden reverse edges.
 - Status and merge preflight are read-only; execution requires the caller to pass the sealed manifest hash.
 - Dirty preservation is path-scoped and must cover staged, unstaged, and untracked files without dropping user changes.
@@ -60,15 +66,14 @@ and committed-tip merge analysis does not account for staged/unstaged/untracked 
 
 | File | Responsibility |
 |---|---|
-| `src/status/task-status.js` (new) | Pure aggregation of run ledger, lifecycle ownership, review verdict, git integration, dirty state, and push state. |
+| `src/status/task-status.js` (new) | Pure aggregation of Mission/campaign/lifecycle receipts, review verdict, git integration, dirty state, and push state. |
 | `src/status/merge-intent.js` (new) | Manifest validation, hash sealing, source/target resolution, forbidden-edge and incoming-path analysis. |
 | `src/status/cli.js` | Add `status task --root-run-id` and human/JSON rendering. |
 | `src/merge/cli.js` (new) | `merge preflight` and explicit `merge execute` front doors. |
 | `bin/autopilot.js` | Expose task status and merge commands. |
 | `schemas/task-status.schema.json` (new) | Stable task-level status evidence contract. |
 | `schemas/merge-intent.schema.json` (new) | Ordered merge edges, forbidden reverse edges, preservation policy, and seal. |
-| `scripts/run-ledger.sh` | Read-only query support for accepted blockers, deferred count, and required/complete merge edges. |
-| `scripts/resolve-worktree-teardown.sh` | Provide ledger-backed owned worktree/branch inventory to status. |
+| `schemas/lifecycle-residue-receipt.schema.json` | Consumed WLB contract; LSM validates freshness/binding and never reimplements lifecycle inference. |
 | `skills/finish-flow/SKILL.md` | Gate marker clearing and “clean” language on `can_close=true`. |
 | `skills/ceo-agent/references/level-front-door.md` | Require plain task status at phase transitions and before/after merge. |
 | `hooks/tests/status-task.test.sh` (new) | Boolean independence, owned residue, blockers, push state, human output. |
@@ -81,14 +86,16 @@ and committed-tip merge analysis does not account for staged/unstaged/untracked 
 
 ### Phase 1 — Task-status schema and read-only aggregation (L)
 
-**Depends on:** lifecycle plan’s stable `root_run_id`, ledger inventory, and creation journal.
+**Depends on:** Mission terminal receipt, ICC campaign receipts, and WLB lifecycle receipt.
 
 1. Define the task-status schema with independent integration/consumer/push/residue booleans.
 2. Resolve repository and refs without checking out or modifying a worktree.
-3. Query owned worktrees/branches from the lifecycle ledger. If ledger data is missing, emit
-   `unknown` and make `can_close=false`; do not fall back to regex.
+3. Validate the WLB lifecycle receipt against canonical repo identity, `root_run_id`, observed head,
+   and freshness. If it is missing, stale, or unknown, emit `unknown` and make
+   `can_close=false`; do not fall back to regex or a second scan.
 4. Aggregate accepted blockers and deferred findings from authoritative artifacts.
-5. Compute `can_merge` and `can_close` from explicit predicates and include every failed predicate.
+5. Validate `mission_terminal` and terminal campaign receipts, then compute `can_merge` and
+   `can_close` from explicit predicates and include every failed predicate.
 
 **Acceptance:** fixtures prove a merged commit with one owned worktree is
 `product_merged=true`, `zero_residue=false`, `can_close=false`.
@@ -102,7 +109,10 @@ and committed-tip merge analysis does not account for staged/unstaged/untracked 
    target and whose second parent contains the pinned source) and `ff-only` (the target becomes the
    pinned source or its verified descendant without a merge commit). Squash, rebase, and implicit
    default modes are rejected.
-2. Resolve every ref to an immutable SHA and seal the manifest hash.
+2. Resolve every ref to an immutable SHA and seal the manifest hash. When a later edge consumes a
+   source or target ref produced by an earlier ordered edge, also seal `source_from_edge` /
+   `target_from_edge`; the pinned SHA remains the initial preflight observation, while Phase 3
+   revalidates that endpoint against the named predecessor execution receipt.
 3. Inventory staged, unstaged, and untracked target paths. Compare against changed paths introduced
    by each incoming edge.
 4. Report safe, overlapping, ambiguous, or blocked. For overlaps, propose a path-scoped
@@ -119,7 +129,9 @@ scripts before any merge.
 **Depends on:** Phase 2.
 
 1. Require the caller to provide the sealed manifest hash.
-2. Before each edge, revalidate source/target SHAs and dirty inventory; halt on drift.
+2. Before each edge, revalidate source/target SHAs and dirty inventory. An endpoint with a sealed
+   `source_from_edge` / `target_from_edge` binding must match that predecessor execution receipt
+   rather than its initial preflight SHA; halt on any other drift.
 3. Execute only the declared merge mode and record before/after SHAs, merge commit, conflicts, and
    preservation action.
 4. Restore path-scoped preserved changes and verify their staged/unstaged state matches the receipt.
@@ -140,9 +152,17 @@ preserved dirty changes, and no reverse-edge merge.
    completion when it is false. The S/Fix/H exemption changes only marker/terminal gating; their
    existing finish-flow behavior is otherwise unchanged.
 5. Replace ambiguous “merged and clean” templates with the four independent state labels.
+6. Before closeout, let depth-0 consume ICC/PRS follow-up candidate artifacts. Dedupe by stable
+   finding fingerprint; admit only evidence-backed valuable work to `docs/BACKLOG.md` with
+   `Source`, `Context`, and `Trigger`. Rejected/nitpick candidates remain in the immutable campaign
+   receipt but do not enter backlog. A backlog admission never reopens the current ticket:
+   `/next` may select it later only after its trigger is true, under a new ticket, contract, and
+   budget.
 
 **Acceptance:** finish-flow fixture cannot clear the marker with branch/worktree residue, and the
-final human report distinguishes merged/not-pushed/consumer-dirty states.
+final human report distinguishes merged/not-pushed/consumer-dirty states. A valuable out-of-scope
+review suggestion is admitted exactly once to backlog without changing current-ticket terminal
+state; a duplicate, unsupported, or preference-only suggestion is not admitted.
 
 ### Phase 5 — Docs/package sync (S)
 
@@ -183,11 +203,12 @@ worktree/branch and assert that human output begins `NOT DONE`.
 
 ## 7. Out of scope
 
-- Creating or budgeting worktrees/review generations; owned by the lifecycle plan.
+- Creating/budgeting worktrees is owned by WLB; implementation/review generations are owned by ICC.
 - Choosing product integration policy when the Board has not supplied merge intent.
 - Automatic push, remote branch deletion, worktree removal, or stash garbage collection.
 - General-purpose release deployment status.
 - Provider readiness and review panel control.
+- Mission lineage/aggregate budget/control and campaign mutation/testing.
 
 ## 8. Open questions
 
@@ -202,3 +223,6 @@ None. Merge intent is supplied per task; the mechanism does not choose business 
 - R1 MiniMax-M3 + GLM-5.2: both semantic READY. GLM reported three nonblocking traceability
   clarifications (`NOT DONE`, false-clean fixture, and L5/L6 predicate scope); all were confirmed and
   applied without changing scope or opening generation 2.
+- R2 ownership consolidation: LSM is now explicitly the sole `can_close`/finish-marker owner and
+  consumes versioned Mission, campaign, and WLB receipts instead of lifecycle ledger inference.
+  R1 remains historical because the plan/rubric hash changed; a new bounded review is required.

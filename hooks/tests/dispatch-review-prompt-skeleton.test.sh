@@ -24,7 +24,7 @@ done
 begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
 end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
 if [ -z "$begin" ] || [ -z "$end" ]; then exit 0; fi
-printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\n%s\n' "$begin" "$end"
+printf '%s\nVERDICT: SHIP-AS-IS\nFINDINGS: none\nNO-FINDING-PROOF: checked=fixture diff and acceptance contract; evidence=changed assignment is present in captured diff; conclusion=specified assignment change has no blocking failure\n%s\n' "$begin" "$end"
 EOF
 chmod +x "$TEST_TMP/capture-stub.sh"
 
@@ -60,8 +60,40 @@ assert_contains "$CAPTURED" "<<<AUTOPILOT-REVIEW-" "prompt must contain BEGIN ma
 assert_contains "$CAPTURED" "<<<AUTOPILOT-END-" "prompt must contain END marker prefix"
 assert_contains "$CAPTURED" "VERDICT: SHIP-AS-IS or FIX-THEN-SHIP" "prompt must contain verdict contract"
 assert_contains "$CAPTURED" "FINDINGS: one finding per line" "prompt must contain findings contract"
+assert_contains "$CAPTURED" "NO-FINDING-PROOF: checked=" \
+  "prompt must require a machine-parseable no-finding proof"
+assert_contains "$CAPTURED" "Bounded convergence contract:" \
+  "prompt must bound review convergence"
+assert_contains "$CAPTURED" "bounded keep/cut list and a minimum shippable version" \
+  "prompt must replace unbounded defect hunting with a bounded deliverable"
+assert_contains "$CAPTURED" "MUST-FIX" \
+  "prompt must distinguish current blockers"
+assert_contains "$CAPTURED" "CUT/FOLLOW-UP" \
+  "prompt must explicitly remove nonblocking work from the current version"
+assert_contains "$CAPTURED" "normalizer-compatible severity" \
+  "prompt must require normalizer-compatible severity on every finding"
+assert_contains "$CAPTURED" "stable ID" \
+  "prompt must require a stable finding ID"
+assert_contains "$CAPTURED" $'🟠 [stable-id] MUST-FIX' \
+  "prompt must show severity + stable-id + MUST-FIX example"
+assert_contains "$CAPTURED" $'🔵 [stable-id] CUT/FOLLOW-UP' \
+  "prompt must show severity + stable-id + CUT/FOLLOW-UP example"
+assert_contains "$CAPTURED" "smallest concrete remediation" \
+  "prompt must require attacks to include a bounded fix"
+assert_contains "$CAPTURED" "MUST-FIX list is empty" \
+  "prompt must define the terminal ship condition"
+assert_contains "$CAPTURED" "Bare claims such as" \
+  "prompt must reject tautological no-finding claims"
 assert_contains "$CAPTURED" "Diff under review:" "prompt must contain diff heading"
 assert_contains "$CAPTURED" "+const a = 2" "prompt must contain fixture diff line"
+
+REVIEWER_BODY="$(cat "$REPO_ROOT/agents/reviewer.md")"
+assert_contains "$REVIEWER_BODY" "bounded keep/cut list and a minimum shippable version" \
+  "methodology reviewer must use the same bounded deliverable"
+assert_contains "$REVIEWER_BODY" "MUST-FIX list is empty" \
+  "methodology reviewer must use the same terminal condition"
+assert_contains "$REVIEWER_BODY" "no-finding proof receipt" \
+  "methodology reviewer must require an auditable no-finding trace"
 
 # 8. Normalize volatile tokens and diff against committed golden skeleton
 GOLDEN="$REPO_ROOT/evals/reviewer-bench/prompt-skeleton.golden"

@@ -19,10 +19,15 @@ Hard rules:
 - Startup pre-filled, never re-asked on a clean goal: OKR from `<goal>`;
   involvement=3 just-results; scope=Hold (`--expand` → Expand); governance mode from the project
   default (`--mode` changes only this run); project red lines plus `-x <csv>` additions.
+- Before any TaskCreate, branch, worktree, runner, model, or inline implementation effect, run
+  `node <plugin>/scripts/session-mode.js set --level l3 --repo-root <repo>`. The command performs
+  canonical Mission policy/graph/source admission before writing its marker. Enforce requires
+  `READY`; shadow is disclosed without authority; off remains `LEGACY`.
 - Posture: **inline** — no foreman dispatch. `/l3` is also the `--solo` degradation
   target for `/l4`/`/l5`/`/l6`.
 - The front-door changes startup ONLY — every `ceo-agent` gate (size → project setup
-  → phases → finish-flow) still applies.
+  → admitted deliverables → finish-flow) still applies. Plan headings, modules, tests,
+  reviewers, and retries remain coverage/gates inside those deliverables.
 
 ### P3.0 shadow translation
 

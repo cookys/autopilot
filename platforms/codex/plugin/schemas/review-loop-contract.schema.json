@@ -49,6 +49,10 @@
     "on_family_conflict",
     "reviewer_fallback_preference",
     "reviewer_fallback_preference_low_risk",
+    "qc_panel_seats",
+    "qc_panel_seats_complete",
+    "provider_readiness_receipt_ttl_seconds",
+    "provider_readiness_fallback_family_constraint",
     "plan_review",
     "plan_reviewer_engine",
     "plan_reviewer_effort",
@@ -108,6 +112,31 @@
     "on_family_conflict": { "type": "string", "enum": ["fallback", "block"], "x-shell-validated": true, "x-shell-var": "ON_FAMILY_CONFLICT", "description": "Engine reviewDiff policy when the (effective) reviewer shares the implementer's model family: fallback = substitute the first cross-family qualified row from fallback_ladder (runner-allowlisted, fail-closed on no candidate); block = hard-block (pre-v2.32.25 behavior). Resolver coerces garbage to block; the engine treats absent/invalid as block. The conditional --check-scorecard key fallback_ladder_implementer_family carries ladder provenance (the implementer family the ladder was computed against) so a stale pre-resolved roster fails closed." },
     "reviewer_fallback_preference": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "HUMAN-ordered engine ids the engine's family-conflict fallback prefers over raw ladder order; every candidate still passes all fallback guards. Empty = ladder order." },
     "reviewer_fallback_preference_low_risk": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Preference list applied when computed review_risk=low; empty = use reviewer_fallback_preference." },
+    "qc_panel_seats": {
+      "type": "array",
+      "description": "Exact readiness identity for every QC seat. Empty with qc_panel_seats_complete=false means the legacy model-only panel lacks enough metadata; consumers must fail closed rather than guess.",
+      "items": {
+        "type": "object",
+        "required": ["role", "runner", "model", "effort", "endpoint", "family"],
+        "properties": {
+          "role": { "type": "string", "enum": ["qc"] },
+          "runner": { "type": "string", "enum": ["codex", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn"] },
+          "model": { "type": "string", "minLength": 1 },
+          "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"] },
+          "endpoint": {
+            "oneOf": [
+              { "type": "null" },
+              { "type": "string", "pattern": "^[A-Za-z0-9_]+$" }
+            ]
+          },
+          "family": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "qc_panel_seats_complete": { "type": "boolean" },
+    "provider_readiness_receipt_ttl_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+    "provider_readiness_fallback_family_constraint": { "type": "string", "enum": ["any", "different"], "x-shell-validated": true, "x-shell-var": "PROVIDER_READINESS_FAMILY_CONSTRAINT" },
     "plan_review": { "type": "string", "enum": ["on", "off"], "x-shell-validated": true, "x-shell-var": "PLAN_REVIEW", "description": "Enable the first-class bounded plan-readiness rail. Independent from the deprecated spec_review implementation-loop switch." },
     "plan_reviewer_engine": { "type": "string" },
     "plan_reviewer_effort": { "type": "string", "enum": ["", "low", "medium", "high", "xhigh", "max"] },
@@ -167,6 +196,10 @@
     "on_family_conflict",
     "reviewer_fallback_preference",
     "reviewer_fallback_preference_low_risk",
+    "qc_panel_seats",
+    "qc_panel_seats_complete",
+    "provider_readiness_receipt_ttl_seconds",
+    "provider_readiness_fallback_family_constraint",
     "plan_review",
     "plan_reviewer_engine",
     "plan_reviewer_effort",

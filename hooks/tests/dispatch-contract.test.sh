@@ -258,7 +258,7 @@ EOF
 
   local cap_event="$store_dir/cap.json"
   cat > "$cap_event" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
 EOF
   
   env ENGINE_CAPABILITY_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$cap_event" > /dev/null 2>&1 || {
@@ -287,7 +287,7 @@ EOF
 
   local impl_cap_event="$store_dir/impl_cap.json"
   cat > "$impl_cap_event" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
 EOF
   env ENGINE_CAPABILITY_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$impl_cap_event" > /dev/null 2>&1 || {
     echo "FATAL: engine-capability-state.js failed setup (va impl)"; exit 1
@@ -308,7 +308,7 @@ EOF
 
   local va_cap_event="$store_dir/va_cap.json"
   cat > "$va_cap_event" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"$quota_status","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"$quota_status","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
 EOF
   env ENGINE_CAPABILITY_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$va_cap_event" > /dev/null 2>&1
   if [ $? -ne 0 ]; then
@@ -371,6 +371,43 @@ sed 's/"section": "API"/"section": "NONEXISTENT"/' "$CONTRACT_DIR/valid.json" > 
 out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/missing_section.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 assert_eq "$rc" "3"
 assert_nogo_json "$out" "section"
+
+echo "--- Case 2.2b: Four-space indented ATX is not a heading ---"
+# CommonMark: 0..3 leading spaces only. Four spaces is code, so section is missing.
+cp specs/feat/core.md "$TEST_TMP/core-atx.md.bak"
+# Rewrite the API heading under four-space indent only.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('specs/feat/core.md')
+text = p.read_text()
+# Ensure a bare API heading exists, then indent it four spaces.
+lines = []
+for line in text.splitlines(True):
+    if line.lstrip().startswith('#') and 'API' in line and not line.startswith('    #'):
+        lines.append('    ' + line.lstrip())
+    else:
+        lines.append(line)
+p.write_text(''.join(lines))
+PY
+git add specs/feat/core.md
+git commit -qm "indent API heading as code" >/dev/null 2>&1 || true
+# Point contract base to HEAD so the indented blob is authoritative.
+HEAD_SHA=$(git rev-parse HEAD)
+python3 - <<PY
+import json
+from pathlib import Path
+contract = json.loads(Path("$CONTRACT_DIR/valid.json").read_text())
+contract["base_sha"] = "$HEAD_SHA"
+Path("$CONTRACT_DIR/indented_section.json").write_text(json.dumps(contract, indent=2) + "\n")
+PY
+out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/indented_section.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "section"
+# restore
+cp "$TEST_TMP/core-atx.md.bak" specs/feat/core.md
+git add specs/feat/core.md
+git commit -qm "restore API heading" >/dev/null 2>&1 || true
+# also restore valid contract base if needed via later tests using valid.json's original base
 
 echo "--- Case 2.3: Hidden clean spec drift ---"
 # use assume-unchanged, then unset and restore
@@ -450,7 +487,7 @@ env ENGINE_SCORECARD_DIR="$STORE_BASE/unqual" node "$REPO_ROOT/scripts/engine-sc
 }
 CAP_UNQUAL="$STORE_BASE/unqual/c.json"
 cat > "$CAP_UNQUAL" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
 EOF
 env ENGINE_CAPABILITY_DIR="$STORE_BASE/unqual" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$CAP_UNQUAL" > /dev/null 2>&1 || {
   echo "FATAL: engine-capability-state.js failed setup (unqual)"; exit 1
@@ -467,7 +504,7 @@ env ENGINE_SCORECARD_DIR="$STORE_BASE/noquota" node "$REPO_ROOT/scripts/engine-s
 }
 CAP_NOQUOTA="$STORE_BASE/noquota/c.json"
 cat > "$CAP_NOQUOTA" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"unknown","confidence":"low","ttl_seconds":0,"reset_at":null,"evidence":"none"}}}
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"unknown","confidence":"low","ttl_seconds":0,"reset_at":null,"evidence":"none"}}}
 EOF
 env ENGINE_CAPABILITY_DIR="$STORE_BASE/noquota" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$CAP_NOQUOTA" > /dev/null 2>&1 || {
   echo "FATAL: engine-capability-state.js failed setup (noquota)"; exit 1
@@ -484,7 +521,7 @@ env ENGINE_SCORECARD_DIR="$STORE_BASE/exhausted" node "$REPO_ROOT/scripts/engine
 }
 CAP_EXH="$STORE_BASE/exhausted/c.json"
 cat > "$CAP_EXH" <<EOF
-{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"exhausted","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"limit"}}}
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"exhausted","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"limit"}}}
 EOF
 env ENGINE_CAPABILITY_DIR="$STORE_BASE/exhausted" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$CAP_EXH" > /dev/null 2>&1 || {
   echo "FATAL: engine-capability-state.js failed setup (exhausted)"; exit 1
@@ -765,6 +802,745 @@ assert_eq "$rc" "0"
 echo "--- Case 9.4: negative control — kind=diff keeps accepting directories ---"
 out=$(with_valid_stores node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
 assert_eq "$rc" "0"
+
+assert_red_green_clean "$MINI_REPO"
+
+# === CASE 10: Provisional implementer admission (no legacy projection) ===
+# Disk-backed scorecard projects evidence-backed qualified rows as provisional.
+# Implementer may GO with assurance=provisional; other roles stay fail-closed.
+
+echo "--- Case 10.1: provisional implementer GO (native projection) ---"
+setup_qualified_store "$STORE_BASE/provisional_impl"
+# Force clean Node options so the legacy test preload does not rewrite provisional→qualified.
+out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/provisional_impl" ENGINE_CAPABILITY_DIR="$STORE_BASE/provisional_impl" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "0"
+keys=$(json_keys "$out" 2>/dev/null) || keys=""
+assert_eq "$keys" "assurance,contract_sha256,reasons,resolved_engine,spec_sha256,unit_id,verdict"
+field=$(json_get "$out" "verdict") || fail "provisional implementer verdict extraction failed"
+assert_eq "$field" "GO"
+field=$(json_get "$out" "assurance") || fail "provisional implementer assurance extraction failed"
+assert_eq "$field" "provisional"
+field=$(json_get "$out" "resolved_engine.model") || fail "provisional implementer model extraction failed"
+assert_eq "$field" "gpt-5.3-codex-spark"
+field=$(json_get "$out" "resolved_engine.runner") || fail "provisional implementer runner extraction failed"
+assert_eq "$field" "codex"
+# Must not claim full qualification.
+assert_not_contains "$out" '"assurance":"qualified"'
+assert_not_contains "$out" '"status":"qualified"'
+
+echo "--- Case 10.1b: provisional row without observed_status=qualified is NO-GO ---"
+# Disk projects provisional+observed_status=qualified. Force a non-qualified
+# observed_status through a one-shot preload so missing/unknown/provisional
+# observations stay fail-closed and never promote telemetry.
+setup_qualified_store "$STORE_BASE/provisional_no_observed"
+PRELOAD_OBS="$TEST_TMP/provisional-observed-rewrite.cjs"
+cat > "$PRELOAD_OBS" <<'NODE'
+'use strict';
+const path = require('path');
+const childProcess = require('child_process');
+const originalSpawnSync = childProcess.spawnSync;
+const rewriteTo = process.env.AUTOPILOT_TEST_REWRITE_OBSERVED_STATUS || '';
+childProcess.spawnSync = function projectedSpawnSync(command, args, options) {
+  const result = originalSpawnSync.call(this, command, args, options);
+  if (!Array.isArray(args) || args.length < 2
+      || path.basename(String(args[0])) !== 'engine-scorecard.js'
+      || args[1] !== 'current' || result.status !== 0) {
+    return result;
+  }
+  try {
+    const rows = JSON.parse(String(result.stdout || ''));
+    if (!Array.isArray(rows)) return result;
+    const projected = rows.map((row) => {
+      if (!row || row.status !== 'provisional') return row;
+      if (rewriteTo === '__delete__') {
+        const next = { ...row };
+        delete next.observed_status;
+        return next;
+      }
+      return { ...row, observed_status: rewriteTo };
+    });
+    return { ...result, stdout: `${JSON.stringify(projected)}\n` };
+  } catch {
+    return result;
+  }
+};
+NODE
+for obs_case in missing provisional unknown; do
+  if [ "$obs_case" = "missing" ]; then
+    rewrite='__delete__'
+  else
+    rewrite="$obs_case"
+  fi
+  out=$(env NODE_OPTIONS="--require=$PRELOAD_OBS" \
+    AUTOPILOT_TEST_REWRITE_OBSERVED_STATUS="$rewrite" \
+    ENGINE_SCORECARD_DIR="$STORE_BASE/provisional_no_observed" \
+    ENGINE_CAPABILITY_DIR="$STORE_BASE/provisional_no_observed" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3" "observed_status=$obs_case must NO-GO"
+  assert_nogo_json "$out" "qualified"
+done
+
+echo "--- Case 10.2: failed implementer remains NO-GO under native projection ---"
+setup_qualified_store "$STORE_BASE/failed_impl"
+cat > "$STORE_BASE/failed_impl/score.json" <<'EOF'
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"2/10","false_pass_critical":3,"specificity":"1/3"},"capability_score":0.1,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+env ENGINE_SCORECARD_DIR="$STORE_BASE/failed_impl" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/failed_impl/score.json" > /dev/null 2>&1 || {
+  echo "FATAL: engine-scorecard.js failed setup (failed_impl)"; exit 1
+}
+out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/failed_impl" ENGINE_CAPABILITY_DIR="$STORE_BASE/failed_impl" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "qualified"
+
+echo "--- Case 10.3: expired implementer remains NO-GO under native projection ---"
+setup_qualified_store "$STORE_BASE/expired_impl"
+cat > "$STORE_BASE/expired_impl/score.json" <<'EOF'
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2020-01-01","expires":"2020-01-02"}
+EOF
+env ENGINE_SCORECARD_DIR="$STORE_BASE/expired_impl" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/expired_impl/score.json" > /dev/null 2>&1 || {
+  echo "FATAL: engine-scorecard.js failed setup (expired_impl)"; exit 1
+}
+out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/expired_impl" ENGINE_CAPABILITY_DIR="$STORE_BASE/expired_impl" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "qualified"
+
+echo "--- Case 10.4: identity-mismatched implementer remains NO-GO ---"
+# Capability for the resolved engine only — scorecard row intentionally wrong model.
+rm -rf "$STORE_BASE/mismatch_impl"
+mkdir -p "$STORE_BASE/mismatch_impl"
+cat > "$STORE_BASE/mismatch_impl/score.json" <<'EOF'
+{"engine":"wrong-model","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+env ENGINE_SCORECARD_DIR="$STORE_BASE/mismatch_impl" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/mismatch_impl/score.json" > /dev/null 2>&1 || {
+  echo "FATAL: engine-scorecard.js failed setup (mismatch_impl)"; exit 1
+}
+cat > "$STORE_BASE/mismatch_impl/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+EOF
+env ENGINE_CAPABILITY_DIR="$STORE_BASE/mismatch_impl" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/mismatch_impl/cap.json" > /dev/null 2>&1 || {
+  echo "FATAL: engine-capability-state.js failed setup (mismatch_impl)"; exit 1
+}
+out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/mismatch_impl" ENGINE_CAPABILITY_DIR="$STORE_BASE/mismatch_impl" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "qualified"
+
+echo "--- Case 10.5: runner-mismatched implementer remains NO-GO ---"
+rm -rf "$STORE_BASE/runner_mismatch"
+mkdir -p "$STORE_BASE/runner_mismatch"
+cat > "$STORE_BASE/runner_mismatch/score.json" <<'EOF'
+{"engine":"gpt-5.3-codex-spark","runner":"claude","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+env ENGINE_SCORECARD_DIR="$STORE_BASE/runner_mismatch" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/runner_mismatch/score.json" > /dev/null 2>&1 || {
+  echo "FATAL: engine-scorecard.js failed setup (runner_mismatch)"; exit 1
+}
+cat > "$STORE_BASE/runner_mismatch/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+EOF
+env ENGINE_CAPABILITY_DIR="$STORE_BASE/runner_mismatch" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/runner_mismatch/cap.json" > /dev/null 2>&1 || {
+  echo "FATAL: engine-capability-state.js failed setup (runner_mismatch)"; exit 1
+}
+out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/runner_mismatch" ENGINE_CAPABILITY_DIR="$STORE_BASE/runner_mismatch" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "qualified"
+
+echo "--- Case 10.6: missing implementer scorecard remains NO-GO ---"
+out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/empty" ENGINE_CAPABILITY_DIR="$STORE_BASE/empty" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "qualified"
+
+if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
+  echo "--- Case 10.7: provisional verification-author GO for raw-artifact only ---"
+  # Seed VA as qualified so disk projects provisional; without legacy rewrite it stays provisional.
+  # raw-artifact authoring labor may GO with assurance=provisional; no review/merge authority.
+  setup_va_qualified_store "$STORE_BASE/va_provisional" "qualified" "available"
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_provisional" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_provisional" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "0"
+  keys=$(json_keys "$out" 2>/dev/null) || keys=""
+  assert_eq "$keys" "assurance,contract_sha256,reasons,resolved_engine,spec_sha256,unit_id,verdict"
+  field=$(json_get "$out" "verdict") || fail "provisional VA verdict extraction failed"
+  assert_eq "$field" "GO"
+  field=$(json_get "$out" "assurance") || fail "provisional VA assurance extraction failed"
+  assert_eq "$field" "provisional"
+  field=$(json_get "$out" "resolved_engine.model") || fail "provisional VA model extraction failed"
+  assert_eq "$field" "glm-5.2"
+  field=$(json_get "$out" "resolved_engine.runner") || fail "provisional VA runner extraction failed"
+  assert_eq "$field" "anthropic-compatible"
+  field=$(json_get "$out" "resolved_engine.family") || fail "provisional VA family extraction failed"
+  assert_eq "$field" "zhipu"
+  assert_not_contains "$out" '"assurance":"qualified"'
+  assert_not_contains "$out" '"status":"qualified"'
+
+  echo "--- Case 10.7b: provisional VA without observed_status=qualified is NO-GO ---"
+  PRELOAD_VA_OBS="$TEST_TMP/provisional-va-observed-rewrite.cjs"
+  cat > "$PRELOAD_VA_OBS" <<'NODE'
+'use strict';
+const path = require('path');
+const childProcess = require('child_process');
+const originalSpawnSync = childProcess.spawnSync;
+const rewriteTo = process.env.AUTOPILOT_TEST_REWRITE_OBSERVED_STATUS || '';
+childProcess.spawnSync = function projectedSpawnSync(command, args, options) {
+  const result = originalSpawnSync.call(this, command, args, options);
+  if (!Array.isArray(args) || args.length < 2
+      || path.basename(String(args[0])) !== 'engine-scorecard.js'
+      || args[1] !== 'current' || result.status !== 0) {
+    return result;
+  }
+  try {
+    const rows = JSON.parse(String(result.stdout || ''));
+    if (!Array.isArray(rows)) return result;
+    const projected = rows.map((row) => {
+      if (!row || row.status !== 'provisional' || row.role !== 'verification_author') return row;
+      if (rewriteTo === '__delete__') {
+        const next = { ...row };
+        delete next.observed_status;
+        return next;
+      }
+      return { ...row, observed_status: rewriteTo };
+    });
+    return { ...result, stdout: `${JSON.stringify(projected)}\n` };
+  } catch {
+    return result;
+  }
+};
+NODE
+  for obs_case in missing provisional unknown; do
+    if [ "$obs_case" = "missing" ]; then
+      rewrite='__delete__'
+    else
+      rewrite="$obs_case"
+    fi
+    out=$(env NODE_OPTIONS="--require=$PRELOAD_VA_OBS" \
+      AUTOPILOT_TEST_REWRITE_OBSERVED_STATUS="$rewrite" \
+      ENGINE_SCORECARD_DIR="$STORE_BASE/va_provisional" \
+      ENGINE_CAPABILITY_DIR="$STORE_BASE/va_provisional" \
+      node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+    assert_eq "$rc" "3" "VA observed_status=$obs_case must NO-GO"
+    assert_nogo_json "$out" "qualified"
+  done
+
+  echo "--- Case 10.7c: provisional VA with non-raw-artifact output is NO-GO ---"
+  cat > "$CONTRACT_DIR/va_verdict.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "feat-core-va-verdict",
+  "role": "verification-author",
+  "goal": "Verify core API",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$BASE_SHA",
+  "depends_on": ["$DEP_SHA"],
+  "scope": {
+    "allow_paths": ["oracle.test.sh"],
+    "deny_paths": ["vendor/"],
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["specs/feat/core.md"],
+    "required_engine_role": "verification-author",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "verdict", "paths": ["oracle.test.sh"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_provisional" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_provisional" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_verdict.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "qualified"
+
+  echo "--- Case 10.7d: failed VA remains NO-GO under native projection ---"
+  setup_va_qualified_store "$STORE_BASE/va_failed" "failed" "available"
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_failed" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_failed" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "qualified"
+
+  echo "--- Case 10.7e: identity-mismatched VA remains NO-GO ---"
+  rm -rf "$STORE_BASE/va_mismatch"
+  mkdir -p "$STORE_BASE/va_mismatch"
+  cat > "$STORE_BASE/va_mismatch/score.json" <<'EOF'
+{"engine":"wrong-va-model","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/va_mismatch" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/va_mismatch/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (va_mismatch)"; exit 1
+  }
+  cat > "$STORE_BASE/va_mismatch/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/va_mismatch" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/va_mismatch/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (va_mismatch)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_mismatch" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_mismatch" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "qualified"
+
+  # === CASE 11: Exact resolver-tuple quota admission (effort + endpoint partition) ===
+  # Production bug: dispatch-contract omitted effort/endpoint and queried the legacy
+  # ambiguous partition, rejecting campaigns whose exact high/@none wallet was available.
+
+  echo "--- Case 11.1: exact high/@none available admits despite legacy ambiguous unknown (implementer) ---"
+  rm -rf "$STORE_BASE/exact_impl_quota"
+  mkdir -p "$STORE_BASE/exact_impl_quota"
+  cat > "$STORE_BASE/exact_impl_quota/score.json" <<'EOF'
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_impl_quota" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_impl_quota/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_impl_quota)"; exit 1
+  }
+  # Legacy ambiguous row: no effort/endpoint fields → unknown (must NOT authorize).
+  cat > "$STORE_BASE/exact_impl_quota/cap_legacy.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"unknown","confidence":"low","ttl_seconds":0,"reset_at":null,"evidence":"legacy-ambiguous"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_quota" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_impl_quota/cap_legacy.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_impl_quota legacy)"; exit 1
+  }
+  # Exact partition matching resolver default implementer_effort=high, endpoint="".
+  cat > "$STORE_BASE/exact_impl_quota/cap_exact.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"exact-high-null"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_quota" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_impl_quota/cap_exact.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_impl_quota exact)"; exit 1
+  }
+  # Sanity: legacy-only query is unknown; exact query is available.
+  leg=$(env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_quota" node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner codex --model gpt-5.3-codex-spark --role implementer 2>/dev/null) || true
+  assert_contains "$leg" '"status":"unknown"'
+  ex=$(env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_quota" node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner codex --model gpt-5.3-codex-spark --role implementer --effort high --endpoint @none 2>/dev/null) || true
+  assert_contains "$ex" '"status":"available"'
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/exact_impl_quota" ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_quota" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "0"
+  field=$(json_get "$out" "verdict") || fail "exact-impl quota verdict extraction failed"
+  assert_eq "$field" "GO"
+  # Public resolved_engine shape unchanged (no effort/endpoint leak).
+  field=$(json_get "$out" "resolved_engine") || fail "exact-impl resolved_engine extraction failed"
+  assert_eq "$field" '{"runner":"codex","model":"gpt-5.3-codex-spark","family":"openai"}'
+  assert_no_secret "$out"
+
+  echo "--- Case 11.2: competing effort cannot authorize configured implementer tuple ---"
+  rm -rf "$STORE_BASE/exact_impl_competing_effort"
+  mkdir -p "$STORE_BASE/exact_impl_competing_effort"
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_impl_competing_effort" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_impl_quota/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_impl_competing_effort)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_impl_competing_effort/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"low","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"competing-low"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_competing_effort" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_impl_competing_effort/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_impl_competing_effort)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/exact_impl_competing_effort" ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_competing_effort" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "quota"
+
+  echo "--- Case 11.3: competing endpoint cannot authorize configured implementer tuple ---"
+  rm -rf "$STORE_BASE/exact_impl_competing_ep"
+  mkdir -p "$STORE_BASE/exact_impl_competing_ep"
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_impl_competing_ep" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_impl_quota/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_impl_competing_ep)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_impl_competing_ep/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":"wallet_a","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"competing-endpoint"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_competing_ep" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_impl_competing_ep/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_impl_competing_ep)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/exact_impl_competing_ep" ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_impl_competing_ep" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "quota"
+
+  echo "--- Case 11.4: exact high/@none available admits despite legacy unknown (verification-author) ---"
+  rm -rf "$STORE_BASE/exact_va_quota"
+  mkdir -p "$STORE_BASE/exact_va_quota"
+  # Scorecard: implementer row not required for VA path; seed VA only.
+  cat > "$STORE_BASE/exact_va_quota/va_score.json" <<'EOF'
+{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_va_quota" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_va_quota/va_score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_va_quota)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_va_quota/cap_legacy.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"unknown","confidence":"low","ttl_seconds":0,"reset_at":null,"evidence":"legacy-ambiguous"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_va_quota" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_va_quota/cap_legacy.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_va_quota legacy)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_va_quota/cap_exact.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"exact-high-null"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_va_quota" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_va_quota/cap_exact.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_va_quota exact)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/exact_va_quota" ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_va_quota" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "0"
+  field=$(json_get "$out" "verdict") || fail "exact-va quota verdict extraction failed"
+  assert_eq "$field" "GO"
+  field=$(json_get "$out" "resolved_engine.runner") || fail "exact-va runner extraction failed"
+  assert_eq "$field" "anthropic-compatible"
+  field=$(json_get "$out" "resolved_engine.model") || fail "exact-va model extraction failed"
+  assert_eq "$field" "glm-5.2"
+  assert_no_secret "$out"
+
+  echo "--- Case 11.5: competing effort cannot authorize configured verification-author tuple ---"
+  rm -rf "$STORE_BASE/exact_va_competing_effort"
+  mkdir -p "$STORE_BASE/exact_va_competing_effort"
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_va_competing_effort" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_va_quota/va_score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_va_competing_effort)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_va_competing_effort/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"xhigh","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"competing-xhigh"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_va_competing_effort" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_va_competing_effort/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_va_competing_effort)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/exact_va_competing_effort" ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_va_competing_effort" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "quota"
+
+  echo "--- Case 11.6: implementer exact wallet does not authorize verification-author path ---"
+  # Role-aware: implementer exact available on codex/gpt-5.3 must not GO a VA contract
+  # whose resolver tuple is anthropic-compatible/glm-5.2 (scorecard also absent for VA).
+  rm -rf "$STORE_BASE/exact_role_cross"
+  mkdir -p "$STORE_BASE/exact_role_cross"
+  # Only implementer scorecard + exact implementer cap.
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_role_cross" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_impl_quota/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_role_cross)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_role_cross/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"impl-only"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_role_cross" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_role_cross/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_role_cross)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/exact_role_cross" ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_role_cross" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  # Fail-closed on missing VA scorecard (role-aware), not a false implementer GO.
+  assert_nogo_json "$out" "qualified"
+  field=$(json_get "$out" "resolved_engine.model") || fail "role-cross VA model extraction failed"
+  assert_eq "$field" "glm-5.2"
+
+  echo "--- Case 11.7: named endpoint exact wallet admits; competing null wallet alone cannot ---"
+  # Pin implementer_endpoint so the resolver emits a named wallet (not "").
+  (
+    cd "$MINI_REPO"
+    cat > .claude/review-loop-config.md <<'EOF'
+# Review Loop Config
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
+- implementer_endpoint: wallet_a
+- verification_author_present: true
+- verification_author_engine: glm-5.2
+- verification_author_runner: anthropic-compatible
+- verification_author_effort: high
+EOF
+    git add .claude/review-loop-config.md >/dev/null 2>&1
+    git commit -m "named endpoint fixture" >/dev/null 2>&1
+  )
+  NAMED_BASE=$(cd "$MINI_REPO" && git rev-parse HEAD)
+  cat > "$CONTRACT_DIR/named_endpoint.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "feat-named-ep",
+  "role": "implementer",
+  "goal": "Implement core API",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$NAMED_BASE",
+  "depends_on": ["$DEP_SHA"],
+  "scope": {
+    "allow_paths": ["src/"],
+    "deny_paths": ["vendor/"],
+    "generated_mirrors": {"command": ["scripts/sync-codex-plugin-skills.sh"], "allow_paths": [".codex/mirror/"]},
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["src/main.go", "src/util.go"],
+    "required_engine_role": "implementer",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "diff", "paths": ["src/"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+  # Competing null wallet only — must not authorize named-endpoint tuple.
+  rm -rf "$STORE_BASE/exact_named_null_only"
+  mkdir -p "$STORE_BASE/exact_named_null_only"
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_named_null_only" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_impl_quota/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_named_null_only)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_named_null_only/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"competing-null"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_named_null_only" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_named_null_only/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_named_null_only)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/exact_named_null_only" ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_named_null_only" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/named_endpoint.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "quota"
+
+  # Exact named wallet available (plus competing null) → GO.
+  rm -rf "$STORE_BASE/exact_named_ok"
+  mkdir -p "$STORE_BASE/exact_named_ok"
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_named_ok" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_impl_quota/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_named_ok)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_named_ok/cap_null.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"competing-null"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_named_ok" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_named_ok/cap_null.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_named_ok null)"; exit 1
+  }
+  cat > "$STORE_BASE/exact_named_ok/cap_named.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":"wallet_a","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"exact-named"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_named_ok" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_named_ok/cap_named.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_named_ok named)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/exact_named_ok" ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_named_ok" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/named_endpoint.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "0"
+  field=$(json_get "$out" "verdict") || fail "named-endpoint verdict extraction failed"
+  assert_eq "$field" "GO"
+  field=$(json_get "$out" "resolved_engine") || fail "named-endpoint resolved_engine extraction failed"
+  assert_eq "$field" '{"runner":"codex","model":"gpt-5.3-codex-spark","family":"openai"}'
+  assert_no_secret "$out"
+
+  # Restore default empty-endpoint config for subsequent cases.
+  (
+    cd "$MINI_REPO"
+    cat > .claude/review-loop-config.md <<'EOF'
+# Review Loop Config
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- verification_author_present: true
+- verification_author_engine: glm-5.2
+- verification_author_runner: anthropic-compatible
+- verification_author_effort: high
+SECRET_FIXTURE_DO_NOT_LEAK
+EOF
+    git add .claude/review-loop-config.md >/dev/null 2>&1
+    git commit -m "restore default endpoint fixture" >/dev/null 2>&1
+  )
+  RESTORED_BASE=$(cd "$MINI_REPO" && git rev-parse HEAD)
+  # Refresh contracts that pin base_sha for later cases that still use valid.json
+  # with the original BASE_SHA (ancestor of restored HEAD) — dirty/base still ok
+  # as long as base is an ancestor and tree is clean.
+
+  echo "--- Case 11.8: resolver response missing endpoint property is NO-GO before quota ---"
+  # Defense-in-depth: absent implementer_endpoint must not map to @none.
+  rm -rf "$STORE_BASE/exact_missing_ep"
+  mkdir -p "$STORE_BASE/exact_missing_ep"
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_missing_ep" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_impl_quota/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (exact_missing_ep)"; exit 1
+  }
+  # Seed exact high/@none available so a silent @none fallback would wrongly GO.
+  cat > "$STORE_BASE/exact_missing_ep/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"would-authorize-if-fallback"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_missing_ep" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/exact_missing_ep/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (exact_missing_ep)"; exit 1
+  }
+  PRELOAD_STRIP_EP="$TEST_TMP/strip-resolver-endpoint.cjs"
+  cat > "$PRELOAD_STRIP_EP" <<'NODE'
+'use strict';
+const path = require('path');
+const childProcess = require('child_process');
+const originalSpawnSync = childProcess.spawnSync;
+childProcess.spawnSync = function strippedEndpointSpawn(command, args, options) {
+  const result = originalSpawnSync.call(this, command, args, options);
+  if (!Array.isArray(args) || result.status !== 0) return result;
+  const joined = args.map(String).join(' ');
+  if (!joined.includes('resolve-review-loop.sh')) return result;
+  try {
+    const parsed = JSON.parse(String(result.stdout || ''));
+    delete parsed.implementer_endpoint;
+    delete parsed.verification_author_endpoint;
+    return { ...result, stdout: `${JSON.stringify(parsed)}\n` };
+  } catch {
+    return result;
+  }
+};
+NODE
+  # Use a contract whose base is the restored HEAD (clean tree).
+  cat > "$CONTRACT_DIR/missing_ep.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "feat-missing-ep",
+  "role": "implementer",
+  "goal": "Implement core API",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$RESTORED_BASE",
+  "depends_on": ["$DEP_SHA"],
+  "scope": {
+    "allow_paths": ["src/"],
+    "deny_paths": ["vendor/"],
+    "generated_mirrors": {"command": ["scripts/sync-codex-plugin-skills.sh"], "allow_paths": [".codex/mirror/"]},
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["src/main.go", "src/util.go"],
+    "required_engine_role": "implementer",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "diff", "paths": ["src/"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+  out=$(env NODE_OPTIONS="--require=$PRELOAD_STRIP_EP" \
+    ENGINE_SCORECARD_DIR="$STORE_BASE/exact_missing_ep" \
+    ENGINE_CAPABILITY_DIR="$STORE_BASE/exact_missing_ep" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/missing_ep.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "endpoint"
+  assert_contains "$out" "missing endpoint"
+  # Must not be a quota-only failure that would imply an @none query succeeded as "unavailable".
+  # Engine resolution fails closed; quota reason may be absent.
+  assert_not_contains "$out" "would-authorize-if-fallback"
+  assert_no_secret "$out"
+
+  echo "--- Case 10.8: /l6 config tuple VA family differs from Grok implementer ---"
+  # Regression: project-pinned /l6 VA must not resolve to the same family as the
+  # Grok implementer (xai). Mini-repo config is rewritten to the real /l6 pair.
+  git checkout -- . 2>/dev/null || true
+  cat > "$MINI_REPO/.claude/review-loop-config.md" <<'EOF'
+# Review Loop Config (l6 family decorrelation regression)
+- implementer_engine: grok-4.5
+- implementer_runner: grok
+- implementer_effort: high
+- verification_author_present: true
+- verification_author_engine: Gemini 3.5 Flash (High)
+- verification_author_runner: agy
+- verification_author_effort: high
+EOF
+  # Scorecard/capability for the Gemini VA tuple only (strict author path).
+  rm -rf "$STORE_BASE/va_l6_family"
+  mkdir -p "$STORE_BASE/va_l6_family"
+  cat > "$STORE_BASE/va_l6_family/score.json" <<'EOF'
+{"engine":"Gemini 3.5 Flash (High)","runner":"agy","family":"google","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/va_l6_family" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/va_l6_family/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (va_l6_family)"; exit 1
+  }
+  cat > "$STORE_BASE/va_l6_family/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"agy","model":"Gemini 3.5 Flash (High)","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/va_l6_family" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/va_l6_family/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (va_l6_family)"; exit 1
+  }
+  # Commit config so dirty-base does not NO-GO; recompute base for the contract.
+  (
+    cd "$MINI_REPO"
+    git add .claude/review-loop-config.md >/dev/null 2>&1
+    git commit -m "l6 family decorrelation fixture" >/dev/null 2>&1
+  )
+  L6_BASE=$(cd "$MINI_REPO" && git rev-parse HEAD)
+  cat > "$CONTRACT_DIR/va_l6_family.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "l6-family-va",
+  "role": "verification-author",
+  "goal": "Author harness",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$L6_BASE",
+  "depends_on": ["$DEP_SHA"],
+  "scope": {
+    "allow_paths": ["oracle.test.sh"],
+    "deny_paths": ["vendor/"],
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["specs/feat/core.md"],
+    "required_engine_role": "verification-author",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "raw-artifact", "paths": ["oracle.test.sh"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_l6_family" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_l6_family" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_l6_family.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "0"
+  field=$(json_get "$out" "verdict") || fail "l6 family VA verdict extraction failed"
+  assert_eq "$field" "GO"
+  field=$(json_get "$out" "assurance") || fail "l6 family VA assurance extraction failed"
+  assert_eq "$field" "provisional"
+  field=$(json_get "$out" "resolved_engine.family") || fail "l6 family VA family extraction failed"
+  assert_eq "$field" "google"
+  # Grok implementer is xai; VA must not collapse onto that family.
+  assert_neq "$field" "xai"
+  field=$(json_get "$out" "resolved_engine.runner") || fail "l6 family VA runner extraction failed"
+  assert_eq "$field" "agy"
+  field=$(json_get "$out" "resolved_engine.model") || fail "l6 family VA model extraction failed"
+  assert_eq "$field" "Gemini 3.5 Flash (High)"
+fi
 
 assert_red_green_clean "$MINI_REPO"
 

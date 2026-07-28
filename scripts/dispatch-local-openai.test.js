@@ -314,6 +314,10 @@ function buildEnvelope(allow = true) {
       topology_preference: 'inline',
       data_egress: 'local-only',
     },
+    missionAuthority: {
+      repoIdentity: 'git-common-dir:/tmp/local-dispatch-test.git',
+      graphDigest: sha256('local-dispatch-mission-graph'),
+    },
     policy: resolved.policy,
     policyHash: resolved.policy_hash,
   }).envelope;

@@ -24,6 +24,82 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.0 — Mission convergence portfolio (release-ready implementation)
+
+**Headline**: Autopilot can run an unattended Mission through bounded implementation campaigns,
+exact provider/readiness admission, worktree lifecycle receipts, authenticated abort finalization,
+task-status merge gates, bounded plan-review sessions, and privacy-safe cross-harness transcript
+retro. Implementation is release-ready on this branch; final depth-0 merge, archive, lifecycle
+residue receipts, and remote push remain finish-flow work and are not claimed by this release note.
+
+### Added
+- Project-authoritative Mission policy, content-bound source manifest, and execution-graph
+  admission (`mission-routing-admission.js` / execution-graph check) that reject deliverable-count,
+  critical-path, and aggregate-reservation overflow before effects.
+- Implementation Campaign Convergence (ICC) reducer/intake with pre-spend gates, repair composition,
+  transport envelope, and sealed campaign unit projection under L5/L6.
+- Provider Readiness Orchestrator (PRO): pure readiness identity, bounded probe coordinator,
+  readiness receipt + CLI, and exact-tuple admission (including provisional author labor only).
+- Dispatch Worktree Lifecycle Budget (WLB): marker/occupancy budget, lifecycle controller, exact
+  branch disposition, and content-bound `LifecycleResidueReceipt` (resource residue only; never
+  computes task `can_close`).
+- L6 Status and Merge Contract (LSM): task-status aggregation, merge-intent preflight, sealed merge
+  execution receipts, and finish-flow/CEO reporting that keeps `product_merged`, `consumer_updated`,
+  `pushed`, and `zero_residue` as independent booleans.
+- Authenticated Mission abort finalization: durable `ABORTING` → `ABORTED` via `abort_finalized`,
+  fail-closed idempotent replay, and zero-effect release only with sealed-root identity proof and
+  mechanical `dispatcher_called === false`.
+- Bounded Plan Review Session controller (`dispatch-plan-review.js`): durable sessions, rubric
+  freeze, finding normalize/dedupe, transport fail-loud, and research-to-ship Phase 3 wiring.
+  Canonically integrated at `a775262`.
+- Cross-Harness Transcript Retro: privacy-safe adapters, evidence-bound metrics, and synthetic
+  fixtures only (raw transcripts and secrets stay outside the repository). Canonically integrated
+  at `070b7a0`.
+- Frozen candidate-path audit and successor-graph correction after `runtime-control` bootstrap:
+  historical/retired path ownership, one implementation owner per active candidate path, and a
+  corrected one-node closeout graph (`graph_digest`
+  `6547db664c5818a115347abd3b37b06ecdfc9e93f56d851c6b07c8e45df4b54f`) after the original release
+  contract’s impossible non-existent `marketplace.json` output path was superseded before model
+  spend.
+
+### Changed
+- Dev-flow, project bootstrap, CEO mode, and L3–L6 treat plan phases, modules, tests, reviewer
+  seats, and retries as coverage/gates inside caller-authored bounded deliverables. Only graph
+  nodes that pass canonical policy/graph/source admission become implementation tasks.
+- Session-mode markers preserve one admission digest while normal, solo, and precondition-fallback
+  routes change execution topology; explicit close evidence remains mandatory for managed L5/L6
+  clear.
+- Mission graph nodes use ICC-compatible rubric IDs and strict campaign projection ceilings for
+  repair generations, wall time, churn, file count, engine attempts, command size, and output paths.
+- Strict `/l6` verification-author admission accepts exact provisional scorecard rows for
+  `raw-artifact` authoring labor only (`assurance: provisional`); depth-0 remains sole
+  verification/merge authority. Reviewer and other authority-bearing roles stay fail-closed.
+- Managed pre-spend lifecycle: missing/malformed/mismatched sealed root identity after durable
+  `implementation_started` uses ICC + Mission zero-effect release only when the prepare rejection
+  carries an explicit identity code and mechanical no-dispatch proof. Same-shaped prepare failures
+  without that proof remain fail-closed possibly effectful. Stagnation no longer terminalizes
+  Mission while an unreleased nonterminal claim remains live.
+
+### Boundary
+- This release publishes implementation and version mirrors only. It does **not** claim a remote
+  push, production deployment, project archive, L6 marker clear, or `zero_residue=true`.
+- Final merge onto the integration target, project archive, lifecycle/status receipts, and marker
+  clear remain depth-0 finish-flow after this campaign is accepted.
+- Framework defects observed during the real L6 run (legacy quota partition vs exact
+  effort/endpoint admission, gate-budget consumption by precondition/no-effect attempts, missing
+  finding-disposition resume, pre-spend output-path/version-mirror validation, `boundary_rejected`
+  status handling, QC panel-count degradation) are tracked in `docs/BACKLOG.md` and are not fixed
+  by this release-closeout node.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.33.0`
+
+prose-justification: this release consolidates the Mission convergence portfolio (ICC, Mission
+supervisor, provider readiness, worktree lifecycle, task status/merge, plan-review, transcript
+retro) into one user-facing surface with honest closeout boundaries; version mirrors and docs are
+synchronized rather than independently authored.
+
 ## v2.33.0 — Capability-adaptive execution profiles
 
 **Headline**: Autopilot remains one product for strong, weak, remote, and local models. It now

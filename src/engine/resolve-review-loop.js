@@ -249,6 +249,51 @@ function validateReviewLoopConfig(value) {
       }
     }
   }
+  assertField(value, 'qc_panel_seats', Array.isArray, 'an array');
+  assertField(value, 'qc_panel_seats_complete', (v) => typeof v === 'boolean', 'a boolean');
+  assertField(
+    value,
+    'provider_readiness_receipt_ttl_seconds',
+    (v) => Number.isInteger(v) && v >= 1 && v <= 86400,
+    'an integer in 1..86400',
+  );
+  assertOneOf(
+    value,
+    'provider_readiness_fallback_family_constraint',
+    schemaEnum('provider_readiness_fallback_family_constraint'),
+  );
+  if (value.qc_panel_seats_complete) {
+    if (value.qc_panel_seats.length !== value.qc_panel.length) {
+      throw new Error('review-loop output JSON exact QC seat count must match qc_panel');
+    }
+  } else if (value.qc_panel_seats.length !== 0) {
+    throw new Error('review-loop output JSON incomplete QC metadata must emit no exact seats');
+  }
+  for (const [index, seat] of value.qc_panel_seats.entries()) {
+    if (!seat || typeof seat !== 'object' || Array.isArray(seat)
+        || Object.keys(seat).length !== 6
+        || Object.keys(seat).some((field) => ![
+          'role',
+          'runner',
+          'model',
+          'effort',
+          'endpoint',
+          'family',
+        ].includes(field))
+        || seat.role !== 'qc'
+        || !schemaEnum('reviewer_runner').includes(seat.runner)
+        || seat.runner === 'auto'
+        || !schemaEnum('reviewer_effort').includes(seat.effort)
+        || !nonEmptyString(seat.model)
+        || !nonEmptyString(seat.family)
+        || !(seat.endpoint === null
+          || (typeof seat.endpoint === 'string' && /^[A-Za-z0-9_]+$/.test(seat.endpoint)))) {
+      throw new Error(`review-loop output JSON qc_panel_seats[${index}] is invalid`);
+    }
+    if (seat.model !== value.qc_panel[index]) {
+      throw new Error('review-loop output JSON exact QC seats must preserve panel order');
+    }
+  }
 
   const hasReviewerQualified = Object.prototype.hasOwnProperty.call(value, 'reviewer_qualified');
   const hasFallbackLadder = Object.prototype.hasOwnProperty.call(value, 'fallback_ladder');

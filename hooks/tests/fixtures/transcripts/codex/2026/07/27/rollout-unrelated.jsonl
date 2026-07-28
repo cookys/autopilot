@@ -1,0 +1,2 @@
+{"timestamp":"2026-07-27T11:00:00.000Z","type":"session_meta","payload":{"id":"codex-unrelated","cwd":"__OTHER_REPO__","repo":"__OTHER_REPO__"}}
+{"timestamp":"2026-07-27T11:00:10.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Unrelated repository text RAW_UNRELATED_SENTINEL"}]}}

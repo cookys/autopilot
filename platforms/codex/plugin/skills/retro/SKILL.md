@@ -80,7 +80,7 @@ If a previous retro JSON exists, read it for delta comparison.
 
 ## Step 4: Output Report
 
-Format the report (~1500 words) using the exact section structure in [references/report-templates.md](references/report-templates.md): Tweetable Summary, Metrics Dashboard, Hourly Distribution, Session Analysis, Commit Type Breakdown, Hotspot Analysis, **Review-Loop Lens** (from 1f — SKIP this section only when `transcript.sessions == 0`), **Escalations** (counts + recurring themes from 1g), Ship of the Week, Observations (3), Habits for Next Week (3).
+Format the report (~1500 words) using the exact section structure in [references/report-templates.md](references/report-templates.md): Tweetable Summary, Metrics Dashboard, Hourly Distribution, Session Analysis, Commit Type Breakdown, Hotspot Analysis, **Transcript Coverage** (from 1f — always render), **Review-Loop Lens** (from 1f; preserve known/unknown and deterministic/heuristic labels), **Escalations** (counts + recurring themes from 1g), Ship of the Week, Observations (3), Habits for Next Week (3).
 
 ## Step 5: Persist Snapshot
 
@@ -115,14 +115,21 @@ Write a JSON file to `.context/retros/{YYYY-MM-DD}.json` containing:
     "codex_exec": N,
     "review_driven_commits": N,
     "qc_verdict_commits": N,
-    "versions": N
+    "versions": N,
+    "provenance": [],
+    "warnings": [],
+    "loop_metrics": {
+      "deterministic": {},
+      "heuristic": {}
+    }
   }
 }
 ```
 
-Populate `review_loop_lens` from the 1f JSON (`transcript.*` + `git_signals.*`). If
-`transcript.sessions == 0` (no local transcripts on this machine), still persist the block
-with the git-signal fields so a future retro on the same machine can delta.
+Populate `review_loop_lens` from the additive 1f JSON (`transcript.*`, `git_signals.*`,
+`provenance`, `warnings`, and `loop_metrics`). If `transcript.sessions == 0`, still persist the
+coverage/provenance and git-signal fields so a future retro can distinguish missing evidence,
+attribution gaps, and true observed zero.
 
 ## Step 6: Delta Report (if previous retro exists)
 

@@ -37,6 +37,30 @@
       "minLength": 1,
       "description": "Lifecycle role."
     },
+    "effort": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "description": "Exact effort identity. Absence means legacy effort-ambiguous evidence."
+    },
+    "effort_binding": {
+      "type": "string",
+      "enum": ["exact", "ambiguous-legacy"],
+      "description": "Output-only identity provenance for merged current/report views."
+    },
+    "endpoint": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_]+$",
+      "description": "Exact endpoint wallet identity. Absence means legacy endpoint-ambiguous evidence."
+    },
+    "endpoint_binding": {
+      "type": "string",
+      "enum": ["exact", "ambiguous-legacy"],
+      "description": "Output-only identity provenance for merged current/report views."
+    },
     "runner_version": {
       "type": ["string", "null"],
       "description": "Version of the runner if known."
@@ -69,6 +93,20 @@
             "ttl_seconds": {
               "type": "integer",
               "minimum": 0
+            },
+            "observed_at": {
+              "type": ["string", "null"],
+              "format": "date-time",
+              "description": "Output-only observation time of the quota event selected by the merged current view."
+            },
+            "event_id": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "description": "Output-only event ID of the quota observation selected by the merged current view."
+            },
+            "source_role": {
+              "type": ["string", "null"],
+              "description": "Output-only role provenance for a role-agnostic quota merge."
             }
           }
         },

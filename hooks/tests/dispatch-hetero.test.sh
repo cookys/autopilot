@@ -19,6 +19,8 @@ git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 
 PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
+EMPTY_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"
+mkdir -p "$EMPTY_SESSION_MODE_DIR"
 
 # --- stub agy: commits one file (ignores all flags, like a cooperative agent) ---
 STUB_OK="$TEST_TMP/agy-ok"
@@ -94,13 +96,19 @@ assert_contains "$OUT" "effort must be one of" "bad --effort error text"
 # only *gpt-5.5* to codex, so gpt-5.3-codex-spark silently fell through to the agy branch).
 # Route to codex and make codex absent (PATH without ~/.local/bin, keeping system tools);
 # the codex precondition must fire — proving routing did NOT fall through to agy.
-OUT="$(cd "$SBX" && PATH=/usr/bin:/bin "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
+  --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
 assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
 
 # 3c. qoder routing: a Qwen model auto-routes to qoderclicn (not agy). Route via auto and make
 # qoder absent (PATH without ~/.local/bin) — the qoder precondition must fire, proving routing.
-OUT="$(cd "$SBX" && PATH=/usr/bin:/bin "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
+  --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes Qwen3.8-Max-Preview to qoder (not agy)"
 assert_contains "$OUT" "qoder binary not found" "qwen routing does not fall through to agy"
 
@@ -114,6 +122,10 @@ assert_contains "$OUT" '"status": "committed"' "qoder committed status"
 assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
 
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
+DIRECT_AUTHORITY_BEFORE="$(
+  git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
+    | wc -l
+)"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "committed path exit code"
 assert_contains "$OUT" '"status": "committed"' "committed status"
@@ -125,6 +137,63 @@ BRANCH_EXISTS="$(git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/smoke 
 assert_eq "yes" "$BRANCH_EXISTS" "branch survives for review/merge"
 SMOKE_CONTENT="$(git -C "$SBX" show feat/smoke:ok.txt)"
 assert_eq "ok" "$SMOKE_CONTENT" "artifact verifiable from branch"
+assert_eq "$(
+  git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
+    | wc -l
+)" "$DIRECT_AUTHORITY_BEFORE" \
+  "direct one-shot cleanup does not create managed lifecycle authority"
+
+# 4b. managed committed path journals exact custom branch before auto-removal
+MANAGED_ROOT="campaign-v1-$(printf 'a%.0s' {1..64})"
+MANAGED_RETAINED="$TEST_TMP/managed-retained"
+MANAGED_BASE="$(git -C "$SBX" rev-parse develop)"
+git -C "$SBX" worktree add -q -b hetero/managed-retained \
+  "$MANAGED_RETAINED" "$MANAGED_BASE"
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/managed-retained\n'
+  printf 'base_sha=%s\n' "$MANAGED_BASE"
+  printf 'run_id=managed-retained\n'
+  printf 'root_run_id=%s\n' "$MANAGED_ROOT"
+  printf 'loop_id=managed-retained-loop\n'
+  printf 'retention=inspect\n'
+  printf 'schema=2\n'
+} > "$MANAGED_RETAINED/.autopilot-worktree"
+: > "$MANAGED_RETAINED/.autopilot-worktree.lock"
+OUT="$(cd "$SBX" && env AUTOPILOT_PARENT_RUN_ID=foreman-managed \
+  AUTOPILOT_ROOT_RUN_ID=foreman-managed \
+  AUTOPILOT_WORKTREE_ROOT_RUN_ID="$MANAGED_ROOT" AUTOPILOT_DISPATCH_DEPTH=1 \
+  "$SCRIPT" --branch hetero/managed-smoke --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "managed committed path exit code"
+assert_contains "$OUT" '"worktree": null' \
+  "managed committed worktree is controller-reaped"
+assert_file_exists "$MANAGED_RETAINED/.git" \
+  "managed success cleanup preserves another retained leaf for inspection"
+MANAGED_SCAN="$(
+  "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" scan \
+    --repo "$SBX" --root-run-id "$MANAGED_ROOT"
+)"
+assert_contains "$MANAGED_SCAN" '"branch":"hetero/managed-smoke"' \
+  "managed auto-removal leaves exact custom branch inventory"
+assert_eq "yes" "$(
+  git -C "$SBX" rev-parse --verify --quiet refs/heads/hetero/managed-smoke \
+    >/dev/null && echo yes || echo no
+)" "managed custom branch survives for exact disposition"
+git -C "$SBX" worktree remove --force "$MANAGED_RETAINED"
+git -C "$SBX" branch -D hetero/managed-retained >/dev/null
+
+# 4c. Explicit managed identity is exact input, never lossy-sanitized.
+OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID='bad/root' \
+  "$SCRIPT" --branch hetero/invalid-managed-root --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "invalid explicit managed root fails before dispatch"
+assert_contains "$OUT" "AUTOPILOT_WORKTREE_ROOT_RUN_ID must match" \
+  "invalid managed root failure names the exact contract"
+assert_eq "no" "$(
+  git -C "$SBX" rev-parse --verify --quiet \
+    refs/heads/hetero/invalid-managed-root >/dev/null && echo yes || echo no
+)" "invalid managed root cannot create a branch"
 
 # 5. duplicate branch → precondition_failed (exit 2)
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
@@ -354,6 +423,148 @@ assert_file_exists "$TEST_TMP/captured_prompt.txt" "captured prompt file exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "=== SKILL: autopilot:dev-flow ===" "prompt contains skill delimiter"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evaluation" "prompt contains skill content"
 
+# 12a. A sealed v1 campaign is not itself a strict leaf projection. Under L6 it
+# must fail before the runner instead of treating prompt text as authority.
+CAMPAIGN_CONTRACT="$TEST_TMP/campaign-boundary.json"
+CAMPAIGN_SEAL="$TEST_TMP/campaign-boundary.seal.json"
+CAMPAIGN_BASE="$(git -C "$SBX" rev-parse develop)"
+CAMPAIGN_REPO_ID="$(node - "$REPO_ROOT" "$SBX" <<'NODE'
+const path = require('path');
+const [root, repo] = process.argv.slice(2);
+const { canonicalRepoIdentity } = require(path.join(root, 'scripts', 'implementation-campaign-check'));
+process.stdout.write(canonicalRepoIdentity(repo));
+NODE
+)"
+printf '%s\n' \
+  "{\"schema_version\":1,\"ticket\":\"campaign-boundary\",\"profile\":\"poc\",\"mission_grant_ref\":null,\"repo_identity\":\"$CAMPAIGN_REPO_ID\",\"base_sha\":\"$CAMPAIGN_BASE\",\"branch\":\"feat/campaign-boundary\",\"vertical_acceptance\":[\"capture bounded prompt\"],\"allowed_path_prefixes\":[\"ok.txt\"],\"max_changed_files\":2,\"baseline_churn\":10,\"max_growth_ratio\":1.5,\"max_extra_churn\":5,\"max_repair_generations\":2,\"max_wall_seconds\":120,\"verify_cmd\":\"true\",\"rubric_ids\":[\"R1\"]}" \
+  > "$CAMPAIGN_CONTRACT"
+SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
+  --contract "$CAMPAIGN_CONTRACT" --repo "$SBX" --mission-mode off \
+  --out "$CAMPAIGN_SEAL" 2>&1)"; SEAL_EXIT=$?
+assert_eq "0" "$SEAL_EXIT" "campaign boundary fixture seals: $SEAL_OUT"
+CAMPAIGN_CONTRACT_SHA="$(node -e '
+  const crypto = require("crypto");
+  const fs = require("fs");
+  process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+' "$CAMPAIGN_CONTRACT")"
+CAMPAIGN_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode"
+mkdir -p "$CAMPAIGN_SESSION_MODE_DIR"
+
+# A legacy v1 campaign remains admissible outside strict Mission/L5/L6 policy.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
+  "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "sealed v1 campaign remains compatible outside strict governance"
+assert_file_exists "$TEST_TMP/captured_prompt.txt" \
+  "legacy v1 shadow/off campaign still reaches its runner"
+
+printf '%s\n' \
+  "{\"level\":\"l6\",\"repo_root\":\"$(cd "$SBX" && pwd -P)\",\"started_at\":\"2026-07-28T00:00:00Z\",\"expires_at\":\"2099-01-01T00:00:00Z\"}" \
+  > "$CAMPAIGN_SESSION_MODE_DIR/l6.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "sealed v1 campaign cannot bypass active L6 strict projection"
+assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
+  "sealed v1 campaign names the active strict admission requirement"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "sealed v1 campaign rejection spawns no runner"
+
+# 12b. A contract changed after intake is rejected before the runner or worktree exists.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-drift --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$(printf '0%.0s' {1..64})" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "campaign contract digest drift exit code"
+assert_contains "$OUT" "campaign contract digest changed after intake" \
+  "campaign contract drift names the intake boundary"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "campaign contract drift spawns no runner"
+
+# 12c. Contract, digest, and intake seal are one inseparable managed boundary.
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-unbound --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "unbound campaign contract exit code"
+assert_contains "$OUT" "are required together" \
+  "campaign contract without its intake digest and seal fails closed"
+
+# 12d. A self-hashed campaign JSON without the intake seal cannot bypass L6.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-missing-seal --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "campaign contract without seal exit code"
+assert_contains "$OUT" "--campaign-seal" "missing campaign seal names the required admission input"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "missing campaign seal spawns no runner"
+
+# 12e. A forged seal cannot authorize the campaign leaf.
+FORGED_CAMPAIGN_SEAL="$TEST_TMP/campaign-boundary.forged.seal.json"
+node - "$CAMPAIGN_SEAL" "$FORGED_CAMPAIGN_SEAL" <<'NODE'
+const fs = require('fs');
+const [source, target] = process.argv.slice(2);
+const seal = JSON.parse(fs.readFileSync(source, 'utf8'));
+seal.contract_sha256 = '0'.repeat(64);
+fs.writeFileSync(target, `${JSON.stringify(seal)}\n`);
+NODE
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-forged-seal --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$FORGED_CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "forged campaign seal exit code"
+assert_contains "$OUT" "campaign contract checker failed" \
+  "forged campaign seal fails the canonical checker"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "forged campaign seal spawns no runner"
+
+# 12f. The new campaign admission path does not weaken the prompt-only session gate.
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-non-strict --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "non-strict dispatch remains blocked under active L6"
+assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
+  "non-strict L6 diagnostic names the required authority"
+
+# 12g. A malformed marker in the authoritative namespace fails closed.
+MALFORMED_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode-malformed"
+mkdir -p "$MALFORMED_SESSION_MODE_DIR"
+printf '%s\n' 'not-json' > "$MALFORMED_SESSION_MODE_DIR/corrupt.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MALFORMED_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-malformed-marker --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "malformed authoritative session marker fails closed"
+assert_contains "$OUT" "authoritative session-mode marker is invalid" \
+  "malformed marker rejection names the authoritative namespace"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "malformed marker rejection spawns no runner"
+
+# 12h. Invalid authoritative Mission governance cannot become an implicit off mode.
+mkdir -p "$SBX/.claude" "$TEST_TMP/empty-session-mode"
+printf '%s\n' '{"mission_convergence":' > "$SBX/.claude/owner-kernel-governance.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
+  "$SCRIPT" --branch feat/campaign-invalid-governance --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "invalid authoritative Mission governance fails closed"
+assert_contains "$OUT" "authoritative Mission governance is invalid" \
+  "Mission admission preserves the governance projection error"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "invalid governance rejection spawns no runner"
+rm -f "$SBX/.claude/owner-kernel-governance.json"
+
 # 13. --skill-mode prompt with non-existent skill fails with exit 2
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "nonexistent skill exit code"
@@ -439,5 +650,38 @@ assert_contains "$OUT" '"status": "committed"' "setsid-unavailable fallback stil
 HB_COUNT="$(grep -c '\"kind\":\"heartbeat\"' "$LEDGER_NOSET" 2>/dev/null)"; HB_COUNT="${HB_COUNT:-0}"
 assert_eq "0" "$HB_COUNT" "setsid-unavailable fallback bypasses detach-side heartbeats"
 assert_file_absent "${LEDGER_NOSET}.results/rn.implement.result.json" "setsid-unavailable fallback does not emit detached durable result"
+
+# 21a. A detached Grok dispatch must carry the clamped reasoning effort into the
+# serialized child. `run_agent` is serialized for the detached rail, so its
+# sourced Grok helpers must be serialized too; otherwise command substitution
+# yields an empty --reasoning-effort value and Grok exits before a model request.
+STUB_GROK_EFFORT="$TEST_TMP/grok-effort"
+GROK_EFFORT_CAPTURE="$TEST_TMP/grok-effort.txt"
+cat > "$STUB_GROK_EFFORT" <<'EOF'
+#!/usr/bin/env bash
+effort=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --reasoning-effort) effort="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s' "$effort" > "$GROK_EFFORT_CAPTURE"
+[ "$effort" = "high" ] || exit 64
+printf 'grok detached effort\n' > grok-effort.txt
+EOF
+chmod +x "$STUB_GROK_EFFORT"
+LEDGER_GROK="$TEST_TMP/grok-detached-ledger/ledger.jsonl"
+mkdir -p "$TEST_TMP/grok-detached-ledger"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_GROK" >/dev/null
+OUT="$(cd "$SBX" && env GROK_EFFORT_CAPTURE="$GROK_EFFORT_CAPTURE" DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_EFFORT" \
+  --branch feat/grok-detached-effort --prompt-file "$PROMPT" --ledger "$LEDGER_GROK" \
+  --run-id grok-detached-effort --stage implement 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "detached Grok effort path exit code"
+assert_contains "$OUT" '"status": "committed"' "detached Grok effort path commits"
+assert_file_exists "$GROK_EFFORT_CAPTURE" "detached Grok stub received reasoning effort"
+assert_eq "high" "$(cat "$GROK_EFFORT_CAPTURE" 2>/dev/null)" \
+  "detached Grok receives the clamped high effort"
 
 finalize_test

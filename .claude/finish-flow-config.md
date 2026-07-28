@@ -60,7 +60,8 @@ Re-read critical files on develop (pick 1-3 highest-risk files that were changed
 Run dev-flow Session End L-Full checklist. autopilot-specific adaptations:
 - Staging verify → N/A (plugin, no staging)
 - Knowledge extraction → record to the user's cross-session memory (not autopilot's own `.claude/`, which is gitignored)
-- Deferred items → into the next plan's `Background` section (autopilot has no BACKLOG.md)
+- Deferred items → evidence-backed candidates are deduped into `docs/BACKLOG.md` with Source,
+  Context, and Trigger; preference-only/unsupported suggestions stay out
 - Docs sync check → `docs/projects/INDEX.md` + CHANGELOG + README skill/agent count badges
 
 ## Per-phase quality pipeline (preserved)

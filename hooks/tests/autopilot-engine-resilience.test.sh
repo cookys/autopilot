@@ -152,17 +152,35 @@ LEDGER_PATH="$TEST_TMP/ledger.jsonl"
 RUN_LEDGER_SCRIPT="$REPO_ROOT/scripts/run-ledger.sh"
 bash "$RUN_LEDGER_SCRIPT" init --ledger "$LEDGER_PATH"
 
-ACQ_OUT=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement" --pid "$$" --git-ref "refs/heads/round1-branch" --git-sha "$ROUND1_SHA" --worktree "$SCRATCH_WT")
+# Reconciliation receipt requires a closed writer: live start_time/heartbeat at
+# acquire, then a dead holder before recovery (holder_alive=false).
+HOLDER1_PID=""
+HOLDER2_PID=""
+cleanup_holders() {
+  if [ -n "${HOLDER1_PID}" ]; then kill "$HOLDER1_PID" 2>/dev/null || true; wait "$HOLDER1_PID" 2>/dev/null || true; fi
+  if [ -n "${HOLDER2_PID}" ]; then kill "$HOLDER2_PID" 2>/dev/null || true; wait "$HOLDER2_PID" 2>/dev/null || true; fi
+}
+trap cleanup_holders EXIT
+
+sleep 120 &
+HOLDER1_PID=$!
+ACQ_OUT=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement" --pid "$HOLDER1_PID" --git-ref "refs/heads/round1-branch" --git-sha "$ROUND1_SHA" --worktree "$SCRATCH_WT")
 GEN=$(jq -r '.generation' <<<"$ACQ_OUT")
 NONCE=$(jq -r '.nonce' <<<"$ACQ_OUT")
-
 bash "$RUN_LEDGER_SCRIPT" stage-transition --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement" --generation "$GEN" --nonce "$NONCE" --to-state committed
+kill "$HOLDER1_PID" 2>/dev/null || true
+wait "$HOLDER1_PID" 2>/dev/null || true
+HOLDER1_PID=""
 
-ACQ_OUT2=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r2" --pid "$$" --git-ref "refs/heads/round2-branch" --git-sha "$ROUND2_SHA" --worktree "$SCRATCH_WT")
+sleep 120 &
+HOLDER2_PID=$!
+ACQ_OUT2=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r2" --pid "$HOLDER2_PID" --git-ref "refs/heads/round2-branch" --git-sha "$ROUND2_SHA" --worktree "$SCRATCH_WT")
 GEN2=$(jq -r '.generation' <<<"$ACQ_OUT2")
 NONCE2=$(jq -r '.nonce' <<<"$ACQ_OUT2")
-
 bash "$RUN_LEDGER_SCRIPT" stage-transition --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r2" --generation "$GEN2" --nonce "$NONCE2" --to-state committed
+kill "$HOLDER2_PID" 2>/dev/null || true
+wait "$HOLDER2_PID" 2>/dev/null || true
+HOLDER2_PID=""
 
 OUT3="$(node - "$REPO_ROOT" "$PROMPT_TXT" "$SCRATCH_WT" "$LEDGER_PATH" "$BASE_SHA" "$ROUND1_SHA" <<'NODE'
 const path = require('path');

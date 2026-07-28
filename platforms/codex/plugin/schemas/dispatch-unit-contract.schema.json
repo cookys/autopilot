@@ -153,6 +153,51 @@
         "max_context_files": { "type": "integer", "minimum": 1, "maximum": 20 }
       },
       "additionalProperties": false
+    },
+    "campaign_projection": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "campaign_contract_sha256",
+        "strict_dispatch_sha256",
+        "campaign_id",
+        "ticket",
+        "campaign_base_sha",
+        "branch",
+        "stage",
+        "generation",
+        "root_run_id",
+        "mission_lineage_id",
+        "mission_policy_digest",
+        "mission_graph_digest",
+        "graph_node_id",
+        "graph_node_digest",
+        "runner",
+        "model"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "campaign_contract_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "strict_dispatch_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "campaign_id": { "type": "string", "pattern": "^campaign-v[12]-[0-9a-f]{64}$" },
+        "ticket": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$" },
+        "campaign_base_sha": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+        "branch": { "type": "string", "minLength": 1 },
+        "stage": {
+          "type": "string",
+          "pattern": "^campaign-implementation(?:#r(?:[2-9]|[1-9][0-9]+))?$"
+        },
+        "generation": { "type": "integer", "minimum": 0 },
+        "root_run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+        "mission_lineage_id": { "type": "string", "minLength": 1 },
+        "mission_policy_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "mission_graph_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "graph_node_id": { "type": "string", "minLength": 1 },
+        "graph_node_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "runner": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

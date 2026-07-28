@@ -95,6 +95,23 @@ const {
   SHADOW_TRANSLATION_LEVEL,
   ShadowTranslationRuntime,
 } = require('./shadow-translation');
+const {
+  MISSION_POLICY_FIELDS,
+  MISSION_POLICY_SCHEMA_VERSION,
+  deriveMissionAdoptionKey,
+  deriveMissionLineageId,
+  resolveMissionLineageAdoption,
+  resolveMissionPolicy,
+  validateEffectiveMissionPolicy,
+} = require('../mission-policy');
+const {
+  MISSION_GRAPH_SCHEMA_VERSION,
+  admitMissionExecutionGraph,
+  checkMissionGraphCoverage,
+  deriveMissionGraphNodeDigest,
+  freezeMissionExecutionGraph,
+  validateMissionExecutionGraph,
+} = require('../mission-execution-graph');
 
 module.exports = {
   ACTION_CLASSES,
@@ -117,6 +134,9 @@ module.exports = {
   LEVEL_TOPOLOGIES,
   LEVEL_TRANSLATION_SCHEMA_VERSION,
   MemoryWitness,
+  MISSION_GRAPH_SCHEMA_VERSION,
+  MISSION_POLICY_FIELDS,
+  MISSION_POLICY_SCHEMA_VERSION,
   OWNER_EVENT_SCHEMA_VERSION,
   OwnerKernel,
   OwnerKernelBlockedError,
@@ -142,10 +162,14 @@ module.exports = {
   createShadowTranslationEnvelope,
   deriveTranslationStatus,
   deriveDisclosure,
+  deriveMissionAdoptionKey,
+  deriveMissionLineageId,
+  deriveMissionGraphNodeDigest,
   egressDecision,
   evaluateAcceptancePredicate,
   freezeAcceptanceContract,
   freezeTaskAuthorityEnvelope,
+  freezeMissionExecutionGraph,
   isSha256,
   actionDescriptorHash,
   actionMatchesDescriptor,
@@ -172,6 +196,9 @@ module.exports = {
   parseLedgerJsonl,
   replayFromLatestCheckpoint,
   resolveGovernancePolicy,
+  resolveMissionPolicy,
+  resolveMissionLineageAdoption,
+  validateEffectiveMissionPolicy,
   receiptIsWithinBrokerRoot,
   serializeLedger,
   semanticRouteHash,
@@ -185,4 +212,7 @@ module.exports = {
   verifyLedger,
   verifyShadowTranslationEnvelope,
   verifyTaskAuthorityEnvelope,
+  admitMissionExecutionGraph,
+  checkMissionGraphCoverage,
+  validateMissionExecutionGraph,
 };

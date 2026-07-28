@@ -1,0 +1,275 @@
+{
+  "artifact_type": "mission_execution_graph",
+  "calculated_batches": 2,
+  "calculated_depth": 2,
+  "graph_digest": "1e51fa23bcfe6c4b3c68270704e1f53148a46ac0c5d0f1f30122b41eaaeed37e",
+  "nodes": [
+    {
+      "acceptance_ids": [
+        "plan-review-controller",
+        "plan-review-terminal-policy"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          "CLAUDE.md",
+          "docs",
+          "hooks",
+          "platforms",
+          "references",
+          "schemas",
+          "scripts",
+          "skills"
+        ],
+        "baseline_churn": 4500,
+        "max_changed_files": 100,
+        "max_extra_churn": 2250,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 1,
+        "max_wall_seconds": 3600,
+        "output_paths": [
+          "hooks/tests/dispatch-plan-review.test.sh",
+          "hooks/tests/fixtures/plan-review/ambiguous.txt",
+          "hooks/tests/fixtures/plan-review/blocker.json",
+          "hooks/tests/fixtures/plan-review/prose-ready.txt",
+          "hooks/tests/fixtures/plan-review/ready.json",
+          "hooks/tests/fixtures/plan-review/suggestion.json",
+          "hooks/tests/plan-review-routing.test.sh",
+          "platforms/codex/plugin/references/plan-template.md",
+          "platforms/codex/plugin/schemas/plan-review-artifact.schema.json",
+          "platforms/codex/plugin/schemas/plan-review-manifest.schema.json",
+          "platforms/codex/plugin/scripts/dispatch-plan-review.js",
+          "platforms/codex/plugin/scripts/lib/plan-review-findings.js",
+          "platforms/codex/plugin/scripts/lib/plan-review-normalize.js",
+          "platforms/codex/plugin/scripts/rubric-freeze.js",
+          "platforms/codex/plugin/skills/research-to-ship/SKILL.md",
+          "references/plan-template.md",
+          "schemas/plan-review-artifact.schema.json",
+          "schemas/plan-review-manifest.schema.json",
+          "scripts/dispatch-plan-review.js",
+          "scripts/lib/plan-review-findings.js",
+          "scripts/lib/plan-review-normalize.js",
+          "scripts/rubric-freeze.js",
+          "skills/research-to-ship/SKILL.md"
+        ],
+        "profile": "standard",
+        "required_paths": [
+          "docs/plans/2026-07-26-plan-review-session-controller.md",
+          "docs/plans/2026-07-26-plan-review-session-controller.rubric.md"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-07-26-plan-review-session-controller.md",
+          "section": "4. Phases"
+        }
+      },
+      "dependencies": [],
+      "gate_attempt_budget": 2,
+      "id": "plan-review",
+      "reservation": {
+        "campaigns": 2,
+        "canonical_changed_files": 100,
+        "engine_attempts": 2,
+        "external_wait_seconds": 3600,
+        "output_bytes": 10000000,
+        "tool_calls": 300,
+        "wall_seconds": 7200
+      },
+      "source_plan_ids": [
+        "plan-925badfc6805f93e6e5c3a62a40427e03835b07efe98389ca593463df2341093"
+      ],
+      "source_rubric_ids": [
+        "R114163656161245072199826520373942248124997305932982290800079045362820452576555",
+        "R21781756239980364547543106742488498042324110170128407828392454384645280017914",
+        "R23785259505382893237450406033922973504360218299320781640573877258155868317760",
+        "R35967083565306403188434854678308915456391344780216101918012531005072994963183",
+        "R5429123320179766078726413550822558498899680546462710244914858810432230178525",
+        "R59862462791338749352409310377307005519917603707659467657098558252119481607138",
+        "R62170848081379392351420346034808934818877539528932807840705014295650110571184",
+        "R75728384650628325840887567059296568410896895146275063028620109440597410428002",
+        "R87658705848120802012632826035156194145789493238978130288391637661245750533227",
+        "R89715521701594170365285651979492905160136655673289904882346856092022843842090",
+        "R98031993453165855523492765702972650568582600338225574633309967212287723489562"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/dispatch-plan-review.test.sh",
+        "bash hooks/tests/plan-review-routing.test.sh"
+      ]
+    },
+    {
+      "acceptance_ids": [
+        "joint-qc",
+        "release-merge",
+        "zero-lifecycle-residue"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          ".claude",
+          ".claude-plugin",
+          "CHANGELOG.md",
+          "CLAUDE.md",
+          "README.md",
+          "README.zh-TW.md",
+          "docs",
+          "hooks",
+          "platforms",
+          "plugin.json",
+          "scripts",
+          "skills"
+        ],
+        "baseline_churn": 4000,
+        "max_changed_files": 100,
+        "max_extra_churn": 2000,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "output_paths": [
+          ".claude-plugin/marketplace.json",
+          ".claude-plugin/plugin.json",
+          "CHANGELOG.md",
+          "README.md",
+          "README.zh-TW.md",
+          "docs/BACKLOG.md",
+          "docs/projects/2026-07-26-mission-convergence-portfolio/README.md",
+          "docs/projects/INDEX.md",
+          "platforms/codex/.agents/plugins/marketplace.json",
+          "platforms/codex/plugin/.codex-plugin/plugin.json",
+          "plugin.json"
+        ],
+        "profile": "high",
+        "required_paths": [
+          "docs/plans/2026-07-26-l6-status-merge-contract.md",
+          "docs/plans/2026-07-26-l6-status-merge-contract.rubric.md"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-07-26-l6-status-merge-contract.md",
+          "section": "4. Phases"
+        }
+      },
+      "dependencies": [
+        "plan-review",
+        "transcript-retro"
+      ],
+      "gate_attempt_budget": 4,
+      "id": "release-closeout",
+      "reservation": {
+        "campaigns": 2,
+        "canonical_changed_files": 100,
+        "engine_attempts": 3,
+        "external_wait_seconds": 0,
+        "output_bytes": 10000000,
+        "tool_calls": 300,
+        "wall_seconds": 7200
+      },
+      "source_plan_ids": [
+        "plan-7bf74c9685b0fd98320c860a68f886367767967b95f661fb72435e97107952b4"
+      ],
+      "source_rubric_ids": [
+        "R101321753748316805232081803122368350765029896374710450142374923750727808219230",
+        "R111778995926731744216336462261132950826449624144469210220473236386640659047062",
+        "R34789105652823242560186775550205951333046055099334092180917105741144566562051",
+        "R66005387099113628474274095650158373081912486903709896993159891796391848132028",
+        "R69787392617824994415129866300965893895008715330592437177037987492513089994707",
+        "R70561549506617501844440922454487213075334901448663688740060197364336090180677",
+        "R72867405640667039872983877767234206556914755496710738245771878794527293697870",
+        "R81218619496890698372105998127504086973912586600657102278533239805196192891098",
+        "R89404824089178303254513279260857273592923811446514965071920495709640322826357",
+        "R94973162221441638143512158988253470114525342970732769618958755558722809198877"
+      ],
+      "verification_commands": [
+        "bash scripts/validate.sh",
+        "bash scripts/check-canonical-invariants.sh",
+        "bash scripts/sync-codex-plugin-skills.sh --check"
+      ]
+    },
+    {
+      "acceptance_ids": [
+        "cross-harness-attribution",
+        "privacy-safe-retro"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          "CLAUDE.md",
+          "docs",
+          "hooks",
+          "platforms",
+          "schemas",
+          "scripts",
+          "skills"
+        ],
+        "baseline_churn": 4500,
+        "max_changed_files": 100,
+        "max_extra_churn": 2250,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 1,
+        "max_wall_seconds": 3600,
+        "output_paths": [
+          "hooks/tests/fixtures/transcripts/claude/session-main.jsonl",
+          "hooks/tests/fixtures/transcripts/codex/2026/07/10/rollout-old.jsonl",
+          "hooks/tests/fixtures/transcripts/codex/2026/07/27/rollout-main.jsonl",
+          "hooks/tests/fixtures/transcripts/codex/2026/07/27/rollout-unrelated.jsonl",
+          "hooks/tests/retro-review-loop.test.sh",
+          "platforms/codex/plugin/schemas/normalized-transcript-event.schema.json",
+          "platforms/codex/plugin/scripts/lib/retro-loop-metrics.js",
+          "platforms/codex/plugin/scripts/lib/transcript-adapters/claude.js",
+          "platforms/codex/plugin/scripts/lib/transcript-adapters/codex.js",
+          "platforms/codex/plugin/scripts/lib/transcript-adapters/common.js",
+          "platforms/codex/plugin/scripts/lib/transcript-adapters/index.js",
+          "platforms/codex/plugin/scripts/lib/transcript-attribution.js",
+          "platforms/codex/plugin/scripts/retro-review-loop.js",
+          "platforms/codex/plugin/skills/retro/SKILL.md",
+          "platforms/codex/plugin/skills/retro/references/data-collection.md",
+          "platforms/codex/plugin/skills/retro/references/report-templates.md",
+          "schemas/normalized-transcript-event.schema.json",
+          "scripts/lib/retro-loop-metrics.js",
+          "scripts/lib/transcript-adapters/claude.js",
+          "scripts/lib/transcript-adapters/codex.js",
+          "scripts/lib/transcript-adapters/common.js",
+          "scripts/lib/transcript-adapters/index.js",
+          "scripts/lib/transcript-attribution.js",
+          "scripts/retro-review-loop.js",
+          "skills/retro/SKILL.md",
+          "skills/retro/references/data-collection.md",
+          "skills/retro/references/report-templates.md"
+        ],
+        "profile": "standard",
+        "required_paths": [
+          "docs/plans/2026-07-26-cross-harness-transcript-retro.md",
+          "docs/plans/2026-07-26-cross-harness-transcript-retro.rubric.md"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-07-26-cross-harness-transcript-retro.md",
+          "section": "4. Phases"
+        }
+      },
+      "dependencies": [],
+      "gate_attempt_budget": 2,
+      "id": "transcript-retro",
+      "reservation": {
+        "campaigns": 2,
+        "canonical_changed_files": 100,
+        "engine_attempts": 2,
+        "external_wait_seconds": 3600,
+        "output_bytes": 10000000,
+        "tool_calls": 300,
+        "wall_seconds": 7200
+      },
+      "source_plan_ids": [
+        "plan-1eed0ef7002319f082df506fdfcb8ec6de673c4c4f6754671c51b15404e49bac"
+      ],
+      "source_rubric_ids": [
+        "R13858250305826194518650708645133798645395386509623835043364370691047715750918",
+        "R14200596200503420436406856788507543114027915022724115676892093440266606843808",
+        "R35012514828454651821523661855615020353048797209115479972978607243479422447877",
+        "R36861297546778816324519115853778155956886102022122778830001407542663700378858",
+        "R52683513375645386561122265174134495601085105135806950392209692120493235902799",
+        "R60416221932183043016814813452660986867646642365705312035447685127936377552751",
+        "R64316753123080141147762535618418529253438018823822017114736661075133361368789",
+        "R9416376327141022493262416068718457377447072096002143785003610865096518953640",
+        "R98706599908418952448268883235774781351935069842444499454732543714617997048593"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/retro-review-loop.test.sh"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

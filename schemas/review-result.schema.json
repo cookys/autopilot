@@ -4,7 +4,7 @@
   "title": "ReviewResult",
   "description": "Review-specific dispatch output emitted by dispatch-review.sh and dispatch-anthropic-review.js.",
   "type": "object",
-  "required": ["status", "runner", "model", "verdict", "findings", "raw_log", "error"],
+  "required": ["status", "runner", "model", "verdict", "findings", "no_finding_proof", "raw_log", "error"],
   "properties": {
     "status": {
       "type": "string",
@@ -24,6 +24,10 @@
       "type": "string",
       "description": "Parsed FINDINGS line or empty string on failure paths."
     },
+    "no_finding_proof": {
+      "type": ["string", "null"],
+      "description": "Machine-parsed checked/evidence/conclusion receipt required for SHIP-AS-IS; null for FIX-THEN-SHIP and failure paths."
+    },
     "raw_log": {
       "type": ["string", "null"],
       "description": "Filesystem path to redacted raw capture; request headers are not logged, and runner auth tokens are exact-match redacted from captured response text."
@@ -32,5 +36,27 @@
       "type": ["string", "null"]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "verdict": { "const": "SHIP-AS-IS" } },
+        "required": ["verdict"]
+      },
+      "then": {
+        "properties": {
+          "no_finding_proof": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^checked=.+;\\s*evidence=.+;\\s*conclusion=.+$"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "no_finding_proof": { "type": "null" }
+        }
+      }
+    }
+  ],
   "additionalProperties": false
 }

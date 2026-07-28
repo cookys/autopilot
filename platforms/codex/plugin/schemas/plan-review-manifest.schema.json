@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/plan-review-manifest.schema.json",
+  "title": "PlanReviewManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "logical_plan_id",
+    "minimum_distinct_families",
+    "max_attempts_per_seat",
+    "seats"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "plan_review_manifest" },
+    "logical_plan_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    },
+    "minimum_distinct_families": {
+      "type": "integer",
+      "enum": [1, 2, 3, 4]
+    },
+    "max_attempts_per_seat": { "type": "integer", "const": 2 },
+    "seats": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/seat" }
+    }
+  },
+  "$defs": {
+    "exact_tuple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "runner",
+        "model",
+        "effort",
+        "endpoint",
+        "role",
+        "family",
+        "readiness_status",
+        "qualification_status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "runner": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "effort": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
+        },
+        "endpoint": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "family": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "readiness_status": { "type": "string", "enum": ["ready", "unavailable"] },
+        "qualification_status": { "type": "string", "enum": ["qualified", "unqualified"] }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "runner",
+        "model",
+        "effort",
+        "endpoint",
+        "role",
+        "family",
+        "readiness_status",
+        "qualification_status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "runner": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "effort": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
+        },
+        "endpoint": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "family": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "readiness_status": { "type": "string", "enum": ["ready", "unavailable"] },
+        "qualification_status": { "type": "string", "enum": ["qualified", "unqualified"] }
+      }
+    },
+    "seat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "runner",
+        "model",
+        "effort",
+        "endpoint",
+        "role",
+        "family",
+        "readiness_status",
+        "qualification_status",
+        "required",
+        "excluded_families",
+        "fallbacks"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "runner": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "effort": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
+        },
+        "endpoint": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "family": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "readiness_status": { "type": "string", "enum": ["ready", "unavailable"] },
+        "qualification_status": { "type": "string", "enum": ["qualified", "unqualified"] },
+        "required": { "type": "boolean" },
+        "excluded_families": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "fallbacks": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/fallback" }
+        }
+      }
+    }
+  }
+}

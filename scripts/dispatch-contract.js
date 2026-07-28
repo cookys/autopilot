@@ -58,7 +58,7 @@ function exitNoGo(unitId, contractSha, specSha, reasons, resolvedEngine) {
   process.exit(3);
 }
 
-function exitGo(unitId, contractSha, specSha, resolvedEngine) {
+function exitGo(unitId, contractSha, specSha, resolvedEngine, options = {}) {
   const payload = {
     verdict: 'GO',
     unit_id: unitId,
@@ -71,9 +71,48 @@ function exitGo(unitId, contractSha, specSha, resolvedEngine) {
       family: resolvedEngine.family,
     },
   };
+  // Bounded provisional labor must keep assurance explicit.
+  // Only implementer (commit) and verification-author (raw-artifact) set this;
+  // reviewer / verifier / owner / finish paths never promote telemetry.
+  if (options.assurance === 'provisional') {
+    payload.assurance = 'provisional';
+  }
 
   console.log(JSON.stringify(payload));
   process.exit(0);
+}
+
+function scorecardRowMatchesEngine(row, storeRole, resolvedEngine) {
+  return Boolean(
+    row
+    && row.role === storeRole
+    && row.engine === resolvedEngine.model
+    && row.runner === resolvedEngine.runner,
+  );
+}
+
+// Strict campaign admission scorecard policy:
+// - implementer: exact configured provisional rows with observed_status===qualified
+//   may GO with assurance=provisional (bounded commit labor only; no review/verify/merge)
+// - verification-author: same provisional shape may GO with assurance=provisional only when
+//   the unit output kind is exactly raw-artifact (untrusted authoring labor; depth-0
+//   remains sole verification/merge authority)
+// - missing / unknown / provisional observed_status remains NO-GO
+// - reviewer and every other authority-bearing role: require status=qualified (fail-closed)
+// - never promotes untrusted telemetry to qualified
+function isAdmissibleScorecardRow(row, storeRole, resolvedEngine, options = {}) {
+  if (!scorecardRowMatchesEngine(row, storeRole, resolvedEngine)) return false;
+  if (row.status === 'qualified') return true;
+  if (row.status !== 'provisional') return false;
+  // Disk-backed projection maps evidence-backed qualified → provisional while
+  // retaining observed_status. Only the exact observed qualified state admits.
+  if (row.observed_status !== 'qualified') return false;
+  if (storeRole === 'implementer') return true;
+  if (storeRole === 'verification_author'
+      && options.outputKind === 'raw-artifact') {
+    return true;
+  }
+  return false;
 }
 
 function usageError(message) {
@@ -160,6 +199,38 @@ function getResolverFieldPrefix(requiredEngineRole) {
   return requiredEngineRole === 'verification-author' ? 'verification_author' : 'implementer';
 }
 
+// Capability-state endpoint partition selector for an exact resolver tuple.
+// Resolver emits "" for "no named endpoint"; capability-state uses "@none" for
+// the explicit null wallet. Named endpoints pass through exactly as emitted —
+// no trim/normalize here (resolve-review-loop owns endpoint validation).
+// Never omit --endpoint: empty/legacy omission would query the ambiguous partition.
+// Non-string (including null/undefined) means unresolved: callers must fail closed
+// before invoking this helper.
+function capabilityEndpointSelector(resolvedEndpoint) {
+  if (typeof resolvedEndpoint !== 'string') {
+    throw new Error('resolver tuple missing exact endpoint partition');
+  }
+  return resolvedEndpoint === '' ? '@none' : resolvedEndpoint;
+}
+
+// Build fail-closed exact capability `current` argv from the resolver tuple.
+// Always includes --effort and --endpoint so admission never silently falls
+// back to the legacy ambiguous (runner, model, role)-only partition.
+function capabilityCurrentArgs(resolvedEngine, storeRole) {
+  const effort = String(resolvedEngine.effort || '').trim();
+  if (!effort) {
+    throw new Error('resolver tuple missing exact effort partition');
+  }
+  return [
+    'current',
+    '--runner', resolvedEngine.runner,
+    '--model', resolvedEngine.model,
+    '--role', storeRole,
+    '--effort', effort,
+    '--endpoint', capabilityEndpointSelector(resolvedEngine.endpoint),
+  ];
+}
+
 function hasKey(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
@@ -230,6 +301,7 @@ function validateSchema(contract, errors, repoPath = '') {
     'output',
     'acceptance',
     'budget',
+    'campaign_projection',
   ]);
   assertNoExtra('contract', contract, rootAllowed, errors);
 
@@ -526,6 +598,93 @@ function validateSchema(contract, errors, repoPath = '') {
       errors.push('budget.max_context_files: must be integer 1..20');
     }
   }
+
+  if (hasKey(contract, 'campaign_projection')) {
+    const projection = contract.campaign_projection;
+    const allowed = new Set([
+      'schema_version',
+      'campaign_contract_sha256',
+      'strict_dispatch_sha256',
+      'campaign_id',
+      'ticket',
+      'campaign_base_sha',
+      'branch',
+      'stage',
+      'generation',
+      'root_run_id',
+      'mission_lineage_id',
+      'mission_policy_digest',
+      'mission_graph_digest',
+      'graph_node_id',
+      'graph_node_digest',
+      'runner',
+      'model',
+    ]);
+    assertNoExtra('campaign_projection', projection, allowed, errors);
+    for (const key of allowed) {
+      if (!projection || !hasKey(projection, key)) {
+        errors.push(`campaign_projection: missing required key '${key}'`);
+      }
+    }
+    if (projection && typeof projection === 'object' && !Array.isArray(projection)) {
+      const shaFields = [
+        'campaign_contract_sha256',
+        'strict_dispatch_sha256',
+        'mission_policy_digest',
+        'mission_graph_digest',
+        'graph_node_digest',
+      ];
+      if (projection.schema_version !== 1) {
+        errors.push('campaign_projection.schema_version: must be 1');
+      }
+      for (const key of shaFields) {
+        if (typeof projection[key] !== 'string' || !/^[0-9a-f]{64}$/.test(projection[key])) {
+          errors.push(`campaign_projection.${key}: must be lowercase SHA-256`);
+        }
+      }
+      if (typeof projection.campaign_id !== 'string'
+          || !/^campaign-v[12]-[0-9a-f]{64}$/.test(projection.campaign_id)) {
+        errors.push('campaign_projection.campaign_id: invalid campaign id');
+      }
+      if (typeof projection.ticket !== 'string'
+          || !/^[A-Za-z0-9._-]{1,128}$/.test(projection.ticket)) {
+        errors.push('campaign_projection.ticket: invalid ticket');
+      }
+      if (typeof projection.campaign_base_sha !== 'string'
+          || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(projection.campaign_base_sha)) {
+        errors.push('campaign_projection.campaign_base_sha: invalid Git object');
+      }
+      if (!isNonEmptyString(projection.branch)) {
+        errors.push('campaign_projection.branch: must be non-empty string');
+      }
+      const stageMatch = typeof projection.stage === 'string'
+        ? /^campaign-implementation(?:#r((?:[2-9]|[1-9][0-9]+)))?$/.exec(
+          projection.stage,
+        )
+        : null;
+      if (!stageMatch) {
+        errors.push('campaign_projection.stage: invalid campaign stage');
+      }
+      const round = projection.stage === 'campaign-implementation'
+        ? 0
+        : (stageMatch && stageMatch[1] ? Number(stageMatch[1]) - 1 : null);
+      if (!Number.isSafeInteger(projection.generation)
+          || projection.generation < 0
+          || round === null
+          || projection.generation !== round) {
+        errors.push('campaign_projection.generation: disagrees with stage');
+      }
+      if (typeof projection.root_run_id !== 'string'
+          || !/^[A-Za-z0-9._-]+$/.test(projection.root_run_id)) {
+        errors.push('campaign_projection.root_run_id: invalid root run id');
+      }
+      for (const key of ['mission_lineage_id', 'graph_node_id', 'runner', 'model']) {
+        if (!isNonEmptyString(projection[key])) {
+          errors.push(`campaign_projection.${key}: must be non-empty string`);
+        }
+      }
+    }
+  }
 }
 
 function escapeRegExp(raw) {
@@ -677,10 +836,27 @@ function resolveEngine(repo, reasons, resolvedEngine, requiredEngineRole = 'impl
   const model = String(resolvedConfig[`${prefix}_engine`] || '').trim();
   const runner = String(resolvedConfig[`${prefix}_runner`] || '').trim();
   const family = String(resolvedConfig[`${prefix}_family`] || '').trim();
+  // Effort/endpoint are part of the exact admission identity.
+  // Endpoint "" is a real value (explicit no named endpoint → capability @none).
+  // Property absence is NOT equivalent to "" — fail closed so a future resolver
+  // drift cannot silently authorize the @none wallet.
+  const effort = String(resolvedConfig[`${prefix}_effort`] || '').trim();
+  const endpointKey = `${prefix}_endpoint`;
+  let endpoint = null; // non-string sentinel: unresolved (never maps to @none)
+  if (!Object.prototype.hasOwnProperty.call(resolvedConfig, endpointKey)) {
+    reasons.push('engine: missing endpoint in canonical resolver output');
+  } else if (typeof resolvedConfig[endpointKey] !== 'string') {
+    reasons.push('engine: invalid endpoint in canonical resolver output');
+  } else {
+    // Forward exactly as emitted — resolver already validated the name or "".
+    endpoint = resolvedConfig[endpointKey];
+  }
 
   resolvedEngine.model = model;
   resolvedEngine.runner = runner;
   resolvedEngine.family = family;
+  resolvedEngine.effort = effort;
+  resolvedEngine.endpoint = endpoint;
 
   if (!model) {
     reasons.push('engine: missing model in .claude/review-loop-config.md');
@@ -690,6 +866,9 @@ function resolveEngine(repo, reasons, resolvedEngine, requiredEngineRole = 'impl
   }
   if (!family) {
     reasons.push('engine: missing family in .claude/review-loop-config.md');
+  }
+  if (!effort) {
+    reasons.push('engine: missing effort in .claude/review-loop-config.md');
   }
 }
 
@@ -714,7 +893,8 @@ function getBaseSpecSection(baseSha, contract, repo) {
   }
 
   const section = String(contract.spec.section || '');
-  const heading = `^\\s*#{1,6}\\s+${escapeRegExp(section)}\\s*$`;
+  // CommonMark ATX: at most 3 leading ASCII spaces (not tabs / arbitrary WS).
+  const heading = `^ {0,3}#{1,6}\\s+${escapeRegExp(section)}\\s*$`;
   const found = specText.split('\n').some((line) => new RegExp(heading).test(line));
 
   if (!found) {
@@ -729,6 +909,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
   const baseSha = contract.base_sha;
   const requiredEngineRole = contract.go.required_engine_role;
   const storeRole = normalizeStoreRole(requiredEngineRole);
+  const campaignProjection = contract.campaign_projection || null;
 
   let headSha = '';
   let baseAtHead = false;
@@ -854,35 +1035,55 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     reasons.push('engine: failed to read scorecard state');
   }
 
+  let engineAssurance = null;
   if (reasons.length === 0) {
     const matched = Array.isArray(scoreRows)
-      ? scoreRows.find((row) => row && row.role === storeRole && row.engine === resolvedEngine.model && row.runner === resolvedEngine.runner && row.status === 'qualified')
+      ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, resolvedEngine, {
+        outputKind: contract.output && contract.output.kind,
+      }))
       : null;
 
     if (!matched) {
       reasons.push('engine: no qualified scorecard row for configured role/engine/runner');
+    } else if (matched.status === 'provisional') {
+      // Explicit provisional assurance for bounded labor only (implementer commit
+      // or verification-author raw-artifact). Never review/verify/merge authority.
+      engineAssurance = 'provisional';
     }
   }
 
   if (reasons.length === 0) {
-    const capScript = path.join(REPO_ROOT, 'scripts', 'engine-capability-state.js');
-    let cap;
-    try {
-      cap = runNodeJson(
-        repo,
-        capScript,
-        ['current', '--runner', resolvedEngine.runner, '--model', resolvedEngine.model, '--role', storeRole],
-      );
-    } catch (err) {
-      reasons.push('quota: failed to read capability state');
-    }
+    // Endpoint must be a string (including "") before any capability partition
+    // query. A non-string means unresolved — never fall through to @none/legacy.
+    if (typeof resolvedEngine.endpoint !== 'string') {
+      reasons.push('engine: missing endpoint in canonical resolver output');
+    } else {
+      const capScript = path.join(REPO_ROOT, 'scripts', 'engine-capability-state.js');
+      let cap;
+      try {
+        // Exact tuple only — never omit effort/endpoint (legacy ambiguous partition).
+        cap = runNodeJson(
+          repo,
+          capScript,
+          capabilityCurrentArgs(resolvedEngine, storeRole),
+        );
+      } catch (err) {
+        reasons.push('quota: failed to read capability state');
+      }
 
-    if (cap && (!cap.capability || !cap.capability.quota || cap.capability.quota.status !== 'available')) {
-      reasons.push(`quota: quota unavailable for ${resolvedEngine.model} as ${requiredEngineRole}`);
+      if (cap && (!cap.capability || !cap.capability.quota || cap.capability.quota.status !== 'available')) {
+        reasons.push(`quota: quota unavailable for ${resolvedEngine.model} as ${requiredEngineRole}`);
+      }
     }
   }
 
-  return { reasons, specSha, headSha, baseAtHead };
+  if (campaignProjection
+      && (campaignProjection.runner !== resolvedEngine.runner
+        || campaignProjection.model !== resolvedEngine.model)) {
+    reasons.push('engine: campaign projection disagrees with resolved runner/model');
+  }
+
+  return { reasons, specSha, headSha, baseAtHead, engineAssurance };
 }
 
 function parseArgs(argv) {
@@ -946,7 +1147,8 @@ function parseArgs(argv) {
 
   const contract = parsed.contract;
   const contractSha = parsed.loaded.hash;
-  const resolvedEngine = { runner: '', model: '', family: '' };
+  // endpoint null = unresolved (not the explicit "" → @none wallet).
+  const resolvedEngine = { runner: '', model: '', family: '', effort: '', endpoint: null };
   const reasons = [];
 
   resolveEngine(repoPath, reasons, resolvedEngine, contract.go.required_engine_role);
@@ -968,5 +1170,7 @@ function parseArgs(argv) {
     runner: resolvedEngine.runner,
     model: resolvedEngine.model,
     family: resolvedEngine.family,
+  }, {
+    assurance: policy.engineAssurance || null,
   });
 })();

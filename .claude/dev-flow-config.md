@@ -48,22 +48,32 @@ No `lint` / `tsc` / `pytest` — skip those steps when finish-flow / quality-pip
 autopilot has **no** `plan-bootstrap.js` script. Manual bootstrap steps for L-size:
 
 ```bash
-# 1. Feature branch from develop
+# 1. Mission admission before TaskCreate, branch, worktree, runner, or model effects
+node scripts/mission-routing-admission.js \
+  --repo-root "$(git rev-parse --show-toplevel)" --level l3
+
+# 2. Feature branch from develop, only after READY admission
 git checkout -b feat/v<X.Y.Z>-<feature-name> develop
 
-# 2. Plan doc (if not already written)
+# 3. Plan doc (if not already written)
 # Write to docs/plans/YYYY-MM-DD-<feature-name>.md
 
-# 3. Project dir (MANDATORY per dev-flow L-1)
+# 4. Project dir (MANDATORY per dev-flow L-1)
 mkdir -p docs/projects/YYYY-MM-DD-<feature-name>
 # Write docs/projects/YYYY-MM-DD-<feature-name>/README.md with:
 #   - Project Goal (final goal, success criteria, scope boundary)
-#   - Phases (extracted from plan)
+#   - Historical plan headings as a non-executable coverage ledger
+#   - One current row per admitted Mission graph deliverable
 #   - Progress table
 #   - Links to plan doc + commits + merge commit
 
-# 4. Update docs/projects/INDEX.md — add row to 進行中
+# 5. Update docs/projects/INDEX.md — add row to 進行中
 ```
+
+The repository's configured `mission_convergence` policy makes `READY` mandatory. `Phase`/`P0..PN`
+headings, modules, tests, reviewers, retries, and repairs remain coverage or gates inside an
+admitted deliverable; never expand them one-for-one into TaskCreate rows. A solo or precondition
+fallback changes topology only and must reuse the same policy, graph, and source admission.
 
 ## Branch Rules
 

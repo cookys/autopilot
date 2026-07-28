@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/runner-transport-envelope.schema.json",
+  "title": "RunnerTransportEnvelope",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "request_binding",
+    "outcome",
+    "output_digests",
+    "private_raw_reference",
+    "receipt_digest"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "runner_transport_envelope" },
+    "request_binding": {
+      "type": "object",
+      "required": ["runner", "model", "operation", "request_digest"],
+      "properties": {
+        "runner": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "operation": { "type": "string", "minLength": 1 },
+        "request_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "required": ["classification", "exit_status", "signal", "error_code"],
+      "properties": {
+        "classification": {
+          "type": "string",
+          "enum": [
+            "success",
+            "exit_failure",
+            "timeout",
+            "quota",
+            "unavailable",
+            "interrupted"
+          ]
+        },
+        "exit_status": { "type": ["integer", "null"] },
+        "signal": { "type": ["string", "null"] },
+        "error_code": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "output_digests": {
+      "type": "object",
+      "required": ["stdout_sha256", "stderr_sha256"],
+      "properties": {
+        "stdout_sha256": { "$ref": "#/$defs/sha256" },
+        "stderr_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "private_raw_reference": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["kind", "locator", "digest"],
+          "properties": {
+            "kind": { "type": "string", "const": "private-file" },
+            "locator": { "type": "string", "minLength": 1 },
+            "digest": {
+              "oneOf": [
+                { "type": "null" },
+                { "$ref": "#/$defs/sha256" }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "receipt_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

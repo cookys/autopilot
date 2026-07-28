@@ -35,6 +35,8 @@
 #     first, then run lock.
 #   - stage mutations are append-only and never overwrite existing rows.
 #   - stale live checks use PID + process start_time dual verification.
+#   - stage-acquire --exclusive-live rejects a second verified-live lease instead of
+#     preserving the legacy additive reacquire behavior.
 #
 
 set -euo pipefail
@@ -254,29 +256,48 @@ sort_csv_ids() {
 
 get_process_start_time() {
   local pid="$1"
-  if [ ! -r "/proc/$pid/stat" ]; then
-    echo "0"
-    return
+  if [ -r "/proc/$pid/stat" ]; then
+    local stat_line stat_tail start_ticks btime clock_ticks
+    local -a stat_fields=()
+    IFS= read -r stat_line < "/proc/$pid/stat" || stat_line=""
+    # Field 2 is parenthesized and may contain spaces or ')'. Strip through
+    # its final delimiter, then field 22 is the 20th field in the remainder.
+    stat_tail="${stat_line##*) }"
+    read -r -a stat_fields <<< "$stat_tail"
+    start_ticks="${stat_fields[19]:-}"
+    btime="$(awk '/^btime /{print $2}' /proc/stat 2>/dev/null || echo 0)"
+    clock_ticks="$(getconf CLK_TCK 2>/dev/null || echo 0)"
+    if [[ "$start_ticks" =~ ^[0-9]+$ ]] \
+      && [ "$clock_ticks" -gt 0 ] && [ "$btime" -gt 0 ]; then
+      echo $((btime + start_ticks / clock_ticks))
+      return
+    fi
   fi
-  local start_ticks
-  start_ticks="$(awk '{print $22}' "/proc/$pid/stat")"
-  if [ -z "$start_ticks" ]; then
-    echo "0"
-    return
+  local ps_start parsed
+  if ! ps_start="$(ps -o lstart= -p "$pid" 2>/dev/null \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"; then
+    ps_start=""
   fi
-  local btime clock_ticks
-  btime="$(awk '/^btime /{print $2}' /proc/stat 2>/dev/null || echo 0)"
-  clock_ticks="$(getconf CLK_TCK)"
-  if [ -z "$clock_ticks" ] || [ "$clock_ticks" -le 0 ] || [ -z "$btime" ]; then
-    echo "0"
-    return
+  if [ -n "$ps_start" ]; then
+    if ! parsed="$(date -d "$ps_start" +%s 2>/dev/null)"; then
+      parsed=""
+    fi
+    if [ -z "$parsed" ]; then
+      if ! parsed="$(date -j -f '%a %b %e %T %Y' "$ps_start" +%s 2>/dev/null)"; then
+        parsed=""
+      fi
+    fi
+    if [ -n "$parsed" ]; then
+      echo "$parsed"
+      return
+    fi
   fi
-  echo $((btime + start_ticks / clock_ticks))
+  echo "0"
 }
 
 is_process_alive() {
   local pid="$1" expected_start="$2"
-  if [ -z "$pid" ] || [ "$pid" -le 0 ] || [ ! -d "/proc/$pid" ]; then
+  if [ -z "$pid" ] || [ "$pid" -le 0 ]; then
     return 1
   fi
   if ! kill -0 "$pid" 2>/dev/null; then
@@ -285,7 +306,7 @@ is_process_alive() {
   if [ -n "$expected_start" ] && [ "$expected_start" -gt 0 ]; then
     local current_start
     current_start="$(get_process_start_time "$pid")"
-    if [ "$current_start" -ne "$expected_start" ]; then
+    if [ "$current_start" -gt 0 ] && [ "$current_start" -ne "$expected_start" ]; then
       return 1
     fi
   fi
@@ -426,7 +447,7 @@ write_side_effect_row() {
 }
 
 command_stage_acquire() {
-  local ledger="" run_id="" stage="" pid="" start_time="" heartbeat_ts="" git_ref="" git_sha="" worktree="" resources="" allow_reopen="0" timeout="$DEFAULT_LOCK_TIMEOUT" stale_secs="$DEFAULT_STALE_SECS"
+  local ledger="" run_id="" stage="" pid="" start_time="" heartbeat_ts="" git_ref="" git_sha="" worktree="" resources="" allow_reopen="0" exclusive_live="0" timeout="$DEFAULT_LOCK_TIMEOUT" stale_secs="$DEFAULT_STALE_SECS"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -441,6 +462,7 @@ command_stage_acquire() {
       --worktree) worktree="$2"; shift 2 ;;
       --resources) resources="$2"; shift 2 ;;
       --allow-reopen) allow_reopen=1; shift ;;
+      --exclusive-live) exclusive_live=1; shift ;;
       --timeout) timeout="$2"; shift 2 ;;
       --stale-seconds) stale_secs="$2"; shift 2 ;;
       *) usage ;;
@@ -489,7 +511,12 @@ command_stage_acquire() {
     fi
 
     if [ "$latest_state" = "leased" ] && [ "$latest_alive" -eq 0 ]; then
-      :
+      if [ "$exclusive_live" -eq 1 ]; then
+        flock -u "$run_fd"
+        eval "exec ${run_fd}>&-"
+        [ -n "$resource_fds" ] && for fd in $resource_fds; do release_lock "$fd"; done
+        error "run=$run_id stage=$stage already has a live lease"
+      fi
     elif is_terminal_gc_state "$latest_state" && [ "$allow_reopen" -eq 0 ]; then
       flock -u "$run_fd"
       eval "exec ${run_fd}>&-"
@@ -708,6 +735,7 @@ command_stage_transition() {
   [ -n "$latest" ] || error "no stage exists for run=$run_id stage=$stage"
 
   local current_state current_gen current_nonce resources git_ref_cur git_sha_cur worktree_cur
+  local pid start_time heartbeat_ts
   current_state="$(jq -r '.state' <<<"$latest")"
   current_gen="$(jq -r '.generation // 0' <<<"$latest")"
   current_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
@@ -771,6 +799,9 @@ command_stage_transition() {
   current_gen="$(jq -r '.generation // 0' <<<"$current_row")"
   current_nonce="$(jq -r '.nonce // empty' <<<"$current_row")"
   resources="$(jq -r '.resources // ""' <<<"$current_row")"
+  pid="$(jq -r '.pid // "0"' <<<"$current_row")"
+  start_time="$(jq -r '.start_time // "0"' <<<"$current_row")"
+  heartbeat_ts="$(jq -r '.heartbeat_ts // "0"' <<<"$current_row")"
 
   if [ "$nonce" != "$current_nonce" ]; then
     stale_from="$(jq -r '.state // ""' <<<"$current_row")"
@@ -833,12 +864,15 @@ command_stage_transition() {
     --arg from "$current_state" \
     --argjson gen "$generation" \
     --arg nonce_v "$nonce" \
+    --arg pid_v "$pid" \
+    --arg start_v "$start_time" \
+    --arg heartbeat_v "$heartbeat_ts" \
     --argjson req "$(jq -Rc 'split(",")' <<<"$required_side_effect_keys")" \
     --arg git_ref_v "$git_ref" \
     --arg git_sha_v "$git_sha" \
     --arg wt "$worktree" \
     --arg resources_v "$resources" \
-    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,idempotency_key:$id_key,transition_from:$from,generation:$gen,nonce:$nonce_v,required_side_effect_keys:$req,git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v}')"
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,idempotency_key:$id_key,transition_from:$from,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($heartbeat_v|tonumber),required_side_effect_keys:$req,git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v}')"
   append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
   for fd in $r_fds; do release_lock "$fd"; done
   echo "$line"
@@ -1256,7 +1290,7 @@ command_stage_reconcile() {
     --argjson blocked "$blocked_state" \
     --argjson is_alive "$alive" \
     --arg resources "$resources" \
-    '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result|if . then true else false end),git_truth:($git_truth|if . then true else false end),pending_side_effects:($pending|tonumber),terminal:($terminal|if . then true else false end),blocked_state:($blocked|if . then true else false end),holder_alive:($is_alive|if . then true else false end),resources:$resources}'
+    '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result == 1),git_truth:($git_truth == 1),pending_side_effects:($pending|tonumber),terminal:($terminal == 1),blocked_state:($blocked == 1),holder_alive:($is_alive == 1),resources:$resources}'
 }
 
 command_resume() {

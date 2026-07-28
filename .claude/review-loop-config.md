@@ -41,7 +41,12 @@
 - verification_author_effort: high
 - verification_author_endpoint:
 - qc_panel: gpt-5.5, claude-opus, Gemini 3.6 Flash (High)
+- qc_panel_runners: codex, claude-native, agy
+- qc_panel_efforts: xhigh, high, high
+- qc_panel_endpoints: @none, @none, @none
 - qc_panel_aggregation: union-on-verified-critical
+- provider_readiness_receipt_ttl_seconds: 300
+- provider_readiness_fallback_family_constraint: different
 
 > **Gemini slot pinned to `Gemini 3.6 Flash (High)` (2026-07-23).** Previously
 > this config omitted `qc_panel`, inheriting the template default whose Google

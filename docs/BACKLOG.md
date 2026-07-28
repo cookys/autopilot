@@ -39,6 +39,84 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Live quota probe writes legacy capability partition; strict dispatch needs exact effort/endpoint
+- **Trigger**: before the next managed `/l5`/`/l6` or Mission campaign that uses live `--probe` / readiness refresh under strict dispatch admission; or next time touching `engine-capability-state.js` probe writers and `resolve-endpoint` / strict unit-contract admission together.
+- **Context**: 2026-07-28 real L6 Mission run: live quota probing still writes a **legacy** capability partition (coarse runner/model pool shape), while strict dispatch admission requires an **exact** effort/endpoint tuple. Result: a freshly probed “available” seat can still fail pre-spend as not-admitted, or an exact-tuple seat can be shadowed by a stale legacy row. Fix: probe/record on the same exact-identity key the admission gate reads (runner + model + effort + named endpoint where applicable); refuse to claim readiness from a legacy-only partition when the roster demands exact tuples. Do not weaken strict admission to accept legacy rows.
+- **Effort**: M
+- **Source**: 2026-07-28 Mission Convergence Portfolio real L6 run; related ship note `da78a66` (exact effort/endpoint admit) still incomplete at the live-probe write path
+
+### Mission graph admission: reject non-existent/mistyped output_paths and verify version-mirror closure pre-spend
+- **Trigger**: before the next Mission grant/graph freeze, or immediately after any campaign lists an `output_path` that does not exist in-tree / cannot be produced by the sealed allowlist (e.g. a fabricated root `marketplace.json`); also when version-mirror files are required outputs but transitive sync closure is not checked before model spend.
+- **Context**: 2026-07-28 release-closeout: the original closeout contract declared an impossible non-existent `marketplace.json` output and had to be **superseded before model spend**. Mission graph admission today does not reject non-existent or mistyped `output_paths`, nor verify that declaring version mirrors implies the full `sync-version.js` closure set. Fix: pre-spend structural check that every `output_path` is a real path or an explicitly allowed create under `allowed_path_prefixes`, and that version-related outputs form a closed mirror set (or name the generator that must run). Fail closed with a machine reason before dispatch.
+- **Effort**: M
+- **Source**: 2026-07-28 Mission Convergence Portfolio release-closeout authority correction (`b186eae`); closeout `graph_digest` `6547db664c5818a115347abd3b37b06ecdfc9e93f56d851c6b07c8e45df4b54f`
+
+### Campaign controller treats `boundary_rejected` as unknown status (obscures boundary reason)
+- **Trigger**: next time touching the ICC/Mission campaign controller status enum, dispatch result ingestion, or any path that maps `dispatch-hetero` / unit-contract outcomes into campaign stage transitions.
+- **Context**: `boundary_rejected` is a real dispatch status (sealed path/churn/scope boundary), but the campaign controller rejects it as an **unknown** status and collapses the durable boundary reason into a generic failure. Operators cannot distinguish a correct boundary stop from a transport crash. Fix: admit `boundary_rejected` as a first-class non-success terminal/retryable class, preserve the boundary reason code in the campaign receipt, and do not reclassify it as unknown/mutation_failed.
+- **Effort**: S–M
+- **Source**: 2026-07-28 Mission Convergence Portfolio real L6 run
+
+### Missing finding-disposition authority terminal-stops campaign instead of resumable adjudication
+- **Trigger**: next managed campaign whose review emits findings while depth-0 disposition authority is absent, delayed, or not yet wired; or next touch of `adjudicate-findings.js` dispose / campaign review composition under Mission.
+- **Context**: When finding-disposition authority is missing, the campaign **terminal-stops** rather than entering a resumable adjudication wait (must-fix-now / follow-up / reject-out-of-scope). That burns the campaign and forces re-grant instead of parking on an explicit `awaiting_disposition` state with durable findings. Fix: non-empty findings without a bound disposition artifact should pause resume-safely, not finalize as failed; only missing schema/identity of the findings themselves stays fail-closed hard-stop.
+- **Effort**: M
+- **Source**: 2026-07-28 Mission Convergence Portfolio real L6 run; `adjudicate-findings.js` dispose/repair-gate contract
+
+### QC panel count degradation vs declared `min_panel_size` (final_panel_count: 1 on 3-seat roster)
+- **Trigger**: next QC panel / joint-qc under a multi-seat roster, or next change to `qc-panel.js` / review-loop panel assembly / Mission joint-qc acceptance.
+- **Context**: A configured three-seat QC roster can still produce a terminal receipt with `final_panel_count: 1` without enforcing the declared minimum or disclosing degradation before acceptance. That lets a single surviving seat silently stand in for a decorrelated panel. Fix: either hard-enforce `min_panel_size` (fail closed / retry within budget) or emit an explicit degradation receipt that acceptance predicates must refuse unless the operator sealed a reduced panel. Related reviewer parse losses stay under the existing “Reviewer response/runner exits…” item; this item owns **panel cardinality honesty**.
+- **Effort**: M
+- **Source**: 2026-07-28 Mission Convergence Portfolio real L6 run (joint-qc / terminal receipt)
+
+### Deterministic Mission resume-projection gate (historical-output replay rejection + no-op adoption)
+- **Trigger**: before the next Mission grant that reuses a partially integrated portfolio graph, or immediately after any campaign fails because `output_paths` list files already present in HEAD while the deliverable’s code is already integrated; must land before treating successor-graph editing as optional human folklore. Also fire when a precondition-failed or zero-effect graph attempt burns a gate-budget slot that should have been a no-spend no-op.
+- **Context**: After a deliverable’s required mutations are already in the base (or an authoritative receipt proves satisfaction), resume must project **remaining** nodes only. Today that judgment is human methodology (`dev-flow` / `project-lifecycle` resume-projection rule). A four-node Mission correctly rejected `runtime-control` when its `output_paths` still enumerated historical files from the old portfolio base—most already in HEAD—so a delta repair could not and must not rewrite them for boundary cosmetics. Missing mechanization: bind accepted commit/receipt evidence, drop or receipt-satisfy integrated nodes, require `output_paths` to be the candidate’s required mutation set (not historical inventory), and **reject historical-output replay before grant**. **2026-07-28 L6 release-closeout observation (extend)**: precondition-failed or no-effect graph attempts still **consume gate budget**, and completed outputs cannot be adopted as a no-op because every declared `output_path` is required to appear in the campaign diff—so an already-satisfied node cannot close without cosmetic rewrites or a wasted budget slot. Fix must include: (a) classify precondition/no-effect as non-budget or refundable when `dispatcher_called === false` and no mutation; (b) allow receipt-backed no-op adoption when every required mutation is already present and byte-equal at HEAD without forcing a diff touch. Do not claim this gate already exists; the successor three-node graph edit is an explicit correction, not proof of automation.
+- **Effort**: L
+- **Source**: 2026-07-28 Mission Convergence Portfolio runtime-control bootstrap campaign rejection; candidate `b9a3f55cf2904c71a276cbaa5f19d5d9fc67ed0d`; successor-graph correction; 2026-07-28 real L6 release-closeout run (gate-budget + output_path no-op)
+
+### Mission graph scheduler 與 portfolio optimization
+- **Trigger**: v2.34.0 的 frozen deliverable graph gate 已出貨，且至少兩個真實 portfolio 顯示靜態 dependency batches 造成可量測的 idle time，或使用者明確要求跨專案排程／dashboard。
+- **Context**: v2.34.0 只需要機械阻止 phase explosion：bounded deliverable count、DAG、parallel/batch/depth/gate budget 與 ready-node admission。Critical-path optimization、dynamic reorder、跨 repo portfolio、priority queue、進度 dashboard 與成本最佳化不屬於本次 prevention boundary；過早加入會把一個 P0 correctness gate 再膨脹成 scheduler 專案。啟動後應消費同一 frozen graph/receipt，不得建立第二套 Mission authority。
+- **Effort**: L
+- **Source**: 2026-07-28 Mission Convergence Portfolio 34-phase runaway audit；`governance-correction.md`
+
+### Mission authority store 與 cross-harness enforcement hardening
+- **Trigger**: 需要把 Mission `enforce` 宣稱擴到目前未有 executable blocking adapter 的 harness，或 threat model 升級為防止惡意 same-UID worker 刪改 `.git` 內 registry/state；若只是誠實 agent 的 branch/session reset，v2.34.0 local registry 已足夠。
+- **Context**: 本次只實作 current-host 可驗證的 Git-common-dir durable registry、CAS 與 fail-closed adapter。防惡意本機程序需要獨立 UID、root-owned/remote daemon 或具 authenticity 的 authority service；精確 provider token/tool/cost telemetry 也只能在 host 真能觀測時加入。未有實證前不得用 HMAC、自述 counter 或 skill prose 假裝形成安全邊界。
+- **Effort**: L
+- **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
+
+### Codex compaction recovery 與 dispatch admission 去重
+- **Trigger**: v2.34.0 portfolio archive 後立即執行，且必須在下一個 portfolio-scale Codex `/l4`–`/l6` campaign 開始前完成；目前 v2.34 campaign 每個 phase boundary 先用 authoritative handoff + `/clear` + mechanical rehydrate 止血。
+- **Context**: 三份 2026-07-28 transcript audit 的共同結論是：compact 不刪 stored transcript、不直接建立 worktree，也沒有證據顯示它普遍造成跨 compact 同 branch 重派；它是可能遺失 active orchestration identity 的放大器，不是 worktree 膨脹的直接主因。已證實的主鏈是長任務缺 durable reconcile/foreman wake-up、dispatcher 對 timeout/dirty/failure 刻意保留 worktree、缺 stale GC/容量閘，再疊加 system kill 與 `/tmp` 壓力。個別 root session 仍重現 compact 前正確回報 `16/34`/seq 16、compact 後退回錯誤 WLB P0，證明續跑校準不能只靠摘要。完整修正需：(1) persistent machine checkpoint，至少綁定 `{root_run_id, project, phase_seq/status, agent_id, run_id, branch, head, dirty_digest, active run ids, worktrees, manifest/ledger paths, idempotency key, next action, last accepted commit}`；(2) Codex `PostCompact` rehydration gate 機械比對 Git/tracker/ledger，校準完成前禁止新 dispatch；(3) 以 `{root_run_id, stage, branch/base}` 做 dispatch idempotency，已有 active/terminal run 時 attach/resume；(4) foreman child 完成後的 durable wake-up/reconcile 契約，避免 depth 0 重複 wait/repair；(5) watchdog 將中斷 manifest 結案為 `aborted`/`unknown`，並以 bounded TTL reaper 清 registered/prunable metadata、orphan `.git` pointer 與已完成 branch/worktree；(6) `/tmp` high-water admission gate，容量不足時 fail closed 而非再 checkout。驗收須 replay `16/34 → WLB P0` 序列並證明仍為 16/34、duplicate dispatch 為 0、SIGKILL 後 manifest 進 terminal state、stale metadata 可安全收斂，且 high-water 下不新增 worktree。現有 Codex hook probe只證明 0.145 支援 `PostCompact`，不構成 recovery。
+- **Effort**: L
+- **Source**: 2026-07-28 三份 Codex transcript/worktree audit（不同時間快照）；Mission Convergence Portfolio seq 16 compaction incident
+
+### Retained-worktree lease 與每輪 outcome disposition 機械閘
+- **Trigger**: v2.34.0 portfolio archive 後立即執行，且必須在下一個 portfolio-scale `/l5`／`/l6` campaign 或下次修改 `dispatch-hetero.sh`／worktree reaper 前完成；在此之前，depth 0 每輪人工列出並裁決 retained outcome，不再裸用 `--keep-worktree`。
+- **Context**: 2026-07-28 實地盤點的 26 個 `/tmp` worktree 中，14 個來自明確 `--keep-worktree`、3 個來自 failure／boundary rejection 的 caller-owned retention、9 個由手動或非 dispatcher 流程建立；59 次 compaction 放大了未結 lifecycle debt，但不是建立者。現行 WLB 已交付 schema-2 root ownership、`max_leaf_worktrees_per_root: 4`、clean/dirty 分流、exact branch disposition 與 `LifecycleResidueReceipt.zero_residue`，不可重做或弱化。剩餘修正是：(1) 把 boolean `--keep-worktree` 升級成 lease，強制 `owner`、`reason`、`expires_at`，缺任一欄即 precondition fail；(2) outcome finalizer 當場裁決：committed success 移除 clean checkout，只留 branch/tip；clean failure 若已有 ref/commit 或沒有唯一內容，也在 durable 記錄後移除 checkout；只有 dirty、無 ref 的唯一內容或 identity/lock 不明狀態可保留並阻止無聲前進；(3) durable resource ledger 記錄 `{root_run_id, worktree, branch, tip, owner, reason, created_at, expires_at, dirty_digest, canonical_successor, state, next_action}`，下一輪 dispatch 前檢查每筆都是 active、dirty-blocked 或已 disposition；(4) canonical commit 形成後，機械列出 exact ancestor、patch-equivalent 與 superseded candidate，先產生可驗證 bundle＋cleanup manifest，再移除 dead/clean checkout；patch equivalence 只提供裁決證據，不得單獨授權刪除 ref；(5) phase boundary、handoff、PostCompact rehydrate 與 finish-flow 都跑同一 hygiene gate；compaction 的 checkpoint/dispatch-idempotency 部分由相鄰 backlog「Codex compaction recovery 與 dispatch admission 去重」負責；(6) repo 目前沒有 `.claude/worktree-teardown-config.md`，故 `stale_reaper_age_days: 0`；補 onboarding/default policy 時先 dry-run，僅自動處理過期、dead、clean、marker-owned checkout，dirty/live/unknown 一律警告並阻擋，絕不 `--force` 穿越證據。驗收要覆蓋 keep lease 缺欄、lease expiry、clean failure、dirty failure、無 ref 唯一內容、canonical ancestor、patch-equivalent、過期 clean、過期 dirty與 bundle 還原；並證明超過 retained budget 時新 dispatch 為零、dirty bytes 不變、所有移除項均可由 manifest/bundle 還原。
+- **Effort**: L
+- **Source**: 2026-07-28 user-provided agent worktree lifecycle digest；Mission Convergence Portfolio WLB P1–P4 shipped baseline
+
+### Managed campaign orphan-mutation adoption
+- **Trigger**: v2.34.0 portfolio archive 後立即執行，且必須在下一個長時間 managed `engine implement-review` campaign 前完成；在此之前，頂層 controller 必須以可持久存活的 supervisor 執行，controller 意外死亡時不得重派同一 mutation。
+- **Context**: 2026-07-28 PRO-P3-U5J 實證 controller 在 detached Grok leaf 仍存活、持續 heartbeat 並持有 dirty candidate 時遭 host exec cap 以 137 終止。Durable campaign 留在 `IMPLEMENTING`、`live_lease=campaign-mutation:0`、沒有 `candidate_reference`；`campaign resume` 先回 `campaign_state_lease_open`，而且即使清掉 lease，現行 resume 也不支援 `IMPLEMENTING`／`REPAIRING`。不得手改 ledger、冒用 dead nonce 或重派 implementation。正式修正需：(1) 頂層 controller 與 leaf 同樣具備 durable supervisor/heartbeat，不受 caller exec timeout 連帶終止；(2) 新增 atomic orphan-mutation adoption transition，先以 PID＋start 證明舊 controller 已死，再核對 detached leaf terminal result、branch tip/tree、base ancestry、clean/dirty digest、scope/churn 與 leaf `git_sha`；(3) 取得新 campaign generation，重建 writer fence與 scope receipt，append `IMPLEMENTATION_COMPLETED`／`REPAIR_COMPLETED`、清除 mutation lease並進入 `VERTICAL_VERIFICATION`，之後 normal `--resume` 必須採用同一 candidate 而不再 dispatch；(4) leaf dirty、無 terminal result、git/result 不一致或 identity 不明時 fail closed 並保留 evidence；(5) 增加 dogfood kill point，精確在 leaf commit 完成但 controller 尚未寫 campaign checkpoint 時 SIGKILL controller，驗證 duplicate dispatch=0、candidate byte-identical、generation 單調、verify/review 可續跑與 lifecycle receipt 最終收斂。舊 campaign 必須保持可觀察的 stranded/orphaned 狀態，未經上述 transition 不得宣稱 converged。
+- **Effort**: L
+- **Source**: 2026-07-28 PRO-P3-U5J live controller-death incident；`campaign resume`／campaign-intake 實碼與 CLI probe
+
+### Run-ledger rotation 的 active campaign replay 一致性
+- **Trigger**: v2.34.0 portfolio archive 後立即執行，且必須在任何共用 ledger 可能超過 `RUN_LEDGER_MAX_BYTES` 的 unattended campaign 前完成；在此之前每個 managed campaign 使用專用 ledger，並在 dispatch 前確認容量不會於 active lease 期間觸發 rotation。
+- **Context**: 2026-07-28 PRO-P3-U5N live campaign 在 Grok leaf 持續執行時，共用 `.git/autopilot/implementation-campaign.jsonl` 到達 262144-byte 閾值並輪替成 `.1`；campaign intake、`implementation_started`、campaign stage lease與 leaf stage lease全被移到 `.1`，live ledger只剩後續 heartbeat。`campaign status` 立即從 `IMPLEMENTING/active` 變成 `not_found`；`latest_stage_record`、`has_applied_journal_key`、stage transition／journal-add等一般 reader只掃 live ledger，只有 directive reader明確掃 rotated segments。這會讓 active writer的下一個 heartbeat、commit transition或 campaign event因找不到原 lease/state而失敗，即使 process與 candidate仍有效。正式修正需：(1) 定義所有 ledger reader共用的 rotation-aware oldest-to-live read set，並保持 idempotency與 last-write semantics；或在 rotation 前生成 digest-bound active-state checkpoint並把所有 live lease／pending journal state帶入新 segment；(2) `campaign status/inspect/resume`、stage probe/heartbeat/transition/reconcile、journal-add與 result lookup使用同一視圖；(3) rotation 與 append在同一 lock下，reader不能觀察只有 heartbeat、沒有 lease的中間世界；(4) rotated segment達上限前，任何仍被 active state引用的紀錄不得被 GC；(5) dogfood以極小 max-bytes在 implementation與review途中各觸發一次 rotation，驗證 campaign始終 found、generation/nonce不變、duplicate dispatch=0、commit/review/terminal receipt可正常收斂。
+- **Effort**: L
+- **Source**: 2026-07-28 PRO-P3-U5N live 262144-byte rotation；`run-ledger.sh` rotation與 reader實碼 probe
+
+### Readiness gate 的 session-local qualification provider
+- **Trigger**: `ICC P4` 或 Mission integration 要把 `ProviderReadinessReceipt` 接到 effectful pre-spend gate 之前；具體而言，只要該 gate 需要 implementer、verification-author 或 QC seat 從 `probe-needed` 合法升到 `usable`，此項就必須先完成。
+- **Context**: PRO P4 嚴格保持三軸獨立：transport/live probe 不得推論 role qualification，而 disk-backed `engine-scorecard.js` 依治理規則只是 `untrusted_telemetry`。目前 reviewer 可由既有 live qualifier 取得 session-local authority，但 implementer／verification-author 尚無可自動升格的 role corpus/verifier，QC 也需明確綁定 reviewer-role authority。正規修法是新增 host-injected、不可序列化或外部簽章的 exact-tuple qualification provider，讓 readiness 只消費 authority-bound observation；不得把 provisional scorecard row 或 probe 成功當 qualification。
+- **Effort**: L（含 implementer／verification-author role eval、QC reviewer-role mapping、ICC intake red/green）
+- **Source**: PRO P4 Heto generation 1，GPT-5.6 Sol finding R2/R6；candidate `d0a05f7`
+
 ### CLAUDE.md 逼近 40k 硬上限（餘裕 54 bytes）— 每個新 script 都要加 row，下一個必撞
 - **Trigger**: 下次任何人要在 Scripts inventory 加 row 時（幾乎等於「下一個新 script」）；或 `check-claude-md-inventory.js` 再次在 CI 變紅時。
 - **Context**: v2.32.57 才剛把 CLAUDE.md 從 81KB 瘦到 38.5KB 並加上 40000 bytes 硬 cap。三週後（v2.32.58）就回到 **39946/40000，只剩 54 bytes 餘裕** —— 因為兩條並行管線各加一個 inventory row 就直接撞破（40223），CI 紅。這次靠把新 row 縮回索引形態（783→~420 bytes）救回，但那是一次性的：**inventory 是單調成長的（每個新 script 一列），而 cap 是固定的**，所以這個閘會週期性地在「兩人同時加 row」時炸掉，且炸的是無辜的第二個 push 者。可能修法：(a) 把 inventory 拆成 `references/scripts-inventory.md` 由 CLAUDE.md 單行引用（CLAUDE.md 回到真正的 session-entry 內容）；(b) cap 改成隨 script 數線性放寬並保留 per-line cap；(c) 維持現狀但把 Row shape rule 的字數上限機械化（目前只有 per-line 800 bytes，太寬）。**(a) 最貼近 40k 存在的理由**（harness 每 session 吞它），但要確認被引用的 reference 不會反而每 session 都被載入。
@@ -319,11 +397,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 ### ✅ DONE (2026-07-03, v2.31.3) — `dispatch-review.sh` prompt-echo pollution
 - **Resolution**: Shipped the fresh-nonce wrapped-block protocol for the codex/agy/grok/cc-shim runners (nonce verified absent-from-diff; marker as absolute output prefix defeats whole-prompt echo; single-block extraction; reject-guard on diff/template leakage; 16 KB oversize cap; trailing-after-END + multiple-block + missing-END ⇒ no_verdict; exactly-one-anchored-VERDICT; pre-dispatch size-guard warning). Design via a cross-family debate (codex+grok+depth-0); implemented via `/l5` hetero-impl (gpt-5.3-codex-spark, 3 rounds) + decorrelated gpt-5.5 review (3 rounds, SHIP-AS-IS) + a depth-0 independent adversarial harness. anthropic-compatible deliberately out of scope (see follow-up below). Commit: squash-merge of `b945f38` chain.
 
-### Grok reviewer preamble causes fail-closed `no_verdict`
-- **Trigger**: next time touching `dispatch-review.sh` Grok parsing, or before promoting Grok to a required review seat.
-- **Context**: Grok 4.5 high has now reproduced the same transport shape across two projects: it emits useful prose before an otherwise valid nonce-wrapped verdict block, so the absolute-prefix parser correctly returns `no_verdict`. In the 2026-07-26 capability-profile review, three raw findings were independently reproduced and fixed, but both initial and post-fix runs remained unparseable. Preserve prompt-echo protection; investigate a runner-specific no-preamble prompt/probe or a safe anchored extraction rule with adversarial echo fixtures.
+### Reviewer response/runner exits cause fail-closed verdict loss（Grok / GLM / Kimi / Qwen / Codex）
+- **Trigger**: next time touching `dispatch-review.sh`, `dispatch-author.sh`, `dispatch-plan-review.js`, response parsing, or runner transports; or before promoting any affected engine to a required strict seat.
+- **Context**: Multiple engines emit semantically valid verdicts that strict parsers or runner exits must reject. Grok 4.5 high has reproduced a prose preamble across three projects; task-convergence review added GLM-5.2 wrapping `READY` JSON in a Markdown fence and official Kimi K3 prefixing its object with one bullet. A later Qoder run emitted exact `{"verdict":"READY","findings":[]}` but exited 1 in scratch space; Codex CLI 0.145 rejected dispatch-author's scratch directory as untrusted; a `cc-shim` MiniMax run returned empty exit 1, while direct MiniMax needed a 60k author-token cap to avoid `stop/length`; an agy Gemini smoke timed out after three minutes. Preserve prompt-echo protection and fail-closed behavior. Investigate runner-native structured output where available (Grok `--json-schema`), explicit exit/result reconciliation, Codex's trusted-directory invocation contract, runner-specific no-preamble/fence probes, and safe anchored extraction with adversarial echo/multiple-object/trailing-content fixtures. Do not accept arbitrary first/last braces or relabel a failed transport as a pass. **Related but separate (do not collapse)**: QC panel-size degradation under a declared multi-seat roster is tracked under “QC panel count degradation vs declared min_panel_size” — parser fail-closed must not silently shrink a configured panel without a disclosed degradation receipt.
 - **Effort**: Fix
-- **Source**: `docs/projects/_archive/2026-07-14-dispatch-branch-lifecycle/README.md`; `docs/projects/_archive/2026-07-26-capability-adaptive-profiles/README.md`.
+- **Source**: `docs/projects/_archive/2026-07-14-dispatch-branch-lifecycle/README.md`; `docs/projects/_archive/2026-07-26-capability-adaptive-profiles/README.md`; `docs/plans/2026-07-26-plan-review-session-controller.md`; `docs/plans/2026-07-26-task-convergence-contract.review.md`.
 
 ### ✅ DONE (2026-07-03, v2.31.4) — `anthropic-compatible` reviewer under the nonce wrapped-block protocol
 - **Resolution**: Shipped the **raw passthrough** design (the one the reverted v2.31.3 inline client should have been): `dispatch-anthropic-review.js` gains `--raw` + `--prompt-file` as pure transport (sends the shell's pre-built wrapped prompt, keeps its redaction/timeout/body-cap, emits only the raw model response, no parse; the two flags are mutually bound so the only prompt-file path is the raw passthrough, legacy `--diff-file` standalone path byte-identical), and `dispatch-review.sh` routes anthropic through the shared nonce parser (no early exec, no inline HTTP client — single anthropic HTTP path). `/l5` hetero-impl (gpt-5.3-codex-spark, one clean round) + decorrelated gpt-5.5 (SHIP-AS-IS; two over-flagged findings — non-reachable "token leak" + "vacuous redaction test" — verified against the code and dismissed) + depth-0 loopback harness + a `--prompt-file`-requires-`--raw` guard added at depth-0. Hermetic loopback test covers valid/echo/leak/malformed/max_tokens/oversize/timeout/non-zero-exit.
@@ -803,3 +881,24 @@ onto v2.32.48 by grok-4.5.
 - **Fix direction**: 在 dispatch-review/roster resolver 加 engine-id→agy 顯示名映射，或改
   config 值 + 更新 references/model-routing.md；加一條 agy 模型名 probe 到 harness-maintenance。
 - **Effort**: S。**Source**: 2026-07-17 /l6 QC panel gemini 席 no_verdict 診斷。
+
+<!-- autopilot-follow-up:fd4e5ef9e4a86709fb80a378b69cc780160e2e9701d83472daf5f7a8fc16cd64 -->
+### Durable merge execution crash recovery
+- **Trigger**: When a caller-owned durable merge receipt directory and recovery authority are standardized.
+- **Context**: A process crash after one ordered merge edge can lose the in-memory aggregate receipt; P3 intentionally omitted a WAL because its frozen contract supplied no storage-path authority.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0; p3-risk
+
+<!-- autopilot-follow-up:9cc8a47d292bb3f8ad6d8182f7199566e000a2e99aefe54bb9af469652871b0d -->
+### Bind dirty content continuity from preflight to execution
+- **Trigger**: When merge preflight schema v2 is designed or a consumer requires cross-phase content-continuity proof.
+- **Context**: P3 detects content drift after execution starts, but cannot prove preserved bytes are unchanged since P2 issuance because the P2 receipt binds path categories rather than content/index digests.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0; p3-risk
+
+<!-- autopilot-follow-up:bedd809a7d1d5a413e90813c5902beba396099a1588e47494ba3cb9876d8bd7d -->
+### Recover stale backlog admission locks safely
+- **Trigger**: When a backlog admission is interrupted or the lock directory exists without a live owning admission process.
+- **Context**: Backlog admission correctly fails closed on a held lock, but an uncatchable process crash can leave the lock directory behind and block all later admissions until manual recovery.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0; qwen-p4

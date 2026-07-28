@@ -1,21 +1,32 @@
 #!/usr/bin/env node
 'use strict';
 
+const path = require('path');
 const { dispatchReview } = require('../src/runners/review');
 const { resolveReviewLoop } = require('../src/engine/resolve-review-loop');
 const { runHarnessCli } = require('../src/harness/cli');
 const { runEndpointsCli } = require('../src/endpoints/cli');
 const { runStatusCli } = require('../src/status/cli');
-const { AutopilotEngine } = require('../src/engine');
+const { runCampaignCli } = require('../src/campaign/cli');
+const { runMergeCli } = require('../src/merge/cli');
+const {
+  AutopilotEngine,
+  compileCampaignDispositionPolicy,
+  compileCampaignDispositionProvider,
+  loadCampaignDispositionAuthority,
+} = require('../src/engine');
 
 function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
+  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
-  node bin/autopilot.js status [quota|runs|roster] [--json] [--probe]
+  node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
+  node bin/autopilot.js status task --root-run-id <id> [--json]
+  node bin/autopilot.js campaign <inspect|status|resume> --campaign-id <id> [--ledger <file>]
+  node bin/autopilot.js merge execute --request <file> [--json]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
@@ -29,9 +40,19 @@ Commands:
                     ahead branch (impl already committed) instead of re-dispatching
                     implementation; fails closed (resume_invalid) on a missing /
                     not-ahead / non-ancestor branch and never moves any ref.
+                    --campaign-contract is mandatory. --legacy-unmanaged is a
+                    v2.34.0-only compatibility rail, rejected for L5/L6, and
+                    emits a machine-readable deprecation disclosure.
+                    Non-empty review findings require a separately supplied
+                    depth-0 disposition authority; reviewer output cannot
+                    self-authorize.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json;
-  status            Read-only state overview: per-pool quota (recorded, per-MODEL pools), live dispatch runs, resolved roster seats (quota|runs|roster; --json; --probe = safe surface refresh, no model spend).
+  status            State overview or task DONE/NOT DONE from authoritative receipts.
+  campaign          Inspect/status durable campaign state or determine whether it is resumable.
+  merge             Execute only an explicitly sealed merge request and emit a receipt.
+  mission           Mission convergence control: init|grant|consume|control|check|receipt
+                    over the canonical pure Mission reducer (no task DONE/closeout authority).
                     tokens never printed, never read from argv).
 
 Exit codes:
@@ -51,6 +72,15 @@ function parseImplementReviewArgs(rawArgs) {
     verifyCmd: null,
     noVerifyFirst: false,
     resume: false,
+    campaignContract: null,
+    campaignSeal: null,
+    campaignLedger: null,
+    campaignDispositionAuthority: null,
+    campaignDispositionPolicy: null,
+    lifecycleReceipt: null,
+    missionPrepared: null,
+    campaignManaged: true,
+    legacyUnmanaged: false,
   };
   let sawRequireQualifiedReviewer = false;
   let sawAllowUnqualifiedReviewer = false;
@@ -65,6 +95,80 @@ function parseImplementReviewArgs(rawArgs) {
       }
       output.promptFile = value;
       i += 2;
+      continue;
+    }
+    if (arg === '--campaign-contract') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--campaign-contract requires a value' };
+      }
+      output.campaignContract = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--campaign-seal') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--campaign-seal requires a value' };
+      }
+      output.campaignSeal = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--campaign-ledger') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--campaign-ledger requires a value' };
+      }
+      output.campaignLedger = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--lifecycle-receipt') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--lifecycle-receipt requires a value' };
+      }
+      output.lifecycleReceipt = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--mission-state') {
+      return {
+        error: '--mission-state is not accepted by the engine; use --mission-prepared',
+      };
+    }
+    if (arg === '--mission-prepared') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--mission-prepared requires a value' };
+      }
+      output.missionPrepared = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--campaign-disposition-authority') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--campaign-disposition-authority requires a value' };
+      }
+      output.campaignDispositionAuthority = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--campaign-disposition-policy') {
+      const value = rawArgs[i + 1];
+      if (!value) {
+        return { error: '--campaign-disposition-policy requires a value' };
+      }
+      output.campaignDispositionPolicy = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--legacy-unmanaged') {
+      output.legacyUnmanaged = true;
+      output.campaignManaged = false;
+      i += 1;
       continue;
     }
     if (arg === '--branch') {
@@ -153,6 +257,24 @@ function parseImplementReviewArgs(rawArgs) {
   if (!output.promptFile || !output.branch || !output.base) {
     return { error: 'flags --prompt-file, --branch, --base are required' };
   }
+  if (output.legacyUnmanaged && output.campaignContract) {
+    return { error: '--legacy-unmanaged cannot be combined with --campaign-contract' };
+  }
+  if (!output.legacyUnmanaged && !output.campaignContract) {
+    return { error: '--campaign-contract is required; use --legacy-unmanaged only for compatibility' };
+  }
+  if (output.campaignDispositionAuthority && output.campaignDispositionPolicy) {
+    return {
+      error: '--campaign-disposition-authority and --campaign-disposition-policy cannot be combined',
+    };
+  }
+  if (output.legacyUnmanaged
+      && (output.campaignDispositionAuthority || output.campaignDispositionPolicy)) {
+    return { error: 'campaign disposition controls require --campaign-contract' };
+  }
+  if (output.legacyUnmanaged && output.lifecycleReceipt) {
+    return { error: '--lifecycle-receipt requires --campaign-contract' };
+  }
 
   return output;
 }
@@ -173,6 +295,25 @@ if (args.length === 0 || args[0] === '-h' || args[0] === '--help' || args[0] ===
 
 if (args[0] === 'status') {
   process.exit(runStatusCli(args.slice(1), { cwd: process.cwd() }));
+}
+
+if (args[0] === 'campaign') {
+  process.exit(runCampaignCli(args.slice(1), { cwd: process.cwd() }));
+}
+
+if (args[0] === 'merge') {
+  process.exit(runMergeCli(args.slice(1), {
+    cwd: process.cwd(),
+    stdout: process.stdout,
+    stderr: process.stderr,
+  }));
+}
+
+if (args[0] === 'mission') {
+  // Deferred import: the Mission CLI module loads only when this subcommand is
+  // invoked (plan P2 single root route to src/mission/cli.js).
+  const { runMissionCli } = require('../src/mission/cli');
+  process.exit(runMissionCli(args.slice(1), { cwd: process.cwd() }));
 }
 
 if (args[0] === 'dispatch') {
@@ -201,9 +342,57 @@ if (args[0] === 'engine') {
       if (parsed.error) {
         failUsage(parsed.error);
       }
-      const result = new AutopilotEngine({
+      const level = String(process.env.AUTOPILOT_LEVEL || '').toLowerCase();
+      if (parsed.legacyUnmanaged && (level === 'l5' || level === 'l6')) {
+        process.stdout.write(`${JSON.stringify({
+          status: 'blocked',
+          phase: 'campaign_contract',
+          reason: '--legacy-unmanaged is prohibited for L5/L6',
+          campaign_control: {
+            status: 'legacy_unmanaged_rejected',
+            deprecated: true,
+            removal_release: 'v2.35.0',
+            removal_deadline: '2026-08-31',
+          },
+        })}\n`);
+        process.exit(1);
+      }
+      let campaignDispositionProvider = null;
+      try {
+        if (parsed.campaignDispositionAuthority) {
+          campaignDispositionProvider = compileCampaignDispositionProvider(
+            loadCampaignDispositionAuthority(path.resolve(
+              parsed.cwd || process.cwd(),
+              parsed.campaignDispositionAuthority,
+            )),
+          );
+        } else if (parsed.campaignDispositionPolicy) {
+          campaignDispositionProvider = compileCampaignDispositionPolicy(
+            parsed.campaignDispositionPolicy,
+          );
+        }
+      } catch (error) {
+        process.stdout.write(`${JSON.stringify({
+          status: 'blocked',
+          phase: 'campaign_disposition_authority',
+          reason: error.message || String(error),
+        })}\n`);
+        process.exit(1);
+      }
+      // The prepared receipt is resolved through the Git common-dir Mission
+      // registry. CLI callers cannot select an arbitrary Mission state path.
+      const engineOptions = {
         cwd: parsed.cwd || process.cwd(),
-      }).runImplementationReviewLoop(parsed);
+        campaignDispositionProvider,
+      };
+      if (parsed.missionPrepared) {
+        engineOptions.missionPreparedReceiptPath = path.resolve(
+          parsed.cwd || process.cwd(),
+          parsed.missionPrepared,
+        );
+      }
+      const result = new AutopilotEngine(engineOptions)
+        .runImplementationReviewLoop(parsed);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

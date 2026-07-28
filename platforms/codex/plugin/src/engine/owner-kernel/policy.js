@@ -3,6 +3,7 @@
 const { canonicalJson, cloneCanonical, isSha256, sha256 } = require('./canonical');
 const { normalizeActionCatalog } = require('./actions');
 const { OwnerKernelError } = require('./errors');
+const { resolveMissionPolicy } = require('../mission-policy');
 
 const GOVERNANCE_SCHEMA_VERSION = 1;
 const SUPPORTED_MODES = new Set(['owner-led', 'milestone-led']);
@@ -192,7 +193,7 @@ function normalizeEnum(raw, fallback, allowed, label) {
 
 function resolveGovernancePolicy(config, options = {}) {
   const root = requireObject(config, 'governance config');
-  rejectUnknownKeys(root, new Set(['schema_version', 'governance']), 'governance config');
+  rejectUnknownKeys(root, new Set(['schema_version', 'governance', 'mission_convergence']), 'governance config');
   if (root.schema_version !== GOVERNANCE_SCHEMA_VERSION) {
     fail(`governance config.schema_version must equal ${GOVERNANCE_SCHEMA_VERSION}`);
   }
@@ -295,6 +296,14 @@ function resolveGovernancePolicy(config, options = {}) {
     ),
   };
 
+  const mission = resolveMissionPolicy(root, {
+    taskOverride: options.missionTaskOverride,
+    agentOverride: options.missionAgentOverride,
+  });
+  if (mission.policy.enforcement_mode !== 'off') {
+    resolved.mission_convergence = mission.policy;
+    resolved.mission_policy_digest = mission.policy_digest;
+  }
   const normalized = cloneCanonical(resolved);
   return {
     policy: normalized,

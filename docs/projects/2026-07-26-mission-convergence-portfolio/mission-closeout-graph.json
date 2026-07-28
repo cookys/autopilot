@@ -1,0 +1,115 @@
+{
+  "artifact_type": "mission_execution_graph",
+  "calculated_batches": 1,
+  "calculated_depth": 1,
+  "graph_digest": "2de755c1a84c316b86b0083486168b09dd499a24ad8705a6754f639c5dbd65b8",
+  "nodes": [
+    {
+      "acceptance_ids": [
+        "regression-suite-green",
+        "joint-qc",
+        "release-merge",
+        "zero-lifecycle-residue"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          ".claude",
+          ".claude-plugin",
+          "CHANGELOG.md",
+          "CLAUDE.md",
+          "README.md",
+          "README.zh-TW.md",
+          "docs",
+          "hooks",
+          "platforms",
+          "plugin.json",
+          "profiles",
+          "scripts",
+          "skills",
+          "src"
+        ],
+        "baseline_churn": 6000,
+        "max_changed_files": 40,
+        "max_extra_churn": 3000,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "output_paths": [
+          "CLAUDE.md",
+          "docs/projects/2026-07-26-mission-convergence-portfolio/README.md",
+          "docs/projects/INDEX.md",
+          "hooks/orchestrator-edit-gate.test.js",
+          "hooks/tests/autopilot-engine-resilience.test.sh",
+          "hooks/tests/codex-plugin-package.test.sh",
+          "hooks/tests/dispatch-author-session-mode.test.sh",
+          "hooks/tests/dispatch-detach.test.sh",
+          "hooks/tests/mission-routing-admission.test.sh",
+          "hooks/tests/mission-routing-campaign-bridge.test.sh",
+          "hooks/tests/profile-context-isolation.test.sh",
+          "hooks/tests/supervised-authenticated-intake.test.sh",
+          "hooks/tests/supervised-engine-bridge-contract.test.sh",
+          "hooks/tests/supervised-intake-host.test.sh",
+          "hooks/tests/supervised-intake-live-host.sh",
+          "hooks/tests/supervised-production-substrate-p0-live.test.sh",
+          "platforms/codex/plugin/profiles/profile-catalog.json",
+          "platforms/codex/plugin/profiles/rule-inventory.json",
+          "platforms/codex/plugin/profiles/rule-migration.json",
+          "platforms/codex/plugin/src/engine/supervised-engine-bridge-contract.js",
+          "platforms/codex/plugin/src/engine/supervised-intake-host.py",
+          "platforms/codex/plugin/src/engine/supervised-intake-verifier.js",
+          "platforms/codex/plugin/src/engine/supervised-production-substrate-host.py",
+          "platforms/codex/plugin/src/harness/capabilities.js",
+          "profiles/profile-catalog.json",
+          "profiles/rule-inventory.json",
+          "profiles/rule-migration.json",
+          "scripts/dispatch-local-openai.test.js",
+          "src/engine/supervised-engine-bridge-contract.js",
+          "src/engine/supervised-intake-host.py",
+          "src/engine/supervised-intake-verifier.js",
+          "src/engine/supervised-production-substrate-host.py",
+          "src/harness/capabilities.js"
+        ],
+        "profile": "high",
+        "required_paths": [
+          "docs/plans/2026-07-26-l6-status-merge-contract.md",
+          "docs/plans/2026-07-26-l6-status-merge-contract.rubric.md"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-07-26-l6-status-merge-contract.md",
+          "section": "4. Phases"
+        }
+      },
+      "dependencies": [],
+      "gate_attempt_budget": 4,
+      "id": "release-repair",
+      "reservation": {
+        "campaigns": 2,
+        "canonical_changed_files": 100,
+        "engine_attempts": 3,
+        "external_wait_seconds": 0,
+        "output_bytes": 10000000,
+        "tool_calls": 300,
+        "wall_seconds": 7200
+      },
+      "source_plan_ids": [
+        "plan-7bf74c9685b0fd98320c860a68f886367767967b95f661fb72435e97107952b4"
+      ],
+      "source_rubric_ids": [
+        "R101321753748316805232081803122368350765029896374710450142374923750727808219230",
+        "R111778995926731744216336462261132950826449624144469210220473236386640659047062",
+        "R34789105652823242560186775550205951333046055099334092180917105741144566562051",
+        "R66005387099113628474274095650158373081912486903709896993159891796391848132028",
+        "R69787392617824994415129866300965893895008715330592437177037987492513089994707",
+        "R70561549506617501844440922454487213075334901448663688740060197364336090180677",
+        "R72867405640667039872983877767234206556914755496710738245771878794527293697870",
+        "R81218619496890698372105998127504086973912586600657102278533239805196192891098",
+        "R89404824089178303254513279260857273592923811446514965071920495709640322826357",
+        "R94973162221441638143512158988253470114525342970732769618958755558722809198877"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/run.sh"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

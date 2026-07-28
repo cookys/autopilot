@@ -739,6 +739,7 @@ function buildImplementationArgs({
   dispatchIdentity = null,
   campaignContractFile = null,
   campaignContractDigest = null,
+  campaignSealFile = null,
 }) {
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
@@ -759,6 +760,7 @@ function buildImplementationArgs({
     '--effort',
     '--campaign-contract',
     '--campaign-contract-sha256',
+    '--campaign-seal',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
   if (campaignContractFile !== null
@@ -770,8 +772,19 @@ function buildImplementationArgs({
         || !/^[0-9a-f]{64}$/.test(campaignContractDigest))) {
     throw new TypeError('campaignContractDigest must be a lowercase SHA-256 digest');
   }
-  if ((campaignContractFile === null) !== (campaignContractDigest === null)) {
-    throw new TypeError('campaignContractFile and campaignContractDigest must be supplied together');
+  if (campaignSealFile !== null
+      && (typeof campaignSealFile !== 'string' || campaignSealFile.length === 0)) {
+    throw new TypeError('campaignSealFile must be a non-empty string');
+  }
+  const campaignBoundaryFields = [
+    campaignContractFile,
+    campaignContractDigest,
+    campaignSealFile,
+  ].filter((value) => value !== null).length;
+  if (campaignBoundaryFields !== 0 && campaignBoundaryFields !== 3) {
+    throw new TypeError(
+      'campaignContractFile, campaignContractDigest, and campaignSealFile must be supplied together',
+    );
   }
 
   const args = [
@@ -795,6 +808,7 @@ function buildImplementationArgs({
   if (campaignContractFile) {
     args.push('--campaign-contract', path.resolve(cwd || process.cwd(), campaignContractFile));
     args.push('--campaign-contract-sha256', campaignContractDigest);
+    args.push('--campaign-seal', path.resolve(cwd || process.cwd(), campaignSealFile));
   }
   args.push(...extraImplementationArgs);
   return args;
@@ -2121,6 +2135,7 @@ class AutopilotEngine {
           : null,
         campaignContractFile: input.campaignContractFile || null,
         campaignContractDigest: input.campaignContractDigest || null,
+        campaignSealFile: input.campaignSealFile || null,
       });
     } catch (error) {
       const startedAt = this.now();
@@ -2779,6 +2794,7 @@ class AutopilotEngine {
           implementationStage: 'campaign-implementation',
           campaignContractFile: campaignControl.contract_path,
           campaignContractDigest: campaignControl.contract_digest,
+          campaignSealFile: campaignControl.seal_path,
           resultJson: input.resultJson,
           gitDir: input.gitDir,
           extraImplementationArgs: Object.prototype.hasOwnProperty.call(
@@ -3987,6 +4003,9 @@ class AutopilotEngine {
             : null,
           campaignContractDigest: campaignControl && campaignControl.status === 'admitted'
             ? campaignControl.contract_digest
+            : null,
+          campaignSealFile: campaignControl && campaignControl.status === 'admitted'
+            ? campaignControl.seal_path
             : null,
           resultJson: input.resultJson,
           gitDir: input.gitDir,

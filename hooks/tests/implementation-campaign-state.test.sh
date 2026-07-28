@@ -881,6 +881,7 @@ function campaignControlFixture(nonce, initialState = admitted.initial_state) {
       max_repair_generations: 2,
     },
     contract_path: contractPath,
+    seal_path: sealPath,
     initial_state: initialState,
     generation_claim: {
       ledger: campaignLedger,
@@ -1280,6 +1281,7 @@ const roundTwoResult = identityEngine.implementTask({
   implementationStage: 'campaign-implementation',
   campaignContractFile: contractPath,
   campaignContractDigest: 'c'.repeat(64),
+  campaignSealFile: sealPath,
   implementationOptions: {
     env: {
       AUTOPILOT_PARENT_RUN_ID: 'foreman-round-two',
@@ -1299,6 +1301,7 @@ const mismatchedRootResult = identityEngine.implementTask({
   implementationStage: 'campaign-implementation',
   campaignContractFile: contractPath,
   campaignContractDigest: 'c'.repeat(64),
+  campaignSealFile: sealPath,
   implementationOptions: { env: { PATH: process.env.PATH || '' } },
 });
 const managedResumeResult = identityEngine.runImplementationReviewLoop({
@@ -1339,6 +1342,7 @@ console.log(`implementation_run_id=${argValue(implementationArgs, '--run-id')}`)
 console.log(`implementation_stage=${argValue(implementationArgs, '--stage')}`);
 console.log(`implementation_contract=${argValue(implementationArgs, '--campaign-contract')}`);
 console.log(`implementation_contract_sha=${argValue(implementationArgs, '--campaign-contract-sha256')}`);
+console.log(`implementation_seal=${argValue(implementationArgs, '--campaign-seal')}`);
 console.log(`review_ledger=${argValue(reviewCalls[0], '--ledger')}`);
 console.log(`review_run_id=${argValue(reviewCalls[0], '--run-id')}`);
 console.log(`review_stage=${argValue(reviewCalls[0], '--stage')}`);
@@ -1497,6 +1501,9 @@ assert_contains "$INTAKE_OUT" \
 assert_contains "$INTAKE_OUT" \
   "implementation_contract_sha=$(printf 'c%.0s' {1..64})" \
   "managed implementation receives the intake-bound contract digest"
+assert_contains "$INTAKE_OUT" \
+  "implementation_seal=$SEAL" \
+  "managed implementation receives the intake-validated campaign seal"
 assert_contains "$INTAKE_OUT" \
   "review_ledger=$SBX/.autopilot/identity-ledger.jsonl" \
   "managed review receives the campaign ledger"

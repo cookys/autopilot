@@ -52,6 +52,7 @@
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
 #       [--campaign-contract <path>]            # sealed ICC boundary, prepended to prompt
 #       [--campaign-contract-sha256 <digest>]    # intake-bound digest for private snapshot
+#       [--campaign-seal <path>]                # intake-validated seal, rechecked at leaf admission
 #       [--strict-contract]                     # required together with --contract-file
 #       [--contract-file <path>]                # required together with --strict-contract
 #       [--keep-worktree]                      # keep worktree even on success
@@ -116,6 +117,7 @@ BRANCH=""
 PROMPT_FILE=""
 CAMPAIGN_CONTRACT_FILE=""
 CAMPAIGN_CONTRACT_SHA256=""
+CAMPAIGN_SEAL_FILE=""
 CAMPAIGN_CONTRACT_SNAPSHOT=""
 RUNNER="auto"
 EFFORT="xhigh"
@@ -739,6 +741,60 @@ run_strict_contract_preflight() {
   fi
 }
 
+run_campaign_contract_preflight() {
+  local campaign_check_out="" campaign_check_json="" checker_reasons=""
+  local verdict checked_digest rc
+
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] || return 0
+  CONSUMING_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$CONSUMING_REPO_ROOT" ] || die_precondition "not inside a git repository"
+
+  campaign_check_out="$(
+    node - "$SELF_DIR/implementation-campaign-check.js" \
+      "$CAMPAIGN_CONTRACT_FILE" "$CAMPAIGN_SEAL_FILE" "$CONSUMING_REPO_ROOT" <<'NODE' 2>&1
+'use strict';
+const [checkerPath, contractPath, sealPath, repoPath] = process.argv.slice(2);
+try {
+  const { inspectSealedCampaignContract } = require(checkerPath);
+  const result = inspectSealedCampaignContract({
+    contractPath,
+    sealPath,
+    repoPath,
+  });
+  process.stdout.write(`${JSON.stringify({
+    verdict: result.verdict,
+    contract_sha256: result.contract_sha256 || null,
+    reasons: result.errors || result.drift || [],
+  })}\n`);
+  process.exit(result.ok === true ? 0 : 3);
+} catch (error) {
+  process.stdout.write(`${JSON.stringify({
+    verdict: 'REJECTED',
+    contract_sha256: null,
+    reasons: [error.message || String(error)],
+  })}\n`);
+  process.exit(3);
+}
+NODE
+  )"
+  rc=$?
+  campaign_check_json="$(printf '%s' "$campaign_check_out" | extract_last_json)"
+  if [ "$rc" -ne 0 ] || [ -z "$campaign_check_json" ]; then
+    checker_reasons="$(extract_json_value "$campaign_check_json" reasons 2>/dev/null || true)"
+    if [ -z "$checker_reasons" ]; then
+      checker_reasons="$(printf '%s' "$campaign_check_out" | tr '\n' ' ')"
+    fi
+    [ -n "$checker_reasons" ] || checker_reasons="campaign contract check failed"
+    die_precondition "campaign contract checker failed: $checker_reasons"
+  fi
+
+  verdict="$(extract_json_value "$campaign_check_json" verdict 2>/dev/null || true)"
+  [ "$verdict" = "VALID" ] || die_precondition "campaign contract checker verdict is $verdict"
+  checked_digest="$(extract_json_value "$campaign_check_json" contract_sha256 2>/dev/null || true)"
+  [ "$checked_digest" = "$CAMPAIGN_CONTRACT_SHA256" ] \
+    || die_precondition "campaign contract digest changed after intake"
+}
+
 die_precondition() {
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
@@ -841,6 +897,7 @@ while [ $# -gt 0 ]; do
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
+    --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
     --model) MODEL="${2:-}"; MODEL_SUPPLIED=1; shift 2 ;;
     --runner) RUNNER="${2:-}"; RUNNER_SUPPLIED=1; shift 2 ;;
     --effort) EFFORT="${2:-}"; shift 2 ;;
@@ -996,18 +1053,26 @@ esac
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
 [ -z "$CAMPAIGN_CONTRACT_FILE" ] || [ -r "$CAMPAIGN_CONTRACT_FILE" ] \
   || die_precondition "campaign contract file not readable: $CAMPAIGN_CONTRACT_FILE"
-if [ -n "$CAMPAIGN_CONTRACT_FILE" ] || [ -n "$CAMPAIGN_CONTRACT_SHA256" ]; then
+if [ -n "$CAMPAIGN_CONTRACT_FILE" ] || [ -n "$CAMPAIGN_CONTRACT_SHA256" ] \
+    || [ -n "$CAMPAIGN_SEAL_FILE" ]; then
   [ -n "$CAMPAIGN_CONTRACT_FILE" ] && [ -n "$CAMPAIGN_CONTRACT_SHA256" ] \
-    || die_precondition "--campaign-contract and --campaign-contract-sha256 are required together"
+    && [ -n "$CAMPAIGN_SEAL_FILE" ] \
+    || die_precondition "--campaign-contract, --campaign-contract-sha256, and --campaign-seal are required together"
   [[ "$CAMPAIGN_CONTRACT_SHA256" =~ ^[0-9a-f]{64}$ ]] \
     || die_precondition "--campaign-contract-sha256 must be a lowercase SHA-256 digest"
+  [ -r "$CAMPAIGN_SEAL_FILE" ] \
+    || die_precondition "campaign seal file not readable: $CAMPAIGN_SEAL_FILE"
 fi
 [ "$STRICT_CONTRACT" -eq 1 ] && [ "$CONTRACT_FILE_SUPPLIED" -eq 0 ] && die_precondition "--contract-file requires --strict-contract"
 [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] && [ "$STRICT_CONTRACT" -eq 0 ] && die_precondition "--strict-contract requires --contract-file"
 
 if [ "$STRICT_CONTRACT" -eq 1 ]; then
   run_strict_contract_preflight
-else
+fi
+if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
+  run_campaign_contract_preflight
+fi
+if [ "$STRICT_CONTRACT" -eq 0 ] && [ -z "$CAMPAIGN_CONTRACT_FILE" ]; then
   check_session_mode_gate
 fi
 set_runner_flags

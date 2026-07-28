@@ -418,18 +418,39 @@ assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evalu
 # 12a. A managed campaign contract is an explicit leaf input and is prepended before
 # the original task so paths and budgets reach the mutating model process.
 CAMPAIGN_CONTRACT="$TEST_TMP/campaign-boundary.json"
-printf '%s\n' '{"allowed_path_prefixes":["src/"],"max_changed_files":2,"max_extra_churn":40}' \
+CAMPAIGN_SEAL="$TEST_TMP/campaign-boundary.seal.json"
+CAMPAIGN_BASE="$(git -C "$SBX" rev-parse develop)"
+CAMPAIGN_REPO_ID="$(node - "$REPO_ROOT" "$SBX" <<'NODE'
+const path = require('path');
+const [root, repo] = process.argv.slice(2);
+const { canonicalRepoIdentity } = require(path.join(root, 'scripts', 'implementation-campaign-check'));
+process.stdout.write(canonicalRepoIdentity(repo));
+NODE
+)"
+printf '%s\n' \
+  "{\"schema_version\":1,\"ticket\":\"campaign-boundary\",\"profile\":\"poc\",\"mission_grant_ref\":null,\"repo_identity\":\"$CAMPAIGN_REPO_ID\",\"base_sha\":\"$CAMPAIGN_BASE\",\"branch\":\"feat/campaign-boundary\",\"vertical_acceptance\":[\"capture bounded prompt\"],\"allowed_path_prefixes\":[\"ok.txt\"],\"max_changed_files\":2,\"baseline_churn\":10,\"max_growth_ratio\":1.5,\"max_extra_churn\":5,\"max_repair_generations\":2,\"max_wall_seconds\":120,\"verify_cmd\":\"true\",\"rubric_ids\":[\"R1\"]}" \
   > "$CAMPAIGN_CONTRACT"
+SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
+  --contract "$CAMPAIGN_CONTRACT" --repo "$SBX" --mission-mode off \
+  --out "$CAMPAIGN_SEAL" 2>&1)"; SEAL_EXIT=$?
+assert_eq "0" "$SEAL_EXIT" "campaign boundary fixture seals: $SEAL_OUT"
 CAMPAIGN_CONTRACT_SHA="$(node -e '
   const crypto = require("crypto");
   const fs = require("fs");
   process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
 ' "$CAMPAIGN_CONTRACT")"
+CAMPAIGN_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode"
+mkdir -p "$CAMPAIGN_SESSION_MODE_DIR"
+printf '%s\n' \
+  "{\"level\":\"l6\",\"repo_root\":\"$(cd "$SBX" && pwd -P)\",\"started_at\":\"2026-07-28T00:00:00Z\",\"expires_at\":\"2099-01-01T00:00:00Z\"}" \
+  > "$CAMPAIGN_SESSION_MODE_DIR/l6.json"
 rm -f "$TEST_TMP/captured_prompt.txt"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
-  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" 2>&1)"; EXIT=$?
-assert_eq "0" "$EXIT" "campaign boundary dispatch exit code"
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "seal-bound campaign dispatch succeeds under active L6"
 assert_file_exists "$TEST_TMP/captured_prompt.txt" "campaign boundary prompt capture exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
   "=== MACHINE-OWNED CAMPAIGN BOUNDARY ===" "campaign boundary delimiter reaches implementer"
@@ -440,21 +461,64 @@ assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" \
 
 # 12b. A contract changed after intake is rejected before the runner or worktree exists.
 rm -f "$TEST_TMP/captured_prompt.txt"
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/campaign-drift --prompt-file "$PROMPT" \
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-drift --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
-  --campaign-contract-sha256 "$(printf '0%.0s' {1..64})" 2>&1)"; EXIT=$?
+  --campaign-contract-sha256 "$(printf '0%.0s' {1..64})" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "campaign contract digest drift exit code"
 assert_contains "$OUT" "campaign contract digest changed after intake" \
   "campaign contract drift names the intake boundary"
 assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
   "campaign contract drift spawns no runner"
 
-# 12c. The snapshot path and digest are one inseparable managed boundary.
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/campaign-unbound --prompt-file "$PROMPT" \
+# 12c. Contract, digest, and intake seal are one inseparable managed boundary.
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-unbound --prompt-file "$PROMPT" \
   --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unbound campaign contract exit code"
 assert_contains "$OUT" "are required together" \
-  "campaign contract without its intake digest fails closed"
+  "campaign contract without its intake digest and seal fails closed"
+
+# 12d. A self-hashed campaign JSON without the intake seal cannot bypass L6.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-missing-seal --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "campaign contract without seal exit code"
+assert_contains "$OUT" "--campaign-seal" "missing campaign seal names the required admission input"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "missing campaign seal spawns no runner"
+
+# 12e. A forged seal cannot authorize the campaign leaf.
+FORGED_CAMPAIGN_SEAL="$TEST_TMP/campaign-boundary.forged.seal.json"
+node - "$CAMPAIGN_SEAL" "$FORGED_CAMPAIGN_SEAL" <<'NODE'
+const fs = require('fs');
+const [source, target] = process.argv.slice(2);
+const seal = JSON.parse(fs.readFileSync(source, 'utf8'));
+seal.contract_sha256 = '0'.repeat(64);
+fs.writeFileSync(target, `${JSON.stringify(seal)}\n`);
+NODE
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-forged-seal --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$FORGED_CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "forged campaign seal exit code"
+assert_contains "$OUT" "campaign contract checker failed" \
+  "forged campaign seal fails the canonical checker"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "forged campaign seal spawns no runner"
+
+# 12f. The new campaign admission path does not weaken the prompt-only session gate.
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-non-strict --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "non-strict dispatch remains blocked under active L6"
+assert_contains "$OUT" "active session-mode=l6 blocks non-strict dispatch" \
+  "non-strict L6 diagnostic remains unchanged"
 
 # 13. --skill-mode prompt with non-existent skill fails with exit 2
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?

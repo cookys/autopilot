@@ -76,9 +76,8 @@ function setup() {
   const repo = path.join(base, 'repo');
   fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
   fs.mkdirSync(path.join(repo, 'docs', 'projects'), { recursive: true });
-  // session-mode set requires a real git identity for Mission routing admission.
-  // For this gate's black-box tests we only need a marker file, so write it
-  // directly in the same shape session-mode.js emits (LEGACY / no mission_routing).
+  const init = spawnSync('git', ['init', repo], { encoding: 'utf8' });
+  assert.strictEqual(init.status, 0, init.stderr);
   const markers = path.join(base, 'markers');
   const sid = `t-${path.basename(base)}`;
   const env = {
@@ -92,21 +91,9 @@ function setup() {
 }
 
 function setMarker(env, repo, level, extra = []) {
-  const ttlHours = (() => {
-    const idx = extra.indexOf('--ttl-hours');
-    if (idx === -1) return 24;
-    return Number(extra[idx + 1]);
-  })();
-  const now = Date.now();
-  const marker = {
-    level,
-    repo_root: path.resolve(repo),
-    started_at: new Date(now).toISOString(),
-    expires_at: new Date(now + ttlHours * 3600 * 1000).toISOString(),
-  };
-  fs.mkdirSync(env.AUTOPILOT_SESSION_MODE_DIR, { recursive: true });
-  const markerFile = path.join(env.AUTOPILOT_SESSION_MODE_DIR, `${env.CLAUDE_CODE_SESSION_ID}.json`);
-  fs.writeFileSync(markerFile, `${JSON.stringify(marker, null, 2)}\n`);
+  const r = spawnSync('node', [path.join(__dirname, '..', 'scripts', 'session-mode.js'),
+    'set', '--level', level, '--repo-root', repo, ...extra], { env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
 }
 
 // Payload fixtures mirror the SPIKE-1 capture (CC 2.1.208).

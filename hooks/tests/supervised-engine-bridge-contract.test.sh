@@ -43,6 +43,30 @@ const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
     minimum_action_class: 'external',
     requires_mediator: true,
   },
+  'campaign-event-append': {
+    operation: 'engine_campaign_event_append',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
+  'campaign-admission-complete': {
+    operation: 'engine_campaign_admission_complete',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
+  'campaign-post-commit-checkpoint': {
+    operation: 'engine_campaign_post_commit_checkpoint',
+    tool_class: 'campaign_control',
+    minimum_action_class: 'irreversible',
+    requires_mediator: true,
+  },
+  'mission-terminal-reconcile': {
+    operation: 'engine_mission_terminal_reconcile',
+    tool_class: 'mission_control',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
   'review-dispatch': {
     operation: 'engine_review_dispatch',
     tool_class: 'model_runner',
@@ -103,15 +127,15 @@ const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
 const EXPECTED_CONTROL_SINKS = [
   ['campaign-intake', 'campaignIntake', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['campaign-admission-release', 'campaignAdmissionReleaser', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
-  ['campaign-event-append', 'campaignEventAppender', 'campaign_control', [], false],
-  ['campaign-admission-complete', 'campaignAdmissionCompleter', 'campaign_control', [], false],
+  ['campaign-event-append', 'campaignEventAppender', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
+  ['campaign-admission-complete', 'campaignAdmissionCompleter', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['campaign-composition', 'campaignComposer', 'campaign_control', [], false],
   ['campaign-adjudication', 'campaignAdjudicator', 'campaign_control', [], false],
   ['campaign-disposition', 'campaignDispositionProvider', 'campaign_control', [], false],
   ['campaign-scope-check', 'campaignScopeChecker', 'campaign_control', [], false],
   ['campaign-tree-resolve', 'campaignTreeResolver', 'campaign_control', [], false],
   ['campaign-lifecycle-inspect', 'campaignLifecycleInspector', 'campaign_control', [], false],
-  ['campaign-post-commit-checkpoint', 'campaignPostCommitCheckpoint', 'campaign_control', [], false],
+  ['campaign-post-commit-checkpoint', 'campaignPostCommitCheckpoint', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['review-loop-resolution', 'reviewLoopResolver', 'policy_read', [], false],
   ['review-dispatch', 'reviewDispatcher', 'challenge_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate', 'recordChallenge'], true],
   ['implementation-dispatch', 'implementationDispatcher', 'worker_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate'], true],
@@ -126,7 +150,7 @@ const EXPECTED_CONTROL_SINKS = [
   ['diff-risk-classification', 'classifyDiffRisk', 'policy_read', [], false],
   ['lifecycle-observation', 'lifecycleObserver', 'non_authoritative_observation', [], false],
   ['mission-adapter-factory', 'missionAdapterFactory', 'mission_control', [], false],
-  ['mission-terminal-reconcile', 'missionTerminalReconciler', 'mission_control', [], false],
+  ['mission-terminal-reconcile', 'missionTerminalReconciler', 'mission_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
 ];
 
 function attestation(identity) {
@@ -474,6 +498,60 @@ const secondRequiredSink = AUTOPILOT_ENGINE_CONTROL_SINKS
 reusedBinding.actionCatalogBindings[secondRequiredSink.id] = firstRequiredSink.id;
 assert.throws(() => compileSupervisedEngineBridgeContract(reusedBinding), /distinct frozen policy entry/i);
 
+const newlyMediatedSinkIds = [
+  'campaign-event-append',
+  'campaign-admission-complete',
+  'campaign-post-commit-checkpoint',
+  'mission-terminal-reconcile',
+];
+for (const sinkId of newlyMediatedSinkIds) {
+  const sink = AUTOPILOT_ENGINE_CONTROL_SINKS.find((item) => item.id === sinkId);
+  assert.ok(sink && sink.requires_action_catalog_binding);
+
+  const missing = input();
+  delete missing.actionCatalogBindings[sinkId];
+  assert.throws(
+    () => compileSupervisedEngineBridgeContract(missing),
+    /missing action catalog binding/i,
+  );
+
+  const unmediated = input();
+  unmediated.governanceConfig.governance.action_catalog
+    .find((entry) => entry.id === sinkId).requires_mediator = false;
+  assert.throws(
+    () => compileSupervisedEngineBridgeContract(unmediated),
+    /requires a mediated/i,
+  );
+
+  const downgraded = input();
+  downgraded.governanceConfig.governance.action_catalog
+    .find((entry) => entry.id === sinkId).action_class = sinkId === 'campaign-post-commit-checkpoint'
+      ? 'external'
+      : 'read_only';
+  assert.throws(
+    () => compileSupervisedEngineBridgeContract(downgraded),
+    /cannot lower/i,
+  );
+
+  for (const destination of ['mintActionDecision', 'executeAuthorizedAction']) {
+    const missingDestination = getAutopilotEngineControlSinkInventory();
+    const target = missingDestination.find((item) => item.id === sinkId);
+    target.kernel_destinations = target.kernel_destinations
+      .filter((item) => item !== destination);
+    assert.throws(
+      () => validateAutopilotEngineControlSinkInventory(missingDestination),
+      new RegExp(`must route through ${destination}`, 'i'),
+    );
+  }
+
+  const reused = input();
+  reused.actionCatalogBindings[sinkId] = firstRequiredSink.id;
+  assert.throws(
+    () => compileSupervisedEngineBridgeContract(reused),
+    /distinct frozen policy entry/i,
+  );
+}
+
 const nonV2 = input({ acceptanceContract: {
   schema_version: 1,
   contract_id: 'v1-not-enough',
@@ -744,7 +822,7 @@ NODE_STATUS=$?
 
 assert_eq "$NODE_STATUS" "0" "supervised engine bridge contract node fixture exits successfully"
 assert_contains "$OUT" "sink_inventory=26" "all injected engine control sinks are covered"
-assert_contains "$OUT" "action_catalog_bindings=11" "every mutable sink requires a frozen catalog binding"
+assert_contains "$OUT" "action_catalog_bindings=15" "every mutable sink requires a frozen catalog binding"
 assert_contains "$OUT" "sensitive_inputs_omitted=true" "compiled contract contains hashes rather than raw sensitive inputs"
 assert_contains "$OUT" "contract_only=true" "bridge remains explicitly non-authoritative"
 assert_contains "$OUT" "mutation_rejected=true" "frozen inputs and compiled contract tampering fail closed"

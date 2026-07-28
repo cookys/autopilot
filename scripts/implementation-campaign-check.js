@@ -33,15 +33,20 @@ function loadCanonicalSchema() {
   if (!value || typeof value !== 'object' || Array.isArray(value)
       || !value.properties || typeof value.properties !== 'object'
       || !Array.isArray(value.required)
+      || !Array.isArray(value['x-optional-properties'])
       || !value['x-profile-repair-ceilings']) {
     throw new CliError('canonical campaign schema is missing contract metadata');
   }
   const properties = Object.keys(value.properties);
   const required = new Set(value.required);
-  if (properties.length !== required.size
-      || properties.some((field) => !required.has(field))
+  const optional = new Set(value['x-optional-properties']);
+  if (properties.length !== required.size + optional.size
+      || properties.some((field) => !required.has(field) && !optional.has(field))
+      || [...required].some((field) => optional.has(field))
       || value.additionalProperties !== false) {
-    throw new CliError('canonical campaign schema must be closed with every property required');
+    throw new CliError(
+      'canonical campaign schema must be closed with every property required or explicitly optional',
+    );
   }
   return value;
 }
@@ -289,9 +294,203 @@ function normalizeAllowedPrefix(value) {
 }
 
 function validBoundedVerifyCommand(value) {
-  return nonEmptyString(value)
-    && value.length <= 4096
-    && /^[A-Za-z0-9_./:@%+=,-]+(?: [A-Za-z0-9_./:@%+=,-]+)*$/.test(value);
+  if (!nonEmptyString(value) || value.length > 4096) return false;
+  const segments = value.split(' && ');
+  return segments.length > 0
+    && segments.join(' && ') === value
+    && segments.every((segment) => (
+      /^[A-Za-z0-9_./:@%+=,-]+(?: [A-Za-z0-9_./:@%+=,-]+)*$/.test(segment)
+    ));
+}
+
+function validateClosedObject(value, label, fields, errors) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    errors.push(`${label}: expected object`);
+    return false;
+  }
+  const allowed = new Set(fields);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) errors.push(`${label}: unknown field '${key}'`);
+  }
+  for (const field of fields) {
+    if (!hasOwn(value, field)) errors.push(`${label}: missing required field '${field}'`);
+  }
+  return true;
+}
+
+function validateStrictPath(value, label, allowedPrefixes, errors) {
+  const normalized = normalizeAllowedPrefix(value);
+  if (normalized === null) {
+    errors.push(`${label}: path escapes or is not normalized`);
+    return null;
+  }
+  if (allowedPrefixes
+      && !allowedPrefixes.some((prefix) => normalized === prefix
+        || normalized.startsWith(`${prefix}/`))) {
+    errors.push(`${label}: path is outside allowed_path_prefixes`);
+  }
+  return normalized;
+}
+
+function validateMissionProjection(contract, required = false) {
+  const errors = [];
+  const hasRuntime = hasOwn(contract, 'mission_runtime');
+  const hasDispatch = hasOwn(contract, 'strict_dispatch');
+  if (required && (!hasRuntime || !hasDispatch)) {
+    if (!hasRuntime) errors.push('mission_runtime: required for mission-subject-v2');
+    if (!hasDispatch) errors.push('strict_dispatch: required for mission-subject-v2');
+  }
+  if (hasRuntime !== hasDispatch) {
+    errors.push('mission_runtime and strict_dispatch must be present together');
+  }
+  if (!hasRuntime || !hasDispatch) return errors;
+
+  const runtimeFields = [
+    'schema_version',
+    'root_run_id',
+    'mission_lineage_id',
+    'mission_policy_digest',
+    'mission_graph_digest',
+    'graph_node_id',
+    'graph_node_digest',
+  ];
+  if (validateClosedObject(contract.mission_runtime, 'mission_runtime', runtimeFields, errors)) {
+    const runtime = contract.mission_runtime;
+    if (runtime.schema_version !== 1) errors.push('mission_runtime.schema_version: must be 1');
+    if (!nonEmptyString(runtime.root_run_id) || runtime.root_run_id.length > 256) {
+      errors.push('mission_runtime.root_run_id: expected bounded non-empty string');
+    }
+    if (typeof runtime.mission_lineage_id !== 'string'
+        || !/^lineage-v1-[0-9a-f]{64}$/.test(runtime.mission_lineage_id)) {
+      errors.push('mission_runtime.mission_lineage_id: invalid lineage id');
+    }
+    for (const field of [
+      'mission_policy_digest',
+      'mission_graph_digest',
+      'graph_node_digest',
+    ]) {
+      if (typeof runtime[field] !== 'string' || !/^[0-9a-f]{64}$/.test(runtime[field])) {
+        errors.push(`mission_runtime.${field}: expected lowercase SHA-256`);
+      }
+    }
+    if (typeof runtime.graph_node_id !== 'string'
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(runtime.graph_node_id)) {
+      errors.push('mission_runtime.graph_node_id: invalid graph node id');
+    }
+  }
+
+  const dispatchFields = [
+    'schema_version',
+    'spec',
+    'required_paths',
+    'output_paths',
+    'allowed_path_prefixes',
+    'budget',
+    'verification_commands',
+  ];
+  if (!validateClosedObject(
+    contract.strict_dispatch,
+    'strict_dispatch',
+    dispatchFields,
+    errors,
+  )) return errors;
+  const dispatch = contract.strict_dispatch;
+  if (dispatch.schema_version !== 1) errors.push('strict_dispatch.schema_version: must be 1');
+
+  const prefixes = [];
+  if (!Array.isArray(dispatch.allowed_path_prefixes)
+      || dispatch.allowed_path_prefixes.length === 0
+      || dispatch.allowed_path_prefixes.length > 128) {
+    errors.push('strict_dispatch.allowed_path_prefixes: expected array length 1..128');
+  } else {
+    dispatch.allowed_path_prefixes.forEach((entry, index) => {
+      const normalized = validateStrictPath(
+        entry,
+        `strict_dispatch.allowed_path_prefixes[${index}]`,
+        null,
+        errors,
+      );
+      if (normalized !== null) prefixes.push(normalized);
+    });
+    if (new Set(prefixes).size !== prefixes.length) {
+      errors.push('strict_dispatch.allowed_path_prefixes: duplicate normalized prefix');
+    }
+  }
+  if (JSON.stringify(dispatch.allowed_path_prefixes) !== JSON.stringify(contract.allowed_path_prefixes)) {
+    errors.push('strict_dispatch.allowed_path_prefixes: must equal allowed_path_prefixes');
+  }
+
+  if (validateClosedObject(dispatch.spec, 'strict_dispatch.spec', ['path', 'section'], errors)) {
+    validateStrictPath(dispatch.spec.path, 'strict_dispatch.spec.path', prefixes, errors);
+    if (!nonEmptyString(dispatch.spec.section) || dispatch.spec.section.length > 512) {
+      errors.push('strict_dispatch.spec.section: expected bounded non-empty string');
+    }
+  }
+  for (const field of ['required_paths', 'output_paths']) {
+    const values = dispatch[field];
+    if (!Array.isArray(values) || values.length === 0 || values.length > 128) {
+      errors.push(`strict_dispatch.${field}: expected array length 1..128`);
+      continue;
+    }
+    const normalized = values.map((entry, index) => validateStrictPath(
+      entry,
+      `strict_dispatch.${field}[${index}]`,
+      prefixes,
+      errors,
+    )).filter((entry) => entry !== null);
+    if (new Set(normalized).size !== normalized.length) {
+      errors.push(`strict_dispatch.${field}: duplicate normalized path`);
+    }
+  }
+
+  const budgetFields = [
+    'max_changed_files',
+    'max_wall_seconds',
+    'max_output_bytes',
+    'max_tool_calls',
+    'max_engine_attempts',
+  ];
+  if (validateClosedObject(dispatch.budget, 'strict_dispatch.budget', budgetFields, errors)) {
+    requireInteger(
+      dispatch.budget.max_changed_files,
+      'strict_dispatch.budget.max_changed_files',
+      1,
+      Number.MAX_SAFE_INTEGER,
+      errors,
+    );
+    requireInteger(
+      dispatch.budget.max_wall_seconds,
+      'strict_dispatch.budget.max_wall_seconds',
+      1,
+      Number.MAX_SAFE_INTEGER,
+      errors,
+    );
+    for (const field of ['max_output_bytes', 'max_tool_calls', 'max_engine_attempts']) {
+      requireInteger(
+        dispatch.budget[field],
+        `strict_dispatch.budget.${field}`,
+        0,
+        Number.MAX_SAFE_INTEGER,
+        errors,
+      );
+    }
+    if (dispatch.budget.max_changed_files !== contract.max_changed_files) {
+      errors.push('strict_dispatch.budget.max_changed_files: must equal max_changed_files');
+    }
+    if (dispatch.budget.max_wall_seconds !== contract.max_wall_seconds) {
+      errors.push('strict_dispatch.budget.max_wall_seconds: must equal max_wall_seconds');
+    }
+  }
+  validateUniqueStrings(dispatch.verification_commands, 'strict_dispatch.verification_commands', {
+    minimum: 1,
+    maximum: 128,
+    maxLength: 4096,
+  }, errors);
+  if (Array.isArray(dispatch.verification_commands)
+      && dispatch.verification_commands.join(' && ') !== contract.verify_cmd) {
+    errors.push('strict_dispatch.verification_commands: must project exactly to verify_cmd');
+  }
+  return errors;
 }
 
 function validateContract(contract, context) {
@@ -447,6 +646,10 @@ function validateContract(contract, context) {
     maxLength: 128,
     pattern: /^[A-Za-z][A-Za-z0-9_-]*[0-9]+$/,
   }, errors);
+  errors.push(...validateMissionProjection(
+    contract,
+    context && context.requireMissionProjection === true,
+  ));
   return errors;
 }
 
@@ -571,6 +774,60 @@ function mintMissionGrantBindingFromStateFile({
         3,
       );
     }
+    const projectionErrors = validateMissionProjection(contract, true);
+    if (projectionErrors.length > 0) {
+      throw new CliError(
+        `mission_grant_ref: ${projectionErrors.join('; ')}`,
+        3,
+      );
+    }
+    const graph = state.execution_graph;
+    const nodes = graph && Array.isArray(graph.nodes) ? graph.nodes : [];
+    const node = nodes.find((entry) => entry.id === claim.graph_node_id);
+    if (!node) {
+      throw new CliError(
+        'mission_grant_ref: v2 claim graph node is absent from frozen Mission graph',
+        3,
+      );
+    }
+    const expectedRuntime = {
+      schema_version: 1,
+      root_run_id: state.root_run_id,
+      mission_lineage_id: state.mission_lineage_id,
+      mission_policy_digest: state.mission_policy_digest || state.policy_hash,
+      mission_graph_digest: state.mission_graph_digest,
+      graph_node_id: node.id,
+      graph_node_digest: mission.sha256(mission.canonicalJson(node)),
+    };
+    const expectedDispatch = {
+      schema_version: 1,
+      spec: node.campaign.spec,
+      required_paths: node.campaign.required_paths,
+      output_paths: node.campaign.output_paths,
+      allowed_path_prefixes: node.campaign.allowed_path_prefixes,
+      budget: {
+        max_changed_files: node.campaign.max_changed_files,
+        max_wall_seconds: node.campaign.max_wall_seconds,
+        max_output_bytes: node.reservation.output_bytes,
+        max_tool_calls: node.reservation.tool_calls,
+        max_engine_attempts: node.reservation.engine_attempts,
+      },
+      verification_commands: node.verification_commands,
+    };
+    if (mission.canonicalJson(contract.mission_runtime)
+        !== mission.canonicalJson(expectedRuntime)) {
+      throw new CliError(
+        'mission_grant_ref: mission_runtime does not match frozen Mission state',
+        3,
+      );
+    }
+    if (mission.canonicalJson(contract.strict_dispatch)
+        !== mission.canonicalJson(expectedDispatch)) {
+      throw new CliError(
+        'mission_grant_ref: strict_dispatch does not match frozen Mission graph node',
+        3,
+      );
+    }
     try {
       subjectDigest = identity.missionSubjectDigest(contract);
       campaignId = identity.missionCampaignIdFor(
@@ -607,13 +864,13 @@ function mintMissionGrantBindingFromStateFile({
     const claimAccept = Array.isArray(claim.acceptance_ids)
       ? [...claim.acceptance_ids].map(String).sort()
       : [];
-    const contractAccept = Array.isArray(contract.rubric_ids)
-      ? [...contract.rubric_ids].map(String).sort()
+    const contractAccept = Array.isArray(contract.vertical_acceptance)
+      ? [...contract.vertical_acceptance].map(String).sort()
       : [];
     if (claimAccept.length !== contractAccept.length
         || claimAccept.some((id, i) => id !== contractAccept[i])) {
       throw new CliError(
-        'mission_grant_ref: claim acceptance_ids do not match the sealed contract rubric_ids',
+        'mission_grant_ref: claim acceptance_ids do not match vertical_acceptance',
         3,
       );
     }
@@ -848,6 +1105,23 @@ function inspectSealedCampaignContract({
   }
 
   const seal = loadSeal(sealPath, contractFile);
+  if (seal.identity_scheme === 'mission-subject-v2') {
+    const v2Errors = validateContract(contractFile.value, {
+      repo,
+      repoIdentity,
+      objectFormat,
+      missionMode,
+      requireMissionProjection: true,
+    });
+    if (v2Errors.length > 0) {
+      return {
+        ok: false,
+        verdict: 'REJECTED',
+        contract_sha256: contractFile.digest,
+        errors: v2Errors,
+      };
+    }
+  }
   const drift = [];
   if (seal.contract_sha256 !== contractFile.digest) drift.push('contract_sha256');
   if (seal.contract_path !== contractFile.path) drift.push('contract_path');

@@ -36,6 +36,46 @@ const lines = [];
 const check = (id, value) => lines.push(`${id}\t${value ? 'PASS' : 'FAIL'}`);
 const shaBytes = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const repoIdentity = `git-common-dir:${common}`;
+const missionLineageId = 'lineage-v1-' + m.sha256('roundtrip-lineage');
+const missionPolicyDigest = m.sha256('roundtrip-mission-policy');
+const rootRunId = 'roundtrip-root';
+const graphNode = {
+  id: 'roundtrip-node',
+  source_plan_ids: ['MISSION'],
+  source_rubric_ids: ['MISSION-P2-SUBJECT1'],
+  dependencies: [],
+  acceptance_ids: ['constructible enforce identity roundtrip'],
+  verification_commands: ['node fixture.js'],
+  gate_attempt_budget: 2,
+  reservation: {
+    campaigns: 1,
+    wall_seconds: 0,
+    tool_calls: 1,
+    engine_attempts: 0,
+    external_wait_seconds: 0,
+    canonical_changed_files: 0,
+    output_bytes: 0,
+  },
+  campaign: {
+    profile: 'poc',
+    allowed_path_prefixes: ['src/'],
+    spec: { path: 'src/value.txt', section: 'Roundtrip' },
+    required_paths: ['src/value.txt'],
+    output_paths: ['src/value.txt'],
+    max_changed_files: 4,
+    baseline_churn: 10,
+    max_growth_ratio: 1.5,
+    max_extra_churn: 5,
+    max_repair_generations: 2,
+    max_wall_seconds: 120,
+  },
+};
+const executionGraph = {
+  schema_version: 1,
+  artifact_type: 'mission_execution_graph',
+  nodes: [graphNode],
+};
+const missionGraphDigest = m.sha256(m.canonicalJson(executionGraph));
 const draft = {
   schema_version: 1,
   ticket: 'mission-p2-roundtrip',
@@ -54,6 +94,30 @@ const draft = {
   max_wall_seconds: 120,
   verify_cmd: 'node fixture.js',
   rubric_ids: ['MISSION-P2-SUBJECT1'],
+  mission_runtime: {
+    schema_version: 1,
+    root_run_id: rootRunId,
+    mission_lineage_id: missionLineageId,
+    mission_policy_digest: missionPolicyDigest,
+    mission_graph_digest: missionGraphDigest,
+    graph_node_id: graphNode.id,
+    graph_node_digest: m.sha256(m.canonicalJson(graphNode)),
+  },
+  strict_dispatch: {
+    schema_version: 1,
+    spec: graphNode.campaign.spec,
+    required_paths: graphNode.campaign.required_paths,
+    output_paths: graphNode.campaign.output_paths,
+    allowed_path_prefixes: graphNode.campaign.allowed_path_prefixes,
+    budget: {
+      max_changed_files: graphNode.campaign.max_changed_files,
+      max_wall_seconds: graphNode.campaign.max_wall_seconds,
+      max_output_bytes: graphNode.reservation.output_bytes,
+      max_tool_calls: graphNode.reservation.tool_calls,
+      max_engine_attempts: graphNode.reservation.engine_attempts,
+    },
+    verification_commands: graphNode.verification_commands,
+  },
 };
 
 const subjectFn = engine.missionSubjectDigest;
@@ -72,9 +136,21 @@ if (typeof subjectFn === 'function' && typeof campaignIdFn === 'function') {
     artifact_type: 'mission_convergence_contract',
     contract_id: 'mission-v1-' + m.sha256('roundtrip'),
     repo_identity: repoIdentity,
-    mission_lineage_id: 'lineage-v1-' + m.sha256('roundtrip-lineage'),
+    mission_lineage_id: missionLineageId,
     task_authority_id: m.sha256('roundtrip-authority'),
     policy_hash: m.sha256('roundtrip-policy'),
+    mission_policy_digest: missionPolicyDigest,
+    mission_graph_digest: missionGraphDigest,
+    initial_required_acceptance_hashes: [
+      m.sha256('roundtrip-initial-acceptance'),
+    ],
+    required_acceptance_hashes: [
+      m.sha256(m.canonicalJson({
+        schema_version: 1,
+        acceptance_id: graphNode.acceptance_ids[0],
+      })),
+    ],
+    execution_graph: executionGraph,
     enforcement_mode: 'enforce',
     state: 'DRAFT',
     closure_ratio: 0.75,
@@ -95,7 +171,7 @@ if (typeof subjectFn === 'function' && typeof campaignIdFn === 'function') {
     },
     lineage_binding: {
       task_authority_id: m.sha256('roundtrip-authority'),
-      root_run_id: 'roundtrip-root',
+      root_run_id: rootRunId,
       policy_hash: m.sha256('roundtrip-policy'),
       successor_inherits_durable_consumed: true,
     },
@@ -123,7 +199,11 @@ if (typeof subjectFn === 'function' && typeof campaignIdFn === 'function') {
       mission_subject_digest: subject,
       campaign_contract_digest: subject,
       base_sha: base,
-      acceptance_ids: draft.rubric_ids,
+      acceptance_ids: draft.vertical_acceptance,
+      acceptance_hashes: missionContract.required_acceptance_hashes,
+      graph_node_id: graphNode.id,
+      graph_attempt: 1,
+      campaign_contract_draft: draft,
       reservation,
       issued_at: '2026-07-27T00:00:00.000Z',
       expires_at: '2026-07-27T01:00:00.000Z',
@@ -200,7 +280,9 @@ if (typeof subjectFn === 'function' && typeof campaignIdFn === 'function') {
     '--contract', mutatedPath, '--repo', repo, '--mission-mode', 'enforce',
     '--mission-state', statePath, '--out', `${sealPath}.mutated`], { encoding: 'utf8' });
   check('governed-field-mutation-rejected', mutation.status === 3
-    && /subject|binding|grant/i.test(mutation.stdout));
+    && /subject|binding|grant|strict_dispatch|projection/i.test(
+      mutation.stdout + mutation.stderr,
+    ));
 
   fs.appendFileSync(contractPath, ' ');
   const drift = spawnSync(process.execPath, [checker, 'check',

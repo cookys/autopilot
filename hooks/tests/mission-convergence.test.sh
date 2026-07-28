@@ -168,6 +168,32 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`projection-raw-transcript-false\t${p.raw_transcript_present === false ? 'PASS' : 'FAIL'}`);
   }
   {
+    // Runtime v2 freezes the complete required acceptance set. Projection
+    // reports required minus satisfied, never the satisfied set itself.
+    const required = [m.sha256('acceptance-a'), m.sha256('acceptance-b')].sort();
+    const s0 = createMissionState({
+      ...makeContract(),
+      required_acceptance_hashes: required,
+    });
+    const p0 = buildProjection(s0);
+    const a = reduceMissionState(s0, {
+      event_type: 'acceptance_satisfied',
+      sequence: 1,
+      mission_lineage_id: s0.mission_lineage_id,
+      payload: { acceptance_hash: required[0] },
+    });
+    const p1 = buildProjection(a.state);
+    console.log(`required-acceptance-frozen-direct\t${
+      JSON.stringify(s0.required_acceptance_hashes) === JSON.stringify(required)
+        ? 'PASS' : 'FAIL'}`);
+    console.log(`remaining-acceptance-initial-direct\t${
+      JSON.stringify(p0.remaining_acceptance) === JSON.stringify(required)
+        ? 'PASS' : 'FAIL'}`);
+    console.log(`remaining-acceptance-subtracts-satisfied-direct\t${
+      JSON.stringify(p1.remaining_acceptance) === JSON.stringify([required[1]])
+        ? 'PASS' : 'FAIL'}`);
+  }
+  {
     // Terminal reconcile once: second reconcile is replay_noop.
     const s0 = createMissionState(makeContract());
     const a = reduceMissionState(s0, claimEvent(s0, { idempotency_key: 'recon-direct', reserved: 4 }));
@@ -1638,7 +1664,10 @@ for id in \
   replay-same-claim-id-direct replay-no-double-reserve-direct \
   double-release-rejected-direct \
   binding-mismatch-direct projection-roundtrip-hash-equal \
-  projection-raw-transcript-false terminal-reconcile-replay-noop-direct \
+  projection-raw-transcript-false \
+  required-acceptance-frozen-direct remaining-acceptance-initial-direct \
+  remaining-acceptance-subtracts-satisfied-direct \
+  terminal-reconcile-replay-noop-direct \
   successor-inherits-direct \
   successor-inherits-lineage successor-inherits-task-authority \
   successor-inherits-policy-hash \

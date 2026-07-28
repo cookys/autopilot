@@ -9,6 +9,7 @@
     { "$ref": "#/$defs/grant_rejected" },
     { "$ref": "#/$defs/no_effect_release" },
     { "$ref": "#/$defs/reconciliation_receipt" },
+    { "$ref": "#/$defs/campaign_terminal_receipt" },
     { "$ref": "#/$defs/closure_allowlist_receipt" },
     { "$ref": "#/$defs/authenticated_control_receipt" },
     { "$ref": "#/$defs/terminal_receipt" }
@@ -40,6 +41,145 @@
         "durable_consumed": { "type": "integer", "minimum": 0 },
         "active_actual": { "type": "integer", "minimum": 0 },
         "known": { "type": "boolean" }
+      }
+    },
+    "campaign_terminal_receipt": {
+      "oneOf": [
+        { "$ref": "#/$defs/campaign_terminal_receipt_v1" },
+        { "$ref": "#/$defs/campaign_terminal_receipt_v2" }
+      ]
+    },
+    "campaign_terminal_receipt_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "claim_id",
+        "mission_lineage_id",
+        "campaign_id",
+        "campaign_contract_digest",
+        "actual_usage",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "campaign_terminal_receipt" },
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "mission_lineage_id": {
+          "type": "string",
+          "pattern": "^lineage-v1-[0-9a-f]{64}$"
+        },
+        "campaign_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "campaign_contract_digest": { "$ref": "#/$defs/sha256" },
+        "actual_usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "campaign_terminal_receipt_v2": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": { "const": "ready" }
+            },
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {
+              "satisfied_acceptance_hashes": { "minItems": 1 }
+            }
+          },
+          "else": {
+            "properties": {
+              "satisfied_acceptance_hashes": { "maxItems": 0 }
+            }
+          }
+        }
+      ],
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "claim_id",
+        "mission_lineage_id",
+        "campaign_id",
+        "mission_campaign_id",
+        "icc_campaign_id",
+        "campaign_contract_digest",
+        "raw_campaign_contract_digest",
+        "graph_node_id",
+        "graph_attempt",
+        "outcome",
+        "possibly_effectful",
+        "actual_usage",
+        "satisfied_acceptance_hashes",
+        "observed_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "campaign_terminal_receipt" },
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "mission_lineage_id": {
+          "type": "string",
+          "pattern": "^lineage-v1-[0-9a-f]{64}$"
+        },
+        "campaign_id": {
+          "type": "string",
+          "pattern": "^campaign-v2-[0-9a-f]{64}$"
+        },
+        "mission_campaign_id": {
+          "type": "string",
+          "pattern": "^campaign-v2-[0-9a-f]{64}$"
+        },
+        "icc_campaign_id": {
+          "type": "string",
+          "pattern": "^campaign-v1-[0-9a-f]{64}$"
+        },
+        "campaign_contract_digest": { "$ref": "#/$defs/sha256" },
+        "raw_campaign_contract_digest": { "$ref": "#/$defs/sha256" },
+        "graph_node_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "graph_attempt": { "type": "integer", "minimum": 1 },
+        "outcome": {
+          "type": "string",
+          "enum": ["ready", "follow_up", "blocked", "abort", "unknown"]
+        },
+        "possibly_effectful": { "type": "boolean", "const": true },
+        "actual_usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "satisfied_acceptance_hashes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
       }
     },
     "grant_claimed": {

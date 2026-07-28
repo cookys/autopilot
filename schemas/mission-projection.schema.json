@@ -28,8 +28,23 @@
     "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
     "task_authority_id": { "$ref": "#/$defs/sha256" },
     "policy_hash": { "$ref": "#/$defs/sha256" },
+    "mission_policy_digest": { "$ref": "#/$defs/sha256" },
+    "mission_graph_digest": {
+      "oneOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "initial_required_acceptance_hashes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "mission_terminal": { "type": "boolean", "const": false },
     "enforcement_mode": { "type": "string", "enum": ["shadow", "enforce"] },
     "closure_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+    "max_stagnant_campaigns": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "successor_inherits_durable_consumed": { "type": "boolean" },
     "state_snapshot": {
       "type": "object",
       "additionalProperties": false,
@@ -40,7 +55,9 @@
         "control_sequence",
         "closure_allowlist",
         "stagnant_campaigns",
+        "required_acceptance_hashes",
         "acceptance_hashes",
+        "graph_progress",
         "unknown_required_axes",
         "event_digests"
       ],
@@ -64,7 +81,16 @@
         "control_sequence": { "type": "integer", "minimum": 0 },
         "closure_allowlist": { "type": "array", "items": { "type": "string" } },
         "stagnant_campaigns": { "type": "integer", "minimum": 0 },
+        "required_acceptance_hashes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
         "acceptance_hashes": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+        "graph_progress": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/graph_progress" }
+        },
         "unknown_required_axes": { "type": "array", "items": { "type": "string" } },
         "event_digests": { "type": "array", "items": { "$ref": "#/$defs/sha256" } }
       }
@@ -146,6 +172,8 @@
       }
     },
     "raw_transcript_present": { "type": "boolean", "const": false },
+    "config_snapshot": { "type": "object" },
+    "config_digest": { "$ref": "#/$defs/sha256" },
     "state_hash": { "$ref": "#/$defs/sha256" },
     "projection_digest": { "$ref": "#/$defs/sha256" }
   },
@@ -186,12 +214,64 @@
       "properties": {
         "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
         "idempotency_key": { "type": "string" },
+        "binding_digest": { "$ref": "#/$defs/sha256" },
+        "identity_scheme": { "type": ["string", "null"] },
+        "mission_lineage_id": { "type": ["string", "null"] },
+        "task_authority_id": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "campaign_id": { "type": ["string", "null"] },
+        "campaign_contract_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "mission_subject_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256" },
+            { "type": "null" }
+          ]
+        },
+        "base_sha": { "type": ["string", "null"] },
+        "acceptance_ids": { "type": "array", "items": { "type": "string" } },
+        "acceptance_hashes": { "type": "array", "items": { "$ref": "#/$defs/sha256" } },
+        "graph_node_id": { "type": ["string", "null"] },
+        "graph_attempt": { "type": ["integer", "null"], "minimum": 1 },
+        "campaign_contract_draft": { "type": ["object", "null"] },
         "terminal": { "type": "boolean" },
         "released": { "type": "boolean" },
         "reconciled": { "type": "boolean" },
         "reservation": { "type": "object" },
         "actual": { "type": ["object", "null"] },
         "event_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "graph_progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "attempts", "terminal_count", "active_claim_id"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "active", "ready", "follow_up", "blocked", "abort", "unknown"]
+        },
+        "attempts": { "type": "integer", "minimum": 0 },
+        "terminal_count": { "type": "integer", "minimum": 0 },
+        "active_claim_id": {
+          "oneOf": [
+            { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+            { "type": "null" }
+          ]
+        },
+        "last_outcome": {
+          "type": "string",
+          "enum": ["ready", "follow_up", "blocked", "abort", "unknown"]
+        },
+        "last_receipt_digest": { "$ref": "#/$defs/sha256" }
       }
     },
     "decision_entry": {

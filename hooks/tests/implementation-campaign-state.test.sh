@@ -11,6 +11,7 @@ const {
   CAMPAIGN_STATES: S,
   CampaignStateError,
   campaignIdFor,
+  canonicalDigest,
   createCampaignState,
   reduceCampaignState,
   validateInitialCampaignState,
@@ -397,6 +398,64 @@ expectCode('REGISTRY_INCOMPLETE', () => apply(
   { changed: 1, churn: 2 },
 ));
 
+sequence = 0;
+const mutationStart = event(
+  E.IMPLEMENTATION_STARTED,
+  0,
+  { sealed_contract: true },
+  { key: 'mutation-start', stage: 'owned-stage' },
+);
+const mutationLeased = reduceCampaignState(initial(), mutationStart);
+const failureDigest = 'b'.repeat(64);
+const mutationFailure = event(
+  E.MUTATION_FAILED,
+  0,
+  {
+    reason: 'runner exited after mutation may have started',
+    failure_receipt_digest: failureDigest,
+    possibly_effectful: true,
+  },
+  {
+    key: 'mutation-failed',
+    stage: 'owned-stage',
+    output: canonicalDigest({ kind: 'campaign_terminal', digest: failureDigest }),
+  },
+);
+const mutationStopped = reduceCampaignState(mutationLeased, mutationFailure);
+assert.strictEqual(mutationStopped.phase, S.TERMINAL_STOP);
+assert.strictEqual(mutationStopped.live_lease, null);
+assert.strictEqual(
+  mutationStopped.terminal_reason,
+  'runner exited after mutation may have started',
+);
+assert.strictEqual(
+  reduceCampaignState(mutationStopped, mutationFailure),
+  mutationStopped,
+);
+expectCode('IDEMPOTENCY_CONFLICT', () => reduceCampaignState(mutationStopped, {
+  ...mutationFailure,
+  payload: {
+    ...mutationFailure.payload,
+    reason: 'changed replay must conflict',
+  },
+}));
+expectCode('LEASE_FENCED', () => reduceCampaignState(mutationLeased, {
+  ...mutationFailure,
+  idempotency_key: 'wrong-owner-failure',
+  stage_identity: 'other-stage',
+}));
+expectCode('MUTATION_FAILURE_EVIDENCE_REQUIRED', () => reduceCampaignState(
+  mutationLeased,
+  {
+    ...mutationFailure,
+    idempotency_key: 'no-effect-failure',
+    payload: {
+      ...mutationFailure.payload,
+      possibly_effectful: false,
+    },
+  },
+));
+
 console.log('valid_terminal=true');
 console.log('contract_digest_namespaces_campaign=true');
 console.log('valid_resume=true');
@@ -421,6 +480,10 @@ console.log('terminal_registry_required=true');
 console.log('initial_identity_recomputed=true');
 console.log('resume_authority_preserved=true');
 console.log('mutation_requires_remaining_wall_budget=true');
+console.log('mutation_failure_terminalizes_lease=true');
+console.log('mutation_failure_replay_safe=true');
+console.log('mutation_failure_owner_fenced=true');
+console.log('mutation_failure_effect_state_required=true');
 NODE
 )"
 PURE_EXIT=$?
@@ -432,7 +495,9 @@ for key in valid_terminal contract_digest_namespaces_campaign valid_resume valid
   repair_ceiling_enforced resume_budget_reset_rejected resume_clock_reset_rejected \
   idempotency_conflict_rejected payload_unknown_field_rejected \
   artifact_chain_break_rejected terminal_registry_required initial_identity_recomputed \
-  resume_authority_preserved mutation_requires_remaining_wall_budget; do
+  resume_authority_preserved mutation_requires_remaining_wall_budget \
+  mutation_failure_terminalizes_lease mutation_failure_replay_safe \
+  mutation_failure_owner_fenced mutation_failure_effect_state_required; do
   assert_contains "$PURE_OUT" "$key=true" "pure reducer proves $key"
 done
 
@@ -498,6 +563,7 @@ INTAKE_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" "$BASE_SH
   "$DRIFT_CONTRACT" "$DRIFT_SEAL" <<'NODE'
 'use strict';
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const [
@@ -894,6 +960,138 @@ function campaignControlFixture(nonce, initialState = admitted.initial_state) {
     steps: [],
   };
 }
+
+const terminalOrder = [];
+const terminalContractPath = path.join(repo, 'mission-terminal-campaign.json');
+const terminalContract = {
+  ...admitted.contract,
+  mission_grant_ref: 'd'.repeat(64),
+  mission_runtime: {
+    schema_version: 1,
+    root_run_id: 'mission-runtime-engine-test',
+    mission_lineage_id: `lineage-v1-${'a'.repeat(64)}`,
+    mission_policy_digest: 'b'.repeat(64),
+    mission_graph_digest: 'c'.repeat(64),
+    graph_node_id: 'engine-terminal',
+    graph_node_digest: 'e'.repeat(64),
+  },
+};
+const terminalContractBytes = `${JSON.stringify(terminalContract, null, 2)}\n`;
+fs.writeFileSync(terminalContractPath, terminalContractBytes);
+const terminalContractDigest = crypto.createHash('sha256')
+  .update(terminalContractBytes)
+  .digest('hex');
+const terminalCampaignId = `campaign-v1-${'f'.repeat(64)}`;
+const terminalClaimId = `claim-v1-${'1'.repeat(64)}`;
+function durableFailureControl() {
+  return {
+    ...campaignControlFixture('durable-failure'),
+    campaign_id: terminalCampaignId,
+    contract_digest: terminalContractDigest,
+    contract: terminalContract,
+    contract_path: terminalContractPath,
+    mission_claim: {
+      claim_id: terminalClaimId,
+      campaign_id: `campaign-v1-${'2'.repeat(64)}`,
+    },
+    initial_state: {
+      ...admitted.initial_state,
+      phase: 'IMPLEMENTING',
+      generation: 0,
+      event_count: 1,
+      live_lease: {
+        stage_identity: 'campaign-mutation:0',
+        generation: 0,
+        acquired_at: '2026-07-26T00:00:00.000Z',
+      },
+    },
+    generation_claim: {
+      ledger: campaignLedger,
+      generation: 1,
+      nonce: 'durable-failure',
+      stage_identity: 'run-ledger:1:durable-failure',
+      durable_journal: true,
+    },
+  };
+}
+let terminalEventInput = null;
+let terminalMissionInput = null;
+const terminalStore = {
+  load() { return {}; },
+  save() { return true; },
+  journalTerminal() { return { status: 'journaled' }; },
+  markTerminalApplied() { return true; },
+};
+const durableTerminalEngine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:05.000Z',
+  missionCampaignStore: terminalStore,
+  campaignEventAppender(input) {
+    terminalOrder.push('icc');
+    terminalEventInput = input;
+    return {
+      status: 'appended',
+      event: {
+        event_type: input.eventType,
+        timestamp: input.observedAt,
+      },
+      state: {
+        ...input.campaignControl.initial_state,
+        phase: 'TERMINAL_STOP',
+        live_lease: null,
+        event_count: input.campaignControl.initial_state.event_count + 1,
+      },
+    };
+  },
+  missionTerminalReconciler(input) {
+    terminalOrder.push('mission');
+    terminalMissionInput = input;
+    return { status: 'applied' };
+  },
+  campaignAdmissionCompleter() {
+    terminalOrder.push('complete');
+    return { status: 'completed' };
+  },
+});
+const durableFailure = durableTerminalEngine.terminalizeManagedCampaignFailure({
+  campaignControl: durableFailureControl(),
+  reason: 'fixture mutation failed after dispatch',
+  phase: 'implementation',
+  cwd: repo,
+});
+console.log(`durable_failure_status=${durableFailure.status}`);
+console.log(`durable_failure_order=${terminalOrder.join(',')}`);
+console.log(`durable_failure_event=${terminalEventInput.eventType}`);
+console.log(`durable_failure_effect=${terminalEventInput.payload.possibly_effectful}`);
+console.log(`durable_failure_frozen_time=${
+  terminalEventInput.observedAt === terminalMissionInput.observedAt
+}`);
+console.log(`durable_failure_icc_id=${terminalMissionInput.iccCampaignId === terminalCampaignId}`);
+console.log(`durable_failure_mission_claim=${terminalMissionInput.claimId === terminalClaimId}`);
+
+let rejectedCompletionCalls = 0;
+const rejectedTerminalEngine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:06.000Z',
+  missionCampaignStore: terminalStore,
+  campaignEventAppender: durableTerminalEngine.campaignEventAppender,
+  missionTerminalReconciler() {
+    return { status: 'rejected', reason: 'fixture Mission CAS rejection' };
+  },
+  campaignAdmissionCompleter() {
+    rejectedCompletionCalls += 1;
+    return { status: 'completed' };
+  },
+});
+const rejectedTerminal = rejectedTerminalEngine.terminalizeManagedCampaignFailure({
+  campaignControl: durableFailureControl(),
+  reason: 'fixture rejected reconciliation',
+  phase: 'implementation',
+  cwd: repo,
+});
+console.log(`rejected_terminal_phase=${rejectedTerminal.phase}`);
+console.log(`rejected_terminal_completion_calls=${rejectedCompletionCalls}`);
+
 let phaseResumeImplementationCalls = 0;
 let phaseResumeReleaseCalls = 0;
 const resumedPastMutation = new AutopilotEngine({
@@ -1452,12 +1650,30 @@ assert_contains "$INTAKE_OUT" "invalid_max_phase=prepare_implementation_loop" \
   "invalid loop limits fail during effect-free local preflight"
 assert_contains "$INTAKE_OUT" "invalid_max_intake_calls=0" \
   "invalid loop limits cannot acquire a campaign claim or lease"
+assert_contains "$INTAKE_OUT" "durable_failure_status=terminalized" \
+  "possibly-effectful managed failure reaches one durable terminal state"
+assert_contains "$INTAKE_OUT" "durable_failure_order=icc,mission,complete" \
+  "ICC terminal journal precedes Mission reconciliation and admission completion"
+assert_contains "$INTAKE_OUT" "durable_failure_event=mutation_failed" \
+  "live mutation lease closes through mutation_failed"
+assert_contains "$INTAKE_OUT" "durable_failure_effect=true" \
+  "mutation failure explicitly records the possibly-effectful state"
+assert_contains "$INTAKE_OUT" "durable_failure_frozen_time=true" \
+  "ICC and Mission terminal records share one frozen timestamp"
+assert_contains "$INTAKE_OUT" "durable_failure_icc_id=true" \
+  "Mission terminal reconciliation binds the ICC v1 campaign id"
+assert_contains "$INTAKE_OUT" "durable_failure_mission_claim=true" \
+  "Mission terminal reconciliation binds the Mission v2 claim id"
+assert_contains "$INTAKE_OUT" "rejected_terminal_phase=mission_terminal_reconciliation" \
+  "Mission reconciliation rejection remains a blocked engine phase"
+assert_contains "$INTAKE_OUT" "rejected_terminal_completion_calls=1" \
+  "ICC admission closes even when Mission reconciliation is recoverably blocked"
 assert_contains "$INTAKE_OUT" "phase_resume_status=blocked" \
   "a non-PREPARED managed resume blocks until phase-aware dispatch exists"
 assert_contains "$INTAKE_OUT" "phase_resume_calls=0" \
   "a completed mutation cannot be replayed by managed resume"
-assert_contains "$INTAKE_OUT" "phase_resume_release_calls=1" \
-  "unsupported phase resume releases its unused admission"
+assert_contains "$INTAKE_OUT" "phase_resume_release_calls=0" \
+  "projected post-mutation phase cannot take the no-effect admission release"
 assert_contains "$INTAKE_OUT" "file_budget_phase=campaign_wall_budget" \
   "changed-file exhaustion blocks at the mutation budget gate"
 assert_contains "$INTAKE_OUT" "file_budget_calls=0" \

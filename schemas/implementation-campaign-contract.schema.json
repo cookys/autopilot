@@ -9,6 +9,10 @@
     "internal-pilot": 5,
     "production": 5
   },
+  "x-optional-properties": [
+    "mission_runtime",
+    "strict_dispatch"
+  ],
   "type": "object",
   "required": [
     "schema_version",
@@ -111,6 +115,105 @@
         "type": "string",
         "pattern": "^[A-Za-z][A-Za-z0-9_-]*[0-9]+$"
       }
+    },
+    "mission_runtime": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "root_run_id",
+        "mission_lineage_id",
+        "mission_policy_digest",
+        "mission_graph_digest",
+        "graph_node_id",
+        "graph_node_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "root_run_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "mission_lineage_id": {
+          "type": "string",
+          "pattern": "^lineage-v1-[0-9a-f]{64}$"
+        },
+        "mission_policy_digest": { "$ref": "#/$defs/sha256" },
+        "mission_graph_digest": { "$ref": "#/$defs/sha256" },
+        "graph_node_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "graph_node_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "strict_dispatch": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "spec",
+        "required_paths",
+        "output_paths",
+        "allowed_path_prefixes",
+        "budget",
+        "verification_commands"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "spec": {
+          "type": "object",
+          "required": ["path", "section"],
+          "properties": {
+            "path": { "$ref": "#/$defs/relativePath" },
+            "section": { "type": "string", "minLength": 1, "maxLength": 512 }
+          },
+          "additionalProperties": false
+        },
+        "required_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "output_paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "allowed_path_prefixes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "budget": {
+          "type": "object",
+          "required": [
+            "max_changed_files",
+            "max_wall_seconds",
+            "max_output_bytes",
+            "max_tool_calls",
+            "max_engine_attempts"
+          ],
+          "properties": {
+            "max_changed_files": { "type": "integer", "minimum": 1 },
+            "max_wall_seconds": { "type": "integer", "minimum": 1 },
+            "max_output_bytes": { "type": "integer", "minimum": 0 },
+            "max_tool_calls": { "type": "integer", "minimum": 0 },
+            "max_engine_attempts": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "verification_commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
@@ -136,6 +239,11 @@
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
     }
   }
 }

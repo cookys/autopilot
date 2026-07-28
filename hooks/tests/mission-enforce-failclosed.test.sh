@@ -37,6 +37,50 @@ const { runCampaignIntake } = require(path.join(root, 'src', 'engine', 'campaign
 const lines = [];
 const check = (id, value) => lines.push(`${id}\t${value ? 'PASS' : 'FAIL'}`);
 const repoIdentity = `git-common-dir:${common}`;
+const missionLineageId = 'lineage-v1-' + m.sha256('fc-lineage');
+const missionPolicyDigest = m.sha256('fc-mission-policy');
+const rootRunId = 'fc-root';
+const graphNode = {
+  id: 'failclosed-node',
+  source_plan_ids: ['MISSION'],
+  source_rubric_ids: ['FC-P2-1'],
+  dependencies: [],
+  acceptance_ids: ['fail-closed regression'],
+  verification_commands: ['node fixture.js'],
+  gate_attempt_budget: 2,
+  reservation: {
+    campaigns: 1,
+    wall_seconds: 0,
+    tool_calls: 1,
+    engine_attempts: 0,
+    external_wait_seconds: 0,
+    canonical_changed_files: 0,
+    output_bytes: 0,
+  },
+  campaign: {
+    profile: 'poc',
+    allowed_path_prefixes: ['src/'],
+    spec: { path: 'src/value.txt', section: 'Fail closed' },
+    required_paths: ['src/value.txt'],
+    output_paths: ['src/value.txt'],
+    max_changed_files: 4,
+    baseline_churn: 10,
+    max_growth_ratio: 1.5,
+    max_extra_churn: 5,
+    max_repair_generations: 2,
+    max_wall_seconds: 120,
+  },
+};
+const executionGraph = {
+  schema_version: 1,
+  artifact_type: 'mission_execution_graph',
+  nodes: [graphNode],
+};
+const missionGraphDigest = m.sha256(m.canonicalJson(executionGraph));
+const acceptanceHash = m.sha256(m.canonicalJson({
+  schema_version: 1,
+  acceptance_id: graphNode.acceptance_ids[0],
+}));
 
 const draft = {
   schema_version: 1,
@@ -56,10 +100,41 @@ const draft = {
   max_wall_seconds: 120,
   verify_cmd: 'node fixture.js',
   rubric_ids: ['FC-P2-1'],
+  mission_runtime: {
+    schema_version: 1,
+    root_run_id: rootRunId,
+    mission_lineage_id: missionLineageId,
+    mission_policy_digest: missionPolicyDigest,
+    mission_graph_digest: missionGraphDigest,
+    graph_node_id: graphNode.id,
+    graph_node_digest: m.sha256(m.canonicalJson(graphNode)),
+  },
+  strict_dispatch: {
+    schema_version: 1,
+    spec: graphNode.campaign.spec,
+    required_paths: graphNode.campaign.required_paths,
+    output_paths: graphNode.campaign.output_paths,
+    allowed_path_prefixes: graphNode.campaign.allowed_path_prefixes,
+    budget: {
+      max_changed_files: graphNode.campaign.max_changed_files,
+      max_wall_seconds: graphNode.campaign.max_wall_seconds,
+      max_output_bytes: graphNode.reservation.output_bytes,
+      max_tool_calls: graphNode.reservation.tool_calls,
+      max_engine_attempts: graphNode.reservation.engine_attempts,
+    },
+    verification_commands: graphNode.verification_commands,
+  },
 };
 
 const subject = engine.missionSubjectDigest(draft);
 const campaignId = engine.missionCampaignIdFor(repoIdentity, draft.ticket, subject);
+const graphClaimFields = {
+  acceptance_ids: draft.vertical_acceptance,
+  acceptance_hashes: [acceptanceHash],
+  graph_node_id: graphNode.id,
+  graph_attempt: 1,
+  campaign_contract_draft: draft,
+};
 
 function buildMissionContract(authoritySeed) {
   return {
@@ -67,9 +142,14 @@ function buildMissionContract(authoritySeed) {
     artifact_type: 'mission_convergence_contract',
     contract_id: 'mission-v1-' + m.sha256('fc-' + authoritySeed),
     repo_identity: repoIdentity,
-    mission_lineage_id: 'lineage-v1-' + m.sha256('fc-lineage'),
+    mission_lineage_id: missionLineageId,
     task_authority_id: m.sha256('fc-authority-' + authoritySeed),
     policy_hash: m.sha256('fc-policy'),
+    mission_policy_digest: missionPolicyDigest,
+    mission_graph_digest: missionGraphDigest,
+    initial_required_acceptance_hashes: [m.sha256('fc-initial-acceptance')],
+    required_acceptance_hashes: [acceptanceHash],
+    execution_graph: executionGraph,
     enforcement_mode: 'enforce',
     state: 'DRAFT',
     closure_ratio: 0.75,
@@ -90,7 +170,7 @@ function buildMissionContract(authoritySeed) {
     },
     lineage_binding: {
       task_authority_id: m.sha256('fc-authority-' + authoritySeed),
-      root_run_id: 'fc-root',
+      root_run_id: rootRunId,
       policy_hash: m.sha256('fc-policy'),
       successor_inherits_durable_consumed: true,
     },
@@ -131,7 +211,7 @@ function buildReservation(s0) {
       mission_subject_digest: subject,
       campaign_contract_digest: subject,
       base_sha: base,
-      acceptance_ids: draft.rubric_ids,
+      ...graphClaimFields,
       reservation: reservationA,
       issued_at: '2026-07-28T00:00:00.000Z',
       expires_at: '2026-07-28T01:00:00.000Z',
@@ -150,7 +230,7 @@ function buildReservation(s0) {
       mission_subject_digest: subject,
       campaign_contract_digest: subject,
       base_sha: base,
-      acceptance_ids: draft.rubric_ids,
+      ...graphClaimFields,
       reservation: reservationB,
       issued_at: '2026-07-28T00:00:00.000Z',
       expires_at: '2026-07-28T01:00:00.000Z',
@@ -180,7 +260,7 @@ function buildReservation(s0) {
       mission_subject_digest: subject,
       campaign_contract_digest: subject,
       base_sha: base,
-      acceptance_ids: draft.rubric_ids,
+      ...graphClaimFields,
       reservation,
       issued_at: '2026-07-28T00:00:00.000Z',
       expires_at: '2026-07-28T01:00:00.000Z',
@@ -230,7 +310,7 @@ function buildReservation(s0) {
       mission_subject_digest: subject,
       campaign_contract_digest: subject,
       base_sha: base,
-      acceptance_ids: draft.rubric_ids,
+      ...graphClaimFields,
       reservation,
       issued_at: '2026-07-28T00:00:00.000Z',
       expires_at: '2026-07-28T01:00:00.000Z',
@@ -295,7 +375,7 @@ function buildReservation(s0) {
       mission_subject_digest: subject,
       campaign_contract_digest: subject,
       base_sha: base,
-      acceptance_ids: draft.rubric_ids,
+      ...graphClaimFields,
       reservation,
       issued_at: '2026-07-28T00:00:00.000Z',
       expires_at: '2026-07-28T01:00:00.000Z',

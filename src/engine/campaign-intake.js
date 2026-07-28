@@ -1519,6 +1519,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
     contract_path: contractPath,
     seal_path: inspection.seal_path,
     initial_state: durableState,
+    mission_claim: missionClaim.status === 'claimed' ? missionClaim : null,
     generation_claim: generation,
     full_enforcement: shadowAxes.length === 0,
     shadow_axes: shadowAxes,

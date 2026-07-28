@@ -20,7 +20,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-state <file>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
+  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
@@ -78,7 +78,7 @@ function parseImplementReviewArgs(rawArgs) {
     campaignDispositionAuthority: null,
     campaignDispositionPolicy: null,
     lifecycleReceipt: null,
-    missionState: null,
+    missionPrepared: null,
     campaignManaged: true,
     legacyUnmanaged: false,
   };
@@ -134,11 +134,16 @@ function parseImplementReviewArgs(rawArgs) {
       continue;
     }
     if (arg === '--mission-state') {
+      return {
+        error: '--mission-state is not accepted by the engine; use --mission-prepared',
+      };
+    }
+    if (arg === '--mission-prepared') {
       const value = rawArgs[i + 1];
       if (!value) {
-        return { error: '--mission-state requires a value' };
+        return { error: '--mission-prepared requires a value' };
       }
-      output.missionState = value;
+      output.missionPrepared = value;
       i += 2;
       continue;
     }
@@ -374,18 +379,16 @@ if (args[0] === 'engine') {
         })}\n`);
         process.exit(1);
       }
-      // Trusted host constructs the file-backed Mission CAS store from
-      // --mission-state; free-form load/save callbacks are never accepted
-      // from CLI input. The engine reads mission_grant_ref from the sealed
-      // campaign contract and builds canonical adapters itself.
+      // The prepared receipt is resolved through the Git common-dir Mission
+      // registry. CLI callers cannot select an arbitrary Mission state path.
       const engineOptions = {
         cwd: parsed.cwd || process.cwd(),
         campaignDispositionProvider,
       };
-      if (parsed.missionState) {
-        engineOptions.missionStatePath = path.resolve(
+      if (parsed.missionPrepared) {
+        engineOptions.missionPreparedReceiptPath = path.resolve(
           parsed.cwd || process.cwd(),
-          parsed.missionState,
+          parsed.missionPrepared,
         );
       }
       const result = new AutopilotEngine(engineOptions)

@@ -1646,6 +1646,163 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`lineage-binding-valid-projection-roundtrip\t${
       stateHash(restoredValid) === projValid.state_hash ? 'PASS' : 'FAIL'}`);
   }
+  {
+    // ─── P0 abort finalization: ABORTING → ABORTED ───────────────────────
+    const ac = require(path.join(root, 'src', 'engine', 'authenticated-control'));
+    function mintControl(adapter, lineageId, action, sequence) {
+      return adapter.acceptEvent({
+        mission_lineage_id: lineageId,
+        action,
+        authority: 'authenticated_user',
+        sequence,
+        issued_at: '2026-07-27T00:00:00.000Z',
+        reason: 'abort-finalization-test',
+      });
+    }
+    function controlEvent(state, canonical) {
+      return {
+        event_type: 'control_event',
+        sequence: state.events.length + 1,
+        mission_lineage_id: state.mission_lineage_id,
+        payload: { event: canonical },
+      };
+    }
+    function abortFinalizeEvent(state) {
+      return {
+        event_type: 'abort_finalized',
+        sequence: state.events.length + 1,
+        mission_lineage_id: state.mission_lineage_id,
+        payload: {},
+      };
+    }
+
+    // control_sequence advances exactly once on abort_requested.
+    const adapterSeq = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const sSeq = createMissionState(makeContract());
+    const abortedSeq = reduceMissionState(
+      sSeq,
+      controlEvent(sSeq, mintControl(adapterSeq, sSeq.mission_lineage_id, 'abort_requested', 5)),
+    );
+    console.log(`abort-control-sequence-advances\t${
+      abortedSeq.state.state === 'ABORTING'
+        && abortedSeq.state.control_sequence === 5
+        && !abortedSeq.state.terminal ? 'PASS' : 'FAIL'}`);
+
+    // Normal drained ABORTING → ABORTED.
+    const adapterOk = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const sOk = createMissionState(makeContract());
+    const abortingOk = reduceMissionState(
+      sOk,
+      controlEvent(sOk, mintControl(adapterOk, sOk.mission_lineage_id, 'abort_requested', 1)),
+    );
+    const finalizedOk = reduceMissionState(abortingOk.state, abortFinalizeEvent(abortingOk.state));
+    console.log(`abort-normal-aborting-to-aborted\t${
+      finalizedOk.state.state === 'ABORTED'
+        && finalizedOk.state.terminal
+        && finalizedOk.state.terminal.state === 'ABORTED'
+        && finalizedOk.state.terminal.reason === 'abort_finalized'
+        && finalizedOk.receipt.artifact_type === 'mission_abort_finalized' ? 'PASS' : 'FAIL'}`);
+
+    // Legacy persisted ABORTING marker (non-null terminal) can finalize.
+    const adapterLegacy = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const sLegacyBase = createMissionState(makeContract());
+    const abortingNew = reduceMissionState(
+      sLegacyBase,
+      controlEvent(sLegacyBase, mintControl(adapterLegacy, sLegacyBase.mission_lineage_id, 'abort_requested', 2)),
+    );
+    const legacyState = {
+      ...JSON.parse(JSON.stringify(abortingNew.state)),
+      terminal: { state: 'ABORTING', reason: 'abort_requested', at_event: abortingNew.state.events.length },
+    };
+    const finalizedLegacy = reduceMissionState(legacyState, abortFinalizeEvent(legacyState));
+    console.log(`abort-legacy-marker-to-aborted\t${
+      finalizedLegacy.state.state === 'ABORTED'
+        && finalizedLegacy.state.terminal
+        && finalizedLegacy.state.terminal.state === 'ABORTED'
+        && finalizedLegacy.state.terminal.reason === 'abort_finalized' ? 'PASS' : 'FAIL'}`);
+
+    // Live claim blocks finalization (fail closed, no mutation).
+    const adapterLive = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const sLive0 = createMissionState(makeContract());
+    const claimed = reduceMissionState(sLive0, claimEvent(sLive0, { idempotency_key: 'abort-live' }));
+    const abortingLive = reduceMissionState(
+      claimed.state,
+      controlEvent(claimed.state, mintControl(adapterLive, claimed.state.mission_lineage_id, 'abort_requested', 3)),
+    );
+    const hashBeforeLive = stateHash(abortingLive.state);
+    const rejectedLive = reduceMissionState(abortingLive.state, abortFinalizeEvent(abortingLive.state));
+    console.log(`abort-live-claim-rejects\t${
+      rejectedLive.receipt.artifact_type === 'mission_abort_rejected'
+        && rejectedLive.receipt.reason === 'live_claims_remain'
+        && rejectedLive.state.state === 'ABORTING'
+        && !rejectedLive.state.terminal
+        && stateHash(rejectedLive.state) === hashBeforeLive ? 'PASS' : 'FAIL'}`);
+
+    // Nonzero reserved_active / active_actual blocks finalization.
+    const adapterRes = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const sRes0 = createMissionState(makeContract());
+    const abortingRes = reduceMissionState(
+      sRes0,
+      controlEvent(sRes0, mintControl(adapterRes, sRes0.mission_lineage_id, 'abort_requested', 1)),
+    );
+    const stickyAxes = JSON.parse(JSON.stringify(abortingRes.state));
+    stickyAxes.axes.tool_calls.reserved_active = 2;
+    stickyAxes.axes.tool_calls.active_actual = 1;
+    const hashBeforeRes = stateHash(stickyAxes);
+    const rejectedRes = reduceMissionState(stickyAxes, abortFinalizeEvent(stickyAxes));
+    console.log(`abort-nonzero-reservation-rejects\t${
+      rejectedRes.receipt.artifact_type === 'mission_abort_rejected'
+        && rejectedRes.receipt.reason === 'resource_axes_not_drained'
+        && rejectedRes.state.state === 'ABORTING'
+        && stateHash(rejectedRes.state) === hashBeforeRes ? 'PASS' : 'FAIL'}`);
+
+    // Unrelated events while ABORTING fail closed.
+    const adapterUnrel = new ac.AuthenticatedControlAdapter({
+      verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+    });
+    const sUnrel0 = createMissionState(makeContract());
+    const abortingUnrel = reduceMissionState(
+      sUnrel0,
+      controlEvent(sUnrel0, mintControl(adapterUnrel, sUnrel0.mission_lineage_id, 'abort_requested', 1)),
+    );
+    let unrelatedRejected = false;
+    let unrelatedCode = null;
+    try {
+      reduceMissionState(abortingUnrel.state, claimEvent(abortingUnrel.state, { idempotency_key: 'after-abort' }));
+    } catch (e) {
+      unrelatedRejected = true;
+      unrelatedCode = e.code;
+    }
+    console.log(`abort-unrelated-event-rejects\t${
+      unrelatedRejected && unrelatedCode === 'MISSION_ABORTING_EVENT_REJECTED' ? 'PASS' : 'FAIL'}`);
+
+    // Terminal receipt only after ABORTED finalization (not while ABORTING).
+    let receiptWhileAbortingRejected = false;
+    try {
+      m.buildMissionTerminalReceipt(abortingOk.state, {
+        residue_digest: m.sha256({ note: 'x' }),
+        note: 'x',
+      });
+    } catch (_e) { receiptWhileAbortingRejected = true; }
+    const residuePayload = { lifecycle_residue: ['abort-cleanup'] };
+    const residue = { ...residuePayload, residue_digest: m.sha256(residuePayload) };
+    const receiptAfter = m.buildMissionTerminalReceipt(finalizedOk.state, residue);
+    console.log(`abort-terminal-receipt-only-after-finalization\t${
+      receiptWhileAbortingRejected
+        && receiptAfter
+        && receiptAfter.mission_terminal === true
+        && receiptAfter.artifact_type === 'mission_terminal_receipt' ? 'PASS' : 'FAIL'}`);
+  }
 }
 NODE
 )"
@@ -1764,7 +1921,14 @@ for id in \
   lineage-binding-proto-inherited-successor-rejects \
   lineage-binding-accessor-rejects \
   lineage-binding-valid-four-field-accepted \
-  lineage-binding-valid-projection-roundtrip
+  lineage-binding-valid-projection-roundtrip \
+  abort-control-sequence-advances \
+  abort-normal-aborting-to-aborted \
+  abort-legacy-marker-to-aborted \
+  abort-live-claim-rejects \
+  abort-nonzero-reservation-rejects \
+  abort-unrelated-event-rejects \
+  abort-terminal-receipt-only-after-finalization
 do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done

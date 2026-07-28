@@ -17,6 +17,7 @@
 //   consume --state <file> --out <file> --claim-id <id> [--reserved <n>]
 //   control --state <file> --out <file> --action <a> --sequence <n>
 //           [--authority <auth>] [--now <iso>]
+//   finalize-abort --state <file> --out <file>
 //   check   --state <file>
 //   receipt --state <file> [--residue <file>]
 
@@ -395,6 +396,75 @@ function cmdControl(flags, options = {}) {
   return 0;
 }
 
+function cmdFinalizeAbort(flags) {
+  rejectUnknownFlags(flags, new Set(['state', 'out']), 'finalize-abort');
+  const state = loadState(requireFlag(flags, 'state'));
+  const outPath = requireFlag(flags, 'out');
+
+  // Idempotent success: already-canonical ABORTED is a no-op write of the
+  // same terminal state. receipt never mutates; this command owns the write.
+  if (state.state === 'ABORTED' && state.terminal && mission.TERMINAL_STATES.has(state.state)) {
+    writeState(outPath, state);
+    emit({
+      status: 'aborted',
+      next_state: 'ABORTED',
+      idempotent: true,
+      mission_terminal: true,
+      control_sequence: state.control_sequence,
+      state_hash: mission.stateHash(state),
+      receipt: null,
+    });
+    return 0;
+  }
+
+  const event = {
+    event_type: 'abort_finalized',
+    sequence: state.events.length + 1,
+    mission_lineage_id: state.mission_lineage_id,
+    payload: {},
+  };
+  let result;
+  try {
+    result = mission.reduceMissionState(state, event);
+  } catch (error) {
+    emit({
+      status: 'rejected',
+      code: error.code || 'mission_abort_rejected',
+      reason: error.message || String(error),
+      state_hash: mission.stateHash(state),
+    });
+    return 1;
+  }
+  const rejected = !result
+    || !result.state
+    || result.state.state !== 'ABORTED'
+    || !result.state.terminal
+    || !mission.TERMINAL_STATES.has(result.state.state)
+    || (result.receipt && result.receipt.artifact_type === 'mission_abort_rejected');
+  // Fail closed: never write --out on rejection.
+  if (rejected) {
+    emit({
+      status: 'rejected',
+      code: (result && result.receipt && result.receipt.reason) || 'mission_abort_rejected',
+      reason: (result && result.receipt && result.receipt.reason) || 'abort finalization rejected',
+      state_hash: mission.stateHash(state),
+      receipt: result && result.receipt,
+    });
+    return 1;
+  }
+  writeState(outPath, result.state);
+  emit({
+    status: 'aborted',
+    next_state: 'ABORTED',
+    idempotent: false,
+    mission_terminal: true,
+    control_sequence: result.state.control_sequence,
+    state_hash: mission.stateHash(result.state),
+    receipt: result.receipt,
+  });
+  return 0;
+}
+
 function cmdCheck(flags) {
   const state = loadState(requireFlag(flags, 'state'));
   emit({
@@ -465,6 +535,7 @@ const COMMANDS = {
   grant: cmdGrant,
   consume: cmdConsume,
   control: cmdControl,
+  'finalize-abort': cmdFinalizeAbort,
   check: cmdCheck,
   receipt: cmdReceipt,
 };
@@ -475,7 +546,7 @@ function runMissionCli(argv, options = {}) {
   const command = argv[0];
   if (!command || command === '-h' || command === '--help' || command === 'help') {
     stdout.write(`${[
-      'usage: mission <prepare|init|grant|consume|control|check|receipt> [flags]',
+      'usage: mission <prepare|init|grant|consume|control|finalize-abort|check|receipt> [flags]',
       '  prepare --repo <git-repo> --authority <file> --graph <file> --out <receipt>',
       '  grant   --repo <git-repo> --prepared <receipt> --node <graph-node> [--now <iso>]',
       '  init    --contract <file> --out <state>',
@@ -483,6 +554,7 @@ function runMissionCli(argv, options = {}) {
       '          --contract-digest <sha256> --base-sha <sha> --acceptance-ids <a,b> [--reserved <n>] [--now <iso>]',
       '  consume --state <file> --out <file> --claim-id <id> [--reserved <n>]',
       '  control --state <file> --out <file> --action <a> --sequence <n> [--authority <auth>] [--now <iso>]',
+      '  finalize-abort --state <file> --out <file>',
       '  check   --state <file>',
       '  receipt --state <file> [--residue <file>]',
     ].join('\n')}\n`);

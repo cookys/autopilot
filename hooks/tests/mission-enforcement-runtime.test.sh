@@ -453,7 +453,10 @@ group('g3', () => {
   check('g3-scope-closing', scope.state.state === 'CLOSING' && scope.state.control_sequence === 4);
   const sAbort = m.createMissionState(makeContract());
   const abort = m.reduceMissionState(sAbort, controlEvent(sAbort, mintControl(adapter, sAbort.mission_lineage_id, 'abort_requested', 2)));
-  check('g3-abort-terminal', abort.state.terminal && abort.state.terminal.reason === 'abort_requested');
+  // ABORTING is intermediate (not TERMINAL_STATES); control_sequence advances once.
+  check('g3-abort-terminal', abort.state.state === 'ABORTING'
+    && !abort.state.terminal
+    && abort.state.control_sequence === 2);
   const stale = m.reduceMissionState(fin.state, controlEvent(fin.state, mintControl(adapter, fin.state.mission_lineage_id, 'finish_requested', 3)));
   check('g3-stale-fenced', stale.receipt.reason === 'control_sequence_stale'
     && stale.receipt.next_state === 'CLOSING');
@@ -789,6 +792,142 @@ group('g7', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+// ── Group 8: abort finalization CLI — reducer transition, fail-closed write,
+// idempotent ABORTED re-entry, and terminal receipt only after finalization.
+group('g8', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mission-abort-finalize-cli-'));
+  const statePath = path.join(dir, 'state.json');
+  const outPath = path.join(dir, 'aborted.json');
+  const rejectOut = path.join(dir, 'rejected-out.json');
+
+  const adapter = new ac.AuthenticatedControlAdapter({
+    verifier: () => ({ verified: true, authority: 'authenticated_user' }),
+  });
+  const initial = m.createMissionState(makeContract({ enforcement_mode: 'enforce' }));
+  const aborting = m.reduceMissionState(
+    initial,
+    controlEvent(initial, mintControl(adapter, initial.mission_lineage_id, 'abort_requested', 4)),
+  );
+  check('g8-abort-control-sequence', aborting.state.state === 'ABORTING'
+    && aborting.state.control_sequence === 4
+    && !aborting.state.terminal);
+  fs.writeFileSync(statePath, `${JSON.stringify(aborting.state)}\n`, { mode: 0o600 });
+
+  // Live-claim rejection writes nothing.
+  const livePath = path.join(dir, 'live.json');
+  const claimed = m.reduceMissionState(initial, claimEvent(initial, { idempotency_key: 'cli-live' }));
+  const abortingLive = m.reduceMissionState(
+    claimed.state,
+    controlEvent(claimed.state, mintControl(adapter, claimed.state.mission_lineage_id, 'abort_requested', 6)),
+  );
+  fs.writeFileSync(livePath, `${JSON.stringify(abortingLive.state)}\n`, { mode: 0o600 });
+  let liveStdout = '';
+  const originalWrite = process.stdout.write;
+  process.stdout.write = (chunk) => { liveStdout += String(chunk); return true; };
+  let liveCode;
+  try {
+    liveCode = missionCli.runMissionCli([
+      'finalize-abort', '--state', livePath, '--out', rejectOut,
+    ]);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  let livePayload = null;
+  try { livePayload = JSON.parse(liveStdout); } catch (_e) { livePayload = null; }
+  check('g8-cli-reject-live-claim-no-write',
+    liveCode === 1
+      && !fs.existsSync(rejectOut)
+      && livePayload
+      && livePayload.status === 'rejected'
+      && livePayload.code === 'live_claims_remain');
+
+  // Success path writes ABORTED via the reducer (not raw JSON mutation).
+  let okStdout = '';
+  process.stdout.write = (chunk) => { okStdout += String(chunk); return true; };
+  let okCode;
+  try {
+    okCode = missionCli.runMissionCli([
+      'finalize-abort', '--state', statePath, '--out', outPath,
+    ]);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  let okPayload = null;
+  try { okPayload = JSON.parse(okStdout); } catch (_e) { okPayload = null; }
+  const written = fs.existsSync(outPath) ? JSON.parse(fs.readFileSync(outPath, 'utf8')) : null;
+  check('g8-cli-finalize-success',
+    okCode === 0
+      && okPayload
+      && okPayload.status === 'aborted'
+      && okPayload.next_state === 'ABORTED'
+      && okPayload.mission_terminal === true
+      && written
+      && written.state === 'ABORTED'
+      && written.terminal
+      && written.terminal.reason === 'abort_finalized');
+
+  // Idempotent re-entry of already-ABORTED succeeds and rewrites --out.
+  let idempStdout = '';
+  process.stdout.write = (chunk) => { idempStdout += String(chunk); return true; };
+  let idempCode;
+  try {
+    idempCode = missionCli.runMissionCli([
+      'finalize-abort', '--state', outPath, '--out', outPath,
+    ]);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  let idempPayload = null;
+  try { idempPayload = JSON.parse(idempStdout); } catch (_e) { idempPayload = null; }
+  check('g8-cli-idempotent-aborted',
+    idempCode === 0
+      && idempPayload
+      && idempPayload.status === 'aborted'
+      && idempPayload.idempotent === true
+      && idempPayload.next_state === 'ABORTED');
+
+  // Terminal receipt accepted only after finalization.
+  const residuePayload = { lifecycle_residue: ['g8-cleanup'] };
+  const residue = { ...residuePayload, residue_digest: m.sha256(residuePayload) };
+  let abortingReceiptRejected = false;
+  try {
+    m.buildMissionTerminalReceipt(aborting.state, residue);
+  } catch (_e) { abortingReceiptRejected = true; }
+  const terminalReceipt = m.buildMissionTerminalReceipt(written, residue);
+  check('g8-terminal-receipt-after-finalize',
+    abortingReceiptRejected
+      && terminalReceipt
+      && terminalReceipt.mission_terminal === true
+      && terminalReceipt.artifact_type === 'mission_terminal_receipt');
+
+  // receipt CLI must not mutate state; terminal receipt needs bound residue.
+  const residuePath = path.join(dir, 'residue.json');
+  fs.writeFileSync(residuePath, `${JSON.stringify(residue)}\n`, { mode: 0o600 });
+  const receiptStateBefore = fs.readFileSync(outPath, 'utf8');
+  let receiptStdout = '';
+  process.stdout.write = (chunk) => { receiptStdout += String(chunk); return true; };
+  let receiptCode;
+  try {
+    receiptCode = missionCli.runMissionCli([
+      'receipt', '--state', outPath, '--residue', residuePath,
+    ]);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  let receiptPayload = null;
+  try { receiptPayload = JSON.parse(receiptStdout); } catch (_e) { receiptPayload = null; }
+  check('g8-receipt-cli-no-mutate',
+    receiptCode === 0
+      && fs.readFileSync(outPath, 'utf8') === receiptStateBefore
+      && receiptPayload
+      && receiptPayload.status === 'terminal'
+      && receiptPayload.mission_terminal === true
+      && receiptPayload.receipt
+      && receiptPayload.receipt.mission_terminal === true);
+
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 for (const line of lines) console.log(line);
 NODE
 )"
@@ -810,7 +949,7 @@ do
 done
 
 # ── No group may have aborted the harness mid-run. ──
-for grp in g1 g2 g3 g4 g5 g6 g7; do
+for grp in g1 g2 g3 g4 g5 g6 g7 g8; do
   assert_not_contains "$OUT" "$grp	FAIL	threw" "enforcement group $grp ran to completion"
 done
 
@@ -854,7 +993,9 @@ for id in \
   p2-terminal-receipt-mission-terminal-true p2-terminal-receipt-no-task-closeout \
   p2-terminal-receipt-schema-version p2-terminal-receipt-digests \
   p2-terminal-receipt-residue-binding p2-terminal-receipt-tampered-residue-rejected \
-  p2-cli-control-without-host-auth-rejected
+  p2-cli-control-without-host-auth-rejected \
+  g8-abort-control-sequence g8-cli-reject-live-claim-no-write g8-cli-finalize-success \
+  g8-cli-idempotent-aborted g8-terminal-receipt-after-finalize g8-receipt-cli-no-mutate
 do
   assert_contains "$OUT" "$id	PASS" "Mission P2 enforcement behavior $id must pass"
 done

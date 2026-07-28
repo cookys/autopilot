@@ -30,7 +30,8 @@
 // Events accepted by the reducer (canonical event_type set):
 //   grant_claimed, grant_resumed, no_effect_release, reconciliation,
 //   ceiling_adjust, control_event, stagnation_observation,
-//   acceptance_satisfied, closure_evaluated, successor_inherited
+//   acceptance_satisfied, closure_evaluated, successor_inherited,
+//   abort_finalized
 
 const crypto = require('crypto');
 const fs = require('fs');
@@ -125,8 +126,16 @@ const EVENT_TYPES = Object.freeze([
   'acceptance_satisfied',
   'closure_evaluated',
   'successor_inherited',
+  'abort_finalized',
 ]);
 const EVENT_TYPE_SET = new Set(EVENT_TYPES);
+// While ABORTING, only drain paths and the canonical finalization transition
+// may advance state. Unrelated events fail closed without mutation.
+const ABORTING_ALLOWED_EVENTS = new Set([
+  'abort_finalized',
+  'no_effect_release',
+  'reconciliation',
+]);
 const REJECTION_REASONS_MISSION = Object.freeze([
   'grant_already_claimed',
   'stagnation',
@@ -1024,14 +1033,52 @@ function validateEventShape(event) {
 
 // ─── Reducer ───────────────────────────────────────────────────────────────
 
+function isLegacyAbortingTerminal(state) {
+  // Pre-fix persisted defect: abort_requested called setTerminal(ABORTING),
+  // leaving a non-null terminal marker that is not in TERMINAL_STATES. The
+  // only legal escape is abort_finalized.
+  return state
+    && state.state === 'ABORTING'
+    && isPlainObject(state.terminal)
+    && state.terminal.state === 'ABORTING';
+}
+
+function abortDrainPreconditions(state) {
+  for (const claim of Object.values(state.claims || {})) {
+    if (!claim.released && !claim.terminal) {
+      return { ok: false, reason: 'live_claims_remain' };
+    }
+  }
+  for (const axisName of SUPPORTED_AXES) {
+    const axis = state.axes[axisName];
+    if ((axis.reserved_active || 0) !== 0 || (axis.active_actual || 0) !== 0) {
+      return { ok: false, reason: 'resource_axes_not_drained' };
+    }
+  }
+  return { ok: true, reason: null };
+}
+
 function reduceMissionState(state, event) {
   // Validate state before accessing state.terminal — a malformed state is
   // a reducer error, not a transient condition.
   validateMissionState(state);
+  const { eventType, sequence, payload } = validateEventShape(event);
+  // Terminal gate: only abort_finalized may enter a legacy ABORTING marker
+  // that carries a non-null terminal object. All other non-null terminals
+  // remain irreducible.
   if (state.terminal) {
+    if (!(eventType === 'abort_finalized' && isLegacyAbortingTerminal(state))) {
+      fail('cannot reduce a terminal Mission state', 'MISSION_STATE_TERMINAL');
+    }
+  } else if (TERMINAL_STATES.has(state.state)) {
     fail('cannot reduce a terminal Mission state', 'MISSION_STATE_TERMINAL');
   }
-  const { eventType, sequence, payload } = validateEventShape(event);
+  if (state.state === 'ABORTING' && !ABORTING_ALLOWED_EVENTS.has(eventType)) {
+    fail(
+      `event_type "${eventType}" is not accepted while ABORTING`,
+      'MISSION_ABORTING_EVENT_REJECTED',
+    );
+  }
   if (event.mission_lineage_id !== state.mission_lineage_id) {
     fail('event.mission_lineage_id does not match state.mission_lineage_id');
   }
@@ -1090,6 +1137,7 @@ function reduceMissionState(state, event) {
     acceptance_satisfied: handleAcceptanceSatisfied,
     closure_evaluated: handleClosureEvaluated,
     successor_inherited: handleSuccessorInherited,
+    abort_finalized: handleAbortFinalized,
   };
   const result = handlers[eventType](state, eventWithDigest, payload, sanitizedControlEvent);
   // Deep-freeze the entire returned state and receipt so neither caller
@@ -2182,7 +2230,14 @@ function handleControlEvent(state, event, payload, sanitizedControlEvent) {
   if (ce.action === 'finish_requested') {
     nextState = Object.freeze({ ...appendEvent(state, event), state: 'CLOSING', control_sequence: ce.sequence });
   } else if (ce.action === 'abort_requested') {
-    nextState = setTerminal(appendEvent(state, event), 'ABORTING', 'abort_requested');
+    // ABORTING is an intermediate control state, not a TERMINAL_STATES member.
+    // Do not set terminal here — that permanently blocked abort finalization.
+    // Advance control_sequence exactly once to the accepted control event.
+    nextState = Object.freeze({
+      ...appendEvent(state, event),
+      state: 'ABORTING',
+      control_sequence: ce.sequence,
+    });
   } else if (ce.action === 'scope_frozen') {
     nextState = Object.freeze({ ...appendEvent(state, event), state: 'CLOSING', control_sequence: ce.sequence });
   } else if (ce.action === 'ceiling_adjust') {
@@ -2204,6 +2259,69 @@ function handleControlEvent(state, event, payload, sanitizedControlEvent) {
         kind: 'mission_authenticated_control',
         action: ce.action,
         sequence: ce.sequence,
+        mission_lineage_id: state.mission_lineage_id,
+        event_digest: event.event_digest,
+      }),
+    },
+  };
+}
+
+function handleAbortFinalized(state, event, _payload) {
+  // Canonical ABORTING → ABORTED transition. Abort is not successful closure:
+  // this path never claims acceptance, completion, or task closeout.
+  if (state.state !== 'ABORTING') {
+    return {
+      state,
+      receipt: {
+        artifact_type: 'mission_abort_rejected',
+        event_type: 'abort_finalized',
+        reason: 'not_aborting',
+        mission_lineage_id: state.mission_lineage_id,
+        source_event: event,
+        next_state: state.state,
+        receipt_digest: sha256({
+          kind: 'mission_abort_rejected',
+          reason: 'not_aborting',
+          mission_lineage_id: state.mission_lineage_id,
+          event_digest: event.event_digest,
+        }),
+      },
+    };
+  }
+  const drain = abortDrainPreconditions(state);
+  if (!drain.ok) {
+    return {
+      state,
+      receipt: {
+        artifact_type: 'mission_abort_rejected',
+        event_type: 'abort_finalized',
+        reason: drain.reason,
+        mission_lineage_id: state.mission_lineage_id,
+        source_event: event,
+        next_state: state.state,
+        receipt_digest: sha256({
+          kind: 'mission_abort_rejected',
+          reason: drain.reason,
+          mission_lineage_id: state.mission_lineage_id,
+          event_digest: event.event_digest,
+        }),
+      },
+    };
+  }
+  // Success: replace any legacy ABORTING terminal marker with canonical ABORTED.
+  const next = setTerminal(appendEvent(state, event), 'ABORTED', 'abort_finalized');
+  return {
+    state: next,
+    receipt: {
+      artifact_type: 'mission_abort_finalized',
+      event_type: 'abort_finalized',
+      reason: 'abort_finalized',
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: 'ABORTED',
+      receipt_digest: sha256({
+        kind: 'mission_abort_finalized',
+        reason: 'abort_finalized',
         mission_lineage_id: state.mission_lineage_id,
         event_digest: event.event_digest,
       }),

@@ -17,9 +17,12 @@ except the IMPLEMENTER is a heterogeneous engine driven through the canonical
 (`bin/autopilot.js` → campaign controller → `dispatch-hetero.sh`).
 
 Hard rules:
-- At entry run `node <plugin>/scripts/session-mode.js set --level l5` (`--solo` ⇒
-  `set --level l3`) — arms the orchestrator-edit-gate + context-budget hooks
-  (level-front-door § "Session-mode marker").
+- Before any TaskCreate, branch, worktree, runner, or model effect, run
+  `node <plugin>/scripts/session-mode.js set --level l5 --repo-root <repo>`. `--solo` uses
+  `set --level l3 --entry-level l5 --fallback solo`; a recorded precondition degradation uses
+  `--fallback precondition_failed`. The command admits canonical Mission policy/graph/source
+  coverage before writing the marker. Topology may change; its admission digest and later
+  Mission prepare/grant may not.
 - The roster from [`../../scripts/resolve-review-loop.sh`](../../scripts/resolve-review-loop.sh)
   is the ONLY source of truth — never hardcode model/runner/effort inline.
 - Implementation dispatch uses an **immutable base SHA**; verification is by **git
@@ -59,6 +62,8 @@ Hard rules:
   is not task completion.
 - Review is DECORRELATED: the reviewer is a different engine family than the implementer.
 - `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
+- Only admitted graph nodes become implementation tasks. Plan phase headings, modules, tests,
+  review seats, and retries stay inside the owning deliverable and gate-attempt budget.
 
 **Capability profile (shadow):** `/l5` fixes heterogeneous-implementer topology only. When the host
 supplies a current verified envelope/grant/profile payload, forward it unchanged; never infer

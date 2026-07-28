@@ -5,7 +5,8 @@
  * Written by depth-0 at /l3 /l4 /l5 /l6 entry; read by the orchestrator-edit-gate
  * and context-budget hooks. One marker file per session id:
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
- *   { level, repo_root, started_at, expires_at }
+ *   { level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
+ *     mission_routing? }
  *
  * Design notes (see docs/plans/2026-07-14-context-budget-orchestrator-gate.md):
  * - Host-stable path (~/.autopilot, NOT $TMPDIR) — docker-exec contexts see the
@@ -18,7 +19,8 @@
  * - Atomic write via tmp+rename; corrupt marker reads as active:false.
  *
  * Usage:
- *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--repo-root <dir>] [--ttl-hours N]
+ *   node scripts/session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6]
+ *     [--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N]
  *   node scripts/session-mode.js clear [--task-status-receipt <file> --root-run-id <id>]
  *   node scripts/session-mode.js status
  * Exit: 0 ok / 2 usage-or-invalid-args.
@@ -31,9 +33,41 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { canonicalDigest } = require('../src/engine/campaign-verification');
+const { admitMissionRouting } = require('./mission-routing-admission');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const DEFAULT_TTL_HOURS = 24;
+const ROUTING_KEYS = Object.freeze([
+  'status',
+  'admitted',
+  'would_block',
+  'prior_marker_status',
+  'admission',
+]);
+const ADMISSION_KEYS = Object.freeze([
+  'schema_version',
+  'artifact_type',
+  'authority_status',
+  'repo_identity',
+  'mission_policy_digest',
+  'mission_graph_digest',
+  'sources_digest',
+  'deliverable_count',
+  'source_authoring_unit_count',
+  'critical_path',
+  'batch_count',
+  'reservation_totals',
+  'admission_digest',
+]);
+const RESERVATION_KEYS = Object.freeze([
+  'campaigns',
+  'wall_seconds',
+  'tool_calls',
+  'engine_attempts',
+  'external_wait_seconds',
+  'canonical_changed_files',
+  'output_bytes',
+]);
 
 function markerDir() {
   return process.env.AUTOPILOT_SESSION_MODE_DIR
@@ -60,6 +94,52 @@ function readMarker() {
   } catch {
     return null; // absent or corrupt ⇒ fail-open
   }
+}
+
+function exactKeys(value, expected) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).sort().join('\0') === [...expected].sort().join('\0');
+}
+
+function verifyMissionRoutingProjection(marker, expected) {
+  const reject = (reason) => ({ valid: false, reason });
+  if (!exactKeys(expected, [
+    'repo_identity',
+    'mission_policy_digest',
+    'mission_graph_digest',
+  ])) {
+    return reject('expected Mission projection identity is invalid');
+  }
+  const routing = marker && marker.mission_routing;
+  if (!exactKeys(routing, ROUTING_KEYS)) return reject('marker Mission routing shape is invalid');
+  if (routing.status !== 'READY' || routing.admitted !== true || routing.would_block !== false) {
+    return reject('marker Mission routing is not an enforced READY admission');
+  }
+  const admission = routing.admission;
+  if (!exactKeys(admission, ADMISSION_KEYS)) return reject('marker Mission admission shape is invalid');
+  if (!exactKeys(admission.reservation_totals, RESERVATION_KEYS)) {
+    return reject('marker Mission reservation shape is invalid');
+  }
+  const { admission_digest: admissionDigest, ...body } = admission;
+  if (!/^[a-f0-9]{64}$/u.test(admissionDigest || '')
+      || canonicalDigest(body) !== admissionDigest) {
+    return reject('marker Mission admission digest is invalid');
+  }
+  if (admission.schema_version !== 1
+      || admission.artifact_type !== 'mission_routing_admission'
+      || admission.authority_status !== 'enforce') {
+    return reject('marker Mission admission authority is invalid');
+  }
+  for (const field of [
+    'repo_identity',
+    'mission_policy_digest',
+    'mission_graph_digest',
+  ]) {
+    if (admission[field] !== expected[field]) {
+      return reject(`marker Mission ${field} does not match campaign projection`);
+    }
+  }
+  return { valid: true, admission_digest: admissionDigest };
 }
 
 function gitToplevel() {
@@ -92,13 +172,44 @@ function cmdSet(args) {
     process.stderr.write(`session-mode: invalid --ttl-hours "${args['ttl-hours']}"\n`);
     return 2;
   }
+  const repoRoot = path.resolve(args['repo-root'] || gitToplevel());
+  let missionRouting;
+  try {
+    missionRouting = admitMissionRouting({
+      repoRoot,
+      entryLevel: args['entry-level'] || level,
+      fallback: args.fallback || 'none',
+      markerFile: markerPath(),
+    });
+  } catch (error) {
+    process.stderr.write(`session-mode: Mission routing rejected: ${error.message}\n`);
+    return 2;
+  }
+  if (missionRouting.route.effective_level !== level) {
+    process.stderr.write(
+      `session-mode: --level ${level} disagrees with Mission route effective level ` +
+      `${missionRouting.route.effective_level}\n`,
+    );
+    return 2;
+  }
   const now = Date.now();
   const marker = {
     level,
-    repo_root: path.resolve(args['repo-root'] || gitToplevel()),
+    repo_root: repoRoot,
     started_at: new Date(now).toISOString(),
     expires_at: new Date(now + ttlHours * 3600 * 1000).toISOString(),
   };
+  if (missionRouting.status !== 'LEGACY') {
+    marker.entry_level = missionRouting.route.entry_level;
+    marker.fallback_reason = missionRouting.route.fallback_reason;
+    marker.mission_routing = {
+      status: missionRouting.status,
+      admitted: missionRouting.admitted,
+      would_block: missionRouting.would_block,
+      prior_marker_status: missionRouting.marker.status,
+      admission: missionRouting.admission,
+    };
+  }
   fs.mkdirSync(markerDir(), { recursive: true });
   const tmp = `${markerPath()}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`);
@@ -229,7 +340,11 @@ function main() {
     case 'clear': return cmdClear(args);
     case 'status': return cmdStatus();
     default:
-      process.stderr.write('Usage: session-mode.js set --level l3|l4|l5|l6 [--repo-root <dir>] [--ttl-hours N] | clear | status\n');
+      process.stderr.write(
+        'Usage: session-mode.js set --level l3|l4|l5|l6 [--entry-level l3|l4|l5|l6] ' +
+        '[--fallback none|solo|precondition_failed] [--repo-root <dir>] [--ttl-hours N] | ' +
+        'clear | status\n',
+      );
       return 2;
   }
 }
@@ -240,5 +355,6 @@ module.exports = {
   getSessionId,
   markerPath,
   validateCloseReceipt,
+  verifyMissionRoutingProjection,
   LEVELS,
 };

@@ -273,11 +273,11 @@ assert_contains "$AUTONOMOUS_BUILD_OUT" '"effective_profile": "autonomous"' "aut
 
 CATALOG_OUT="$(node "$BUILD_CLI" catalog --check --repo "$REPO_ROOT" 2>&1)"; CATALOG_EXIT=$?
 assert_exit_code "$CATALOG_EXIT" 0 "current inventory derives from the immutable P0 baseline"
-assert_contains "$CATALOG_OUT" '"canonical_rules": 755' "profile catalog accounts for every canonical rule"
-assert_eq "$(jq '.mappings | length' "$REPO_ROOT/profiles/rule-migration.json")" "755" \
+assert_contains "$CATALOG_OUT" '"canonical_rules": 793' "profile catalog accounts for every canonical rule"
+assert_eq "$(jq '.mappings | length' "$REPO_ROOT/profiles/rule-migration.json")" "793" \
   "every canonical rule has one content-addressed migration row"
 assert_eq "$(jq '[.mappings[].rule_id] | unique | length' \
-  "$REPO_ROOT/profiles/rule-migration.json")" "755" \
+  "$REPO_ROOT/profiles/rule-migration.json")" "793" \
   "rule migration identifiers are unique"
 
 P2_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
@@ -302,6 +302,7 @@ const config = JSON.parse(fs.readFileSync(
   path.join(root, '.claude', 'owner-kernel-governance.json'),
   'utf8',
 ));
+delete config.mission_convergence;
 const resolved = ownerKernel.resolveGovernancePolicy(config);
 const scope = {
   task_classes: ['implementation'],

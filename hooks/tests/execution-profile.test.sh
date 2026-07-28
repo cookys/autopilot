@@ -139,6 +139,7 @@ const config = JSON.parse(fs.readFileSync(
   path.join(root, '.claude', 'owner-kernel-governance.json'),
   'utf8',
 ));
+delete config.mission_convergence;
 const omittedGuidanceConfig = clone(config);
 delete omittedGuidanceConfig.governance.guidance_profile;
 assert.equal(

@@ -2,9 +2,9 @@
 
 > Status: In progress
 >
-> Progress: 22/34 phases READY
+> Progress: 0/4 current deliverables canonically READY; 2 candidate implementations are under depth-0 repair/review
 >
-> Current phase: seq 22 — PRO P3 native Kimi transport (`IN_PROGRESS`; not READY)
+> Current deliverable: `runtime-control` (`IN_PROGRESS`)
 >
 > Target: v2.34.0
 >
@@ -25,13 +25,13 @@ runner, reviewer, branch, or successor to reset authority or resource ceilings.
 
 | Requirement | Bound work |
 |---|---|
-| "讓 CEO 全權把計畫全數依序執行完" | The CEO owns implementation, recovery, verification, local commits, merge, and archive across every phase below. |
-| "每個階段跑完都要跑 heto engine loop review till all good" | Every phase must have passing deterministic tests plus a bounded heterogeneous review artifact before the next phase starts. |
+| "讓 CEO 全權把計畫全數依序執行完" | The CEO owns implementation, recovery, verification, local commits, merge, and archive across the admitted deliverable graph below. |
+| "每個階段跑完都要跑 heto engine loop review till all good" | Every deliverable has passing deterministic tests plus a bounded heterogeneous review gate before a dependent node starts; review generations are not new deliverables. |
 | Existing project policy: project default once, task override only when needed | Mission configuration and authenticated override contract in Mission P1/P2. |
 | Existing project policy: strong and weak models coexist through profiles | ICC and PRO consume the shipped capability/guidance profile contracts without splitting the repository. |
-| Existing project policy: no unbounded topic expansion | Review discoveries outside the frozen phase rubric go to `docs/BACKLOG.md`; they do not grow the active phase. |
+| Existing project policy: no unbounded topic expansion | Review discoveries outside the frozen deliverable rubric go to `docs/BACKLOG.md`; they do not grow the active graph. |
 | Valuable reviewer follow-ups must not be lost | ICC/PRS emit evidence-bound follow-up candidates; LSM P4 makes depth-0 dedupe and admit them to backlog before closeout, while `/next` may reopen them only as a new ticket/contract/budget after their trigger is true. |
-| "直接放寬" Kimi transport | Seq 22 permits Kimi 0.28.0 direct-vector `--prompt` transport with scratch-cwd isolation and public-output redaction; it does not claim role qualification or a CLI-enforced no-effect guarantee. |
+| "直接放寬" Kimi transport | `runtime-control` permits Kimi 0.28.0 direct-vector `--prompt` transport with scratch-cwd isolation and public-output redaction; it does not claim role qualification or a CLI-enforced no-effect guarantee. |
 
 ## Scope Completeness Audit
 
@@ -42,15 +42,17 @@ runner, reviewer, branch, or successor to reset authority or resource ceilings.
 | CLI and scripts | `engine implement-review`, campaign/mission/status/merge commands, deterministic checkers and lifecycle tools |
 | Git/process safety | Pre-spend rejection, immutable verification, occupancy locking, exact branch disposition, dirty-aware merge execution |
 | Tests | RED/GREEN fixtures, state tables, transport parsing, replay/resume, race cases, status/merge, transcript adapters, package parity |
-| Skills/docs | CEO/L3-L6/dev-flow/finish-flow routing, config templates, references, script inventory, CHANGELOG |
+| Skills/docs | CEO/L3-L6/dev-flow/finish-flow routing, bounded Mission admission, config templates, references, script inventory, CHANGELOG |
 | Generated payload | Codex plugin mirror generated once from the final canonical tree |
 | Data/privacy | Synthetic fixtures only; raw transcripts and secrets stay outside the repository |
 | Deployment/migration | Backward-compatible shadow defaults; no daemon, production push, database migration, assets, or i18n surface |
 
-## Phase Ledger
+## Historical Implementation Ledger
 
-`READY` means deterministic acceptance passed and the bounded Heto phase artifact has no admitted
-blocking finding. A transport failure never counts as a verdict.
+These rows preserve the completed implementation and review evidence from the original source-plan
+sequence. They are historical traceability, not remaining executable phases. `READY` means
+deterministic acceptance passed and the bounded Heto artifact has no admitted blocking finding. A
+transport failure never counts as a verdict.
 
 | Seq | Phase | Dependency | Status | Commit | Heto artifact |
 |---:|---|---|---|---|---|
@@ -76,32 +78,44 @@ blocking finding. A transport failure never counts as a verdict.
 | 19 | LSM P4 finish-flow + CEO reporting | LSM P3 | READY | `f77866a` | [lsm-p4.md](reviews/lsm-p4.md) |
 | 20 | LSM P5 docs/package integration | LSM P4 | READY | `27d43a8` | [lsm-p5.md](reviews/lsm-p5.md) |
 | 21 | ICC P4 057 dogfood + ship integration | Mission/LSM integration | READY | `cc8c227` | [icc-p4.md](reviews/icc-p4.md) |
-| 22 | PRO P3 native Kimi transport | PRO core; independent | IN_PROGRESS | pending | pending |
-| 23 | PRO P5 docs/package integration | PRO P3 | Pending | pending | pending |
-| 24 | PRS P1 manifest + artifact contracts | ICC transport boundary | Pending | pending | pending |
-| 25 | PRS P2 normalization + bounded retry | PRS P1 | Pending | pending | pending |
-| 26 | PRS P3 finding ledger + adjudication | PRS P2 | Pending | pending | pending |
-| 27 | PRS P4 N-seat terminal policy | PRS P3 | Pending | pending | pending |
-| 28 | PRS P5 skill/docs/package integration | PRS P4 | Pending | pending | pending |
-| 29 | CTR P1 normalized adapters | baseline | Pending | pending | pending |
-| 30 | CTR P2 attribution + provenance | CTR P1 | Pending | pending | pending |
-| 31 | CTR P3 loop/control metrics | CTR P2 | Pending | pending | pending |
-| 32 | CTR P4 reports/package integration | CTR P3 | Pending | pending | pending |
-| 33 | Full portfolio QC, version, merge, archive | all phases | Pending | pending | pending |
+## Current Deliverable Graph
 
-## Phase Gate
+The source portfolio contains 32 `Phase`/`P0` authoring headings; the old tracker also added a
+baseline and closeout row, producing 34 sequential rows. Those units are coverage metadata inside
+four bounded deliverables. The authoritative graph and content-bound source set are checked before
+TaskCreate or execution topology effects.
 
-For each row:
+| Node | Included source work | Dependencies | Status | Candidate/integration evidence |
+|---|---|---|---|---|
+| `runtime-control` | Mission governance correction, durable Mission runtime, L6 strict bridge, remaining PRO/Kimi integration | completed core | IN_PROGRESS | policy/graph `7d96d46`; strict leaf projection `1da5c72` + `8d7e61c`; runtime `149e520` + `ffd2fb0`; C routing and marker/campaign digest equality pending |
+| `plan-review` | PRS P1-P5 | completed core | REPAIR/REVIEW IN_PROGRESS | candidate commits `c076d94`, `7e9ba5f`; branch `feat/prs-complete-track`; no canonical acceptance yet |
+| `transcript-retro` | CTR P1-P4 | completed core | REPAIR/REVIEW IN_PROGRESS | candidate commit `446956241b3906f3a3ab5399b7be8cb60670bc0c`; branch `feat/ctr-complete-track`; no canonical acceptance yet |
+| `release-closeout` | Joint QC, version sync, canonical merge, worktree/branch cleanup, archive | all three nodes | BLOCKED | starts only after the three predecessors are canonically integrated |
 
-1. Freeze the phase acceptance criteria and allowed diff.
+Maximum active implementation width is three. `release-closeout` is the only sequential terminal
+node. See [mission-execution-graph.json](mission-execution-graph.json) and
+[the content-bound source manifest](../../mission-convergence-portfolio-sources.json). The
+[candidate path audit](candidate-path-audit.json) freezes the mechanically observed A/B/QA/C,
+PRS, and CTR path sets plus the known post-C marker/campaign bridge surfaces; admission-time shared
+documentation exclusions are explicit instead of silently widening a candidate node.
+Candidate branches and commits are evidence inputs only; depth-0 retains acceptance authority, so
+none of the four current deliverables is canonically READY yet.
+
+## Deliverable Gate
+
+For each current graph node:
+
+1. Freeze the deliverable acceptance criteria and allowed diff.
 2. Add or confirm the RED oracle before production mutation.
 3. Implement and run the focused tests.
 4. Run repository invariants appropriate to the changed surfaces.
-5. Commit one logical phase.
+5. Commit one logical deliverable/workstream.
 6. Run a bounded heterogeneous review against that commit/diff.
 7. Fix only admitted in-scope blockers, rerun tests, and record the terminal verdict.
 
-The phase cannot advance on an empty response, parser failure, timeout, or reviewer prose alone.
+Tests, reviewer seats, transport attempts, repairs, and retries consume the node's frozen
+gate-attempt budget. They never create a new phase or graph node. A dependent node cannot advance
+on an empty response, parser failure, timeout, or reviewer prose alone.
 
 The temporary ICC `--legacy-unmanaged` rail is scheduled for removal in v2.35.0 no later than
 2026-08-31. ICC P4 must retain the dated removal item in its ship artifact; L5/L6 reject the rail

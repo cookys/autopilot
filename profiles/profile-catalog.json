@@ -1,17 +1,17 @@
 {
   "schema_version": 1,
-  "inventory_sha256": "1dee81e242ad2d2114f232f798e0c9c2312371f536d318a5286de0ad95a37c89",
+  "inventory_sha256": "485ecd9f9be2e6953075f74fe65aea2b2864a263ec6d60b8b005c99776ef816b",
   "source_manifest_sha256": "5ba748b8e81e63b7c9278375385cdc9e84c22932ca7b31d8e7c96eb084784caa",
   "source_map_sha256": "ede8e180aed5d4eb85d8e90a3d81afa49b79ae5a5c9c56de288f9a40fe65ea79",
   "hook_classes_sha256": "99589c42c67df1ba75584cb2616720ef8e9011e409337b413013d8c1749b4663",
-  "rule_migration_sha256": "38f40c07e9c447b7d00a881de2ffc954c81d8e3397b9a4ba72a7957c63f34243",
+  "rule_migration_sha256": "489ab5436e90d828453045ed71be8da2a49677923ead7d4dccb3f6e0e3ca1cef",
   "guided_compatibility_sha256": "f1483b1a0b6f087e7a0d29622044226c0c9feb3568239ed909a3d1c7da5946b1",
   "category_totals": {
     "core": 114,
     "guided": 403,
     "autonomous": 16,
     "assurance": 80,
-    "topology": 142,
+    "topology": 180,
     "obsolete": 0
   },
   "core": {

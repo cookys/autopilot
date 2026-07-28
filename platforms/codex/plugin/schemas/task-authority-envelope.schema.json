@@ -20,10 +20,6 @@
     "finish_receipt_schema",
     "execution_preferences"
   ],
-  "optional_provenance": [
-    "mission_lineage_id",
-    "mission_policy_digest"
-  ],
   "properties": {
     "schema_version": { "const": 1 },
     "task_authority_id": { "$ref": "#/$defs/sha256" },
@@ -193,7 +189,8 @@
       "type": "string",
       "pattern": "^lineage-v1-[0-9a-f]{64}$"
     },
-    "mission_policy_digest": { "$ref": "#/$defs/sha256" }
+    "mission_policy_digest": { "$ref": "#/$defs/sha256" },
+    "mission_graph_digest": { "$ref": "#/$defs/sha256" }
   },
   "$defs": {
     "sha256": {

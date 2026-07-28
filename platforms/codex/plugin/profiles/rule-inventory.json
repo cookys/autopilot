@@ -46,7 +46,7 @@
   "sources": [
     {
       "path": "skills/ceo-agent/SKILL.md",
-      "sha256": "822232aa6340e8406ba9d16450bc9cc048008af8ae59e972c644379c2b3b70d8",
+      "sha256": "064f77976de4f044ee3103b939cb698438c3600232db06acc4cd644d6a866af2",
       "segments": [
         { "id": "ceo.discovery-routing", "category": "topology", "start_line": 4, "end_line": 7 },
         { "id": "ceo.dispatch-config", "category": "topology", "start_line": 12, "end_line": 19 },
@@ -88,12 +88,13 @@
         { "id": "ceo.profile-session-invariant", "category": "core", "start_line": 517, "end_line": 522 },
         { "id": "ceo.profile-runtime-lane", "category": "topology", "start_line": 523, "end_line": 523 },
         { "id": "ceo.profile-runtime-evidence", "category": "assurance", "start_line": 524, "end_line": 525 },
-        { "id": "ceo.profile-runtime-compatibility", "category": "topology", "start_line": 526, "end_line": 528 }
+        { "id": "ceo.profile-runtime-compatibility", "category": "topology", "start_line": 526, "end_line": 528 },
+        { "id": "ceo.mission-routing", "category": "topology", "start_line": 530, "end_line": 550 }
       ]
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "c70ad82ff579aaf69713c3b5884b7e6a3487bcab8062d39147a8220558d155ea",
+      "sha256": "15ef7d1d56bf63126c66d0de705e1d53de7dc2db2ed2ecdf320ee94d5f4125b3",
       "segments": [
         { "id": "dev.discovery-routing", "category": "topology", "start_line": 4, "end_line": 9 },
         { "id": "dev.config-and-routing", "category": "topology", "start_line": 14, "end_line": 28 },
@@ -136,7 +137,8 @@
         { "id": "dev.profile-guided-compatibility", "category": "guided", "start_line": 666, "end_line": 670 },
         { "id": "dev.profile-session-invariant", "category": "core", "start_line": 671, "end_line": 671 },
         { "id": "dev.profile-runtime-lane", "category": "topology", "start_line": 672, "end_line": 672 },
-        { "id": "dev.profile-runtime-evidence", "category": "assurance", "start_line": 673, "end_line": 673 }
+        { "id": "dev.profile-runtime-evidence", "category": "assurance", "start_line": 673, "end_line": 673 },
+        { "id": "dev.mission-routing", "category": "topology", "start_line": 675, "end_line": 708 }
       ]
     }
   ]

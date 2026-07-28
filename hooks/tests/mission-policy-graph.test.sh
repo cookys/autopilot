@@ -44,6 +44,7 @@ const baseGovernance = JSON.parse(fs.readFileSync(
   path.join(root, '.claude/owner-kernel-governance.json'),
   'utf8',
 ));
+delete baseGovernance.mission_convergence;
 const legacy = owner.resolveGovernancePolicy(baseGovernance);
 assert.equal(legacy.policy_hash, 'ebb355428a0f60be2b52d3842894bab215bf625b3359e0d6d2ba5696dae03ae8');
 assert.equal(Object.hasOwn(legacy.policy, 'mission_convergence'), false);
@@ -218,7 +219,7 @@ function reservation(overrides = {}) {
     campaigns: 1,
     wall_seconds: 1000,
     tool_calls: 100,
-    engine_attempts: 10,
+    engine_attempts: 3,
     external_wait_seconds: 10,
     canonical_changed_files: 10,
     output_bytes: 10000,
@@ -255,20 +256,20 @@ const graph = {
   schema_version: 1,
   artifact_type: 'mission_execution_graph',
   nodes: [
-    node('plan-review', [], 'plan-prs', 'R-PRS'),
-    node('runtime-control', [], 'plan-runtime', 'R-RUNTIME'),
-    node('transcript-retro', [], 'plan-ctr', 'R-CTR'),
+    node('plan-review', [], 'plan-prs', 'RPRS1'),
+    node('runtime-control', [], 'plan-runtime', 'RRUNTIME2'),
+    node('transcript-retro', [], 'plan-ctr', 'RCTR3'),
     node(
       'release-closeout',
       ['runtime-control', 'plan-review', 'transcript-retro'],
       'plan-close',
-      'R-CLOSE',
+      'RCLOSE4',
     ),
   ],
 };
 const frozenGraph = graphApi.checkMissionGraphCoverage(graph, {
   planIds: ['plan-prs', 'plan-runtime', 'plan-ctr', 'plan-close'],
-  rubricIds: ['R-PRS', 'R-RUNTIME', 'R-CTR', 'R-CLOSE'],
+  rubricIds: ['RPRS1', 'RRUNTIME2', 'RCTR3', 'RCLOSE4'],
 }, resolvedMission);
 assert.equal(frozenGraph.calculated_depth, 2);
 assert.equal(frozenGraph.calculated_batches, 2);
@@ -331,6 +332,93 @@ assert.throws(
   () => graphApi.freezeMissionExecutionGraph(ambiguousPath, resolvedMission),
   /bounded relative path/,
 );
+function projectionReject(mutate, pattern) {
+  const candidate = clone(graph);
+  mutate(candidate.nodes[0]);
+  assert.throws(
+    () => graphApi.freezeMissionExecutionGraph(candidate, resolvedMission),
+    pattern,
+  );
+}
+projectionReject(
+  (selected) => { selected.source_rubric_ids = ['r-invalid-hash']; },
+  /ICC rubric ID contract/,
+);
+projectionReject(
+  (selected) => {
+    selected.source_rubric_ids = Array.from({ length: 129 }, (_, index) => `R${index}`);
+  },
+  /1\.\.128 ICC-compatible IDs/,
+);
+projectionReject(
+  (selected) => {
+    selected.acceptance_ids = Array.from({ length: 65 }, (_, index) => `accept-${index}`);
+  },
+  /at most 64/,
+);
+projectionReject(
+  (selected) => {
+    selected.campaign.allowed_path_prefixes = Array.from(
+      { length: 129 },
+      (_, index) => `src/prefix-${index}`,
+    );
+  },
+  /at most 128/,
+);
+projectionReject(
+  (selected) => { selected.campaign.max_changed_files = 4097; },
+  /1\.\.4096/,
+);
+projectionReject(
+  (selected) => { selected.campaign.baseline_churn = 0; },
+  /1\.\.10000000/,
+);
+projectionReject(
+  (selected) => { selected.campaign.baseline_churn = 10000001; },
+  /1\.\.10000000/,
+);
+projectionReject(
+  (selected) => { selected.campaign.max_growth_ratio = 1.5001; },
+  /1\.\.1\.5/,
+);
+projectionReject(
+  (selected) => { selected.campaign.max_extra_churn = 5000001; },
+  /0\.\.5000000/,
+);
+projectionReject(
+  (selected) => { selected.campaign.max_extra_churn = 51; },
+  /ratio-derived ceiling 50/,
+);
+projectionReject(
+  (selected) => { selected.campaign.max_repair_generations = 3; },
+  /0\.\.2/,
+);
+projectionReject(
+  (selected) => { selected.campaign.max_wall_seconds = 3601; },
+  /1\.\.3600/,
+);
+projectionReject(
+  (selected) => {
+    selected.verification_commands = ['x'.repeat(2048), 'y'.repeat(2048)];
+  },
+  /projection exceeds 4096/,
+);
+projectionReject(
+  (selected) => { selected.reservation.tool_calls = 0; },
+  /tool_calls.*1\.\./,
+);
+projectionReject(
+  (selected) => { selected.reservation.engine_attempts = 0; },
+  /engine_attempts.*1\.\.3/,
+);
+projectionReject(
+  (selected) => { selected.reservation.engine_attempts = 4; },
+  /engine_attempts.*1\.\.3/,
+);
+projectionReject(
+  (selected) => { selected.reservation.output_bytes = 0; },
+  /output_bytes.*1\.\./,
+);
 const oversized = {
   ...graph,
   nodes: Array.from({ length: 34 }, (_, index) => (
@@ -368,7 +456,7 @@ assert.throws(
 assert.throws(
   () => graphApi.checkMissionGraphCoverage(graph, {
     planIds: ['plan-prs', 'plan-runtime', 'plan-ctr', 'invented'],
-    rubricIds: ['R-PRS', 'R-RUNTIME', 'R-CTR', 'R-CLOSE'],
+    rubricIds: ['RPRS1', 'RRUNTIME2', 'RCTR3', 'RCLOSE4'],
   }, resolvedMission),
   (error) => error.code === 'MISSION_GRAPH_PLAN_COVERAGE',
 );
@@ -433,14 +521,13 @@ assert.throws(
   () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath }),
   /coverage is not exact/,
 );
-const originalRubricId = derivedCoverage.rubricIds[0];
 const changedRubric = '## R1 Ready with changed semantics\n';
 fs.writeFileSync(path.join(sourceRoot, sourceFiles[0].rubric), changedRubric);
 const changedRubricManifest = clone(sourceManifest);
 changedRubricManifest.sources[0].rubric_sha256 = hash(changedRubric);
 fs.writeFileSync(sourcesPath, JSON.stringify(changedRubricManifest));
 const changedRubricCoverage = graphChecker.loadSourceCoverageManifest(sourcesPath);
-assert.notEqual(changedRubricCoverage.rubricIds[0], originalRubricId);
+assert.notDeepEqual(changedRubricCoverage.rubricIds, derivedCoverage.rubricIds);
 fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
 assert.throws(
   () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath }),
@@ -503,11 +590,30 @@ const policySchema = JSON.parse(fs.readFileSync(path.join(root, 'schemas/mission
 const graphSchema = JSON.parse(fs.readFileSync(path.join(root, 'schemas/mission-execution-graph.schema.json')));
 assert.equal(policySchema.properties.max_deliverables.minimum, undefined);
 assert.equal(graphSchema.$defs.node.properties.gate_attempt_budget.minimum, 1);
+assert.equal(graphSchema.$defs.node.properties.source_rubric_ids.maxItems, 128);
+assert.equal(
+  graphSchema.$defs.node.properties.source_rubric_ids.items.pattern,
+  '^[A-Za-z][A-Za-z0-9_-]*[0-9]+$',
+);
+assert.equal(graphSchema.$defs.node.properties.acceptance_ids.maxItems, 64);
+assert.equal(graphSchema.$defs.campaign.properties.allowed_path_prefixes.maxItems, 128);
+assert.equal(graphSchema.$defs.campaign.properties.max_changed_files.maximum, 4096);
+assert.equal(graphSchema.$defs.campaign.properties.baseline_churn.minimum, 1);
+assert.equal(graphSchema.$defs.campaign.properties.max_growth_ratio.maximum, 1.5);
+assert.equal(graphSchema.$defs.campaign.properties.max_extra_churn.maximum, 5000000);
+assert.equal(graphSchema.$defs.campaign.properties.max_wall_seconds.maximum, 3600);
+assert.equal(graphSchema.$defs.reservation.properties.engine_attempts.maximum, 3);
 const authoritySchema = JSON.parse(fs.readFileSync(
   path.join(root, 'schemas/task-authority-envelope.schema.json'),
 ));
-assert.ok(authoritySchema.optional_provenance.includes('mission_graph_digest'));
-assert.ok(authoritySchema.properties.mission_graph_digest);
+for (const field of [
+  'mission_lineage_id',
+  'mission_policy_digest',
+  'mission_graph_digest',
+]) {
+  assert.ok(authoritySchema.properties[field]);
+  assert.equal(authoritySchema.required.includes(field), false);
+}
 
 console.log(JSON.stringify({
   legacy_policy_hash_unchanged: true,

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-26-implementation-campaign-convergence-control.md",
+      "rubric_path": "plans/2026-07-26-implementation-campaign-convergence-control.rubric.md",
+      "plan_sha256": "d4c7ee6e9e0256a6498551e1af4e5a7dfce16c695e2447e62f2bea71144dd479",
+      "rubric_sha256": "62062f8d3f147970ee8b841589716d3309e0cbfecb215a57e44230e5aabff701"
+    },
+    {
+      "plan_path": "plans/2026-07-26-task-convergence-contract.md",
+      "rubric_path": "plans/2026-07-26-task-convergence-contract.rubric.md",
+      "plan_sha256": "1d82264b51b0a361bf0db673aa6d479576c2370b11c1c2db6b39cf8918d206dc",
+      "rubric_sha256": "e9dcffa05c2f9e0a96d59ce1a655b4c0cc2dbfe0b1428817b291fa98d6260e48"
+    },
+    {
+      "plan_path": "plans/2026-07-26-provider-readiness-orchestrator.md",
+      "rubric_path": "plans/2026-07-26-provider-readiness-orchestrator.rubric.md",
+      "plan_sha256": "8b3580bfc2f58e235661dc8749375d8563826adb0247dbefc08c44829351c42d",
+      "rubric_sha256": "6f18af4bce669ff1b56313593a832886489435dfd45b2ba95b6f38c612d53768"
+    },
+    {
+      "plan_path": "plans/2026-07-26-dispatch-worktree-lifecycle-budget.md",
+      "rubric_path": "plans/2026-07-26-dispatch-worktree-lifecycle-budget.rubric.md",
+      "plan_sha256": "8eb4fc58fd3755d2b1f08be947dcb9d9fde1e86715bcd98c054fe396f52556dc",
+      "rubric_sha256": "73836a68f3b48958abf8ea940dd0f48378a8f9c09ccf4a3a22ff2c549a8adbe8"
+    },
+    {
+      "plan_path": "plans/2026-07-26-l6-status-merge-contract.md",
+      "rubric_path": "plans/2026-07-26-l6-status-merge-contract.rubric.md",
+      "plan_sha256": "7bf74c9685b0fd98320c860a68f886367767967b95f661fb72435e97107952b4",
+      "rubric_sha256": "77f17dff39be90e1cac5b0345957e948a2951b1e18de3a310c700bfda09709ac"
+    },
+    {
+      "plan_path": "plans/2026-07-26-plan-review-session-controller.md",
+      "rubric_path": "plans/2026-07-26-plan-review-session-controller.rubric.md",
+      "plan_sha256": "925badfc6805f93e6e5c3a62a40427e03835b07efe98389ca593463df2341093",
+      "rubric_sha256": "e518a66e34cc94c63e68fa9df3291f0ca844a00e16f2f4f1f34ef48c74753ad6"
+    },
+    {
+      "plan_path": "plans/2026-07-26-cross-harness-transcript-retro.md",
+      "rubric_path": "plans/2026-07-26-cross-harness-transcript-retro.rubric.md",
+      "plan_sha256": "1eed0ef7002319f082df506fdfcb8ec6de673c4c4f6754671c51b15404e49bac",
+      "rubric_sha256": "3b19a4637b6e313e33769d62250d1b897d5827963c7ec50d8d053fc44a0ca9b9"
+    }
+  ]
+}

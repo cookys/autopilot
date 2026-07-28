@@ -526,3 +526,25 @@ The `profile-session.js prepare -> measure -> run -> check` lane is a no-effect 
 neither qualifies an effectful child. Until P5 records an independently witnessed transport,
 the already-loaded main plugin session remains the guided compatibility host. Never simulate an
 autonomous switch by appending profile prose to that session.
+
+## Mission Routing Override
+
+When `mission_convergence` is configured, this section overrides every legacy Phase/P0 task
+enumeration rule above. Before any TaskCreate, branch, worktree, runner, or model effect, run:
+
+```bash
+node <plugin>/scripts/mission-routing-admission.js \
+  --repo-root <repo> --level <entry-level>
+```
+
+- Enforce requires `READY`; shadow records `admitted`/`would_block` without claiming authority;
+  off returns `LEGACY`.
+- Plan `Phase`/`P0..PN` headings, modules, reviewer seats, tests, retries, repairs, and fallbacks
+  are coverage or gates inside caller-authored bounded deliverables. They never authorize tasks
+  through one-for-one expansion.
+- In `READY`, a legacy "phase" means one admitted graph node. Create only those nodes as
+  implementation tasks; keep the historical implementation sequence in a separate README ledger.
+- A topology fallback reuses the same policy/graph/source admission. It does not author a second
+  graph, mint new authority, or reset the owning node's gate-attempt budget.
+- Expanding source headings into tasks, or enumerating tasks before Mission admission and the scope
+  audit, is a process violation.

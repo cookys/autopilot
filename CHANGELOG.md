@@ -24,6 +24,26 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## Unreleased — Bounded Mission routing
+
+### Added
+- A project-authoritative Mission policy, content-bound source manifest, and four-node execution
+  graph for the convergence portfolio.
+- `mission-routing-admission.js` and an L3-L6/solo/fallback adversarial matrix that reject
+  deliverable-count, critical-path, and aggregate-reservation overflow before effects.
+- A frozen candidate-path audit that recomputes available historical ranges, records five
+  pre-admission shared-document exclusions, and proves every remaining candidate or post-C bridge
+  path has exactly one active deliverable owner.
+
+### Changed
+- Dev-flow, project bootstrap, CEO mode, and L3-L6 now treat plan phases, modules, tests, reviewer
+  seats, and retries as coverage/gates inside caller-authored bounded deliverables. Only graph
+  nodes that pass canonical policy/graph/source admission become implementation tasks.
+- Session-mode markers preserve one admission digest while normal, solo, and precondition-fallback
+  routes change execution topology.
+- Mission graph nodes now use ICC-compatible rubric IDs and strict campaign projection ceilings for
+  repair generations, wall time, churn, file count, engine attempts, command size, and output paths.
+
 ## v2.33.0 — Capability-adaptive execution profiles
 
 **Headline**: Autopilot remains one product for strong, weak, remote, and local models. It now

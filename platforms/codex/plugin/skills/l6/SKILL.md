@@ -34,7 +34,12 @@ Hard rules:
   (`node scripts/dispatch-contract.js check --contract <unit.json> --repo <repo> --json`) must
   return GO before ANY runner spend — a prompt is task detail, not authorization. The
   runner/model derive from the checker's resolved verification-author tuple; caller-supplied
-  `--runner`/`--model`/`--timeout` that disagree are precondition-rejected. Consuming-checkout
+  `--runner`/`--model`/`--timeout` that disagree are precondition-rejected. A GO with
+  `assurance: "provisional"` admits only untrusted **raw-artifact** generation labor from an
+  exact project-configured provisional verification-author row (`observed_status=qualified`);
+  it does **not** grant review, verifier, acceptance, merge, closeout, owner, or finish
+  authority. Depth-0 must execute the authored artifact and remains the sole
+  verification/merge authority. Consuming-checkout
   mutation is `containment_breach` (exit 4) and the artifact is quarantined, never promoted.
   Repository mutation has one entry:
   `node "$autopilot_root/bin/autopilot.js" engine implement-review --campaign-contract <campaign.json> ...`.

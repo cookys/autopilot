@@ -1497,6 +1497,171 @@ console.log(`durable_release_fail_no_mutation=${
   !durableReleaseFail.events.includes('mutation_failed')
 }`);
 
+// Durable never-dispatched prepare (missing sealed root identity): after
+// IMPLEMENTATION_STARTED, prepare_implementation blocks with null dispatcher
+// result. Must release ICC+Mission zero-effect path — no mutation_failed,
+// no terminal reconcile, no dispatcher call.
+const durableNeverDispatched = (() => {
+  const events = [];
+  let dispatchCalls = 0;
+  let releaseRejection = null;
+  let terminalCalls = 0;
+  let mutationFailed = false;
+  class NeverDispatchedEngine extends AutopilotEngine {
+    implementTask() {
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        reason: 'managed strict implementation requires AUTOPILOT_ROOT_RUN_ID',
+        roster,
+        resolveResult: null,
+        implementationResult: null,
+        implementationArgs: null,
+        implementation: null,
+        ledger: [],
+      };
+    }
+  }
+  const engine = new NeverDispatchedEngine({
+    cwd: repo,
+    clock: () => '2026-07-26T00:00:04.000Z',
+    campaignIntake() {
+      return durableManagedControl('durable-never-dispatched');
+    },
+    campaignEventAppender(input) {
+      events.push(input.eventType);
+      if (input.eventType === 'mutation_failed' || input.eventType === 'terminal_stop') {
+        mutationFailed = true;
+      }
+      const state = input.campaignControl.initial_state;
+      if (input.eventType === 'implementation_started') {
+        return {
+          status: 'appended',
+          event: { event_type: input.eventType, timestamp: input.observedAt },
+          state: {
+            ...state,
+            phase: 'IMPLEMENTING',
+            generation: 0,
+            event_count: 1,
+            usage: state.usage || {
+              repair_generations: 0,
+              changed_files: 0,
+              churn: 0,
+              elapsed_wall_seconds: 0,
+            },
+            live_lease: {
+              stage_identity: input.stageIdentity,
+              generation: 0,
+              acquired_at: input.observedAt,
+            },
+          },
+        };
+      }
+      return {
+        status: 'appended',
+        event: { event_type: input.eventType, timestamp: input.observedAt },
+        state: {
+          ...state,
+          phase: 'TERMINAL_STOP',
+          live_lease: null,
+          event_count: (state.event_count || 0) + 1,
+        },
+      };
+    },
+    campaignAdmissionReleaser(input) {
+      releaseRejection = input.rejection || null;
+      return { status: 'released', rejection: input.rejection };
+    },
+    missionTerminalReconciler() {
+      terminalCalls += 1;
+      return { status: 'applied' };
+    },
+    campaignAdmissionCompleter() {
+      return { status: 'completed' };
+    },
+    implementationDispatcher() {
+      dispatchCalls += 1;
+      throw new Error('never-dispatched prepare must not call implementationDispatcher');
+    },
+  });
+  const result = engine.runImplementationReviewLoop({
+    promptFile,
+    branch: 'impl/icc-p1-intake',
+    base,
+    roster,
+    campaignContract: contractPath,
+    implementationOptions: {
+      // Explicitly omit AUTOPILOT_ROOT_RUN_ID — classification still uses the
+      // never-dispatched prepare leaf shape from implementTask override.
+      env: { PATH: process.env.PATH || '' },
+    },
+  });
+  return {
+    result,
+    events,
+    releaseRejection,
+    terminalCalls,
+    mutationFailed,
+    dispatchCalls,
+  };
+})();
+console.log(`durable_never_dispatched_status=${durableNeverDispatched.result.status}`);
+console.log(`durable_never_dispatched_events=${durableNeverDispatched.events.join(',')}`);
+console.log(`durable_never_dispatched_release_status=${
+  durableNeverDispatched.result.campaign_control
+  && durableNeverDispatched.result.campaign_control.admission_release
+    ? durableNeverDispatched.result.campaign_control.admission_release.status
+    : null
+}`);
+console.log(`durable_never_dispatched_release_code=${
+  durableNeverDispatched.releaseRejection
+  && durableNeverDispatched.releaseRejection.code
+}`);
+console.log(`durable_never_dispatched_leaf_bound=${Boolean(
+  durableNeverDispatched.releaseRejection
+  && durableNeverDispatched.releaseRejection.zero_effect_leaf
+  && durableNeverDispatched.releaseRejection.zero_effect_leaf.status === 'precondition_failed'
+  && durableNeverDispatched.releaseRejection.zero_effect_leaf.commit === null
+  && durableNeverDispatched.releaseRejection.zero_effect_leaf.worktree === null
+  && durableNeverDispatched.releaseRejection.zero_effect_leaf.agent_log === null
+  && durableNeverDispatched.releaseRejection.zero_effect_leaf.files_changed === 0
+  && durableNeverDispatched.releaseRejection.zero_effect_leaf.insertions === 0
+  && durableNeverDispatched.releaseRejection.zero_effect_leaf.deletions === 0
+)}`);
+console.log(`durable_never_dispatched_terminal_calls=${durableNeverDispatched.terminalCalls}`);
+console.log(`durable_never_dispatched_mutation_failed=${durableNeverDispatched.mutationFailed}`);
+console.log(`durable_never_dispatched_dispatch_calls=${durableNeverDispatched.dispatchCalls}`);
+console.log(`durable_never_dispatched_no_terminal_failure=${
+  !durableNeverDispatched.result.campaign_control
+  || !durableNeverDispatched.result.campaign_control.terminal_failure
+}`);
+
+// Ambiguous post-dispatch failure (dispatcher returned a non-zero-effect shape)
+// remains possibly effectful — terminalize, never zero-effect release.
+const durableAmbiguousPostDispatch = runDurableLeafCase('ambiguous-post', {
+  status: 'failed',
+  agent_log: null,
+  worktree: null,
+  commit: null,
+  files_changed: 0,
+  insertions: 0,
+  deletions: 0,
+  error: 'ambiguous runner failure after dispatch',
+});
+console.log(`durable_ambiguous_terminalizes=${Boolean(
+  durableAmbiguousPostDispatch.mutationFailed
+  || (durableAmbiguousPostDispatch.result.campaign_control
+    && durableAmbiguousPostDispatch.result.campaign_control.terminal_failure
+    && durableAmbiguousPostDispatch.result.campaign_control.terminal_failure.status
+      === 'terminalized')
+)}`);
+console.log(`durable_ambiguous_release_calls=${
+  durableAmbiguousPostDispatch.result.campaign_control
+  && durableAmbiguousPostDispatch.result.campaign_control.admission_release
+    ? 1
+    : 0
+}`);
+
 let expiredImplementationCalls = 0;
 let expiredReleaseCalls = 0;
 const expiredBeforeImplementation = new AutopilotEngine({
@@ -1993,6 +2158,28 @@ assert_contains "$INTAKE_OUT" "durable_release_fail_terminal_calls=0" \
   "failed zero-effect release does not claim Mission terminal success"
 assert_contains "$INTAKE_OUT" "durable_release_fail_no_mutation=true" \
   "failed zero-effect release never writes MUTATION_FAILED"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_status=blocked" \
+  "never-dispatched prepare remains a blocked campaign result"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_events=implementation_started" \
+  "never-dispatched prepare records only IMPLEMENTATION_STARTED intent"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_release_status=released" \
+  "never-dispatched prepare releases campaign admission"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_release_code=campaign_pre_effect_blocked" \
+  "never-dispatched prepare uses the pre-effect rejection code"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_leaf_bound=true" \
+  "never-dispatched rejection digests bind exact zero-effect leaf facts"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_terminal_calls=0" \
+  "never-dispatched prepare never reconciles a Mission terminal receipt"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_mutation_failed=false" \
+  "never-dispatched prepare never appends MUTATION_FAILED"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_dispatch_calls=0" \
+  "never-dispatched prepare never calls the implementation dispatcher"
+assert_contains "$INTAKE_OUT" "durable_never_dispatched_no_terminal_failure=true" \
+  "never-dispatched prepare never stores a campaign terminal failure"
+assert_contains "$INTAKE_OUT" "durable_ambiguous_terminalizes=true" \
+  "ambiguous post-dispatch failure remains possibly effectful"
+assert_contains "$INTAKE_OUT" "durable_ambiguous_release_calls=0" \
+  "ambiguous post-dispatch failure does not take zero-effect admission release"
 assert_contains "$INTAKE_OUT" "expired_impl_phase=campaign_wall_budget" \
   "zero remaining wall budget blocks before implementation dispatch"
 assert_contains "$INTAKE_OUT" "expired_impl_calls=0" \

@@ -2408,6 +2408,15 @@ function handleAbortFinalized(state, event, _payload) {
   };
 }
 
+function hasLiveUnreleasedClaims(state) {
+  for (const claim of Object.values(state.claims || {})) {
+    if (claim && !claim.released && !claim.terminal) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function handleStagnationObservation(state, event, payload) {
   const stagnant = requireInteger(
     payload.stagnant_campaigns,
@@ -2419,9 +2428,13 @@ function handleStagnationObservation(state, event, payload) {
   const requestThirdGrant = payload.request_third_grant === true;
   let newCount = Math.max(stagnant, state.stagnant_campaigns);
   let next = Object.freeze({ ...appendEvent(state, event), stagnant_campaigns: newCount });
-  if (acceptanceUnresolved && newCount >= state.max_stagnant_campaigns) {
+  // Preserve the stagnation count always, but do not terminalize Mission while
+  // any unreleased nonterminal claim remains live. After the final live claim
+  // terminates without progress, the existing threshold may terminalize.
+  const mayTerminalize = !hasLiveUnreleasedClaims(next);
+  if (mayTerminalize && acceptanceUnresolved && newCount >= state.max_stagnant_campaigns) {
     next = setTerminal(next, 'BLOCKED', 'stagnation');
-  } else if (requestThirdGrant && newCount >= state.max_stagnant_campaigns) {
+  } else if (mayTerminalize && requestThirdGrant && newCount >= state.max_stagnant_campaigns) {
     next = setTerminal(next, 'BLOCKED', 'stagnation');
   }
   return {

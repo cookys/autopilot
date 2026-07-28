@@ -979,18 +979,45 @@ function reviewerQualificationViable(roster) {
     }) !== null;
 }
 
+function isNeverDispatchedPrepareRejection(result) {
+  // Mechanical proof the implementation dispatcher was never called: prepare
+  // blocked with null dispatcher result and null parsed implementation leaf.
+  // Ambiguous post-dispatch failures keep a non-null implementationResult.
+  return Boolean(result)
+    && result.status === 'blocked'
+    && result.phase === 'prepare_implementation'
+    && result.implementationResult === null
+    && result.implementation === null;
+}
+
 function zeroEffectLeafFacts(result) {
   const leaf = result && result.implementation;
-  if (!leaf || typeof leaf !== 'object' || Array.isArray(leaf)) return null;
-  return {
-    status: leaf.status,
-    commit: leaf.commit,
-    worktree: leaf.worktree,
-    agent_log: leaf.agent_log,
-    files_changed: leaf.files_changed,
-    insertions: leaf.insertions,
-    deletions: leaf.deletions,
-  };
+  if (leaf && typeof leaf === 'object' && !Array.isArray(leaf)) {
+    return {
+      status: leaf.status,
+      commit: leaf.commit,
+      worktree: leaf.worktree,
+      agent_log: leaf.agent_log,
+      files_changed: leaf.files_changed,
+      insertions: leaf.insertions,
+      deletions: leaf.deletions,
+    };
+  }
+  // Never-dispatched prepare rejections (e.g. missing/mismatched
+  // AUTOPILOT_ROOT_RUN_ID) produce no leaf; synthesize the exact zero-effect
+  // shape so ICC + Mission release can bind deterministic leaf facts.
+  if (isNeverDispatchedPrepareRejection(result)) {
+    return {
+      status: 'precondition_failed',
+      commit: null,
+      worktree: null,
+      agent_log: null,
+      files_changed: 0,
+      insertions: 0,
+      deletions: 0,
+    };
+  }
+  return null;
 }
 
 function isExactZeroEffectPreconditionLeaf(leaf) {
@@ -1008,9 +1035,7 @@ function isExactZeroEffectPreconditionLeaf(leaf) {
 
 function isCampaignPreSpendRejection(result) {
   if (!result || result.status !== 'blocked') return false;
-  if (result.phase === 'prepare_implementation'
-      && result.implementationResult === null
-      && result.implementation === null) {
+  if (isNeverDispatchedPrepareRejection(result)) {
     return true;
   }
   return isExactZeroEffectPreconditionLeaf(result.implementation);
@@ -1051,7 +1076,8 @@ function isCampaignAdmissionReleasable(state, claim, leafProof) {
     return true;
   }
   // Post-IMPLEMENTATION_STARTED durable release requires the exact zero-effect
-  // leaf proof. prepare_implementation / null-leaf shapes do not qualify.
+  // leaf proof (dispatcher precondition_failed, or never-dispatched prepare
+  // with synthesized null-mutation facts) plus intent-only journal state.
   return isExactZeroEffectLeafProof(leafProof)
     && isIntentOnlyImplementationStartedState(state, claim);
 }
@@ -3758,8 +3784,10 @@ class AutopilotEngine {
       const soleInitialPreSpend = implementationChain.length === 0
         || (implementationChain.length === 1
           && isCampaignPreSpendRejection(finalImplementation));
-      // Exact zero-effect leaf after sole initial dispatch (durable only).
-      // prepare_implementation / null-leaf shapes must not take this path.
+      // Exact zero-effect after sole initial leaf (durable only): either a
+      // dispatcher precondition_failed with null mutation facts, or a never-
+      // dispatched prepare_implementation rejection (e.g. missing root id).
+      // Ambiguous / post-dispatch failures remain fail-closed possibly effectful.
       const soleInitialExactZeroEffectLeaf = implementationChain.length === 1
         && isExactZeroEffectLeafProof(finalImplementation);
       if (!durableJournal && soleInitialPreSpend) {

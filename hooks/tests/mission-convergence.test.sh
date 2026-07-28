@@ -1800,6 +1800,85 @@ if (createMissionState && reduceMissionState && stateHash) {
         && !rejectedLive.state.terminal
         && stateHash(rejectedLive.state) === hashBeforeLive ? 'PASS' : 'FAIL'}`);
 
+    // Stagnation threshold preserves count while an unreleased nonterminal claim
+    // remains live; only terminalizes after the final live claim is gone.
+    const stagnantBase = createMissionState(makeContract());
+    const liveA = reduceMissionState(
+      stagnantBase,
+      claimEvent(stagnantBase, {
+        idempotency_key: 'stagnation-live-a',
+        campaign_id: 'campaign-stagnation-a',
+      }),
+    );
+    const liveB = reduceMissionState(
+      liveA.state,
+      claimEvent(liveA.state, {
+        idempotency_key: 'stagnation-live-b',
+        campaign_id: 'campaign-stagnation-b',
+      }),
+    );
+    const claimAId = liveA.receipt.claim_id;
+    const claimBId = liveB.receipt.claim_id;
+    // Simulate claim A already terminal/released while B remains live.
+    const mid = JSON.parse(JSON.stringify(liveB.state));
+    mid.claims[claimAId] = {
+      ...mid.claims[claimAId],
+      released: true,
+      terminal: true,
+    };
+    mid.claims[claimBId] = {
+      ...mid.claims[claimBId],
+      released: false,
+      terminal: false,
+    };
+    mid.stagnant_campaigns = 0;
+    mid.max_stagnant_campaigns = 2;
+    mid.state = 'ACTIVE';
+    mid.terminal = null;
+    const stagnateWithLive = reduceMissionState(mid, {
+      event_type: 'stagnation_observation',
+      sequence: (mid.events || []).length + 1,
+      mission_lineage_id: mid.mission_lineage_id,
+      payload: {
+        stagnant_campaigns: 2,
+        acceptance_unresolved: true,
+        request_third_grant: false,
+      },
+    });
+    console.log(`stagnation-preserves-count-with-live-claim\t${
+      stagnateWithLive
+        && stagnateWithLive.state.stagnant_campaigns === 2
+        && stagnateWithLive.state.state !== 'BLOCKED'
+        && !stagnateWithLive.state.terminal
+        && stagnateWithLive.receipt
+        && stagnateWithLive.receipt.stagnant_campaigns === 2
+        && stagnateWithLive.receipt.grant_authorized === true ? 'PASS' : 'FAIL'}`);
+    // After the last live claim terminates, the same threshold may BLOCK.
+    const drained = JSON.parse(JSON.stringify(stagnateWithLive.state));
+    drained.claims[claimBId] = {
+      ...drained.claims[claimBId],
+      released: true,
+      terminal: true,
+    };
+    const stagnateAfterDrain = reduceMissionState(drained, {
+      event_type: 'stagnation_observation',
+      sequence: (drained.events || []).length + 1,
+      mission_lineage_id: drained.mission_lineage_id,
+      payload: {
+        stagnant_campaigns: 2,
+        acceptance_unresolved: true,
+        request_third_grant: false,
+      },
+    });
+    console.log(`stagnation-terminalizes-after-final-live-claim\t${
+      stagnateAfterDrain
+        && stagnateAfterDrain.state.stagnant_campaigns === 2
+        && stagnateAfterDrain.state.state === 'BLOCKED'
+        && stagnateAfterDrain.state.terminal
+        && stagnateAfterDrain.state.terminal.reason === 'stagnation'
+        && stagnateAfterDrain.receipt
+        && stagnateAfterDrain.receipt.grant_authorized === false ? 'PASS' : 'FAIL'}`);
+
     // Nonzero reserved_active / active_actual blocks finalization.
     const adapterRes = new ac.AuthenticatedControlAdapter({
       verifier: () => ({ verified: true, authority: 'authenticated_user' }),
@@ -2045,6 +2124,8 @@ for id in \
   abort-legacy-rejects-wrong-nested-action \
   abort-legacy-rejects-lineage-mismatch \
   abort-live-claim-rejects \
+  stagnation-preserves-count-with-live-claim \
+  stagnation-terminalizes-after-final-live-claim \
   abort-nonzero-reservation-rejects \
   abort-unrelated-event-rejects \
   abort-terminal-receipt-only-after-finalization \

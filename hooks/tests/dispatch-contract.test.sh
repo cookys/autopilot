@@ -955,13 +955,234 @@ assert_eq "$rc" "3"
 assert_nogo_json "$out" "qualified"
 
 if [ "$VA_SEEDING_FAILED" -eq 0 ]; then
-  echo "--- Case 10.7: provisional verification-author remains NO-GO (role fail-closed) ---"
+  echo "--- Case 10.7: provisional verification-author GO for raw-artifact only ---"
   # Seed VA as qualified so disk projects provisional; without legacy rewrite it stays provisional.
+  # raw-artifact authoring labor may GO with assurance=provisional; no review/merge authority.
   setup_va_qualified_store "$STORE_BASE/va_provisional" "qualified" "available"
   out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_provisional" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_provisional" \
     node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "0"
+  keys=$(json_keys "$out" 2>/dev/null) || keys=""
+  assert_eq "$keys" "assurance,contract_sha256,reasons,resolved_engine,spec_sha256,unit_id,verdict"
+  field=$(json_get "$out" "verdict") || fail "provisional VA verdict extraction failed"
+  assert_eq "$field" "GO"
+  field=$(json_get "$out" "assurance") || fail "provisional VA assurance extraction failed"
+  assert_eq "$field" "provisional"
+  field=$(json_get "$out" "resolved_engine.model") || fail "provisional VA model extraction failed"
+  assert_eq "$field" "glm-5.2"
+  field=$(json_get "$out" "resolved_engine.runner") || fail "provisional VA runner extraction failed"
+  assert_eq "$field" "anthropic-compatible"
+  field=$(json_get "$out" "resolved_engine.family") || fail "provisional VA family extraction failed"
+  assert_eq "$field" "zhipu"
+  assert_not_contains "$out" '"assurance":"qualified"'
+  assert_not_contains "$out" '"status":"qualified"'
+
+  echo "--- Case 10.7b: provisional VA without observed_status=qualified is NO-GO ---"
+  PRELOAD_VA_OBS="$TEST_TMP/provisional-va-observed-rewrite.cjs"
+  cat > "$PRELOAD_VA_OBS" <<'NODE'
+'use strict';
+const path = require('path');
+const childProcess = require('child_process');
+const originalSpawnSync = childProcess.spawnSync;
+const rewriteTo = process.env.AUTOPILOT_TEST_REWRITE_OBSERVED_STATUS || '';
+childProcess.spawnSync = function projectedSpawnSync(command, args, options) {
+  const result = originalSpawnSync.call(this, command, args, options);
+  if (!Array.isArray(args) || args.length < 2
+      || path.basename(String(args[0])) !== 'engine-scorecard.js'
+      || args[1] !== 'current' || result.status !== 0) {
+    return result;
+  }
+  try {
+    const rows = JSON.parse(String(result.stdout || ''));
+    if (!Array.isArray(rows)) return result;
+    const projected = rows.map((row) => {
+      if (!row || row.status !== 'provisional' || row.role !== 'verification_author') return row;
+      if (rewriteTo === '__delete__') {
+        const next = { ...row };
+        delete next.observed_status;
+        return next;
+      }
+      return { ...row, observed_status: rewriteTo };
+    });
+    return { ...result, stdout: `${JSON.stringify(projected)}\n` };
+  } catch {
+    return result;
+  }
+};
+NODE
+  for obs_case in missing provisional unknown; do
+    if [ "$obs_case" = "missing" ]; then
+      rewrite='__delete__'
+    else
+      rewrite="$obs_case"
+    fi
+    out=$(env NODE_OPTIONS="--require=$PRELOAD_VA_OBS" \
+      AUTOPILOT_TEST_REWRITE_OBSERVED_STATUS="$rewrite" \
+      ENGINE_SCORECARD_DIR="$STORE_BASE/va_provisional" \
+      ENGINE_CAPABILITY_DIR="$STORE_BASE/va_provisional" \
+      node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+    assert_eq "$rc" "3" "VA observed_status=$obs_case must NO-GO"
+    assert_nogo_json "$out" "qualified"
+  done
+
+  echo "--- Case 10.7c: provisional VA with non-raw-artifact output is NO-GO ---"
+  cat > "$CONTRACT_DIR/va_verdict.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "feat-core-va-verdict",
+  "role": "verification-author",
+  "goal": "Verify core API",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$BASE_SHA",
+  "depends_on": ["$DEP_SHA"],
+  "scope": {
+    "allow_paths": ["oracle.test.sh"],
+    "deny_paths": ["vendor/"],
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["specs/feat/core.md"],
+    "required_engine_role": "verification-author",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "verdict", "paths": ["oracle.test.sh"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_provisional" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_provisional" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_verdict.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
   assert_eq "$rc" "3"
   assert_nogo_json "$out" "qualified"
+
+  echo "--- Case 10.7d: failed VA remains NO-GO under native projection ---"
+  setup_va_qualified_store "$STORE_BASE/va_failed" "failed" "available"
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_failed" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_failed" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "qualified"
+
+  echo "--- Case 10.7e: identity-mismatched VA remains NO-GO ---"
+  rm -rf "$STORE_BASE/va_mismatch"
+  mkdir -p "$STORE_BASE/va_mismatch"
+  cat > "$STORE_BASE/va_mismatch/score.json" <<'EOF'
+{"engine":"wrong-va-model","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/va_mismatch" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/va_mismatch/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (va_mismatch)"; exit 1
+  }
+  cat > "$STORE_BASE/va_mismatch/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/va_mismatch" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/va_mismatch/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (va_mismatch)"; exit 1
+  }
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_mismatch" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_mismatch" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "3"
+  assert_nogo_json "$out" "qualified"
+
+  echo "--- Case 10.8: /l6 config tuple VA family differs from Grok implementer ---"
+  # Regression: project-pinned /l6 VA must not resolve to the same family as the
+  # Grok implementer (xai). Mini-repo config is rewritten to the real /l6 pair.
+  git checkout -- . 2>/dev/null || true
+  cat > "$MINI_REPO/.claude/review-loop-config.md" <<'EOF'
+# Review Loop Config (l6 family decorrelation regression)
+- implementer_engine: grok-4.5
+- implementer_runner: grok
+- implementer_effort: high
+- verification_author_present: true
+- verification_author_engine: Gemini 3.5 Flash (High)
+- verification_author_runner: agy
+- verification_author_effort: high
+EOF
+  # Scorecard/capability for the Gemini VA tuple only (strict author path).
+  rm -rf "$STORE_BASE/va_l6_family"
+  mkdir -p "$STORE_BASE/va_l6_family"
+  cat > "$STORE_BASE/va_l6_family/score.json" <<'EOF'
+{"engine":"Gemini 3.5 Flash (High)","runner":"agy","family":"google","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+EOF
+  env ENGINE_SCORECARD_DIR="$STORE_BASE/va_l6_family" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/va_l6_family/score.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-scorecard.js failed setup (va_l6_family)"; exit 1
+  }
+  cat > "$STORE_BASE/va_l6_family/cap.json" <<EOF
+{"schema_version":1,"observed_at":"$(utc_now)","runner":"agy","model":"Gemini 3.5 Flash (High)","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}
+EOF
+  env ENGINE_CAPABILITY_DIR="$STORE_BASE/va_l6_family" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/va_l6_family/cap.json" > /dev/null 2>&1 || {
+    echo "FATAL: engine-capability-state.js failed setup (va_l6_family)"; exit 1
+  }
+  # Commit config so dirty-base does not NO-GO; recompute base for the contract.
+  (
+    cd "$MINI_REPO"
+    git add .claude/review-loop-config.md >/dev/null 2>&1
+    git commit -m "l6 family decorrelation fixture" >/dev/null 2>&1
+  )
+  L6_BASE=$(cd "$MINI_REPO" && git rev-parse HEAD)
+  cat > "$CONTRACT_DIR/va_l6_family.json" <<EOF
+{
+  "schema": 1,
+  "unit_id": "l6-family-va",
+  "role": "verification-author",
+  "goal": "Author harness",
+  "spec": {"path": "specs/feat/core.md", "section": "API"},
+  "base_sha": "$L6_BASE",
+  "depends_on": ["$DEP_SHA"],
+  "scope": {
+    "allow_paths": ["oracle.test.sh"],
+    "deny_paths": ["vendor/"],
+    "max_files": 10,
+    "max_diff_lines": 100
+  },
+  "go": {
+    "required_paths": ["specs/feat/core.md"],
+    "required_engine_role": "verification-author",
+    "required_red_command": ["tools/red.sh"]
+  },
+  "no_go": {
+    "on_missing_spec": "stop",
+    "on_dirty_base": "stop",
+    "on_unknown_engine": "stop",
+    "on_quota_unavailable": "stop",
+    "on_scope_violation": "stop",
+    "on_budget_exceeded": "stop",
+    "on_clarification_needed": "stop",
+    "forbidden_actions": ["push", "merge", "network", "dependency-change"]
+  },
+  "output": {"kind": "raw-artifact", "paths": ["oracle.test.sh"]},
+  "acceptance": [
+    {"argv": ["tools/runner.sh"], "exit": 0}
+  ],
+  "budget": {"wall_seconds": 60, "max_attempts": 1, "max_context_files": 5}
+}
+EOF
+  out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/va_l6_family" ENGINE_CAPABILITY_DIR="$STORE_BASE/va_l6_family" \
+    node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/va_l6_family.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
+  assert_eq "$rc" "0"
+  field=$(json_get "$out" "verdict") || fail "l6 family VA verdict extraction failed"
+  assert_eq "$field" "GO"
+  field=$(json_get "$out" "assurance") || fail "l6 family VA assurance extraction failed"
+  assert_eq "$field" "provisional"
+  field=$(json_get "$out" "resolved_engine.family") || fail "l6 family VA family extraction failed"
+  assert_eq "$field" "google"
+  # Grok implementer is xai; VA must not collapse onto that family.
+  assert_neq "$field" "xai"
+  field=$(json_get "$out" "resolved_engine.runner") || fail "l6 family VA runner extraction failed"
+  assert_eq "$field" "agy"
+  field=$(json_get "$out" "resolved_engine.model") || fail "l6 family VA model extraction failed"
+  assert_eq "$field" "Gemini 3.5 Flash (High)"
 fi
 
 assert_red_green_clean "$MINI_REPO"

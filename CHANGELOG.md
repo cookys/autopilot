@@ -43,6 +43,13 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   routes change execution topology.
 - Mission graph nodes now use ICC-compatible rubric IDs and strict campaign projection ceilings for
   repair generations, wall time, churn, file count, engine attempts, command size, and output paths.
+- Strict `/l6` verification-author admission accepts exact provisional scorecard rows for
+  `raw-artifact` authoring labor only (`assurance: provisional`); depth-0 remains sole
+  verification/merge authority. Reviewer and other authority-bearing roles stay fail-closed.
+- Managed pre-spend lifecycle: missing/mismatched sealed root identity after durable
+  `implementation_started` uses ICC + Mission zero-effect release (no `mutation_failed`,
+  unknown usage, or stagnation). Stagnation threshold no longer terminalizes Mission while an
+  unreleased nonterminal claim remains live.
 
 ## v2.33.0 — Capability-adaptive execution profiles
 

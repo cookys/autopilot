@@ -71,8 +71,9 @@ function exitGo(unitId, contractSha, specSha, resolvedEngine, options = {}) {
       family: resolvedEngine.family,
     },
   };
-  // Implementer-only provisional admission must keep assurance explicit.
-  // Reviewer / verification-author / owner paths never set this from provisional rows.
+  // Bounded provisional labor must keep assurance explicit.
+  // Only implementer (commit) and verification-author (raw-artifact) set this;
+  // reviewer / verifier / owner / finish paths never promote telemetry.
   if (options.assurance === 'provisional') {
     payload.assurance = 'provisional';
   }
@@ -92,18 +93,26 @@ function scorecardRowMatchesEngine(row, storeRole, resolvedEngine) {
 
 // Strict campaign admission scorecard policy:
 // - implementer: exact configured provisional rows with observed_status===qualified
-//   may GO with assurance=provisional (bounded commit only; no review/verify/merge)
+//   may GO with assurance=provisional (bounded commit labor only; no review/verify/merge)
+// - verification-author: same provisional shape may GO with assurance=provisional only when
+//   the unit output kind is exactly raw-artifact (untrusted authoring labor; depth-0
+//   remains sole verification/merge authority)
 // - missing / unknown / provisional observed_status remains NO-GO
-// - all other roles: still require status=qualified (fail-closed)
+// - reviewer and every other authority-bearing role: require status=qualified (fail-closed)
 // - never promotes untrusted telemetry to qualified
-function isAdmissibleScorecardRow(row, storeRole, resolvedEngine) {
+function isAdmissibleScorecardRow(row, storeRole, resolvedEngine, options = {}) {
   if (!scorecardRowMatchesEngine(row, storeRole, resolvedEngine)) return false;
   if (row.status === 'qualified') return true;
-  if (storeRole !== 'implementer') return false;
   if (row.status !== 'provisional') return false;
   // Disk-backed projection maps evidence-backed qualified → provisional while
   // retaining observed_status. Only the exact observed qualified state admits.
-  return row.observed_status === 'qualified';
+  if (row.observed_status !== 'qualified') return false;
+  if (storeRole === 'implementer') return true;
+  if (storeRole === 'verification_author'
+      && options.outputKind === 'raw-artifact') {
+    return true;
+  }
+  return false;
 }
 
 function usageError(message) {
@@ -977,13 +986,16 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
   let engineAssurance = null;
   if (reasons.length === 0) {
     const matched = Array.isArray(scoreRows)
-      ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, resolvedEngine))
+      ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, resolvedEngine, {
+        outputKind: contract.output && contract.output.kind,
+      }))
       : null;
 
     if (!matched) {
       reasons.push('engine: no qualified scorecard row for configured role/engine/runner');
     } else if (matched.status === 'provisional') {
-      // Explicit provisional assurance for implementer-only bounded commit effect.
+      // Explicit provisional assurance for bounded labor only (implementer commit
+      // or verification-author raw-artifact). Never review/verify/merge authority.
       engineAssurance = 'provisional';
     }
   }

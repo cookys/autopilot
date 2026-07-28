@@ -77,6 +77,17 @@ authorized tuple against capability state and rejects caller disagreement. Named
 endpoint readiness and credentials are resolved separately after authorization,
 and secret values never enter result provenance.
 
+**Provisional verification-author admission** (disk scorecard projects evidence-backed
+qualified rows as `status=provisional` / `authority_status=untrusted_telemetry`): when the
+unit `output.kind` is exactly `raw-artifact`, the role/store role are verification-author,
+and the model/runner exactly match the canonical resolver with `observed_status=qualified`,
+the checker may return GO with `assurance: "provisional"`. That admits untrusted artifact
+**generation labor only**. Depth-0 must execute the artifact, run mechanical checks, and
+retains sole verification, acceptance, and merge authority. Provisional admission never
+promotes telemetry to qualified and never grants review/verifier/owner/finish authority.
+Non-`raw-artifact` units, identity/runner mismatches, expired/failed/missing rows, and
+non-qualified observed status remain NO-GO.
+
 Failure modes are fail-closed: an absent, malformed, drifted, or NO-GO dispatch unit
 (including same-family, unknown-family, or endpoint-unready resolution) aborts
 before runner start and emits `status=precondition_failed`.

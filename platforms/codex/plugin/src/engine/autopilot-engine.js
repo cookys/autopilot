@@ -39,6 +39,10 @@ const {
   CAMPAIGN_STATES,
   campaignIdFor,
 } = require('./implementation-campaign');
+const {
+  missionCampaignIdFor,
+  missionSubjectDigest,
+} = require('./mission-campaign-identity');
 const { normalizeProductReviewFindings } = require('./product-review-normalizer');
 const {
   canonicalDigest: campaignCanonicalDigest,
@@ -912,11 +916,35 @@ function deriveCampaignLifecycleRoot({
       throw new TypeError('managed campaign contract digest does not match its seal');
     }
   }
-  const expected = strictAuthority
-    ? seal.campaign_id
-    : campaignIdFor(repoIdentity, contract.ticket, campaignContractDigest);
-  if (typeof expected !== 'string' || !/^campaign-v[12]-[0-9a-f]{64}$/.test(expected)) {
-    throw new TypeError('managed campaign seal is missing campaign identity');
+  // Durable ICC / run / worktree identity is always campaign-v1 from raw contract
+  // bytes. Mission-v2 seal identity is validated separately and never substituted.
+  const expected = campaignIdFor(repoIdentity, contract.ticket, campaignContractDigest);
+  if (typeof expected !== 'string' || !/^campaign-v1-[0-9a-f]{64}$/.test(expected)) {
+    throw new TypeError('managed campaign ICC identity is invalid');
+  }
+  let missionCampaignId = null;
+  if (seal && seal.identity_scheme === 'mission-subject-v2') {
+    let recomputedSubject;
+    let recomputedMissionId;
+    try {
+      recomputedSubject = missionSubjectDigest(contract);
+      recomputedMissionId = missionCampaignIdFor(
+        repoIdentity,
+        contract.ticket,
+        recomputedSubject,
+      );
+    } catch (error) {
+      throw new TypeError(
+        `managed campaign Mission-v2 identity cannot be recomputed: ${error.message}`,
+      );
+    }
+    if (seal.mission_subject_digest !== recomputedSubject
+        || seal.campaign_id !== recomputedMissionId) {
+      throw new TypeError(
+        'managed campaign Mission-v2 seal identity does not match sealed contract',
+      );
+    }
+    missionCampaignId = recomputedMissionId;
   }
   if (runId !== expected) {
     throw new TypeError(
@@ -925,6 +953,7 @@ function deriveCampaignLifecycleRoot({
   }
   return {
     campaign_id: expected,
+    mission_campaign_id: missionCampaignId,
     contract,
     root_run_id: strictAuthority ? contract.mission_runtime.root_run_id : expected,
     strict: strictAuthority,

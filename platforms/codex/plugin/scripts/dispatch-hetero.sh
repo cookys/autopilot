@@ -120,6 +120,7 @@ CAMPAIGN_CONTRACT_SHA256=""
 CAMPAIGN_SEAL_FILE=""
 CAMPAIGN_CONTRACT_SNAPSHOT=""
 CAMPAIGN_ID=""
+MISSION_CAMPAIGN_ID=""
 CAMPAIGN_MISSION_MODE=""
 CAMPAIGN_STRICT_AUTHORITY=0
 CAMPAIGN_PROJECTION_BOUND=0
@@ -817,14 +818,17 @@ try {
     sealPath,
     repoPath,
   });
-  let campaignId = result.campaign_id || null;
+  // Durable ICC identity is always campaign-v1 from raw contract bytes.
+  // Seal campaign_id under mission-subject-v2 is Mission provenance only.
+  let campaignId = null;
+  let missionCampaignId = null;
   const strictAuthority = Boolean(
     result.contract
       && typeof result.contract === 'object'
       && result.contract.mission_runtime
       && result.contract.strict_dispatch,
   );
-  if (!campaignId && result.ok === true) {
+  if (result.ok === true) {
     const { campaignIdFor } = require(path.resolve(
       path.dirname(checkerPath),
       '..',
@@ -837,11 +841,17 @@ try {
       result.contract.ticket,
       result.contract_sha256,
     );
+    if (result.identity_scheme === 'mission-subject-v2'
+        && typeof result.campaign_id === 'string'
+        && /^campaign-v2-[0-9a-f]{64}$/.test(result.campaign_id)) {
+      missionCampaignId = result.campaign_id;
+    }
   }
   process.stdout.write(`${JSON.stringify({
     verdict: result.verdict,
     contract_sha256: result.contract_sha256 || null,
     campaign_id: campaignId,
+    mission_campaign_id: missionCampaignId,
     mission_mode: result.mission_mode || null,
     strict_authority: strictAuthority,
     reasons: result.errors || result.drift || [],
@@ -874,6 +884,7 @@ NODE
   [ "$checked_digest" = "$CAMPAIGN_CONTRACT_SHA256" ] \
     || die_precondition "campaign contract digest changed after intake"
   CAMPAIGN_ID="$(extract_json_value "$campaign_check_json" campaign_id 2>/dev/null || true)"
+  MISSION_CAMPAIGN_ID="$(extract_json_value "$campaign_check_json" mission_campaign_id 2>/dev/null || true)"
   CAMPAIGN_MISSION_MODE="$(extract_json_value "$campaign_check_json" mission_mode 2>/dev/null || true)"
   [ "$(extract_json_value "$campaign_check_json" strict_authority 2>/dev/null || true)" = "true" ] \
     && CAMPAIGN_STRICT_AUTHORITY=1
@@ -881,8 +892,15 @@ NODE
     off|shadow|enforce) ;;
     *) die_precondition "campaign contract checker returned invalid mission mode" ;;
   esac
-  [[ "$CAMPAIGN_ID" =~ ^campaign-v[12]-[0-9a-f]{64}$ ]] \
-    || die_precondition "campaign contract checker returned invalid campaign identity"
+  # --run-id and lifecycle roots must match ICC v1 only.
+  [[ "$CAMPAIGN_ID" =~ ^campaign-v1-[0-9a-f]{64}$ ]] \
+    || die_precondition "campaign contract checker returned invalid ICC campaign identity"
+  if [ -n "$MISSION_CAMPAIGN_ID" ] && [ "$MISSION_CAMPAIGN_ID" != "null" ]; then
+    [[ "$MISSION_CAMPAIGN_ID" =~ ^campaign-v2-[0-9a-f]{64}$ ]] \
+      || die_precondition "campaign contract checker returned invalid Mission campaign identity"
+  else
+    MISSION_CAMPAIGN_ID=""
+  fi
 }
 
 run_campaign_projection_preflight() {
@@ -951,6 +969,109 @@ NODE
     die_precondition "campaign dispatch projection rejected: $projection_out"
   fi
   CAMPAIGN_PROJECTION_BOUND=1
+}
+
+# Marker → sealed campaign admission bridge (zero-runner under enforce mismatch).
+# Active L5/L6 markers and L3 fallbacks whose entry_level is L4-L6 must carry the
+# same repo/policy/graph digests as the sealed campaign mission_runtime. Caller
+# flags and environment variables are never substitutes for sealed contract bytes
+# or marker admission bytes.
+check_marker_campaign_admission_bridge() {
+  local marker_dir="${AUTOPILOT_SESSION_MODE_DIR:-${HOME:-}/.autopilot/session-mode}"
+  local marker bridge_state bridge_rc consumed_repo normalized_repo
+  local markers
+  [ "$CAMPAIGN_PROJECTION_BOUND" -eq 1 ] || return 0
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] || return 0
+  consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$consumed_repo" ] || return 0
+  [ "$marker_dir" != "/.autopilot/session-mode" ] || return 0
+  [ -d "$marker_dir" ] || return 0
+  [ -r "$marker_dir" ] && [ -x "$marker_dir" ] \
+    || die_precondition "authoritative session-mode marker directory is unreadable"
+  normalized_repo="$(cd "$consumed_repo" && pwd -P 2>/dev/null || echo "$consumed_repo")"
+  markers=("$marker_dir"/*.json)
+  for marker in "${markers[@]}"; do
+    if [ "$marker" = "$marker_dir/*.json" ] && [ ! -e "$marker" ]; then
+      continue
+    fi
+    [ -f "$marker" ] \
+      || die_precondition "authoritative session-mode marker is not a regular file: $marker"
+    bridge_state="$(
+      node - "$marker" "$normalized_repo" "$CAMPAIGN_CONTRACT_FILE" \
+        "$CAMPAIGN_MISSION_MODE" "$SELF_DIR/session-mode.js" <<'NODE' 2>&1
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const [
+  markerPath,
+  repo,
+  campaignPath,
+  missionMode,
+  sessionModePath,
+] = process.argv.slice(2);
+const managedLevels = new Set(['l5', 'l6']);
+const fallbackEntryLevels = new Set(['l4', 'l5', 'l6']);
+try {
+  const data = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new TypeError('marker must be an object');
+  }
+  if (!new Set(['l3', 'l4', 'l5', 'l6']).has(data.level)) {
+    throw new TypeError('marker level is invalid');
+  }
+  if (typeof data.repo_root !== 'string' || !path.isAbsolute(data.repo_root)) {
+    throw new TypeError('marker repo_root is invalid');
+  }
+  const startedAt = Date.parse(data.started_at);
+  const expiresAt = Date.parse(data.expires_at);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(expiresAt)) {
+    throw new TypeError('marker timestamps are invalid');
+  }
+  if (expiresAt <= Date.now()
+      || path.resolve(data.repo_root) !== path.resolve(repo)) {
+    process.stdout.write('INACTIVE');
+    process.exit(0);
+  }
+  const isManaged = managedLevels.has(data.level)
+    || (data.level === 'l3' && fallbackEntryLevels.has(data.entry_level));
+  if (!isManaged) {
+    process.stdout.write('INACTIVE');
+    process.exit(0);
+  }
+  // off/shadow keep compatibility when authoritative policy permits it.
+  if (missionMode === 'off' || missionMode === 'shadow') {
+    process.stdout.write(`COMPAT:${missionMode}`);
+    process.exit(0);
+  }
+  if (missionMode !== 'enforce') {
+    throw new TypeError(`invalid mission mode for marker bridge: ${missionMode}`);
+  }
+  const campaign = JSON.parse(fs.readFileSync(campaignPath, 'utf8'));
+  if (!campaign || typeof campaign !== 'object' || !campaign.mission_runtime) {
+    throw new TypeError('sealed campaign is missing mission_runtime for marker bridge');
+  }
+  const expected = {
+    repo_identity: campaign.repo_identity,
+    mission_policy_digest: campaign.mission_runtime.mission_policy_digest,
+    mission_graph_digest: campaign.mission_runtime.mission_graph_digest,
+  };
+  const { verifyMissionRoutingProjection } = require(sessionModePath);
+  const verdict = verifyMissionRoutingProjection(data, expected);
+  if (!verdict.valid) {
+    throw new TypeError(verdict.reason || 'marker Mission admission does not match campaign');
+  }
+  process.stdout.write(`BOUND:${data.level}`);
+} catch (error) {
+  process.stdout.write(error.message || String(error));
+  process.exit(3);
+}
+NODE
+    )"
+    bridge_rc=$?
+    if [ "$bridge_rc" -ne 0 ]; then
+      die_precondition "marker-to-campaign admission bridge failed: $bridge_state"
+    fi
+  done
 }
 
 check_mission_enforcement_gate() {
@@ -1271,6 +1392,10 @@ fi
 if [ "$CAMPAIGN_PROJECTION_BOUND" -ne 1 ]; then
   check_session_mode_gate
   check_mission_enforcement_gate
+else
+  # Sealed strict projection is present: still bind active L5/L6 (and L3
+  # fallback) markers to the campaign's policy/graph digests before spend.
+  check_marker_campaign_admission_bridge
 fi
 set_runner_flags
 

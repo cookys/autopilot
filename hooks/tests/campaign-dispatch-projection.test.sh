@@ -25,24 +25,28 @@ git -C "$REPO" commit -qm "base"
 BASE="$(git -C "$REPO" rev-parse HEAD)"
 COMMON_RAW="$(git -C "$REPO" rev-parse --git-common-dir)"
 COMMON="$(realpath "$REPO/$COMMON_RAW")"
-CAMPAIGN_ID="campaign-v2-$(printf 'a%.0s' {1..64})"
+# Seal may retain a Mission-v2 provenance id; durable run/leaf identity is ICC v1.
+MISSION_CAMPAIGN_ID="campaign-v2-$(printf 'a%.0s' {1..64})"
 ROOT_RUN_ID="mission-root-projection"
 printf 'Implement the strict bridge fixture.\n' > "$PROMPT"
 
-node - "$CAMPAIGN" "$CAMPAIGN_FALSE" "$SEAL" "$COMMON" "$BASE" \
-  "$CAMPAIGN_ID" "$ROOT_RUN_ID" <<'NODE'
+CAMPAIGN_ID="$(node - "$REPO_ROOT" "$CAMPAIGN" "$CAMPAIGN_FALSE" "$SEAL" "$COMMON" "$BASE" \
+  "$MISSION_CAMPAIGN_ID" "$ROOT_RUN_ID" <<'NODE'
 'use strict';
 const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
 const [
+  root,
   target,
   falseTarget,
   sealTarget,
   common,
   base,
-  campaignId,
+  missionCampaignId,
   rootRunId,
 ] = process.argv.slice(2);
+const { campaignIdFor } = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
 const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const campaign = {
   schema_version: 2,
@@ -93,12 +97,18 @@ const falseCampaign = JSON.parse(JSON.stringify(campaign));
 falseCampaign.strict_dispatch.verification_commands = ['false'];
 falseCampaign.verify_cmd = 'false';
 fs.writeFileSync(falseTarget, `${JSON.stringify(falseCampaign, null, 2)}\n`);
+const contractSha = digest(bytes);
+// Seal retains Mission-v2 provenance; ICC v1 is derived from raw contract bytes.
 fs.writeFileSync(sealTarget, `${JSON.stringify({
   schema_version: 1,
-  contract_sha256: digest(bytes),
-  campaign_id: campaignId,
+  contract_sha256: contractSha,
+  campaign_id: missionCampaignId,
 })}\n`);
+process.stdout.write(campaignIdFor(`git-common-dir:${common}`, 'strict-bridge', contractSha));
 NODE
+)"
+assert_neq "$CAMPAIGN_ID" "" "projection fixture derives ICC campaign id"
+assert_contains "$CAMPAIGN_ID" "campaign-v1-" "projection leaf identity is ICC v1"
 
 UNIT_OUT="$(node - "$REPO_ROOT" "$REPO" "$CAMPAIGN" "$SEAL" "$BASE" \
   "$CAMPAIGN_ID" "$ROOT_RUN_ID" <<'NODE'

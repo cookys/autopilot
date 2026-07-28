@@ -1226,6 +1226,277 @@ console.log(`precondition_status=${preconditionResult.status}`);
 console.log(`precondition_release_calls=${admissionReleaseCalls}`);
 console.log(`precondition_release_status=${preconditionResult.campaign_control.admission_release.status}`);
 
+function zeroEffectLeafResult(overrides = {}) {
+  return {
+    error: null,
+    status: 2,
+    signal: null,
+    stdout: '',
+    stderr: '',
+    parseError: null,
+    result: {
+      status: 'precondition_failed',
+      runner: 'fixture',
+      model: 'fixture-implementer',
+      branch: 'impl/icc-p1-intake',
+      base,
+      commit: null,
+      files_changed: 0,
+      insertions: 0,
+      deletions: 0,
+      worktree: null,
+      agent_log: null,
+      error: 'fixture zero-effect precondition',
+      ...overrides,
+    },
+  };
+}
+
+function durableManagedControl(nonce) {
+  // Reuse the already-valid admitted contract+seal from campaignControlFixture.
+  // This unit path only needs durable_journal + resume fields; real Mission
+  // release is covered by mission-runtime-v2.
+  const control = campaignControlFixture(
+    nonce,
+    JSON.parse(JSON.stringify(admitted.initial_state)),
+  );
+  return {
+    ...control,
+    generation_claim: {
+      ...control.generation_claim,
+      durable_journal: true,
+      resume_candidate: null,
+      resume_review_digest: null,
+    },
+  };
+}
+
+function runDurableLeafCase(label, leafOverrides = {}) {
+  const events = [];
+  let releaseRejection = null;
+  let terminalCalls = 0;
+  let mutationFailed = false;
+  const engine = new AutopilotEngine({
+    cwd: repo,
+    clock: () => '2026-07-26T00:00:02.000Z',
+    campaignIntake() {
+      return durableManagedControl(`durable-${label}`);
+    },
+    campaignEventAppender(input) {
+      events.push(input.eventType);
+      if (input.eventType === 'mutation_failed' || input.eventType === 'terminal_stop') {
+        mutationFailed = true;
+      }
+      const state = input.campaignControl.initial_state;
+      if (input.eventType === 'implementation_started') {
+        return {
+          status: 'appended',
+          event: {
+            event_type: input.eventType,
+            timestamp: input.observedAt,
+          },
+          state: {
+            ...state,
+            phase: 'IMPLEMENTING',
+            generation: 0,
+            event_count: 1,
+            live_lease: {
+              stage_identity: input.stageIdentity,
+              generation: 0,
+              acquired_at: input.observedAt,
+            },
+          },
+        };
+      }
+      return {
+        status: 'appended',
+        event: {
+          event_type: input.eventType,
+          timestamp: input.observedAt,
+        },
+        state: {
+          ...state,
+          phase: 'TERMINAL_STOP',
+          live_lease: null,
+          event_count: (state.event_count || 0) + 1,
+        },
+      };
+    },
+    campaignAdmissionReleaser(input) {
+      releaseRejection = input.rejection || null;
+      return { status: 'released', rejection: input.rejection };
+    },
+    missionTerminalReconciler() {
+      terminalCalls += 1;
+      return { status: 'applied' };
+    },
+    campaignAdmissionCompleter() {
+      return { status: 'completed' };
+    },
+    implementationDispatcher() {
+      return zeroEffectLeafResult(leafOverrides);
+    },
+  });
+  const result = engine.runImplementationReviewLoop({
+    promptFile,
+    branch: 'impl/icc-p1-intake',
+    base,
+    roster,
+    campaignContract: contractPath,
+  });
+  return {
+    result,
+    events,
+    releaseRejection,
+    terminalCalls,
+    mutationFailed,
+  };
+}
+
+const durableZero = runDurableLeafCase('zero-effect');
+console.log(`durable_zero_status=${durableZero.result.status}`);
+console.log(`durable_zero_events=${durableZero.events.join(',')}`);
+console.log(`durable_zero_release_status=${
+  durableZero.result.campaign_control
+  && durableZero.result.campaign_control.admission_release
+    ? durableZero.result.campaign_control.admission_release.status
+    : null
+}`);
+console.log(`durable_zero_release_code=${
+  durableZero.releaseRejection && durableZero.releaseRejection.code
+}`);
+console.log(`durable_zero_leaf_bound=${Boolean(
+  durableZero.releaseRejection
+  && durableZero.releaseRejection.zero_effect_leaf
+  && durableZero.releaseRejection.zero_effect_leaf.status === 'precondition_failed'
+  && durableZero.releaseRejection.zero_effect_leaf.commit === null
+  && durableZero.releaseRejection.zero_effect_leaf.worktree === null
+  && durableZero.releaseRejection.zero_effect_leaf.agent_log === null
+  && durableZero.releaseRejection.zero_effect_leaf.files_changed === 0
+  && durableZero.releaseRejection.zero_effect_leaf.insertions === 0
+  && durableZero.releaseRejection.zero_effect_leaf.deletions === 0
+)}`);
+console.log(`durable_zero_terminal_calls=${durableZero.terminalCalls}`);
+console.log(`durable_zero_mutation_failed=${durableZero.mutationFailed}`);
+console.log(`durable_zero_no_terminal_failure=${
+  !durableZero.result.campaign_control
+  || !durableZero.result.campaign_control.terminal_failure
+}`);
+
+const durableAgentLog = runDurableLeafCase('agent-log', { agent_log: '/tmp/agent.log' });
+console.log(`durable_agent_log_terminalizes=${Boolean(
+  durableAgentLog.mutationFailed
+  || (durableAgentLog.result.campaign_control
+    && durableAgentLog.result.campaign_control.terminal_failure
+    && durableAgentLog.result.campaign_control.terminal_failure.status === 'terminalized')
+)}`);
+console.log(`durable_agent_log_release_calls=${
+  durableAgentLog.result.campaign_control
+  && durableAgentLog.result.campaign_control.admission_release
+    ? 1
+    : 0
+}`);
+
+const durableWorktree = runDurableLeafCase('worktree', { worktree: '/tmp/wt' });
+console.log(`durable_worktree_terminalizes=${Boolean(
+  durableWorktree.mutationFailed
+  || (durableWorktree.result.campaign_control
+    && durableWorktree.result.campaign_control.terminal_failure
+    && durableWorktree.result.campaign_control.terminal_failure.status === 'terminalized')
+)}`);
+
+const durableCommit = runDurableLeafCase('commit', {
+  commit: '1111111111111111111111111111111111111111',
+});
+console.log(`durable_commit_terminalizes=${Boolean(
+  durableCommit.mutationFailed
+  || (durableCommit.result.campaign_control
+    && durableCommit.result.campaign_control.terminal_failure
+    && durableCommit.result.campaign_control.terminal_failure.status === 'terminalized')
+)}`);
+
+const durableChurn = runDurableLeafCase('churn', {
+  files_changed: 1,
+  insertions: 2,
+  deletions: 0,
+});
+console.log(`durable_churn_terminalizes=${Boolean(
+  durableChurn.mutationFailed
+  || (durableChurn.result.campaign_control
+    && durableChurn.result.campaign_control.terminal_failure
+    && durableChurn.result.campaign_control.terminal_failure.status === 'terminalized')
+)}`);
+
+const durableReleaseFail = (() => {
+  const events = [];
+  let terminalCalls = 0;
+  const engine = new AutopilotEngine({
+    cwd: repo,
+    clock: () => '2026-07-26T00:00:03.000Z',
+    campaignIntake() {
+      return durableManagedControl('durable-release-fail');
+    },
+    campaignEventAppender(input) {
+      events.push(input.eventType);
+      const state = input.campaignControl.initial_state;
+      if (input.eventType === 'implementation_started') {
+        return {
+          status: 'appended',
+          event: { event_type: input.eventType, timestamp: input.observedAt },
+          state: {
+            ...state,
+            phase: 'IMPLEMENTING',
+            generation: 0,
+            event_count: 1,
+            live_lease: {
+              stage_identity: input.stageIdentity,
+              generation: 0,
+              acquired_at: input.observedAt,
+            },
+          },
+        };
+      }
+      return {
+        status: 'appended',
+        event: { event_type: input.eventType, timestamp: input.observedAt },
+        state: {
+          ...state,
+          phase: 'TERMINAL_STOP',
+          live_lease: null,
+          event_count: (state.event_count || 0) + 1,
+        },
+      };
+    },
+    campaignAdmissionReleaser() {
+      return { status: 'blocked', error: 'fixture_release_failed' };
+    },
+    missionTerminalReconciler() {
+      terminalCalls += 1;
+      return { status: 'applied' };
+    },
+    campaignAdmissionCompleter() {
+      return { status: 'completed' };
+    },
+    implementationDispatcher() {
+      return zeroEffectLeafResult();
+    },
+  });
+  const result = engine.runImplementationReviewLoop({
+    promptFile,
+    branch: 'impl/icc-p1-intake',
+    base,
+    roster,
+    campaignContract: contractPath,
+  });
+  return { result, events, terminalCalls };
+})();
+console.log(`durable_release_fail_phase=${durableReleaseFail.result.phase}`);
+console.log(`durable_release_fail_events=${durableReleaseFail.events.join(',')}`);
+console.log(`durable_release_fail_terminal_calls=${durableReleaseFail.terminalCalls}`);
+console.log(`durable_release_fail_no_mutation=${
+  !durableReleaseFail.events.includes('mutation_failed')
+}`);
+
 let expiredImplementationCalls = 0;
 let expiredReleaseCalls = 0;
 const expiredBeforeImplementation = new AutopilotEngine({
@@ -1690,6 +1961,38 @@ assert_contains "$INTAKE_OUT" "precondition_release_calls=1" \
   "zero-spend leaf precondition failure releases campaign admission once"
 assert_contains "$INTAKE_OUT" "precondition_release_status=released" \
   "campaign control records the terminal admission release result"
+assert_contains "$INTAKE_OUT" "durable_zero_status=blocked" \
+  "durable zero-effect leaf remains a blocked campaign result"
+assert_contains "$INTAKE_OUT" "durable_zero_events=implementation_started" \
+  "durable zero-effect leaf records only IMPLEMENTATION_STARTED intent"
+assert_contains "$INTAKE_OUT" "durable_zero_release_status=released" \
+  "durable zero-effect leaf releases campaign admission"
+assert_contains "$INTAKE_OUT" "durable_zero_release_code=campaign_pre_effect_blocked" \
+  "durable zero-effect leaf uses the pre-effect rejection code"
+assert_contains "$INTAKE_OUT" "durable_zero_leaf_bound=true" \
+  "durable rejection digest binds exact zero-effect leaf facts"
+assert_contains "$INTAKE_OUT" "durable_zero_terminal_calls=0" \
+  "durable zero-effect leaf never reconciles a Mission terminal receipt"
+assert_contains "$INTAKE_OUT" "durable_zero_mutation_failed=false" \
+  "durable zero-effect leaf never appends MUTATION_FAILED"
+assert_contains "$INTAKE_OUT" "durable_zero_no_terminal_failure=true" \
+  "durable zero-effect leaf never stores a campaign terminal failure"
+assert_contains "$INTAKE_OUT" "durable_agent_log_terminalizes=true" \
+  "non-null agent_log continues durable terminalization"
+assert_contains "$INTAKE_OUT" "durable_worktree_terminalizes=true" \
+  "non-null worktree continues durable terminalization"
+assert_contains "$INTAKE_OUT" "durable_commit_terminalizes=true" \
+  "non-null commit continues durable terminalization"
+assert_contains "$INTAKE_OUT" "durable_churn_terminalizes=true" \
+  "nonzero churn continues durable terminalization"
+assert_contains "$INTAKE_OUT" "durable_release_fail_phase=campaign_admission_release" \
+  "failed zero-effect release fails closed at admission release"
+assert_contains "$INTAKE_OUT" "durable_release_fail_events=implementation_started" \
+  "failed zero-effect release does not append terminal campaign events"
+assert_contains "$INTAKE_OUT" "durable_release_fail_terminal_calls=0" \
+  "failed zero-effect release does not claim Mission terminal success"
+assert_contains "$INTAKE_OUT" "durable_release_fail_no_mutation=true" \
+  "failed zero-effect release never writes MUTATION_FAILED"
 assert_contains "$INTAKE_OUT" "expired_impl_phase=campaign_wall_budget" \
   "zero remaining wall budget blocks before implementation dispatch"
 assert_contains "$INTAKE_OUT" "expired_impl_calls=0" \

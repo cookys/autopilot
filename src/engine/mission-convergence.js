@@ -1784,6 +1784,24 @@ function handleNoEffectRelease(state, event, payload) {
       }]),
     ),
   };
+  // Free the graph node claim: clear active_claim_id and restore pending so
+  // the next graph attempt can re-grant. Attempt count is retained (already
+  // spent for this failed attempt), not unspent; stagnation is not incremented.
+  let graphProgress = state.graph_progress;
+  if (claim.graph_node_id
+      && state.graph_progress
+      && state.graph_progress[claim.graph_node_id]) {
+    const priorProgress = state.graph_progress[claim.graph_node_id];
+    graphProgress = Object.freeze({
+      ...state.graph_progress,
+      [claim.graph_node_id]: Object.freeze({
+        ...priorProgress,
+        status: 'pending',
+        active_claim_id: null,
+        attempts: priorProgress.attempts || 0,
+      }),
+    });
+  }
   const next = Object.freeze({
     ...appendEvent(state, event),
     axes: Object.freeze({
@@ -1796,6 +1814,7 @@ function handleNoEffectRelease(state, event, payload) {
       output_bytes: Object.freeze(newAxes.output_bytes),
     }),
     claims: Object.freeze({ ...state.claims, [claimId]: Object.freeze(releasedClaim) }),
+    graph_progress: graphProgress,
   });
   return {
     state: next,

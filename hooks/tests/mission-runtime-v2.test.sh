@@ -484,12 +484,244 @@ if (runtime) {
     && /^campaign-v1-/.test(intake.campaign_id)
     && intake.mission_claim.campaign_id === granted.payload.mission_campaign_id);
 
+  // Durable zero-effect leaf after IMPLEMENTATION_STARTED: release Mission
+  // admission without terminal receipt, stagnation, or MUTATION_FAILED.
+  const { releaseCampaignAdmission } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
+  const stagnationBeforeZeroEffect = store.load().stagnant_campaigns;
+  const durableLeafEvents = [];
+  let durableTerminalReconcileCalls = 0;
+  const durableLeafControl = {
+    ...intake,
+    generation_claim: {
+      ...(intake.generation_claim || {}),
+      durable_journal: true,
+      resume_candidate: null,
+      resume_review_digest: null,
+      generation: intake.generation_claim && intake.generation_claim.generation
+        ? intake.generation_claim.generation
+        : 1,
+      nonce: (intake.generation_claim && intake.generation_claim.nonce)
+        || 'runtime-zero-effect',
+      ledger: (intake.generation_claim && intake.generation_claim.ledger)
+        || path.join(common, 'autopilot', 'oracle.jsonl'),
+      stage_identity: (intake.generation_claim && intake.generation_claim.stage_identity)
+        || 'campaign-implementation',
+    },
+    steps: Array.isArray(intake.steps)
+      ? intake.steps.map((entry) => (
+        entry.owner === 'mission'
+          ? {
+            ...entry,
+            status: 'claimed',
+            claim_id: granted.payload.claim_id,
+          }
+          : entry
+      ))
+      : [{
+        owner: 'mission',
+        status: 'claimed',
+        claim_id: granted.payload.claim_id,
+      }],
+  };
+  fs.mkdirSync(path.dirname(durableLeafControl.generation_claim.ledger), { recursive: true });
+  const releaseAdapters = {
+    ...mission.createMissionCampaignAdapters({
+      store,
+      grant_ref: granted.payload.mission_grant_ref,
+      mission_subject_digest: granted.payload.mission_subject_digest,
+      campaign_id: granted.payload.mission_campaign_id,
+    }),
+  };
+  // Ensure a dead generation lease so admission release can finish after Mission.
+  const ledgerScript = path.join(root, 'scripts', 'run-ledger.sh');
+  const runLedgerJson = (args) => {
+    const result = spawnSync('bash', [ledgerScript, ...args], {
+      cwd: repo,
+      encoding: 'utf8',
+    });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || `run-ledger exited ${result.status}`);
+    }
+    return result.stdout.trim() ? JSON.parse(result.stdout) : null;
+  };
+  if (!fs.existsSync(durableLeafControl.generation_claim.ledger)) {
+    runLedgerJson(['init', '--ledger', durableLeafControl.generation_claim.ledger]);
+  }
+  const acquiredLease = runLedgerJson([
+    'stage-acquire',
+    '--ledger', durableLeafControl.generation_claim.ledger,
+    '--run-id', durableLeafControl.campaign_id,
+    '--stage', 'campaign',
+    '--pid', String(process.pid),
+    '--resources', `campaign:${durableLeafControl.campaign_id}`,
+    '--exclusive-live',
+  ]);
+  durableLeafControl.generation_claim = {
+    ...durableLeafControl.generation_claim,
+    generation: acquiredLease.generation,
+    nonce: acquiredLease.nonce,
+    stage_identity: `run-ledger:${acquiredLease.generation}:${acquiredLease.nonce}`,
+  };
+  const zeroEffectEngine = new AutopilotEngine({
+    cwd: repo,
+    clock: () => '2026-07-28T00:00:02.000Z',
+    campaignIntake() {
+      return {
+        ...durableLeafControl,
+        initial_state: {
+          ...durableLeafControl.initial_state,
+          phase: 'PREPARED',
+          generation: 0,
+          event_count: 0,
+          live_lease: null,
+        },
+      };
+    },
+    campaignEventAppender(input) {
+      durableLeafEvents.push(input.eventType);
+      const state = input.campaignControl.initial_state;
+      if (input.eventType === 'implementation_started') {
+        return {
+          status: 'appended',
+          event: { event_type: input.eventType, timestamp: input.observedAt },
+          state: {
+            ...state,
+            phase: 'IMPLEMENTING',
+            generation: 0,
+            event_count: 1,
+            live_lease: {
+              stage_identity: input.stageIdentity,
+              generation: 0,
+              acquired_at: input.observedAt,
+            },
+          },
+        };
+      }
+      throw new Error(`unexpected durable leaf event ${input.eventType}`);
+    },
+    campaignAdmissionReleaser(input) {
+      return releaseCampaignAdmission(input, releaseAdapters);
+    },
+    missionTerminalReconciler() {
+      durableTerminalReconcileCalls += 1;
+      throw new Error('zero-effect leaf must not terminal-reconcile Mission');
+    },
+    campaignAdmissionCompleter() {
+      return { status: 'completed' };
+    },
+    implementationDispatcher() {
+      return {
+        error: null,
+        status: 2,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: 'precondition_failed',
+          runner: 'fixture',
+          model: 'fixture-implementer',
+          branch: granted.payload.branch,
+          base: granted.payload.base_sha,
+          commit: null,
+          files_changed: 0,
+          insertions: 0,
+          deletions: 0,
+          worktree: null,
+          agent_log: null,
+          error: 'fixture zero-effect precondition',
+        },
+      };
+    },
+  });
+  const zeroEffectResult = zeroEffectEngine.runImplementationReviewLoop({
+    promptFile: path.join(temp, 'prompt.txt'),
+    branch: granted.payload.branch,
+    base: granted.payload.base_sha,
+    roster: {
+      implementer_engine: 'fixture-implementer',
+      implementer_runner: 'codex',
+      implementer_effort: 'medium',
+      reviewer_engine: 'fixture-reviewer',
+      reviewer_runner: 'codex',
+      reviewer_effort: 'medium',
+      verify_first: false,
+      loop_max_rounds: 2,
+    },
+    campaignContract: granted.payload.contract_path,
+  });
+  const afterZeroEffect = store.load();
+  const zeroEffectEvents = (afterZeroEffect.events || []).map((event) => event.event_type);
+  check('durable-zero-effect-blocks', zeroEffectResult.status === 'blocked');
+  check('durable-zero-effect-records-intent-only',
+    durableLeafEvents.join(',') === 'implementation_started');
+  check('durable-zero-effect-releases-admission',
+    zeroEffectResult.campaign_control
+    && zeroEffectResult.campaign_control.admission_release
+    && zeroEffectResult.campaign_control.admission_release.status === 'released');
+  check('durable-zero-effect-emits-mission-no-effect-release',
+    zeroEffectEvents.includes('no_effect_release')
+    && afterZeroEffect.claims[granted.payload.claim_id]
+    && afterZeroEffect.claims[granted.payload.claim_id].released === true);
+  check('durable-zero-effect-stagnation-unchanged',
+    afterZeroEffect.stagnant_campaigns === stagnationBeforeZeroEffect);
+  check('durable-zero-effect-graph-restored-pending',
+    afterZeroEffect.graph_progress['runtime-control'].status === 'pending'
+    && afterZeroEffect.graph_progress['runtime-control'].active_claim_id === null
+    && afterZeroEffect.graph_progress['runtime-control'].attempts === 1);
+  check('durable-zero-effect-no-terminal-reconcile',
+    durableTerminalReconcileCalls === 0
+    && !zeroEffectEvents.includes('reconciliation')
+    && !(zeroEffectResult.campaign_control
+      && zeroEffectResult.campaign_control.terminal_failure));
+  const regrantAfterRelease = runCli([
+    'grant', '--repo', repo, '--prepared', preparedPath,
+    '--node', 'runtime-control', '--now', '2026-07-28T00:00:30.000Z',
+  ]);
+  check('durable-zero-effect-permits-next-graph-attempt',
+    regrantAfterRelease.code === 0
+    && regrantAfterRelease.payload
+    && regrantAfterRelease.payload.claim_id
+    && regrantAfterRelease.payload.claim_id !== granted.payload.claim_id);
+  const regranted = regrantAfterRelease;
+  const regrantAdapters = {
+    ...mission.createMissionCampaignAdapters({
+      store,
+      grant_ref: regranted.payload.mission_grant_ref,
+      mission_subject_digest: regranted.payload.mission_subject_digest,
+      campaign_id: regranted.payload.mission_campaign_id,
+    }),
+    readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+    contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+    occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    claimGeneration: () => ({
+      owner: 'campaign_generation',
+      status: 'claimed',
+      generation: 1,
+      nonce: 'runtime-oracle-regrant',
+      ledger: path.join(common, 'autopilot', 'oracle-regrant.jsonl'),
+      stage_identity: 'campaign-implementation',
+    }),
+  };
+  const regrantIntake = runCampaignIntake({
+    repo,
+    contractPath: regranted.payload.contract_path,
+    sealPath: regranted.payload.seal_path,
+    promptFile: path.join(temp, 'prompt.txt'),
+    branch: regranted.payload.branch,
+    base: regranted.payload.base_sha,
+    observedAt: '2026-07-28T00:00:31.000Z',
+  }, regrantAdapters);
+  check('regrant-intake-admitted', regrantIntake.status === 'admitted'
+    && regrantIntake.mission_claim
+    && regrantIntake.mission_claim.claim_id === regranted.payload.claim_id);
+
   const terminalInput = {
     store,
-    grantRef: granted.payload.mission_grant_ref,
-    claimId: granted.payload.claim_id,
-    iccCampaignId: intake.campaign_id,
-    rawCampaignContractDigest: intake.contract_digest,
+    grantRef: regranted.payload.mission_grant_ref,
+    claimId: regranted.payload.claim_id,
+    iccCampaignId: regrantIntake.campaign_id,
+    rawCampaignContractDigest: regrantIntake.contract_digest,
     outcome: 'ready',
     possiblyEffectful: true,
     observedAt: '2026-07-28T00:01:00.000Z',
@@ -506,16 +738,16 @@ if (runtime) {
     missionPreparedReceipt: JSON.parse(fs.readFileSync(preparedPath, 'utf8')),
   });
   const terminal = terminalEngine.reconcileManagedMissionTerminal({
-    campaignControl: intake,
+    campaignControl: regrantIntake,
     outcome: 'ready',
     observedAt: terminalInput.observedAt,
     cwd: repo,
   });
   check('engine-terminal-ready-applied', terminal.status === 'applied');
   check('engine-terminal-binds-both-campaign-identities', terminal.receipt
-    && terminal.receipt.icc_campaign_id === intake.campaign_id
-    && terminal.receipt.mission_campaign_id === granted.payload.mission_campaign_id
-    && terminal.receipt.raw_campaign_contract_digest === intake.contract_digest);
+    && terminal.receipt.icc_campaign_id === regrantIntake.campaign_id
+    && terminal.receipt.mission_campaign_id === regranted.payload.mission_campaign_id
+    && terminal.receipt.raw_campaign_contract_digest === regrantIntake.contract_digest);
   const afterTerminal = store.load();
   check('unknown-usage-charges-conservative-reservation',
     afterTerminal.axes.tool_calls.durable_consumed === 3

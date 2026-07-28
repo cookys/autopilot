@@ -979,6 +979,33 @@ function reviewerQualificationViable(roster) {
     }) !== null;
 }
 
+function zeroEffectLeafFacts(result) {
+  const leaf = result && result.implementation;
+  if (!leaf || typeof leaf !== 'object' || Array.isArray(leaf)) return null;
+  return {
+    status: leaf.status,
+    commit: leaf.commit,
+    worktree: leaf.worktree,
+    agent_log: leaf.agent_log,
+    files_changed: leaf.files_changed,
+    insertions: leaf.insertions,
+    deletions: leaf.deletions,
+  };
+}
+
+function isExactZeroEffectPreconditionLeaf(leaf) {
+  return Boolean(leaf)
+    && typeof leaf === 'object'
+    && !Array.isArray(leaf)
+    && leaf.status === 'precondition_failed'
+    && leaf.commit === null
+    && leaf.worktree === null
+    && leaf.agent_log === null
+    && leaf.files_changed === 0
+    && leaf.insertions === 0
+    && leaf.deletions === 0;
+}
+
 function isCampaignPreSpendRejection(result) {
   if (!result || result.status !== 'blocked') return false;
   if (result.phase === 'prepare_implementation'
@@ -986,14 +1013,64 @@ function isCampaignPreSpendRejection(result) {
       && result.implementation === null) {
     return true;
   }
-  const leaf = result.implementation;
-  return leaf
-    && leaf.status === 'precondition_failed'
-    && leaf.commit === null
-    && leaf.worktree === null
-    && leaf.files_changed === 0
-    && leaf.insertions === 0
-    && leaf.deletions === 0;
+  return isExactZeroEffectPreconditionLeaf(result.implementation);
+}
+
+function isIntentOnlyImplementationStartedState(state, claim) {
+  if (!state || typeof state !== 'object') return false;
+  if (state.generation !== 0
+      || state.event_count !== 1
+      || state.phase !== CAMPAIGN_STATES.IMPLEMENTING
+      || !state.live_lease
+      || typeof state.live_lease !== 'object'
+      || state.live_lease.generation !== 0
+      || state.live_lease.stage_identity !== 'campaign-mutation:0') {
+    return false;
+  }
+  if (!state.usage
+      || state.usage.changed_files !== 0
+      || state.usage.churn !== 0) {
+    return false;
+  }
+  if (claim && claim.resume_candidate) return false;
+  if (claim && claim.resume_review_digest) return false;
+  return true;
+}
+
+function isExactZeroEffectLeafProof(leafProof) {
+  return isExactZeroEffectPreconditionLeaf(zeroEffectLeafFacts(leafProof));
+}
+
+function isCampaignAdmissionReleasable(state, claim, leafProof) {
+  // Missing campaign state fails closed — never treat unknown as releasable.
+  if (!state || typeof state !== 'object') return false;
+  // Classic pre-intent admission: PREPARED, no events, no live lease.
+  if (state.event_count === 0
+      && state.phase === CAMPAIGN_STATES.PREPARED
+      && state.live_lease === null) {
+    return true;
+  }
+  // Post-IMPLEMENTATION_STARTED durable release requires the exact zero-effect
+  // leaf proof. prepare_implementation / null-leaf shapes do not qualify.
+  return isExactZeroEffectLeafProof(leafProof)
+    && isIntentOnlyImplementationStartedState(state, claim);
+}
+
+function buildCampaignPreSpendRejection({
+  owner,
+  code,
+  reason,
+  result = null,
+}) {
+  const rejection = {
+    owner,
+    status: 'rejected',
+    code,
+    reason,
+  };
+  const leaf = zeroEffectLeafFacts(result);
+  if (leaf) rejection.zero_effect_leaf = leaf;
+  return rejection;
 }
 
 function campaignWallBudgetStatus(control, observedAt) {
@@ -3676,52 +3753,87 @@ class AutopilotEngine {
       finalPanel: (reviewInput) => performReview({ ...reviewInput, scope: 'final' }),
     });
 
-    if (!durableJournal && !new Set(['ready', 'follow_up']).has(composition.status)) {
+    if (!new Set(['ready', 'follow_up']).has(composition.status)) {
       const finalImplementation = implementationChain.at(-1) || null;
-      if (implementationChain.length === 0
-          || (implementationChain.length === 1
-            && isCampaignPreSpendRejection(finalImplementation))) {
-        releaseCampaignNoEffect({
+      const soleInitialPreSpend = implementationChain.length === 0
+        || (implementationChain.length === 1
+          && isCampaignPreSpendRejection(finalImplementation));
+      // Exact zero-effect leaf after sole initial dispatch (durable only).
+      // prepare_implementation / null-leaf shapes must not take this path.
+      const soleInitialExactZeroEffectLeaf = implementationChain.length === 1
+        && isExactZeroEffectLeafProof(finalImplementation);
+      if (!durableJournal && soleInitialPreSpend) {
+        releaseCampaignNoEffect(buildCampaignPreSpendRejection({
           owner: 'campaign_composition',
-          status: 'rejected',
           code: 'campaign_pre_effect_blocked',
           reason: composition.reason || 'campaign composition blocked before mutation',
-        });
-      }
-    }
-
-    if (durableJournal && !new Set(['ready', 'follow_up']).has(composition.status)) {
-      const failure = this.terminalizeManagedCampaignFailure({
-        campaignControl,
-        reason: composition.reason,
-        phase: composition.phase,
-        cwd: loopCwd,
-      });
-      campaignControl.terminal_failure = failure;
-      if (failure.status === 'no_effect') {
-        releaseCampaignNoEffect({
+          result: finalImplementation,
+        }), { leafProof: finalImplementation });
+      } else if (durableJournal && soleInitialExactZeroEffectLeaf) {
+        // Durable journals record IMPLEMENTATION_STARTED before dispatch. When
+        // the sole initial leaf is the exact fail-closed zero-effect shape,
+        // release Mission/ICC admission instead of terminalizing as effectful.
+        const rejection = buildCampaignPreSpendRejection({
           owner: 'campaign_composition',
-          status: 'rejected',
           code: 'campaign_pre_effect_blocked',
           reason: composition.reason || 'campaign composition blocked before mutation',
+          result: finalImplementation,
         });
-      } else if (failure.status !== 'terminalized') {
-        return {
-          status: 'blocked',
-          phase: failure.phase || 'campaign_terminal_reconciliation',
-          reason: failure.reason || 'managed campaign failure terminalization failed',
-          rounds: implementationChain.length,
-          verdict: latestReview ? latestReview.verdict : null,
-          roster,
-          resolveResult,
-          base,
-          implementation: implementationChain.at(-1) || null,
-          review: latestReview,
-          implementationChain,
-          reviewChain,
-          campaign_receipt: composition,
-          ledger,
-        };
+        const release = releaseCampaignNoEffect(rejection, {
+          leafProof: finalImplementation,
+        });
+        if (!release || release.status !== 'released') {
+          return {
+            status: 'blocked',
+            phase: 'campaign_admission_release',
+            reason: (release && (release.reason || release.error))
+              || 'zero-effect leaf release failed closed',
+            rounds: implementationChain.length,
+            verdict: latestReview ? latestReview.verdict : null,
+            roster,
+            resolveResult,
+            base,
+            implementation: finalImplementation,
+            review: latestReview,
+            implementationChain,
+            reviewChain,
+            campaign_receipt: composition,
+            ledger,
+          };
+        }
+      } else if (durableJournal) {
+        const failure = this.terminalizeManagedCampaignFailure({
+          campaignControl,
+          reason: composition.reason,
+          phase: composition.phase,
+          cwd: loopCwd,
+        });
+        campaignControl.terminal_failure = failure;
+        if (failure.status === 'no_effect') {
+          releaseCampaignNoEffect(buildCampaignPreSpendRejection({
+            owner: 'campaign_composition',
+            code: 'campaign_pre_effect_blocked',
+            reason: composition.reason || 'campaign composition blocked before mutation',
+            result: finalImplementation,
+          }), { leafProof: finalImplementation });
+        } else if (failure.status !== 'terminalized') {
+          return {
+            status: 'blocked',
+            phase: failure.phase || 'campaign_terminal_reconciliation',
+            reason: failure.reason || 'managed campaign failure terminalization failed',
+            rounds: implementationChain.length,
+            verdict: latestReview ? latestReview.verdict : null,
+            roster,
+            resolveResult,
+            base,
+            implementation: finalImplementation,
+            review: latestReview,
+            implementationChain,
+            reviewChain,
+            campaign_receipt: composition,
+            ledger,
+          };
+        }
       }
     }
 
@@ -4359,12 +4471,12 @@ class AutopilotEngine {
       ledger.push(this.ledgerEntry('verify_first_signal', 'unused', startedAt));
     }
 
-    const releaseCampaignNoEffect = (rejection) => {
+    const releaseCampaignNoEffect = (rejection, options = {}) => {
       if (!campaignControl || campaignControl.status !== 'admitted') return null;
       const state = campaignControl.initial_state;
-      if (state && (state.event_count > 0
-          || state.phase !== CAMPAIGN_STATES.PREPARED
-          || state.live_lease !== null)) {
+      const claim = campaignControl.generation_claim || null;
+      const leafProof = options && options.leafProof ? options.leafProof : null;
+      if (!isCampaignAdmissionReleasable(state, claim, leafProof)) {
         return {
           status: 'blocked',
           error: 'campaign_effect_possible',
@@ -4599,13 +4711,13 @@ class AutopilotEngine {
         if (campaignControl
             && campaignControl.status === 'admitted'
             && isCampaignPreSpendRejection(implementation)) {
-          const rejection = {
+          const rejection = buildCampaignPreSpendRejection({
             owner: 'implementation_dispatch',
-            status: 'rejected',
             code: 'campaign_leaf_pre_spend_rejected',
             reason: implementation.reason || `implementation status ${implementation.status}`,
-          };
-          releaseCampaignNoEffect(rejection);
+            result: implementation,
+          });
+          releaseCampaignNoEffect(rejection, { leafProof: implementation });
         }
         return finish({
           status: 'blocked',

@@ -32,13 +32,10 @@ fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
 execFileSync('git', ['init', '-q', repo]);
 execFileSync('git', ['-C', repo, 'config', 'user.email', 'mission-runtime@example.invalid']);
 execFileSync('git', ['-C', repo, 'config', 'user.name', 'Mission Runtime Oracle']);
-fs.writeFileSync(path.join(repo, '.claude', 'owner-kernel-governance.json'),
-  `${JSON.stringify({ mission_convergence: { enforcement_mode: 'enforce' } })}\n`);
 fs.writeFileSync(path.join(repo, 'src', 'value.txt'), 'base\n');
-execFileSync('git', ['-C', repo, 'add', '.']);
-execFileSync('git', ['-C', repo, 'commit', '-qm', 'base']);
 
 const policy = {
+  schema_version: 1,
   enforcement_mode: 'enforce',
   max_campaigns: 4,
   max_wall_seconds: 1000,
@@ -48,9 +45,24 @@ const policy = {
   max_canonical_changed_files: 10,
   max_output_bytes: 4096,
   max_stagnant_campaigns: 2,
+  max_deliverables: 2,
+  max_parallel: 1,
+  max_batches: 2,
+  max_graph_depth: 2,
   max_gate_attempts: 4,
   closure_ratio: 0.75,
 };
+const projectGovernance = JSON.parse(fs.readFileSync(
+  path.join(root, '.claude', 'owner-kernel-governance.json'),
+  'utf8',
+));
+projectGovernance.mission_convergence = policy;
+fs.writeFileSync(
+  path.join(repo, '.claude', 'owner-kernel-governance.json'),
+  `${JSON.stringify(projectGovernance)}\n`,
+);
+execFileSync('git', ['-C', repo, 'add', '.']);
+execFileSync('git', ['-C', repo, 'commit', '-qm', 'base']);
 const policyDigest = sha(policy);
 const graph = {
   schema_version: 1,

@@ -56,6 +56,11 @@ function normalizeProductReviewFindings(raw) {
     return result('invalid', [], 'product review findings are empty');
   }
   const trimmed = raw.trim();
+  // Exact clean sentinel emitted by dispatch-review for SHIP-AS-IS with no items.
+  // Accept only trimmed case-insensitive `none` — not "no findings", empty, or prose.
+  if (trimmed.toLowerCase() === 'none') {
+    return result('normalized', []);
+  }
   try {
     return normalizeStructured(JSON.parse(trimmed));
   } catch (_error) {

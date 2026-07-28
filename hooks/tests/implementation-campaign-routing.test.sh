@@ -73,6 +73,37 @@ assert.strictEqual(
 assert.strictEqual(normalizeProductReviewFindings('ambiguous prose').status, 'invalid');
 assert.strictEqual(normalizeProductReviewFindings('').status, 'invalid');
 
+// P0 contract bridge: dispatch-review emits exact sentinel findings:"none" for clean
+// SHIP-AS-IS reviews. Only that trimmed, case-insensitive word normalizes to [].
+const cleanNone = normalizeProductReviewFindings('none');
+assert.strictEqual(cleanNone.status, 'normalized');
+assert.deepStrictEqual(cleanNone.findings, []);
+assert.strictEqual(cleanNone.canonical, '[]');
+assert.strictEqual(normalizeProductReviewFindings('NONE').status, 'normalized');
+assert.deepStrictEqual(normalizeProductReviewFindings('NONE').findings, []);
+assert.strictEqual(normalizeProductReviewFindings('  none  ').status, 'normalized');
+assert.deepStrictEqual(normalizeProductReviewFindings('  none  ').findings, []);
+assert.strictEqual(normalizeProductReviewFindings('no findings').status, 'invalid');
+assert.strictEqual(normalizeProductReviewFindings('none found').status, 'invalid');
+assert.strictEqual(normalizeProductReviewFindings('looks good').status, 'invalid');
+// Classification retained in claim under normalizer severity/id grammar.
+const mustFixLine = normalizeProductReviewFindings(
+  '🟠 [stable-id-001] MUST-FIX parser accepts unsafe input; impact=RCE path; fix=reject non-ASCII',
+);
+assert.strictEqual(mustFixLine.status, 'normalized');
+assert.strictEqual(mustFixLine.findings[0].finding_id, 'stable-id-001');
+assert.match(mustFixLine.findings[0].claim, /^MUST-FIX /);
+const cutLine = normalizeProductReviewFindings(
+  '🔵 [stable-id-002] CUT/FOLLOW-UP nicer logging is optional and excluded from this version',
+);
+assert.strictEqual(cutLine.status, 'normalized');
+assert.match(cutLine.findings[0].claim, /^CUT\/FOLLOW-UP /);
+// Bare classification without severity/[id] remains invalid (dispatcher contract mismatch).
+assert.strictEqual(
+  normalizeProductReviewFindings('MUST-FIX parser accepts unsafe input').status,
+  'invalid',
+);
+
 const authority = {
   schema_version: 1,
   artifact_type: 'campaign_disposition_authority',

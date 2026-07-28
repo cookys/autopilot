@@ -70,6 +70,14 @@ assert_contains "$CAPTURED" "MUST-FIX" \
   "prompt must distinguish current blockers"
 assert_contains "$CAPTURED" "CUT/FOLLOW-UP" \
   "prompt must explicitly remove nonblocking work from the current version"
+assert_contains "$CAPTURED" "normalizer-compatible severity" \
+  "prompt must require normalizer-compatible severity on every finding"
+assert_contains "$CAPTURED" "stable ID" \
+  "prompt must require a stable finding ID"
+assert_contains "$CAPTURED" $'🟠 [stable-id] MUST-FIX' \
+  "prompt must show severity + stable-id + MUST-FIX example"
+assert_contains "$CAPTURED" $'🔵 [stable-id] CUT/FOLLOW-UP' \
+  "prompt must show severity + stable-id + CUT/FOLLOW-UP example"
 assert_contains "$CAPTURED" "smallest concrete remediation" \
   "prompt must require attacks to include a bounded fix"
 assert_contains "$CAPTURED" "MUST-FIX list is empty" \

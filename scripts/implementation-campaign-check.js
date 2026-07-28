@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { resolveMissionPolicy } = require('../src/engine/mission-policy');
+const { resolveGovernancePolicy } = require('../src/engine/owner-kernel/policy');
 
 const MAX_CONTRACT_BYTES = 1024 * 1024;
 const SCHEMA_PATH = path.resolve(
@@ -170,25 +172,27 @@ function canonicalRepoIdentity(repo) {
   return `git-common-dir:${canonical}`;
 }
 
-function projectMissionMode(repo) {
+function projectMissionPolicy(repo) {
   const configPath = path.join(repo, '.claude', 'owner-kernel-governance.json');
-  if (!fs.existsSync(configPath)) return 'off';
+  if (!fs.existsSync(configPath)) {
+    return resolveMissionPolicy({ schema_version: 1, governance: {} });
+  }
   let config;
   try {
     config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   } catch (error) {
     throw new CliError(`authoritative project governance is invalid: ${error.message}`, 3);
   }
-  if (!hasOwn(config, 'mission_convergence')) return 'off';
-  const section = config.mission_convergence;
-  if (!section || typeof section !== 'object' || Array.isArray(section)
-      || !new Set(['off', 'shadow', 'enforce']).has(section.enforcement_mode)) {
-    throw new CliError(
-      'authoritative project governance has invalid mission_convergence.enforcement_mode',
-      3,
-    );
+  try {
+    resolveGovernancePolicy(config);
+    return resolveMissionPolicy(config);
+  } catch (error) {
+    throw new CliError(`authoritative project governance has invalid mission_convergence: ${error.message}`, 3);
   }
-  return section.enforcement_mode;
+}
+
+function projectMissionMode(repo) {
+  return projectMissionPolicy(repo).policy.enforcement_mode;
 }
 
 function repoObjectFormat(repo) {
@@ -1041,6 +1045,7 @@ module.exports = {
   inspectSealedCampaignContract,
   isWindowsReservedSegment,
   normalizeAllowedPrefix,
+  projectMissionPolicy,
   projectMissionMode,
   repoObjectFormat,
   validateContract,

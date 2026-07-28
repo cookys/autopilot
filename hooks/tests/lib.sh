@@ -43,6 +43,35 @@ mkdir -p "$HOOK_TMPDIR"
 # different TMPDIR can still export its own after sourcing lib.sh.
 export TMPDIR="$HOOK_TMPDIR"
 
+write_mission_governance() {
+  local target="$1"
+  local mode="$2"
+  node - "$REPO_ROOT/.claude/owner-kernel-governance.json" "$target" "$mode" <<'NODE'
+const fs = require('fs');
+const [source, target, mode] = process.argv.slice(2);
+const value = JSON.parse(fs.readFileSync(source, 'utf8'));
+value.mission_convergence = {
+  schema_version: 1,
+  enforcement_mode: mode,
+  max_campaigns: 8,
+  max_wall_seconds: 7200,
+  max_tool_calls: 1000,
+  max_engine_attempts: 100,
+  max_external_wait_seconds: 600,
+  max_canonical_changed_files: 100,
+  max_output_bytes: 1000000,
+  max_deliverables: 8,
+  max_parallel: 3,
+  max_batches: 4,
+  max_graph_depth: 4,
+  max_gate_attempts: 16,
+  closure_ratio: 1,
+  max_stagnant_campaigns: 2,
+};
+fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+}
+
 cleanup_test_tmp() { rm -rf "$TEST_TMP"; }
 trap cleanup_test_tmp EXIT
 

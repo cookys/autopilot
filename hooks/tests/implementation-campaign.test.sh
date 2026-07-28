@@ -9,8 +9,7 @@ git -C "$SBX" init -q
 git -C "$SBX" config user.email "campaign-test@example.invalid"
 git -C "$SBX" config user.name "Campaign Test"
 mkdir -p "$SBX/.claude"
-printf '%s\n' '{"mission_convergence":{"enforcement_mode":"shadow"}}' \
-  > "$SBX/.claude/owner-kernel-governance.json"
+write_mission_governance "$SBX/.claude/owner-kernel-governance.json" shadow
 printf 'first\n' > "$SBX/README.md"
 git -C "$SBX" add README.md .claude/owner-kernel-governance.json
 git -C "$SBX" commit -qm "first"
@@ -287,8 +286,7 @@ assert_contains "$__RUN_STDOUT" "canonical repository identity" "identity reject
 
 ENFORCED_GRANT="$TEST_TMP/enforced-grant.json"
 write_contract "$ENFORCED_GRANT"
-printf '%s\n' '{"mission_convergence":{"enforcement_mode":"enforce"}}' \
-  > "$SBX/.claude/owner-kernel-governance.json"
+write_mission_governance "$SBX/.claude/owner-kernel-governance.json" enforce
 MISSION_MODE=enforce run_checker seal --contract "$ENFORCED_GRANT" --repo "$SBX" \
   --out "$TEST_TMP/enforced-grant.seal"
 assert_exit_code "$__RUN_EXIT" "3" "enforced Mission rejects a null parent grant"
@@ -309,8 +307,7 @@ assert_exit_code "$__RUN_EXIT" "3" "caller cannot downgrade authoritative Missio
 assert_contains "$__RUN_STDERR" "does not match authoritative project mode" \
   "mode downgrade rejection names the authority mismatch"
 
-printf '%s\n' '{"mission_convergence":{"enforcement_mode":"shadow"}}' \
-  > "$SBX/.claude/owner-kernel-governance.json"
+write_mission_governance "$SBX/.claude/owner-kernel-governance.json" shadow
 
 OBJECT_FORMAT="$TEST_TMP/object-format.json"
 write_contract "$OBJECT_FORMAT"

@@ -46,8 +46,7 @@ mkdir -p "$SBX/.claude" "$SBX/src"
 git -C "$SBX" init -q
 git -C "$SBX" config user.email "mission-p2@example.invalid"
 git -C "$SBX" config user.name "Mission P2 Oracle"
-printf '%s\n' '{"mission_convergence":{"enforcement_mode":"shadow"}}' \
-  > "$SBX/.claude/owner-kernel-governance.json"
+write_mission_governance "$SBX/.claude/owner-kernel-governance.json" shadow
 printf 'base\n' > "$SBX/src/value.txt"
 git -C "$SBX" add .
 git -C "$SBX" commit -qm "base"
@@ -96,8 +95,7 @@ mkdir -p "$EBX/.claude" "$EBX/src"
 git -C "$EBX" init -q
 git -C "$EBX" config user.email "mission-p2@example.invalid"
 git -C "$EBX" config user.name "Mission P2 Oracle"
-printf '%s\n' '{"mission_convergence":{"enforcement_mode":"enforce"}}' \
-  > "$EBX/.claude/owner-kernel-governance.json"
+write_mission_governance "$EBX/.claude/owner-kernel-governance.json" enforce
 printf 'base\n' > "$EBX/src/value.txt"
 git -C "$EBX" add .
 git -C "$EBX" commit -qm "base"

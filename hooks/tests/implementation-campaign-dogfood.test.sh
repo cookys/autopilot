@@ -7,8 +7,7 @@ mkdir -p "$REPO/.claude" "$REPO/assets"
 git -C "$REPO" init -q -b develop
 git -C "$REPO" config user.email 057@example.invalid
 git -C "$REPO" config user.name "ICC 057 Dogfood"
-printf '%s\n' '{"mission_convergence":{"enforcement_mode":"shadow"}}' \
-  >"$REPO/.claude/owner-kernel-governance.json"
+write_mission_governance "$REPO/.claude/owner-kernel-governance.json" shadow
 printf 'alpha\n' >"$REPO/assets/source.txt"
 git -C "$REPO" add .
 git -C "$REPO" commit -qm "057 base"

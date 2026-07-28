@@ -330,8 +330,7 @@ mkdir -p "$SBX/.claude" "$SBX/src"
 git -C "$SBX" init -q
 git -C "$SBX" config user.email "campaign-p3@example.invalid"
 git -C "$SBX" config user.name "Campaign P3 Test"
-printf '%s\n' '{"mission_convergence":{"enforcement_mode":"shadow"}}' \
-  > "$SBX/.claude/owner-kernel-governance.json"
+write_mission_governance "$SBX/.claude/owner-kernel-governance.json" shadow
 printf 'base\n' > "$SBX/src/value.txt"
 git -C "$SBX" add .
 git -C "$SBX" commit -qm "base"

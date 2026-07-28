@@ -8,8 +8,7 @@ mkdir -p "$REPO/.claude" "$REPO/src"
 git -C "$REPO" init -q
 git -C "$REPO" config user.email "failclosed@example.invalid"
 git -C "$REPO" config user.name "Fail-Closed Oracle"
-printf '%s\n' '{"mission_convergence":{"enforcement_mode":"enforce"}}' \
-  > "$REPO/.claude/owner-kernel-governance.json"
+write_mission_governance "$REPO/.claude/owner-kernel-governance.json" enforce
 printf 'base\n' > "$REPO/src/value.txt"
 git -C "$REPO" add .
 git -C "$REPO" commit -qm "base"

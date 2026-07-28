@@ -88,13 +88,12 @@ headings remain provenance/coverage; they are never copied directly into impleme
   "sourceAuthoringUnitsFound": 34,
   "deliverablesAdmitted": 4,
   "deliverableDeps": {
-    "runtime-control": [],
     "plan-review": [],
     "transcript-retro": [],
-    "release-closeout": ["runtime-control", "plan-review", "transcript-retro"]
+    "release-closeout": ["plan-review", "transcript-retro"]
   },
   "parallelGroups": [
-    ["runtime-control", "plan-review", "transcript-retro"],
+    ["plan-review", "transcript-retro"],
     ["release-closeout"]
   ],
   "missionAdmissionDigest": "<sha256>",
@@ -103,11 +102,28 @@ headings remain provenance/coverage; they are never copied directly into impleme
 }
 ```
 
+Illustrative shape only: the caller-authored graph may drop already-integrated deliverables on
+resume (see resume projection below). Do not copy historical four-node deps from memory.
+
+## Resume projection (remaining deliverables only)
+
+When bootstrapping or re-admitting after partial integration:
+
+- Graph nodes represent **remaining** deliverables. An already integrated deliverable is omitted or
+  satisfied by an authoritative receipt/commit — never redispatched.
+- `campaign.output_paths` describe **required mutations for the new candidate**, not every file the
+  workstream ever touched historically.
+- Source manifests stay exact-coverage for the **current** graph. Narrow the active manifest when a
+  deliverable leaves the executable set; keep full provenance in git history / project ledger. Never
+  fabricate source hashes.
+- This is methodology and tracker discipline until a deterministic resume-projection gate binds
+  accepted commit/receipt evidence and rejects historical-output replay before grant (BACKLOG).
+
 ## Step 4: Verify + Commit
 
 1. **Check `deliverablesAdmitted`** — it must equal the frozen graph node count and stay within
-   policy. A plan with 34 headings and a four-node graph reports 34 coverage units and four
-   deliverables, never 34 implementation tasks.
+   policy. A plan with 34 headings and a three-node successor graph reports coverage units for the
+   active source set and three deliverables, never one task per authoring heading.
 2. **Check `indexUpdated`** — if false, INDEX insertion failed. Manually add the project entry to `docs/projects/INDEX.md`.
 3. **Review generated README.md** — verify goals, success criteria, and scope were correctly extracted. Fix any inaccuracies.
 4. **Check `deliverableDeps`** against the admitted graph. Never infer dependencies from heading order.

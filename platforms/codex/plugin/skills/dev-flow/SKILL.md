@@ -706,3 +706,8 @@ node <autopilot-source>/scripts/mission-routing-admission.js \
   second graph or reset authority.
 - The project README keeps historical completed phases in a non-executable ledger and reports only
   current admitted deliverables as executable work.
+- **Resume projection**: on resume, Mission nodes are remaining deliverables only. An already
+  integrated deliverable is omitted or satisfied by an authoritative receipt/commit — never
+  redispatched. `output_paths` list required mutations for the new candidate, not historical files
+  already in HEAD. Correct campaign rejection of historical-output replay is not a cue to rewrite
+  those paths. This judgment is methodology until a deterministic gate lands (BACKLOG).

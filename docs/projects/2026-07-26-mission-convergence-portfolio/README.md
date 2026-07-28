@@ -2,9 +2,11 @@
 
 > Status: In progress
 >
-> Progress: 0/4 current deliverables canonically READY; 2 candidate implementations are under depth-0 repair/review
+> Progress: 0/3 current deliverables canonically READY; `runtime-control` bootstrap is integrated
+> on candidate history and omitted from the successor executable graph
 >
-> Current deliverable: `runtime-control` (`IN_PROGRESS`)
+> Current deliverable: successor graph — `plan-review` + `transcript-retro` (parallel), then
+> `release-closeout`
 >
 > Target: v2.34.0
 >
@@ -31,7 +33,7 @@ runner, reviewer, branch, or successor to reset authority or resource ceilings.
 | Existing project policy: strong and weak models coexist through profiles | ICC and PRO consume the shipped capability/guidance profile contracts without splitting the repository. |
 | Existing project policy: no unbounded topic expansion | Review discoveries outside the frozen deliverable rubric go to `docs/BACKLOG.md`; they do not grow the active graph. |
 | Valuable reviewer follow-ups must not be lost | ICC/PRS emit evidence-bound follow-up candidates; LSM P4 makes depth-0 dedupe and admit them to backlog before closeout, while `/next` may reopen them only as a new ticket/contract/budget after their trigger is true. |
-| "直接放寬" Kimi transport | `runtime-control` permits Kimi 0.28.0 direct-vector `--prompt` transport with scratch-cwd isolation and public-output redaction; it does not claim role qualification or a CLI-enforced no-effect guarantee. |
+| "直接放寬" Kimi transport | `runtime-control` (historical bootstrap deliverable) permits Kimi 0.28.0 direct-vector `--prompt` transport with scratch-cwd isolation and public-output redaction; it does not claim role qualification or a CLI-enforced no-effect guarantee. |
 
 ## Scope Completeness Audit
 
@@ -78,28 +80,46 @@ transport failure never counts as a verdict.
 | 19 | LSM P4 finish-flow + CEO reporting | LSM P3 | READY | `f77866a` | [lsm-p4.md](reviews/lsm-p4.md) |
 | 20 | LSM P5 docs/package integration | LSM P4 | READY | `27d43a8` | [lsm-p5.md](reviews/lsm-p5.md) |
 | 21 | ICC P4 057 dogfood + ship integration | Mission/LSM integration | READY | `cc8c227` | [icc-p4.md](reviews/icc-p4.md) |
-## Current Deliverable Graph
+| 22 | `runtime-control` bootstrap (four-node era) | completed core | BOOTSTRAP INTEGRATED (graph-omitted) | candidate `b9a3f55cf2904c71a276cbaa5f19d5d9fc67ed0d` on `mission/d0a1cbf6b531/runtime-control-a1` | focused suite green (842 assertions + canonical/mirror gates); prior four-node campaign correctly rejected historical `output_paths` replay against HEAD |
 
-The source portfolio contains 32 `Phase`/`P0` authoring headings; the old tracker also added a
-baseline and closeout row, producing 34 sequential rows. Those units are coverage metadata inside
-four bounded deliverables. The authoritative graph and content-bound source set are checked before
-TaskCreate or execution topology effects.
+## Current Deliverable Graph (successor after runtime-control bootstrap)
+
+The source portfolio originally contained 32 `Phase`/`P0` authoring headings; the old tracker also
+added a baseline and closeout row, producing 34 sequential rows. Those units are coverage metadata.
+After the `runtime-control` bootstrap landed its required mutations in candidate history, the
+**successor executable graph** retains only outstanding deliverables:
 
 | Node | Included source work | Dependencies | Status | Candidate/integration evidence |
 |---|---|---|---|---|
-| `runtime-control` | Mission governance correction, durable Mission runtime, L6 strict bridge, remaining PRO/Kimi integration | completed core | IN_PROGRESS | policy/graph `7d96d46`; strict leaf projection `1da5c72` + `8d7e61c`; runtime `149e520` + `ffd2fb0`; C routing and marker/campaign digest equality pending |
-| `plan-review` | PRS P1-P5 | completed core | REPAIR/REVIEW IN_PROGRESS | candidate commits `c076d94`, `7e9ba5f`; branch `feat/prs-complete-track`; no canonical acceptance yet |
-| `transcript-retro` | CTR P1-P4 | completed core | REPAIR/REVIEW IN_PROGRESS | candidate commit `446956241b3906f3a3ab5399b7be8cb60670bc0c`; branch `feat/ctr-complete-track`; no canonical acceptance yet |
-| `release-closeout` | Joint QC, version sync, canonical merge, worktree/branch cleanup, archive | all three nodes | BLOCKED | starts only after the three predecessors are canonically integrated |
+| `plan-review` | PRS P1-P5 | completed core + runtime-control bootstrap | REPAIR/REVIEW IN_PROGRESS | candidate commits `c076d94`, `7e9ba5f`; branch `feat/prs-complete-track`; no canonical acceptance yet |
+| `transcript-retro` | CTR P1-P4 | completed core + runtime-control bootstrap | REPAIR/REVIEW IN_PROGRESS | candidate commit `446956241b3906f3a3ab5399b7be8cb60670bc0c`; branch `feat/ctr-complete-track`; no canonical acceptance yet |
+| `release-closeout` | Joint QC, version sync, canonical merge, worktree/branch cleanup, archive | exactly `plan-review` + `transcript-retro` | BLOCKED | starts only after both predecessors are canonically integrated |
 
-Maximum active implementation width is three. `release-closeout` is the only sequential terminal
-node. See [mission-execution-graph.json](mission-execution-graph.json) and
-[the content-bound source manifest](../../mission-convergence-portfolio-sources.json). The
-[candidate path audit](candidate-path-audit.json) freezes the mechanically observed A/B/QA/C,
-PRS, and CTR path sets plus the known post-C marker/campaign bridge surfaces; admission-time shared
-documentation exclusions are explicit instead of silently widening a candidate node.
-Candidate branches and commits are evidence inputs only; depth-0 retains acceptance authority, so
-none of the four current deliverables is canonically READY yet.
+Maximum active implementation width is two on the successor graph (`plan-review` ∥
+`transcript-retro`). `release-closeout` remains the only sequential terminal node.
+
+Authoritative artifacts:
+
+- [mission-execution-graph.json](mission-execution-graph.json) — successor three-node DAG
+  (`graph_digest` `782ea5db…`)
+- [content-bound source manifest](../../mission-convergence-portfolio-sources.json) — narrowed to
+  the three remaining source plans/rubrics required for exact coverage of the successor graph.
+  The historical seven-plan portfolio set remains recoverable from git history and the historical
+  ledger above; hashes are never fabricated.
+- [candidate path audit](candidate-path-audit.json) — frozen mechanically observed path sets from
+  the four-node era, retained as audit evidence.
+
+### Why `runtime-control` was removed from the executable graph
+
+A prior Mission campaign correctly rejected integrating the `runtime-control` node: its
+`output_paths` list represented **all files produced since the old portfolio base**, most of which
+are already present in current HEAD. A delta repair must not rewrite those files merely to satisfy
+a historical boundary. The bootstrap implementation itself is complete and its focused suite is
+green at candidate `b9a3f55…`; resume projection therefore **omits** the integrated deliverable
+from the successor graph rather than redispatches it.
+
+PRS and CTR `required_paths` / `output_paths` contracts are unchanged: they still match the
+complete diffs from their frozen source-plan bases and must not be weakened into broad allowlists.
 
 ## Deliverable Gate
 
@@ -138,3 +158,6 @@ immediately in v2.34.0.
 - Native Kimi implementation dispatch; this project adds only the reviewed author/reviewer transport.
 - Universal enforcement claims for harnesses without executable blocking evidence.
 - Repairing unrelated repository debt discovered by deterministic gates.
+- Mechanized resume-projection judgment (historical-output replay rejection before grant) — tracked
+  as a high-priority backlog item; this successor-graph edit is an explicit human correction, not a
+  claim that the gate already exists.

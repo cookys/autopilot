@@ -106,14 +106,16 @@ These are implementation ownership boundaries, not user-visible phases.
 |---|---|---|---|
 | A: policy + graph | canonical resolver, Owner Kernel/TaskAuthority freeze, graph contract/checker | one commit | integrated as `7d96d46` |
 | B: runtime lifecycle | prepare/grant v2, registry/CAS, terminal reconciliation, engine intake | one commit plus fixture correction | integrated as `149e520` + `ffd2fb0` |
-| C: routing + dogfood | CEO/L3-L6 admission, current four-node graph, tracker correction, end-to-end matrix | one commit | in progress; strict leaf projection prerequisites integrated as `1da5c72` + `8d7e61c` |
+| C: routing + dogfood | CEO/L3-L6 admission, graph/tracker correction, end-to-end matrix | one commit | bootstrap integrated on candidate `b9a3f55…` (focused suite green); successor graph omits `runtime-control` after historical-`output_paths` campaign rejection |
 
 No new sub-phase may be created inside these workstreams. A failed test is repaired inside its owning
 workstream. A finding outside this frozen boundary goes to backlog with a trigger.
 
 ## Current Portfolio Execution Graph
 
-The remaining portfolio is represented by four deliverables, not twelve phase rows:
+### Four-node era (historical; auditable only)
+
+The portfolio was first represented by four deliverables:
 
 | Node | Deliverable | Dependencies |
 |---|---|---|
@@ -122,7 +124,25 @@ The remaining portfolio is represented by four deliverables, not twelve phase ro
 | `transcript-retro` | CTR P1-P4 as one independently verified track | completed core |
 | `release-closeout` | joint QC, version, merge, worktree/branch cleanup, and archive | all three nodes |
 
-Maximum active implementation nodes is three. Closeout is the only sequential terminal node.
+Maximum active implementation nodes was three. A Mission campaign against the four-node graph
+correctly rejected `runtime-control` integration because its `output_paths` listed historical files
+already present in HEAD; delta repair must not rewrite them to satisfy the boundary. The bootstrap
+implementation itself is complete at candidate `b9a3f55cf2904c71a276cbaa5f19d5d9fc67ed0d`.
+
+### Successor graph (current executable)
+
+After the `runtime-control` bootstrap, remaining work is three deliverables:
+
+| Node | Deliverable | Dependencies |
+|---|---|---|
+| `plan-review` | PRS P1-P5 as one independently verified track | completed core + runtime-control bootstrap |
+| `transcript-retro` | CTR P1-P4 as one independently verified track | completed core + runtime-control bootstrap |
+| `release-closeout` | joint QC, version, merge, worktree/branch cleanup, and archive | exactly `plan-review` and `transcript-retro` |
+
+Maximum active implementation nodes is two. Closeout is the only sequential terminal node. PRS/CTR
+required and output path contracts are preserved unchanged. The content-bound source manifest is
+narrowed to the three remaining plans so exact source/rubric coverage still holds; the historical
+seven-plan set remains in git history and the project ledger.
 
 ## Mechanical Acceptance
 
@@ -142,8 +162,9 @@ Maximum active implementation nodes is three. Closeout is the only sequential te
 8. Two configured zero-delta terminal outcomes block the Mission while acceptance remains.
 9. L3-L6, `--solo`, precondition fallback, and expired/corrupt marker tests cannot bypass the same
    Mission/graph admission.
-10. The current four-node graph passes the source-rubric coverage checker against the real seven
-    plans and rubrics.
+10. The current successor three-node graph passes the source-rubric coverage checker against the
+    three remaining plans and rubrics (PRS, CTR, LSM closeout). The historical seven-plan set is
+    provenance only and is not re-covered by the executable graph after `runtime-control` omission.
 
 Required final commands:
 

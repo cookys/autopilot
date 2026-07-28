@@ -39,6 +39,12 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
+### Deterministic Mission resume-projection gate (historical-output replay rejection)
+- **Trigger**: before the next Mission grant that reuses a partially integrated portfolio graph, or immediately after any campaign fails because `output_paths` list files already present in HEAD while the deliverable’s code is already integrated; must land before treating successor-graph editing as optional human folklore.
+- **Context**: After a deliverable’s required mutations are already in the base (or an authoritative receipt proves satisfaction), resume must project **remaining** nodes only. Today that judgment is human methodology (`dev-flow` / `project-lifecycle` resume-projection rule). A four-node Mission correctly rejected `runtime-control` when its `output_paths` still enumerated historical files from the old portfolio base—most already in HEAD—so a delta repair could not and must not rewrite them for boundary cosmetics. Missing mechanization: bind accepted commit/receipt evidence, drop or receipt-satisfy integrated nodes, require `output_paths` to be the candidate’s required mutation set (not historical inventory), and **reject historical-output replay before grant**. Do not claim this gate already exists; the successor three-node graph edit is an explicit correction, not proof of automation.
+- **Effort**: L
+- **Source**: 2026-07-28 Mission Convergence Portfolio runtime-control bootstrap campaign rejection; candidate `b9a3f55cf2904c71a276cbaa5f19d5d9fc67ed0d`; successor-graph correction
+
 ### Mission graph scheduler 與 portfolio optimization
 - **Trigger**: v2.34.0 的 frozen deliverable graph gate 已出貨，且至少兩個真實 portfolio 顯示靜態 dependency batches 造成可量測的 idle time，或使用者明確要求跨專案排程／dashboard。
 - **Context**: v2.34.0 只需要機械阻止 phase explosion：bounded deliverable count、DAG、parallel/batch/depth/gate budget 與 ready-node admission。Critical-path optimization、dynamic reorder、跨 repo portfolio、priority queue、進度 dashboard 與成本最佳化不屬於本次 prevention boundary；過早加入會把一個 P0 correctness gate 再膨脹成 scheduler 專案。啟動後應消費同一 frozen graph/receipt，不得建立第二套 Mission authority。

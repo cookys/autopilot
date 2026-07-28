@@ -179,10 +179,7 @@ function isAuthoritativeGitObjectId(baseSha) {
   return typeof baseSha === 'string' && /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(baseSha);
 }
 
-// Pre-spend gate at Mission admission: every frozen node must reference a
-// base-tree path whose exact Markdown heading matches campaign.spec.section.
-// Invalid graphs fail before any Mission state/grant is created.
-function validateGraphSpecsAtBase(repoRoot, graph) {
+function resolveAuthoritativeHead(repoRoot) {
   let baseSha;
   try {
     baseSha = execFileSync(
@@ -196,6 +193,16 @@ function validateGraphSpecsAtBase(repoRoot, graph) {
       'MISSION_GRAPH_SPEC_INVALID',
     );
   }
+  if (!isAuthoritativeGitObjectId(baseSha)) {
+    fail('authoritative base SHA is invalid for graph spec validation', 'MISSION_GRAPH_SPEC_INVALID');
+  }
+  return baseSha;
+}
+
+// Pre-spend gate at Mission admission: every frozen node must reference a
+// base-tree path whose exact heading matches campaign.spec.section at the
+// caller-bound base SHA (resolved once per admission operation).
+function validateGraphSpecsAtBase(repoRoot, graph, baseSha) {
   if (!isAuthoritativeGitObjectId(baseSha)) {
     fail('authoritative base SHA is invalid for graph spec validation', 'MISSION_GRAPH_SPEC_INVALID');
   }
@@ -292,11 +299,13 @@ function admitMissionRouting(options = {}) {
         'MISSION_POLICY_DRIFT',
       );
     }
-    // Pre-spend: validate frozen graph specs at HEAD using the already-checked
-    // routing-config graph file. Do not depend on inspect() exposing nodes.
+    // Pre-spend: resolve HEAD once per admission, then validate frozen graph
+    // specs against that exact SHA using the already-checked routing graph.
+    const admissionBaseSha = resolveAuthoritativeHead(repo.root);
     validateGraphSpecsAtBase(
       repo.root,
       readJson(artifacts.graph, 'Mission execution graph'),
+      admissionBaseSha,
     );
   } catch (error) {
     if (policy.resolution.policy.enforcement_mode === 'enforce') throw error;

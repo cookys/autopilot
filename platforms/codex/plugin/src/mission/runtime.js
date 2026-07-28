@@ -1098,11 +1098,15 @@ function reservationForNode(state, node) {
   };
 }
 
-function campaignDraftFor({ state, node, adoptionKey, attempt, repoInfo }) {
+function campaignDraftFor({ state, node, adoptionKey, attempt, repoInfo, baseSha }) {
   const campaign = requireObject(node.campaign, `graph node ${node.id} campaign`);
   const spec = requireObject(campaign.spec, `graph node ${node.id} campaign.spec`);
   const graphNodeDigest = mission.sha256(mission.canonicalJson(node));
-  const baseSha = git(repoInfo.repo, ['rev-parse', 'HEAD']);
+  // Never re-resolve HEAD here — callers bind one authoritative base SHA per
+  // grant attempt (validated heading + sealed contract base_sha must match).
+  if (typeof baseSha !== 'string' || !/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(baseSha)) {
+    fail('MISSION_RUNTIME_INVALID', 'campaign draft requires an authoritative base SHA');
+  }
   const acceptanceIds = [...node.acceptance_ids];
   const rubricIds = [...node.source_rubric_ids];
   return {
@@ -1285,8 +1289,9 @@ function grantMissionCampaign(input = {}) {
         || attempt > node.gate_attempt_budget) {
       fail('MISSION_GATE_BUDGET_EXHAUSTED', `graph node ${nodeId} gate budget exhausted`);
     }
-    // Re-validate the node's frozen spec against the authoritative grant base
-    // (HEAD) before creating a new Mission claim / campaign draft.
+    // Resolve the grant base exactly once per attempt: validate the node
+    // heading at that SHA and seal the same SHA into the campaign draft so
+    // base_sha cannot drift from the validated tree.
     const grantBaseSha = git(repoInfo.repo, ['rev-parse', 'HEAD']);
     validateGraphSpecsAtBase(repoInfo.repo, { nodes: [node] }, grantBaseSha);
     const draft = campaignDraftFor({
@@ -1295,7 +1300,14 @@ function grantMissionCampaign(input = {}) {
       adoptionKey: verified.value.adoption_key,
       attempt,
       repoInfo,
+      baseSha: grantBaseSha,
     });
+    if (draft.base_sha !== grantBaseSha) {
+      fail(
+        'MISSION_RUNTIME_INVALID',
+        'campaign draft base_sha must equal the validated grant base',
+      );
+    }
     const subject = missionSubjectDigest(draft);
     const campaignId = missionCampaignIdFor(
       state.repo_identity,
@@ -1311,7 +1323,7 @@ function grantMissionCampaign(input = {}) {
       campaign_id: campaignId,
       mission_subject_digest: subject,
       campaign_contract_digest: subject,
-      base_sha: draft.base_sha,
+      base_sha: grantBaseSha,
       acceptance_ids: [...node.acceptance_ids],
       acceptance_hashes: acceptanceHashes,
       graph_node_id: nodeId,
@@ -1466,6 +1478,7 @@ module.exports = {
   MissionRuntimeError,
   acceptanceHashFor,
   atomicWriteJson,
+  campaignDraftFor,
   canonicalRepository,
   createCampaignTerminalReceipt,
   grantMissionCampaign,
@@ -1475,5 +1488,6 @@ module.exports = {
   reconcileMissionCampaignTerminal,
   recoverPendingTerminals,
   requiredAcceptanceHashes,
+  validateGraphSpecsAtBase,
   validatePreparedReceipt,
 };

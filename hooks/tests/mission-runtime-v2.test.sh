@@ -54,7 +54,8 @@ const policy = {
   max_parallel: 1,
   max_batches: 2,
   max_graph_depth: 2,
-  max_gate_attempts: 4,
+  // runtime-control (4) + release-closeout (2); TOCTOU re-grants need the headroom.
+  max_gate_attempts: 8,
   closure_ratio: 0.75,
 };
 const projectGovernance = JSON.parse(fs.readFileSync(
@@ -80,7 +81,8 @@ const graph = {
       dependencies: [],
       acceptance_ids: ['runtime-ready'],
       verification_commands: ['node fixture.js', 'node second-fixture.js'],
-      gate_attempt_budget: 2,
+      // Extra budget: original grant + TOCTOU re-grant + post-zero-effect re-grant.
+      gate_attempt_budget: 4,
       reservation: {
         campaigns: 1, wall_seconds: 100, tool_calls: 3, engine_attempts: 2,
         external_wait_seconds: 0, canonical_changed_files: 2, output_bytes: 1024,
@@ -472,9 +474,116 @@ if (runtime) {
     repo,
     preparedReceipt: JSON.parse(fs.readFileSync(preparedPath, 'utf8')),
   });
+  // TOCTOU: one authoritative base per grant attempt — draft cannot re-read HEAD,
+  // and heading must exist at that exact SHA (not merely on some later commit).
+  check('campaign-draft-api-present', typeof runtime.campaignDraftFor === 'function');
+  check('validate-graph-specs-api-present',
+    typeof runtime.validateGraphSpecsAtBase === 'function');
+  const boundBaseSha = granted.payload.base_sha;
+  check('grant-seals-validated-base-sha',
+    typeof boundBaseSha === 'string'
+    && /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(boundBaseSha)
+    && boundBaseSha === grantedContract.base_sha);
+  runtime.validateGraphSpecsAtBase(repo, { nodes: [graph.nodes[0]] }, boundBaseSha);
+  fs.writeFileSync(path.join(repo, 'src', 'value.txt'), 'no-atx-headings-at-this-head\n');
+  execFileSync('git', ['-C', repo, 'add', 'src/value.txt']);
+  execFileSync('git', ['-C', repo, 'commit', '-qm', 'move HEAD without ATX headings']);
+  const movedHeadSha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+  check('toctou-head-moved-from-bound-base',
+    movedHeadSha !== boundBaseSha);
+  const draftPinned = runtime.campaignDraftFor({
+    state: store.load(),
+    node: graph.nodes[0],
+    adoptionKey,
+    attempt: 99,
+    repoInfo: runtime.canonicalRepository(repo),
+    baseSha: boundBaseSha,
+  });
+  check('draft-pins-bound-base-not-current-head',
+    draftPinned.base_sha === boundBaseSha
+    && draftPinned.base_sha !== movedHeadSha);
+  // Current HEAD lacks headings, but the bound base still has them.
+  let boundBaseStillValid = true;
+  try {
+    runtime.validateGraphSpecsAtBase(repo, { nodes: [graph.nodes[0]] }, boundBaseSha);
+  } catch (_error) {
+    boundBaseStillValid = false;
+  }
+  check('bound-base-still-has-heading-after-head-move', boundBaseStillValid);
+  let movedHeadRejected = false;
+  try {
+    runtime.validateGraphSpecsAtBase(repo, { nodes: [graph.nodes[0]] }, movedHeadSha);
+  } catch (error) {
+    movedHeadRejected = error.code === 'MISSION_GRAPH_SPEC_INVALID'
+      && /missing heading/.test(error.message || '');
+  }
+  check('moved-head-missing-heading-rejected', movedHeadRejected);
+  // Free the live pre-spawn claim so grant can attempt a new claim and hit
+  // the heading gate at the moved HEAD (not dependency/replay short-circuits).
+  const releaseAdapters = mission.createMissionCampaignAdapters({
+    store,
+    grant_ref: granted.payload.mission_grant_ref,
+  });
+  const preSpawnRelease = releaseAdapters.releaseMission({
+    missionClaim: { claim_id: granted.payload.claim_id },
+  });
+  check('toctou-pre-spawn-release-for-regrant',
+    preSpawnRelease && preSpawnRelease.status === 'released');
+  const claimsBeforeBadGrant = Object.keys(store.load().claims).length;
+  const controlSequenceBeforeBadGrant = store.load().control_sequence;
+  const grantAtMovedHead = runCli([
+    'grant', '--repo', repo, '--prepared', preparedPath,
+    '--node', 'runtime-control', '--now', '2026-07-28T00:00:05.000Z',
+  ]);
+  check('grant-rejects-heading-absent-at-exact-base',
+    grantAtMovedHead.code !== 0
+    && /MISSION_GRAPH_SPEC_INVALID|missing heading/.test(
+      grantAtMovedHead.stderr + grantAtMovedHead.stdout,
+    ));
+  const afterBadGrant = store.load();
+  check('grant-heading-miss-no-claim-mutation',
+    Object.keys(afterBadGrant.claims).length === claimsBeforeBadGrant
+    && afterBadGrant.control_sequence === controlSequenceBeforeBadGrant
+    && !Object.values(afterBadGrant.claims).some(
+      (claim) => claim.graph_node_id === 'runtime-control' && !claim.released,
+    ));
+  // Restore headings at a new HEAD so later grants still use then-current HEAD.
+  fs.writeFileSync(path.join(repo, 'src', 'value.txt'), [
+    '## Runtime control',
+    'base',
+    '## Release closeout',
+    '',
+  ].join('\n'));
+  execFileSync('git', ['-C', repo, 'add', 'src/value.txt']);
+  execFileSync('git', ['-C', repo, 'commit', '-qm', 'restore ATX headings at new HEAD']);
+  const restoredHeadSha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+  check('later-grant-uses-then-current-head-not-prepare-base',
+    restoredHeadSha !== boundBaseSha);
+  const grantAfterRestore = runCli([
+    'grant', '--repo', repo, '--prepared', preparedPath,
+    '--node', 'runtime-control', '--now', '2026-07-28T00:00:06.000Z',
+  ]);
+  check('post-restore-grant-binds-then-current-head',
+    grantAfterRestore.code === 0
+    && grantAfterRestore.payload
+    && grantAfterRestore.payload.status === 'claimed'
+    && grantAfterRestore.payload.base_sha === restoredHeadSha
+    && grantAfterRestore.payload.claim_id !== granted.payload.claim_id);
+  // Subsequent intake/zero-effect paths must use the live re-grant binding.
+  const originalGrantedClaimId = granted.payload.claim_id;
+  Object.assign(granted, grantAfterRestore);
+
   const once = store.load();
+  const liveClaims = Object.values(once.claims).filter((claim) => !claim.released);
   check('same-node-reserved-once', once.axes.tool_calls.reserved_active === 3
-    && Object.keys(once.claims).length === 1);
+    && liveClaims.length === 1
+    && liveClaims[0].graph_node_id === 'runtime-control'
+    && liveClaims[0].claim_id === granted.payload.claim_id
+    && liveClaims[0].claim_id !== originalGrantedClaimId);
   check('state-preserves-distinct-policy-anchors',
     once.policy_hash === authority.policy_hash
     && once.mission_policy_digest === policyDigest
@@ -921,10 +1030,12 @@ if (runtime) {
     && afterZeroEffect.claims[granted.payload.claim_id].released === true);
   check('durable-zero-effect-stagnation-unchanged',
     afterZeroEffect.stagnant_campaigns === stagnationBeforeZeroEffect);
+  // Attempt count is retained across no_effect_release (not unspent). TOCTOU
+  // path already spent attempt 1, re-grant is attempt 2, zero-effect keeps 2.
   check('durable-zero-effect-graph-restored-pending',
     afterZeroEffect.graph_progress['runtime-control'].status === 'pending'
     && afterZeroEffect.graph_progress['runtime-control'].active_claim_id === null
-    && afterZeroEffect.graph_progress['runtime-control'].attempts === 1);
+    && afterZeroEffect.graph_progress['runtime-control'].attempts === 2);
   check('durable-zero-effect-no-terminal-reconcile',
     durableTerminalReconcileCalls === 0
     && !zeroEffectEvents.includes('reconciliation')
@@ -1231,6 +1342,12 @@ for id in \
   cli-prepare-blocks-unresolved-reset cli-grant-claimed \
   cli-grant-writes-sealed-contract grant-projects-frozen-runtime-contract \
   grant-projects-strict-dispatch-from-graph grant-artifacts-pass-canonical-icc-checker \
+  campaign-draft-api-present validate-graph-specs-api-present \
+  grant-seals-validated-base-sha toctou-head-moved-from-bound-base \
+  draft-pins-bound-base-not-current-head bound-base-still-has-heading-after-head-move \
+  moved-head-missing-heading-rejected grant-rejects-heading-absent-at-exact-base \
+  grant-heading-miss-no-claim-mutation later-grant-uses-then-current-head-not-prepare-base \
+  toctou-pre-spawn-release-for-regrant post-restore-grant-binds-then-current-head \
   cli-grant-exact-replay \
   grant-replay-rejects-tampered-seal same-node-reserved-once \
   state-preserves-distinct-policy-anchors forged-prepared-rejected \

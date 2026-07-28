@@ -469,6 +469,9 @@ const engineEvent = {
   runner: 'codex',
   model: 'gpt-5.3-codex-spark',
   role: 'implementer',
+  // Exact resolver tuple: implementer_effort defaults to high; endpoint "" → null.
+  effort: 'high',
+  endpoint: null,
   runner_version: 'v1',
   capability: {
     quota: {

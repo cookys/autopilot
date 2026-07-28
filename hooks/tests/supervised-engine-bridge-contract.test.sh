@@ -103,6 +103,15 @@ const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
 const EXPECTED_CONTROL_SINKS = [
   ['campaign-intake', 'campaignIntake', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['campaign-admission-release', 'campaignAdmissionReleaser', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
+  ['campaign-event-append', 'campaignEventAppender', 'campaign_control', [], false],
+  ['campaign-admission-complete', 'campaignAdmissionCompleter', 'campaign_control', [], false],
+  ['campaign-composition', 'campaignComposer', 'campaign_control', [], false],
+  ['campaign-adjudication', 'campaignAdjudicator', 'campaign_control', [], false],
+  ['campaign-disposition', 'campaignDispositionProvider', 'campaign_control', [], false],
+  ['campaign-scope-check', 'campaignScopeChecker', 'campaign_control', [], false],
+  ['campaign-tree-resolve', 'campaignTreeResolver', 'campaign_control', [], false],
+  ['campaign-lifecycle-inspect', 'campaignLifecycleInspector', 'campaign_control', [], false],
+  ['campaign-post-commit-checkpoint', 'campaignPostCommitCheckpoint', 'campaign_control', [], false],
   ['review-loop-resolution', 'reviewLoopResolver', 'policy_read', [], false],
   ['review-dispatch', 'reviewDispatcher', 'challenge_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate', 'recordChallenge'], true],
   ['implementation-dispatch', 'implementationDispatcher', 'worker_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate'], true],
@@ -116,6 +125,8 @@ const EXPECTED_CONTROL_SINKS = [
   ['resume-inspection', 'gitResumeInspect', 'resume_read', ['resume'], false],
   ['diff-risk-classification', 'classifyDiffRisk', 'policy_read', [], false],
   ['lifecycle-observation', 'lifecycleObserver', 'non_authoritative_observation', [], false],
+  ['mission-adapter-factory', 'missionAdapterFactory', 'mission_control', [], false],
+  ['mission-terminal-reconcile', 'missionTerminalReconciler', 'mission_control', [], false],
 ];
 
 function attestation(identity) {
@@ -351,7 +362,16 @@ assert.deepEqual(
   ),
   EXPECTED_ACTION_CATALOG_REQUIREMENTS,
 );
-assert.deepEqual([...AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS], ['clock', 'cwd']);
+assert.deepEqual([...AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS].sort(), [
+  'clock',
+  'cwd',
+  'missionCampaignAdapterOptions',
+  'missionCampaignGrant',
+  'missionCampaignStore',
+  'missionPreparedReceipt',
+  'missionPreparedReceiptPath',
+  'missionStatePath',
+].sort());
 assert.equal(validateAutopilotEngineControlSinkInventory(getAutopilotEngineControlSinkInventory()), true);
 const duplicateSinkInventory = getAutopilotEngineControlSinkInventory();
 duplicateSinkInventory[1] = { ...duplicateSinkInventory[0] };
@@ -723,7 +743,7 @@ NODE
 NODE_STATUS=$?
 
 assert_eq "$NODE_STATUS" "0" "supervised engine bridge contract node fixture exits successfully"
-assert_contains "$OUT" "sink_inventory=15" "all injected engine control sinks are covered"
+assert_contains "$OUT" "sink_inventory=26" "all injected engine control sinks are covered"
 assert_contains "$OUT" "action_catalog_bindings=11" "every mutable sink requires a frozen catalog binding"
 assert_contains "$OUT" "sensitive_inputs_omitted=true" "compiled contract contains hashes rather than raw sensitive inputs"
 assert_contains "$OUT" "contract_only=true" "bridge remains explicitly non-authoritative"

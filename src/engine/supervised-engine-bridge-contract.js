@@ -22,7 +22,16 @@ const ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION = 2;
 const TOKEN_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-const AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS = Object.freeze(['clock', 'cwd']);
+const AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS = Object.freeze([
+  'clock',
+  'cwd',
+  'missionCampaignAdapterOptions',
+  'missionCampaignGrant',
+  'missionCampaignStore',
+  'missionPreparedReceipt',
+  'missionPreparedReceiptPath',
+  'missionStatePath',
+]);
 const TRUSTED_INTAKE_VERIFICATION_PATH = 'host_pinned_authenticated_intake';
 const P2_ACTION_AUTHORITY_DESTINATIONS = Object.freeze([
   'mintActionDecision',
@@ -54,6 +63,15 @@ const ACTION_CATALOG_REQUIREMENT_KEYS = new Set([
 const REQUIRED_CONTROL_SINK_REGISTRY = Object.freeze({
   'campaign-intake': Object.freeze({ seam: 'campaignIntake', requires_action_catalog_binding: true }),
   'campaign-admission-release': Object.freeze({ seam: 'campaignAdmissionReleaser', requires_action_catalog_binding: true }),
+  'campaign-event-append': Object.freeze({ seam: 'campaignEventAppender', requires_action_catalog_binding: false }),
+  'campaign-admission-complete': Object.freeze({ seam: 'campaignAdmissionCompleter', requires_action_catalog_binding: false }),
+  'campaign-composition': Object.freeze({ seam: 'campaignComposer', requires_action_catalog_binding: false }),
+  'campaign-adjudication': Object.freeze({ seam: 'campaignAdjudicator', requires_action_catalog_binding: false }),
+  'campaign-disposition': Object.freeze({ seam: 'campaignDispositionProvider', requires_action_catalog_binding: false }),
+  'campaign-scope-check': Object.freeze({ seam: 'campaignScopeChecker', requires_action_catalog_binding: false }),
+  'campaign-tree-resolve': Object.freeze({ seam: 'campaignTreeResolver', requires_action_catalog_binding: false }),
+  'campaign-lifecycle-inspect': Object.freeze({ seam: 'campaignLifecycleInspector', requires_action_catalog_binding: false }),
+  'campaign-post-commit-checkpoint': Object.freeze({ seam: 'campaignPostCommitCheckpoint', requires_action_catalog_binding: false }),
   'review-loop-resolution': Object.freeze({ seam: 'reviewLoopResolver', requires_action_catalog_binding: false }),
   'review-dispatch': Object.freeze({ seam: 'reviewDispatcher', requires_action_catalog_binding: true }),
   'implementation-dispatch': Object.freeze({ seam: 'implementationDispatcher', requires_action_catalog_binding: true }),
@@ -67,6 +85,8 @@ const REQUIRED_CONTROL_SINK_REGISTRY = Object.freeze({
   'resume-inspection': Object.freeze({ seam: 'gitResumeInspect', requires_action_catalog_binding: false }),
   'diff-risk-classification': Object.freeze({ seam: 'classifyDiffRisk', requires_action_catalog_binding: false }),
   'lifecycle-observation': Object.freeze({ seam: 'lifecycleObserver', requires_action_catalog_binding: false }),
+  'mission-adapter-factory': Object.freeze({ seam: 'missionAdapterFactory', requires_action_catalog_binding: false }),
+  'mission-terminal-reconcile': Object.freeze({ seam: 'missionTerminalReconciler', requires_action_catalog_binding: false }),
 });
 
 function freezeEntries(entries) {
@@ -117,6 +137,69 @@ const AUTOPILOT_ENGINE_CONTROL_SINKS = freezeEntries([
       minimum_action_class: 'external',
       requires_mediator: true,
     },
+  },
+  {
+    id: 'campaign-event-append',
+    seam: 'campaignEventAppender',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-admission-complete',
+    seam: 'campaignAdmissionCompleter',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-composition',
+    seam: 'campaignComposer',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-adjudication',
+    seam: 'campaignAdjudicator',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-disposition',
+    seam: 'campaignDispositionProvider',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-scope-check',
+    seam: 'campaignScopeChecker',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-tree-resolve',
+    seam: 'campaignTreeResolver',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-lifecycle-inspect',
+    seam: 'campaignLifecycleInspector',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-post-commit-checkpoint',
+    seam: 'campaignPostCommitCheckpoint',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
   },
   {
     id: 'review-loop-resolution',
@@ -274,6 +357,20 @@ const AUTOPILOT_ENGINE_CONTROL_SINKS = freezeEntries([
     id: 'lifecycle-observation',
     seam: 'lifecycleObserver',
     kind: 'non_authoritative_observation',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'mission-adapter-factory',
+    seam: 'missionAdapterFactory',
+    kind: 'mission_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'mission-terminal-reconcile',
+    seam: 'missionTerminalReconciler',
+    kind: 'mission_control',
     kernel_destinations: [],
     requires_action_catalog_binding: false,
   },

@@ -39,6 +39,8 @@ const nowBase = 1760000000000;
 const hash = (value) => sha256(value);
 
 const requirementBySink = {
+  'campaign-intake': ['engine_campaign_intake', 'campaign_control', 'external'],
+  'campaign-admission-release': ['engine_campaign_admission_release', 'campaign_control', 'external'],
   'review-dispatch': ['engine_review_dispatch', 'model_runner', 'external'],
   'implementation-dispatch': ['engine_implementation_dispatch', 'model_runner', 'external'],
   'diff-provenance': ['engine_diff_materialization', 'filesystem_git', 'reversible'],

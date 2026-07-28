@@ -266,7 +266,11 @@ cat > "$RSTUB" <<'EOF'
 p="$(cat)"
 b="$(printf '%s\n' "$p" | grep -o '<<<AUTOPILOT-REVIEW-[0-9a-f]*>>>' | head -1)"
 e="$(printf '%s\n' "$p" | grep -o '<<<AUTOPILOT-END-[0-9a-f]*>>>' | head -1)"
-echo "$b"; echo "VERDICT: SHIP-AS-IS"; echo "FINDINGS: none"; echo "$e"
+echo "$b"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=target slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
+echo "$e"
 EOF
 chmod +x "$RSTUB"
 

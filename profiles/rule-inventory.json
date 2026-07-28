@@ -94,7 +94,7 @@
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "15ef7d1d56bf63126c66d0de705e1d53de7dc2db2ed2ecdf320ee94d5f4125b3",
+      "sha256": "782d234c6f7b142f77249fdc1e38cb6c980b39beb4546232f92c9d8f3bd11cf5",
       "segments": [
         { "id": "dev.discovery-routing", "category": "topology", "start_line": 4, "end_line": 9 },
         { "id": "dev.config-and-routing", "category": "topology", "start_line": 14, "end_line": 28 },
@@ -138,7 +138,7 @@
         { "id": "dev.profile-session-invariant", "category": "core", "start_line": 671, "end_line": 671 },
         { "id": "dev.profile-runtime-lane", "category": "topology", "start_line": 672, "end_line": 672 },
         { "id": "dev.profile-runtime-evidence", "category": "assurance", "start_line": 673, "end_line": 673 },
-        { "id": "dev.mission-routing", "category": "topology", "start_line": 675, "end_line": 708 }
+        { "id": "dev.mission-routing", "category": "topology", "start_line": 675, "end_line": 713 }
       ]
     }
   ]

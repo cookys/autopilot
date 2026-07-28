@@ -145,8 +145,8 @@ version mirrors, CHANGELOG, project tracking, and backlog honesty within its sea
 | Remote push / marketplace publish | Not claimed |
 | L6 session marker clear | Not claimed by this campaign |
 
-Do **not** read this README as `DONE`, merged, archived, pushed, or `zero_residue=true`. Those are
-finish-flow predicates after this campaign is accepted.
+This README is a review snapshot only. Authoritative completion is recorded only in closeout
+receipts produced by finish-flow after this campaign is accepted.
 
 ## Deliverable Gate
 

@@ -64,19 +64,19 @@ assert.deepEqual(
 );
 assert.ok(admissions.every((entry) => entry.status === 'READY' && entry.enforced));
 const dogfood = admissions[0].admission;
-// Successor graph after runtime-control bootstrap: PRS + CTR + release-closeout only.
-assert.equal(dogfood.deliverable_count, 3);
-assert.equal(dogfood.source_authoring_unit_count, 14);
-assert.equal(dogfood.critical_path, 2);
-assert.equal(dogfood.batch_count, 2);
+// Active closeout graph: single release-repair deliverable (post PRS/CTR integration).
+assert.equal(dogfood.deliverable_count, 1);
+assert.equal(dogfood.source_authoring_unit_count, 5);
+assert.equal(dogfood.critical_path, 1);
+assert.equal(dogfood.batch_count, 1);
 assert.deepEqual(dogfood.reservation_totals, {
-  campaigns: 6,
-  wall_seconds: 21600,
-  tool_calls: 900,
-  engine_attempts: 7,
-  external_wait_seconds: 7200,
-  canonical_changed_files: 300,
-  output_bytes: 30000000,
+  campaigns: 2,
+  wall_seconds: 7200,
+  tool_calls: 300,
+  engine_attempts: 3,
+  external_wait_seconds: 0,
+  canonical_changed_files: 100,
+  output_bytes: 10000000,
 });
 
 const markerDir = path.join(tmp, 'markers');

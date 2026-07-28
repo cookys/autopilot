@@ -196,8 +196,9 @@ assert_eq "0" "$PY_EXIT_3" "Case 3 schema: $PY_OUT_3"
 
 
 # Case 4: missing marker + legacy explicit -> authored success;
+# L5/L6 clear is closeout-gated; for a pure "no marker" fixture remove the file.
 reset_run_count
-node "$REPO_ROOT/scripts/session-mode.js" clear >/dev/null 2>&1
+rm -f "$AUTOPILOT_SESSION_MODE_DIR/${CLAUDE_CODE_SESSION_ID}.json"
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>&1)"; EXIT=$?
 
 assert_eq "0" "$EXIT" "Case 4: exit code 0"

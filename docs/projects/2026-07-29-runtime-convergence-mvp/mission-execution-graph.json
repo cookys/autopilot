@@ -28,7 +28,7 @@
         "bash hooks/tests/codex-compaction-rehydration.test.sh",
         "bash hooks/tests/implementation-campaign-dogfood.test.sh"
       ],
-      "gate_attempt_budget": 2,
+      "gate_attempt_budget": 3,
       "reservation": {
         "campaigns": 1,
         "wall_seconds": 3600,

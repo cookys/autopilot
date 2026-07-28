@@ -1033,14 +1033,63 @@ function validateEventShape(event) {
 
 // ─── Reducer ───────────────────────────────────────────────────────────────
 
+// Bind terminal.at_event to the final reducer-owned event log entry.
+// Returns the final event on success, null when the terminal is unbound/forged.
+function finalEventBoundToTerminal(state) {
+  if (!isPlainObject(state) || !isPlainObject(state.terminal)) return null;
+  const events = state.events;
+  if (!Array.isArray(events) || events.length < 1) return null;
+  const atEvent = state.terminal.at_event;
+  // setTerminal records 1-based at_event === events.length after appendEvent.
+  if (!Number.isSafeInteger(atEvent) || atEvent < 1 || atEvent !== events.length) {
+    return null;
+  }
+  const finalEvent = events[atEvent - 1];
+  if (!isPlainObject(finalEvent)) return null;
+  if (finalEvent.sequence !== atEvent) return null;
+  if (finalEvent.mission_lineage_id !== state.mission_lineage_id) return null;
+  if (typeof finalEvent.event_digest !== 'string' || !/^[a-f0-9]{64}$/.test(finalEvent.event_digest)) {
+    return null;
+  }
+  // Recompute the reducer-owned digest from recorded fields — a mismatched
+  // digest means the final event was not the one the reducer appended.
+  const recomputed = eventDigestFor({
+    event_type: finalEvent.event_type,
+    sequence: finalEvent.sequence,
+    mission_lineage_id: finalEvent.mission_lineage_id,
+    payload: finalEvent.payload,
+  });
+  if (recomputed !== finalEvent.event_digest) return null;
+  return finalEvent;
+}
+
 function isLegacyAbortingTerminal(state) {
-  // Pre-fix persisted defect: abort_requested called setTerminal(ABORTING),
-  // leaving a non-null terminal marker that is not in TERMINAL_STATES. The
-  // only legal escape is abort_finalized.
-  return state
-    && state.state === 'ABORTING'
-    && isPlainObject(state.terminal)
-    && state.terminal.state === 'ABORTING';
+  // Pre-fix persisted defect: abort_requested called
+  // setTerminal(appendEvent(...), 'ABORTING', 'abort_requested') without
+  // advancing state.control_sequence (often left at 0). Restrict the
+  // compatibility escape hatch to that exact historical shape only — not
+  // any ABORTING terminal reason. The only legal escape is abort_finalized.
+  if (!state
+      || state.state !== 'ABORTING'
+      || !isPlainObject(state.terminal)
+      || state.terminal.state !== 'ABORTING'
+      || state.terminal.reason !== 'abort_requested') {
+    return false;
+  }
+  const finalEvent = finalEventBoundToTerminal(state);
+  if (!finalEvent || finalEvent.event_type !== 'control_event') return false;
+  const nested = isPlainObject(finalEvent.payload) ? finalEvent.payload.event : null;
+  if (!isPlainObject(nested)
+      || nested.action !== 'abort_requested'
+      || nested.mission_lineage_id !== state.mission_lineage_id
+      || !Number.isSafeInteger(nested.sequence)
+      || nested.sequence < 1) {
+    return false;
+  }
+  // Do NOT require state.control_sequence === nested.sequence: the historical
+  // defect left the state-level control sequence at zero while the nested
+  // authenticated control event still carried its own sequence.
+  return true;
 }
 
 function abortDrainPreconditions(state) {
@@ -1059,8 +1108,10 @@ function abortDrainPreconditions(state) {
 }
 
 // Canonical ABORTED terminal suitable for idempotent finalize-abort replay.
-// Requires reducer-owned provenance (setTerminal ABORTED/abort_finalized) and
-// the same drain preconditions as abort_finalized — never a weaker CLI check.
+// Requires reducer-owned provenance: setTerminal ABORTED/abort_finalized bound
+// to the final abort_finalized event (at_event/position/sequence/type/lineage/
+// digest), plus the same drain preconditions as abort_finalized — never a
+// weaker CLI check that trusts a forged terminal marker alone.
 function evaluateCanonicalAbortedTerminal(state) {
   try {
     validateMissionState(state);
@@ -1073,6 +1124,10 @@ function evaluateCanonicalAbortedTerminal(state) {
   if (!isPlainObject(state.terminal)
       || state.terminal.state !== 'ABORTED'
       || state.terminal.reason !== 'abort_finalized') {
+    return { ok: false, reason: 'noncanonical_abort_terminal' };
+  }
+  const finalEvent = finalEventBoundToTerminal(state);
+  if (!finalEvent || finalEvent.event_type !== 'abort_finalized') {
     return { ok: false, reason: 'noncanonical_abort_terminal' };
   }
   const drain = abortDrainPreconditions(state);
@@ -4826,6 +4881,16 @@ function buildMissionTerminalReceipt(state, residue) {
   if (!state.terminal || !TERMINAL_STATES.has(state.state) || !isPlainObject(residue)
       || typeof residue.residue_digest !== 'string') {
     fail('terminal receipt requires terminal state and bound residue');
+  }
+  // ABORTED-only: refuse receipts for forged terminal markers that lack the
+  // reducer-owned abort_finalized binding. COMPLETE/BLOCKED semantics unchanged.
+  if (state.state === 'ABORTED') {
+    const canonical = evaluateCanonicalAbortedTerminal(state);
+    if (!canonical.ok) {
+      fail(
+        `ABORTED terminal receipt requires canonical abort finalization (${canonical.reason || 'noncanonical_abort_terminal'})`,
+      );
+    }
   }
   // The residue digest must bind the actual residue content (excluding the
   // residue_digest field itself), not merely satisfy a 64-hex shape check.

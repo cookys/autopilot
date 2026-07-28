@@ -911,14 +911,15 @@ group('g8', () => {
   check('g8-canonical-aborted-helper-accepts',
     helperOk && helperOk.ok === true);
 
-  // Live claim under forged ABORTED.
+  // Live claim under otherwise-canonical ABORTED (event binding intact).
+  // Inject a real unreleased claim into a reducer-produced ABORTED so the
+  // drain check — not a weaker forged terminal marker — owns the rejection.
   const liveClaimed = m.reduceMissionState(
     initial,
     claimEvent(initial, { idempotency_key: 'cli-aborted-live' }),
   );
-  const abortedLive = JSON.parse(JSON.stringify(liveClaimed.state));
-  abortedLive.state = 'ABORTED';
-  abortedLive.terminal = { state: 'ABORTED', reason: 'abort_finalized', at_event: 1 };
+  const abortedLive = JSON.parse(JSON.stringify(written));
+  abortedLive.claims = JSON.parse(JSON.stringify(liveClaimed.state.claims));
   const liveNegOut = path.join(dir, 'neg-live-out.json');
   const liveNeg = runFinalizeAbort(abortedLive, liveNegOut);
   check('g8-cli-reject-aborted-live-claim-no-write',
@@ -964,6 +965,51 @@ group('g8', () => {
       && forgedNeg.payload.status === 'rejected'
       && forgedNeg.payload.code === 'noncanonical_abort_terminal');
 
+  // Drained ABORTED with correct reason but forged at_event / final event / lineage.
+  const abortedForgedAt = JSON.parse(JSON.stringify(written));
+  abortedForgedAt.terminal = {
+    state: 'ABORTED',
+    reason: 'abort_finalized',
+    at_event: 999,
+  };
+  const forgedAtOut = path.join(dir, 'neg-forged-at-out.json');
+  const forgedAtNeg = runFinalizeAbort(abortedForgedAt, forgedAtOut);
+  check('g8-cli-reject-forged-aborted-at-event-no-write',
+    forgedAtNeg.code === 1
+      && forgedAtNeg.wrote === false
+      && forgedAtNeg.payload
+      && forgedAtNeg.payload.status === 'rejected'
+      && forgedAtNeg.payload.code === 'noncanonical_abort_terminal');
+  check('g8-canonical-rejects-forged-at-event',
+    m.evaluateCanonicalAbortedTerminal(abortedForgedAt).ok === false
+      && m.evaluateCanonicalAbortedTerminal(abortedForgedAt).reason === 'noncanonical_abort_terminal');
+
+  const abortedForgedEvt = JSON.parse(JSON.stringify(written));
+  const lastForged = abortedForgedEvt.events[abortedForgedEvt.events.length - 1];
+  lastForged.event_type = 'stagnation_observation';
+  lastForged.event_digest = m.sha256({
+    event_type: lastForged.event_type,
+    sequence: lastForged.sequence,
+    mission_lineage_id: lastForged.mission_lineage_id,
+    payload: lastForged.payload,
+  });
+  check('g8-canonical-rejects-forged-final-event',
+    m.evaluateCanonicalAbortedTerminal(abortedForgedEvt).ok === false
+      && m.evaluateCanonicalAbortedTerminal(abortedForgedEvt).reason === 'noncanonical_abort_terminal');
+
+  const abortedForgedLin = JSON.parse(JSON.stringify(written));
+  const lastLin = abortedForgedLin.events[abortedForgedLin.events.length - 1];
+  lastLin.mission_lineage_id = 'lineage-v1-' + 'a'.repeat(64);
+  lastLin.event_digest = m.sha256({
+    event_type: lastLin.event_type,
+    sequence: lastLin.sequence,
+    mission_lineage_id: lastLin.mission_lineage_id,
+    payload: lastLin.payload,
+  });
+  check('g8-canonical-rejects-forged-lineage',
+    m.evaluateCanonicalAbortedTerminal(abortedForgedLin).ok === false
+      && m.evaluateCanonicalAbortedTerminal(abortedForgedLin).reason === 'noncanonical_abort_terminal');
+
   // Terminal receipt accepted only after finalization.
   const residuePayload = { lifecycle_residue: ['g8-cleanup'] };
   const residue = { ...residuePayload, residue_digest: m.sha256(residuePayload) };
@@ -977,6 +1023,83 @@ group('g8', () => {
       && terminalReceipt
       && terminalReceipt.mission_terminal === true
       && terminalReceipt.artifact_type === 'mission_terminal_receipt');
+
+  // Forged ABORTED must not mint a terminal receipt.
+  let forgedReceiptRejected = false;
+  try {
+    m.buildMissionTerminalReceipt(abortedForgedAt, residue);
+  } catch (_e) { forgedReceiptRejected = true; }
+  check('g8-terminal-receipt-rejects-forged-aborted', forgedReceiptRejected);
+
+  // Malformed legacy ABORTING terminal bindings remain irreducible.
+  function expectLegacyTerminal(id, mutator) {
+    const baseLegacy = {
+      ...JSON.parse(JSON.stringify(aborting.state)),
+      control_sequence: 0,
+      terminal: {
+        state: 'ABORTING',
+        reason: 'abort_requested',
+        at_event: aborting.state.events.length,
+      },
+    };
+    const bad = mutator(JSON.parse(JSON.stringify(baseLegacy)));
+    let rejected = false;
+    let code = null;
+    try {
+      m.reduceMissionState(bad, {
+        event_type: 'abort_finalized',
+        sequence: bad.events.length + 1,
+        mission_lineage_id: bad.mission_lineage_id,
+        payload: {},
+      });
+    } catch (e) {
+      rejected = true;
+      code = e.code;
+    }
+    check(id, rejected && code === 'MISSION_STATE_TERMINAL');
+  }
+  // Valid real legacy (control_sequence 0 + abort_requested terminal) finalizes.
+  const realLegacy = {
+    ...JSON.parse(JSON.stringify(aborting.state)),
+    control_sequence: 0,
+    terminal: {
+      state: 'ABORTING',
+      reason: 'abort_requested',
+      at_event: aborting.state.events.length,
+    },
+  };
+  const legacyFinalized = m.reduceMissionState(realLegacy, {
+    event_type: 'abort_finalized',
+    sequence: realLegacy.events.length + 1,
+    mission_lineage_id: realLegacy.mission_lineage_id,
+    payload: {},
+  });
+  check('g8-legacy-zero-control-sequence-finalizes',
+    legacyFinalized.state.state === 'ABORTED'
+      && legacyFinalized.state.terminal
+      && legacyFinalized.state.terminal.reason === 'abort_finalized'
+      && m.evaluateCanonicalAbortedTerminal(legacyFinalized.state).ok === true);
+  expectLegacyTerminal('g8-legacy-rejects-wrong-reason', (s) => {
+    s.terminal.reason = 'forged_reason';
+    return s;
+  });
+  expectLegacyTerminal('g8-legacy-rejects-wrong-at-event', (s) => {
+    s.terminal.at_event = 1;
+    // When at_event is wrong relative to events.length, still irreducible.
+    if (s.events.length === 1) s.terminal.at_event = 0;
+    return s;
+  });
+  expectLegacyTerminal('g8-legacy-rejects-wrong-nested-action', (s) => {
+    const last = s.events[s.events.length - 1];
+    last.payload.event.action = 'finish_requested';
+    last.event_digest = m.sha256({
+      event_type: last.event_type,
+      sequence: last.sequence,
+      mission_lineage_id: last.mission_lineage_id,
+      payload: last.payload,
+    });
+    return s;
+  });
 
   // receipt CLI must not mutate state; terminal receipt needs bound residue.
   const residuePath = path.join(dir, 'residue.json');
@@ -1076,7 +1199,12 @@ for id in \
   g8-cli-idempotent-aborted g8-canonical-aborted-helper-accepts \
   g8-cli-reject-aborted-live-claim-no-write g8-cli-reject-aborted-reserved-no-write \
   g8-cli-reject-aborted-active-no-write g8-cli-reject-forged-aborted-terminal-no-write \
-  g8-terminal-receipt-after-finalize g8-receipt-cli-no-mutate
+  g8-cli-reject-forged-aborted-at-event-no-write g8-canonical-rejects-forged-at-event \
+  g8-canonical-rejects-forged-final-event g8-canonical-rejects-forged-lineage \
+  g8-terminal-receipt-after-finalize g8-terminal-receipt-rejects-forged-aborted \
+  g8-legacy-zero-control-sequence-finalizes g8-legacy-rejects-wrong-reason \
+  g8-legacy-rejects-wrong-at-event g8-legacy-rejects-wrong-nested-action \
+  g8-receipt-cli-no-mutate
 do
   assert_contains "$OUT" "$id	PASS" "Mission P2 enforcement behavior $id must pass"
 done

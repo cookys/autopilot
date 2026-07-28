@@ -1708,6 +1708,8 @@ if (createMissionState && reduceMissionState && stateHash) {
         && finalizedOk.receipt.artifact_type === 'mission_abort_finalized' ? 'PASS' : 'FAIL'}`);
 
     // Legacy persisted ABORTING marker (non-null terminal) can finalize.
+    // Historical defect: setTerminal(ABORTING, abort_requested) without
+    // advancing state.control_sequence — often left at zero.
     const adapterLegacy = new ac.AuthenticatedControlAdapter({
       verifier: () => ({ verified: true, authority: 'authenticated_user' }),
     });
@@ -1718,6 +1720,7 @@ if (createMissionState && reduceMissionState && stateHash) {
     );
     const legacyState = {
       ...JSON.parse(JSON.stringify(abortingNew.state)),
+      control_sequence: 0,
       terminal: { state: 'ABORTING', reason: 'abort_requested', at_event: abortingNew.state.events.length },
     };
     const finalizedLegacy = reduceMissionState(legacyState, abortFinalizeEvent(legacyState));
@@ -1726,6 +1729,57 @@ if (createMissionState && reduceMissionState && stateHash) {
         && finalizedLegacy.state.terminal
         && finalizedLegacy.state.terminal.state === 'ABORTED'
         && finalizedLegacy.state.terminal.reason === 'abort_finalized' ? 'PASS' : 'FAIL'}`);
+
+    // Malformed legacy bindings must remain irreducible (not a free escape hatch).
+    function expectLegacyIrreducible(id, mutator) {
+      const bad = mutator(JSON.parse(JSON.stringify({
+        ...JSON.parse(JSON.stringify(abortingNew.state)),
+        control_sequence: 0,
+        terminal: { state: 'ABORTING', reason: 'abort_requested', at_event: abortingNew.state.events.length },
+      })));
+      let rejected = false;
+      let code = null;
+      try {
+        reduceMissionState(bad, abortFinalizeEvent(bad));
+      } catch (e) {
+        rejected = true;
+        code = e.code;
+      }
+      console.log(`${id}\t${
+        rejected && code === 'MISSION_STATE_TERMINAL' ? 'PASS' : 'FAIL'}`);
+    }
+    expectLegacyIrreducible('abort-legacy-rejects-wrong-reason', (s) => {
+      s.terminal.reason = 'forged_reason';
+      return s;
+    });
+    expectLegacyIrreducible('abort-legacy-rejects-wrong-at-event', (s) => {
+      s.terminal.at_event = 999;
+      return s;
+    });
+    expectLegacyIrreducible('abort-legacy-rejects-wrong-nested-action', (s) => {
+      const last = s.events[s.events.length - 1];
+      last.payload.event.action = 'finish_requested';
+      // Keep digest consistent with mutated payload so the failure is the
+      // nested-action binding, not a digest mismatch alone.
+      last.event_digest = m.sha256({
+        event_type: last.event_type,
+        sequence: last.sequence,
+        mission_lineage_id: last.mission_lineage_id,
+        payload: last.payload,
+      });
+      return s;
+    });
+    expectLegacyIrreducible('abort-legacy-rejects-lineage-mismatch', (s) => {
+      const last = s.events[s.events.length - 1];
+      last.mission_lineage_id = 'lineage-v1-' + '0'.repeat(64);
+      last.event_digest = m.sha256({
+        event_type: last.event_type,
+        sequence: last.sequence,
+        mission_lineage_id: last.mission_lineage_id,
+        payload: last.payload,
+      });
+      return s;
+    });
 
     // Live claim blocks finalization (fail closed, no mutation).
     const adapterLive = new ac.AuthenticatedControlAdapter({
@@ -1813,12 +1867,56 @@ if (createMissionState && reduceMissionState && stateHash) {
     console.log(`abort-canonical-helper-rejects-forged\t${
       helperForged && helperForged.ok === false
         && helperForged.reason === 'noncanonical_abort_terminal' ? 'PASS' : 'FAIL'}`);
+    // Drained ABORTED with correct reason but unbound final event must reject.
+    const forgedAtEvent = JSON.parse(JSON.stringify(finalizedOk.state));
+    forgedAtEvent.terminal = {
+      state: 'ABORTED',
+      reason: 'abort_finalized',
+      at_event: 999,
+    };
+    const helperForgedAt = m.evaluateCanonicalAbortedTerminal(forgedAtEvent);
+    console.log(`abort-canonical-helper-rejects-forged-at-event\t${
+      helperForgedAt && helperForgedAt.ok === false
+        && helperForgedAt.reason === 'noncanonical_abort_terminal' ? 'PASS' : 'FAIL'}`);
+    const forgedFinalType = JSON.parse(JSON.stringify(finalizedOk.state));
+    forgedFinalType.events[forgedFinalType.events.length - 1].event_type = 'stagnation_observation';
+    forgedFinalType.events[forgedFinalType.events.length - 1].event_digest = m.sha256({
+      event_type: 'stagnation_observation',
+      sequence: forgedFinalType.events[forgedFinalType.events.length - 1].sequence,
+      mission_lineage_id: forgedFinalType.events[forgedFinalType.events.length - 1].mission_lineage_id,
+      payload: forgedFinalType.events[forgedFinalType.events.length - 1].payload,
+    });
+    const helperForgedType = m.evaluateCanonicalAbortedTerminal(forgedFinalType);
+    console.log(`abort-canonical-helper-rejects-forged-final-event\t${
+      helperForgedType && helperForgedType.ok === false
+        && helperForgedType.reason === 'noncanonical_abort_terminal' ? 'PASS' : 'FAIL'}`);
+    const forgedLineage = JSON.parse(JSON.stringify(finalizedOk.state));
+    const lastEvt = forgedLineage.events[forgedLineage.events.length - 1];
+    lastEvt.mission_lineage_id = 'lineage-v1-' + 'f'.repeat(64);
+    lastEvt.event_digest = m.sha256({
+      event_type: lastEvt.event_type,
+      sequence: lastEvt.sequence,
+      mission_lineage_id: lastEvt.mission_lineage_id,
+      payload: lastEvt.payload,
+    });
+    const helperForgedLineage = m.evaluateCanonicalAbortedTerminal(forgedLineage);
+    console.log(`abort-canonical-helper-rejects-forged-lineage\t${
+      helperForgedLineage && helperForgedLineage.ok === false
+        && helperForgedLineage.reason === 'noncanonical_abort_terminal' ? 'PASS' : 'FAIL'}`);
     const undrained = JSON.parse(JSON.stringify(finalizedOk.state));
     undrained.axes.tool_calls.reserved_active = 1;
     const helperUndrained = m.evaluateCanonicalAbortedTerminal(undrained);
     console.log(`abort-canonical-helper-rejects-undrained\t${
       helperUndrained && helperUndrained.ok === false
         && helperUndrained.reason === 'resource_axes_not_drained' ? 'PASS' : 'FAIL'}`);
+
+    // Forged ABORTED must not mint a terminal receipt (COMPLETE/BLOCKED unchanged).
+    let forgedReceiptRejected = false;
+    try {
+      m.buildMissionTerminalReceipt(forgedAtEvent, residue);
+    } catch (_e) { forgedReceiptRejected = true; }
+    console.log(`abort-terminal-receipt-rejects-forged-aborted\t${
+      forgedReceiptRejected ? 'PASS' : 'FAIL'}`);
   }
 }
 NODE
@@ -1942,13 +2040,21 @@ for id in \
   abort-control-sequence-advances \
   abort-normal-aborting-to-aborted \
   abort-legacy-marker-to-aborted \
+  abort-legacy-rejects-wrong-reason \
+  abort-legacy-rejects-wrong-at-event \
+  abort-legacy-rejects-wrong-nested-action \
+  abort-legacy-rejects-lineage-mismatch \
   abort-live-claim-rejects \
   abort-nonzero-reservation-rejects \
   abort-unrelated-event-rejects \
   abort-terminal-receipt-only-after-finalization \
   abort-canonical-helper-accepts-finalized \
   abort-canonical-helper-rejects-forged \
-  abort-canonical-helper-rejects-undrained
+  abort-canonical-helper-rejects-forged-at-event \
+  abort-canonical-helper-rejects-forged-final-event \
+  abort-canonical-helper-rejects-forged-lineage \
+  abort-canonical-helper-rejects-undrained \
+  abort-terminal-receipt-rejects-forged-aborted
 do
   assert_contains "$OUT" "$id	PASS" "RED: generic state transition $id"
 done

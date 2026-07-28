@@ -8,6 +8,7 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-07-29 | debug | CLI `--help` 只證明 option 存在，不證明可組合：Kimi 0.28.0 的 non-interactive `--prompt` 與 interactive `--plan` 互斥；hermetic fixture 若照抄錯誤 argv 也會假綠，需 live smoke | [debug-patterns.md](debug-patterns.md) |
 | 2026-07-27 | arch | Absence 不等於 zero：先用 repo registry admission 記住資源曾存在，再以 Git-ref CAS authority 防 ordinary-file rollback、anchor/registry forward-repair 防 torn write；先凍結 attack matrix、穩定 diff 後才跑昂貴外審 | [architecture.md](architecture.md) |
 | 2026-07-26 | arch | Severity 不等於當票修復權；同模型新 context 是 peer、不是 Heto；主席不可用時改走全部合格異質席聯審，逐票排除 implementation lineage／能力與 context 不足席 | [architecture.md](architecture.md) |
 | 2026-07-24 | arch | Merge 完成後 cleanup 是 terminal invariant：驗證 worktree inactive/clean 與 branch containment，移除 worktree，再用 preserve-first reaper 或 `git branch -d`，最後重新列舉確認零殘留 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) |
@@ -22,7 +23,7 @@
 |------|------|
 | [architecture.md](architecture.md) | Review repair authority、peer/Heto 分界與 fallback panel 資格 |
 | [git-ref-lifecycle-races.md](git-ref-lifecycle-races.md) | Git refs / dispatch branch lifecycle 的 race-safe enumeration、ack publication、prepared restore、worktree lifetime lock 與 reviewer probe patterns |
-| [debug-patterns.md](debug-patterns.md) | 診斷技巧與假死 pattern：529 silent-retry 分層診斷、worktree config 寫穿身分污染 |
+| [debug-patterns.md](debug-patterns.md) | 診斷技巧與假死 pattern：CLI option 相容性、529 silent-retry 分層診斷、worktree config 寫穿身分污染 |
 | ⚠️ `claude-code-plugin-dogfood-lessons.md`（遺失，見上） | Claude Code plugin/hook 開發 5 大 pattern（catalog drift / cross-cwd state / prose fragility / review loop / dogfood trade-off）|
 
 ## 跨 repo mirror

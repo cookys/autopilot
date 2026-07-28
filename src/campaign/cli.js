@@ -126,17 +126,52 @@ function parseArgs(argv, cwd) {
   return output;
 }
 
+/**
+ * Rotation-aware oldest-to-live ledger view (mirrors scripts/run-ledger.sh
+ * ledger_scan_files). Segments ${ledger}.N … ${ledger}.1 (oldest retained first),
+ * then the live ledger. Last-write semantics: later segments / later lines win.
+ */
+function ledgerScanFiles(ledger) {
+  if (typeof ledger !== 'string' || ledger.length === 0) {
+    throw new Error('campaign ledger path is required');
+  }
+  const maxRotRaw = process.env.RUN_LEDGER_MAX_ROTATIONS;
+  const maxRot = maxRotRaw === undefined || maxRotRaw === ''
+    ? 4
+    : Number(maxRotRaw);
+  const limit = Number.isFinite(maxRot) && maxRot >= 0 ? Math.floor(maxRot) : 4;
+  const files = [];
+  for (let idx = limit; idx >= 1; idx -= 1) {
+    const segment = `${ledger}.${idx}`;
+    if (fs.existsSync(segment)) files.push(segment);
+  }
+  if (fs.existsSync(ledger)) files.push(ledger);
+  return files;
+}
+
 function loadRows(ledger) {
-  const bytes = fs.readFileSync(ledger);
-  if (bytes.length > 64 * 1024 * 1024) throw new Error('campaign ledger exceeds 64 MiB');
-  const lines = bytes.toString('utf8').split('\n').filter((line) => line.trim() !== '');
-  return lines.map((line, index) => {
-    try {
-      return JSON.parse(line);
-    } catch (error) {
-      throw new Error(`campaign ledger line ${index + 1} is invalid JSON: ${error.message}`);
+  const files = ledgerScanFiles(ledger);
+  if (files.length === 0) return [];
+  const rows = [];
+  let totalBytes = 0;
+  let lineNo = 0;
+  for (const file of files) {
+    const bytes = fs.readFileSync(file);
+    totalBytes += bytes.length;
+    if (totalBytes > 64 * 1024 * 1024) throw new Error('campaign ledger exceeds 64 MiB');
+    const lines = bytes.toString('utf8').split('\n').filter((line) => line.trim() !== '');
+    for (const line of lines) {
+      lineNo += 1;
+      try {
+        rows.push(JSON.parse(line));
+      } catch (error) {
+        throw new Error(
+          `campaign ledger line ${lineNo} (${path.basename(file)}) is invalid JSON: ${error.message}`,
+        );
+      }
     }
-  });
+  }
+  return rows;
 }
 
 function parsePayload(row) {
@@ -173,6 +208,16 @@ function validateCampaignStageHistory(stageRows, intake, campaignId) {
       throw new Error('campaign ledger latest stage evidence is malformed');
     }
     if (row.state === 'leased') {
+      // Rotation carry-forward re-materializes the latest leased row onto the
+      // live segment; treat identical generation+nonce as last-write no-op.
+      if (latest
+          && latest.state === 'leased'
+          && latest.generation === row.generation
+          && latest.nonce === row.nonce) {
+        generations.set(row.generation, row);
+        latest = row;
+        continue;
+      }
       if ((!latest && row.generation !== 1)
           || generations.has(row.generation)
           || (latest && row.generation !== latest.generation + 1)
@@ -222,10 +267,25 @@ function projectCampaign(rows, campaignId) {
     (row) => row.kind === 'journal' && row.op === 'campaign_intake',
   );
   if (intakes.length === 0) return null;
-  if (intakes.length !== 1) {
-    throw new Error('campaign ledger must contain exactly one intake root');
+  // Last-write across rotated segments (and rotation carry-forward) may
+  // re-materialize the same intake root on the live segment. Prefer the
+  // newest row; reject only when multiple intakes disagree.
+  const intake = intakes[intakes.length - 1];
+  if (intakes.length > 1) {
+    const digests = new Set(intakes.map((row) => {
+      try {
+        const payload = parsePayload(row);
+        return typeof payload.initial_state_digest === 'string'
+          ? payload.initial_state_digest
+          : JSON.stringify(payload);
+      } catch (_error) {
+        return `invalid:${row.ts || ''}:${row.idempotency_key || ''}`;
+      }
+    }));
+    if (digests.size !== 1) {
+      throw new Error('campaign ledger must contain exactly one intake root');
+    }
   }
-  const [intake] = intakes;
   const intakePayload = parsePayload(intake);
   if (!hasExactKeys(intakePayload, INTAKE_ARTIFACT_KEYS)
       || intakePayload.schema_version !== 1
@@ -509,6 +569,7 @@ function runCampaignCli(argv, options = {}) {
 module.exports = {
   campaignResumeEligibility,
   defaultCampaignLedgerPath,
+  ledgerScanFiles,
   loadRows,
   parseArgs,
   processLiveness,

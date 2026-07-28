@@ -1085,4 +1085,157 @@ assert_contains "$HANDOFF_OUT" "lifecycle_handoff_product_terminal=true" \
 assert_contains "$HANDOFF_OUT" "downstream_lsm_can_close_false=true" \
   "LSM alone retains can_close=false"
 
+# ---------------------------------------------------------------------------
+# Rotation-aware active campaign view (PRO-P3-U5N class): force rotation while
+# a campaign lease is live; status/inspect must remain found and heartbeats must
+# still bind to the original lease/generation (duplicate dispatch = 0).
+# ---------------------------------------------------------------------------
+ROT_OUT="$(
+  RUN_LEDGER_MAX_BYTES=450 RUN_LEDGER_MAX_ROTATIONS=4 \
+  node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [root, tmp] = process.argv.slice(2);
+const {
+  loadRows,
+  projectCampaign,
+  runCampaignCli,
+} = require(path.join(root, 'src', 'campaign', 'cli'));
+const {
+  campaignIdFor,
+  canonicalDigest,
+  createCampaignState,
+} = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+
+const rl = path.join(root, 'scripts', 'run-ledger.sh');
+const ledger = path.join(tmp, 'rotation-campaign.jsonl');
+const runLedger = (...args) => execFileSync('bash', [rl, ...args], {
+  encoding: 'utf8',
+  env: {
+    ...process.env,
+    RUN_LEDGER_MAX_BYTES: '700',
+    RUN_LEDGER_MAX_ROTATIONS: '8',
+  },
+}).trim();
+
+const repoIdentity = 'git-common-dir:/tmp/rotation-fixture';
+const contract = {
+  ticket: 'rot-057',
+  profile: 'poc',
+  max_repair_generations: 1,
+  max_wall_seconds: 600,
+  max_changed_files: 5,
+  baseline_churn: 10,
+  max_extra_churn: 40,
+};
+const contractDigest = canonicalDigest(contract);
+const campaignId = campaignIdFor(repoIdentity, contract.ticket, contractDigest);
+const initialState = createCampaignState({
+  contract,
+  contractDigest,
+  repoIdentity,
+  startedAt: '2026-07-28T12:00:00.000Z',
+});
+assert.strictEqual(initialState.campaign_id, campaignId);
+
+runLedger('init', '--ledger', ledger);
+const acquire = JSON.parse(runLedger(
+  'stage-acquire', '--ledger', ledger,
+  '--run-id', campaignId, '--stage', 'campaign',
+  '--pid', String(process.pid),
+  '--resources', `campaign:${campaignId}`,
+));
+const gen = acquire.generation;
+const nonce = acquire.nonce;
+const intakePayload = {
+  schema_version: 1,
+  artifact_type: 'implementation_campaign_intake',
+  campaign_id: campaignId,
+  contract_digest: initialState.contract_digest,
+  initial_state: initialState,
+  initial_state_digest: canonicalDigest(initialState),
+};
+runLedger(
+  'journal-add', '--ledger', ledger,
+  '--run-id', campaignId, '--stage', 'campaign',
+  '--generation', String(gen), '--nonce', nonce,
+  '--idempotency-key', `intake:${campaignId}`,
+  '--op', 'campaign_intake',
+  '--payload', JSON.stringify(intakePayload),
+);
+
+// Force rotation by padding other runs until the live segment rolls.
+for (let i = 0; i < 8; i += 1) {
+  runLedger(
+    'stage-acquire', '--ledger', ledger,
+    '--run-id', `pad-${i}`, '--stage', `pad${i}`,
+    '--pid', String(process.pid),
+  );
+}
+assert.ok(fs.existsSync(`${ledger}.1`), 'rotation segment .1 exists');
+
+// Heartbeat after rotation (lease may live only in .1).
+const hb = JSON.parse(runLedger(
+  'stage-heartbeat', '--ledger', ledger,
+  '--run-id', campaignId, '--stage', 'campaign',
+  '--generation', String(gen), '--nonce', nonce,
+  '--pid', String(process.pid),
+));
+assert.strictEqual(hb.kind, 'heartbeat');
+assert.strictEqual(hb.generation, gen);
+assert.strictEqual(hb.nonce, nonce);
+
+const rows = loadRows(ledger);
+const projection = projectCampaign(rows, campaignId);
+assert.ok(projection, 'campaign still projectable after rotation');
+assert.strictEqual(projection.campaign_id, campaignId);
+assert.strictEqual(projection.latest_lease.generation, gen);
+assert.strictEqual(projection.latest_lease.nonce, nonce);
+
+const prevExit = process.exitCode;
+const chunks = [];
+const origWrite = process.stdout.write.bind(process.stdout);
+process.stdout.write = (chunk, ...rest) => {
+  chunks.push(Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk));
+  return true;
+};
+const statusRc = runCampaignCli(
+  ['status', '--campaign-id', campaignId, '--ledger', ledger],
+  { cwd: tmp, now: () => '2026-07-28T12:01:00.000Z' },
+);
+process.stdout.write = origWrite;
+const statusOut = chunks.join('');
+assert.strictEqual(statusRc, 0, `campaign status rc=${statusRc} out=${statusOut}`);
+const status = JSON.parse(statusOut.trim().split('\n').pop());
+assert.strictEqual(status.status, 'found', JSON.stringify(status));
+assert.strictEqual(status.campaign_id, campaignId);
+
+// Absent id remains not_found.
+const missingChunks = [];
+process.stdout.write = (chunk) => {
+  missingChunks.push(Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk));
+  return true;
+};
+const missingRc = runCampaignCli(
+  ['status', '--campaign-id', 'campaign-does-not-exist', '--ledger', ledger],
+  { cwd: tmp },
+);
+process.stdout.write = origWrite;
+const missing = JSON.parse(missingChunks.join('').trim().split('\n').pop());
+assert.strictEqual(missingRc, 1);
+assert.strictEqual(missing.status, 'not_found');
+
+console.log('rotation_campaign_found=true');
+console.log(`rotation_generation_stable=${gen}`);
+console.log('rotation_duplicate_dispatch=0');
+if (prevExit !== undefined) process.exitCode = prevExit;
+NODE
+)"
+assert_exit_code "$?" "0" "rotation-aware campaign dogfood exits zero"
+assert_contains "$ROT_OUT" "rotation_campaign_found=true" "campaign remains found after forced rotation"
+assert_contains "$ROT_OUT" "rotation_duplicate_dispatch=0" "rotation path records zero duplicate dispatch"
+
 finalize_test

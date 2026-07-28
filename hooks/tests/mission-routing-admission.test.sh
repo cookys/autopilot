@@ -14,6 +14,7 @@ const root = process.argv[2];
 const tmp = process.argv[3];
 const {
   admitMissionRouting,
+  isAuthoritativeGitObjectId,
 } = require(path.join(root, 'scripts/mission-routing-admission'));
 const {
   contentBoundRubricId,
@@ -23,6 +24,16 @@ const {
 } = require(path.join(root, 'scripts/session-mode'));
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+// Graph-spec base SHA gate: accept Git SHA-1 (40) and SHA-256 (64) only.
+assert.equal(isAuthoritativeGitObjectId('a'.repeat(40)), true);
+assert.equal(isAuthoritativeGitObjectId('b'.repeat(64)), true);
+assert.equal(isAuthoritativeGitObjectId('c'.repeat(39)), false);
+assert.equal(isAuthoritativeGitObjectId('d'.repeat(41)), false);
+assert.equal(isAuthoritativeGitObjectId('e'.repeat(63)), false);
+assert.equal(isAuthoritativeGitObjectId('f'.repeat(65)), false);
+assert.equal(isAuthoritativeGitObjectId('A'.repeat(40)), false);
+assert.equal(isAuthoritativeGitObjectId(null), false);
 
 const routes = [
   ['l3', 'none'],
@@ -215,7 +226,7 @@ function graphNode(index) {
       max_extra_churn: 5,
       max_repair_generations: 0,
       max_wall_seconds: 100,
-      spec: { path: `docs/sources/plan-${index}.md`, section: `Phase ${index}` },
+      spec: { path: `docs/sources/plan-${index}.md`, section: `Phase ${index}-0: coverage only` },
       required_paths: [`docs/sources/plan-${index}.md`],
       output_paths: [`docs/output-${index}.txt`],
     },
@@ -228,6 +239,10 @@ const boundedGraph = {
   nodes: [0, 1, 2, 3].map(graphNode),
 };
 fs.writeFileSync(graphPath, `${JSON.stringify(boundedGraph, null, 2)}\n`);
+execFileSync('git', ['-C', repo, 'config', 'user.email', 'mission-routing@example.invalid']);
+execFileSync('git', ['-C', repo, 'config', 'user.name', 'Mission Routing Oracle']);
+execFileSync('git', ['-C', repo, 'add', '.']);
+execFileSync('git', ['-C', repo, 'commit', '-qm', 'synthetic mission sources']);
 const compressed = admitMissionRouting({ repoRoot: repo, entryLevel: 'l6' });
 assert.equal(compressed.admission.source_authoring_unit_count, 34);
 assert.equal(compressed.admission.deliverable_count, 4);

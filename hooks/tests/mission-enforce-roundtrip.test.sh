@@ -8,7 +8,7 @@ git -C "$REPO" init -q
 git -C "$REPO" config user.email "mission-roundtrip@example.invalid"
 git -C "$REPO" config user.name "Mission Roundtrip Oracle"
 write_mission_governance "$REPO/.claude/owner-kernel-governance.json" enforce
-printf 'base\n' > "$REPO/src/value.txt"
+printf '## Roundtrip\nbase\n' > "$REPO/src/value.txt"
 git -C "$REPO" add .
 git -C "$REPO" commit -qm "base"
 BASE="$(git -C "$REPO" rev-parse HEAD)"

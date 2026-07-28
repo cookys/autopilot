@@ -283,7 +283,7 @@
         "max_wall_seconds": 3600,
         "spec": {
           "path": "docs/plans/2026-07-26-plan-review-session-controller.md",
-          "section": "Implementation Plan"
+          "section": "4. Phases"
         },
         "required_paths": [
           "docs/plans/2026-07-26-plan-review-session-controller.md",
@@ -369,7 +369,7 @@
         "max_wall_seconds": 3600,
         "spec": {
           "path": "docs/plans/2026-07-26-cross-harness-transcript-retro.md",
-          "section": "Implementation Plan"
+          "section": "4. Phases"
         },
         "required_paths": [
           "docs/plans/2026-07-26-cross-harness-transcript-retro.md",
@@ -471,7 +471,7 @@
         "max_wall_seconds": 3600,
         "spec": {
           "path": "docs/plans/2026-07-26-l6-status-merge-contract.md",
-          "section": "Implementation Plan"
+          "section": "4. Phases"
         },
         "required_paths": [
           "docs/plans/2026-07-26-l6-status-merge-contract.md",
@@ -489,5 +489,5 @@
   ],
   "calculated_depth": 2,
   "calculated_batches": 2,
-  "graph_digest": "53c51a270fbd596b71105ade63a6bf64abff0625a5dc485f7af0114a6ceb0fa3"
+  "graph_digest": "28cc7d2bc1aad7a56df52ed12c5b3b21bfd386c6566adf8fe9faf04942fc5c1b"
 }

@@ -164,6 +164,67 @@ function governancePolicy(root) {
   };
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Git object IDs: SHA-1 (40) or SHA-256 (64), lowercase hex only.
+function isAuthoritativeGitObjectId(baseSha) {
+  return typeof baseSha === 'string' && /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(baseSha);
+}
+
+// Pre-spend gate at Mission admission: every frozen node must reference a
+// base-tree path whose exact Markdown heading matches campaign.spec.section.
+// Invalid graphs fail before any Mission state/grant is created.
+function validateGraphSpecsAtBase(repoRoot, graph) {
+  let baseSha;
+  try {
+    baseSha = execFileSync(
+      'git',
+      ['-C', repoRoot, 'rev-parse', 'HEAD'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim();
+  } catch (error) {
+    fail(
+      `unable to resolve authoritative base for graph specs: ${error.message}`,
+      'MISSION_GRAPH_SPEC_INVALID',
+    );
+  }
+  if (!isAuthoritativeGitObjectId(baseSha)) {
+    fail('authoritative base SHA is invalid for graph spec validation', 'MISSION_GRAPH_SPEC_INVALID');
+  }
+  const nodes = graph && Array.isArray(graph.nodes) ? graph.nodes : [];
+  for (const node of nodes) {
+    const spec = node && node.campaign && node.campaign.spec;
+    if (!spec || typeof spec.path !== 'string' || typeof spec.section !== 'string') {
+      fail(
+        `graph node ${node && node.id} campaign.spec.path/section is required`,
+        'MISSION_GRAPH_SPEC_INVALID',
+      );
+    }
+    let specText;
+    try {
+      specText = execFileSync(
+        'git',
+        ['-C', repoRoot, 'show', `${baseSha}:${spec.path}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+    } catch (_error) {
+      fail(
+        `graph node ${node.id} spec.path missing at base (${spec.path})`,
+        'MISSION_GRAPH_SPEC_INVALID',
+      );
+    }
+    const heading = new RegExp(`^\\s*#{1,6}\\s+${escapeRegExp(spec.section)}\\s*$`);
+    if (!String(specText).split(/\r?\n/).some((line) => heading.test(line))) {
+      fail(
+        `graph node ${node.id} missing heading '${spec.section}' in ${spec.path}`,
+        'MISSION_GRAPH_SPEC_INVALID',
+      );
+    }
+  }
+}
+
 function buildAdmission({ repoIdentity, policy, graphResult }) {
   const coverage = graphResult.coverage;
   const sourcesDigest = sha256(canonicalJson({
@@ -224,6 +285,12 @@ function admitMissionRouting(options = {}) {
         'MISSION_POLICY_DRIFT',
       );
     }
+    // Pre-spend: validate frozen graph specs at HEAD using the already-checked
+    // routing-config graph file. Do not depend on inspect() exposing nodes.
+    validateGraphSpecsAtBase(
+      repo.root,
+      readJson(artifacts.graph, 'Mission execution graph'),
+    );
   } catch (error) {
     if (policy.resolution.policy.enforcement_mode === 'enforce') throw error;
     const shadowFailure = {
@@ -303,6 +370,7 @@ if (require.main === module) main();
 module.exports = {
   MissionRoutingAdmissionError,
   admitMissionRouting,
+  isAuthoritativeGitObjectId,
   normalizeRoute,
   observeMarker,
 };

@@ -58,7 +58,7 @@ function exitNoGo(unitId, contractSha, specSha, reasons, resolvedEngine) {
   process.exit(3);
 }
 
-function exitGo(unitId, contractSha, specSha, resolvedEngine) {
+function exitGo(unitId, contractSha, specSha, resolvedEngine, options = {}) {
   const payload = {
     verdict: 'GO',
     unit_id: unitId,
@@ -71,9 +71,39 @@ function exitGo(unitId, contractSha, specSha, resolvedEngine) {
       family: resolvedEngine.family,
     },
   };
+  // Implementer-only provisional admission must keep assurance explicit.
+  // Reviewer / verification-author / owner paths never set this from provisional rows.
+  if (options.assurance === 'provisional') {
+    payload.assurance = 'provisional';
+  }
 
   console.log(JSON.stringify(payload));
   process.exit(0);
+}
+
+function scorecardRowMatchesEngine(row, storeRole, resolvedEngine) {
+  return Boolean(
+    row
+    && row.role === storeRole
+    && row.engine === resolvedEngine.model
+    && row.runner === resolvedEngine.runner,
+  );
+}
+
+// Strict campaign admission scorecard policy:
+// - implementer: exact configured provisional rows with observed_status===qualified
+//   may GO with assurance=provisional (bounded commit only; no review/verify/merge)
+// - missing / unknown / provisional observed_status remains NO-GO
+// - all other roles: still require status=qualified (fail-closed)
+// - never promotes untrusted telemetry to qualified
+function isAdmissibleScorecardRow(row, storeRole, resolvedEngine) {
+  if (!scorecardRowMatchesEngine(row, storeRole, resolvedEngine)) return false;
+  if (row.status === 'qualified') return true;
+  if (storeRole !== 'implementer') return false;
+  if (row.status !== 'provisional') return false;
+  // Disk-backed projection maps evidence-backed qualified → provisional while
+  // retaining observed_status. Only the exact observed qualified state admits.
+  return row.observed_status === 'qualified';
 }
 
 function usageError(message) {
@@ -943,13 +973,17 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     reasons.push('engine: failed to read scorecard state');
   }
 
+  let engineAssurance = null;
   if (reasons.length === 0) {
     const matched = Array.isArray(scoreRows)
-      ? scoreRows.find((row) => row && row.role === storeRole && row.engine === resolvedEngine.model && row.runner === resolvedEngine.runner && row.status === 'qualified')
+      ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, resolvedEngine))
       : null;
 
     if (!matched) {
       reasons.push('engine: no qualified scorecard row for configured role/engine/runner');
+    } else if (matched.status === 'provisional') {
+      // Explicit provisional assurance for implementer-only bounded commit effect.
+      engineAssurance = 'provisional';
     }
   }
 
@@ -977,7 +1011,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     reasons.push('engine: campaign projection disagrees with resolved runner/model');
   }
 
-  return { reasons, specSha, headSha, baseAtHead };
+  return { reasons, specSha, headSha, baseAtHead, engineAssurance };
 }
 
 function parseArgs(argv) {
@@ -1063,5 +1097,7 @@ function parseArgs(argv) {
     runner: resolvedEngine.runner,
     model: resolvedEngine.model,
     family: resolvedEngine.family,
+  }, {
+    assurance: policy.engineAssurance || null,
   });
 })();

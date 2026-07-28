@@ -32,7 +32,12 @@ fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
 execFileSync('git', ['init', '-q', repo]);
 execFileSync('git', ['-C', repo, 'config', 'user.email', 'mission-runtime@example.invalid']);
 execFileSync('git', ['-C', repo, 'config', 'user.name', 'Mission Runtime Oracle']);
-fs.writeFileSync(path.join(repo, 'src', 'value.txt'), 'base\n');
+fs.writeFileSync(path.join(repo, 'src', 'value.txt'), [
+  '## Runtime control',
+  'base',
+  '## Release closeout',
+  '',
+].join('\n'));
 
 const policy = {
   schema_version: 1,
@@ -237,6 +242,41 @@ if (runtime) {
   }
   check('test-seam-requires-explicit-process-opt-in', disabledTestSeamRejected);
   process.env.AUTOPILOT_TEST_ALLOW_MISSION_RUNTIME_SEAMS = '1';
+
+  // Invalid frozen heading must fail before Mission state/grant exists.
+  const badHeadingGraph = JSON.parse(JSON.stringify(graph));
+  badHeadingGraph.nodes[0].campaign.spec.section = 'Missing Heading That Does Not Exist';
+  const badHeadingDigest = sha(badHeadingGraph);
+  const badHeadingAuthority = {
+    ...authority,
+    mission_graph_digest: badHeadingDigest,
+  };
+  const badHeadingDeps = {
+    ...dependencies,
+    freezeMissionExecutionGraph: () => ({
+      graph: badHeadingGraph,
+      graph_digest: badHeadingDigest,
+      calculated_depth: 2,
+      calculated_batches: 2,
+    }),
+  };
+  let badHeadingError = null;
+  try {
+    runtime.prepareMissionRuntimeForTest({
+      repo,
+      taskAuthority: badHeadingAuthority,
+      authoritativeGovernance: projectGovernance,
+      executionGraph: badHeadingGraph,
+      preparedAt: '2026-07-28T00:00:00.000Z',
+    }, badHeadingDeps);
+  } catch (error) {
+    badHeadingError = error;
+  }
+  check('prepare-rejects-missing-spec-heading',
+    badHeadingError
+    && badHeadingError.code === 'MISSION_GRAPH_SPEC_INVALID'
+    && /missing heading/.test(badHeadingError.message)
+    && !fs.existsSync(registryPath));
 
   let productionInjectionRejected = false;
   try {
@@ -486,11 +526,11 @@ if (runtime) {
 
   // Durable zero-effect leaf after IMPLEMENTATION_STARTED: release Mission
   // admission without terminal receipt, stagnation, or MUTATION_FAILED.
-  const { releaseCampaignAdmission } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
+  // Engine supplies trusted adapters to the default releaseCampaignAdmission.
   const stagnationBeforeZeroEffect = store.load().stagnant_campaigns;
   const durableLeafEvents = [];
   let durableTerminalReconcileCalls = 0;
-  const durableLeafControl = {
+  let durableLeafControl = {
     ...intake,
     generation_claim: {
       ...(intake.generation_claim || {}),
@@ -524,15 +564,7 @@ if (runtime) {
       }],
   };
   fs.mkdirSync(path.dirname(durableLeafControl.generation_claim.ledger), { recursive: true });
-  const releaseAdapters = {
-    ...mission.createMissionCampaignAdapters({
-      store,
-      grant_ref: granted.payload.mission_grant_ref,
-      mission_subject_digest: granted.payload.mission_subject_digest,
-      campaign_id: granted.payload.mission_campaign_id,
-    }),
-  };
-  // Ensure a dead generation lease so admission release can finish after Mission.
+  // Ensure a live generation lease so admission release can mark it dead after Mission.
   const ledgerScript = path.join(root, 'scripts', 'run-ledger.sh');
   const runLedgerJson = (args) => {
     const result = spawnSync('bash', [ledgerScript, ...args], {
@@ -547,60 +579,167 @@ if (runtime) {
   if (!fs.existsSync(durableLeafControl.generation_claim.ledger)) {
     runLedgerJson(['init', '--ledger', durableLeafControl.generation_claim.ledger]);
   }
-  const acquiredLease = runLedgerJson([
-    'stage-acquire',
-    '--ledger', durableLeafControl.generation_claim.ledger,
-    '--run-id', durableLeafControl.campaign_id,
-    '--stage', 'campaign',
-    '--pid', String(process.pid),
-    '--resources', `campaign:${durableLeafControl.campaign_id}`,
-    '--exclusive-live',
-  ]);
-  durableLeafControl.generation_claim = {
-    ...durableLeafControl.generation_claim,
-    generation: acquiredLease.generation,
-    nonce: acquiredLease.nonce,
-    stage_identity: `run-ledger:${acquiredLease.generation}:${acquiredLease.nonce}`,
+  const acquireLeaseFor = (control) => {
+    const acquiredLease = runLedgerJson([
+      'stage-acquire',
+      '--ledger', control.generation_claim.ledger,
+      '--run-id', control.campaign_id,
+      '--stage', 'campaign',
+      '--pid', String(process.pid),
+      '--resources', `campaign:${control.campaign_id}`,
+      '--exclusive-live',
+    ]);
+    return {
+      ...control,
+      generation_claim: {
+        ...control.generation_claim,
+        generation: acquiredLease.generation,
+        nonce: acquiredLease.nonce,
+        stage_identity: `run-ledger:${acquiredLease.generation}:${acquiredLease.nonce}`,
+      },
+    };
   };
+  durableLeafControl = acquireLeaseFor(durableLeafControl);
+  const preparedControlForEngine = () => ({
+    ...durableLeafControl,
+    initial_state: {
+      ...durableLeafControl.initial_state,
+      phase: 'PREPARED',
+      generation: 0,
+      event_count: 0,
+      live_lease: null,
+    },
+  });
+  const zeroEffectLeaf = {
+    error: null,
+    status: 2,
+    signal: null,
+    stdout: '',
+    stderr: '',
+    parseError: null,
+    result: {
+      status: 'precondition_failed',
+      runner: 'fixture',
+      model: 'fixture-implementer',
+      branch: granted.payload.branch,
+      base: granted.payload.base_sha,
+      commit: null,
+      files_changed: 0,
+      insertions: 0,
+      deletions: 0,
+      worktree: null,
+      agent_log: null,
+      error: 'fixture zero-effect precondition',
+    },
+  };
+  const roster = {
+    implementer_engine: 'fixture-implementer',
+    implementer_runner: 'codex',
+    implementer_effort: 'medium',
+    reviewer_engine: 'fixture-reviewer',
+    reviewer_runner: 'codex',
+    reviewer_effort: 'medium',
+    verify_first: false,
+    loop_max_rounds: 2,
+    loop_convergence_verdict: 'SHIP-AS-IS',
+  };
+  const missionRootRunId = intake.contract
+    && intake.contract.mission_runtime
+    && intake.contract.mission_runtime.root_run_id;
+  const loopInput = {
+    promptFile: path.join(temp, 'prompt.txt'),
+    branch: granted.payload.branch,
+    base: granted.payload.base_sha,
+    roster,
+    campaignContract: granted.payload.contract_path,
+    implementationOptions: {
+      env: {
+        ...process.env,
+        AUTOPILOT_ROOT_RUN_ID: missionRootRunId,
+      },
+    },
+  };
+
+  const intentOnlyAppender = (input, events) => {
+    if (events) events.push(input.eventType);
+    const state = input.campaignControl.initial_state;
+    if (input.eventType === 'implementation_started') {
+      return {
+        status: 'appended',
+        event: { event_type: input.eventType, timestamp: input.observedAt },
+        state: {
+          ...state,
+          phase: 'IMPLEMENTING',
+          generation: 0,
+          event_count: 1,
+          usage: state.usage || {
+            repair_generations: 0,
+            changed_files: 0,
+            churn: 0,
+            elapsed_wall_seconds: 0,
+          },
+          live_lease: {
+            stage_identity: input.stageIdentity,
+            generation: 0,
+            acquired_at: input.observedAt,
+          },
+        },
+      };
+    }
+    throw new Error(`unexpected durable leaf event ${input.eventType}`);
+  };
+
+  // Fail-closed first: enforce precheck needs a store, but adapter factory
+  // omits releaseMission so admission release fails closed.
+  const noAdapterEngine = new AutopilotEngine({
+    cwd: repo,
+    clock: () => '2026-07-28T00:00:01.500Z',
+    missionCampaignStore: store,
+    missionAdapterFactory: () => ({
+      missionClaim: () => ({ owner: 'mission', status: 'claimed', claim_id: granted.payload.claim_id }),
+      // intentionally no releaseMission
+    }),
+    campaignIntake() {
+      return preparedControlForEngine();
+    },
+    campaignEventAppender: (input) => intentOnlyAppender(input),
+    implementationDispatcher() {
+      return zeroEffectLeaf;
+    },
+  });
+  const noAdapterResult = noAdapterEngine.runImplementationReviewLoop(loopInput);
+  const noAdapterRelease = noAdapterResult.campaign_control
+    && noAdapterResult.campaign_control.admission_release;
+  check('zero-effect-adapter-missing-blocks-release',
+    noAdapterResult.status === 'blocked'
+    && noAdapterRelease
+    && noAdapterRelease.status === 'blocked');
+  check('zero-effect-adapter-missing-keeps-lease-live',
+    noAdapterRelease
+    && noAdapterRelease.campaign_generation_release
+    && noAdapterRelease.campaign_generation_release.status === 'rejected'
+    && noAdapterRelease.campaign_generation_release.code === 'mission_release_incomplete');
+  check('zero-effect-adapter-missing-mission-code',
+    noAdapterRelease
+    && noAdapterRelease.mission_release
+    && (
+      noAdapterRelease.mission_release.code === 'mission_release_adapter_missing'
+      || noAdapterRelease.mission_release.code === 'mission_state_store_required'
+    ));
+
+  // Real managed composition path: constructor-owned Mission store + default
+  // releaseCampaignAdmission. Engine must supply trusted adapters from the
+  // sealed mission_grant_ref (never from runtime input). Reuses the same live
+  // generation lease so a successful release can mark it dead.
   const zeroEffectEngine = new AutopilotEngine({
     cwd: repo,
     clock: () => '2026-07-28T00:00:02.000Z',
+    missionCampaignStore: store,
     campaignIntake() {
-      return {
-        ...durableLeafControl,
-        initial_state: {
-          ...durableLeafControl.initial_state,
-          phase: 'PREPARED',
-          generation: 0,
-          event_count: 0,
-          live_lease: null,
-        },
-      };
+      return preparedControlForEngine();
     },
     campaignEventAppender(input) {
-      durableLeafEvents.push(input.eventType);
-      const state = input.campaignControl.initial_state;
-      if (input.eventType === 'implementation_started') {
-        return {
-          status: 'appended',
-          event: { event_type: input.eventType, timestamp: input.observedAt },
-          state: {
-            ...state,
-            phase: 'IMPLEMENTING',
-            generation: 0,
-            event_count: 1,
-            live_lease: {
-              stage_identity: input.stageIdentity,
-              generation: 0,
-              acquired_at: input.observedAt,
-            },
-          },
-        };
-      }
-      throw new Error(`unexpected durable leaf event ${input.eventType}`);
-    },
-    campaignAdmissionReleaser(input) {
-      return releaseCampaignAdmission(input, releaseAdapters);
+      return intentOnlyAppender(input, durableLeafEvents);
     },
     missionTerminalReconciler() {
       durableTerminalReconcileCalls += 1;
@@ -610,55 +749,27 @@ if (runtime) {
       return { status: 'completed' };
     },
     implementationDispatcher() {
-      return {
-        error: null,
-        status: 2,
-        signal: null,
-        stdout: '',
-        stderr: '',
-        parseError: null,
-        result: {
-          status: 'precondition_failed',
-          runner: 'fixture',
-          model: 'fixture-implementer',
-          branch: granted.payload.branch,
-          base: granted.payload.base_sha,
-          commit: null,
-          files_changed: 0,
-          insertions: 0,
-          deletions: 0,
-          worktree: null,
-          agent_log: null,
-          error: 'fixture zero-effect precondition',
-        },
-      };
+      return zeroEffectLeaf;
     },
   });
-  const zeroEffectResult = zeroEffectEngine.runImplementationReviewLoop({
-    promptFile: path.join(temp, 'prompt.txt'),
-    branch: granted.payload.branch,
-    base: granted.payload.base_sha,
-    roster: {
-      implementer_engine: 'fixture-implementer',
-      implementer_runner: 'codex',
-      implementer_effort: 'medium',
-      reviewer_engine: 'fixture-reviewer',
-      reviewer_runner: 'codex',
-      reviewer_effort: 'medium',
-      verify_first: false,
-      loop_max_rounds: 2,
-    },
-    campaignContract: granted.payload.contract_path,
-  });
+  const zeroEffectResult = zeroEffectEngine.runImplementationReviewLoop(loopInput);
   const afterZeroEffect = store.load();
   const zeroEffectEvents = (afterZeroEffect.events || []).map((event) => event.event_type);
+  const zeroRelease = zeroEffectResult.campaign_control
+    && zeroEffectResult.campaign_control.admission_release;
   check('durable-zero-effect-blocks', zeroEffectResult.status === 'blocked');
   check('durable-zero-effect-records-intent-only',
     durableLeafEvents.join(',') === 'implementation_started');
   check('durable-zero-effect-releases-admission',
-    zeroEffectResult.campaign_control
-    && zeroEffectResult.campaign_control.admission_release
-    && zeroEffectResult.campaign_control.admission_release.status === 'released');
+    zeroRelease && zeroRelease.status === 'released');
+  check('durable-zero-effect-mission-release-via-trusted-adapter',
+    zeroRelease
+    && zeroRelease.mission_release
+    && zeroRelease.mission_release.status === 'released');
+  check('durable-zero-effect-lease-marked-dead',
+    zeroRelease
+    && zeroRelease.campaign_generation_release
+    && zeroRelease.campaign_generation_release.status === 'released');
   check('durable-zero-effect-emits-mission-no-effect-release',
     zeroEffectEvents.includes('no_effect_release')
     && afterZeroEffect.claims[granted.payload.claim_id]
@@ -674,6 +785,12 @@ if (runtime) {
     && !zeroEffectEvents.includes('reconciliation')
     && !(zeroEffectResult.campaign_control
       && zeroEffectResult.campaign_control.terminal_failure));
+  check('durable-zero-effect-non-terminal-result',
+    zeroEffectResult.status === 'blocked'
+    && zeroEffectResult.phase !== 'campaign_terminal_reconciliation'
+    && !(zeroEffectResult.campaign_control
+      && zeroEffectResult.campaign_control.terminal_failure));
+
   const regrantAfterRelease = runCli([
     'grant', '--repo', repo, '--prepared', preparedPath,
     '--node', 'runtime-control', '--now', '2026-07-28T00:00:30.000Z',
@@ -766,7 +883,7 @@ if (runtime) {
     runtimeRoot,
     'journals',
     adoptionKey,
-    `${granted.payload.claim_id}.pending.json`,
+    `${regranted.payload.claim_id}.pending.json`,
   );
   fs.writeFileSync(duplicatePendingPath, `${JSON.stringify(conflictingPending, null, 2)}\n`);
   const appliedPendingConflict = runtime.reconcileMissionCampaignTerminal(terminalInput);
@@ -948,7 +1065,12 @@ fs.writeFileSync(outputPath, JSON.stringify(result));
     && /stagnation|terminal/i.test(afterStagnation.stdout + afterStagnation.stderr));
 }
 
+const failed = lines.filter((line) => line.endsWith('\tFAIL'));
 for (const line of lines) console.log(line);
+if (failed.length > 0) {
+  process.stderr.write(`mission-runtime-v2 failures:\n${failed.join('\n')}\n`);
+  process.exitCode = 1;
+}
 NODE
 )"
 assert_exit_code "$?" "0" "Mission runtime v2 oracle executes"
@@ -956,7 +1078,7 @@ assert_exit_code "$?" "0" "Mission runtime v2 oracle executes"
 for id in \
   runtime-module-present prepare-api-present prepare-test-seam-explicit \
   production-prepare-rejects-dependency-injection grant-api-present prepared-store-api-present \
-  test-seam-requires-explicit-process-opt-in \
+  test-seam-requires-explicit-process-opt-in prepare-rejects-missing-spec-heading \
   terminal-api-present engine-cli-advertises-prepared-receipt \
   engine-cli-rejects-arbitrary-state-path cli-prepare-created cli-prepare-adopts-same-lineage \
   stale-dead-process-lock-recovered live-lock-not-reaped registry-rejects-extra-fields \
@@ -969,6 +1091,14 @@ for id in \
   recomputed-unkeyed-prepared-bindings-rejected recomputed-prepared-extra-field-rejected \
   enforce-arbitrary-state-rejected prepared-grant-rejects-caller-identity-flags \
   sealed-v2-engine-intake-admitted intake-keeps-both-campaign-identities \
+  zero-effect-adapter-missing-blocks-release zero-effect-adapter-missing-keeps-lease-live \
+  zero-effect-adapter-missing-mission-code \
+  durable-zero-effect-blocks durable-zero-effect-records-intent-only \
+  durable-zero-effect-releases-admission durable-zero-effect-mission-release-via-trusted-adapter \
+  durable-zero-effect-lease-marked-dead durable-zero-effect-emits-mission-no-effect-release \
+  durable-zero-effect-stagnation-unchanged durable-zero-effect-graph-restored-pending \
+  durable-zero-effect-no-terminal-reconcile durable-zero-effect-non-terminal-result \
+  durable-zero-effect-permits-next-graph-attempt \
   engine-terminal-ready-applied engine-terminal-binds-both-campaign-identities \
   unknown-usage-charges-conservative-reservation \
   terminal-requires-frozen-observed-at \

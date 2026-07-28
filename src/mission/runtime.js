@@ -336,6 +336,53 @@ function git(repo, args) {
   return result.stdout.trim();
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Pre-spend gate: every frozen graph node must reference a real base-tree
+// Markdown file whose exact heading matches campaign.spec.section. Fails
+// before Mission state or grant artifacts are created.
+function validateGraphSpecsAtBase(repo, graph, baseSha) {
+  const nodes = graph && Array.isArray(graph.nodes) ? graph.nodes : [];
+  // Accept Git SHA-1 (40) or SHA-256 (64) object IDs (lowercase hex).
+  if (typeof baseSha !== 'string' || !/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(baseSha)) {
+    fail('MISSION_GRAPH_SPEC_INVALID', 'authoritative base SHA is required to validate graph specs');
+  }
+  for (const node of nodes) {
+    if (!node || typeof node.id !== 'string') {
+      fail('MISSION_GRAPH_SPEC_INVALID', 'graph node id is required for spec validation');
+    }
+    const campaign = node.campaign;
+    const spec = campaign && campaign.spec;
+    if (!spec || typeof spec.path !== 'string' || typeof spec.section !== 'string') {
+      fail(
+        'MISSION_GRAPH_SPEC_INVALID',
+        `graph node ${node.id} campaign.spec.path/section is required`,
+      );
+    }
+    const raw = spawnSync('git', ['-C', repo, 'show', `${baseSha}:${spec.path}`], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (raw.error || raw.status !== 0) {
+      fail(
+        'MISSION_GRAPH_SPEC_INVALID',
+        `graph node ${node.id} spec.path missing at base (${spec.path})`,
+      );
+    }
+    const specText = String(raw.stdout || '');
+    const heading = new RegExp(`^\\s*#{1,6}\\s+${escapeRegExp(spec.section)}\\s*$`);
+    const found = specText.split(/\r?\n/).some((line) => heading.test(line));
+    if (!found) {
+      fail(
+        'MISSION_GRAPH_SPEC_INVALID',
+        `graph node ${node.id} missing heading '${spec.section}' in ${spec.path}`,
+      );
+    }
+  }
+}
+
 function canonicalRepository(repo) {
   let canonical;
   try {
@@ -666,6 +713,10 @@ function prepareMissionRuntimeInternal(input, options) {
     'frozen execution graph.graph_digest',
     SHA256,
   );
+  // Fail closed before any Mission registry/state write when a frozen node
+  // references a missing base-tree path or a non-existent Markdown heading.
+  const prepareBaseSha = git(repoInfo.repo, ['rev-parse', 'HEAD']);
+  validateGraphSpecsAtBase(repoInfo.repo, graph, prepareBaseSha);
   const initialRequired = initialAcceptanceHashes(authority);
   const adoptionBinding = {
     repo_identity: repoInfo.repo_identity,
@@ -1233,6 +1284,10 @@ function grantMissionCampaign(input = {}) {
         || attempt > node.gate_attempt_budget) {
       fail('MISSION_GATE_BUDGET_EXHAUSTED', `graph node ${nodeId} gate budget exhausted`);
     }
+    // Re-validate the node's frozen spec against the authoritative grant base
+    // (HEAD) before creating a new Mission claim / campaign draft.
+    const grantBaseSha = git(repoInfo.repo, ['rev-parse', 'HEAD']);
+    validateGraphSpecsAtBase(repoInfo.repo, { nodes: [node] }, grantBaseSha);
     const draft = campaignDraftFor({
       state,
       node,

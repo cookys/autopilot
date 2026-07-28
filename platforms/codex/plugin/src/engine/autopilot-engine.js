@@ -4485,12 +4485,25 @@ class AutopilotEngine {
       const releaseStartedAt = this.now();
       let release;
       try {
+        // Supply constructor-owned Mission adapters derived from the sealed
+        // mission_grant_ref — never from runtime input. Missing adapters stay
+        // fail-closed inside releaseCampaignAdmission.
+        const sealedGrantRef = (
+          campaignControl.contract
+          && typeof campaignControl.contract.mission_grant_ref === 'string'
+          && /^[0-9a-f]{64}$/.test(campaignControl.contract.mission_grant_ref)
+        )
+          ? campaignControl.contract.mission_grant_ref
+          : this.readCampaignMissionGrantRef(input.campaignContract, loopCwd);
+        const releaseAdapters = this.buildMissionCampaignAdapters({
+          grant_ref: sealedGrantRef,
+        });
         release = this.campaignAdmissionReleaser({
           repo: loopCwd,
           campaignControl,
           rejection,
           observedAt: releaseStartedAt,
-        });
+        }, releaseAdapters || undefined);
       } catch (error) {
         release = {
           status: 'blocked',

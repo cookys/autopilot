@@ -44,7 +44,12 @@ fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
 execFileSync('git', ['init', '-q', repo]);
 execFileSync('git', ['-C', repo, 'config', 'user.email', 'bridge@example.invalid']);
 execFileSync('git', ['-C', repo, 'config', 'user.name', 'Mission Bridge Oracle']);
-fs.writeFileSync(path.join(repo, 'src', 'value.txt'), '## Runtime control\nbase\n');
+fs.writeFileSync(path.join(repo, 'src', 'value.txt'), [
+  '## Runtime control',
+  'base',
+  '## Release closeout',
+  '',
+].join('\n'));
 fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
   '- implementer_engine: gpt-5.3-codex-spark',
   '- implementer_runner: codex',

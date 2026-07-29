@@ -691,15 +691,119 @@ NODE
 assert_eq "0" "$?" "outside MemoryWitness journal alone cannot become production authority"
 rm -rf "$OUTSIDE_MW_DIR" "$OUTSIDE_MW_PROJ" "$OUTSIDE_MW_HOME"
 
-# Case 3b — positive control: independently provisioned external witness adapter
-# (trustTier external, outside repo/project) authenticates equivalent valid KR8.
+# Case 3b — negative: fully self-consistent caller-created config + external
+# adapter + receipts (adapter nominated FROM authority JSON) cannot self-auth.
+# Adapter identity must come from deployment-provisioned binding, not project config.
+SELF_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-self-auth.XXXXXX")"
+SELF_AUTH="$SELF_DIR/trusted-installed-witness-authority.json"
+SELF_ADAPTER="$SELF_DIR/external-witness-adapter.js"
+SELF_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-self-auth-proj.XXXXXX")"
+SELF_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-self-auth-home.XXXXXX")"
+mkdir -p "$SELF_PROJ/production-telemetry"
+node - "$REPO_ROOT" "$SELF_AUTH" "$SELF_PROJ" "$SELF_ADAPTER" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const authOut = process.argv[3];
+const proj = process.argv[4];
+const adapterOut = process.argv[5];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const body = {
+  observed_false_acceptances: 0,
+  observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1,
+  baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const streamId = 'rg-self-auth-stream';
+const receiptBase = {
+  run_id: 'rg-self-auth-run', stream_id: streamId, sequence: 1,
+  event_hash: bodyHash, previous_witness_head: null,
+};
+const receipt = { ...receiptBase, witness_head: sha256(canonicalJson(receiptBase)) };
+fs.writeFileSync(adapterOut, `'use strict';
+const crypto = require('crypto');
+function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
+function canonicalJson(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
+  return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
+}
+function createAuthority({ streamId, receipts }) {
+  const known = new Map();
+  for (const entry of receipts || []) known.set(String(entry.witness_head).toLowerCase(), entry);
+  return {
+    streamId, trustTier: 'external',
+    identity: 'external-adapter:' + streamId,
+    attestation_hash: sha256('external-adapter:' + streamId),
+    protocol_version: 1,
+    getAppendTimestamp() { return null; },
+    append() { throw new Error('unused'); },
+    verify(receipt) {
+      if (!receipt || receipt.stream_id !== streamId) return false;
+      return known.has(String(receipt.witness_head).toLowerCase());
+    },
+  };
+}
+module.exports = { createAuthority };
+`);
+// Caller nominates adapter FROM authority config (forbidden self-auth shape).
+fs.writeFileSync(authOut, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  stream_id: streamId,
+  external_adapter_module: adapterOut,
+  adapter_sha256: 'a'.repeat(64),
+  receipts: [receipt],
+}, null, 2));
+fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
+  ...body,
+  production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
+}, null, 2));
+NODE
+SELF_OUT="$(
+  HOME="$SELF_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$SELF_AUTH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$SELF_PROJ" --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$SELF_OUT" <<'NODE'
+'use strict';
+const report = JSON.parse(process.argv[2]);
+const kr8 = report.kr8;
+if (!kr8 || kr8.status !== 'HOLD') {
+  console.error('caller-nominated adapter must HOLD KR8; got', kr8 && kr8.status, kr8 && kr8.blocking_reasons);
+  process.exit(1);
+}
+if (kr8.evidence && kr8.evidence.source === 'production_telemetry') {
+  console.error('self-auth adapter must not classify as production_telemetry');
+  process.exit(1);
+}
+const reasons = (kr8.blocking_reasons || []).join('\n');
+if (!/adapter|binding|nominate|sha256|pin|deployment|must not select/i.test(reasons)
+  && !/independently|untrusted|provenance|authority/i.test(reasons)) {
+  console.error('self-auth HOLD must cite adapter binding/nomination; got:', reasons);
+  process.exit(1);
+}
+if (report.alias_retirement && report.alias_retirement.trusted_authority_present === true) {
+  console.error('self-auth must not set trusted_authority_present');
+  process.exit(1);
+}
+console.log('rg-caller-nominated-adapter-self-auth-hold=ok');
+NODE
+assert_eq "0" "$?" "caller-created config+adapter+receipts cannot self-authenticate"
+rm -rf "$SELF_DIR" "$SELF_PROJ" "$SELF_HOME"
+
+# Case 3c — positive control: independently supplied pinned adapter binding
+# (AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING) authenticates valid KR8.
 OUTSIDE_AUTH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth.XXXXXX")"
 OUTSIDE_AUTH="$OUTSIDE_AUTH_DIR/trusted-installed-witness-authority.json"
 OUTSIDE_ADAPTER="$OUTSIDE_AUTH_DIR/external-witness-adapter.js"
+OUTSIDE_BINDING="$OUTSIDE_AUTH_DIR/trusted-witness-adapter-binding.json"
 OUTSIDE_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth-proj.XXXXXX")"
 OUTSIDE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth-home.XXXXXX")"
 mkdir -p "$OUTSIDE_PROJ/production-telemetry"
-node - "$REPO_ROOT" "$OUTSIDE_AUTH" "$OUTSIDE_PROJ" "$OUTSIDE_ADAPTER" <<'NODE'
+node - "$REPO_ROOT" "$OUTSIDE_AUTH" "$OUTSIDE_PROJ" "$OUTSIDE_ADAPTER" "$OUTSIDE_BINDING" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -708,8 +812,8 @@ const root = process.argv[2];
 const authOut = process.argv[3];
 const proj = process.argv[4];
 const adapterOut = process.argv[5];
+const bindingOut = process.argv[6];
 const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
-
 const body = {
   observed_false_acceptances: 0,
   observed_missed_red_line_escalations: 0,
@@ -720,103 +824,80 @@ const bodyHash = sha256(canonicalJson(body));
 const streamId = 'rg-outside-ext-stream';
 const runId = 'rg-outside-ext-run';
 const receiptBase = {
-  run_id: runId,
-  stream_id: streamId,
-  sequence: 1,
-  event_hash: bodyHash,
-  previous_witness_head: null,
+  run_id: runId, stream_id: streamId, sequence: 1,
+  event_hash: bodyHash, previous_witness_head: null,
 };
 const witnessHead = sha256(canonicalJson(receiptBase));
-const receipt = {
-  ...receiptBase,
-  witness_head: witnessHead,
-  append_timestamp: new Date().toISOString(),
-};
-
-// Independently provisioned external adapter (not MemoryWitness / not allowTestWitness).
+const receipt = { ...receiptBase, witness_head: witnessHead };
 fs.writeFileSync(adapterOut, `'use strict';
 const crypto = require('crypto');
 function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
 function canonicalJson(v) {
   if (v === null || typeof v !== 'object') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
-  const keys = Object.keys(v).sort();
-  return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
+  return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
 }
-function createAuthority({ streamId, receipts }) {
-  const receiptsList = Array.isArray(receipts) ? receipts : [];
+function createAuthority({ streamId, receipts, anchored_append_timestamps }) {
   const known = new Map();
-  const appendTimestamps = new Map();
-  for (const entry of receiptsList) {
-    const head = String(entry.witness_head).toLowerCase();
-    known.set(head, entry);
-    if (typeof entry.append_timestamp === 'string') {
-      appendTimestamps.set(head, entry.append_timestamp);
-    }
-  }
+  for (const entry of receipts || []) known.set(String(entry.witness_head).toLowerCase(), entry);
+  const anchored = new Map(Object.entries(anchored_append_timestamps || {}).map(([k, v]) => [String(k).toLowerCase(), v]));
   return {
-    streamId,
-    trustTier: 'external',
+    streamId, trustTier: 'external',
     identity: 'external-adapter:' + streamId,
     attestation_hash: sha256('external-adapter:' + streamId),
     protocol_version: 1,
-    appendTimestamps,
     getAppendTimestamp(receipt) {
-      return appendTimestamps.get(String(receipt.witness_head).toLowerCase()) || null;
+      return anchored.get(String(receipt.witness_head).toLowerCase()) || null;
     },
-    append() { throw new Error('append not used in release verify'); },
+    append() { throw new Error('unused'); },
     verify(receipt) {
       if (!receipt || receipt.stream_id !== streamId) return false;
       const head = String(receipt.witness_head).toLowerCase();
-      const knownEntry = known.get(head);
-      if (!knownEntry) return false;
-      const expectedHead = sha256(canonicalJson({
-        run_id: receipt.run_id,
-        stream_id: receipt.stream_id,
-        sequence: receipt.sequence,
-        event_hash: receipt.event_hash,
-        previous_witness_head: receipt.previous_witness_head,
+      if (!known.has(head)) return false;
+      const expected = sha256(canonicalJson({
+        run_id: receipt.run_id, stream_id: receipt.stream_id, sequence: receipt.sequence,
+        event_hash: receipt.event_hash, previous_witness_head: receipt.previous_witness_head,
       }));
-      return expectedHead === receipt.witness_head;
+      return expected === receipt.witness_head;
     },
   };
 }
 module.exports = { createAuthority };
 `);
-
+const adapterPin = crypto.createHash('sha256').update(fs.readFileSync(adapterOut)).digest('hex');
+// Authority config does NOT select adapter module.
 fs.writeFileSync(authOut, JSON.stringify({
   kind: 'trusted_installed_witness_authority',
+  authority_id: 'rg-outside-auth-1',
   stream_id: streamId,
-  external_adapter_module: adapterOut,
   receipts: [receipt],
 }, null, 2));
-fs.writeFileSync(
-  path.join(proj, 'production-telemetry', 'kr8.json'),
-  JSON.stringify({
-    ...body,
-    production_provenance: {
-      evidence_body_hash: bodyHash,
-      witness_receipt: receipt,
-    },
-  }, null, 2),
-);
-fs.writeFileSync(
-  path.join(proj, 'production-telemetry', 'alias-retirement.json'),
-  JSON.stringify({
-    shipped_compatibility_cycle: true,
-    witnessed_zero_use_days: 0,
-    translation_used_events: 0,
-    unresolved_translation_deltas: 0,
-  }, null, 2),
-);
+// Independent deployment binding pins adapter + optional anchored timestamps.
+fs.writeFileSync(bindingOut, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding',
+  authority_id: 'rg-outside-auth-1',
+  adapter_module: adapterOut,
+  adapter_sha256: adapterPin,
+  anchored_append_timestamps: { [witnessHead]: new Date().toISOString() },
+}, null, 2));
+fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
+  ...body,
+  production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
+}, null, 2));
+fs.writeFileSync(path.join(proj, 'production-telemetry', 'alias-retirement.json'), JSON.stringify({
+  shipped_compatibility_cycle: true,
+  witnessed_zero_use_days: 0,
+  translation_used_events: 0,
+  unresolved_translation_deltas: 0,
+}, null, 2));
 NODE
 
 OUTSIDE_OUT="$(
   HOME="$OUTSIDE_HOME" \
   AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$OUTSIDE_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$OUTSIDE_BINDING" \
   node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
-    --project "$OUTSIDE_PROJ" \
-    --repo-root "$REPO_ROOT" 2>&1
+    --project "$OUTSIDE_PROJ" --repo-root "$REPO_ROOT" 2>&1
 )"
 node - "$OUTSIDE_OUT" "$OUTSIDE_AUTH" "$REPO_ROOT" "$OUTSIDE_PROJ" <<'NODE'
 'use strict';
@@ -837,52 +918,185 @@ function isInside(parent, child) {
   return c.startsWith(prefix);
 }
 if (isInside(repoReal, authReal) || isInside(projReal, authReal)) {
-  console.error('positive-control fixture mis-placed: authority realpath inside boundary', authReal);
+  console.error('positive-control fixture mis-placed', authReal);
   process.exit(1);
 }
 const kr8 = report.kr8;
 const alias = report.alias_retirement;
 if (!kr8 || !kr8.evidence || kr8.evidence.source !== 'production_telemetry') {
-  console.error(
-    'external adapter authority must authenticate KR8 as production_telemetry; got',
-    kr8 && kr8.evidence && kr8.evidence.source,
-    kr8 && kr8.blocking_reasons,
-  );
+  console.error('pinned binding must authenticate KR8 as production_telemetry; got',
+    kr8 && kr8.evidence && kr8.evidence.source, kr8 && kr8.blocking_reasons);
   process.exit(1);
 }
 if (kr8.status !== 'PASS') {
-  console.error('external adapter with valid KR8 counters must PASS KR8; got',
-    kr8.status, kr8.blocking_reasons);
+  console.error('pinned binding with valid KR8 must PASS; got', kr8.status, kr8.blocking_reasons);
   process.exit(1);
 }
 if (!alias || alias.trusted_authority_present !== true) {
-  console.error('external adapter must set trusted_authority_present; got',
+  console.error('pinned binding must set trusted_authority_present; got',
     alias && alias.trusted_authority_present, alias && alias.blocking_reasons);
   process.exit(1);
 }
-const accepted = String(alias.trusted_authority_path || '');
-if (!accepted || accepted !== authReal) {
-  console.error('external adapter must surface trusted_authority_path as realpath; got',
-    accepted, 'expected', authReal);
-  process.exit(1);
-}
-console.log('rg-outside-external-adapter-positive-control=ok');
+console.log('rg-outside-pinned-binding-positive-control=ok');
 NODE
-assert_eq "0" "$?" "outside external witness adapter authenticates trusted production-evidence surface"
+assert_eq "0" "$?" "independently supplied pinned adapter binding authenticates production evidence"
 rm -rf "$OUTSIDE_AUTH_DIR" "$OUTSIDE_PROJ" "$OUTSIDE_HOME"
 
-# Source asserts: allowTestWitness never used for release evidence; mechanical KR10.
+# kr10 mutation: added executed hook member is counted; dynamic require cannot claim complete.
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const root = process.argv[2];
+const checker = path.join(root, 'scripts', 'check-owner-kernel-release-gates.js');
+
+function runReport(repoRoot) {
+  const project = path.join(repoRoot, 'proj');
+  fs.mkdirSync(project, { recursive: true });
+  const run = spawnSync(process.execPath, [
+    checker, '--project', project, '--repo-root', repoRoot,
+  ], { encoding: 'utf8' });
+  if (run.error) throw run.error;
+  return JSON.parse(run.stdout);
+}
+
+// Base: real repo must not use fixed seed as complete-only; membership_complete
+// requires authoritative sources. Thresholds stay 42/51.
+const base = runReport(root);
+if (base.kr10.definition.baseline_surface_count !== 42
+  || base.kr10.definition.projected_post_p3_surface_count !== 51) {
+  console.error('thresholds must stay 42/51');
+  process.exit(1);
+}
+if (base.kr10.measured_surface.membership_complete === true
+  && !base.kr10.measured_surface.bucket_sources) {
+  console.error('complete membership must report bucket_sources');
+  process.exit(1);
+}
+
+// Mutation A: add a new default-on hook to a copy of hooks manifests — counted.
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kr10-add-hook-'));
+function copyTree(from, to) {
+  fs.mkdirSync(to, { recursive: true });
+  for (const ent of fs.readdirSync(from, { withFileTypes: true })) {
+    const s = path.join(from, ent.name);
+    const d = path.join(to, ent.name);
+    if (ent.isDirectory()) copyTree(s, d);
+    else fs.copyFileSync(s, d);
+  }
+}
+// Minimal authoritative tree: hooks + inventory deps + engine + skills + schemas + scripts.
+for (const rel of [
+  'hooks/hooks.json', 'hooks/opt-in-manifest.json',
+  'scripts/check-hook-inventory.js',
+  'scripts/check-owner-kernel-release-gates.js',
+  'scripts/owner-kernel.js',
+  'src/engine',
+  'src/runners',
+  'skills/l5/SKILL.md',
+  'schemas/owner-event.schema.json',
+  'schemas/dispatch-unit-contract.schema.json',
+  'schemas/review-loop-contract.schema.json',
+]) {
+  const src = path.join(root, rel);
+  const dest = path.join(tmp, rel);
+  if (!fs.existsSync(src)) continue;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const st = fs.statSync(src);
+  if (st.isDirectory()) copyTree(src, dest);
+  else fs.copyFileSync(src, dest);
+}
+// Ensure minimal skill/schema files exist
+fs.mkdirSync(path.join(tmp, 'skills', 'l5'), { recursive: true });
+if (!fs.existsSync(path.join(tmp, 'skills', 'l5', 'SKILL.md'))) {
+  fs.writeFileSync(path.join(tmp, 'skills', 'l5', 'SKILL.md'), '---\nname: l5\n---\n');
+}
+// Copy all hooks/*.js referenced
+const hooksJson = JSON.parse(fs.readFileSync(path.join(tmp, 'hooks', 'hooks.json'), 'utf8'));
+const stems = new Set();
+for (const event of Object.keys(hooksJson.hooks || {})) {
+  for (const matcher of hooksJson.hooks[event] || []) {
+    for (const h of matcher.hooks || []) {
+      const m = String(h.command || '').match(/hooks\/([A-Za-z0-9_-]+)\.(js|sh)/);
+      if (m) stems.add(m[1] + '.' + m[2]);
+    }
+  }
+}
+for (const f of stems) {
+  const src = path.join(root, 'hooks', f);
+  if (fs.existsSync(src)) {
+    fs.copyFileSync(src, path.join(tmp, 'hooks', f));
+  }
+}
+// Also copy owner-kernel deps used by checker
+for (const rel of [
+  'src/engine/owner-kernel/canonical.js',
+  'src/engine/owner-kernel/witness.js',
+  'src/engine/owner-kernel/errors.js',
+]) {
+  const dest = path.join(tmp, rel);
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(path.join(root, rel), dest);
+}
+
+const before = runReport(tmp);
+const beforeHooks = before.kr10.measured_surface.hooks_default_on || 0;
+
+// Add new default-on hook member.
+fs.writeFileSync(path.join(tmp, 'hooks', 'kr10-extra-hook.js'), '#!/usr/bin/env node\nconsole.log("x");\n');
+// Wire into SessionStart
+const hj = JSON.parse(fs.readFileSync(path.join(tmp, 'hooks', 'hooks.json'), 'utf8'));
+if (!hj.hooks.SessionStart) hj.hooks.SessionStart = [{ matcher: '*', hooks: [] }];
+hj.hooks.SessionStart[0].hooks.push({
+  type: 'command',
+  command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/kr10-extra-hook.js',
+});
+fs.writeFileSync(path.join(tmp, 'hooks', 'hooks.json'), JSON.stringify(hj, null, 2));
+const after = runReport(tmp);
+const afterHooks = after.kr10.measured_surface.hooks_default_on || 0;
+if (!(afterHooks > beforeHooks)) {
+  console.error('added executed hook must increase hooks count', beforeHooks, afterHooks,
+    after.kr10.measured_surface.measurement_errors);
+  process.exit(1);
+}
+
+// Mutation B: introduce dynamic require in engine → membership_complete false.
+const dynTarget = path.join(tmp, 'src', 'engine', 'supervised-owner-kernel-installed-engine.js');
+if (fs.existsSync(dynTarget)) {
+  let body = fs.readFileSync(dynTarget, 'utf8');
+  body = 'const __dyn = "owner-kernel/canonical"; require(__dyn);\n' + body;
+  fs.writeFileSync(dynTarget, body);
+  const dyn = runReport(tmp);
+  if (dyn.kr10.measured_surface.membership_complete === true) {
+    console.error('dynamic require must not claim membership_complete=true');
+    process.exit(1);
+  }
+  if (dyn.kr10.status !== 'HOLD') {
+    console.error('dynamic require incomplete membership must HOLD KR10');
+    process.exit(1);
+  }
+}
+fs.rmSync(tmp, { recursive: true, force: true });
+console.log('kr10-added-member-and-dynamic-require=ok');
+NODE
+assert_eq "0" "$?" "KR10 counts added members and refuses complete on dynamic require"
+
+# Source asserts: no allowTestWitness; adapter binding; no journal harvest.
 CHECKER_SRC="$(cat "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js")"
 if printf '%s' "$CHECKER_SRC" | grep -q 'allowTestWitness: true'; then
   echo "FAIL: allowTestWitness:true is forbidden for release evidence" >&2
   exit 1
 fi
-assert_contains "$CHECKER_SRC" 'discoverExecutedMembership' \
-  "KR10 derives membership mechanically (not fixed-list-only)"
-assert_contains "$CHECKER_SRC" 'external_adapter_module' \
-  "production authority requires external adapter module"
-assert_contains "$CHECKER_SRC" 'append_timestamp' \
-  "day evidence binds authority-issued append timestamps"
+assert_contains "$CHECKER_SRC" 'AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING' \
+  "adapter identity comes from deployment binding env"
+assert_contains "$CHECKER_SRC" 'adapter_sha256' \
+  "adapter integrity pin is required before require()"
+assert_contains "$CHECKER_SRC" 'stripCallerAppendTimestamps' \
+  "caller journal append_timestamp fields are stripped"
+assert_contains "$CHECKER_SRC" 'membership_complete' \
+  "KR10 reports membership_complete"
 
 echo "PASS [owner-kernel-release-gates] release gate honesty checks"
 finalize_test

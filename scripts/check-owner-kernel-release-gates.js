@@ -170,21 +170,23 @@ function isNonEmptySha256(value) {
  * files, their hashes, timestamps, signer IDs, and migration flags are
  * untrusted inputs and cannot supply a parallel trust root.
  *
- * Authority is loaded from independently configured state:
+ * Authority journal is loaded from independently configured state:
  *   1. AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY (absolute path)
  *   2. ~/.autopilot/trusted-installed-witness-authority.json
  *   3. ~/.autopilot/installed-witness-authority.json
  *
- * Every configured path is realpath-resolved (symlinks followed) before read.
- * Any authority file whose resolved path lies inside repoRoot or the project
- * trust boundary is rejected, regardless of configured spelling (including
- * outside-symlink-into-repo).
+ * Adapter module identity + integrity pin are loaded from a SEPARATE
+ * deployment-provisioned trust-anchor binding (never from project evidence or
+ * from the authority journal selecting adapter_module/digest):
+ *   1. AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING (absolute path)
+ *   2. ~/.autopilot/trusted-witness-adapter-binding.json
  *
- * Production authority requires an independently provisioned external witness
- * adapter (trustTier === 'external'). Serialized caller-authored JSON plus a
- * replayed MemoryWitness (test-tier) never becomes production authority —
- * allowTestWitness is never used for release evidence. Absent an external
- * adapter/anchor the CLI honestly HOLDs.
+ * Project/authority config may reference authority_id only. It must not select
+ * the adapter module path or its digest. The binding realpaths the adapter
+ * outside repo/project, verifies adapter_sha256 before require(), and HOLDs
+ * when the independent binding/pin is absent or mismatched.
+ *
+ * allowTestWitness is never used for release evidence.
  */
 function isPathInside(parent, child) {
   const resolvedParent = path.resolve(parent);
@@ -209,6 +211,11 @@ function resolveAuthorityPathReal(filePath) {
   }
 }
 
+function fileSha256Hex(filePath) {
+  const body = fs.readFileSync(filePath);
+  return require('crypto').createHash('sha256').update(body).digest('hex');
+}
+
 function independentAuthorityCandidates(projectDir, repoRoot) {
   const candidates = [];
   const envPath = process.env.AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY;
@@ -220,11 +227,156 @@ function independentAuthorityCandidates(projectDir, repoRoot) {
     candidates.push(path.join(home, '.autopilot', 'trusted-installed-witness-authority.json'));
     candidates.push(path.join(home, '.autopilot', 'installed-witness-authority.json'));
   }
-  // Deliberately omit projectDir / production-telemetry sibling paths — those
-  // are evidence-adjacent and cannot independently authenticate the evidence.
   void projectDir;
   void repoRoot;
   return candidates;
+}
+
+function independentAdapterBindingCandidates() {
+  const candidates = [];
+  const envPath = process.env.AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING;
+  if (typeof envPath === 'string' && envPath.trim()) {
+    candidates.push(path.resolve(envPath.trim()));
+  }
+  const home = process.env.HOME || process.env.USERPROFILE || null;
+  if (home) {
+    candidates.push(path.join(home, '.autopilot', 'trusted-witness-adapter-binding.json'));
+  }
+  return candidates;
+}
+
+/**
+ * Load deployment-provisioned adapter binding (path + sha256 pin). Never read
+ * adapter selection from project evidence or authority-journal config.
+ */
+function loadTrustedWitnessAdapterBinding(projectDir, repoRoot) {
+  const projectResolved = path.resolve(projectDir);
+  const repoResolved = repoRoot ? path.resolve(repoRoot) : null;
+  for (const candidate of independentAdapterBindingCandidates()) {
+    if (!candidate) continue;
+    const resolved = resolveAuthorityPathReal(candidate);
+    if (!resolved) continue;
+    if (repoResolved && isPathInside(repoResolved, resolved)) continue;
+    if (isPathInside(projectResolved, resolved)) continue;
+    if (isPathInside(projectResolved, candidate)
+      || (repoResolved && isPathInside(repoResolved, candidate))) {
+      continue;
+    }
+    const data = readJsonIfExists(resolved);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+    if (data.kind !== 'trusted_installed_witness_adapter_binding'
+      && data.kind !== 'p37_installed_witness_adapter_binding') {
+      return {
+        ok: false,
+        reason: 'trusted witness adapter binding kind is unsupported',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    const adapterRaw = data.adapter_module;
+    const pin = data.adapter_sha256;
+    if (typeof adapterRaw !== 'string' || !adapterRaw.trim()) {
+      return {
+        ok: false,
+        reason: 'trusted witness adapter binding is missing adapter_module',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    if (typeof pin !== 'string' || !/^[a-f0-9]{64}$/i.test(pin)) {
+      return {
+        ok: false,
+        reason: 'trusted witness adapter binding is missing a valid adapter_sha256 pin',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    const adapterCandidate = path.resolve(adapterRaw.trim());
+    const adapterReal = resolveAuthorityPathReal(adapterCandidate);
+    if (!adapterReal) {
+      return {
+        ok: false,
+        reason: 'trusted witness adapter module path is not resolvable',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    if (repoResolved && isPathInside(repoResolved, adapterReal)) {
+      return {
+        ok: false,
+        reason: 'trusted witness adapter module must not resolve inside the repo trust boundary',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    if (isPathInside(projectResolved, adapterReal)) {
+      return {
+        ok: false,
+        reason: 'trusted witness adapter module must not resolve inside the project evidence boundary',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    let actualPin;
+    try {
+      actualPin = fileSha256Hex(adapterReal);
+    } catch (error) {
+      return {
+        ok: false,
+        reason: `trusted witness adapter module cannot be hashed: ${error.message}`,
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    if (actualPin.toLowerCase() !== pin.toLowerCase()) {
+      return {
+        ok: false,
+        reason: 'trusted witness adapter module sha256 pin mismatch; refusing to require() unpinned adapter',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    const anchored = new Map();
+    const rawAnchored = data.anchored_append_timestamps;
+    if (rawAnchored && typeof rawAnchored === 'object' && !Array.isArray(rawAnchored)) {
+      for (const [head, ts] of Object.entries(rawAnchored)) {
+        if (typeof head === 'string' && typeof ts === 'string' && /Z$/.test(ts)
+          && !Number.isNaN(new Date(ts).getTime())) {
+          anchored.set(head.toLowerCase(), ts);
+        }
+      }
+    }
+    return {
+      ok: true,
+      reason: null,
+      binding: {
+        authority_id: typeof data.authority_id === 'string' ? data.authority_id : null,
+        adapter_module: adapterReal,
+        adapter_sha256: pin.toLowerCase(),
+        anchored_append_timestamps: anchored,
+      },
+      binding_path: resolved,
+    };
+  }
+  return {
+    ok: false,
+    reason: 'deployment-provisioned trusted witness adapter binding is absent; '
+      + 'caller-selected project/authority JSON cannot nominate an adapter module or digest; '
+      + 'CLI HOLDs until an independent adapter binding with sha256 pin is provisioned',
+    binding: null,
+    binding_path: null,
+  };
+}
+
+function stripCallerAppendTimestamps(journal) {
+  return journal.map((entry) => {
+    if (!entry || typeof entry !== 'object') return entry;
+    const clone = { ...entry };
+    delete clone.append_timestamp;
+    delete clone.observation_timestamp;
+    delete clone.observed_at;
+    return clone;
+  });
 }
 
 function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
@@ -235,20 +387,14 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
   let configPath = null;
   for (const candidate of candidates) {
     if (!candidate || candidate.includes(`${path.sep}${path.sep}`)) continue;
-    // Resolve configured spelling and every symlink before reading.
     const resolvedCandidate = resolveAuthorityPathReal(candidate);
     if (!resolvedCandidate) continue;
-    // Reject any authority whose realpath is inside the repo trust boundary
-    // or project evidence boundary, regardless of configured spelling
-    // (covers in-repo paths and outside-symlink-into-repo).
     if (repoResolved && isPathInside(repoResolved, resolvedCandidate)) {
       continue;
     }
     if (isPathInside(projectResolved, resolvedCandidate)) {
       continue;
     }
-    // Also refuse unresolved spelling that lands inside project (belt+suspenders
-    // when realpath is outside but spelling was project-relative weirdness).
     if (isPathInside(projectResolved, candidate)
       || (repoResolved && isPathInside(repoResolved, candidate))) {
       continue;
@@ -282,6 +428,20 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
       config_path: configPath,
     };
   }
+  if (config.external_adapter_module != null
+    || config.external_witness_adapter_module != null
+    || config.adapter_module != null
+    || config.adapter_sha256 != null) {
+    return {
+      ok: false,
+      reason: 'authority/project config must not select adapter_module or adapter_sha256; '
+        + 'adapter identity and integrity pin come only from the deployment-provisioned '
+        + 'trusted witness adapter binding',
+      authority: null,
+      stream_id: typeof config.stream_id === 'string' ? config.stream_id : null,
+      config_path: configPath,
+    };
+  }
   const streamId = config.stream_id;
   if (typeof streamId !== 'string' || streamId.length === 0) {
     return {
@@ -305,49 +465,24 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
     };
   }
 
-  // Production authority requires an independently provisioned external witness
-  // adapter module (absolute path outside repo/project). Replaying a caller-
-  // authored JSON journal into MemoryWitness is never production authority and
-  // must not use allowTestWitness for release evidence.
-  const adapterModuleRaw = config.external_adapter_module
-    || config.external_witness_adapter_module
-    || null;
-  if (typeof adapterModuleRaw !== 'string' || !adapterModuleRaw.trim()) {
+  const adapterBinding = loadTrustedWitnessAdapterBinding(projectDir, repoRoot);
+  if (!adapterBinding.ok || !adapterBinding.binding) {
     return {
       ok: false,
-      reason: 'independently provisioned external witness adapter/anchor is absent; '
-        + 'serialized caller-authored JSON and a replayed MemoryWitness cannot become '
-        + 'production authority (allowTestWitness is forbidden for release evidence); '
-        + 'CLI HOLDs until an external adapter is provisioned',
+      reason: adapterBinding.reason
+        || 'deployment-provisioned trusted witness adapter binding is absent',
       authority: null,
       stream_id: streamId,
       config_path: configPath,
     };
   }
-  const adapterModuleCandidate = path.resolve(adapterModuleRaw.trim());
-  const adapterModuleReal = resolveAuthorityPathReal(adapterModuleCandidate);
-  if (!adapterModuleReal) {
+  const authorityId = typeof config.authority_id === 'string' ? config.authority_id : null;
+  if (adapterBinding.binding.authority_id
+    && authorityId
+    && adapterBinding.binding.authority_id !== authorityId) {
     return {
       ok: false,
-      reason: 'external witness adapter module path is not resolvable',
-      authority: null,
-      stream_id: streamId,
-      config_path: configPath,
-    };
-  }
-  if (repoResolved && isPathInside(repoResolved, adapterModuleReal)) {
-    return {
-      ok: false,
-      reason: 'external witness adapter module must not resolve inside the repo trust boundary',
-      authority: null,
-      stream_id: streamId,
-      config_path: configPath,
-    };
-  }
-  if (isPathInside(projectResolved, adapterModuleReal)) {
-    return {
-      ok: false,
-      reason: 'external witness adapter module must not resolve inside the project evidence boundary',
+      reason: 'authority_id in authority config does not match deployment adapter binding',
       authority: null,
       stream_id: streamId,
       config_path: configPath,
@@ -356,7 +491,7 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
 
   try {
     // eslint-disable-next-line import/no-dynamic-require, global-require
-    const adapterExports = require(adapterModuleReal);
+    const adapterExports = require(adapterBinding.binding.adapter_module);
     const factory = typeof adapterExports.createAuthority === 'function'
       ? adapterExports.createAuthority
       : (typeof adapterExports.createWitness === 'function'
@@ -367,14 +502,16 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
         'external witness adapter must export createAuthority() or createWitness()',
       );
     }
+    const strippedJournal = stripCallerAppendTimestamps(journal);
     const witness = factory({
       streamId,
-      receipts: journal,
-      receipt_journal: journal,
-      config,
-      config_path: configPath,
+      receipts: strippedJournal,
+      receipt_journal: strippedJournal,
+      anchored_append_timestamps: Object.fromEntries(
+        adapterBinding.binding.anchored_append_timestamps.entries(),
+      ),
+      authority_id: authorityId || adapterBinding.binding.authority_id,
     });
-    // Never allowTestWitness for release evidence — external trustTier only.
     const authority = assertWitnessAdapter(witness, {
       allowTestWitness: false,
       requireBinding: true,
@@ -385,45 +522,11 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
         + 'MemoryWitness/test-tier adapters are not production authority',
       );
     }
-    // Authority-issued append timestamps (evidence body cannot choose these).
-    // Prefer adapter-provided map; otherwise harvest append_timestamp fields
-    // from the independently provisioned journal entries only when the adapter
-    // also re-emits them via getAppendTimestamp / appendTimestamps.
-    const appendTimestamps = new Map();
-    if (typeof authority.getAppendTimestamp === 'function') {
-      for (const entry of journal) {
-        if (!entry || typeof entry !== 'object') continue;
-        const head = typeof entry.witness_head === 'string'
-          ? entry.witness_head.toLowerCase()
-          : null;
-        if (!head) continue;
-        const ts = authority.getAppendTimestamp(entry);
-        if (typeof ts === 'string' && !Number.isNaN(new Date(ts).getTime())) {
-          appendTimestamps.set(head, ts);
-        }
-      }
-    } else if (authority.appendTimestamps instanceof Map) {
-      for (const [head, ts] of authority.appendTimestamps.entries()) {
-        if (typeof head === 'string' && typeof ts === 'string') {
-          appendTimestamps.set(head.toLowerCase(), ts);
-        }
-      }
-    } else {
-      // Harvest only authority-journal fields the adapter verified by replaying
-      // them into its own state. Adapter must set appendTimestamps or
-      // getAppendTimestamp — body-only observation timestamps are rejected later.
-      for (const entry of journal) {
-        if (!entry || typeof entry !== 'object') continue;
-        const head = typeof entry.witness_head === 'string'
-          ? entry.witness_head.toLowerCase()
-          : null;
-        const ts = typeof entry.append_timestamp === 'string'
-          ? entry.append_timestamp
-          : null;
-        if (head && ts && !Number.isNaN(new Date(ts).getTime()) && /Z$/.test(ts)) {
-          appendTimestamps.set(head, ts);
-        }
-      }
+    if (typeof authority.getAppendTimestamp !== 'function') {
+      throw new Error(
+        'release-evidence authority must expose getAppendTimestamp() over adapter-owned '
+        + 'anchored state; journal-harvested timestamps are forbidden',
+      );
     }
     return {
       ok: true,
@@ -431,7 +534,9 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
       authority,
       stream_id: streamId,
       config_path: configPath,
-      append_timestamps: appendTimestamps,
+      adapter_binding_path: adapterBinding.binding_path,
+      adapter_module: adapterBinding.binding.adapter_module,
+      adapter_sha256: adapterBinding.binding.adapter_sha256,
     };
   } catch (error) {
     return {
@@ -673,196 +778,247 @@ function measureSchemaMember(repoRoot, name) {
 }
 
 /**
- * Mechanically derive executed load-bearing membership. A fixed candidate list
- * is a seed only — never the complete executed surface. Dependency/require
- * graph, hooks inventory, and installed sink exports expand membership so
- * additions or renames cannot evade counting. HOLD if complete membership
- * cannot be established.
+ * Derive executed load-bearing membership from authoritative execution
+ * manifests / runtime graphs / inventory present in the repo.
+ *
+ * A fixed seed list, filename/name heuristic, or literal-relative-require scan
+ * alone must NEVER report membership_complete=true. Every counted bucket needs
+ * an authoritative source. Dynamic/unresolved dependencies, missing manifests,
+ * or unresolvable references set membership_complete=false and HOLD.
  */
 function discoverExecutedMembership(repoRoot) {
   const errors = [];
-  const skills = new Set(FROZEN_SURFACE_ENUMERATION.skills);
-  const scripts = new Set(FROZEN_SURFACE_ENUMERATION.scripts);
-  const engineModules = new Set(FROZEN_SURFACE_ENUMERATION.engine_modules);
-  const schemas = new Set(FROZEN_SURFACE_ENUMERATION.schemas);
-  const hooks = new Set(FROZEN_SURFACE_ENUMERATION.hooks_default_on);
+  const bucketSources = {};
+  const skills = new Set();
+  const scripts = new Set();
+  const engineModules = new Set();
+  const schemas = new Set();
+  const hooks = new Set();
 
-  // Mechanical hooks membership from hooks.json wiring (default-on + wired).
+  // --- hooks: authoritative hooks.json + opt-in-manifest (same contract as inventory)
   const hooksJsonPath = path.join(repoRoot, 'hooks', 'hooks.json');
-  let hooksJsonPresent = false;
-  if (fs.existsSync(hooksJsonPath)) {
-    hooksJsonPresent = true;
+  const optInPath = path.join(repoRoot, 'hooks', 'opt-in-manifest.json');
+  const hooksTreePresent = fs.existsSync(path.join(repoRoot, 'hooks'));
+  if (fs.existsSync(hooksJsonPath) && fs.existsSync(optInPath)) {
     try {
       const hooksJson = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
-      const hookBlob = JSON.stringify(hooksJson);
-      const hookStemRe = /hooks\/([A-Za-z0-9._-]+)\.(?:js|sh)/g;
-      let match;
-      while ((match = hookStemRe.exec(hookBlob)) !== null) {
-        if (!match[1].startsWith('_')) hooks.add(match[1]);
-      }
-    } catch (error) {
-      errors.push(`hooks.json mechanical membership failed: ${error.message}`);
-    }
-  }
-
-  // Mechanical engine membership via require-graph from installed roots.
-  const engineRootDir = path.join(repoRoot, 'src', 'engine');
-  const engineRoots = [
-    'supervised-owner-kernel-installed-engine.js',
-    path.join('owner-kernel', 'index.js'),
-    'index.js',
-  ];
-  const visited = new Set();
-  function walkEngineRequires(relModule) {
-    const normalized = relModule.replace(/\\/g, '/');
-    if (visited.has(normalized)) return;
-    visited.add(normalized);
-    const abs = path.join(engineRootDir, normalized);
-    if (!fs.existsSync(abs)) return;
-    engineModules.add(normalized);
-    let body;
-    try {
-      body = fs.readFileSync(abs, 'utf8');
-    } catch (error) {
-      errors.push(`engine require-graph read failed for ${normalized}: ${error.message}`);
-      return;
-    }
-    const requireRe = /require\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g;
-    let reqMatch;
-    while ((reqMatch = requireRe.exec(body)) !== null) {
-      const target = reqMatch[1];
-      if (!target.startsWith('.')) continue;
-      const resolved = path.normalize(path.join(path.dirname(normalized), target))
-        .replace(/\\/g, '/');
-      // Stay inside src/engine (and runners sibling referenced by frozen seed).
-      let candidate = resolved;
-      if (!candidate.endsWith('.js')) {
-        if (fs.existsSync(path.join(engineRootDir, `${candidate}.js`))) {
-          candidate = `${candidate}.js`;
-        } else if (fs.existsSync(path.join(engineRootDir, candidate, 'index.js'))) {
-          candidate = path.join(candidate, 'index.js').replace(/\\/g, '/');
-        } else {
-          continue;
-        }
-      }
-      if (candidate.startsWith('..')) {
-        // Allow ../runners/* as frozen seed does.
-        const fromSrc = path.normalize(path.join('engine', candidate)).replace(/\\/g, '/');
-        if (fromSrc.startsWith('runners/')) {
-          engineModules.add(path.join('..', fromSrc).replace(/\\/g, '/'));
-        }
-        continue;
-      }
-      walkEngineRequires(candidate);
-    }
-  }
-  if (fs.existsSync(engineRootDir)) {
-    for (const root of engineRoots) {
-      walkEngineRequires(root);
-    }
-  }
-
-  // Mechanical scripts membership: seed + scripts required by owner-kernel /
-  // release-gate / installed host paths (basename scan of scripts/ that the
-  // installed engine surface references).
-  const scriptsDir = path.join(repoRoot, 'scripts');
-  if (fs.existsSync(scriptsDir)) {
-    // Always include owner-kernel CLI and release-gate checker if present.
-    for (const extra of [
-      'owner-kernel.js',
-      'check-owner-kernel-release-gates.js',
-      'check-hook-inventory.js',
-    ]) {
-      if (fs.existsSync(path.join(scriptsDir, extra))) scripts.add(extra);
-    }
-  }
-
-  // Installed sink export membership (cannot rename-evade).
-  const installedEnginePath = path.join(
-    repoRoot,
-    'src',
-    'engine',
-    'supervised-owner-kernel-installed-engine.js',
-  );
-  let includesInstalledEngine = false;
-  if (fs.existsSync(installedEnginePath)) {
-    engineModules.add('supervised-owner-kernel-installed-engine.js');
-    try {
-      const resolved = require.resolve(installedEnginePath);
-      delete require.cache[resolved];
-      const installed = require(installedEnginePath);
-      if (installed.INSTALLED_ENGINE_SINK_ID === 'engine-implementation-dispatch-v1') {
-        includesInstalledEngine = true;
-      } else {
-        errors.push('installed-engine surface failed export measurement for fixed sink id');
-      }
-    } catch (error) {
-      errors.push(`installed-engine export measurement failed: ${error.message}`);
-    }
-  }
-
-  // Hook inventory / hooks.json must corroborate complete membership whenever
-  // a hooks/ tree is present. Sparse measurement trees without hooks/ may use
-  // seed membership only (removed members reduce cardinality). A production
-  // tree that has hooks/ but cannot derive membership HOLDs.
-  const inventoryScript = path.join(repoRoot, 'scripts', 'check-hook-inventory.js');
-  const hooksTreePresent = fs.existsSync(path.join(repoRoot, 'hooks'));
-  let inventoryComplete = false;
-  if (fs.existsSync(inventoryScript)) {
-    const inventory = spawnSync(
-      process.execPath,
-      [inventoryScript],
-      { encoding: 'utf8', cwd: repoRoot },
-    );
-    if (inventory.error) {
-      errors.push(`hooks inventory execution failed: ${inventory.error.message}`);
-    } else if (inventory.status !== 0) {
-      errors.push(`hooks inventory exited ${inventory.status}; complete membership cannot be established`);
-    } else {
-      inventoryComplete = true;
-      const out = `${inventory.stdout || ''}\n${inventory.stderr || ''}`;
-      for (const line of out.split('\n')) {
-        if (/default-on|DEFAULT_ON|default_on/i.test(line)) {
-          let stemMatch;
-          const localRe = /\b([a-z][a-z0-9-]{2,})\b/g;
-          while ((stemMatch = localRe.exec(line)) !== null) {
-            const stem = stemMatch[1];
-            if (stem === 'default' || stem === 'hooks') continue;
-            const jsPath = path.join(repoRoot, 'hooks', `${stem}.js`);
-            const shPath = path.join(repoRoot, 'hooks', `${stem}.sh`);
-            if (fs.existsSync(jsPath) || fs.existsSync(shPath)) hooks.add(stem);
+      const manifest = JSON.parse(fs.readFileSync(optInPath, 'utf8'));
+      const wired = new Set();
+      const eventMap = hooksJson.hooks || {};
+      for (const event of Object.keys(eventMap)) {
+        for (const matcher of eventMap[event] || []) {
+          for (const h of matcher.hooks || []) {
+            const cmd = h.command || '';
+            const m = cmd.match(/hooks\/([A-Za-z0-9_-]+)\.(js|sh)/);
+            if (m) wired.add(m[1]);
           }
         }
       }
+      const optInList = Array.isArray(manifest.opt_in) ? manifest.opt_in : [];
+      const optIn = new Set(optInList);
+      for (const stem of optInList) {
+        if (!wired.has(stem)) {
+          errors.push(`opt-in hook "${stem}" not wired in hooks.json; membership unresolved`);
+        }
+      }
+      for (const stem of wired) {
+        if (!optIn.has(stem)) hooks.add(stem);
+      }
+      const inventoryScript = path.join(repoRoot, 'scripts', 'check-hook-inventory.js');
+      if (fs.existsSync(inventoryScript)) {
+        const inventory = spawnSync(
+          process.execPath,
+          [inventoryScript],
+          { encoding: 'utf8', cwd: repoRoot },
+        );
+        if (inventory.error) {
+          errors.push(`hooks inventory execution failed: ${inventory.error.message}`);
+        } else if (inventory.status !== 0) {
+          errors.push(
+            `hooks inventory exited ${inventory.status}; complete membership cannot be established`,
+          );
+        }
+      }
+      bucketSources.hooks = 'hooks.json+opt-in-manifest.json(+inventory)';
+    } catch (error) {
+      errors.push(`hooks authoritative membership failed: ${error.message}`);
     }
-  } else if (hooksJsonPresent) {
-    inventoryComplete = true;
   } else if (!hooksTreePresent) {
-    // Sparse tree without hooks/ — seed-only membership is complete for the
-    // surfaces that exist; cannot hide a real hooks tree this way.
-    inventoryComplete = true;
+    bucketSources.hooks = 'absent-hooks-tree';
   } else {
     errors.push(
-      'hooks/ tree present but hooks.json and check-hook-inventory.js are absent; '
-      + 'complete hook membership cannot be established',
+      'hooks bucket has no authoritative membership source '
+      + '(require hooks.json + opt-in-manifest.json)',
     );
   }
 
-  // Schema seed remains; discover any owner-kernel related schemas present.
+  // --- engine: runtime require.cache graph from installed roots (not text seed)
+  const engineRootDir = path.join(repoRoot, 'src', 'engine');
+  let includesInstalledEngine = false;
+  if (fs.existsSync(engineRootDir)) {
+    const engineRoots = [
+      path.join(engineRootDir, 'supervised-owner-kernel-installed-engine.js'),
+      path.join(engineRootDir, 'owner-kernel', 'index.js'),
+    ];
+    const loadedAbs = new Set();
+    let dynamicUnresolved = false;
+    for (const rootAbs of engineRoots) {
+      if (!fs.existsSync(rootAbs)) continue;
+      try {
+        const resolved = require.resolve(rootAbs);
+        delete require.cache[resolved];
+        for (const key of Object.keys(require.cache)) {
+          if (key.startsWith(engineRootDir + path.sep) || key === engineRootDir) {
+            delete require.cache[key];
+          }
+        }
+        require(rootAbs);
+        for (const key of Object.keys(require.cache)) {
+          if (key.startsWith(engineRootDir + path.sep) || key === rootAbs) {
+            loadedAbs.add(key);
+            continue;
+          }
+          const runnersDir = path.join(repoRoot, 'src', 'runners');
+          if (key.startsWith(runnersDir + path.sep)) {
+            loadedAbs.add(key);
+          }
+        }
+      } catch (error) {
+        errors.push(`engine runtime graph load failed for ${path.basename(rootAbs)}: ${error.message}`);
+      }
+    }
+    for (const abs of loadedAbs) {
+      if (abs.startsWith(engineRootDir + path.sep)) {
+        engineModules.add(path.relative(engineRootDir, abs).replace(/\\/g, '/'));
+      } else {
+        const runnersDir = path.join(repoRoot, 'src', 'runners');
+        if (abs.startsWith(runnersDir + path.sep)) {
+          engineModules.add(
+            path.join('..', 'runners', path.relative(runnersDir, abs)).replace(/\\/g, '/'),
+          );
+        }
+      }
+      try {
+        const body = fs.readFileSync(abs, 'utf8');
+        if (/require\s*\(\s*[^'"`\s]/.test(body)
+          || /require\s*\(\s*[`'"][^'"`]*\$\{/.test(body)
+          || /require\s*\(\s*[^)]+\+/.test(body)) {
+          dynamicUnresolved = true;
+          errors.push(
+            `engine module ${path.basename(abs)} has dynamic/unresolved require form; `
+            + 'membership_complete cannot be true',
+          );
+        }
+      } catch (_error) {
+        dynamicUnresolved = true;
+        errors.push(`engine module source unreadable for dynamic-require scan: ${abs}`);
+      }
+    }
+    if (engineModules.size === 0) {
+      errors.push('engine bucket runtime graph produced zero members');
+    } else {
+      bucketSources.engine_modules = dynamicUnresolved
+        ? 'runtime-require-cache(incomplete-dynamic)'
+        : 'runtime-require-cache';
+    }
+    const installedEnginePath = path.join(
+      engineRootDir,
+      'supervised-owner-kernel-installed-engine.js',
+    );
+    if (fs.existsSync(installedEnginePath)) {
+      try {
+        const installed = require(installedEnginePath);
+        if (installed.INSTALLED_ENGINE_SINK_ID === 'engine-implementation-dispatch-v1') {
+          includesInstalledEngine = true;
+        } else {
+          errors.push('installed-engine surface failed export measurement for fixed sink id');
+        }
+      } catch (error) {
+        errors.push(`installed-engine export measurement failed: ${error.message}`);
+      }
+    }
+  } else {
+    bucketSources.engine_modules = 'absent-engine-tree';
+  }
+
+  // --- skills: directory inventory of skills/*/SKILL.md
+  const skillsDir = path.join(repoRoot, 'skills');
+  if (fs.existsSync(skillsDir)) {
+    try {
+      for (const name of fs.readdirSync(skillsDir)) {
+        const skillMd = path.join(skillsDir, name, 'SKILL.md');
+        if (fs.existsSync(skillMd) && fs.statSync(path.join(skillsDir, name)).isDirectory()) {
+          skills.add(name);
+        }
+      }
+      bucketSources.skills = 'skills/*/SKILL.md inventory';
+    } catch (error) {
+      errors.push(`skills inventory failed: ${error.message}`);
+    }
+  } else {
+    bucketSources.skills = 'absent-skills-tree';
+  }
+
+  // --- schemas: directory inventory of schemas/*.json
   const schemasDir = path.join(repoRoot, 'schemas');
   if (fs.existsSync(schemasDir)) {
     try {
       for (const name of fs.readdirSync(schemasDir)) {
-        if (/owner|dispatch-unit-contract|review-loop-contract/.test(name) && name.endsWith('.json')) {
-          schemas.add(name);
-        }
+        if (name.endsWith('.json')) schemas.add(name);
       }
+      bucketSources.schemas = 'schemas/*.json inventory';
     } catch (error) {
-      errors.push(`schemas mechanical membership failed: ${error.message}`);
+      errors.push(`schemas inventory failed: ${error.message}`);
     }
+  } else {
+    bucketSources.schemas = 'absent-schemas-tree';
   }
 
-  const complete = errors.length === 0 && inventoryComplete;
+  // --- scripts: hooks.json script refs + known execution entrypoints
+  const scriptsDir = path.join(repoRoot, 'scripts');
+  if (fs.existsSync(scriptsDir) && fs.existsSync(hooksJsonPath)) {
+    try {
+      const hooksJson = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      const blob = JSON.stringify(hooksJson);
+      const re = /scripts\/([A-Za-z0-9._\/-]+\.(?:js|sh))/g;
+      let m;
+      while ((m = re.exec(blob)) !== null) {
+        if (fs.existsSync(path.join(scriptsDir, m[1]))) scripts.add(m[1]);
+      }
+      for (const entry of [
+        'owner-kernel.js',
+        'check-owner-kernel-release-gates.js',
+        'check-hook-inventory.js',
+      ]) {
+        if (fs.existsSync(path.join(scriptsDir, entry))) scripts.add(entry);
+      }
+      if (scripts.size === 0) {
+        errors.push('scripts bucket has no resolvable authoritative members from hooks/entrypoints');
+      } else {
+        bucketSources.scripts = 'hooks.json-script-refs+entrypoint-inventory';
+      }
+    } catch (error) {
+      errors.push(`scripts authoritative membership failed: ${error.message}`);
+    }
+  } else if (!fs.existsSync(scriptsDir)) {
+    bucketSources.scripts = 'absent-scripts-tree';
+  } else {
+    errors.push(
+      'scripts bucket has no authoritative membership source '
+      + '(require hooks.json script references or known entrypoints with hooks tree)',
+    );
+  }
+
+  const requiredBucketKeys = ['hooks', 'engine_modules', 'skills', 'schemas', 'scripts'];
+  for (const key of requiredBucketKeys) {
+    if (!bucketSources[key]) {
+      errors.push(`bucket ${key} has no authoritative membership source`);
+    }
+  }
+  const complete = errors.length === 0
+    && requiredBucketKeys.every((key) => Boolean(bucketSources[key]))
+    && !String(bucketSources.engine_modules || '').includes('incomplete');
+
   return {
     complete,
     errors,
@@ -872,6 +1028,7 @@ function discoverExecutedMembership(repoRoot) {
     schemas: [...schemas],
     hooks_default_on: [...hooks],
     includes_installed_engine: includesInstalledEngine,
+    bucket_sources: bucketSources,
   };
 }
 
@@ -1016,7 +1173,8 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
     measurement_errors: measurementErrors,
     nonexecuted_members: nonexecuted,
     membership_complete: discovered.complete && measurementErrors.length === 0,
-    method: 'mechanically derived executed load-bearing surface membership from dependency/hook/sink graph + inventory (fixed candidate list is seed only, not complete surface); complete membership required or HOLD; removed/nonexecuted members reduce measured cardinality; thresholds remain frozen at 42 and 51; includes supervised-owner-kernel-installed-engine.js when executed; no KR redefinition',
+    bucket_sources: discovered.bucket_sources || {},
+    method: 'authoritative manifests/runtime graphs/inventory only (fixed seed/heuristics/literal-require-scan cannot set membership_complete); incomplete/dynamic/unresolved HOLD; thresholds frozen at 42 and 51; no KR redefinition',
     includes_installed_engine_module: includesInstalledEngine,
     catalog_membership: {
       skills: [...FROZEN_SURFACE_ENUMERATION.skills],
@@ -1539,9 +1697,6 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
     // Body-chosen observation_timestamp fields alone never satisfy the window.
     const requiredDays = requiredWitnessedDayKeys(Date.now());
     const requiredDaySet = new Set(requiredDays);
-    const authorityAppendTimestamps = trustedAuthority && trustedAuthority.append_timestamps
-      ? trustedAuthority.append_timestamps
-      : new Map();
 
     if (!dayRecords || dayRecords.length < ALIAS_DEFINITION.required_witnessed_days) {
       blocking.push(
@@ -1578,15 +1733,13 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
           && day.witness_head.toLowerCase() !== dayReceipt.witness_head.toLowerCase()) {
           continue;
         }
-        // Authority-issued append timestamp: from the trusted authority adapter /
-        // journal map only. Evidence-body observation_timestamp cannot choose it.
-        const receiptHead = dayReceipt.witness_head.toLowerCase();
-        let appendTs = null;
-        if (typeof trustedAuthority.authority.getAppendTimestamp === 'function') {
-          appendTs = trustedAuthority.authority.getAppendTimestamp(dayReceipt);
-        } else if (authorityAppendTimestamps.has(receiptHead)) {
-          appendTs = authorityAppendTimestamps.get(receiptHead);
+        // Adapter-owned anchored append timestamp only — never harvest from
+        // caller journal fields or accept pass-through of stripped input values.
+        // Must be returned by getAppendTimestamp for a receipt authority.verify accepts.
+        if (typeof trustedAuthority.authority.getAppendTimestamp !== 'function') {
+          continue;
         }
+        const appendTs = trustedAuthority.authority.getAppendTimestamp(dayReceipt);
         if (typeof appendTs !== 'string'
           || !/Z$/.test(appendTs)
           || Number.isNaN(new Date(appendTs).getTime())) {
@@ -1626,7 +1779,7 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
           + `over the host-clock required window `
           + `(${requiredDays[0]}..${requiredDays[requiredDays.length - 1]}); `
           + `require ${ALIAS_DEFINITION.required_witnessed_days} `
-          + '(backdated labels, fourteen-created-today chains, body-chosen observation timestamps, '
+          + '(backdated labels, fourteen-created-today chains, journal-harvested timestamps, pass-through getAppendTimestamp, body-chosen observation timestamps, '
           + 'and shape-only fabricated chains are rejected; authority-issued append timestamps '
           + 'must fall on the exact claimed required UTC day)',
         );
@@ -1742,10 +1895,10 @@ function main() {
       'KR definitions are frozen by the parent plan and are not redefined by this checker',
       'KR8 always uses frozen baseline 6; conflicting production telemetry is a blocker',
       'KR8 requires authenticated production provenance; a filename or parseable JSON is not production provenance',
-      'KR10 mechanically derives executed load-bearing membership from dependency/hook/sink graph + inventory; fixed candidate lists are seed only; incomplete membership HOLDs; thresholds stay frozen at 42 and 51',
+      'KR10 derives executed membership only from authoritative manifests/runtime graphs/inventory; fixed seed/heuristics/literal-require-scan never set membership_complete; incomplete/dynamic HOLD; thresholds stay frozen at 42 and 51',
       'alias authenticity comes only from independently provisioned external witness adapter + installed authority state',
-      'serialized caller-authored JSON and replayed MemoryWitness never become production authority; allowTestWitness is forbidden for release evidence',
-      'day evidence requires authority-issued append timestamps in the host-clock window; body-chosen observation timestamps cannot forge elapsed days',
+      'serialized caller-authored JSON cannot nominate adapter module/digest; adapter identity+sha256 pin come from deployment binding only; allowTestWitness forbidden for release evidence',
+      'day evidence requires adapter-owned anchored append timestamps via getAppendTimestamp after verify; journal harvest and pass-through timestamps cannot forge elapsed days',
       'project-local telemetry/journal files, hashes, timestamps, signer IDs, and migration flags are untrusted inputs',
       'self-hashed deterministic_caller_migration is not proof; migration is mechanical OR authority-authenticated (not both required; telemetry completion flags are untrusted)',
       'fixture telemetry is never promoted to production telemetry',

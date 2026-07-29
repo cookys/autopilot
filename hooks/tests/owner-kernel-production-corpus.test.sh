@@ -349,9 +349,11 @@ function openInstalledSession(fx, {
 
 const attackMutations = {
   protected_event_envelope_forgery() {
-    // Isolated mutation: only forge the protected decision envelope on the
-    // installed ledger. Positive reachability control proves unforged resume
-    // path is live; rejection must be the exact named ledger/envelope path.
+    // Same installed operation on clean vs one-field-mutated ledger.
+    // Positive control: clean ledger reaches resumeInstalledEngineSession.
+    // Mutation: only event_hash on the protected decision envelope is forged.
+    // Exact documented OwnerKernelError code from the protected-envelope path:
+    // WITNESS_REJECTED ("external witness rejected event receipt").
     const fx = installedFixture('corpus-attack-forgery');
     const { session, witnessInvoke } = openInstalledSession(fx, {
       runLabel: 'protected-envelope-forgery',
@@ -363,74 +365,75 @@ const attackMutations = {
       actionDescriptor: fx.profile.action,
     });
     assert.equal(decision.payload.action_class, 'external');
-    // Positive reachability: clean ledger reconstructs the action identity.
     const cleanLedger = session.kernel.getLedger();
-    const cleanIdentity = installedEngine.reconstructActionIdentityFromLedger(cleanLedger);
-    assert.equal(cleanIdentity.decision_id, decision.payload.decision_id);
-    assert.ok(
-      cleanIdentity.status === 'authorized' || cleanIdentity.status === 'dispatched'
-        || cleanIdentity.decision_id,
-      'positive control: clean ledger must reconstruct action identity',
-    );
-
-    const ledger = structuredClone(cleanLedger);
-    const decisionIndex = ledger.events.findIndex((event) => event.type === 'decision');
-    assert.ok(decisionIndex >= 0);
-    const originalDecision = ledger.events[decisionIndex];
-    ledger.events[decisionIndex] = {
-      ...originalDecision,
-      emitter: { kind: 'user', identity: 'workspace-forger', channel: 'workspace-file' },
-      event_hash: 'f'.repeat(64),
-      witness: {
-        ...(originalDecision.witness || {}),
-        batch_id: 'forged-batch',
-        durable_request_hash: 'e'.repeat(64),
+    const resumeArgs = {
+      binding: fx.installedBinding,
+      profile: fx.profile,
+      governanceConfig: fx.runtime.governanceConfig,
+      acceptanceContract,
+      routeInputs: fx.runtime.routeInputs,
+      durableBinding: fx.durableBinding,
+      kernelBinding: fx.kernelBinding,
+      capabilityProbedAt: fx.now,
+      capabilityExpiresAt: fx.expires,
+      witnessInvoke,
+      engineInvoke: capabilityOnlyInvoke(fx),
+      coordinatorInvoke: () => {
+        throw new Error('forgery resume must not accept');
+      },
+      kernelOptions: {
+        adapters: fx.runtime.adapters(),
+        clock: () => new Date(fx.runtime.NOW),
+        nonceFactory: () => 'd'.repeat(64),
       },
     };
-    // Exact named rejection — not any exception. Forged envelope fails at
-    // reconstruct / resume with a ledger or hash integrity code.
+    // Positive reachability: clean ledger reaches the installed resume operation.
+    const cleanResumed = installedEngine.resumeInstalledEngineSession({
+      ...resumeArgs,
+      ledger: cleanLedger,
+    });
+    assert.ok(cleanResumed && cleanResumed.kernel, 'clean control must reach resumeInstalledEngineSession');
+    assert.equal(
+      cleanResumed.getActionIdentity().decision_id,
+      decision.payload.decision_id,
+    );
+    cleanResumed.teardown();
+
+    // One-field mutation of the protected decision envelope event_hash only.
+    const mutatedLedger = structuredClone(cleanLedger);
+    const decisionIndex = mutatedLedger.events.findIndex((event) => event.type === 'decision');
+    assert.ok(decisionIndex >= 0);
+    mutatedLedger.events[decisionIndex] = {
+      ...mutatedLedger.events[decisionIndex],
+      event_hash: 'f'.repeat(64),
+    };
     let namedCode = null;
     let namedMessage = null;
     try {
-      installedEngine.reconstructActionIdentityFromLedger(ledger);
-      // If reconstruct does not throw, resume must reject with a named code.
       installedEngine.resumeInstalledEngineSession({
-        binding: fx.installedBinding,
-        profile: fx.profile,
-        governanceConfig: fx.runtime.governanceConfig,
-        acceptanceContract,
-        routeInputs: fx.runtime.routeInputs,
-        durableBinding: fx.durableBinding,
-        kernelBinding: fx.kernelBinding,
-        ledger,
-        capabilityProbedAt: fx.now,
-        capabilityExpiresAt: fx.expires,
-        witnessInvoke,
-        engineInvoke: capabilityOnlyInvoke(fx),
-        coordinatorInvoke: () => {
-          throw new Error('forgery resume must not accept');
-        },
-        kernelOptions: {
-          adapters: fx.runtime.adapters(),
-          clock: () => new Date(fx.runtime.NOW),
-          nonceFactory: () => 'd'.repeat(64),
-        },
+        ...resumeArgs,
+        ledger: mutatedLedger,
       });
-      assert.fail('forged envelope must be rejected');
+      assert.fail('forged protected envelope must be rejected by resume');
     } catch (error) {
       namedCode = error && error.code;
       namedMessage = String(error && error.message || '');
+      assert.ok(
+        error instanceof OwnerKernelError,
+        `protected-envelope path must throw OwnerKernelError; got ${error && error.name}`,
+      );
     }
     session.teardown();
-    // Exact named path: integrity / hash / ledger / envelope codes — never a bare Error without code.
-    assert.ok(
-      typeof namedCode === 'string' && namedCode.length > 0,
-      `protected-envelope forgery must use a named error code; got message=${namedMessage}`,
-    );
-    assert.match(
+    // Exact documented code from the protected-envelope integrity path — not a broad regex.
+    assert.equal(
       namedCode,
-      /LEDGER|HASH|WITNESS|ENVELOPE|INTEGRITY|EVENT|TAMPER|RESUME|INVALID|CHAIN|REPLAY|MISMATCH/i,
-      `protected-envelope forgery exact named code; got ${namedCode}: ${namedMessage}`,
+      'WITNESS_REJECTED',
+      `protected-envelope forgery must reject with WITNESS_REJECTED; got ${namedCode}: ${namedMessage}`,
+    );
+    assert.equal(
+      namedMessage,
+      'external witness rejected event receipt',
+      `protected-envelope forgery must use the documented witness rejection message; got ${namedMessage}`,
     );
     return true;
   },

@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "p37-installed-semantic-probe",
+      "source_plan_ids": [
+        "plan-a2ea6961e3b2bdbfcbef1e6a105bbfa154b7f02c0a80894c17f3f6d8df550e37"
+      ],
+      "source_rubric_ids": [
+        "R67226972178732015324693053470245252464262459869357740815034666424965363602890",
+        "R93010313934017455425474450836047488372811677644275904444312441926971622440586",
+        "R21259636597494225060750300932215899367417147473900098076492447556655227720529",
+        "R51402225832317874771922995655814798516937392846484239681763018778201118493299",
+        "R73468453947646821091355255767374085124760827071403843705562716511465325726175",
+        "R42851831191748010473256934575537115489084624254162575901775277870031059741829"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "installed-six-identity-boundary",
+        "installed-semantic-witness",
+        "fixed-probe-restored",
+        "zero-live-residue"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/supervised-owner-kernel-installed-contract.test.sh",
+        "bash hooks/tests/supervised-owner-kernel-installed-host.test.sh",
+        "AUTOPILOT_P37_LIVE=1 PYTHONDONTWRITEBYTECODE=1 bash hooks/tests/supervised-owner-kernel-installed-live.test.sh"
+      ],
+      "gate_attempt_budget": 3,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 240,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 11,
+        "output_bytes": 5000000
+      },
+      "campaign": {
+        "profile": "high",
+        "allowed_path_prefixes": [
+          "docs",
+          "hooks",
+          "src"
+        ],
+        "max_changed_files": 11,
+        "baseline_churn": 5000,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 2500,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-07-29-owner-kernel-installed-u5.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "src/engine/supervised-owner-kernel-engine-acceptance.js",
+          "src/engine/supervised-owner-kernel-probe-effect.js",
+          "src/engine/supervised-owner-kernel-semantic-witness.js",
+          "src/engine/supervised-production-substrate-durable-host.py"
+        ],
+        "output_paths": [
+          "hooks/tests/supervised-owner-kernel-installed-contract.test.sh",
+          "hooks/tests/supervised-owner-kernel-installed-host.test.sh",
+          "hooks/tests/supervised-owner-kernel-installed-live.test.sh",
+          "src/engine/index.js",
+          "src/engine/supervised-owner-kernel-installed-contract.js",
+          "src/engine/supervised-owner-kernel-installed-host.py",
+          "src/engine/supervised-owner-kernel-installed-ipc.js",
+          "src/engine/supervised-owner-kernel-installed-runner.js",
+          "src/engine/supervised-owner-kernel-installed-service.py",
+          "src/engine/supervised_owner_kernel_installed.py",
+          "src/engine/supervised_owner_kernel_installed_transport.py"
+        ]
+      }
+    },
+    {
+      "id": "p37-installed-engine-release-gates",
+      "source_plan_ids": [
+        "plan-d119e278aaabf055a26b9ed243d8709b0959f2683f7a590899db95e79d818e1a"
+      ],
+      "source_rubric_ids": [
+        "R59692738651661089920056383281200695244213458391223095902832483208971974893668",
+        "R2587207482350286723113255142345486981613239222956632284414534299289055049510",
+        "R32828465733761989537772728771379899806640326590883861308026152284663992857393",
+        "R40549920196494589807911834658782643887364989144485133804564347192730208163948",
+        "R26448141307456192531707045198575902419183708533797038406079640004718129078863",
+        "R96667798155841233540839080801100071777990880633900473584162559951565066992460",
+        "R9145093839664975929243818798249303047797108236822464611524236647144437357310"
+      ],
+      "dependencies": [
+        "p37-installed-semantic-probe"
+      ],
+      "acceptance_ids": [
+        "installed-engine-single-sink",
+        "atomic-owner-acceptance",
+        "production-corpus-complete",
+        "dogfood-complete",
+        "release-gates-honest"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/supervised-owner-kernel-installed-engine.test.sh",
+        "AUTOPILOT_P37_DOGFOOD=1 bash hooks/tests/owner-kernel-installed-dogfood.test.sh",
+        "bash hooks/tests/owner-kernel-release-gates.test.sh",
+        "bash hooks/tests/owner-kernel-alias-retirement.test.sh"
+      ],
+      "gate_attempt_budget": 3,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 240,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 7,
+        "output_bytes": 4000000
+      },
+      "campaign": {
+        "profile": "high",
+        "allowed_path_prefixes": [
+          "docs",
+          "hooks",
+          "scripts",
+          "src"
+        ],
+        "max_changed_files": 7,
+        "baseline_churn": 4000,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 2000,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-07-29-owner-kernel-installed-u6.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "hooks/tests/owner-kernel-production-corpus.test.sh",
+          "src/engine/supervised-owner-kernel-engine-acceptance.js",
+          "src/engine/supervised-owner-kernel-installed-host.py"
+        ],
+        "output_paths": [
+          "hooks/tests/owner-kernel-alias-retirement.test.sh",
+          "hooks/tests/owner-kernel-installed-dogfood.test.sh",
+          "hooks/tests/owner-kernel-production-corpus.test.sh",
+          "hooks/tests/owner-kernel-release-gates.test.sh",
+          "hooks/tests/supervised-owner-kernel-installed-engine.test.sh",
+          "scripts/check-owner-kernel-release-gates.js",
+          "src/engine/supervised-owner-kernel-installed-engine.js"
+        ]
+      }
+    }
+  ],
+  "calculated_depth": 2,
+  "calculated_batches": 2,
+  "graph_digest": "aa412c30a6f4c31641d8bb78d3b453dfe8a973819325b0f4ad9a1f4e40764d7b"
+}

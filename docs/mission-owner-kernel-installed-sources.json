@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-29-owner-kernel-installed-u5.md",
+      "rubric_path": "plans/2026-07-29-owner-kernel-installed-u5.rubric.md",
+      "plan_sha256": "a2ea6961e3b2bdbfcbef1e6a105bbfa154b7f02c0a80894c17f3f6d8df550e37",
+      "rubric_sha256": "eeab42df657d6c05822a739711e7259f0ce0de554f9f5b52df527a5565498cd1"
+    },
+    {
+      "plan_path": "plans/2026-07-29-owner-kernel-installed-u6.md",
+      "rubric_path": "plans/2026-07-29-owner-kernel-installed-u6.rubric.md",
+      "plan_sha256": "d119e278aaabf055a26b9ed243d8709b0959f2683f7a590899db95e79d818e1a",
+      "rubric_sha256": "f3453658c79f46ddc6486034e5bd80a71f1997798d8343c0c6f9bbe35ad00640"
+    }
+  ]
+}

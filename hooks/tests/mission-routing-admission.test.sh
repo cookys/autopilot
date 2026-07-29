@@ -19,6 +19,7 @@ const {
 } = require(path.join(root, 'scripts/mission-routing-admission'));
 const {
   contentBoundRubricId,
+  inspect: inspectMissionGraph,
 } = require(path.join(root, 'scripts/mission-execution-graph-check'));
 const {
   verifyMissionRoutingProjection,
@@ -80,20 +81,21 @@ assert.deepEqual(
 );
 assert.ok(admissions.every((entry) => entry.status === 'READY' && entry.enforced));
 const dogfood = admissions[0].admission;
-// Active runtime-convergence graph: durable identity followed by QC-panel honesty.
-assert.equal(dogfood.deliverable_count, 2);
-assert.equal(dogfood.source_authoring_unit_count, 0);
-assert.equal(dogfood.critical_path, 2);
-assert.equal(dogfood.batch_count, 2);
-assert.deepEqual(dogfood.reservation_totals, {
-  campaigns: 2,
-  wall_seconds: 7200,
-  tool_calls: 360,
-  engine_attempts: 6,
-  external_wait_seconds: 3600,
-  canonical_changed_files: 22,
-  output_bytes: 4000000,
+const routingConfig = JSON.parse(fs.readFileSync(
+  path.join(root, '.claude', 'mission-routing-config.json'),
+  'utf8',
+));
+const currentGraph = inspectMissionGraph({
+  graph: path.join(root, routingConfig.graph_path),
+  governance: path.join(root, '.claude', 'owner-kernel-governance.json'),
+  sources: path.join(root, routingConfig.sources_path),
 });
+assert.equal(dogfood.deliverable_count, currentGraph.deliverables);
+assert.equal(dogfood.source_authoring_unit_count, currentGraph.coverage.authoring_unit_count);
+assert.equal(dogfood.critical_path, currentGraph.calculated_depth);
+assert.equal(dogfood.batch_count, currentGraph.calculated_batches);
+assert.equal(dogfood.mission_graph_digest, currentGraph.graph_digest);
+assert.deepEqual(dogfood.reservation_totals, currentGraph.reservation_totals);
 
 const markerDir = path.join(tmp, 'markers');
 const markerEnv = {

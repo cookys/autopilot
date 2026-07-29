@@ -2,7 +2,7 @@
 . "$(dirname "$0")/lib.sh"
 
 PROBE="$REPO_ROOT/scripts/probe-codex-enforcement.js"
-ARTIFACT="$REPO_ROOT/docs/projects/2026-07-26-mission-convergence-portfolio/mission-p0-codex-enforcement.json"
+ARTIFACT="$REPO_ROOT/docs/projects/_archive/2026-07-26-mission-convergence-portfolio/mission-p0-codex-enforcement.json"
 CAPABILITY="$REPO_ROOT/src/harness/capabilities/codex.json"
 
 assert_file_exists "$PROBE" "Codex enforcement probe exists"

@@ -831,13 +831,13 @@ NODE
 )"
 assert_neq "$(jq -r .status <<<"$FAULT_OUT")" "committed" "fault inject lifecycle never returns committed"
 assert_neq "$(jq -r .impl_status <<<"$FAULT_OUT")" "committed" "fault inject impl never committed"
-TERM_SRC="$(rg -n '_cont_terminal_on_exit \|\| true|_cont_finalize_or_die|refusing success JSON with nonterminal|_CONT_WO_CLAIMED_ROOT|_CONT_WO_PARENT_TRANSFERRED|transfer-owner' "$DH" || true)"
+TERM_SRC="$(grep -nE '_cont_terminal_on_exit \|\| true|_cont_finalize_or_die|refusing success JSON with nonterminal|_CONT_WO_CLAIMED_ROOT|_CONT_WO_PARENT_TRANSFERRED|transfer-owner' "$DH" || true)"
 assert_contains "$TERM_SRC" "_cont_finalize_or_die" "inline/detach uses _cont_finalize_or_die"
 assert_contains "$TERM_SRC" "refusing success JSON with nonterminal" "finalizer refuses success with nonterminal WO"
 assert_eq "0" "$(printf '%s\n' "$TERM_SRC" | grep -c '_cont_terminal_on_exit || true' || true)" "terminal finalizer not swallowed"
 assert_contains "$TERM_SRC" "_CONT_WO_PARENT_TRANSFERRED=1" "parent marks WO claim transferred to child"
 assert_contains "$TERM_SRC" "transfer-owner" "detached_main transfers WO lease"
-assert_contains "$(rg -n '_CONT_WO_CLAIMED_ROOT=\"\"' "$DH" || true)" '_CONT_WO_CLAIMED_ROOT=""' "parent clears WO claim after detach"
+assert_contains "$(grep -n '_CONT_WO_CLAIMED_ROOT=""' "$DH" || true)" '_CONT_WO_CLAIMED_ROOT=""' "parent clears WO claim after detach"
 BIND_OK="$(node - "$RH" "$SBX" "$REPO_ROOT" <<'NODE'
 const {spawnSync,spawn}=require('child_process'),fs=require('fs'),path=require('path');
 const wo=require(path.join(process.argv[4],'src/engine/work-order.js'));

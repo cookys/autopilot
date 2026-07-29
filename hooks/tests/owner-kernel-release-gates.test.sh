@@ -1246,12 +1246,23 @@ node - "$SYM_REPO_OUT" <<'NODE'
 const report = JSON.parse(process.argv[2]);
 // When --repo-root is a symlink into a tree holding the trust material, realpath
 // containment must reject that material (cannot appear external via symlink spelling).
-if (report.kr8 && report.kr8.status === 'PASS') {
-  console.error('symlinked repo-root co-located trust material must not PASS KR8');
+// Strength matches the symlinked-project-root oracle: require explicit HOLD + reason.
+if (!report.kr8) {
+  console.error('symlinked repo-root oracle requires report.kr8; missing kr8');
   process.exit(1);
 }
-if (report.kr8 && report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') {
+if (report.kr8.status !== 'HOLD') {
+  console.error('symlinked repo-root co-located trust material must HOLD KR8; got',
+    report.kr8.status, report.kr8.blocking_reasons);
+  process.exit(1);
+}
+if (report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') {
   console.error('symlinked repo-root must not authenticate production_telemetry');
+  process.exit(1);
+}
+const reasons = (report.kr8.blocking_reasons || []).join('\n');
+if (!/boundary|realpath|repo|co-locat|inside|independently|adapter|authority|project/i.test(reasons)) {
+  console.error('symlink repo-root HOLD must cite boundary/authority reason; got', reasons);
   process.exit(1);
 }
 console.log('rg-symlinked-repo-root-boundary-hold=ok');

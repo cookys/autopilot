@@ -1277,37 +1277,102 @@ const categoryMutations = {
     return workerFailedOnce && acceptHeld ? 'recover' : 'accept';
   },
   unavailable_challenger() {
-    // Control: challenge with production adapters reaches/succeeds on control path.
+    // Same installed operation (mint + recordChallenge) on control vs mutant.
+    // Control: working challengeVerifier must succeed (no exception) and produce
+    // challenge evidence. Mutant: only challengeVerifier returns ok:false.
     const fx = installedFixture('corpus-cat-challenger');
+    const deliveredManifest = [{ id: 'workspace', sha256: fx.hash('ws') }];
+    const manifestHash = fx.hash(deliveredManifest);
+    const nowIso = fx.now;
+    function challengeAdapters(challengeOk) {
+      return {
+        ...fx.runtime.adapters(),
+        evidenceArchiver({ verified_evidence }) {
+          return {
+            uri: `durable://corpus-challenge/${fx.hash(verified_evidence)}`,
+            sha256: fx.hash(verified_evidence),
+          };
+        },
+        challengeVerifier(envelope, context) {
+          if (!challengeOk) {
+            return { ok: false, reason: 'no_qualified_challenger' };
+          }
+          return {
+            ok: true,
+            run_id: context.run_id,
+            identity: 'challenger-a',
+            channel: 'corpus-challenge',
+            envelope_hash: fx.hash({ challenge: envelope.scope_id }),
+            payload: {
+              verification_path: 'qualified_challenge',
+              attestation_sha256: fx.hash('attestation:challenger-a'),
+              challenge_id: `corpus-challenge-${envelope.scope_id}`,
+              intent_id: context.intent_id,
+              scope: 'contract_leg',
+              scope_id: envelope.scope_id,
+              finding: 'clear',
+              candidate_artifacts: deliveredManifest,
+              candidate_set_hash: manifestHash,
+              subject_identity: fx.profile.engine_profile.route.worker_binding.identity,
+              subject_family: 'qwen',
+              result_hash: fx.hash(`challenge-result:${envelope.scope_id}`),
+              reviewed_at: nowIso,
+            },
+          };
+        },
+        artifactProvenanceVerifier(request, context) {
+          return {
+            ok: true,
+            run_id: context.run_id,
+            identity: fx.profile.engine_profile.route.coordinator_binding.identity,
+            channel: 'corpus-provenance',
+            envelope_hash: fx.hash({ provenance: request }),
+            payload: {
+              verification_path: 'artifact_provenance',
+              attestation_sha256:
+                fx.profile.engine_profile.route.coordinator_binding.attestation_hash,
+              candidate_set_hash: request.candidate_set_hash,
+              intent_id: context.intent_id,
+              subject_identity: request.subject_identity,
+              subject_family: request.subject_family,
+            },
+          };
+        },
+      };
+    }
+    // --- Positive control: recordChallenge succeeds ---
     const { session: controlSession } = openInstalledSession(fx, {
       runLabel: 'unavailable-challenger-control',
+      adapters: challengeAdapters(true),
     });
-    // Mint so challenge has something to bind to; control challenge under ok verifier.
     controlSession.kernel.mintActionDecision({
       capability: controlSession.owner_capability,
       ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'chal-control' },
       actionClass: 'external',
       actionDescriptor: fx.profile.action,
     });
-    let controlChallengeOk = false;
-    try {
-      controlSession.kernel.recordChallenge({ scope_id: 'tests' });
-      controlChallengeOk = true;
-    } catch (_error) {
-      // Some adapters may require more state; still require control session lives.
-      controlChallengeOk = controlSession.kernel.getState() != null;
-    }
-    assert.equal(controlChallengeOk, true, 'control challenger path must be reachable');
+    const controlChallenge = controlSession.kernel.recordChallenge({ scope_id: 'tests' });
+    assert.ok(controlChallenge && controlChallenge.payload, 'control recordChallenge must return evidence');
+    assert.equal(
+      controlChallenge.payload.evidence_kind,
+      'challenge',
+      'control recordChallenge must produce challenge evidence',
+    );
+    assert.equal(
+      controlChallenge.payload.finding,
+      'clear',
+      'control challenge finding must be clear',
+    );
+    assert.equal(
+      typeof controlChallenge.payload.challenge_id,
+      'string',
+      'control challenge_id must be present',
+    );
     controlSession.teardown();
-    // Mutation: only challengeVerifier unavailability.
-    const adapters = fx.runtime.adapters();
-    adapters.challengeVerifier = () => ({
-      ok: false,
-      reason: 'no_qualified_challenger',
-    });
+    // --- Mutation: only challengeVerifier unavailability ---
     const { session } = openInstalledSession(fx, {
       runLabel: 'unavailable-challenger',
-      adapters,
+      adapters: challengeAdapters(false),
     });
     session.kernel.mintActionDecision({
       capability: session.owner_capability,
@@ -1331,10 +1396,10 @@ const categoryMutations = {
       'UNVERIFIED_ENVELOPE',
       `unavailable_challenger exact code UNVERIFIED_ENVELOPE; got ${code}: ${message}`,
     );
-    assert.match(
+    assert.equal(
       message,
-      /challenge result was not verified by the trusted adapter/i,
-      `unavailable_challenger message; got ${message}`,
+      'challenge result was not verified by the trusted adapter',
+      `unavailable_challenger exact message; got ${message}`,
     );
     return 'block';
   },

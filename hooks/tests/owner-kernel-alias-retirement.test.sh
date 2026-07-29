@@ -1002,24 +1002,36 @@ ORDER_OUT_POS="$(
 node - "$ORDER_OUT_POS" <<'NODE'
 const report = JSON.parse(process.argv[2]);
 const alias = report.alias_retirement;
-// Overall may still HOLD (migration scan on real skills), but must not cite
-// incomplete day-window/cycle order once positive chain is well-formed.
+// Overall may still HOLD (e.g. migration on residual skills), but the day window
+// must prove exactly 14 validated days and no incomplete-window/order blockers.
 if (!alias || alias.trusted_authority_present !== true) {
   console.error('positive window control must authenticate authority; got', alias);
   process.exit(1);
 }
 const reasons = (alias.blocking_reasons || []).join('\n');
-if (/cycle-after-window|does not precede first required day|only 0 complete/i.test(reasons)) {
-  console.error('positive cycle-before-day1 chain must not fail window order; got', reasons);
+// Reject any incomplete-window phrasing: "only N complete" in any wording.
+if (/only\s+\d+\s+complete/i.test(reasons)) {
+  console.error('positive control must not report incomplete day count; got', reasons);
   process.exit(1);
 }
-// Prefer seeing full 14-day validation succeed (no "only N complete" with N<14).
-if (/only ([0-9]+) complete witnessed day/.test(reasons)) {
-  const n = Number(RegExp.$1);
-  if (n < 14) {
-    console.error('positive control expected 14 validated days; got', reasons);
-    process.exit(1);
-  }
+if (/cycle-after-window|does not precede first required day|nonmono|out-of-order|strictly increasing/i.test(reasons)) {
+  console.error('positive control must not report window/order blockers; got', reasons);
+  process.exit(1);
+}
+// Exact validated-day count surface: scalar must be 14 and must not be blocked
+// as mismatched against validated distinct day-record count.
+if (alias.witnessed_zero_use_days !== 14) {
+  console.error('positive control requires witnessed_zero_use_days === 14; got',
+    alias.witnessed_zero_use_days);
+  process.exit(1);
+}
+if (/scalar witnessed_zero_use_days=.*does not match/i.test(reasons)) {
+  console.error('positive control must not report scalar/validated day mismatch; got', reasons);
+  process.exit(1);
+}
+if (/full witnessed 14-day production evidence missing/i.test(reasons)) {
+  console.error('positive control must not report missing 14-day evidence; got', reasons);
+  process.exit(1);
 }
 console.log('alias_positive_window_order_control=ok');
 NODE

@@ -115,6 +115,8 @@ QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test s
 KEEP=0
 BRANCH=""
 PROMPT_FILE=""
+CONTINUATION_CHECKPOINT=""
+CONTINUATION_DURABLE=""
 CAMPAIGN_CONTRACT_FILE=""
 CAMPAIGN_CONTRACT_SHA256=""
 CAMPAIGN_SEAL_FILE=""
@@ -344,11 +346,63 @@ OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DE
 CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome); read by classify_outcome
 # shellcheck source=/dev/null
 . "$SELF_DIR/lib/worktree-reap.sh"
+# When dispatch_new claims a Work Order, terminal finalizer must fail closed (never swallow).
+_CONT_WO_CLAIMED_ROOT=""
+_CONT_WO_CLAIMED_STAGE="implement"
+_CONT_WO_PARENT_TRANSFERRED=0
+_cont_terminal_on_exit() {
+  local _root="${_CONT_WO_CLAIMED_ROOT:-}"
+  [ -n "$_root" ] || return 0
+  local _status=failed
+  # Prefer recorded outcome; committed/success only when outcome says so.
+  if [ -n "${OUTCOME_STATUS:-}" ]; then
+    case "$OUTCOME_STATUS" in
+      success|ok|attached|consumed|committed) _status=success ;;
+      *) _status=failed ;;
+    esac
+  elif [ "${OUTCOME_EXIT:-1}" = "0" ]; then
+    _status=success
+  fi
+  local _term_out _term_st _term_rc _cwd
+  _cwd="$(pwd 2>/dev/null || echo .)"
+  _term_out="$(node "$SELF_DIR/compaction-rehydrate.js" heartbeat --git-cwd "$_cwd" \
+    --root-run-id "$_root" --graph-node "${_CONT_WO_CLAIMED_STAGE:-implement}" --attempt 1 \
+    --owner-pid "$$" --runner self --terminal-status "$_status" --disposition consumed 2>/dev/null)" || {
+    echo "dispatch-hetero: work order terminal finalizer failed closed for root=$_root" >&2
+    return 1
+  }
+  _term_st="$(printf '%s' "$_term_out" | jq -r '.status // empty' 2>/dev/null || true)"
+  if [ "$_term_st" = "written" ]; then return 0; fi
+  _term_rc="$(printf '%s' "$_term_out" | jq -r '.reason_code // empty' 2>/dev/null || true)"
+  if [ "$_term_st" = "reject" ] && [ "$_term_rc" = "not_found" ]; then return 0; fi
+  echo "dispatch-hetero: work order terminal finalizer rejected: ${_term_rc:-$_term_st}" >&2
+  return 1
+}
+# Inline/detached success path: finalize WO before emit; clear claim so EXIT does not re-run.
+_cont_finalize_or_die() {
+  [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ] || return 0
+  if ! _cont_terminal_on_exit; then
+    echo "dispatch-hetero: refusing success JSON with nonterminal work order" >&2
+    return 1
+  fi
+  _CONT_WO_CLAIMED_ROOT=""
+  return 0
+}
 cleanup() {
+  trap - EXIT
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
   [ -n "${CAMPAIGN_CONTRACT_SNAPSHOT:-}" ] && rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
+  # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
+  # Parent that transferred claim to detached child must not mark WO failed on its EXIT.
+  if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ] && [ "${_CONT_WO_PARENT_TRANSFERRED:-0}" != "1" ]; then
+    if ! _cont_terminal_on_exit; then
+      echo "dispatch-hetero: terminal finalizer failed closed on exit" >&2
+      exit 1
+    fi
+    _CONT_WO_CLAIMED_ROOT=""
+  fi
 }
 trap cleanup EXIT
 
@@ -1235,6 +1289,8 @@ while [ $# -gt 0 ]; do
     --ledger) LEDGER="${2:-}"; shift 2 ;;
     --run-id) RUN_ID="${2:-}"; shift 2 ;;
     --stage) STAGE="${2:-}"; shift 2 ;;
+    --continuation-checkpoint) CONTINUATION_CHECKPOINT="${2:-}"; shift 2 ;;
+    --continuation-durable) CONTINUATION_DURABLE="${2:-}"; shift 2 ;;
     --gc) DO_GC=1; shift ;;
     --reap-unmarked) REAP_UNMARKED=1; shift ;;
     --yes) GC_YES=1; shift ;;
@@ -1492,6 +1548,170 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die_precondition "not inside a git repository"
 git rev-parse --verify --quiet "$BASE" >/dev/null || die_precondition "base ref not found: $BASE"
+BASE_SHA="$(git rev-parse "$BASE")"
+
+# Mandatory whenever an active Mission/root work order exists under git-common-dir,
+# or when durable/checkpoint/reconcile inputs are present. Cannot be disabled by
+# omitting continuation env when work orders exist — absence/stale/forged reconcile
+# receipts fail closed before branch/worktree/runner effects.
+if [ -z "$CONTINUATION_CHECKPOINT" ] && [ -n "${AUTOPILOT_CONTINUATION_CHECKPOINT:-}" ]; then
+  CONTINUATION_CHECKPOINT="$AUTOPILOT_CONTINUATION_CHECKPOINT"
+fi
+if [ -z "$CONTINUATION_DURABLE" ] && [ -n "${AUTOPILOT_CONTINUATION_DURABLE:-}" ]; then
+  CONTINUATION_DURABLE="$AUTOPILOT_CONTINUATION_DURABLE"
+fi
+# Prefer mission root over worktree/lineage/root/run (exact Mission identity wins).
+_cont_root="${AUTOPILOT_MISSION_ROOT_RUN_ID:-${WORKTREE_ROOT_RUN_ID:-${LINEAGE_ROOT:-${AUTOPILOT_ROOT_RUN_ID:-${RUN_ID:-}}}}}"
+_cont_common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+_cont_has_wo=0
+_cont_wo_claimed=""
+# Mission / reconcile paths require root_run_id (never global scan, never silent miss).
+if [ -z "$_cont_root" ] && { [ -n "${AUTOPILOT_MISSION_ROOT_RUN_ID:-}" ] \
+    || [ -n "${AUTOPILOT_RECONCILE_RECEIPT:-}" ] \
+    || [ "${AUTOPILOT_CONTINUATION_STRICT:-0}" = "1" ]; }; then
+  die_precondition "root_run_id mandatory for continuation/mission reconcile enumeration"
+fi
+if [ -n "$_cont_common" ] && [ -n "$_cont_root" ]; then
+  # Exact-root enumerate under fail-closed semantics — never `|| echo 0` on errors.
+  _cont_has_wo="$(node -e '
+const wo=require(process.argv[1]);
+try {
+  const n=wo.listNonterminalWorkOrders(process.argv[2], process.argv[3]);
+  process.stdout.write(n.length>0?"1":"0");
+} catch (e) {
+  process.stderr.write(String(e && e.message || e));
+  process.exit(2);
+}
+' "$SELF_DIR/../src/engine/work-order.js" "$_cont_common" "$_cont_root")" || {
+    die_precondition "work order root enumeration failed closed for root=$_cont_root"
+  }
+  case "$_cont_has_wo" in
+    0|1) ;;
+    *) die_precondition "work order root enumeration returned invalid result" ;;
+  esac
+fi
+if [ -n "$CONTINUATION_CHECKPOINT" ] || [ -n "$CONTINUATION_DURABLE" ] \
+    || [ "${AUTOPILOT_CONTINUATION_STRICT:-0}" = "1" ] \
+    || [ -n "${AUTOPILOT_RECONCILE_RECEIPT:-}" ] \
+    || [ "$_cont_has_wo" = "1" ] \
+    || [ -n "${AUTOPILOT_MISSION_ROOT_RUN_ID:-}" ]; then
+  _cont_args=(admit)
+  if [ -n "$CONTINUATION_CHECKPOINT" ]; then
+    [ -r "$CONTINUATION_CHECKPOINT" ] \
+      || die_precondition "continuation checkpoint not readable: $CONTINUATION_CHECKPOINT"
+    _cont_args+=(--checkpoint "$CONTINUATION_CHECKPOINT")
+  fi
+  if [ -n "$CONTINUATION_DURABLE" ]; then
+    [ -r "$CONTINUATION_DURABLE" ] \
+      || die_precondition "continuation durable tracker not readable: $CONTINUATION_DURABLE"
+    _cont_args+=(--durable "$CONTINUATION_DURABLE")
+  fi
+  [ -n "$_cont_root" ] && _cont_args+=(--root-run-id "$_cont_root")
+  [ -n "$BRANCH" ] && _cont_args+=(--branch "$BRANCH")
+  [ -n "${STAGE:-}" ] && _cont_args+=(--stage "$STAGE" --graph-node "${STAGE}")
+  [ -n "$BASE_SHA" ] && _cont_args+=(--base-sha "$BASE_SHA")
+  [ -n "${MANIFEST_DIR_PATH:-}" ] && _cont_args+=(--manifest-dir "$MANIFEST_DIR_PATH")
+  _cont_args+=(--git-cwd "$(pwd)")
+  _cont_args+=(--owner-pid "$$")
+  if [ "${AUTOPILOT_CONTINUATION_STRICT:-0}" = "1" ] || [ "$_cont_has_wo" = "1" ]; then
+    _cont_args+=(--strict-match)
+  fi
+  if [ "$_cont_has_wo" = "1" ] || [ -n "${AUTOPILOT_MISSION_ROOT_RUN_ID:-}" ]; then
+    _cont_args+=(--require-reconcile --mission-active)
+  fi
+  if [ -n "${AUTOPILOT_RECONCILE_RECEIPT:-}" ]; then
+    [ -r "${AUTOPILOT_RECONCILE_RECEIPT}" ] \
+      || die_precondition "reconcile receipt not readable: ${AUTOPILOT_RECONCILE_RECEIPT}"
+    _cont_args+=(--reconcile-receipt "${AUTOPILOT_RECONCILE_RECEIPT}")
+  fi
+  if [ -n "${AUTOPILOT_TERMINAL_RECEIPT:-}" ]; then
+    _cont_args+=(--terminal-receipt "${AUTOPILOT_TERMINAL_RECEIPT}")
+  fi
+  if [ -n "${AUTOPILOT_CONTINUATION_NARRATIVE:-}" ]; then
+    _cont_args+=(--narrative "$AUTOPILOT_CONTINUATION_NARRATIVE")
+  fi
+  if [ -n "$CONTINUATION_DURABLE" ] || [ "$_cont_has_wo" = "1" ] \
+      || [ -n "${AUTOPILOT_MISSION_ROOT_RUN_ID:-}" ]; then
+    _cont_args+=(--create-work-order)
+  fi
+  _cont_json="$(node "$SELF_DIR/compaction-rehydrate.js" "${_cont_args[@]}" 2>/dev/null || true)"
+  _cont_status="$(printf '%s' "$_cont_json" | jq -r '.status // empty' 2>/dev/null || true)"
+  _cont_action="$(printf '%s' "$_cont_json" | jq -r '.action // empty' 2>/dev/null || true)"
+  if [ -z "$_cont_json" ] || [ -z "$_cont_status" ]; then
+    die_precondition "continuation admission failed closed (no admission result)"
+  fi
+  if [ "$_cont_status" = "reject" ] || [ "$_cont_status" = "not_found" ]; then
+    _cont_reason="$(printf '%s' "$_cont_json" | jq -r '.reason // .reason_code // "continuation admission rejected"' 2>/dev/null || true)"
+    die_precondition "continuation admission: ${_cont_reason:-rejected}"
+  fi
+  if [ "$_cont_action" = "attach_active" ] || [ "$_cont_action" = "attach_existing" ] \
+      || [ "$_cont_action" = "consume_terminal" ] || [ "$_cont_action" = "resume_terminal" ]; then
+    if [ -n "$_cont_common" ] && [ -n "$_cont_root" ]; then
+      _cont_term="$(printf '%s' "$_cont_json" | jq -r '.terminal_status // empty' 2>/dev/null || true)"
+      _cont_hb_args=(heartbeat --git-cwd "$(pwd)" --root-run-id "$_cont_root"
+        --graph-node "${STAGE:-implement}" --attempt 1 --owner-pid "$$")
+      if [ "$_cont_action" = "consume_terminal" ] || [ "$_cont_action" = "resume_terminal" ]; then
+        _cont_hb_args+=(--terminal-status "${_cont_term:-aborted}" --disposition consumed)
+      fi
+      # Shell lifecycle/heartbeat failures fail closed (except not_found when no WO).
+      _cont_hb_json="$(node "$SELF_DIR/compaction-rehydrate.js" "${_cont_hb_args[@]}" 2>/dev/null)" || {
+        die_precondition "work order lifecycle heartbeat failed closed"
+      }
+      _cont_hb_st="$(printf '%s' "$_cont_hb_json" | jq -r '.status // empty' 2>/dev/null || true)"
+      _cont_hb_rc="$(printf '%s' "$_cont_hb_json" | jq -r '.reason_code // empty' 2>/dev/null || true)"
+      if [ -z "$_cont_hb_st" ] || { [ "$_cont_hb_st" = "reject" ] && [ "$_cont_hb_rc" != "not_found" ]; }; then
+        die_precondition "work order lifecycle heartbeat failed: ${_cont_hb_rc:-reject}"
+      fi
+    fi
+    _cont_phase="$(printf '%s' "$_cont_json" | jq -r '.phase_cursor // empty' 2>/dev/null || true)"
+    _cont_commit="$(printf '%s' "$_cont_json" | jq -r '.accepted_commit // empty' 2>/dev/null || true)"
+    _cont_run="$(printf '%s' "$_cont_json" | jq -r '.attached_run_id // empty' 2>/dev/null || true)"
+    _cont_next="$(printf '%s' "$_cont_json" | jq -r '.next_action // empty' 2>/dev/null || true)"
+    _cont_auth_root="$(printf '%s' "$_cont_json" | jq -r '.root_run_id // empty' 2>/dev/null || true)"
+    [ -z "$_cont_auth_root" ] && _cont_auth_root="$_cont_root"
+    if [ "$_cont_commit" = "none" ] || [ -z "$_cont_commit" ]; then
+      _cont_commit_json="null"
+    else
+      _cont_commit_json="\"$(_flat_json_escape "$_cont_commit")\""
+    fi
+    _cont_out_status="attached"
+    if [ "$_cont_action" = "consume_terminal" ] || [ "$_cont_action" = "resume_terminal" ]; then
+      _cont_out_status="consumed"
+    fi
+    printf '{ "status": "%s", "runner": "continuation-admission", "model": null, "branch": "%s", "base": "%s", "commit": %s, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "root_run_id": %s, "phase_cursor": %s, "next_action": %s, "duplicate_dispatch": 0, "continuation_admission": %s, "duplex": null }\n' \
+      "$_cont_out_status" \
+      "$(_flat_json_escape "$BRANCH")" \
+      "$(_flat_json_escape "$BASE")" \
+      "$_cont_commit_json" \
+      "$(_flat_json_escape "${EFFECTIVE_SKILL_MODE:-off}")" \
+      "${SKILLS_INJECTED_JSON:-[]}" \
+      "$([ -n "$_cont_run" ] && printf '"%s"' "$(_flat_json_escape "$_cont_run")" || echo null)" \
+      "$([ -n "$_cont_auth_root" ] && printf '"%s"' "$(_flat_json_escape "$_cont_auth_root")" || echo null)" \
+      "$([ -n "$_cont_phase" ] && printf '"%s"' "$(_flat_json_escape "$_cont_phase")" || echo null)" \
+      "$([ -n "$_cont_next" ] && printf '"%s"' "$(_flat_json_escape "$_cont_next")" || echo null)" \
+      "$_cont_json"
+    exit 0
+  fi
+  if [ "$_cont_action" = "dispatch_new" ] && [ -n "$_cont_common" ] && [ -n "$_cont_root" ]; then
+    _CONT_WO_CLAIMED_ROOT="$_cont_root"
+    _CONT_WO_CLAIMED_STAGE="${STAGE:-implement}"
+    _cont_hb_json="$(node "$SELF_DIR/compaction-rehydrate.js" heartbeat --git-cwd "$(pwd)" \
+      --root-run-id "$_cont_root" --graph-node "${STAGE:-implement}" --attempt 1 \
+      --owner-pid "$$" --runner self 2>/dev/null)" || {
+      die_precondition "work order lifecycle heartbeat failed closed before dispatch effects"
+    }
+    _cont_hb_st="$(printf '%s' "$_cont_hb_json" | jq -r '.status // empty' 2>/dev/null || true)"
+    _cont_hb_rc="$(printf '%s' "$_cont_hb_json" | jq -r '.reason_code // empty' 2>/dev/null || true)"
+    if [ -z "$_cont_hb_st" ] || { [ "$_cont_hb_st" = "reject" ] && [ "$_cont_hb_rc" != "not_found" ]; }; then
+      die_precondition "work order lifecycle heartbeat failed: ${_cont_hb_rc:-reject}"
+    fi
+  fi
+  unset _cont_args _cont_json _cont_status _cont_action _cont_reason \
+    _cont_phase _cont_commit _cont_run _cont_next _cont_commit_json _cont_auth_root \
+    _cont_has_wo _cont_out_status _cont_term _cont_hb_args \
+    _cont_hb_json _cont_hb_st _cont_hb_rc _cont_wo_claimed _cont_root _cont_common
+fi
+
 if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
   die_precondition "branch already exists: $BRANCH"
 fi
@@ -2695,7 +2915,12 @@ detached_main() {
   if [ -z "$DETACH_GEN" ] || [ -z "$DETACH_NONCE" ]; then
     exit 2
   fi
-  # Publish child liveness only after durable ownership handoff succeeds.
+  # WO owner/runner/lease → this detached child (parent claim already cleared).
+  if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ]; then
+    node "$SELF_DIR/compaction-rehydrate.js" heartbeat --git-cwd "$(pwd)" \
+      --root-run-id "$_CONT_WO_CLAIMED_ROOT" --graph-node "${_CONT_WO_CLAIMED_STAGE:-implement}" \
+      --attempt 1 --owner-pid "$$" --runner self --transfer-owner >/dev/null 2>&1 || exit 2
+  fi
   write_manifest "$DETACH_SELF_PID"
   local hb_pid=""
   heartbeat_loop &
@@ -2705,6 +2930,14 @@ detached_main() {
   [ -n "$hb_pid" ] && { kill "$hb_pid" 2>/dev/null || true; wait "$hb_pid" 2>/dev/null || true; }
   compute_artifacts
   classify_outcome
+  # Detached child owns continuation WO terminalization; parent must not mark stale failed.
+  if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ]; then
+    if ! _cont_finalize_or_die; then
+      OUTCOME_STATUS="failure"
+      OUTCOME_ERR="work order terminal finalizer failed closed"
+      OUTCOME_EXIT=1
+    fi
+  fi
   # Build the SAME outcome JSON the inline path would print, and land it atomically.
   local json; json="$(emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR")"
   local payload_tmp="$RESULT_FILE.payload.$$"
@@ -2746,10 +2979,12 @@ dispatch_detached_run() {
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
+    declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
+      _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \
       gc_stale_worktrees 2>/dev/null || true
@@ -2761,10 +2996,15 @@ dispatch_detached_run() {
   # The detached child now owns and removes this prompt copy.
   unset PACKED_PROMPT_TEMP
   unset CAMPAIGN_PROMPT_FILE
+  # Transfer continuation WO ownership to detached child: parent must NOT mark WO failed on EXIT
+  # with a stale empty OUTCOME (child serializes/updates its own terminal state).
+  _CONT_WO_PARENT_TRANSFERRED=1
   # The child removes the state file right after sourcing (before the long run) so a caller-kill
   # of the parent — which skips the parent's own cleanup below — cannot leak it.
   setsid bash -c 'IN_DETACHED_CHILD=1; source "$1"; rm -f "$1"; detached_main' bash "$state_file" >/dev/null 2>&1 &
   local child=$!
+  # Clear parent claim after child is launched so parent EXIT cleanup cannot fail-mark the WO.
+  _CONT_WO_CLAIMED_ROOT=""
   wait "$child"; local wait_rc=$?
   # Reaching here means the caller was NOT killed → relay the durable result transparently.
   local out_rc="$wait_rc"
@@ -2854,5 +3094,13 @@ run_agent
 trap - INT TERM
 compute_artifacts
 classify_outcome
+# Terminal finalizer before success JSON — never emit success with a nonterminal claimed WO.
+if ! _cont_finalize_or_die; then
+  OUTCOME_STATUS="failure"
+  OUTCOME_ERR="work order terminal finalizer failed closed"
+  OUTCOME_EXIT=1
+  emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR"
+  exit 1
+fi
 emit "$OUTCOME_STATUS" "$OUTCOME_COMMIT" "$OUTCOME_FILES" "$OUTCOME_INS" "$OUTCOME_DEL" "$OUTCOME_WT" "$OUTCOME_ERR"
 exit "$OUTCOME_EXIT"

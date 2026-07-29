@@ -123,23 +123,38 @@ const RESULT_KEYS = new Set([
 
 // Only createInstalledEngineSession / resumeInstalledEngineSession may register
 // intake-frozen witness and coordinator instances for accepted-result replay.
-const INTAKE_FROZEN_WITNESSES = new WeakSet();
-const INTAKE_FROZEN_COORDINATORS = new WeakSet();
+// Values are the intake-frozen installed profile_hash those instances belong to.
+const INTAKE_FROZEN_WITNESSES = new WeakMap();
+const INTAKE_FROZEN_COORDINATORS = new WeakMap();
 
 function installedEngineError(message, code = 'INVALID_INSTALLED_ENGINE') {
   throw new OwnerKernelError(message, code);
 }
 
-function registerIntakeFrozenAuthorities(witness, acceptanceAuthority) {
+function registerIntakeFrozenAuthorities(witness, acceptanceAuthority, profileHash) {
+  if (typeof profileHash !== 'string' || !/^[a-f0-9]{64}$/i.test(profileHash)) {
+    installedEngineError(
+      'intake-frozen authority registration requires the installed profile hash',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
+  const frozenHash = profileHash.toLowerCase();
   if (witness && typeof witness === 'object') {
-    INTAKE_FROZEN_WITNESSES.add(witness);
+    INTAKE_FROZEN_WITNESSES.set(witness, frozenHash);
   }
   if (acceptanceAuthority && typeof acceptanceAuthority === 'object') {
-    INTAKE_FROZEN_COORDINATORS.add(acceptanceAuthority);
+    INTAKE_FROZEN_COORDINATORS.set(acceptanceAuthority, frozenHash);
   }
 }
 
-function assertIntakeFrozenInstalledVerifiers(witness, acceptanceAuthority) {
+function assertIntakeFrozenInstalledVerifiers(witness, acceptanceAuthority, expectedProfileHash) {
+  if (typeof expectedProfileHash !== 'string' || !/^[a-f0-9]{64}$/i.test(expectedProfileHash)) {
+    installedEngineError(
+      'accepted:true result requires the intake-frozen installed profile hash',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
+  const expected = expectedProfileHash.toLowerCase();
   if (!witness || !INTAKE_FROZEN_WITNESSES.has(witness)) {
     installedEngineError(
       'accepted:true result rejects caller-supplied duck-typed witness substitutes; '
@@ -151,6 +166,15 @@ function assertIntakeFrozenInstalledVerifiers(witness, acceptanceAuthority) {
     installedEngineError(
       'accepted:true result rejects caller-supplied duck-typed coordinator substitutes; '
       + 'only intake-frozen installed acceptance coordinator instances can verify accepted replay',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
+  const witnessProfileHash = INTAKE_FROZEN_WITNESSES.get(witness);
+  const coordinatorProfileHash = INTAKE_FROZEN_COORDINATORS.get(acceptanceAuthority);
+  if (witnessProfileHash !== expected || coordinatorProfileHash !== expected) {
+    installedEngineError(
+      'accepted:true result profile_hash does not exactly match the intake-frozen '
+      + 'witness/coordinator installed profile binding; substituted profile hashes are rejected',
       'ACCEPTANCE_BATCH_REQUIRED',
     );
   }
@@ -1180,7 +1204,10 @@ function createInstalledEngineSession(options = {}) {
       modeOverride,
     });
   if (profile.installed_binding_hash !== sha256(canonicalJson(installedBinding))) {
-    installedEngineError('installed Engine session binding does not match profile');
+    installedEngineError(
+      'installed Engine session binding does not match profile',
+      'INSTALLED_BINDING_MISMATCH',
+    );
   }
   assertEngineRouteMatchesInstalled(
     profile.engine_profile,
@@ -1205,7 +1232,11 @@ function createInstalledEngineSession(options = {}) {
   } catch (error) {
     throw error;
   }
-  registerIntakeFrozenAuthorities(session.witness, session.acceptance_authority);
+  registerIntakeFrozenAuthorities(
+    session.witness,
+    session.acceptance_authority,
+    profile.profile_hash,
+  );
   return Object.freeze(wrapSession(session, profile, tracker));
 }
 
@@ -1231,6 +1262,14 @@ function resumeInstalledEngineSession(options = {}) {
       kernelBinding,
       modeOverride,
     });
+  // Match createInstalledEngineSession: full installed binding hash must equal
+  // the profile binding hash. Route-core equivalence alone is insufficient.
+  if (profile.installed_binding_hash !== sha256(canonicalJson(installedBinding))) {
+    installedEngineError(
+      'installed Engine session binding does not match profile',
+      'INSTALLED_BINDING_MISMATCH',
+    );
+  }
   assertEngineRouteMatchesInstalled(profile.engine_profile, durableBinding, kernelBinding);
   const tracker = createActionIdentityTracker();
 
@@ -1343,13 +1382,14 @@ function resumeInstalledEngineSession(options = {}) {
       return true;
     },
   };
-  registerIntakeFrozenAuthorities(witness, acceptanceAuthority);
+  registerIntakeFrozenAuthorities(witness, acceptanceAuthority, profile.profile_hash);
   return Object.freeze(wrapSession(session, profile, tracker));
 }
 
 function verifyAcceptedLedgerCanonical(ledger, {
   witness = null,
   acceptanceAuthority = null,
+  profileHash = null,
 } = {}) {
   assertObject(ledger, 'ledger');
   if (!Array.isArray(ledger.events) || ledger.events.length < 2) {
@@ -1358,7 +1398,7 @@ function verifyAcceptedLedgerCanonical(ledger, {
       'ACCEPTANCE_BATCH_REQUIRED',
     );
   }
-  assertIntakeFrozenInstalledVerifiers(witness, acceptanceAuthority);
+  assertIntakeFrozenInstalledVerifiers(witness, acceptanceAuthority, profileHash);
   if (typeof witness.getHead !== 'function'
     || typeof witness.verifyBatch !== 'function') {
     installedEngineError(
@@ -1554,6 +1594,17 @@ function assertNoAcceptanceLikeMaterialWhenRejected(value) {
   }
 }
 
+function resolveAcceptedResultProfile(options = {}) {
+  if (!options.profile || typeof options.profile !== 'object') {
+    installedEngineError(
+      'accepted:true result requires the intake-frozen normalized installed profile bound at '
+      + 'session registration; recomputing result_hash cannot legitimize a substituted profile hash',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
+  return normalizeInstalledEngineProfile(options.profile);
+}
+
 function assertAcceptedResultMaterial(value, options = {}) {
   if (value.accepted !== true) {
     assertNoAcceptanceLikeMaterialWhenRejected(value);
@@ -1578,11 +1629,22 @@ function assertAcceptedResultMaterial(value, options = {}) {
       'ACCEPTANCE_BATCH_REQUIRED',
     );
   }
+  const profile = resolveAcceptedResultProfile(options);
+  if (value.profile_hash !== profile.profile_hash) {
+    installedEngineError(
+      'accepted:true result profile_hash must exactly equal the normalized installed profile hash; '
+      + 'recomputing result_hash cannot legitimize a substituted profile hash',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
   const verified = verifyAcceptedLedgerCanonical(value.ledger, {
     witness: options.witness,
     acceptanceAuthority: options.acceptanceAuthority,
+    profileHash: profile.profile_hash,
   });
   const derived = deriveAcceptedFieldsFromVerifiedReplay(value.ledger, verified);
+  derived.profile_hash = profile.profile_hash;
+  derived.profile = profile;
   if (value.status !== derived.status) {
     installedEngineError(
       'accepted:true result status must equal verified ledger status; caller status injection rejected',
@@ -1673,7 +1735,8 @@ function normalizeInstalledEngineResult(raw, options = {}) {
       kind: INSTALLED_ENGINE_RESULT_KIND,
       status: derivedAccepted.status,
       outcome: derivedAccepted.outcome,
-      profile_hash: value.profile_hash,
+      // Always the intake-normalized profile hash — never a caller-substituted value.
+      profile_hash: derivedAccepted.profile_hash,
       sink_id: INSTALLED_ENGINE_SINK_ID,
       action_identity: cloneCanonical(derivedAccepted.action_identity),
       engine_observation: cloneCanonical(derivedAccepted.engine_observation),
@@ -1767,9 +1830,11 @@ function buildInstalledEngineResult({
         'ACCEPTANCE_INFERRED_FROM_ENGINE',
       );
     }
+    const normalizedProfile = resolveAcceptedResultProfile({ profile });
     const verified = verifyAcceptedLedgerCanonical(resolvedLedger, {
       witness,
       acceptanceAuthority,
+      profileHash: normalizedProfile.profile_hash,
     });
     const derived = deriveAcceptedFieldsFromVerifiedReplay(resolvedLedger, verified);
     // Every supplied field must exact-match verified replay; no silent rewrite.
@@ -1901,7 +1966,11 @@ function buildInstalledEngineResult({
     complete_event_hash: accepted === true ? resolvedCompleteHash : null,
   };
   material.result_hash = sha256(canonicalJson(material));
-  return normalizeInstalledEngineResult(material, { witness, acceptanceAuthority });
+  return normalizeInstalledEngineResult(material, {
+    witness,
+    acceptanceAuthority,
+    profile,
+  });
 }
 
 function rejectForeignEngineSink(sinkId) {

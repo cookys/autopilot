@@ -71,11 +71,17 @@ assert_contains "$CHECKER_SRC" "bash', ['-n'" \
 assert_contains "$CHECKER_SRC" 'assertWitnessAdapter' \
   "alias retirement uses trusted installed witness-authority API"
 assert_contains "$CHECKER_SRC" 'loadTrustedInstalledWitnessAuthority' \
-  "alias retirement loads persisted trusted installed witness authority"
+  "alias retirement loads independently configured installed witness authority"
 assert_contains "$CHECKER_SRC" 'verifyWithTrustedInstalledWitnessAuthority' \
   "alias retirement calls trusted witness-authority verification"
 assert_contains "$CHECKER_SRC" 'authority.verify(receipt)' \
   "alias retirement authenticates via witness.verify authority API"
+assert_contains "$CHECKER_SRC" 'AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY' \
+  "authority path is independently configured (not project-local co-located journal)"
+assert_contains "$CHECKER_SRC" 'executeDeterministicCallerMigrationScan' \
+  "caller migration is mechanically executed"
+assert_contains "$CHECKER_SRC" 'requiredWitnessedDayKeys' \
+  "14-day window binds to host-clock timestamps outside the evidence"
 assert_not_contains "$CHECKER_SRC" 'compatibility_cycle_signer_binding' \
   "telemetry-supplied signer bindings are not a trust root"
 # Must not construct MemoryWitness from telemetry receipt.stream_id as trust root.
@@ -201,6 +207,111 @@ console.log('alias_forged_hold=ok');
 NODE
 assert_eq "0" "$?" "internally consistent forged chains HOLD alias retirement subsection"
 rm -rf "$FAB_DIR"
+
+# alias-cogen-backdated: freshly generated project-local journal + backdated
+# 14-day chain + self-hashed deterministic_caller_migration cannot fund PASS.
+COGEN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-cogen.XXXXXX")"
+mkdir -p "$COGEN_DIR/production-telemetry"
+node - "$REPO_ROOT" "$COGEN_DIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const dir = process.argv[3];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+
+const streamId = 'alias-cogen-stream';
+const runId = 'alias-cogen-run';
+const witness = new MemoryWitness({ streamId });
+const cycleBody = { compatibility_cycle_id: 'alias-cogen-cycle' };
+const cycleReceipt = witness.append({
+  run_id: runId,
+  sequence: 1,
+  event_hash: sha256(canonicalJson(cycleBody)),
+});
+const days = [];
+for (let i = 1; i <= 14; i += 1) {
+  const day = `2020-01-${String(i).padStart(2, '0')}`;
+  const previousHead = witness.getHead();
+  const dayBody = {
+    day,
+    translation_used_events: 0,
+    unresolved_translation_deltas: 0,
+    prior_witness_head: previousHead,
+  };
+  const receipt = witness.append({
+    run_id: runId,
+    sequence: i + 1,
+    event_hash: sha256(canonicalJson(dayBody)),
+  });
+  days.push({
+    day,
+    translation_used_events: 0,
+    unresolved_translation_deltas: 0,
+    witness_head: receipt.witness_head,
+    witness_receipt: receipt,
+  });
+}
+const migrationBody = { complete: true, callers_migrated: ['l3', 'l4', 'l5', 'l6'] };
+const migrationHash = sha256(canonicalJson(migrationBody));
+const migrationReceipt = witness.append({
+  run_id: runId,
+  sequence: 16,
+  event_hash: migrationHash,
+});
+
+fs.writeFileSync(
+  path.join(dir, 'trusted-installed-witness-authority.json'),
+  JSON.stringify({
+    kind: 'trusted_installed_witness_authority',
+    stream_id: streamId,
+    receipts: witness._receipts,
+  }, null, 2),
+);
+fs.writeFileSync(
+  path.join(dir, 'production-telemetry', 'alias-retirement.json'),
+  JSON.stringify({
+    compatibility_cycle_id: 'alias-cogen-cycle',
+    shipped_compatibility_cycle: true,
+    compatibility_cycle_receipt_body: cycleBody,
+    compatibility_cycle_ship_receipt: cycleReceipt,
+    witnessed_zero_use_days: 14,
+    translation_used_events: 0,
+    unresolved_translation_deltas: 0,
+    deterministic_caller_migration: true,
+    caller_migration_complete: true,
+    caller_migration_scan_body: migrationBody,
+    caller_migration_scan_hash: migrationHash,
+    caller_migration_witness_receipt: migrationReceipt,
+    witnessed_day_records: days,
+  }, null, 2),
+);
+NODE
+
+COGEN_OUT="$(node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+  --project "$COGEN_DIR" \
+  --repo-root "$REPO_ROOT" 2>&1)"
+node - "$COGEN_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('backdated co-gen alias evidence must HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (!/independent|untrusted|project-local|authority|self-hashed|migration|backdated|host-clock/i.test(reasons)) {
+  console.error('alias co-gen HOLD must cite independent authority/migration/backdating; got:', reasons);
+  process.exit(1);
+}
+if (alias.deterministic_caller_migration === true) {
+  console.error('self-hashed migration must not set deterministic_caller_migration true');
+  process.exit(1);
+}
+console.log('alias_cogen_backdated_hold=ok');
+NODE
+assert_eq "0" "$?" "backdated co-gen alias evidence HOLD"
+rm -rf "$COGEN_DIR"
 
 echo "PASS [owner-kernel-alias-retirement] alias retirement gate stays HOLD without deletion"
 finalize_test

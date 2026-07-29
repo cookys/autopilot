@@ -191,6 +191,75 @@ NODE
 assert_eq "0" "$?" "KR8 HOLD for trusted receipt unbound to mutated KR8 body"
 rm -rf "$KR8_BODY_DIR"
 
+# kr8-cogen-self-consistent: freshly generated project-local journal + matching
+# KR8 body cannot fund PASS — project-local journals are untrusted inputs.
+KR8_COGEN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kr8-cogen.XXXXXX")"
+mkdir -p "$KR8_COGEN_DIR/production-telemetry"
+node - "$REPO_ROOT" "$KR8_COGEN_DIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const dir = process.argv[3];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+
+const body = {
+  observed_false_acceptances: 0,
+  observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1,
+  baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const witness = new MemoryWitness({ streamId: 'kr8-cogen-stream' });
+const receipt = witness.append({
+  run_id: 'kr8-cogen-run',
+  sequence: 1,
+  event_hash: bodyHash,
+});
+// Evidence-adjacent project-local journal (untrusted parallel "trust root").
+fs.writeFileSync(
+  path.join(dir, 'trusted-installed-witness-authority.json'),
+  JSON.stringify({
+    kind: 'trusted_installed_witness_authority',
+    stream_id: 'kr8-cogen-stream',
+    receipts: [receipt],
+  }, null, 2),
+);
+fs.writeFileSync(
+  path.join(dir, 'production-telemetry', 'kr8.json'),
+  JSON.stringify({
+    ...body,
+    production_provenance: {
+      evidence_body_hash: bodyHash,
+      witness_receipt: receipt,
+    },
+  }, null, 2),
+);
+NODE
+KR8_COGEN_OUT="$(node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+  --project "$KR8_COGEN_DIR" \
+  --repo-root "$REPO_ROOT" 2>&1)"
+node - "$KR8_COGEN_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+if (report.kr8.status !== 'HOLD') {
+  console.error('freshly generated self-consistent KR8 must HOLD; got', report.kr8.status);
+  process.exit(1);
+}
+const reasons = (report.kr8.blocking_reasons || []).join('\n');
+if (!/independent|untrusted|project-local|provenance|authority/i.test(reasons)) {
+  console.error('KR8 co-gen HOLD must cite independent/untrusted authority; got:', reasons);
+  process.exit(1);
+}
+if (report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') {
+  console.error('co-generated project-local journal must not classify as production_telemetry');
+  process.exit(1);
+}
+console.log('kr8-cogen-self-consistent=ok');
+NODE
+assert_eq "0" "$?" "KR8 HOLD for freshly generated self-consistent project-local evidence"
+rm -rf "$KR8_COGEN_DIR"
+
 # kr10-permanent-hold: thresholds stay 42/51; executed membership is derived;
 # removed/nonexecuted members reduce measured cardinality rather than measurement errors.
 node - "$REPO_ROOT" <<'NODE'

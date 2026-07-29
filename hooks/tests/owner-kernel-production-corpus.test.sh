@@ -713,15 +713,64 @@ const attackMutations = {
     return a && b;
   },
   witness_head_rewrite() {
+    // Isolated mutation: rewrite an actual witnessed ledger receipt/head (not
+    // route/profile hashes). Route the mutated ledger through installed resume
+    // and require rejection for witness-head mismatch.
     const fx = installedFixture('corpus-attack-witness-rewrite');
-    return held(() => installedEngine.normalizeInstalledEngineProfile({
-      ...fx.profile,
-      engine_profile: {
-        ...fx.profile.engine_profile,
-        route_hash: '0'.repeat(64),
+    const { session, witnessInvoke } = openInstalledSession(fx, {
+      runLabel: 'witness-head-rewrite',
+    });
+    session.kernel.mintActionDecision({
+      capability: session.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'witness-rewrite' },
+      actionClass: 'external',
+      actionDescriptor: fx.profile.action,
+    });
+    const ledger = structuredClone(session.kernel.getLedger());
+    assert.ok(Array.isArray(ledger.events) && ledger.events.length > 0);
+    const witnessedIdx = ledger.events.findIndex(
+      (event) => event && event.witness && typeof event.witness.witness_head === 'string',
+    );
+    assert.ok(witnessedIdx >= 0, 'ledger must carry a witnessed receipt to rewrite');
+    const original = ledger.events[witnessedIdx];
+    ledger.events[witnessedIdx] = {
+      ...original,
+      witness: {
+        ...original.witness,
+        // Mutate the actual witness head while keeping event shape intact.
+        witness_head: 'b'.repeat(64),
+        previous_witness_head: original.witness.previous_witness_head,
       },
-      profile_hash: '0'.repeat(64),
+    };
+    const rejectedResume = held(() => installedEngine.resumeInstalledEngineSession({
+      binding: fx.installedBinding,
+      profile: fx.profile,
+      governanceConfig: fx.runtime.governanceConfig,
+      acceptanceContract,
+      routeInputs: fx.runtime.routeInputs,
+      durableBinding: fx.durableBinding,
+      kernelBinding: fx.kernelBinding,
+      ledger,
+      capabilityProbedAt: fx.now,
+      capabilityExpiresAt: fx.expires,
+      witnessInvoke,
+      engineInvoke: capabilityOnlyInvoke(fx),
+      coordinatorInvoke: () => {
+        throw new Error('witness-head rewrite must not accept');
+      },
+      kernelOptions: {
+        adapters: fx.runtime.adapters(),
+        clock: () => new Date(fx.runtime.NOW),
+        nonceFactory: () => 'f'.repeat(64),
+      },
     }));
+    session.teardown();
+    assert.equal(
+      rejectedResume,
+      true,
+      'witness-head rewrite must be rejected by installed resume/replay verification',
+    );
+    return rejectedResume;
   },
 };
 

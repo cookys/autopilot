@@ -864,6 +864,7 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
       terminal_batch: null,
       result_hash: '0'.repeat(64),
     }, {
+      profile,
       witness: session.witness,
       acceptanceAuthority: session.acceptance_authority,
     }),
@@ -871,8 +872,27 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   );
   assert.throws(
     () => installedEngine.normalizeInstalledEngineResult(result),
-    /duck-typed|intake-frozen|ACCEPTANCE_BATCH|authoritative witness|acceptance coordinator/i,
+    /duck-typed|intake-frozen|ACCEPTANCE_BATCH|authoritative witness|acceptance coordinator|profile/i,
   );
+  // accepted-result profile binding: substituted profile_hash with recomputed
+  // result_hash cannot legitimize acceptance against intake-frozen authorities.
+  {
+    const substituted = {
+      ...result,
+      profile_hash: 'a'.repeat(64),
+    };
+    const material = { ...substituted };
+    delete material.result_hash;
+    material.result_hash = hash(material);
+    assert.throws(
+      () => installedEngine.normalizeInstalledEngineResult(material, {
+        profile,
+        witness: session.witness,
+        acceptanceAuthority: session.acceptance_authority,
+      }),
+      /profile_hash|substituted profile|intake-frozen|exact/i,
+    );
+  }
   // accepted-verifier-authority: duck-typed witness/coordinator substitutes are rejected.
   const duckWitness = {
     identity: session.witness.identity,
@@ -900,6 +920,7 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   };
   assert.throws(
     () => installedEngine.normalizeInstalledEngineResult(result, {
+      profile,
       witness: duckWitness,
       acceptanceAuthority: duckCoordinator,
     }),
@@ -1002,6 +1023,45 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
     }),
     /override|INSTALLED_BINDING_MISMATCH|mismatch/i,
   );
+
+  // resume binding: route-core-equivalent but full-binding-different must reject
+  // (installed_binding_hash must exactly equal the normalized supplied binding hash).
+  {
+    const altBinding = installedContract.normalizeInstalledBinding({
+      ...installedBinding,
+      snapshot_hash: hash(`resume-binding-alt:${installedBinding.snapshot_hash}`),
+    });
+    assert.notEqual(
+      sha256(canonicalJson(altBinding)),
+      profile.installed_binding_hash,
+      'fixture must differ in full installed binding hash',
+    );
+    assert.equal(
+      altBinding.install_binding_hash,
+      installedBinding.install_binding_hash,
+      'route-core install hash remains equivalent',
+    );
+    assert.throws(
+      () => installedEngine.resumeInstalledEngineSession({
+        profile,
+        binding: altBinding,
+        governanceConfig,
+        acceptanceContract,
+        routeInputs,
+        ledger,
+        priorActionIdentity: session.getActionIdentity(),
+        witnessInvoke: sharedWitnessInvoke,
+        engineInvoke,
+        coordinatorInvoke,
+        kernelOptions: {
+          adapters,
+          clock: () => new Date(runtime.NOW),
+          nonceFactory: () => 'e'.repeat(64),
+        },
+      }),
+      /binding does not match profile|INSTALLED_BINDING_MISMATCH|installed Engine session binding/i,
+    );
+  }
 
   const priorIdentity = session.getActionIdentity();
   const resumed = installedEngine.resumeInstalledEngineSession({

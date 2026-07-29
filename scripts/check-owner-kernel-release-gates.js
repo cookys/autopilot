@@ -166,30 +166,65 @@ function isNonEmptySha256(value) {
 }
 
 /**
- * Load persisted trusted installed witness authority/configuration.
+ * Independent installed authority paths only — never project-local journals
+ * co-located with the evidence under evaluation. Project telemetry/journal
+ * files, their hashes, timestamps, signer IDs, and migration flags are
+ * untrusted inputs and cannot supply a parallel trust root.
  *
- * Alias authenticity and production provenance authentication come only from
- * this persisted trusted surface — never from a telemetry-stream-derived fresh
- * MemoryWitness. Telemetry cannot supply its own trust root (stream_id / keys /
- * signer bindings). Absent trusted state fails closed (HOLD).
+ * Authority is loaded from independently configured state:
+ *   1. AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY (absolute path)
+ *   2. ~/.autopilot/trusted-installed-witness-authority.json
+ *   3. ~/.autopilot/installed-witness-authority.json
  *
- * Expected config kind uses the existing assertWitnessAdapter + MemoryWitness
- * APIs: a journal of trusted receipts is replayed into MemoryWitness so
- * authority.verify() only accepts receipts already recorded by the trusted
- * installed authority, not self-computable forged heads.
+ * Paths under projectDir (or repo-relative project mirrors) are rejected as
+ * evidence-adjacent. Authentication uses assertWitnessAdapter + MemoryWitness
+ * journal replay so authority.verify() only accepts receipts already recorded
+ * by that independent authority.
  */
+function isPathInside(parent, child) {
+  const resolvedParent = path.resolve(parent);
+  const resolvedChild = path.resolve(child);
+  if (resolvedParent === resolvedChild) return true;
+  const prefix = resolvedParent.endsWith(path.sep)
+    ? resolvedParent
+    : `${resolvedParent}${path.sep}`;
+  return resolvedChild.startsWith(prefix);
+}
+
+function independentAuthorityCandidates(projectDir, repoRoot) {
+  const candidates = [];
+  const envPath = process.env.AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY;
+  if (typeof envPath === 'string' && envPath.trim()) {
+    candidates.push(path.resolve(envPath.trim()));
+  }
+  const home = process.env.HOME || process.env.USERPROFILE || null;
+  if (home) {
+    candidates.push(path.join(home, '.autopilot', 'trusted-installed-witness-authority.json'));
+    candidates.push(path.join(home, '.autopilot', 'installed-witness-authority.json'));
+  }
+  // Deliberately omit projectDir / production-telemetry sibling paths — those
+  // are evidence-adjacent and cannot independently authenticate the evidence.
+  void projectDir;
+  void repoRoot;
+  return candidates;
+}
+
 function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
-  const candidates = [
-    path.join(projectDir, 'p3', 'trusted-installed-witness-authority.json'),
-    path.join(projectDir, 'trusted-installed-witness-authority.json'),
-    path.join(projectDir, 'p3', 'installed-witness-authority.json'),
-    path.join(repoRoot || '', 'docs', 'projects', path.basename(projectDir),
-      'p3', 'trusted-installed-witness-authority.json'),
-  ];
+  const projectResolved = path.resolve(projectDir);
+  const candidates = independentAuthorityCandidates(projectDir, repoRoot);
   let config = null;
   let configPath = null;
   for (const candidate of candidates) {
     if (!candidate || candidate.includes(`${path.sep}${path.sep}`)) continue;
+    // Refuse evidence-adjacent paths even if env points into the project.
+    if (isPathInside(projectResolved, candidate)) {
+      continue;
+    }
+    if (repoRoot && isPathInside(path.resolve(repoRoot, 'docs', 'projects'), candidate)
+      && isPathInside(path.resolve(repoRoot), candidate)
+      && candidate.includes(`${path.sep}production-telemetry${path.sep}`)) {
+      continue;
+    }
     const data = readJsonIfExists(candidate);
     if (data && typeof data === 'object' && !Array.isArray(data)) {
       config = data;
@@ -200,8 +235,9 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
   if (!config) {
     return {
       ok: false,
-      reason: 'persisted trusted installed witness authority/configuration is absent; '
-        + 'telemetry cannot supply its own trust root',
+      reason: 'independently configured installed witness authority/configuration is absent; '
+        + 'project-local telemetry/journal files, hashes, timestamps, signer IDs, and migration '
+        + 'flags are untrusted and cannot supply their own trust root',
       authority: null,
       stream_id: null,
       config_path: null,
@@ -331,6 +367,72 @@ function verifyWithTrustedInstalledWitnessAuthority(receipt, {
 
 function isNonNegativeInteger(value) {
   return Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * Host-clock UTC calendar days strictly before today. Day labels inside the
+ * evidence package are untrusted; the required window is derived only from the
+ * verifier host clock (authenticated timestamp outside the evidence).
+ */
+function requiredWitnessedDayKeys(nowMs = Date.now()) {
+  const todayUtc = new Date(nowMs).toISOString().slice(0, 10);
+  const [year, month, day] = todayUtc.split('-').map((part) => Number(part));
+  const keys = [];
+  for (let offset = 1; offset <= ALIAS_DEFINITION.required_witnessed_days; offset += 1) {
+    const date = new Date(Date.UTC(year, month - 1, day - offset));
+    keys.push(date.toISOString().slice(0, 10));
+  }
+  return keys.reverse();
+}
+
+/**
+ * Mechanically execute the deterministic caller-migration scan against the repo.
+ * Self-hashed migration bodies and boolean flags in telemetry are not proof.
+ */
+function executeDeterministicCallerMigrationScan(repoRoot) {
+  const callersMigrated = [];
+  const remaining = [];
+  for (const level of ALIAS_DEFINITION.levels) {
+    const skillPath = path.join(repoRoot, 'skills', level, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) {
+      callersMigrated.push(level);
+      continue;
+    }
+    let body;
+    try {
+      body = fs.readFileSync(skillPath, 'utf8');
+    } catch (error) {
+      return {
+        complete: false,
+        reason: `caller migration scan failed reading skills/${level}: ${error.message}`,
+        callers_migrated: callersMigrated,
+        remaining: [...ALIAS_DEFINITION.levels],
+      };
+    }
+    // Compatibility stubs may remain, but lifecycle/trust routing prose means
+    // callers have not finished migrating off the alias surface.
+    if (/lifecycle|trust.?boundary|owner.?kernel|dispatch.?hetero|ceo-agent|dev-flow/i.test(body)
+      && body.length > 400) {
+      remaining.push(level);
+    } else {
+      callersMigrated.push(level);
+    }
+  }
+  if (remaining.length > 0) {
+    return {
+      complete: false,
+      reason: `deterministic caller migration scan found residual alias lifecycle/trust prose `
+        + `in: ${remaining.join(',')}`,
+      callers_migrated: callersMigrated,
+      remaining,
+    };
+  }
+  return {
+    complete: true,
+    reason: null,
+    callers_migrated: callersMigrated,
+    remaining: [],
+  };
 }
 
 function measureSkillMember(repoRoot, name) {
@@ -666,8 +768,8 @@ function authenticateProductionProvenance(data, trustedAuthority) {
   if (!trustedAuthority || !trustedAuthority.ok) {
     return {
       ok: false,
-      reason: 'production provenance cannot be authenticated without persisted trusted '
-        + 'installed witness authority/configuration',
+      reason: 'production provenance cannot be authenticated without independently configured '
+        + 'installed witness authority state (project-local journals/telemetry are untrusted)',
     };
   }
   const receipt = provenance.witness_receipt;
@@ -968,16 +1070,19 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
     );
   }
 
-  // Alias authenticity comes only from persisted trusted installed witness
-  // authority/configuration; telemetry cannot supply its own trust root.
+  // Alias authenticity comes only from independently configured installed
+  // witness authority state; project-local telemetry/journals cannot self-trust.
   if (!trustedAuthority || !trustedAuthority.ok) {
     blocking.push(
-      'alias retirement requires persisted trusted installed witness authority/configuration; '
+      'alias retirement requires independently configured installed witness authority state; '
       + (trustedAuthority && trustedAuthority.reason
         ? trustedAuthority.reason
-        : 'trusted authority state is absent'),
+        : 'independent trusted authority state is absent'),
     );
   }
+
+  // Mechanical migration scan always runs; self-hashed telemetry flags are not proof.
+  const migrationScan = executeDeterministicCallerMigrationScan(repoRoot);
 
   const productionTelemetry = readJsonIfExists(path.join(
     projectDir,
@@ -1055,24 +1160,56 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       );
     }
 
+    // Caller migration: must be mechanically executed by this checker AND/OR
+    // authenticated by independent installed authority. A self-hashed
+    // deterministic_caller_migration:true flag is never proof by itself.
     const migrationHash = productionTelemetry.caller_migration_scan_hash;
     const migrationBody = productionTelemetry.caller_migration_scan_body;
-    let migrationBound = false;
+    const migrationReceipt = productionTelemetry.caller_migration_witness_receipt;
+    let migrationAuthorityAuthenticated = false;
     if (migrationBody && typeof migrationBody === 'object' && !Array.isArray(migrationBody)
       && isNonEmptySha256(migrationHash)
       && migrationBody.complete === true
-      && Array.isArray(migrationBody.callers_migrated)) {
-      migrationBound = sha256(canonicalJson(migrationBody)).toLowerCase()
-        === migrationHash.toLowerCase();
+      && Array.isArray(migrationBody.callers_migrated)
+      && migrationReceipt && typeof migrationReceipt === 'object'
+      && !Array.isArray(migrationReceipt)
+      && trustedAuthority && trustedAuthority.ok) {
+      try {
+        verifyWithTrustedInstalledWitnessAuthority(migrationReceipt, {
+          trustedAuthority,
+        });
+        const bodyHash = sha256(canonicalJson(migrationBody)).toLowerCase();
+        if (migrationReceipt.event_hash.toLowerCase() !== bodyHash
+          || migrationHash.toLowerCase() !== bodyHash) {
+          throw new Error('migration receipt event_hash is not bound to migration scan body');
+        }
+        migrationAuthorityAuthenticated = true;
+      } catch (_error) {
+        migrationAuthorityAuthenticated = false;
+      }
     }
-    deterministicCallerMigration = productionTelemetry.deterministic_caller_migration === true
-      && productionTelemetry.caller_migration_complete === true
-      && migrationBound;
+    const selfHashedOnly = migrationBody && typeof migrationBody === 'object'
+      && isNonEmptySha256(migrationHash)
+      && sha256(canonicalJson(migrationBody)).toLowerCase() === migrationHash.toLowerCase()
+      && productionTelemetry.deterministic_caller_migration === true
+      && !migrationAuthorityAuthenticated;
+    if (selfHashedOnly) {
+      blocking.push(
+        'self-hashed deterministic_caller_migration:true is not proof; '
+        + 'caller migration must be mechanically executed or authenticated by independent '
+        + 'installed authority (require caller_migration_witness_receipt bound to scan body)',
+      );
+    }
+    deterministicCallerMigration = migrationScan.complete === true
+      && migrationAuthorityAuthenticated === true
+      && productionTelemetry.caller_migration_complete === true;
     if (!deterministicCallerMigration) {
       blocking.push(
         'deterministic caller migration evidence missing or incomplete '
-        + '(require caller_migration_scan_body content-addressed to caller_migration_scan_hash '
-        + 'with complete=true; reject self-asserted booleans and arbitrary hashes)',
+        + '(require mechanical migration scan complete AND authority-authenticated '
+        + 'caller_migration_witness_receipt bound to caller_migration_scan_body; '
+        + 'reject self-asserted booleans and self-hashed bodies alone)'
+        + (migrationScan.reason ? `; scan: ${migrationScan.reason}` : ''),
       );
     }
 
@@ -1080,7 +1217,10 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       ? productionTelemetry.witnessed_day_records
       : null;
 
-    const todayUtc = new Date().toISOString().slice(0, 10);
+    // Required day window comes only from the verifier host clock — not from
+    // backdated day labels inside the evidence package.
+    const requiredDays = requiredWitnessedDayKeys(Date.now());
+    const requiredDaySet = new Set(requiredDays);
 
     if (!dayRecords || dayRecords.length < ALIAS_DEFINITION.required_witnessed_days) {
       blocking.push(
@@ -1100,7 +1240,8 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       for (const day of dayRecords) {
         if (!day || typeof day !== 'object') continue;
         if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day)) continue;
-        if (day.day >= todayUtc) continue;
+        // Reject backdated or future days outside the host-clock required window.
+        if (!requiredDaySet.has(day.day)) continue;
         if (day.translation_used_events !== 0 || day.unresolved_translation_deltas !== 0) continue;
         const dayReceipt = day.witness_receipt;
         if (!dayReceipt || typeof dayReceipt !== 'object' || Array.isArray(dayReceipt)) continue;
@@ -1139,12 +1280,15 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
         });
         previousWitnessHead = dayReceipt.witness_head.toLowerCase();
       }
-      if (validDays.length < ALIAS_DEFINITION.required_witnessed_days) {
+      const validDaySet = new Set(validDays.map((day) => day.day));
+      const missingRequired = requiredDays.filter((day) => !validDaySet.has(day));
+      if (missingRequired.length > 0 || validDays.length < ALIAS_DEFINITION.required_witnessed_days) {
         blocking.push(
           `only ${validDays.length} complete witnessed day records with trusted-authority receipt chain `
-          + `bound to the shipped-cycle receipt, zero translation use, and dates strictly before today; `
+          + `bound to the shipped-cycle receipt over the host-clock required window `
+          + `(${requiredDays[0]}..${requiredDays[requiredDays.length - 1]}); `
           + `require ${ALIAS_DEFINITION.required_witnessed_days} `
-          + '(self-authenticating or shape-only fabricated chains are rejected)',
+          + '(backdated self-consistent chains and shape-only fabricated chains are rejected)',
         );
       }
       const distinctDays = new Set(validDays.map((day) => day.day));
@@ -1155,7 +1299,7 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       }
       if (distinctDays.size < ALIAS_DEFINITION.required_witnessed_days) {
         blocking.push(
-          `only ${distinctDays.size} distinct complete production days strictly before today; `
+          `only ${distinctDays.size} distinct complete production days in the host-clock window; `
           + `require ${ALIAS_DEFINITION.required_witnessed_days}`,
         );
       }
@@ -1219,6 +1363,7 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
     unresolved_translation_deltas: unresolvedDeltas,
     shipped_compatibility_cycle: shippedCompatibilityCycle,
     deterministic_caller_migration: deterministicCallerMigration,
+    mechanical_caller_migration_scan: migrationScan,
     status: blocking.length === 0 ? 'PASS' : 'HOLD',
     blocking_reasons: blocking,
   };
@@ -1258,7 +1403,9 @@ function main() {
       'KR8 always uses frozen baseline 6; conflicting production telemetry is a blocker',
       'KR8 requires authenticated production provenance; a filename or parseable JSON is not production provenance',
       'KR10 mechanically derives executed load-bearing membership; thresholds stay frozen at 42 and 51; removed/nonexecuted members reduce cardinality',
-      'alias authenticity comes only from persisted trusted installed witness authority/configuration',
+      'alias authenticity comes only from independently configured installed witness authority state',
+      'project-local telemetry/journal files, hashes, timestamps, signer IDs, and migration flags are untrusted inputs',
+      'self-hashed deterministic_caller_migration is not proof; migration must be mechanical or authority-authenticated',
       'fixture telemetry is never promoted to production telemetry',
       'this checker never deletes compatibility aliases',
       'present compatibility aliases are nonblocking; only unmet retirement prerequisites HOLD',

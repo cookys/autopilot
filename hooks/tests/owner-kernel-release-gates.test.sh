@@ -355,5 +355,247 @@ console.log('kr10-permanent-hold=ok');
 NODE
 assert_eq "0" "$?" "KR10 derives executed membership while freezing 42/51"
 
+# ---------------------------------------------------------------------------
+# Authority path containment (isolated regressions):
+# 1) configured authority anywhere under repoRoot is rejected before it can
+#    authenticate release evidence;
+# 2) authority path spelled outside the repo but resolving through a symlink
+#    into repoRoot is also rejected;
+# 3) assert the exact path-containment / independent-authority blocker on the
+#    affected subsections — never an unrelated aggregate HOLD alone.
+# ---------------------------------------------------------------------------
+
+# Case 1 — direct in-repo authority path (anywhere under repoRoot).
+INREPO_AUTH="$REPO_ROOT/scripts/.tmp-rg-inrepo-authority-$$.json"
+INREPO_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-inrepo-auth-proj.XXXXXX")"
+INREPO_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-inrepo-auth-home.XXXXXX")"
+mkdir -p "$INREPO_PROJ/production-telemetry"
+node - "$REPO_ROOT" "$INREPO_AUTH" "$INREPO_PROJ" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const authOut = process.argv[3];
+const proj = process.argv[4];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+
+// Self-consistent KR8 body + journal that WOULD authenticate if the authority
+// path were accepted (mutation oracle for path-containment failure).
+const body = {
+  observed_false_acceptances: 0,
+  observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1,
+  baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const witness = new MemoryWitness({ streamId: 'rg-inrepo-auth-stream' });
+const receipt = witness.append({
+  run_id: 'rg-inrepo-auth-run',
+  sequence: 1,
+  event_hash: bodyHash,
+});
+fs.writeFileSync(authOut, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  stream_id: 'rg-inrepo-auth-stream',
+  receipts: [receipt],
+}, null, 2));
+fs.writeFileSync(
+  path.join(proj, 'production-telemetry', 'kr8.json'),
+  JSON.stringify({
+    ...body,
+    production_provenance: {
+      evidence_body_hash: bodyHash,
+      witness_receipt: receipt,
+    },
+  }, null, 2),
+);
+// Minimal alias telemetry so alias subsection is exercised too.
+fs.writeFileSync(
+  path.join(proj, 'production-telemetry', 'alias-retirement.json'),
+  JSON.stringify({
+    shipped_compatibility_cycle: true,
+    witnessed_zero_use_days: 0,
+    translation_used_events: 0,
+    unresolved_translation_deltas: 0,
+  }, null, 2),
+);
+NODE
+
+INREPO_OUT="$(
+  HOME="$INREPO_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$INREPO_AUTH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$INREPO_PROJ" \
+    --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$INREPO_OUT" "$INREPO_AUTH" <<'NODE'
+'use strict';
+const report = JSON.parse(process.argv[2]);
+const inrepoAuth = process.argv[3];
+const kr8 = report.kr8;
+const alias = report.alias_retirement;
+// Do not trust aggregate disposition alone (KR10/etc. can HOLD for other reasons).
+if (!kr8 || kr8.status !== 'HOLD') {
+  console.error('in-repo authority must HOLD KR8 before authenticating evidence; got', kr8 && kr8.status);
+  process.exit(1);
+}
+if (kr8.evidence && kr8.evidence.source === 'production_telemetry') {
+  console.error('in-repo authority must not authenticate KR8 as production_telemetry');
+  process.exit(1);
+}
+const kr8Reasons = (kr8.blocking_reasons || []).join('\n');
+// Exact independent-authority / path-containment blocker (not unrelated KR8 counter HOLD).
+if (!/independently configured installed witness authority/i.test(kr8Reasons)
+  && !/without independently configured/i.test(kr8Reasons)) {
+  console.error('KR8 must cite independent-authority path-containment blocker; got:', kr8Reasons);
+  process.exit(1);
+}
+if (!/untrusted|project-local|provenance/i.test(kr8Reasons)) {
+  console.error('KR8 path-containment HOLD must mention untrusted/project-local provenance; got:', kr8Reasons);
+  process.exit(1);
+}
+if (!alias || alias.status !== 'HOLD') {
+  console.error('in-repo authority must HOLD alias_retirement subsection; got', alias && alias.status);
+  process.exit(1);
+}
+if (alias.trusted_authority_present === true) {
+  console.error('in-repo authority must not set trusted_authority_present');
+  process.exit(1);
+}
+if (alias.trusted_authority_path) {
+  console.error('in-repo authority must not surface trusted_authority_path; got', alias.trusted_authority_path);
+  process.exit(1);
+}
+const aliasReasons = (alias.blocking_reasons || []).join('\n');
+if (!/independently configured installed witness authority/i.test(aliasReasons)) {
+  console.error('alias must cite exact independent-authority blocker; got:', aliasReasons);
+  process.exit(1);
+}
+// Configured path must not leak in as an accepted authority path.
+if (String(alias.trusted_authority_path || '').indexOf(inrepoAuth) !== -1) {
+  console.error('in-repo configured path must not be trusted_authority_path');
+  process.exit(1);
+}
+console.log('rg-inrepo-authority-path-containment=ok');
+NODE
+assert_eq "0" "$?" "direct in-repo authority path rejected before authenticating release evidence"
+rm -f "$INREPO_AUTH"
+rm -rf "$INREPO_PROJ" "$INREPO_HOME"
+
+# Case 2 — authority spelling outside repo, realpath via symlink into repoRoot.
+SYMLINK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-symlink-auth.XXXXXX")"
+TARGET_IN_REPO="$REPO_ROOT/scripts/.tmp-rg-symlink-target-$$.json"
+LINK_PATH="$SYMLINK_DIR/outside-link-authority.json"
+SYMLINK_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-symlink-auth-proj.XXXXXX")"
+SYMLINK_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-symlink-auth-home.XXXXXX")"
+mkdir -p "$SYMLINK_PROJ/production-telemetry"
+node - "$REPO_ROOT" "$TARGET_IN_REPO" "$SYMLINK_PROJ" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const authOut = process.argv[3];
+const proj = process.argv[4];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+
+const body = {
+  observed_false_acceptances: 0,
+  observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1,
+  baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const witness = new MemoryWitness({ streamId: 'rg-symlink-auth-stream' });
+const receipt = witness.append({
+  run_id: 'rg-symlink-auth-run',
+  sequence: 1,
+  event_hash: bodyHash,
+});
+fs.writeFileSync(authOut, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  stream_id: 'rg-symlink-auth-stream',
+  receipts: [receipt],
+}, null, 2));
+fs.writeFileSync(
+  path.join(proj, 'production-telemetry', 'kr8.json'),
+  JSON.stringify({
+    ...body,
+    production_provenance: {
+      evidence_body_hash: bodyHash,
+      witness_receipt: receipt,
+    },
+  }, null, 2),
+);
+fs.writeFileSync(
+  path.join(proj, 'production-telemetry', 'alias-retirement.json'),
+  JSON.stringify({
+    shipped_compatibility_cycle: true,
+    witnessed_zero_use_days: 0,
+    translation_used_events: 0,
+    unresolved_translation_deltas: 0,
+  }, null, 2),
+);
+NODE
+ln -s "$TARGET_IN_REPO" "$LINK_PATH"
+
+SYMLINK_OUT="$(
+  HOME="$SYMLINK_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$LINK_PATH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$SYMLINK_PROJ" \
+    --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$SYMLINK_OUT" "$LINK_PATH" "$TARGET_IN_REPO" <<'NODE'
+'use strict';
+const report = JSON.parse(process.argv[2]);
+const linkPath = process.argv[3];
+const targetInRepo = process.argv[4];
+const kr8 = report.kr8;
+const alias = report.alias_retirement;
+if (!kr8 || kr8.status !== 'HOLD') {
+  console.error('symlink-into-repo authority must HOLD KR8; got', kr8 && kr8.status);
+  process.exit(1);
+}
+if (kr8.evidence && kr8.evidence.source === 'production_telemetry') {
+  console.error('symlink-into-repo authority must not authenticate KR8 as production_telemetry');
+  process.exit(1);
+}
+const kr8Reasons = (kr8.blocking_reasons || []).join('\n');
+if (!/independently configured installed witness authority/i.test(kr8Reasons)
+  && !/without independently configured/i.test(kr8Reasons)) {
+  console.error('symlink-into-repo KR8 must cite independent-authority path-containment blocker; got:', kr8Reasons);
+  process.exit(1);
+}
+if (!alias || alias.status !== 'HOLD') {
+  console.error('symlink-into-repo authority must HOLD alias_retirement; got', alias && alias.status);
+  process.exit(1);
+}
+if (alias.trusted_authority_present === true) {
+  console.error('symlink-into-repo authority must not set trusted_authority_present');
+  process.exit(1);
+}
+if (alias.trusted_authority_path) {
+  console.error('symlink-into-repo authority must not surface trusted_authority_path; got', alias.trusted_authority_path);
+  process.exit(1);
+}
+const aliasReasons = (alias.blocking_reasons || []).join('\n');
+if (!/independently configured installed witness authority/i.test(aliasReasons)) {
+  console.error('symlink-into-repo alias must cite exact independent-authority blocker; got:', aliasReasons);
+  process.exit(1);
+}
+// Neither the outside spelling nor the in-repo realpath may be accepted.
+const accepted = String(alias.trusted_authority_path || '');
+if (accepted === linkPath || accepted === targetInRepo) {
+  console.error('symlink path-containment failed; accepted path:', accepted);
+  process.exit(1);
+}
+console.log('rg-symlink-into-repo-authority-path-containment=ok');
+NODE
+assert_eq "0" "$?" "outside-symlink-into-repo authority path rejected before authenticating release evidence"
+rm -f "$TARGET_IN_REPO" "$LINK_PATH"
+rm -rf "$SYMLINK_DIR" "$SYMLINK_PROJ" "$SYMLINK_HOME"
+
 echo "PASS [owner-kernel-release-gates] release gate honesty checks"
 finalize_test

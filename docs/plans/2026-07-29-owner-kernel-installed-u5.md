@@ -23,6 +23,21 @@ The caller cannot supply a command, path, tool, target, catalog row, receipt roo
 identity. Crash ambiguity returns `unknown` or `recovery_required`; it never replays an effect.
 The installed Engine sink and acceptance remain disabled in U5.
 
+### Review repair constraints
+
+The installed probe result must come from the completed six-service workflow. The host must not
+synthesize completion from a constructed request, and the live gate must not replace an installed
+failure with an in-process dry fallback.
+
+- Every listener authenticates the endpoint's declared sender role, not the recipient process.
+- Root-owned acknowledgement listeners exist before service release and validate probe-complete
+  and quiesced acknowledgements from all six identities.
+- The exact P3.5d handoff and cohort authority are claimed and consumed before the broker effect.
+- Completion requires semantic witness readback, independent effect verification, sentinel
+  restoration, durable audit evidence, and successful acknowledgement/cleanup.
+- The privileged preflight rejects every pre-existing dedicated service user or group and only
+  removes identities created by the current run.
+
 ### Required mutations
 
 - `src/engine/supervised-owner-kernel-installed-contract.js`

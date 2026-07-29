@@ -731,10 +731,11 @@ function createActionIdentityTracker() {
       persistedAbort = record ? cloneCanonical(record) : null;
     },
     assertNotInferredFromEngineTerminal(engineStatus) {
+      // AutopilotEngine terminal labels are never Kernel acceptance — even after
+      // a separate witnessed acceptance batch. committed/converged remain input
+      // evidence only; acceptance is only the atomic Kernel acceptance path.
       if (engineStatus === 'committed' || engineStatus === 'converged') {
-        if (!active || active.status !== 'accepted') {
-          return false;
-        }
+        return false;
       }
       return active ? active.status === 'accepted' : false;
     },
@@ -1176,6 +1177,10 @@ function wrapSession(session, profile, tracker) {
       return tracker.markAborted(abortReason, head);
     },
     engineTerminalIsAcceptance(engineStatus) {
+      // Predicate is unambiguous: Engine terminal strings never mean acceptance.
+      if (engineStatus === 'committed' || engineStatus === 'converged') {
+        return false;
+      }
       return tracker.assertNotInferredFromEngineTerminal(engineStatus);
     },
     disclosure() {

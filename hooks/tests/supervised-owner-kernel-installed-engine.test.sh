@@ -745,7 +745,9 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   assert.equal(terminalReceipts[0].durable_request_hash, terminalReceipts[1].durable_request_hash);
   assert.equal(session.witness.verifyBatch(terminalReceipts), true);
   assert.equal(session.getActionIdentity().status, 'accepted');
-  assert.equal(session.engineTerminalIsAcceptance('committed'), true);
+  // Engine terminal labels remain non-acceptance even after separate Kernel acceptance.
+  assert.equal(session.engineTerminalIsAcceptance('committed'), false);
+  assert.equal(session.engineTerminalIsAcceptance('converged'), false);
 
   const disclosure = session.disclosure();
   assert.ok(disclosure && typeof disclosure === 'object');

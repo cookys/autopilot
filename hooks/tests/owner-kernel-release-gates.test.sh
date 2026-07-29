@@ -600,17 +600,14 @@ assert_eq "0" "$?" "outside-symlink-into-repo authority path rejected before aut
 rm -f "$TARGET_IN_REPO" "$LINK_PATH"
 rm -rf "$SYMLINK_DIR" "$SYMLINK_PROJ" "$SYMLINK_HOME"
 
-# Case 3 — positive control: authority real path outside repoRoot AND outside
-# the project evidence boundary authenticates equivalent valid KR8/alias
-# evidence. Fails any production gate that ignores or universally rejects
-# configured authorities. Assert the trusted authentication surface, not
-# aggregate disposition (KR10 may still HOLD).
-OUTSIDE_AUTH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth.XXXXXX")"
-OUTSIDE_AUTH="$OUTSIDE_AUTH_DIR/trusted-installed-witness-authority.json"
-OUTSIDE_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth-proj.XXXXXX")"
-OUTSIDE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth-home.XXXXXX")"
-mkdir -p "$OUTSIDE_PROJ/production-telemetry"
-node - "$REPO_ROOT" "$OUTSIDE_AUTH" "$OUTSIDE_PROJ" <<'NODE'
+# Case 3a — release-evidence-self-auth: outside-path MemoryWitness journal alone
+# must NOT become production authority (no allowTestWitness; no external adapter).
+OUTSIDE_MW_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-mw.XXXXXX")"
+OUTSIDE_MW_AUTH="$OUTSIDE_MW_DIR/trusted-installed-witness-authority.json"
+OUTSIDE_MW_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-mw-proj.XXXXXX")"
+OUTSIDE_MW_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-mw-home.XXXXXX")"
+mkdir -p "$OUTSIDE_MW_PROJ/production-telemetry"
+node - "$REPO_ROOT" "$OUTSIDE_MW_AUTH" "$OUTSIDE_MW_PROJ" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -619,9 +616,6 @@ const authOut = process.argv[3];
 const proj = process.argv[4];
 const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
 const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
-
-// Same self-consistent shape as the negative path-containment oracles, but
-// authority file lives at a real path outside both repo and project.
 const body = {
   observed_false_acceptances: 0,
   observed_missed_red_line_escalations: 0,
@@ -629,15 +623,171 @@ const body = {
   baseline_mandatory_review_dispatches: 6,
 };
 const bodyHash = sha256(canonicalJson(body));
-const witness = new MemoryWitness({ streamId: 'rg-outside-auth-stream' });
+const witness = new MemoryWitness({ streamId: 'rg-outside-mw-stream' });
 const receipt = witness.append({
-  run_id: 'rg-outside-auth-run',
+  run_id: 'rg-outside-mw-run',
   sequence: 1,
   event_hash: bodyHash,
 });
+// Journal only — no external_adapter_module. Must not fund production authority.
 fs.writeFileSync(authOut, JSON.stringify({
   kind: 'trusted_installed_witness_authority',
-  stream_id: 'rg-outside-auth-stream',
+  stream_id: 'rg-outside-mw-stream',
+  receipts: [receipt],
+}, null, 2));
+fs.writeFileSync(
+  path.join(proj, 'production-telemetry', 'kr8.json'),
+  JSON.stringify({
+    ...body,
+    production_provenance: {
+      evidence_body_hash: bodyHash,
+      witness_receipt: receipt,
+    },
+  }, null, 2),
+);
+fs.writeFileSync(
+  path.join(proj, 'production-telemetry', 'alias-retirement.json'),
+  JSON.stringify({
+    shipped_compatibility_cycle: true,
+    witnessed_zero_use_days: 0,
+    translation_used_events: 0,
+    unresolved_translation_deltas: 0,
+  }, null, 2),
+);
+NODE
+
+OUTSIDE_MW_OUT="$(
+  HOME="$OUTSIDE_MW_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$OUTSIDE_MW_AUTH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$OUTSIDE_MW_PROJ" \
+    --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$OUTSIDE_MW_OUT" <<'NODE'
+'use strict';
+const report = JSON.parse(process.argv[2]);
+const kr8 = report.kr8;
+const alias = report.alias_retirement;
+if (!kr8 || kr8.status !== 'HOLD') {
+  console.error('MemoryWitness-only outside journal must HOLD KR8; got', kr8 && kr8.status);
+  process.exit(1);
+}
+if (kr8.evidence && kr8.evidence.source === 'production_telemetry') {
+  console.error('MemoryWitness-only journal must not classify as production_telemetry');
+  process.exit(1);
+}
+const kr8Reasons = (kr8.blocking_reasons || []).join('\n');
+if (!/external|MemoryWitness|allowTestWitness|adapter|production authority/i.test(kr8Reasons)
+  && !/independently configured|provenance|untrusted/i.test(kr8Reasons)) {
+  console.error('MemoryWitness self-auth HOLD must cite external adapter / untrusted; got:', kr8Reasons);
+  process.exit(1);
+}
+if (alias && alias.trusted_authority_present === true) {
+  console.error('MemoryWitness-only must not set trusted_authority_present');
+  process.exit(1);
+}
+console.log('rg-outside-memory-witness-self-auth-hold=ok');
+NODE
+assert_eq "0" "$?" "outside MemoryWitness journal alone cannot become production authority"
+rm -rf "$OUTSIDE_MW_DIR" "$OUTSIDE_MW_PROJ" "$OUTSIDE_MW_HOME"
+
+# Case 3b — positive control: independently provisioned external witness adapter
+# (trustTier external, outside repo/project) authenticates equivalent valid KR8.
+OUTSIDE_AUTH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth.XXXXXX")"
+OUTSIDE_AUTH="$OUTSIDE_AUTH_DIR/trusted-installed-witness-authority.json"
+OUTSIDE_ADAPTER="$OUTSIDE_AUTH_DIR/external-witness-adapter.js"
+OUTSIDE_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth-proj.XXXXXX")"
+OUTSIDE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth-home.XXXXXX")"
+mkdir -p "$OUTSIDE_PROJ/production-telemetry"
+node - "$REPO_ROOT" "$OUTSIDE_AUTH" "$OUTSIDE_PROJ" "$OUTSIDE_ADAPTER" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const authOut = process.argv[3];
+const proj = process.argv[4];
+const adapterOut = process.argv[5];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+
+const body = {
+  observed_false_acceptances: 0,
+  observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1,
+  baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const streamId = 'rg-outside-ext-stream';
+const runId = 'rg-outside-ext-run';
+const receiptBase = {
+  run_id: runId,
+  stream_id: streamId,
+  sequence: 1,
+  event_hash: bodyHash,
+  previous_witness_head: null,
+};
+const witnessHead = sha256(canonicalJson(receiptBase));
+const receipt = {
+  ...receiptBase,
+  witness_head: witnessHead,
+  append_timestamp: new Date().toISOString(),
+};
+
+// Independently provisioned external adapter (not MemoryWitness / not allowTestWitness).
+fs.writeFileSync(adapterOut, `'use strict';
+const crypto = require('crypto');
+function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
+function canonicalJson(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
+  const keys = Object.keys(v).sort();
+  return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
+}
+function createAuthority({ streamId, receipts }) {
+  const receiptsList = Array.isArray(receipts) ? receipts : [];
+  const known = new Map();
+  const appendTimestamps = new Map();
+  for (const entry of receiptsList) {
+    const head = String(entry.witness_head).toLowerCase();
+    known.set(head, entry);
+    if (typeof entry.append_timestamp === 'string') {
+      appendTimestamps.set(head, entry.append_timestamp);
+    }
+  }
+  return {
+    streamId,
+    trustTier: 'external',
+    identity: 'external-adapter:' + streamId,
+    attestation_hash: sha256('external-adapter:' + streamId),
+    protocol_version: 1,
+    appendTimestamps,
+    getAppendTimestamp(receipt) {
+      return appendTimestamps.get(String(receipt.witness_head).toLowerCase()) || null;
+    },
+    append() { throw new Error('append not used in release verify'); },
+    verify(receipt) {
+      if (!receipt || receipt.stream_id !== streamId) return false;
+      const head = String(receipt.witness_head).toLowerCase();
+      const knownEntry = known.get(head);
+      if (!knownEntry) return false;
+      const expectedHead = sha256(canonicalJson({
+        run_id: receipt.run_id,
+        stream_id: receipt.stream_id,
+        sequence: receipt.sequence,
+        event_hash: receipt.event_hash,
+        previous_witness_head: receipt.previous_witness_head,
+      }));
+      return expectedHead === receipt.witness_head;
+    },
+  };
+}
+module.exports = { createAuthority };
+`);
+
+fs.writeFileSync(authOut, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  stream_id: streamId,
+  external_adapter_module: adapterOut,
   receipts: [receipt],
 }, null, 2));
 fs.writeFileSync(
@@ -679,7 +829,6 @@ const projectDir = process.argv[5];
 const authReal = fs.realpathSync(outsideAuth);
 const repoReal = fs.realpathSync(repoRoot);
 const projReal = fs.realpathSync(projectDir);
-// Fixture itself must place authority outside both trust boundaries.
 function isInside(parent, child) {
   const p = path.resolve(parent);
   const c = path.resolve(child);
@@ -693,49 +842,47 @@ if (isInside(repoReal, authReal) || isInside(projReal, authReal)) {
 }
 const kr8 = report.kr8;
 const alias = report.alias_retirement;
-// Trusted production-evidence surface — not aggregate disposition (KR10 HOLD ok).
 if (!kr8 || !kr8.evidence || kr8.evidence.source !== 'production_telemetry') {
   console.error(
-    'outside authority must authenticate KR8 as production_telemetry; got',
+    'external adapter authority must authenticate KR8 as production_telemetry; got',
     kr8 && kr8.evidence && kr8.evidence.source,
+    kr8 && kr8.blocking_reasons,
   );
   process.exit(1);
 }
 if (kr8.status !== 'PASS') {
-  console.error('outside authority with valid KR8 counters must PASS KR8 subsection; got',
+  console.error('external adapter with valid KR8 counters must PASS KR8; got',
     kr8.status, kr8.blocking_reasons);
   process.exit(1);
 }
 if (!alias || alias.trusted_authority_present !== true) {
-  console.error('outside authority must set trusted_authority_present; got',
-    alias && alias.trusted_authority_present);
+  console.error('external adapter must set trusted_authority_present; got',
+    alias && alias.trusted_authority_present, alias && alias.blocking_reasons);
   process.exit(1);
 }
 const accepted = String(alias.trusted_authority_path || '');
 if (!accepted || accepted !== authReal) {
-  console.error('outside authority must surface trusted_authority_path as realpath; got',
+  console.error('external adapter must surface trusted_authority_path as realpath; got',
     accepted, 'expected', authReal);
   process.exit(1);
 }
-// Independent-authority absence blockers must not appear once authority authenticates.
-const kr8Reasons = (kr8.blocking_reasons || []).join('\n');
-if (/without independently configured|independently configured installed witness authority/i.test(kr8Reasons)
-  && /absent|untrusted|project-local/i.test(kr8Reasons)) {
-  console.error('authenticated outside authority must not emit independent-authority absence on KR8; got:',
-    kr8Reasons);
-  process.exit(1);
-}
-const aliasReasons = (alias.blocking_reasons || []).join('\n');
-if (/alias retirement requires independently configured installed witness authority/i.test(aliasReasons)) {
-  console.error('authenticated outside authority must not block alias for missing authority; got:',
-    aliasReasons);
-  process.exit(1);
-}
-console.log('rg-outside-authority-positive-control=ok');
+console.log('rg-outside-external-adapter-positive-control=ok');
 NODE
-assert_eq "0" "$?" "outside realpath authority authenticates trusted production-evidence surface"
-rm -f "$OUTSIDE_AUTH"
+assert_eq "0" "$?" "outside external witness adapter authenticates trusted production-evidence surface"
 rm -rf "$OUTSIDE_AUTH_DIR" "$OUTSIDE_PROJ" "$OUTSIDE_HOME"
+
+# Source asserts: allowTestWitness never used for release evidence; mechanical KR10.
+CHECKER_SRC="$(cat "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js")"
+if printf '%s' "$CHECKER_SRC" | grep -q 'allowTestWitness: true'; then
+  echo "FAIL: allowTestWitness:true is forbidden for release evidence" >&2
+  exit 1
+fi
+assert_contains "$CHECKER_SRC" 'discoverExecutedMembership' \
+  "KR10 derives membership mechanically (not fixed-list-only)"
+assert_contains "$CHECKER_SRC" 'external_adapter_module' \
+  "production authority requires external adapter module"
+assert_contains "$CHECKER_SRC" 'append_timestamp' \
+  "day evidence binds authority-issued append timestamps"
 
 echo "PASS [owner-kernel-release-gates] release gate honesty checks"
 finalize_test

@@ -235,6 +235,55 @@ function held(fn) {
   }
 }
 
+/**
+ * Exact named rejection path — not any exception. Requires error.code (and
+ * optional message pattern). Returns true only on the named path.
+ */
+function heldNamed(fn, { code, messagePattern = null, label = 'mutation' } = {}) {
+  assert.ok(typeof code === 'string' && code.length > 0, `${label} requires exact error code`);
+  try {
+    const result = fn();
+    if (result && typeof result.then === 'function') {
+      return result.then(
+        () => {
+          assert.fail(`${label} expected exact rejection ${code} but resolved`);
+        },
+        (error) => {
+          assert.equal(
+            error && error.code,
+            code,
+            `${label} must reject via exact code ${code}; got ${error && error.code}: ${error && error.message}`,
+          );
+          if (messagePattern) {
+            assert.match(
+              String(error.message || ''),
+              messagePattern,
+              `${label} message must match ${messagePattern}`,
+            );
+          }
+          return true;
+        },
+      );
+    }
+    assert.fail(`${label} expected exact rejection ${code} but returned`);
+    return false;
+  } catch (error) {
+    assert.equal(
+      error && error.code,
+      code,
+      `${label} must reject via exact code ${code}; got ${error && error.code}: ${error && error.message}`,
+    );
+    if (messagePattern) {
+      assert.match(
+        String(error.message || ''),
+        messagePattern,
+        `${label} message must match ${messagePattern}`,
+      );
+    }
+    return true;
+  }
+}
+
 function capabilityOnlyInvoke(fx) {
   return function capInvoke(message) {
     if (message.operation && message.operation.startsWith('capability:')) {
@@ -301,8 +350,8 @@ function openInstalledSession(fx, {
 const attackMutations = {
   protected_event_envelope_forgery() {
     // Isolated mutation: only forge the protected decision envelope on the
-    // installed ledger. Do not append an unrelated guaranteed-rejected second
-    // decision — rejection must be for this forgery alone via installed resume.
+    // installed ledger. Positive reachability control proves unforged resume
+    // path is live; rejection must be the exact named ledger/envelope path.
     const fx = installedFixture('corpus-attack-forgery');
     const { session, witnessInvoke } = openInstalledSession(fx, {
       runLabel: 'protected-envelope-forgery',
@@ -313,7 +362,18 @@ const attackMutations = {
       actionClass: 'external',
       actionDescriptor: fx.profile.action,
     });
-    const ledger = structuredClone(session.kernel.getLedger());
+    assert.equal(decision.payload.action_class, 'external');
+    // Positive reachability: clean ledger reconstructs the action identity.
+    const cleanLedger = session.kernel.getLedger();
+    const cleanIdentity = installedEngine.reconstructActionIdentityFromLedger(cleanLedger);
+    assert.equal(cleanIdentity.decision_id, decision.payload.decision_id);
+    assert.ok(
+      cleanIdentity.status === 'authorized' || cleanIdentity.status === 'dispatched'
+        || cleanIdentity.decision_id,
+      'positive control: clean ledger must reconstruct action identity',
+    );
+
+    const ledger = structuredClone(cleanLedger);
     const decisionIndex = ledger.events.findIndex((event) => event.type === 'decision');
     assert.ok(decisionIndex >= 0);
     const originalDecision = ledger.events[decisionIndex];
@@ -327,33 +387,52 @@ const attackMutations = {
         durable_request_hash: 'e'.repeat(64),
       },
     };
-    // Reach installed resume/verification with only the forged envelope mutation.
-    const heldResume = held(() => installedEngine.resumeInstalledEngineSession({
-      binding: fx.installedBinding,
-      profile: fx.profile,
-      governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract,
-      routeInputs: fx.runtime.routeInputs,
-      durableBinding: fx.durableBinding,
-      kernelBinding: fx.kernelBinding,
-      ledger,
-      capabilityProbedAt: fx.now,
-      capabilityExpiresAt: fx.expires,
-      witnessInvoke,
-      engineInvoke: capabilityOnlyInvoke(fx),
-      coordinatorInvoke: () => {
-        throw new Error('forgery resume must not accept');
-      },
-      kernelOptions: {
-        adapters: fx.runtime.adapters(),
-        clock: () => new Date(fx.runtime.NOW),
-        nonceFactory: () => 'd'.repeat(64),
-      },
-    }));
+    // Exact named rejection — not any exception. Forged envelope fails at
+    // reconstruct / resume with a ledger or hash integrity code.
+    let namedCode = null;
+    let namedMessage = null;
+    try {
+      installedEngine.reconstructActionIdentityFromLedger(ledger);
+      // If reconstruct does not throw, resume must reject with a named code.
+      installedEngine.resumeInstalledEngineSession({
+        binding: fx.installedBinding,
+        profile: fx.profile,
+        governanceConfig: fx.runtime.governanceConfig,
+        acceptanceContract,
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        kernelBinding: fx.kernelBinding,
+        ledger,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: fx.expires,
+        witnessInvoke,
+        engineInvoke: capabilityOnlyInvoke(fx),
+        coordinatorInvoke: () => {
+          throw new Error('forgery resume must not accept');
+        },
+        kernelOptions: {
+          adapters: fx.runtime.adapters(),
+          clock: () => new Date(fx.runtime.NOW),
+          nonceFactory: () => 'd'.repeat(64),
+        },
+      });
+      assert.fail('forged envelope must be rejected');
+    } catch (error) {
+      namedCode = error && error.code;
+      namedMessage = String(error && error.message || '');
+    }
     session.teardown();
-    assert.equal(decision.payload.action_class, 'external');
-    assert.equal(heldResume, true, 'forged envelope must be rejected by installed resume alone');
-    return heldResume;
+    // Exact named path: integrity / hash / ledger / envelope codes — never a bare Error without code.
+    assert.ok(
+      typeof namedCode === 'string' && namedCode.length > 0,
+      `protected-envelope forgery must use a named error code; got message=${namedMessage}`,
+    );
+    assert.match(
+      namedCode,
+      /LEDGER|HASH|WITNESS|ENVELOPE|INTEGRITY|EVENT|TAMPER|RESUME|INVALID|CHAIN|REPLAY|MISMATCH/i,
+      `protected-envelope forgery exact named code; got ${namedCode}: ${namedMessage}`,
+    );
+    return true;
   },
   direct_decision_append() {
     const fx = installedFixture('corpus-attack-direct-decision');
@@ -819,9 +898,22 @@ const categoryMutations = {
   },
   high_risk_executable() {
     const fx = installedFixture('corpus-cat-high-risk');
-    return held(() => installedEngine.rejectForeignEngineSink('campaign-dispatch'))
-      ? 'block'
-      : 'accept';
+    // Positive reachability: the fixed installed sink is accepted by the gate.
+    assert.equal(
+      installedEngine.rejectForeignEngineSink(installedEngine.INSTALLED_ENGINE_SINK_ID),
+      true,
+      'positive control: fixed installed sink must be reachable/accepted',
+    );
+    // Exact named rejection for a foreign high-risk sink — not any exception.
+    const blocked = heldNamed(
+      () => installedEngine.rejectForeignEngineSink('campaign-dispatch'),
+      {
+        code: 'ENGINE_SINK_REJECTED',
+        messagePattern: /campaign-dispatch|rejects sink/i,
+        label: 'high_risk_executable',
+      },
+    );
+    return blocked ? 'block' : 'accept';
   },
   mixed_executable_non_executable() {
     const fx = installedFixture('corpus-cat-mixed');
@@ -1146,17 +1238,39 @@ const categoryMutations = {
   },
   owner_principal_swap_expiry() {
     const fx = installedFixture('corpus-cat-principal');
-    return held(() => installedEngine.compileInstalledEngineProfile({
+    // Positive reachability: valid capability window compiles the installed profile.
+    const live = installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
       governanceConfig: fx.runtime.governanceConfig,
       acceptanceContract,
       routeInputs: fx.runtime.routeInputs,
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
-      capabilityExpiresAt: new Date(fx.runtime.NOW - 1000).toISOString(),
-    }))
-      ? 'block'
-      : 'accept';
+      capabilityExpiresAt: fx.expires,
+    });
+    assert.equal(
+      live.sink_id,
+      'engine-implementation-dispatch-v1',
+      'positive control: valid principal/capability window must compile',
+    );
+    // Exact named rejection for expired capability — not any exception.
+    const blocked = heldNamed(
+      () => installedEngine.compileInstalledEngineProfile({
+        binding: fx.installedBinding,
+        governanceConfig: fx.runtime.governanceConfig,
+        acceptanceContract,
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: new Date(fx.runtime.NOW - 1000).toISOString(),
+      }),
+      {
+        code: 'INVALID_ENGINE_ACCEPTANCE_PROFILE',
+        messagePattern: /capability|fixed sink|invalid/i,
+        label: 'owner_principal_swap_expiry',
+      },
+    );
+    return blocked ? 'block' : 'accept';
   },
   session_resume() {
     const fx = installedFixture('corpus-cat-resume');
@@ -1272,22 +1386,50 @@ const categoryMutations = {
   },
   intent_amendment() {
     const fx = installedFixture('corpus-cat-intent');
-    return held(() => installedEngine.compileInstalledEngineProfile({
+    // Positive reachability: fixed action descriptor compiles.
+    const live = installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
-      action: {
-        operation: 'engine_implementation_dispatch',
-        tool_class: 'model_runner',
-        targets: ['autopilot-engine:implementation-dispatch', 'extra'],
-      },
+      action: installedEngine.fixedAction(),
       governanceConfig: fx.runtime.governanceConfig,
       acceptanceContract,
       routeInputs: fx.runtime.routeInputs,
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }))
-      ? 'block'
-      : 'accept';
+    });
+    assert.equal(
+      live.sink_id,
+      'engine-implementation-dispatch-v1',
+      'positive control: fixed action must compile on installed route',
+    );
+    assert.equal(
+      live.action_hash,
+      sha256(canonicalJson(installedEngine.fixedAction())),
+      'positive control: compiled action_hash must match fixed action',
+    );
+    // Exact named rejection for amended targets — not any exception.
+    const blocked = heldNamed(
+      () => installedEngine.compileInstalledEngineProfile({
+        binding: fx.installedBinding,
+        action: {
+          operation: 'engine_implementation_dispatch',
+          tool_class: 'model_runner',
+          targets: ['autopilot-engine:implementation-dispatch', 'extra'],
+        },
+        governanceConfig: fx.runtime.governanceConfig,
+        acceptanceContract,
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: fx.expires,
+      }),
+      {
+        code: 'ENGINE_SINK_REJECTED',
+        messagePattern: /action descriptor|substitute|sink/i,
+        label: 'intent_amendment',
+      },
+    );
+    return blocked ? 'block' : 'accept';
   },
   event_log_tampering() {
     // Isolated mutation: mutate actual ledger events (not profile hashes) and

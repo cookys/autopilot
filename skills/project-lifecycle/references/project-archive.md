@@ -59,6 +59,7 @@ These items require judgment and must not be skipped:
 - [ ] **`~/.claude/plans/` cleanup** — check for leftover plan files from Plan Mode. Archive to `docs/plans/_archive/`.
 - [ ] **BACKLOG.md sync** — **delete** completed items (not strikethrough). Add any newly identified follow-up items with trigger conditions.
 - [ ] **Documentation sync** — run `git diff --name-only develop` and verify: if game logic/architecture/proto/skill files changed, corresponding docs are updated.
+- [ ] **Mission routing continuity** — if `.claude/mission-routing-config.json` points inside the project directory being moved, update `graph_path` to the archived path in the same archive change. Then run `bash hooks/tests/mission-routing-admission.test.sh` and `bash hooks/tests/session-mode.test.sh`; both must pass before closeout.
 - [ ] **MEMORY.md refresh** — update "In Progress" section (remove archived project, add any new state).
 
 ## Step 4: Stale Entry Sweep

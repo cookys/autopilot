@@ -862,33 +862,25 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
     }),
     /engineObservation|action-outcome|observation injection/i,
   );
-  // caller-durable-derivation / durable non-influence: top-level durableBinding is
-  // intentionally ignored as a derivation input. Two otherwise identical valid
-  // calls that differ only in that option yield byte-identical canonical material.
-  const derivedWithoutCallerDurable = installedEngine.compileInstalledEngineProfile({
+  // durable-regression-contradiction / durable non-influence: top-level
+  // durableBinding is intentionally ignored as a derivation input. Two otherwise
+  // identical valid calls that differ only in that option must yield
+  // byte-identical canonically derived durable/profile material — do not expect a
+  // throw when the option is present.
+  const compileBase = {
     binding: installedBinding,
     governanceConfig,
     acceptanceContract,
     routeInputs,
     capabilityProbedAt: NOW,
     capabilityExpiresAt: EXPIRES,
-  });
-  // Mutated top-level durableBinding that still exact-matches after canonical
-  // clone of installed-derived fields (object identity / ordering noise only).
-  // A field-level forgery is rejected separately by anti-substitution checks;
-  // non-influence is proven when the option is present but not a derivation input.
-  const mutatedTopLevelDurable = {
-    ...JSON.parse(canonicalJson(durableBinding)),
-    service_bindings: JSON.parse(canonicalJson(durableBinding.service_bindings)),
   };
+  const derivedWithoutCallerDurable = installedEngine.compileInstalledEngineProfile({
+    ...compileBase,
+  });
   const derivedWithCallerDurable = installedEngine.compileInstalledEngineProfile({
-    binding: installedBinding,
-    governanceConfig,
-    acceptanceContract,
-    routeInputs,
-    durableBinding: mutatedTopLevelDurable,
-    capabilityProbedAt: NOW,
-    capabilityExpiresAt: EXPIRES,
+    ...compileBase,
+    durableBinding,
   });
   assert.equal(
     canonicalJson(derivedWithoutCallerDurable),

@@ -12,7 +12,6 @@ const {
 const {
   MemoryWitness,
   assertWitnessAdapter,
-  normalizeWitnessBinding,
   verifyReceiptShape,
 } = require('../src/engine/owner-kernel/witness');
 
@@ -795,10 +794,10 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
     const cycleId = productionTelemetry.compatibility_cycle_id;
     const cycleReceipt = productionTelemetry.compatibility_cycle_ship_receipt;
     const cycleReceiptBody = productionTelemetry.compatibility_cycle_receipt_body;
-    // Telemetry-supplied signer bindings are untrusted metadata only — never a trust root.
-    const cycleSignerBinding = productionTelemetry.compatibility_cycle_signer_binding;
+    // Telemetry-supplied signer IDs / bindings / keys / callbacks are untrusted and
+    // are never read as a trust root (alias-receipt-self-authentication).
     let cycleReceiptBound = false;
-    let signerBinding = null;
+    let authorityAuthenticated = false;
     let verifiedCycleReceipt = null;
     if (typeof cycleId === 'string'
       && /^[a-z0-9][a-z0-9._-]{2,128}$/i.test(cycleId)
@@ -809,12 +808,9 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
       && !Array.isArray(cycleReceipt)
       && productionTelemetry.shipped_compatibility_cycle === true) {
       try {
-        // Shape-only normalize of any claimed binding (informational); authentication
-        // comes exclusively from the trusted installed witness-authority verify API.
-        if (cycleSignerBinding && typeof cycleSignerBinding === 'object') {
-          normalizeWitnessBinding(cycleSignerBinding);
-        }
-        // Day-zero genesis receipt has null previous head.
+        // Day-zero genesis receipt has null previous head. Authentication comes
+        // exclusively from the trusted installed witness-authority verify API —
+        // never from self-computable heads or telemetry-supplied signers.
         verifyWithTrustedInstalledWitnessAuthority(cycleReceipt, {
           expectedPreviousHead: null,
         });
@@ -827,11 +823,11 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
         }
         verifiedCycleReceipt = cycleReceipt;
         cycleReceiptBound = true;
-        signerBinding = true;
+        authorityAuthenticated = true;
       } catch (_error) {
         cycleReceiptBound = false;
         verifiedCycleReceipt = null;
-        signerBinding = null;
+        authorityAuthenticated = false;
       }
     }
     shippedCompatibilityCycle = cycleReceiptBound;
@@ -877,7 +873,7 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
         + `have ${dayRecords ? dayRecords.length : 0} day records, `
         + `require ${ALIAS_DEFINITION.required_witnessed_days} (scalar day count alone is insufficient)`,
       );
-    } else if (!shippedCompatibilityCycle || !verifiedCycleReceipt || !signerBinding) {
+    } else if (!shippedCompatibilityCycle || !verifiedCycleReceipt || !authorityAuthenticated) {
       blocking.push(
         '14-day witnessed chain cannot be validated without a trusted-authority shipped-cycle receipt',
       );

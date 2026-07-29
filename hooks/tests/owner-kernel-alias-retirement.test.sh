@@ -48,6 +48,10 @@ assert_contains "$CHECKER_SRC" 'assertWitnessAdapter' \
   "alias retirement uses trusted installed witness-authority API"
 assert_contains "$CHECKER_SRC" 'verifyWithTrustedInstalledWitnessAuthority' \
   "alias retirement calls trusted witness-authority verification"
+assert_contains "$CHECKER_SRC" 'authority.verify(receipt)' \
+  "alias retirement authenticates via witness.verify authority API"
+assert_not_contains "$CHECKER_SRC" 'compatibility_cycle_signer_binding' \
+  "telemetry-supplied signer bindings are not a trust root"
 
 # alias-receipt-self-authentication: internally consistent forged chains HOLD.
 # Heads and event hashes are recomputed with the same canonical formula a forger

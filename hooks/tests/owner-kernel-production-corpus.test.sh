@@ -389,14 +389,12 @@ const attackMutations = {
     const workerBindingHash = sha256(canonicalJson(
       fx.profile.engine_profile.route.worker_binding,
     ));
-    // Canonical installed worker-artifact intake is Kernel.recordEvidence via the
-    // production evidenceVerifier adapter. Do not install a verifier whose
-    // programmed behavior is the rejection under test — instrument reachability
-    // only. Production Kernel treats worker output as evidence only (no decision).
-    let workerArtifactIntakeCalls = 0;
-    const baseAdapters = fx.runtime.adapters();
+    // Production-shaped evidence adapters only — never install a verifier whose
+    // programmed behavior is the rejection under test (worker-intake-tautological-oracle).
+    // Decision-shaped worker output is still accepted as evidence; Kernel never
+    // appends a decision from this path.
     const adapters = {
-      ...baseAdapters,
+      ...fx.runtime.adapters(),
       evidenceArchiver({ verified_evidence }) {
         return {
           uri: `durable://corpus-worker-artifact/${sha256(canonicalJson(verified_evidence))}`,
@@ -404,14 +402,11 @@ const attackMutations = {
         };
       },
       evidenceVerifier(request, context) {
-        workerArtifactIntakeCalls += 1;
-        // Production-shaped passthrough: classify as kernel evidence.
-        // Decision rejection is not programmed here — Kernel appends evidence, never a decision.
         return {
           ok: true,
           run_id: context.run_id,
           identity: 'owner-kernel',
-          channel: 'worker-artifact',
+          channel: 'kernel-evidence',
           envelope_hash: sha256(canonicalJson({ request, context })),
           payload: {
             emitter_kind: 'kernel',
@@ -425,6 +420,14 @@ const attackMutations = {
       runLabel: 'worker-inject',
       adapters,
     });
+    // Instrument reachability of the canonical installed worker-artifact adapter
+    // (Kernel.recordEvidence) only — do not reprogram its decision semantics.
+    let workerArtifactIntakeCalls = 0;
+    const canonicalWorkerArtifactIntake = session.kernel.recordEvidence.bind(session.kernel);
+    session.kernel.recordEvidence = (request) => {
+      workerArtifactIntakeCalls += 1;
+      return canonicalWorkerArtifactIntake(request);
+    };
     const decision = session.kernel.mintActionDecision({
       capability: session.owner_capability,
       ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'worker-inject' },

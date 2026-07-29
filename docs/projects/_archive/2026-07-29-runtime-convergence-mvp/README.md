@@ -55,4 +55,4 @@ or publication was performed.
 - [Durable continuation rubric](../../plans/2026-07-29-durable-continuation-identity.rubric.md)
 - [QC panel plan](../../plans/2026-07-29-qc-panel-honesty.md)
 - [QC panel rubric](../../plans/2026-07-29-qc-panel-honesty.rubric.md)
-- [Selecting review](../_archive/2026-07-29-bounded-backlog-intake/reviews/joint-review.md)
+- [Selecting review](../2026-07-29-bounded-backlog-intake/reviews/joint-review.md)

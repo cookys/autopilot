@@ -903,9 +903,9 @@ const proj = process.argv[3];
 const auth = process.argv[4];
 const bind = process.argv[5];
 const {
-  evaluateReleaseGates,
+  evaluateReleaseGatesFixture,
 } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-const report = evaluateReleaseGates({
+const report = evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: root,
   trust: {
@@ -963,6 +963,42 @@ if (!alias || alias.trusted_authority_present !== true) {
   console.error('injected binding must set trusted_authority_present; got',
     alias && alias.trusted_authority_present, alias && alias.blocking_reasons);
   process.exit(1);
+}
+// Fixture seam never production-shaped PASS.
+if (report.disposition !== 'HOLD' || report.fixture_mode !== true) {
+  console.error('fixture evaluator must force HOLD + fixture_mode; got',
+    report.disposition, report.fixture_mode);
+  process.exit(1);
+}
+if (report.kind !== 'owner_kernel_release_gate_fixture_report') {
+  console.error('fixture report kind required; got', report.kind);
+  process.exit(1);
+}
+const fixtureReasons = (report.blocking_reasons || []).join('\n');
+if (!/test-only fixture evaluator|not production authorization/i.test(fixtureReasons)) {
+  console.error('fixture must cite test-only blocker; got', fixtureReasons);
+  process.exit(1);
+}
+// Production evaluateReleaseGates rejects trust injection entirely.
+{
+  const path = require('path');
+  const {
+    evaluateReleaseGates,
+  } = require(path.join(repoRoot, 'scripts/check-owner-kernel-release-gates.js'));
+  let rejected = false;
+  try {
+    evaluateReleaseGates({
+      project: projectDir,
+      repoRoot,
+      trust: { authorityPath: outsideAuth, skipInstallationOwnershipChecks: true },
+    });
+  } catch (error) {
+    rejected = /rejects trust injection|evaluateReleaseGatesFixture/i.test(String(error && error.message));
+  }
+  if (!rejected) {
+    console.error('production evaluateReleaseGates must reject trust injection');
+    process.exit(1);
+  }
 }
 // Env/HOME path must not self-bootstrap on production CLI.
 const cliKr8 = cliReport.kr8;
@@ -1057,8 +1093,8 @@ fs.writeFileSync(bind, JSON.stringify({
   adapter_sha256: pin,
   anchored_append_timestamps: { x: new Date().toISOString() },
 }, null, 2));
-const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-const report = evaluateReleaseGates({
+const { evaluateReleaseGatesFixture } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+const report = evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: root,
   trust: {
@@ -1079,6 +1115,258 @@ fs.rmSync(tmp, { recursive: true, force: true });
 console.log('rg-ownership-mode-symlink-and-binding-timestamp-hold=ok');
 NODE
 assert_eq "0" "$?" "ownership/mode/symlink failures and binding timestamp HOLD"
+
+# Mutation-specific trust-loader oracles via test-only seam + mask guard:
+# valid fixture reaches component positive, then one-field mutation hits exact blocker.
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const {
+  evaluateReleaseGatesFixture,
+  assertSecureInstallationPath,
+} = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+
+function writeAdapter(filePath) {
+  fs.writeFileSync(filePath, `'use strict';
+function createAuthority({ streamId, receipts }) {
+  const known = new Map((receipts||[]).map((e)=>[String(e.witness_head).toLowerCase(), e]));
+  return {
+    streamId, trustTier: 'external', identity: 'x:'+streamId,
+    attestation_hash: 'a'.repeat(64), protocol_version: 1,
+    getAppendTimestamp() { return null; },
+    append() { throw new Error('n'); },
+    verify(r) { return r && known.has(String(r.witness_head).toLowerCase()); },
+  };
+}
+module.exports = { createAuthority };
+`);
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function baseFixture() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rg-mut-'));
+  const outside = path.join(dir, 'outside');
+  const proj = path.join(dir, 'proj');
+  fs.mkdirSync(path.join(proj, 'production-telemetry'), { recursive: true });
+  fs.mkdirSync(outside, { recursive: true });
+  const body = {
+    observed_false_acceptances: 0,
+    observed_missed_red_line_escalations: 0,
+    candidate_mandatory_review_dispatches: 1,
+    baseline_mandatory_review_dispatches: 6,
+  };
+  const bodyHash = sha256(canonicalJson(body));
+  const streamId = 'mut-stream';
+  const base = {
+    run_id: 'r', stream_id: streamId, sequence: 1,
+    event_hash: bodyHash, previous_witness_head: null,
+  };
+  const receipt = { ...base, witness_head: sha256(canonicalJson(base)) };
+  const adapter = path.join(outside, 'adapter.js');
+  const pin = writeAdapter(adapter);
+  const auth = path.join(outside, 'authority.json');
+  const bind = path.join(outside, 'binding.json');
+  fs.writeFileSync(auth, JSON.stringify({
+    kind: 'trusted_installed_witness_authority',
+    authority_id: 'mut-auth-1',
+    stream_id: streamId,
+    receipts: [receipt],
+  }));
+  fs.writeFileSync(bind, JSON.stringify({
+    kind: 'trusted_installed_witness_adapter_binding',
+    authority_id: 'mut-auth-1',
+    adapter_module: adapter,
+    adapter_sha256: pin,
+  }));
+  fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
+    ...body,
+    production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
+  }));
+  return { dir, outside, proj, auth, bind, adapter, pin, streamId, receipt, body, bodyHash };
+}
+
+function runFixture(fx, trustOverride = null) {
+  return evaluateReleaseGatesFixture({
+    project: fx.proj,
+    repoRoot: root,
+    trust: trustOverride || {
+      authorityPath: fx.auth,
+      adapterBindingPath: fx.bind,
+      skipInstallationOwnershipChecks: true,
+    },
+  });
+}
+
+// Mask guard: valid fixture reaches component-positive KR8 / authority present.
+const good = baseFixture();
+const goodReport = runFixture(good);
+if (goodReport.kr8.status !== 'PASS'
+  || goodReport.kr8.evidence.source !== 'production_telemetry'
+  || goodReport.alias_retirement.trusted_authority_present !== true) {
+  console.error('mask guard valid fixture must be component-positive', goodReport.kr8, goodReport.alias_retirement);
+  process.exit(1);
+}
+if (goodReport.disposition !== 'HOLD' || !/test-only fixture evaluator/i.test((goodReport.blocking_reasons || []).join('\n'))) {
+  console.error('mask guard valid fixture must still overall HOLD as test-only');
+  process.exit(1);
+}
+
+// 1) in-repo containment
+{
+  const fx = baseFixture();
+  const inrepoAuth = path.join(root, 'scripts', `.tmp-rg-mut-inrepo-${process.pid}.json`);
+  fs.writeFileSync(inrepoAuth, fs.readFileSync(fx.auth));
+  const report = runFixture(fx, {
+    authorityPath: inrepoAuth,
+    adapterBindingPath: fx.bind,
+    skipInstallationOwnershipChecks: true,
+  });
+  fs.unlinkSync(inrepoAuth);
+  const reasons = [
+    ...(report.blocking_reasons || []),
+    ...((report.alias_retirement && report.alias_retirement.blocking_reasons) || []),
+    ...((report.kr8 && report.kr8.blocking_reasons) || []),
+  ].join('\n');
+  if (report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') {
+    console.error('in-repo mutation must not authenticate production_telemetry');
+    process.exit(1);
+  }
+  if (!/repo trust boundary|inside the repo|project evidence boundary|independently configured/i.test(reasons)
+    && report.alias_retirement.trusted_authority_present === true) {
+    console.error('in-repo containment must HOLD authority; got', reasons);
+    process.exit(1);
+  }
+  fs.rmSync(fx.dir, { recursive: true, force: true });
+}
+
+// 2) missing config authority_id
+{
+  const fx = baseFixture();
+  const auth = JSON.parse(fs.readFileSync(fx.auth, 'utf8'));
+  delete auth.authority_id;
+  fs.writeFileSync(fx.auth, JSON.stringify(auth));
+  const report = runFixture(fx);
+  const reasons = [
+    ...(report.blocking_reasons || []),
+    ...((report.alias_retirement && report.alias_retirement.blocking_reasons) || []),
+  ].join('\n');
+  if (!/missing a non-empty bounded authority_id/i.test(reasons)) {
+    console.error('missing config authority_id must cite exact blocker; got', reasons);
+    process.exit(1);
+  }
+  fs.rmSync(fx.dir, { recursive: true, force: true });
+}
+
+// 3) missing binding authority_id
+{
+  const fx = baseFixture();
+  const bind = JSON.parse(fs.readFileSync(fx.bind, 'utf8'));
+  delete bind.authority_id;
+  fs.writeFileSync(fx.bind, JSON.stringify(bind));
+  const report = runFixture(fx);
+  const reasons = [
+    ...(report.blocking_reasons || []),
+    ...((report.alias_retirement && report.alias_retirement.blocking_reasons) || []),
+  ].join('\n');
+  if (!/adapter binding is missing a non-empty bounded authority_id|missing a non-empty bounded authority_id/i.test(reasons)) {
+    console.error('missing binding authority_id must cite exact blocker; got', reasons);
+    process.exit(1);
+  }
+  fs.rmSync(fx.dir, { recursive: true, force: true });
+}
+
+// 4) binding timestamp injection
+{
+  const fx = baseFixture();
+  const bind = JSON.parse(fs.readFileSync(fx.bind, 'utf8'));
+  bind.anchored_append_timestamps = { x: new Date().toISOString() };
+  fs.writeFileSync(fx.bind, JSON.stringify(bind));
+  const report = runFixture(fx);
+  const reasons = [
+    ...(report.blocking_reasons || []),
+    ...((report.alias_retirement && report.alias_retirement.blocking_reasons) || []),
+  ].join('\n');
+  if (!/anchored_append_timestamps|must not supply/i.test(reasons)) {
+    console.error('binding timestamps must cite exact blocker; got', reasons);
+    process.exit(1);
+  }
+  fs.rmSync(fx.dir, { recursive: true, force: true });
+}
+
+// 5) ownership/mode (non-root file)
+{
+  const own = assertSecureInstallationPath(good.auth, 'test authority');
+  if (own.ok || !/root-owned|uid/i.test(own.reason || '')) {
+    console.error('non-root ownership must fail; got', own);
+    process.exit(1);
+  }
+}
+
+// 6) symlink installation path
+{
+  const fx = baseFixture();
+  const link = path.join(fx.outside, 'auth-link.json');
+  fs.symlinkSync(fx.auth, link);
+  const sym = assertSecureInstallationPath(link, 'test authority');
+  if (sym.ok || !/symlink/i.test(sym.reason || '')) {
+    console.error('symlink installation path must fail; got', sym);
+    process.exit(1);
+  }
+  // Via fixture without skipOwnership — hits ownership/symlink fail-closed.
+  const report = evaluateReleaseGatesFixture({
+    project: fx.proj,
+    repoRoot: root,
+    trust: {
+      authorityPath: link,
+      adapterBindingPath: fx.bind,
+      skipInstallationOwnershipChecks: false,
+    },
+  });
+  const reasons = [
+    ...(report.blocking_reasons || []),
+    ...((report.alias_retirement && report.alias_retirement.blocking_reasons) || []),
+  ].join('\n');
+  if (!/symlink|root-owned|uid/i.test(reasons)) {
+    console.error('fixture ownership path must cite symlink/ownership; got', reasons);
+    process.exit(1);
+  }
+  fs.rmSync(fx.dir, { recursive: true, force: true });
+}
+
+// 7) adapter inside repo boundary via fixture injection
+{
+  const fx = baseFixture();
+  const inrepoAdapter = path.join(root, 'scripts', `.tmp-rg-mut-adapter-${process.pid}.js`);
+  fs.writeFileSync(inrepoAdapter, fs.readFileSync(fx.adapter));
+  const pin = crypto.createHash('sha256').update(fs.readFileSync(inrepoAdapter)).digest('hex');
+  fs.writeFileSync(fx.bind, JSON.stringify({
+    kind: 'trusted_installed_witness_adapter_binding',
+    authority_id: 'mut-auth-1',
+    adapter_module: inrepoAdapter,
+    adapter_sha256: pin,
+  }));
+  const report = runFixture(fx);
+  fs.unlinkSync(inrepoAdapter);
+  const reasons = [
+    ...(report.blocking_reasons || []),
+    ...((report.alias_retirement && report.alias_retirement.blocking_reasons) || []),
+  ].join('\n');
+  if (!reasons.includes('trusted witness adapter module must not resolve inside the repo trust boundary')) {
+    console.error('in-repo adapter must cite exact containment reason; got', reasons);
+    process.exit(1);
+  }
+  fs.rmSync(fx.dir, { recursive: true, force: true });
+}
+
+fs.rmSync(good.dir, { recursive: true, force: true });
+console.log('rg-mutation-specific-mask-guard-oracles=ok');
+NODE
+assert_eq "0" "$?" "mutation-specific trust-loader oracles with mask guard"
 rm -rf "$OUTSIDE_AUTH_DIR" "$OUTSIDE_PROJ" "$OUTSIDE_HOME"
 
 # authority-id-optional-bypass: missing config or binding authority_id is HOLD.
@@ -1408,9 +1696,9 @@ const repoLink = process.argv[4];
 const auth = process.argv[5];
 const bind = process.argv[6];
 const {
-  evaluateReleaseGates,
+  evaluateReleaseGatesFixture,
 } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-const report = evaluateReleaseGates({
+const report = evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: repoLink,
   trust: {

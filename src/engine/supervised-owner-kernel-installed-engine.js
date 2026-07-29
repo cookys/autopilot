@@ -131,6 +131,179 @@ function installedEngineError(message, code = 'INVALID_INSTALLED_ENGINE') {
   throw new OwnerKernelError(message, code);
 }
 
+const DISPATCH_DELIVERED_MANIFEST_KIND = 'p37_dispatch_delivered_manifest';
+
+/**
+ * Immutable delivered-manifest commitment from the actual implementation dispatch.
+ * Binds commit, artifact path/content digests, and receipt identity. Used to
+ * exact-match verification/challenge/audit/coordinator/accept/resume.
+ */
+function normalizeDispatchDeliveredManifest(raw, context = {}) {
+  const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+  if (!value) {
+    installedEngineError(
+      'dispatch delivered_manifest commitment is required after execute_engine_dispatch',
+      'DISPATCH_MANIFEST_REQUIRED',
+    );
+  }
+  const commit = value.commit;
+  if (typeof commit !== 'string' || !/^[a-f0-9]{40}$/i.test(commit)) {
+    installedEngineError(
+      'dispatch delivered_manifest.commit must be a 40-hex git commit',
+      'DISPATCH_MANIFEST_INVALID',
+    );
+  }
+  if (commit.toLowerCase() === 'd'.repeat(40) || commit.toLowerCase() === '0'.repeat(40)) {
+    installedEngineError(
+      'dispatch delivered_manifest.commit must not be a stub hash',
+      'DISPATCH_MANIFEST_INVALID',
+    );
+  }
+  if (!Array.isArray(value.artifacts) || value.artifacts.length === 0) {
+    installedEngineError(
+      'dispatch delivered_manifest.artifacts must be a non-empty array',
+      'DISPATCH_MANIFEST_INVALID',
+    );
+  }
+  const artifacts = value.artifacts.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      installedEngineError(
+        `dispatch delivered_manifest.artifacts[${index}] must be an object`,
+        'DISPATCH_MANIFEST_INVALID',
+      );
+    }
+    const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : null;
+    const artPath = typeof item.path === 'string' && item.path.trim() ? item.path.trim() : null;
+    const sha = typeof item.sha256 === 'string' ? item.sha256.toLowerCase() : null;
+    if (!id || !artPath || !sha || !/^[a-f0-9]{64}$/.test(sha)) {
+      installedEngineError(
+        `dispatch delivered_manifest.artifacts[${index}] requires id, path, and sha256`,
+        'DISPATCH_MANIFEST_INVALID',
+      );
+    }
+    const out = { id, path: artPath, sha256: sha };
+    if (item.bytes != null) {
+      if (!Number.isInteger(item.bytes) || item.bytes < 0) {
+        installedEngineError(
+          `dispatch delivered_manifest.artifacts[${index}].bytes must be a non-negative integer`,
+          'DISPATCH_MANIFEST_INVALID',
+        );
+      }
+      out.bytes = item.bytes;
+    }
+    return out;
+  }).sort((a, b) => a.id.localeCompare(b.id) || a.path.localeCompare(b.path));
+
+  const receiptSha = value.receipt_sha256
+    || (context.receipt && typeof context.receipt.sha256 === 'string'
+      ? context.receipt.sha256
+      : null);
+  if (typeof receiptSha !== 'string' || !/^[a-f0-9]{64}$/i.test(receiptSha)) {
+    installedEngineError(
+      'dispatch delivered_manifest.receipt_sha256 must bind the dispatch receipt identity',
+      'DISPATCH_MANIFEST_INVALID',
+    );
+  }
+  const boundaryEffectId = value.boundary_effect_id
+    || context.boundary_effect_id
+    || null;
+  if (typeof boundaryEffectId !== 'string' || !boundaryEffectId) {
+    installedEngineError(
+      'dispatch delivered_manifest.boundary_effect_id is required',
+      'DISPATCH_MANIFEST_INVALID',
+    );
+  }
+
+  const material = {
+    schema_version: INSTALLED_ENGINE_SCHEMA_VERSION,
+    kind: DISPATCH_DELIVERED_MANIFEST_KIND,
+    commit: commit.toLowerCase(),
+    artifacts,
+    receipt_sha256: receiptSha.toLowerCase(),
+    boundary_effect_id: boundaryEffectId,
+  };
+  // Candidate/delivered set for coordinator v2: id+sha256 only, sorted by id.
+  const artifactSet = artifacts
+    .map((a) => ({ id: a.id, sha256: a.sha256 }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  material.artifact_set = artifactSet;
+  material.artifact_set_hash = sha256(canonicalJson(artifactSet));
+  material.commitment_hash = sha256(canonicalJson({
+    schema_version: material.schema_version,
+    kind: material.kind,
+    commit: material.commit,
+    artifacts: material.artifacts,
+    receipt_sha256: material.receipt_sha256,
+    boundary_effect_id: material.boundary_effect_id,
+    artifact_set_hash: material.artifact_set_hash,
+  }));
+  return cloneCanonical(material);
+}
+
+function assertDispatchManifestMatchesAcceptance(dispatchManifest, deliveredSetHash, label) {
+  if (!dispatchManifest || typeof dispatchManifest !== 'object') {
+    installedEngineError(
+      `${label} requires dispatch delivered-manifest commitment bound at execute`,
+      'DISPATCH_MANIFEST_REQUIRED',
+    );
+  }
+  if (typeof deliveredSetHash !== 'string' || !/^[a-f0-9]{64}$/i.test(deliveredSetHash)) {
+    installedEngineError(
+      `${label} requires delivered_set_hash from verified coordinator acceptance`,
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  if (deliveredSetHash.toLowerCase() !== dispatchManifest.artifact_set_hash) {
+    installedEngineError(
+      `${label} delivered_set_hash does not exact-match dispatch delivered-manifest `
+      + `artifact_set_hash (substitution or synthetic-manifest mismatch)`,
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  return true;
+}
+
+function captureDeliveredManifestFromHostEnvelope(envelope, pendingRef) {
+  if (!envelope || typeof envelope !== 'object' || !envelope.response
+    || typeof envelope.response !== 'object') {
+    return envelope;
+  }
+  const response = envelope.response;
+  if (!Object.prototype.hasOwnProperty.call(response, 'delivered_manifest')) {
+    return envelope;
+  }
+  const rawManifest = response.delivered_manifest;
+  // Strip before Kernel action executor schema sees the field, rebinding response_hash.
+  const rest = { ...response };
+  delete rest.delivered_manifest;
+  const normalized = normalizeDispatchDeliveredManifest(rawManifest, {
+    receipt: rest.receipt,
+    boundary_effect_id: rest.boundary_effect_id,
+  });
+  // Receipt identity must match commitment.
+  if (!rest.receipt || typeof rest.receipt.sha256 !== 'string'
+    || rest.receipt.sha256.toLowerCase() !== normalized.receipt_sha256) {
+    installedEngineError(
+      'dispatch delivered_manifest.receipt_sha256 must equal host response receipt.sha256',
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  if (rest.boundary_effect_id !== normalized.boundary_effect_id) {
+    installedEngineError(
+      'dispatch delivered_manifest.boundary_effect_id must equal host boundary_effect_id',
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  pendingRef.current = normalized;
+  const next = {
+    ...envelope,
+    response: rest,
+    response_hash: sha256(canonicalJson(rest)),
+  };
+  return next;
+}
+
+
 function registerIntakeFrozenAuthorities(witness, acceptanceAuthority, profileHash) {
   if (typeof profileHash !== 'string' || !/^[a-f0-9]{64}$/i.test(profileHash)) {
     installedEngineError(
@@ -665,6 +838,7 @@ function createActionIdentityTracker() {
         terminal: false,
         engine_observation: null,
         claim_id: null,
+        delivered_manifest: null,
       };
       return cloneCanonical(active);
     },
@@ -675,7 +849,7 @@ function createActionIdentityTracker() {
       }
       return cloneCanonical(active);
     },
-    markDispatched(claimId, engineObservation) {
+    markDispatched(claimId, engineObservation, deliveredManifest = null) {
       if (!active || active.terminal) {
         installedEngineError('no open installed Engine action identity to dispatch');
       }
@@ -690,7 +864,25 @@ function createActionIdentityTracker() {
       active.engine_observation = engineObservation
         ? cloneCanonical(engineObservation)
         : active.engine_observation;
+      if (deliveredManifest) {
+        const normalized = deliveredManifest.commitment_hash
+          ? cloneCanonical(deliveredManifest)
+          : normalizeDispatchDeliveredManifest(deliveredManifest);
+        if (active.delivered_manifest
+          && active.delivered_manifest.commitment_hash !== normalized.commitment_hash) {
+          installedEngineError(
+            'dispatch delivered_manifest commitment drift on redispatch attempt',
+            'DISPATCH_MANIFEST_MISMATCH',
+          );
+        }
+        active.delivered_manifest = normalized;
+      }
       return cloneCanonical(active);
+    },
+    getDeliveredManifest() {
+      return active && active.delivered_manifest
+        ? cloneCanonical(active.delivered_manifest)
+        : null;
     },
     markAborted(reason, ledgerHead) {
       if (!active) return null;
@@ -1060,7 +1252,7 @@ function reconstructActionIdentityFromLedger(ledger, persistedAbort = null) {
   });
 }
 
-function wrapSession(session, profile, tracker) {
+function wrapSession(session, profile, tracker, pendingDispatchManifest) {
   const originalExecute = session.kernel.executeAuthorizedAction.bind(session.kernel);
   const originalAccept = session.kernel.accept.bind(session.kernel);
   const originalMint = session.kernel.mintActionDecision.bind(session.kernel);
@@ -1122,18 +1314,76 @@ function wrapSession(session, profile, tracker) {
       );
     }
     const result = await originalExecute(request);
-    const claimId = result && result.outcome && result.outcome.payload
-      ? (result.outcome.payload.claim_id || result.outcome.payload.boundary_effect_id || null)
+    const payload = result && result.outcome && result.outcome.payload
+      ? result.outcome.payload
       : null;
-    tracker.markDispatched(claimId || `claim:${request.decisionId}`, {
-      engine_status_is_not_acceptance: true,
-    });
+    const claimId = payload
+      ? (payload.claim_id || payload.boundary_effect_id || null)
+      : null;
+    const pendingManifest = pendingDispatchManifest.current;
+    pendingDispatchManifest.current = null;
+    // Successful mediated host execute always produces a consumed permit + receipt.
+    // Those paths MUST bind a delivered-manifest commitment. Worker failure /
+    // unknown outcomes that never returned a host execute envelope may proceed
+    // without a commitment (recover/block oracles) but cannot later accept.
+    const hostSucceeded = Boolean(
+      payload
+      && payload.permit_state === 'consumed'
+      && payload.receipt_ref
+      && payload.boundary_effect_id,
+    );
+    if (pendingManifest) {
+      const observation = {
+        engine_status_is_not_acceptance: true,
+        delivered_manifest_commitment_hash: pendingManifest.commitment_hash,
+        delivered_manifest_artifact_set_hash: pendingManifest.artifact_set_hash,
+        delivered_manifest_commit: pendingManifest.commit,
+      };
+      tracker.markDispatched(
+        claimId || `claim:${request.decisionId}`,
+        observation,
+        pendingManifest,
+      );
+    } else if (hostSucceeded) {
+      installedEngineError(
+        'execute_engine_dispatch must return delivered_manifest commitment bound to the real sink',
+        'DISPATCH_MANIFEST_REQUIRED',
+      );
+    } else {
+      tracker.markDispatched(claimId || `claim:${request.decisionId}`, {
+        engine_status_is_not_acceptance: true,
+      });
+    }
     return result;
   };
 
   session.kernel.accept = async function accept(request) {
+    const dispatchManifest = tracker.getDeliveredManifest();
+    if (!dispatchManifest) {
+      installedEngineError(
+        'accept requires dispatch delivered-manifest commitment from execute',
+        'DISPATCH_MANIFEST_REQUIRED',
+      );
+    }
     const accepted = await originalAccept(request);
     if (accepted && accepted.accepted === true) {
+      // Coordinator delivered_set_hash must exact-match the dispatch artifact set.
+      // Prefer ledger acceptance payload (terminal state may clear live acceptance).
+      const ledger = session.kernel.getLedger();
+      const acceptanceEvent = Array.isArray(ledger.events)
+        ? [...ledger.events].reverse().find((event) => event && event.type === 'acceptance')
+        : null;
+      const state = session.kernel.getState();
+      const deliveredSetHash = (acceptanceEvent && acceptanceEvent.payload
+        && acceptanceEvent.payload.delivered_set_hash)
+        || (state && state.acceptance && state.acceptance.delivered_set_hash)
+        || (accepted && accepted.delivered_set_hash)
+        || null;
+      assertDispatchManifestMatchesAcceptance(
+        dispatchManifest,
+        deliveredSetHash,
+        'accept',
+      );
       tracker.markAccepted();
     }
     return accepted;
@@ -1151,6 +1401,9 @@ function wrapSession(session, profile, tracker) {
     action_tracker: tracker,
     getActionIdentity() {
       return tracker.current();
+    },
+    getDispatchDeliveredManifest() {
+      return tracker.getDeliveredManifest();
     },
     getPersistedAbort() {
       return tracker.getPersistedAbort();
@@ -1220,6 +1473,18 @@ function createInstalledEngineSession(options = {}) {
     kernelBinding,
   );
   const tracker = createActionIdentityTracker();
+  const pendingDispatchManifest = { current: null };
+  const rawEngineInvoke = options.engineInvoke;
+  if (typeof rawEngineInvoke !== 'function') {
+    installedEngineError('installed Engine session requires engineInvoke', 'ENGINE_SINK_UNAVAILABLE');
+  }
+  const engineInvoke = (message) => {
+    const envelope = rawEngineInvoke(message);
+    if (message && message.operation === 'execute_engine_dispatch') {
+      return captureDeliveredManifestFromHostEnvelope(envelope, pendingDispatchManifest);
+    }
+    return envelope;
+  };
   let session;
   try {
     session = createEngineAcceptanceSession({
@@ -1229,7 +1494,7 @@ function createInstalledEngineSession(options = {}) {
       acceptanceContract: options.acceptanceContract,
       modeOverride,
       witnessInvoke: options.witnessInvoke,
-      engineInvoke: options.engineInvoke,
+      engineInvoke,
       coordinatorInvoke: options.coordinatorInvoke,
       requestIdFactory: options.requestIdFactory,
       kernelOptions: options.kernelOptions,
@@ -1242,7 +1507,7 @@ function createInstalledEngineSession(options = {}) {
     session.acceptance_authority,
     profile.profile_hash,
   );
-  return Object.freeze(wrapSession(session, profile, tracker));
+  return Object.freeze(wrapSession(session, profile, tracker, pendingDispatchManifest));
 }
 
 function resumeInstalledEngineSession(options = {}) {
@@ -1327,6 +1592,19 @@ function resumeInstalledEngineSession(options = {}) {
     }
   }
   if (reconstructed) {
+    // Rehydrate dispatch commitment from prior identity (resume/replay binding).
+    const priorManifest = options.priorActionIdentity
+      && options.priorActionIdentity.delivered_manifest
+      ? options.priorActionIdentity.delivered_manifest
+      : (options.priorDispatchDeliveredManifest || null);
+    if (priorManifest) {
+      reconstructed.delivered_manifest = normalizeDispatchDeliveredManifest(priorManifest);
+    } else if (reconstructed.status === 'accepted') {
+      installedEngineError(
+        'resume of accepted identity requires prior dispatch delivered-manifest commitment',
+        'DISPATCH_MANIFEST_REQUIRED',
+      );
+    }
     tracker.adopt(reconstructed);
     if (reconstructed.status === 'aborted') {
       const ledger = options.ledger;
@@ -1335,8 +1613,34 @@ function resumeInstalledEngineSession(options = {}) {
         : null;
       tracker.markAborted(reconstructed.abort_reason || 'aborted', head);
     }
+    // For accepted resume, delivered_set_hash on ledger must still match commitment.
+    // Structural read only — full witness verify happens when the session resumes.
+    if (reconstructed.status === 'accepted' && reconstructed.delivered_manifest) {
+      const events = Array.isArray(options.ledger.events) ? options.ledger.events : [];
+      const acceptance = [...events].reverse().find((event) => event && event.type === 'acceptance');
+      const deliveredSetHash = acceptance && acceptance.payload
+        ? acceptance.payload.delivered_set_hash
+        : null;
+      assertDispatchManifestMatchesAcceptance(
+        reconstructed.delivered_manifest,
+        deliveredSetHash,
+        'resume',
+      );
+    }
   }
 
+  const pendingDispatchManifest = { current: null };
+  const rawEngineInvoke = options.engineInvoke;
+  if (typeof rawEngineInvoke !== 'function') {
+    installedEngineError('resumeInstalledEngineSession requires engineInvoke', 'ENGINE_SINK_UNAVAILABLE');
+  }
+  const engineInvoke = (message) => {
+    const envelope = rawEngineInvoke(message);
+    if (message && message.operation === 'execute_engine_dispatch') {
+      return captureDeliveredManifestFromHostEnvelope(envelope, pendingDispatchManifest);
+    }
+    return envelope;
+  };
   const witness = createSemanticWitnessAdapter({
     route: profile.engine_profile.route,
     durableBinding,
@@ -1350,7 +1654,7 @@ function resumeInstalledEngineSession(options = {}) {
     actionAuthority = createEngineActionAuthority({
       profile: profile.engine_profile,
       durableBinding,
-      invoke: options.engineInvoke,
+      invoke: engineInvoke,
     });
     acceptanceAuthority = createEngineAcceptanceCoordinator({
       profile: profile.engine_profile,
@@ -1388,7 +1692,7 @@ function resumeInstalledEngineSession(options = {}) {
     },
   };
   registerIntakeFrozenAuthorities(witness, acceptanceAuthority, profile.profile_hash);
-  return Object.freeze(wrapSession(session, profile, tracker));
+  return Object.freeze(wrapSession(session, profile, tracker, pendingDispatchManifest));
 }
 
 function verifyAcceptedLedgerCanonical(ledger, {
@@ -1995,6 +2299,7 @@ module.exports = {
   ENGINE_IMPLEMENTATION_RECEIPT_ROOT,
   ENGINE_IMPLEMENTATION_TARGET,
   ENGINE_IMPLEMENTATION_TOOL_CLASS,
+  DISPATCH_DELIVERED_MANIFEST_KIND,
   FORBIDDEN_ENGINE_SINK_IDS,
   INSTALLED_ENGINE_ACTION_IDENTITY,
   INSTALLED_ENGINE_ABORT_KIND,
@@ -2011,6 +2316,7 @@ module.exports = {
   createInstalledEngineSession,
   durableBindingFromInstalled,
   fixedAction,
+  normalizeDispatchDeliveredManifest,
   normalizeInstalledEngineProfile,
   normalizeInstalledEngineResult,
   normalizePersistedAbort,

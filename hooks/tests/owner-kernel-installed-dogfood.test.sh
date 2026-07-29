@@ -157,7 +157,7 @@ function hostResponse(message, response, hash) {
   };
 }
 
-function buildHosts(runtime, profile, deliveredManifest, hash) {
+function buildHosts(runtime, profile, hash) {
   const NOW = new Date(runtime.NOW).toISOString();
   const authorizations = new Map();
   const consumed = new Set();
@@ -165,7 +165,17 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
   let executedClaimId = null;
   let engineObservation = null;
   let lastDogfoodDelivery = null;
-  const manifestHash = hash(deliveredManifest);
+  // Active delivered manifest is bound only from real execute sink output.
+  let activeDeliveredManifest = null;
+  function requireActiveManifest() {
+    if (!activeDeliveredManifest) {
+      throw new Error('delivered manifest not yet bound from execute_engine_dispatch');
+    }
+    return activeDeliveredManifest;
+  }
+  function activeManifestHash() {
+    return hash(requireActiveManifest());
+  }
   const auditHead = hash(`audit:${runtime.routeInputs.runBinding.cohort_id}`);
   const coordinatorBinding = {
     identity: profile.engine_profile.route.coordinator_binding.identity,
@@ -350,14 +360,25 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
         artifact_sha256: deliveredSha,
         work_repo: workRepo,
       };
+      // Bind acceptance artifacts to the REAL delivered bytes (not a pre-run fixture).
+      activeDeliveredManifest = [{
+        id: 'workspace',
+        sha256: deliveredSha,
+      }];
       engineObservation = engineResult.status;
       const effectId = `dogfood-effect-${request.claim_id}`;
-      // Keep host-response shape compatible with installed execute path (no
-      // extra delivered_manifest field that could force a blocked transition).
+      const receiptSha = hash({
+        effect_id: effectId,
+        result: engineResult,
+        delivered_commit: commitSha,
+        delivered_artifact_sha256: deliveredSha,
+      });
+      // delivered_manifest is stripped by installed-engine before Kernel schema;
+      // commitment binds commit + artifact + receipt identity.
       return hostResponse(message, {
         receipt: {
           uri: `file://${profile.engine_profile.receipt_root}/${effectId}.json`,
-          sha256: hash({ effect_id: effectId, result: engineResult }),
+          sha256: receiptSha,
         },
         broker: {
           identity: runtime.serviceBindings.broker.identity,
@@ -373,6 +394,17 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
         boundary_state_version: 1,
         boundary_attestation_hash: runtime.serviceBindings.broker.attestation_hash,
         effect_at: NOW,
+        delivered_manifest: {
+          commit: commitSha,
+          artifacts: [{
+            id: 'workspace',
+            path: deliveredRel,
+            sha256: deliveredSha,
+            bytes: deliveredBytes.length,
+          }],
+          receipt_sha256: receiptSha,
+          boundary_effect_id: effectId,
+        },
       }, hash);
     }
     if (message.operation === 'verify_engine_dispatch') {
@@ -447,10 +479,10 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
         intent_id: request.expected_intent_id,
         transaction_id: `txn-${request.attempt_id}`,
         fence: hash(`fence:${request.attempt_id}`),
-        candidate_artifacts: deliveredManifest,
-        delivered_artifacts: deliveredManifest,
-        candidate_set_hash: manifestHash,
-        delivered_set_hash: manifestHash,
+        candidate_artifacts: requireActiveManifest(),
+        delivered_artifacts: requireActiveManifest(),
+        candidate_set_hash: activeManifestHash(),
+        delivered_set_hash: activeManifestHash(),
         audit_head: auditHead,
         control_event_head: request.expected_event_head,
         control_witness_head: request.expected_witness_head,
@@ -549,8 +581,8 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
           leg_id: 'tests',
           outcome: 'green',
           command_hash: hash('node --test'),
-          candidate_artifacts: deliveredManifest,
-          candidate_set_hash: manifestHash,
+          candidate_artifacts: requireActiveManifest(),
+          candidate_set_hash: activeManifestHash(),
           exit_code: 0,
           stdout_hash: hash('dogfood-stdout'),
           stderr_hash: hash('dogfood-stderr'),
@@ -573,8 +605,8 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
           scope: 'contract_leg',
           scope_id: envelope.scope_id,
           finding: 'clear',
-          candidate_artifacts: deliveredManifest,
-          candidate_set_hash: manifestHash,
+          candidate_artifacts: requireActiveManifest(),
+          candidate_set_hash: activeManifestHash(),
           subject_identity: profile.engine_profile.route.worker_binding.identity,
           subject_family: 'qwen',
           result_hash: hash(`challenge-result:${envelope.scope_id}`),
@@ -611,8 +643,8 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
           attestation_sha256: profile.engine_profile.route.coordinator_binding.attestation_hash,
           audit_head: auditHead,
           intent_id: context.intent_id,
-          candidate_artifacts: deliveredManifest,
-          candidate_set_hash: manifestHash,
+          candidate_artifacts: requireActiveManifest(),
+          candidate_set_hash: activeManifestHash(),
           complete: true,
           action_claim_ids: [executedClaimId],
           action_footprint_hash: context.action_footprint_hash,
@@ -631,14 +663,14 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
     sinkCalls,
     getEngineObservation: () => engineObservation,
     getLastDogfoodDelivery: () => lastDogfoodDelivery,
+    getActiveDeliveredManifest: () => (activeDeliveredManifest
+      ? activeDeliveredManifest.map((item) => ({ ...item }))
+      : null),
+    getActiveManifestHash: () => (activeDeliveredManifest ? hash(activeDeliveredManifest) : null),
   };
 }
 
 async function runHappyPath({ runtime, modeOverride, label }) {
-  const deliveredManifest = [{
-    id: 'workspace',
-    sha256: runtime.hash(`dogfood-workspace:${label}`),
-  }];
   const binding = installedBindingFor(runtime);
   const NOW = new Date(runtime.NOW).toISOString();
   const EXPIRES = new Date(runtime.NOW + 3600000).toISOString();
@@ -658,7 +690,7 @@ async function runHappyPath({ runtime, modeOverride, label }) {
     label,
     hash: runtime.hash,
   });
-  const hosts = buildHosts(runtime, profile, deliveredManifest, runtime.hash);
+  const hosts = buildHosts(runtime, profile, runtime.hash);
   const witnessInvoke = runtime.createWitnessInvoke();
   const session = installedEngine.createInstalledEngineSession({
     profile,
@@ -731,11 +763,32 @@ async function runHappyPath({ runtime, modeOverride, label }) {
     timeoutMilliseconds: 1000,
   });
   assert.equal(accepted.accepted, true);
+  const realManifestHash = hosts.getActiveManifestHash();
+  assert.equal(typeof realManifestHash, 'string');
   const disclosure = session.disclosure();
   assert.deepEqual(disclosure, expectedDisclosure);
   const ledger = session.kernel.getLedger();
   assert.deepEqual(ledger.events.slice(-2).map((event) => event.type), ['acceptance', 'complete']);
+  const acceptanceEvent = ledger.events.find((event) => event.type === 'acceptance');
+  assert.ok(acceptanceEvent && acceptanceEvent.payload);
+  assert.equal(
+    acceptanceEvent.payload.delivered_set_hash,
+    realManifestHash,
+    'acceptance delivered_set_hash must bind the real dispatch artifact set',
+  );
+  assert.equal(
+    acceptanceEvent.payload.candidate_set_hash,
+    realManifestHash,
+    'acceptance candidate_set_hash must bind the real dispatch artifact set',
+  );
+  const dispatchManifest = session.getDispatchDeliveredManifest();
+  assert.ok(dispatchManifest, 'session must expose dispatch delivered-manifest commitment');
+  assert.equal(dispatchManifest.artifact_set_hash, realManifestHash);
+  assert.equal(dispatchManifest.commit, delivery.commit);
+  assert.equal(dispatchManifest.artifacts[0].sha256, delivery.artifact_sha256);
   const priorIdentity = session.getActionIdentity();
+  // Resume/replay carries the same dispatch commitment on prior identity.
+  priorIdentity.delivered_manifest = dispatchManifest;
   const resumed = installedEngine.resumeInstalledEngineSession({
     profile,
     binding,

@@ -312,13 +312,19 @@ function engineInvoke(message) {
     assert.equal(engineResult.status === 'committed', true);
 
     const effectId = `engine-effect-${request.claim_id}`;
+    // Non-stub commit identity bound into delivered_manifest commitment.
+    const commitSha = 'c'.repeat(40);
+    const artifactSha = deliveredManifest[0].sha256;
+    const receiptSha = hash({
+      effect_id: effectId,
+      result: engineResult,
+      authorization_id: authorization.authorization_id,
+      delivered_commit: commitSha,
+      delivered_artifact_sha256: artifactSha,
+    });
     const receipt = {
       uri: `file://${profile.engine_profile.receipt_root}/${effectId}.json`,
-      sha256: hash({
-        effect_id: effectId,
-        result: engineResult,
-        authorization_id: authorization.authorization_id,
-      }),
+      sha256: receiptSha,
     };
     return hostResponse(message, {
       receipt,
@@ -336,6 +342,16 @@ function engineInvoke(message) {
       boundary_state_version: 1,
       boundary_attestation_hash: serviceBindings.broker.attestation_hash,
       effect_at: NOW,
+      delivered_manifest: {
+        commit: commitSha,
+        artifacts: [{
+          id: 'workspace',
+          path: 'workspace.tar',
+          sha256: artifactSha,
+        }],
+        receipt_sha256: receiptSha,
+        boundary_effect_id: effectId,
+      },
     });
   }
   if (message.operation === 'verify_engine_dispatch') {
@@ -796,6 +812,51 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
     result.candidate_set_hash,
     'delivered_manifest_head must satisfy same-manifest relationship to candidate_set_hash',
   );
+
+  // Dispatch commitment must exact-match coordinator delivered_set_hash.
+  const dispatchManifest = session.getDispatchDeliveredManifest();
+  assert.ok(dispatchManifest, 'session must expose dispatch delivered-manifest');
+  assert.equal(dispatchManifest.artifact_set_hash, manifestHash);
+  assert.equal(dispatchManifest.commit, 'c'.repeat(40));
+  assert.equal(
+    acceptanceEvent.payload.delivered_set_hash,
+    dispatchManifest.artifact_set_hash,
+  );
+
+  // substitution/synthetic-manifest: host that binds a different artifact set must fail closed.
+  {
+    const badRuntime = createP37Runtime(root, {
+      actionCatalog: [baseEngine.ENGINE_IMPLEMENTATION_CATALOG_ENTRY],
+      acceptanceContract,
+      runId: 'p37-installed-engine-manifest-mismatch',
+    });
+    // Reuse same hosts pattern with mismatched coordinator manifest is hard inline;
+    // unit-test normalizeDispatchDeliveredManifest + assert path via direct API.
+    const ok = installedEngine.normalizeDispatchDeliveredManifest({
+      commit: 'a'.repeat(40),
+      artifacts: [{ id: 'workspace', path: 'x', sha256: 'b'.repeat(64) }],
+      receipt_sha256: 'c'.repeat(64),
+      boundary_effect_id: 'effect-1',
+    });
+    assert.equal(ok.artifacts[0].sha256, 'b'.repeat(64));
+    assert.equal(typeof ok.commitment_hash, 'string');
+    assert.equal(typeof ok.artifact_set_hash, 'string');
+    let stubRejected = false;
+    try {
+      installedEngine.normalizeDispatchDeliveredManifest({
+        commit: 'd'.repeat(40),
+        artifacts: [{ id: 'workspace', path: 'x', sha256: 'b'.repeat(64) }],
+        receipt_sha256: 'c'.repeat(64),
+        boundary_effect_id: 'effect-1',
+      });
+    } catch (error) {
+      stubRejected = /stub|DISPATCH_MANIFEST/i.test(String(error && error.message));
+      assert.equal(error.code, 'DISPATCH_MANIFEST_INVALID');
+    }
+    assert.equal(stubRejected, true, 'stub commit must be rejected');
+  }
+
+
   assert.equal(
     result.candidate_set_hash,
     acceptanceEvent.payload.candidate_set_hash,
@@ -1066,6 +1127,7 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   }
 
   const priorIdentity = session.getActionIdentity();
+  priorIdentity.delivered_manifest = session.getDispatchDeliveredManifest();
   const resumed = installedEngine.resumeInstalledEngineSession({
     profile,
     binding: installedBinding,

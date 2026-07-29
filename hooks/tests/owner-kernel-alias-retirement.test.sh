@@ -594,8 +594,8 @@ const root = process.argv[2];
 const proj = process.argv[3];
 const auth = process.argv[4];
 const bind = process.argv[5];
-const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-process.stdout.write(JSON.stringify(evaluateReleaseGates({
+const { evaluateReleaseGatesFixture } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: root,
   trust: {
@@ -761,8 +761,8 @@ const root = process.argv[2];
 const proj = process.argv[3];
 const auth = process.argv[4];
 const bind = process.argv[5];
-const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-process.stdout.write(JSON.stringify(evaluateReleaseGates({
+const { evaluateReleaseGatesFixture } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: root,
   trust: {
@@ -983,8 +983,8 @@ const root = process.argv[2];
 const proj = process.argv[3];
 const auth = process.argv[4];
 const bind = process.argv[5];
-const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-process.stdout.write(JSON.stringify(evaluateReleaseGates({
+const { evaluateReleaseGatesFixture } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: root,
   trust: {
@@ -1021,8 +1021,8 @@ const root = process.argv[2];
 const proj = process.argv[3];
 const auth = process.argv[4];
 const bind = process.argv[5];
-const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-process.stdout.write(JSON.stringify(evaluateReleaseGates({
+const { evaluateReleaseGatesFixture } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: root,
   trust: {
@@ -1059,8 +1059,8 @@ const root = process.argv[2];
 const proj = process.argv[3];
 const auth = process.argv[4];
 const bind = process.argv[5];
-const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-process.stdout.write(JSON.stringify(evaluateReleaseGates({
+const { evaluateReleaseGatesFixture } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: root,
   trust: {
@@ -1118,23 +1118,27 @@ rm -rf "$ORDER_DIR" "$ORDER_AUTH_DIR"
 # ---------------------------------------------------------------------------
 # Mechanical-only: stubbed migrated skills so the scan completes; no authority
 # migration receipt. Expect deterministic_caller_migration true via scan alone.
+# Temp git repo with only exempt alias definition stubs — no residual active callers.
 MECH_REPO="$(mktemp -d "${TMPDIR:-/tmp}/alias-mech-repo.XXXXXX")"
 MECH_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/alias-mech-proj.XXXXXX")"
 mkdir -p "$MECH_PROJ/production-telemetry"
-# Minimal checker + owner-kernel deps for --repo-root.
-for rel in \
-  scripts/check-owner-kernel-release-gates.js \
-  src/engine/owner-kernel/canonical.js \
-  src/engine/owner-kernel/witness.js \
-  src/engine/owner-kernel/errors.js
-do
-  mkdir -p "$(dirname "$MECH_REPO/$rel")"
-  cp "$REPO_ROOT/$rel" "$MECH_REPO/$rel"
-done
-for level in l3 l4 l5 l6; do
-  mkdir -p "$MECH_REPO/skills/$level"
-  printf '%s\n' "---" "name: $level" "---" "compat stub" >"$MECH_REPO/skills/$level/SKILL.md"
-done
+(
+  cd "$MECH_REPO" || exit 1
+  git init -q
+  git config user.email 'mech@autopilot.local'
+  git config user.name 'mech'
+  for level in l3 l4 l5 l6; do
+    mkdir -p "skills/$level"
+    printf '%s\n' "---" "name: $level" "---" "compat stub" >"skills/$level/SKILL.md"
+  done
+  # Active surface without /l3-/l6 tokens.
+  mkdir -p skills/other scripts hooks
+  printf '%s\n' "---" "name: other" "---" "no alias tokens" >skills/other/SKILL.md
+  printf '%s\n' '#!/bin/sh' 'echo ok' >scripts/hello.sh
+  printf '%s\n' '// no alias' >hooks/noop.js
+  git add -A
+  git commit -q -m 'clean tracked surfaces'
+)
 printf '%s\n' '{
   "compatibility_cycle_id": "mech-only",
   "shipped_compatibility_cycle": false,
@@ -1144,7 +1148,7 @@ printf '%s\n' '{
   "caller_migration_complete": false,
   "deterministic_caller_migration": false
 }' >"$MECH_PROJ/production-telemetry/alias-retirement.json"
-MECH_OUT="$(node "$MECH_REPO/scripts/check-owner-kernel-release-gates.js" \
+MECH_OUT="$(node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
   --project "$MECH_PROJ" \
   --repo-root "$MECH_REPO" 2>&1)"
 node - "$MECH_OUT" <<'NODE'
@@ -1156,21 +1160,109 @@ if (!alias || alias.status !== 'HOLD') {
 }
 if (alias.deterministic_caller_migration !== true) {
   console.error('mechanical-only success shape requires deterministic_caller_migration true; got',
-    alias.deterministic_caller_migration);
+    alias.deterministic_caller_migration, alias.mechanical_caller_migration_scan);
   process.exit(1);
 }
 const reasons = (alias.blocking_reasons || []).join('\n');
-if (/caller migration evidence missing or incomplete/i.test(reasons)) {
-  console.error('mechanical-only must not emit migration-incomplete blocker; got:', reasons);
+if (/caller migration evidence missing or incomplete|residual/i.test(reasons)
+  && /mechanical caller migration scan is mandatory and incomplete/i.test(reasons)) {
+  console.error('mechanical-only must not emit residual migration blocker; got:', reasons);
   process.exit(1);
 }
 if (!alias.mechanical_caller_migration_scan || alias.mechanical_caller_migration_scan.complete !== true) {
-  console.error('mechanical scan must report complete');
+  console.error('mechanical scan must report complete', alias.mechanical_caller_migration_scan);
+  process.exit(1);
+}
+if (!alias.mechanical_caller_migration_scan.revision
+  || !alias.mechanical_caller_migration_scan.scan_contract_digest) {
+  console.error('complete scan must bind revision and scan_contract_digest');
   process.exit(1);
 }
 console.log('alias_mechanical_only_success_shape=ok');
 NODE
 assert_eq "0" "$?" "mechanical-only migration success shape with overall HOLD"
+
+# Residual active callers in non-definition surfaces must block complete.
+node - "$REPO_ROOT" "$MECH_REPO" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const root = process.argv[2];
+const mechRepo = process.argv[3];
+const {
+  executeDeterministicCallerMigrationScan,
+} = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+
+function commitAll(msg) {
+  spawnSync('git', ['-C', mechRepo, 'add', '-A'], { stdio: 'ignore' });
+  spawnSync('git', ['-C', mechRepo, 'commit', '-q', '-m', msg], { stdio: 'ignore' });
+}
+
+const clean = executeDeterministicCallerMigrationScan(mechRepo);
+if (clean.complete !== true) {
+  console.error('clean temp repo must scan complete', clean);
+  process.exit(1);
+}
+const cleanRev = clean.revision;
+const cleanDigest = clean.scan_contract_digest;
+
+const cases = [
+  { rel: 'skills/other/SKILL.md', body: 'invoke /l3 for legacy\n', label: 'other-skill' },
+  { rel: 'scripts/legacy.sh', body: '#!/bin/sh\n# /l4 dispatch\n', label: 'script' },
+  { rel: 'hooks/legacy-hook.js', body: '// call /l5 here\n', label: 'hook' },
+  { rel: 'docs/guide.md', body: 'Use /l6 for full delegation\n', label: 'docs' },
+  { rel: 'references/ops.md', body: 'prefer /l3 entry\n', label: 'reference' },
+  { rel: 'platforms/codex/plugin/README.md', body: 'generated surface mentions /l4\n', label: 'generated-active' },
+];
+for (const c of cases) {
+  // reset to clean definition-only baseline each case
+  spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
+  spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
+  const abs = path.join(mechRepo, c.rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, c.body);
+  commitAll(`add residual ${c.label}`);
+  const scan = executeDeterministicCallerMigrationScan(mechRepo);
+  if (scan.complete === true) {
+    console.error(`${c.label} residual must block complete`, scan);
+    process.exit(1);
+  }
+  if (!Array.isArray(scan.residuals) || scan.residuals.length < 1) {
+    console.error(`${c.label} must report path/line/token residuals`, scan);
+    process.exit(1);
+  }
+  const hit = scan.residuals.some((r) => r.path === c.rel.replace(/\\/g, '/'));
+  if (!hit) {
+    console.error(`${c.label} residual path missing`, scan.residuals);
+    process.exit(1);
+  }
+  if (scan.revision === cleanRev) {
+    console.error(`${c.label} revision must change after residual commit`);
+    process.exit(1);
+  }
+  if (scan.scan_contract_digest !== cleanDigest) {
+    console.error('scan_contract_digest must be stable across revisions');
+    process.exit(1);
+  }
+}
+
+// Exact definition files remain exempt even with /l3 tokens in their body.
+spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
+spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
+fs.writeFileSync(
+  path.join(mechRepo, 'skills/l3/SKILL.md'),
+  '---\nname: l3\n---\nThis definition implements /l3\n',
+);
+commitAll('definition exempt');
+const defScan = executeDeterministicCallerMigrationScan(mechRepo);
+if (defScan.complete !== true) {
+  console.error('exact definition SKILL.md must be exempt', defScan);
+  process.exit(1);
+}
+console.log('alias_tracked_residual_scan_oracles=ok');
+NODE
+assert_eq "0" "$?" "tracked residual scan blocks active surfaces; definition exempt"
 rm -rf "$MECH_REPO" "$MECH_PROJ"
 
 # Authority-only: residual real-repo skills fail mechanical scan, but an
@@ -1284,8 +1376,8 @@ const root = process.argv[2];
 const proj = process.argv[3];
 const auth = process.argv[4];
 const bind = process.argv[5];
-const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
-process.stdout.write(JSON.stringify(evaluateReleaseGates({
+const { evaluateReleaseGatesFixture } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGatesFixture({
   project: proj,
   repoRoot: root,
   trust: {

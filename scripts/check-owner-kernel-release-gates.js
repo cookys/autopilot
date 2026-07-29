@@ -185,8 +185,9 @@ function isNonEmptySha256(value) {
  * Env, HOME, project, CLI flags, and serialized evidence cannot select authority.
  * Paths must be regular, root-owned, not group/other-writable, non-symlink files
  * with similarly owned parents. Hermetic tests may inject trust paths only via
- * evaluateReleaseGates({ trust: { authorityPath, adapterBindingPath,
- * skipInstallationOwnershipChecks } }) — never via CLI argv/env.
+ * evaluateReleaseGatesFixture({ trust: { authorityPath, adapterBindingPath,
+ * skipInstallationOwnershipChecks } }) — test-only; always forces overall HOLD.
+ * Production evaluateReleaseGates never accepts trust injection.
  *
  * Adapter module identity + integrity pin come only from the deployment binding
  * (never from authority journal selecting adapter_module/digest). Binding must
@@ -843,63 +844,203 @@ function requiredWitnessedDayKeys(nowMs = Date.now()) {
  * Self-hashed migration bodies and boolean flags in telemetry are not proof.
  */
 function executeDeterministicCallerMigrationScan(repoRoot) {
-  const callersMigrated = [];
-  const remaining = [];
+  const retired = [...ALIAS_DEFINITION.levels];
+  const scanContract = Object.freeze({
+    id: 'p37-alias-caller-residual-scan-v2',
+    method: 'git-ls-files-tracked-residual',
+    tokens: retired.map((level) => `/${level}`),
+    retired_alias_set: retired,
+  });
+  const scanContractDigest = sha256(canonicalJson(scanContract));
+
   let revision = null;
   const rev = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
-  if (!rev.error && rev.status === 0 && typeof rev.stdout === 'string') {
-    revision = rev.stdout.trim() || null;
+  if (rev.error || rev.status !== 0 || typeof rev.stdout !== 'string' || !rev.stdout.trim()) {
+    return {
+      complete: false,
+      reason: 'mechanical caller migration scan requires a readable git HEAD revision '
+        + `(rev-parse failed: ${(rev.stderr || rev.error || 'unknown').toString().trim()})`,
+      callers_migrated: [],
+      remaining: [...retired],
+      residuals: [],
+      revision: null,
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
+    };
   }
-  // Deterministic scan contract: exact retired alias set l3-l6 residual prose check.
-  const scanContract = 'skills/<l3|l4|l5|l6>/SKILL.md residual lifecycle/trust prose scan';
-  for (const level of ALIAS_DEFINITION.levels) {
-    const skillPath = path.join(repoRoot, 'skills', level, 'SKILL.md');
-    if (!fs.existsSync(skillPath)) {
-      callersMigrated.push(level);
+  revision = rev.stdout.trim();
+
+  const ls = spawnSync(
+    'git',
+    ['-C', repoRoot, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 },
+  );
+  // Use tracked files only (cached). Untracked are not authoritative for retirement.
+  const lsTracked = spawnSync(
+    'git',
+    ['-C', repoRoot, 'ls-files', '-z'],
+    { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 },
+  );
+  if (lsTracked.error || lsTracked.status !== 0) {
+    return {
+      complete: false,
+      reason: 'mechanical caller migration scan failed git ls-files '
+        + `(${(lsTracked.stderr || lsTracked.error || 'unknown').toString().trim()})`,
+      callers_migrated: [],
+      remaining: [...retired],
+      residuals: [],
+      revision,
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
+    };
+  }
+  const rawList = lsTracked.stdout || Buffer.alloc(0);
+  const files = rawList.length === 0
+    ? []
+    : rawList.toString('utf8').split('\0').filter(Boolean);
+  if (files.length === 0) {
+    return {
+      complete: false,
+      reason: 'mechanical caller migration scan found zero tracked files; incomplete manifest',
+      callers_migrated: [],
+      remaining: [...retired],
+      residuals: [],
+      revision,
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
+    };
+  }
+
+  // Exact alias definition trees (compatibility implementations) and their mirrors.
+  function isExactAliasDefinition(relPath) {
+    const n = relPath.replace(/\\/g, '/');
+    for (const level of retired) {
+      if (n === `skills/${level}/SKILL.md`
+        || n.startsWith(`skills/${level}/`)
+        || n === `platforms/codex/plugin/skills/${level}/SKILL.md`
+        || n.startsWith(`platforms/codex/plugin/skills/${level}/`)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isHistoricalOrFixture(relPath) {
+    const n = relPath.replace(/\\/g, '/');
+    if (n.includes('/_archive/') || n.startsWith('_archive/')) return true;
+    if (n.includes('/hooks/tests/') || n.startsWith('hooks/tests/')) return true;
+    if (n.includes('/fixtures/') || n.startsWith('fixtures/')) return true;
+    if (n.includes('/evals/') || n.startsWith('evals/')) return true;
+    if (/\.test\.(js|sh|ts|mjs|cjs)$/.test(n)) return true;
+    if (/\/tests?\//.test(`/${n}`)) return true;
+    return false;
+  }
+
+  // Active caller surfaces only (authoritative tracked set).
+  function isActiveCallerSurface(relPath) {
+    const n = relPath.replace(/\\/g, '/');
+    if (isExactAliasDefinition(n) || isHistoricalOrFixture(n)) return false;
+    if (n.startsWith('skills/')
+      || n.startsWith('agents/')
+      || n.startsWith('hooks/')
+      || n.startsWith('scripts/')
+      || n.startsWith('platforms/')
+      || n.startsWith('references/')
+      || n.startsWith('docs/')
+      || n.startsWith('.opencode/')
+      || n.startsWith('project-config-template/')
+      || n.startsWith('src/')
+      || n === 'AGENTS.md'
+      || n === 'CLAUDE.md'
+      || n === 'README.md'
+      || n === 'README.zh-TW.md'
+      || n.startsWith('.claude')
+      || n.startsWith('.agents/')) {
+      return true;
+    }
+    return false;
+  }
+
+  // Canonical invocation spellings for retired aliases.
+  const tokenRe = /(^|[^A-Za-z0-9_/])(\/l[3-6])(?=[^A-Za-z0-9_]|$)/g;
+
+  const residuals = [];
+  const remainingSet = new Set();
+  for (const rel of files) {
+    if (!isActiveCallerSurface(rel)) continue;
+    // Skip binary-ish extensions.
+    if (/\.(png|jpg|jpeg|gif|webp|ico|pdf|woff2?|ttf|eot|zip|gz|tgz|xz|bin|o|so|dylib|wasm)$/i.test(rel)) {
       continue;
     }
+    const abs = path.join(repoRoot, rel);
     let body;
     try {
-      body = fs.readFileSync(skillPath, 'utf8');
+      body = fs.readFileSync(abs, 'utf8');
     } catch (error) {
       return {
         complete: false,
-        reason: `caller migration scan failed reading skills/${level}: ${error.message}`,
-        callers_migrated: callersMigrated,
-        remaining: [...ALIAS_DEFINITION.levels],
+        reason: `mechanical caller migration scan failed reading tracked file ${rel}: ${error.message}`,
+        callers_migrated: [],
+        remaining: [...retired],
+        residuals: [],
+        revision,
+        scan_contract: scanContract.id,
+        scan_contract_digest: scanContractDigest,
+        retired_alias_set: retired,
       };
     }
-    // Compatibility stubs may remain, but lifecycle/trust routing prose means
-    // callers have not finished migrating off the alias surface.
-    if (/lifecycle|trust.?boundary|owner.?kernel|dispatch.?hetero|ceo-agent|dev-flow/i.test(body)
-      && body.length > 400) {
-      remaining.push(level);
-    } else {
-      callersMigrated.push(level);
+    const lines = body.split(/\r?\n/);
+    for (let lineNo = 0; lineNo < lines.length; lineNo += 1) {
+      const line = lines[lineNo];
+      tokenRe.lastIndex = 0;
+      let match;
+      while ((match = tokenRe.exec(line)) !== null) {
+        const token = match[2];
+        const level = token.slice(1); // l3..l6
+        if (!retired.includes(level)) continue;
+        remainingSet.add(level);
+        residuals.push({
+          path: rel.replace(/\\/g, '/'),
+          line: lineNo + 1,
+          token,
+        });
+      }
     }
   }
-  if (remaining.length > 0) {
+
+  const remaining = retired.filter((level) => remainingSet.has(level));
+  const callersMigrated = retired.filter((level) => !remainingSet.has(level));
+
+  if (residuals.length > 0) {
     return {
       complete: false,
-      reason: `deterministic caller migration scan found residual alias lifecycle/trust prose `
-        + `in: ${remaining.join(',')}`,
+      reason: `deterministic tracked residual scan found active /l3-/l6 callers `
+        + `(${residuals.length} hits across ${remaining.join(',') || 'unknown'})`,
       callers_migrated: callersMigrated,
       remaining,
+      residuals: residuals.slice(0, 200),
+      residual_count: residuals.length,
       revision,
-      scan_contract: scanContract,
-      retired_alias_set: [...ALIAS_DEFINITION.levels],
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
     };
   }
-  if (callersMigrated.length !== ALIAS_DEFINITION.levels.length
-    || ALIAS_DEFINITION.levels.some((level) => !callersMigrated.includes(level))) {
+  if (callersMigrated.length !== retired.length
+    || retired.some((level) => !callersMigrated.includes(level))) {
     return {
       complete: false,
       reason: 'mechanical scan did not clear the exact retired alias set l3,l4,l5,l6',
       callers_migrated: callersMigrated,
-      remaining: ALIAS_DEFINITION.levels.filter((level) => !callersMigrated.includes(level)),
+      remaining: retired.filter((level) => !callersMigrated.includes(level)),
+      residuals: [],
       revision,
-      scan_contract: scanContract,
-      retired_alias_set: [...ALIAS_DEFINITION.levels],
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
     };
   }
   return {
@@ -907,9 +1048,12 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
     reason: null,
     callers_migrated: callersMigrated,
     remaining: [],
+    residuals: [],
+    residual_count: 0,
     revision,
-    scan_contract: scanContract,
-    retired_alias_set: [...ALIAS_DEFINITION.levels],
+    scan_contract: scanContract.id,
+    scan_contract_digest: scanContractDigest,
+    retired_alias_set: retired,
   };
 }
 
@@ -2180,7 +2324,7 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
   };
 }
 
-function evaluateReleaseGates(input = {}) {
+function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = null } = {}) {
   const repoRootArg = input.repoRoot || input.repo_root || path.resolve(__dirname, '..');
   const projectArg = input.project || input.projectDir || input.project_dir;
   if (!projectArg) {
@@ -2197,9 +2341,9 @@ function evaluateReleaseGates(input = {}) {
     throw new Error(projectBoundary.reason);
   }
   const projectDir = projectBoundary.path;
-  // Hermetic injection: options.trust.{authorityPath,adapterBindingPath,skipInstallationOwnershipChecks}
-  // Production CLI never passes trust injection.
-  const trustOptions = { trust: input.trust || null };
+  const trustOptions = fixtureMode && trust && typeof trust === 'object'
+    ? { trust }
+    : { trust: null };
   const trustedAuthority = loadTrustedInstalledWitnessAuthority(
     projectDir,
     repoRoot,
@@ -2215,33 +2359,73 @@ function evaluateReleaseGates(input = {}) {
     ...kr10.blocking_reasons.map((reason) => `KR10: ${reason}`),
     ...alias.blocking_reasons.map((reason) => `alias_retirement: ${reason}`),
   ];
-  const disposition = blocking.length === 0 ? 'PASS' : 'HOLD';
+  let disposition = blocking.length === 0 ? 'PASS' : 'HOLD';
+  const notes = [
+    'KR definitions are frozen by the parent plan and are not redefined by this checker',
+    'KR8 always uses frozen baseline 6; conflicting production telemetry is a blocker',
+    'KR8 requires authenticated production provenance; a filename or parseable JSON is not production provenance',
+    'KR10 derives executed membership only from authoritative manifests/runtime graphs/inventory; fixed seed/heuristics/literal-require-scan never set membership_complete; incomplete/dynamic HOLD; thresholds stay frozen at 42 and 51',
+    'production trust roots are fixed /etc/autopilot paths only (not env/HOME/project); adapter binding must not supply timestamps; allowTestWitness forbidden for release evidence',
+    'day evidence requires adapter-owned anchored append timestamps via getAppendTimestamp after verify; journal harvest and pass-through timestamps cannot forge elapsed days',
+    'project-local telemetry/journal files, hashes, timestamps, signer IDs, and migration flags are untrusted inputs',
+    'self-hashed deterministic_caller_migration is not proof; mechanical scan of residual l3-l6 callers on current revision is MANDATORY (authority evidence supplements but never replaces)',
+    'fixture telemetry is never promoted to production telemetry',
+    'this checker never deletes compatibility aliases',
+    'present compatibility aliases are nonblocking; only unmet retirement prerequisites HOLD',
+    'P4 role qualification is out of scope',
+  ];
+  if (fixtureMode) {
+    // Test-only seam: never a production-shaped PASS, even when components are positive.
+    const fixtureBlocker = 'test-only fixture evaluator; not production authorization '
+      + '(evaluateReleaseGatesFixture cannot authorize release PASS)';
+    blocking.push(fixtureBlocker);
+    disposition = 'HOLD';
+    notes.push(fixtureBlocker);
+  }
   const material = {
     schema_version: 1,
-    kind: 'owner_kernel_release_gate_report',
+    kind: fixtureMode
+      ? 'owner_kernel_release_gate_fixture_report'
+      : 'owner_kernel_release_gate_report',
     project: path.relative(repoRoot, projectDir) || projectDir,
     disposition,
+    fixture_mode: fixtureMode === true,
     kr8,
     kr10,
     alias_retirement: alias,
     blocking_reasons: blocking,
-    notes: [
-      'KR definitions are frozen by the parent plan and are not redefined by this checker',
-      'KR8 always uses frozen baseline 6; conflicting production telemetry is a blocker',
-      'KR8 requires authenticated production provenance; a filename or parseable JSON is not production provenance',
-      'KR10 derives executed membership only from authoritative manifests/runtime graphs/inventory; fixed seed/heuristics/literal-require-scan never set membership_complete; incomplete/dynamic HOLD; thresholds stay frozen at 42 and 51',
-      'production trust roots are fixed /etc/autopilot paths only (not env/HOME/project); adapter binding must not supply timestamps; allowTestWitness forbidden for release evidence',
-      'day evidence requires adapter-owned anchored append timestamps via getAppendTimestamp after verify; journal harvest and pass-through timestamps cannot forge elapsed days',
-      'project-local telemetry/journal files, hashes, timestamps, signer IDs, and migration flags are untrusted inputs',
-      'self-hashed deterministic_caller_migration is not proof; mechanical scan of residual l3-l6 callers on current revision is MANDATORY (authority evidence supplements but never replaces)',
-      'fixture telemetry is never promoted to production telemetry',
-      'this checker never deletes compatibility aliases',
-      'present compatibility aliases are nonblocking; only unmet retirement prerequisites HOLD',
-      'P4 role qualification is out of scope',
-    ],
+    notes,
   };
   material.report_hash = sha256(canonicalJson(material));
   return material;
+}
+
+/**
+ * Production evaluator: fixed /etc trust roots + real ownership checks only.
+ * Never accepts trust injection paths or skipInstallationOwnershipChecks.
+ */
+function evaluateReleaseGates(input = {}) {
+  if (input && (input.trust != null || input.trustedAuthority != null
+    || input.authorityPath != null || input.adapterBindingPath != null
+    || input.skipInstallationOwnershipChecks != null)) {
+    throw new Error(
+      'evaluateReleaseGates rejects trust injection; production uses fixed /etc trust roots only. '
+      + 'Hermetic tests must call evaluateReleaseGatesFixture (test-only, forces HOLD)',
+    );
+  }
+  return evaluateReleaseGatesCore(input, { fixtureMode: false, trust: null });
+}
+
+/**
+ * Explicit test-only seam. May inject trust paths and skip ownership checks for
+ * component oracles, but ALWAYS labels fixture/test-only and forces overall HOLD.
+ * Cannot return an ordinary production-shaped PASS.
+ */
+function evaluateReleaseGatesFixture(input = {}) {
+  const trust = input && input.trust && typeof input.trust === 'object'
+    ? input.trust
+    : null;
+  return evaluateReleaseGatesCore(input, { fixtureMode: true, trust });
 }
 
 function main() {
@@ -2256,8 +2440,6 @@ function main() {
     material = evaluateReleaseGates({
       project: options.project,
       repoRoot: options.repoRoot,
-      // Explicitly no trust injection on production main.
-      trust: null,
     });
   } catch (error) {
     fail(error.message || String(error), 2);
@@ -2272,13 +2454,15 @@ module.exports = {
   PRODUCTION_AUTHORITY_PATH,
   PRODUCTION_ADAPTER_BINDING_PATH,
   evaluateReleaseGates,
-  loadTrustedInstalledWitnessAuthority,
-  loadTrustedWitnessAdapterBinding,
+  evaluateReleaseGatesFixture,
   executeDeterministicCallerMigrationScan,
-  evaluateAliasRetirement,
   evaluateKr8,
   evaluateKr10,
   assertSecureInstallationPath,
+  // Internal component helpers are not a production trust-injection surface.
+  // evaluateAliasRetirement remains available for focused scan/report tests only
+  // and never supplies caller-selected authority on its own.
+  evaluateAliasRetirement,
 };
 
 if (require.main === module) {

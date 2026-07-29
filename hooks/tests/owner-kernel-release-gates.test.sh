@@ -794,8 +794,8 @@ NODE
 assert_eq "0" "$?" "caller-created config+adapter+receipts cannot self-authenticate"
 rm -rf "$SELF_DIR" "$SELF_PROJ" "$SELF_HOME"
 
-# Case 3c — positive control: independently supplied pinned adapter binding
-# (AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING) authenticates valid KR8.
+# Case 3c — positive control: hermetic evaluateReleaseGates trust injection
+# (NOT env/HOME/CLI) with installation-owned-path skip for fixtures.
 OUTSIDE_AUTH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth.XXXXXX")"
 OUTSIDE_AUTH="$OUTSIDE_AUTH_DIR/trusted-installed-witness-authority.json"
 OUTSIDE_ADAPTER="$OUTSIDE_AUTH_DIR/external-witness-adapter.js"
@@ -829,18 +829,20 @@ const receiptBase = {
 };
 const witnessHead = sha256(canonicalJson(receiptBase));
 const receipt = { ...receiptBase, witness_head: witnessHead };
-fs.writeFileSync(adapterOut, `'use strict';
+// Adapter-owned append map (module-local) — binding must not supply timestamps.
+const adapterBody = `'use strict';
 const crypto = require('crypto');
+const ANCHORED = ${JSON.stringify({ [witnessHead]: new Date().toISOString() })};
 function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
 function canonicalJson(v) {
   if (v === null || typeof v !== 'object') return JSON.stringify(v);
   if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
   return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
 }
-function createAuthority({ streamId, receipts, anchored_append_timestamps }) {
+function createAuthority({ streamId, receipts }) {
   const known = new Map();
   for (const entry of receipts || []) known.set(String(entry.witness_head).toLowerCase(), entry);
-  const anchored = new Map(Object.entries(anchored_append_timestamps || {}).map(([k, v]) => [String(k).toLowerCase(), v]));
+  const anchored = new Map(Object.entries(ANCHORED).map(([k, v]) => [String(k).toLowerCase(), v]));
   return {
     streamId, trustTier: 'external',
     identity: 'external-adapter:' + streamId,
@@ -863,22 +865,21 @@ function createAuthority({ streamId, receipts, anchored_append_timestamps }) {
   };
 }
 module.exports = { createAuthority };
-`);
+`;
+fs.writeFileSync(adapterOut, adapterBody);
 const adapterPin = crypto.createHash('sha256').update(fs.readFileSync(adapterOut)).digest('hex');
-// Authority config does NOT select adapter module.
 fs.writeFileSync(authOut, JSON.stringify({
   kind: 'trusted_installed_witness_authority',
   authority_id: 'rg-outside-auth-1',
   stream_id: streamId,
   receipts: [receipt],
 }, null, 2));
-// Independent deployment binding pins adapter + optional anchored timestamps.
+// Binding pins adapter only — no anchored_append_timestamps field.
 fs.writeFileSync(bindingOut, JSON.stringify({
   kind: 'trusted_installed_witness_adapter_binding',
   authority_id: 'rg-outside-auth-1',
   adapter_module: adapterOut,
   adapter_sha256: adapterPin,
-  anchored_append_timestamps: { [witnessHead]: new Date().toISOString() },
 }, null, 2));
 fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
   ...body,
@@ -892,14 +893,39 @@ fs.writeFileSync(path.join(proj, 'production-telemetry', 'alias-retirement.json'
 }, null, 2));
 NODE
 
+# Hermetic injection path (module API) — not CLI env/HOME.
 OUTSIDE_OUT="$(
+  node - "$REPO_ROOT" "$OUTSIDE_PROJ" "$OUTSIDE_AUTH" "$OUTSIDE_BINDING" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const proj = process.argv[3];
+const auth = process.argv[4];
+const bind = process.argv[5];
+const {
+  evaluateReleaseGates,
+} = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+const report = evaluateReleaseGates({
+  project: proj,
+  repoRoot: root,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+});
+process.stdout.write(JSON.stringify(report));
+NODE
+)"
+# CLI env/HOME self-bootstrap must still HOLD even with matching malicious fixture.
+CLI_ENV_HOLD_OUT="$(
   HOME="$OUTSIDE_HOME" \
   AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$OUTSIDE_AUTH" \
   AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$OUTSIDE_BINDING" \
   node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
     --project "$OUTSIDE_PROJ" --repo-root "$REPO_ROOT" 2>&1
 )"
-node - "$OUTSIDE_OUT" "$OUTSIDE_AUTH" "$REPO_ROOT" "$OUTSIDE_PROJ" <<'NODE'
+node - "$OUTSIDE_OUT" "$OUTSIDE_AUTH" "$REPO_ROOT" "$OUTSIDE_PROJ" "$CLI_ENV_HOLD_OUT" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -907,6 +933,7 @@ const report = JSON.parse(process.argv[2]);
 const outsideAuth = process.argv[3];
 const repoRoot = process.argv[4];
 const projectDir = process.argv[5];
+const cliReport = JSON.parse(process.argv[6]);
 const authReal = fs.realpathSync(outsideAuth);
 const repoReal = fs.realpathSync(repoRoot);
 const projReal = fs.realpathSync(projectDir);
@@ -924,22 +951,134 @@ if (isInside(repoReal, authReal) || isInside(projReal, authReal)) {
 const kr8 = report.kr8;
 const alias = report.alias_retirement;
 if (!kr8 || !kr8.evidence || kr8.evidence.source !== 'production_telemetry') {
-  console.error('pinned binding must authenticate KR8 as production_telemetry; got',
+  console.error('injected binding must authenticate KR8 as production_telemetry; got',
     kr8 && kr8.evidence && kr8.evidence.source, kr8 && kr8.blocking_reasons);
   process.exit(1);
 }
 if (kr8.status !== 'PASS') {
-  console.error('pinned binding with valid KR8 must PASS; got', kr8.status, kr8.blocking_reasons);
+  console.error('injected binding with valid KR8 must PASS; got', kr8.status, kr8.blocking_reasons);
   process.exit(1);
 }
 if (!alias || alias.trusted_authority_present !== true) {
-  console.error('pinned binding must set trusted_authority_present; got',
+  console.error('injected binding must set trusted_authority_present; got',
     alias && alias.trusted_authority_present, alias && alias.blocking_reasons);
   process.exit(1);
 }
+// Env/HOME path must not self-bootstrap on production CLI.
+const cliKr8 = cliReport.kr8;
+if (cliKr8 && cliKr8.evidence && cliKr8.evidence.source === 'production_telemetry') {
+  console.error('CLI env/HOME must not authenticate production_telemetry');
+  process.exit(1);
+}
+if (cliReport.alias_retirement && cliReport.alias_retirement.trusted_authority_present === true) {
+  console.error('CLI env/HOME must not set trusted_authority_present');
+  process.exit(1);
+}
+const cliReasons = [
+  ...(cliReport.blocking_reasons || []),
+  ...((cliReport.alias_retirement && cliReport.alias_retirement.blocking_reasons) || []),
+].join('\n');
+if (!/\/etc\/autopilot|fixed installation|env\/HOME|cannot supply/i.test(cliReasons)) {
+  console.error('CLI env self-bootstrap HOLD must cite fixed /etc path; got', cliReasons);
+  process.exit(1);
+}
 console.log('rg-outside-pinned-binding-positive-control=ok');
+console.log('rg-cli-env-home-self-bootstrap-hold=ok');
 NODE
 assert_eq "0" "$?" "independently supplied pinned adapter binding authenticates production evidence"
+# Ownership/mode/symlink failures on installation trust path checks.
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const root = process.argv[2];
+const {
+  assertSecureInstallationPath,
+  PRODUCTION_AUTHORITY_PATH,
+  PRODUCTION_ADAPTER_BINDING_PATH,
+} = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+if (PRODUCTION_AUTHORITY_PATH !== '/etc/autopilot/trusted-installed-witness-authority.json') {
+  console.error('PRODUCTION_AUTHORITY_PATH drift');
+  process.exit(1);
+}
+if (PRODUCTION_ADAPTER_BINDING_PATH !== '/etc/autopilot/trusted-witness-adapter-binding.json') {
+  console.error('PRODUCTION_ADAPTER_BINDING_PATH drift');
+  process.exit(1);
+}
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rg-own-'));
+const regular = path.join(tmp, 'auth.json');
+fs.writeFileSync(regular, '{}');
+const own = assertSecureInstallationPath(regular, 'test authority');
+if (own.ok) {
+  console.error('non-root-owned fixture must fail ownership check');
+  process.exit(1);
+}
+if (!/root-owned|uid/i.test(own.reason || '')) {
+  console.error('ownership failure must cite root-owned; got', own.reason);
+  process.exit(1);
+}
+const link = path.join(tmp, 'link.json');
+fs.symlinkSync(regular, link);
+const sym = assertSecureInstallationPath(link, 'test authority');
+if (sym.ok || !/symlink/i.test(sym.reason || '')) {
+  console.error('symlink must be rejected; got', sym);
+  process.exit(1);
+}
+// Binding with anchored_append_timestamps rejected under hermetic injection.
+const auth = path.join(tmp, 'authority.json');
+const adapter = path.join(tmp, 'adapter.js');
+const bind = path.join(tmp, 'binding.json');
+const proj = path.join(tmp, 'proj');
+fs.mkdirSync(path.join(proj, 'production-telemetry'), { recursive: true });
+fs.writeFileSync(adapter, `'use strict';
+function createAuthority({ streamId, receipts }) {
+  return {
+    streamId, trustTier: 'external', identity: 'x',
+    attestation_hash: 'a'.repeat(64), protocol_version: 1,
+    getAppendTimestamp() { return null; },
+    append() { throw new Error('n'); },
+    verify() { return false; },
+  };
+}
+module.exports = { createAuthority };
+`);
+const pin = require('crypto').createHash('sha256').update(fs.readFileSync(adapter)).digest('hex');
+fs.writeFileSync(auth, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  authority_id: 'ts-reject',
+  stream_id: 's',
+  receipts: [],
+}, null, 2));
+fs.writeFileSync(bind, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding',
+  authority_id: 'ts-reject',
+  adapter_module: adapter,
+  adapter_sha256: pin,
+  anchored_append_timestamps: { x: new Date().toISOString() },
+}, null, 2));
+const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+const report = evaluateReleaseGates({
+  project: proj,
+  repoRoot: root,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+});
+const reasons = [
+  ...(report.blocking_reasons || []),
+  ...((report.alias_retirement && report.alias_retirement.blocking_reasons) || []),
+].join('\n');
+if (!/anchored_append_timestamps|must not supply/i.test(reasons)) {
+  console.error('binding timestamps must HOLD; got', reasons);
+  process.exit(1);
+}
+fs.rmSync(tmp, { recursive: true, force: true });
+console.log('rg-ownership-mode-symlink-and-binding-timestamp-hold=ok');
+NODE
+assert_eq "0" "$?" "ownership/mode/symlink failures and binding timestamp HOLD"
 rm -rf "$OUTSIDE_AUTH_DIR" "$OUTSIDE_PROJ" "$OUTSIDE_HOME"
 
 # authority-id-optional-bypass: missing config or binding authority_id is HOLD.
@@ -1257,12 +1396,31 @@ NODE
 ln -sfn "$SYM_REPO_REAL" "$SYM_REPO_LINK"
 SYM_REPO_AUTH="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).auth)' "$SYM_OUTSIDE/paths.json")"
 SYM_REPO_BIND="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).bind)' "$SYM_OUTSIDE/paths.json")"
+# Hermetic injection: trust paths are explicit; ownership checks skipped so the
+# exact in-repo adapter containment reason is reachable.
 SYM_REPO_OUT="$(
-  HOME="$SYM_REPO_HOME" \
-  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$SYM_REPO_AUTH" \
-  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$SYM_REPO_BIND" \
-  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
-    --project "$SYM_REPO_PROJ" --repo-root "$SYM_REPO_LINK" 2>&1
+  node - "$REPO_ROOT" "$SYM_REPO_PROJ" "$SYM_REPO_LINK" "$SYM_REPO_AUTH" "$SYM_REPO_BIND" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const proj = process.argv[3];
+const repoLink = process.argv[4];
+const auth = process.argv[5];
+const bind = process.argv[6];
+const {
+  evaluateReleaseGates,
+} = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+const report = evaluateReleaseGates({
+  project: proj,
+  repoRoot: repoLink,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+});
+process.stdout.write(JSON.stringify(report));
+NODE
 )"
 node - "$SYM_REPO_OUT" <<'NODE'
 const report = JSON.parse(process.argv[2]);
@@ -1480,7 +1638,7 @@ if printf '%s' "$CHECKER_SRC" | grep -q 'allowTestWitness: true'; then
   echo "FAIL: allowTestWitness:true is forbidden for release evidence" >&2
   exit 1
 fi
-assert_contains "$CHECKER_SRC" 'AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING' \
+assert_contains "$CHECKER_SRC" '/etc/autopilot/trusted-witness-adapter-binding.json' \
   "adapter identity comes from deployment binding env"
 assert_contains "$CHECKER_SRC" 'adapter_sha256' \
   "adapter integrity pin is required before require()"

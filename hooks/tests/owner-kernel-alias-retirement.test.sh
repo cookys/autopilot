@@ -76,8 +76,8 @@ assert_contains "$CHECKER_SRC" 'verifyWithTrustedInstalledWitnessAuthority' \
   "alias retirement calls trusted witness-authority verification"
 assert_contains "$CHECKER_SRC" 'authority.verify(receipt)' \
   "alias retirement authenticates via witness.verify authority API"
-assert_contains "$CHECKER_SRC" 'AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY' \
-  "authority path is independently configured (not project-local co-located journal)"
+assert_contains "$CHECKER_SRC" '/etc/autopilot/trusted-installed-witness-authority.json' \
+  "production authority is fixed installation path (not project-local co-located journal)"
 assert_contains "$CHECKER_SRC" 'executeDeterministicCallerMigrationScan' \
   "caller migration is mechanically executed"
 assert_contains "$CHECKER_SRC" 'requiredWitnessedDayKeys' \
@@ -572,7 +572,6 @@ fs.writeFileSync(bindingPath, JSON.stringify({
   authority_id: 'alias-today-1',
   adapter_module: adapterPath,
   adapter_sha256: adapterPin,
-  anchored_append_timestamps: {},
 }, null, 2));
 fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json'), JSON.stringify({
   compatibility_cycle_id: 'alias-today-cycle', shipped_compatibility_cycle: true,
@@ -588,11 +587,24 @@ NODE
 TODAY_AUTH_PATH="$(node -e 'const j=JSON.parse(process.argv[1]); process.stdout.write(j.auth)' "$TODAY_AUTH")"
 TODAY_BINDING_PATH="$(node -e 'const j=JSON.parse(process.argv[1]); process.stdout.write(j.binding)' "$TODAY_AUTH")"
 TODAY_OUT="$(
-  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$TODAY_AUTH_PATH" \
-  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$TODAY_BINDING_PATH" \
-  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
-    --project "$TODAY_DIR" \
-    --repo-root "$REPO_ROOT" 2>&1
+  node - "$REPO_ROOT" "$TODAY_DIR" "$TODAY_AUTH_PATH" "$TODAY_BINDING_PATH" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const proj = process.argv[3];
+const auth = process.argv[4];
+const bind = process.argv[5];
+const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGates({
+  project: proj,
+  repoRoot: root,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+})));
+NODE
 )"
 node - "$TODAY_OUT" <<'NODE'
 const report = JSON.parse(process.argv[2]);
@@ -726,7 +738,7 @@ fs.writeFileSync(authPath, JSON.stringify({
 const bindingPath = path.join(authDir, 'binding.json');
 fs.writeFileSync(bindingPath, JSON.stringify({
   kind: 'trusted_installed_witness_adapter_binding', authority_id: 'alias-direct-1',
-  adapter_module: adapterPath, adapter_sha256: pin, anchored_append_timestamps: {},
+  adapter_module: adapterPath, adapter_sha256: pin,
 }, null, 2));
 fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json'), JSON.stringify({
   compatibility_cycle_id: 'alias-direct-cycle', shipped_compatibility_cycle: true,
@@ -742,10 +754,24 @@ NODE
 DIRECT_AUTH="$(node -e 'const j=JSON.parse(process.argv[1]); process.stdout.write(j.auth)' "$DIRECT_META")"
 DIRECT_BIND="$(node -e 'const j=JSON.parse(process.argv[1]); process.stdout.write(j.binding)' "$DIRECT_META")"
 DIRECT_OUT="$(
-  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$DIRECT_AUTH" \
-  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$DIRECT_BIND" \
-  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
-    --project "$DIRECT_DIR" --repo-root "$REPO_ROOT" 2>&1
+  node - "$REPO_ROOT" "$DIRECT_DIR" "$DIRECT_AUTH" "$DIRECT_BIND" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const proj = process.argv[3];
+const auth = process.argv[4];
+const bind = process.argv[5];
+const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGates({
+  project: proj,
+  repoRoot: root,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+})));
+NODE
 )"
 node - "$DIRECT_OUT" <<'NODE'
 const report = JSON.parse(process.argv[2]);
@@ -788,6 +814,43 @@ const dir = process.argv[3];
 const authDir = process.argv[4];
 const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
 function headOf(base) { return sha256(canonicalJson(base)); }
+function writeAdapter(filePath, anchoredMap) {
+  fs.writeFileSync(filePath, `'use strict';
+const crypto = require('crypto');
+const ANCHORED = ${JSON.stringify(anchoredMap)};
+function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
+function canonicalJson(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
+  return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
+}
+function createAuthority({ streamId, receipts }) {
+  const known = new Map();
+  for (const entry of receipts || []) known.set(String(entry.witness_head).toLowerCase(), entry);
+  const anchored = new Map(Object.entries(ANCHORED).map(([k, v]) => [String(k).toLowerCase(), v]));
+  return {
+    streamId, trustTier: 'external',
+    identity: 'external-adapter:' + streamId,
+    attestation_hash: sha256('external-adapter:' + streamId),
+    protocol_version: 1,
+    getAppendTimestamp(r) { return anchored.get(String(r.witness_head).toLowerCase()) || null; },
+    append() { throw new Error('unused'); },
+    verify(receipt) {
+      if (!receipt || receipt.stream_id !== streamId) return false;
+      const head = String(receipt.witness_head).toLowerCase();
+      if (!known.has(head)) return false;
+      const expected = sha256(canonicalJson({
+        run_id: receipt.run_id, stream_id: receipt.stream_id, sequence: receipt.sequence,
+        event_hash: receipt.event_hash, previous_witness_head: receipt.previous_witness_head,
+      }));
+      return expected === receipt.witness_head;
+    },
+  };
+}
+module.exports = { createAuthority };
+`);
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
 const streamId = 'alias-order-stream';
 const runId = 'alias-order-run';
 const now = Date.now();
@@ -798,7 +861,6 @@ for (let offset = 1; offset <= 14; offset += 1) {
   requiredDays.push(new Date(Date.UTC(year, month - 1, dayNum - offset)).toISOString().slice(0, 10));
 }
 requiredDays.reverse();
-// Cycle day is after the window (today) — must HOLD.
 const cycleBody = { compatibility_cycle_id: 'alias-order-cycle' };
 const cycleBase = {
   run_id: runId, stream_id: streamId, sequence: 1,
@@ -814,7 +876,6 @@ anchored[cycleHead] = cycleTs;
 let previousHead = cycleHead;
 for (let i = 0; i < 14; i += 1) {
   const day = requiredDays[i];
-  // Historical timestamps matching each day (would pass day match if cycle ok).
   const dayTs = new Date(Date.UTC(year, month - 1, dayNum - (14 - i), 12)).toISOString();
   const dayBody = {
     day, translation_used_events: 0,
@@ -842,53 +903,20 @@ const migBase = {
 };
 const migHead = headOf(migBase);
 journal.push({ ...migBase, witness_head: migHead });
-const adapterPath = path.join(authDir, 'adapter.js');
-fs.writeFileSync(adapterPath, `'use strict';
-const crypto = require('crypto');
-function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
-function canonicalJson(v) {
-  if (v === null || typeof v !== 'object') return JSON.stringify(v);
-  if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
-  return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
-}
-function createAuthority({ streamId, receipts, anchored_append_timestamps }) {
-  const known = new Map();
-  for (const entry of receipts || []) known.set(String(entry.witness_head).toLowerCase(), entry);
-  const anchored = new Map(Object.entries(anchored_append_timestamps || {}).map(([k, v]) => [String(k).toLowerCase(), v]));
-  return {
-    streamId, trustTier: 'external',
-    identity: 'external-adapter:' + streamId,
-    attestation_hash: sha256('external-adapter:' + streamId),
-    protocol_version: 1,
-    getAppendTimestamp(r) { return anchored.get(String(r.witness_head).toLowerCase()) || null; },
-    append() { throw new Error('unused'); },
-    verify(receipt) {
-      if (!receipt || receipt.stream_id !== streamId) return false;
-      const head = String(receipt.witness_head).toLowerCase();
-      if (!known.has(head)) return false;
-      const expected = sha256(canonicalJson({
-        run_id: receipt.run_id, stream_id: receipt.stream_id, sequence: receipt.sequence,
-        event_hash: receipt.event_hash, previous_witness_head: receipt.previous_witness_head,
-      }));
-      return expected === receipt.witness_head;
-    },
-  };
-}
-module.exports = { createAuthority };
-`);
-const pin = crypto.createHash('sha256').update(fs.readFileSync(adapterPath)).digest('hex');
+
+const adapterAfter = path.join(authDir, 'adapter-after.js');
+const pinAfter = writeAdapter(adapterAfter, anchored);
 const authPath = path.join(authDir, 'authority.json');
 fs.writeFileSync(authPath, JSON.stringify({
   kind: 'trusted_installed_witness_authority', authority_id: 'alias-order-1',
   stream_id: streamId, receipts: journal,
 }, null, 2));
-const bindingPath = path.join(authDir, 'binding.json');
+const bindingPath = path.join(authDir, 'binding-after.json');
 fs.writeFileSync(bindingPath, JSON.stringify({
   kind: 'trusted_installed_witness_adapter_binding', authority_id: 'alias-order-1',
-  adapter_module: adapterPath, adapter_sha256: pin,
-  anchored_append_timestamps: anchored,
+  adapter_module: adapterAfter, adapter_sha256: pinAfter,
 }, null, 2));
-fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json'), JSON.stringify({
+const telemetry = {
   compatibility_cycle_id: 'alias-order-cycle', shipped_compatibility_cycle: true,
   compatibility_cycle_receipt_body: cycleBody, compatibility_cycle_ship_receipt: cycleReceipt,
   witnessed_zero_use_days: 14, translation_used_events: 0, unresolved_translation_deltas: 0,
@@ -896,28 +924,30 @@ fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json')
   caller_migration_scan_body: migrationBody, caller_migration_scan_hash: migrationHash,
   caller_migration_witness_receipt: { ...migBase, witness_head: migHead },
   witnessed_day_records: days,
-}, null, 2));
-// Second fixture: nonmonotonic day timestamps (cycle before window, but days reversed times).
+};
+fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json'), JSON.stringify(telemetry, null, 2));
+
+// Nonmonotonic day timestamps
 const dir2 = path.join(authDir, 'nonmono-proj');
 fs.mkdirSync(path.join(dir2, 'production-telemetry'), { recursive: true });
 const anchored2 = {};
 const cycleTs2 = new Date(Date.UTC(year, month - 1, dayNum - 20, 12)).toISOString();
 anchored2[cycleHead] = cycleTs2;
-// Reverse timestamps: later required days get earlier wall times.
 for (let i = 0; i < 14; i += 1) {
   const h = days[i].witness_head;
   const dayTs = new Date(Date.UTC(year, month - 1, dayNum - 1 - i, 12)).toISOString();
   anchored2[h] = dayTs;
 }
+const adapterNonmono = path.join(authDir, 'adapter-nonmono.js');
+const pinNonmono = writeAdapter(adapterNonmono, anchored2);
 const bind2 = path.join(authDir, 'binding-nonmono.json');
 fs.writeFileSync(bind2, JSON.stringify({
   kind: 'trusted_installed_witness_adapter_binding', authority_id: 'alias-order-1',
-  adapter_module: adapterPath, adapter_sha256: pin,
-  anchored_append_timestamps: anchored2,
+  adapter_module: adapterNonmono, adapter_sha256: pinNonmono,
 }, null, 2));
-fs.writeFileSync(path.join(dir2, 'production-telemetry', 'alias-retirement.json'),
-  fs.readFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json')));
-// Positive control: cycle before day1, strictly increasing day anchors.
+fs.writeFileSync(path.join(dir2, 'production-telemetry', 'alias-retirement.json'), JSON.stringify(telemetry, null, 2));
+
+// Positive: cycle before day1, strictly increasing
 const dir3 = path.join(authDir, 'positive-proj');
 fs.mkdirSync(path.join(dir3, 'production-telemetry'), { recursive: true });
 const anchored3 = {};
@@ -928,14 +958,14 @@ for (let i = 0; i < 14; i += 1) {
   const dayTs = new Date(Date.UTC(year, month - 1, dayNum - (14 - i), 12)).toISOString();
   anchored3[h] = dayTs;
 }
+const adapterPos = path.join(authDir, 'adapter-positive.js');
+const pinPos = writeAdapter(adapterPos, anchored3);
 const bind3 = path.join(authDir, 'binding-positive.json');
 fs.writeFileSync(bind3, JSON.stringify({
   kind: 'trusted_installed_witness_adapter_binding', authority_id: 'alias-order-1',
-  adapter_module: adapterPath, adapter_sha256: pin,
-  anchored_append_timestamps: anchored3,
+  adapter_module: adapterPos, adapter_sha256: pinPos,
 }, null, 2));
-fs.writeFileSync(path.join(dir3, 'production-telemetry', 'alias-retirement.json'),
-  fs.readFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json')));
+fs.writeFileSync(path.join(dir3, 'production-telemetry', 'alias-retirement.json'), JSON.stringify(telemetry, null, 2));
 process.stdout.write(JSON.stringify({
   auth: authPath, bindingAfter: bindingPath, bindingNonmono: bind2, bindingPositive: bind3,
   projAfter: dir, projNonmono: dir2, projPositive: dir3,
@@ -946,10 +976,24 @@ ORDER_AUTH="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(
 ORDER_BIND_AFTER="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.bindingAfter)' "$ORDER_META")"
 ORDER_PROJ_AFTER="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.projAfter)' "$ORDER_META")"
 ORDER_OUT_AFTER="$(
-  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$ORDER_AUTH" \
-  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$ORDER_BIND_AFTER" \
-  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
-    --project "$ORDER_PROJ_AFTER" --repo-root "$REPO_ROOT" 2>&1
+  node - "$REPO_ROOT" "$ORDER_PROJ_AFTER" "$ORDER_AUTH" "$ORDER_BIND_AFTER" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const proj = process.argv[3];
+const auth = process.argv[4];
+const bind = process.argv[5];
+const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGates({
+  project: proj,
+  repoRoot: root,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+})));
+NODE
 )"
 node - "$ORDER_OUT_AFTER" <<'NODE'
 const report = JSON.parse(process.argv[2]);
@@ -970,10 +1014,24 @@ assert_eq "0" "$?" "cycle append after window HOLDs"
 ORDER_BIND_NONMONO="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.bindingNonmono)' "$ORDER_META")"
 ORDER_PROJ_NONMONO="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.projNonmono)' "$ORDER_META")"
 ORDER_OUT_NONMONO="$(
-  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$ORDER_AUTH" \
-  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$ORDER_BIND_NONMONO" \
-  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
-    --project "$ORDER_PROJ_NONMONO" --repo-root "$REPO_ROOT" 2>&1
+  node - "$REPO_ROOT" "$ORDER_PROJ_NONMONO" "$ORDER_AUTH" "$ORDER_BIND_NONMONO" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const proj = process.argv[3];
+const auth = process.argv[4];
+const bind = process.argv[5];
+const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGates({
+  project: proj,
+  repoRoot: root,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+})));
+NODE
 )"
 node - "$ORDER_OUT_NONMONO" <<'NODE'
 const report = JSON.parse(process.argv[2]);
@@ -994,10 +1052,24 @@ assert_eq "0" "$?" "nonchronological day timestamps HOLD"
 ORDER_BIND_POS="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.bindingPositive)' "$ORDER_META")"
 ORDER_PROJ_POS="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.projPositive)' "$ORDER_META")"
 ORDER_OUT_POS="$(
-  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$ORDER_AUTH" \
-  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$ORDER_BIND_POS" \
-  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
-    --project "$ORDER_PROJ_POS" --repo-root "$REPO_ROOT" 2>&1
+  node - "$REPO_ROOT" "$ORDER_PROJ_POS" "$ORDER_AUTH" "$ORDER_BIND_POS" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const proj = process.argv[3];
+const auth = process.argv[4];
+const bind = process.argv[5];
+const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGates({
+  project: proj,
+  repoRoot: root,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+})));
+NODE
 )"
 node - "$ORDER_OUT_POS" <<'NODE'
 const report = JSON.parse(process.argv[2]);
@@ -1040,9 +1112,9 @@ rm -rf "$ORDER_DIR" "$ORDER_AUTH_DIR"
 
 
 
-# Finding 3 — Migration OR semantics: mechanical-only and authority-only
-# success shapes (overall disposition remains HOLD when other prerequisites
-# are absent). Untrusted telemetry completion flags are never required.
+# Finding 3 — Migration AND semantics: mechanical residual scan is mandatory;
+# authority may supplement but never replace residual clearance. Mechanical-only
+# success shape remains HOLD when other prerequisites are absent.
 # ---------------------------------------------------------------------------
 # Mechanical-only: stubbed migrated skills so the scan completes; no authority
 # migration receipt. Expect deterministic_caller_migration true via scan alone.
@@ -1205,11 +1277,24 @@ NODE
 AUTH_ONLY_PATH="$(node -e 'const j=JSON.parse(process.argv[1]); process.stdout.write(j.auth)' "$AUTH_ONLY_META")"
 AUTH_ONLY_BINDING="$(node -e 'const j=JSON.parse(process.argv[1]); process.stdout.write(j.binding)' "$AUTH_ONLY_META")"
 AUTH_ONLY_OUT="$(
-  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$AUTH_ONLY_PATH" \
-  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$AUTH_ONLY_BINDING" \
-  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
-    --project "$AUTH_ONLY_DIR" \
-    --repo-root "$REPO_ROOT" 2>&1
+  node - "$REPO_ROOT" "$AUTH_ONLY_DIR" "$AUTH_ONLY_PATH" "$AUTH_ONLY_BINDING" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const proj = process.argv[3];
+const auth = process.argv[4];
+const bind = process.argv[5];
+const { evaluateReleaseGates } = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+process.stdout.write(JSON.stringify(evaluateReleaseGates({
+  project: proj,
+  repoRoot: root,
+  trust: {
+    authorityPath: auth,
+    adapterBindingPath: bind,
+    skipInstallationOwnershipChecks: true,
+  },
+})));
+NODE
 )"
 node - "$AUTH_ONLY_OUT" <<'NODE'
 const report = JSON.parse(process.argv[2]);
@@ -1222,14 +1307,14 @@ if (alias.trusted_authority_present !== true) {
   console.error('authority-only requires trusted_authority_present');
   process.exit(1);
 }
-if (alias.deterministic_caller_migration !== true) {
-  console.error('authority-only success shape requires deterministic_caller_migration true; got',
-    alias.deterministic_caller_migration);
+// Mechanical residual scan is MANDATORY — authority cannot OR-bypass residual l3-l6.
+if (alias.deterministic_caller_migration === true) {
+  console.error('authority-only must NOT set deterministic_caller_migration when residual callers remain');
   process.exit(1);
 }
 const reasons = (alias.blocking_reasons || []).join('\n');
-if (/caller migration evidence missing or incomplete/i.test(reasons)) {
-  console.error('authority-only must not emit migration-incomplete blocker; got:', reasons);
+if (!/mechanical|residual|mandatory|l3|l4|l5|l6/i.test(reasons)) {
+  console.error('authority-only must cite mandatory mechanical residual scan; got:', reasons);
   process.exit(1);
 }
 if (alias.mechanical_caller_migration_scan && alias.mechanical_caller_migration_scan.complete === true) {
@@ -1247,14 +1332,16 @@ assert_contains "$CHECKER_SRC" 'realpathSync' \
   "authority path containment uses realpath"
 assert_contains "$CHECKER_SRC" 'getAppendTimestamp' \
   "day receipts require adapter-owned getAppendTimestamp"
-assert_contains "$CHECKER_SRC" 'AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING' \
-  "adapter identity comes from deployment binding"
+assert_contains "$CHECKER_SRC" '/etc/autopilot/trusted-witness-adapter-binding.json' \
+  "adapter identity comes from fixed installation binding"
 assert_contains "$CHECKER_SRC" 'sanitizeReceiptForTimestampLookup' \
   "timestamp lookup sanitizes receipts"
-assert_contains "$CHECKER_SRC" 'migrationScan.complete === true' \
-  "migration OR includes mechanical scan complete"
-assert_contains "$CHECKER_SRC" 'migrationAuthorityAuthenticated === true' \
-  "migration OR includes authority authentication"
+assert_contains "$CHECKER_SRC" 'mechanical caller migration scan is mandatory' \
+  "migration AND requires mandatory mechanical residual scan"
+assert_contains "$CHECKER_SRC" 'authority-authenticated migration bodies cannot bypass residual l3-l6 callers' \
+  "authority cannot OR-bypass residual callers"
+assert_contains "$CHECKER_SRC" 'scan_contract' \
+  "mechanical scan evidence binds deterministic scan contract"
 assert_not_contains "$CHECKER_SRC" 'caller_migration_complete === true' \
   "untrusted telemetry completion flag is not required for migration"
 if printf '%s' "$CHECKER_SRC" | grep -q 'allowTestWitness: true'; then

@@ -438,45 +438,62 @@ const attackMutations = {
     return true;
   },
   direct_decision_append() {
+    // Control: valid installed session mints exactly one legitimate decision
+    // under the real owner capability; ledger reconstructs successfully.
     const fx = installedFixture('corpus-attack-direct-decision');
-    const fixedHash = sha256(canonicalJson(installedEngine.fixedAction()));
-    const forgedLedger = {
-      header: { run_id: 'forged-direct-decision' },
-      events: [
-        {
-          type: 'decision',
-          event_hash: '1'.repeat(64),
-          payload: {
-            decision_id: 'forged-decision-1',
-            action_class: 'external',
-            action_descriptor: installedEngine.fixedAction(),
-            action_descriptor_hash: fixedHash,
-            catalog_id: 'engine-implementation-dispatch-v1',
-          },
-        },
-        {
-          type: 'decision',
-          event_hash: '2'.repeat(64),
-          payload: {
-            decision_id: 'forged-decision-2',
-            action_class: 'external',
-            action_descriptor: installedEngine.fixedAction(),
-            action_descriptor_hash: fixedHash,
-            catalog_id: 'engine-implementation-dispatch-v1',
-          },
-        },
-      ],
-    };
-    const duplicateHeld = held(() => installedEngine.reconstructActionIdentityFromLedger(forgedLedger));
     const { session } = openInstalledSession(fx, { runLabel: 'direct-decision' });
-    const noCapabilityHeld = held(() => session.kernel.mintActionDecision({
-      capability: {},
-      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'no-cap' },
+    const decision = session.kernel.mintActionDecision({
+      capability: session.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'direct-control' },
       actionClass: 'external',
       actionDescriptor: fx.profile.action,
-    }));
+    });
+    assert.equal(typeof decision.payload.decision_id, 'string');
+    const cleanLedger = session.kernel.getLedger();
+    const controlIdentity = installedEngine.reconstructActionIdentityFromLedger(cleanLedger);
+    assert.equal(controlIdentity.decision_id, decision.payload.decision_id);
+    assert.ok(
+      controlIdentity.status === 'authorized' || controlIdentity.decision_id,
+      'control decision must reconstruct from installed ledger',
+    );
+    // Mutation: exactly one direct appended decision event on that ledger.
+    const mutated = structuredClone(cleanLedger);
+    const controlDecision = mutated.events.find((event) => event.type === 'decision');
+    assert.ok(controlDecision);
+    mutated.events.push({
+      ...controlDecision,
+      event_hash: 'a'.repeat(64),
+      payload: {
+        ...controlDecision.payload,
+        decision_id: `${controlDecision.payload.decision_id}-appended`,
+      },
+    });
+    let code = null;
+    let message = null;
+    try {
+      installedEngine.reconstructActionIdentityFromLedger(mutated);
+      assert.fail('direct appended decision must be rejected');
+    } catch (error) {
+      code = error && error.code;
+      message = String(error && error.message || '');
+      assert.ok(
+        error instanceof OwnerKernelError || error instanceof Error,
+        'direct append must throw a named error',
+      );
+    }
     session.teardown();
-    return duplicateHeld && noCapabilityHeld;
+    assert.ok(typeof code === 'string' && code.length > 0, `direct_decision_append exact code; got ${code}`);
+    assert.equal(
+      code,
+      'ENGINE_REDISPATCH_FORBIDDEN',
+      `direct appended decision must reject with ENGINE_REDISPATCH_FORBIDDEN; got ${code}: ${message}`,
+    );
+    assert.match(
+      message,
+      /duplicate or replaced installed action identities/i,
+      `direct_decision_append exact message; got ${message}`,
+    );
+    return true;
   },
   worker_artifact_decision_injection() {
     const fx = installedFixture('corpus-attack-worker-inject');

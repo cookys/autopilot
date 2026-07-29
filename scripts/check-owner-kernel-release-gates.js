@@ -19,7 +19,16 @@ const USAGE = `Usage:
 
 Reports mechanical KR8, KR10, and alias-retirement readiness. With --check, exits
 non-zero when disposition is HOLD. Never redefines KR metrics or fabricates
-elapsed production telemetry.`;
+elapsed production telemetry.
+
+Production trust roots are fixed installation paths under /etc/autopilot only
+(not env, HOME, project, or CLI flags).`;
+
+/** Fixed installation-controlled production trust roots (never caller-selected). */
+const PRODUCTION_AUTHORITY_PATH =
+  '/etc/autopilot/trusted-installed-witness-authority.json';
+const PRODUCTION_ADAPTER_BINDING_PATH =
+  '/etc/autopilot/trusted-witness-adapter-binding.json';
 
 const KR8_DEFINITION = Object.freeze({
   id: 'KR8',
@@ -170,23 +179,19 @@ function isNonEmptySha256(value) {
  * files, their hashes, timestamps, signer IDs, and migration flags are
  * untrusted inputs and cannot supply a parallel trust root.
  *
- * Authority journal is loaded from independently configured state:
- *   1. AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY (absolute path)
- *   2. ~/.autopilot/trusted-installed-witness-authority.json
- *   3. ~/.autopilot/installed-witness-authority.json
+ * Production CLI trust roots are fixed installation-controlled paths only:
+ *   - /etc/autopilot/trusted-installed-witness-authority.json
+ *   - /etc/autopilot/trusted-witness-adapter-binding.json
+ * Env, HOME, project, CLI flags, and serialized evidence cannot select authority.
+ * Paths must be regular, root-owned, not group/other-writable, non-symlink files
+ * with similarly owned parents. Hermetic tests may inject trust paths only via
+ * evaluateReleaseGates({ trust: { authorityPath, adapterBindingPath,
+ * skipInstallationOwnershipChecks } }) — never via CLI argv/env.
  *
- * Adapter module identity + integrity pin are loaded from a SEPARATE
- * deployment-provisioned trust-anchor binding (never from project evidence or
- * from the authority journal selecting adapter_module/digest):
- *   1. AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING (absolute path)
- *   2. ~/.autopilot/trusted-witness-adapter-binding.json
- *
- * Project/authority config may reference authority_id only. It must not select
- * the adapter module path or its digest. The binding realpaths the adapter
- * outside repo/project, verifies adapter_sha256 before require(), and HOLDs
- * when the independent binding/pin is absent or mismatched.
- *
- * allowTestWitness is never used for release evidence.
+ * Adapter module identity + integrity pin come only from the deployment binding
+ * (never from authority journal selecting adapter_module/digest). Binding must
+ * not supply anchored_append_timestamps; elapsed-day evidence is adapter-owned
+ * after receipt verify. allowTestWitness is never used for release evidence.
  */
 function isPathInside(parent, child) {
   // Callers must pass already-canonical (realpath) boundaries when used for
@@ -242,40 +247,94 @@ function fileSha256Hex(filePath) {
   return require('crypto').createHash('sha256').update(body).digest('hex');
 }
 
-function independentAuthorityCandidates(projectDir, repoRoot) {
-  const candidates = [];
-  const envPath = process.env.AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY;
-  if (typeof envPath === 'string' && envPath.trim()) {
-    candidates.push(path.resolve(envPath.trim()));
-  }
-  const home = process.env.HOME || process.env.USERPROFILE || null;
-  if (home) {
-    candidates.push(path.join(home, '.autopilot', 'trusted-installed-witness-authority.json'));
-    candidates.push(path.join(home, '.autopilot', 'installed-witness-authority.json'));
-  }
-  void projectDir;
-  void repoRoot;
-  return candidates;
-}
-
-function independentAdapterBindingCandidates() {
-  const candidates = [];
-  const envPath = process.env.AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING;
-  if (typeof envPath === 'string' && envPath.trim()) {
-    candidates.push(path.resolve(envPath.trim()));
-  }
-  const home = process.env.HOME || process.env.USERPROFILE || null;
-  if (home) {
-    candidates.push(path.join(home, '.autopilot', 'trusted-witness-adapter-binding.json'));
-  }
-  return candidates;
+/**
+ * Production authority candidates: fixed /etc path only.
+ * Env/HOME/project are never consulted on the production path.
+ */
+function productionAuthorityCandidates() {
+  return [PRODUCTION_AUTHORITY_PATH];
 }
 
 /**
- * Load deployment-provisioned adapter binding (path + sha256 pin). Never read
- * adapter selection from project evidence or authority-journal config.
+ * Production adapter binding candidates: fixed /etc path only.
  */
-function loadTrustedWitnessAdapterBinding(projectDir, repoRoot) {
+function productionAdapterBindingCandidates() {
+  return [PRODUCTION_ADAPTER_BINDING_PATH];
+}
+
+/**
+ * Installation trust path checks: regular file, not symlink, root-owned,
+ * not group/other writable; parents similarly root-owned and not group/other writable.
+ */
+function assertSecureInstallationPath(filePath, label) {
+  let st;
+  try {
+    st = fs.lstatSync(filePath);
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `${label} is absent at fixed installation path ${filePath}: ${error.message}`,
+    };
+  }
+  if (st.isSymbolicLink()) {
+    return { ok: false, reason: `${label} must not be a symlink: ${filePath}` };
+  }
+  if (!st.isFile()) {
+    return { ok: false, reason: `${label} must be a regular file: ${filePath}` };
+  }
+  if (typeof st.uid === 'number' && st.uid !== 0) {
+    return {
+      ok: false,
+      reason: `${label} must be root-owned (uid 0); got uid ${st.uid}`,
+    };
+  }
+  if ((st.mode & 0o022) !== 0) {
+    return {
+      ok: false,
+      reason: `${label} must not be group/other writable (mode ${ (st.mode & 0o777).toString(8) })`,
+    };
+  }
+  let dir = path.dirname(filePath);
+  for (let depth = 0; depth < 64; depth += 1) {
+    let dst;
+    try {
+      dst = fs.lstatSync(dir);
+    } catch (_error) {
+      break;
+    }
+    if (dst.isSymbolicLink()) {
+      return {
+        ok: false,
+        reason: `${label} parent path component must not be a symlink: ${dir}`,
+      };
+    }
+    if (typeof dst.uid === 'number' && dst.uid !== 0) {
+      return {
+        ok: false,
+        reason: `${label} parent ${dir} must be root-owned (uid 0); got uid ${dst.uid}`,
+      };
+    }
+    if ((dst.mode & 0o022) !== 0) {
+      return {
+        ok: false,
+        reason: `${label} parent ${dir} must not be group/other writable`,
+      };
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return { ok: true, reason: null };
+}
+
+/**
+ * Load deployment-provisioned adapter binding (path + sha256 pin).
+ * Production uses fixed /etc path only. Hermetic tests may inject trust paths
+ * via options.trust (never from CLI argv/env).
+ */
+function loadTrustedWitnessAdapterBinding(projectDir, repoRoot, options = {}) {
+  const trust = options.trust && typeof options.trust === 'object' ? options.trust : {};
+  const skipOwnership = trust.skipInstallationOwnershipChecks === true;
   const projectBoundary = canonicalizeBoundaryRoot(projectDir, 'project');
   if (!projectBoundary.ok) {
     return {
@@ -299,10 +358,34 @@ function loadTrustedWitnessAdapterBinding(projectDir, repoRoot) {
     repoResolved = repoBoundary.path;
   }
   const projectResolved = projectBoundary.path;
-  for (const candidate of independentAdapterBindingCandidates()) {
+  const candidates = typeof trust.adapterBindingPath === 'string' && trust.adapterBindingPath.trim()
+    ? [path.resolve(trust.adapterBindingPath.trim())]
+    : productionAdapterBindingCandidates();
+  for (const candidate of candidates) {
     if (!candidate) continue;
+    // Prefer lstat-based secure checks before following links for production.
+    if (!skipOwnership) {
+      const secure = assertSecureInstallationPath(candidate, 'adapter binding');
+      if (!secure.ok) {
+        return {
+          ok: false,
+          reason: secure.reason,
+          binding: null,
+          binding_path: null,
+        };
+      }
+    }
     const resolved = resolveAuthorityPathReal(candidate);
     if (!resolved) continue;
+    if (!skipOwnership && resolved !== path.resolve(candidate)) {
+      // realpath differed from spelling without lstat catching it
+      return {
+        ok: false,
+        reason: 'adapter binding path resolved through unexpected link; refuse',
+        binding: null,
+        binding_path: null,
+      };
+    }
     if (repoResolved && isPathInside(repoResolved, resolved)) continue;
     if (isPathInside(projectResolved, resolved)) continue;
     if (isPathInside(projectResolved, candidate)
@@ -383,14 +466,28 @@ function loadTrustedWitnessAdapterBinding(projectDir, repoRoot) {
         binding_path: resolved,
       };
     }
-    const anchored = new Map();
-    const rawAnchored = data.anchored_append_timestamps;
-    if (rawAnchored && typeof rawAnchored === 'object' && !Array.isArray(rawAnchored)) {
-      for (const [head, ts] of Object.entries(rawAnchored)) {
-        if (typeof head === 'string' && typeof ts === 'string' && /Z$/.test(ts)
-          && !Number.isNaN(new Date(ts).getTime())) {
-          anchored.set(head.toLowerCase(), ts);
-        }
+    if (Object.prototype.hasOwnProperty.call(data, 'anchored_append_timestamps')) {
+      return {
+        ok: false,
+        reason: 'adapter binding must not supply anchored_append_timestamps; '
+          + 'elapsed-day timestamps must come from adapter-owned authenticated append-time state only',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
+    // Also secure-check the adapter module path in production.
+    if (!skipOwnership) {
+      const adapterSecure = assertSecureInstallationPath(
+        path.resolve(String(data.adapter_module || '').trim()),
+        'adapter module',
+      );
+      if (!adapterSecure.ok) {
+        return {
+          ok: false,
+          reason: adapterSecure.reason,
+          binding: null,
+          binding_path: resolved,
+        };
       }
     }
     const bindingAuthorityId = data.authority_id;
@@ -410,16 +507,15 @@ function loadTrustedWitnessAdapterBinding(projectDir, repoRoot) {
         authority_id: bindingAuthorityId,
         adapter_module: adapterReal,
         adapter_sha256: pin.toLowerCase(),
-        anchored_append_timestamps: anchored,
       },
       binding_path: resolved,
     };
   }
   return {
     ok: false,
-    reason: 'deployment-provisioned trusted witness adapter binding is absent; '
-      + 'caller-selected project/authority JSON cannot nominate an adapter module or digest; '
-      + 'CLI HOLDs until an independent adapter binding with sha256 pin is provisioned',
+    reason: 'deployment-provisioned trusted witness adapter binding is absent at fixed '
+      + 'installation path; env/HOME/project cannot supply the binding; '
+      + 'CLI HOLDs until /etc/autopilot/trusted-witness-adapter-binding.json is provisioned',
     binding: null,
     binding_path: null,
   };
@@ -448,7 +544,9 @@ function sanitizeReceiptForTimestampLookup(receipt) {
   return clone;
 }
 
-function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
+function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot, options = {}) {
+  const trust = options.trust && typeof options.trust === 'object' ? options.trust : {};
+  const skipOwnership = trust.skipInstallationOwnershipChecks === true;
   const projectBoundary = canonicalizeBoundaryRoot(projectDir, 'project');
   if (!projectBoundary.ok) {
     return {
@@ -474,11 +572,25 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
     repoResolved = repoBoundary.path;
   }
   const projectResolved = projectBoundary.path;
-  const candidates = independentAuthorityCandidates(projectDir, repoRoot);
+  const candidates = typeof trust.authorityPath === 'string' && trust.authorityPath.trim()
+    ? [path.resolve(trust.authorityPath.trim())]
+    : productionAuthorityCandidates();
   let config = null;
   let configPath = null;
   for (const candidate of candidates) {
     if (!candidate || candidate.includes(`${path.sep}${path.sep}`)) continue;
+    if (!skipOwnership) {
+      const secure = assertSecureInstallationPath(candidate, 'installed witness authority');
+      if (!secure.ok) {
+        return {
+          ok: false,
+          reason: secure.reason,
+          authority: null,
+          stream_id: null,
+          config_path: null,
+        };
+      }
+    }
     const resolvedCandidate = resolveAuthorityPathReal(candidate);
     if (!resolvedCandidate) continue;
     if (repoResolved && isPathInside(repoResolved, resolvedCandidate)) {
@@ -501,9 +613,9 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
   if (!config) {
     return {
       ok: false,
-      reason: 'independently configured installed witness authority/configuration is absent; '
-        + 'project-local telemetry/journal files, hashes, timestamps, signer IDs, and migration '
-        + 'flags are untrusted and cannot supply their own trust root',
+      reason: 'installation-controlled installed witness authority is absent at fixed path '
+        + `${PRODUCTION_AUTHORITY_PATH}; env/HOME/project cannot supply authority; `
+        + 'project-local telemetry/journal files are untrusted and cannot supply their own trust root',
       authority: null,
       stream_id: null,
       config_path: null,
@@ -557,7 +669,7 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
     };
   }
 
-  const adapterBinding = loadTrustedWitnessAdapterBinding(projectDir, repoRoot);
+  const adapterBinding = loadTrustedWitnessAdapterBinding(projectDir, repoRoot, options);
   if (!adapterBinding.ok || !adapterBinding.binding) {
     return {
       ok: false,
@@ -612,14 +724,14 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
       );
     }
     const strippedJournal = stripCallerAppendTimestamps(journal);
+    // Never pass binding-supplied timestamps. Adapter must own append-time state
+    // (e.g. module-local authenticated store), not caller journal fields.
     const witness = factory({
       streamId,
       receipts: strippedJournal,
       receipt_journal: strippedJournal,
-      anchored_append_timestamps: Object.fromEntries(
-        adapterBinding.binding.anchored_append_timestamps.entries(),
-      ),
       authority_id: authorityId,
+      adapter_sha256: adapterBinding.binding.adapter_sha256,
     });
     const authority = assertWitnessAdapter(witness, {
       allowTestWitness: false,
@@ -733,6 +845,13 @@ function requiredWitnessedDayKeys(nowMs = Date.now()) {
 function executeDeterministicCallerMigrationScan(repoRoot) {
   const callersMigrated = [];
   const remaining = [];
+  let revision = null;
+  const rev = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+  if (!rev.error && rev.status === 0 && typeof rev.stdout === 'string') {
+    revision = rev.stdout.trim() || null;
+  }
+  // Deterministic scan contract: exact retired alias set l3-l6 residual prose check.
+  const scanContract = 'skills/<l3|l4|l5|l6>/SKILL.md residual lifecycle/trust prose scan';
   for (const level of ALIAS_DEFINITION.levels) {
     const skillPath = path.join(repoRoot, 'skills', level, 'SKILL.md');
     if (!fs.existsSync(skillPath)) {
@@ -766,6 +885,21 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
         + `in: ${remaining.join(',')}`,
       callers_migrated: callersMigrated,
       remaining,
+      revision,
+      scan_contract: scanContract,
+      retired_alias_set: [...ALIAS_DEFINITION.levels],
+    };
+  }
+  if (callersMigrated.length !== ALIAS_DEFINITION.levels.length
+    || ALIAS_DEFINITION.levels.some((level) => !callersMigrated.includes(level))) {
+    return {
+      complete: false,
+      reason: 'mechanical scan did not clear the exact retired alias set l3,l4,l5,l6',
+      callers_migrated: callersMigrated,
+      remaining: ALIAS_DEFINITION.levels.filter((level) => !callersMigrated.includes(level)),
+      revision,
+      scan_contract: scanContract,
+      retired_alias_set: [...ALIAS_DEFINITION.levels],
     };
   }
   return {
@@ -773,6 +907,9 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
     reason: null,
     callers_migrated: callersMigrated,
     remaining: [],
+    revision,
+    scan_contract: scanContract,
+    retired_alias_set: [...ALIAS_DEFINITION.levels],
   };
 }
 
@@ -1758,10 +1895,10 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       );
     }
 
-    // Caller migration OR semantics: completion is established by EITHER a
-    // mechanically executed migration scan OR installed-authority authentication.
-    // Do not require an untrusted telemetry completion flag, and do not require
-    // both alternatives simultaneously. Self-hashed flags alone are never proof.
+    // Caller migration AND semantics: the deterministic mechanical residual
+    // caller scan of the current revision is MANDATORY. Authority-authenticated
+    // migration bodies may corroborate but never replace residual l3-l6 clearance.
+    // Self-hashed flags alone are never proof.
     const migrationHash = productionTelemetry.caller_migration_scan_hash;
     const migrationBody = productionTelemetry.caller_migration_scan_body;
     const migrationReceipt = productionTelemetry.caller_migration_witness_receipt;
@@ -1790,28 +1927,45 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
     // OR: mechanical scan complete OR authority-authenticated migration body.
     // Untrusted caller_migration_complete / deterministic_caller_migration flags
     // never participate in the success predicate.
-    deterministicCallerMigration = migrationScan.complete === true
-      || migrationAuthorityAuthenticated === true;
+    // Mechanical scan is MANDATORY for retirement — authority evidence may
+    // supplement but never replace residual-caller clearance of l3-l6.
+    if (migrationScan.complete !== true) {
+      blocking.push(
+        'deterministic mechanical caller migration scan is mandatory and incomplete '
+        + '(authority-authenticated migration bodies cannot bypass residual l3-l6 callers)'
+        + (migrationScan.reason ? `; scan: ${migrationScan.reason}` : ''),
+      );
+      deterministicCallerMigration = false;
+    } else if (Array.isArray(migrationScan.remaining) && migrationScan.remaining.length > 0) {
+      blocking.push(
+        `mechanical caller migration scan found residual aliases: ${migrationScan.remaining.join(',')}`,
+      );
+      deterministicCallerMigration = false;
+    } else {
+      // Scan cleared all aliases; optional authority evidence may corroborate.
+      deterministicCallerMigration = true;
+      if (migrationBody && migrationAuthorityAuthenticated) {
+        const migrated = migrationBody.callers_migrated;
+        if (!Array.isArray(migrated)
+          || ALIAS_DEFINITION.levels.some((level) => !migrated.includes(level))
+          || migrated.length < ALIAS_DEFINITION.levels.length) {
+          blocking.push(
+            'authority-authenticated migration body must list exact retired alias set l3,l4,l5,l6; '
+            + 'incomplete alias sets are rejected (mechanical scan still required)',
+          );
+        }
+      }
+    }
+    void migrationAuthorityAuthenticated;
     const selfHashedOnly = migrationBody && typeof migrationBody === 'object'
       && isNonEmptySha256(migrationHash)
       && sha256(canonicalJson(migrationBody)).toLowerCase() === migrationHash.toLowerCase()
       && productionTelemetry.deterministic_caller_migration === true
-      && !deterministicCallerMigration;
+      && migrationScan.complete !== true;
     if (selfHashedOnly) {
       blocking.push(
         'self-hashed deterministic_caller_migration:true is not proof; '
-        + 'caller migration must be mechanically executed or authenticated by independent '
-        + 'installed authority (require caller_migration_witness_receipt bound to scan body)',
-      );
-    }
-    if (!deterministicCallerMigration) {
-      blocking.push(
-        'deterministic caller migration evidence missing or incomplete '
-        + '(require mechanical migration scan complete OR authority-authenticated '
-        + 'caller_migration_witness_receipt bound to caller_migration_scan_body; '
-        + 'reject self-asserted booleans, untrusted telemetry completion flags, '
-        + 'and self-hashed bodies alone; do not require both alternatives simultaneously)'
-        + (migrationScan.reason ? `; scan: ${migrationScan.reason}` : ''),
+        + 'mechanical scan of current revision for residual l3-l6 callers is mandatory',
       );
     }
 
@@ -2026,24 +2180,31 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
   };
 }
 
-function main() {
-  const options = parseArgs(process.argv.slice(2));
-  if (options.help) {
-    process.stdout.write(`${USAGE}\n`);
-    return;
+function evaluateReleaseGates(input = {}) {
+  const repoRootArg = input.repoRoot || input.repo_root || path.resolve(__dirname, '..');
+  const projectArg = input.project || input.projectDir || input.project_dir;
+  if (!projectArg) {
+    throw new Error('evaluateReleaseGates requires project');
   }
-  const repoBoundary = canonicalizeBoundaryRoot(options.repoRoot, 'repo');
+  const repoBoundary = canonicalizeBoundaryRoot(repoRootArg, 'repo');
   if (!repoBoundary.ok) {
-    fail(repoBoundary.reason, 2);
+    throw new Error(repoBoundary.reason);
   }
   const repoRoot = repoBoundary.path;
-  const projectDirRaw = resolveProjectDir(repoRoot, options.project);
+  const projectDirRaw = resolveProjectDir(repoRoot, projectArg);
   const projectBoundary = canonicalizeBoundaryRoot(projectDirRaw, 'project');
   if (!projectBoundary.ok) {
-    fail(projectBoundary.reason, 2);
+    throw new Error(projectBoundary.reason);
   }
   const projectDir = projectBoundary.path;
-  const trustedAuthority = loadTrustedInstalledWitnessAuthority(projectDir, repoRoot);
+  // Hermetic injection: options.trust.{authorityPath,adapterBindingPath,skipInstallationOwnershipChecks}
+  // Production CLI never passes trust injection.
+  const trustOptions = { trust: input.trust || null };
+  const trustedAuthority = loadTrustedInstalledWitnessAuthority(
+    projectDir,
+    repoRoot,
+    trustOptions,
+  );
   const surface = countExecutedLoadBearingSurfaces(repoRoot);
   const kr8 = evaluateKr8(loadKr8Evidence(projectDir, trustedAuthority));
   const kr10 = evaluateKr10(surface);
@@ -2069,11 +2230,10 @@ function main() {
       'KR8 always uses frozen baseline 6; conflicting production telemetry is a blocker',
       'KR8 requires authenticated production provenance; a filename or parseable JSON is not production provenance',
       'KR10 derives executed membership only from authoritative manifests/runtime graphs/inventory; fixed seed/heuristics/literal-require-scan never set membership_complete; incomplete/dynamic HOLD; thresholds stay frozen at 42 and 51',
-      'alias authenticity comes only from independently provisioned external witness adapter + installed authority state',
-      'serialized caller-authored JSON cannot nominate adapter module/digest; adapter identity+sha256 pin come from deployment binding only; allowTestWitness forbidden for release evidence',
+      'production trust roots are fixed /etc/autopilot paths only (not env/HOME/project); adapter binding must not supply timestamps; allowTestWitness forbidden for release evidence',
       'day evidence requires adapter-owned anchored append timestamps via getAppendTimestamp after verify; journal harvest and pass-through timestamps cannot forge elapsed days',
       'project-local telemetry/journal files, hashes, timestamps, signer IDs, and migration flags are untrusted inputs',
-      'self-hashed deterministic_caller_migration is not proof; migration is mechanical OR authority-authenticated (not both required; telemetry completion flags are untrusted)',
+      'self-hashed deterministic_caller_migration is not proof; mechanical scan of residual l3-l6 callers on current revision is MANDATORY (authority evidence supplements but never replaces)',
       'fixture telemetry is never promoted to production telemetry',
       'this checker never deletes compatibility aliases',
       'present compatibility aliases are nonblocking; only unmet retirement prerequisites HOLD',
@@ -2081,10 +2241,47 @@ function main() {
     ],
   };
   material.report_hash = sha256(canonicalJson(material));
+  return material;
+}
+
+function main() {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.help) {
+    process.stdout.write(`${USAGE}\n`);
+    return;
+  }
+  // Production CLI: fixed installation trust roots only — never env/HOME/argv trust paths.
+  let material;
+  try {
+    material = evaluateReleaseGates({
+      project: options.project,
+      repoRoot: options.repoRoot,
+      // Explicitly no trust injection on production main.
+      trust: null,
+    });
+  } catch (error) {
+    fail(error.message || String(error), 2);
+  }
   process.stdout.write(`${JSON.stringify(material, null, 2)}\n`);
-  if (options.check && disposition === 'HOLD') {
+  if (options.check && material.disposition === 'HOLD') {
     process.exitCode = 1;
   }
 }
 
-main();
+module.exports = {
+  PRODUCTION_AUTHORITY_PATH,
+  PRODUCTION_ADAPTER_BINDING_PATH,
+  evaluateReleaseGates,
+  loadTrustedInstalledWitnessAuthority,
+  loadTrustedWitnessAdapterBinding,
+  executeDeterministicCallerMigrationScan,
+  evaluateAliasRetirement,
+  evaluateKr8,
+  evaluateKr10,
+  assertSecureInstallationPath,
+};
+
+if (require.main === module) {
+  main();
+}
+

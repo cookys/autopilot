@@ -164,6 +164,7 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
   const sinkCalls = [];
   let executedClaimId = null;
   let engineObservation = null;
+  let lastDogfoodDelivery = null;
   const manifestHash = hash(deliveredManifest);
   const auditHead = hash(`audit:${runtime.routeInputs.runBinding.cohort_id}`);
   const coordinatorBinding = {
@@ -250,12 +251,59 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
       consumed.add(authorization.authorization_id);
       executedClaimId = request.claim_id;
       sinkCalls.push(request.claim_id);
+      // Real bounded sink mutation in an isolated temporary git repository —
+      // not an unconditional committed stub. The fixed sink is the installed
+      // engine route (execute_engine_dispatch); AutopilotEngine.implementTask
+      // is exercised with a dispatcher that returns the real commit receipt.
       const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'p37-dogfood-'));
+      const workRepo = path.join(temporary, 'sink-repo');
+      fs.mkdirSync(workRepo, { recursive: true });
+      const git = (args) => {
+        const run = require('child_process').spawnSync('git', args, {
+          cwd: workRepo,
+          encoding: 'utf8',
+        });
+        if (run.error || run.status !== 0) {
+          throw new Error(`dogfood sink git ${args.join(' ')} failed: ${run.stderr || run.error}`);
+        }
+        return (run.stdout || '').trim();
+      };
+      git(['init']);
+      git(['config', 'user.email', 'dogfood@autopilot.local']);
+      git(['config', 'user.name', 'p37-dogfood']);
+      const deliveredRel = 'delivered/implement-unit.md';
+      const deliveredAbs = path.join(workRepo, deliveredRel);
+      fs.mkdirSync(path.dirname(deliveredAbs), { recursive: true });
+      const deliveredBody = `Low-risk installed dogfood unit\nclaim=${request.claim_id}\n`;
+      fs.writeFileSync(deliveredAbs, deliveredBody);
+      git(['add', deliveredRel]);
+      git(['commit', '-m', `dogfood fixed-sink ${request.claim_id}`]);
+      const commitSha = git(['rev-parse', 'HEAD']);
+      const deliveredBytes = fs.readFileSync(deliveredAbs);
+      const deliveredSha = hash(deliveredBytes.toString('utf8'));
+      assert.notEqual(commitSha, 'd'.repeat(40), 'must not use stub commit hash');
+      assert.equal(fs.existsSync(deliveredAbs), true, 'dogfood delivered artifact must exist');
+      const show = require('child_process').spawnSync(
+        'git',
+        ['show', '--name-only', '--pretty=format:', commitSha],
+        { cwd: workRepo, encoding: 'utf8' },
+      );
+      assert.equal(show.status, 0);
+      assert.match(show.stdout || '', /delivered\/implement-unit\.md/);
+      const blob = require('child_process').spawnSync(
+        'git',
+        ['show', `${commitSha}:${deliveredRel}`],
+        { cwd: workRepo, encoding: 'utf8' },
+      );
+      assert.equal(blob.status, 0);
+      assert.equal(blob.stdout, deliveredBody);
+      const baseSha = 'b'.repeat(40);
       const promptFile = path.join(temporary, 'implement.md');
       fs.writeFileSync(promptFile, 'Low-risk installed dogfood unit.\n');
       const implementationEngine = new baseEngine.AutopilotEngine({
-        cwd: root,
+        cwd: workRepo,
         implementationDispatcher() {
+          // Dispatcher returns the real commit/receipt from the isolated sink.
           return {
             error: null,
             status: 0,
@@ -268,13 +316,13 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
               runner: 'p37-dogfood-runner',
               model: 'p37-dogfood-model',
               branch: 'feat/p37-dogfood',
-              base: 'b'.repeat(40),
-              commit: 'd'.repeat(40),
+              base: baseSha,
+              commit: commitSha,
               files_changed: 1,
-              insertions: 4,
+              insertions: deliveredBody.split('\n').length,
               deletions: 0,
               worktree: null,
-              agent_log: '/var/log/autopilot/p37-dogfood.log',
+              agent_log: path.join(temporary, 'agent.log'),
               error: null,
             },
           };
@@ -283,17 +331,29 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
       const engineResult = implementationEngine.implementTask({
         promptFile,
         branch: 'feat/p37-dogfood',
-        base: 'b'.repeat(40),
-        cwd: root,
+        base: baseSha,
+        cwd: workRepo,
         roster: {
           implementer_runner: 'p37-dogfood-runner',
           implementer_engine: 'p37-dogfood-model',
           implementer_effort: 'low',
         },
       });
-      fs.rmSync(temporary, { recursive: true, force: true });
+      const deliveredCommit = engineResult
+        && engineResult.implementation
+        && engineResult.implementation.commit;
+      assert.equal(engineResult.status, 'committed');
+      assert.equal(deliveredCommit, commitSha, 'engine result must bind the real sink commit');
+      lastDogfoodDelivery = {
+        commit: commitSha,
+        artifact_path: deliveredRel,
+        artifact_sha256: deliveredSha,
+        work_repo: workRepo,
+      };
       engineObservation = engineResult.status;
       const effectId = `dogfood-effect-${request.claim_id}`;
+      // Keep host-response shape compatible with installed execute path (no
+      // extra delivered_manifest field that could force a blocked transition).
       return hostResponse(message, {
         receipt: {
           uri: `file://${profile.engine_profile.receipt_root}/${effectId}.json`,
@@ -570,6 +630,7 @@ function buildHosts(runtime, profile, deliveredManifest, hash) {
     adapters,
     sinkCalls,
     getEngineObservation: () => engineObservation,
+    getLastDogfoodDelivery: () => lastDogfoodDelivery,
   };
 }
 
@@ -651,6 +712,16 @@ async function runHappyPath({ runtime, modeOverride, label }) {
   assert.equal(hosts.sinkCalls.length, 1);
   assert.equal(hosts.getEngineObservation(), 'committed');
   assert.equal(session.engineTerminalIsAcceptance('committed'), false);
+  const delivery = hosts.getLastDogfoodDelivery();
+  assert.ok(delivery && delivery.commit, 'fixed sink must return real delivery receipt');
+  assert.notEqual(delivery.commit, 'd'.repeat(40), 'delivery commit must not be stub');
+  assert.equal(typeof delivery.artifact_sha256, 'string');
+  assert.match(delivery.artifact_path, /delivered\/implement-unit\.md/);
+  assert.equal(
+    fs.existsSync(path.join(delivery.work_repo, delivery.artifact_path)),
+    true,
+    'delivered artifact bytes must exist in isolated sink repo',
+  );
   session.kernel.recordVerification({ purpose: 'tests' });
   session.kernel.recordChallenge({ scope_id: 'tests' });
   session.kernel.recordChallenge({ scope_id: 'ux' });

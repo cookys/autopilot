@@ -209,13 +209,14 @@ COMMON_H="$(git -C "$SBX" rev-parse --path-format=absolute --git-common-dir)"
 LEDGER_H="$COMMON_H/autopilot/same-tuple-ledger.jsonl"
 MANIFEST_H="$TEST_TMP/h/manifests"
 RUNNER_CALLS_H="$TEST_TMP/h/runner-calls"
+RELEASE_H="$TEST_TMP/h/release"
 mkdir -p "$TEST_TMP/h"
 bash "$LEDGER_SH" init --ledger "$LEDGER_H" >/dev/null
 STUB_CONCURRENT="$TEST_TMP/agy-concurrent"
 cat > "$STUB_CONCURRENT" <<EOF
 #!/usr/bin/env bash
 echo call >> "$RUNNER_CALLS_H"
-sleep 2
+while [ ! -f "$RELEASE_H" ]; do sleep 0.01; done
 echo ok > concurrent.txt
 git add concurrent.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent"
@@ -235,13 +236,14 @@ fi
 (
   cd "$SBX"
   AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H" bash "$SCRIPT" \
-    --branch feat/concurrent --prompt-file "$PROMPT" --agy-bin "$STUB_CONCURRENT" \
+    --branch feat/concurrent-second --prompt-file "$PROMPT" --agy-bin "$STUB_CONCURRENT" \
     --ledger "$LEDGER_H" --run-id same-tuple --stage implement
 ) > "$TEST_TMP/h/second.out" 2> "$TEST_TMP/h/second.err"
 SECOND_H_RC=$?
 assert_neq "0" "$SECOND_H_RC" "second same-tuple caller is rejected"
 assert_contains "$(cat "$TEST_TMP/h/second.out")" '"status": "precondition_failed"' "second caller fails at precondition rail"
 assert_contains "$(cat "$TEST_TMP/h/second.out")" "durable dispatch claim rejected" "second caller is fenced by durable tuple claim"
+touch "$RELEASE_H"
 wait "$FIRST_H_PID"
 FIRST_H_OUT="$(cat "$TEST_TMP/h/first.out")"
 reap_wt "$FIRST_H_OUT"
@@ -251,6 +253,10 @@ assert_eq "1" "$H_MANIFESTS" "same tuple creates at most one manifest"
 H_WORKTREES="$(git -C "$SBX" worktree list --porcelain \
   | grep -c '^branch refs/heads/feat/concurrent$' || true)"
 assert_eq "1" "$H_WORKTREES" "same tuple creates at most one worktree"
+assert_eq "no" "$(
+  git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/concurrent-second \
+    >/dev/null && echo yes || echo no
+)" "fenced same tuple creates no second branch"
 
 # =========================================================================================
 # (h2) SAME-TUPLE WITHOUT SETSID: detach was requested, so the parent preclaim still fences
@@ -260,6 +266,7 @@ COMMON_H2="$(git -C "$SBX" rev-parse --path-format=absolute --git-common-dir)"
 LEDGER_H2="$COMMON_H2/autopilot/same-tuple-no-setsid-ledger.jsonl"
 MANIFEST_H2="$TEST_TMP/h2/manifests"
 RUNNER_CALLS_H2="$TEST_TMP/h2/runner-calls"
+RELEASE_H2="$TEST_TMP/h2/release"
 FAKEBIN_H2="$TEST_TMP/h2/bin"
 mkdir -p "$FAKEBIN_H2" "$MANIFEST_H2"
 bash "$LEDGER_SH" init --ledger "$LEDGER_H2" >/dev/null
@@ -273,7 +280,7 @@ STUB_CONCURRENT_H2="$TEST_TMP/h2/agy-concurrent"
 cat > "$STUB_CONCURRENT_H2" <<EOF
 #!/usr/bin/env bash
 echo call >> "$RUNNER_CALLS_H2"
-sleep 2
+while [ ! -f "$RELEASE_H2" ]; do sleep 0.01; done
 echo ok > concurrent-no-setsid.txt
 git add concurrent-no-setsid.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent without setsid"
@@ -301,7 +308,7 @@ assert_eq "1" "$H2_WORKTREES_DURING" \
 (
   cd "$SBX"
   PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
-    --branch feat/concurrent-no-setsid --prompt-file "$PROMPT" \
+    --branch feat/concurrent-no-setsid-second --prompt-file "$PROMPT" \
     --agy-bin "$STUB_CONCURRENT_H2" \
     --ledger "$LEDGER_H2" --run-id same-tuple-no-setsid --stage implement
 ) > "$TEST_TMP/h2/second.out" 2> "$TEST_TMP/h2/second.err"
@@ -311,6 +318,7 @@ assert_contains "$(cat "$TEST_TMP/h2/second.out")" '"status": "precondition_fail
   "no-setsid duplicate fails at precondition rail"
 assert_contains "$(cat "$TEST_TMP/h2/second.out")" "durable dispatch claim rejected" \
   "no-setsid duplicate is fenced by the parent-owned tuple lease"
+touch "$RELEASE_H2"
 wait "$FIRST_H2_PID"
 FIRST_H2_OUT="$(cat "$TEST_TMP/h2/first.out")"
 reap_wt "$FIRST_H2_OUT"
@@ -322,6 +330,10 @@ assert_eq "1" "$H2_MANIFESTS" "no-setsid same tuple creates at most one manifest
 H2_WORKTREES_AFTER="$(git -C "$SBX" worktree list --porcelain \
   | grep -c '^branch refs/heads/feat/concurrent-no-setsid$' || true)"
 assert_eq "0" "$H2_WORKTREES_AFTER" "no-setsid inline path reaps its sole worktree after completion"
+assert_eq "no" "$(
+  git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/concurrent-no-setsid-second \
+    >/dev/null && echo yes || echo no
+)" "no-setsid fenced tuple creates no second branch"
 
 # =========================================================================================
 # (i) OWNERSHIP-TRANSFER CAS: A preclaims, its child pauses before transfer,

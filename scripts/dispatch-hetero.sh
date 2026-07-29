@@ -1492,6 +1492,9 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die_precondition "not inside a git repository"
 git rev-parse --verify --quiet "$BASE" >/dev/null || die_precondition "base ref not found: $BASE"
+if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
+  die_precondition "branch already exists: $BRANCH"
+fi
 # Claim the durable implementation tuple before branch/worktree/manifest
 # creation. This parent-owned lease is required whenever detach was requested,
 # even when this host cannot provide setsid --wait and execution later falls
@@ -1514,9 +1517,6 @@ if [ "$_detach_preclaim" -eq 1 ] \
     || die_precondition "durable dispatch claim returned invalid ownership identity"
 fi
 unset _detach_preclaim _preclaim
-if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
-  die_precondition "branch already exists: $BRANCH"
-fi
 
 # Resolve effective skill mode and build prompt-pack if requested
 if [[ "$SKILL_MODE" != "off" ]]; then

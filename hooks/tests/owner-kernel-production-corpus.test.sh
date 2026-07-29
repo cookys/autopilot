@@ -300,8 +300,13 @@ function openInstalledSession(fx, {
 
 const attackMutations = {
   protected_event_envelope_forgery() {
+    // Isolated mutation: only forge the protected decision envelope on the
+    // installed ledger. Do not append an unrelated guaranteed-rejected second
+    // decision — rejection must be for this forgery alone via installed resume.
     const fx = installedFixture('corpus-attack-forgery');
-    const { session } = openInstalledSession(fx, { runLabel: 'protected-envelope-forgery' });
+    const { session, witnessInvoke } = openInstalledSession(fx, {
+      runLabel: 'protected-envelope-forgery',
+    });
     const decision = session.kernel.mintActionDecision({
       capability: session.owner_capability,
       ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'forgery' },
@@ -311,36 +316,44 @@ const attackMutations = {
     const ledger = structuredClone(session.kernel.getLedger());
     const decisionIndex = ledger.events.findIndex((event) => event.type === 'decision');
     assert.ok(decisionIndex >= 0);
+    const originalDecision = ledger.events[decisionIndex];
     ledger.events[decisionIndex] = {
-      ...ledger.events[decisionIndex],
+      ...originalDecision,
       emitter: { kind: 'user', identity: 'workspace-forger', channel: 'workspace-file' },
       event_hash: 'f'.repeat(64),
       witness: {
-        ...(ledger.events[decisionIndex].witness || {}),
+        ...(originalDecision.witness || {}),
         batch_id: 'forged-batch',
         durable_request_hash: 'e'.repeat(64),
       },
     };
-    ledger.events.push({
-      type: 'decision',
-      event_hash: 'd'.repeat(64),
-      payload: {
-        decision_id: 'forged-second-identity',
-        action_class: 'external',
-        action_descriptor: installedEngine.fixedAction(),
-        action_descriptor_hash: sha256(canonicalJson(installedEngine.fixedAction())),
+    // Reach installed resume/verification with only the forged envelope mutation.
+    const heldResume = held(() => installedEngine.resumeInstalledEngineSession({
+      binding: fx.installedBinding,
+      profile: fx.profile,
+      governanceConfig: fx.runtime.governanceConfig,
+      acceptanceContract,
+      routeInputs: fx.runtime.routeInputs,
+      durableBinding: fx.durableBinding,
+      kernelBinding: fx.kernelBinding,
+      ledger,
+      capabilityProbedAt: fx.now,
+      capabilityExpiresAt: fx.expires,
+      witnessInvoke,
+      engineInvoke: capabilityOnlyInvoke(fx),
+      coordinatorInvoke: () => {
+        throw new Error('forgery resume must not accept');
       },
-    });
-    const heldForge = held(() => installedEngine.reconstructActionIdentityFromLedger(ledger));
-    const heldSecondMint = held(() => session.kernel.mintActionDecision({
-      capability: session.owner_capability,
-      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'forgery-2' },
-      actionClass: 'external',
-      actionDescriptor: fx.profile.action,
+      kernelOptions: {
+        adapters: fx.runtime.adapters(),
+        clock: () => new Date(fx.runtime.NOW),
+        nonceFactory: () => 'd'.repeat(64),
+      },
     }));
     session.teardown();
     assert.equal(decision.payload.action_class, 'external');
-    return heldForge && heldSecondMint;
+    assert.equal(heldResume, true, 'forged envelope must be rejected by installed resume alone');
+    return heldResume;
   },
   direct_decision_append() {
     const fx = installedFixture('corpus-attack-direct-decision');
@@ -1192,14 +1205,57 @@ const categoryMutations = {
       : 'accept';
   },
   event_log_tampering() {
+    // Isolated mutation: mutate actual ledger events (not profile hashes) and
+    // require rejection through the installed resume/verification route.
     const fx = installedFixture('corpus-cat-tamper');
-    return held(() => installedEngine.normalizeInstalledEngineProfile({
-      ...fx.profile,
-      installed_binding_hash: '0'.repeat(64),
-      profile_hash: '0'.repeat(64),
-    }))
-      ? 'reject'
-      : 'accept';
+    const { session, witnessInvoke } = openInstalledSession(fx, { runLabel: 'event-log-tamper' });
+    session.kernel.mintActionDecision({
+      capability: session.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'tamper-base' },
+      actionClass: 'external',
+      actionDescriptor: fx.profile.action,
+    });
+    const ledger = structuredClone(session.kernel.getLedger());
+    assert.ok(Array.isArray(ledger.events) && ledger.events.length > 0);
+    const decisionIdx = ledger.events.findIndex((event) => event.type === 'decision');
+    const targetIndex = decisionIdx >= 0 ? decisionIdx : ledger.events.length - 1;
+    const original = ledger.events[targetIndex];
+    ledger.events[targetIndex] = {
+      ...original,
+      payload: {
+        ...(original.payload || {}),
+        decision_id: `${(original.payload && original.payload.decision_id) || 'decision'}-tampered`,
+        text: 'event-log-tampered-payload',
+      },
+      // Break the event hash chain while keeping a plausible shape.
+      event_hash: 'a'.repeat(64),
+      previous_hash: original.previous_hash,
+    };
+    const rejectedResume = held(() => installedEngine.resumeInstalledEngineSession({
+      binding: fx.installedBinding,
+      profile: fx.profile,
+      governanceConfig: fx.runtime.governanceConfig,
+      acceptanceContract,
+      routeInputs: fx.runtime.routeInputs,
+      durableBinding: fx.durableBinding,
+      kernelBinding: fx.kernelBinding,
+      ledger,
+      capabilityProbedAt: fx.now,
+      capabilityExpiresAt: fx.expires,
+      witnessInvoke,
+      engineInvoke: capabilityOnlyInvoke(fx),
+      coordinatorInvoke: () => {
+        throw new Error('tampered ledger must not accept');
+      },
+      kernelOptions: {
+        adapters: fx.runtime.adapters(),
+        clock: () => new Date(fx.runtime.NOW),
+        nonceFactory: () => 'e'.repeat(64),
+      },
+    }));
+    session.teardown();
+    assert.equal(rejectedResume, true, 'event-log tampering must be rejected by installed resume');
+    return rejectedResume ? 'reject' : 'accept';
   },
   unknown_decision_class() {
     const fx = installedFixture('corpus-cat-unknown');

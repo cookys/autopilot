@@ -1422,14 +1422,30 @@ function deriveAcceptedFieldsFromVerifiedReplay(ledger, verified) {
       'ACCEPTANCE_BATCH_REQUIRED',
     );
   }
-  const acceptanceState = verified.state.acceptance;
+  const acceptanceState = verified.state.acceptance || {};
+  const acceptancePayload = acceptance.payload && typeof acceptance.payload === 'object'
+    ? acceptance.payload
+    : {};
+  // Delivered-manifest identity comes only from verified coordinator delivered-set
+  // evidence (acceptance payload / coordinator state), never from candidate aliasing.
   const candidateSetHash = acceptanceState.candidate_set_hash
-    || (acceptance.payload && acceptance.payload.candidate_set_hash)
+    || acceptancePayload.candidate_set_hash
     || null;
-  const deliveredManifestHead = candidateSetHash;
-  if (typeof candidateSetHash !== 'string' || !candidateSetHash) {
+  const deliveredManifestHead = acceptanceState.delivered_set_hash
+    || acceptancePayload.delivered_set_hash
+    || null;
+  if (typeof candidateSetHash !== 'string' || !candidateSetHash
+    || typeof deliveredManifestHead !== 'string' || !deliveredManifestHead) {
     installedEngineError(
-      'accepted:true result requires verified acceptance candidate/delivered heads',
+      'accepted:true result requires verified coordinator candidate_set_hash and delivered_set_hash',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
+  // Coordinator v2 requires candidate and delivered manifests to match exactly.
+  if (candidateSetHash !== deliveredManifestHead) {
+    installedEngineError(
+      'accepted:true result delivered_manifest_head must equal verified candidate_set_hash '
+      + '(coordinator same-manifest delivered-set relationship)',
       'ACCEPTANCE_BATCH_REQUIRED',
     );
   }
@@ -1485,8 +1501,64 @@ function deriveAcceptedFieldsFromVerifiedReplay(ledger, verified) {
   };
 }
 
+function assertNoAcceptanceLikeMaterialWhenRejected(value) {
+  // accepted:false cannot carry acceptance-like material. Only witnessed replay
+  // that proves accepted:true may authorize these fields.
+  if (value.accepted === true) return;
+  if (value.outcome === 'accepted') {
+    installedEngineError(
+      'accepted:false result rejects acceptance-like outcome without witnessed accepted:true replay',
+      'ACCEPTANCE_LIKE_MATERIAL_REJECTED',
+    );
+  }
+  if (value.status === 'accepted' || value.status === 'complete') {
+    installedEngineError(
+      'accepted:false result rejects acceptance-like status without witnessed accepted:true replay',
+      'ACCEPTANCE_LIKE_MATERIAL_REJECTED',
+    );
+  }
+  if (value.terminal_batch === 'atomic' || value.terminal_batch === 'acceptance+complete') {
+    installedEngineError(
+      'accepted:false result rejects terminal_batch acceptance material without witnessed accepted:true replay',
+      'ACCEPTANCE_LIKE_MATERIAL_REJECTED',
+    );
+  }
+  if (value.action_identity && typeof value.action_identity === 'object') {
+    if (value.action_identity.status === 'accepted'
+      || value.action_identity.terminal === true) {
+      installedEngineError(
+        'accepted:false result rejects accepted action_identity without witnessed accepted:true replay',
+        'ACCEPTANCE_LIKE_MATERIAL_REJECTED',
+      );
+    }
+  }
+  if (value.delivered_manifest_head != null
+    || value.candidate_set_hash != null
+    || value.acceptance_event_hash != null
+    || value.complete_event_hash != null) {
+    installedEngineError(
+      'accepted:false result rejects acceptance hash material without witnessed accepted:true replay',
+      'ACCEPTANCE_LIKE_MATERIAL_REJECTED',
+    );
+  }
+  if (value.engine_observation != null && typeof value.engine_observation === 'object') {
+    if (value.engine_observation.accepted === true
+      || value.engine_observation.outcome === 'accepted'
+      || value.engine_observation.terminal_batch === 'atomic'
+      || value.engine_observation.acceptance === true) {
+      installedEngineError(
+        'accepted:false result rejects acceptance-like observation fields without witnessed accepted:true replay',
+        'ACCEPTANCE_LIKE_MATERIAL_REJECTED',
+      );
+    }
+  }
+}
+
 function assertAcceptedResultMaterial(value, options = {}) {
-  if (value.accepted !== true) return;
+  if (value.accepted !== true) {
+    assertNoAcceptanceLikeMaterialWhenRejected(value);
+    return;
+  }
   if (!value.ledger || typeof value.ledger !== 'object' || !Array.isArray(value.ledger.events)) {
     installedEngineError(
       'accepted:true result requires the witnessed ledger; literal hashes alone cannot authorize',
@@ -1592,6 +1664,8 @@ function normalizeInstalledEngineResult(raw, options = {}) {
   let derivedAccepted = null;
   if (value.accepted === true) {
     derivedAccepted = assertAcceptedResultMaterial(value, options);
+  } else {
+    assertNoAcceptanceLikeMaterialWhenRejected(value);
   }
   const material = value.accepted === true
     ? {
@@ -1616,25 +1690,29 @@ function normalizeInstalledEngineResult(raw, options = {}) {
       complete_event_hash: derivedAccepted.complete_event_hash,
     }
     : {
+      // accepted:false never carries acceptance-like material; force nulls.
       schema_version: INSTALLED_ENGINE_SCHEMA_VERSION,
       kind: INSTALLED_ENGINE_RESULT_KIND,
       status: value.status,
       outcome: value.outcome,
       profile_hash: value.profile_hash,
       sink_id: INSTALLED_ENGINE_SINK_ID,
-      action_identity: cloneCanonical(value.action_identity),
-      engine_observation: value.engine_observation,
+      action_identity: cloneCanonical(value.action_identity || INSTALLED_ENGINE_ACTION_IDENTITY),
+      engine_observation: value.engine_observation == null
+        ? null
+        : cloneCanonical(value.engine_observation),
       accepted: false,
-      terminal_batch: value.terminal_batch,
+      terminal_batch: null,
       authority: cloneCanonical(INSTALLED_ENGINE_AUTHORITY),
-      disclosure: cloneCanonical(value.disclosure),
-      disclosure_hash: value.disclosure_hash,
+      disclosure: cloneCanonical(value.disclosure || {}),
+      disclosure_hash: value.disclosure_hash
+        || sha256(canonicalJson(value.disclosure || {})),
       ledger: value.ledger == null ? null : cloneCanonical(value.ledger),
-      ledger_head: value.ledger_head,
-      delivered_manifest_head: value.delivered_manifest_head,
-      candidate_set_hash: value.candidate_set_hash,
-      acceptance_event_hash: value.acceptance_event_hash,
-      complete_event_hash: value.complete_event_hash,
+      ledger_head: value.ledger_head == null ? null : value.ledger_head,
+      delivered_manifest_head: null,
+      candidate_set_hash: null,
+      acceptance_event_hash: null,
+      complete_event_hash: null,
     };
   material.result_hash = sha256(canonicalJson(material));
   if (value.result_hash !== material.result_hash) {
@@ -1761,10 +1839,41 @@ function buildInstalledEngineResult({
     resolvedOutcome = derived.outcome;
     resolvedTerminalBatch = derived.terminal_batch;
     resolvedEngineObservation = derived.engine_observation;
-  } else if (resolvedLedger && Array.isArray(resolvedLedger.events)) {
-    const events = resolvedLedger.events;
-    if (!resolvedLedgerHead && events.length > 0) {
-      resolvedLedgerHead = events[events.length - 1].event_hash;
+  } else {
+    // accepted:false: strip every acceptance-like field before normalize.
+    if (resolvedOutcome === 'accepted'
+      || resolvedStatus === 'accepted'
+      || resolvedStatus === 'complete'
+      || resolvedTerminalBatch === 'atomic'
+      || resolvedTerminalBatch === 'acceptance+complete'
+      || resolvedManifestHead != null
+      || resolvedCandidate != null
+      || resolvedAcceptanceHash != null
+      || resolvedCompleteHash != null
+      || (resolvedIdentity && typeof resolvedIdentity === 'object'
+        && (resolvedIdentity.status === 'accepted' || resolvedIdentity.terminal === true))
+      || (resolvedEngineObservation && typeof resolvedEngineObservation === 'object'
+        && (resolvedEngineObservation.accepted === true
+          || resolvedEngineObservation.outcome === 'accepted'
+          || resolvedEngineObservation.terminal_batch === 'atomic'
+          || resolvedEngineObservation.acceptance === true))) {
+      installedEngineError(
+        'accepted:false result rejects every acceptance-like outcome, terminal_batch, '
+        + 'action_identity, accepted material, or observation field unless witnessed '
+        + 'replay proves accepted:true',
+        'ACCEPTANCE_LIKE_MATERIAL_REJECTED',
+      );
+    }
+    resolvedTerminalBatch = null;
+    resolvedManifestHead = null;
+    resolvedCandidate = null;
+    resolvedAcceptanceHash = null;
+    resolvedCompleteHash = null;
+    if (resolvedLedger && Array.isArray(resolvedLedger.events)) {
+      const events = resolvedLedger.events;
+      if (!resolvedLedgerHead && events.length > 0) {
+        resolvedLedgerHead = events[events.length - 1].event_hash;
+      }
     }
   }
 
@@ -1780,16 +1889,16 @@ function buildInstalledEngineResult({
       ? null
       : cloneCanonical(resolvedEngineObservation),
     accepted: accepted === true,
-    terminal_batch: resolvedTerminalBatch,
+    terminal_batch: accepted === true ? resolvedTerminalBatch : null,
     authority: cloneCanonical(INSTALLED_ENGINE_AUTHORITY),
     disclosure: cloneCanonical(resolvedDisclosure || {}),
     disclosure_hash: sha256(canonicalJson(resolvedDisclosure || {})),
     ledger: resolvedLedger == null ? null : cloneCanonical(resolvedLedger),
     ledger_head: resolvedLedgerHead,
-    delivered_manifest_head: resolvedManifestHead,
-    candidate_set_hash: resolvedCandidate,
-    acceptance_event_hash: resolvedAcceptanceHash,
-    complete_event_hash: resolvedCompleteHash,
+    delivered_manifest_head: accepted === true ? resolvedManifestHead : null,
+    candidate_set_hash: accepted === true ? resolvedCandidate : null,
+    acceptance_event_hash: accepted === true ? resolvedAcceptanceHash : null,
+    complete_event_hash: accepted === true ? resolvedCompleteHash : null,
   };
   material.result_hash = sha256(canonicalJson(material));
   return normalizeInstalledEngineResult(material, { witness, acceptanceAuthority });

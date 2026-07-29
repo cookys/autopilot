@@ -763,7 +763,7 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
     terminalBatch: 'atomic',
     disclosure,
     ledgerHead: completeEvent.event_hash,
-    deliveredManifestHead: acceptanceEvent.payload.candidate_set_hash,
+    deliveredManifestHead: acceptanceEvent.payload.delivered_set_hash,
     candidateSetHash: acceptanceEvent.payload.candidate_set_hash,
     acceptanceEventHash: acceptanceEvent.event_hash,
     completeEventHash: completeEvent.event_hash,
@@ -783,10 +783,81 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   assert.equal(result.action_identity.status, 'accepted');
   assert.equal(result.action_identity.terminal, true);
   assert.equal(result.action_identity.catalog_id, 'engine-implementation-dispatch-v1');
+  // delivered-manifest-proof: head is the coordinator delivered_set_hash, bound to candidate.
+  assert.equal(
+    result.delivered_manifest_head,
+    acceptanceEvent.payload.delivered_set_hash,
+    'delivered_manifest_head must equal verified coordinator delivered_set_hash',
+  );
+  assert.equal(
+    result.delivered_manifest_head,
+    result.candidate_set_hash,
+    'delivered_manifest_head must satisfy same-manifest relationship to candidate_set_hash',
+  );
+  assert.equal(
+    result.candidate_set_hash,
+    acceptanceEvent.payload.candidate_set_hash,
+  );
   // engine_observation is derived from verified action-outcome replay, not caller labels.
   assert.ok(result.engine_observation && typeof result.engine_observation === 'object');
   assert.equal(result.engine_observation.engine_status_is_not_acceptance, true);
   assert.equal(result.engine_observation.outcome, 'succeeded');
+  // delivered-manifest-proof: caller substitution of delivered head fails.
+  assert.throws(
+    () => installedEngine.buildInstalledEngineResult({
+      profile,
+      status: 'complete',
+      outcome: 'accepted',
+      accepted: true,
+      terminalBatch: 'atomic',
+      ledger,
+      deliveredManifestHead: 'a'.repeat(64),
+      candidateSetHash: acceptanceEvent.payload.candidate_set_hash,
+      witness: session.witness,
+      acceptanceAuthority: session.acceptance_authority,
+    }),
+    /delivered_manifest_head|verified ledger|candidate/i,
+  );
+  // result-acceptance-substitution: accepted:false rejects acceptance-like material.
+  assert.throws(
+    () => installedEngine.normalizeInstalledEngineResult({
+      schema_version: result.schema_version,
+      kind: result.kind,
+      status: 'complete',
+      outcome: 'accepted',
+      profile_hash: result.profile_hash,
+      sink_id: result.sink_id,
+      action_identity: { status: 'accepted', terminal: true, catalog_id: result.sink_id },
+      engine_observation: { accepted: true, outcome: 'accepted' },
+      accepted: false,
+      terminal_batch: 'atomic',
+      authority: result.authority,
+      disclosure: {},
+      disclosure_hash: hash({}),
+      ledger: null,
+      ledger_head: null,
+      delivered_manifest_head: 'b'.repeat(64),
+      candidate_set_hash: 'c'.repeat(64),
+      acceptance_event_hash: 'd'.repeat(64),
+      complete_event_hash: 'e'.repeat(64),
+      result_hash: 'f'.repeat(64),
+    }),
+    /accepted:false|acceptance-like|ACCEPTANCE_LIKE/i,
+  );
+  assert.throws(
+    () => installedEngine.buildInstalledEngineResult({
+      profile,
+      status: 'complete',
+      outcome: 'accepted',
+      accepted: false,
+      terminalBatch: 'atomic',
+      deliveredManifestHead: acceptanceEvent.payload.delivered_set_hash,
+      candidateSetHash: acceptanceEvent.payload.candidate_set_hash,
+      acceptanceEventHash: acceptanceEvent.event_hash,
+      completeEventHash: completeEvent.event_hash,
+    }),
+    /accepted:false|acceptance-like|ACCEPTANCE_LIKE/i,
+  );
   assert.throws(
     () => installedEngine.normalizeInstalledEngineResult({
       ...result,

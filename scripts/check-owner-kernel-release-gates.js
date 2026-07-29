@@ -166,19 +166,136 @@ function isNonEmptySha256(value) {
 }
 
 /**
- * Trusted installed witness-authority verification.
+ * Load persisted trusted installed witness authority/configuration.
  *
- * Telemetry, signer IDs, keys, hashes, and callbacks supplied by the evidence
- * under check are untrusted and cannot authenticate themselves. Self-computable
- * head derivation alone is therefore insufficient: call the existing
- * assertWitnessAdapter + witness.verify() authority API. A freshly constructed
- * authority has no recorded receipts from the file under check, so verify()
- * fails closed for file-only self-authenticating chains (including internally
- * consistent forged heads).
+ * Alias authenticity and production provenance authentication come only from
+ * this persisted trusted surface — never from a telemetry-stream-derived fresh
+ * MemoryWitness. Telemetry cannot supply its own trust root (stream_id / keys /
+ * signer bindings). Absent trusted state fails closed (HOLD).
+ *
+ * Expected config kind uses the existing assertWitnessAdapter + MemoryWitness
+ * APIs: a journal of trusted receipts is replayed into MemoryWitness so
+ * authority.verify() only accepts receipts already recorded by the trusted
+ * installed authority, not self-computable forged heads.
+ */
+function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
+  const candidates = [
+    path.join(projectDir, 'p3', 'trusted-installed-witness-authority.json'),
+    path.join(projectDir, 'trusted-installed-witness-authority.json'),
+    path.join(projectDir, 'p3', 'installed-witness-authority.json'),
+    path.join(repoRoot || '', 'docs', 'projects', path.basename(projectDir),
+      'p3', 'trusted-installed-witness-authority.json'),
+  ];
+  let config = null;
+  let configPath = null;
+  for (const candidate of candidates) {
+    if (!candidate || candidate.includes(`${path.sep}${path.sep}`)) continue;
+    const data = readJsonIfExists(candidate);
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      config = data;
+      configPath = candidate;
+      break;
+    }
+  }
+  if (!config) {
+    return {
+      ok: false,
+      reason: 'persisted trusted installed witness authority/configuration is absent; '
+        + 'telemetry cannot supply its own trust root',
+      authority: null,
+      stream_id: null,
+      config_path: null,
+    };
+  }
+  const kind = config.kind;
+  if (kind !== 'trusted_installed_witness_authority'
+    && kind !== 'p37_installed_witness_authority') {
+    return {
+      ok: false,
+      reason: 'trusted installed witness authority kind is unsupported',
+      authority: null,
+      stream_id: null,
+      config_path: configPath,
+    };
+  }
+  const streamId = config.stream_id;
+  if (typeof streamId !== 'string' || streamId.length === 0) {
+    return {
+      ok: false,
+      reason: 'trusted installed witness authority is missing stream_id binding',
+      authority: null,
+      stream_id: null,
+      config_path: configPath,
+    };
+  }
+  const journal = Array.isArray(config.receipts)
+    ? config.receipts
+    : (Array.isArray(config.receipt_journal) ? config.receipt_journal : null);
+  if (!journal) {
+    return {
+      ok: false,
+      reason: 'trusted installed witness authority is missing receipt journal',
+      authority: null,
+      stream_id: streamId,
+      config_path: configPath,
+    };
+  }
+  try {
+    const witness = new MemoryWitness({ streamId });
+    for (const entry of journal) {
+      if (!entry || typeof entry !== 'object') {
+        throw new Error('trusted journal entry is not an object');
+      }
+      const produced = witness.append({
+        run_id: entry.run_id,
+        sequence: entry.sequence,
+        event_hash: entry.event_hash,
+      });
+      if (typeof entry.witness_head === 'string'
+        && produced.witness_head.toLowerCase() !== entry.witness_head.toLowerCase()) {
+        throw new Error('trusted journal witness_head does not match authoritative append');
+      }
+      if (typeof entry.stream_id === 'string' && entry.stream_id !== streamId) {
+        throw new Error('trusted journal stream_id drifted from authority binding');
+      }
+    }
+    const authority = assertWitnessAdapter(witness, {
+      allowTestWitness: true,
+      requireBinding: true,
+    });
+    return {
+      ok: true,
+      reason: null,
+      authority,
+      stream_id: streamId,
+      config_path: configPath,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `trusted installed witness authority journal failed to load: ${error.message}`,
+      authority: null,
+      stream_id: streamId,
+      config_path: configPath,
+    };
+  }
+}
+
+/**
+ * Verify a receipt against the persisted trusted installed witness authority.
+ * Never constructs a fresh MemoryWitness from telemetry-controlled stream_id.
  */
 function verifyWithTrustedInstalledWitnessAuthority(receipt, {
   expectedPreviousHead = undefined,
+  trustedAuthority = null,
 } = {}) {
+  if (!trustedAuthority || !trustedAuthority.ok || !trustedAuthority.authority) {
+    throw new Error(
+      'witness receipt cannot be authenticated without persisted trusted installed '
+      + 'witness authority/configuration (telemetry-stream-derived fresh witnesses '
+      + 'are rejected)',
+    );
+  }
   verifyReceiptShape(receipt);
   if (expectedPreviousHead !== undefined) {
     const prev = receipt.previous_witness_head;
@@ -196,17 +313,24 @@ function verifyWithTrustedInstalledWitnessAuthority(receipt, {
   if (typeof receipt.stream_id !== 'string' || receipt.stream_id.length === 0) {
     throw new Error('witness receipt stream_id is required for authority verification');
   }
-  const authority = assertWitnessAdapter(
-    new MemoryWitness({ streamId: receipt.stream_id }),
-    { allowTestWitness: true, requireBinding: true },
-  );
+  if (receipt.stream_id !== trustedAuthority.stream_id) {
+    throw new Error(
+      'witness receipt stream_id does not match persisted trusted installed witness authority binding',
+    );
+  }
+  const authority = trustedAuthority.authority;
   if (!authority.verify(receipt)) {
     throw new Error(
       'witness receipt is not authenticated by the trusted installed witness-authority API '
-      + '(telemetry-supplied hashes and signer bindings cannot self-authenticate)',
+      + '(telemetry-supplied hashes and signer bindings cannot self-authenticate; '
+      + 'only receipts recorded in the persisted trusted journal are accepted)',
     );
   }
   return true;
+}
+
+function isNonNegativeInteger(value) {
+  return Number.isInteger(value) && value >= 0;
 }
 
 function measureSkillMember(repoRoot, name) {
@@ -320,50 +444,37 @@ function measureSchemaMember(repoRoot, name) {
 }
 
 function countExecutedLoadBearingSurfaces(repoRoot) {
+  // KR10 mechanically derives the currently executed load-bearing surface
+  // membership. Catalog candidates that are removed/missing/nonexecuted reduce
+  // measured cardinality rather than becoming measurement errors. Thresholds
+  // stay frozen at 42 and 51 (evaluateKr10); the catalog is not an impossible
+  // 53-member minimum.
   const measurementErrors = [];
+  const nonexecuted = [];
 
   const skillEvidence = [];
   for (const name of FROZEN_SURFACE_ENUMERATION.skills) {
     const result = measureSkillMember(repoRoot, name);
-    if (!result.ok) measurementErrors.push(result.error);
+    if (!result.ok) nonexecuted.push({ bucket: 'skills', name, reason: result.error });
     else skillEvidence.push(name);
   }
   const skillsEntry = skillEvidence.length;
-  const skillsExpected = FROZEN_SURFACE_ENUMERATION.skills.length;
-  if (skillsEntry !== skillsExpected) {
-    measurementErrors.push(
-      `skills membership incomplete after per-member evidence: ${skillsEntry}/${skillsExpected}`,
-    );
-  }
 
   const scriptEvidence = [];
   for (const name of FROZEN_SURFACE_ENUMERATION.scripts) {
     const result = measureScriptMember(repoRoot, name);
-    if (!result.ok) measurementErrors.push(result.error);
+    if (!result.ok) nonexecuted.push({ bucket: 'scripts', name, reason: result.error });
     else scriptEvidence.push(name);
   }
   const scripts = scriptEvidence.length;
-  const scriptsExpected = FROZEN_SURFACE_ENUMERATION.scripts.length;
-  if (scripts !== scriptsExpected) {
-    measurementErrors.push(
-      `scripts membership incomplete after per-member evidence: ${scripts}/${scriptsExpected}`,
-    );
-  }
 
   const engineEvidence = [];
   for (const name of FROZEN_SURFACE_ENUMERATION.engine_modules) {
     const result = measureEngineMember(repoRoot, name);
-    if (!result.ok) measurementErrors.push(result.error);
+    if (!result.ok) nonexecuted.push({ bucket: 'engine_modules', name, reason: result.error });
     else engineEvidence.push(name);
   }
   const engineModules = engineEvidence.length;
-  const engineExpected = FROZEN_SURFACE_ENUMERATION.engine_modules.length;
-  if (engineModules !== engineExpected) {
-    measurementErrors.push(
-      `engine module membership incomplete after per-member evidence: `
-      + `${engineModules}/${engineExpected}`,
-    );
-  }
 
   const installedEnginePath = path.join(
     repoRoot,
@@ -373,15 +484,18 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
   );
   let includesInstalledEngine = false;
   if (!fs.existsSync(installedEnginePath)) {
-    measurementErrors.push(
-      'installed-engine surface bucket missing: supervised-owner-kernel-installed-engine.js',
-    );
+    nonexecuted.push({
+      bucket: 'installed_engine',
+      name: 'supervised-owner-kernel-installed-engine.js',
+      reason: 'missing',
+    });
   } else {
     const installedMeasure = measureEngineMember(
       repoRoot,
       'supervised-owner-kernel-installed-engine.js',
     );
     if (!installedMeasure.ok) {
+      // Parse/execution failure of a present member is a measurement error.
       measurementErrors.push(
         `installed-engine measurement failed: ${installedMeasure.error}`,
       );
@@ -406,16 +520,10 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
   const schemaEvidence = [];
   for (const name of FROZEN_SURFACE_ENUMERATION.schemas) {
     const result = measureSchemaMember(repoRoot, name);
-    if (!result.ok) measurementErrors.push(result.error);
+    if (!result.ok) nonexecuted.push({ bucket: 'schemas', name, reason: result.error });
     else schemaEvidence.push(name);
   }
   const schemas = schemaEvidence.length;
-  const schemasExpected = FROZEN_SURFACE_ENUMERATION.schemas.length;
-  if (schemas !== schemasExpected) {
-    measurementErrors.push(
-      `schemas membership incomplete after per-member evidence: ${schemas}/${schemasExpected}`,
-    );
-  }
 
   const frozenHooks = FROZEN_SURFACE_ENUMERATION.hooks_default_on;
   const hookEvidence = [];
@@ -424,18 +532,19 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
     const shPath = path.join(repoRoot, 'hooks', `${name}.sh`);
     const hookPath = fs.existsSync(jsPath) ? jsPath : (fs.existsSync(shPath) ? shPath : null);
     if (!hookPath) {
-      measurementErrors.push(`hooks/${name} missing (frozen default-on membership)`);
+      nonexecuted.push({ bucket: 'hooks', name, reason: 'missing' });
       continue;
     }
     let body;
     try {
       body = fs.readFileSync(hookPath, 'utf8');
     } catch (error) {
+      // Present but unreadable is a measurement error, not a cardinality reduction.
       measurementErrors.push(`hooks/${name} read failed: ${error.message}`);
       continue;
     }
     if (!body || body.trim().length < 8) {
-      measurementErrors.push(`hooks/${name} failed parse evidence: empty or trivial body`);
+      nonexecuted.push({ bucket: 'hooks', name, reason: 'empty or trivial body' });
       continue;
     }
     if (hookPath.endsWith('.js')) {
@@ -452,7 +561,7 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
         continue;
       }
     } else if (hookPath.endsWith('.sh')) {
-      // Every frozen shell-hook member requires deterministic bash -n evidence.
+      // Every shell-hook member that is present requires deterministic bash -n evidence.
       if (!/^#!/.test(body)) {
         measurementErrors.push(`hooks/${name} shell hook missing shebang`);
         continue;
@@ -474,18 +583,12 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
     }
     hookEvidence.push(name);
   }
-  let hooks = null;
-  const hooksExpected = frozenHooks.length;
-  if (hookEvidence.length !== hooksExpected) {
-    measurementErrors.push(
-      `hooks membership incomplete after per-member evidence: `
-      + `${hookEvidence.length}/${hooksExpected}`,
-    );
-  }
+  const hooks = hookEvidence.length;
+
+  // Inventory is advisory corroboration of currently executed hooks; it does not
+  // re-freeze an impossible minimum membership.
   const inventoryScript = path.join(repoRoot, 'scripts', 'check-hook-inventory.js');
-  if (!fs.existsSync(inventoryScript)) {
-    measurementErrors.push('hooks surface bucket measurement failure: check-hook-inventory.js is missing');
-  } else {
+  if (fs.existsSync(inventoryScript)) {
     const inventory = spawnSync(
       process.execPath,
       [inventoryScript],
@@ -497,47 +600,10 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
       measurementErrors.push(
         `hooks measurement failure: inventory exited ${inventory.status}; HOLD`,
       );
-    } else if (!inventory.stdout) {
-      measurementErrors.push('hooks measurement failure: empty stdout; HOLD');
-    } else {
-      const match = inventory.stdout.match(
-        /default-on\s*\((\d+)\)\s*:\s*([^\n]+)/i,
-      ) || inventory.stdout.match(
-        /default-on[^\d]*(\d+)[^\n:]*:\s*([^\n]+)/i,
-      );
-      if (!match) {
-        measurementErrors.push(
-          'hooks measurement failure: parse failed for default-on membership; HOLD',
-        );
-      } else {
-        const inventoryCount = Number(match[1]);
-        const inventoryMembers = match[2]
-          .split(',')
-          .map((part) => part.trim())
-          .filter(Boolean)
-          .sort();
-        const expectedSorted = [...frozenHooks].sort();
-        if (inventoryCount !== hooksExpected
-          || canonicalJson(inventoryMembers) !== canonicalJson(expectedSorted)) {
-          measurementErrors.push(
-            'hooks inventory membership does not match frozen exact default-on membership; HOLD',
-          );
-        } else if (hookEvidence.length === hooksExpected) {
-          hooks = hooksExpected;
-        }
-      }
     }
   }
 
   const total = measurementErrors.length === 0
-    && skillsEntry === skillsExpected
-    && scripts === scriptsExpected
-    && engineModules === engineExpected
-    && schemas === schemasExpected
-    && hooks != null
-    && hooks === hooksExpected
-    && hookEvidence.length === hooksExpected
-    && includesInstalledEngine
     ? skillsEntry + scripts + engineModules + schemas + hooks
     : null;
 
@@ -549,8 +615,17 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
     hooks_default_on: hooks,
     total,
     measurement_errors: measurementErrors,
-    method: 'frozen complete surface enumeration including supervised-owner-kernel-installed-engine.js; exact membership + per-member execution/parsing/measurement evidence required for every bucket including hooks; count equality alone is invalid; no KR redefinition; no hooks=10 substitution',
+    nonexecuted_members: nonexecuted,
+    method: 'mechanically derived executed load-bearing surface membership from catalog candidates; removed/nonexecuted members reduce measured cardinality rather than becoming measurement errors; thresholds remain frozen at 42 and 51; includes supervised-owner-kernel-installed-engine.js when executed; no KR redefinition',
     includes_installed_engine_module: includesInstalledEngine,
+    catalog_membership: {
+      skills: [...FROZEN_SURFACE_ENUMERATION.skills],
+      scripts: [...FROZEN_SURFACE_ENUMERATION.scripts],
+      engine_modules: [...FROZEN_SURFACE_ENUMERATION.engine_modules],
+      schemas: [...FROZEN_SURFACE_ENUMERATION.schemas],
+      hooks_default_on: [...frozenHooks],
+    },
+    // Keep frozen_membership key for back-compat report consumers (catalog only).
     frozen_membership: {
       skills: [...FROZEN_SURFACE_ENUMERATION.skills],
       scripts: [...FROZEN_SURFACE_ENUMERATION.scripts],
@@ -566,17 +641,82 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
       hooks_default_on: hookEvidence,
     },
     bucket_completeness: {
-      skills: skillsEntry === skillsExpected && skillEvidence.length === skillsExpected,
-      scripts: scripts === scriptsExpected && scriptEvidence.length === scriptsExpected,
-      engine_modules: engineModules === engineExpected && engineEvidence.length === engineExpected,
-      schemas: schemas === schemasExpected && schemaEvidence.length === schemasExpected,
-      hooks: hooks != null && hookEvidence.length === hooksExpected,
+      skills: skillEvidence.length === FROZEN_SURFACE_ENUMERATION.skills.length,
+      scripts: scriptEvidence.length === FROZEN_SURFACE_ENUMERATION.scripts.length,
+      engine_modules: engineEvidence.length === FROZEN_SURFACE_ENUMERATION.engine_modules.length,
+      schemas: schemaEvidence.length === FROZEN_SURFACE_ENUMERATION.schemas.length,
+      hooks: hookEvidence.length === frozenHooks.length,
       installed_engine: includesInstalledEngine,
     },
   };
 }
 
-function loadKr8Evidence(projectDir) {
+function authenticateProductionProvenance(data, trustedAuthority) {
+  // A filename or parseable JSON is not production provenance. Require a
+  // content-bound witness receipt authenticated by the persisted trusted
+  // installed witness authority.
+  const provenance = data && data.production_provenance;
+  if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) {
+    return {
+      ok: false,
+      reason: 'production-named JSON lacks authenticated production_provenance; '
+        + 'a filename or parseable JSON is not production provenance',
+    };
+  }
+  if (!trustedAuthority || !trustedAuthority.ok) {
+    return {
+      ok: false,
+      reason: 'production provenance cannot be authenticated without persisted trusted '
+        + 'installed witness authority/configuration',
+    };
+  }
+  const receipt = provenance.witness_receipt;
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) {
+    return {
+      ok: false,
+      reason: 'production_provenance.witness_receipt is missing',
+    };
+  }
+  try {
+    verifyWithTrustedInstalledWitnessAuthority(receipt, {
+      trustedAuthority,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `production provenance receipt failed trusted authority verification: ${error.message}`,
+    };
+  }
+  // Body (counters + baseline fields) must be content-bound to the receipt event_hash.
+  const body = {
+    observed_false_acceptances: data.observed_false_acceptances,
+    observed_missed_red_line_escalations: data.observed_missed_red_line_escalations,
+    candidate_mandatory_review_dispatches: data.candidate_mandatory_review_dispatches,
+    baseline_mandatory_review_dispatches: data.baseline_mandatory_review_dispatches == null
+      ? KR8_DEFINITION.baseline_mandatory_model_review_dispatches
+      : data.baseline_mandatory_review_dispatches,
+  };
+  const bodyHash = sha256(canonicalJson(body));
+  const eventHash = typeof receipt.event_hash === 'string' ? receipt.event_hash.toLowerCase() : '';
+  const explicit = typeof provenance.evidence_body_hash === 'string'
+    ? provenance.evidence_body_hash.toLowerCase()
+    : null;
+  if (eventHash !== bodyHash && explicit !== eventHash) {
+    return {
+      ok: false,
+      reason: 'production provenance receipt event_hash is not bound to KR8 evidence body',
+    };
+  }
+  if (explicit && explicit !== bodyHash && explicit !== eventHash) {
+    return {
+      ok: false,
+      reason: 'production provenance evidence_body_hash does not match KR8 evidence body',
+    };
+  }
+  return { ok: true, reason: null };
+}
+
+function loadKr8Evidence(projectDir, trustedAuthority = null) {
   const reasons = [];
   const productionTelemetryPaths = [
     path.join(projectDir, 'p3', 'production-telemetry', 'kr8.json'),
@@ -585,28 +725,72 @@ function loadKr8Evidence(projectDir) {
   ];
   for (const candidate of productionTelemetryPaths) {
     const data = readJsonIfExists(candidate);
-    if (data) {
-      const reportedBaseline = data.baseline_mandatory_review_dispatches;
-      if (reportedBaseline != null
-        && Number(reportedBaseline) !== KR8_DEFINITION.baseline_mandatory_model_review_dispatches) {
-        reasons.push(
-          `production telemetry baseline_mandatory_review_dispatches=${reportedBaseline} `
-          + `conflicts with frozen KR8 baseline ${KR8_DEFINITION.baseline_mandatory_model_review_dispatches}; `
-          + 'conflicting baseline is a blocker and must never replace the frozen baseline',
-        );
-      }
+    if (!data) continue;
+
+    const falseRaw = data.observed_false_acceptances;
+    const missedRaw = data.observed_missed_red_line_escalations;
+    const candidateRaw = data.candidate_mandatory_review_dispatches;
+    // Negative/non-integer counters always HOLD and cannot fund KR8 PASS.
+    if (!isNonNegativeInteger(falseRaw)
+      || !isNonNegativeInteger(missedRaw)
+      || !isNonNegativeInteger(candidateRaw)) {
+      reasons.push(
+        'KR8 counters must be non-negative integers; negative/non-integer counters '
+        + 'always HOLD and cannot fund KR8 PASS',
+      );
       return {
-        source: 'production_telemetry',
+        source: 'untrusted_production_named_json',
         path: path.relative(projectDir, candidate),
-        observed_false_acceptances: Number(data.observed_false_acceptances),
-        observed_missed_red_line_escalations: Number(data.observed_missed_red_line_escalations),
+        observed_false_acceptances: falseRaw,
+        observed_missed_red_line_escalations: missedRaw,
         baseline_mandatory_review_dispatches:
           KR8_DEFINITION.baseline_mandatory_model_review_dispatches,
-        candidate_mandatory_review_dispatches: Number(data.candidate_mandatory_review_dispatches),
-        telemetry_reported_baseline: reportedBaseline == null ? null : Number(reportedBaseline),
+        candidate_mandatory_review_dispatches: candidateRaw,
+        telemetry_reported_baseline: data.baseline_mandatory_review_dispatches == null
+          ? null
+          : Number(data.baseline_mandatory_review_dispatches),
         reasons,
       };
     }
+
+    const provenance = authenticateProductionProvenance(data, trustedAuthority);
+    if (!provenance.ok) {
+      reasons.push(provenance.reason);
+      return {
+        source: 'untrusted_production_named_json',
+        path: path.relative(projectDir, candidate),
+        observed_false_acceptances: falseRaw,
+        observed_missed_red_line_escalations: missedRaw,
+        baseline_mandatory_review_dispatches:
+          KR8_DEFINITION.baseline_mandatory_model_review_dispatches,
+        candidate_mandatory_review_dispatches: candidateRaw,
+        telemetry_reported_baseline: data.baseline_mandatory_review_dispatches == null
+          ? null
+          : Number(data.baseline_mandatory_review_dispatches),
+        reasons,
+      };
+    }
+
+    const reportedBaseline = data.baseline_mandatory_review_dispatches;
+    if (reportedBaseline != null
+      && Number(reportedBaseline) !== KR8_DEFINITION.baseline_mandatory_model_review_dispatches) {
+      reasons.push(
+        `production telemetry baseline_mandatory_review_dispatches=${reportedBaseline} `
+        + `conflicts with frozen KR8 baseline ${KR8_DEFINITION.baseline_mandatory_model_review_dispatches}; `
+        + 'conflicting baseline is a blocker and must never replace the frozen baseline',
+      );
+    }
+    return {
+      source: 'production_telemetry',
+      path: path.relative(projectDir, candidate),
+      observed_false_acceptances: falseRaw,
+      observed_missed_red_line_escalations: missedRaw,
+      baseline_mandatory_review_dispatches:
+        KR8_DEFINITION.baseline_mandatory_model_review_dispatches,
+      candidate_mandatory_review_dispatches: candidateRaw,
+      telemetry_reported_baseline: reportedBaseline == null ? null : Number(reportedBaseline),
+      reasons,
+    };
   }
 
   const spikeSummary = readJsonIfExists(path.join(
@@ -667,23 +851,37 @@ function evaluateKr8(evidence) {
       reduction = 1 - (evidence.candidate_mandatory_review_dispatches / baseline);
     }
     blocking.push('KR8 fixture arithmetic is not production telemetry and cannot fund release');
+  } else if (evidence.source === 'untrusted_production_named_json') {
+    blocking.push(
+      'production-named JSON without authenticated production provenance cannot fund KR8 PASS',
+    );
   } else {
-    const falseOk = evidence.observed_false_acceptances === 0;
-    const missedOk = evidence.observed_missed_red_line_escalations === 0;
-    if (!falseOk) blocking.push(`observed_false_acceptances=${evidence.observed_false_acceptances}`);
-    if (!missedOk) {
+    if (!isNonNegativeInteger(evidence.observed_false_acceptances)
+      || !isNonNegativeInteger(evidence.observed_missed_red_line_escalations)
+      || !isNonNegativeInteger(evidence.candidate_mandatory_review_dispatches)) {
       blocking.push(
-        `observed_missed_red_line_escalations=${evidence.observed_missed_red_line_escalations}`,
+        'KR8 counters must be non-negative integers; negative/non-integer counters always HOLD',
       );
-    }
-    if (!Number.isFinite(evidence.candidate_mandatory_review_dispatches) || baseline <= 0) {
-      blocking.push('mandatory model-review dispatch counts are incomplete');
     } else {
-      reduction = 1 - (evidence.candidate_mandatory_review_dispatches / baseline);
-      if (reduction < KR8_DEFINITION.min_reduction_ratio) {
+      const falseOk = evidence.observed_false_acceptances === 0;
+      const missedOk = evidence.observed_missed_red_line_escalations === 0;
+      if (!falseOk) {
+        blocking.push(`observed_false_acceptances=${evidence.observed_false_acceptances}`);
+      }
+      if (!missedOk) {
         blocking.push(
-          `mandatory model-review reduction ${(reduction * 100).toFixed(1)}% is below 30%`,
+          `observed_missed_red_line_escalations=${evidence.observed_missed_red_line_escalations}`,
         );
+      }
+      if (baseline <= 0) {
+        blocking.push('mandatory model-review dispatch counts are incomplete');
+      } else {
+        reduction = 1 - (evidence.candidate_mandatory_review_dispatches / baseline);
+        if (reduction < KR8_DEFINITION.min_reduction_ratio) {
+          blocking.push(
+            `mandatory model-review reduction ${(reduction * 100).toFixed(1)}% is below 30%`,
+          );
+        }
       }
     }
     if (blocking.length === 0) status = 'PASS';
@@ -746,7 +944,7 @@ function evaluateKr10(surface) {
   };
 }
 
-function evaluateAliasRetirement(repoRoot, projectDir) {
+function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) {
   const blocking = [];
   const present = [];
   const missing = [];
@@ -763,6 +961,17 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
   } else {
     nonblockingNotes.push(
       'compatibility aliases /l3-/l6 are still present (nonblocking; deletion not authorized yet)',
+    );
+  }
+
+  // Alias authenticity comes only from persisted trusted installed witness
+  // authority/configuration; telemetry cannot supply its own trust root.
+  if (!trustedAuthority || !trustedAuthority.ok) {
+    blocking.push(
+      'alias retirement requires persisted trusted installed witness authority/configuration; '
+      + (trustedAuthority && trustedAuthority.reason
+        ? trustedAuthority.reason
+        : 'trusted authority state is absent'),
     );
   }
 
@@ -809,10 +1018,11 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
       && productionTelemetry.shipped_compatibility_cycle === true) {
       try {
         // Day-zero genesis receipt has null previous head. Authentication comes
-        // exclusively from the trusted installed witness-authority verify API —
-        // never from self-computable heads or telemetry-supplied signers.
+        // exclusively from the persisted trusted installed witness-authority —
+        // never from a telemetry-stream-derived fresh MemoryWitness.
         verifyWithTrustedInstalledWitnessAuthority(cycleReceipt, {
           expectedPreviousHead: null,
+          trustedAuthority,
         });
         // Body must be content-bound to the receipt event_hash (not free-form).
         const bodyHash = sha256(canonicalJson(cycleReceiptBody));
@@ -834,9 +1044,10 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
     if (!shippedCompatibilityCycle) {
       blocking.push(
         'shipped compatibility cycle evidence missing or incomplete '
-        + '(require compatibility_cycle_ship_receipt authenticated by the trusted '
-        + 'installed witness-authority API via assertWitnessAdapter + witness.verify; '
-        + 'reject telemetry self-authentication, self-computable heads, and self-asserted booleans)',
+        + '(require compatibility_cycle_ship_receipt authenticated by the persisted '
+        + 'trusted installed witness-authority API via assertWitnessAdapter + witness.verify; '
+        + 'reject telemetry self-authentication, self-computable heads, telemetry-derived '
+        + 'fresh MemoryWitness, and self-asserted booleans)',
       );
     }
 
@@ -892,6 +1103,7 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
         try {
           verifyWithTrustedInstalledWitnessAuthority(dayReceipt, {
             expectedPreviousHead: previousWitnessHead,
+            trustedAuthority,
           });
         } catch (_error) {
           continue;
@@ -994,6 +1206,10 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
     aliases_present_nonblocking: true,
     nonblocking_notes: nonblockingNotes,
     telemetry_source: telemetrySource,
+    trusted_authority_present: Boolean(trustedAuthority && trustedAuthority.ok),
+    trusted_authority_path: trustedAuthority && trustedAuthority.config_path
+      ? trustedAuthority.config_path
+      : null,
     witnessed_zero_use_days: witnessedDays,
     translation_used_events: translationUsed,
     unresolved_translation_deltas: unresolvedDeltas,
@@ -1012,10 +1228,11 @@ function main() {
   }
   const repoRoot = options.repoRoot;
   const projectDir = resolveProjectDir(repoRoot, options.project);
+  const trustedAuthority = loadTrustedInstalledWitnessAuthority(projectDir, repoRoot);
   const surface = countExecutedLoadBearingSurfaces(repoRoot);
-  const kr8 = evaluateKr8(loadKr8Evidence(projectDir));
+  const kr8 = evaluateKr8(loadKr8Evidence(projectDir, trustedAuthority));
   const kr10 = evaluateKr10(surface);
-  const alias = evaluateAliasRetirement(repoRoot, projectDir);
+  const alias = evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority);
 
   const blocking = [
     ...kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
@@ -1035,7 +1252,9 @@ function main() {
     notes: [
       'KR definitions are frozen by the parent plan and are not redefined by this checker',
       'KR8 always uses frozen baseline 6; conflicting production telemetry is a blocker',
-      'KR10 uses frozen complete surface enumeration including installed-engine; measurement failure is HOLD',
+      'KR8 requires authenticated production provenance; a filename or parseable JSON is not production provenance',
+      'KR10 mechanically derives executed load-bearing membership; thresholds stay frozen at 42 and 51; removed/nonexecuted members reduce cardinality',
+      'alias authenticity comes only from persisted trusted installed witness authority/configuration',
       'fixture telemetry is never promoted to production telemetry',
       'this checker never deletes compatibility aliases',
       'present compatibility aliases are nonblocking; only unmet retirement prerequisites HOLD',

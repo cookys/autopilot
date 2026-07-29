@@ -16,7 +16,31 @@ EXIT=$?
 assert_eq "0" "$EXIT" "alias-retirement readiness report emits without tool failure"
 
 assert_contains "$OUT" '"alias_retirement"' "alias retirement section present"
-assert_contains "$OUT" '"status": "HOLD"' "alias retirement is HOLD before real 14-day gate"
+# alias-test-masking: inspect the exact alias_retirement subsection, never aggregate HOLD.
+node - "$OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || typeof alias !== 'object') {
+  console.error('alias_retirement section missing');
+  process.exit(1);
+}
+if (alias.status !== 'HOLD') {
+  console.error('alias_retirement.status must be HOLD before real 14-day gate; got', alias.status);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (!/trusted|authority|witness|telemetry|14|manufacture/i.test(reasons)) {
+  console.error('alias HOLD must cite trusted-authority or telemetry blockers; got:', reasons);
+  process.exit(1);
+}
+if (alias.trusted_authority_present === true) {
+  // Project default has no trusted authority journal — must be absent/false.
+  console.error('default project must not claim trusted_authority_present without config');
+  process.exit(1);
+}
+console.log('alias_subsection_hold=ok');
+NODE
+assert_eq "0" "$?" "alias_retirement.status HOLD asserted on subsection"
 assert_contains "$OUT" '"aliases_present"' "present aliases are enumerated"
 assert_contains "$OUT" 'l3' "l3 alias readiness is reported"
 assert_contains "$OUT" 'l4' "l4 alias readiness is reported"
@@ -40,22 +64,28 @@ assert_not_contains "$HELP" 'delete-alias' "checker has no alias deletion flag"
 assert_file_exists "$REPO_ROOT/src/engine/owner-kernel/compatibility.js" \
   "compatibility translation module remains (aliases not retired)"
 
-# kr10-shell-evidence: frozen shell members receive deterministic bash -n evidence.
+# kr10-shell-evidence / alias authority surface checks in checker source.
 CHECKER_SRC="$(cat "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js")"
 assert_contains "$CHECKER_SRC" "bash', ['-n'" \
   "KR10 runs deterministic bash -n for shell members"
 assert_contains "$CHECKER_SRC" 'assertWitnessAdapter' \
   "alias retirement uses trusted installed witness-authority API"
+assert_contains "$CHECKER_SRC" 'loadTrustedInstalledWitnessAuthority' \
+  "alias retirement loads persisted trusted installed witness authority"
 assert_contains "$CHECKER_SRC" 'verifyWithTrustedInstalledWitnessAuthority' \
   "alias retirement calls trusted witness-authority verification"
 assert_contains "$CHECKER_SRC" 'authority.verify(receipt)' \
   "alias retirement authenticates via witness.verify authority API"
 assert_not_contains "$CHECKER_SRC" 'compatibility_cycle_signer_binding' \
   "telemetry-supplied signer bindings are not a trust root"
+# Must not construct MemoryWitness from telemetry receipt.stream_id as trust root.
+if printf '%s' "$CHECKER_SRC" | grep -q "new MemoryWitness({ streamId: receipt.stream_id })"; then
+  echo "FAIL: telemetry-stream-derived fresh MemoryWitness is forbidden" >&2
+  exit 1
+fi
 
-# alias-receipt-self-authentication: internally consistent forged chains HOLD.
-# Heads and event hashes are recomputed with the same canonical formula a forger
-# would use; telemetry still cannot self-authenticate against the trusted API.
+# alias-receipt-self-authentication / alias-authority-bootstrap:
+# internally consistent forged chains HOLD; absent trusted state HOLDs.
 FAB_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-retire-fab.XXXXXX")"
 mkdir -p "$FAB_DIR/production-telemetry"
 node - "$REPO_ROOT" "$FAB_DIR" <<'NODE'
@@ -149,10 +179,27 @@ FAB_OUT="$(node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
   --repo-root "$REPO_ROOT" 2>&1)"
 FAB_EXIT=$?
 assert_eq "0" "$FAB_EXIT" "internally consistent forged telemetry still emits a report"
-assert_contains "$FAB_OUT" '"status": "HOLD"' \
-  "internally consistent forged chains HOLD alias retirement"
-assert_contains "$FAB_OUT" 'trusted' \
-  "HOLD reasons cite trusted witness-authority verification"
+# alias-test-masking: parse JSON and assert alias_retirement.status + trusted-authority blocker.
+node - "$FAB_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('forged chains must HOLD alias_retirement.status; got', alias && alias.status);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (!/trusted|authority|witness/i.test(reasons)) {
+  console.error('HOLD reasons must cite trusted witness-authority verification; got:', reasons);
+  process.exit(1);
+}
+// KR8/KR10 HOLD cannot mask an erroneous alias PASS — we already require alias HOLD.
+if (alias.status === 'PASS') {
+  console.error('alias PASS masked by other gates is forbidden');
+  process.exit(1);
+}
+console.log('alias_forged_hold=ok');
+NODE
+assert_eq "0" "$?" "internally consistent forged chains HOLD alias retirement subsection"
 rm -rf "$FAB_DIR"
 
 echo "PASS [owner-kernel-alias-retirement] alias retirement gate stays HOLD without deletion"

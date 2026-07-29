@@ -19,8 +19,8 @@ deliverables, then prove the combined tree has no known blocker before any relea
 
 | Deliverable | Dependencies | Status |
 |---|---|---|
-| `durable-continuation-identity` | none | IMPLEMENTED + REGRESSION GREEN (UNRELEASED) |
-| `qc-panel-honesty` | `durable-continuation-identity` | IMPLEMENTED + REGRESSION GREEN (UNRELEASED) |
+| `durable-continuation-identity` | none | MERGED TO `develop` + REGRESSION GREEN (UNRELEASED) |
+| `qc-panel-honesty` | `durable-continuation-identity` | MERGED TO `develop` + REGRESSION GREEN (UNRELEASED) |
 
 The deliverables close independently but run in order because both must edit the engine boundary.
 This prevents overlapping candidate diffs from hiding or reverting each other. Release is a later
@@ -28,33 +28,26 @@ human-authorized action, not a third deliverable.
 
 ## Verification
 
-- `durable-continuation-identity`: focused forced-rotation, managed phase/generation/Git-bound
-  resume, zero-duplicate-dispatch, and campaign/ledger/Mission regressions. The original
-  admission target named a literal `16/34` replay and three rehydration artifacts that do not
-  exist in the accepted implementation; the executable proof uses the runtime's supported
-  campaign phases instead.
+- `durable-continuation-identity`: durable Work Order v2 under the Git common directory,
+  mandatory post-compaction reconciliation, strict process/lease/ledger identity, terminal
+  receipt and exact-root binding, CAS duplicate prevention, forced rotation, and the exact
+  recorded `16/34` replay with zero duplicate dispatch. Focused acceptance passes 189 assertions.
 - `qc-panel-honesty`: undersized/full/single-seat panel matrix, then review-loop/task-status
   regressions, exact terminal-seat qualification, family diversity, receipt tamper rejection,
   and validated follow-up admission.
-- combined: canonical invariants, completeness, secret scan, and a clean detached-worktree
-  full regression run: `ALL TESTS PASSED (248 test files)`.
+- combined: canonical invariants, sync/package checks, Sol High plus GLM High independent
+  acceptance, and the complete clean-worktree regression suite.
 
 ## Admission-to-delivery correction
 
-The committed execution graph is the corrected current graph, not a claim that the first formal
-Mission attempt completed successfully. That attempt failed closed and the session continued
-through the `/l6`-authorized depth-0 fallback. During bounded repair review:
+The first formal Mission attempt failed closed and the session continued through the
+`/l6`-authorized depth-0 fallback. Adversarial review then expanded the accepted implementation
+to the runtime-owned Work Order/reconciliation surfaces above rather than weakening the frozen
+`16/34` acceptance. The final A9 candidate passed Sol High and GLM High review before integration.
 
-- the proposed generic `scripts/compaction-rehydrate.js`,
-  `src/engine/continuation-admission.js`, and
-  `hooks/tests/codex-compaction-rehydration.test.sh` surfaces were removed rather than shipped
-  without an authoritative runtime owner;
-- exact numeric `16/34` replay was replaced by executable phase/generation/Git identity
-  assertions and a zero-duplicate-dispatch oracle;
-- terminal campaigns are recognized but cannot be resumed or redispatched;
-- terminal QC scope expanded to exact qualified seats and panel-level reviewer-family diversity.
-
-No version bump, tag, release, merge, or push is implied by these implementation statuses.
+The implementation was merged to `develop` in `e342bb5`; Codex payload and archive-routing
+closeout fixes followed in `832b8e7` and `019456a`. No version bump, tag, release, remote push,
+or publication was performed.
 
 ## Links
 

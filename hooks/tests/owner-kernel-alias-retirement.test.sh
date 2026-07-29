@@ -773,6 +773,260 @@ NODE
 assert_eq "0" "$?" "direct getAppendTimestamp(receipt.append_timestamp) cannot forge days"
 rm -rf "$DIRECT_DIR" "$DIRECT_AUTH_DIR"
 
+# alias-window-order: cycle after window HOLD; nonchronological day timestamps HOLD.
+# Positive shape: cycle before day one with strictly increasing day anchors.
+ORDER_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-order.XXXXXX")"
+ORDER_AUTH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-order-auth.XXXXXX")"
+mkdir -p "$ORDER_DIR/production-telemetry"
+ORDER_META="$(node - "$REPO_ROOT" "$ORDER_DIR" "$ORDER_AUTH_DIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const dir = process.argv[3];
+const authDir = process.argv[4];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+function headOf(base) { return sha256(canonicalJson(base)); }
+const streamId = 'alias-order-stream';
+const runId = 'alias-order-run';
+const now = Date.now();
+const todayUtc = new Date(now).toISOString().slice(0, 10);
+const [year, month, dayNum] = todayUtc.split('-').map(Number);
+const requiredDays = [];
+for (let offset = 1; offset <= 14; offset += 1) {
+  requiredDays.push(new Date(Date.UTC(year, month - 1, dayNum - offset)).toISOString().slice(0, 10));
+}
+requiredDays.reverse();
+// Cycle day is after the window (today) — must HOLD.
+const cycleBody = { compatibility_cycle_id: 'alias-order-cycle' };
+const cycleBase = {
+  run_id: runId, stream_id: streamId, sequence: 1,
+  event_hash: sha256(canonicalJson(cycleBody)), previous_witness_head: null,
+};
+const cycleHead = headOf(cycleBase);
+const cycleReceipt = { ...cycleBase, witness_head: cycleHead };
+const journal = [cycleReceipt];
+const days = [];
+const anchored = {};
+const cycleTs = new Date().toISOString(); // after window
+anchored[cycleHead] = cycleTs;
+let previousHead = cycleHead;
+for (let i = 0; i < 14; i += 1) {
+  const day = requiredDays[i];
+  // Historical timestamps matching each day (would pass day match if cycle ok).
+  const dayTs = new Date(Date.UTC(year, month - 1, dayNum - (14 - i), 12)).toISOString();
+  const dayBody = {
+    day, translation_used_events: 0,
+    unresolved_translation_deltas: 0, prior_witness_head: previousHead,
+  };
+  const base = {
+    run_id: runId, stream_id: streamId, sequence: i + 2,
+    event_hash: sha256(canonicalJson(dayBody)), previous_witness_head: previousHead,
+  };
+  const h = headOf(base);
+  const receipt = { ...base, witness_head: h };
+  journal.push(receipt);
+  days.push({
+    day, translation_used_events: 0, unresolved_translation_deltas: 0,
+    witness_head: h, witness_receipt: receipt,
+  });
+  anchored[h] = dayTs;
+  previousHead = h;
+}
+const migrationBody = { complete: true, callers_migrated: ['l3', 'l4', 'l5', 'l6'] };
+const migrationHash = sha256(canonicalJson(migrationBody));
+const migBase = {
+  run_id: runId, stream_id: streamId, sequence: 16,
+  event_hash: migrationHash, previous_witness_head: previousHead,
+};
+const migHead = headOf(migBase);
+journal.push({ ...migBase, witness_head: migHead });
+const adapterPath = path.join(authDir, 'adapter.js');
+fs.writeFileSync(adapterPath, `'use strict';
+const crypto = require('crypto');
+function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
+function canonicalJson(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
+  return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
+}
+function createAuthority({ streamId, receipts, anchored_append_timestamps }) {
+  const known = new Map();
+  for (const entry of receipts || []) known.set(String(entry.witness_head).toLowerCase(), entry);
+  const anchored = new Map(Object.entries(anchored_append_timestamps || {}).map(([k, v]) => [String(k).toLowerCase(), v]));
+  return {
+    streamId, trustTier: 'external',
+    identity: 'external-adapter:' + streamId,
+    attestation_hash: sha256('external-adapter:' + streamId),
+    protocol_version: 1,
+    getAppendTimestamp(r) { return anchored.get(String(r.witness_head).toLowerCase()) || null; },
+    append() { throw new Error('unused'); },
+    verify(receipt) {
+      if (!receipt || receipt.stream_id !== streamId) return false;
+      const head = String(receipt.witness_head).toLowerCase();
+      if (!known.has(head)) return false;
+      const expected = sha256(canonicalJson({
+        run_id: receipt.run_id, stream_id: receipt.stream_id, sequence: receipt.sequence,
+        event_hash: receipt.event_hash, previous_witness_head: receipt.previous_witness_head,
+      }));
+      return expected === receipt.witness_head;
+    },
+  };
+}
+module.exports = { createAuthority };
+`);
+const pin = crypto.createHash('sha256').update(fs.readFileSync(adapterPath)).digest('hex');
+const authPath = path.join(authDir, 'authority.json');
+fs.writeFileSync(authPath, JSON.stringify({
+  kind: 'trusted_installed_witness_authority', authority_id: 'alias-order-1',
+  stream_id: streamId, receipts: journal,
+}, null, 2));
+const bindingPath = path.join(authDir, 'binding.json');
+fs.writeFileSync(bindingPath, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding', authority_id: 'alias-order-1',
+  adapter_module: adapterPath, adapter_sha256: pin,
+  anchored_append_timestamps: anchored,
+}, null, 2));
+fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json'), JSON.stringify({
+  compatibility_cycle_id: 'alias-order-cycle', shipped_compatibility_cycle: true,
+  compatibility_cycle_receipt_body: cycleBody, compatibility_cycle_ship_receipt: cycleReceipt,
+  witnessed_zero_use_days: 14, translation_used_events: 0, unresolved_translation_deltas: 0,
+  deterministic_caller_migration: true, caller_migration_complete: true,
+  caller_migration_scan_body: migrationBody, caller_migration_scan_hash: migrationHash,
+  caller_migration_witness_receipt: { ...migBase, witness_head: migHead },
+  witnessed_day_records: days,
+}, null, 2));
+// Second fixture: nonmonotonic day timestamps (cycle before window, but days reversed times).
+const dir2 = path.join(authDir, 'nonmono-proj');
+fs.mkdirSync(path.join(dir2, 'production-telemetry'), { recursive: true });
+const anchored2 = {};
+const cycleTs2 = new Date(Date.UTC(year, month - 1, dayNum - 20, 12)).toISOString();
+anchored2[cycleHead] = cycleTs2;
+// Reverse timestamps: later required days get earlier wall times.
+for (let i = 0; i < 14; i += 1) {
+  const h = days[i].witness_head;
+  const dayTs = new Date(Date.UTC(year, month - 1, dayNum - 1 - i, 12)).toISOString();
+  anchored2[h] = dayTs;
+}
+const bind2 = path.join(authDir, 'binding-nonmono.json');
+fs.writeFileSync(bind2, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding', authority_id: 'alias-order-1',
+  adapter_module: adapterPath, adapter_sha256: pin,
+  anchored_append_timestamps: anchored2,
+}, null, 2));
+fs.writeFileSync(path.join(dir2, 'production-telemetry', 'alias-retirement.json'),
+  fs.readFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json')));
+// Positive control: cycle before day1, strictly increasing day anchors.
+const dir3 = path.join(authDir, 'positive-proj');
+fs.mkdirSync(path.join(dir3, 'production-telemetry'), { recursive: true });
+const anchored3 = {};
+const cycleTs3 = new Date(Date.UTC(year, month - 1, dayNum - 20, 8)).toISOString();
+anchored3[cycleHead] = cycleTs3;
+for (let i = 0; i < 14; i += 1) {
+  const h = days[i].witness_head;
+  const dayTs = new Date(Date.UTC(year, month - 1, dayNum - (14 - i), 12)).toISOString();
+  anchored3[h] = dayTs;
+}
+const bind3 = path.join(authDir, 'binding-positive.json');
+fs.writeFileSync(bind3, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding', authority_id: 'alias-order-1',
+  adapter_module: adapterPath, adapter_sha256: pin,
+  anchored_append_timestamps: anchored3,
+}, null, 2));
+fs.writeFileSync(path.join(dir3, 'production-telemetry', 'alias-retirement.json'),
+  fs.readFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json')));
+process.stdout.write(JSON.stringify({
+  auth: authPath, bindingAfter: bindingPath, bindingNonmono: bind2, bindingPositive: bind3,
+  projAfter: dir, projNonmono: dir2, projPositive: dir3,
+}));
+NODE
+)"
+ORDER_AUTH="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.auth)' "$ORDER_META")"
+ORDER_BIND_AFTER="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.bindingAfter)' "$ORDER_META")"
+ORDER_PROJ_AFTER="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.projAfter)' "$ORDER_META")"
+ORDER_OUT_AFTER="$(
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$ORDER_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$ORDER_BIND_AFTER" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$ORDER_PROJ_AFTER" --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$ORDER_OUT_AFTER" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('cycle-after-window must HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (!/cycle|precede|after-window|first required day/i.test(reasons)) {
+  console.error('must cite cycle-after-window; got', reasons);
+  process.exit(1);
+}
+console.log('alias_cycle_after_window_hold=ok');
+NODE
+assert_eq "0" "$?" "cycle append after window HOLDs"
+
+ORDER_BIND_NONMONO="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.bindingNonmono)' "$ORDER_META")"
+ORDER_PROJ_NONMONO="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.projNonmono)' "$ORDER_META")"
+ORDER_OUT_NONMONO="$(
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$ORDER_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$ORDER_BIND_NONMONO" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$ORDER_PROJ_NONMONO" --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$ORDER_OUT_NONMONO" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('nonmonotonic day timestamps must HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (!/only [0-9]+ complete|timestamp|14|host-clock|nonmono|order|increasing/i.test(reasons)) {
+  console.error('must reject nonchronological day timestamps; got', reasons);
+  process.exit(1);
+}
+console.log('alias_nonmonotonic_day_timestamps_hold=ok');
+NODE
+assert_eq "0" "$?" "nonchronological day timestamps HOLD"
+
+ORDER_BIND_POS="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.bindingPositive)' "$ORDER_META")"
+ORDER_PROJ_POS="$(node -e 'const j=JSON.parse(process.argv[1]);process.stdout.write(j.projPositive)' "$ORDER_META")"
+ORDER_OUT_POS="$(
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$ORDER_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$ORDER_BIND_POS" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$ORDER_PROJ_POS" --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$ORDER_OUT_POS" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+// Overall may still HOLD (migration scan on real skills), but must not cite
+// incomplete day-window/cycle order once positive chain is well-formed.
+if (!alias || alias.trusted_authority_present !== true) {
+  console.error('positive window control must authenticate authority; got', alias);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (/cycle-after-window|does not precede first required day|only 0 complete/i.test(reasons)) {
+  console.error('positive cycle-before-day1 chain must not fail window order; got', reasons);
+  process.exit(1);
+}
+// Prefer seeing full 14-day validation succeed (no "only N complete" with N<14).
+if (/only ([0-9]+) complete witnessed day/.test(reasons)) {
+  const n = Number(RegExp.$1);
+  if (n < 14) {
+    console.error('positive control expected 14 validated days; got', reasons);
+    process.exit(1);
+  }
+}
+console.log('alias_positive_window_order_control=ok');
+NODE
+assert_eq "0" "$?" "positive cycle-before-day1 strictly-increasing control"
+rm -rf "$ORDER_DIR" "$ORDER_AUTH_DIR"
+
+
 
 # Finding 3 — Migration OR semantics: mechanical-only and authority-only
 # success shapes (overall disposition remains HOLD when other prerequisites

@@ -1090,6 +1090,176 @@ NODE
 assert_eq "0" "$?" "missing binding authority_id HOLDs"
 rm -rf "$MISS_BND_DIR" "$MISS_BND_PROJ" "$MISS_BND_HOME"
 
+# authority-boundary-symlink: symlinked --project root co-locating trust material HOLDs.
+SYM_REAL="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-real.XXXXXX")"
+SYM_LINK="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-link-parent.XXXXXX")/proj-link"
+SYM_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-home.XXXXXX")"
+mkdir -p "$SYM_REAL/production-telemetry"
+# Place purported "external" auth+binding+adapter inside real project tree.
+node - "$REPO_ROOT" "$SYM_REAL" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const proj = process.argv[3];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const body = {
+  observed_false_acceptances: 0, observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1, baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const streamId = 'sym-proj-stream';
+const base = { run_id: 'r', stream_id: streamId, sequence: 1, event_hash: bodyHash, previous_witness_head: null };
+const receipt = { ...base, witness_head: sha256(canonicalJson(base)) };
+const adapterPath = path.join(proj, 'adapter.js');
+fs.writeFileSync(adapterPath, `'use strict';
+function createAuthority({ streamId, receipts }) {
+  const known = new Map((receipts||[]).map((e)=>[String(e.witness_head).toLowerCase(), e]));
+  return {
+    streamId, trustTier: 'external', identity: 'x:'+streamId,
+    attestation_hash: 'a'.repeat(64), protocol_version: 1,
+    getAppendTimestamp() { return null; },
+    append() { throw new Error('n'); },
+    verify(r) { return r && known.has(String(r.witness_head).toLowerCase()); },
+  };
+}
+module.exports = { createAuthority };
+`);
+const pin = crypto.createHash('sha256').update(fs.readFileSync(adapterPath)).digest('hex');
+const authPath = path.join(proj, 'authority.json');
+fs.writeFileSync(authPath, JSON.stringify({
+  kind: 'trusted_installed_witness_authority', authority_id: 'sym-1',
+  stream_id: streamId, receipts: [receipt],
+}, null, 2));
+const bindPath = path.join(proj, 'binding.json');
+fs.writeFileSync(bindPath, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding', authority_id: 'sym-1',
+  adapter_module: adapterPath, adapter_sha256: pin,
+}, null, 2));
+fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
+  ...body, production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
+}, null, 2));
+// Write paths for shell
+fs.writeFileSync(path.join(proj, 'paths.json'), JSON.stringify({ auth: authPath, bind: bindPath }));
+NODE
+ln -sfn "$SYM_REAL" "$SYM_LINK"
+SYM_AUTH="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).auth)' "$SYM_REAL/paths.json")"
+SYM_BIND="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).bind)' "$SYM_REAL/paths.json")"
+SYM_OUT="$(
+  HOME="$SYM_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$SYM_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$SYM_BIND" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$SYM_LINK" --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$SYM_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+if (report.kr8.status !== 'HOLD') {
+  console.error('symlinked project co-located authority must HOLD KR8; got', report.kr8.status, report.kr8.blocking_reasons);
+  process.exit(1);
+}
+if (report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') {
+  console.error('symlinked project must not authenticate as production_telemetry');
+  process.exit(1);
+}
+const reasons = (report.kr8.blocking_reasons || []).join('\n');
+if (!/boundary|realpath|project|co-locat|inside|independently|adapter|authority/i.test(reasons)) {
+  console.error('symlink project HOLD must cite boundary/authority; got', reasons);
+  process.exit(1);
+}
+console.log('rg-symlinked-project-boundary-hold=ok');
+NODE
+assert_eq "0" "$?" "symlinked project root cannot externalize co-located trust material"
+rm -rf "$SYM_REAL" "$SYM_HOME" "$(dirname "$SYM_LINK")"
+
+# Symlinked --repo-root containing purported external material HOLDs.
+SYM_REPO_REAL="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-repo-real.XXXXXX")"
+SYM_REPO_LINK="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-repo-link-parent.XXXXXX")/repo-link"
+SYM_REPO_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-repo-proj.XXXXXX")"
+SYM_REPO_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-repo-home.XXXXXX")"
+mkdir -p "$SYM_REPO_PROJ/production-telemetry" "$SYM_REPO_REAL/trust"
+# Minimal repo contents for checker require graph + trust material inside repo realpath.
+cp "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" "$SYM_REPO_REAL/check.js"
+mkdir -p "$SYM_REPO_REAL/src/engine/owner-kernel"
+cp "$REPO_ROOT/src/engine/owner-kernel/canonical.js" "$SYM_REPO_REAL/src/engine/owner-kernel/"
+cp "$REPO_ROOT/src/engine/owner-kernel/witness.js" "$SYM_REPO_REAL/src/engine/owner-kernel/"
+cp "$REPO_ROOT/src/engine/owner-kernel/errors.js" "$SYM_REPO_REAL/src/engine/owner-kernel/"
+node - "$REPO_ROOT" "$SYM_REPO_REAL" "$SYM_REPO_PROJ" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const repoReal = process.argv[3];
+const proj = process.argv[4];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const body = {
+  observed_false_acceptances: 0, observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1, baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const streamId = 'sym-repo-stream';
+const base = { run_id: 'r', stream_id: streamId, sequence: 1, event_hash: bodyHash, previous_witness_head: null };
+const receipt = { ...base, witness_head: sha256(canonicalJson(base)) };
+const adapterPath = path.join(repoReal, 'trust', 'adapter.js');
+fs.writeFileSync(adapterPath, `'use strict';
+function createAuthority({ streamId, receipts }) {
+  const known = new Map((receipts||[]).map((e)=>[String(e.witness_head).toLowerCase(), e]));
+  return {
+    streamId, trustTier: 'external', identity: 'x:'+streamId,
+    attestation_hash: 'a'.repeat(64), protocol_version: 1,
+    getAppendTimestamp() { return null; },
+    append() { throw new Error('n'); },
+    verify(r) { return r && known.has(String(r.witness_head).toLowerCase()); },
+  };
+}
+module.exports = { createAuthority };
+`);
+const pin = crypto.createHash('sha256').update(fs.readFileSync(adapterPath)).digest('hex');
+const authPath = path.join(repoReal, 'trust', 'authority.json');
+fs.writeFileSync(authPath, JSON.stringify({
+  kind: 'trusted_installed_witness_authority', authority_id: 'sym-repo-1',
+  stream_id: streamId, receipts: [receipt],
+}, null, 2));
+const bindPath = path.join(repoReal, 'trust', 'binding.json');
+fs.writeFileSync(bindPath, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding', authority_id: 'sym-repo-1',
+  adapter_module: adapterPath, adapter_sha256: pin,
+}, null, 2));
+fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
+  ...body, production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
+}, null, 2));
+fs.writeFileSync(path.join(repoReal, 'paths.json'), JSON.stringify({ auth: authPath, bind: bindPath }));
+NODE
+ln -sfn "$SYM_REPO_REAL" "$SYM_REPO_LINK"
+SYM_REPO_AUTH="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).auth)' "$SYM_REPO_REAL/paths.json")"
+SYM_REPO_BIND="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).bind)' "$SYM_REPO_REAL/paths.json")"
+SYM_REPO_OUT="$(
+  HOME="$SYM_REPO_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$SYM_REPO_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$SYM_REPO_BIND" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$SYM_REPO_PROJ" --repo-root "$SYM_REPO_LINK" 2>&1
+)"
+node - "$SYM_REPO_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+// When --repo-root is a symlink into a tree holding the trust material, realpath
+// containment must reject that material (cannot appear external via symlink spelling).
+if (report.kr8 && report.kr8.status === 'PASS') {
+  console.error('symlinked repo-root co-located trust material must not PASS KR8');
+  process.exit(1);
+}
+if (report.kr8 && report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') {
+  console.error('symlinked repo-root must not authenticate production_telemetry');
+  process.exit(1);
+}
+console.log('rg-symlinked-repo-root-boundary-hold=ok');
+NODE
+assert_eq "0" "$?" "symlinked repo-root cannot externalize co-located trust material"
+rm -rf "$SYM_REPO_REAL" "$SYM_REPO_PROJ" "$SYM_REPO_HOME" "$(dirname "$SYM_REPO_LINK")"
+
+
 
 # kr10 mutation: added executed hook member is counted; dynamic require cannot claim complete.
 node - "$REPO_ROOT" <<'NODE'
@@ -1264,6 +1434,8 @@ assert_contains "$CHECKER_SRC" 'AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING' \
   "adapter identity comes from deployment binding env"
 assert_contains "$CHECKER_SRC" 'adapter_sha256' \
   "adapter integrity pin is required before require()"
+assert_contains "$CHECKER_SRC" 'canonicalizeBoundaryRoot' \
+  "boundary roots are realpathed"
 assert_contains "$CHECKER_SRC" 'sanitizeReceiptForTimestampLookup' \
   "timestamp lookup uses sanitized receipts"
 assert_contains "$CHECKER_SRC" 'missing a non-empty bounded authority_id' \

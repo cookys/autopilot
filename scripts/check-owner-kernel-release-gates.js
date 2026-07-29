@@ -189,6 +189,8 @@ function isNonEmptySha256(value) {
  * allowTestWitness is never used for release evidence.
  */
 function isPathInside(parent, child) {
+  // Callers must pass already-canonical (realpath) boundaries when used for
+  // trust decisions. path.resolve alone is insufficient for symlink roots.
   const resolvedParent = path.resolve(parent);
   const resolvedChild = path.resolve(child);
   if (resolvedParent === resolvedChild) return true;
@@ -196,6 +198,30 @@ function isPathInside(parent, child) {
     ? resolvedParent
     : `${resolvedParent}${path.sep}`;
   return resolvedChild.startsWith(prefix);
+}
+
+/**
+ * Canonicalize a project/repo trust-boundary root with realpath. Symlinked
+ * --project / --repo-root must not make co-located trust material appear external.
+ * Missing or un-realpathable roots fail closed.
+ */
+function canonicalizeBoundaryRoot(rootPath, label) {
+  if (typeof rootPath !== 'string' || !rootPath.trim()) {
+    return {
+      ok: false,
+      path: null,
+      reason: `${label} boundary root is missing; cannot authenticate release evidence`,
+    };
+  }
+  try {
+    return { ok: true, path: fs.realpathSync(rootPath), reason: null };
+  } catch (error) {
+    return {
+      ok: false,
+      path: null,
+      reason: `${label} boundary root cannot be realpathed; HOLD without treating path.resolve spelling as external: ${error.message}`,
+    };
+  }
 }
 
 /**
@@ -250,8 +276,29 @@ function independentAdapterBindingCandidates() {
  * adapter selection from project evidence or authority-journal config.
  */
 function loadTrustedWitnessAdapterBinding(projectDir, repoRoot) {
-  const projectResolved = path.resolve(projectDir);
-  const repoResolved = repoRoot ? path.resolve(repoRoot) : null;
+  const projectBoundary = canonicalizeBoundaryRoot(projectDir, 'project');
+  if (!projectBoundary.ok) {
+    return {
+      ok: false,
+      reason: projectBoundary.reason,
+      binding: null,
+      binding_path: null,
+    };
+  }
+  let repoResolved = null;
+  if (repoRoot) {
+    const repoBoundary = canonicalizeBoundaryRoot(repoRoot, 'repo');
+    if (!repoBoundary.ok) {
+      return {
+        ok: false,
+        reason: repoBoundary.reason,
+        binding: null,
+        binding_path: null,
+      };
+    }
+    repoResolved = repoBoundary.path;
+  }
+  const projectResolved = projectBoundary.path;
   for (const candidate of independentAdapterBindingCandidates()) {
     if (!candidate) continue;
     const resolved = resolveAuthorityPathReal(candidate);
@@ -402,8 +449,31 @@ function sanitizeReceiptForTimestampLookup(receipt) {
 }
 
 function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
-  const projectResolved = path.resolve(projectDir);
-  const repoResolved = repoRoot ? path.resolve(repoRoot) : null;
+  const projectBoundary = canonicalizeBoundaryRoot(projectDir, 'project');
+  if (!projectBoundary.ok) {
+    return {
+      ok: false,
+      reason: projectBoundary.reason,
+      authority: null,
+      stream_id: null,
+      config_path: null,
+    };
+  }
+  let repoResolved = null;
+  if (repoRoot) {
+    const repoBoundary = canonicalizeBoundaryRoot(repoRoot, 'repo');
+    if (!repoBoundary.ok) {
+      return {
+        ok: false,
+        reason: repoBoundary.reason,
+        authority: null,
+        stream_id: null,
+        config_path: null,
+      };
+    }
+    repoResolved = repoBoundary.path;
+  }
+  const projectResolved = projectBoundary.path;
   const candidates = independentAuthorityCandidates(projectDir, repoRoot);
   let config = null;
   let configPath = null;
@@ -1769,14 +1839,48 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       );
     } else {
       const validDays = [];
-      // Day one must continue the shipped-cycle receipt head (bind first day to
-      // the trusted-authority-verified compatibility-cycle receipt).
-      let previousWitnessHead = verifiedCycleReceipt.witness_head.toLowerCase();
+      // Cycle append timestamp from adapter-owned anchored state (sanitized receipt).
+      let cycleAppendTs = null;
+      if (typeof trustedAuthority.authority.getAppendTimestamp === 'function') {
+        cycleAppendTs = trustedAuthority.authority.getAppendTimestamp(
+          sanitizeReceiptForTimestampLookup(verifiedCycleReceipt),
+        );
+      }
+      if (typeof cycleAppendTs !== 'string'
+        || !/Z$/.test(cycleAppendTs)
+        || Number.isNaN(new Date(cycleAppendTs).getTime())) {
+        blocking.push(
+          'compatibility-cycle receipt lacks adapter-owned anchored append timestamp; '
+          + 'cycle timestamp must precede the first required witnessed day',
+        );
+      } else {
+        const cycleDayKey = new Date(cycleAppendTs).toISOString().slice(0, 10);
+        const firstRequiredDay = requiredDays[0];
+        // Cycle must strictly precede the first required UTC day window.
+        if (cycleDayKey >= firstRequiredDay) {
+          blocking.push(
+            `compatibility-cycle append timestamp day ${cycleDayKey} does not precede first required day ${firstRequiredDay}; `
+            + 'cycle-after-window and same-day cycle starts are rejected',
+          );
+        }
+      }
+      // Index day records by UTC day for requiredDays-order validation.
+      const recordsByDay = new Map();
       for (const day of dayRecords) {
         if (!day || typeof day !== 'object') continue;
         if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day)) continue;
-        // Reject backdated or future day labels outside the host-clock window.
-        if (!requiredDaySet.has(day.day)) continue;
+        if (!recordsByDay.has(day.day)) recordsByDay.set(day.day, day);
+      }
+      // Day one must continue the shipped-cycle receipt head (bind first day to
+      // the trusted-authority-verified compatibility-cycle receipt).
+      let previousWitnessHead = verifiedCycleReceipt.witness_head.toLowerCase();
+      let previousAppendMs = cycleAppendTs && !Number.isNaN(new Date(cycleAppendTs).getTime())
+        ? new Date(cycleAppendTs).getTime()
+        : null;
+      // Walk requiredDays in host-clock order — not caller record order.
+      for (const requiredDay of requiredDays) {
+        const day = recordsByDay.get(requiredDay);
+        if (!day) continue;
         if (day.translation_used_events !== 0 || day.unresolved_translation_deltas !== 0) continue;
         const dayReceipt = day.witness_receipt;
         if (!dayReceipt || typeof dayReceipt !== 'object' || Array.isArray(dayReceipt)) continue;
@@ -1792,9 +1896,6 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
           && day.witness_head.toLowerCase() !== dayReceipt.witness_head.toLowerCase()) {
           continue;
         }
-        // Adapter-owned anchored append timestamp only. Always pass a
-        // timestamp-stripped copy so caller free-choice time fields cannot
-        // be read back by getAppendTimestamp after verify.
         if (typeof trustedAuthority.authority.getAppendTimestamp !== 'function') {
           continue;
         }
@@ -1805,15 +1906,16 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
           || Number.isNaN(new Date(appendTs).getTime())) {
           continue;
         }
+        const appendMs = new Date(appendTs).getTime();
         const appendDayKey = new Date(appendTs).toISOString().slice(0, 10);
-        // Timestamp must fall on the exact claimed required UTC day — a
-        // today-created backdated chain (labels past, appends today) cannot pass.
-        if (appendDayKey !== day.day) continue;
-        if (!requiredDaySet.has(appendDayKey)) continue;
-        // Day body is content-bound without a free-choice observation timestamp.
-        // Authority-issued append timestamp is outside the body the caller hashes.
+        // Timestamp must fall on the exact claimed required UTC day.
+        if (appendDayKey !== requiredDay) continue;
+        // Strictly increasing authenticated append timestamps in requiredDays order.
+        if (previousAppendMs != null && !(appendMs > previousAppendMs)) {
+          continue;
+        }
         const dayBodyHash = sha256(canonicalJson({
-          day: day.day,
+          day: requiredDay,
           translation_used_events: 0,
           unresolved_translation_deltas: 0,
           prior_witness_head: previousWitnessHead,
@@ -1823,12 +1925,14 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
           continue;
         }
         validDays.push({
-          day: day.day,
+          day: requiredDay,
           append_timestamp: appendTs,
+          append_ms: appendMs,
           witness_head: dayReceipt.witness_head.toLowerCase(),
           event_hash: eventHash,
         });
         previousWitnessHead = dayReceipt.witness_head.toLowerCase();
+        previousAppendMs = appendMs;
       }
       const validDaySet = new Set(validDays.map((day) => day.day));
       const missingRequired = requiredDays.filter((day) => !validDaySet.has(day));
@@ -1839,7 +1943,7 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
           + `over the host-clock required window `
           + `(${requiredDays[0]}..${requiredDays[requiredDays.length - 1]}); `
           + `require ${ALIAS_DEFINITION.required_witnessed_days} `
-          + '(backdated labels, fourteen-created-today chains, journal-harvested timestamps, pass-through getAppendTimestamp, body-chosen observation timestamps, '
+          + '(backdated labels, fourteen-created-today chains, cycle-after-window, nonmonotonic/out-of-order day timestamps, journal-harvested timestamps, pass-through getAppendTimestamp, body-chosen observation timestamps, '
           + 'and shape-only fabricated chains are rejected; authority-issued append timestamps '
           + 'must fall on the exact claimed required UTC day)',
         );
@@ -1928,8 +2032,17 @@ function main() {
     process.stdout.write(`${USAGE}\n`);
     return;
   }
-  const repoRoot = options.repoRoot;
-  const projectDir = resolveProjectDir(repoRoot, options.project);
+  const repoBoundary = canonicalizeBoundaryRoot(options.repoRoot, 'repo');
+  if (!repoBoundary.ok) {
+    fail(repoBoundary.reason, 2);
+  }
+  const repoRoot = repoBoundary.path;
+  const projectDirRaw = resolveProjectDir(repoRoot, options.project);
+  const projectBoundary = canonicalizeBoundaryRoot(projectDirRaw, 'project');
+  if (!projectBoundary.ok) {
+    fail(projectBoundary.reason, 2);
+  }
+  const projectDir = projectBoundary.path;
   const trustedAuthority = loadTrustedInstalledWitnessAuthority(projectDir, repoRoot);
   const surface = countExecutedLoadBearingSurfaces(repoRoot);
   const kr8 = evaluateKr8(loadKr8Evidence(projectDir, trustedAuthority));

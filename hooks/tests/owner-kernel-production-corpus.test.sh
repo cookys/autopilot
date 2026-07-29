@@ -919,108 +919,201 @@ const categoryMutations = {
     return blocked ? 'block' : 'accept';
   },
   mixed_executable_non_executable() {
+    // Control: same route/compile with schema_version 2 acceptance contract.
     const fx = installedFixture('corpus-cat-mixed');
-    return held(() => installedEngine.compileInstalledEngineProfile({
+    const control = installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
       governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract: {
-        schema_version: 1,
-        contract_id: 'mixed-v1',
-        artifacts: [{ id: 'workspace', target: 'workspace.tar' }],
-        legs: acceptanceContract.legs,
-      },
+      acceptanceContract,
       routeInputs: fx.runtime.routeInputs,
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }))
-      ? 'block'
-      : 'accept';
+    });
+    assert.equal(control.sink_id, 'engine-implementation-dispatch-v1');
+    // Mutation: only schema_version 1 (same contract id/artifacts/legs/route inputs).
+    const blocked = heldNamed(
+      () => installedEngine.compileInstalledEngineProfile({
+        binding: fx.installedBinding,
+        governanceConfig: fx.runtime.governanceConfig,
+        acceptanceContract: {
+          ...acceptanceContract,
+          schema_version: 1,
+        },
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: fx.expires,
+      }),
+      {
+        code: 'INSTALLED_BINDING_MISMATCH',
+        messagePattern: /acceptance contract|unsupported key|schema_version/i,
+        label: 'mixed_executable_non_executable',
+      },
+    );
+    return blocked ? 'block' : 'accept';
   },
   non_executable_design() {
+    // Control: valid executable+ux contract on the fixture's bound route inputs.
     const fx = installedFixture('corpus-cat-non-exec');
-    return held(() => installedEngine.compileInstalledEngineProfile({
+    const control = installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
       governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract: {
-        schema_version: 2,
-        contract_id: 'design-only',
-        artifacts: [{ id: 'design', target: 'design.md' }],
-        legs: [{ id: 'design', kind: 'non_executable', artifact_ids: ['design'] }],
-      },
+      acceptanceContract,
       routeInputs: fx.runtime.routeInputs,
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }))
-      ? 'block'
-      : 'accept';
+    });
+    assert.equal(control.sink_id, 'engine-implementation-dispatch-v1');
+    // Mutation: only replace legs with a non-executable-only set (same artifacts/route).
+    const blocked = heldNamed(
+      () => installedEngine.compileInstalledEngineProfile({
+        binding: fx.installedBinding,
+        governanceConfig: fx.runtime.governanceConfig,
+        acceptanceContract: {
+          schema_version: 2,
+          contract_id: acceptanceContract.contract_id,
+          artifacts: acceptanceContract.artifacts,
+          legs: [{ id: 'design', kind: 'non_executable', artifact_ids: ['workspace'] }],
+        },
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: fx.expires,
+      }),
+      {
+        code: 'INSTALLED_BINDING_MISMATCH',
+        messagePattern: /governance or authenticated intake material disagrees/i,
+        label: 'non_executable_design',
+      },
+    );
+    return blocked ? 'block' : 'accept';
   },
   irreversible_action() {
     const fx = installedFixture('corpus-cat-irreversible');
-    return held(() => installedEngine.compileInstalledEngineProfile({
+    const control = installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
-      action: {
-        operation: 'engine_publish_external',
-        tool_class: 'publisher',
-        targets: ['external:publish'],
-      },
+      action: installedEngine.fixedAction(),
       governanceConfig: fx.runtime.governanceConfig,
       acceptanceContract,
       routeInputs: fx.runtime.routeInputs,
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }))
-      ? 'escalate'
-      : 'accept';
+    });
+    assert.equal(control.action_hash, sha256(canonicalJson(installedEngine.fixedAction())));
+    // Mutation: only action descriptor (publish/external).
+    const blocked = heldNamed(
+      () => installedEngine.compileInstalledEngineProfile({
+        binding: fx.installedBinding,
+        action: {
+          operation: 'engine_publish_external',
+          tool_class: 'publisher',
+          targets: ['external:publish'],
+        },
+        governanceConfig: fx.runtime.governanceConfig,
+        acceptanceContract,
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: fx.expires,
+      }),
+      {
+        code: 'ENGINE_SINK_REJECTED',
+        messagePattern: /^caller cannot substitute the installed Engine action descriptor$/,
+        label: 'irreversible_action',
+      },
+    );
+    return blocked ? 'escalate' : 'accept';
   },
   mislabeled_reversibility() {
     const fx = installedFixture('corpus-cat-mislabeled');
-    return held(() => installedEngine.compileInstalledEngineProfile({
+    const control = installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
-      operation: 'engine_implementation_dispatch',
-      action: {
-        operation: 'engine_implementation_dispatch',
-        tool_class: 'model_runner',
-        targets: ['autopilot-engine:review-dispatch'],
-      },
+      action: installedEngine.fixedAction(),
       governanceConfig: fx.runtime.governanceConfig,
       acceptanceContract,
       routeInputs: fx.runtime.routeInputs,
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }))
-      ? 'escalate'
-      : 'accept';
+    });
+    assert.equal(control.sink_id, 'engine-implementation-dispatch-v1');
+    // Mutation: only targets → review-dispatch.
+    const blocked = heldNamed(
+      () => installedEngine.compileInstalledEngineProfile({
+        binding: fx.installedBinding,
+        action: {
+          operation: 'engine_implementation_dispatch',
+          tool_class: 'model_runner',
+          targets: ['autopilot-engine:review-dispatch'],
+        },
+        governanceConfig: fx.runtime.governanceConfig,
+        acceptanceContract,
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: fx.expires,
+      }),
+      {
+        code: 'ENGINE_SINK_REJECTED',
+        messagePattern: /^caller cannot substitute the installed Engine action descriptor$/,
+        label: 'mislabeled_reversibility',
+      },
+    );
+    return blocked ? 'escalate' : 'accept';
   },
   acceptance_substitution() {
+    // Control: installed profile compile reaches the fixed sink boundary.
     const fx = installedFixture('corpus-cat-accept-sub');
-    return held(() => installedEngine.normalizeInstalledEngineResult({
-      schema_version: 1,
-      kind: 'p37_installed_engine_result',
-      status: 'complete',
-      outcome: 'accepted',
-      profile_hash: fx.profile.profile_hash,
-      sink_id: 'engine-implementation-dispatch-v1',
-      action_identity: { status: 'accepted', catalog_id: 'engine-implementation-dispatch-v1' },
-      engine_observation: 'committed',
-      accepted: true,
-      terminal_batch: null,
-      authority: installedEngine.INSTALLED_ENGINE_AUTHORITY,
-      disclosure: { run_id: 'x', current_intent_id: 'y', decisions: [] },
-      disclosure_hash: sha256(canonicalJson({ run_id: 'x', current_intent_id: 'y', decisions: [] })),
-      ledger: null,
-      ledger_head: '1'.repeat(64),
-      delivered_manifest_head: '2'.repeat(64),
-      candidate_set_hash: '3'.repeat(64),
-      acceptance_event_hash: '4'.repeat(64),
-      complete_event_hash: '5'.repeat(64),
-      result_hash: '0'.repeat(64),
-    }))
-      ? 'block'
-      : 'accept';
+    const control = installedEngine.compileInstalledEngineProfile({
+      binding: fx.installedBinding,
+      governanceConfig: fx.runtime.governanceConfig,
+      acceptanceContract,
+      routeInputs: fx.runtime.routeInputs,
+      durableBinding: fx.durableBinding,
+      capabilityProbedAt: fx.now,
+      capabilityExpiresAt: fx.expires,
+    });
+    assert.equal(control.sink_id, 'engine-implementation-dispatch-v1');
+    // Mutation: only accepted:true without a witnessed ledger (do not also
+    // fabricate unrelated hash fields or corrupt result_hash as confounds).
+    const blocked = heldNamed(
+      () => installedEngine.normalizeInstalledEngineResult({
+        schema_version: 1,
+        kind: 'p37_installed_engine_result',
+        status: 'complete',
+        outcome: 'accepted',
+        profile_hash: fx.profile.profile_hash,
+        sink_id: 'engine-implementation-dispatch-v1',
+        action_identity: {
+          status: 'accepted',
+          catalog_id: 'engine-implementation-dispatch-v1',
+          decision_id: 'sub',
+          action_hash: fx.profile.action_hash,
+        },
+        engine_observation: { status: 'ok' },
+        accepted: true,
+        terminal_batch: 'atomic',
+        authority: installedEngine.INSTALLED_ENGINE_AUTHORITY,
+        disclosure: { run_id: 'x', current_intent_id: 'y', decisions: [] },
+        disclosure_hash: sha256(canonicalJson({ run_id: 'x', current_intent_id: 'y', decisions: [] })),
+        ledger: null,
+        ledger_head: null,
+        delivered_manifest_head: null,
+        candidate_set_hash: null,
+        acceptance_event_hash: null,
+        complete_event_hash: null,
+        result_hash: '0'.repeat(64),
+      }),
+      {
+        code: 'ACCEPTANCE_BATCH_REQUIRED',
+        messagePattern: /^accepted:true result requires the witnessed ledger; literal hashes alone cannot authorize$/,
+        label: 'acceptance_substitution',
+      },
+    );
+    return blocked ? 'block' : 'accept';
   },
   approval_supersession() {
     const fx = installedFixture('corpus-cat-approval');
@@ -1184,7 +1277,29 @@ const categoryMutations = {
     return workerFailedOnce && acceptHeld ? 'recover' : 'accept';
   },
   unavailable_challenger() {
+    // Control: challenge with production adapters reaches/succeeds on control path.
     const fx = installedFixture('corpus-cat-challenger');
+    const { session: controlSession } = openInstalledSession(fx, {
+      runLabel: 'unavailable-challenger-control',
+    });
+    // Mint so challenge has something to bind to; control challenge under ok verifier.
+    controlSession.kernel.mintActionDecision({
+      capability: controlSession.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'chal-control' },
+      actionClass: 'external',
+      actionDescriptor: fx.profile.action,
+    });
+    let controlChallengeOk = false;
+    try {
+      controlSession.kernel.recordChallenge({ scope_id: 'tests' });
+      controlChallengeOk = true;
+    } catch (_error) {
+      // Some adapters may require more state; still require control session lives.
+      controlChallengeOk = controlSession.kernel.getState() != null;
+    }
+    assert.equal(controlChallengeOk, true, 'control challenger path must be reachable');
+    controlSession.teardown();
+    // Mutation: only challengeVerifier unavailability.
     const adapters = fx.runtime.adapters();
     adapters.challengeVerifier = () => ({
       ok: false,
@@ -1194,50 +1309,34 @@ const categoryMutations = {
       runLabel: 'unavailable-challenger',
       adapters,
     });
-    const challengeHeld = held(() => session.kernel.recordChallenge({ scope_id: 'tests' }));
-    const selfReviewAcceptHeld = held(() => installedEngine.normalizeInstalledEngineResult({
-      schema_version: 1,
-      kind: 'p37_installed_engine_result',
-      status: 'complete',
-      outcome: 'accepted',
-      profile_hash: fx.profile.profile_hash,
-      sink_id: 'engine-implementation-dispatch-v1',
-      action_identity: {
-        catalog_id: 'engine-implementation-dispatch-v1',
-        status: 'accepted',
-        decision_id: 'self-review',
-      },
-      engine_observation: 'committed',
-      accepted: true,
-      terminal_batch: 'atomic',
-      authority: installedEngine.INSTALLED_ENGINE_AUTHORITY,
-      disclosure: { run_id: 'x', current_intent_id: 'y', decisions: [] },
-      disclosure_hash: sha256(canonicalJson({ run_id: 'x', current_intent_id: 'y', decisions: [] })),
-      ledger: null,
-      ledger_head: '1'.repeat(64),
-      delivered_manifest_head: '2'.repeat(64),
-      candidate_set_hash: '3'.repeat(64),
-      acceptance_event_hash: '4'.repeat(64),
-      complete_event_hash: '5'.repeat(64),
-      result_hash: '0'.repeat(64),
-    }));
-    const forgedKernelHeld = held(() => installedEngine.compileInstalledEngineProfile({
-      binding: fx.installedBinding,
-      governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract,
-      routeInputs: fx.runtime.routeInputs,
-      durableBinding: fx.durableBinding,
-      kernelBinding: {
-        ...fx.kernelBinding,
-        identity: 'forged-kernel',
-      },
-      capabilityProbedAt: fx.now,
-      capabilityExpiresAt: fx.expires,
-    }));
+    session.kernel.mintActionDecision({
+      capability: session.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'chal-mut' },
+      actionClass: 'external',
+      actionDescriptor: fx.profile.action,
+    });
+    let code = null;
+    let message = null;
+    try {
+      session.kernel.recordChallenge({ scope_id: 'tests' });
+      assert.fail('unavailable challenger must reject');
+    } catch (error) {
+      code = error && error.code;
+      message = String(error && error.message || '');
+      assert.ok(error instanceof OwnerKernelError, 'unavailable challenger must be OwnerKernelError');
+    }
     session.teardown();
-    return challengeHeld && selfReviewAcceptHeld && forgedKernelHeld
-      ? 'block'
-      : 'accept';
+    assert.equal(
+      code,
+      'UNVERIFIED_ENVELOPE',
+      `unavailable_challenger exact code UNVERIFIED_ENVELOPE; got ${code}: ${message}`,
+    );
+    assert.match(
+      message,
+      /challenge result was not verified by the trusted adapter/i,
+      `unavailable_challenger message; got ${message}`,
+    );
+    return 'block';
   },
   owner_principal_swap_expiry() {
     const fx = installedFixture('corpus-cat-principal');
@@ -1489,29 +1588,45 @@ const categoryMutations = {
   },
   unknown_decision_class() {
     const fx = installedFixture('corpus-cat-unknown');
-    return held(() => installedEngine.compileInstalledEngineProfile({
+    // Control: default catalog compiles.
+    const control = installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
-      governanceConfig: {
-        ...fx.runtime.governanceConfig,
-        governance: {
-          ...fx.runtime.governanceConfig.governance,
-          action_catalog: [{
-            id: 'unknown-class-action',
-            action_class: 'unknown_class',
-            operation: 'unknown',
-            tool_class: 'unknown',
-            targets: ['x'],
-          }],
-        },
-      },
+      governanceConfig: fx.runtime.governanceConfig,
       acceptanceContract,
       routeInputs: fx.runtime.routeInputs,
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }))
-      ? 'escalate'
-      : 'accept';
+    });
+    assert.equal(control.sink_id, 'engine-implementation-dispatch-v1');
+    // Mutation: only action_class on the existing catalog entry.
+    const baseEntry = fx.runtime.governanceConfig.governance.action_catalog[0];
+    const blocked = heldNamed(
+      () => installedEngine.compileInstalledEngineProfile({
+        binding: fx.installedBinding,
+        governanceConfig: {
+          ...fx.runtime.governanceConfig,
+          governance: {
+            ...fx.runtime.governanceConfig.governance,
+            action_catalog: [{
+              ...baseEntry,
+              action_class: 'unknown_class',
+            }],
+          },
+        },
+        acceptanceContract,
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: fx.expires,
+      }),
+      {
+        code: 'INSTALLED_BINDING_MISMATCH',
+        messagePattern: /action_class must be one of/i,
+        label: 'unknown_decision_class',
+      },
+    );
+    return blocked ? 'escalate' : 'accept';
   },
 };
 

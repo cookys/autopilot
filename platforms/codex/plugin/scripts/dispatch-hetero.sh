@@ -1493,15 +1493,17 @@ fi
 git rev-parse --git-dir >/dev/null 2>&1 || die_precondition "not inside a git repository"
 git rev-parse --verify --quiet "$BASE" >/dev/null || die_precondition "base ref not found: $BASE"
 # Claim the durable implementation tuple before branch/worktree/manifest
-# creation. The detached child renews this parent-owned preclaim after startup.
+# creation. This parent-owned lease is required whenever detach was requested,
+# even when this host cannot provide setsid --wait and execution later falls
+# back inline. Detachment capability controls process topology, never tuple
+# exclusivity. A detached child transfers this preclaim after startup; an
+# inline run retains the parent lease for its lifetime.
 _detach_preclaim=1
 case "${DISPATCH_DETACH:-1}" in
   0|false|FALSE|no|NO|off|OFF|No|Off) _detach_preclaim=0 ;;
 esac
 if [ "$_detach_preclaim" -eq 1 ] \
-    && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] \
-    && command -v setsid >/dev/null 2>&1 \
-    && setsid --help 2>&1 | grep -q -- --wait; then
+    && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ]; then
   _preclaim="$(bash "$SELF_DIR/run-ledger.sh" stage-acquire \
     --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
     --pid "$$" --git-ref "refs/heads/$BRANCH" --exclusive-live 2>&1)" \

@@ -8,7 +8,11 @@ const path = require('path');
 const root = process.argv[2];
 const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
 const { canonicalDigest } = require(path.join(root, 'src/engine/campaign-verification'));
-const { AutopilotEngine, finalPanelSeatQualified } = require(path.join(root, 'src/engine/autopilot-engine'));
+const {
+  AutopilotEngine,
+  finalPanelSeatQualified,
+  terminalPanelCrossFamilySatisfied,
+} = require(path.join(root, 'src/engine/autopilot-engine'));
 
 const TREE = 'a'.repeat(40);
 const DIGEST = 'b'.repeat(64);
@@ -162,7 +166,7 @@ const pinnedReview = pinEngine.reviewDiff({
 });
 assert.strictEqual(pinnedReview.status, 'reviewed');
 assert.strictEqual(pinnedArgs[pinnedArgs.indexOf('--model') + 1], 'gpt-5.6');
-const pinnedFamilyConflict = pinEngine.reviewDiff({
+const pinnedSameFamilySeat = pinEngine.reviewDiff({
   diffFile: '/tmp/qc-panel-fixture.diff',
   implementerEngine: 'gpt-5.6',
   requireQualifiedReviewer: true,
@@ -174,8 +178,40 @@ const pinnedFamilyConflict = pinEngine.reviewDiff({
     fallback_ladder: [{ runner: 'fixture', model: 'claude-opus', effort: 'high', family: 'anthropic' }],
   },
 });
-assert.strictEqual(pinnedFamilyConflict.status, 'blocked');
-assert.strictEqual(pinnedFamilyConflict.phase, 'reviewer_family');
+assert.strictEqual(pinnedSameFamilySeat.status, 'reviewed');
+assert.strictEqual(pinnedArgs[pinnedArgs.indexOf('--model') + 1], 'gpt-5.6');
+
+const unpinnedFamilyConflict = pinEngine.reviewDiff({
+  diffFile: '/tmp/qc-panel-fixture.diff',
+  implementerEngine: 'gpt-5.6',
+  requireQualifiedReviewer: true,
+  roster: {
+    reviewer_runner: 'fixture', reviewer_engine: 'gpt-5.6', reviewer_effort: 'high',
+    reviewer_qualified: true, implementer_engine: 'gpt-5.6',
+    on_family_conflict: 'block',
+  },
+});
+assert.strictEqual(unpinnedFamilyConflict.status, 'blocked');
+assert.strictEqual(unpinnedFamilyConflict.phase, 'reviewer_family');
+
+assert.strictEqual(terminalPanelCrossFamilySatisfied({
+  implementer_engine: 'gpt-5.6',
+  required_review_families: 1,
+  cross_family_required: true,
+}, [
+  { model: 'gpt-5.5', family: 'openai' },
+  { model: 'codex-5.4', family: 'openai' },
+  { model: 'o3', family: 'openai' },
+]), false);
+assert.strictEqual(terminalPanelCrossFamilySatisfied({
+  implementer_engine: 'gpt-5.6',
+  required_review_families: 2,
+  cross_family_required: true,
+}, [
+  { model: 'gpt-5.5', family: 'openai' },
+  { model: 'claude-opus', family: 'anthropic' },
+  { model: 'grok-4.5', family: 'xai' },
+]), true);
 
 const duplicate = seat(2, { seat_index: 3 });
 const duplicateTuple = run(3, panel(3, [seat(1), seat(2), duplicate]));

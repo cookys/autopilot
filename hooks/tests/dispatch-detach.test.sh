@@ -253,6 +253,77 @@ H_WORKTREES="$(git -C "$SBX" worktree list --porcelain \
 assert_eq "1" "$H_WORKTREES" "same tuple creates at most one worktree"
 
 # =========================================================================================
+# (h2) SAME-TUPLE WITHOUT SETSID: detach was requested, so the parent preclaim still fences
+#      duplicates even though process topology falls back to the inline runner.
+# =========================================================================================
+COMMON_H2="$(git -C "$SBX" rev-parse --path-format=absolute --git-common-dir)"
+LEDGER_H2="$COMMON_H2/autopilot/same-tuple-no-setsid-ledger.jsonl"
+MANIFEST_H2="$TEST_TMP/h2/manifests"
+RUNNER_CALLS_H2="$TEST_TMP/h2/runner-calls"
+FAKEBIN_H2="$TEST_TMP/h2/bin"
+mkdir -p "$FAKEBIN_H2" "$MANIFEST_H2"
+bash "$LEDGER_SH" init --ledger "$LEDGER_H2" >/dev/null
+cat > "$FAKEBIN_H2/setsid" <<'EOF'
+#!/usr/bin/env bash
+echo "fixture setsid without wait support"
+exit 0
+EOF
+chmod +x "$FAKEBIN_H2/setsid"
+STUB_CONCURRENT_H2="$TEST_TMP/h2/agy-concurrent"
+cat > "$STUB_CONCURRENT_H2" <<EOF
+#!/usr/bin/env bash
+echo call >> "$RUNNER_CALLS_H2"
+sleep 2
+echo ok > concurrent-no-setsid.txt
+git add concurrent-no-setsid.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent without setsid"
+EOF
+chmod +x "$STUB_CONCURRENT_H2"
+(
+  cd "$SBX"
+  PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
+    --branch feat/concurrent-no-setsid --prompt-file "$PROMPT" \
+    --agy-bin "$STUB_CONCURRENT_H2" \
+    --ledger "$LEDGER_H2" --run-id same-tuple-no-setsid --stage implement \
+    > "$TEST_TMP/h2/first.out" 2> "$TEST_TMP/h2/first.err"
+) &
+FIRST_H2_PID=$!
+if ! poll_until 20 grep -q '"state":"leased"' "$LEDGER_H2"; then
+  fail "same-tuple without setsid: first caller never published durable parent preclaim"
+fi
+if ! poll_until 20 test -f "$RUNNER_CALLS_H2"; then
+  fail "same-tuple without setsid: inline runner never started"
+fi
+H2_WORKTREES_DURING="$(git -C "$SBX" worktree list --porcelain \
+  | grep -c '^branch refs/heads/feat/concurrent-no-setsid$' || true)"
+assert_eq "1" "$H2_WORKTREES_DURING" \
+  "no-setsid first caller owns exactly one worktree while runner is active"
+(
+  cd "$SBX"
+  PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
+    --branch feat/concurrent-no-setsid --prompt-file "$PROMPT" \
+    --agy-bin "$STUB_CONCURRENT_H2" \
+    --ledger "$LEDGER_H2" --run-id same-tuple-no-setsid --stage implement
+) > "$TEST_TMP/h2/second.out" 2> "$TEST_TMP/h2/second.err"
+SECOND_H2_RC=$?
+assert_neq "0" "$SECOND_H2_RC" "second same-tuple caller is rejected without setsid"
+assert_contains "$(cat "$TEST_TMP/h2/second.out")" '"status": "precondition_failed"' \
+  "no-setsid duplicate fails at precondition rail"
+assert_contains "$(cat "$TEST_TMP/h2/second.out")" "durable dispatch claim rejected" \
+  "no-setsid duplicate is fenced by the parent-owned tuple lease"
+wait "$FIRST_H2_PID"
+FIRST_H2_OUT="$(cat "$TEST_TMP/h2/first.out")"
+reap_wt "$FIRST_H2_OUT"
+assert_eq "1" "$(wc -l < "$RUNNER_CALLS_H2" | tr -d ' ')" \
+  "no-setsid same tuple dispatches inline runner exactly once"
+H2_MANIFESTS="$(find "$MANIFEST_H2" -maxdepth 1 -name '*.manifest.json' -type f 2>/dev/null \
+  | wc -l | tr -d ' ')"
+assert_eq "1" "$H2_MANIFESTS" "no-setsid same tuple creates at most one manifest"
+H2_WORKTREES_AFTER="$(git -C "$SBX" worktree list --porcelain \
+  | grep -c '^branch refs/heads/feat/concurrent-no-setsid$' || true)"
+assert_eq "0" "$H2_WORKTREES_AFTER" "no-setsid inline path reaps its sole worktree after completion"
+
+# =========================================================================================
 # (i) OWNERSHIP-TRANSFER CAS: A preclaims, its child pauses before transfer,
 #     A dies, B acquires, then A's child must be fenced without running.
 # =========================================================================================

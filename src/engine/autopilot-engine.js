@@ -1007,6 +1007,32 @@ function finalPanelSeatQualified(roster, seat) {
   });
 }
 
+// Terminal panel decorrelation is a roster-level invariant. A pinned seat is an
+// immutable invocation tuple, so sharing the implementer's family is permitted
+// for that individual seat; the sealed panel as a whole must still contain the
+// required number of distinct reviewer families and at least one family known
+// to differ from a known implementer. Unknown implementers preserve the
+// resolver's pigeonhole rule: one known family is compatible at requirement 1,
+// while requirement >=2 needs that many distinct known families.
+function terminalPanelCrossFamilySatisfied(roster, seats) {
+  if (!roster || !Array.isArray(seats)) return false;
+  if (roster.cross_family_required === false) return true;
+  const required = Number.isSafeInteger(roster.required_review_families)
+    && roster.required_review_families >= 1
+    ? roster.required_review_families
+    : 1;
+  const families = new Set();
+  for (const seat of seats) {
+    if (!seat || typeof seat.family !== 'string' || seat.family.length === 0) continue;
+    const derived = modelFamilyOfEngine(seat.model);
+    families.add(derived === 'unknown' ? seat.family : derived);
+  }
+  if (families.size < required) return false;
+  const implementerFamily = modelFamilyOfEngine(roster.implementer_engine);
+  if (implementerFamily === 'unknown') return required < 2 || families.size >= required;
+  return [...families].some((family) => family !== implementerFamily);
+}
+
 // Stable codes for managed-strict sealed root-identity precondition failures.
 // Zero-effect release after IMPLEMENTATION_STARTED is gated on these codes —
 // never on prepare shape or free-text reason alone.
@@ -2318,24 +2344,7 @@ class AutopilotEngine {
     if (!ensureDistinctReviewFamily({
       implementerEngine,
       reviewerEngine: roster.reviewer_engine,
-    })) {
-      if (input.pinReviewerTuple === true) {
-        const startedAt = this.now();
-        ledger.push(this.ledgerEntry('reviewer_family', 'blocked', startedAt));
-        return {
-          status: 'blocked',
-          phase: 'reviewer_family',
-          reason: 'pinned reviewer and implementer must be different families',
-          verdict: null,
-          roster,
-          resolveResult,
-          reviewResult: null,
-          review: null,
-          reviewArgs,
-          riskClassification,
-          ledger,
-        };
-      }
+    }) && input.pinReviewerTuple !== true) {
       // Family-conflict fallback (v2.32.25 design review: gpt-5.5 xhigh REVISE
       // applied): instead of unconditionally hard-blocking — which left the
       // DEFAULT openai×openai roster with a permanently dead in-loop review and
@@ -3377,6 +3386,14 @@ class AutopilotEngine {
         ? roster.qc_panel_seats
         : null;
       if (!Number.isSafeInteger(minPanelSize) || minPanelSize < 1 || !seats) {
+        return {
+          reviewed: false,
+          sealed_min_panel_size: minPanelSize,
+          final_panel_count: 0,
+          final_panel_seat_receipts: [],
+        };
+      }
+      if (!terminalPanelCrossFamilySatisfied(roster, seats)) {
         return {
           reviewed: false,
           sealed_min_panel_size: minPanelSize,
@@ -5535,6 +5552,7 @@ module.exports = {
   reviewLoopResultBlocked,
   reviewResultBlocked,
   finalPanelSeatQualified,
+  terminalPanelCrossFamilySatisfied,
   validateExtraReviewArgs,
   validateExtraArgs,
   tempNameSegment,

@@ -713,9 +713,12 @@ const attackMutations = {
     return a && b;
   },
   witness_head_rewrite() {
-    // Isolated mutation: rewrite an actual witnessed ledger receipt/head (not
-    // route/profile hashes). Route the mutated ledger through installed resume
-    // and require rejection for witness-head mismatch.
+    // Isolated mutation: rewrite an actual witnessed ledger receipt/head only
+    // (not route/profile hashes). Prefer the last witnessed event so subsequent
+    // previous_witness_head chain validators cannot fire first. Non-witness
+    // integrity fields (content_hash / event_hash / payload) stay intact so the
+    // exact witness-head mismatch is the first and only failure mode — held(any
+    // exception) is forbidden.
     const fx = installedFixture('corpus-attack-witness-rewrite');
     const { session, witnessInvoke } = openInstalledSession(fx, {
       runLabel: 'witness-head-rewrite',
@@ -728,49 +731,82 @@ const attackMutations = {
     });
     const ledger = structuredClone(session.kernel.getLedger());
     assert.ok(Array.isArray(ledger.events) && ledger.events.length > 0);
-    const witnessedIdx = ledger.events.findIndex(
-      (event) => event && event.witness && typeof event.witness.witness_head === 'string',
-    );
+    let witnessedIdx = -1;
+    for (let index = ledger.events.length - 1; index >= 0; index -= 1) {
+      const event = ledger.events[index];
+      if (event && event.witness && typeof event.witness.witness_head === 'string') {
+        witnessedIdx = index;
+        break;
+      }
+    }
     assert.ok(witnessedIdx >= 0, 'ledger must carry a witnessed receipt to rewrite');
     const original = ledger.events[witnessedIdx];
+    // Isolate mutation to witness_head on the actual receipt. Leave event_hash,
+    // content_hash, payload, and previous_witness_head untouched so no unrelated
+    // INVALID_OWNER_EVENT / content-hash validator fails first.
+    const forgedHead = 'b'.repeat(64);
+    assert.notEqual(
+      original.witness.witness_head.toLowerCase(),
+      forgedHead,
+      'forged head must differ from the authentic witnessed head',
+    );
     ledger.events[witnessedIdx] = {
       ...original,
+      // Preserve non-witness integrity fields byte-for-byte.
+      content_hash: original.content_hash,
+      event_hash: original.event_hash,
+      payload: original.payload,
       witness: {
         ...original.witness,
-        // Mutate the actual witness head while keeping event shape intact.
-        witness_head: 'b'.repeat(64),
+        witness_head: forgedHead,
         previous_witness_head: original.witness.previous_witness_head,
+        event_hash: original.witness.event_hash,
       },
     };
-    const rejectedResume = held(() => installedEngine.resumeInstalledEngineSession({
-      binding: fx.installedBinding,
-      profile: fx.profile,
-      governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract,
-      routeInputs: fx.runtime.routeInputs,
-      durableBinding: fx.durableBinding,
-      kernelBinding: fx.kernelBinding,
-      ledger,
-      capabilityProbedAt: fx.now,
-      capabilityExpiresAt: fx.expires,
-      witnessInvoke,
-      engineInvoke: capabilityOnlyInvoke(fx),
-      coordinatorInvoke: () => {
-        throw new Error('witness-head rewrite must not accept');
-      },
-      kernelOptions: {
-        adapters: fx.runtime.adapters(),
-        clock: () => new Date(fx.runtime.NOW),
-        nonceFactory: () => 'f'.repeat(64),
-      },
-    }));
+    let caught = null;
+    try {
+      installedEngine.resumeInstalledEngineSession({
+        binding: fx.installedBinding,
+        profile: fx.profile,
+        governanceConfig: fx.runtime.governanceConfig,
+        acceptanceContract,
+        routeInputs: fx.runtime.routeInputs,
+        durableBinding: fx.durableBinding,
+        kernelBinding: fx.kernelBinding,
+        ledger,
+        capabilityProbedAt: fx.now,
+        capabilityExpiresAt: fx.expires,
+        witnessInvoke,
+        engineInvoke: capabilityOnlyInvoke(fx),
+        coordinatorInvoke: () => {
+          throw new Error('witness-head rewrite must not accept');
+        },
+        kernelOptions: {
+          adapters: fx.runtime.adapters(),
+          clock: () => new Date(fx.runtime.NOW),
+          nonceFactory: () => 'f'.repeat(64),
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
     session.teardown();
-    assert.equal(
-      rejectedResume,
-      true,
-      'witness-head rewrite must be rejected by installed resume/replay verification',
+    assert.ok(caught, 'witness-head rewrite must throw');
+    assert.ok(
+      caught instanceof OwnerKernelError,
+      'witness-head rewrite must throw OwnerKernelError (not a generic Error)',
     );
-    return rejectedResume;
+    assert.equal(
+      caught.code,
+      'WITNESS_REJECTED',
+      'exact witness-head mismatch code must be WITNESS_REJECTED',
+    );
+    assert.equal(
+      caught.message,
+      'external witness rejected event receipt',
+      'exact witness-head mismatch message must be the external witness rejection',
+    );
+    return true;
   },
 };
 

@@ -176,10 +176,12 @@ function isNonEmptySha256(value) {
  *   2. ~/.autopilot/trusted-installed-witness-authority.json
  *   3. ~/.autopilot/installed-witness-authority.json
  *
- * Paths under projectDir (or repo-relative project mirrors) are rejected as
- * evidence-adjacent. Authentication uses assertWitnessAdapter + MemoryWitness
- * journal replay so authority.verify() only accepts receipts already recorded
- * by that independent authority.
+ * Every configured path is realpath-resolved (symlinks followed) before read.
+ * Any authority file whose resolved path lies inside repoRoot or the project
+ * trust boundary is rejected, regardless of configured spelling (including
+ * outside-symlink-into-repo). Authentication uses assertWitnessAdapter +
+ * MemoryWitness journal replay so authority.verify() only accepts receipts
+ * already recorded by that independent authority.
  */
 function isPathInside(parent, child) {
   const resolvedParent = path.resolve(parent);
@@ -189,6 +191,19 @@ function isPathInside(parent, child) {
     ? resolvedParent
     : `${resolvedParent}${path.sep}`;
   return resolvedChild.startsWith(prefix);
+}
+
+/**
+ * Resolve a configured path through every symlink via realpath before trust
+ * decisions. Missing paths return null (candidate skipped).
+ */
+function resolveAuthorityPathReal(filePath) {
+  if (typeof filePath !== 'string' || !filePath) return null;
+  try {
+    return fs.realpathSync(filePath);
+  } catch (_error) {
+    return null;
+  }
 }
 
 function independentAuthorityCandidates(projectDir, repoRoot) {
@@ -211,24 +226,34 @@ function independentAuthorityCandidates(projectDir, repoRoot) {
 
 function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
   const projectResolved = path.resolve(projectDir);
+  const repoResolved = repoRoot ? path.resolve(repoRoot) : null;
   const candidates = independentAuthorityCandidates(projectDir, repoRoot);
   let config = null;
   let configPath = null;
   for (const candidate of candidates) {
     if (!candidate || candidate.includes(`${path.sep}${path.sep}`)) continue;
-    // Refuse evidence-adjacent paths even if env points into the project.
-    if (isPathInside(projectResolved, candidate)) {
+    // Resolve configured spelling and every symlink before reading.
+    const resolvedCandidate = resolveAuthorityPathReal(candidate);
+    if (!resolvedCandidate) continue;
+    // Reject any authority whose realpath is inside the repo trust boundary
+    // or project evidence boundary, regardless of configured spelling
+    // (covers in-repo paths and outside-symlink-into-repo).
+    if (repoResolved && isPathInside(repoResolved, resolvedCandidate)) {
       continue;
     }
-    if (repoRoot && isPathInside(path.resolve(repoRoot, 'docs', 'projects'), candidate)
-      && isPathInside(path.resolve(repoRoot), candidate)
-      && candidate.includes(`${path.sep}production-telemetry${path.sep}`)) {
+    if (isPathInside(projectResolved, resolvedCandidate)) {
       continue;
     }
-    const data = readJsonIfExists(candidate);
+    // Also refuse unresolved spelling that lands inside project (belt+suspenders
+    // when realpath is outside but spelling was project-relative weirdness).
+    if (isPathInside(projectResolved, candidate)
+      || (repoResolved && isPathInside(repoResolved, candidate))) {
+      continue;
+    }
+    const data = readJsonIfExists(resolvedCandidate);
     if (data && typeof data === 'object' && !Array.isArray(data)) {
       config = data;
-      configPath = candidate;
+      configPath = resolvedCandidate;
       break;
     }
   }
@@ -1160,9 +1185,10 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       );
     }
 
-    // Caller migration: must be mechanically executed by this checker AND/OR
-    // authenticated by independent installed authority. A self-hashed
-    // deterministic_caller_migration:true flag is never proof by itself.
+    // Caller migration OR semantics: completion is established by EITHER a
+    // mechanically executed migration scan OR installed-authority authentication.
+    // Do not require an untrusted telemetry completion flag, and do not require
+    // both alternatives simultaneously. Self-hashed flags alone are never proof.
     const migrationHash = productionTelemetry.caller_migration_scan_hash;
     const migrationBody = productionTelemetry.caller_migration_scan_body;
     const migrationReceipt = productionTelemetry.caller_migration_witness_receipt;
@@ -1188,11 +1214,16 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
         migrationAuthorityAuthenticated = false;
       }
     }
+    // OR: mechanical scan complete OR authority-authenticated migration body.
+    // Untrusted caller_migration_complete / deterministic_caller_migration flags
+    // never participate in the success predicate.
+    deterministicCallerMigration = migrationScan.complete === true
+      || migrationAuthorityAuthenticated === true;
     const selfHashedOnly = migrationBody && typeof migrationBody === 'object'
       && isNonEmptySha256(migrationHash)
       && sha256(canonicalJson(migrationBody)).toLowerCase() === migrationHash.toLowerCase()
       && productionTelemetry.deterministic_caller_migration === true
-      && !migrationAuthorityAuthenticated;
+      && !deterministicCallerMigration;
     if (selfHashedOnly) {
       blocking.push(
         'self-hashed deterministic_caller_migration:true is not proof; '
@@ -1200,15 +1231,13 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
         + 'installed authority (require caller_migration_witness_receipt bound to scan body)',
       );
     }
-    deterministicCallerMigration = migrationScan.complete === true
-      && migrationAuthorityAuthenticated === true
-      && productionTelemetry.caller_migration_complete === true;
     if (!deterministicCallerMigration) {
       blocking.push(
         'deterministic caller migration evidence missing or incomplete '
-        + '(require mechanical migration scan complete AND authority-authenticated '
+        + '(require mechanical migration scan complete OR authority-authenticated '
         + 'caller_migration_witness_receipt bound to caller_migration_scan_body; '
-        + 'reject self-asserted booleans and self-hashed bodies alone)'
+        + 'reject self-asserted booleans, untrusted telemetry completion flags, '
+        + 'and self-hashed bodies alone; do not require both alternatives simultaneously)'
         + (migrationScan.reason ? `; scan: ${migrationScan.reason}` : ''),
       );
     }
@@ -1218,7 +1247,10 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       : null;
 
     // Required day window comes only from the verifier host clock — not from
-    // backdated day labels inside the evidence package.
+    // backdated day labels inside the evidence package. Each day receipt must
+    // also carry an authority-authenticated observation timestamp covered by
+    // the verified receipt; the timestamp must fall on the exact claimed UTC
+    // day (labels/backdating alone cannot satisfy the window).
     const requiredDays = requiredWitnessedDayKeys(Date.now());
     const requiredDaySet = new Set(requiredDays);
 
@@ -1240,9 +1272,23 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       for (const day of dayRecords) {
         if (!day || typeof day !== 'object') continue;
         if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day)) continue;
-        // Reject backdated or future days outside the host-clock required window.
+        // Reject backdated or future day labels outside the host-clock window.
         if (!requiredDaySet.has(day.day)) continue;
         if (day.translation_used_events !== 0 || day.unresolved_translation_deltas !== 0) continue;
+        // Authority-authenticated observation timestamp covered by the receipt.
+        const observationTs = typeof day.observation_timestamp === 'string'
+          ? day.observation_timestamp
+          : (typeof day.observed_at === 'string' ? day.observed_at : null);
+        if (!observationTs
+          || !/Z$/.test(observationTs)
+          || Number.isNaN(new Date(observationTs).getTime())) {
+          continue;
+        }
+        const observationDayKey = new Date(observationTs).toISOString().slice(0, 10);
+        // Timestamp must fall on the exact claimed required UTC day — a
+        // backdated label with a today-minted observation cannot pass.
+        if (observationDayKey !== day.day) continue;
+        if (!requiredDaySet.has(observationDayKey)) continue;
         const dayReceipt = day.witness_receipt;
         if (!dayReceipt || typeof dayReceipt !== 'object' || Array.isArray(dayReceipt)) continue;
         try {
@@ -1257,24 +1303,22 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
           && day.witness_head.toLowerCase() !== dayReceipt.witness_head.toLowerCase()) {
           continue;
         }
-        // Day body must be content-bound to the receipt event_hash via either the
-        // canonical day material or an explicit event_body_hash field.
+        // Day body (including observation timestamp) must be content-bound to
+        // the receipt event_hash. Labels alone are not covered material.
         const dayBodyHash = sha256(canonicalJson({
           day: day.day,
+          observation_timestamp: observationTs,
           translation_used_events: 0,
           unresolved_translation_deltas: 0,
           prior_witness_head: previousWitnessHead,
         }));
         const eventHash = dayReceipt.event_hash.toLowerCase();
-        const boundToCanonicalDay = eventHash === dayBodyHash.toLowerCase();
-        const boundToExplicitBody = typeof day.event_body_hash === 'string'
-          && day.event_body_hash.toLowerCase() === eventHash
-          && isNonEmptySha256(day.event_body_hash);
-        if (!boundToCanonicalDay && !boundToExplicitBody) {
+        if (eventHash !== dayBodyHash.toLowerCase()) {
           continue;
         }
         validDays.push({
           day: day.day,
+          observation_timestamp: observationTs,
           witness_head: dayReceipt.witness_head.toLowerCase(),
           event_hash: eventHash,
         });
@@ -1285,10 +1329,12 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
       if (missingRequired.length > 0 || validDays.length < ALIAS_DEFINITION.required_witnessed_days) {
         blocking.push(
           `only ${validDays.length} complete witnessed day records with trusted-authority receipt chain `
-          + `bound to the shipped-cycle receipt over the host-clock required window `
+          + `and authority-authenticated observation timestamps bound to the shipped-cycle receipt `
+          + `over the host-clock required window `
           + `(${requiredDays[0]}..${requiredDays[requiredDays.length - 1]}); `
           + `require ${ALIAS_DEFINITION.required_witnessed_days} `
-          + '(backdated self-consistent chains and shape-only fabricated chains are rejected)',
+          + '(backdated labels, fourteen-created-today chains, and shape-only fabricated chains '
+          + 'are rejected; observation timestamps must fall on the exact claimed required UTC day)',
         );
       }
       const distinctDays = new Set(validDays.map((day) => day.day));
@@ -1405,7 +1451,7 @@ function main() {
       'KR10 mechanically derives executed load-bearing membership; thresholds stay frozen at 42 and 51; removed/nonexecuted members reduce cardinality',
       'alias authenticity comes only from independently configured installed witness authority state',
       'project-local telemetry/journal files, hashes, timestamps, signer IDs, and migration flags are untrusted inputs',
-      'self-hashed deterministic_caller_migration is not proof; migration must be mechanical or authority-authenticated',
+      'self-hashed deterministic_caller_migration is not proof; migration is mechanical OR authority-authenticated (not both required; telemetry completion flags are untrusted)',
       'fixture telemetry is never promoted to production telemetry',
       'this checker never deletes compatibility aliases',
       'present compatibility aliases are nonblocking; only unmet retirement prerequisites HOLD',

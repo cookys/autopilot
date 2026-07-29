@@ -313,5 +313,386 @@ NODE
 assert_eq "0" "$?" "backdated co-gen alias evidence HOLD"
 rm -rf "$COGEN_DIR"
 
+# ---------------------------------------------------------------------------
+# Finding 1 — Authority path containment: realpath before read; reject any
+# authority whose resolved path is inside repoRoot / project trust boundary,
+# including direct in-repo paths and outside-symlink-into-repo.
+# ---------------------------------------------------------------------------
+INREPO_AUTH="$REPO_ROOT/scripts/.tmp-inrepo-authority-$$.json"
+node - "$REPO_ROOT" "$INREPO_AUTH" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const out = process.argv[3];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+const witness = new MemoryWitness({ streamId: 'inrepo-auth-stream' });
+const receipt = witness.append({
+  run_id: 'inrepo-auth-run',
+  sequence: 1,
+  event_hash: sha256(canonicalJson({ kind: 'inrepo' })),
+});
+fs.writeFileSync(out, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  stream_id: 'inrepo-auth-stream',
+  receipts: [receipt],
+}, null, 2));
+NODE
+INREPO_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-inrepo-auth.XXXXXX")"
+mkdir -p "$INREPO_DIR/production-telemetry"
+printf '%s\n' '{
+  "shipped_compatibility_cycle": true,
+  "witnessed_zero_use_days": 0,
+  "translation_used_events": 0,
+  "unresolved_translation_deltas": 0
+}' >"$INREPO_DIR/production-telemetry/alias-retirement.json"
+# Isolate from operator HOME authority so only the in-repo candidate is considered.
+INREPO_HOME="$(mktemp -d "${TMPDIR:-/tmp}/alias-inrepo-home.XXXXXX")"
+INREPO_OUT="$(
+  HOME="$INREPO_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$INREPO_AUTH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$INREPO_DIR" \
+    --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$INREPO_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('in-repo authority path must HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+if (alias.trusted_authority_present === true) {
+  console.error('in-repo authority must not set trusted_authority_present');
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (!/independent|authority|absent|untrusted/i.test(reasons)) {
+  console.error('in-repo authority HOLD must cite independent authority absence; got:', reasons);
+  process.exit(1);
+}
+console.log('alias_inrepo_authority_hold=ok');
+NODE
+assert_eq "0" "$?" "direct in-repo authority path rejected"
+rm -f "$INREPO_AUTH"
+rm -rf "$INREPO_DIR" "$INREPO_HOME"
+
+# Outside symlink whose realpath lands inside repoRoot must also be rejected.
+SYMLINK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-symlink-auth.XXXXXX")"
+TARGET_IN_REPO="$REPO_ROOT/scripts/.tmp-symlink-target-$$.json"
+node - "$REPO_ROOT" "$TARGET_IN_REPO" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const out = process.argv[3];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+const witness = new MemoryWitness({ streamId: 'symlink-auth-stream' });
+const receipt = witness.append({
+  run_id: 'symlink-auth-run',
+  sequence: 1,
+  event_hash: sha256(canonicalJson({ kind: 'symlink-into-repo' })),
+});
+fs.writeFileSync(out, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  stream_id: 'symlink-auth-stream',
+  receipts: [receipt],
+}, null, 2));
+NODE
+LINK_PATH="$SYMLINK_DIR/outside-link-authority.json"
+ln -s "$TARGET_IN_REPO" "$LINK_PATH"
+SYMLINK_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/alias-symlink-proj.XXXXXX")"
+mkdir -p "$SYMLINK_PROJ/production-telemetry"
+printf '%s\n' '{
+  "shipped_compatibility_cycle": true,
+  "witnessed_zero_use_days": 0,
+  "translation_used_events": 0,
+  "unresolved_translation_deltas": 0
+}' >"$SYMLINK_PROJ/production-telemetry/alias-retirement.json"
+SYMLINK_HOME="$(mktemp -d "${TMPDIR:-/tmp}/alias-symlink-home.XXXXXX")"
+SYMLINK_OUT="$(
+  HOME="$SYMLINK_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$LINK_PATH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$SYMLINK_PROJ" \
+    --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$SYMLINK_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('outside-symlink-into-repo authority must HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+if (alias.trusted_authority_present === true) {
+  console.error('symlink-into-repo authority must not set trusted_authority_present');
+  process.exit(1);
+}
+console.log('alias_symlink_into_repo_hold=ok');
+NODE
+assert_eq "0" "$?" "outside-symlink-into-repo authority path rejected"
+rm -f "$TARGET_IN_REPO" "$LINK_PATH"
+rm -rf "$SYMLINK_DIR" "$SYMLINK_PROJ" "$SYMLINK_HOME"
+
+# ---------------------------------------------------------------------------
+# Finding 2 — fourteen-created-today / backdated-label rejection:
+# receipts minted today with backdated day labels cannot satisfy the 14-day
+# window even when internally consistent and authority-journaled.
+# ---------------------------------------------------------------------------
+TODAY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-today-backdate.XXXXXX")"
+AUTH_OUTSIDE="$(mktemp -d "${TMPDIR:-/tmp}/alias-today-auth.XXXXXX")"
+mkdir -p "$TODAY_DIR/production-telemetry"
+# Mint all 14 receipts "today" (observation_timestamp = now) but label them
+# with the required past days — labels/backdating alone must not pass.
+TODAY_AUTH="$(node - "$REPO_ROOT" "$TODAY_DIR" "$AUTH_OUTSIDE" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const dir = process.argv[3];
+const authDir = process.argv[4];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+const streamId = 'alias-today-backdate-stream';
+const runId = 'alias-today-backdate-run';
+const witness = new MemoryWitness({ streamId });
+const cycleBody = { compatibility_cycle_id: 'alias-today-cycle' };
+const cycleReceipt = witness.append({
+  run_id: runId, sequence: 1, event_hash: sha256(canonicalJson(cycleBody)),
+});
+const now = Date.now();
+const todayUtc = new Date(now).toISOString().slice(0, 10);
+const [year, month, dayNum] = todayUtc.split('-').map(Number);
+const requiredDays = [];
+for (let offset = 1; offset <= 14; offset += 1) {
+  requiredDays.push(new Date(Date.UTC(year, month - 1, dayNum - offset)).toISOString().slice(0, 10));
+}
+requiredDays.reverse();
+const todayIso = new Date(now).toISOString();
+const days = [];
+for (let i = 0; i < 14; i += 1) {
+  const day = requiredDays[i];
+  const previousHead = witness.getHead();
+  const observation_timestamp = todayIso;
+  const dayBody = {
+    day, observation_timestamp, translation_used_events: 0,
+    unresolved_translation_deltas: 0, prior_witness_head: previousHead,
+  };
+  const receipt = witness.append({
+    run_id: runId, sequence: i + 2, event_hash: sha256(canonicalJson(dayBody)),
+  });
+  days.push({
+    day, observation_timestamp, translation_used_events: 0,
+    unresolved_translation_deltas: 0, witness_head: receipt.witness_head, witness_receipt: receipt,
+  });
+}
+const migrationBody = { complete: true, callers_migrated: ['l3', 'l4', 'l5', 'l6'] };
+const migrationHash = sha256(canonicalJson(migrationBody));
+const migrationReceipt = witness.append({
+  run_id: runId, sequence: 16, event_hash: migrationHash,
+});
+const authPath = path.join(authDir, 'trusted-installed-witness-authority.json');
+fs.writeFileSync(authPath, JSON.stringify({
+  kind: 'trusted_installed_witness_authority', stream_id: streamId, receipts: witness._receipts,
+}, null, 2));
+fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json'), JSON.stringify({
+  compatibility_cycle_id: 'alias-today-cycle', shipped_compatibility_cycle: true,
+  compatibility_cycle_receipt_body: cycleBody, compatibility_cycle_ship_receipt: cycleReceipt,
+  witnessed_zero_use_days: 14, translation_used_events: 0, unresolved_translation_deltas: 0,
+  deterministic_caller_migration: true, caller_migration_complete: true,
+  caller_migration_scan_body: migrationBody, caller_migration_scan_hash: migrationHash,
+  caller_migration_witness_receipt: migrationReceipt, witnessed_day_records: days,
+}, null, 2));
+process.stdout.write(authPath);
+NODE
+)"
+TODAY_OUT="$(
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$TODAY_AUTH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$TODAY_DIR" \
+    --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$TODAY_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('fourteen-created-today/backdated-label must HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (!/observation|timestamp|backdated|host-clock|created-today|required UTC day|14/i.test(reasons)) {
+  console.error('today-minted backdated labels must cite observation timestamp rejection; got:', reasons);
+  process.exit(1);
+}
+console.log('alias_fourteen_created_today_hold=ok');
+NODE
+assert_eq "0" "$?" "fourteen-created-today/backdated-label rejection"
+rm -rf "$TODAY_DIR" "$AUTH_OUTSIDE"
+
+# ---------------------------------------------------------------------------
+# Finding 3 — Migration OR semantics: mechanical-only and authority-only
+# success shapes (overall disposition remains HOLD when other prerequisites
+# are absent). Untrusted telemetry completion flags are never required.
+# ---------------------------------------------------------------------------
+# Mechanical-only: stubbed migrated skills so the scan completes; no authority
+# migration receipt. Expect deterministic_caller_migration true via scan alone.
+MECH_REPO="$(mktemp -d "${TMPDIR:-/tmp}/alias-mech-repo.XXXXXX")"
+MECH_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/alias-mech-proj.XXXXXX")"
+mkdir -p "$MECH_PROJ/production-telemetry"
+# Minimal checker + owner-kernel deps for --repo-root.
+for rel in \
+  scripts/check-owner-kernel-release-gates.js \
+  src/engine/owner-kernel/canonical.js \
+  src/engine/owner-kernel/witness.js \
+  src/engine/owner-kernel/errors.js
+do
+  mkdir -p "$(dirname "$MECH_REPO/$rel")"
+  cp "$REPO_ROOT/$rel" "$MECH_REPO/$rel"
+done
+for level in l3 l4 l5 l6; do
+  mkdir -p "$MECH_REPO/skills/$level"
+  printf '%s\n' "---" "name: $level" "---" "compat stub" >"$MECH_REPO/skills/$level/SKILL.md"
+done
+printf '%s\n' '{
+  "compatibility_cycle_id": "mech-only",
+  "shipped_compatibility_cycle": false,
+  "witnessed_zero_use_days": 0,
+  "translation_used_events": 0,
+  "unresolved_translation_deltas": 0,
+  "caller_migration_complete": false,
+  "deterministic_caller_migration": false
+}' >"$MECH_PROJ/production-telemetry/alias-retirement.json"
+MECH_OUT="$(node "$MECH_REPO/scripts/check-owner-kernel-release-gates.js" \
+  --project "$MECH_PROJ" \
+  --repo-root "$MECH_REPO" 2>&1)"
+node - "$MECH_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('mechanical-only must preserve overall HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+if (alias.deterministic_caller_migration !== true) {
+  console.error('mechanical-only success shape requires deterministic_caller_migration true; got',
+    alias.deterministic_caller_migration);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (/caller migration evidence missing or incomplete/i.test(reasons)) {
+  console.error('mechanical-only must not emit migration-incomplete blocker; got:', reasons);
+  process.exit(1);
+}
+if (!alias.mechanical_caller_migration_scan || alias.mechanical_caller_migration_scan.complete !== true) {
+  console.error('mechanical scan must report complete');
+  process.exit(1);
+}
+console.log('alias_mechanical_only_success_shape=ok');
+NODE
+assert_eq "0" "$?" "mechanical-only migration success shape with overall HOLD"
+rm -rf "$MECH_REPO" "$MECH_PROJ"
+
+# Authority-only: residual real-repo skills fail mechanical scan, but an
+# independently configured outside authority authenticates a migration receipt.
+AUTH_ONLY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-auth-only.XXXXXX")"
+AUTH_ONLY_AUTH="$(mktemp -d "${TMPDIR:-/tmp}/alias-auth-only-auth.XXXXXX")"
+mkdir -p "$AUTH_ONLY_DIR/production-telemetry"
+AUTH_ONLY_PATH="$(node - "$REPO_ROOT" "$AUTH_ONLY_DIR" "$AUTH_ONLY_AUTH" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const dir = process.argv[3];
+const authDir = process.argv[4];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+const streamId = 'alias-auth-only-stream';
+const runId = 'alias-auth-only-run';
+const witness = new MemoryWitness({ streamId });
+const cycleBody = { compatibility_cycle_id: 'alias-auth-only-cycle' };
+const cycleReceipt = witness.append({
+  run_id: runId, sequence: 1, event_hash: sha256(canonicalJson(cycleBody)),
+});
+const migrationBody = { complete: true, callers_migrated: ['l3', 'l4', 'l5', 'l6'] };
+const migrationHash = sha256(canonicalJson(migrationBody));
+const migrationReceipt = witness.append({
+  run_id: runId, sequence: 2, event_hash: migrationHash,
+});
+const authPath = path.join(authDir, 'trusted-installed-witness-authority.json');
+fs.writeFileSync(authPath, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  stream_id: streamId,
+  receipts: witness._receipts,
+}, null, 2));
+// No day records → overall HOLD; migration satisfied via authority only.
+// Explicitly omit caller_migration_complete / set false (untrusted flag).
+fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json'), JSON.stringify({
+  compatibility_cycle_id: 'alias-auth-only-cycle',
+  shipped_compatibility_cycle: true,
+  compatibility_cycle_receipt_body: cycleBody,
+  compatibility_cycle_ship_receipt: cycleReceipt,
+  witnessed_zero_use_days: 0,
+  translation_used_events: 0,
+  unresolved_translation_deltas: 0,
+  deterministic_caller_migration: false,
+  caller_migration_complete: false,
+  caller_migration_scan_body: migrationBody,
+  caller_migration_scan_hash: migrationHash,
+  caller_migration_witness_receipt: migrationReceipt,
+  witnessed_day_records: [],
+}, null, 2));
+process.stdout.write(authPath);
+NODE
+)"
+AUTH_ONLY_OUT="$(
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$AUTH_ONLY_PATH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$AUTH_ONLY_DIR" \
+    --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$AUTH_ONLY_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('authority-only must preserve overall HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+if (alias.trusted_authority_present !== true) {
+  console.error('authority-only requires trusted_authority_present');
+  process.exit(1);
+}
+if (alias.deterministic_caller_migration !== true) {
+  console.error('authority-only success shape requires deterministic_caller_migration true; got',
+    alias.deterministic_caller_migration);
+  process.exit(1);
+}
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (/caller migration evidence missing or incomplete/i.test(reasons)) {
+  console.error('authority-only must not emit migration-incomplete blocker; got:', reasons);
+  process.exit(1);
+}
+if (alias.mechanical_caller_migration_scan && alias.mechanical_caller_migration_scan.complete === true) {
+  console.error('authority-only fixture expected residual mechanical scan failure on real repo');
+  process.exit(1);
+}
+console.log('alias_authority_only_success_shape=ok');
+NODE
+assert_eq "0" "$?" "authority-only migration success shape with overall HOLD"
+rm -rf "$AUTH_ONLY_DIR" "$AUTH_ONLY_AUTH"
+
+# Source asserts for new containment / observation / OR contracts.
+CHECKER_SRC="$(cat "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js")"
+assert_contains "$CHECKER_SRC" 'realpathSync' \
+  "authority path containment uses realpath"
+assert_contains "$CHECKER_SRC" 'observation_timestamp' \
+  "day receipts require authority-authenticated observation timestamps"
+assert_contains "$CHECKER_SRC" 'migrationScan.complete === true' \
+  "migration OR includes mechanical scan complete"
+assert_contains "$CHECKER_SRC" 'migrationAuthorityAuthenticated === true' \
+  "migration OR includes authority authentication"
+assert_not_contains "$CHECKER_SRC" 'caller_migration_complete === true' \
+  "untrusted telemetry completion flag is not required for migration"
+
 echo "PASS [owner-kernel-alias-retirement] alias retirement gate stays HOLD without deletion"
 finalize_test

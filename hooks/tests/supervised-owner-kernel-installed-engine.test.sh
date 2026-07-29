@@ -759,7 +759,6 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
     profile,
     status: 'complete',
     outcome: 'accepted',
-    engineObservation: 'committed',
     accepted: true,
     terminalBatch: 'atomic',
     disclosure,
@@ -784,6 +783,10 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   assert.equal(result.action_identity.status, 'accepted');
   assert.equal(result.action_identity.terminal, true);
   assert.equal(result.action_identity.catalog_id, 'engine-implementation-dispatch-v1');
+  // engine_observation is derived from verified action-outcome replay, not caller labels.
+  assert.ok(result.engine_observation && typeof result.engine_observation === 'object');
+  assert.equal(result.engine_observation.engine_status_is_not_acceptance, true);
+  assert.equal(result.engine_observation.outcome, 'succeeded');
   assert.throws(
     () => installedEngine.normalizeInstalledEngineResult({
       ...result,
@@ -797,7 +800,83 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   );
   assert.throws(
     () => installedEngine.normalizeInstalledEngineResult(result),
-    /authoritative witness|acceptance coordinator|ACCEPTANCE_BATCH/i,
+    /duck-typed|intake-frozen|ACCEPTANCE_BATCH|authoritative witness|acceptance coordinator/i,
+  );
+  // accepted-verifier-authority: duck-typed witness/coordinator substitutes are rejected.
+  const duckWitness = {
+    identity: session.witness.identity,
+    attestation_hash: session.witness.attestation_hash,
+    protocol_version: 1,
+    trustTier: 'external',
+    streamId: session.witness.streamId,
+    getHead: () => session.witness.getHead(),
+    verifyBatch: () => true,
+    verify: () => true,
+  };
+  const duckCoordinator = {
+    identity: session.acceptance_authority.identity,
+    attestation_hash: session.acceptance_authority.attestation_hash,
+    protocol_version: 2,
+    trustTier: 'external',
+    acquire: () => ({}),
+    commit: async () => ({}),
+    requestAbort: () => ({}),
+    cancel: () => ({}),
+    resolveAttempt: () => ({}),
+    verifyCommit: () => true,
+    verifyResolution: () => true,
+    release: () => ({}),
+  };
+  assert.throws(
+    () => installedEngine.normalizeInstalledEngineResult(result, {
+      witness: duckWitness,
+      acceptanceAuthority: duckCoordinator,
+    }),
+    /duck-typed|intake-frozen|ACCEPTANCE_BATCH/i,
+  );
+  // accepted-result-injection: status "accepted" and caller engineObservation are rejected.
+  assert.throws(
+    () => installedEngine.buildInstalledEngineResult({
+      profile,
+      status: 'accepted',
+      outcome: 'accepted',
+      accepted: true,
+      terminalBatch: 'atomic',
+      ledger,
+      witness: session.witness,
+      acceptanceAuthority: session.acceptance_authority,
+    }),
+    /status injection|exact-match verified replay|accepted:true/i,
+  );
+  assert.throws(
+    () => installedEngine.buildInstalledEngineResult({
+      profile,
+      status: 'complete',
+      outcome: 'accepted',
+      engineObservation: 'committed',
+      accepted: true,
+      terminalBatch: 'atomic',
+      ledger,
+      witness: session.witness,
+      acceptanceAuthority: session.acceptance_authority,
+    }),
+    /engineObservation|action-outcome|observation injection/i,
+  );
+  // caller-durable-derivation: options.durableBinding cannot influence durable derivation.
+  assert.throws(
+    () => installedEngine.compileInstalledEngineProfile({
+      binding: installedBinding,
+      governanceConfig,
+      acceptanceContract,
+      routeInputs,
+      durableBinding: {
+        ...durableBinding,
+        substrate_plan_hash: 'a'.repeat(64),
+      },
+      capabilityProbedAt: NOW,
+      capabilityExpiresAt: EXPIRES,
+    }),
+    /override|INSTALLED_BINDING_MISMATCH|mismatch|durable/i,
   );
 
   assert.throws(

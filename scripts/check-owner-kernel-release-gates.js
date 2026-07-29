@@ -164,6 +164,53 @@ function isNonEmptySha256(value) {
     && value !== 'f'.repeat(64);
 }
 
+/**
+ * Authoritative witness receipt verification using the MemoryWitness head
+ * derivation formula. Shape-only receipts with arbitrary hashes must not pass.
+ */
+function verifyAuthoritativeWitnessReceipt(receipt, {
+  signerBinding = null,
+  expectedPreviousHead = undefined,
+} = {}) {
+  verifyReceiptShape(receipt);
+  if (signerBinding) {
+    const binding = normalizeWitnessBinding(signerBinding);
+    if (typeof receipt.stream_id !== 'string'
+      || !receipt.stream_id.includes(binding.identity)) {
+      throw new Error(
+        'witness receipt stream_id is not bound to the authoritative signer identity',
+      );
+    }
+  }
+  const expectedHead = sha256(canonicalJson({
+    run_id: receipt.run_id,
+    stream_id: receipt.stream_id,
+    sequence: receipt.sequence,
+    event_hash: receipt.event_hash,
+    previous_witness_head: receipt.previous_witness_head,
+  }));
+  if (receipt.witness_head.toLowerCase() !== expectedHead.toLowerCase()) {
+    throw new Error(
+      'witness_head is not the authoritative receipt chain head '
+      + '(shape-only fabricated receipts are rejected)',
+    );
+  }
+  if (expectedPreviousHead !== undefined) {
+    const prev = receipt.previous_witness_head;
+    if (expectedPreviousHead === null) {
+      if (prev !== null && prev !== undefined && prev !== '') {
+        throw new Error('first receipt previous_witness_head must be null');
+      }
+    } else if (typeof prev !== 'string'
+      || prev.toLowerCase() !== expectedPreviousHead.toLowerCase()) {
+      throw new Error(
+        'receipt previous_witness_head does not continue the authoritative chain',
+      );
+    }
+  }
+  return true;
+}
+
 function measureSkillMember(repoRoot, name) {
   const skillPath = path.join(repoRoot, 'skills', name, 'SKILL.md');
   if (!fs.existsSync(skillPath)) {
@@ -212,7 +259,25 @@ function measureScriptMember(repoRoot, name) {
         error: `scripts/${name} parse/execution evidence failed (exit ${checked.status})`,
       };
     }
-  } else if (name.endsWith('.sh') || name.endsWith('.py') || !path.extname(name)) {
+  } else if (name.endsWith('.sh')) {
+    const checked = spawnSync('bash', ['-n', scriptPath], {
+      encoding: 'utf8',
+      cwd: repoRoot,
+    });
+    if (checked.error) {
+      return {
+        ok: false,
+        error: `scripts/${name} bash -n evidence failed: ${checked.error.message}`,
+      };
+    }
+    if (checked.status !== 0) {
+      return {
+        ok: false,
+        error: `scripts/${name} bash -n parse evidence failed (exit ${checked.status}): `
+          + `${(checked.stderr || checked.stdout || '').trim()}`,
+      };
+    }
+  } else if (name.endsWith('.py') || !path.extname(name)) {
     if (!body.startsWith('#!') && !body.includes('set -') && !body.includes('#!/')) {
       if (body.trim().length < 16) {
         return { ok: false, error: `scripts/${name} failed measurement (too short)` };
@@ -388,8 +453,25 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
         );
         continue;
       }
-    } else if (!/^#!/.test(body)) {
-      measurementErrors.push(`hooks/${name} shell hook missing shebang parse evidence`);
+    } else if (hookPath.endsWith('.sh')) {
+      // Every frozen shell-hook member requires deterministic bash -n evidence.
+      if (!/^#!/.test(body)) {
+        measurementErrors.push(`hooks/${name} shell hook missing shebang`);
+        continue;
+      }
+      const parsed = spawnSync('bash', ['-n', hookPath], {
+        encoding: 'utf8',
+        cwd: repoRoot,
+      });
+      if (parsed.error || parsed.status !== 0) {
+        measurementErrors.push(
+          `hooks/${name} bash -n parse evidence failed: `
+          + `${parsed.error ? parsed.error.message : (parsed.stderr || 'bash -n failed')}`,
+        );
+        continue;
+      }
+    } else {
+      measurementErrors.push(`hooks/${name} has unsupported extension for KR10 parse evidence`);
       continue;
     }
     hookEvidence.push(name);
@@ -717,6 +799,7 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
     const cycleSignerBinding = productionTelemetry.compatibility_cycle_signer_binding;
     let cycleReceiptBound = false;
     let signerBinding = null;
+    let verifiedCycleReceipt = null;
     if (typeof cycleId === 'string'
       && /^[a-z0-9][a-z0-9._-]{2,128}$/i.test(cycleId)
       && cycleReceiptBody && typeof cycleReceiptBody === 'object'
@@ -724,32 +807,29 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
       && cycleReceiptBody.compatibility_cycle_id === cycleId
       && cycleReceipt && typeof cycleReceipt === 'object'
       && !Array.isArray(cycleReceipt)
-      && cycleSignerBinding && typeof cycleSignerBinding === 'object') {
+      && cycleSignerBinding && typeof cycleSignerBinding === 'object'
+      && productionTelemetry.shipped_compatibility_cycle === true) {
       try {
         signerBinding = normalizeWitnessBinding(cycleSignerBinding);
-        verifyReceiptShape(cycleReceipt);
-        if (cycleReceipt.stream_id
-          && typeof cycleReceipt.stream_id === 'string'
-          && cycleReceipt.stream_id.includes(signerBinding.identity)
-          && isNonEmptySha256(cycleReceipt.witness_head)
-          && isNonEmptySha256(cycleReceipt.event_hash)
-          && productionTelemetry.shipped_compatibility_cycle === true) {
-          const selfBodyHash = sha256(canonicalJson(cycleReceiptBody));
-          const selfSignatureMaterial = sha256(canonicalJson({
-            receipt_hash: selfBodyHash,
-            body_hash: selfBodyHash,
-            compatibility_cycle_id: cycleId,
-          }));
-          if (cycleReceipt.event_hash.toLowerCase() === selfBodyHash.toLowerCase()
-            || cycleReceipt.witness_head.toLowerCase() === selfBodyHash.toLowerCase()
-            || cycleReceipt.event_hash.toLowerCase() === selfSignatureMaterial.toLowerCase()) {
-            cycleReceiptBound = false;
-          } else {
-            cycleReceiptBound = true;
-          }
+        // Authoritative signer/witness API: normalizeWitnessBinding + head-derivation
+        // verify (not shape-only). Day-zero genesis receipt has null previous head.
+        verifyAuthoritativeWitnessReceipt(cycleReceipt, {
+          signerBinding,
+          expectedPreviousHead: null,
+        });
+        // Body must be content-bound to the receipt event_hash (not free-form).
+        const bodyHash = sha256(canonicalJson(cycleReceiptBody));
+        if (cycleReceipt.event_hash.toLowerCase() !== bodyHash.toLowerCase()) {
+          throw new Error(
+            'compatibility cycle receipt event_hash is not bound to receipt body',
+          );
         }
+        verifiedCycleReceipt = cycleReceipt;
+        cycleReceiptBound = true;
       } catch (_error) {
         cycleReceiptBound = false;
+        verifiedCycleReceipt = null;
+        signerBinding = null;
       }
     }
     shippedCompatibilityCycle = cycleReceiptBound;
@@ -757,8 +837,8 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
       blocking.push(
         'shipped compatibility cycle evidence missing or incomplete '
         + '(require authoritative signer_binding via normalizeWitnessBinding + '
-        + 'compatibility_cycle_ship_receipt verified by verifyReceiptShape bound to that signer; '
-        + 'reject self-computable shaped hashes and self-asserted booleans)',
+        + 'compatibility_cycle_ship_receipt verified by the authoritative witness head API '
+        + 'bound to that signer; reject shape-only fabricated receipts and self-asserted booleans)',
       );
     }
 
@@ -795,9 +875,15 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
         + `have ${dayRecords ? dayRecords.length : 0} day records, `
         + `require ${ALIAS_DEFINITION.required_witnessed_days} (scalar day count alone is insufficient)`,
       );
+    } else if (!shippedCompatibilityCycle || !verifiedCycleReceipt || !signerBinding) {
+      blocking.push(
+        '14-day witnessed chain cannot be validated without an authoritative shipped-cycle receipt',
+      );
     } else {
       const validDays = [];
-      let previousWitnessHead = null;
+      // Day one must continue the shipped-cycle receipt head (bind first day to
+      // the authoritative compatibility-cycle receipt).
+      let previousWitnessHead = verifiedCycleReceipt.witness_head.toLowerCase();
       for (const day of dayRecords) {
         if (!day || typeof day !== 'object') continue;
         if (typeof day.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day.day)) continue;
@@ -806,47 +892,46 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
         const dayReceipt = day.witness_receipt;
         if (!dayReceipt || typeof dayReceipt !== 'object' || Array.isArray(dayReceipt)) continue;
         try {
-          verifyReceiptShape(dayReceipt);
+          verifyAuthoritativeWitnessReceipt(dayReceipt, {
+            signerBinding,
+            expectedPreviousHead: previousWitnessHead,
+          });
         } catch (_error) {
-          continue;
-        }
-        if (!isNonEmptySha256(dayReceipt.witness_head)
-          || !isNonEmptySha256(dayReceipt.event_hash)) continue;
-        const selfDayHash = sha256(canonicalJson({
-          day: day.day,
-          translation_used_events: 0,
-          unresolved_translation_deltas: 0,
-        }));
-        if (dayReceipt.witness_head.toLowerCase() === selfDayHash.toLowerCase()
-          || dayReceipt.event_hash.toLowerCase() === selfDayHash.toLowerCase()) {
-          continue;
-        }
-        if (previousWitnessHead == null) {
-          if (dayReceipt.previous_witness_head !== null
-            && dayReceipt.previous_witness_head !== undefined
-            && dayReceipt.previous_witness_head !== '') {
-            continue;
-          }
-        } else if (dayReceipt.previous_witness_head == null
-          || dayReceipt.previous_witness_head.toLowerCase() !== previousWitnessHead.toLowerCase()) {
           continue;
         }
         if (day.witness_head
           && day.witness_head.toLowerCase() !== dayReceipt.witness_head.toLowerCase()) {
           continue;
         }
+        // Day body must be content-bound to the receipt event_hash via either the
+        // canonical day material or an explicit event_body_hash field.
+        const dayBodyHash = sha256(canonicalJson({
+          day: day.day,
+          translation_used_events: 0,
+          unresolved_translation_deltas: 0,
+          prior_witness_head: previousWitnessHead,
+        }));
+        const eventHash = dayReceipt.event_hash.toLowerCase();
+        const boundToCanonicalDay = eventHash === dayBodyHash.toLowerCase();
+        const boundToExplicitBody = typeof day.event_body_hash === 'string'
+          && day.event_body_hash.toLowerCase() === eventHash
+          && isNonEmptySha256(day.event_body_hash);
+        if (!boundToCanonicalDay && !boundToExplicitBody) {
+          continue;
+        }
         validDays.push({
           day: day.day,
           witness_head: dayReceipt.witness_head.toLowerCase(),
-          event_hash: dayReceipt.event_hash.toLowerCase(),
+          event_hash: eventHash,
         });
         previousWitnessHead = dayReceipt.witness_head.toLowerCase();
       }
       if (validDays.length < ALIAS_DEFINITION.required_witnessed_days) {
         blocking.push(
-          `only ${validDays.length} complete witnessed day records with linked receipt chain, `
-          + `zero translation use, and dates strictly before today; `
-          + `require ${ALIAS_DEFINITION.required_witnessed_days}`,
+          `only ${validDays.length} complete witnessed day records with authoritative receipt chain `
+          + `bound to the shipped-cycle receipt, zero translation use, and dates strictly before today; `
+          + `require ${ALIAS_DEFINITION.required_witnessed_days} `
+          + '(shape-only fabricated chains are rejected)',
         );
       }
       const distinctDays = new Set(validDays.map((day) => day.day));

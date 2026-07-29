@@ -121,8 +121,39 @@ const RESULT_KEYS = new Set([
   'result_hash',
 ]);
 
+// Only createInstalledEngineSession / resumeInstalledEngineSession may register
+// intake-frozen witness and coordinator instances for accepted-result replay.
+const INTAKE_FROZEN_WITNESSES = new WeakSet();
+const INTAKE_FROZEN_COORDINATORS = new WeakSet();
+
 function installedEngineError(message, code = 'INVALID_INSTALLED_ENGINE') {
   throw new OwnerKernelError(message, code);
+}
+
+function registerIntakeFrozenAuthorities(witness, acceptanceAuthority) {
+  if (witness && typeof witness === 'object') {
+    INTAKE_FROZEN_WITNESSES.add(witness);
+  }
+  if (acceptanceAuthority && typeof acceptanceAuthority === 'object') {
+    INTAKE_FROZEN_COORDINATORS.add(acceptanceAuthority);
+  }
+}
+
+function assertIntakeFrozenInstalledVerifiers(witness, acceptanceAuthority) {
+  if (!witness || !INTAKE_FROZEN_WITNESSES.has(witness)) {
+    installedEngineError(
+      'accepted:true result rejects caller-supplied duck-typed witness substitutes; '
+      + 'only intake-frozen installed witness instances can verify accepted replay',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
+  if (!acceptanceAuthority || !INTAKE_FROZEN_COORDINATORS.has(acceptanceAuthority)) {
+    installedEngineError(
+      'accepted:true result rejects caller-supplied duck-typed coordinator substitutes; '
+      + 'only intake-frozen installed acceptance coordinator instances can verify accepted replay',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
 }
 
 function assertObject(value, label) {
@@ -268,26 +299,22 @@ function durableAndKernelFromInstalled(installedBinding, options = {}) {
   }
   const installedDefaults = durableBindingFromInstalled(binding);
   const kernelBinding = cloneCanonical(binding.service_bindings.kernel);
+  // Caller options.durableBinding / verifiedHandoff / handoffClaim / runBinding /
+  // substratePlan are NOT derivation inputs. Only routeInputs-bound materials may
+  // authorize the route-verified durable; otherwise the installed defaults clone
+  // is returned unmodified.
   const routeInputs = options.routeInputs && typeof options.routeInputs === 'object'
     ? options.routeInputs
     : {};
-  const candidateRaw = Object.prototype.hasOwnProperty.call(options, 'durableBinding')
-    && options.durableBinding != null
-    ? options.durableBinding
-    : (routeInputs.durableBinding != null ? routeInputs.durableBinding : null);
-  const handoff = options.verifiedHandoff || routeInputs.verifiedHandoff || null;
-  const claim = options.handoffClaim || routeInputs.handoffClaim || null;
-  const runBinding = options.runBinding || routeInputs.runBinding || null;
-  const substratePlan = options.substratePlan || routeInputs.substratePlan || null;
+  const routeDurableRaw = routeInputs.durableBinding != null
+    ? routeInputs.durableBinding
+    : null;
+  const handoff = routeInputs.verifiedHandoff || null;
+  const claim = routeInputs.handoffClaim || null;
+  const runBinding = routeInputs.runBinding || null;
+  const substratePlan = routeInputs.substratePlan || null;
 
-  if (candidateRaw == null) {
-    if (substratePlan != null || handoff != null || runBinding != null) {
-      installedEngineError(
-        'caller substrate ABI/plan inputs cannot derive durable state; '
-        + 'supply a complete durableBinding verified by the installed/route path',
-        'INSTALLED_BINDING_MISMATCH',
-      );
-    }
+  if (routeDurableRaw == null) {
     return {
       installedBinding: binding,
       durableBinding: cloneCanonical(installedDefaults),
@@ -297,16 +324,16 @@ function durableAndKernelFromInstalled(installedBinding, options = {}) {
 
   let durable;
   try {
-    durable = normalizeDurableBinding(candidateRaw);
+    durable = normalizeDurableBinding(routeDurableRaw);
   } catch (error) {
     installedEngineError(
-      `caller durable binding failed canonical normalization: ${error.message}`,
+      `route durable binding failed canonical normalization: ${error.message}`,
       'INSTALLED_BINDING_MISMATCH',
     );
   }
   if (!installedCoreMatchesDurable(binding, durable)) {
     installedEngineError(
-      'caller durable binding mismatches installed core install/run/cohort/services',
+      'route durable binding mismatches installed core install/run/cohort/services',
       'INSTALLED_BINDING_MISMATCH',
     );
   }
@@ -332,6 +359,7 @@ function durableAndKernelFromInstalled(installedBinding, options = {}) {
         'INSTALLED_BINDING_MISMATCH',
       );
     }
+    // Return the route-verifier clone unmodified — never options.durableBinding.
     return {
       installedBinding: binding,
       durableBinding: cloneCanonical(durable),
@@ -341,7 +369,7 @@ function durableAndKernelFromInstalled(installedBinding, options = {}) {
 
   if (canonicalJson(durable) !== canonicalJson(installedDefaults)) {
     installedEngineError(
-      'caller durable binding must exact-match installed-derived state without route materials',
+      'route durable binding must exact-match installed-derived state without complete route materials',
       'INSTALLED_BINDING_MISMATCH',
     );
   }
@@ -1176,6 +1204,7 @@ function createInstalledEngineSession(options = {}) {
   } catch (error) {
     throw error;
   }
+  registerIntakeFrozenAuthorities(session.witness, session.acceptance_authority);
   return Object.freeze(wrapSession(session, profile, tracker));
 }
 
@@ -1313,6 +1342,7 @@ function resumeInstalledEngineSession(options = {}) {
       return true;
     },
   };
+  registerIntakeFrozenAuthorities(witness, acceptanceAuthority);
   return Object.freeze(wrapSession(session, profile, tracker));
 }
 
@@ -1327,15 +1357,15 @@ function verifyAcceptedLedgerCanonical(ledger, {
       'ACCEPTANCE_BATCH_REQUIRED',
     );
   }
-  if (!witness || typeof witness.getHead !== 'function'
+  assertIntakeFrozenInstalledVerifiers(witness, acceptanceAuthority);
+  if (typeof witness.getHead !== 'function'
     || typeof witness.verifyBatch !== 'function') {
     installedEngineError(
       'accepted:true result requires the authoritative witness adapter for strict replay',
       'ACCEPTANCE_BATCH_REQUIRED',
     );
   }
-  if (!acceptanceAuthority
-    || typeof acceptanceAuthority.verifyCommit !== 'function'
+  if (typeof acceptanceAuthority.verifyCommit !== 'function'
     || typeof acceptanceAuthority.verifyResolution !== 'function') {
     installedEngineError(
       'accepted:true result requires the intake-frozen acceptance coordinator for strict replay',
@@ -1426,12 +1456,23 @@ function deriveAcceptedFieldsFromVerifiedReplay(ledger, verified) {
     status: 'accepted',
     terminal: true,
   };
+  // Engine observation is derived from verified action-outcome replay only —
+  // never caller-supplied Engine terminal labels such as "committed".
+  if (!reconstructed.engine_observation
+    || typeof reconstructed.engine_observation !== 'object') {
+    installedEngineError(
+      'accepted:true result requires engine_observation derived from verified action-outcome replay',
+      'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
+  const engineObservation = cloneCanonical(reconstructed.engine_observation);
   return {
     verified,
     reconstructed,
     status: verified.state.status,
     outcome: 'accepted',
     terminal_batch: 'atomic',
+    engine_observation: engineObservation,
     disclosure,
     disclosure_hash: sha256(canonicalJson(disclosure)),
     acceptance_event_hash: acceptance.event_hash,
@@ -1483,6 +1524,12 @@ function assertAcceptedResultMaterial(value, options = {}) {
     installedEngineError(
       'accepted:true result terminal_batch must equal verified atomic batch; caller injection rejected',
       'ACCEPTANCE_BATCH_REQUIRED',
+    );
+  }
+  if (canonicalJson(value.engine_observation) !== canonicalJson(derived.engine_observation)) {
+    installedEngineError(
+      'accepted:true result engine_observation must equal observation derived from verified '
+      + 'action-outcome replay; caller observation injection rejected',
     );
   }
   if (!value.action_identity || typeof value.action_identity !== 'object') {
@@ -1554,7 +1601,7 @@ function normalizeInstalledEngineResult(raw, options = {}) {
       profile_hash: value.profile_hash,
       sink_id: INSTALLED_ENGINE_SINK_ID,
       action_identity: cloneCanonical(derivedAccepted.action_identity),
-      engine_observation: value.engine_observation,
+      engine_observation: cloneCanonical(derivedAccepted.engine_observation),
       accepted: true,
       terminal_batch: derivedAccepted.terminal_batch,
       authority: cloneCanonical(INSTALLED_ENGINE_AUTHORITY),
@@ -1625,22 +1672,12 @@ function buildInstalledEngineResult({
   let resolvedOutcome = outcome;
   let resolvedTerminalBatch = terminalBatch || null;
 
+  let resolvedEngineObservation = engineObservation == null ? null : engineObservation;
+
   if (accepted === true) {
     if (!resolvedLedger || !Array.isArray(resolvedLedger.events)) {
       installedEngineError(
         'accepted:true result requires the witnessed ledger',
-        'ACCEPTANCE_BATCH_REQUIRED',
-      );
-    }
-    if (status != null && status !== 'complete' && status !== 'accepted') {
-      installedEngineError('accepted:true result rejects caller status injection');
-    }
-    if (outcome != null && outcome !== 'accepted') {
-      installedEngineError('accepted:true result rejects caller outcome injection');
-    }
-    if (terminalBatch != null && terminalBatch !== 'atomic') {
-      installedEngineError(
-        'accepted:true result rejects caller terminal_batch injection',
         'ACCEPTANCE_BATCH_REQUIRED',
       );
     }
@@ -1656,6 +1693,23 @@ function buildInstalledEngineResult({
       acceptanceAuthority,
     });
     const derived = deriveAcceptedFieldsFromVerifiedReplay(resolvedLedger, verified);
+    // Every supplied field must exact-match verified replay; no silent rewrite.
+    if (status != null && status !== derived.status) {
+      installedEngineError(
+        'accepted:true result rejects caller status injection; status must exact-match verified replay',
+      );
+    }
+    if (outcome != null && outcome !== derived.outcome) {
+      installedEngineError(
+        'accepted:true result rejects caller outcome injection; outcome must exact-match verified replay',
+      );
+    }
+    if (terminalBatch != null && terminalBatch !== derived.terminal_batch) {
+      installedEngineError(
+        'accepted:true result rejects caller terminal_batch injection',
+        'ACCEPTANCE_BATCH_REQUIRED',
+      );
+    }
     if (resolvedLedgerHead != null && resolvedLedgerHead !== derived.ledger_head) {
       installedEngineError('caller ledger_head does not match verified ledger');
     }
@@ -1688,6 +1742,13 @@ function buildInstalledEngineResult({
         'caller disclosure does not match disclosure reconstructed from verified ledger replay',
       );
     }
+    if (engineObservation != null
+      && canonicalJson(engineObservation) !== canonicalJson(derived.engine_observation)) {
+      installedEngineError(
+        'caller engineObservation must exact-match observation derived from verified '
+        + 'action-outcome replay; caller observation injection rejected',
+      );
+    }
     resolvedLedgerHead = derived.ledger_head;
     resolvedAcceptanceHash = derived.acceptance_event_hash;
     resolvedCompleteHash = derived.complete_event_hash;
@@ -1698,6 +1759,7 @@ function buildInstalledEngineResult({
     resolvedStatus = derived.status;
     resolvedOutcome = derived.outcome;
     resolvedTerminalBatch = derived.terminal_batch;
+    resolvedEngineObservation = derived.engine_observation;
   } else if (resolvedLedger && Array.isArray(resolvedLedger.events)) {
     const events = resolvedLedger.events;
     if (!resolvedLedgerHead && events.length > 0) {
@@ -1713,7 +1775,9 @@ function buildInstalledEngineResult({
     profile_hash: profile.profile_hash,
     sink_id: INSTALLED_ENGINE_SINK_ID,
     action_identity: cloneCanonical(resolvedIdentity || INSTALLED_ENGINE_ACTION_IDENTITY),
-    engine_observation: engineObservation || null,
+    engine_observation: resolvedEngineObservation == null
+      ? null
+      : cloneCanonical(resolvedEngineObservation),
     accepted: accepted === true,
     terminal_batch: resolvedTerminalBatch,
     authority: cloneCanonical(INSTALLED_ENGINE_AUTHORITY),

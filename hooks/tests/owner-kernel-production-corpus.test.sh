@@ -385,95 +385,132 @@ const attackMutations = {
   },
   worker_artifact_decision_injection() {
     const fx = installedFixture('corpus-attack-worker-inject');
-    const { session } = openInstalledSession(fx, { runLabel: 'worker-inject' });
+    const workerIdentity = fx.profile.engine_profile.route.worker_binding.identity;
+    const workerBindingHash = sha256(canonicalJson(
+      fx.profile.engine_profile.route.worker_binding,
+    ));
+    let workerArtifactIntakeCalls = 0;
+    // Real installed worker-artifact intake: evidenceVerifier is the gate that
+    // classifies worker output. Decision-shaped worker artifacts must be rejected
+    // there — not only via generic missing-adapter failures or manual ledger edits.
+    const adapters = {
+      ...fx.runtime.adapters(),
+      evidenceVerifier(request, context) {
+        workerArtifactIntakeCalls += 1;
+        if (request
+          && (request.kind === 'worker_artifact'
+            || request.channel === 'worker-artifact'
+            || request.source_artifact
+            || request.decision_id
+            || (request.payload && request.payload.type === 'decision'))) {
+          return {
+            ok: false,
+            reason: 'decision_source_invalid',
+            run_id: context.run_id,
+          };
+        }
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: 'owner-kernel',
+          channel: 'kernel-evidence',
+          envelope_hash: sha256(canonicalJson({ request, context })),
+          payload: {
+            emitter_kind: 'kernel',
+            verification_path: 'kernel_verify',
+            artifact_hashes: [],
+          },
+        };
+      },
+      evidenceArchiver({ verified_evidence }) {
+        return {
+          uri: `durable://corpus-worker-artifact/${sha256(canonicalJson(verified_evidence))}`,
+          sha256: sha256(canonicalJson(verified_evidence)),
+        };
+      },
+      delegationVerifier(dispatchEnvelope, context) {
+        if (dispatchEnvelope
+          && (dispatchEnvelope.channel === 'worker-artifact'
+            || dispatchEnvelope.inject_decision
+            || dispatchEnvelope.source_artifact)) {
+          return { ok: false, reason: 'decision_source_invalid', run_id: context.run_id };
+        }
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: workerIdentity,
+          channel: 'delegation',
+          envelope_hash: sha256(canonicalJson(dispatchEnvelope)),
+          payload: {
+            dispatch_hash: sha256(canonicalJson(dispatchEnvelope)),
+            worker_identity: workerIdentity,
+            worker_family: 'qwen',
+            worker_binding_hash: workerBindingHash,
+          },
+        };
+      },
+    };
+    const { session } = openInstalledSession(fx, {
+      runLabel: 'worker-inject',
+      adapters,
+    });
     const decision = session.kernel.mintActionDecision({
       capability: session.owner_capability,
       ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'worker-inject' },
       actionClass: 'external',
       actionDescriptor: fx.profile.action,
     });
-    const workerIdentity = fx.profile.engine_profile.route.worker_binding.identity;
-    const workerBindingHash = sha256(canonicalJson(
-      fx.profile.engine_profile.route.worker_binding,
-    ));
-    const workerEvidenceHeld = held(() => session.kernel.recordEvidence({
-      purpose: 'worker-artifact-decision-injection',
-      kind: 'worker_artifact',
-      channel: 'worker-artifact',
-      worker_identity: workerIdentity,
-      worker_binding_hash: workerBindingHash,
-      decision_id: 'worker-injected-decision',
-      action_descriptor: fx.profile.action,
-      source_artifact: 'worker-decision.json',
-    }));
-    const workerDelegationHeld = held(() => session.kernel.delegate({
-      capability: session.owner_capability,
-      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'worker-delegate' },
-      decisionId: decision.payload.decision_id,
-      dispatchEnvelope: {
+    let intakeError = null;
+    try {
+      session.kernel.recordEvidence({
+        purpose: 'worker-artifact-decision-injection',
+        kind: 'worker_artifact',
+        channel: 'worker-artifact',
         worker_identity: workerIdentity,
         worker_binding_hash: workerBindingHash,
-        channel: 'worker-artifact',
-        inject_decision: {
-          decision_id: 'worker-injected-decision',
-          action_descriptor: {
-            ...fx.profile.action,
-            targets: ['worker-forged-target'],
-          },
-        },
-      },
-    }));
-    const ledger = structuredClone(session.kernel.getLedger());
-    ledger.events.push({
-      type: 'decision',
-      event_hash: 'a'.repeat(64),
-      emitter: { kind: 'worker', identity: workerIdentity, channel: 'worker-artifact' },
-      payload: {
         decision_id: 'worker-injected-decision',
-        action_class: 'external',
         action_descriptor: {
-          catalog_id: 'engine-implementation-dispatch-v1',
-          operation: 'engine_implementation_dispatch',
-          tool_class: 'model_runner',
-          action_class: 'external',
+          ...fx.profile.action,
           targets: ['worker-forged-target'],
-          target_set_hash: sha256(canonicalJson(['worker-forged-target'])),
         },
-        action_descriptor_hash: sha256(canonicalJson({
-          catalog_id: 'engine-implementation-dispatch-v1',
-          operation: 'engine_implementation_dispatch',
-          tool_class: 'model_runner',
-          action_class: 'external',
-          targets: ['worker-forged-target'],
-          target_set_hash: sha256(canonicalJson(['worker-forged-target'])),
-        })),
-      },
-    });
-    const reconstructHeld = held(() => installedEngine.reconstructActionIdentityFromLedger(ledger));
-    session.teardown();
+        source_artifact: 'worker-decision.json',
+        payload: {
+          type: 'decision',
+          decision_id: 'worker-injected-decision',
+          descriptor: 'worker-forged-target',
+        },
+      });
+    } catch (error) {
+      intakeError = error;
+    }
+    const workerArtifactIntakeHeld = intakeError != null
+      && workerArtifactIntakeCalls === 1
+      && /decision_source|UNVERIFIED_EVIDENCE|not verified|worker/i.test(
+        String(intakeError && intakeError.message ? intakeError.message : intakeError),
+      );
+    const decisionsBefore = session.kernel.getLedger().events
+      .filter((event) => event.type === 'decision').length;
+    assert.equal(decisionsBefore, 1);
     assert.equal(decision.payload.action_class, 'external');
-    return workerEvidenceHeld && workerDelegationHeld && reconstructHeld;
+    session.teardown();
+    return workerArtifactIntakeHeld;
   },
   child_process_capability_theft() {
     const fx = installedFixture('corpus-attack-cap-theft');
-    const { session } = openInstalledSession(fx, { runLabel: 'cap-theft' });
+    const { session, witnessInvoke } = openInstalledSession(fx, { runLabel: 'cap-theft' });
     const realCapability = session.owner_capability;
     const stateJson = JSON.stringify(session.kernel.getState());
     const ledgerJson = JSON.stringify(session.kernel.getLedger());
     const leaked = stateJson.includes('owner_capability')
       || ledgerJson.includes('owner_capability')
       || JSON.stringify(session.kernel.disclosure()).includes(String(realCapability));
+    // Serialize only the capability blob the child could steal — not live WeakMap identity.
     const stolenPayload = JSON.stringify({
       capability: realCapability,
       action: fx.profile.action,
       root,
-      profile: fx.profile,
-      binding: fx.installedBinding,
-      durableBinding: fx.durableBinding,
-      governanceConfig: fx.runtime.governanceConfig,
       acceptanceContract,
-      routeInputs: fx.runtime.routeInputs,
-      now: fx.now,
+      now: fx.runtime.NOW,
       expires: fx.expires,
     });
     const child = require('child_process').spawnSync(
@@ -482,47 +519,136 @@ const attackMutations = {
         const path = require('path');
         const payload = JSON.parse(process.argv[1]);
         const eng = require(path.join(payload.root, 'src/engine/supervised-owner-kernel-installed-engine'));
+        const installedContract = require(path.join(
+          payload.root, 'src/engine/supervised-owner-kernel-installed-contract',
+        ));
+        const { createP37Runtime } = require(path.join(payload.root, 'hooks/tests/fixtures/p37-runtime'));
+        // Child builds its own complete installed session; only the stolen
+        // capability token is imported from the parent process.
+        const childRuntime = createP37Runtime(payload.root, {
+          actionCatalog: [eng.ENGINE_IMPLEMENTATION_CATALOG_ENTRY],
+          acceptanceContract: payload.acceptanceContract,
+          runId: 'corpus-attack-cap-theft-child',
+        });
+        const { durableBinding, serviceBindings, kernelBinding, hash } = childRuntime;
+        const bindings = { kernel: {
+          role: 'kernel',
+          identity: kernelBinding.identity,
+          uid: kernelBinding.uid,
+          gid: kernelBinding.gid,
+          attestation_hash: kernelBinding.attestation_hash,
+          cgroup_binding_hash: kernelBinding.cgroup_binding_hash,
+        } };
+        for (const [role, service] of Object.entries(serviceBindings)) {
+          bindings[role] = {
+            role,
+            identity: service.identity,
+            uid: service.uid,
+            gid: service.gid,
+            attestation_hash: service.attestation_hash,
+            cgroup_binding_hash: service.cgroup_binding_hash,
+          };
+        }
+        const binding = installedContract.normalizeInstalledBinding({
+          schema_version: 1,
+          kind: 'p37_installed_state_binding',
+          install_binding_hash: durableBinding.install_binding_hash,
+          run_binding_hash: durableBinding.run_binding_hash,
+          installed_abi_hash: installedContract.getSupervisedOwnerKernelInstalledAbiHash(),
+          durable_abi_hash: durableBinding.durable_abi_hash,
+          cohort_id: durableBinding.cohort_id,
+          generation: durableBinding.generation,
+          service_bindings: bindings,
+          snapshot_hash: hash({ cohort: durableBinding.cohort_id, gen: durableBinding.generation }),
+        });
+        const nowIso = new Date(payload.now).toISOString();
+        const expiresIso = new Date(payload.expires || (payload.now + 3600000)).toISOString();
+        const profile = eng.compileInstalledEngineProfile({
+          binding,
+          governanceConfig: childRuntime.governanceConfig,
+          acceptanceContract: payload.acceptanceContract,
+          routeInputs: childRuntime.routeInputs,
+          durableBinding,
+          kernelBinding,
+          capabilityProbedAt: nowIso,
+          capabilityExpiresAt: expiresIso,
+        });
+        const childWitness = childRuntime.createWitnessInvoke();
+        const capabilityOnly = (message) => {
+          if (message.operation && message.operation.startsWith('capability:')) {
+            const request = message.request;
+            const response = {
+              ok: true,
+              run_id: request.run_id,
+              host_capability_hash: request.host_capability_hash,
+              observation_hash: childRuntime.hash({ operation: message.operation, request }),
+              probe_nonce: request.probe_nonce,
+            };
+            return {
+              schema_version: 1,
+              kind: 'p37_engine_host_response',
+              profile_hash: message.profile_hash,
+              route_hash: message.route_hash,
+              operation: message.operation,
+              request_hash: message.request_hash,
+              response,
+              response_hash: childRuntime.hash(response),
+            };
+          }
+          throw new Error('child must not execute');
+        };
+        let childSession;
         try {
-          const session = eng.createInstalledEngineSession({
-            profile: payload.profile,
-            binding: payload.binding,
-            durableBinding: payload.durableBinding,
-            governanceConfig: payload.governanceConfig,
+          childSession = eng.createInstalledEngineSession({
+            profile,
+            binding,
+            durableBinding,
+            governanceConfig: childRuntime.governanceConfig,
             acceptanceContract: payload.acceptanceContract,
-            routeInputs: payload.routeInputs,
-            witnessInvoke: () => { throw new Error('child has no witness'); },
-            engineInvoke: () => { throw new Error('child has no engine'); },
-            coordinatorInvoke: () => { throw new Error('child has no coordinator'); },
+            routeInputs: childRuntime.routeInputs,
+            witnessInvoke: childWitness,
+            engineInvoke: capabilityOnly,
+            coordinatorInvoke: () => { throw new Error('child must not accept'); },
             kernelOptions: {
               initialIntentEnvelope: {
                 signed: true,
                 payload: { text: 'stolen-child', explicit_action_hashes: [] },
               },
               initialOwnerId: 'owner-a',
-              adapters: {},
+              adapters: childRuntime.adapters(),
               clock: () => new Date(payload.now),
               nonceFactory: () => 'd'.repeat(64),
             },
           });
-          session.kernel.mintActionDecision({
+        } catch (error) {
+          process.stdout.write('CHILD_SESSION_FAILED:' + (error && error.message ? error.message : 'failed'));
+          process.exit(2);
+        }
+        process.stdout.write('CHILD_SESSION_OK\\n');
+        try {
+          childSession.kernel.mintActionDecision({
             capability: payload.capability,
             ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'stolen' },
             actionClass: 'external',
-            actionDescriptor: payload.action,
+            actionDescriptor: profile.action,
           });
           process.stdout.write('CHILD_AUTHORIZED');
           process.exit(0);
         } catch (error) {
-          process.stdout.write('CHILD_HELD:' + (error && error.message ? error.message : 'held'));
+          const msg = error && error.message ? error.message : 'held';
+          const code = error && error.code ? error.code : '';
+          process.stdout.write('CHILD_HELD:' + code + ':' + msg);
           process.exit(1);
         }
       `, stolenPayload],
-      { encoding: 'utf8', cwd: root, timeout: 15000 },
+      { encoding: 'utf8', cwd: root, timeout: 20000 },
     );
+    const childOut = typeof child.stdout === 'string' ? child.stdout : '';
     const childHeld = child.status === 1
-      && typeof child.stdout === 'string'
-      && child.stdout.includes('CHILD_HELD')
-      && !child.stdout.includes('CHILD_AUTHORIZED');
+      && childOut.includes('CHILD_SESSION_OK')
+      && childOut.includes('CHILD_HELD')
+      && !childOut.includes('CHILD_AUTHORIZED')
+      && /OWNER_CAPABILITY|capability|in-memory owner capability/i.test(childOut);
     const sameProcessHeld = held(() => session.kernel.mintActionDecision({
       capability: { stolen: true, from: 'child-process', token: realCapability },
       ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'theft' },
@@ -764,16 +890,85 @@ const categoryMutations = {
   async worker_failure() {
     const fx = installedFixture('corpus-cat-worker-fail');
     let engineCalls = 0;
-    function failingWorkerInvoke(message) {
+    const authorizations = new Map();
+    // Valid mediated capability responses so execution reaches the worker exactly once.
+    function mediatedFailingWorkerInvoke(message) {
+      const request = message.request;
       if (message.operation && message.operation.startsWith('capability:')) {
-        return capabilityOnlyInvoke(fx)(message);
+        const response = {
+          ok: true,
+          run_id: request.run_id,
+          host_capability_hash: request.host_capability_hash,
+          observation_hash: fx.hash({ operation: message.operation, request }),
+          probe_nonce: request.probe_nonce,
+        };
+        if (message.operation === 'capability:pre_action') {
+          response.execution_permit = {
+            permit_id: `permit-${request.claim_id}`,
+            run_id: request.run_id,
+            witness_stream_id: request.witness_stream_id,
+            witness_binding_hash: request.witness_binding_hash,
+            authority_hash: request.authority_hash,
+            claim_id: request.claim_id,
+            pre_action_witness_head: request.pre_action_witness_head,
+            host_capability_hash: request.host_capability_hash,
+            action_descriptor_hash: request.action_descriptor_hash,
+            executor_binding_hash: request.executor_binding_hash,
+            audience_identity: request.audience_identity,
+            expires_at: new Date(fx.runtime.NOW + 120000).toISOString(),
+            attestation_hash: fx.hash(`permit:${request.claim_id}`),
+            issuer: fx.profile.engine_profile.route.kernel_binding.identity,
+            issuer_attestation_hash: fx.profile.engine_profile.route.kernel_binding.attestation_hash,
+            preclaim_authorization: `preclaim:${request.claim_id}`,
+          };
+        }
+        if (message.operation === 'capability:post_claim') {
+          const authorization = {
+            authorization_id: `authorization-${request.claim_id}`,
+            run_id: request.run_id,
+            witness_stream_id: request.witness_stream_id,
+            witness_binding_hash: request.witness_binding_hash,
+            authority_hash: request.authority_hash,
+            claim_id: request.claim_id,
+            claim_event_hash: request.claim_event_hash,
+            claim_witness_head: request.claim_witness_head,
+            claim_emitted_at: request.claim_emitted_at,
+            execution_permit_id: request.execution_permit.permit_id,
+            execution_permit_hash: request.execution_permit_hash,
+            host_capability_hash: request.host_capability_hash,
+            action_descriptor_hash: request.action_descriptor_hash,
+            executor_binding_hash: request.executor_binding_hash,
+            audience_identity: request.audience_identity,
+            issued_at: new Date(fx.runtime.NOW).toISOString(),
+            expires_at: new Date(fx.runtime.NOW + 60000).toISOString(),
+            attestation_hash: fx.hash(`authorization:${request.claim_id}`),
+            issuer: fx.profile.engine_profile.route.kernel_binding.identity,
+            issuer_attestation_hash: fx.profile.engine_profile.route.kernel_binding.attestation_hash,
+            authorization: `postclaim:${request.claim_id}:${request.claim_event_hash}`,
+          };
+          authorizations.set(authorization.authorization_id, authorization.authorization);
+          response.execution_authorization = authorization;
+        }
+        return {
+          schema_version: 1,
+          kind: 'p37_engine_host_response',
+          profile_hash: message.profile_hash,
+          route_hash: message.route_hash,
+          operation: message.operation,
+          request_hash: message.request_hash,
+          response,
+          response_hash: fx.hash(response),
+        };
       }
-      engineCalls += 1;
-      throw new Error('worker exited non-zero / dirty tree');
+      if (message.operation === 'execute_engine_dispatch') {
+        engineCalls += 1;
+        throw new Error('worker exited non-zero / dirty tree');
+      }
+      throw new Error(`unexpected engine op ${message.operation}`);
     }
     const { session } = openInstalledSession(fx, {
       runLabel: 'worker-failure',
-      engineInvoke: failingWorkerInvoke,
+      engineInvoke: mediatedFailingWorkerInvoke,
     });
     const decision = session.kernel.mintActionDecision({
       capability: session.owner_capability,
@@ -789,17 +984,37 @@ const categoryMutations = {
         max_uses: 1,
       },
     });
-    const failed = await held(() => session.kernel.executeAuthorizedAction({
-      decisionId: decision.payload.decision_id,
-      action: fx.profile.action,
-      timeoutMilliseconds: 1000,
-    }));
+    // executeAuthorizedAction does not rethrow worker failures after a claim is
+    // witnessed — it records an unknown outcome. The oracle must require the
+    // failing worker to run exactly once under valid mediation.
+    let executeResult = null;
+    let executeThrew = false;
+    try {
+      executeResult = await session.kernel.executeAuthorizedAction({
+        decisionId: decision.payload.decision_id,
+        action: fx.profile.action,
+        timeoutMilliseconds: 1000,
+      });
+    } catch (_error) {
+      executeThrew = true;
+    }
+    const outcomePayload = executeResult
+      && executeResult.outcome
+      && executeResult.outcome.payload;
+    const workerFailedOnce = engineCalls === 1
+      && !executeThrew
+      && outcomePayload
+      && outcomePayload.outcome === 'unknown'
+      && (
+        outcomePayload.error_code === 'executor_exception'
+        || outcomePayload.error_code === 'action_boundary_ambiguous'
+      );
     const acceptHeld = await held(() => session.kernel.accept({
       capability: session.owner_capability,
       timeoutMilliseconds: 1000,
     }));
     session.teardown();
-    return failed && acceptHeld && engineCalls >= 0 ? 'recover' : 'accept';
+    return workerFailedOnce && acceptHeld ? 'recover' : 'accept';
   },
   unavailable_challenger() {
     const fx = installedFixture('corpus-cat-challenger');

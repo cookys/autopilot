@@ -735,18 +735,33 @@ const attackMutations = {
       && childOut.includes('CHILD_HELD')
       && !childOut.includes('CHILD_AUTHORIZED')
       && /OWNER_CAPABILITY|capability|in-memory owner capability/i.test(childOut);
-    const sameProcessHeld = held(() => session.kernel.mintActionDecision({
+    const sameProcessHeld = heldNamed(() => session.kernel.mintActionDecision({
       capability: { stolen: true, from: 'child-process', token: realCapability },
       ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'theft' },
       actionClass: 'external',
       actionDescriptor: fx.profile.action,
-    }));
+    }), {
+      code: 'OWNER_CAPABILITY_REQUIRED',
+      messagePattern: /capability|owner/i,
+      label: 'child_process_capability_theft_same_process',
+    });
     session.teardown();
     return !leaked && childHeld && sameProcessHeld;
   },
   policy_kernel_mutation() {
     const fx = installedFixture('corpus-attack-policy-kernel');
-    return held(() => installedEngine.compileInstalledEngineProfile({
+    // Positive control: clean durable binding compiles.
+    const control = installedEngine.compileInstalledEngineProfile({
+      binding: fx.installedBinding,
+      governanceConfig: fx.runtime.governanceConfig,
+      acceptanceContract,
+      routeInputs: fx.runtime.routeInputs,
+      durableBinding: fx.durableBinding,
+      capabilityProbedAt: fx.now,
+      capabilityExpiresAt: fx.expires,
+    });
+    assert.equal(control.sink_id, 'engine-implementation-dispatch-v1');
+    return heldNamed(() => installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
       governanceConfig: fx.runtime.governanceConfig,
       acceptanceContract,
@@ -757,7 +772,11 @@ const attackMutations = {
       },
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }));
+    }), {
+      code: 'INSTALLED_BINDING_MISMATCH',
+      messagePattern: /binding|hash|cohort|route/i,
+      label: 'policy_kernel_mutation',
+    });
   },
   async mediated_action_bypass() {
     const fx = installedFixture('corpus-attack-mediated-bypass');
@@ -773,7 +792,7 @@ const attackMutations = {
       action: fx.profile.action,
       timeoutMilliseconds: 1000,
     });
-    const lateApprovalHeld = await held(() => session.kernel.submitApproval({
+    const lateApprovalHeld = await heldNamed(() => session.kernel.submitApproval({
       signed: true,
       payload: {
         decision_id: decision.payload.decision_id,
@@ -781,9 +800,17 @@ const attackMutations = {
         max_uses: 99,
         forged_async_bypass: true,
       },
-    }));
-    const executeWithoutMediation = await held(() => raceExecute);
-    const foreignOpHeld = held(() => installedEngine.compileInstalledEngineProfile({
+    }), {
+      code: 'INVALID_OWNER_EVENT_STATE',
+      messagePattern: /approval|content|hash|decision/i,
+      label: 'mediated_action_bypass_late_approval',
+    });
+    const executeWithoutMediation = await heldNamed(() => raceExecute, {
+      code: 'ACTION_USE_EXHAUSTED',
+      messagePattern: /remaining authorized use|approv|authorization|execute|claim/i,
+      label: 'mediated_action_bypass_execute',
+    });
+    const foreignOpHeld = heldNamed(() => installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
       operation: 'engine_review_dispatch',
       governanceConfig: fx.runtime.governanceConfig,
@@ -792,14 +819,27 @@ const attackMutations = {
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }));
+    }), {
+      code: 'ENGINE_SINK_REJECTED',
+      messagePattern: /operation|substitute|sink/i,
+      label: 'mediated_action_bypass_foreign_op',
+    });
     session.teardown();
     return executeWithoutMediation && lateApprovalHeld && foreignOpHeld;
   },
   capability_set_drift() {
     const fx = installedFixture('corpus-attack-cap-drift');
-    const a = held(() => installedEngine.rejectForeignEngineSink('implementation-dispatch'));
-    const b = held(() => installedEngine.compileInstalledEngineProfile({
+    // Positive control: fixed installed sink is accepted.
+    assert.equal(
+      installedEngine.rejectForeignEngineSink(installedEngine.INSTALLED_ENGINE_SINK_ID),
+      true,
+    );
+    const a = heldNamed(() => installedEngine.rejectForeignEngineSink('implementation-dispatch'), {
+      code: 'ENGINE_SINK_REJECTED',
+      messagePattern: /implementation-dispatch|rejects sink/i,
+      label: 'capability_set_drift_foreign_sink',
+    });
+    const b = heldNamed(() => installedEngine.compileInstalledEngineProfile({
       binding: fx.installedBinding,
       sink_id: 'implementation-dispatch',
       governanceConfig: fx.runtime.governanceConfig,
@@ -808,7 +848,11 @@ const attackMutations = {
       durableBinding: fx.durableBinding,
       capabilityProbedAt: fx.now,
       capabilityExpiresAt: fx.expires,
-    }));
+    }), {
+      code: 'ENGINE_SINK_REJECTED',
+      messagePattern: /sink|substitute|caller/i,
+      label: 'capability_set_drift_sink_id',
+    });
     return a && b;
   },
   witness_head_rewrite() {
@@ -910,10 +954,178 @@ const attackMutations = {
 };
 
 const categoryMutations = {
-  low_risk_executable() {
+  async low_risk_executable() {
     const fx = installedFixture('corpus-cat-low-risk');
     assert.equal(fx.profile.sink_id, 'engine-implementation-dispatch-v1');
     assert.equal(fx.profile.authority.acceptance, 'coordinator_v2');
+    // Real mediated fixed-sink execute through the installed action path.
+    const authorizations = new Map();
+    const sinkCalls = [];
+    let engineObservation = null;
+    const contentSha = fx.hash('low-risk-workspace-bytes');
+    function hostResponse(message, response) {
+      return {
+        schema_version: 1,
+        kind: 'p37_engine_host_response',
+        profile_hash: message.profile_hash,
+        route_hash: message.route_hash,
+        operation: message.operation,
+        request_hash: message.request_hash,
+        response,
+        response_hash: fx.hash(response),
+      };
+    }
+    function engineInvoke(message) {
+      const request = message.request;
+      if (message.operation && message.operation.startsWith('capability:')) {
+        const response = {
+          ok: true,
+          run_id: request.run_id,
+          host_capability_hash: request.host_capability_hash,
+          observation_hash: fx.hash({ operation: message.operation, request }),
+          probe_nonce: request.probe_nonce,
+        };
+        if (message.operation === 'capability:pre_action') {
+          response.execution_permit = {
+            permit_id: `permit-${request.claim_id}`,
+            run_id: request.run_id,
+            witness_stream_id: request.witness_stream_id,
+            witness_binding_hash: request.witness_binding_hash,
+            authority_hash: request.authority_hash,
+            claim_id: request.claim_id,
+            pre_action_witness_head: request.pre_action_witness_head,
+            host_capability_hash: request.host_capability_hash,
+            action_descriptor_hash: request.action_descriptor_hash,
+            executor_binding_hash: request.executor_binding_hash,
+            audience_identity: request.audience_identity,
+            expires_at: new Date(fx.runtime.NOW + 120000).toISOString(),
+            attestation_hash: fx.hash(`permit:${request.claim_id}`),
+            issuer: fx.profile.engine_profile.route.kernel_binding.identity,
+            issuer_attestation_hash: fx.profile.engine_profile.route.kernel_binding.attestation_hash,
+            preclaim_authorization: `preclaim:${request.claim_id}`,
+          };
+        }
+        if (message.operation === 'capability:post_claim') {
+          const authorization = {
+            authorization_id: `authorization-${request.claim_id}`,
+            run_id: request.run_id,
+            witness_stream_id: request.witness_stream_id,
+            witness_binding_hash: request.witness_binding_hash,
+            authority_hash: request.authority_hash,
+            claim_id: request.claim_id,
+            claim_event_hash: request.claim_event_hash,
+            claim_witness_head: request.claim_witness_head,
+            claim_emitted_at: request.claim_emitted_at,
+            execution_permit_id: request.execution_permit.permit_id,
+            execution_permit_hash: request.execution_permit_hash,
+            host_capability_hash: request.host_capability_hash,
+            action_descriptor_hash: request.action_descriptor_hash,
+            executor_binding_hash: request.executor_binding_hash,
+            audience_identity: request.audience_identity,
+            issued_at: fx.now,
+            expires_at: new Date(fx.runtime.NOW + 60000).toISOString(),
+            attestation_hash: fx.hash(`authorization:${request.claim_id}`),
+            issuer: fx.profile.engine_profile.route.kernel_binding.identity,
+            issuer_attestation_hash: fx.profile.engine_profile.route.kernel_binding.attestation_hash,
+            authorization: `postclaim:${request.claim_id}:${request.claim_event_hash}`,
+          };
+          authorizations.set(authorization.authorization_id, authorization.authorization);
+          response.execution_authorization = authorization;
+        }
+        return hostResponse(message, response);
+      }
+      if (message.operation === 'execute_engine_dispatch') {
+        const authorization = request.execution_authorization;
+        if (!authorization
+          || authorizations.get(authorization.authorization_id) !== authorization.authorization) {
+          throw new Error('low_risk execute authorization missing');
+        }
+        sinkCalls.push(request.claim_id);
+        engineObservation = 'committed';
+        const effectId = `low-risk-effect-${request.claim_id}`;
+        const commitSha = 'a'.repeat(40);
+        const receiptSha = fx.hash({ effect_id: effectId, commit: commitSha, content: contentSha });
+        return hostResponse(message, {
+          receipt: {
+            uri: `file://${fx.profile.engine_profile.receipt_root}/${effectId}.json`,
+            sha256: receiptSha,
+          },
+          broker: {
+            identity: fx.runtime.serviceBindings.broker.identity,
+            broker_uid: fx.runtime.serviceBindings.broker.uid,
+          },
+          execution_permit_hash: request.execution_permit_hash,
+          execution_authorization_hash: request.execution_authorization_hash,
+          authorization_id: authorization.authorization_id,
+          claim_event_hash: request.claim_event_hash,
+          claim_witness_head: request.claim_witness_head,
+          permit_state: 'consumed',
+          boundary_effect_id: effectId,
+          boundary_state_version: 1,
+          boundary_attestation_hash: fx.runtime.serviceBindings.broker.attestation_hash,
+          effect_at: fx.now,
+          delivered_manifest: {
+            commit: commitSha,
+            artifacts: [{ id: 'workspace', path: 'workspace.tar', sha256: contentSha }],
+            receipt_sha256: receiptSha,
+            boundary_effect_id: effectId,
+          },
+        });
+      }
+      if (message.operation === 'verify_engine_dispatch') {
+        const receipt = request.receipt;
+        return hostResponse(message, {
+          ok: true,
+          run_id: request.run_id,
+          claim_id: request.claim_id,
+          executor_binding_hash: request.executor_binding_hash,
+          execution_permit_hash: request.execution_permit_hash,
+          execution_authorization_hash: request.execution_authorization_hash,
+          authorization_id: request.authorization_id,
+          claim_event_hash: request.claim_event_hash,
+          claim_witness_head: request.claim_witness_head,
+          permit_state: 'consumed',
+          boundary_effect_id: receipt.boundary_effect_id,
+          boundary_state_version: receipt.boundary_state_version,
+          boundary_attestation_hash: receipt.boundary_attestation_hash,
+          effect_at: receipt.effect_at,
+          status: 'succeeded',
+          receipt: receipt.receipt_ref,
+          broker: receipt.broker_receipt,
+          observed_action: fx.profile.action,
+          error_code: null,
+        });
+      }
+      throw new Error(`unexpected engine op ${message.operation}`);
+    }
+    const { session } = openInstalledSession(fx, {
+      runLabel: 'low-risk-executable',
+      engineInvoke,
+    });
+    const decision = session.kernel.mintActionDecision({
+      capability: session.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'low-risk' },
+      actionClass: 'external',
+      actionDescriptor: fx.profile.action,
+    });
+    session.kernel.submitApproval({
+      signed: true,
+      payload: {
+        decision_id: decision.payload.decision_id,
+        decision_content_hash: decision.payload.decision_content_hash,
+        max_uses: 1,
+      },
+    });
+    await session.kernel.executeAuthorizedAction({
+      decisionId: decision.payload.decision_id,
+      action: fx.profile.action,
+      timeoutMilliseconds: 1000,
+    });
+    assert.equal(sinkCalls.length, 1, 'low_risk must call fixed sink exactly once');
+    assert.equal(engineObservation, 'committed');
+    assert.equal(session.engineTerminalIsAcceptance('committed'), false);
+    assert.equal(session.sink_id, 'engine-implementation-dispatch-v1');
+    session.teardown();
     return 'accept';
   },
   high_risk_executable() {
@@ -1153,14 +1365,18 @@ const categoryMutations = {
       signed: true,
       payload: { text: 'Superseding intent', explicit_action_hashes: [] },
     });
-    const staleApprovalHeld = held(() => session.kernel.submitApproval({
+    const staleApprovalHeld = heldNamed(() => session.kernel.submitApproval({
       signed: true,
       payload: {
         decision_id: first.payload.decision_id,
         decision_content_hash: first.payload.decision_content_hash,
         max_uses: 1,
       },
-    }));
+    }), {
+      code: 'INVALID_OWNER_EVENT_STATE',
+      messagePattern: /approv|supersed|intent|stale|decision/i,
+      label: 'approval_supersession',
+    });
     session.teardown();
     return staleApprovalHeld ? 'reject' : 'accept';
   },
@@ -1286,10 +1502,14 @@ const categoryMutations = {
         outcomePayload.error_code === 'executor_exception'
         || outcomePayload.error_code === 'action_boundary_ambiguous'
       );
-    const acceptHeld = await held(() => session.kernel.accept({
+    const acceptHeld = await heldNamed(() => session.kernel.accept({
       capability: session.owner_capability,
       timeoutMilliseconds: 1000,
-    }));
+    }), {
+      code: 'DISPATCH_MANIFEST_REQUIRED',
+      messagePattern: /dispatch|delivered-manifest|accept requires/i,
+      label: 'worker_failure_accept',
+    });
     session.teardown();
     return workerFailedOnce && acceptHeld ? 'recover' : 'accept';
   },
@@ -1458,13 +1678,19 @@ const categoryMutations = {
   },
   session_resume() {
     const fx = installedFixture('corpus-cat-resume');
-    const rejected = held(() => installedEngine.resumeInstalledEngineSession({
+    // Positive control: resume without ledger is not the production resume path —
+    // exact rejection for missing ledger is the control before mint/abort resume.
+    const rejected = heldNamed(() => installedEngine.resumeInstalledEngineSession({
       profile: fx.profile,
       binding: fx.installedBinding,
       durableBinding: fx.durableBinding,
       governanceConfig: fx.runtime.governanceConfig,
       acceptanceContract,
-    }));
+    }), {
+      code: 'INVALID_INSTALLED_ENGINE',
+      messagePattern: /ledger|requires the witnessed ledger/i,
+      label: 'session_resume_missing_ledger',
+    });
     assert.equal(rejected, true);
 
     function capInvoke(message) {
@@ -1530,10 +1756,14 @@ const categoryMutations = {
     assert.equal(reconstructed.status, 'aborted');
     assert.equal(reconstructed.decision_id, decision.payload.decision_id);
     assert.equal(
-      held(() => installedEngine.reconstructActionIdentityFromLedger(
+      heldNamed(() => installedEngine.reconstructActionIdentityFromLedger(
         { header: ledger.header, events: ledger.events.filter((e) => e.type !== 'abort') },
         session.getPersistedAbort(),
-      )),
+      ), {
+        code: 'ENGINE_ABORT_INVALID',
+        messagePattern: /abort|side record|witnessed/i,
+        label: 'session_resume_abort_side_record',
+      }),
       true,
     );
     const resumed = installedEngine.resumeInstalledEngineSession({
@@ -1642,7 +1872,7 @@ const categoryMutations = {
       event_hash: 'a'.repeat(64),
       previous_hash: original.previous_hash,
     };
-    const rejectedResume = held(() => installedEngine.resumeInstalledEngineSession({
+    const rejectedResume = heldNamed(() => installedEngine.resumeInstalledEngineSession({
       binding: fx.installedBinding,
       profile: fx.profile,
       governanceConfig: fx.runtime.governanceConfig,
@@ -1663,7 +1893,11 @@ const categoryMutations = {
         clock: () => new Date(fx.runtime.NOW),
         nonceFactory: () => 'e'.repeat(64),
       },
-    }));
+    }), {
+      code: 'INVALID_OWNER_EVENT',
+      messagePattern: /unsupported key|event|hash|tamper|witness/i,
+      label: 'event_log_tampering',
+    });
     session.teardown();
     assert.equal(rejectedResume, true, 'event-log tampering must be rejected by installed resume');
     return rejectedResume ? 'reject' : 'accept';

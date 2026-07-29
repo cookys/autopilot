@@ -360,11 +360,6 @@ function buildHosts(runtime, profile, hash) {
         artifact_sha256: deliveredSha,
         work_repo: workRepo,
       };
-      // Bind acceptance artifacts to the REAL delivered bytes (not a pre-run fixture).
-      activeDeliveredManifest = [{
-        id: 'workspace',
-        sha256: deliveredSha,
-      }];
       engineObservation = engineResult.status;
       const effectId = `dogfood-effect-${request.claim_id}`;
       const receiptSha = hash({
@@ -373,8 +368,21 @@ function buildHosts(runtime, profile, hash) {
         delivered_commit: commitSha,
         delivered_artifact_sha256: deliveredSha,
       });
-      // delivered_manifest is stripped by installed-engine before Kernel schema;
-      // commitment binds commit + artifact + receipt identity.
+      // Full commitment → acceptance_set binds content digests + commitment_hash
+      // into the coordinator candidate/delivered set.
+      const normalizedManifest = installedEngine.normalizeDispatchDeliveredManifest({
+        commit: commitSha,
+        artifacts: [{
+          id: 'workspace',
+          path: deliveredRel,
+          sha256: deliveredSha,
+          bytes: deliveredBytes.length,
+        }],
+        receipt_sha256: receiptSha,
+        boundary_effect_id: effectId,
+      });
+      activeDeliveredManifest = normalizedManifest.acceptance_set;
+      // delivered_manifest is stripped by installed-engine before Kernel schema.
       return hostResponse(message, {
         receipt: {
           uri: `file://${profile.engine_profile.receipt_root}/${effectId}.json`,
@@ -783,9 +791,18 @@ async function runHappyPath({ runtime, modeOverride, label }) {
   );
   const dispatchManifest = session.getDispatchDeliveredManifest();
   assert.ok(dispatchManifest, 'session must expose dispatch delivered-manifest commitment');
-  assert.equal(dispatchManifest.artifact_set_hash, realManifestHash);
+  assert.equal(dispatchManifest.acceptance_set_hash, realManifestHash);
   assert.equal(dispatchManifest.commit, delivery.commit);
   assert.equal(dispatchManifest.artifacts[0].sha256, delivery.artifact_sha256);
+  assert.equal(
+    dispatchManifest.acceptance_set[0].id,
+    'workspace',
+  );
+  assert.notEqual(
+    dispatchManifest.acceptance_set[0].sha256,
+    delivery.artifact_sha256,
+    'acceptance-bound digest must include commitment_hash (not raw content alone)',
+  );
   const priorIdentity = session.getActionIdentity();
   // Resume/replay carries the same dispatch commitment on prior identity.
   priorIdentity.delivered_manifest = dispatchManifest;

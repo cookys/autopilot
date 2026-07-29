@@ -1009,6 +1009,45 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
     return null;
   }
 
+  // Index and tracked worktree must exact-match HEAD so reported revision and
+  // scanned bytes are the same immutable tree. Staged/unstaged edits HOLD.
+  const porcelain = spawnSync(
+    'git',
+    ['-C', repoRoot, 'status', '--porcelain', '-uno'],
+    { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+  );
+  if (porcelain.error || porcelain.status !== 0) {
+    return {
+      complete: false,
+      reason: 'mechanical caller migration scan failed git status --porcelain '
+        + `(${(porcelain.stderr || porcelain.error || 'unknown').toString().trim()})`,
+      callers_migrated: [],
+      remaining: [...retired],
+      residuals: [],
+      revision,
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
+    };
+  }
+  const dirtyLines = (porcelain.stdout || '').split('\n').map((line) => line.trimEnd()).filter(Boolean);
+  if (dirtyLines.length > 0) {
+    const dirtyPaths = dirtyLines.map((line) => line.replace(/^\s*[MADRCU?! ]{1,2}\s+/, '').trim());
+    return {
+      complete: false,
+      reason: 'mechanical caller migration scan requires index and tracked worktree to exact-match HEAD; '
+        + `dirty paths: ${dirtyPaths.slice(0, 20).join(',')}`,
+      callers_migrated: [],
+      remaining: [...retired],
+      residuals: [],
+      dirty_paths: dirtyPaths.slice(0, 200),
+      revision,
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
+    };
+  }
+
   const residuals = [];
   const remainingSet = new Set();
   for (const rel of files) {
@@ -1017,14 +1056,17 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
     if (/\.(png|jpg|jpeg|gif|webp|ico|pdf|woff2?|ttf|eot|zip|gz|tgz|xz|bin|o|so|dylib|wasm)$/i.test(rel)) {
       continue;
     }
-    const abs = path.join(repoRoot, rel);
-    let body;
-    try {
-      body = fs.readFileSync(abs, 'utf8');
-    } catch (error) {
+    // Read candidate bytes from HEAD only — never mutable worktree content.
+    const show = spawnSync(
+      'git',
+      ['-C', repoRoot, 'show', `${revision}:${rel}`],
+      { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024 },
+    );
+    if (show.error || show.status !== 0) {
       return {
         complete: false,
-        reason: `mechanical caller migration scan failed reading tracked file ${rel}: ${error.message}`,
+        reason: `mechanical caller migration scan failed reading HEAD blob ${rel} `
+          + `at ${revision}: ${(show.stderr || show.error || 'unknown').toString().trim()}`,
         callers_migrated: [],
         remaining: [...retired],
         residuals: [],
@@ -1034,6 +1076,7 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
         retired_alias_set: retired,
       };
     }
+    const body = (show.stdout || Buffer.alloc(0)).toString('utf8');
     const lines = body.split(/\r?\n/);
     for (let lineNo = 0; lineNo < lines.length; lineNo += 1) {
       const line = lines[lineNo];

@@ -1310,6 +1310,56 @@ if (!Array.isArray(untrackedCaller.untracked)
   console.error('untracked caller must list exact path', untrackedCaller.untracked);
   process.exit(1);
 }
+
+// Revision-honest scan: staged/unstaged residual removal cannot manufacture complete.
+spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
+spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
+fs.mkdirSync(path.join(mechRepo, 'scripts'), { recursive: true });
+fs.writeFileSync(path.join(mechRepo, 'scripts/head-residual.sh'), '#!/bin/sh\n# /l3 residual\n');
+commitAll('add head residual');
+const withResidual = executeDeterministicCallerMigrationScan(mechRepo);
+if (withResidual.complete === true) {
+  console.error('HEAD residual must block complete', withResidual);
+  process.exit(1);
+}
+const residualRev = withResidual.revision;
+// Unstaged removal of residual — must still HOLD (dirty or HEAD residual).
+fs.unlinkSync(path.join(mechRepo, 'scripts/head-residual.sh'));
+const unstagedRemoval = executeDeterministicCallerMigrationScan(mechRepo);
+if (unstagedRemoval.complete === true) {
+  console.error('unstaged residual removal must not manufacture complete', unstagedRemoval);
+  process.exit(1);
+}
+if (!/dirty|HEAD|untracked|residual/i.test(unstagedRemoval.reason || '')
+  && !(Array.isArray(unstagedRemoval.residuals) && unstagedRemoval.residuals.length > 0)
+  && !(Array.isArray(unstagedRemoval.dirty_paths) && unstagedRemoval.dirty_paths.length > 0)) {
+  console.error('unstaged removal HOLD must cite dirty or HEAD residual', unstagedRemoval);
+  process.exit(1);
+}
+// Staged removal likewise cannot pass.
+spawnSync('git', ['-C', mechRepo, 'add', '-A'], { stdio: 'ignore' });
+const stagedRemoval = executeDeterministicCallerMigrationScan(mechRepo);
+if (stagedRemoval.complete === true) {
+  console.error('staged residual removal must not manufacture complete', stagedRemoval);
+  process.exit(1);
+}
+if (!/dirty|HEAD|residual/i.test(stagedRemoval.reason || '')
+  && !(Array.isArray(stagedRemoval.dirty_paths) && stagedRemoval.dirty_paths.length > 0)
+  && !(Array.isArray(stagedRemoval.residuals) && stagedRemoval.residuals.length > 0)) {
+  console.error('staged removal HOLD must cite dirty/HEAD residual', stagedRemoval);
+  process.exit(1);
+}
+// After committed removal, revision changes and scan may complete.
+commitAll('remove residual');
+const afterCommit = executeDeterministicCallerMigrationScan(mechRepo);
+if (afterCommit.complete !== true) {
+  console.error('committed residual removal should allow complete on clean HEAD', afterCommit);
+  process.exit(1);
+}
+if (afterCommit.revision === residualRev) {
+  console.error('committed removal must change bound revision');
+  process.exit(1);
+}
 console.log('alias_tracked_residual_scan_oracles=ok');
 NODE
 assert_eq "0" "$?" "tracked residual scan blocks active surfaces; definition exempt"

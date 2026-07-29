@@ -222,7 +222,7 @@ function normalizeDispatchDeliveredManifest(raw, context = {}) {
     receipt_sha256: receiptSha.toLowerCase(),
     boundary_effect_id: boundaryEffectId,
   };
-  // Candidate/delivered set for coordinator v2: id+sha256 only, sorted by id.
+  // Content digests alone (id+content sha) — actual artifact bytes remain authoritative.
   const artifactSet = artifacts
     .map((a) => ({ id: a.id, sha256: a.sha256 }))
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -237,7 +237,36 @@ function normalizeDispatchDeliveredManifest(raw, context = {}) {
     boundary_effect_id: material.boundary_effect_id,
     artifact_set_hash: material.artifact_set_hash,
   }));
+  // Coordinator/acceptance set keeps contract artifact ids but binds each entry
+  // to content digest + full commitment_hash so commit/path/receipt/boundary are
+  // transitively committed in delivered_set_hash.
+  material.acceptance_set = acceptanceArtifactSetFromCommitment(material);
+  material.acceptance_set_hash = sha256(canonicalJson(material.acceptance_set));
   return cloneCanonical(material);
+}
+
+/**
+ * Contract-compatible artifact set whose per-entry digests cryptographically
+ * bind content_sha256 to the full dispatch commitment_hash.
+ */
+function acceptanceArtifactSetFromCommitment(manifest) {
+  if (!manifest || typeof manifest !== 'object'
+    || typeof manifest.commitment_hash !== 'string'
+    || !Array.isArray(manifest.artifacts)) {
+    installedEngineError(
+      'acceptanceArtifactSetFromCommitment requires a normalized dispatch commitment',
+      'DISPATCH_MANIFEST_REQUIRED',
+    );
+  }
+  return manifest.artifacts
+    .map((artifact) => ({
+      id: artifact.id,
+      sha256: sha256(canonicalJson({
+        content_sha256: artifact.sha256,
+        commitment_hash: manifest.commitment_hash,
+      })),
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
 }
 
 function assertDispatchManifestMatchesAcceptance(dispatchManifest, deliveredSetHash, label) {
@@ -247,20 +276,113 @@ function assertDispatchManifestMatchesAcceptance(dispatchManifest, deliveredSetH
       'DISPATCH_MANIFEST_REQUIRED',
     );
   }
+  // Always re-normalize so caller-supplied commitment_hash cannot paper over
+  // commit/path/receipt/boundary metadata substitution.
+  const normalized = normalizeDispatchDeliveredManifest(dispatchManifest);
   if (typeof deliveredSetHash !== 'string' || !/^[a-f0-9]{64}$/i.test(deliveredSetHash)) {
     installedEngineError(
       `${label} requires delivered_set_hash from verified coordinator acceptance`,
       'DISPATCH_MANIFEST_MISMATCH',
     );
   }
-  if (deliveredSetHash.toLowerCase() !== dispatchManifest.artifact_set_hash) {
+  if (deliveredSetHash.toLowerCase() !== normalized.acceptance_set_hash) {
     installedEngineError(
       `${label} delivered_set_hash does not exact-match dispatch delivered-manifest `
-      + `artifact_set_hash (substitution or synthetic-manifest mismatch)`,
+      + `acceptance_set_hash (full commitment binding; substitution or synthetic-manifest mismatch)`,
       'DISPATCH_MANIFEST_MISMATCH',
     );
   }
   return true;
+}
+
+function assertHostAcceptanceSetMatchesCommitment(response, dispatchManifest, label) {
+  if (!response || typeof response !== 'object') {
+    installedEngineError(
+      `${label} coordinator response is required for full-manifest binding`,
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  const expected = acceptanceArtifactSetFromCommitment(dispatchManifest);
+  const expectedHash = sha256(canonicalJson(expected));
+  const candidate = Array.isArray(response.candidate_artifacts)
+    ? response.candidate_artifacts
+    : null;
+  const delivered = Array.isArray(response.delivered_artifacts)
+    ? response.delivered_artifacts
+    : null;
+  if (!candidate || !delivered) {
+    installedEngineError(
+      `${label} coordinator must supply candidate_artifacts and delivered_artifacts`,
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  const norm = (list) => list
+    .map((item) => ({
+      id: String(item && item.id || ''),
+      sha256: String(item && item.sha256 || '').toLowerCase(),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const candNorm = norm(candidate);
+  const delNorm = norm(delivered);
+  if (canonicalJson(candNorm) !== canonicalJson(expected)
+    || canonicalJson(delNorm) !== canonicalJson(expected)
+    || sha256(canonicalJson(candNorm)) !== expectedHash
+    || sha256(canonicalJson(delNorm)) !== expectedHash) {
+    installedEngineError(
+      `${label} coordinator candidate/delivered set does not exact-match dispatch `
+      + 'full-commitment acceptance set',
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  if (typeof response.candidate_set_hash === 'string'
+    && response.candidate_set_hash.toLowerCase() !== expectedHash) {
+    installedEngineError(
+      `${label} coordinator candidate_set_hash does not match full-commitment acceptance set`,
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  if (typeof response.delivered_set_hash === 'string'
+    && response.delivered_set_hash.toLowerCase() !== expectedHash) {
+    installedEngineError(
+      `${label} coordinator delivered_set_hash does not match full-commitment acceptance set`,
+      'DISPATCH_MANIFEST_MISMATCH',
+    );
+  }
+  return expectedHash;
+}
+
+/**
+ * Mediate coordinator host responses so acceptance only proceeds when the
+ * acquire snapshot exact-matches the dispatch full-commitment acceptance set.
+ * Rejects before Kernel can append acceptance/complete.
+ */
+function mediateCoordinatorInvoke(rawInvoke, tracker) {
+  if (typeof rawInvoke !== 'function') {
+    installedEngineError(
+      'installed Engine session requires coordinatorInvoke',
+      'ENGINE_SINK_UNAVAILABLE',
+    );
+  }
+  return function coordinatorInvoke(message) {
+    const envelope = rawInvoke(message);
+    if (!message || message.operation !== 'coordinator_acquire') {
+      return envelope;
+    }
+    const dispatchManifest = tracker.getDeliveredManifest();
+    if (!dispatchManifest) {
+      installedEngineError(
+        'coordinator_acquire requires dispatch delivered-manifest commitment from execute',
+        'DISPATCH_MANIFEST_REQUIRED',
+      );
+    }
+    const response = envelope && envelope.response;
+    assertHostAcceptanceSetMatchesCommitment(
+      response,
+      dispatchManifest,
+      'coordinator_acquire',
+    );
+    return envelope;
+  };
 }
 
 function captureDeliveredManifestFromHostEnvelope(envelope, pendingRef) {
@@ -865,9 +987,8 @@ function createActionIdentityTracker() {
         ? cloneCanonical(engineObservation)
         : active.engine_observation;
       if (deliveredManifest) {
-        const normalized = deliveredManifest.commitment_hash
-          ? cloneCanonical(deliveredManifest)
-          : normalizeDispatchDeliveredManifest(deliveredManifest);
+        // Always re-normalize — never trust a caller-supplied commitment_hash.
+        const normalized = normalizeDispatchDeliveredManifest(deliveredManifest);
         if (active.delivered_manifest
           && active.delivered_manifest.commitment_hash !== normalized.commitment_hash) {
           installedEngineError(
@@ -1365,10 +1486,33 @@ function wrapSession(session, profile, tracker, pendingDispatchManifest) {
         'DISPATCH_MANIFEST_REQUIRED',
       );
     }
-    const accepted = await originalAccept(request);
+    // Freeze expected full-commitment acceptance set before Kernel runs
+    // coordinator acquire/prepare/commit. Mediated coordinator_acquire rejects
+    // mismatch before acceptance/complete can append.
+    const expectedAcceptanceHash = sha256(canonicalJson(
+      acceptanceArtifactSetFromCommitment(dispatchManifest),
+    ));
+    const ledgerBefore = session.kernel.getLedger();
+    const eventsBefore = Array.isArray(ledgerBefore.events) ? ledgerBefore.events.length : 0;
+    let accepted;
+    try {
+      accepted = await originalAccept(request);
+    } catch (error) {
+      // Fail-closed: mismatch/reject must not leave acceptance or complete events.
+      const ledgerAfter = session.kernel.getLedger();
+      const events = Array.isArray(ledgerAfter.events) ? ledgerAfter.events : [];
+      const leaked = events.slice(eventsBefore).some((event) => (
+        event && (event.type === 'acceptance' || event.type === 'complete')
+      ));
+      if (leaked) {
+        installedEngineError(
+          'accept rejection leaked acceptance/complete events after dispatch manifest mismatch',
+          'DISPATCH_MANIFEST_MISMATCH',
+        );
+      }
+      throw error;
+    }
     if (accepted && accepted.accepted === true) {
-      // Coordinator delivered_set_hash must exact-match the dispatch artifact set.
-      // Prefer ledger acceptance payload (terminal state may clear live acceptance).
       const ledger = session.kernel.getLedger();
       const acceptanceEvent = Array.isArray(ledger.events)
         ? [...ledger.events].reverse().find((event) => event && event.type === 'acceptance')
@@ -1384,6 +1528,12 @@ function wrapSession(session, profile, tracker, pendingDispatchManifest) {
         deliveredSetHash,
         'accept',
       );
+      if (deliveredSetHash.toLowerCase() !== expectedAcceptanceHash) {
+        installedEngineError(
+          'accept delivered_set_hash does not match pre-frozen full-commitment acceptance set',
+          'DISPATCH_MANIFEST_MISMATCH',
+        );
+      }
       tracker.markAccepted();
     }
     return accepted;
@@ -1485,6 +1635,7 @@ function createInstalledEngineSession(options = {}) {
     }
     return envelope;
   };
+  const coordinatorInvoke = mediateCoordinatorInvoke(options.coordinatorInvoke, tracker);
   let session;
   try {
     session = createEngineAcceptanceSession({
@@ -1495,7 +1646,7 @@ function createInstalledEngineSession(options = {}) {
       modeOverride,
       witnessInvoke: options.witnessInvoke,
       engineInvoke,
-      coordinatorInvoke: options.coordinatorInvoke,
+      coordinatorInvoke,
       requestIdFactory: options.requestIdFactory,
       kernelOptions: options.kernelOptions,
     });
@@ -1641,6 +1792,7 @@ function resumeInstalledEngineSession(options = {}) {
     }
     return envelope;
   };
+  const coordinatorInvoke = mediateCoordinatorInvoke(options.coordinatorInvoke, tracker);
   const witness = createSemanticWitnessAdapter({
     route: profile.engine_profile.route,
     durableBinding,
@@ -1660,7 +1812,7 @@ function resumeInstalledEngineSession(options = {}) {
       profile: profile.engine_profile,
       durableBinding,
       witness,
-      invoke: options.coordinatorInvoke,
+      invoke: coordinatorInvoke,
     });
     resumed = OwnerKernel.resume({
       ...options.kernelOptions,
@@ -2316,6 +2468,7 @@ module.exports = {
   createInstalledEngineSession,
   durableBindingFromInstalled,
   fixedAction,
+  acceptanceArtifactSetFromCommitment,
   normalizeDispatchDeliveredManifest,
   normalizeInstalledEngineProfile,
   normalizeInstalledEngineResult,

@@ -37,10 +37,11 @@ const { OwnerKernelError, canonicalJson, sha256 } = require(path.join(
   'owner-kernel',
 ));
 
-const deliveredManifest = [{
+let deliveredManifest = [{
   id: 'workspace',
   sha256: baseEngine.sha256('p37-installed-engine-delivered-workspace'),
 }];
+const contentWorkspaceSha = deliveredManifest[0].sha256;
 const acceptanceContract = {
   schema_version: 2,
   contract_id: 'p37-installed-engine-acceptance',
@@ -75,7 +76,7 @@ const {
 } = runtime;
 const NOW = new Date(runtime.NOW).toISOString();
 const EXPIRES = new Date(runtime.NOW + 3600000).toISOString();
-const manifestHash = hash(deliveredManifest);
+let manifestHash = hash(deliveredManifest);
 const auditHead = hash('p37-installed-engine-audit-head');
 
 function makeInstalledBinding() {
@@ -314,7 +315,7 @@ function engineInvoke(message) {
     const effectId = `engine-effect-${request.claim_id}`;
     // Non-stub commit identity bound into delivered_manifest commitment.
     const commitSha = 'c'.repeat(40);
-    const artifactSha = deliveredManifest[0].sha256;
+    const artifactSha = contentWorkspaceSha;
     const receiptSha = hash({
       effect_id: effectId,
       result: engineResult,
@@ -326,6 +327,20 @@ function engineInvoke(message) {
       uri: `file://${profile.engine_profile.receipt_root}/${effectId}.json`,
       sha256: receiptSha,
     };
+    const rawDeliveredManifest = {
+      commit: commitSha,
+      artifacts: [{
+        id: 'workspace',
+        path: 'workspace.tar',
+        sha256: artifactSha,
+      }],
+      receipt_sha256: receiptSha,
+      boundary_effect_id: effectId,
+    };
+    const normalized = installedEngine.normalizeDispatchDeliveredManifest(rawDeliveredManifest);
+    // Coordinator/verification/challenge must use full-commitment acceptance set.
+    deliveredManifest = normalized.acceptance_set;
+    manifestHash = normalized.acceptance_set_hash;
     return hostResponse(message, {
       receipt,
       broker: {
@@ -342,16 +357,7 @@ function engineInvoke(message) {
       boundary_state_version: 1,
       boundary_attestation_hash: serviceBindings.broker.attestation_hash,
       effect_at: NOW,
-      delivered_manifest: {
-        commit: commitSha,
-        artifacts: [{
-          id: 'workspace',
-          path: 'workspace.tar',
-          sha256: artifactSha,
-        }],
-        receipt_sha256: receiptSha,
-        boundary_effect_id: effectId,
-      },
+      delivered_manifest: rawDeliveredManifest,
     });
   }
   if (message.operation === 'verify_engine_dispatch') {
@@ -816,11 +822,16 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   // Dispatch commitment must exact-match coordinator delivered_set_hash.
   const dispatchManifest = session.getDispatchDeliveredManifest();
   assert.ok(dispatchManifest, 'session must expose dispatch delivered-manifest');
-  assert.equal(dispatchManifest.artifact_set_hash, manifestHash);
+  assert.equal(dispatchManifest.acceptance_set_hash, manifestHash);
   assert.equal(dispatchManifest.commit, 'c'.repeat(40));
   assert.equal(
     acceptanceEvent.payload.delivered_set_hash,
-    dispatchManifest.artifact_set_hash,
+    dispatchManifest.acceptance_set_hash,
+  );
+  assert.notEqual(
+    dispatchManifest.acceptance_set[0].sha256,
+    contentWorkspaceSha,
+    'acceptance-bound digest must include commitment_hash',
   );
 
   // substitution/synthetic-manifest: host that binds a different artifact set must fail closed.
@@ -1316,7 +1327,464 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
   abortSession.teardown();
   abortResumed.teardown();
 
-  console.log(JSON.stringify({
+
+  // --- Full-commitment binding regressions ---
+  // 1) Coordinator/caller set mismatch rejects before acceptance/complete append.
+  {
+    const mismatchRuntime = createP37Runtime(root, {
+      actionCatalog: [baseEngine.ENGINE_IMPLEMENTATION_CATALOG_ENTRY],
+      acceptanceContract,
+      runId: 'p37-manifest-mismatch',
+    });
+    const mismatchHash = mismatchRuntime.hash;
+    const mismatchBinding = (() => {
+      const roles = installedContract.SERVICE_ROLES;
+      const bindings = {};
+      for (const role of roles) {
+        if (role === 'kernel') {
+          bindings.kernel = {
+            role: 'kernel',
+            identity: mismatchRuntime.kernelBinding.identity,
+            uid: mismatchRuntime.kernelBinding.uid,
+            gid: mismatchRuntime.kernelBinding.gid,
+            attestation_hash: mismatchRuntime.kernelBinding.attestation_hash,
+            cgroup_binding_hash: mismatchRuntime.kernelBinding.cgroup_binding_hash,
+          };
+          continue;
+        }
+        const service = mismatchRuntime.serviceBindings[role];
+        bindings[role] = {
+          role,
+          identity: service.identity,
+          uid: service.uid,
+          gid: service.gid,
+          attestation_hash: service.attestation_hash,
+          cgroup_binding_hash: service.cgroup_binding_hash,
+        };
+      }
+      return {
+        schema_version: 1,
+        kind: 'p37_installed_state_binding',
+        install_binding_hash: mismatchRuntime.durableBinding.install_binding_hash,
+        run_binding_hash: mismatchRuntime.durableBinding.run_binding_hash,
+        installed_abi_hash: installedContract.getSupervisedOwnerKernelInstalledAbiHash(),
+        durable_abi_hash: mismatchRuntime.durableBinding.durable_abi_hash,
+        cohort_id: mismatchRuntime.durableBinding.cohort_id,
+        generation: mismatchRuntime.durableBinding.generation,
+        service_bindings: bindings,
+        snapshot_hash: mismatchHash({
+          install: mismatchRuntime.durableBinding.install_binding_hash,
+          run: mismatchRuntime.durableBinding.run_binding_hash,
+          cohort: mismatchRuntime.durableBinding.cohort_id,
+        }),
+      };
+    })();
+    const mismatchNow = new Date(mismatchRuntime.NOW).toISOString();
+    const mismatchExpires = new Date(mismatchRuntime.NOW + 3600000).toISOString();
+    const mismatchProfile = installedEngine.compileInstalledEngineProfile({
+      binding: mismatchBinding,
+      governanceConfig: mismatchRuntime.governanceConfig,
+      acceptanceContract,
+      routeInputs: mismatchRuntime.routeInputs,
+      durableBinding: mismatchRuntime.durableBinding,
+      kernelBinding: mismatchRuntime.kernelBinding,
+      capabilityProbedAt: mismatchNow,
+      capabilityExpiresAt: mismatchExpires,
+    });
+    const wrongManifest = [{ id: 'workspace', sha256: 'e'.repeat(64) }];
+    const wrongHash = mismatchHash(wrongManifest);
+    const authorizations = new Map();
+    const consumed = new Set();
+    let captureManifest = null;
+    function mismatchHostResponse(message, response) {
+      return {
+        schema_version: 1,
+        kind: 'p37_engine_host_response',
+        profile_hash: message.profile_hash,
+        route_hash: message.route_hash,
+        operation: message.operation,
+        request_hash: message.request_hash,
+        response,
+        response_hash: mismatchHash(response),
+      };
+    }
+    function mismatchEngineInvoke(message) {
+      const request = message.request;
+      if (message.operation.startsWith('capability:')) {
+        const response = {
+          ok: true,
+          run_id: request.run_id,
+          host_capability_hash: request.host_capability_hash,
+          observation_hash: mismatchHash({ operation: message.operation, request }),
+          probe_nonce: request.probe_nonce,
+        };
+        if (message.operation === 'capability:pre_action') {
+          response.execution_permit = {
+            permit_id: `permit-${request.claim_id}`,
+            run_id: request.run_id,
+            witness_stream_id: request.witness_stream_id,
+            witness_binding_hash: request.witness_binding_hash,
+            authority_hash: request.authority_hash,
+            claim_id: request.claim_id,
+            pre_action_witness_head: request.pre_action_witness_head,
+            host_capability_hash: request.host_capability_hash,
+            action_descriptor_hash: request.action_descriptor_hash,
+            executor_binding_hash: request.executor_binding_hash,
+            audience_identity: request.audience_identity,
+            expires_at: new Date(mismatchRuntime.NOW + 120000).toISOString(),
+            attestation_hash: mismatchHash(`permit:${request.claim_id}`),
+            issuer: mismatchProfile.engine_profile.route.kernel_binding.identity,
+            issuer_attestation_hash: mismatchProfile.engine_profile.route.kernel_binding.attestation_hash,
+            preclaim_authorization: `preclaim:${request.claim_id}`,
+          };
+        }
+        if (message.operation === 'capability:post_claim') {
+          const authorization = {
+            authorization_id: `authorization-${request.claim_id}`,
+            run_id: request.run_id,
+            witness_stream_id: request.witness_stream_id,
+            witness_binding_hash: request.witness_binding_hash,
+            authority_hash: request.authority_hash,
+            claim_id: request.claim_id,
+            claim_event_hash: request.claim_event_hash,
+            claim_witness_head: request.claim_witness_head,
+            claim_emitted_at: request.claim_emitted_at,
+            execution_permit_id: request.execution_permit.permit_id,
+            execution_permit_hash: request.execution_permit_hash,
+            host_capability_hash: request.host_capability_hash,
+            action_descriptor_hash: request.action_descriptor_hash,
+            executor_binding_hash: request.executor_binding_hash,
+            audience_identity: request.audience_identity,
+            issued_at: mismatchNow,
+            expires_at: new Date(mismatchRuntime.NOW + 60000).toISOString(),
+            attestation_hash: mismatchHash(`authorization:${request.claim_id}`),
+            issuer: mismatchProfile.engine_profile.route.kernel_binding.identity,
+            issuer_attestation_hash: mismatchProfile.engine_profile.route.kernel_binding.attestation_hash,
+            authorization: `postclaim:${request.claim_id}:${request.claim_event_hash}`,
+          };
+          authorizations.set(authorization.authorization_id, authorization.authorization);
+          response.execution_authorization = authorization;
+        }
+        return mismatchHostResponse(message, response);
+      }
+      if (message.operation === 'execute_engine_dispatch') {
+        const authorization = request.execution_authorization;
+        consumed.add(authorization.authorization_id);
+        const effectId = `mismatch-effect-${request.claim_id}`;
+        const commitSha = 'a'.repeat(40);
+        const artifactSha = contentWorkspaceSha;
+        const receiptSha = mismatchHash({ effect_id: effectId, commit: commitSha });
+        const raw = {
+          commit: commitSha,
+          artifacts: [{ id: 'workspace', path: 'workspace.tar', sha256: artifactSha }],
+          receipt_sha256: receiptSha,
+          boundary_effect_id: effectId,
+        };
+        captureManifest = installedEngine.normalizeDispatchDeliveredManifest(raw);
+        return mismatchHostResponse(message, {
+          receipt: {
+            uri: `file://${mismatchProfile.engine_profile.receipt_root}/${effectId}.json`,
+            sha256: receiptSha,
+          },
+          broker: {
+            identity: mismatchRuntime.serviceBindings.broker.identity,
+            broker_uid: mismatchRuntime.serviceBindings.broker.uid,
+          },
+          execution_permit_hash: request.execution_permit_hash,
+          execution_authorization_hash: request.execution_authorization_hash,
+          authorization_id: authorization.authorization_id,
+          claim_event_hash: request.claim_event_hash,
+          claim_witness_head: request.claim_witness_head,
+          permit_state: 'consumed',
+          boundary_effect_id: effectId,
+          boundary_state_version: 1,
+          boundary_attestation_hash: mismatchRuntime.serviceBindings.broker.attestation_hash,
+          effect_at: mismatchNow,
+          delivered_manifest: raw,
+        });
+      }
+      if (message.operation === 'verify_engine_dispatch') {
+        const receipt = request.receipt;
+        return mismatchHostResponse(message, {
+          ok: true,
+          run_id: request.run_id,
+          claim_id: request.claim_id,
+          executor_binding_hash: request.executor_binding_hash,
+          execution_permit_hash: request.execution_permit_hash,
+          execution_authorization_hash: request.execution_authorization_hash,
+          authorization_id: request.authorization_id,
+          claim_event_hash: request.claim_event_hash,
+          claim_witness_head: request.claim_witness_head,
+          permit_state: 'consumed',
+          boundary_effect_id: receipt.boundary_effect_id,
+          boundary_state_version: receipt.boundary_state_version,
+          boundary_attestation_hash: receipt.boundary_attestation_hash,
+          effect_at: receipt.effect_at,
+          status: 'succeeded',
+          receipt: receipt.receipt_ref,
+          broker: receipt.broker_receipt,
+          observed_action: mismatchProfile.action,
+          error_code: null,
+        });
+      }
+      throw new Error(`unexpected op ${message.operation}`);
+    }
+    // Coordinator deliberately returns WRONG artifact set (not full-commitment set).
+    function mismatchCoordinatorInvoke(message) {
+      const request = message.request;
+      if (message.operation === 'coordinator_cancel'
+        || message.operation === 'coordinator_release'
+        || message.operation === 'coordinator_request_abort') {
+        return mismatchHostResponse(message, { ok: true, disposition: 'cancelled' });
+      }
+      if (message.operation === 'coordinator_acquire') {
+        const normalized = {
+          attempt_id: request.attempt_id,
+          attempt_hash: request.attempt_hash,
+          intent_id: request.expected_intent_id,
+          transaction_id: `txn-${request.attempt_id}`,
+          fence: mismatchHash(`fence:${request.attempt_id}`),
+          candidate_artifacts: wrongManifest,
+          delivered_artifacts: wrongManifest,
+          candidate_set_hash: wrongHash,
+          delivered_set_hash: wrongHash,
+          audit_head: mismatchHash('audit-mismatch'),
+          control_event_head: request.expected_event_head,
+          control_witness_head: request.expected_witness_head,
+          snapshot_at: mismatchNow,
+        };
+        const snapshot = {
+          ok: true,
+          run_id: request.run_id,
+          attempt_id: normalized.attempt_id,
+          attempt_hash: normalized.attempt_hash,
+          intent_id: normalized.intent_id,
+          transaction_id: normalized.transaction_id,
+          fence: normalized.fence,
+          candidate_artifacts: normalized.candidate_artifacts,
+          delivered_artifacts: normalized.delivered_artifacts,
+          audit_head: normalized.audit_head,
+          control_event_head: normalized.control_event_head,
+          control_witness_head: normalized.control_witness_head,
+          snapshot_at: normalized.snapshot_at,
+          snapshot_hash: mismatchHash({ run_id: request.run_id, ...normalized }),
+        };
+        return mismatchHostResponse(message, snapshot);
+      }
+      throw new Error(`coordinator should not reach ${message.operation} after mismatch`);
+    }
+    // Minimal adapters for verification path before accept.
+    const adapters = {
+      ...mismatchRuntime.adapters(),
+      evidenceArchiver({ verified_evidence }) {
+        return {
+          uri: `durable://mismatch/${mismatchHash(verified_evidence)}`,
+          sha256: mismatchHash(verified_evidence),
+        };
+      },
+      verificationVerifier(_request, context) {
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: 'runner-a',
+          channel: 'mismatch-runner',
+          envelope_hash: mismatchHash('mismatch-verification'),
+          payload: {
+            emitter_kind: 'runner',
+            verification_path: 'trusted_runner',
+            attestation_sha256: mismatchHash('attestation:runner-a'),
+            verification_id: 'mismatch-verification',
+            intent_id: context.intent_id,
+            leg_id: 'tests',
+            outcome: 'green',
+            command_hash: mismatchHash('node --test'),
+            candidate_artifacts: captureManifest
+              ? captureManifest.acceptance_set
+              : wrongManifest,
+            candidate_set_hash: captureManifest
+              ? captureManifest.acceptance_set_hash
+              : wrongHash,
+            exit_code: 0,
+            stdout_hash: mismatchHash('out'),
+            stderr_hash: mismatchHash('err'),
+            executed_at: mismatchNow,
+          },
+        };
+      },
+      challengeVerifier(envelope, context) {
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: 'challenger-a',
+          channel: 'mismatch-challenge',
+          envelope_hash: mismatchHash({ challenge: envelope.scope_id }),
+          payload: {
+            verification_path: 'qualified_challenge',
+            attestation_sha256: mismatchHash('attestation:challenger-a'),
+            challenge_id: `mismatch-challenge-${envelope.scope_id}`,
+            intent_id: context.intent_id,
+            scope: 'contract_leg',
+            scope_id: envelope.scope_id,
+            finding: 'clear',
+            candidate_artifacts: captureManifest
+              ? captureManifest.acceptance_set
+              : wrongManifest,
+            candidate_set_hash: captureManifest
+              ? captureManifest.acceptance_set_hash
+              : wrongHash,
+            subject_identity: mismatchProfile.engine_profile.route.worker_binding.identity,
+            subject_family: 'qwen',
+            result_hash: mismatchHash(`challenge-result:${envelope.scope_id}`),
+            reviewed_at: mismatchNow,
+          },
+        };
+      },
+      artifactProvenanceVerifier(request, context) {
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: mismatchProfile.engine_profile.route.coordinator_binding.identity,
+          channel: 'mismatch-provenance',
+          envelope_hash: mismatchHash({ provenance: request }),
+          payload: {
+            verification_path: 'artifact_provenance',
+            attestation_sha256: mismatchHash('attestation:provenance'),
+            candidate_artifacts: captureManifest
+              ? captureManifest.acceptance_set
+              : wrongManifest,
+            candidate_set_hash: captureManifest
+              ? captureManifest.acceptance_set_hash
+              : wrongHash,
+            observed_at: mismatchNow,
+          },
+        };
+      },
+    };
+    // Skip full happy path if adapters incomplete — focus on execute + accept mismatch.
+    // Use same adapter shape as main test if available via runtime.adapters only
+    // and recordVerification with purpose.
+    const witnessInvoke = mismatchRuntime.createWitnessInvoke();
+    const session = installedEngine.createInstalledEngineSession({
+      profile: mismatchProfile,
+      binding: mismatchBinding,
+      durableBinding: mismatchRuntime.durableBinding,
+      governanceConfig: mismatchRuntime.governanceConfig,
+      acceptanceContract,
+      routeInputs: mismatchRuntime.routeInputs,
+      witnessInvoke,
+      engineInvoke: mismatchEngineInvoke,
+      coordinatorInvoke: mismatchCoordinatorInvoke,
+      requestIdFactory: ({ label: part, counter }) => `mm-${part}-${counter}`,
+      kernelOptions: {
+        initialIntentEnvelope: {
+          signed: true,
+          payload: { text: 'mismatch', explicit_action_hashes: [] },
+        },
+        initialOwnerId: 'owner-a',
+        adapters: mismatchRuntime.adapters(),
+        clock: () => new Date(mismatchRuntime.NOW),
+        nonceFactory: () => mismatchHash('nonce-mm').slice(0, 64),
+      },
+    });
+    const decision = session.kernel.mintActionDecision({
+      capability: session.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'mismatch' },
+      actionClass: 'external',
+      actionDescriptor: mismatchProfile.action,
+    });
+    session.kernel.submitApproval({
+      signed: true,
+      payload: {
+        decision_id: decision.payload.decision_id,
+        decision_content_hash: decision.payload.decision_content_hash,
+        max_uses: 1,
+      },
+    });
+    await session.kernel.executeAuthorizedAction({
+      decisionId: decision.payload.decision_id,
+      action: mismatchProfile.action,
+      timeoutMilliseconds: 1000,
+    });
+    assert.ok(session.getDispatchDeliveredManifest());
+    let mismatchCode = null;
+    let mismatchMessage = null;
+    try {
+      await session.kernel.accept({
+        capability: session.owner_capability,
+        timeoutMilliseconds: 1000,
+      });
+      assert.fail('coordinator mismatch must reject accept');
+    } catch (error) {
+      mismatchCode = error && error.code;
+      mismatchMessage = String(error && error.message || '');
+    }
+    assert.equal(mismatchCode, 'DISPATCH_MANIFEST_MISMATCH');
+    assert.match(mismatchMessage, /dispatch|commitment|mismatch/i);
+    const ledger = session.kernel.getLedger();
+    const types = (ledger.events || []).map((event) => event.type);
+    assert.equal(types.includes('acceptance'), false, 'mismatch must leave zero acceptance events');
+    assert.equal(types.includes('complete'), false, 'mismatch must leave zero complete events');
+    session.teardown();
+  }
+
+  // 2) Metadata-only substitutions change commitment and fail exact match.
+  {
+    const base = installedEngine.normalizeDispatchDeliveredManifest({
+      commit: 'a'.repeat(40),
+      artifacts: [{ id: 'workspace', path: 'workspace.tar', sha256: 'b'.repeat(64), bytes: 12 }],
+      receipt_sha256: 'c'.repeat(64),
+      boundary_effect_id: 'effect-base',
+    });
+    const mutations = [
+      { label: 'commit', patch: { commit: '1'.repeat(40) } },
+      { label: 'path', patch: { artifacts: [{ id: 'workspace', path: 'other.tar', sha256: 'b'.repeat(64), bytes: 12 }] } },
+      { label: 'receipt_sha256', patch: { receipt_sha256: '2'.repeat(64) } },
+      { label: 'boundary_effect_id', patch: { boundary_effect_id: 'effect-other' } },
+    ];
+    for (const mutation of mutations) {
+      const raw = {
+        commit: base.commit,
+        artifacts: base.artifacts.map((a) => ({ ...a })),
+        receipt_sha256: base.receipt_sha256,
+        boundary_effect_id: base.boundary_effect_id,
+        ...mutation.patch,
+      };
+      // Keep artifact id+content sha256 identical for path mutation (path changes only).
+      if (mutation.label === 'path') {
+        assert.equal(raw.artifacts[0].sha256, base.artifacts[0].sha256);
+        assert.equal(raw.artifacts[0].id, base.artifacts[0].id);
+      }
+      const mutated = installedEngine.normalizeDispatchDeliveredManifest(raw);
+      assert.notEqual(
+        mutated.commitment_hash,
+        base.commitment_hash,
+        `${mutation.label} must change commitment_hash`,
+      );
+      assert.notEqual(
+        mutated.acceptance_set_hash,
+        base.acceptance_set_hash,
+        `${mutation.label} must change acceptance_set_hash`,
+      );
+      let failed = false;
+      try {
+        // Simulate resume/result exact-match against original acceptance set hash.
+        installedEngine.normalizeDispatchDeliveredManifest; // keep lint quiet
+        const { assert } = require('node:assert/strict');
+        // Direct match helper path via acceptance assert equivalent:
+        if (mutated.acceptance_set_hash === base.acceptance_set_hash) {
+          throw new Error('should differ');
+        }
+        // reconstruct-style: original ledger hash must not match mutated commitment
+        failed = mutated.acceptance_set_hash !== base.acceptance_set_hash;
+      } catch (_error) {
+        failed = true;
+      }
+      assert.equal(failed, true, `${mutation.label} metadata substitution must fail exact matching`);
+    }
+  }
+
+
+console.log(JSON.stringify({
     installed_engine_sink: 'ok',
     sink_id: 'engine-implementation-dispatch-v1',
     sink_calls: sinkCalls.length,

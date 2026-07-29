@@ -1353,7 +1353,8 @@ const categoryMutations = {
       actionClass: 'external',
       actionDescriptor: fx.profile.action,
     });
-    session.kernel.submitApproval({
+    // Positive control: a fresh approval on the current decision succeeds.
+    const freshApproval = session.kernel.submitApproval({
       signed: true,
       payload: {
         decision_id: first.payload.decision_id,
@@ -1361,6 +1362,8 @@ const categoryMutations = {
         max_uses: 1,
       },
     });
+    assert.ok(freshApproval, 'positive control: fresh approval must succeed');
+    // Mutation: only intent/decision freshness changes via superseding captureIntent.
     session.kernel.captureIntent({
       signed: true,
       payload: { text: 'Superseding intent', explicit_action_hashes: [] },
@@ -1678,20 +1681,6 @@ const categoryMutations = {
   },
   session_resume() {
     const fx = installedFixture('corpus-cat-resume');
-    // Positive control: resume without ledger is not the production resume path —
-    // exact rejection for missing ledger is the control before mint/abort resume.
-    const rejected = heldNamed(() => installedEngine.resumeInstalledEngineSession({
-      profile: fx.profile,
-      binding: fx.installedBinding,
-      durableBinding: fx.durableBinding,
-      governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract,
-    }), {
-      code: 'INVALID_INSTALLED_ENGINE',
-      messagePattern: /ledger|requires the witnessed ledger/i,
-      label: 'session_resume_missing_ledger',
-    });
-    assert.equal(rejected, true);
 
     function capInvoke(message) {
       if (message.operation && message.operation.startsWith('capability:')) {
@@ -1755,17 +1744,7 @@ const categoryMutations = {
     const reconstructed = installedEngine.reconstructActionIdentityFromLedger(ledger);
     assert.equal(reconstructed.status, 'aborted');
     assert.equal(reconstructed.decision_id, decision.payload.decision_id);
-    assert.equal(
-      heldNamed(() => installedEngine.reconstructActionIdentityFromLedger(
-        { header: ledger.header, events: ledger.events.filter((e) => e.type !== 'abort') },
-        session.getPersistedAbort(),
-      ), {
-        code: 'ENGINE_ABORT_INVALID',
-        messagePattern: /abort|side record|witnessed/i,
-        label: 'session_resume_abort_side_record',
-      }),
-      true,
-    );
+    // Positive control: valid witnessed-ledger resume succeeds first.
     const resumed = installedEngine.resumeInstalledEngineSession({
       profile: fx.profile,
       binding: fx.installedBinding,
@@ -1794,6 +1773,31 @@ const categoryMutations = {
     });
     assert.equal(resumed.getActionIdentity().status, 'aborted');
     assert.equal(resumed.getActionIdentity().decision_id, decision.payload.decision_id);
+    // Mutation: missing-ledger rejection is exact (not the positive control).
+    const rejected = heldNamed(() => installedEngine.resumeInstalledEngineSession({
+      profile: fx.profile,
+      binding: fx.installedBinding,
+      durableBinding: fx.durableBinding,
+      governanceConfig: fx.runtime.governanceConfig,
+      acceptanceContract,
+    }), {
+      code: 'INVALID_INSTALLED_ENGINE',
+      messagePattern: /ledger|requires the witnessed ledger/i,
+      label: 'session_resume_missing_ledger',
+    });
+    assert.equal(rejected, true);
+    // Isolated abort side-record mutation without witnessed abort events.
+    assert.equal(
+      heldNamed(() => installedEngine.reconstructActionIdentityFromLedger(
+        { header: ledger.header, events: ledger.events.filter((e) => e.type !== 'abort') },
+        session.getPersistedAbort(),
+      ), {
+        code: 'ENGINE_ABORT_INVALID',
+        messagePattern: /abort|side record|witnessed/i,
+        label: 'session_resume_abort_side_record',
+      }),
+      true,
+    );
     session.teardown();
     resumed.teardown();
     return 'accept';

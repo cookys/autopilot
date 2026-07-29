@@ -1172,6 +1172,180 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
     }),
     /terminal|redispatch|capability|accepted|second identity/i,
   );
+
+  // 2) Metadata-only substitutions fail real result/replay/resume matching APIs.
+  // Valid control uses the accepted main-session ledger + dispatch commitment above.
+  {
+    // Reuse accepted main-session ledger + dispatch commitment (already verified above).
+    const baseManifest = session.getDispatchDeliveredManifest();
+    assert.ok(baseManifest, 'control requires dispatch commitment after accept');
+    // priorIdentity was set for the successful main resume above; re-use that shape.
+    const controlPrior = {
+      decision_id: priorIdentity.decision_id,
+      action_hash: priorIdentity.action_hash,
+      claim_id: priorIdentity.claim_id,
+      status: priorIdentity.status,
+      catalog_id: priorIdentity.catalog_id,
+      delivered_manifest: baseManifest,
+    };
+    // Positive control: resume/replay with exact commitment succeeds.
+    const controlResumed = installedEngine.resumeInstalledEngineSession({
+      profile,
+      binding: installedBinding,
+      durableBinding,
+      governanceConfig,
+      acceptanceContract,
+      routeInputs,
+      ledger,
+      priorActionIdentity: controlPrior,
+      witnessInvoke: sharedWitnessInvoke,
+      engineInvoke,
+      coordinatorInvoke,
+      requestIdFactory: ({ label, counter }) => `meta-control-${label}-${counter}`,
+      kernelOptions: {
+        adapters,
+        clock: () => new Date(runtime.NOW),
+        nonceFactory: () => hash('meta-control-nonce').slice(0, 64),
+      },
+    });
+    assert.equal(controlResumed.getActionIdentity().status, 'accepted');
+    assert.equal(controlResumed.getActionIdentity().decision_id, controlPrior.decision_id);
+    // Control result rebuild also succeeds with exact heads.
+    const controlResult = installedEngine.buildInstalledEngineResult({
+      profile,
+      status: 'complete',
+      outcome: 'accepted',
+      accepted: true,
+      terminalBatch: 'atomic',
+      disclosure: session.disclosure(),
+      ledgerHead: completeEvent.event_hash,
+      deliveredManifestHead: acceptanceEvent.payload.delivered_set_hash,
+      candidateSetHash: acceptanceEvent.payload.candidate_set_hash,
+      acceptanceEventHash: acceptanceEvent.event_hash,
+      completeEventHash: completeEvent.event_hash,
+      ledger,
+      witness: session.witness,
+      acceptanceAuthority: session.acceptance_authority,
+    });
+    assert.equal(controlResult.accepted, true);
+    assert.equal(controlResult.delivered_manifest_head, baseManifest.acceptance_set_hash);
+    controlResumed.teardown();
+
+    const mutations = [
+      { label: 'commit', patch: { commit: '1'.repeat(40) } },
+      {
+        label: 'path',
+        patch: {
+          artifacts: baseManifest.artifacts.map((a) => ({
+            ...a,
+            path: 'other-path.tar',
+          })),
+        },
+      },
+      { label: 'receipt_sha256', patch: { receipt_sha256: '2'.repeat(64) } },
+      { label: 'boundary_effect_id', patch: { boundary_effect_id: 'effect-other' } },
+    ];
+    for (const mutation of mutations) {
+      const raw = {
+        commit: baseManifest.commit,
+        artifacts: baseManifest.artifacts.map((a) => ({
+          id: a.id,
+          path: a.path,
+          sha256: a.sha256,
+          ...(a.bytes != null ? { bytes: a.bytes } : {}),
+        })),
+        receipt_sha256: baseManifest.receipt_sha256,
+        boundary_effect_id: baseManifest.boundary_effect_id,
+        ...mutation.patch,
+      };
+      // Artifact id + content sha remain identical for every mutation.
+      assert.equal(raw.artifacts[0].id, baseManifest.artifacts[0].id);
+      assert.equal(raw.artifacts[0].sha256, baseManifest.artifacts[0].sha256);
+      if (mutation.label === 'path') {
+        assert.notEqual(raw.artifacts[0].path, baseManifest.artifacts[0].path);
+      }
+      const mutatedManifest = installedEngine.normalizeDispatchDeliveredManifest(raw);
+      assert.notEqual(
+        mutatedManifest.commitment_hash,
+        baseManifest.commitment_hash,
+        `${mutation.label} must change commitment_hash`,
+      );
+      assert.notEqual(
+        mutatedManifest.acceptance_set_hash,
+        baseManifest.acceptance_set_hash,
+        `${mutation.label} must change acceptance_set_hash`,
+      );
+      const mutatedPrior = {
+        decision_id: controlPrior.decision_id,
+        action_hash: controlPrior.action_hash,
+        claim_id: controlPrior.claim_id,
+        status: controlPrior.status,
+        catalog_id: controlPrior.catalog_id,
+        delivered_manifest: mutatedManifest,
+      };
+      let resumeCode = null;
+      try {
+        installedEngine.resumeInstalledEngineSession({
+          profile,
+          binding: installedBinding,
+          durableBinding,
+          governanceConfig,
+          acceptanceContract,
+          routeInputs,
+          ledger,
+          priorActionIdentity: mutatedPrior,
+          witnessInvoke: sharedWitnessInvoke,
+          engineInvoke,
+          coordinatorInvoke,
+          requestIdFactory: ({ label, counter }) => `meta-${mutation.label}-${label}-${counter}`,
+          kernelOptions: {
+            adapters,
+            clock: () => new Date(runtime.NOW),
+            nonceFactory: () => hash(`meta-${mutation.label}`).slice(0, 64),
+          },
+        });
+        assert.fail(`${mutation.label} resume must reject metadata substitution`);
+      } catch (error) {
+        resumeCode = error && error.code;
+        assert.equal(
+          resumeCode,
+          'DISPATCH_MANIFEST_MISMATCH',
+          `${mutation.label} resume must reject with DISPATCH_MANIFEST_MISMATCH; got ${resumeCode}: ${error && error.message}`,
+        );
+      }
+      // Result rebuild with substituted delivered_manifest_head also fails closed.
+      let resultCode = null;
+      try {
+        installedEngine.buildInstalledEngineResult({
+          profile,
+          status: 'complete',
+          outcome: 'accepted',
+          accepted: true,
+          terminalBatch: 'atomic',
+          disclosure: session.disclosure(),
+          ledgerHead: completeEvent.event_hash,
+          deliveredManifestHead: mutatedManifest.acceptance_set_hash,
+          candidateSetHash: mutatedManifest.acceptance_set_hash,
+          acceptanceEventHash: acceptanceEvent.event_hash,
+          completeEventHash: completeEvent.event_hash,
+          ledger,
+          witness: session.witness,
+          acceptanceAuthority: session.acceptance_authority,
+        });
+        assert.fail(`${mutation.label} result rebuild must reject substituted head`);
+      } catch (error) {
+        resultCode = error && error.code;
+        assert.ok(
+          resultCode === 'DISPATCH_MANIFEST_MISMATCH'
+            || resultCode === 'ACCEPTANCE_BATCH_REQUIRED'
+            || /delivered_manifest|commitment|match|accept/i.test(String(error && error.message || '')),
+          `${mutation.label} result must reject substitution; got ${resultCode}: ${error && error.message}`,
+        );
+      }
+    }
+  }
+
+
   session.teardown();
   resumed.teardown();
 
@@ -1470,6 +1644,7 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
       if (message.operation === 'execute_engine_dispatch') {
         const authorization = request.execution_authorization;
         consumed.add(authorization.authorization_id);
+        mismatchExecutedClaimId = request.claim_id;
         const effectId = `mismatch-effect-${request.claim_id}`;
         const commitSha = 'a'.repeat(40);
         const artifactSha = contentWorkspaceSha;
@@ -1573,7 +1748,9 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
       }
       throw new Error(`coordinator should not reach ${message.operation} after mismatch`);
     }
-    // Minimal adapters for verification path before accept.
+    // Full-commitment adapters (same shape as production happy-path adapters).
+    const mismatchAuditHead = mismatchHash('audit-mismatch-head');
+    let mismatchExecutedClaimId = null;
     const adapters = {
       ...mismatchRuntime.adapters(),
       evidenceArchiver({ verified_evidence }) {
@@ -1583,6 +1760,8 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
         };
       },
       verificationVerifier(_request, context) {
+        const set = captureManifest ? captureManifest.acceptance_set : wrongManifest;
+        const setHash = captureManifest ? captureManifest.acceptance_set_hash : wrongHash;
         return {
           ok: true,
           run_id: context.run_id,
@@ -1598,12 +1777,8 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
             leg_id: 'tests',
             outcome: 'green',
             command_hash: mismatchHash('node --test'),
-            candidate_artifacts: captureManifest
-              ? captureManifest.acceptance_set
-              : wrongManifest,
-            candidate_set_hash: captureManifest
-              ? captureManifest.acceptance_set_hash
-              : wrongHash,
+            candidate_artifacts: set,
+            candidate_set_hash: setHash,
             exit_code: 0,
             stdout_hash: mismatchHash('out'),
             stderr_hash: mismatchHash('err'),
@@ -1612,6 +1787,8 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
         };
       },
       challengeVerifier(envelope, context) {
+        const set = captureManifest ? captureManifest.acceptance_set : wrongManifest;
+        const setHash = captureManifest ? captureManifest.acceptance_set_hash : wrongHash;
         return {
           ok: true,
           run_id: context.run_id,
@@ -1626,12 +1803,8 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
             scope: 'contract_leg',
             scope_id: envelope.scope_id,
             finding: 'clear',
-            candidate_artifacts: captureManifest
-              ? captureManifest.acceptance_set
-              : wrongManifest,
-            candidate_set_hash: captureManifest
-              ? captureManifest.acceptance_set_hash
-              : wrongHash,
+            candidate_artifacts: set,
+            candidate_set_hash: setHash,
             subject_identity: mismatchProfile.engine_profile.route.worker_binding.identity,
             subject_family: 'qwen',
             result_hash: mismatchHash(`challenge-result:${envelope.scope_id}`),
@@ -1648,21 +1821,41 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
           envelope_hash: mismatchHash({ provenance: request }),
           payload: {
             verification_path: 'artifact_provenance',
-            attestation_sha256: mismatchHash('attestation:provenance'),
-            candidate_artifacts: captureManifest
-              ? captureManifest.acceptance_set
-              : wrongManifest,
-            candidate_set_hash: captureManifest
-              ? captureManifest.acceptance_set_hash
-              : wrongHash,
+            attestation_sha256: mismatchProfile.engine_profile.route.coordinator_binding.attestation_hash,
+            candidate_set_hash: request.candidate_set_hash,
+            intent_id: context.intent_id,
+            subject_identity: request.subject_identity,
+            subject_family: request.subject_family,
+          },
+        };
+      },
+      auditVerifier(_request, context) {
+        const set = captureManifest ? captureManifest.acceptance_set : wrongManifest;
+        const setHash = captureManifest ? captureManifest.acceptance_set_hash : wrongHash;
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: mismatchProfile.engine_profile.route.coordinator_binding.identity,
+          channel: 'mismatch-audit',
+          envelope_hash: mismatchHash('mismatch-audit-envelope'),
+          payload: {
+            verification_path: 'acceptance_audit',
+            attestation_sha256: mismatchProfile.engine_profile.route.coordinator_binding.attestation_hash,
+            audit_head: mismatchAuditHead,
+            intent_id: context.intent_id,
+            candidate_artifacts: set,
+            candidate_set_hash: setHash,
+            complete: true,
+            action_claim_ids: mismatchExecutedClaimId ? [mismatchExecutedClaimId] : [],
+            action_footprint_hash: context.action_footprint_hash,
+            evaluated_event_head: context.evaluated_event_head,
+            evaluated_witness_head: context.evaluated_witness_head,
             observed_at: mismatchNow,
           },
         };
       },
     };
-    // Skip full happy path if adapters incomplete — focus on execute + accept mismatch.
-    // Use same adapter shape as main test if available via runtime.adapters only
-    // and recordVerification with purpose.
+    // Track claim id for audit adapter when execute runs.
     const witnessInvoke = mismatchRuntime.createWitnessInvoke();
     const session = installedEngine.createInstalledEngineSession({
       profile: mismatchProfile,
@@ -1681,11 +1874,51 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
           payload: { text: 'mismatch', explicit_action_hashes: [] },
         },
         initialOwnerId: 'owner-a',
-        adapters: mismatchRuntime.adapters(),
+        // Install the full-commitment adapters constructed above (not default runtime adapters).
+        adapters,
         clock: () => new Date(mismatchRuntime.NOW),
         nonceFactory: () => mismatchHash('nonce-mm').slice(0, 64),
       },
     });
+    let verificationAdapterCalls = 0;
+    let challengeAdapterCalls = 0;
+    let provenanceAdapterCalls = 0;
+    // Wrap adapters to count exercise of verification/challenge/provenance bindings.
+    const countedAdapters = {
+      ...adapters,
+      verificationVerifier(request, context) {
+        verificationAdapterCalls += 1;
+        return adapters.verificationVerifier(request, context);
+      },
+      challengeVerifier(envelope, context) {
+        challengeAdapterCalls += 1;
+        return adapters.challengeVerifier(envelope, context);
+      },
+      artifactProvenanceVerifier(request, context) {
+        provenanceAdapterCalls += 1;
+        return adapters.artifactProvenanceVerifier(request, context);
+      },
+    };
+    // Re-bind counted adapters into a fresh session — session already created; instead
+    // count via the adapters object used at construction by mutating the functions.
+    // The adapters object was already passed; instrument it in place before mint.
+    void countedAdapters;
+    // Instrument the same object reference installed into the session:
+    const origVer = adapters.verificationVerifier;
+    const origCh = adapters.challengeVerifier;
+    const origProv = adapters.artifactProvenanceVerifier;
+    adapters.verificationVerifier = function verificationVerifier(request, context) {
+      verificationAdapterCalls += 1;
+      return origVer(request, context);
+    };
+    adapters.challengeVerifier = function challengeVerifier(envelope, context) {
+      challengeAdapterCalls += 1;
+      return origCh(envelope, context);
+    };
+    adapters.artifactProvenanceVerifier = function artifactProvenanceVerifier(request, context) {
+      provenanceAdapterCalls += 1;
+      return origProv(request, context);
+    };
     const decision = session.kernel.mintActionDecision({
       capability: session.owner_capability,
       ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'mismatch' },
@@ -1706,6 +1939,14 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
       timeoutMilliseconds: 1000,
     });
     assert.ok(session.getDispatchDeliveredManifest());
+    // Exercise verification/challenge/provenance adapters before coordinator mismatch.
+    session.kernel.recordVerification({ purpose: 'tests' });
+    session.kernel.recordChallenge({ scope_id: 'tests' });
+    session.kernel.recordChallenge({ scope_id: 'ux' });
+    session.kernel.recordAuditReconciliation({ purpose: 'audit' });
+    assert.ok(verificationAdapterCalls >= 1, 'verification adapter must be exercised');
+    assert.ok(challengeAdapterCalls >= 1, 'challenge adapter must be exercised');
+    assert.ok(provenanceAdapterCalls >= 1, 'provenance adapter must be exercised');
     let mismatchCode = null;
     let mismatchMessage = null;
     try {
@@ -1719,7 +1960,7 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
       mismatchMessage = String(error && error.message || '');
     }
     assert.equal(mismatchCode, 'DISPATCH_MANIFEST_MISMATCH');
-    assert.match(mismatchMessage, /dispatch|commitment|mismatch/i);
+    assert.match(mismatchMessage, /dispatch|commitment|mismatch|coordinator_acquire/i);
     const ledger = session.kernel.getLedger();
     const types = (ledger.events || []).map((event) => event.type);
     assert.equal(types.includes('acceptance'), false, 'mismatch must leave zero acceptance events');
@@ -1727,62 +1968,434 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
     session.teardown();
   }
 
-  // 2) Metadata-only substitutions change commitment and fail exact match.
+  // 1b) Late-phase coordinator substitution after a correct acquire.
   {
-    const base = installedEngine.normalizeDispatchDeliveredManifest({
-      commit: 'a'.repeat(40),
-      artifacts: [{ id: 'workspace', path: 'workspace.tar', sha256: 'b'.repeat(64), bytes: 12 }],
-      receipt_sha256: 'c'.repeat(64),
-      boundary_effect_id: 'effect-base',
+    const lateRuntime = createP37Runtime(root, {
+      actionCatalog: [baseEngine.ENGINE_IMPLEMENTATION_CATALOG_ENTRY],
+      acceptanceContract,
+      runId: 'p37-late-phase-sub',
     });
-    const mutations = [
-      { label: 'commit', patch: { commit: '1'.repeat(40) } },
-      { label: 'path', patch: { artifacts: [{ id: 'workspace', path: 'other.tar', sha256: 'b'.repeat(64), bytes: 12 }] } },
-      { label: 'receipt_sha256', patch: { receipt_sha256: '2'.repeat(64) } },
-      { label: 'boundary_effect_id', patch: { boundary_effect_id: 'effect-other' } },
-    ];
-    for (const mutation of mutations) {
-      const raw = {
-        commit: base.commit,
-        artifacts: base.artifacts.map((a) => ({ ...a })),
-        receipt_sha256: base.receipt_sha256,
-        boundary_effect_id: base.boundary_effect_id,
-        ...mutation.patch,
-      };
-      // Keep artifact id+content sha256 identical for path mutation (path changes only).
-      if (mutation.label === 'path') {
-        assert.equal(raw.artifacts[0].sha256, base.artifacts[0].sha256);
-        assert.equal(raw.artifacts[0].id, base.artifacts[0].id);
-      }
-      const mutated = installedEngine.normalizeDispatchDeliveredManifest(raw);
-      assert.notEqual(
-        mutated.commitment_hash,
-        base.commitment_hash,
-        `${mutation.label} must change commitment_hash`,
-      );
-      assert.notEqual(
-        mutated.acceptance_set_hash,
-        base.acceptance_set_hash,
-        `${mutation.label} must change acceptance_set_hash`,
-      );
-      let failed = false;
-      try {
-        // Simulate resume/result exact-match against original acceptance set hash.
-        installedEngine.normalizeDispatchDeliveredManifest; // keep lint quiet
-        const { assert } = require('node:assert/strict');
-        // Direct match helper path via acceptance assert equivalent:
-        if (mutated.acceptance_set_hash === base.acceptance_set_hash) {
-          throw new Error('should differ');
+    const lateHash = lateRuntime.hash;
+    const lateBinding = (() => {
+      const roles = installedContract.SERVICE_ROLES;
+      const bindings = {};
+      for (const role of roles) {
+        if (role === 'kernel') {
+          bindings.kernel = {
+            role: 'kernel',
+            identity: lateRuntime.kernelBinding.identity,
+            uid: lateRuntime.kernelBinding.uid,
+            gid: lateRuntime.kernelBinding.gid,
+            attestation_hash: lateRuntime.kernelBinding.attestation_hash,
+            cgroup_binding_hash: lateRuntime.kernelBinding.cgroup_binding_hash,
+          };
+          continue;
         }
-        // reconstruct-style: original ledger hash must not match mutated commitment
-        failed = mutated.acceptance_set_hash !== base.acceptance_set_hash;
-      } catch (_error) {
-        failed = true;
+        const service = lateRuntime.serviceBindings[role];
+        bindings[role] = {
+          role,
+          identity: service.identity,
+          uid: service.uid,
+          gid: service.gid,
+          attestation_hash: service.attestation_hash,
+          cgroup_binding_hash: service.cgroup_binding_hash,
+        };
       }
-      assert.equal(failed, true, `${mutation.label} metadata substitution must fail exact matching`);
+      return {
+        schema_version: 1,
+        kind: 'p37_installed_state_binding',
+        install_binding_hash: lateRuntime.durableBinding.install_binding_hash,
+        run_binding_hash: lateRuntime.durableBinding.run_binding_hash,
+        installed_abi_hash: installedContract.getSupervisedOwnerKernelInstalledAbiHash(),
+        durable_abi_hash: lateRuntime.durableBinding.durable_abi_hash,
+        cohort_id: lateRuntime.durableBinding.cohort_id,
+        generation: lateRuntime.durableBinding.generation,
+        service_bindings: bindings,
+        snapshot_hash: lateHash({
+          install: lateRuntime.durableBinding.install_binding_hash,
+          run: lateRuntime.durableBinding.run_binding_hash,
+          cohort: lateRuntime.durableBinding.cohort_id,
+        }),
+      };
+    })();
+    const lateNow = new Date(lateRuntime.NOW).toISOString();
+    const lateExpires = new Date(lateRuntime.NOW + 3600000).toISOString();
+    const lateProfile = installedEngine.compileInstalledEngineProfile({
+      binding: lateBinding,
+      governanceConfig: lateRuntime.governanceConfig,
+      acceptanceContract,
+      routeInputs: lateRuntime.routeInputs,
+      durableBinding: lateRuntime.durableBinding,
+      kernelBinding: lateRuntime.kernelBinding,
+      capabilityProbedAt: lateNow,
+      capabilityExpiresAt: lateExpires,
+    });
+    const lateAuth = new Map();
+    let lateManifest = null;
+    let acquireOk = false;
+    function lateHostResponse(message, response) {
+      return {
+        schema_version: 1,
+        kind: 'p37_engine_host_response',
+        profile_hash: message.profile_hash,
+        route_hash: message.route_hash,
+        operation: message.operation,
+        request_hash: message.request_hash,
+        response,
+        response_hash: lateHash(response),
+      };
     }
+    function lateEngineInvoke(message) {
+      const request = message.request;
+      if (message.operation.startsWith('capability:')) {
+        const response = {
+          ok: true,
+          run_id: request.run_id,
+          host_capability_hash: request.host_capability_hash,
+          observation_hash: lateHash({ operation: message.operation, request }),
+          probe_nonce: request.probe_nonce,
+        };
+        if (message.operation === 'capability:pre_action') {
+          response.execution_permit = {
+            permit_id: `permit-${request.claim_id}`,
+            run_id: request.run_id,
+            witness_stream_id: request.witness_stream_id,
+            witness_binding_hash: request.witness_binding_hash,
+            authority_hash: request.authority_hash,
+            claim_id: request.claim_id,
+            pre_action_witness_head: request.pre_action_witness_head,
+            host_capability_hash: request.host_capability_hash,
+            action_descriptor_hash: request.action_descriptor_hash,
+            executor_binding_hash: request.executor_binding_hash,
+            audience_identity: request.audience_identity,
+            expires_at: new Date(lateRuntime.NOW + 120000).toISOString(),
+            attestation_hash: lateHash(`permit:${request.claim_id}`),
+            issuer: lateProfile.engine_profile.route.kernel_binding.identity,
+            issuer_attestation_hash: lateProfile.engine_profile.route.kernel_binding.attestation_hash,
+            preclaim_authorization: `preclaim:${request.claim_id}`,
+          };
+        }
+        if (message.operation === 'capability:post_claim') {
+          const authorization = {
+            authorization_id: `authorization-${request.claim_id}`,
+            run_id: request.run_id,
+            witness_stream_id: request.witness_stream_id,
+            witness_binding_hash: request.witness_binding_hash,
+            authority_hash: request.authority_hash,
+            claim_id: request.claim_id,
+            claim_event_hash: request.claim_event_hash,
+            claim_witness_head: request.claim_witness_head,
+            claim_emitted_at: request.claim_emitted_at,
+            execution_permit_id: request.execution_permit.permit_id,
+            execution_permit_hash: request.execution_permit_hash,
+            host_capability_hash: request.host_capability_hash,
+            action_descriptor_hash: request.action_descriptor_hash,
+            executor_binding_hash: request.executor_binding_hash,
+            audience_identity: request.audience_identity,
+            issued_at: lateNow,
+            expires_at: new Date(lateRuntime.NOW + 60000).toISOString(),
+            attestation_hash: lateHash(`authorization:${request.claim_id}`),
+            issuer: lateProfile.engine_profile.route.kernel_binding.identity,
+            issuer_attestation_hash: lateProfile.engine_profile.route.kernel_binding.attestation_hash,
+            authorization: `postclaim:${request.claim_id}:${request.claim_event_hash}`,
+          };
+          lateAuth.set(authorization.authorization_id, authorization.authorization);
+          response.execution_authorization = authorization;
+        }
+        return lateHostResponse(message, response);
+      }
+      if (message.operation === 'execute_engine_dispatch') {
+        const authorization = request.execution_authorization;
+        lateExecutedClaimId = request.claim_id;
+        const effectId = `late-effect-${request.claim_id}`;
+        const commitSha = 'a'.repeat(40);
+        const artifactSha = contentWorkspaceSha;
+        const receiptSha = lateHash({ effect_id: effectId, commit: commitSha });
+        const raw = {
+          commit: commitSha,
+          artifacts: [{ id: 'workspace', path: 'workspace.tar', sha256: artifactSha }],
+          receipt_sha256: receiptSha,
+          boundary_effect_id: effectId,
+        };
+        lateManifest = installedEngine.normalizeDispatchDeliveredManifest(raw);
+        return lateHostResponse(message, {
+          receipt: {
+            uri: `file://${lateProfile.engine_profile.receipt_root}/${effectId}.json`,
+            sha256: receiptSha,
+          },
+          broker: {
+            identity: lateRuntime.serviceBindings.broker.identity,
+            broker_uid: lateRuntime.serviceBindings.broker.uid,
+          },
+          execution_permit_hash: request.execution_permit_hash,
+          execution_authorization_hash: request.execution_authorization_hash,
+          authorization_id: authorization.authorization_id,
+          claim_event_hash: request.claim_event_hash,
+          claim_witness_head: request.claim_witness_head,
+          permit_state: 'consumed',
+          boundary_effect_id: effectId,
+          boundary_state_version: 1,
+          boundary_attestation_hash: lateRuntime.serviceBindings.broker.attestation_hash,
+          effect_at: lateNow,
+          delivered_manifest: raw,
+        });
+      }
+      if (message.operation === 'verify_engine_dispatch') {
+        const receipt = request.receipt;
+        return lateHostResponse(message, {
+          ok: true,
+          run_id: request.run_id,
+          claim_id: request.claim_id,
+          executor_binding_hash: request.executor_binding_hash,
+          execution_permit_hash: request.execution_permit_hash,
+          execution_authorization_hash: request.execution_authorization_hash,
+          authorization_id: request.authorization_id,
+          claim_event_hash: request.claim_event_hash,
+          claim_witness_head: request.claim_witness_head,
+          permit_state: 'consumed',
+          boundary_effect_id: receipt.boundary_effect_id,
+          boundary_state_version: receipt.boundary_state_version,
+          boundary_attestation_hash: receipt.boundary_attestation_hash,
+          effect_at: receipt.effect_at,
+          status: 'succeeded',
+          receipt: receipt.receipt_ref,
+          broker: receipt.broker_receipt,
+          observed_action: lateProfile.action,
+          error_code: null,
+        });
+      }
+      throw new Error(`unexpected op ${message.operation}`);
+    }
+    function lateCoordinatorInvoke(message) {
+      const request = message.request;
+      if (message.operation === 'coordinator_cancel'
+        || message.operation === 'coordinator_release'
+        || message.operation === 'coordinator_request_abort') {
+        return lateHostResponse(message, { ok: true, disposition: 'cancelled' });
+      }
+      if (message.operation === 'coordinator_acquire') {
+        // Correct full-commitment set on acquire.
+        const set = lateManifest.acceptance_set;
+        const setHash = lateManifest.acceptance_set_hash;
+        const normalized = {
+          attempt_id: request.attempt_id,
+          attempt_hash: request.attempt_hash,
+          intent_id: request.expected_intent_id,
+          transaction_id: `txn-${request.attempt_id}`,
+          fence: lateHash(`fence:${request.attempt_id}`),
+          candidate_artifacts: set,
+          delivered_artifacts: set,
+          candidate_set_hash: setHash,
+          delivered_set_hash: setHash,
+          audit_head: lateAuditHead,
+          control_event_head: request.expected_event_head,
+          control_witness_head: request.expected_witness_head,
+          snapshot_at: lateNow,
+        };
+        // Snapshot body omits set hashes (normalizer recomputes them); hash input keeps them.
+        const snapshot = {
+          ok: true,
+          run_id: request.run_id,
+          attempt_id: normalized.attempt_id,
+          attempt_hash: normalized.attempt_hash,
+          intent_id: normalized.intent_id,
+          transaction_id: normalized.transaction_id,
+          fence: normalized.fence,
+          candidate_artifacts: normalized.candidate_artifacts,
+          delivered_artifacts: normalized.delivered_artifacts,
+          audit_head: normalized.audit_head,
+          control_event_head: normalized.control_event_head,
+          control_witness_head: normalized.control_witness_head,
+          snapshot_at: normalized.snapshot_at,
+          snapshot_hash: lateHash({ run_id: request.run_id, ...normalized }),
+        };
+        acquireOk = true;
+        return lateHostResponse(message, snapshot);
+      }
+      if (message.operation === 'coordinator_prepare_commit') {
+        // Late-phase substitution: inject wrong delivered_set_hash after acquire.
+        assert.equal(acquireOk, true, 'acquire must succeed before late prepare');
+        return lateHostResponse(message, {
+          disposition: 'prepared',
+          coordinator_commitment: {
+            protocol_version: 1,
+            run_id: request.run_id,
+            delivered_set_hash: 'f'.repeat(64),
+            candidate_set_hash: 'f'.repeat(64),
+            candidate_artifacts: [{ id: 'workspace', sha256: 'e'.repeat(64) }],
+            delivered_artifacts: [{ id: 'workspace', sha256: 'e'.repeat(64) }],
+            signature: lateHash('late-sub'),
+          },
+        });
+      }
+      throw new Error(`unexpected late coordinator op ${message.operation}`);
+    }
+    const lateAuditHead = lateHash('audit-late-head');
+    let lateExecutedClaimId = null;
+    const lateAdapters = {
+      ...lateRuntime.adapters(),
+      evidenceArchiver({ verified_evidence }) {
+        return {
+          uri: `durable://late/${lateHash(verified_evidence)}`,
+          sha256: lateHash(verified_evidence),
+        };
+      },
+      verificationVerifier(_request, context) {
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: 'runner-a',
+          channel: 'late-runner',
+          envelope_hash: lateHash('late-verification'),
+          payload: {
+            emitter_kind: 'runner',
+            verification_path: 'trusted_runner',
+            attestation_sha256: lateHash('attestation:runner-a'),
+            verification_id: 'late-verification',
+            intent_id: context.intent_id,
+            leg_id: 'tests',
+            outcome: 'green',
+            command_hash: lateHash('node --test'),
+            candidate_artifacts: lateManifest.acceptance_set,
+            candidate_set_hash: lateManifest.acceptance_set_hash,
+            exit_code: 0,
+            stdout_hash: lateHash('out'),
+            stderr_hash: lateHash('err'),
+            executed_at: lateNow,
+          },
+        };
+      },
+      challengeVerifier(envelope, context) {
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: 'challenger-a',
+          channel: 'late-challenge',
+          envelope_hash: lateHash({ challenge: envelope.scope_id }),
+          payload: {
+            verification_path: 'qualified_challenge',
+            attestation_sha256: lateHash('attestation:challenger-a'),
+            challenge_id: `late-challenge-${envelope.scope_id}`,
+            intent_id: context.intent_id,
+            scope: 'contract_leg',
+            scope_id: envelope.scope_id,
+            finding: 'clear',
+            candidate_artifacts: lateManifest.acceptance_set,
+            candidate_set_hash: lateManifest.acceptance_set_hash,
+            subject_identity: lateProfile.engine_profile.route.worker_binding.identity,
+            subject_family: 'qwen',
+            result_hash: lateHash(`challenge-result:${envelope.scope_id}`),
+            reviewed_at: lateNow,
+          },
+        };
+      },
+      artifactProvenanceVerifier(request, context) {
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: lateProfile.engine_profile.route.coordinator_binding.identity,
+          channel: 'late-provenance',
+          envelope_hash: lateHash({ provenance: request }),
+          payload: {
+            verification_path: 'artifact_provenance',
+            attestation_sha256: lateProfile.engine_profile.route.coordinator_binding.attestation_hash,
+            candidate_set_hash: request.candidate_set_hash,
+            intent_id: context.intent_id,
+            subject_identity: request.subject_identity,
+            subject_family: request.subject_family,
+          },
+        };
+      },
+      auditVerifier(_request, context) {
+        return {
+          ok: true,
+          run_id: context.run_id,
+          identity: lateProfile.engine_profile.route.coordinator_binding.identity,
+          channel: 'late-audit',
+          envelope_hash: lateHash('late-audit-envelope'),
+          payload: {
+            verification_path: 'acceptance_audit',
+            attestation_sha256: lateProfile.engine_profile.route.coordinator_binding.attestation_hash,
+            audit_head: lateAuditHead,
+            intent_id: context.intent_id,
+            candidate_artifacts: lateManifest.acceptance_set,
+            candidate_set_hash: lateManifest.acceptance_set_hash,
+            complete: true,
+            action_claim_ids: lateExecutedClaimId ? [lateExecutedClaimId] : [],
+            action_footprint_hash: context.action_footprint_hash,
+            evaluated_event_head: context.evaluated_event_head,
+            evaluated_witness_head: context.evaluated_witness_head,
+            observed_at: lateNow,
+          },
+        };
+      },
+    };
+    const lateWitness = lateRuntime.createWitnessInvoke();
+    const lateSession = installedEngine.createInstalledEngineSession({
+      profile: lateProfile,
+      binding: lateBinding,
+      durableBinding: lateRuntime.durableBinding,
+      governanceConfig: lateRuntime.governanceConfig,
+      acceptanceContract,
+      routeInputs: lateRuntime.routeInputs,
+      witnessInvoke: lateWitness,
+      engineInvoke: lateEngineInvoke,
+      coordinatorInvoke: lateCoordinatorInvoke,
+      requestIdFactory: ({ label: part, counter }) => `late-${part}-${counter}`,
+      kernelOptions: {
+        initialIntentEnvelope: {
+          signed: true,
+          payload: { text: 'late-phase', explicit_action_hashes: [] },
+        },
+        initialOwnerId: 'owner-a',
+        adapters: lateAdapters,
+        clock: () => new Date(lateRuntime.NOW),
+        nonceFactory: () => lateHash('nonce-late').slice(0, 64),
+      },
+    });
+    const lateDecision = lateSession.kernel.mintActionDecision({
+      capability: lateSession.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'late' },
+      actionClass: 'external',
+      actionDescriptor: lateProfile.action,
+    });
+    lateSession.kernel.submitApproval({
+      signed: true,
+      payload: {
+        decision_id: lateDecision.payload.decision_id,
+        decision_content_hash: lateDecision.payload.decision_content_hash,
+        max_uses: 1,
+      },
+    });
+    await lateSession.kernel.executeAuthorizedAction({
+      decisionId: lateDecision.payload.decision_id,
+      action: lateProfile.action,
+      timeoutMilliseconds: 1000,
+    });
+    lateSession.kernel.recordVerification({ purpose: 'tests' });
+    lateSession.kernel.recordChallenge({ scope_id: 'tests' });
+    lateSession.kernel.recordChallenge({ scope_id: 'ux' });
+    lateSession.kernel.recordAuditReconciliation({ purpose: 'audit' });
+    let lateCode = null;
+    let lateMessage = null;
+    try {
+      await lateSession.kernel.accept({
+        capability: lateSession.owner_capability,
+        timeoutMilliseconds: 1000,
+      });
+      assert.fail('late-phase substitution must reject accept');
+    } catch (error) {
+      lateCode = error && error.code;
+      lateMessage = String(error && error.message || '');
+    }
+    assert.equal(lateCode, 'DISPATCH_MANIFEST_MISMATCH');
+    assert.match(lateMessage, /substitut|prepare|commitment|mismatch|delivered_set_hash/i);
+    const lateLedger = lateSession.kernel.getLedger();
+    const lateTypes = (lateLedger.events || []).map((event) => event.type);
+    assert.equal(lateTypes.includes('acceptance'), false, 'late-phase must leave zero acceptance');
+    assert.equal(lateTypes.includes('complete'), false, 'late-phase must leave zero complete');
+    lateSession.teardown();
   }
-
 
 console.log(JSON.stringify({
     installed_engine_sink: 'ok',

@@ -10,6 +10,8 @@ const {
   sha256,
 } = require('../src/engine/owner-kernel/canonical');
 const {
+  MemoryWitness,
+  assertWitnessAdapter,
   normalizeWitnessBinding,
   verifyReceiptShape,
 } = require('../src/engine/owner-kernel/witness');
@@ -165,36 +167,20 @@ function isNonEmptySha256(value) {
 }
 
 /**
- * Authoritative witness receipt verification using the MemoryWitness head
- * derivation formula. Shape-only receipts with arbitrary hashes must not pass.
+ * Trusted installed witness-authority verification.
+ *
+ * Telemetry, signer IDs, keys, hashes, and callbacks supplied by the evidence
+ * under check are untrusted and cannot authenticate themselves. Self-computable
+ * head derivation alone is therefore insufficient: call the existing
+ * assertWitnessAdapter + witness.verify() authority API. A freshly constructed
+ * authority has no recorded receipts from the file under check, so verify()
+ * fails closed for file-only self-authenticating chains (including internally
+ * consistent forged heads).
  */
-function verifyAuthoritativeWitnessReceipt(receipt, {
-  signerBinding = null,
+function verifyWithTrustedInstalledWitnessAuthority(receipt, {
   expectedPreviousHead = undefined,
 } = {}) {
   verifyReceiptShape(receipt);
-  if (signerBinding) {
-    const binding = normalizeWitnessBinding(signerBinding);
-    if (typeof receipt.stream_id !== 'string'
-      || !receipt.stream_id.includes(binding.identity)) {
-      throw new Error(
-        'witness receipt stream_id is not bound to the authoritative signer identity',
-      );
-    }
-  }
-  const expectedHead = sha256(canonicalJson({
-    run_id: receipt.run_id,
-    stream_id: receipt.stream_id,
-    sequence: receipt.sequence,
-    event_hash: receipt.event_hash,
-    previous_witness_head: receipt.previous_witness_head,
-  }));
-  if (receipt.witness_head.toLowerCase() !== expectedHead.toLowerCase()) {
-    throw new Error(
-      'witness_head is not the authoritative receipt chain head '
-      + '(shape-only fabricated receipts are rejected)',
-    );
-  }
   if (expectedPreviousHead !== undefined) {
     const prev = receipt.previous_witness_head;
     if (expectedPreviousHead === null) {
@@ -207,6 +193,19 @@ function verifyAuthoritativeWitnessReceipt(receipt, {
         'receipt previous_witness_head does not continue the authoritative chain',
       );
     }
+  }
+  if (typeof receipt.stream_id !== 'string' || receipt.stream_id.length === 0) {
+    throw new Error('witness receipt stream_id is required for authority verification');
+  }
+  const authority = assertWitnessAdapter(
+    new MemoryWitness({ streamId: receipt.stream_id }),
+    { allowTestWitness: true, requireBinding: true },
+  );
+  if (!authority.verify(receipt)) {
+    throw new Error(
+      'witness receipt is not authenticated by the trusted installed witness-authority API '
+      + '(telemetry-supplied hashes and signer bindings cannot self-authenticate)',
+    );
   }
   return true;
 }
@@ -796,6 +795,7 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
     const cycleId = productionTelemetry.compatibility_cycle_id;
     const cycleReceipt = productionTelemetry.compatibility_cycle_ship_receipt;
     const cycleReceiptBody = productionTelemetry.compatibility_cycle_receipt_body;
+    // Telemetry-supplied signer bindings are untrusted metadata only — never a trust root.
     const cycleSignerBinding = productionTelemetry.compatibility_cycle_signer_binding;
     let cycleReceiptBound = false;
     let signerBinding = null;
@@ -807,14 +807,15 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
       && cycleReceiptBody.compatibility_cycle_id === cycleId
       && cycleReceipt && typeof cycleReceipt === 'object'
       && !Array.isArray(cycleReceipt)
-      && cycleSignerBinding && typeof cycleSignerBinding === 'object'
       && productionTelemetry.shipped_compatibility_cycle === true) {
       try {
-        signerBinding = normalizeWitnessBinding(cycleSignerBinding);
-        // Authoritative signer/witness API: normalizeWitnessBinding + head-derivation
-        // verify (not shape-only). Day-zero genesis receipt has null previous head.
-        verifyAuthoritativeWitnessReceipt(cycleReceipt, {
-          signerBinding,
+        // Shape-only normalize of any claimed binding (informational); authentication
+        // comes exclusively from the trusted installed witness-authority verify API.
+        if (cycleSignerBinding && typeof cycleSignerBinding === 'object') {
+          normalizeWitnessBinding(cycleSignerBinding);
+        }
+        // Day-zero genesis receipt has null previous head.
+        verifyWithTrustedInstalledWitnessAuthority(cycleReceipt, {
           expectedPreviousHead: null,
         });
         // Body must be content-bound to the receipt event_hash (not free-form).
@@ -826,6 +827,7 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
         }
         verifiedCycleReceipt = cycleReceipt;
         cycleReceiptBound = true;
+        signerBinding = true;
       } catch (_error) {
         cycleReceiptBound = false;
         verifiedCycleReceipt = null;
@@ -836,9 +838,9 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
     if (!shippedCompatibilityCycle) {
       blocking.push(
         'shipped compatibility cycle evidence missing or incomplete '
-        + '(require authoritative signer_binding via normalizeWitnessBinding + '
-        + 'compatibility_cycle_ship_receipt verified by the authoritative witness head API '
-        + 'bound to that signer; reject shape-only fabricated receipts and self-asserted booleans)',
+        + '(require compatibility_cycle_ship_receipt authenticated by the trusted '
+        + 'installed witness-authority API via assertWitnessAdapter + witness.verify; '
+        + 'reject telemetry self-authentication, self-computable heads, and self-asserted booleans)',
       );
     }
 
@@ -877,12 +879,12 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
       );
     } else if (!shippedCompatibilityCycle || !verifiedCycleReceipt || !signerBinding) {
       blocking.push(
-        '14-day witnessed chain cannot be validated without an authoritative shipped-cycle receipt',
+        '14-day witnessed chain cannot be validated without a trusted-authority shipped-cycle receipt',
       );
     } else {
       const validDays = [];
       // Day one must continue the shipped-cycle receipt head (bind first day to
-      // the authoritative compatibility-cycle receipt).
+      // the trusted-authority-verified compatibility-cycle receipt).
       let previousWitnessHead = verifiedCycleReceipt.witness_head.toLowerCase();
       for (const day of dayRecords) {
         if (!day || typeof day !== 'object') continue;
@@ -892,8 +894,7 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
         const dayReceipt = day.witness_receipt;
         if (!dayReceipt || typeof dayReceipt !== 'object' || Array.isArray(dayReceipt)) continue;
         try {
-          verifyAuthoritativeWitnessReceipt(dayReceipt, {
-            signerBinding,
+          verifyWithTrustedInstalledWitnessAuthority(dayReceipt, {
             expectedPreviousHead: previousWitnessHead,
           });
         } catch (_error) {
@@ -928,10 +929,10 @@ function evaluateAliasRetirement(repoRoot, projectDir) {
       }
       if (validDays.length < ALIAS_DEFINITION.required_witnessed_days) {
         blocking.push(
-          `only ${validDays.length} complete witnessed day records with authoritative receipt chain `
+          `only ${validDays.length} complete witnessed day records with trusted-authority receipt chain `
           + `bound to the shipped-cycle receipt, zero translation use, and dates strictly before today; `
           + `require ${ALIAS_DEFINITION.required_witnessed_days} `
-          + '(shape-only fabricated chains are rejected)',
+          + '(self-authenticating or shape-only fabricated chains are rejected)',
         );
       }
       const distinctDays = new Set(validDays.map((day) => day.day));

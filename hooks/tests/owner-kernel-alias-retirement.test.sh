@@ -44,10 +44,14 @@ assert_file_exists "$REPO_ROOT/src/engine/owner-kernel/compatibility.js" \
 CHECKER_SRC="$(cat "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js")"
 assert_contains "$CHECKER_SRC" "bash', ['-n'" \
   "KR10 runs deterministic bash -n for shell members"
-assert_contains "$CHECKER_SRC" 'verifyAuthoritativeWitnessReceipt' \
-  "alias retirement uses authoritative witness receipt API"
+assert_contains "$CHECKER_SRC" 'assertWitnessAdapter' \
+  "alias retirement uses trusted installed witness-authority API"
+assert_contains "$CHECKER_SRC" 'verifyWithTrustedInstalledWitnessAuthority' \
+  "alias retirement calls trusted witness-authority verification"
 
-# alias-receipt-authenticity: fabricated shape-only 14-day chains HOLD retirement.
+# alias-receipt-self-authentication: internally consistent forged chains HOLD.
+# Heads and event hashes are recomputed with the same canonical formula a forger
+# would use; telemetry still cannot self-authenticate against the trusted API.
 FAB_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-retire-fab.XXXXXX")"
 mkdir -p "$FAB_DIR/production-telemetry"
 node - "$REPO_ROOT" "$FAB_DIR" <<'NODE'
@@ -56,26 +60,60 @@ const path = require('path');
 const root = process.argv[2];
 const dir = process.argv[3];
 const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+
+function witnessHead(fields) {
+  return sha256(canonicalJson({
+    run_id: fields.run_id,
+    stream_id: fields.stream_id,
+    sequence: fields.sequence,
+    event_hash: fields.event_hash,
+    previous_witness_head: fields.previous_witness_head,
+  }));
+}
+
+const runId = 'fabricated-run';
+const streamId = 'fabricated-signer-stream';
+const cycleBody = { compatibility_cycle_id: 'fabricated-cycle' };
+const cycleEventHash = sha256(canonicalJson(cycleBody));
+const cycleBase = {
+  run_id: runId,
+  stream_id: streamId,
+  sequence: 1,
+  event_hash: cycleEventHash,
+  previous_witness_head: null,
+};
+const cycleHead = witnessHead(cycleBase);
+const cycleReceipt = { ...cycleBase, witness_head: cycleHead };
+
 const days = [];
+let previousHead = cycleHead;
 for (let i = 1; i <= 14; i += 1) {
   const day = `2020-01-${String(i).padStart(2, '0')}`;
+  const dayBody = {
+    day,
+    translation_used_events: 0,
+    unresolved_translation_deltas: 0,
+    prior_witness_head: previousHead,
+  };
+  const eventHash = sha256(canonicalJson(dayBody));
+  const base = {
+    run_id: runId,
+    stream_id: streamId,
+    sequence: i + 1,
+    event_hash: eventHash,
+    previous_witness_head: previousHead,
+  };
+  const head = witnessHead(base);
   days.push({
     day,
     translation_used_events: 0,
     unresolved_translation_deltas: 0,
-    witness_head: `${i.toString(16).padStart(2, '0')}${'a'.repeat(62)}`,
-    witness_receipt: {
-      run_id: 'fabricated-run',
-      stream_id: 'fabricated-signer-stream',
-      sequence: i,
-      event_hash: `${i.toString(16).padStart(2, '0')}${'b'.repeat(62)}`,
-      previous_witness_head: i === 1
-        ? 'e'.repeat(64)
-        : `${(i - 1).toString(16).padStart(2, '0')}${'a'.repeat(62)}`,
-      witness_head: `${i.toString(16).padStart(2, '0')}${'a'.repeat(62)}`,
-    },
+    witness_head: head,
+    witness_receipt: { ...base, witness_head: head },
   });
+  previousHead = head;
 }
+
 const migrationBody = { complete: true, callers_migrated: ['l3', 'l4', 'l5', 'l6'] };
 const telemetry = {
   compatibility_cycle_id: 'fabricated-cycle',
@@ -85,16 +123,8 @@ const telemetry = {
     attestation_hash: 'c'.repeat(64),
     protocol_version: 1,
   },
-  compatibility_cycle_receipt_body: { compatibility_cycle_id: 'fabricated-cycle' },
-  compatibility_cycle_ship_receipt: {
-    run_id: 'fabricated-run',
-    stream_id: 'fabricated-signer-stream',
-    sequence: 1,
-    event_hash: 'd'.repeat(64),
-    previous_witness_head: null,
-    // Deliberately NOT the authoritative head derivation of the receipt fields.
-    witness_head: 'e'.repeat(64),
-  },
+  compatibility_cycle_receipt_body: cycleBody,
+  compatibility_cycle_ship_receipt: cycleReceipt,
   witnessed_zero_use_days: 14,
   translation_used_events: 0,
   unresolved_translation_deltas: 0,
@@ -114,11 +144,11 @@ FAB_OUT="$(node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
   --project "$FAB_DIR" \
   --repo-root "$REPO_ROOT" 2>&1)"
 FAB_EXIT=$?
-assert_eq "0" "$FAB_EXIT" "fabricated telemetry still emits a report"
+assert_eq "0" "$FAB_EXIT" "internally consistent forged telemetry still emits a report"
 assert_contains "$FAB_OUT" '"status": "HOLD"' \
-  "fabricated shape-only chains HOLD alias retirement"
-assert_contains "$FAB_OUT" 'authoritative' \
-  "HOLD reasons cite authoritative receipt verification"
+  "internally consistent forged chains HOLD alias retirement"
+assert_contains "$FAB_OUT" 'trusted' \
+  "HOLD reasons cite trusted witness-authority verification"
 rm -rf "$FAB_DIR"
 
 echo "PASS [owner-kernel-alias-retirement] alias retirement gate stays HOLD without deletion"

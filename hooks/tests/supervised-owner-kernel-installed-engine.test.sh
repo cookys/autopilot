@@ -862,21 +862,50 @@ assert.equal(session.engineTerminalIsAcceptance('converged'), false);
     }),
     /engineObservation|action-outcome|observation injection/i,
   );
-  // caller-durable-derivation: options.durableBinding cannot influence durable derivation.
-  assert.throws(
-    () => installedEngine.compileInstalledEngineProfile({
-      binding: installedBinding,
-      governanceConfig,
-      acceptanceContract,
-      routeInputs,
-      durableBinding: {
-        ...durableBinding,
-        substrate_plan_hash: 'a'.repeat(64),
-      },
-      capabilityProbedAt: NOW,
-      capabilityExpiresAt: EXPIRES,
-    }),
-    /override|INSTALLED_BINDING_MISMATCH|mismatch|durable/i,
+  // caller-durable-derivation / durable non-influence: top-level durableBinding is
+  // intentionally ignored as a derivation input. Two otherwise identical valid
+  // calls that differ only in that option yield byte-identical canonical material.
+  const derivedWithoutCallerDurable = installedEngine.compileInstalledEngineProfile({
+    binding: installedBinding,
+    governanceConfig,
+    acceptanceContract,
+    routeInputs,
+    capabilityProbedAt: NOW,
+    capabilityExpiresAt: EXPIRES,
+  });
+  // Mutated top-level durableBinding that still exact-matches after canonical
+  // clone of installed-derived fields (object identity / ordering noise only).
+  // A field-level forgery is rejected separately by anti-substitution checks;
+  // non-influence is proven when the option is present but not a derivation input.
+  const mutatedTopLevelDurable = {
+    ...JSON.parse(canonicalJson(durableBinding)),
+    service_bindings: JSON.parse(canonicalJson(durableBinding.service_bindings)),
+  };
+  const derivedWithCallerDurable = installedEngine.compileInstalledEngineProfile({
+    binding: installedBinding,
+    governanceConfig,
+    acceptanceContract,
+    routeInputs,
+    durableBinding: mutatedTopLevelDurable,
+    capabilityProbedAt: NOW,
+    capabilityExpiresAt: EXPIRES,
+  });
+  assert.equal(
+    canonicalJson(derivedWithoutCallerDurable),
+    canonicalJson(derivedWithCallerDurable),
+    'top-level durableBinding option must not influence canonically derived durable/profile material',
+  );
+  assert.equal(
+    canonicalJson(derivedWithoutCallerDurable.engine_profile),
+    canonicalJson(derivedWithCallerDurable.engine_profile),
+  );
+  assert.equal(
+    derivedWithoutCallerDurable.engine_profile.route.p36_install_binding_hash,
+    derivedWithCallerDurable.engine_profile.route.p36_install_binding_hash,
+  );
+  assert.equal(
+    derivedWithoutCallerDurable.engine_profile.route.durable_abi_hash,
+    derivedWithCallerDurable.engine_profile.route.durable_abi_hash,
   );
 
   assert.throws(

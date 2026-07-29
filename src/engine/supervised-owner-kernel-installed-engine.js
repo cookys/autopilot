@@ -299,10 +299,11 @@ function durableAndKernelFromInstalled(installedBinding, options = {}) {
   }
   const installedDefaults = durableBindingFromInstalled(binding);
   const kernelBinding = cloneCanonical(binding.service_bindings.kernel);
-  // Caller options.durableBinding / verifiedHandoff / handoffClaim / runBinding /
-  // substratePlan are NOT derivation inputs. Only routeInputs-bound materials may
-  // authorize the route-verified durable; otherwise the installed defaults clone
-  // is returned unmodified.
+  // Caller options.durableBinding is intentionally ignored as a derivation input
+  // (durable non-influence). verifiedHandoff / handoffClaim / runBinding /
+  // substratePlan are likewise NOT derivation inputs. Only routeInputs-bound
+  // materials may authorize the route-verified durable; otherwise the installed
+  // defaults clone is returned unmodified.
   const routeInputs = options.routeInputs && typeof options.routeInputs === 'object'
     ? options.routeInputs
     : {};

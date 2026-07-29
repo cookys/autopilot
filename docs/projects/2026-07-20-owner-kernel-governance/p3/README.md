@@ -1,8 +1,9 @@
 # P3 Compatibility Activation
 
-P3 is split deliberately. P3.0-P3.6c are implemented prerequisites; full P3 remains blocked until the
-P3.7 supervised host bridge controls a live Engine action sink and v2 acceptance. The intermediate
-phases are not release activation: release metadata moves only after the full gate clears.
+P3 is split deliberately. P3.0-P3.6c provide the installed substrate, P3.7a-c freeze the authority
+contracts, and installed U5/U6 activate one fixed Engine action sink with v2 acceptance in the
+disposable Linux gate. Release evidence remains separately fail-closed: metadata and alias retirement
+do not move until the production KR8/KR10 and elapsed-window gates clear.
 
 ## P3.0 Implemented
 
@@ -530,14 +531,30 @@ bash hooks/tests/supervised-owner-kernel-engine-acceptance.test.sh
 bash hooks/tests/owner-kernel-production-corpus.test.sh
 ```
 
-## Deferred Full P3 Gate
+## P3.7 Installed U5/U6
+
+The installed route now composes authenticated intake, owner decision, delegation, the fixed
+`engine-implementation-dispatch-v1` sink, verification, independent challenge, reconciliation,
+abort/resume, final delivered-manifest commitment, and atomic acceptance/complete into one witnessed
+ledger. The acceptance set transitively binds commit, artifact paths/bytes/content digests,
+receipt identity, boundary effect, and artifact-set digest across every coordinator phase. Alias
+migration scans use immutable clean-HEAD bytes.
+
+The local privileged disposable gate passes 8 assertions and removes every `autopilot-p37i-*`
+identity, transient unit, runtime directory, and temporary fixed Node binary afterward. U6's
+engine/dogfood/corpus/release/alias suites pass 12/11/20/44/50 assertions. The mechanical release
+checker intentionally remains `HOLD`: current evidence is fixture/dogfood rather than authenticated
+production KR8 telemetry, KR10 complete executed membership is unavailable, and no 14-day witnessed
+alias-retirement window has elapsed.
+
+## Deferred Release Gate
 
 Do not reduce `/l4` through `/l6` to aliases yet. Their worktree isolation, strict dispatch
 contracts, artifact boundary, depth-0 QC, merge, session marker, and recovery rails are currently
-the active enforcement path. P3.7 now has one bounded Owner Kernel action-sink bridge and the
-external coordinator contract, but no installed P3.7 systemd adapter has replaced those rails.
+the active enforcement path. Installed P3.7 validates the bounded route; it does not manufacture
+production telemetry or authorize compatibility deletion.
 
-Full activation requires all of the following:
+Release and alias retirement still require all of the following:
 
 1. A Linux-scoped supervised host/broker with authenticated user/owner/translation IPC, durable
    external witness compare-and-append/batch/readback, bounded callbacks, restart recovery, and the

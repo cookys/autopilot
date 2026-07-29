@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-30-repair-lineage-convergence.md",
+      "rubric_path": "plans/2026-07-30-repair-lineage-convergence.rubric.md",
+      "plan_sha256": "03aca7146505a685ff337c266f266813d9499fbd9ebbac86aca0bcfb2c64da0c",
+      "rubric_sha256": "21254773dc030151d66870e243bc786371d7d9ef340139f58ea9a2ef45734689"
+    }
+  ]
+}

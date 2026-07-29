@@ -66,6 +66,16 @@ Hard rules:
   `zero_residue` field to be exactly `true`; `false` is a resource blocker.
   This rail proves resource disposition only and never computes task
   `can_close`, generation advance, or finish authority.
+- **Repair lineage convergence**: one managed campaign uses one stable branch
+  and one leased implementation worktree. Repairs attach the exact checkout;
+  Grok repairs also resume the exact provider UUID. A runner without verified
+  resume support records the non-reuse reason and may not hide a fresh session
+  as continuity. The same normalized finding recurring after one bounded
+  repair, or two repair rounds without a smaller finding set, enters
+  `awaiting_convergence_adjudication` before model spend. Compaction/resume
+  restores this identity from the durable candidate reference, not from the
+  conversational summary. Terminal success removes the clean retained
+  worktree; dirty or unverifiable cleanup blocks.
 - **Terminal status gate**: run
   `node "$autopilot_root/bin/autopilot.js" status task --root-run-id <campaign-root> --json`
   before merge, after merge, and before marker clear. Exit 0 alone is insufficient: capture the

@@ -298,13 +298,18 @@ function runCampaignComposition(input = {}, adapters = {}) {
   trace.push('preflight');
   if (gate.passed !== true) return blocked('preflight', gate.reason || 'preflight rejected', trace);
 
-  const mutate = (kind, repairFindings = []) => {
+  const mutate = (
+    kind,
+    repairFindings = [],
+    reviewInputMode = 'full_diff_generation',
+  ) => {
     const repairFindingIds = repairFindings.map((finding) => finding.id);
     const mutation = requireReceipt(implement({
       kind,
       repair_generation: repairGeneration,
       repair_finding_ids: repairFindingIds,
       repair_findings: repairFindings,
+      review_input_mode: reviewInputMode,
       previous_candidate: candidate,
     }), 'implement');
     trace.push(kind === 'initial' ? 'implement' : 'repair');
@@ -451,7 +456,11 @@ function runCampaignComposition(input = {}, adapters = {}) {
       return blocked('convergence', receipt.reason || 'convergence gate tripped', trace);
     }
     repairGeneration += 1;
-    const mutationResult = mutate('review_repair', mustFix);
+    const mutationResult = mutate(
+      'review_repair',
+      mustFix,
+      lastReview.review_input_mode || 'full_diff_generation',
+    );
     if (mutationResult.stop) return mutationResult.stop;
   }
 

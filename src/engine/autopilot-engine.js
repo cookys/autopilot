@@ -38,12 +38,16 @@ const {
   CAMPAIGN_EVENTS,
   CAMPAIGN_STATES,
   campaignIdFor,
+  repairLineageCleanupId,
 } = require('./implementation-campaign');
 const {
   missionCampaignIdFor,
   missionSubjectDigest,
 } = require('./mission-campaign-identity');
 const { normalizeProductReviewFindings } = require('./product-review-normalizer');
+const {
+  worktreeInstanceId: repairWorktreeInstanceId,
+} = require('./repair-lineage-cleanup');
 const {
   canonicalDigest: campaignCanonicalDigest,
   createDetachedCheckoutAttestation,
@@ -818,6 +822,13 @@ function buildImplementationArgs({
   campaignContractDigest = null,
   campaignSealFile = null,
   campaignUnitContractFile = null,
+  keepWorktree = false,
+  reuseWorktree = null,
+  expectedWorktreeInstanceId = null,
+  resumeSessionId = null,
+  retentionOwner = null,
+  retentionReason = null,
+  retentionExpiresAt = null,
 }) {
   validateImplementerRoster(roster);
   if (!promptFile || typeof promptFile !== 'string') {
@@ -841,6 +852,13 @@ function buildImplementationArgs({
     '--campaign-seal',
     '--strict-contract',
     '--contract-file',
+    '--keep-worktree',
+    '--reuse-worktree',
+    '--expected-worktree-instance',
+    '--resume-session',
+    '--retain-owner',
+    '--retain-reason',
+    '--retain-until',
     ...DISPATCH_IDENTITY_FLAGS,
   ]), 'extraImplementationArgs');
   if (campaignContractFile !== null
@@ -904,6 +922,51 @@ function buildImplementationArgs({
       cwd || process.cwd(),
       campaignUnitContractFile,
     ));
+  }
+  if (reuseWorktree !== null) {
+    if (typeof reuseWorktree !== 'string' || !path.isAbsolute(reuseWorktree)) {
+      throw new TypeError('reuseWorktree must be an absolute path');
+    }
+    args.push('--reuse-worktree', reuseWorktree);
+    if (typeof expectedWorktreeInstanceId !== 'string'
+        || !/^[0-9a-f]{64}$/.test(expectedWorktreeInstanceId)) {
+      throw new TypeError(
+        'expectedWorktreeInstanceId must be a lowercase SHA-256 digest when reusing a worktree',
+      );
+    }
+    args.push('--expected-worktree-instance', expectedWorktreeInstanceId);
+  } else if (expectedWorktreeInstanceId !== null) {
+    throw new TypeError('expectedWorktreeInstanceId requires reuseWorktree');
+  }
+  if (resumeSessionId !== null) {
+    if (typeof resumeSessionId !== 'string'
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+          resumeSessionId,
+        )) {
+      throw new TypeError('resumeSessionId must be a lowercase UUID');
+    }
+    args.push('--resume-session', resumeSessionId);
+  }
+  if (keepWorktree === true) {
+    if (typeof retentionOwner !== 'string'
+        || !/^[A-Za-z0-9._-]+$/.test(retentionOwner)) {
+      throw new TypeError('retentionOwner must match [A-Za-z0-9._-]+');
+    }
+    if (typeof retentionReason !== 'string' || retentionReason.trim().length === 0) {
+      throw new TypeError('retentionReason must be a non-empty string');
+    }
+    if (!Number.isSafeInteger(retentionExpiresAt) || retentionExpiresAt <= 0) {
+      throw new TypeError('retentionExpiresAt must be a positive epoch second');
+    }
+    args.push(
+      '--keep-worktree',
+      '--retain-owner',
+      retentionOwner,
+      '--retain-reason',
+      retentionReason,
+      '--retain-until',
+      String(retentionExpiresAt),
+    );
   }
   args.push(...extraImplementationArgs);
   return args;
@@ -1301,6 +1364,85 @@ function createCampaignScopeSession({ contract, base, implementationSha }) {
   });
 }
 
+function createRepairScopeSeal({ findingIds, allowedPaths, sourceCommit }) {
+  const body = {
+    schema: 1,
+    finding_ids: [...new Set(findingIds)].sort(),
+    allowed_paths: [...new Set(allowedPaths)].sort(),
+    source_commit: sourceCommit,
+  };
+  return Object.freeze({
+    ...body,
+    seal_digest: campaignCanonicalDigest(body),
+  });
+}
+
+function repairScopeSealValid(seal) {
+  if (!isPlainObject(seal)) return false;
+  const { seal_digest: sealDigest, ...body } = seal;
+  return body.schema === 1
+    && Array.isArray(body.finding_ids)
+    && body.finding_ids.length > 0
+    && Array.isArray(body.allowed_paths)
+    && body.allowed_paths.length > 0
+    && body.finding_ids.every((item, index) => typeof item === 'string'
+      && item.length > 0
+      && (index === 0 || body.finding_ids[index - 1] < item))
+    && body.allowed_paths.every((item, index) => typeof item === 'string'
+      && item.length > 0
+      && !path.isAbsolute(item)
+      && !item.split('/').includes('..')
+      && (index === 0 || body.allowed_paths[index - 1] < item))
+    && isImmutableGitSha(body.source_commit)
+    && /^[0-9a-f]{64}$/.test(sealDigest || '')
+    && campaignCanonicalDigest(body) === sealDigest;
+}
+
+function findingBoundRepairPaths(findings, allowedPrefixes) {
+  const prefixes = allowedPrefixes.map((prefix) => (
+    prefix.endsWith('/') ? prefix : `${prefix}/`
+  ));
+  const allPaths = new Set();
+  for (const finding of findings) {
+    const findingPaths = new Set();
+    const evidence = `${finding.claim || ''}\n${finding.source || ''}`;
+    for (const match of evidence.matchAll(
+      /(?:^|[\s`'"(])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)(?=[:#]?\d*(?:[\s`'",)]|$))/gu,
+    )) {
+      const candidate = match[1];
+      if (candidate.split('/').includes('..')
+          || path.isAbsolute(candidate)
+          || !prefixes.some((prefix) => candidate.startsWith(prefix))) continue;
+      findingPaths.add(candidate);
+      allPaths.add(candidate);
+    }
+    if (findingPaths.size === 0) {
+      throw new Error(
+        `finding ${finding.finding_id || finding.id} has no explicit allowed repair path`,
+      );
+    }
+  }
+  return [...allPaths].sort();
+}
+
+function defaultCampaignRepairChangedPaths({ repo, base, head }) {
+  const result = spawnSync(
+    'git',
+    ['-C', repo, 'diff', '--name-only', '-z', base, head, '--'],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const blocked = worktreeResultBlocked(result);
+  if (blocked) return { status: 'blocked', reason: blocked, paths: [] };
+  return {
+    status: 'ok',
+    reason: null,
+    paths: String(result.stdout || '').split('\0').filter(Boolean).sort(),
+  };
+}
+
 function checkCampaignScope({ session, repo, head }) {
   if (!session
       || repairScopeContractDigest(session.contract) !== session.seal_digest) {
@@ -1525,7 +1667,32 @@ function defaultGitWorktreeAdd({ commit, cwd }) {
   };
 }
 
-function defaultGitWorktreeRemove({ worktree, cwd }) {
+function gitText(cwd, args) {
+  const child = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return {
+    ...child,
+    stdout: String(child.stdout || '').trim(),
+    stderr: String(child.stderr || '').trim(),
+  };
+}
+
+function defaultGitWorktreeRemove({
+  worktree,
+  cwd,
+  expectedBranch,
+  expectedTip,
+  expectedRootRunId,
+  expectedRetentionOwner,
+  expectedRetentionReason,
+  expectedRetentionExpiresAt,
+  expectedWorktreeInstanceId,
+  allowMissingAfterIntent = false,
+}) {
   if (!cwd || typeof cwd !== 'string') {
     return {
       error: new Error('git worktree remove requires repository cwd'),
@@ -1535,7 +1702,207 @@ function defaultGitWorktreeRemove({ worktree, cwd }) {
       stderr: '',
     };
   }
-  const child = spawnSync('git', ['worktree', 'remove', '--force', worktree], {
+  const strictIdentity = [
+    expectedBranch,
+    expectedTip,
+    expectedRootRunId,
+    expectedRetentionOwner,
+    expectedRetentionReason,
+    expectedRetentionExpiresAt,
+  ].some((value) => value !== undefined && value !== null);
+  if (!strictIdentity) {
+    const status = gitText(worktree, ['status', '--porcelain']);
+    if (status.error || status.signal || status.status !== 0
+        || status.stdout.length > 0) {
+      return {
+        error: status.error || null,
+        status: status.status === 0 ? 1 : status.status,
+        signal: status.signal || null,
+        stdout: status.stdout || '',
+        stderr: status.stderr || 'worktree is dirty',
+      };
+    }
+    return gitText(cwd, ['worktree', 'remove', path.resolve(worktree)]);
+  }
+  if (!fs.existsSync(worktree) && allowMissingAfterIntent) {
+    const tip = gitText(cwd, ['rev-parse', '--verify', `refs/heads/${expectedBranch}`]);
+    if (!tip.error && !tip.signal && tip.status === 0 && tip.stdout === expectedTip) {
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        recovered_after_intent: true,
+      };
+    }
+  }
+  const requiredStrings = {
+    expectedBranch,
+    expectedTip,
+    expectedRootRunId,
+    expectedRetentionOwner,
+    expectedRetentionReason,
+  };
+  for (const [field, value] of Object.entries(requiredStrings)) {
+    if (typeof value !== 'string' || value.length === 0) {
+      return {
+        error: new Error(`git worktree remove requires ${field}`),
+        status: null,
+        signal: null,
+        stdout: '',
+        stderr: '',
+      };
+    }
+  }
+  const cleanupInput = {
+    cwd,
+    worktree,
+    expectedBranch,
+    expectedTip,
+    expectedRootRunId,
+    expectedRetentionOwner,
+    expectedRetentionReason,
+    expectedRetentionExpiresAt,
+    expectedWorktreeInstanceId,
+  };
+  const locked = spawnSync('flock', [
+    '-x',
+    path.join(path.resolve(worktree), '.autopilot-worktree.lock'),
+    process.execPath,
+    path.join(__dirname, 'repair-lineage-cleanup.js'),
+    JSON.stringify(cleanupInput),
+  ], {
+    cwd,
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return {
+    error: locked.error || null,
+    status: locked.status,
+    signal: locked.signal || null,
+    stdout: locked.stdout || '',
+    stderr: locked.stderr || '',
+  };
+}
+
+function defaultRepairLineageCleanupJournal({ cwd, cleanupId, action, record = null }) {
+  const common = gitText(cwd, [
+    'rev-parse', '--path-format=absolute', '--git-common-dir',
+  ]);
+  if (common.error || common.signal || common.status !== 0) {
+    return { status: 'blocked', reason: 'cannot resolve cleanup journal directory' };
+  }
+  const journalDir = path.join(common.stdout, 'autopilot');
+  const journalPath = path.join(journalDir, 'repair-lineage-cleanup.jsonl');
+  let rows = [];
+  try {
+    if (fs.existsSync(journalPath)) {
+      rows = fs.readFileSync(journalPath, 'utf8').trim().split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+    }
+  } catch (error) {
+    return { status: 'blocked', reason: `cleanup journal is invalid: ${error.message}` };
+  }
+  const matching = rows.filter((row) => row.cleanup_id === cleanupId);
+  if (record) {
+    const validMatching = matching.every((row) => {
+      if (!row || row.schema !== 1
+          || !new Set(['intent', 'removed_clean']).has(row.action)
+          || row.cleanup_id !== cleanupId
+          || row.lineage_id !== record.lineage_id
+          || row.branch !== record.branch
+          || row.worktree !== record.worktree
+          || row.expected_tip !== record.expected_tip
+          || row.cleanup_epoch !== record.cleanup_epoch
+          || row.worktree_instance_id !== record.worktree_instance_id
+          || row.retention_owner !== record.retention_owner
+          || row.retention_reason !== record.retention_reason
+          || row.retention_expires_at !== record.retention_expires_at
+          || !/^[0-9a-f]{64}$/.test(row.record_digest || '')) return false;
+      const { record_digest: recordDigest, ...body } = row;
+      return campaignCanonicalDigest(body) === recordDigest;
+    });
+    const duplicateAction = new Set(matching.map((row) => row.action)).size
+      !== matching.length;
+    if (!validMatching || duplicateAction) {
+      return { status: 'blocked', reason: 'cleanup journal identity or digest is invalid' };
+    }
+  }
+  if (action === 'inspect') {
+    if (!record) {
+      return { status: 'blocked', reason: 'cleanup journal inspection requires exact identity' };
+    }
+    const completionRecorded = matching.some((row) => row.action === 'removed_clean');
+    if (completionRecorded && fs.existsSync(record.worktree)) {
+      return {
+        status: 'blocked',
+        reason: 'cleanup completion exists while retained worktree is still present',
+      };
+    }
+    return {
+      status: 'ok',
+      intent_recorded: matching.some((row) => row.action === 'intent'),
+      completion_recorded: completionRecorded,
+    };
+  }
+  if (!new Set(['intent', 'removed_clean']).has(action) || !record) {
+    return { status: 'blocked', reason: 'cleanup journal append request is invalid' };
+  }
+  if (matching.some((row) => row.action === action)) {
+    return { status: 'ok', already_recorded: true };
+  }
+  const row = {
+    schema: 1,
+    cleanup_id: cleanupId,
+    action,
+    ...record,
+  };
+  row.record_digest = campaignCanonicalDigest(row);
+  try {
+    fs.mkdirSync(journalDir, { recursive: true, mode: 0o700 });
+    const fd = fs.openSync(journalPath, 'a', 0o600);
+    try {
+      fs.writeSync(fd, `${JSON.stringify(row)}\n`);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (error) {
+    return { status: 'blocked', reason: `cannot append cleanup journal: ${error.message}` };
+  }
+  return { status: 'ok', record_digest: row.record_digest };
+}
+
+function defaultRepairLineageCleanupTransaction({ cwd, cleanupId, record }) {
+  const common = gitText(cwd, [
+    'rev-parse', '--path-format=absolute', '--git-common-dir',
+  ]);
+  if (common.error || common.signal || common.status !== 0) {
+    return {
+      error: new Error('cannot resolve cleanup transaction directory'),
+      status: null,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+  }
+  const transactionDir = path.join(common.stdout, 'autopilot');
+  fs.mkdirSync(transactionDir, { recursive: true, mode: 0o700 });
+  const child = spawnSync('flock', [
+    '-x',
+    path.join(transactionDir, 'repair-lineage-cleanup.transaction.lock'),
+    process.execPath,
+    path.join(__dirname, 'repair-lineage-cleanup-transaction.js'),
+    JSON.stringify({
+      cwd,
+      cleanupId,
+      record,
+      cleanupHelper: path.join(__dirname, 'repair-lineage-cleanup.js'),
+    }),
+  ], {
     cwd,
     encoding: 'utf8',
     shell: false,
@@ -1708,6 +2075,13 @@ function defaultRepairPromptWriter({
   previousCommit,
   commit,
   review,
+  unresolvedFindingIds = [],
+  acceptedInvariants = [],
+      noRegressionAssertions = [],
+      reviewInputMode = 'full_diff_generation',
+      acceptedInvariantsSourceCommit = null,
+      acceptedInvariantsDigest = null,
+      repairScopeSeal = null,
 }) {
   const original = fs.readFileSync(promptFile, 'utf8');
   const findings = review && review.review && typeof review.review.findings === 'string'
@@ -1721,6 +2095,13 @@ function defaultRepairPromptWriter({
     `previous_commit: ${previousCommit}`,
     `failed_commit: ${commit}`,
     `previous_verdict: ${review && review.verdict}`,
+    `review_input_mode: ${reviewInputMode}`,
+    `unresolved_finding_ids: ${JSON.stringify(unresolvedFindingIds)}`,
+    `accepted_invariants: ${JSON.stringify(acceptedInvariants)}`,
+    `accepted_invariants_source_commit: ${acceptedInvariantsSourceCommit}`,
+    `accepted_invariants_digest: ${acceptedInvariantsDigest}`,
+    `no_regression_assertions: ${JSON.stringify(noRegressionAssertions)}`,
+    `repair_scope_seal: ${JSON.stringify(repairScopeSeal)}`,
     '---',
     '',
     'Reviewer findings:',
@@ -1745,6 +2126,8 @@ class AutopilotEngine {
     this.verifyCommandRunner = options.verifyCommandRunner || defaultVerifyCommandRunner;
     this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
     this.gitWorktreeRemove = options.gitWorktreeRemove || defaultGitWorktreeRemove;
+    this.repairLineageCleanupTransaction = options.repairLineageCleanupTransaction
+      || defaultRepairLineageCleanupTransaction;
     this.verifyWorktreeCleanup = options.verifyWorktreeCleanup || defaultVerifyWorktreeCleanup;
     this.gitBranchForce = options.gitBranchForce || defaultGitBranchForce;
     this.gitResumeInspect = options.gitResumeInspect || defaultResumeInspect;
@@ -1762,6 +2145,8 @@ class AutopilotEngine {
     this.campaignAdjudicator = options.campaignAdjudicator || defaultCampaignAdjudicator;
     this.campaignDispositionProvider = options.campaignDispositionProvider || null;
     this.campaignScopeChecker = options.campaignScopeChecker || checkCampaignScope;
+    this.campaignRepairChangedPaths = options.campaignRepairChangedPaths
+      || defaultCampaignRepairChangedPaths;
     this.campaignTreeResolver = options.campaignTreeResolver || defaultCampaignTreeResolver;
     this.campaignLifecycleInspector = options.campaignLifecycleInspector
       || inspectLifecycleReceipt;
@@ -1988,6 +2373,7 @@ class AutopilotEngine {
     phase,
     cwd,
     observedAt = null,
+    repairLineage = null,
   }) {
     const state = campaignControl && campaignControl.initial_state;
     if (!campaignControl || campaignControl.status !== 'admitted'
@@ -2013,6 +2399,9 @@ class AutopilotEngine {
       reason: terminalReason,
       possibly_effectful: true,
       observed_at: terminalAt,
+      repair_lineage_disposition: repairLineage
+        ? repairLineage.terminal_worktree_disposition
+        : null,
     };
     const receiptDigest = campaignCanonicalDigest(receiptBody);
     const hasLiveLease = state.live_lease !== null;
@@ -2042,6 +2431,9 @@ class AutopilotEngine {
         artifactReference: {
           kind: 'campaign_terminal',
           digest: receiptDigest,
+          ...(repairLineage ? {
+            repair_lineage: { ...repairLineage },
+          } : {}),
         },
       });
     } catch (error) {
@@ -2801,6 +3193,13 @@ class AutopilotEngine {
         campaignContractDigest: input.campaignContractDigest || null,
         campaignSealFile: input.campaignSealFile || null,
         campaignUnitContractFile: campaignUnit ? campaignUnit.contract_path : null,
+        keepWorktree: input.keepWorktree === true,
+        reuseWorktree: input.reuseWorktree || null,
+        resumeSessionId: input.resumeSessionId || null,
+        retentionOwner: input.retentionOwner || null,
+        retentionReason: input.retentionReason || null,
+        retentionExpiresAt: input.retentionExpiresAt || null,
+        expectedWorktreeInstanceId: input.expectedWorktreeInstanceId || null,
       });
     } catch (error) {
       if (campaignUnit) {
@@ -3254,6 +3653,7 @@ class AutopilotEngine {
         implementationResult,
         implementationArgs,
         implementation: parsed,
+        dispatcher_called: true,
         ledger,
       };
     }
@@ -3268,6 +3668,7 @@ class AutopilotEngine {
         implementationResult,
         implementationArgs,
         implementation: parsed,
+        dispatcher_called: true,
         ledger,
       };
     }
@@ -3292,6 +3693,7 @@ class AutopilotEngine {
         implementationResult,
         implementationArgs,
         implementation: parsed,
+        dispatcher_called: true,
         engine_unavailable: engineUnavailable,
         ledger,
       };
@@ -3306,6 +3708,7 @@ class AutopilotEngine {
       implementationResult,
       implementationArgs,
       implementation: parsed,
+      dispatcher_called: true,
       ledger,
     };
   }
@@ -3407,6 +3810,55 @@ class AutopilotEngine {
     const reviewChain = [];
     const verificationCache = new Map();
     const convergenceArtifacts = [];
+    const repairFindingOccurrences = new Map();
+    const acceptedInvariantIds = new Set();
+    let previousRepairFindingCount = null;
+    let nonReductionRounds = 0;
+    const noRegressionAssertions = Array.isArray(campaignControl.contract.vertical_acceptance)
+      ? [...campaignControl.contract.vertical_acceptance]
+      : [];
+    const campaignStartedAtEpoch = Math.floor(
+      Date.parse(campaignControl.initial_state.started_at) / 1000,
+    );
+    const retentionExpiresAt = campaignStartedAtEpoch
+      + campaignControl.contract.max_wall_seconds;
+    const repairLineage = {
+      lineage_id: campaignControl.campaign_id,
+      branch,
+      worktree: null,
+      provider_session_id: null,
+      provider_session_reused: false,
+      provider_session_non_reuse_reason: null,
+      worktree_reused: false,
+      worktree_instance_id: null,
+      cleanup_epoch: 0,
+      cleanup_receipt_id: null,
+      generation: campaignControl.initial_state.generation,
+      inherited_churn: campaignControl.initial_state.usage.churn,
+      delta_churn: 0,
+      retention_owner: campaignControl.campaign_id,
+      retention_reason: 'implementation-campaign-repair-lineage',
+      retention_expires_at: retentionExpiresAt,
+      terminal_worktree_disposition: 'active',
+      transcript_reused: false,
+      transcript_source_digest: campaignCanonicalDigest({
+        status: 'not_dispatched',
+      }),
+      review_input_mode: 'full_diff_generation',
+      new_input_bytes: 0,
+      new_input_tokens: null,
+      input_token_measurement: 'unavailable',
+      finding_occurrences: [],
+      accepted_invariant_ids: [],
+      accepted_invariants: [],
+      accepted_invariants_source_commit: null,
+      accepted_invariants_digest: null,
+      prior_review_finding_ids: [],
+      previous_repair_finding_count: null,
+      non_reduction_rounds: 0,
+      repair_scope_paths: [],
+      repair_scope_seal: null,
+    };
     const durableJournal = campaignControl.generation_claim.durable_journal === true;
     const resumeCandidate = campaignControl.generation_claim.resume_candidate || null;
     const resumeReviewDigest = campaignControl.generation_claim.resume_review_digest || null;
@@ -3416,10 +3868,50 @@ class AutopilotEngine {
     let latestReview = null;
     let latestAdjudication = null;
     let latestVerification = null;
+    let priorReviewFindingIds = new Set();
     let implementationRound = 0;
     let resumeSetupError = null;
     let lifecycleSetupError = null;
     let lifecycleReceiptRef = 'unknown';
+    const syncRepairFindingState = () => {
+      repairLineage.finding_occurrences = [...repairFindingOccurrences.entries()]
+        .map(([findingId, occurrences]) => ({
+          finding_id: findingId,
+          occurrences,
+        }))
+        .sort((left, right) => left.finding_id.localeCompare(right.finding_id));
+      repairLineage.accepted_invariant_ids = [...acceptedInvariantIds].sort();
+      repairLineage.prior_review_finding_ids = [...priorReviewFindingIds].sort();
+      repairLineage.previous_repair_finding_count = previousRepairFindingCount;
+      repairLineage.non_reduction_rounds = nonReductionRounds;
+    };
+    const postDispatchLineageFailure = (reason) => {
+      repairLineage.terminal_worktree_disposition = repairLineage.worktree === null
+        ? 'not_created_failed_dispatch'
+        : 'retained_failed_dispatch';
+      return {
+        committed: false,
+        phase: 'campaign_repair_lineage',
+        reason,
+        repair_lineage: { ...repairLineage },
+      };
+    };
+    const recordAcceptedVerificationInvariants = (sourceCommit) => {
+      acceptedInvariantIds.clear();
+      for (const assertion of noRegressionAssertions) {
+        acceptedInvariantIds.add(
+          `acceptance:${crypto.createHash('sha256').update(assertion).digest('hex')}`,
+        );
+      }
+      repairLineage.accepted_invariants = [...noRegressionAssertions];
+      repairLineage.accepted_invariants_source_commit = sourceCommit;
+      repairLineage.accepted_invariants_digest = campaignCanonicalDigest({
+        schema: 1,
+        assertions: repairLineage.accepted_invariants,
+        source_commit: sourceCommit,
+      });
+      syncRepairFindingState();
+    };
 
     if (input.lifecycleReceipt) {
       const receiptPath = path.resolve(loopCwd, input.lifecycleReceipt);
@@ -3509,6 +4001,43 @@ class AutopilotEngine {
         });
         currentBase = resumeCandidate.commit;
         implementationRound = campaignControl.initial_state.generation + 1;
+        if (!resumeCandidate.repair_lineage
+            || resumeCandidate.repair_lineage.lineage_id !== campaignControl.campaign_id
+            || resumeCandidate.repair_lineage.branch !== branch
+            || typeof resumeCandidate.repair_lineage.worktree !== 'string'
+            || !path.isAbsolute(resumeCandidate.repair_lineage.worktree)) {
+          throw new Error('campaign resume is missing exact repair resource lineage');
+        }
+        Object.assign(
+          repairLineage,
+          JSON.parse(JSON.stringify(resumeCandidate.repair_lineage)),
+          {
+            worktree_reused: true,
+            generation: campaignControl.initial_state.generation,
+          },
+        );
+        if (!Number.isSafeInteger(repairLineage.cleanup_epoch)
+            || repairLineage.cleanup_epoch < 0) {
+          throw new Error('campaign resume has an invalid cleanup epoch');
+        }
+        if (repairLineage.worktree_instance_id !== null
+            && !/^[0-9a-f]{64}$/.test(repairLineage.worktree_instance_id)) {
+          throw new Error('campaign resume has an invalid worktree instance identity');
+        }
+        for (const item of resumeCandidate.repair_lineage.finding_occurrences || []) {
+          repairFindingOccurrences.set(item.finding_id, item.occurrences);
+        }
+        for (const findingId of
+          resumeCandidate.repair_lineage.accepted_invariant_ids || []) {
+          acceptedInvariantIds.add(findingId);
+        }
+        priorReviewFindingIds = new Set(
+          resumeCandidate.repair_lineage.prior_review_finding_ids || [],
+        );
+        previousRepairFindingCount =
+          resumeCandidate.repair_lineage.previous_repair_finding_count;
+        nonReductionRounds = resumeCandidate.repair_lineage.non_reduction_rounds || 0;
+        syncRepairFindingState();
       } catch (error) {
         resumeSetupError = error.message || String(error);
       }
@@ -3601,6 +4130,10 @@ class AutopilotEngine {
           };
         }
         findings = normalized.canonical;
+        priorReviewFindingIds = new Set(
+          normalized.findings.map((finding) => finding.finding_id),
+        );
+        syncRepairFindingState();
       }
       const reviewDigest = campaignCanonicalDigest({
         verdict: reviewed.verdict,
@@ -3629,6 +4162,7 @@ class AutopilotEngine {
             artifactReference: {
               kind: 'product_review',
               digest: reviewDigest,
+              repair_lineage: { ...repairLineage },
             },
           });
         } catch (error) {
@@ -3645,6 +4179,7 @@ class AutopilotEngine {
         verdict: reviewed.verdict,
         findings,
         review_digest: reviewDigest,
+        review_input_mode: 'full_diff_generation',
         raw: reviewed,
       };
     };
@@ -3774,6 +4309,7 @@ class AutopilotEngine {
       campaignControl.contract.max_repair_generations,
       Math.max(0, roster.loop_max_rounds - 1),
     );
+    const resumableProviderSession = roster.implementer_runner === 'grok';
     const composition = this.campaignComposer({
       maxRepairGenerations,
       minPanelSize: roster.min_panel_size,
@@ -3796,6 +4332,7 @@ class AutopilotEngine {
         repair_generation: repairGeneration,
         repair_finding_ids: findingIds,
         repair_findings: repairFindings,
+        review_input_mode: reviewInputMode = 'full_diff_generation',
       }) => {
         const budgetAt = this.now();
         const budget = campaignMutationBudgetStatus(campaignControl, budgetAt);
@@ -3806,15 +4343,73 @@ class AutopilotEngine {
             reason: 'campaign mutation budget exhausted',
           };
         }
-        implementationRound += 1;
-        const currentBranch = implementationRound === 1
-          ? branch
-          : buildRepairBranchName({
-            branch,
-            round: implementationRound,
-            previousCommit: currentBase,
-          });
+        const candidateImplementationRound = implementationRound + 1;
+        const currentBranch = branch;
+        let authorizedFindingState = null;
         if (kind !== 'initial') {
+          if (!new Set(['full_diff_generation', 'focused_delta_round']).has(
+            reviewInputMode,
+          )) {
+            return {
+              committed: false,
+              phase: 'campaign_review_input_mode',
+              reason: 'repair review input mode is invalid',
+            };
+          }
+          repairLineage.review_input_mode = reviewInputMode;
+          const normalizedFindingIds = [...new Set(
+            (Array.isArray(findingIds) ? findingIds : []).filter(
+              (findingId) => typeof findingId === 'string' && findingId.length > 0,
+            ),
+          )].sort();
+          const repeatedFindingIds = normalizedFindingIds.filter(
+            (findingId) => (repairFindingOccurrences.get(findingId) || 0) >= 2,
+          );
+          const nextNonReductionRounds = previousRepairFindingCount !== null
+            ? (normalizedFindingIds.length >= previousRepairFindingCount
+              ? nonReductionRounds + 1
+              : 0)
+            : nonReductionRounds;
+          const findingReductionStalled = nextNonReductionRounds >= 2;
+          if (repeatedFindingIds.length > 0 || findingReductionStalled) {
+            return {
+              committed: false,
+              phase: 'awaiting_convergence_adjudication',
+              reason: repeatedFindingIds.length > 0
+                ? `recurring finding lineage exhausted: ${repeatedFindingIds.join(',')}`
+                : 'finding set did not measurably shrink across two repair rounds',
+              awaiting_convergence_adjudication: true,
+              recurring_finding_ids: repeatedFindingIds,
+              non_reduction_rounds: nextNonReductionRounds,
+            };
+          }
+          if (!Array.isArray(repairLineage.repair_scope_paths)
+              || repairLineage.repair_scope_paths.length === 0) {
+            return {
+              committed: false,
+              phase: 'campaign_repair_scope_seal',
+              reason: 'repair scope cannot be sealed without initial changed paths',
+            };
+          }
+          let findingPaths;
+          try {
+            findingPaths = findingBoundRepairPaths(
+              repairFindings,
+              campaignControl.contract.allowed_path_prefixes,
+            );
+          } catch (error) {
+            return {
+              committed: false,
+              phase: 'campaign_repair_scope_seal',
+              reason: error.message || String(error),
+            };
+          }
+          repairLineage.repair_scope_seal = createRepairScopeSeal({
+            findingIds: normalizedFindingIds,
+            allowedPaths: findingPaths,
+            sourceCommit: currentBase,
+          });
+          repairLineage.repair_scope_paths = findingPaths;
           const repairReview = {
             verdict: kind === 'vertical_repair'
               ? 'VERTICAL-ACCEPTANCE-FAILED'
@@ -3826,15 +4421,31 @@ class AutopilotEngine {
           try {
             repairPromptFile = this.repairPromptWriter({
               promptFile,
-              round: implementationRound,
+              round: candidateImplementationRound,
               base,
               previousCommit: currentBase,
               commit: currentBase,
               review: repairReview,
+              unresolvedFindingIds: normalizedFindingIds,
+              acceptedInvariants: repairLineage.accepted_invariants,
+              acceptedInvariantsSourceCommit:
+                repairLineage.accepted_invariants_source_commit,
+              acceptedInvariantsDigest: repairLineage.accepted_invariants_digest,
+              noRegressionAssertions,
+              reviewInputMode,
+              repairScopeSeal: repairLineage.repair_scope_seal,
             });
           } catch (error) {
-            return { committed: false, reason: error.message || String(error) };
+            return {
+              committed: false,
+              phase: 'campaign_repair_prompt',
+              reason: error.message || String(error),
+            };
           }
+          authorizedFindingState = {
+            findingIds: normalizedFindingIds,
+            nonReductionRounds: nextNonReductionRounds,
+          };
         }
         try {
           recordCampaignEvent({
@@ -3860,7 +4471,7 @@ class AutopilotEngine {
           roster,
           runId: campaignControl.campaign_id,
           ledger: campaignControl.generation_claim.ledger,
-          implementationRound,
+          implementationRound: candidateImplementationRound,
           implementationStage: 'campaign-implementation',
           campaignContractFile: campaignControl.contract_path,
           campaignContractDigest: campaignControl.contract_digest,
@@ -3871,6 +4482,19 @@ class AutopilotEngine {
             input,
             'extraImplementationArgs',
           ) ? input.extraImplementationArgs : [],
+          keepWorktree: true,
+          reuseWorktree: candidateImplementationRound > 1
+            ? repairLineage.worktree
+            : null,
+          expectedWorktreeInstanceId: candidateImplementationRound > 1
+            ? repairLineage.worktree_instance_id
+            : null,
+          resumeSessionId: resumableProviderSession && candidateImplementationRound > 1
+            ? repairLineage.provider_session_id
+            : null,
+          retentionOwner: campaignControl.campaign_id,
+          retentionReason: 'implementation-campaign-repair-lineage',
+          retentionExpiresAt,
           implementationOptions: {
             ...(input.implementationOptions || {}),
             cwd: loopCwd,
@@ -3878,14 +4502,137 @@ class AutopilotEngine {
         });
         ledger.push(...implementation.ledger);
         implementationChain.push(implementation);
+        if (implementation.dispatcher_called !== true) {
+          return {
+            committed: false,
+            phase: implementation.phase || 'prepare_implementation',
+            reason: implementation.reason || 'implementation was not dispatched',
+          };
+        }
+        implementationRound = candidateImplementationRound;
+        if (authorizedFindingState) {
+          previousRepairFindingCount = authorizedFindingState.findingIds.length;
+          nonReductionRounds = authorizedFindingState.nonReductionRounds;
+          for (const findingId of authorizedFindingState.findingIds) {
+            repairFindingOccurrences.set(
+              findingId,
+              (repairFindingOccurrences.get(findingId) || 0) + 1,
+            );
+          }
+          syncRepairFindingState();
+        }
+        const dispatched = implementation.implementation;
+        repairLineage.cleanup_epoch += 1;
+        if (dispatched && typeof dispatched.worktree === 'string'
+            && path.isAbsolute(dispatched.worktree)) {
+          if (repairLineage.worktree !== null
+              && dispatched.worktree !== repairLineage.worktree) {
+            return postDispatchLineageFailure(
+              'repair dispatch changed retained worktree identity',
+            );
+          }
+          repairLineage.worktree = dispatched.worktree;
+          repairLineage.worktree_reused = dispatched.worktree_reused === true;
+          let dispatchedInstanceId;
+          try {
+            dispatchedInstanceId = repairWorktreeInstanceId(dispatched.worktree);
+          } catch (error) {
+            return postDispatchLineageFailure(
+              `cannot attest retained worktree instance: ${error.message}`,
+            );
+          }
+          if (repairLineage.worktree_instance_id !== null
+              && repairLineage.worktree_reused
+              && dispatchedInstanceId !== repairLineage.worktree_instance_id) {
+            return postDispatchLineageFailure(
+              'reused worktree changed filesystem instance identity',
+            );
+          }
+          repairLineage.worktree_instance_id = dispatchedInstanceId;
+        }
+        if (dispatched && typeof dispatched.provider_session_id === 'string'
+            && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+              dispatched.provider_session_id,
+            )) {
+          if (repairLineage.provider_session_id !== null
+              && dispatched.provider_session_id !== repairLineage.provider_session_id) {
+            return postDispatchLineageFailure(
+              'repair dispatch changed provider session identity',
+            );
+          }
+          repairLineage.provider_session_id = dispatched.provider_session_id;
+          repairLineage.provider_session_reused =
+            dispatched.provider_session_reused === true;
+          repairLineage.transcript_reused = repairLineage.provider_session_reused;
+        }
         if (implementation.status !== 'committed') {
+          repairLineage.terminal_worktree_disposition = repairLineage.worktree === null
+            ? 'not_created_failed_dispatch'
+            : 'retained_failed_dispatch';
           return {
             committed: false,
             reason: implementation.reason || `implementation status ${implementation.status}`,
+            repair_lineage: { ...repairLineage },
             raw: implementation,
           };
         }
         const commit = implementation.implementation.commit;
+        if (typeof dispatched.worktree !== 'string'
+              || !path.isAbsolute(dispatched.worktree)) {
+          return postDispatchLineageFailure(
+            'retained implementation worktree identity is missing',
+          );
+        }
+        if (resumableProviderSession
+            && (typeof dispatched.provider_session_id !== 'string'
+              || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+                dispatched.provider_session_id,
+              ))) {
+          return postDispatchLineageFailure(
+            'Grok implementation did not return a resumable provider session',
+          );
+        }
+        if (repairLineage.worktree !== null
+            && dispatched.worktree !== repairLineage.worktree) {
+          return postDispatchLineageFailure(
+            'repair dispatch changed retained worktree identity',
+          );
+        }
+        if (resumableProviderSession && repairLineage.provider_session_id !== null
+            && dispatched.provider_session_id !== repairLineage.provider_session_id) {
+          return postDispatchLineageFailure(
+            'repair dispatch changed provider session identity',
+          );
+        }
+        repairLineage.worktree = dispatched.worktree;
+        repairLineage.provider_session_id = resumableProviderSession
+          ? dispatched.provider_session_id
+          : null;
+        repairLineage.provider_session_reused = resumableProviderSession
+          && dispatched.provider_session_reused === true;
+        repairLineage.provider_session_non_reuse_reason = resumableProviderSession
+          ? null
+          : `runner_resume_not_verified:${roster.implementer_runner}`;
+        repairLineage.worktree_reused = dispatched.worktree_reused === true;
+        repairLineage.transcript_reused = repairLineage.provider_session_reused;
+        repairLineage.transcript_source_digest = campaignCanonicalDigest(
+          fs.readFileSync(repairPromptFile, 'utf8'),
+        );
+        repairLineage.new_input_bytes += fs.statSync(repairPromptFile).size;
+        const inputTokens = dispatched.usage
+          && Number.isSafeInteger(dispatched.usage.input_tokens)
+          ? dispatched.usage.input_tokens
+          : null;
+        if (inputTokens !== null) {
+          repairLineage.new_input_tokens =
+            (repairLineage.new_input_tokens || 0) + inputTokens;
+          repairLineage.input_token_measurement = 'provider_reported';
+        }
+        repairLineage.generation = repairGeneration;
+        repairLineage.delta_churn += Number.isSafeInteger(dispatched.insertions)
+          && Number.isSafeInteger(dispatched.deletions)
+          ? dispatched.insertions + dispatched.deletions
+          : 0;
         let treeSha;
         let writerFence;
         try {
@@ -3943,6 +4690,36 @@ class AutopilotEngine {
           checkpoint,
         });
         try {
+          const changedFiles = Array.isArray(receipt.changed_files)
+            ? [...new Set(receipt.changed_files)].sort()
+            : [];
+          if (receipt.passed === true && checkpoint === 'after_initial_mutation') {
+            repairLineage.repair_scope_paths = changedFiles;
+          }
+          if (receipt.passed === true && checkpoint === 'after_repair_mutation') {
+            if (!repairScopeSealValid(repairLineage.repair_scope_seal)) {
+              throw new Error('repair scope seal is missing or invalid');
+            }
+            const delta = this.campaignRepairChangedPaths({
+              repo: loopCwd,
+              base: repairLineage.repair_scope_seal.source_commit,
+              head: candidate.commit,
+            });
+            if (!delta || delta.status !== 'ok' || !Array.isArray(delta.paths)) {
+              throw new Error(
+                delta && delta.reason
+                  ? delta.reason
+                  : 'cannot resolve repair delta paths',
+              );
+            }
+            const allowed = new Set(repairLineage.repair_scope_seal.allowed_paths);
+            const unauthorized = delta.paths.filter((file) => !allowed.has(file));
+            if (unauthorized.length > 0) {
+              throw new Error(
+                `repair changed paths outside its finding-bound seal: ${unauthorized.join(',')}`,
+              );
+            }
+          }
           receipt = bindCampaignScopeReceipt({
             receipt,
             candidate,
@@ -3996,6 +4773,7 @@ class AutopilotEngine {
                 branch: candidate.branch,
                 base,
                 writer_fence: candidate.writer_fence,
+                repair_lineage: { ...repairLineage },
                 ...(candidate.campaign_contract_sha256 ? {
                   campaign_contract_sha256: candidate.campaign_contract_sha256,
                   unit_contract_sha256: candidate.unit_contract_sha256,
@@ -4045,6 +4823,7 @@ class AutopilotEngine {
         });
         const cached = verificationCache.get(request.request_digest);
         if (reusableGreenReceipt(cached, request)) {
+          recordAcceptedVerificationInvariants(candidate.commit);
           try {
             recordGreenVerification(cached, repairGeneration);
           } catch (error) {
@@ -4183,7 +4962,10 @@ class AutopilotEngine {
             }),
           };
         }
-        if (receipt.verdict === 'GREEN') verificationCache.set(request.request_digest, receipt);
+        if (receipt.verdict === 'GREEN') {
+          verificationCache.set(request.request_digest, receipt);
+          recordAcceptedVerificationInvariants(candidate.commit);
+        }
         latestVerification = receipt;
         ledger.push(this.ledgerEntry(
           'campaign_verification',
@@ -4376,11 +5158,18 @@ class AutopilotEngine {
           };
         }
       } else if (durableJournal) {
+        if (repairLineage.terminal_worktree_disposition === 'active') {
+          repairLineage.terminal_worktree_disposition =
+            repairLineage.worktree === null
+              ? 'not_created_failed_dispatch'
+              : 'retained_failed_dispatch';
+        }
         const failure = this.terminalizeManagedCampaignFailure({
           campaignControl,
           reason: composition.reason,
           phase: composition.phase,
           cwd: loopCwd,
+          repairLineage,
         });
         campaignControl.terminal_failure = failure;
         if (failure.status === 'no_effect') {
@@ -4409,6 +5198,58 @@ class AutopilotEngine {
           };
         }
       }
+    }
+
+    if (new Set(['ready', 'follow_up']).has(composition.status)
+        && repairLineage.worktree !== null) {
+      const cleanupId = repairLineageCleanupId({
+        lineageId: repairLineage.lineage_id,
+        branch: repairLineage.branch,
+        worktree: repairLineage.worktree,
+        expectedTip: currentBase,
+        cleanupEpoch: repairLineage.cleanup_epoch,
+        worktreeInstanceId: repairLineage.worktree_instance_id,
+      });
+      const cleanupRecord = {
+        lineage_id: repairLineage.lineage_id,
+        branch: repairLineage.branch,
+        worktree: repairLineage.worktree,
+        expected_tip: currentBase,
+        cleanup_epoch: repairLineage.cleanup_epoch,
+        worktree_instance_id: repairLineage.worktree_instance_id,
+        retention_owner: repairLineage.retention_owner,
+        retention_reason: repairLineage.retention_reason,
+        retention_expires_at: repairLineage.retention_expires_at,
+      };
+      const transaction = this.repairLineageCleanupTransaction({
+        cwd: loopCwd,
+        cleanupId,
+        record: cleanupRecord,
+      });
+      const transactionBlocked = worktreeResultBlocked(transaction);
+      if (transactionBlocked) {
+        repairLineage.terminal_worktree_disposition =
+          'blocked_dirty_or_unverifiable';
+        return {
+          status: 'blocked',
+          phase: 'campaign_repair_lineage_cleanup',
+          reason: transactionBlocked,
+          rounds: implementationChain.length,
+          verdict: latestReview ? latestReview.verdict : null,
+          roster,
+          resolveResult,
+          base,
+          implementation: implementationChain.at(-1) || null,
+          review: latestReview,
+          implementationChain,
+          reviewChain,
+          campaign_receipt: composition,
+          repair_lineage: repairLineage,
+          ledger,
+        };
+      }
+      repairLineage.terminal_worktree_disposition = 'removed_clean';
+      repairLineage.cleanup_receipt_id = cleanupId;
     }
 
     if (durableJournal && new Set(['ready', 'follow_up']).has(composition.status)) {
@@ -4445,6 +5286,7 @@ class AutopilotEngine {
           artifactReference: {
             kind: 'campaign_terminal',
             digest: composition.receipt_digest,
+            repair_lineage: { ...repairLineage },
           },
           observedAt: terminalObservedAt,
         });
@@ -4511,6 +5353,7 @@ class AutopilotEngine {
       implementationChain,
       reviewChain,
       campaign_receipt: composition,
+      repair_lineage: repairLineage,
       ledger,
     };
   }

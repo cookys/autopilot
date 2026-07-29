@@ -584,12 +584,21 @@ engine.implementTask = () => {
   fs.writeFileSync(countPath, `${count + 1}\n`);
   return {
     status: 'committed',
-    implementation: { commit: candidate },
+    dispatcher_called: true,
+    implementation: {
+      commit: candidate,
+      worktree: repo,
+      provider_session_id: null,
+      provider_session_reused: false,
+      worktree_reused: false,
+      insertions: 1,
+      deletions: 0,
+    },
     implementationResult: { error: null, signal: null, status: 0 },
     ledger: [],
   };
 };
-engine.runImplementationReviewLoop({
+const unexpectedKillResult = engine.runImplementationReviewLoop({
   promptFile,
   branch,
   base,
@@ -599,7 +608,11 @@ engine.runImplementationReviewLoop({
   verificationEnv: { PATH: process.env.PATH || '', CI: '057-kill' },
   verificationEnvAllowlist: ['CI'],
 });
-throw new Error('post-commit kill checkpoint did not terminate the process');
+throw new Error(
+  `post-commit kill checkpoint did not terminate the process: ${
+    JSON.stringify(unexpectedKillResult)
+  }`,
+);
 NODE
 )"
 KILL_EXIT=$?
@@ -693,6 +706,9 @@ const engine = new AutopilotEngine({
     };
   },
   gitWorktreeRemove() {
+    return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
+  },
+  repairLineageCleanupTransaction() {
     return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
   },
   verifyCommandRunner({ verifyCmd }) {
@@ -852,6 +868,41 @@ const candidate = icc.normalizeCampaignArtifactReference({
   branch: contract.branch,
   base: contract.base_sha,
   writer_fence: writerFence,
+  repair_lineage: {
+    lineage_id: campaignId,
+    branch: contract.branch,
+    worktree: repo,
+    provider_session_id: null,
+    provider_session_reused: false,
+    provider_session_non_reuse_reason: 'runner_resume_not_verified:fixture',
+    worktree_reused: false,
+    worktree_instance_id: 'b'.repeat(64),
+    cleanup_epoch: 1,
+    cleanup_receipt_id: null,
+    generation: 0,
+    inherited_churn: 0,
+    delta_churn: 0,
+    retention_owner: campaignId,
+    retention_reason: 'implementation-campaign-repair-lineage',
+    retention_expires_at: 2000000000,
+    terminal_worktree_disposition: 'active',
+    transcript_reused: false,
+    transcript_source_digest: 'a'.repeat(64),
+    review_input_mode: 'full_diff_generation',
+    new_input_bytes: 0,
+    new_input_tokens: null,
+    input_token_measurement: 'unavailable',
+    finding_occurrences: [],
+    accepted_invariant_ids: [],
+    accepted_invariants: [],
+    accepted_invariants_source_commit: null,
+    accepted_invariants_digest: null,
+    prior_review_finding_ids: [],
+    previous_repair_finding_count: null,
+    non_reduction_rounds: 0,
+    repair_scope_paths: ['dist/kill-resume.txt'],
+    repair_scope_seal: null,
+  },
 });
 const verificationRequest = verificationApi.createVerificationRequest({
   treeSha: candidateTree,

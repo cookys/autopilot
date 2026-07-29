@@ -19,13 +19,14 @@
       "dependencies": [],
       "acceptance_ids": [
         "rotation-aware-active-view",
-        "compaction-authoritative-rehydrate",
+        "managed-phase-identity-resume",
         "zero-duplicate-dispatch"
       ],
       "verification_commands": [
         "bash scripts/tests/run-ledger.test.sh",
         "bash hooks/tests/run-ledger-rotation.test.sh",
-        "bash hooks/tests/codex-compaction-rehydration.test.sh",
+        "bash hooks/tests/implementation-campaign-routing.test.sh",
+        "bash hooks/tests/implementation-campaign-state.test.sh",
         "bash hooks/tests/implementation-campaign-dogfood.test.sh"
       ],
       "gate_attempt_budget": 3,
@@ -63,15 +64,14 @@
           "scripts/dispatch-hetero.sh"
         ],
         "output_paths": [
-          "hooks/tests/codex-compaction-rehydration.test.sh",
           "hooks/tests/implementation-campaign-dogfood.test.sh",
+          "hooks/tests/implementation-campaign-routing.test.sh",
+          "hooks/tests/implementation-campaign-state.test.sh",
           "hooks/tests/run-ledger-rotation.test.sh",
-          "scripts/compaction-rehydrate.js",
           "scripts/dispatch-hetero.sh",
           "scripts/run-ledger.sh",
           "src/campaign/cli.js",
-          "src/engine/autopilot-engine.js",
-          "src/engine/continuation-admission.js"
+          "src/engine/autopilot-engine.js"
         ]
       }
     },
@@ -99,6 +99,7 @@
       "verification_commands": [
         "bash hooks/tests/autopilot-engine.test.sh",
         "bash hooks/tests/implementation-campaign-receipt.test.sh",
+        "bash hooks/tests/qc-panel-honesty.test.sh",
         "bash hooks/tests/status-task.test.sh"
       ],
       "gate_attempt_budget": 2,
@@ -136,6 +137,7 @@
         "output_paths": [
           "hooks/tests/autopilot-engine.test.sh",
           "hooks/tests/implementation-campaign-receipt.test.sh",
+          "hooks/tests/qc-panel-honesty.test.sh",
           "hooks/tests/status-task.test.sh",
           "src/engine/autopilot-engine.js",
           "src/engine/campaign-composition.js",

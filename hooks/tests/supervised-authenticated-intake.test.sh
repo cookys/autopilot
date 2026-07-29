@@ -52,6 +52,7 @@ const requirementBySink = {
   'verification-execution': ['engine_verification_command', 'shell', 'external'],
   'verify-worktree-add': ['engine_verify_worktree_add', 'git', 'external'],
   'verify-worktree-remove': ['engine_verify_worktree_remove', 'git', 'external'],
+  'repair-lineage-cleanup': ['engine_repair_lineage_cleanup', 'git', 'external'],
   'verify-worktree-cleanup': ['engine_verify_worktree_cleanup', 'filesystem', 'irreversible'],
   'branch-force': ['engine_branch_force', 'git', 'external'],
 };

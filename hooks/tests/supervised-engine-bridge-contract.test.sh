@@ -110,6 +110,12 @@ const EXPECTED_ACTION_CATALOG_REQUIREMENTS = {
     minimum_action_class: 'external',
     requires_mediator: true,
   },
+  'repair-lineage-cleanup': {
+    operation: 'engine_repair_lineage_cleanup',
+    tool_class: 'git',
+    minimum_action_class: 'external',
+    requires_mediator: true,
+  },
   'verify-worktree-cleanup': {
     operation: 'engine_verify_worktree_cleanup',
     tool_class: 'filesystem',
@@ -133,6 +139,7 @@ const EXPECTED_CONTROL_SINKS = [
   ['campaign-adjudication', 'campaignAdjudicator', 'campaign_control', [], false],
   ['campaign-disposition', 'campaignDispositionProvider', 'campaign_control', [], false],
   ['campaign-scope-check', 'campaignScopeChecker', 'campaign_control', [], false],
+  ['campaign-repair-changed-paths', 'campaignRepairChangedPaths', 'campaign_control', [], false],
   ['campaign-tree-resolve', 'campaignTreeResolver', 'campaign_control', [], false],
   ['campaign-lifecycle-inspect', 'campaignLifecycleInspector', 'campaign_control', [], false],
   ['campaign-post-commit-checkpoint', 'campaignPostCommitCheckpoint', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
@@ -144,6 +151,7 @@ const EXPECTED_CONTROL_SINKS = [
   ['verification-execution', 'verifyCommandRunner', 'command_execution', ['mintActionDecision', 'executeAuthorizedAction', 'recordVerification'], true],
   ['verify-worktree-add', 'gitWorktreeAdd', 'worktree_mutation', ['mintActionDecision', 'executeAuthorizedAction'], true],
   ['verify-worktree-remove', 'gitWorktreeRemove', 'worktree_mutation', ['mintActionDecision', 'executeAuthorizedAction'], true],
+  ['repair-lineage-cleanup', 'repairLineageCleanupTransaction', 'worktree_mutation', ['mintActionDecision', 'executeAuthorizedAction'], true],
   ['verify-worktree-cleanup', 'verifyWorktreeCleanup', 'filesystem_deletion', ['mintActionDecision', 'executeAuthorizedAction'], true],
   ['branch-force', 'gitBranchForce', 'branch_mutation', ['mintActionDecision', 'executeAuthorizedAction'], true],
   ['resume-inspection', 'gitResumeInspect', 'resume_read', ['resume'], false],
@@ -821,8 +829,8 @@ NODE
 NODE_STATUS=$?
 
 assert_eq "$NODE_STATUS" "0" "supervised engine bridge contract node fixture exits successfully"
-assert_contains "$OUT" "sink_inventory=26" "all injected engine control sinks are covered"
-assert_contains "$OUT" "action_catalog_bindings=15" "every mutable sink requires a frozen catalog binding"
+assert_contains "$OUT" "sink_inventory=28" "all injected engine control sinks are covered"
+assert_contains "$OUT" "action_catalog_bindings=16" "every mutable sink requires a frozen catalog binding"
 assert_contains "$OUT" "sensitive_inputs_omitted=true" "compiled contract contains hashes rather than raw sensitive inputs"
 assert_contains "$OUT" "contract_only=true" "bridge remains explicitly non-authoritative"
 assert_contains "$OUT" "mutation_rejected=true" "frozen inputs and compiled contract tampering fail closed"

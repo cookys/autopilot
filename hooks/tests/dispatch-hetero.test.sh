@@ -21,6 +21,7 @@ PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
 EMPTY_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"
 mkdir -p "$EMPTY_SESSION_MODE_DIR"
+RETAIN_UNTIL="$(( $(date +%s) + 3600 ))"
 
 # --- stub agy: commits one file (ignores all flags, like a cooperative agent) ---
 STUB_OK="$TEST_TMP/agy-ok"
@@ -253,15 +254,215 @@ DIRTY_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_file_exists "$DIRTY_WT/unstaged.txt" "dirty worktree kept with unstaged file"
 git -C "$SBX" worktree remove --force "$DIRTY_WT" >/dev/null 2>&1 || true
 
-# 5c. --keep-worktree: success still keeps the worktree, JSON carries its path
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/keep --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --keep-worktree 2>&1)"; EXIT=$?
+# 5c. --keep-worktree is a bounded lease, never an ownerless boolean.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/bare-keep --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --keep-worktree 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "bare keep-worktree rejects before runner spend"
+assert_contains "$OUT" '"status": "precondition_failed"' \
+  "bare keep-worktree is a precondition failure"
+assert_contains "$OUT" 'requires --retain-owner' \
+  "bare keep-worktree names missing lease owner"
+assert_eq "0" "$(git -C "$SBX" branch --list feat/bare-keep | wc -l | tr -d ' ')" \
+  "bare keep-worktree creates no branch"
+
+# A partial lease must still emit parseable JSON on the precondition path.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/partial-lease --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --keep-worktree --retain-owner test-campaign \
+  --retain-reason integration-test 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "partial keep lease rejects before runner spend"
+PARTIAL_JSON="$(printf '%s\n' "$OUT" | tail -n 1)"
+assert_eq "null" "$(node -e \
+  'process.stdout.write(String(JSON.parse(process.argv[1]).retention_lease))' \
+  "$PARTIAL_JSON")" "partial keep lease emits parseable null retention metadata"
+
+# 5d. a valid keep lease keeps the worktree and reports its path.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/keep --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --keep-worktree --retain-owner test-campaign \
+  --retain-reason integration-test --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "keep-worktree exit code"
 assert_contains "$OUT" '"status": "committed"' "keep-worktree committed status"
+assert_contains "$OUT" '"retention_lease": {"owner":"test-campaign"' \
+  "keep-worktree result exposes its bounded lease owner"
 KEEP_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_file_exists "$KEEP_WT/ok.txt" "kept worktree present on success"
+assert_contains "$(cat "$KEEP_WT/.autopilot-worktree")" 'retention=lease' \
+  "kept worktree marker records lease retention"
+assert_contains "$(cat "$KEEP_WT/.autopilot-worktree")" 'retention_owner=test-campaign' \
+  "kept worktree marker records its owner"
 git -C "$SBX" worktree remove --force "$KEEP_WT" >/dev/null 2>&1 || true
 
-# 5d. codex wrapper-commit path (legacy bug): codex may leave edits uncommitted while
+# 5e. Grok repair lineage reuses the exact retained worktree, branch, and
+# provider session. A dirty retained checkout must fail before runner spend.
+STUB_GROK_REUSE="$TEST_TMP/grok-reuse"
+GROK_REUSE_CAPTURE="$TEST_TMP/grok-reuse-capture.txt"
+cat > "$STUB_GROK_REUSE" <<'EOF'
+#!/usr/bin/env bash
+mode=initial
+session=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --session-id) session="$2"; shift 2 ;;
+    --resume) mode=repair; session="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s:%s\n' "$mode" "$session" >> "$GROK_REUSE_CAPTURE"
+printf '%s\n' "$mode" >> grok-lineage.txt
+EOF
+chmod +x "$STUB_GROK_REUSE"
+GROK_ROOT="campaign-v1-grok-reuse"
+OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --branch feat/grok-reuse --prompt-file "$PROMPT" --keep-worktree \
+  --retain-owner "$GROK_ROOT" --retain-reason repair-lineage \
+  --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "initial Grok retained-lineage exit code"
+assert_contains "$OUT" '"status": "committed"' "initial Grok retained-lineage commits"
+GROK_REUSE_JSON="$(printf '%s\n' "$OUT" | grep '^{' | tail -n 1)"
+GROK_REUSE_WT="$(printf '%s' "$GROK_REUSE_JSON" | node -e '
+  let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).worktree))
+')"
+GROK_REUSE_SESSION="$(printf '%s' "$GROK_REUSE_JSON" | node -e '
+  let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).provider_session_id))
+')"
+GROK_REUSE_COMMIT="$(printf '%s' "$GROK_REUSE_JSON" | node -e '
+  let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).commit))
+')"
+GROK_REUSE_INSTANCE="$(node - "$GROK_REUSE_WT" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const worktree = path.resolve(process.argv[2]);
+const stat = fs.statSync(worktree, { bigint: true });
+process.stdout.write(crypto.createHash('sha256').update(JSON.stringify({
+  birthtime_ns: stat.birthtimeNs.toString(),
+  device: stat.dev.toString(),
+  inode: stat.ino.toString(),
+  schema: 1,
+  worktree,
+})).digest('hex'));
+NODE
+)"
+assert_file_exists "$GROK_REUSE_WT/grok-lineage.txt" \
+  "initial Grok retained worktree remains present"
+assert_contains "$OUT" '"provider_session_reused": false' \
+  "initial Grok dispatch creates a provider session"
+assert_contains "$OUT" '"worktree_reused": false' \
+  "initial Grok dispatch creates one worktree"
+
+# Another same-root leaf must count an unexpired retained lease as occupied and
+# must not reclaim the campaign checkout after its lifetime lock is released.
+OUT_LEASE_PROBE="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  "$SCRIPT" --branch feat/grok-lease-budget-probe --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "same-root admission with one retained lease stays within budget"
+assert_file_exists "$GROK_REUSE_WT/grok-lineage.txt" \
+  "same-root budget reconciliation preserves the unexpired retained lease"
+
+OUT_REPAIR="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --branch feat/grok-reuse --base "$GROK_REUSE_COMMIT" --prompt-file "$PROMPT" \
+  --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
+  --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
+  --resume-session "$GROK_REUSE_SESSION" --retain-owner "$GROK_ROOT" \
+  --retain-reason repair-lineage --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Grok repair reuse exit code"
+assert_contains "$OUT_REPAIR" '"status": "committed"' "Grok repair reuse commits"
+assert_contains "$OUT_REPAIR" "\"worktree\": \"$GROK_REUSE_WT\"" \
+  "Grok repair returns the same retained worktree"
+assert_contains "$OUT_REPAIR" "\"provider_session_id\": \"$GROK_REUSE_SESSION\"" \
+  "Grok repair returns the same provider session"
+assert_contains "$OUT_REPAIR" '"provider_session_reused": true' \
+  "Grok repair reports provider session reuse"
+assert_contains "$OUT_REPAIR" '"worktree_reused": true' \
+  "Grok repair reports worktree reuse"
+assert_eq "2" "$(wc -l < "$GROK_REUSE_WT/grok-lineage.txt" | tr -d ' ')" \
+  "Grok repair advances content in the same checkout"
+assert_eq "1" "$(git -C "$SBX" branch --list feat/grok-reuse | wc -l | tr -d ' ')" \
+  "Grok repair lineage keeps one branch"
+assert_eq "initial:$GROK_REUSE_SESSION
+repair:$GROK_REUSE_SESSION" "$(cat "$GROK_REUSE_CAPTURE")" \
+  "Grok CLI receives one session id then resumes that exact id"
+
+# A path-compatible replacement must be rejected under the lifetime lock before
+# the runner can mutate it.
+GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
+OUT_INSTANCE_MISMATCH="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --branch feat/grok-reuse --base "$(git -C "$GROK_REUSE_WT" rev-parse HEAD)" \
+  --prompt-file "$PROMPT" --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
+  --expected-worktree-instance "$(printf '0%.0s' {1..64})" \
+  --resume-session "$GROK_REUSE_SESSION" --retain-owner "$GROK_ROOT" \
+  --retain-reason repair-lineage --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "mismatched retained worktree instance rejects reuse"
+assert_contains "$OUT_INSTANCE_MISMATCH" 'retained worktree filesystem instance changed' \
+  "reuse verifies exact filesystem instance under the lifetime lock"
+assert_eq "$GROK_CAPTURE_LINES_BEFORE" \
+  "$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')" \
+  "mismatched retained instance spends zero Grok calls"
+
+# Reuse validation must happen while holding the lifetime lock. Advance HEAD
+# while a candidate reuse is blocked on that lock; it must revalidate and stop
+# before runner spend after the lock is released.
+LOCKED_BASE="$(git -C "$GROK_REUSE_WT" rev-parse HEAD)"
+LOCK_RACE_OUT="$TEST_TMP/grok-reuse-lock-race.out"
+exec {TEST_REUSE_LOCK_FD}> "$GROK_REUSE_WT/.autopilot-worktree.lock"
+flock -x "$TEST_REUSE_LOCK_FD"
+(
+  exec {TEST_REUSE_LOCK_FD}>&-
+  cd "$SBX"
+  env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+    GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+    --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+    --branch feat/grok-reuse --base "$LOCKED_BASE" --prompt-file "$PROMPT" \
+    --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
+    --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
+    --resume-session "$GROK_REUSE_SESSION" --retain-owner "$GROK_ROOT" \
+    --retain-reason repair-lineage --retain-until "$RETAIN_UNTIL"
+) >"$LOCK_RACE_OUT" 2>&1 &
+LOCK_RACE_PID=$!
+sleep 0.2
+printf 'external advance\n' > "$GROK_REUSE_WT/lock-race.txt"
+git -C "$GROK_REUSE_WT" add lock-race.txt
+git -C "$GROK_REUSE_WT" -c user.email=t@t -c user.name=t \
+  commit -q -m "test: advance while reuse waits"
+GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
+exec {TEST_REUSE_LOCK_FD}>&-
+wait "$LOCK_RACE_PID"; LOCK_RACE_EXIT=$?
+OUT_LOCK_RACE="$(cat "$LOCK_RACE_OUT")"
+assert_eq "2" "$LOCK_RACE_EXIT" "reuse revalidates HEAD after acquiring its lifetime lock"
+assert_contains "$OUT_LOCK_RACE" 'retained worktree HEAD does not match --base' \
+  "reuse lock closes the validation-to-marker TOCTOU window"
+assert_eq "$GROK_CAPTURE_LINES_BEFORE" \
+  "$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')" \
+  "stale concurrent reuse spends zero Grok calls"
+
+touch "$GROK_REUSE_WT/uncommitted-user-data.txt"
+GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
+OUT_DIRTY_REUSE="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --branch feat/grok-reuse --base "$(git -C "$GROK_REUSE_WT" rev-parse HEAD)" \
+  --prompt-file "$PROMPT" --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
+  --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
+  --resume-session "$GROK_REUSE_SESSION" --retain-owner "$GROK_ROOT" \
+  --retain-reason repair-lineage --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "dirty retained Grok worktree rejects reuse"
+assert_contains "$OUT_DIRTY_REUSE" '"status": "precondition_failed"' \
+  "dirty retained Grok worktree fails as a precondition"
+assert_contains "$OUT_DIRTY_REUSE" 'retained worktree is dirty' \
+  "dirty retained Grok worktree names the blocker"
+assert_eq "$GROK_CAPTURE_LINES_BEFORE" \
+  "$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')" \
+  "dirty retained worktree spends zero Grok calls"
+rm -f "$GROK_REUSE_WT/uncommitted-user-data.txt"
+git -C "$SBX" worktree remove "$GROK_REUSE_WT" >/dev/null 2>&1 || true
+git -C "$SBX" branch -D feat/grok-reuse >/dev/null 2>&1 || true
+
+# 5f. codex wrapper-commit path (legacy bug): codex may leave edits uncommitted while
 # HEAD unchanged; wrapper-commit must still run and produce committed outcome.
 OUT="$( (
   cd "$SBX"
@@ -273,7 +474,7 @@ assert_contains "$OUT" '"files_changed": 1' "codex wrapper-commit diff stat"
 assert_contains "$OUT" '"runner": "codex"' "codex wrapper-commit runner reported"
 assert_eq "dispatch-hetero(codex): edits on feat/codex-no-commit" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-no-commit)" "codex wrapper-commit message"
 
-# 5e. wrapper-commit identity fallback covers author-only environments too.
+# 5g. wrapper-commit identity fallback covers author-only environments too.
 # `git commit` needs both author and committer identity; an author env alone is
 # not enough when HOME has no git config.
 AUTHOR_ONLY_HOME="$TEST_TMP/git-home-author-only"
@@ -287,7 +488,7 @@ assert_eq "0" "$EXIT" "codex wrapper-commit with author-only env exit code"
 assert_contains "$OUT" '"status": "committed"' "codex author-only wrapper-commit status"
 assert_eq "dispatch-hetero(codex): edits on feat/codex-author-only" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-author-only)" "codex author-only wrapper-commit message"
 
-# 5f. feature-detect: a STALE codex (its `exec --help` lacks --dangerously-bypass-hook-trust,
+# 5h. feature-detect: a STALE codex (its `exec --help` lacks --dangerously-bypass-hook-trust,
 # e.g. an old npm-global codex earlier in PATH) must FAIL LOUD as precondition_failed —
 # NOT dispatch to it and get misclassified as question_suspected (root cause fixed 2026-07-02).
 STUB_CODEX_OLD="$TEST_TMP/codex-old"
@@ -306,7 +507,7 @@ assert_contains "$OUT" '"status": "precondition_failed"' "stale codex status pre
 assert_contains "$OUT" 'does not support --dangerously-bypass-hook-trust' "stale codex error names the missing flag"
 assert_file_absent "$SBX/should_not_run.txt" "stale codex never actually dispatched"
 
-# 5g. RELATIVE --codex-bin: feature-detect (caller cwd) and worker exec (inside $WT) must
+# 5i. RELATIVE --codex-bin: feature-detect (caller cwd) and worker exec (inside $WT) must
 # resolve the SAME binary — a relative path is absolutized, not resolved twice (gpt-5.5 review).
 # Run from $TEST_TMP where the flag-supporting stub lives as ./codex; before the fix the
 # worker's post-`cd $WT` exec would miss it.
@@ -317,7 +518,7 @@ OUT="$( (
 assert_eq "0" "$EXIT" "relative --codex-bin absolutized → committed exit 0"
 assert_contains "$OUT" '"status": "committed"' "relative --codex-bin wrapper-commit status"
 
-# 5h. unresolvable path-form --codex-bin must fail closed (NOT silently become /<basename>) — R2
+# 5j. unresolvable path-form --codex-bin must fail closed (NOT silently become /<basename>) — R2
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/codex-badbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin nonexistent-dir/codex 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unresolvable --codex-bin dir → precondition exit 2"
 assert_contains "$OUT" 'not resolvable' "unresolvable --codex-bin names the path"

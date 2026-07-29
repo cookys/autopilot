@@ -1,6 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
+const path = require('path');
+const { isImmutableGitSha } = require('../lib/common');
 
 const CAMPAIGN_SCHEMA_VERSION = 1;
 const CAMPAIGN_STATES = Object.freeze({
@@ -172,6 +174,25 @@ function canonicalDigest(value) {
   return sha256(JSON.stringify(canonicalize(value)));
 }
 
+function repairLineageCleanupId({
+  lineageId,
+  branch,
+  worktree,
+  expectedTip,
+  cleanupEpoch,
+  worktreeInstanceId,
+}) {
+  return canonicalDigest({
+    schema: 1,
+    lineage_id: lineageId,
+    branch,
+    worktree,
+    expected_tip: expectedTip,
+    cleanup_epoch: cleanupEpoch,
+    worktree_instance_id: worktreeInstanceId,
+  });
+}
+
 function normalizeCampaignArtifactReference(value) {
   if (value === null || value === undefined) return null;
   if (!isPlainObject(value) || typeof value.kind !== 'string') {
@@ -184,9 +205,22 @@ function normalizeCampaignArtifactReference(value) {
     'campaign_terminal',
   ]);
   if (digestKinds.has(value.kind)) {
-    assertExactKeys(value, new Set(['kind', 'digest']), 'campaign artifact reference');
+    const hasRepairLineage = new Set(['product_review', 'campaign_terminal']).has(value.kind)
+      && Object.prototype.hasOwnProperty.call(value, 'repair_lineage');
+    assertExactKeys(
+      value,
+      new Set(['kind', 'digest', ...(hasRepairLineage ? ['repair_lineage'] : [])]),
+      'campaign artifact reference',
+    );
     if (!isSha256(value.digest)) {
       fail('INVALID_ARTIFACT_REFERENCE', 'campaign artifact digest is invalid');
+    }
+    if (hasRepairLineage) {
+      validateRepairLineage(
+        value.repair_lineage,
+        value.repair_lineage.lineage_id,
+        value.repair_lineage.branch,
+      );
     }
     return { ...value };
   }
@@ -204,6 +238,7 @@ function normalizeCampaignArtifactReference(value) {
     'branch',
     'base',
     'writer_fence',
+    'repair_lineage',
     ...(hasDigestChain ? ['campaign_contract_sha256', 'unit_contract_sha256'] : []),
   ]);
   assertExactKeys(
@@ -216,10 +251,13 @@ function normalizeCampaignArtifactReference(value) {
       || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value.base)
       || typeof value.branch !== 'string'
       || value.branch.length === 0
-      || !isPlainObject(value.writer_fence)) {
+      || !isPlainObject(value.writer_fence)
+      || !isPlainObject(value.repair_lineage)) {
     fail('INVALID_ARTIFACT_REFERENCE', 'campaign Git candidate identity is invalid');
   }
   const fence = value.writer_fence;
+  const lineage = value.repair_lineage;
+  validateRepairLineage(lineage, fence.campaign_id, value.branch);
   const fenceHasDigestChain = Object.prototype.hasOwnProperty.call(
     fence,
     'campaign_contract_sha256',
@@ -262,6 +300,166 @@ function normalizeCampaignArtifactReference(value) {
     fail('INVALID_ARTIFACT_REFERENCE', 'campaign writer fence reference is invalid');
   }
   return JSON.parse(JSON.stringify(value));
+}
+
+function validateRepairLineage(lineage, campaignId, branch) {
+  assertExactKeys(lineage, new Set([
+    'lineage_id',
+    'branch',
+    'worktree',
+    'provider_session_id',
+    'provider_session_reused',
+    'provider_session_non_reuse_reason',
+    'worktree_reused',
+    'worktree_instance_id',
+    'cleanup_epoch',
+    'cleanup_receipt_id',
+    'generation',
+    'inherited_churn',
+    'delta_churn',
+    'retention_owner',
+    'retention_reason',
+    'retention_expires_at',
+    'terminal_worktree_disposition',
+    'transcript_reused',
+    'transcript_source_digest',
+    'review_input_mode',
+    'new_input_bytes',
+    'new_input_tokens',
+    'input_token_measurement',
+    'finding_occurrences',
+    'accepted_invariant_ids',
+    'accepted_invariants',
+    'accepted_invariants_source_commit',
+    'accepted_invariants_digest',
+    'prior_review_finding_ids',
+    'previous_repair_finding_count',
+    'non_reduction_rounds',
+    'repair_scope_paths',
+    'repair_scope_seal',
+  ]), 'campaign repair lineage reference');
+  const findingIds = new Set();
+  const findingOccurrencesValid = Array.isArray(lineage.finding_occurrences)
+    && lineage.finding_occurrences.every((item) => {
+      if (!isPlainObject(item)
+          || Object.keys(item).sort().join(',') !== 'finding_id,occurrences'
+          || typeof item.finding_id !== 'string'
+          || item.finding_id.length === 0
+          || !Number.isSafeInteger(item.occurrences)
+          || item.occurrences < 1
+          || findingIds.has(item.finding_id)) return false;
+      findingIds.add(item.finding_id);
+      return true;
+    });
+  const validFindingIdList = (items) => Array.isArray(items)
+    && items.every((item, index) => typeof item === 'string'
+      && item.length > 0
+      && (index === 0 || items[index - 1] < item));
+  if (lineage.lineage_id !== campaignId
+      || lineage.branch !== branch
+      || (lineage.worktree === null
+        ? lineage.terminal_worktree_disposition !== 'not_created_failed_dispatch'
+        : (typeof lineage.worktree !== 'string' || !path.isAbsolute(lineage.worktree)))
+      || (lineage.provider_session_id !== null
+        && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+          lineage.provider_session_id,
+        ))
+      || typeof lineage.provider_session_reused !== 'boolean'
+      || (lineage.provider_session_non_reuse_reason !== null
+        && (typeof lineage.provider_session_non_reuse_reason !== 'string'
+          || lineage.provider_session_non_reuse_reason.length === 0))
+      || typeof lineage.worktree_reused !== 'boolean'
+      || (lineage.worktree === null
+        ? lineage.worktree_instance_id !== null
+        : !isSha256(lineage.worktree_instance_id))
+      || !Number.isSafeInteger(lineage.cleanup_epoch)
+      || lineage.cleanup_epoch < 0
+      || (lineage.cleanup_epoch === 0
+        && (lineage.worktree !== null
+          || lineage.terminal_worktree_disposition !== 'not_created_failed_dispatch'))
+      || (lineage.cleanup_receipt_id !== null
+        && !isSha256(lineage.cleanup_receipt_id))
+      || ((lineage.terminal_worktree_disposition === 'removed_clean')
+        !== (lineage.cleanup_receipt_id !== null))
+      || !Number.isSafeInteger(lineage.generation)
+      || lineage.generation < 0
+      || !Number.isSafeInteger(lineage.inherited_churn)
+      || lineage.inherited_churn < 0
+      || !Number.isSafeInteger(lineage.delta_churn)
+      || lineage.delta_churn < 0
+      || lineage.retention_owner !== campaignId
+      || lineage.retention_reason !== 'implementation-campaign-repair-lineage'
+      || !Number.isSafeInteger(lineage.retention_expires_at)
+      || lineage.retention_expires_at <= 0
+      || !new Set([
+        'active',
+        'retained_failed_dispatch',
+        'not_created_failed_dispatch',
+        'blocked_cleanup_journal',
+        'blocked_dirty_or_unverifiable',
+        'removed_clean',
+      ]).has(lineage.terminal_worktree_disposition)
+      || typeof lineage.transcript_reused !== 'boolean'
+      || !isSha256(lineage.transcript_source_digest)
+      || !new Set(['full_diff_generation', 'focused_delta_round']).has(
+        lineage.review_input_mode,
+      )
+      || !Number.isSafeInteger(lineage.new_input_bytes)
+      || lineage.new_input_bytes < 0
+      || (lineage.new_input_tokens !== null
+        && (!Number.isSafeInteger(lineage.new_input_tokens)
+          || lineage.new_input_tokens < 0))
+      || !new Set(['unavailable', 'provider_reported']).has(
+        lineage.input_token_measurement,
+      )
+      || !findingOccurrencesValid
+      || !validFindingIdList(lineage.accepted_invariant_ids)
+      || !Array.isArray(lineage.accepted_invariants)
+      || lineage.accepted_invariants.some((item) => typeof item !== 'string'
+        || item.length === 0)
+      || (lineage.accepted_invariants_source_commit !== null
+        && !isImmutableGitSha(lineage.accepted_invariants_source_commit))
+      || (lineage.accepted_invariants_digest !== null
+        && !isSha256(lineage.accepted_invariants_digest))
+      || ((lineage.accepted_invariants.length === 0)
+        !== (lineage.accepted_invariants_source_commit === null))
+      || ((lineage.accepted_invariants.length === 0)
+        !== (lineage.accepted_invariants_digest === null))
+      || (lineage.accepted_invariants.length > 0
+        && canonicalDigest({
+          schema: 1,
+          assertions: lineage.accepted_invariants,
+          source_commit: lineage.accepted_invariants_source_commit,
+        }) !== lineage.accepted_invariants_digest)
+      || !validFindingIdList(lineage.prior_review_finding_ids)
+      || (lineage.previous_repair_finding_count !== null
+        && (!Number.isSafeInteger(lineage.previous_repair_finding_count)
+          || lineage.previous_repair_finding_count < 0))
+      || !Number.isSafeInteger(lineage.non_reduction_rounds)
+      || lineage.non_reduction_rounds < 0
+      || !Array.isArray(lineage.repair_scope_paths)
+      || lineage.repair_scope_paths.some((item, index) => typeof item !== 'string'
+        || item.length === 0
+        || path.isAbsolute(item)
+        || item.split('/').includes('..')
+        || (index > 0 && lineage.repair_scope_paths[index - 1] >= item))
+      || (lineage.repair_scope_seal !== null
+        && (!isPlainObject(lineage.repair_scope_seal)
+          || lineage.repair_scope_seal.schema !== 1
+          || !isSha256(lineage.repair_scope_seal.seal_digest)
+          || !isImmutableGitSha(lineage.repair_scope_seal.source_commit)
+          || !validFindingIdList(lineage.repair_scope_seal.finding_ids)
+          || !Array.isArray(lineage.repair_scope_seal.allowed_paths)
+          || lineage.repair_scope_seal.allowed_paths.join('\0')
+            !== lineage.repair_scope_paths.join('\0')
+          || canonicalDigest({
+            schema: lineage.repair_scope_seal.schema,
+            finding_ids: lineage.repair_scope_seal.finding_ids,
+            allowed_paths: lineage.repair_scope_seal.allowed_paths,
+            source_commit: lineage.repair_scope_seal.source_commit,
+          }) !== lineage.repair_scope_seal.seal_digest))) {
+    fail('INVALID_ARTIFACT_REFERENCE', 'campaign repair lineage identity is invalid');
+  }
 }
 
 function assertExactKeys(value, allowed, label) {
@@ -721,6 +919,7 @@ module.exports = {
   canonicalDigest,
   createCampaignState,
   normalizeCampaignArtifactReference,
+  repairLineageCleanupId,
   reduceCampaignState,
   replayCampaignEvents,
   validateInitialCampaignState,

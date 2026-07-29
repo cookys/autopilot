@@ -486,6 +486,45 @@ const writerFence = createWriterFence({
     },
   },
 });
+const repairLineage = {
+  lineage_id: control.campaign_id,
+  branch: 'impl/p3-resume',
+  worktree: repo,
+  provider_session_id: null,
+  provider_session_reused: false,
+  provider_session_non_reuse_reason: 'runner_resume_not_verified:fixture',
+  worktree_reused: false,
+  worktree_instance_id: 'b'.repeat(64),
+  cleanup_epoch: 1,
+  cleanup_receipt_id: null,
+  generation: 0,
+  inherited_churn: 0,
+  delta_churn: 2,
+  retention_owner: control.campaign_id,
+  retention_reason: 'implementation-campaign-repair-lineage',
+  retention_expires_at: 2000000000,
+  terminal_worktree_disposition: 'active',
+  transcript_reused: false,
+  transcript_source_digest: 'a'.repeat(64),
+  review_input_mode: 'full_diff_generation',
+  new_input_bytes: 17,
+  new_input_tokens: 23,
+  input_token_measurement: 'provider_reported',
+  finding_occurrences: [],
+  accepted_invariant_ids: [`acceptance:${'c'.repeat(64)}`],
+  accepted_invariants: ['preserve durable invariant'],
+  accepted_invariants_source_commit: candidate,
+  accepted_invariants_digest: canonicalDigest({
+    schema: 1,
+    assertions: ['preserve durable invariant'],
+    source_commit: candidate,
+  }),
+  prior_review_finding_ids: [],
+  previous_repair_finding_count: null,
+  non_reduction_rounds: 0,
+  repair_scope_paths: ['src/example.js'],
+  repair_scope_seal: null,
+};
 let appended = appendCampaignEvent({
   repo,
   campaignControl: control,
@@ -515,6 +554,7 @@ appended = appendCampaignEvent({
     branch: 'impl/p3-resume',
     base,
     writer_fence: writerFence,
+    repair_lineage: repairLineage,
   },
 });
 control = { ...control, initial_state: appended.state };
@@ -558,6 +598,10 @@ appended = appendCampaignEvent({
   artifactReference: {
     kind: 'product_review',
     digest: reviewDigest,
+    repair_lineage: {
+      ...repairLineage,
+      prior_review_finding_ids: ['icc-p3-note'],
+    },
   },
 });
 console.log(`campaign_id=${control.campaign_id}`);
@@ -675,6 +719,7 @@ const {
   AutopilotEngine,
   canonicalDigest,
   compileCampaignDispositionProvider,
+  repairLineageCleanupId,
   runCampaignIntake,
 } = require(path.join(root, 'src', 'engine'));
 const roster = {
@@ -704,6 +749,7 @@ const roster = {
 };
 let implementationCalls = 0;
 let reviewCalls = 0;
+let intakeAcceptedInvariants = [];
 const findings = JSON.stringify([{
   finding_id: 'icc-p3-note',
   claim: 'fixture note is outside the frozen acceptance',
@@ -738,6 +784,7 @@ const decision = {
     rationale: 'does not protect the frozen vertical acceptance',
   },
 };
+const cleanupActions = [];
 const engine = new AutopilotEngine({
   cwd: repo,
   clock: () => '2026-07-27T00:00:03.000Z',
@@ -757,11 +804,15 @@ const engine = new AutopilotEngine({
     ],
   }),
   campaignIntake(input) {
-    return runCampaignIntake(input, {
+    const control = runCampaignIntake(input, {
       readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
       contextGate: () => ({ owner: 'context_window', status: 'ready' }),
       occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
     });
+    intakeAcceptedInvariants = [
+      ...(control.generation_claim.resume_candidate.repair_lineage.accepted_invariants || []),
+    ];
+    return control;
   },
   implementationDispatcher() {
     implementationCalls += 1;
@@ -805,7 +856,52 @@ const engine = new AutopilotEngine({
       detached: true,
     };
   },
-  gitWorktreeRemove() {
+  gitWorktreeRemove(input) {
+    if (input.expectedRootRunId) {
+      cleanupActions.push('remove');
+      if (input.expectedBranch !== 'impl/p3-resume'
+          || input.expectedTip !== candidate
+          || input.expectedRootRunId !== campaignId
+          || input.expectedRetentionOwner !== campaignId
+          || input.expectedRetentionReason !== 'implementation-campaign-repair-lineage') {
+        throw new Error('cleanup did not receive exact retained worktree authority');
+      }
+    }
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+  },
+  repairLineageCleanupTransaction({ cleanupId, record }) {
+    cleanupActions.push('remove');
+    if (record.branch !== 'impl/p3-resume'
+        || record.expected_tip !== candidate
+        || record.lineage_id !== campaignId
+        || record.retention_owner !== campaignId
+        || record.retention_reason !== 'implementation-campaign-repair-lineage') {
+      throw new Error('cleanup transaction did not receive exact retained worktree authority');
+    }
+    const journal = require('path').join(
+      repo,
+      '.git',
+      'autopilot',
+      'repair-lineage-cleanup.jsonl',
+    );
+    require('fs').mkdirSync(require('path').dirname(journal), { recursive: true });
+    const rows = ['intent', 'removed_clean'].map((action) => {
+      const row = {
+        schema: 1,
+        cleanup_id: cleanupId,
+        action,
+        ...record,
+      };
+      row.record_digest = canonicalDigest(row);
+      return JSON.stringify(row);
+    });
+    require('fs').appendFileSync(journal, `${rows.join('\n')}\n`);
     return {
       error: null,
       status: 0,
@@ -849,6 +945,37 @@ console.log(`durable_phase=${result.campaign_control.initial_state
 console.log(`completion=${result.campaign_control.completion
   ? result.campaign_control.completion.status
   : 'missing'}`);
+console.log(`resumed_prior_findings=${
+  result.repair_lineage.prior_review_finding_ids.join(',')
+}`);
+console.log(`resumed_delta_churn=${result.repair_lineage.delta_churn}`);
+console.log(`resumed_input_bytes=${result.repair_lineage.new_input_bytes}`);
+console.log(`resumed_input_tokens=${result.repair_lineage.new_input_tokens}`);
+console.log(`resumed_accepted_invariants=${
+  result.repair_lineage.accepted_invariants.join(',')
+}`);
+console.log(`intake_accepted_invariants=${intakeAcceptedInvariants.join(',')}`);
+console.log(`resumed_invariant_source=${
+  result.repair_lineage.accepted_invariants_source_commit
+}`);
+console.log(`cleanup_identity_shared=${
+  result.repair_lineage.cleanup_receipt_id === repairLineageCleanupId({
+    lineageId: result.repair_lineage.lineage_id,
+    branch: result.repair_lineage.branch,
+    worktree: result.repair_lineage.worktree,
+    expectedTip: candidate,
+    cleanupEpoch: result.repair_lineage.cleanup_epoch,
+    worktreeInstanceId: result.repair_lineage.worktree_instance_id,
+  })
+}`);
+const cleanupRows = require('fs').readFileSync(
+  require('path').join(repo, '.git', 'autopilot', 'repair-lineage-cleanup.jsonl'),
+  'utf8',
+).trim().split('\n').map((line) => JSON.parse(line))
+  .filter((row) => row.cleanup_id === result.repair_lineage.cleanup_receipt_id);
+console.log(`cleanup_transaction=${
+  [cleanupRows[0].action, ...cleanupActions, cleanupRows[1].action].join(',')
+}`);
 if (result.status !== 'converged') console.log(`blocked_result=${JSON.stringify(result)}`);
 NODE
 )"
@@ -863,6 +990,25 @@ assert_contains "$RESUME_OUT" "durable_phase=TERMINAL_READY" \
   "resumed campaign journals its terminal reducer state"
 assert_contains "$RESUME_OUT" "completion=completed" \
   "terminal campaign closes its durable generation lease"
+assert_contains "$RESUME_OUT" "resumed_prior_findings=icc-p3-note" \
+  "resume rehydrates the durable finding lineage, not only Git resources"
+assert_contains "$RESUME_OUT" "resumed_delta_churn=2" \
+  "resume rehydrates cumulative repair churn"
+assert_contains "$RESUME_OUT" "resumed_input_bytes=17" \
+  "resume rehydrates cumulative repair input bytes"
+assert_contains "$RESUME_OUT" "resumed_input_tokens=23" \
+  "resume rehydrates cumulative provider token usage"
+assert_contains "$RESUME_OUT" "intake_accepted_invariants=preserve durable invariant" \
+  "intake rehydrates accepted invariant assertions after compaction"
+assert_contains "$RESUME_OUT" \
+  "resumed_accepted_invariants=resume verifies the committed candidate" \
+  "post-resume GREEN verification refreshes the durable invariant assertions"
+assert_contains "$RESUME_OUT" "resumed_invariant_source=$CANDIDATE_SHA" \
+  "resume rehydrates the accepted invariant source commit"
+assert_contains "$RESUME_OUT" "cleanup_transaction=intent,remove,removed_clean" \
+  "terminal cleanup journals intent and result around exact-identity removal"
+assert_contains "$RESUME_OUT" "cleanup_identity_shared=true" \
+  "terminal writer and durable recovery share the complete cleanup identity"
 
 STATUS_OUT="$(node - "$REPO_ROOT" "$SBX" "$CAMPAIGN_ID" <<'NODE'
 const path = require('path');

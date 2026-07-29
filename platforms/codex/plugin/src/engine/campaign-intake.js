@@ -16,6 +16,7 @@ const {
   canonicalDigest,
   createCampaignState,
   normalizeCampaignArtifactReference,
+  repairLineageCleanupId,
   reduceCampaignState,
 } = require('./implementation-campaign');
 const {
@@ -41,6 +42,62 @@ class CampaignIntakeError extends Error {
 
 function sha256(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
+}
+
+function repairLineageCleanupState({ repo, reference, repairLineage }) {
+  const cleanupId = repairLineageCleanupId({
+    lineageId: repairLineage.lineage_id,
+    branch: repairLineage.branch,
+    worktree: repairLineage.worktree,
+    expectedTip: reference.commit,
+    cleanupEpoch: repairLineage.cleanup_epoch,
+    worktreeInstanceId: repairLineage.worktree_instance_id,
+  });
+  const common = spawnSync(
+    'git',
+    ['-C', repo, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  if (common.error || common.signal || common.status !== 0) return null;
+  const journalPath = path.join(
+    String(common.stdout || '').trim(),
+    'autopilot',
+    'repair-lineage-cleanup.jsonl',
+  );
+  if (!fs.existsSync(journalPath)) return null;
+  let rows;
+  try {
+    rows = fs.readFileSync(journalPath, 'utf8').trim().split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((row) => row.cleanup_id === cleanupId);
+  } catch (_error) {
+    return null;
+  }
+  const valid = rows.every((row) => {
+    if (!row || row.schema !== 1
+        || !new Set(['intent', 'removed_clean']).has(row.action)
+        || row.lineage_id !== repairLineage.lineage_id
+        || row.branch !== repairLineage.branch
+        || row.worktree !== repairLineage.worktree
+        || row.expected_tip !== reference.commit
+        || row.cleanup_epoch !== repairLineage.cleanup_epoch
+        || row.worktree_instance_id !== repairLineage.worktree_instance_id
+        || row.retention_owner !== repairLineage.retention_owner
+        || row.retention_reason !== repairLineage.retention_reason
+        || row.retention_expires_at !== repairLineage.retention_expires_at
+        || !/^[0-9a-f]{64}$/.test(row.record_digest || '')) return false;
+    const { record_digest: recordDigest, ...body } = row;
+    return canonicalDigest(body) === recordDigest;
+  });
+  if (!valid || fs.existsSync(repairLineage.worktree)
+      || rows.filter((row) => row.action === 'intent').length !== 1) return null;
+  const completions = rows.filter((row) => row.action === 'removed_clean').length;
+  if (completions === 0) return 'pending_intent';
+  return completions === 1 ? 'completed' : null;
 }
 
 function defaultCampaignSealPath(contractPath) {
@@ -246,6 +303,15 @@ function appendCampaignEvent(input = {}) {
     );
   }
   if (artifactReference
+      && artifactReference.repair_lineage
+      && (artifactReference.repair_lineage.lineage_id !== control.campaign_id
+        || artifactReference.repair_lineage.branch !== control.contract.branch)) {
+    throw new CampaignIntakeError(
+      'campaign_event_artifact_invalid',
+      'campaign repair lineage belongs to another campaign or branch',
+    );
+  }
+  if (artifactReference
       && artifactReference.kind === 'git_candidate'
       && artifactReference.campaign_contract_sha256
       && artifactReference.campaign_contract_sha256 !== control.contract_digest) {
@@ -444,6 +510,7 @@ function abandonCampaignLease({
 function verifyResumeCandidate({ projection, repo, base }) {
   const reference = projection.candidate_reference;
   const writerFence = reference && reference.writer_fence;
+  const repairLineage = reference && reference.repair_lineage;
   const writerFenceBody = writerFence && { ...writerFence };
   if (writerFenceBody) delete writerFenceBody.receipt_digest;
   if (!reference
@@ -459,6 +526,19 @@ function verifyResumeCandidate({ projection, repo, base }) {
       || writerFence.campaign_id !== projection.state.campaign_id
       || writerFence.candidate_commit !== reference.commit
       || writerFence.candidate_tree_sha !== reference.tree_sha
+      || !repairLineage
+      || repairLineage.lineage_id !== projection.state.campaign_id
+      || repairLineage.branch !== reference.branch
+      || typeof repairLineage.worktree !== 'string'
+      || !path.isAbsolute(repairLineage.worktree)
+      || repairLineage.retention_owner !== projection.state.campaign_id
+      || repairLineage.retention_reason !== 'implementation-campaign-repair-lineage'
+      || !Number.isSafeInteger(repairLineage.retention_expires_at)
+      || repairLineage.retention_expires_at <= 0
+      || (repairLineage.provider_session_id !== null
+        && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+          repairLineage.provider_session_id,
+        ))
       || (reference.campaign_contract_sha256
         && (reference.campaign_contract_sha256 !== projection.state.contract_digest
           || reference.campaign_contract_sha256
@@ -492,10 +572,39 @@ function verifyResumeCandidate({ projection, repo, base }) {
     ['-C', repo, 'merge-base', '--is-ancestor', base, reference.commit],
     { stdio: 'ignore' },
   );
+  const retainedTip = spawnSync(
+    'git',
+    ['-C', repairLineage.worktree, 'rev-parse', '--verify', 'HEAD'],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const retainedBranch = spawnSync(
+    'git',
+    ['-C', repairLineage.worktree, 'symbolic-ref', '--quiet', '--short', 'HEAD'],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const retainedWorktreeMatches = !retainedTip.error
+    && retainedTip.status === 0
+    && String(retainedTip.stdout || '').trim() === reference.commit
+    && !retainedBranch.error
+    && retainedBranch.status === 0
+    && String(retainedBranch.stdout || '').trim() === reference.branch;
+  const cleanupState = retainedWorktreeMatches
+    ? null
+    : !fs.existsSync(repairLineage.worktree)
+      ? repairLineageCleanupState({ repo, reference, repairLineage })
+      : null;
   if (tip.error || tip.status !== 0 || String(tip.stdout || '').trim() !== reference.commit
       || tree.error || tree.status !== 0
       || String(tree.stdout || '').trim() !== reference.tree_sha
-      || ancestry.error || ancestry.status !== 0) {
+      || ancestry.error || ancestry.status !== 0
+      || (!retainedWorktreeMatches
+        && !new Set(['pending_intent', 'completed']).has(cleanupState))) {
     throw new CampaignIntakeError(
       'campaign_resume_git_drift',
       'durable campaign candidate does not match current immutable Git truth',
@@ -513,6 +622,7 @@ function verifyResumeCandidate({ projection, repo, base }) {
       unit_contract_sha256: reference.unit_contract_sha256,
     } : {}),
     scope_implementation_sha: initial.commit,
+    repair_lineage: repairLineage,
   };
 }
 
@@ -681,6 +791,12 @@ function defaultGenerationClaim({
       const reviewReference = existing.last_artifact_reference;
       if (!reviewReference
           || reviewReference.kind !== 'product_review'
+          || !reviewReference.repair_lineage
+          || reviewReference.repair_lineage.lineage_id !== existing.state.campaign_id
+          || reviewReference.repair_lineage.branch
+            !== existing.resume_candidate.branch
+          || reviewReference.repair_lineage.worktree
+            !== existing.resume_candidate.repair_lineage.worktree
           || canonicalDigest(reviewReference) !== existing.state.last_output_artifact_digest) {
         return rejected(
           'campaign_generation',
@@ -688,6 +804,7 @@ function defaultGenerationClaim({
           'adjudication resume requires the exact durable focused-review digest',
         );
       }
+      existing.resume_candidate.repair_lineage = reviewReference.repair_lineage;
       existing.resume_review_digest = reviewReference.digest;
     }
     if (existing.state.usage.changed_files >= existing.state.limits.max_changed_files) {
@@ -1534,6 +1651,7 @@ module.exports = {
   buildNoEffectReceipt,
   completeCampaignAdmission,
   defaultCampaignSealPath,
+  repairLineageCleanupState,
   releaseCampaignAdmission,
   runCampaignIntake,
 };

@@ -56,6 +56,10 @@
 #       [--strict-contract]                     # required together with --contract-file
 #       [--contract-file <path>]                # required together with --strict-contract
 #       [--keep-worktree]                      # keep worktree even on success
+#       [--retain-owner <id> --retain-reason <text> --retain-until <epoch>]
+#       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
+#       [--expected-worktree-instance <sha256>] # required identity fence for retained reuse
+#       [--resume-session <uuid>]               # Grok repair: resume the exact prior session
 #   scripts/dispatch-hetero.sh --gc            # marker-scoped stale worktree reaper
 #       [--reap-unmarked --yes]                # recovery: reap unmarked hetero-* only
 #   ⏳ TIMEOUT: the implementer run can take MANY minutes. Under Claude Code's Bash tool,
@@ -113,6 +117,16 @@ CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PA
                      # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
 KEEP=0
+RETENTION_OWNER=""
+RETENTION_REASON=""
+RETENTION_REASON_SHA256=""
+RETENTION_EXPIRES_AT=""
+REUSE_WORKTREE=""
+EXPECTED_WORKTREE_INSTANCE=""
+RESUME_SESSION_ID=""
+PROVIDER_SESSION_ID=""
+PROVIDER_SESSION_REUSED=0
+WORKTREE_REUSED=0
 BRANCH=""
 PROMPT_FILE=""
 CONTINUATION_CHECKPOINT=""
@@ -622,10 +636,24 @@ emit() { # status commit files ins del worktree error
     fi
   fi
   local commit_json="null" wt_json="null" err_json="null" orphan_json="null"
+  local provider_session_json="null" provider_reused_json="false" worktree_reused_json="false"
+  local retention_lease_json="null"
   [ -n "${2:-}" ] && commit_json="\"$2\""
   [ -n "${6:-}" ] && wt_json="\"$(_flat_json_escape "$6")\""
   [ -n "${7:-}" ] && err_json="\"$(_flat_json_escape "$7")\""
   [ -n "${OUTCOME_ORPHAN:-}" ] && orphan_json="\"$(_flat_json_escape "$OUTCOME_ORPHAN")\""
+  [ -n "${PROVIDER_SESSION_ID:-}" ] \
+    && provider_session_json="\"$(_flat_json_escape "$PROVIDER_SESSION_ID")\""
+  [ "${PROVIDER_SESSION_REUSED:-0}" -eq 1 ] && provider_reused_json="true"
+  [ "${WORKTREE_REUSED:-0}" -eq 1 ] && worktree_reused_json="true"
+  if [ -n "${RETENTION_OWNER:-}" ] \
+    && [[ "${RETENTION_REASON_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] \
+    && [[ "${RETENTION_EXPIRES_AT:-}" =~ ^[1-9][0-9]*$ ]]; then
+    retention_lease_json="$(printf \
+      '{"owner":"%s","reason_sha256":"%s","expires_at":%s}' \
+      "$(_flat_json_escape "$RETENTION_OWNER")" \
+      "$RETENTION_REASON_SHA256" "$RETENTION_EXPIRES_AT")"
+  fi
   local strict_unit_json="null" strict_contract_sha_json="null" strict_spec_sha_json="null" strict_go_json="null"
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     [ -n "${STRICT_UNIT_ID:-}" ] && strict_unit_json="\"$(_flat_json_escape "$STRICT_UNIT_ID")\""
@@ -686,12 +714,14 @@ emit() { # status commit files ins del worktree error
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     identity_fields=', "identity_drift": true'
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s%s%s%s%s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
-    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$identity_fields"
+    "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
+    "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
+    "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$identity_fields"
 }
 
 check_session_mode_gate() {
@@ -1176,7 +1206,7 @@ die_precondition() {
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
   exit 2
@@ -1283,6 +1313,12 @@ while [ $# -gt 0 ]; do
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
+    --retain-owner) RETENTION_OWNER="${2:-}"; shift 2 ;;
+    --retain-reason) RETENTION_REASON="${2:-}"; shift 2 ;;
+    --retain-until) RETENTION_EXPIRES_AT="${2:-}"; shift 2 ;;
+    --reuse-worktree) REUSE_WORKTREE="${2:-}"; shift 2 ;;
+    --expected-worktree-instance) EXPECTED_WORKTREE_INSTANCE="${2:-}"; shift 2 ;;
+    --resume-session) RESUME_SESSION_ID="${2:-}"; shift 2 ;;
     --skill-mode) SKILL_MODE="${2:-}"; shift 2 ;;
     --skill) SKILLS+=("${2:-}"); shift 2 ;;
     --store) export ENGINE_CAPABILITY_DIR="${2:-}"; shift 2 ;;
@@ -1423,6 +1459,35 @@ esac
 [ -n "$BRANCH" ] || die_precondition "--branch is required"
 [ -n "$PROMPT_FILE" ] || die_precondition "--prompt-file is required"
 [ -r "$PROMPT_FILE" ] || die_precondition "prompt file not readable: $PROMPT_FILE"
+if [ "$KEEP" -eq 1 ]; then
+  [[ "$RETENTION_OWNER" =~ ^[A-Za-z0-9._-]+$ ]] \
+    || die_precondition "--keep-worktree requires --retain-owner matching [A-Za-z0-9._-]+"
+  [ -n "$RETENTION_REASON" ] \
+    || die_precondition "--keep-worktree requires --retain-reason"
+  [[ "$RETENTION_EXPIRES_AT" =~ ^[0-9]+$ ]] \
+    || die_precondition "--keep-worktree requires --retain-until epoch seconds"
+  [ "$RETENTION_EXPIRES_AT" -gt "$(date +%s)" ] \
+    || die_precondition "--retain-until must be in the future"
+  RETENTION_REASON_SHA256="$(
+    printf '%s' "$RETENTION_REASON" | sha256sum | awk '{print $1}'
+  )"
+elif [ -n "$RETENTION_OWNER$RETENTION_REASON$RETENTION_EXPIRES_AT" ]; then
+  die_precondition "retention metadata requires --keep-worktree"
+fi
+if [ -n "$REUSE_WORKTREE" ]; then
+  [ "$KEEP" -eq 1 ] || die_precondition "--reuse-worktree requires --keep-worktree"
+  [[ "$REUSE_WORKTREE" = /* ]] || die_precondition "--reuse-worktree must be absolute"
+  [[ "$EXPECTED_WORKTREE_INSTANCE" =~ ^[0-9a-f]{64}$ ]] \
+    || die_precondition "--reuse-worktree requires --expected-worktree-instance SHA-256"
+elif [ -n "$EXPECTED_WORKTREE_INSTANCE" ]; then
+  die_precondition "--expected-worktree-instance requires --reuse-worktree"
+fi
+if [ -n "$RESUME_SESSION_ID" ]; then
+  [ "$RUNNER" = "grok" ] \
+    || die_precondition "--resume-session is only verified for --runner grok"
+  [[ "$RESUME_SESSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] \
+    || die_precondition "--resume-session must be a lowercase UUID"
+fi
 [ -z "$CAMPAIGN_CONTRACT_FILE" ] || [ -r "$CAMPAIGN_CONTRACT_FILE" ] \
   || die_precondition "campaign contract file not readable: $CAMPAIGN_CONTRACT_FILE"
 if [ -n "$CAMPAIGN_CONTRACT_FILE" ] || [ -n "$CAMPAIGN_CONTRACT_SHA256" ] \
@@ -1712,7 +1777,8 @@ if [ -n "$CONTINUATION_CHECKPOINT" ] || [ -n "$CONTINUATION_DURABLE" ] \
     _cont_hb_json _cont_hb_st _cont_hb_rc _cont_wo_claimed _cont_root _cont_common
 fi
 
-if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
+if [ -z "$REUSE_WORKTREE" ] \
+  && git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
   die_precondition "branch already exists: $BRANCH"
 fi
 # Claim the durable implementation tuple before branch/worktree/manifest
@@ -2025,7 +2091,9 @@ try {
       continue
     fi
     [ "$_WT_MARKER_ROOT_RUN_ID" = "$root_id" ] || continue
-    if [ "$_WT_MARKER_RETENTION" = "inspect" ]; then
+    if [ "$_WT_MARKER_RETENTION" = "inspect" ] \
+       || { [ "$_WT_MARKER_RETENTION" = "lease" ] \
+         && [ "$_WT_MARKER_RETENTION_EXPIRES_AT" -gt "$(date +%s)" ]; }; then
       WT_BUDGET_COUNT=$((WT_BUDGET_COUNT + 1))
       continue
     fi
@@ -2073,13 +2141,62 @@ BASE_SHA="$(git rev-parse "$BASE")"
 WT_RUN_ID="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
 WT_LOOP_ID="${AUTOPILOT_LOOP_ID:-${LINEAGE_PARENT:-$DISPATCH_RUN_ID}}"
 WT_LOOP_ID="$(printf '%s' "$WT_LOOP_ID" | tr -c 'A-Za-z0-9._-' '-')"
-WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"  # -u: path only; git worktree add creates it
-WT="$(realpath -m "$WT" 2>/dev/null)" \
-  || die_precondition "cannot canonicalize planned worktree path"
 _wt_repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" \
   || die_precondition "cannot resolve consuming repository root"
 _wt_common_dir="$(_wt_resolve_common_dir "$_wt_repo_root")" \
   || die_precondition "cannot resolve canonical git common directory"
+if [ -n "$REUSE_WORKTREE" ]; then
+  WT="$(realpath "$REUSE_WORKTREE" 2>/dev/null)" \
+    || die_precondition "cannot canonicalize retained worktree path"
+  _wt_open_lock_fd "$WT/.autopilot-worktree.lock" \
+    || die_precondition "cannot open retained worktree lifetime lock"
+  WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
+  flock -x "$WT_LOCK_FD" \
+    || die_precondition "cannot acquire retained worktree lifetime lock"
+  _actual_worktree_instance="$(
+    node - "$WT" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const worktree = path.resolve(process.argv[2]);
+const stat = fs.statSync(worktree, { bigint: true });
+process.stdout.write(crypto.createHash('sha256').update(JSON.stringify({
+  birthtime_ns: stat.birthtimeNs.toString(),
+  device: stat.dev.toString(),
+  inode: stat.ino.toString(),
+  schema: 1,
+  worktree,
+})).digest('hex'));
+NODE
+  )" || die_precondition "cannot attest retained worktree filesystem instance"
+  [ "$_actual_worktree_instance" = "$EXPECTED_WORKTREE_INSTANCE" ] \
+    || die_precondition "retained worktree filesystem instance changed"
+  _wt_is_registered_path "$_wt_repo_root" "$WT"
+  [ "$?" -eq 0 ] || die_precondition "retained worktree is not registered"
+  [ "$(git -C "$WT" symbolic-ref --quiet --short HEAD 2>/dev/null || true)" = "$BRANCH" ] \
+    || die_precondition "retained worktree branch does not match --branch"
+  [ "$(git -C "$WT" rev-parse HEAD 2>/dev/null || true)" = "$BASE_SHA" ] \
+    || die_precondition "retained worktree HEAD does not match --base"
+  [ -z "$(git -C "$WT" status --porcelain 2>/dev/null)" ] \
+    || die_precondition "retained worktree is dirty"
+  _wt_read_schema2_marker "$WT/.autopilot-worktree" \
+    || die_precondition "retained worktree marker is invalid"
+  [ "$_WT_MARKER_BRANCH" = "$BRANCH" ] \
+    || die_precondition "retained worktree marker branch mismatch"
+  [ "$_WT_MARKER_ROOT_RUN_ID" = "$WORKTREE_ROOT_RUN_ID" ] \
+    || die_precondition "retained worktree root identity mismatch"
+  [ "$_WT_MARKER_RETENTION_OWNER" = "$RETENTION_OWNER" ] \
+    || die_precondition "retained worktree lease owner mismatch"
+  [ "$_WT_MARKER_RETENTION_REASON_SHA256" = "$RETENTION_REASON_SHA256" ] \
+    || die_precondition "retained worktree lease reason mismatch"
+  [ "$_WT_MARKER_RETENTION_EXPIRES_AT" = "$RETENTION_EXPIRES_AT" ] \
+    || die_precondition "retained worktree lease expiry mismatch"
+  WORKTREE_REUSED=1
+else
+  WT="$(mktemp -u -d -t "hetero-${BRANCH//\//-}-XXXXXX")"
+  WT="$(realpath -m "$WT" 2>/dev/null)" \
+    || die_precondition "cannot canonicalize planned worktree path"
+fi
 
 _wt_prepare_common_excludes() {
   mkdir -p "$_wt_common_dir/info" || return 1
@@ -2102,6 +2219,13 @@ _wt_lock_fail() {
   # This path runs before the worker starts, but external state can still race
   # marker/lock setup. Never force-remove newly dirty data, and delete the ref
   # only if it still has the exact creation tip.
+  if [ "${WORKTREE_REUSED:-0}" -eq 1 ]; then
+    [ -n "$WT_LOCK_FD" ] && exec {WT_LOCK_FD}>&-
+    [ -n "$WT_BUDGET_LOCK_FD" ] && exec {WT_BUDGET_LOCK_FD}>&-
+    WT_LOCK_FD=""
+    WT_BUDGET_LOCK_FD=""
+    die_precondition "$1"
+  fi
   git worktree remove "$WT" >/dev/null 2>&1 || true
   if [ -z "$WT_PENDING_RECORD" ]; then
     git update-ref -d "refs/heads/$BRANCH" "$BASE_SHA" >/dev/null 2>&1 || true
@@ -2120,7 +2244,7 @@ _wt_lock_fail() {
   die_precondition "$1"
 }
 
-if [ "$WORKTREE_MANAGED" -eq 1 ]; then
+if [ "$WORKTREE_REUSED" -eq 0 ] && [ "$WORKTREE_MANAGED" -eq 1 ]; then
   # Admission must precede the first pending record, branch, or worktree. Once
   # active, evidence loss cannot be reinterpreted as an empty lifecycle root.
   bash "$SELF_DIR/reap-dispatch-worktrees.sh" scan \
@@ -2167,17 +2291,18 @@ if [ "$WORKTREE_MANAGED" -eq 1 ]; then
       die_precondition "cannot publish worktree creation record"
     }
   _wt_creation_test_checkpoint after-pending
-else
+elif [ "$WORKTREE_REUSED" -eq 0 ]; then
   _wt_prepare_common_excludes \
     || die_precondition "cannot register worktree bookkeeping exclusion"
 fi
 
-if ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA"; then
+if [ "$WORKTREE_REUSED" -eq 0 ] \
+  && ! git worktree add --quiet "$WT" -b "$BRANCH" "$BASE_SHA"; then
   # `git worktree add -b` creates the branch ref BEFORE the dir, so the ref leaks
   # even when dir creation fails (verified 2026-06-22). Reap it before bailing.
   _wt_lock_fail "git worktree add failed"
 fi
-_wt_creation_test_checkpoint after-add
+[ "$WORKTREE_REUSED" -eq 1 ] || _wt_creation_test_checkpoint after-add
 # Marker = --gc eligibility token (name-independent). Lifetime flock = liveness gate
 # (kernel-released on process death incl. SIGKILL; no pid checks — plan §2a/§2c).
 # Both names are registered in the COMMON git dir's info/exclude below: the wrapper
@@ -2186,13 +2311,26 @@ _wt_creation_test_checkpoint after-add
 # would see them as untracked.
 _wt_marker_tmp="$WT/.autopilot-worktree.tmp.$$"
 {
-  printf 'created_at=%s\n' "$(date +%s)"
+  if [ "$WORKTREE_REUSED" -eq 1 ]; then
+    printf 'created_at=%s\n' "$_WT_MARKER_CREATED_AT"
+  else
+    printf 'created_at=%s\n' "$(date +%s)"
+  fi
   printf 'branch=%s\n' "$BRANCH"
   printf 'base_sha=%s\n' "$BASE_SHA"
   printf 'run_id=%s\n' "$WT_RUN_ID"
   printf 'root_run_id=%s\n' "$WORKTREE_ROOT_RUN_ID"
-  printf 'loop_id=%s\n' "$WT_LOOP_ID"
-  [ "$KEEP" -eq 1 ] && printf 'retention=inspect\n'
+  if [ "$WORKTREE_REUSED" -eq 1 ]; then
+    printf 'loop_id=%s\n' "$_WT_MARKER_LOOP_ID"
+  else
+    printf 'loop_id=%s\n' "$WT_LOOP_ID"
+  fi
+  if [ "$KEEP" -eq 1 ]; then
+    printf 'retention=lease\n'
+    printf 'retention_owner=%s\n' "$RETENTION_OWNER"
+    printf 'retention_reason_sha256=%s\n' "$RETENTION_REASON_SHA256"
+    printf 'retention_expires_at=%s\n' "$RETENTION_EXPIRES_AT"
+  fi
   printf 'schema=2\n'
 } > "$_wt_marker_tmp"
 mv -f -- "$_wt_marker_tmp" "$WT/.autopilot-worktree" \
@@ -2201,13 +2339,16 @@ _wt_creation_test_checkpoint after-marker
 # Hold exclusive lock on a dedicated fd for the whole dispatch life. Never close
 # early; never exec-replace this shell (would release the lock silently).
 # On lock failure, clean up the just-created worktree+branch before dying.
-_wt_open_lock_fd "$WT/.autopilot-worktree.lock" || _wt_lock_fail "cannot open worktree lifetime lock"
-WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
-flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
+if [ "$WORKTREE_REUSED" -eq 0 ]; then
+  _wt_open_lock_fd "$WT/.autopilot-worktree.lock" \
+    || _wt_lock_fail "cannot open worktree lifetime lock"
+  WT_LOCK_FD="$_WT_SAFE_LOCK_FD"
+  flock -x "$WT_LOCK_FD" || _wt_lock_fail "cannot acquire worktree lifetime lock"
+fi
 if ! _wt_read_schema2_marker "$WT/.autopilot-worktree" \
    || [ "$_WT_MARKER_RUN_ID" != "$WT_RUN_ID" ] \
    || [ "$_WT_MARKER_ROOT_RUN_ID" != "$WORKTREE_ROOT_RUN_ID" ] \
-   || [ "$_WT_MARKER_LOOP_ID" != "$WT_LOOP_ID" ] \
+   || { [ "$WORKTREE_REUSED" -eq 0 ] && [ "$_WT_MARKER_LOOP_ID" != "$WT_LOOP_ID" ]; } \
    || [ "$_WT_MARKER_BRANCH" != "$BRANCH" ] \
    || [ "$_WT_MARKER_BASE_SHA" != "$BASE_SHA" ]; then
   _wt_lock_fail "worktree ownership marker verification failed"
@@ -2397,10 +2538,18 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   GROK_PROMPT_FILE="$(mktemp -t dispatch-hetero-grok-prompt-XXXXXX)"
   printf '%s' "${GROK_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$GROK_PROMPT_FILE"
   grok_effort_note "$EFFORT" "dispatch-hetero"
-  run_worker bash -c 'cd "$1" && exec "$2" --prompt-file "$3" --cwd "$1" --model "$4" \
-      --reasoning-effort "$5" \
-      --always-approve --no-alt-screen --output-format json' \
-      _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$(grok_effort_clamp "$EFFORT")"
+  if [ -n "$RESUME_SESSION_ID" ]; then
+    PROVIDER_SESSION_ID="$RESUME_SESSION_ID"
+    PROVIDER_SESSION_REUSED=1
+    run_worker bash -c 'cd "$1" && exec "$2" --resume "$6" --prompt-file "$3" --cwd "$1" --model "$4" \
+        --reasoning-effort "$5" --always-approve --no-alt-screen --output-format json' \
+        _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$(grok_effort_clamp "$EFFORT")" "$RESUME_SESSION_ID"
+  else
+    PROVIDER_SESSION_ID="$(node -e 'process.stdout.write(require("crypto").randomUUID())')"
+    run_worker bash -c 'cd "$1" && exec "$2" --session-id "$6" --prompt-file "$3" --cwd "$1" --model "$4" \
+        --reasoning-effort "$5" --always-approve --no-alt-screen --output-format json' \
+        _ "$WT" "$GROK_BIN" "$GROK_PROMPT_FILE" "$MODEL" "$(grok_effort_clamp "$EFFORT")" "$PROVIDER_SESSION_ID"
+  fi
   rm -f "$GROK_PROMPT_FILE"
 elif [ "$IS_QODER" -eq 1 ]; then
   # qoder (Qoder CLI CN; gateway to Qwen3.8-Max-Preview / GLM-5.2 / DeepSeek-V4 / …).
@@ -2966,7 +3115,7 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN KEEP BRANCH PROMPT_FILE RUNNER EFFORT \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
       SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

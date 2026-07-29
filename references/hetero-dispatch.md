@@ -321,8 +321,11 @@ exact branch is not contained, rerun the branch disposition with
 never broaden a regex to make it disappear.
 
 Automatic managed success cleanup targets only the completing leaf. An explicit
-`--keep-worktree` publishes `retention=inspect`; later budget reconciliation
-counts that leaf but cannot remove it before depth 0 dispositions it. Inventory
+`--keep-worktree` is a bounded lease and is rejected unless
+`--retain-owner`, `--retain-reason`, and future `--retain-until` are all
+present. The schema-2 marker stores the owner, reason digest, and expiry.
+Later budget reconciliation counts that leaf but cannot remove it before depth
+0 dispositions it. Inventory
 copy publication is protected by a write-ahead intent: pre-authority copies may
 be rolled back and a post-authority trailing intent may be cleared only when
 both copies still match. Missing, malformed, or extra evidence never gains
@@ -335,6 +338,25 @@ Exact branch disposition inherits and verifies the same lifecycle lock fd for
 its controller rescan, then holds that lock through validation and destructive
 disposition, so a new managed leaf cannot enter between canonical inventory and
 branch action.
+
+Managed implementation campaigns keep one branch and one retained worktree
+across the initial mutation and every authorized repair. A repair passes the
+exact prior commit as `--base` and the exact retained checkout through
+`--reuse-worktree` plus the controller-bound `--expected-worktree-instance`
+digest; creating a successor branch is not a retry mechanism. Grok
+repairs additionally pass the first call's UUID through `--resume-session`.
+Runners without a verified resume API may start a new provider conversation in
+the same checkout, but the campaign receipt must name
+`provider_session_non_reuse_reason`. The retained checkout is removed without
+`--force` on terminal success. Dirty or unverifiable state blocks cleanup.
+
+Finding IDs and accepted invariants are carried across repair prompts. The same
+normalized finding may authorize one bounded repair; seeing it again stops at
+`awaiting_convergence_adjudication` before another runner call. Renamed finding
+sets that fail to shrink for two repair rounds stop at the same gate. Durable
+`git_candidate` references include the exact repair lineage so a new process
+after compaction can restore branch, worktree, provider session, lease, churn,
+and input-measurement identity rather than redispatching from transcript memory.
 
 Before first anchor creation, the controller admits the root into a private
 repo-level registry (`initializing` then `active`). An active registered root

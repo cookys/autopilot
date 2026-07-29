@@ -168,6 +168,9 @@ _wt_read_schema2_marker() {
   _WT_MARKER_ROOT_RUN_ID=""
   _WT_MARKER_LOOP_ID=""
   _WT_MARKER_RETENTION=""
+  _WT_MARKER_RETENTION_OWNER=""
+  _WT_MARKER_RETENTION_REASON_SHA256=""
+  _WT_MARKER_RETENTION_EXPIRES_AT=""
   [ -f "$marker" ] && [ ! -L "$marker" ] && [ -O "$marker" ] || return 1
   exec {fd}<"$marker" || return 1
   fd_path="/proc/$$/fd/$fd"
@@ -185,7 +188,22 @@ _wt_read_schema2_marker() {
   done
   local line_count
   line_count="$(wc -l < "$fd_path" | tr -d ' ')"
-  if [ "$line_count" -eq 8 ]; then
+  if [ "$line_count" -eq 11 ]; then
+    for key in retention retention_owner retention_reason_sha256 retention_expires_at; do
+      if [ "$(grep -c "^${key}=" "$fd_path" 2>/dev/null)" -ne 1 ]; then
+        exec {fd}>&-
+        return 1
+      fi
+    done
+    _WT_MARKER_RETENTION="$(sed -n 's/^retention=//p' "$fd_path")"
+    _WT_MARKER_RETENTION_OWNER="$(sed -n 's/^retention_owner=//p' "$fd_path")"
+    _WT_MARKER_RETENTION_REASON_SHA256="$(
+      sed -n 's/^retention_reason_sha256=//p' "$fd_path"
+    )"
+    _WT_MARKER_RETENTION_EXPIRES_AT="$(
+      sed -n 's/^retention_expires_at=//p' "$fd_path"
+    )"
+  elif [ "$line_count" -eq 8 ]; then
     [ "$(grep -c '^retention=' "$fd_path" 2>/dev/null)" -eq 1 ] || {
       exec {fd}>&-
       return 1
@@ -215,8 +233,13 @@ _wt_read_schema2_marker() {
   [[ "$_WT_MARKER_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   [[ "$_WT_MARKER_ROOT_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   [[ "$_WT_MARKER_LOOP_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  [ -z "$_WT_MARKER_RETENTION" ] || [ "$_WT_MARKER_RETENTION" = "inspect" ] \
-    || return 1
+  if [ "$_WT_MARKER_RETENTION" = "lease" ]; then
+    [[ "$_WT_MARKER_RETENTION_OWNER" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    [[ "$_WT_MARKER_RETENTION_REASON_SHA256" =~ ^[0-9a-f]{64}$ ]] || return 1
+    [[ "$_WT_MARKER_RETENTION_EXPIRES_AT" =~ ^[0-9]+$ ]] || return 1
+  elif [ -n "$_WT_MARKER_RETENTION" ] && [ "$_WT_MARKER_RETENTION" != "inspect" ]; then
+    return 1
+  fi
   git check-ref-format --branch "$_WT_MARKER_BRANCH" >/dev/null 2>&1 || return 1
   return 0
 }

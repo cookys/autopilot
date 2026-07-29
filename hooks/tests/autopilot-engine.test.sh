@@ -631,6 +631,44 @@ assert_contains "$OUT" "cannot override --runner" "AutopilotEngine rejects reser
 OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
+const promptFile = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+let dispatchCalls = 0;
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    dispatchCalls += 1;
+    throw new Error('reserved lineage override must block before dispatch');
+  },
+});
+const result = engine.implementTask({
+  promptFile,
+  branch: 'impl/reserved-lineage-flags',
+  base: 'a'.repeat(40),
+  roster: {
+    implementer_engine: 'test-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+  },
+  extraImplementationArgs: ['--reuse-worktree', '/tmp/forbidden'],
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`dispatch_calls=${dispatchCalls}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "reserved lineage override probe exits cleanly"
+assert_contains "$OUT" "status=blocked" "reserved lineage override is blocked"
+assert_contains "$OUT" "phase=prepare_implementation" \
+  "reserved lineage override blocks during argument preparation"
+assert_contains "$OUT" "cannot override --reuse-worktree" \
+  "managed extra args cannot replace the retained checkout"
+assert_contains "$OUT" "dispatch_calls=0" \
+  "reserved lineage override spends zero implementer calls"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
 const diff = process.argv[3];
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 
@@ -4600,5 +4638,167 @@ NODE
 assert_eq "0" "$EXIT" "loop on_engine_unavailable propagation process exits 0"
 assert_contains "$OUT" "loop_status=blocked" "loop blocks on engine_unavailable"
 assert_contains "$OUT" "loop_eu=wait-reset/wait-reset/rate_limited" "loop propagates the engine_unavailable directive to the final result"
+
+CLEANUP_REPO="$TEST_TMP/cleanup-repo"
+CLEANUP_WORKTREE="$TEST_TMP/cleanup-worktree"
+git init -q "$CLEANUP_REPO"
+git -C "$CLEANUP_REPO" config user.name fixture
+git -C "$CLEANUP_REPO" config user.email fixture@example.test
+printf 'base\n' >"$CLEANUP_REPO/base.txt"
+git -C "$CLEANUP_REPO" add base.txt
+git -C "$CLEANUP_REPO" commit -qm "cleanup base"
+git -C "$CLEANUP_REPO" branch retained-cleanup
+git -C "$CLEANUP_REPO" worktree add -q "$CLEANUP_WORKTREE" retained-cleanup
+printf '.autopilot-worktree\n.autopilot-worktree.lock\n' \
+  >>"$CLEANUP_REPO/.git/info/exclude"
+CLEANUP_TIP="$(git -C "$CLEANUP_REPO" rev-parse retained-cleanup)"
+CLEANUP_REASON="implementation-campaign-repair-lineage"
+CLEANUP_REASON_SHA="$(printf '%s' "$CLEANUP_REASON" | sha256sum | cut -d' ' -f1)"
+cat >"$CLEANUP_WORKTREE/.autopilot-worktree" <<EOF
+created_at=1782864000
+base_sha=$CLEANUP_TIP
+run_id=cleanup-run
+loop_id=cleanup-loop
+schema=2
+branch=retained-cleanup
+root_run_id=campaign-v1-$(printf 'a%.0s' {1..64})
+retention=lease
+retention_owner=campaign-v1-$(printf 'a%.0s' {1..64})
+retention_reason_sha256=$CLEANUP_REASON_SHA
+retention_expires_at=2000000000
+EOF
+CLEANUP_INPUT="$(node - "$REPO_ROOT" "$CLEANUP_REPO" "$CLEANUP_WORKTREE" \
+  "$CLEANUP_TIP" <<'NODE'
+const path = require('path');
+const [root, cwd, worktree, tip] = process.argv.slice(2);
+const { worktreeInstanceId } = require(
+  path.join(root, 'src', 'engine', 'repair-lineage-cleanup'),
+);
+const { repairLineageCleanupId } = require(
+  path.join(root, 'src', 'engine', 'implementation-campaign'),
+);
+const rootRunId = `campaign-v1-${'a'.repeat(64)}`;
+const record = {
+  lineage_id: rootRunId,
+  branch: 'retained-cleanup',
+  worktree,
+  expected_tip: tip,
+  cleanup_epoch: 1,
+  worktree_instance_id: worktreeInstanceId(worktree),
+  retention_owner: rootRunId,
+  retention_reason: 'implementation-campaign-repair-lineage',
+  retention_expires_at: 2000000000,
+};
+process.stdout.write(JSON.stringify({
+  cwd,
+  cleanupId: repairLineageCleanupId({
+    lineageId: record.lineage_id,
+    branch: record.branch,
+    worktree: record.worktree,
+    expectedTip: record.expected_tip,
+    cleanupEpoch: record.cleanup_epoch,
+    worktreeInstanceId: record.worktree_instance_id,
+  }),
+  record,
+  cleanupHelper: path.join(root, 'src', 'engine', 'repair-lineage-cleanup.js'),
+}));
+NODE
+)"
+mkdir -p "$CLEANUP_REPO/.git/autopilot"
+node - "$REPO_ROOT" "$CLEANUP_INPUT" \
+  "$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.jsonl" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [root, inputJson, journal] = process.argv.slice(2);
+const { canonicalDigest } = require(
+  path.join(root, 'src', 'engine', 'implementation-campaign'),
+);
+const input = JSON.parse(inputJson);
+const row = {
+  schema: 1,
+  cleanup_id: input.cleanupId,
+  action: 'intent',
+  ...input.record,
+};
+row.record_digest = canonicalDigest(row);
+fs.writeFileSync(journal, `${JSON.stringify(row)}\n`);
+NODE
+CLEANUP_REMOVE_INPUT="$(node - "$CLEANUP_INPUT" <<'NODE'
+const input = JSON.parse(process.argv[2]);
+const record = input.record;
+process.stdout.write(JSON.stringify({
+  cwd: input.cwd,
+  worktree: record.worktree,
+  expectedBranch: record.branch,
+  expectedTip: record.expected_tip,
+  expectedRootRunId: record.lineage_id,
+  expectedRetentionOwner: record.retention_owner,
+  expectedRetentionReason: record.retention_reason,
+  expectedRetentionExpiresAt: record.retention_expires_at,
+  expectedWorktreeInstanceId: record.worktree_instance_id,
+}));
+NODE
+)"
+flock -x "$CLEANUP_WORKTREE/.autopilot-worktree.lock" \
+  node "$REPO_ROOT/src/engine/repair-lineage-cleanup.js" "$CLEANUP_REMOVE_INPUT"
+PENDING_CLEANUP_STATE="$(node - "$REPO_ROOT" "$CLEANUP_INPUT" <<'NODE'
+const path = require('path');
+const [root, inputJson] = process.argv.slice(2);
+const { repairLineageCleanupState } = require(
+  path.join(root, 'src', 'engine', 'campaign-intake'),
+);
+const input = JSON.parse(inputJson);
+process.stdout.write(String(repairLineageCleanupState({
+  repo: input.cwd,
+  reference: { commit: input.record.expected_tip },
+  repairLineage: {
+    lineage_id: input.record.lineage_id,
+    branch: input.record.branch,
+    worktree: input.record.worktree,
+    cleanup_epoch: input.record.cleanup_epoch,
+    worktree_instance_id: input.record.worktree_instance_id,
+    retention_owner: input.record.retention_owner,
+    retention_reason: input.record.retention_reason,
+    retention_expires_at: input.record.retention_expires_at,
+  },
+})));
+NODE
+)"
+assert_eq "$PENDING_CLEANUP_STATE" "pending_intent" \
+  "durable intake accepts exact pending cleanup intent after removal crash"
+flock -x "$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.transaction.lock" \
+  node "$REPO_ROOT/src/engine/repair-lineage-cleanup-transaction.js" \
+  "$CLEANUP_INPUT" >"$TEST_TMP/cleanup-transaction-a.out" &
+CLEANUP_PID_A=$!
+flock -x "$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.transaction.lock" \
+  node "$REPO_ROOT/src/engine/repair-lineage-cleanup-transaction.js" \
+  "$CLEANUP_INPUT" >"$TEST_TMP/cleanup-transaction-b.out" &
+CLEANUP_PID_B=$!
+wait "$CLEANUP_PID_A"; CLEANUP_EXIT_A=$?
+wait "$CLEANUP_PID_B"; CLEANUP_EXIT_B=$?
+assert_eq "$CLEANUP_EXIT_A" "0" \
+  "first concurrent cleanup controller completes successfully"
+assert_eq "$CLEANUP_EXIT_B" "0" \
+  "second concurrent cleanup controller replays the serialized completion"
+assert_file_absent "$CLEANUP_WORKTREE" \
+  "serialized repair-lineage cleanup removes the exact clean retained worktree"
+assert_eq "$(git -C "$CLEANUP_REPO" rev-parse retained-cleanup)" "$CLEANUP_TIP" \
+  "serialized repair-lineage cleanup preserves the retained branch tip"
+assert_eq "$(wc -l <"$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.jsonl" \
+  | tr -d ' ')" "2" \
+  "crash recovery records one intent and one completion without duplicates"
+NO_INTENT_INPUT="$(node - "$CLEANUP_INPUT" <<'NODE'
+const input = JSON.parse(process.argv[2]);
+input.cleanupId = 'f'.repeat(64);
+process.stdout.write(JSON.stringify(input));
+NODE
+)"
+OUT="$(flock -x "$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.transaction.lock" \
+  node "$REPO_ROOT/src/engine/repair-lineage-cleanup-transaction.js" \
+  "$NO_INTENT_INPUT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" \
+  "missing worktree without a prior intent cannot be retroactively recovered"
+assert_contains "$OUT" "missing retained worktree has no prior cleanup intent" \
+  "cleanup recovery requires durable ownership intent from an earlier attempt"
 
 finalize_test

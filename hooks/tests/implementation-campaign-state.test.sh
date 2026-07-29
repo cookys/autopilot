@@ -579,6 +579,7 @@ const [
 const {
   AutopilotEngine,
   campaignIdFor,
+  normalizeCampaignArtifactReference,
   runCampaignIntake,
 } = require(path.join(root, 'src', 'engine'));
 const roster = {
@@ -1235,6 +1236,60 @@ const preconditionResult = preconditionEngine.runImplementationReviewLoop({
 console.log(`precondition_status=${preconditionResult.status}`);
 console.log(`precondition_release_calls=${admissionReleaseCalls}`);
 console.log(`precondition_release_status=${preconditionResult.campaign_control.admission_release.status}`);
+
+const failedResourceResult = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
+  campaignIntake() {
+    return campaignControlFixture('failed-resource-lineage');
+  },
+  implementationDispatcher(args) {
+    return {
+      error: null,
+      status: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'failure',
+        runner: 'fixture',
+        model: 'fixture-implementer',
+        branch: args[args.indexOf('--branch') + 1],
+        base: args[args.indexOf('--base') + 1],
+        commit: null,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: repo,
+        provider_session_id: null,
+        provider_session_reused: false,
+        worktree_reused: false,
+        agent_log: null,
+        error: 'fixture failed after retaining its checkout',
+        containment: 'plain',
+        contained: true,
+      },
+    };
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-failed-resource',
+  base,
+  roster,
+  campaignManaged: true,
+  campaignContract: contractPath,
+  implementationOptions: {
+    env: {
+      AUTOPILOT_ROOT_RUN_ID: campaignId,
+      AUTOPILOT_DISPATCH_DEPTH: '1',
+    },
+  },
+});
+console.log(`failed_resource_worktree=${failedResourceResult.repair_lineage.worktree}`);
+console.log(`failed_resource_disposition=${
+  failedResourceResult.repair_lineage.terminal_worktree_disposition
+}`);
 
 function zeroEffectLeafResult(overrides = {}) {
   return {
@@ -1941,6 +1996,7 @@ const implementationCalls = [];
 const implementationEnvs = [];
 const reviewCalls = [];
 const verificationEnvs = [];
+const identityRetainedWorktreeRoot = path.join(path.dirname(repo), 'identity-retained-worktree');
 const identityEngine = new AutopilotEngine({
   cwd: repo,
   clock: () => '2026-07-26T00:00:01.000Z',
@@ -1951,6 +2007,10 @@ const identityEngine = new AutopilotEngine({
     implementationCalls.push(args);
     implementationEnvs.push(options.env || {});
     const dispatchedBranch = args[args.indexOf('--branch') + 1];
+    const dispatchedWorktree = `${identityRetainedWorktreeRoot}-${
+      dispatchedBranch.replace(/[^A-Za-z0-9_.-]/g, '-')
+    }`;
+    fs.mkdirSync(dispatchedWorktree, { recursive: true });
     return {
       error: null,
       status: 0,
@@ -1968,7 +2028,7 @@ const identityEngine = new AutopilotEngine({
         files_changed: 0,
         insertions: 0,
         deletions: 0,
-        worktree: repo,
+        worktree: dispatchedWorktree,
         agent_log: null,
         error: null,
         containment: 'plain',
@@ -2018,7 +2078,22 @@ const identityEngine = new AutopilotEngine({
       detached: true,
     };
   },
-  gitWorktreeRemove() {
+  gitWorktreeRemove({ worktree }) {
+    if (worktree.startsWith(identityRetainedWorktreeRoot)) {
+      fs.rmSync(worktree, { recursive: true, force: true });
+    }
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
+  },
+  repairLineageCleanupTransaction({ record }) {
+    if (record.worktree.startsWith(identityRetainedWorktreeRoot)) {
+      fs.rmSync(record.worktree, { recursive: true, force: true });
+    }
     return {
       error: null,
       status: 0,
@@ -2064,6 +2139,444 @@ const identityResult = identityEngine.runImplementationReviewLoop({
   },
   verificationEnvAllowlist: ['CI'],
 });
+
+const grokLineageCalls = [];
+const grokRepairPrompts = [];
+const grokSessionId = '123e4567-e89b-42d3-a456-426614174000';
+const grokRoster = {
+  ...roster,
+  implementer_engine: 'grok-4.5',
+  implementer_runner: 'grok',
+};
+const grokLineageEngine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
+  campaignIntake() {
+    return campaignControlFixture('grok-lineage');
+  },
+  campaignScopeChecker() {
+    return {
+      passed: true,
+      verdict: 'PASS',
+      changed_files: ['src/fixture.js'],
+      total_churn: 0,
+      receipt_digest: 'a'.repeat(64),
+    };
+  },
+  campaignComposer(_input, adapters) {
+    const initial = adapters.implement({
+      kind: 'initial',
+      repair_generation: 0,
+      repair_finding_ids: [],
+      repair_findings: [],
+    });
+    if (!initial.committed) return { status: 'blocked', ...initial };
+    const initialScope = adapters.scopeCheck({
+      checkpoint: 'after_initial_mutation',
+      candidate: initial,
+    });
+    if (!initialScope.passed) return { status: 'blocked', ...initialScope };
+    const firstRepair = adapters.implement({
+      kind: 'review_repair',
+      repair_generation: 1,
+      repair_finding_ids: ['finding-stable'],
+      repair_findings: [{
+        id: 'finding-stable',
+        claim: 'stable repair finding in src/fixture.js',
+      }],
+    });
+    if (!firstRepair.committed) return { status: 'blocked', ...firstRepair };
+    const secondRepair = adapters.implement({
+      kind: 'review_repair',
+      repair_generation: 2,
+      repair_finding_ids: ['finding-stable'],
+      repair_findings: [{
+        id: 'finding-stable',
+        claim: 'stable repair finding in src/fixture.js',
+      }],
+    });
+    if (!secondRepair.committed) return { status: 'blocked', ...secondRepair };
+    const recurringRepair = adapters.implement({
+      kind: 'review_repair',
+      repair_generation: 3,
+      repair_finding_ids: ['finding-stable'],
+      repair_findings: [{
+        id: 'finding-stable',
+        claim: 'stable repair finding in src/fixture.js',
+      }],
+    });
+    return {
+      status: recurringRepair.committed ? 'ready' : 'blocked',
+      phase: recurringRepair.phase || null,
+      reason: recurringRepair.reason || null,
+      recurring_finding_ids: recurringRepair.recurring_finding_ids || [],
+      repair_generations: 1,
+    };
+  },
+  implementationDispatcher(args) {
+    grokLineageCalls.push(args);
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'grok',
+        model: 'grok-4.5',
+        branch: args[args.indexOf('--branch') + 1],
+        base: args[args.indexOf('--base') + 1],
+        commit: base,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: repo,
+        provider_session_id: grokSessionId,
+        provider_session_reused: grokLineageCalls.length > 1,
+        worktree_reused: grokLineageCalls.length > 1,
+        agent_log: null,
+        error: null,
+        containment: 'plain',
+        contained: true,
+      },
+    };
+  },
+  repairPromptWriter(input) {
+    grokRepairPrompts.push(input);
+    return promptFile;
+  },
+  campaignTreeResolver() {
+    return spawnSync(
+      'git',
+      ['rev-parse', `${base}^{tree}`],
+      { cwd: repo, encoding: 'utf8' },
+    ).stdout.trim();
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-grok-lineage',
+  base,
+  roster: grokRoster,
+  campaignManaged: true,
+  campaignContract: contractPath,
+  implementationOptions: {
+    env: {
+      AUTOPILOT_ROOT_RUN_ID: campaignId,
+      AUTOPILOT_DISPATCH_DEPTH: '1',
+    },
+  },
+});
+const grokFirstBranch = grokLineageCalls[0][grokLineageCalls[0].indexOf('--branch') + 1];
+const grokRepairBranch = grokLineageCalls[1][grokLineageCalls[1].indexOf('--branch') + 1];
+console.log(`grok_lineage_phase=${grokLineageEngine.phase}`);
+console.log(`grok_lineage_calls=${grokLineageCalls.length}`);
+console.log(`grok_lineage_same_branch=${
+  grokLineageCalls.every(
+    (args) => args[args.indexOf('--branch') + 1] === grokFirstBranch,
+  )
+}`);
+console.log(`grok_lineage_keep_count=${grokLineageCalls.filter(
+  (args) => args.includes('--keep-worktree'),
+).length}`);
+console.log(`grok_lineage_reuse_worktree=${
+  grokLineageCalls[1][grokLineageCalls[1].indexOf('--reuse-worktree') + 1] === repo
+}`);
+console.log(`grok_lineage_resume_session=${
+  grokLineageCalls[1][grokLineageCalls[1].indexOf('--resume-session') + 1] === grokSessionId
+}`);
+console.log(`grok_lineage_prompt_count=${grokRepairPrompts.length}`);
+console.log(`grok_lineage_prompt_mode=${grokRepairPrompts[0].reviewInputMode}`);
+console.log(`grok_lineage_prompt_finding=${grokRepairPrompts[0].unresolvedFindingIds.join(',')}`);
+console.log(`grok_lineage_recurring=${
+  grokLineageEngine.campaign_receipt.recurring_finding_ids.join(',')
+}`);
+
+const boundedLineageCalls = [];
+let boundedPredispatchRejected = false;
+const boundedLineageInput = {
+  promptFile,
+  branch: 'impl/icc-p1-bounded-lineage',
+  base,
+  roster,
+  campaignManaged: true,
+  campaignContract: contractPath,
+  implementationOptions: {
+    env: {
+      AUTOPILOT_ROOT_RUN_ID: campaignId,
+      AUTOPILOT_DISPATCH_DEPTH: '1',
+    },
+  },
+};
+const boundedLineageEngine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
+  campaignIntake() {
+    return campaignControlFixture('bounded-lineage');
+  },
+  campaignScopeChecker() {
+    return {
+      passed: true,
+      verdict: 'PASS',
+      changed_files: ['src/fixture.js'],
+      total_churn: 0,
+      receipt_digest: 'a'.repeat(64),
+    };
+  },
+  campaignComposer(_input, adapters) {
+    const attempts = [
+      {
+        kind: 'initial',
+        repair_generation: 0,
+        repair_finding_ids: [],
+        repair_findings: [],
+      },
+      {
+        kind: 'review_repair',
+        repair_generation: 1,
+        repair_finding_ids: ['finding-a'],
+        repair_findings: [{
+          id: 'finding-a',
+          claim: 'first finding family in src/fixture.js',
+        }],
+      },
+      {
+        kind: 'review_repair',
+        repair_generation: 2,
+        repair_finding_ids: ['finding-b'],
+        repair_findings: [{
+          id: 'finding-b',
+          claim: 'renamed finding family in src/fixture.js',
+        }],
+      },
+      {
+        kind: 'review_repair',
+        repair_generation: 3,
+        repair_finding_ids: ['finding-c'],
+        repair_findings: [{
+          id: 'finding-c',
+          claim: 'renamed again in src/fixture.js',
+        }],
+      },
+    ];
+    let result = null;
+    for (const attempt of attempts) {
+      result = adapters.implement(attempt);
+      if (!result.committed) break;
+      if (attempt.kind === 'initial') {
+        const initialScope = adapters.scopeCheck({
+          checkpoint: 'after_initial_mutation',
+          candidate: result,
+        });
+        if (!initialScope.passed) {
+          result = { committed: false, ...initialScope };
+          break;
+        }
+        const rejectedBeforeDispatch = adapters.implement({
+          kind: 'review_repair',
+          repair_generation: 1,
+          repair_finding_ids: ['finding-a'],
+          repair_findings: [{
+            id: 'finding-a',
+            claim: 'finding without an explicit repair path',
+          }],
+        });
+        boundedPredispatchRejected = rejectedBeforeDispatch.committed === false
+          && rejectedBeforeDispatch.phase === 'campaign_repair_scope_seal';
+      }
+    }
+    return {
+      status: result.committed ? 'ready' : 'blocked',
+      phase: result.phase || null,
+      reason: result.reason || null,
+      non_reduction_rounds: result.non_reduction_rounds || 0,
+      repair_generations: 2,
+    };
+  },
+  implementationDispatcher(args) {
+    boundedLineageCalls.push(args);
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'fixture',
+        model: 'fixture-implementer',
+        branch: args[args.indexOf('--branch') + 1],
+        base: args[args.indexOf('--base') + 1],
+        commit: base,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: repo,
+        provider_session_id: null,
+        provider_session_reused: false,
+        worktree_reused: boundedLineageCalls.length > 1,
+        agent_log: null,
+        error: null,
+        containment: 'plain',
+        contained: true,
+      },
+    };
+  },
+  repairPromptWriter() {
+    return promptFile;
+  },
+  campaignTreeResolver() {
+    return spawnSync(
+      'git',
+      ['rev-parse', `${base}^{tree}`],
+      { cwd: repo, encoding: 'utf8' },
+    ).stdout.trim();
+  },
+}).runImplementationReviewLoop(boundedLineageInput);
+const boundedBranches = boundedLineageCalls.map(
+  (args) => args[args.indexOf('--branch') + 1],
+);
+console.log(`bounded_lineage_phase=${boundedLineageEngine.phase}`);
+console.log(`bounded_lineage_calls=${boundedLineageCalls.length}`);
+console.log(`bounded_lineage_non_reduction=${
+  boundedLineageEngine.campaign_receipt.non_reduction_rounds
+}`);
+console.log(`bounded_lineage_one_branch=${new Set(boundedBranches).size === 1}`);
+console.log(`bounded_lineage_reuse_count=${boundedLineageCalls.filter(
+  (args) => args.includes('--reuse-worktree'),
+).length}`);
+console.log(`bounded_lineage_non_reuse_reason=${
+  boundedLineageEngine.repair_lineage.provider_session_non_reuse_reason
+}`);
+console.log(`bounded_predispatch_rejected=${boundedPredispatchRejected}`);
+console.log(`bounded_finding_a_occurrences=${
+  boundedLineageEngine.repair_lineage.finding_occurrences
+    .find((item) => item.finding_id === 'finding-a').occurrences
+}`);
+
+let sealedScopeChecks = 0;
+let sealedScopeDispatches = 0;
+let sealedScopeReviewMode = null;
+const sealedScopeEngine = new AutopilotEngine({
+  cwd: repo,
+  clock: () => '2026-07-26T00:00:01.000Z',
+  campaignIntake() {
+    return campaignControlFixture('sealed-repair-scope');
+  },
+  campaignScopeChecker() {
+    sealedScopeChecks += 1;
+    return {
+      passed: true,
+      verdict: 'PASS',
+      changed_files: sealedScopeChecks === 1
+        ? ['src/fixture.js']
+        : ['docs/unrelated.md', 'src/fixture.js'],
+      total_churn: 1,
+      receipt_digest: 'a'.repeat(64),
+    };
+  },
+  campaignRepairChangedPaths() {
+    return {
+      status: 'ok',
+      reason: null,
+      paths: ['docs/unrelated.md', 'src/fixture.js'],
+    };
+  },
+  campaignComposer(_input, adapters) {
+    const initial = adapters.implement({
+      kind: 'initial',
+      repair_generation: 0,
+      repair_finding_ids: [],
+      repair_findings: [],
+    });
+    if (!initial.committed) return { status: 'blocked', ...initial };
+    const initialScope = adapters.scopeCheck({
+      checkpoint: 'after_initial_mutation',
+      candidate: initial,
+    });
+    if (!initialScope.passed) return { status: 'blocked', ...initialScope };
+    const repair = adapters.implement({
+      kind: 'review_repair',
+      repair_generation: 1,
+      repair_finding_ids: ['finding-scope'],
+      repair_findings: [{
+        id: 'finding-scope',
+        claim: 'bounded repair in src/fixture.js',
+      }],
+      review_input_mode: 'focused_delta_round',
+    });
+    if (!repair.committed) return { status: 'blocked', ...repair };
+    const repairScope = adapters.scopeCheck({
+      checkpoint: 'after_repair_mutation',
+      candidate: repair,
+    });
+    return {
+      status: repairScope.passed ? 'ready' : 'blocked',
+      phase: repairScope.phase || null,
+      reason: repairScope.reason || null,
+    };
+  },
+  implementationDispatcher(args) {
+    sealedScopeDispatches += 1;
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'committed',
+        runner: 'fixture',
+        model: 'fixture-implementer',
+        branch: args[args.indexOf('--branch') + 1],
+        base: args[args.indexOf('--base') + 1],
+        commit: base,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: repo,
+        provider_session_id: null,
+        provider_session_reused: false,
+        worktree_reused: sealedScopeDispatches > 1,
+        agent_log: null,
+        error: null,
+        containment: 'plain',
+        contained: true,
+      },
+    };
+  },
+  repairPromptWriter(input) {
+    sealedScopeReviewMode = input.reviewInputMode;
+    return promptFile;
+  },
+  campaignTreeResolver() {
+    return spawnSync(
+      'git',
+      ['rev-parse', `${base}^{tree}`],
+      { cwd: repo, encoding: 'utf8' },
+    ).stdout.trim();
+  },
+}).runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-sealed-scope',
+  base,
+  roster,
+  campaignManaged: true,
+  campaignContract: contractPath,
+  implementationOptions: {
+    env: {
+      AUTOPILOT_ROOT_RUN_ID: campaignId,
+      AUTOPILOT_DISPATCH_DEPTH: '1',
+    },
+  },
+});
+console.log(`sealed_scope_dispatches=${sealedScopeDispatches}`);
+console.log(`sealed_scope_reason=${sealedScopeEngine.reason}`);
+console.log(`sealed_scope_review_mode=${sealedScopeReviewMode}`);
+
 const roundTwoResult = identityEngine.implementTask({
   promptFile,
   branch: 'impl/icc-p1-intake-repair-r2',
@@ -2083,6 +2596,14 @@ const roundTwoResult = identityEngine.implementTask({
     },
   },
 });
+for (const entry of fs.readdirSync(path.dirname(identityRetainedWorktreeRoot))) {
+  if (entry.startsWith(path.basename(identityRetainedWorktreeRoot))) {
+    fs.rmSync(path.join(path.dirname(identityRetainedWorktreeRoot), entry), {
+      recursive: true,
+      force: true,
+    });
+  }
+}
 const implementationCallsBeforeMismatch = implementationCalls.length;
 const mismatchedRootResult = identityEngine.implementTask({
   promptFile,
@@ -2114,6 +2635,25 @@ const managedResumeResult = identityEngine.runImplementationReviewLoop({
     },
   },
 });
+const zeroDispatchLineage = {
+  ...identityResult.repair_lineage,
+  worktree: null,
+  worktree_instance_id: null,
+  cleanup_epoch: 0,
+  cleanup_receipt_id: null,
+  terminal_worktree_disposition: 'not_created_failed_dispatch',
+};
+let zeroDispatchLineageAccepted = false;
+try {
+  normalizeCampaignArtifactReference({
+    kind: 'campaign_terminal',
+    digest: 'f'.repeat(64),
+    repair_lineage: zeroDispatchLineage,
+  });
+  zeroDispatchLineageAccepted = true;
+} catch (_error) {
+  zeroDispatchLineageAccepted = false;
+}
 const implementationsBeforeNoSpec = implementationCalls.length;
 const managedNoSpecResult = identityEngine.runImplementationReviewLoop({
   promptFile,
@@ -2146,6 +2686,7 @@ console.log(`round_two_stage=${argValue(roundTwoArgs, '--stage')}`);
 console.log(`managed_resume_status=${managedResumeResult.status}`);
 console.log(`managed_resume_phase=${managedResumeResult.phase}`);
 console.log(`managed_resume_reason=${managedResumeResult.reason}`);
+console.log(`zero_dispatch_lineage_accepted=${zeroDispatchLineageAccepted}`);
 console.log(`managed_resume_stage=${argValue(managedResumeArgs, '--stage')}`);
 console.log(`implementation_root=${implementationEnvs[0].AUTOPILOT_ROOT_RUN_ID}`);
 console.log(`round_two_root=${implementationEnvs[1].AUTOPILOT_ROOT_RUN_ID}`);
@@ -2176,6 +2717,24 @@ console.log(
 console.log(`managed_no_spec_phase=${managedNoSpecResult.phase}`);
 console.log(`managed_no_spec_rounds=${managedNoSpecResult.rounds}`);
 console.log(`managed_no_spec_impl_delta=${implementationCalls.length - implementationsBeforeNoSpec}`);
+const missingGrokSessionResult = identityEngine.runImplementationReviewLoop({
+  promptFile,
+  branch: 'impl/icc-p1-intake',
+  base,
+  roster: grokRoster,
+  campaignManaged: true,
+  campaignContract: contractPath,
+  implementationOptions: {
+    env: {
+      AUTOPILOT_ROOT_RUN_ID: campaignId,
+      AUTOPILOT_DISPATCH_DEPTH: '1',
+    },
+  },
+});
+console.log(`missing_grok_session_phase=${missingGrokSessionResult.phase}`);
+console.log(`missing_grok_session_disposition=${
+  missingGrokSessionResult.repair_lineage.terminal_worktree_disposition
+}`);
 NODE
 )"
 INTAKE_EXIT=$?
@@ -2286,6 +2845,10 @@ assert_contains "$INTAKE_OUT" "precondition_release_calls=1" \
   "zero-spend leaf precondition failure releases campaign admission once"
 assert_contains "$INTAKE_OUT" "precondition_release_status=released" \
   "campaign control records the terminal admission release result"
+assert_contains "$INTAKE_OUT" "failed_resource_worktree=$SBX" \
+  "failed dispatch preserves its retained worktree identity"
+assert_contains "$INTAKE_OUT" "failed_resource_disposition=retained_failed_dispatch" \
+  "failed dispatch returns an explicit retained-resource disposition"
 assert_contains "$INTAKE_OUT" "durable_zero_status=blocked" \
   "durable zero-effect leaf remains a blocked campaign result"
 assert_contains "$INTAKE_OUT" "durable_zero_events=implementation_started" \
@@ -2355,6 +2918,52 @@ assert_contains "$INTAKE_OUT" "expired_review_calls=0" \
 assert_contains "$INTAKE_OUT" "identity_status=converged" \
   "managed campaign completes through identity-capturing dispatchers"
 assert_contains "$INTAKE_OUT" \
+  "grok_lineage_phase=awaiting_convergence_adjudication" \
+  "recurring reviewer finding stops before another repair dispatch"
+assert_contains "$INTAKE_OUT" "grok_lineage_calls=3" \
+  "Grok lineage permits initial implementation and two bounded repairs only"
+assert_contains "$INTAKE_OUT" "grok_lineage_same_branch=true" \
+  "Grok repair keeps one stable implementation branch"
+assert_contains "$INTAKE_OUT" "grok_lineage_keep_count=3" \
+  "Grok lineage retains its one worktree across all three dispatches"
+assert_contains "$INTAKE_OUT" "grok_lineage_reuse_worktree=true" \
+  "Grok repair receives the exact retained worktree"
+assert_contains "$INTAKE_OUT" "grok_lineage_resume_session=true" \
+  "Grok repair resumes the exact provider session"
+assert_contains "$INTAKE_OUT" "grok_lineage_prompt_count=2" \
+  "second recurrence is stopped before writing a third repair prompt"
+assert_contains "$INTAKE_OUT" "grok_lineage_prompt_mode=full_diff_generation" \
+  "repair prompt declares full generation diff review mode"
+assert_contains "$INTAKE_OUT" "grok_lineage_prompt_finding=finding-stable" \
+  "repair prompt carries the unresolved finding identity"
+assert_contains "$INTAKE_OUT" "grok_lineage_recurring=finding-stable" \
+  "convergence receipt names the recurring finding that exhausted its lineage"
+assert_contains "$INTAKE_OUT" \
+  "bounded_lineage_phase=awaiting_convergence_adjudication" \
+  "renamed findings stop after two rounds without measurable reduction"
+assert_contains "$INTAKE_OUT" "bounded_lineage_calls=3" \
+  "non-reducing lineage permits initial plus two bounded repairs only"
+assert_contains "$INTAKE_OUT" "bounded_lineage_non_reduction=2" \
+  "convergence receipt exposes the non-reduction count"
+assert_contains "$INTAKE_OUT" "bounded_lineage_one_branch=true" \
+  "non-Grok repair lineage also keeps one stable branch"
+assert_contains "$INTAKE_OUT" "bounded_lineage_reuse_count=2" \
+  "non-Grok repair lineage reuses one retained worktree twice"
+assert_contains "$INTAKE_OUT" \
+  "bounded_lineage_non_reuse_reason=runner_resume_not_verified:fixture" \
+  "runner without verified resume records an explicit non-reuse reason"
+assert_contains "$INTAKE_OUT" "bounded_predispatch_rejected=true" \
+  "finding repair without an explicit path fails before dispatch"
+assert_contains "$INTAKE_OUT" "bounded_finding_a_occurrences=1" \
+  "pre-dispatch seal failure does not consume finding recurrence budget"
+assert_contains "$INTAKE_OUT" "sealed_scope_dispatches=2" \
+  "finding-bound repair scope is checked after the repair dispatch"
+assert_contains "$INTAKE_OUT" \
+  "sealed_scope_reason=repair changed paths outside its finding-bound seal: docs/unrelated.md" \
+  "repair scope rejects unrelated paths even inside the broader campaign"
+assert_contains "$INTAKE_OUT" "sealed_scope_review_mode=focused_delta_round" \
+  "authoritative focused-delta provenance reaches the repair prompt"
+assert_contains "$INTAKE_OUT" \
   "implementation_ledger=$SBX/.autopilot/identity-ledger.jsonl" \
   "managed implementation receives the campaign ledger"
 assert_contains "$INTAKE_OUT" \
@@ -2390,6 +2999,8 @@ assert_contains "$INTAKE_OUT" "round_two_stage=campaign-implementation#r2" \
   "managed repair rounds receive distinct implementation stage identities"
 assert_contains "$INTAKE_OUT" "managed_resume_status=converged" \
   "managed PREPARED resume continues through campaign implementation"
+assert_contains "$INTAKE_OUT" "zero_dispatch_lineage_accepted=true" \
+  "terminal failure before the first dispatch persists a coherent zero-epoch lineage"
 assert_contains "$INTAKE_OUT" "managed_resume_stage=campaign-implementation" \
   "managed PREPARED resume dispatches the first campaign implementation round"
 assert_contains "$INTAKE_OUT" "implementation_root=foreman-initial" \
@@ -2435,6 +3046,10 @@ assert_contains "$INTAKE_OUT" "managed_no_spec_rounds=0" \
   "missing managed review specification blocks before round one"
 assert_contains "$INTAKE_OUT" "managed_no_spec_impl_delta=0" \
   "missing managed review specification blocks before model spend"
+assert_contains "$INTAKE_OUT" "missing_grok_session_phase=campaign_repair_lineage" \
+  "missing resumable provider session fails at retained lineage validation"
+assert_contains "$INTAKE_OUT" "missing_grok_session_disposition=retained_failed_dispatch" \
+  "post-dispatch lineage rejection records an explicit retained failure disposition"
 
 CAMPAIGN_LEDGER="$COMMON_DIR/autopilot/implementation-campaign.jsonl"
 DEFAULT_INTAKE_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \

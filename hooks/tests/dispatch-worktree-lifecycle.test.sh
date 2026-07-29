@@ -61,7 +61,12 @@ linked_worktree_count() {
 dispatch_leaf() {
   local repo="$1" branch="$2" run_id="$3" stub="$4"
   local keep_args=()
-  [ "${DISPATCH_LEAF_KEEP:-1}" = "0" ] || keep_args+=(--keep-worktree)
+  [ "${DISPATCH_LEAF_KEEP:-1}" = "0" ] || keep_args+=(
+    --keep-worktree
+    --retain-owner "$ROOT_RUN_ID"
+    --retain-reason lifecycle-budget-test
+    --retain-until "$(( $(date +%s) + 3600 ))"
+  )
   (
     cd "$repo" || exit 98
     env \

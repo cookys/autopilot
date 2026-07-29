@@ -361,8 +361,11 @@ assert_eq "0" "$?" "KR10 derives executed membership while freezing 42/51"
 #    authenticate release evidence;
 # 2) authority path spelled outside the repo but resolving through a symlink
 #    into repoRoot is also rejected;
-# 3) assert the exact path-containment / independent-authority blocker on the
-#    affected subsections — never an unrelated aggregate HOLD alone.
+# 3) positive control: authority whose real path is outside both repoRoot and
+#    the project evidence boundary authenticates equivalent valid evidence
+#    (production_telemetry / trusted_authority_* surface — not aggregate PASS);
+# 4) assert the exact path-containment / independent-authority blocker on the
+#    negative cases' affected subsections — never an unrelated aggregate HOLD.
 # ---------------------------------------------------------------------------
 
 # Case 1 — direct in-repo authority path (anywhere under repoRoot).
@@ -596,6 +599,143 @@ NODE
 assert_eq "0" "$?" "outside-symlink-into-repo authority path rejected before authenticating release evidence"
 rm -f "$TARGET_IN_REPO" "$LINK_PATH"
 rm -rf "$SYMLINK_DIR" "$SYMLINK_PROJ" "$SYMLINK_HOME"
+
+# Case 3 — positive control: authority real path outside repoRoot AND outside
+# the project evidence boundary authenticates equivalent valid KR8/alias
+# evidence. Fails any production gate that ignores or universally rejects
+# configured authorities. Assert the trusted authentication surface, not
+# aggregate disposition (KR10 may still HOLD).
+OUTSIDE_AUTH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth.XXXXXX")"
+OUTSIDE_AUTH="$OUTSIDE_AUTH_DIR/trusted-installed-witness-authority.json"
+OUTSIDE_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth-proj.XXXXXX")"
+OUTSIDE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-outside-auth-home.XXXXXX")"
+mkdir -p "$OUTSIDE_PROJ/production-telemetry"
+node - "$REPO_ROOT" "$OUTSIDE_AUTH" "$OUTSIDE_PROJ" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const authOut = process.argv[3];
+const proj = process.argv[4];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const { MemoryWitness } = require(path.join(root, 'src/engine/owner-kernel/witness'));
+
+// Same self-consistent shape as the negative path-containment oracles, but
+// authority file lives at a real path outside both repo and project.
+const body = {
+  observed_false_acceptances: 0,
+  observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1,
+  baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const witness = new MemoryWitness({ streamId: 'rg-outside-auth-stream' });
+const receipt = witness.append({
+  run_id: 'rg-outside-auth-run',
+  sequence: 1,
+  event_hash: bodyHash,
+});
+fs.writeFileSync(authOut, JSON.stringify({
+  kind: 'trusted_installed_witness_authority',
+  stream_id: 'rg-outside-auth-stream',
+  receipts: [receipt],
+}, null, 2));
+fs.writeFileSync(
+  path.join(proj, 'production-telemetry', 'kr8.json'),
+  JSON.stringify({
+    ...body,
+    production_provenance: {
+      evidence_body_hash: bodyHash,
+      witness_receipt: receipt,
+    },
+  }, null, 2),
+);
+fs.writeFileSync(
+  path.join(proj, 'production-telemetry', 'alias-retirement.json'),
+  JSON.stringify({
+    shipped_compatibility_cycle: true,
+    witnessed_zero_use_days: 0,
+    translation_used_events: 0,
+    unresolved_translation_deltas: 0,
+  }, null, 2),
+);
+NODE
+
+OUTSIDE_OUT="$(
+  HOME="$OUTSIDE_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$OUTSIDE_AUTH" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$OUTSIDE_PROJ" \
+    --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$OUTSIDE_OUT" "$OUTSIDE_AUTH" "$REPO_ROOT" "$OUTSIDE_PROJ" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const report = JSON.parse(process.argv[2]);
+const outsideAuth = process.argv[3];
+const repoRoot = process.argv[4];
+const projectDir = process.argv[5];
+const authReal = fs.realpathSync(outsideAuth);
+const repoReal = fs.realpathSync(repoRoot);
+const projReal = fs.realpathSync(projectDir);
+// Fixture itself must place authority outside both trust boundaries.
+function isInside(parent, child) {
+  const p = path.resolve(parent);
+  const c = path.resolve(child);
+  if (p === c) return true;
+  const prefix = p.endsWith(path.sep) ? p : `${p}${path.sep}`;
+  return c.startsWith(prefix);
+}
+if (isInside(repoReal, authReal) || isInside(projReal, authReal)) {
+  console.error('positive-control fixture mis-placed: authority realpath inside boundary', authReal);
+  process.exit(1);
+}
+const kr8 = report.kr8;
+const alias = report.alias_retirement;
+// Trusted production-evidence surface — not aggregate disposition (KR10 HOLD ok).
+if (!kr8 || !kr8.evidence || kr8.evidence.source !== 'production_telemetry') {
+  console.error(
+    'outside authority must authenticate KR8 as production_telemetry; got',
+    kr8 && kr8.evidence && kr8.evidence.source,
+  );
+  process.exit(1);
+}
+if (kr8.status !== 'PASS') {
+  console.error('outside authority with valid KR8 counters must PASS KR8 subsection; got',
+    kr8.status, kr8.blocking_reasons);
+  process.exit(1);
+}
+if (!alias || alias.trusted_authority_present !== true) {
+  console.error('outside authority must set trusted_authority_present; got',
+    alias && alias.trusted_authority_present);
+  process.exit(1);
+}
+const accepted = String(alias.trusted_authority_path || '');
+if (!accepted || accepted !== authReal) {
+  console.error('outside authority must surface trusted_authority_path as realpath; got',
+    accepted, 'expected', authReal);
+  process.exit(1);
+}
+// Independent-authority absence blockers must not appear once authority authenticates.
+const kr8Reasons = (kr8.blocking_reasons || []).join('\n');
+if (/without independently configured|independently configured installed witness authority/i.test(kr8Reasons)
+  && /absent|untrusted|project-local/i.test(kr8Reasons)) {
+  console.error('authenticated outside authority must not emit independent-authority absence on KR8; got:',
+    kr8Reasons);
+  process.exit(1);
+}
+const aliasReasons = (alias.blocking_reasons || []).join('\n');
+if (/alias retirement requires independently configured installed witness authority/i.test(aliasReasons)) {
+  console.error('authenticated outside authority must not block alias for missing authority; got:',
+    aliasReasons);
+  process.exit(1);
+}
+console.log('rg-outside-authority-positive-control=ok');
+NODE
+assert_eq "0" "$?" "outside realpath authority authenticates trusted production-evidence surface"
+rm -f "$OUTSIDE_AUTH"
+rm -rf "$OUTSIDE_AUTH_DIR" "$OUTSIDE_PROJ" "$OUTSIDE_HOME"
 
 echo "PASS [owner-kernel-release-gates] release gate honesty checks"
 finalize_test

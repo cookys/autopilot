@@ -1011,16 +1011,20 @@ function finalPanelSeatQualified(roster, seat) {
 // immutable invocation tuple, so sharing the implementer's family is permitted
 // for that individual seat; the sealed panel as a whole must still contain the
 // required number of distinct reviewer families and at least one family known
-// to differ from a known implementer. Unknown implementers preserve the
-// resolver's pigeonhole rule: one known family is compatible at requirement 1,
-// while requirement >=2 needs that many distinct known families.
+// to differ from a known implementer. A multi-seat terminal panel must span at
+// least two reviewer families even when a low-risk roster's configured family
+// floor is one; explicit single-seat/min=1 operation remains compatible.
+// Unknown implementers preserve the resolver's pigeonhole rule.
 function terminalPanelCrossFamilySatisfied(roster, seats) {
   if (!roster || !Array.isArray(seats)) return false;
   if (roster.cross_family_required === false) return true;
-  const required = Number.isSafeInteger(roster.required_review_families)
+  const configuredRequired = Number.isSafeInteger(roster.required_review_families)
     && roster.required_review_families >= 1
     ? roster.required_review_families
     : 1;
+  const panelRequiresDiversity = seats.length > 1
+    || (Number.isSafeInteger(roster.min_panel_size) && roster.min_panel_size > 1);
+  const required = panelRequiresDiversity ? Math.max(2, configuredRequired) : configuredRequired;
   const families = new Set();
   for (const seat of seats) {
     if (!seat || typeof seat.family !== 'string' || seat.family.length === 0) continue;

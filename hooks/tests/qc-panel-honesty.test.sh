@@ -205,6 +205,16 @@ assert.strictEqual(terminalPanelCrossFamilySatisfied({
 ]), false);
 assert.strictEqual(terminalPanelCrossFamilySatisfied({
   implementer_engine: 'gpt-5.6',
+  required_review_families: 1,
+  min_panel_size: 3,
+  cross_family_required: true,
+}, [
+  { model: 'claude-opus', family: 'anthropic' },
+  { model: 'claude-sonnet', family: 'anthropic' },
+  { model: 'claude-haiku', family: 'anthropic' },
+]), false);
+assert.strictEqual(terminalPanelCrossFamilySatisfied({
+  implementer_engine: 'gpt-5.6',
   required_review_families: 2,
   cross_family_required: true,
 }, [

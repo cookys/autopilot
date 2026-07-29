@@ -848,7 +848,7 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
   const scanContract = Object.freeze({
     id: 'p37-alias-caller-residual-scan-v2',
     method: 'git-ls-files-tracked-residual',
-    tokens: retired.map((level) => `/${level}`),
+    tokens: retired.flatMap((level) => [`/${level}`, `autopilot:${level}`]),
     retired_alias_set: retired,
   });
   const scanContractDigest = sha256(canonicalJson(scanContract));
@@ -871,12 +871,49 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
   }
   revision = rev.stdout.trim();
 
-  const ls = spawnSync(
+  // Untracked paths mean the scan manifest is not revision-complete → HOLD.
+  const lsOthers = spawnSync(
     'git',
-    ['-C', repoRoot, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    ['-C', repoRoot, 'ls-files', '--others', '--exclude-standard', '-z'],
     { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 },
   );
-  // Use tracked files only (cached). Untracked are not authoritative for retirement.
+  if (lsOthers.error || lsOthers.status !== 0) {
+    return {
+      complete: false,
+      reason: 'mechanical caller migration scan failed git ls-files --others '
+        + `(${(lsOthers.stderr || lsOthers.error || 'unknown').toString().trim()})`,
+      callers_migrated: [],
+      remaining: [...retired],
+      residuals: [],
+      untracked: [],
+      revision,
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
+    };
+  }
+  const untrackedRaw = lsOthers.stdout || Buffer.alloc(0);
+  const untracked = untrackedRaw.length === 0
+    ? []
+    : untrackedRaw.toString('utf8').split('\0').filter(Boolean).map((p) => p.replace(/\\/g, '/'));
+  if (untracked.length > 0) {
+    return {
+      complete: false,
+      reason: 'mechanical caller migration scan found untracked paths; '
+        + 'scan manifest is not revision-complete (HEAD-bound tracked inventory required): '
+        + untracked.slice(0, 20).join(','),
+      callers_migrated: [],
+      remaining: [...retired],
+      residuals: [],
+      untracked: untracked.slice(0, 200),
+      untracked_count: untracked.length,
+      revision,
+      scan_contract: scanContract.id,
+      scan_contract_digest: scanContractDigest,
+      retired_alias_set: retired,
+    };
+  }
+
   const lsTracked = spawnSync(
     'git',
     ['-C', repoRoot, 'ls-files', '-z'],
@@ -914,14 +951,12 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
     };
   }
 
-  // Exact alias definition trees (compatibility implementations) and their mirrors.
+  // Exact compatibility definition files/mirrors only (not whole definition trees).
   function isExactAliasDefinition(relPath) {
     const n = relPath.replace(/\\/g, '/');
     for (const level of retired) {
       if (n === `skills/${level}/SKILL.md`
-        || n.startsWith(`skills/${level}/`)
-        || n === `platforms/codex/plugin/skills/${level}/SKILL.md`
-        || n.startsWith(`platforms/codex/plugin/skills/${level}/`)) {
+        || n === `platforms/codex/plugin/skills/${level}/SKILL.md`) {
         return true;
       }
     }
@@ -964,8 +999,15 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
     return false;
   }
 
-  // Canonical invocation spellings for retired aliases.
-  const tokenRe = /(^|[^A-Za-z0-9_/])(\/l[3-6])(?=[^A-Za-z0-9_]|$)/g;
+  // Canonical invocation spellings: /l3-/l6 and autopilot:l3-autopilot:l6.
+  const tokenRe = /(^|[^A-Za-z0-9_/])(\/l[3-6]|autopilot:l[3-6])(?=[^A-Za-z0-9_]|$)/g;
+
+  function retiredLevelFromToken(token) {
+    if (typeof token !== 'string') return null;
+    if (/^\/l[3-6]$/.test(token)) return token.slice(1);
+    if (/^autopilot:l[3-6]$/.test(token)) return token.slice('autopilot:'.length);
+    return null;
+  }
 
   const residuals = [];
   const remainingSet = new Set();
@@ -999,13 +1041,14 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
       let match;
       while ((match = tokenRe.exec(line)) !== null) {
         const token = match[2];
-        const level = token.slice(1); // l3..l6
-        if (!retired.includes(level)) continue;
+        const level = retiredLevelFromToken(token);
+        if (!level || !retired.includes(level)) continue;
         remainingSet.add(level);
         residuals.push({
           path: rel.replace(/\\/g, '/'),
           line: lineNo + 1,
           token,
+          level,
         });
       }
     }
@@ -2454,18 +2497,17 @@ module.exports = {
   PRODUCTION_AUTHORITY_PATH,
   PRODUCTION_ADAPTER_BINDING_PATH,
   evaluateReleaseGates,
+  // Only injectable seam: always forces fixture/test-only overall HOLD.
   evaluateReleaseGatesFixture,
   executeDeterministicCallerMigrationScan,
   evaluateKr8,
   evaluateKr10,
   assertSecureInstallationPath,
-  // Internal component helpers are not a production trust-injection surface.
-  // evaluateAliasRetirement remains available for focused scan/report tests only
-  // and never supplies caller-selected authority on its own.
-  evaluateAliasRetirement,
+  // evaluateAliasRetirement and production trust loaders are intentionally not
+  // exported — they accept or load authority material and must not be a public
+  // composition surface for caller-crafted trustedAuthority bypass.
 };
 
 if (require.main === module) {
   main();
 }
-

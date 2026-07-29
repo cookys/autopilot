@@ -1939,5 +1939,68 @@ assert_contains "$CHECKER_SRC" 'missing a non-empty bounded authority_id' \
 assert_contains "$CHECKER_SRC" 'membership_complete' \
   "KR10 reports membership_complete"
 
+# Public export surface: only fixture seam is injectable; no production loaders
+# or evaluateAliasRetirement(trustedAuthority) composition surface.
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.argv[2];
+const mod = require(path.join(root, 'scripts/check-owner-kernel-release-gates.js'));
+const allowed = new Set([
+  'PRODUCTION_AUTHORITY_PATH',
+  'PRODUCTION_ADAPTER_BINDING_PATH',
+  'evaluateReleaseGates',
+  'evaluateReleaseGatesFixture',
+  'executeDeterministicCallerMigrationScan',
+  'evaluateKr8',
+  'evaluateKr10',
+  'assertSecureInstallationPath',
+]);
+const keys = Object.keys(mod).sort();
+for (const key of keys) {
+  if (!allowed.has(key)) {
+    console.error('unexpected public export:', key);
+    process.exit(1);
+  }
+}
+const forbidden = [
+  'evaluateAliasRetirement',
+  'loadTrustedInstalledWitnessAuthority',
+  'loadTrustedWitnessAdapterBinding',
+  'evaluateReleaseGatesCore',
+];
+for (const name of forbidden) {
+  if (Object.prototype.hasOwnProperty.call(mod, name) || typeof mod[name] === 'function') {
+    console.error('forbidden export present:', name);
+    process.exit(1);
+  }
+}
+if (typeof mod.evaluateReleaseGatesFixture !== 'function') {
+  console.error('evaluateReleaseGatesFixture must remain the only injectable seam');
+  process.exit(1);
+}
+if (typeof mod.evaluateReleaseGates !== 'function') {
+  console.error('evaluateReleaseGates production entry must remain exported');
+  process.exit(1);
+}
+// evaluateReleaseGates still rejects trust injection (no authority composition).
+let rejected = false;
+try {
+  mod.evaluateReleaseGates({
+    project: path.join(root, 'docs/projects/2026-07-20-owner-kernel-governance'),
+    repoRoot: root,
+    trust: { authorityPath: '/tmp/x', skipInstallationOwnershipChecks: true },
+  });
+} catch (error) {
+  rejected = /rejects trust injection|evaluateReleaseGatesFixture/i.test(String(error && error.message));
+}
+if (!rejected) {
+  console.error('evaluateReleaseGates must reject trust injection');
+  process.exit(1);
+}
+console.log('rg-public-export-surface=ok');
+NODE
+assert_eq "0" "$?" "public module export surface forbids trust-composition loaders"
+
 echo "PASS [owner-kernel-release-gates] release gate honesty checks"
 finalize_test

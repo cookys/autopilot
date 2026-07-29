@@ -1208,12 +1208,16 @@ const cleanRev = clean.revision;
 const cleanDigest = clean.scan_contract_digest;
 
 const cases = [
-  { rel: 'skills/other/SKILL.md', body: 'invoke /l3 for legacy\n', label: 'other-skill' },
-  { rel: 'scripts/legacy.sh', body: '#!/bin/sh\n# /l4 dispatch\n', label: 'script' },
-  { rel: 'hooks/legacy-hook.js', body: '// call /l5 here\n', label: 'hook' },
-  { rel: 'docs/guide.md', body: 'Use /l6 for full delegation\n', label: 'docs' },
-  { rel: 'references/ops.md', body: 'prefer /l3 entry\n', label: 'reference' },
-  { rel: 'platforms/codex/plugin/README.md', body: 'generated surface mentions /l4\n', label: 'generated-active' },
+  { rel: 'skills/other/SKILL.md', body: 'invoke /l3 for legacy\n', label: 'other-skill', token: '/l3' },
+  { rel: 'scripts/legacy.sh', body: '#!/bin/sh\n# /l4 dispatch\n', label: 'script', token: '/l4' },
+  { rel: 'hooks/legacy-hook.js', body: '// call /l5 here\n', label: 'hook', token: '/l5' },
+  { rel: 'docs/guide.md', body: 'Use /l6 for full delegation\n', label: 'docs', token: '/l6' },
+  { rel: 'references/ops.md', body: 'prefer /l3 entry\n', label: 'reference', token: '/l3' },
+  { rel: 'platforms/codex/plugin/README.md', body: 'generated surface mentions /l4\n', label: 'generated-active', token: '/l4' },
+  { rel: 'scripts/autopilot-entry.sh', body: '#!/bin/sh\n# autopilot:l5 entry\n', label: 'autopilot-token', token: 'autopilot:l5' },
+  // Sibling under definition directory is NOT exempt — only exact SKILL.md is.
+  { rel: 'skills/l3/references/notes.md', body: 'sibling still invokes /l3\n', label: 'definition-sibling', token: '/l3' },
+  { rel: 'platforms/codex/plugin/skills/l4/helper.md', body: 'mirror sibling uses autopilot:l4\n', label: 'mirror-sibling', token: 'autopilot:l4' },
 ];
 for (const c of cases) {
   // reset to clean definition-only baseline each case
@@ -1232,9 +1236,17 @@ for (const c of cases) {
     console.error(`${c.label} must report path/line/token residuals`, scan);
     process.exit(1);
   }
-  const hit = scan.residuals.some((r) => r.path === c.rel.replace(/\\/g, '/'));
+  const hit = scan.residuals.find((r) => r.path === c.rel.replace(/\\/g, '/'));
   if (!hit) {
     console.error(`${c.label} residual path missing`, scan.residuals);
+    process.exit(1);
+  }
+  if (hit.token !== c.token) {
+    console.error(`${c.label} must report exact matched token ${c.token}; got`, hit);
+    process.exit(1);
+  }
+  if (typeof hit.line !== 'number' || hit.line < 1) {
+    console.error(`${c.label} must report exact line`, hit);
     process.exit(1);
   }
   if (scan.revision === cleanRev) {
@@ -1252,12 +1264,50 @@ spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore
 spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
 fs.writeFileSync(
   path.join(mechRepo, 'skills/l3/SKILL.md'),
-  '---\nname: l3\n---\nThis definition implements /l3\n',
+  '---\nname: l3\n---\nThis definition implements /l3 and autopilot:l3\n',
+);
+fs.mkdirSync(path.join(mechRepo, 'platforms/codex/plugin/skills/l4'), { recursive: true });
+fs.writeFileSync(
+  path.join(mechRepo, 'platforms/codex/plugin/skills/l4/SKILL.md'),
+  '---\nname: l4\n---\nmirror implements /l4\n',
 );
 commitAll('definition exempt');
 const defScan = executeDeterministicCallerMigrationScan(mechRepo);
 if (defScan.complete !== true) {
   console.error('exact definition SKILL.md must be exempt', defScan);
+  process.exit(1);
+}
+
+// Untracked repository state HOLDs (manifest not HEAD-bound / revision-complete).
+spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
+spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
+// Any untracked file (even without alias tokens) makes the inventory incomplete.
+fs.writeFileSync(path.join(mechRepo, 'scripts/untracked-noise.sh'), '#!/bin/sh\necho noise\n');
+const untrackedNoise = executeDeterministicCallerMigrationScan(mechRepo);
+if (untrackedNoise.complete === true) {
+  console.error('any untracked file must HOLD complete', untrackedNoise);
+  process.exit(1);
+}
+if (!/untracked/i.test(untrackedNoise.reason || '')) {
+  console.error('untracked HOLD must cite untracked reason', untrackedNoise.reason);
+  process.exit(1);
+}
+if (!Array.isArray(untrackedNoise.untracked)
+  || !untrackedNoise.untracked.includes('scripts/untracked-noise.sh')) {
+  console.error('untracked HOLD must list exact untracked path', untrackedNoise.untracked);
+  process.exit(1);
+}
+// Untracked active caller path also HOLDs with exact path.
+fs.unlinkSync(path.join(mechRepo, 'scripts/untracked-noise.sh'));
+fs.writeFileSync(path.join(mechRepo, 'scripts/untracked-caller.sh'), '#!/bin/sh\n# /l3 untracked\n');
+const untrackedCaller = executeDeterministicCallerMigrationScan(mechRepo);
+if (untrackedCaller.complete === true) {
+  console.error('untracked active caller must HOLD', untrackedCaller);
+  process.exit(1);
+}
+if (!Array.isArray(untrackedCaller.untracked)
+  || !untrackedCaller.untracked.includes('scripts/untracked-caller.sh')) {
+  console.error('untracked caller must list exact path', untrackedCaller.untracked);
   process.exit(1);
 }
 console.log('alias_tracked_residual_scan_oracles=ok');

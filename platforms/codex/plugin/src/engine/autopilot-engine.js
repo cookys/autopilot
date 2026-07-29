@@ -613,13 +613,43 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   return { policy, action, error_class: null, dispatch_status: dispatchStatus };
 }
 
-function validateReviewRoster(roster) {
+function validateReviewRoster(roster, options = {}) {
   if (!roster || typeof roster !== 'object') {
     throw new TypeError('review roster is required');
   }
   for (const field of ['reviewer_runner', 'reviewer_engine', 'reviewer_effort']) {
     if (typeof roster[field] !== 'string' || roster[field].length === 0) {
       throw new TypeError(`review roster field ${field} is required`);
+    }
+  }
+  if (options.requireTerminalPanel !== true) return roster;
+  if (!Number.isSafeInteger(roster.min_panel_size) || roster.min_panel_size < 1) {
+    throw new TypeError('managed review roster min_panel_size must be an integer >= 1');
+  }
+  if (roster.qc_panel_seats_complete !== true) {
+    throw new TypeError('managed review roster requires complete exact QC seat metadata');
+  }
+  if (!Array.isArray(roster.qc_panel_seats)
+      || roster.qc_panel_seats.length < roster.min_panel_size) {
+    throw new TypeError('managed review roster exact QC seats must satisfy min_panel_size');
+  }
+  for (const [index, seat] of roster.qc_panel_seats.entries()) {
+    const fields = seat && typeof seat === 'object' && !Array.isArray(seat)
+      ? Object.keys(seat)
+      : [];
+    const valid = fields.length === 6
+      && fields.every((field) => [
+        'role', 'runner', 'model', 'effort', 'endpoint', 'family',
+      ].includes(field))
+      && seat.role === 'qc'
+      && typeof seat.runner === 'string' && seat.runner.length > 0
+      && typeof seat.model === 'string' && seat.model.length > 0
+      && typeof seat.effort === 'string' && seat.effort.length > 0
+      && typeof seat.family === 'string' && seat.family.length > 0
+      && (seat.endpoint === null
+        || (typeof seat.endpoint === 'string' && /^[A-Za-z0-9_]+$/.test(seat.endpoint)));
+    if (!valid) {
+      throw new TypeError(`managed review roster qc_panel_seats[${index}] is invalid`);
     }
   }
   return roster;
@@ -977,6 +1007,64 @@ function reviewerQualificationViable(roster) {
       roster,
       reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
     }) !== null;
+}
+
+// Terminal QC seats are independently selected tuples, not aliases for the
+// focused reviewer. A roster-level qualification bit therefore cannot certify
+// a different runner/model/effort. The incumbent remains compatible only when
+// the sealed seat is exactly that qualified tuple; every other terminal seat
+// needs an exact qualified scorecard-ladder row.
+function finalPanelSeatQualified(roster, seat) {
+  if (!roster || !seat) return false;
+  const endpoint = (value) => typeof value === 'string' && value.length > 0 ? value : null;
+  const incumbent = roster.reviewer_qualified === true
+    && roster.reviewer_runner === seat.runner
+    && roster.reviewer_engine === seat.model
+    && roster.reviewer_effort === seat.effort
+    && endpoint(roster.reviewer_endpoint) === endpoint(seat.endpoint);
+  if (incumbent) return true;
+  if (!Array.isArray(roster.fallback_ladder)) return false;
+  return roster.fallback_ladder.some((row) => {
+    if (!row || typeof row !== 'object') return false;
+    const rowModel = typeof row.model === 'string' && row.model.length > 0
+      ? row.model
+      : row.engine;
+    return row.runner === seat.runner
+      && rowModel === seat.model
+      && row.effort === seat.effort
+      && endpoint(row.endpoint) === endpoint(seat.endpoint)
+      && (typeof row.family !== 'string' || row.family === seat.family);
+  });
+}
+
+// Terminal panel decorrelation is a roster-level invariant. A pinned seat is an
+// immutable invocation tuple, so sharing the implementer's family is permitted
+// for that individual seat; the sealed panel as a whole must still contain the
+// required number of distinct reviewer families and at least one family known
+// to differ from a known implementer. A multi-seat terminal panel must span at
+// least two reviewer families even when a low-risk roster's configured family
+// floor is one; explicit single-seat/min=1 operation remains compatible.
+// Unknown implementers preserve the resolver's pigeonhole rule.
+function terminalPanelCrossFamilySatisfied(roster, seats) {
+  if (!roster || !Array.isArray(seats)) return false;
+  if (roster.cross_family_required === false) return true;
+  const configuredRequired = Number.isSafeInteger(roster.required_review_families)
+    && roster.required_review_families >= 1
+    ? roster.required_review_families
+    : 1;
+  const panelRequiresDiversity = seats.length > 1
+    || (Number.isSafeInteger(roster.min_panel_size) && roster.min_panel_size > 1);
+  const required = panelRequiresDiversity ? Math.max(2, configuredRequired) : configuredRequired;
+  const families = new Set();
+  for (const seat of seats) {
+    if (!seat || typeof seat.family !== 'string' || seat.family.length === 0) continue;
+    const derived = modelFamilyOfEngine(seat.model);
+    families.add(derived === 'unknown' ? seat.family : derived);
+  }
+  if (families.size < required) return false;
+  const implementerFamily = modelFamilyOfEngine(roster.implementer_engine);
+  if (implementerFamily === 'unknown') return required < 2 || families.size >= required;
+  return [...families].some((family) => family !== implementerFamily);
 }
 
 // Stable codes for managed-strict sealed root-identity precondition failures.
@@ -2225,6 +2313,8 @@ class AutopilotEngine {
     // the returned roster self-documents the substitution (it still carries the
     // _low_risk source keys).
     if (
+      input.pinReviewerTuple !== true
+      &&
       reviewRisk === 'low'
       && roster
       && typeof roster.reviewer_engine_low_risk === 'string' && roster.reviewer_engine_low_risk.length > 0
@@ -2288,7 +2378,7 @@ class AutopilotEngine {
     if (!ensureDistinctReviewFamily({
       implementerEngine,
       reviewerEngine: roster.reviewer_engine,
-    })) {
+    }) && input.pinReviewerTuple !== true) {
       // Family-conflict fallback (v2.32.25 design review: gpt-5.5 xhigh REVISE
       // applied): instead of unconditionally hard-blocking — which left the
       // DEFAULT openai×openai roster with a permanently dead in-loop review and
@@ -2785,6 +2875,8 @@ class AutopilotEngine {
         },
       } : {}),
     };
+
+
     let campaignUnitCleanupError = null;
     try {
       implementationResult = this.implementationDispatcher(
@@ -3157,7 +3249,14 @@ class AutopilotEngine {
       }
     }
 
-    const performReview = ({ candidate, scope, repair_generation: repairGeneration }) => {
+    const performReview = ({
+      candidate,
+      scope,
+      repair_generation: repairGeneration,
+      reviewRoster = roster,
+      reviewStage = null,
+      pinReviewerTuple = false,
+    }) => {
       let diffFile;
       try {
         diffFile = this.diffProvider({
@@ -3183,7 +3282,7 @@ class AutopilotEngine {
       const reviewed = this.reviewDiff({
         diffFile,
         specFile: promptFile,
-        roster,
+        roster: reviewRoster,
         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
           ? input.rosterArgs
           : ['--check-scorecard'],
@@ -3202,14 +3301,16 @@ class AutopilotEngine {
         implementerEngine: roster.implementer_engine,
         runId: campaignControl.campaign_id,
         ledger: campaignControl.generation_claim.ledger,
-        reviewStage: scope === 'final'
+        reviewStage: reviewStage || (scope === 'final'
           ? 'campaign-final-review'
-          : `campaign-review#r${repairGeneration + 1}`,
+          : `campaign-review#r${repairGeneration + 1}`
+        ),
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
         },
-        requireQualifiedReviewer,
+        requireQualifiedReviewer: scope === 'final' ? true : requireQualifiedReviewer,
+        pinReviewerTuple,
       });
       ledger.push(...reviewed.ledger);
       reviewChain.push(reviewed);
@@ -3283,12 +3384,134 @@ class AutopilotEngine {
       };
     };
 
+    const finalPanelSeatReceipt = (seat, seatIndex, outcome) => {
+      const isReviewed = outcome && outcome.reviewed === true;
+      let status = 'no_verdict';
+      if (!isReviewed && outcome && outcome.phase === 'product_review_normalization') {
+        status = 'parser_failed';
+      } else if (!isReviewed && outcome && outcome.raw && outcome.raw.reviewResult
+          && (outcome.raw.reviewResult.error || outcome.raw.reviewResult.signal
+            || outcome.raw.reviewResult.status !== 0)) {
+        status = 'transport_failed';
+      } else if (!isReviewed && outcome && outcome.phase === 'reviewer_qualification') {
+        status = 'precondition_failed';
+      }
+      const body = {
+        schema_version: 1,
+        artifact_type: 'implementation_campaign_final_panel_seat',
+        seat_index: seatIndex + 1,
+        runner: seat.runner,
+        model: seat.model,
+        effort: seat.effort,
+        endpoint: seat.endpoint === undefined ? null : seat.endpoint,
+        family: seat.family,
+        status: isReviewed ? 'reviewed' : status,
+        verdict: isReviewed ? outcome.verdict : null,
+        review_digest: isReviewed ? outcome.review_digest : null,
+        reason: isReviewed ? null : `final_panel_seat_${status}`,
+      };
+      return { ...body, receipt_digest: campaignCanonicalDigest(body) };
+    };
+
+    const performFinalPanel = (reviewInput) => {
+      const minPanelSize = roster.min_panel_size;
+      const seats = roster.qc_panel_seats_complete === true
+        && Array.isArray(roster.qc_panel_seats)
+        ? roster.qc_panel_seats
+        : null;
+      if (!Number.isSafeInteger(minPanelSize) || minPanelSize < 1 || !seats) {
+        return {
+          reviewed: false,
+          sealed_min_panel_size: minPanelSize,
+          final_panel_count: 0,
+          final_panel_seat_receipts: [],
+        };
+      }
+      if (!terminalPanelCrossFamilySatisfied(roster, seats)) {
+        return {
+          reviewed: false,
+          sealed_min_panel_size: minPanelSize,
+          final_panel_count: 0,
+          final_panel_seat_receipts: [],
+        };
+      }
+      const outcomes = seats.map((seat, index) => {
+        const reviewRoster = {
+          ...roster,
+          reviewer_runner: seat.runner,
+          reviewer_engine: seat.model,
+          reviewer_effort: seat.effort,
+          reviewer_endpoint: seat.endpoint || '',
+          reviewer_qualified: finalPanelSeatQualified(roster, seat),
+        };
+        const outcome = finalPanelSeatQualified(roster, seat)
+          ? performReview({
+            ...reviewInput,
+            scope: 'final',
+            reviewRoster,
+            reviewStage: `campaign-final-review#seat-${index + 1}`,
+            pinReviewerTuple: true,
+          })
+          : {
+            reviewed: false,
+            phase: 'reviewer_qualification',
+            reason: 'final panel seat is not an exact qualified reviewer tuple',
+          };
+        return { seat, outcome };
+      });
+      const seatReceipts = outcomes.map(({ seat, outcome }, index) =>
+        finalPanelSeatReceipt(seat, index, outcome));
+      const reviewedOutcomes = outcomes.filter(({ outcome }) => outcome.reviewed === true);
+      const mergedFindings = [];
+      const findingIds = new Map();
+      let findingsConsistent = true;
+      for (const { outcome } of reviewedOutcomes) {
+        let items;
+        try {
+          items = outcome.findings && outcome.findings.trim().length > 0
+            ? JSON.parse(outcome.findings)
+            : [];
+        } catch (_error) {
+          findingsConsistent = false;
+          break;
+        }
+        for (const item of items) {
+          const prior = findingIds.get(item.finding_id);
+          const digest = campaignCanonicalDigest(item);
+          if (prior && prior !== digest) {
+            findingsConsistent = false;
+            break;
+          }
+          if (!prior) {
+            findingIds.set(item.finding_id, digest);
+            mergedFindings.push(item);
+          }
+        }
+        if (!findingsConsistent) break;
+      }
+      const allReviewed = reviewedOutcomes.length === outcomes.length;
+      return {
+        reviewed: allReviewed && findingsConsistent,
+        verdict: allReviewed && findingsConsistent ? 'SHIP-AS-IS' : null,
+        findings: JSON.stringify(mergedFindings),
+        review_digest: allReviewed && findingsConsistent
+          ? (reviewedOutcomes.length === 1
+            ? reviewedOutcomes[0].outcome.review_digest
+            : campaignCanonicalDigest(seatReceipts.map((seat) => seat.review_digest)))
+          : null,
+        sealed_min_panel_size: minPanelSize,
+        final_panel_count: reviewedOutcomes.length,
+        final_panel_seat_receipts: seatReceipts,
+      };
+    };
+
     const maxRepairGenerations = Math.min(
       campaignControl.contract.max_repair_generations,
       Math.max(0, roster.loop_max_rounds - 1),
     );
     const composition = this.campaignComposer({
       maxRepairGenerations,
+      minPanelSize: roster.min_panel_size,
       lifecycleReceiptRef,
       resume: resumeCandidate && !resumeSetupError
         ? {
@@ -3833,7 +4056,7 @@ class AutopilotEngine {
           gate,
         };
       },
-      finalPanel: (reviewInput) => performReview({ ...reviewInput, scope: 'final' }),
+      finalPanel: (reviewInput) => performFinalPanel(reviewInput),
     });
 
     if (!new Set(['ready', 'follow_up']).has(composition.status)) {
@@ -4222,7 +4445,7 @@ class AutopilotEngine {
     }
 
     try {
-      validateReviewRoster(roster);
+      validateReviewRoster(roster, { requireTerminalPanel: campaignRequested });
       validateImplementerRoster(roster);
     } catch (error) {
       const startedAt = this.now();
@@ -5362,6 +5585,8 @@ module.exports = {
   implementationResultBlocked,
   reviewLoopResultBlocked,
   reviewResultBlocked,
+  finalPanelSeatQualified,
+  terminalPanelCrossFamilySatisfied,
   validateExtraReviewArgs,
   validateExtraArgs,
   tempNameSegment,

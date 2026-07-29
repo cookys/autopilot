@@ -195,10 +195,46 @@ assert_eq "no" "$(
     refs/heads/hetero/invalid-managed-root >/dev/null && echo yes || echo no
 )" "invalid managed root cannot create a branch"
 
-# 5. duplicate branch → precondition_failed (exit 2)
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+# 5. duplicate branch is a read-only precondition: it must fail before the
+# durable tuple claim or any runner/manifest/worktree effect.
+DUP_LEDGER="$TEST_TMP/duplicate-branch-ledger.jsonl"
+DUP_RUNS="$TEST_TMP/duplicate-branch-runs"
+DUP_RUNNER_MARK="$TEST_TMP/duplicate-branch-runner-invoked"
+DUP_STUB="$TEST_TMP/agy-duplicate-branch"
+cat > "$DUP_STUB" <<EOF
+#!/usr/bin/env bash
+touch "$DUP_RUNNER_MARK"
+exit 99
+EOF
+chmod +x "$DUP_STUB"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$DUP_LEDGER" >/dev/null
+DUP_LEDGER_LINES_BEFORE="$(wc -l < "$DUP_LEDGER" | tr -d ' ')"
+DUP_WORKTREES_BEFORE="$(
+  git -C "$SBX" worktree list --porcelain \
+    | awk '/^worktree / { count += 1 } END { print count + 0 }'
+)"
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$DUP_RUNS" \
+  "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$DUP_STUB" \
+  --ledger "$DUP_LEDGER" --run-id duplicate-branch --stage implementation \
+  2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "duplicate branch exit code"
+assert_contains "$OUT" '"status": "precondition_failed"' "duplicate branch status"
 assert_contains "$OUT" "branch already exists" "duplicate branch error"
+assert_eq "$DUP_LEDGER_LINES_BEFORE" \
+  "$(wc -l < "$DUP_LEDGER" | tr -d ' ')" \
+  "duplicate branch creates zero durable lease rows"
+assert_file_absent "$DUP_RUNNER_MARK" "duplicate branch invokes zero runners"
+assert_eq "0" "$(
+  if [ -d "$DUP_RUNS" ]; then
+    find "$DUP_RUNS" -maxdepth 1 -type f -name '*.manifest.json' | wc -l | tr -d ' '
+  else
+    printf '0'
+  fi
+)" "duplicate branch creates zero manifests"
+assert_eq "$DUP_WORKTREES_BEFORE" "$(
+  git -C "$SBX" worktree list --porcelain \
+    | awk '/^worktree / { count += 1 } END { print count + 0 }'
+)" "duplicate branch creates zero worktrees"
 
 # 5b. dirty path: stub commits then leaves an unstaged file → exit 1, status dirty, worktree kept
 STUB_DIRTY="$TEST_TMP/agy-dirty"

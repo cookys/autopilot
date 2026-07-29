@@ -82,7 +82,7 @@ const graph = {
       acceptance_ids: ['runtime-ready'],
       verification_commands: ['node fixture.js', 'node second-fixture.js'],
       // Extra budget: original grant + TOCTOU re-grant + post-zero-effect re-grant.
-      gate_attempt_budget: 4,
+      gate_attempt_budget: 1,
       reservation: {
         campaigns: 1, wall_seconds: 100, tool_calls: 3, engine_attempts: 2,
         external_wait_seconds: 0, canonical_changed_files: 2, output_bytes: 1024,
@@ -788,6 +788,19 @@ if (runtime) {
     verify_first: false,
     loop_max_rounds: 2,
     loop_convergence_verdict: 'SHIP-AS-IS',
+    min_panel_size: 1,
+    required_review_families: 1,
+    cross_family_required: false,
+    reviewer_qualified: true,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [{
+      role: 'qc',
+      runner: 'codex',
+      model: 'fixture-reviewer',
+      effort: 'medium',
+      endpoint: null,
+      family: 'fixture',
+    }],
   };
   const missionRootRunId = intake.contract
     && intake.contract.mission_runtime
@@ -1030,8 +1043,8 @@ if (runtime) {
     && afterZeroEffect.claims[granted.payload.claim_id].released === true);
   check('durable-zero-effect-stagnation-unchanged',
     afterZeroEffect.stagnant_campaigns === stagnationBeforeZeroEffect);
-  // Attempt count is retained across no_effect_release (not unspent). TOCTOU
-  // path already spent attempt 1, re-grant is attempt 2, zero-effect keeps 2.
+  // Attempt identity remains monotonic across no_effect_release. The durable
+  // graph progress records ordinal 2, while the gate budget slot is restored.
   check('durable-zero-effect-graph-restored-pending',
     afterZeroEffect.graph_progress['runtime-control'].status === 'pending'
     && afterZeroEffect.graph_progress['runtime-control'].active_claim_id === null
@@ -1054,6 +1067,7 @@ if (runtime) {
   check('durable-zero-effect-permits-next-graph-attempt',
     regrantAfterRelease.code === 0
     && regrantAfterRelease.payload
+    && regrantAfterRelease.payload.graph_attempt === 3
     && regrantAfterRelease.payload.claim_id
     && regrantAfterRelease.payload.claim_id !== granted.payload.claim_id);
   const regranted = regrantAfterRelease;

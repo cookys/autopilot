@@ -63,6 +63,11 @@ const {
   hasCampaignDispatchAuthority,
   writeCampaignDispatchUnit,
 } = require('./campaign-dispatch-projection');
+const {
+  admitContinuation,
+  loadMatchingRunsFromManifestDir,
+  workOrder,
+} = require('./continuation-admission');
 
 const RUN_LEDGER_SCRIPT = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 
@@ -530,6 +535,10 @@ function reviewResultBlocked(result) {
 function implementationResultBlocked(result) {
   if (!result) return 'missing implementation dispatch result';
   if (result.error) return result.error.message || String(result.error);
+  // Lifecycle update / WO terminalization failures are fail-closed: never surface as committed.
+  if (result.lifecycle_error) {
+    return `work order lifecycle update failed: ${result.lifecycle_error}`;
+  }
   if (result.signal) return `implementation dispatch terminated by signal ${result.signal}`;
   if (result.status === null || result.status === undefined) {
     return `implementation dispatch exited with status ${result.status}`;
@@ -613,13 +622,43 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   return { policy, action, error_class: null, dispatch_status: dispatchStatus };
 }
 
-function validateReviewRoster(roster) {
+function validateReviewRoster(roster, options = {}) {
   if (!roster || typeof roster !== 'object') {
     throw new TypeError('review roster is required');
   }
   for (const field of ['reviewer_runner', 'reviewer_engine', 'reviewer_effort']) {
     if (typeof roster[field] !== 'string' || roster[field].length === 0) {
       throw new TypeError(`review roster field ${field} is required`);
+    }
+  }
+  if (options.requireTerminalPanel !== true) return roster;
+  if (!Number.isSafeInteger(roster.min_panel_size) || roster.min_panel_size < 1) {
+    throw new TypeError('managed review roster min_panel_size must be an integer >= 1');
+  }
+  if (roster.qc_panel_seats_complete !== true) {
+    throw new TypeError('managed review roster requires complete exact QC seat metadata');
+  }
+  if (!Array.isArray(roster.qc_panel_seats)
+      || roster.qc_panel_seats.length < roster.min_panel_size) {
+    throw new TypeError('managed review roster exact QC seats must satisfy min_panel_size');
+  }
+  for (const [index, seat] of roster.qc_panel_seats.entries()) {
+    const fields = seat && typeof seat === 'object' && !Array.isArray(seat)
+      ? Object.keys(seat)
+      : [];
+    const valid = fields.length === 6
+      && fields.every((field) => [
+        'role', 'runner', 'model', 'effort', 'endpoint', 'family',
+      ].includes(field))
+      && seat.role === 'qc'
+      && typeof seat.runner === 'string' && seat.runner.length > 0
+      && typeof seat.model === 'string' && seat.model.length > 0
+      && typeof seat.effort === 'string' && seat.effort.length > 0
+      && typeof seat.family === 'string' && seat.family.length > 0
+      && (seat.endpoint === null
+        || (typeof seat.endpoint === 'string' && /^[A-Za-z0-9_]+$/.test(seat.endpoint)));
+    if (!valid) {
+      throw new TypeError(`managed review roster qc_panel_seats[${index}] is invalid`);
     }
   }
   return roster;
@@ -977,6 +1016,64 @@ function reviewerQualificationViable(roster) {
       roster,
       reviewRisk: typeof roster.review_risk === 'string' ? roster.review_risk : null,
     }) !== null;
+}
+
+// Terminal QC seats are independently selected tuples, not aliases for the
+// focused reviewer. A roster-level qualification bit therefore cannot certify
+// a different runner/model/effort. The incumbent remains compatible only when
+// the sealed seat is exactly that qualified tuple; every other terminal seat
+// needs an exact qualified scorecard-ladder row.
+function finalPanelSeatQualified(roster, seat) {
+  if (!roster || !seat) return false;
+  const endpoint = (value) => typeof value === 'string' && value.length > 0 ? value : null;
+  const incumbent = roster.reviewer_qualified === true
+    && roster.reviewer_runner === seat.runner
+    && roster.reviewer_engine === seat.model
+    && roster.reviewer_effort === seat.effort
+    && endpoint(roster.reviewer_endpoint) === endpoint(seat.endpoint);
+  if (incumbent) return true;
+  if (!Array.isArray(roster.fallback_ladder)) return false;
+  return roster.fallback_ladder.some((row) => {
+    if (!row || typeof row !== 'object') return false;
+    const rowModel = typeof row.model === 'string' && row.model.length > 0
+      ? row.model
+      : row.engine;
+    return row.runner === seat.runner
+      && rowModel === seat.model
+      && row.effort === seat.effort
+      && endpoint(row.endpoint) === endpoint(seat.endpoint)
+      && (typeof row.family !== 'string' || row.family === seat.family);
+  });
+}
+
+// Terminal panel decorrelation is a roster-level invariant. A pinned seat is an
+// immutable invocation tuple, so sharing the implementer's family is permitted
+// for that individual seat; the sealed panel as a whole must still contain the
+// required number of distinct reviewer families and at least one family known
+// to differ from a known implementer. A multi-seat terminal panel must span at
+// least two reviewer families even when a low-risk roster's configured family
+// floor is one; explicit single-seat/min=1 operation remains compatible.
+// Unknown implementers preserve the resolver's pigeonhole rule.
+function terminalPanelCrossFamilySatisfied(roster, seats) {
+  if (!roster || !Array.isArray(seats)) return false;
+  if (roster.cross_family_required === false) return true;
+  const configuredRequired = Number.isSafeInteger(roster.required_review_families)
+    && roster.required_review_families >= 1
+    ? roster.required_review_families
+    : 1;
+  const panelRequiresDiversity = seats.length > 1
+    || (Number.isSafeInteger(roster.min_panel_size) && roster.min_panel_size > 1);
+  const required = panelRequiresDiversity ? Math.max(2, configuredRequired) : configuredRequired;
+  const families = new Set();
+  for (const seat of seats) {
+    if (!seat || typeof seat.family !== 'string' || seat.family.length === 0) continue;
+    const derived = modelFamilyOfEngine(seat.model);
+    families.add(derived === 'unknown' ? seat.family : derived);
+  }
+  if (families.size < required) return false;
+  const implementerFamily = modelFamilyOfEngine(roster.implementer_engine);
+  if (implementerFamily === 'unknown') return required < 2 || families.size >= required;
+  return [...families].some((family) => family !== implementerFamily);
 }
 
 // Stable codes for managed-strict sealed root-identity precondition failures.
@@ -2225,6 +2322,8 @@ class AutopilotEngine {
     // the returned roster self-documents the substitution (it still carries the
     // _low_risk source keys).
     if (
+      input.pinReviewerTuple !== true
+      &&
       reviewRisk === 'low'
       && roster
       && typeof roster.reviewer_engine_low_risk === 'string' && roster.reviewer_engine_low_risk.length > 0
@@ -2288,7 +2387,7 @@ class AutopilotEngine {
     if (!ensureDistinctReviewFamily({
       implementerEngine,
       reviewerEngine: roster.reviewer_engine,
-    })) {
+    }) && input.pinReviewerTuple !== true) {
       // Family-conflict fallback (v2.32.25 design review: gpt-5.5 xhigh REVISE
       // applied): instead of unconditionally hard-blocking — which left the
       // DEFAULT openai×openai roster with a permanently dead in-loop review and
@@ -2728,6 +2827,186 @@ class AutopilotEngine {
 
     const startedAt = this.now();
     let implementationResult;
+    let continuationWorkOrderRef = null;
+    let continuationCommonDir = null;
+
+    // Pre-dispatch continuation admission (Work Order v2 + mandatory PostCompact).
+    // Work Order create/claim is unconditional for active Mission/root before any
+    // branch/worktree/runner effects; controller identity is this engine process.
+    {
+      const ck = input.continuationCheckpoint || input.continuation_checkpoint || null;
+      const ckPath = input.continuationCheckpointPath || input.continuation_checkpoint_path
+        || process.env.AUTOPILOT_CONTINUATION_CHECKPOINT || null;
+      const dur = input.continuationDurable || input.continuation_durable || null;
+      const durPath = input.continuationDurablePath || input.continuation_durable_path
+        || process.env.AUTOPILOT_CONTINUATION_DURABLE || null;
+      const identityRoot = (campaignAuthority && campaignAuthority.root_run_id)
+        || (implementationBaseEnv && implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID)
+        || process.env.AUTOPILOT_ROOT_RUN_ID || process.env.AUTOPILOT_MISSION_ROOT_RUN_ID
+        || input.rootRunId || input.root_run_id || null;
+      const gitCwdForCont = resolvedTaskCwd || this.cwd || process.cwd();
+      const commonDirForCont = workOrder.resolveGitCommonDir(gitCwdForCont);
+      continuationCommonDir = commonDirForCont;
+      // Exact-root only — never enumerate with null root (global scan banned).
+      let nonterminalWOs = [];
+      const rootOk = typeof identityRoot === 'string' && identityRoot.length > 0;
+      if (commonDirForCont && rootOk) {
+        try {
+          nonterminalWOs = workOrder.listNonterminalWorkOrders(commonDirForCont, identityRoot);
+        } catch (enumErr) {
+          const err = new Error(`work order root enumeration failed: ${enumErr.message || String(enumErr)}`);
+          err.code = 'work_order_enum_failed';
+          throw err;
+        }
+      } else if (commonDirForCont && !rootOk
+          && (input.missionActive === true || process.env.AUTOPILOT_MISSION_ROOT_RUN_ID)) {
+        const err = new Error('root_run_id is mandatory for mission/root work order enumeration');
+        err.code = 'root_run_id_required';
+        throw err;
+      }
+      // Active-root Work Orders force reconcile. Bare campaignAuthority alone must NOT —
+      // campaign-dispatch-projection and other Mission callers without WOs keep working.
+      const hasActiveRootWorkOrders = nonterminalWOs.length > 0;
+      const missionActive = Boolean(
+        input.missionActive === true
+        || hasActiveRootWorkOrders
+        || (process.env.AUTOPILOT_MISSION_ROOT_RUN_ID && hasActiveRootWorkOrders),
+      );
+      const hasCont = Boolean(ck || ckPath || dur || durPath
+        || input.continuationMatchingRuns || input.continuation_matching_runs
+        || process.env.AUTOPILOT_CONTINUATION_STRICT === '1'
+        || process.env.AUTOPILOT_RECONCILE_RECEIPT
+        || input.reconcileReceipt || input.reconcileReceiptPath
+        || hasActiveRootWorkOrders
+        || input.missionActive === true);
+      if (hasCont) {
+        const manifestDir = input.continuationManifestDir || process.env.AUTOPILOT_DISPATCH_RUNS_DIR
+          || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+        const matchingRuns = Array.isArray(input.continuationMatchingRuns)
+          ? input.continuationMatchingRuns
+          : Array.isArray(input.continuation_matching_runs)
+            ? input.continuation_matching_runs
+            : loadMatchingRunsFromManifestDir(manifestDir, {
+              root_run_id: identityRoot, branch: input.branch,
+              stage: resolvedImplementationStage, base_sha: input.base,
+            });
+        let narrative = input.continuationNarrative || input.continuation_narrative || null;
+        if (!narrative && process.env.AUTOPILOT_CONTINUATION_NARRATIVE) {
+          try { narrative = JSON.parse(process.env.AUTOPILOT_CONTINUATION_NARRATIVE); }
+          catch (_e) { narrative = null; }
+        }
+        const controllerId = workOrder.captureProcessIdentity(process.pid);
+        const admission = admitContinuation({
+          identity: {
+            root_run_id: identityRoot, branch: input.branch,
+            stage: resolvedImplementationStage, base_sha: input.base,
+          },
+          checkpoint: ck, checkpointPath: ckPath, durable: dur, durablePath: durPath,
+          narrative, matchingRuns, requireIdentity: true,
+          strictMatch: process.env.AUTOPILOT_CONTINUATION_STRICT === '1'
+            || input.strictContinuationMatch === true,
+          gitCwd: gitCwdForCont, requireCommitInRepo: Boolean(gitCwdForCont),
+          reconcileReceipt: input.reconcileReceipt || input.reconcile_receipt || null,
+          reconcileReceiptPath: input.reconcileReceiptPath || input.reconcile_receipt_path
+            || process.env.AUTOPILOT_RECONCILE_RECEIPT || null,
+          requireReconcile: missionActive, missionActive,
+          // Unconditional WO claim for active Mission/root — not only durable input.
+          createWorkOrder: Boolean(dur || durPath || missionActive),
+          claimWorkOrder: Boolean(dur || durPath || missionActive),
+          graph_node: resolvedImplementationStage || 'implement',
+          terminalReceipt: input.terminalReceipt || null,
+          terminalReceiptPath: input.terminalReceiptPath || process.env.AUTOPILOT_TERMINAL_RECEIPT || null,
+          owner: controllerId, ownerPid: controllerId.pid, controllerPid: controllerId.pid,
+          ledgerPath: input.ledgerPath || process.env.AUTOPILOT_LEDGER_PATH || null,
+          missionPath: input.missionPath || process.env.AUTOPILOT_MISSION_PATH || null,
+        });
+        if (admission.status === 'reject' || admission.status === 'not_found') {
+          const err = new Error(admission.reason || admission.reason_code || 'continuation admission rejected');
+          err.code = admission.reason_code || 'continuation_admission_rejected';
+          err.continuation_admission = admission;
+          throw err;
+        }
+        if (admission.work_order || admission.work_order_path || admission.attached_run_id) {
+          continuationWorkOrderRef = {
+            path: admission.work_order_path || null,
+            root_run_id: admission.root_run_id || identityRoot,
+            graph_node: resolvedImplementationStage || 'implement',
+            attempt: 1,
+            work_order_id: admission.attached_run_id
+              || (admission.work_order && admission.work_order.work_order_id) || null,
+          };
+        }
+        if (admission.action === 'attach_active' || admission.action === 'attach_existing'
+            || admission.action === 'consume_terminal' || admission.action === 'resume_terminal') {
+          if (commonDirForCont && continuationWorkOrderRef) {
+            const term = admission.terminal_status || null;
+            const isConsume = admission.action === 'consume_terminal'
+              || admission.action === 'resume_terminal';
+            // Attach must not replace a live controller with this short-lived engine
+            // process identity; only consume/terminal paths rewrite disposition.
+            // Lifecycle update failures must not be swallowed.
+            const life = workOrder.updateWorkOrderLifecycle(commonDirForCont, continuationWorkOrderRef, {
+              ...(isConsume ? {
+                owner: controllerId,
+                terminal_status: term || 'aborted', disposition: 'consumed',
+              } : { disposition: null }),
+            }, { preserveOwner: !isConsume, bumpGeneration: isConsume, bindArtifacts: false });
+            if (life && life.status === 'reject' && life.reason_code !== 'not_found') {
+              const err = new Error(life.reason || 'work order lifecycle update failed on attach/consume');
+              err.code = life.reason_code || 'work_order_lifecycle_failed';
+              err.lifecycle = life;
+              throw err;
+            }
+          }
+          if (typeof this.cleanup === 'function') {
+            try { this.cleanup(); } catch (_e) { /* attach authoritative */ }
+          }
+          const outStatus = (admission.action === 'consume_terminal'
+            || admission.action === 'resume_terminal') ? 'consumed' : 'attached';
+          const commit = admission.accepted_commit === 'none' ? null : admission.accepted_commit;
+          const implResult = {
+            status: outStatus, runner: 'continuation-admission', model: null,
+            branch: input.branch, base: input.base, commit,
+            files_changed: 0, insertions: 0, deletions: 0, worktree: null, agent_log: null, error: null,
+            run_id: admission.attached_run_id, root_run_id: admission.root_run_id,
+            phase_cursor: admission.phase_cursor, next_action: admission.next_action, duplicate_dispatch: 0,
+          };
+          return {
+            status: outStatus, phase: 'continuation_admission', reason: admission.reason,
+            reason_code: admission.reason_code, continuation_admission: admission, duplicate_dispatch: 0,
+            root_run_id: admission.root_run_id, phase_cursor: admission.phase_cursor,
+            accepted_commit: admission.accepted_commit, next_action: admission.next_action,
+            attached_run_id: admission.attached_run_id,
+            classification: admission.classification || admission.action,
+            terminal_status: admission.terminal_status || null, roster, resolveResult,
+            implementationResult: {
+              status: 0, signal: null, stdout: '', stderr: '', result: implResult, parseError: null,
+            },
+            implementationArgs,
+            implementation: {
+              status: outStatus, commit, branch: input.branch, base: input.base,
+              run_id: admission.attached_run_id, root_run_id: admission.root_run_id,
+              phase_cursor: admission.phase_cursor, next_action: admission.next_action,
+              duplicate_dispatch: 0,
+            },
+            ledger,
+          };
+        }
+        // dispatch_new: transfer real runner identity + heartbeat before effects.
+        if (commonDirForCont && continuationWorkOrderRef && admission.action === 'dispatch_new') {
+          const life = workOrder.updateWorkOrderLifecycle(commonDirForCont, continuationWorkOrderRef, {
+            owner: controllerId, runner: controllerId, next_action: admission.next_action || 'dispatch',
+          }, { preserveOwner: false, bumpGeneration: false, bindArtifacts: false });
+          if (!life || life.status !== 'written') {
+            const err = new Error((life && life.reason) || 'work order lifecycle transfer failed before dispatch effects');
+            err.code = (life && life.reason_code) || 'work_order_lifecycle_failed';
+            err.lifecycle = life;
+            throw err;
+          }
+        }
+      }
+    }
+
     if (campaignLifecycleRoot
         && (!implementationBaseEnv || typeof implementationBaseEnv !== 'object'
           || Array.isArray(implementationBaseEnv))) {
@@ -2785,6 +3064,8 @@ class AutopilotEngine {
         },
       } : {}),
     };
+
+
     let campaignUnitCleanupError = null;
     try {
       implementationResult = this.implementationDispatcher(
@@ -2808,6 +3089,82 @@ class AutopilotEngine {
         } catch (error) {
           campaignUnitCleanupError = error.message || String(error);
         }
+      }
+      // Terminal/receipt/heartbeat updates on every dispatch exit path — check result.
+      if (continuationCommonDir && continuationWorkOrderRef) {
+        const parsedExit = implementationResult && implementationResult.result
+          ? implementationResult.result : null;
+        const exitStatus = implementationResult && implementationResult.error
+          ? 'failed'
+          : (parsedExit && (parsedExit.status === 'failed' || parsedExit.status === 'error')
+            ? 'failed'
+            : (parsedExit && (parsedExit.status === 'success' || parsedExit.status === 'attached'
+              || parsedExit.status === 'ok')
+              ? 'success'
+              : (implementationResult && implementationResult.status === 0 ? 'success' : 'failed')));
+        const receiptPath = (parsedExit && parsedExit.receipt_path)
+          || input.terminalReceiptPath || process.env.AUTOPILOT_TERMINAL_RECEIPT || null;
+        const runnerId = workOrder.captureProcessIdentity(process.pid);
+        const patch = {
+          owner: runnerId, runner: runnerId, terminal_status: exitStatus, disposition: 'consumed',
+        };
+        if (receiptPath) {
+          let dig = null;
+          try {
+            const raw = workOrder.readJsonIfPresent(receiptPath);
+            if (raw) {
+              const body = { ...raw }; delete body.digest;
+              dig = workOrder.sha256Json(body);
+            }
+          } catch (_e) { dig = null; }
+          if (!dig) {
+            // Fail closed: terminal exit without a digest-bound receipt cannot be persisted as success.
+            if (!implementationResult) implementationResult = { status: 1, error: 'terminal_receipt_digest_missing' };
+            else implementationResult.error = implementationResult.error || 'terminal_receipt_digest_missing';
+          } else {
+            patch.expected_receipt = {
+              path: receiptPath, digest: dig, artifact_type: workOrder.TERMINAL_RECEIPT_ARTIFACT,
+            };
+            patch.paths = { receipt: receiptPath };
+          }
+        }
+        const life = workOrder.updateWorkOrderLifecycle(
+          continuationCommonDir, continuationWorkOrderRef, patch,
+          { preserveOwner: false, bumpGeneration: true, bindArtifacts: false },
+        );
+        if (!life || life.status !== 'written') {
+          // Fail closed: lifecycle/update failure is always blocked — never leave committed.
+          const code = (life && (life.reason_code || life.reason)) || 'work_order_lifecycle_failed';
+          if (!implementationResult) {
+            implementationResult = {
+              status: 1, signal: null, stdout: '', stderr: '', result: null,
+              parseError: null, error: code, lifecycle_error: code,
+            };
+          } else {
+            implementationResult.lifecycle_error = code;
+            if (implementationResult.status === 0) implementationResult.status = 1;
+            if (implementationResult.result && implementationResult.result.status === 'committed') {
+              implementationResult.result = {
+                ...implementationResult.result,
+                status: 'failed',
+                error: implementationResult.result.error || code,
+              };
+            }
+          }
+        }
+      }
+    }
+    // Fault-injection hook: tests force lifecycle failure after a committed dispatch.
+    if (process.env.AUTOPILOT_FAULT_INJECT_LIFECYCLE === '1' && implementationResult) {
+      implementationResult.lifecycle_error = implementationResult.lifecycle_error
+        || 'fault_inject_lifecycle_update';
+      if (implementationResult.status === 0) implementationResult.status = 1;
+      if (implementationResult.result && implementationResult.result.status === 'committed') {
+        implementationResult.result = {
+          ...implementationResult.result,
+          status: 'failed',
+          error: implementationResult.result.error || 'fault_inject_lifecycle_update',
+        };
       }
     }
     let blockedReason = implementationResultBlocked(implementationResult);
@@ -3157,7 +3514,14 @@ class AutopilotEngine {
       }
     }
 
-    const performReview = ({ candidate, scope, repair_generation: repairGeneration }) => {
+    const performReview = ({
+      candidate,
+      scope,
+      repair_generation: repairGeneration,
+      reviewRoster = roster,
+      reviewStage = null,
+      pinReviewerTuple = false,
+    }) => {
       let diffFile;
       try {
         diffFile = this.diffProvider({
@@ -3183,7 +3547,7 @@ class AutopilotEngine {
       const reviewed = this.reviewDiff({
         diffFile,
         specFile: promptFile,
-        roster,
+        roster: reviewRoster,
         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
           ? input.rosterArgs
           : ['--check-scorecard'],
@@ -3202,14 +3566,16 @@ class AutopilotEngine {
         implementerEngine: roster.implementer_engine,
         runId: campaignControl.campaign_id,
         ledger: campaignControl.generation_claim.ledger,
-        reviewStage: scope === 'final'
+        reviewStage: reviewStage || (scope === 'final'
           ? 'campaign-final-review'
-          : `campaign-review#r${repairGeneration + 1}`,
+          : `campaign-review#r${repairGeneration + 1}`
+        ),
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
         },
-        requireQualifiedReviewer,
+        requireQualifiedReviewer: scope === 'final' ? true : requireQualifiedReviewer,
+        pinReviewerTuple,
       });
       ledger.push(...reviewed.ledger);
       reviewChain.push(reviewed);
@@ -3283,12 +3649,134 @@ class AutopilotEngine {
       };
     };
 
+    const finalPanelSeatReceipt = (seat, seatIndex, outcome) => {
+      const isReviewed = outcome && outcome.reviewed === true;
+      let status = 'no_verdict';
+      if (!isReviewed && outcome && outcome.phase === 'product_review_normalization') {
+        status = 'parser_failed';
+      } else if (!isReviewed && outcome && outcome.raw && outcome.raw.reviewResult
+          && (outcome.raw.reviewResult.error || outcome.raw.reviewResult.signal
+            || outcome.raw.reviewResult.status !== 0)) {
+        status = 'transport_failed';
+      } else if (!isReviewed && outcome && outcome.phase === 'reviewer_qualification') {
+        status = 'precondition_failed';
+      }
+      const body = {
+        schema_version: 1,
+        artifact_type: 'implementation_campaign_final_panel_seat',
+        seat_index: seatIndex + 1,
+        runner: seat.runner,
+        model: seat.model,
+        effort: seat.effort,
+        endpoint: seat.endpoint === undefined ? null : seat.endpoint,
+        family: seat.family,
+        status: isReviewed ? 'reviewed' : status,
+        verdict: isReviewed ? outcome.verdict : null,
+        review_digest: isReviewed ? outcome.review_digest : null,
+        reason: isReviewed ? null : `final_panel_seat_${status}`,
+      };
+      return { ...body, receipt_digest: campaignCanonicalDigest(body) };
+    };
+
+    const performFinalPanel = (reviewInput) => {
+      const minPanelSize = roster.min_panel_size;
+      const seats = roster.qc_panel_seats_complete === true
+        && Array.isArray(roster.qc_panel_seats)
+        ? roster.qc_panel_seats
+        : null;
+      if (!Number.isSafeInteger(minPanelSize) || minPanelSize < 1 || !seats) {
+        return {
+          reviewed: false,
+          sealed_min_panel_size: minPanelSize,
+          final_panel_count: 0,
+          final_panel_seat_receipts: [],
+        };
+      }
+      if (!terminalPanelCrossFamilySatisfied(roster, seats)) {
+        return {
+          reviewed: false,
+          sealed_min_panel_size: minPanelSize,
+          final_panel_count: 0,
+          final_panel_seat_receipts: [],
+        };
+      }
+      const outcomes = seats.map((seat, index) => {
+        const reviewRoster = {
+          ...roster,
+          reviewer_runner: seat.runner,
+          reviewer_engine: seat.model,
+          reviewer_effort: seat.effort,
+          reviewer_endpoint: seat.endpoint || '',
+          reviewer_qualified: finalPanelSeatQualified(roster, seat),
+        };
+        const outcome = finalPanelSeatQualified(roster, seat)
+          ? performReview({
+            ...reviewInput,
+            scope: 'final',
+            reviewRoster,
+            reviewStage: `campaign-final-review#seat-${index + 1}`,
+            pinReviewerTuple: true,
+          })
+          : {
+            reviewed: false,
+            phase: 'reviewer_qualification',
+            reason: 'final panel seat is not an exact qualified reviewer tuple',
+          };
+        return { seat, outcome };
+      });
+      const seatReceipts = outcomes.map(({ seat, outcome }, index) =>
+        finalPanelSeatReceipt(seat, index, outcome));
+      const reviewedOutcomes = outcomes.filter(({ outcome }) => outcome.reviewed === true);
+      const mergedFindings = [];
+      const findingIds = new Map();
+      let findingsConsistent = true;
+      for (const { outcome } of reviewedOutcomes) {
+        let items;
+        try {
+          items = outcome.findings && outcome.findings.trim().length > 0
+            ? JSON.parse(outcome.findings)
+            : [];
+        } catch (_error) {
+          findingsConsistent = false;
+          break;
+        }
+        for (const item of items) {
+          const prior = findingIds.get(item.finding_id);
+          const digest = campaignCanonicalDigest(item);
+          if (prior && prior !== digest) {
+            findingsConsistent = false;
+            break;
+          }
+          if (!prior) {
+            findingIds.set(item.finding_id, digest);
+            mergedFindings.push(item);
+          }
+        }
+        if (!findingsConsistent) break;
+      }
+      const allReviewed = reviewedOutcomes.length === outcomes.length;
+      return {
+        reviewed: allReviewed && findingsConsistent,
+        verdict: allReviewed && findingsConsistent ? 'SHIP-AS-IS' : null,
+        findings: JSON.stringify(mergedFindings),
+        review_digest: allReviewed && findingsConsistent
+          ? (reviewedOutcomes.length === 1
+            ? reviewedOutcomes[0].outcome.review_digest
+            : campaignCanonicalDigest(seatReceipts.map((seat) => seat.review_digest)))
+          : null,
+        sealed_min_panel_size: minPanelSize,
+        final_panel_count: reviewedOutcomes.length,
+        final_panel_seat_receipts: seatReceipts,
+      };
+    };
+
     const maxRepairGenerations = Math.min(
       campaignControl.contract.max_repair_generations,
       Math.max(0, roster.loop_max_rounds - 1),
     );
     const composition = this.campaignComposer({
       maxRepairGenerations,
+      minPanelSize: roster.min_panel_size,
       lifecycleReceiptRef,
       resume: resumeCandidate && !resumeSetupError
         ? {
@@ -3833,7 +4321,7 @@ class AutopilotEngine {
           gate,
         };
       },
-      finalPanel: (reviewInput) => performReview({ ...reviewInput, scope: 'final' }),
+      finalPanel: (reviewInput) => performFinalPanel(reviewInput),
     });
 
     if (!new Set(['ready', 'follow_up']).has(composition.status)) {
@@ -4222,7 +4710,7 @@ class AutopilotEngine {
     }
 
     try {
-      validateReviewRoster(roster);
+      validateReviewRoster(roster, { requireTerminalPanel: campaignRequested });
       validateImplementerRoster(roster);
     } catch (error) {
       const startedAt = this.now();
@@ -5362,6 +5850,8 @@ module.exports = {
   implementationResultBlocked,
   reviewLoopResultBlocked,
   reviewResultBlocked,
+  finalPanelSeatQualified,
+  terminalPanelCrossFamilySatisfied,
   validateExtraReviewArgs,
   validateExtraArgs,
   tempNameSegment,

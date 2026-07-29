@@ -49,34 +49,50 @@ const routes = [
   ['l5', 'none'],
   ['l6', 'none'],
   ['l4', 'solo'],
+  ['l4', 'precondition_failed'],
+  ['l5', 'solo'],
   ['l5', 'precondition_failed'],
   ['l6', 'solo'],
+  ['l6', 'precondition_failed'],
 ];
 const admissions = routes.map(([entryLevel, fallback]) => admitMissionRouting({
   repoRoot: root,
   entryLevel,
   fallback,
 }));
-assert.equal(new Set(admissions.map((entry) => entry.admission.admission_digest)).size, 1);
+const normalizedAdmissionFacts = admissions.map((entry) => {
+  const { admission_digest: _digest, ...facts } = entry.admission;
+  return facts;
+});
+assert.equal(
+  new Set(admissions.map((entry) => entry.admission.admission_digest)).size,
+  1,
+  'routing topology must not change the sealed admission digest',
+);
+assert.deepEqual(
+  normalizedAdmissionFacts,
+  Array.from({ length: routes.length }, () => normalizedAdmissionFacts[0]),
+  'routing topology must not change normalized admission facts',
+);
 assert.deepEqual(
   admissions.map((entry) => entry.route.effective_level),
-  ['l3', 'l4', 'l5', 'l6', 'l3', 'l3', 'l3'],
+  ['l3', 'l4', 'l5', 'l6', 'l3', 'l3', 'l3', 'l3', 'l3', 'l3'],
 );
 assert.ok(admissions.every((entry) => entry.status === 'READY' && entry.enforced));
 const dogfood = admissions[0].admission;
-// Active closeout graph: single release-repair deliverable (post PRS/CTR integration).
-assert.equal(dogfood.deliverable_count, 1);
-assert.equal(dogfood.source_authoring_unit_count, 5);
-assert.equal(dogfood.critical_path, 1);
-assert.equal(dogfood.batch_count, 1);
+// Active runtime-convergence graph: durable identity followed by QC-panel honesty.
+assert.equal(dogfood.deliverable_count, 2);
+assert.equal(dogfood.source_authoring_unit_count, 0);
+assert.equal(dogfood.critical_path, 2);
+assert.equal(dogfood.batch_count, 2);
 assert.deepEqual(dogfood.reservation_totals, {
   campaigns: 2,
   wall_seconds: 7200,
-  tool_calls: 300,
-  engine_attempts: 3,
-  external_wait_seconds: 0,
-  canonical_changed_files: 100,
-  output_bytes: 10000000,
+  tool_calls: 360,
+  engine_attempts: 6,
+  external_wait_seconds: 3600,
+  canonical_changed_files: 22,
+  output_bytes: 4000000,
 });
 
 const markerDir = path.join(tmp, 'markers');

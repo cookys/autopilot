@@ -15,7 +15,7 @@
 # group still runs.
 . "$(dirname "$0")/lib.sh"
 
-ARTIFACT="$REPO_ROOT/docs/projects/2026-07-26-mission-convergence-portfolio/mission-p0-codex-enforcement.json"
+ARTIFACT="$REPO_ROOT/docs/projects/_archive/2026-07-26-mission-convergence-portfolio/mission-p0-codex-enforcement.json"
 CAPABILITY="$REPO_ROOT/src/harness/capabilities/codex.json"
 assert_file_exists "$ARTIFACT" "recorded P0 Codex enforcement disposition exists"
 assert_file_exists "$CAPABILITY" "current-Codex capability record exists"

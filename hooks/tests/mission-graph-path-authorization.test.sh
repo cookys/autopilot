@@ -13,7 +13,7 @@ const { execFileSync, spawnSync } = require('child_process');
 const root = process.argv[2];
 const project = path.join(
   root,
-  'docs/projects/2026-07-26-mission-convergence-portfolio',
+  'docs/projects/_archive/2026-07-26-mission-convergence-portfolio',
 );
 const graph = JSON.parse(fs.readFileSync(
   path.join(project, 'mission-execution-graph.json'),

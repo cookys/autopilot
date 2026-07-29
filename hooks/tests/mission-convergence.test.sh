@@ -121,8 +121,137 @@ function claimEvent(state, opts) {
   };
 }
 
+function graphClaimEvent(state, opts = {}) {
+  const node = state.execution_graph.nodes[0];
+  const event = claimEvent(state, {
+    idempotency_key: opts.idempotency_key,
+    campaign_id: opts.campaign_id || 'graph-campaign',
+    reserved: opts.reserved || 3,
+  });
+  event.payload.base_sha = opts.base_sha
+    || '1111111111111111111111111111111111111111';
+  event.payload.graph_node_id = node.id;
+  event.payload.graph_attempt = opts.graph_attempt || 1;
+  event.payload.campaign_contract_draft = {
+    mission_runtime: {
+      schema_version: 1,
+      root_run_id: state.root_run_id,
+      mission_lineage_id: state.mission_lineage_id,
+      mission_policy_digest: state.mission_policy_digest,
+      mission_graph_digest: state.mission_graph_digest,
+      graph_node_id: node.id,
+      graph_node_digest: m.sha256(m.canonicalJson(node)),
+    },
+    strict_dispatch: {
+      schema_version: 1,
+      spec: node.campaign.spec,
+      required_paths: node.campaign.required_paths,
+      output_paths: node.campaign.output_paths,
+      allowed_path_prefixes: node.campaign.allowed_path_prefixes,
+      budget: {
+        max_changed_files: node.campaign.max_changed_files,
+        max_wall_seconds: node.campaign.max_wall_seconds,
+        max_output_bytes: node.reservation.output_bytes,
+        max_tool_calls: node.reservation.tool_calls,
+        max_engine_attempts: node.reservation.engine_attempts,
+      },
+      verification_commands: node.verification_commands,
+    },
+  };
+  return event;
+}
+
 if (createMissionState && reduceMissionState && stateHash) {
   // Generic state machine negatives.
+  {
+    // A graph budget limits genuinely new claims, not at-least-once delivery
+    // of the already-live claim. Exact replay resumes the same claim even
+    // when gate_attempt_budget=1; changed assertions remain fail-closed.
+    const graphNode = {
+      id: 'budget-one',
+      dependencies: [],
+      acceptance_ids: ['acc-1'],
+      verification_commands: ['node fixture.js'],
+      gate_attempt_budget: 1,
+      reservation: {
+        campaigns: 1,
+        wall_seconds: 10,
+        tool_calls: 3,
+        engine_attempts: 1,
+        external_wait_seconds: 0,
+        canonical_changed_files: 1,
+        output_bytes: 128,
+      },
+      campaign: {
+        spec: { path: 'src/value.js', section: 'Budget one' },
+        required_paths: ['src/value.js'],
+        output_paths: ['src/value.js'],
+        allowed_path_prefixes: ['src/'],
+        max_changed_files: 1,
+        max_wall_seconds: 10,
+      },
+    };
+    const executionGraph = {
+      schema_version: 1,
+      artifact_type: 'mission_execution_graph',
+      nodes: [graphNode],
+    };
+    const graphContract = {
+      ...makeContract(),
+      enforcement_mode: 'enforce',
+      mission_policy_digest: m.sha256('mission-policy'),
+      mission_graph_digest: m.sha256(m.canonicalJson(executionGraph)),
+      execution_graph: executionGraph,
+    };
+    const s0 = createMissionState(graphContract);
+    const first = reduceMissionState(
+      s0,
+      graphClaimEvent(s0, { idempotency_key: 'graph-replay' }),
+    );
+    const replay = reduceMissionState(
+      first.state,
+      graphClaimEvent(first.state, { idempotency_key: 'graph-replay' }),
+    );
+    console.log(`graph-budget-one-live-replay-resumes\t${
+      replay.receipt.artifact_type === 'mission_campaign_grant_claimed'
+      && replay.receipt.event_type === 'grant_resumed'
+      && replay.receipt.claim_id === first.receipt.claim_id
+        ? 'PASS' : 'FAIL'}`);
+    console.log(`graph-budget-one-live-replay-no-double-reserve\t${
+      replay.state.axes.tool_calls.reserved_active
+        === first.state.axes.tool_calls.reserved_active ? 'PASS' : 'FAIL'}`);
+
+    const changedBinding = reduceMissionState(
+      first.state,
+      graphClaimEvent(first.state, {
+        idempotency_key: 'graph-replay',
+        base_sha: '2222222222222222222222222222222222222222',
+      }),
+    );
+    console.log(`graph-budget-one-changed-binding-rejects\t${
+      changedBinding.receipt.artifact_type === 'mission_grant_rejected'
+      && changedBinding.receipt.reason === 'binding_mismatch' ? 'PASS' : 'FAIL'}`);
+
+    const changedReservation = reduceMissionState(
+      first.state,
+      graphClaimEvent(first.state, {
+        idempotency_key: 'graph-replay',
+        reserved: 4,
+      }),
+    );
+    console.log(`graph-budget-one-changed-reservation-rejects\t${
+      changedReservation.receipt.artifact_type === 'mission_grant_rejected'
+      && changedReservation.receipt.reason === 'binding_mismatch' ? 'PASS' : 'FAIL'}`);
+
+    const differentIdempotency = reduceMissionState(
+      first.state,
+      graphClaimEvent(first.state, { idempotency_key: 'graph-replay-other' }),
+    );
+    console.log(`graph-budget-one-different-idempotency-rejects\t${
+      differentIdempotency.receipt.artifact_type === 'mission_grant_rejected'
+      && differentIdempotency.receipt.reason === 'grant_already_claimed'
+        ? 'PASS' : 'FAIL'}`);
+  }
   {
     // Replay idempotency: a re-submitted claim with the same idempotency_key
     // returns the same claim_id and does not double-reserve the budget.
@@ -2012,6 +2141,11 @@ do
 done
 
 for id in \
+  graph-budget-one-live-replay-resumes \
+  graph-budget-one-live-replay-no-double-reserve \
+  graph-budget-one-changed-binding-rejects \
+  graph-budget-one-changed-reservation-rejects \
+  graph-budget-one-different-idempotency-rejects \
   replay-same-claim-id-direct replay-no-double-reserve-direct \
   double-release-rejected-direct \
   binding-mismatch-direct projection-roundtrip-hash-equal \

@@ -58,7 +58,9 @@
         "candidate_tree_sha",
         "verification_receipt_digest",
         "repair_generations",
+        "sealed_min_panel_size",
         "final_panel_count",
+        "final_panel_seat_receipts",
         "follow_up",
         "rejected_findings",
         "unresolved_final_findings",
@@ -73,7 +75,12 @@
         "candidate_tree_sha": { "$ref": "#/$defs/gitObject" },
         "verification_receipt_digest": { "$ref": "#/$defs/sha256" },
         "repair_generations": { "type": "integer", "minimum": 0 },
-        "final_panel_count": { "type": "integer", "const": 1 },
+        "sealed_min_panel_size": { "type": "integer", "minimum": 1 },
+        "final_panel_count": { "type": "integer", "minimum": 0 },
+        "final_panel_seat_receipts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/finalPanelSeat" }
+        },
         "follow_up": {
           "type": "array",
           "items": { "$ref": "#/$defs/adjudicatedFinding" }
@@ -115,6 +122,32 @@
     "gitObject": {
       "type": "string",
       "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "finalPanelSeat": {
+      "type": "object",
+      "required": [
+        "schema_version", "artifact_type", "seat_index", "runner", "model", "effort",
+        "endpoint", "family", "status", "verdict", "review_digest", "reason", "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "implementation_campaign_final_panel_seat" },
+        "seat_index": { "type": "integer", "minimum": 1 },
+        "runner": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "effort": { "type": "string", "minLength": 1 },
+        "endpoint": { "type": ["string", "null"] },
+        "family": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["reviewed", "no_verdict", "transport_failed", "parser_failed", "precondition_failed"]
+        },
+        "verdict": { "type": ["string", "null"] },
+        "review_digest": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "reason": { "type": ["string", "null"] },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
     },
     "evidence": {
       "type": "object",

@@ -2,7 +2,7 @@
 . "$(dirname "$0")/lib.sh"
 
 CHECKER="$REPO_ROOT/scripts/check-plan-authority-ownership.js"
-MANIFEST="$REPO_ROOT/docs/projects/2026-07-26-mission-convergence-portfolio/authority-ownership.json"
+MANIFEST="$REPO_ROOT/docs/projects/_archive/2026-07-26-mission-convergence-portfolio/authority-ownership.json"
 
 OUT="$(node "$CHECKER" "$MANIFEST" 2>&1)"
 EXIT=$?

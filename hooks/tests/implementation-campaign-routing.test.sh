@@ -19,7 +19,22 @@ const {
   projectCampaignStatus,
   runCampaignComposition,
 } = require(path.join(root, 'src', 'engine'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
 const D = 'a'.repeat(64);
+function finalPanelReceipt() {
+  const seat = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: '7'.repeat(64), reason: null,
+  };
+  seat.receipt_digest = canonicalDigest(seat);
+  return {
+    reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: '7'.repeat(64),
+    sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [seat],
+  };
+}
 const transport = createRunnerTransportEnvelope({
   runner: 'fixture',
   model: 'fixture-model',
@@ -233,6 +248,7 @@ const candidate = {
 };
 const composition = runCampaignComposition({
   maxRepairGenerations: 1,
+  minPanelSize: 1,
   resume: {
     phase: 'VERTICAL_VERIFICATION',
     repair_generation: 0,
@@ -261,12 +277,7 @@ const composition = runCampaignComposition({
     rejected: [],
   }),
   convergence: () => ({ passed: true }),
-  finalPanel: () => ({
-    reviewed: true,
-    verdict: 'SHIP-AS-IS',
-    findings: '[]',
-    review_digest: '7'.repeat(64),
-  }),
+  finalPanel: () => finalPanelReceipt(),
 });
 assert.strictEqual(composition.status, 'ready');
 assert.strictEqual(implementationCalls, 0);
@@ -567,6 +578,66 @@ CAMPAIGN_ID="$(printf '%s\n' "$FIRST_OUT" | sed -n 's/^campaign_id=//p')"
 assert_neq "$CAMPAIGN_ID" "" "first campaign process emits durable campaign identity"
 REVIEW_DIGEST="$(printf '%s\n' "$FIRST_OUT" | sed -n 's/^review_digest=//p')"
 assert_neq "$REVIEW_DIGEST" "" "first campaign process emits its bound review digest"
+
+# Managed resume is the only terminal replay path. It must reject any mismatch
+# between the durable candidate and current immutable Git truth before adopting
+# the candidate or dispatching another implementation.
+resume_intake_probe() {
+  node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" "$BASE_SHA" <<'NODE'
+'use strict';
+const path = require('path');
+const [root, repo, contractPath, sealPath, promptFile, base] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const result = runCampaignIntake({
+  repo,
+  contractPath,
+  sealPath,
+  promptFile,
+  branch: 'impl/p3-resume',
+  base,
+  roster: { implementer_engine: 'fixture-implementer' },
+  observedAt: '2026-07-27T00:00:02.400Z',
+  resume: true,
+}, {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+});
+console.log(`status=${result.status}`);
+console.log(`code=${result.rejection ? result.rejection.code : 'none'}`);
+NODE
+}
+
+git -C "$SBX" update-ref refs/heads/impl/p3-resume "$BASE_SHA"
+BRANCH_DRIFT_OUT="$(resume_intake_probe)"
+assert_contains "$BRANCH_DRIFT_OUT" "status=blocked" \
+  "managed resume rejects branch-tip drift"
+assert_contains "$BRANCH_DRIFT_OUT" "code=campaign_resume_git_drift" \
+  "branch-tip drift fails at exact Git-truth reconciliation"
+git -C "$SBX" update-ref refs/heads/impl/p3-resume "$CANDIDATE_SHA"
+
+BASE_TREE="$(git -C "$SBX" rev-parse "$BASE_SHA^{tree}")"
+TREE_REPLACEMENT="$(printf 'tree drift replacement\n' \
+  | git -C "$SBX" commit-tree "$BASE_TREE" -p "$BASE_SHA")"
+git -C "$SBX" replace "$CANDIDATE_SHA" "$TREE_REPLACEMENT"
+TREE_DRIFT_OUT="$(resume_intake_probe)"
+assert_contains "$TREE_DRIFT_OUT" "status=blocked" \
+  "managed resume rejects candidate-tree drift"
+assert_contains "$TREE_DRIFT_OUT" "code=campaign_resume_git_drift" \
+  "tree drift fails at exact Git-truth reconciliation"
+git -C "$SBX" replace -d "$CANDIDATE_SHA" >/dev/null
+
+OFF_BASE="$(printf 'off-base root\n' | git -C "$SBX" commit-tree "$BASE_TREE")"
+BASE_DRIFT_REPLACEMENT="$(printf 'base ancestry drift replacement\n' \
+  | git -C "$SBX" commit-tree "$CANDIDATE_TREE" -p "$OFF_BASE")"
+git -C "$SBX" replace "$CANDIDATE_SHA" "$BASE_DRIFT_REPLACEMENT"
+BASE_DRIFT_OUT="$(resume_intake_probe)"
+assert_contains "$BASE_DRIFT_OUT" "status=blocked" \
+  "managed resume rejects base-ancestry drift"
+assert_contains "$BASE_DRIFT_OUT" "code=campaign_resume_git_drift" \
+  "base ancestry drift fails at exact Git-truth reconciliation"
+git -C "$SBX" replace -d "$CANDIDATE_SHA" >/dev/null
+
 PRE_RESUME_OUT="$(node - "$REPO_ROOT" "$SBX" "$CAMPAIGN_ID" <<'NODE'
 const path = require('path');
 const [root, repo, campaignId] = process.argv.slice(2);
@@ -611,13 +682,28 @@ const roster = {
   reviewer_effort: 'high',
   reviewer_runner: 'fixture',
   reviewer_qualified: true,
-  implementer_engine: 'fixture-implementer',
+  implementer_engine: 'gpt-5.6',
   implementer_effort: 'high',
   implementer_runner: 'fixture',
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 3,
+  required_review_families: 2,
+  cross_family_required: true,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [
+    { role: 'qc', runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', endpoint: null, family: 'openai' },
+    { role: 'qc', runner: 'fixture-b', model: 'claude-opus', effort: 'high', endpoint: null, family: 'anthropic' },
+    { role: 'qc', runner: 'fixture-c', model: 'grok-4.5', effort: 'high', endpoint: null, family: 'xai' },
+  ],
+  fallback_ladder: [
+    { runner: 'fixture-a', model: 'gpt-5.5', effort: 'high', family: 'openai' },
+    { runner: 'fixture-b', model: 'claude-opus', effort: 'high', family: 'anthropic' },
+    { runner: 'fixture-c', model: 'grok-4.5', effort: 'high', family: 'xai' },
+  ],
 };
 let implementationCalls = 0;
+let reviewCalls = 0;
 const findings = JSON.stringify([{
   finding_id: 'icc-p3-note',
   claim: 'fixture note is outside the frozen acceptance',
@@ -633,12 +719,13 @@ const focusedDigest = canonicalDigest({
 if (focusedDigest !== durableReviewDigest) {
   throw new Error('fixture focused review digest drifted across processes');
 }
-const finalDigest = canonicalDigest({
+const finalSeatDigest = canonicalDigest({
   verdict: 'SHIP-AS-IS',
   findings,
   scope: 'final',
   tree_sha: tree,
 });
+const finalDigest = canonicalDigest([finalSeatDigest, finalSeatDigest, finalSeatDigest]);
 const decision = {
   finding_id: 'icc-p3-note',
   evidence: {
@@ -681,6 +768,7 @@ const engine = new AutopilotEngine({
     throw new Error('resume must not repeat implementation');
   },
   reviewDispatcher() {
+    reviewCalls += 1;
     return {
       error: null,
       status: 0,
@@ -754,6 +842,7 @@ const result = engine.runImplementationReviewLoop({
 console.log(`resume_status=${result.status}`);
 console.log(`resume_phase=${result.phase}`);
 console.log(`implementation_calls=${implementationCalls}`);
+console.log(`review_calls=${reviewCalls}`);
 console.log(`durable_phase=${result.campaign_control.initial_state
   ? result.campaign_control.initial_state.phase
   : 'missing'}`);
@@ -768,6 +857,8 @@ assert_contains "$RESUME_OUT" "resume_status=converged" \
   "resumed campaign converges from the committed checkpoint"
 assert_contains "$RESUME_OUT" "implementation_calls=0" \
   "resumed campaign does not repeat implementation"
+assert_contains "$RESUME_OUT" "review_calls=4" \
+  "focused review stays single-seat while terminal QC fans out to all three sealed seats"
 assert_contains "$RESUME_OUT" "durable_phase=TERMINAL_READY" \
   "resumed campaign journals its terminal reducer state"
 assert_contains "$RESUME_OUT" "completion=completed" \

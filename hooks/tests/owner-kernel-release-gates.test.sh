@@ -1173,19 +1173,25 @@ NODE
 assert_eq "0" "$?" "symlinked project root cannot externalize co-located trust material"
 rm -rf "$SYM_REAL" "$SYM_HOME" "$(dirname "$SYM_LINK")"
 
-# Symlinked --repo-root containing purported external material HOLDs.
+# symlink-boundary-oracle: deployment binding is outside the realpath repo
+# boundary, but its pinned adapter_module resolves inside the real repo target
+# (via symlinked --repo-root). Must hit the exact adapter containment HOLD:
+#   trusted witness adapter module must not resolve inside the repo trust boundary
 SYM_REPO_REAL="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-repo-real.XXXXXX")"
 SYM_REPO_LINK="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-repo-link-parent.XXXXXX")/repo-link"
 SYM_REPO_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-repo-proj.XXXXXX")"
 SYM_REPO_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-repo-home.XXXXXX")"
-mkdir -p "$SYM_REPO_PROJ/production-telemetry" "$SYM_REPO_REAL/trust"
-# Minimal repo contents for checker require graph + trust material inside repo realpath.
+# Outside the repo realpath: authority journal + deployment binding only.
+SYM_OUTSIDE="$(mktemp -d "${TMPDIR:-/tmp}/rg-sym-outside.XXXXXX")"
+mkdir -p "$SYM_REPO_PROJ/production-telemetry" "$SYM_REPO_REAL/trust" "$SYM_OUTSIDE"
+# Minimal checker runtime under the real repo target (not required for this path
+# once adapter containment fails, but keeps --repo-root a plausible tree).
 cp "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" "$SYM_REPO_REAL/check.js"
 mkdir -p "$SYM_REPO_REAL/src/engine/owner-kernel"
 cp "$REPO_ROOT/src/engine/owner-kernel/canonical.js" "$SYM_REPO_REAL/src/engine/owner-kernel/"
 cp "$REPO_ROOT/src/engine/owner-kernel/witness.js" "$SYM_REPO_REAL/src/engine/owner-kernel/"
 cp "$REPO_ROOT/src/engine/owner-kernel/errors.js" "$SYM_REPO_REAL/src/engine/owner-kernel/"
-node - "$REPO_ROOT" "$SYM_REPO_REAL" "$SYM_REPO_PROJ" <<'NODE'
+node - "$REPO_ROOT" "$SYM_REPO_REAL" "$SYM_REPO_PROJ" "$SYM_OUTSIDE" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -1193,6 +1199,7 @@ const crypto = require('crypto');
 const root = process.argv[2];
 const repoReal = process.argv[3];
 const proj = process.argv[4];
+const outside = process.argv[5];
 const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
 const body = {
   observed_false_acceptances: 0, observed_missed_red_line_escalations: 0,
@@ -1200,8 +1207,12 @@ const body = {
 };
 const bodyHash = sha256(canonicalJson(body));
 const streamId = 'sym-repo-stream';
-const base = { run_id: 'r', stream_id: streamId, sequence: 1, event_hash: bodyHash, previous_witness_head: null };
+const base = {
+  run_id: 'r', stream_id: streamId, sequence: 1,
+  event_hash: bodyHash, previous_witness_head: null,
+};
 const receipt = { ...base, witness_head: sha256(canonicalJson(base)) };
+// Adapter module lives INSIDE the realpath repo target.
 const adapterPath = path.join(repoReal, 'trust', 'adapter.js');
 fs.writeFileSync(adapterPath, `'use strict';
 function createAuthority({ streamId, receipts }) {
@@ -1217,24 +1228,35 @@ function createAuthority({ streamId, receipts }) {
 module.exports = { createAuthority };
 `);
 const pin = crypto.createHash('sha256').update(fs.readFileSync(adapterPath)).digest('hex');
-const authPath = path.join(repoReal, 'trust', 'authority.json');
+// Authority journal OUTSIDE repo/project so it is eligible to load.
+const authPath = path.join(outside, 'authority.json');
 fs.writeFileSync(authPath, JSON.stringify({
-  kind: 'trusted_installed_witness_authority', authority_id: 'sym-repo-1',
-  stream_id: streamId, receipts: [receipt],
+  kind: 'trusted_installed_witness_authority',
+  authority_id: 'sym-repo-1',
+  stream_id: streamId,
+  receipts: [receipt],
 }, null, 2));
-const bindPath = path.join(repoReal, 'trust', 'binding.json');
+// Deployment binding OUTSIDE repo/project, but pins the in-repo adapter module.
+const bindPath = path.join(outside, 'binding.json');
 fs.writeFileSync(bindPath, JSON.stringify({
-  kind: 'trusted_installed_witness_adapter_binding', authority_id: 'sym-repo-1',
-  adapter_module: adapterPath, adapter_sha256: pin,
+  kind: 'trusted_installed_witness_adapter_binding',
+  authority_id: 'sym-repo-1',
+  adapter_module: adapterPath,
+  adapter_sha256: pin,
 }, null, 2));
 fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
-  ...body, production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
+  ...body,
+  production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
 }, null, 2));
-fs.writeFileSync(path.join(repoReal, 'paths.json'), JSON.stringify({ auth: authPath, bind: bindPath }));
+fs.writeFileSync(path.join(outside, 'paths.json'), JSON.stringify({
+  auth: authPath,
+  bind: bindPath,
+  adapter: adapterPath,
+}));
 NODE
 ln -sfn "$SYM_REPO_REAL" "$SYM_REPO_LINK"
-SYM_REPO_AUTH="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).auth)' "$SYM_REPO_REAL/paths.json")"
-SYM_REPO_BIND="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).bind)' "$SYM_REPO_REAL/paths.json")"
+SYM_REPO_AUTH="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).auth)' "$SYM_OUTSIDE/paths.json")"
+SYM_REPO_BIND="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).bind)' "$SYM_OUTSIDE/paths.json")"
 SYM_REPO_OUT="$(
   HOME="$SYM_REPO_HOME" \
   AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$SYM_REPO_AUTH" \
@@ -1244,15 +1266,19 @@ SYM_REPO_OUT="$(
 )"
 node - "$SYM_REPO_OUT" <<'NODE'
 const report = JSON.parse(process.argv[2]);
-// When --repo-root is a symlink into a tree holding the trust material, realpath
-// containment must reject that material (cannot appear external via symlink spelling).
-// Strength matches the symlinked-project-root oracle: require explicit HOLD + reason.
+// Exact checker rejection for binding outside / adapter inside realpath repo:
+const exactReason =
+  'trusted witness adapter module must not resolve inside the repo trust boundary';
+if (!report || typeof report !== 'object') {
+  console.error('symlinked repo-root oracle requires parseable report JSON');
+  process.exit(1);
+}
 if (!report.kr8) {
   console.error('symlinked repo-root oracle requires report.kr8; missing kr8');
   process.exit(1);
 }
 if (report.kr8.status !== 'HOLD') {
-  console.error('symlinked repo-root co-located trust material must HOLD KR8; got',
+  console.error('symlinked repo-root in-repo adapter must HOLD KR8; got',
     report.kr8.status, report.kr8.blocking_reasons);
   process.exit(1);
 }
@@ -1260,15 +1286,28 @@ if (report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry'
   console.error('symlinked repo-root must not authenticate production_telemetry');
   process.exit(1);
 }
-const reasons = (report.kr8.blocking_reasons || []).join('\n');
-if (!/boundary|realpath|repo|co-locat|inside|independently|adapter|authority|project/i.test(reasons)) {
-  console.error('symlink repo-root HOLD must cite boundary/authority reason; got', reasons);
+// Exact reason is attached to the failed trusted-authority load (surfaced on
+// alias_retirement / top-level blocking_reasons with that literal substring).
+// Do not accept generic repo|project|adapter|authority regex matches.
+const surfaces = [
+  ...(Array.isArray(report.blocking_reasons) ? report.blocking_reasons : []),
+  ...(report.alias_retirement && Array.isArray(report.alias_retirement.blocking_reasons)
+    ? report.alias_retirement.blocking_reasons
+    : []),
+].join('\n');
+if (!surfaces.includes(exactReason)) {
+  console.error(
+    'symlinked repo-root must include exact adapter containment reason:\n',
+    exactReason,
+    '\ngot blocking surfaces:\n',
+    surfaces,
+  );
   process.exit(1);
 }
 console.log('rg-symlinked-repo-root-boundary-hold=ok');
 NODE
-assert_eq "0" "$?" "symlinked repo-root cannot externalize co-located trust material"
-rm -rf "$SYM_REPO_REAL" "$SYM_REPO_PROJ" "$SYM_REPO_HOME" "$(dirname "$SYM_REPO_LINK")"
+assert_eq "0" "$?" "symlinked repo-root rejects in-repo adapter via exact containment reason"
+rm -rf "$SYM_REPO_REAL" "$SYM_REPO_PROJ" "$SYM_REPO_HOME" "$SYM_OUTSIDE" "$(dirname "$SYM_REPO_LINK")"
 
 
 

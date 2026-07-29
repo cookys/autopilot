@@ -615,6 +615,165 @@ NODE
 assert_eq "0" "$?" "fourteen-created-today/pass-through timestamp rejection"
 rm -rf "$TODAY_DIR" "$AUTH_OUTSIDE"
 
+# timestamp-direct-pass-through: adapter returns argument.append_timestamp directly
+# (caller-controlled receipt field). Must HOLD and manufacture zero witnessed days.
+DIRECT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-direct-ts.XXXXXX")"
+DIRECT_AUTH_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alias-direct-auth.XXXXXX")"
+mkdir -p "$DIRECT_DIR/production-telemetry"
+DIRECT_META="$(node - "$REPO_ROOT" "$DIRECT_DIR" "$DIRECT_AUTH_DIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const dir = process.argv[3];
+const authDir = process.argv[4];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const streamId = 'alias-direct-ts';
+const runId = 'alias-direct-run';
+function headOf(base) { return sha256(canonicalJson(base)); }
+const cycleBody = { compatibility_cycle_id: 'alias-direct-cycle' };
+const cycleBase = {
+  run_id: runId, stream_id: streamId, sequence: 1,
+  event_hash: sha256(canonicalJson(cycleBody)), previous_witness_head: null,
+};
+const cycleHead = headOf(cycleBase);
+const cycleReceipt = { ...cycleBase, witness_head: cycleHead };
+const now = Date.now();
+const todayUtc = new Date(now).toISOString().slice(0, 10);
+const [year, month, dayNum] = todayUtc.split('-').map(Number);
+const requiredDays = [];
+for (let offset = 1; offset <= 14; offset += 1) {
+  requiredDays.push(new Date(Date.UTC(year, month - 1, dayNum - offset)).toISOString().slice(0, 10));
+}
+requiredDays.reverse();
+const journal = [cycleReceipt];
+const days = [];
+let previousHead = cycleHead;
+for (let i = 0; i < 14; i += 1) {
+  const day = requiredDays[i];
+  const historical = new Date(Date.UTC(year, month - 1, dayNum - (14 - i), 12)).toISOString();
+  const dayBody = {
+    day, translation_used_events: 0,
+    unresolved_translation_deltas: 0, prior_witness_head: previousHead,
+  };
+  const base = {
+    run_id: runId, stream_id: streamId, sequence: i + 2,
+    event_hash: sha256(canonicalJson(dayBody)), previous_witness_head: previousHead,
+  };
+  const h = headOf(base);
+  // Put free-choice time on the receipt the adapter will try to re-read.
+  const receipt = { ...base, witness_head: h, append_timestamp: historical };
+  journal.push(receipt);
+  days.push({
+    day, translation_used_events: 0, unresolved_translation_deltas: 0,
+    witness_head: h, witness_receipt: receipt,
+  });
+  previousHead = h;
+}
+const migrationBody = { complete: true, callers_migrated: ['l3', 'l4', 'l5', 'l6'] };
+const migrationHash = sha256(canonicalJson(migrationBody));
+const migBase = {
+  run_id: runId, stream_id: streamId, sequence: 16,
+  event_hash: migrationHash, previous_witness_head: previousHead,
+};
+const migHead = headOf(migBase);
+const migrationReceipt = { ...migBase, witness_head: migHead };
+journal.push(migrationReceipt);
+const adapterPath = path.join(authDir, 'adapter.js');
+// Adapter directly returns argument.append_timestamp — must not manufacture days
+// because evaluateAliasRetirement sanitizes the receipt before lookup.
+fs.writeFileSync(adapterPath, `'use strict';
+const crypto = require('crypto');
+function sha256(s) { return crypto.createHash('sha256').update(s).digest('hex'); }
+function canonicalJson(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(canonicalJson).join(',') + ']';
+  return '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}';
+}
+function createAuthority({ streamId, receipts }) {
+  const known = new Map();
+  for (const entry of receipts || []) known.set(String(entry.witness_head).toLowerCase(), entry);
+  return {
+    streamId, trustTier: 'external',
+    identity: 'external-adapter:' + streamId,
+    attestation_hash: sha256('external-adapter:' + streamId),
+    protocol_version: 1,
+    getAppendTimestamp(r) {
+      return r && typeof r.append_timestamp === 'string' ? r.append_timestamp : null;
+    },
+    append() { throw new Error('unused'); },
+    verify(receipt) {
+      if (!receipt || receipt.stream_id !== streamId) return false;
+      const head = String(receipt.witness_head).toLowerCase();
+      if (!known.has(head)) return false;
+      const expected = sha256(canonicalJson({
+        run_id: receipt.run_id, stream_id: receipt.stream_id, sequence: receipt.sequence,
+        event_hash: receipt.event_hash, previous_witness_head: receipt.previous_witness_head,
+      }));
+      return expected === receipt.witness_head;
+    },
+  };
+}
+module.exports = { createAuthority };
+`);
+const pin = crypto.createHash('sha256').update(fs.readFileSync(adapterPath)).digest('hex');
+const authPath = path.join(authDir, 'authority.json');
+fs.writeFileSync(authPath, JSON.stringify({
+  kind: 'trusted_installed_witness_authority', authority_id: 'alias-direct-1',
+  stream_id: streamId, receipts: journal,
+}, null, 2));
+const bindingPath = path.join(authDir, 'binding.json');
+fs.writeFileSync(bindingPath, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding', authority_id: 'alias-direct-1',
+  adapter_module: adapterPath, adapter_sha256: pin, anchored_append_timestamps: {},
+}, null, 2));
+fs.writeFileSync(path.join(dir, 'production-telemetry', 'alias-retirement.json'), JSON.stringify({
+  compatibility_cycle_id: 'alias-direct-cycle', shipped_compatibility_cycle: true,
+  compatibility_cycle_receipt_body: cycleBody, compatibility_cycle_ship_receipt: cycleReceipt,
+  witnessed_zero_use_days: 14, translation_used_events: 0, unresolved_translation_deltas: 0,
+  deterministic_caller_migration: true, caller_migration_complete: true,
+  caller_migration_scan_body: migrationBody, caller_migration_scan_hash: migrationHash,
+  caller_migration_witness_receipt: migrationReceipt, witnessed_day_records: days,
+}, null, 2));
+process.stdout.write(JSON.stringify({ auth: authPath, binding: bindingPath }));
+NODE
+)"
+DIRECT_AUTH="$(node -e 'const j=JSON.parse(process.argv[1]); process.stdout.write(j.auth)' "$DIRECT_META")"
+DIRECT_BIND="$(node -e 'const j=JSON.parse(process.argv[1]); process.stdout.write(j.binding)' "$DIRECT_META")"
+DIRECT_OUT="$(
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$DIRECT_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$DIRECT_BIND" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$DIRECT_DIR" --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$DIRECT_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+const alias = report.alias_retirement;
+if (!alias || alias.status !== 'HOLD') {
+  console.error('direct pass-through append_timestamp must HOLD; got', alias && alias.status);
+  process.exit(1);
+}
+if (alias.trusted_authority_present !== true) {
+  console.error('direct pass-through fixture must authenticate adapter; got', alias.blocking_reasons);
+  process.exit(1);
+}
+// Must not manufacture any validated witnessed day via argument pass-through.
+const reasons = (alias.blocking_reasons || []).join('\n');
+if (!/only 0 complete|append.?timestamp|timestamp|14|host-clock|anchored|required UTC/i.test(reasons)) {
+  console.error('must reject direct receipt timestamp pass-through; got:', reasons);
+  process.exit(1);
+}
+if (/only 14 complete witnessed/i.test(reasons)) {
+  console.error('must not accept all 14 days via pass-through');
+  process.exit(1);
+}
+console.log('alias_direct_append_timestamp_pass_through_hold=ok');
+NODE
+assert_eq "0" "$?" "direct getAppendTimestamp(receipt.append_timestamp) cannot forge days"
+rm -rf "$DIRECT_DIR" "$DIRECT_AUTH_DIR"
+
+
 # Finding 3 — Migration OR semantics: mechanical-only and authority-only
 # success shapes (overall disposition remains HOLD when other prerequisites
 # are absent). Untrusted telemetry completion flags are never required.
@@ -824,8 +983,8 @@ assert_contains "$CHECKER_SRC" 'getAppendTimestamp' \
   "day receipts require adapter-owned getAppendTimestamp"
 assert_contains "$CHECKER_SRC" 'AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING' \
   "adapter identity comes from deployment binding"
-assert_contains "$CHECKER_SRC" 'stripCallerAppendTimestamps' \
-  "caller journal timestamps are stripped"
+assert_contains "$CHECKER_SRC" 'sanitizeReceiptForTimestampLookup' \
+  "timestamp lookup sanitizes receipts"
 assert_contains "$CHECKER_SRC" 'migrationScan.complete === true' \
   "migration OR includes mechanical scan complete"
 assert_contains "$CHECKER_SRC" 'migrationAuthorityAuthenticated === true' \

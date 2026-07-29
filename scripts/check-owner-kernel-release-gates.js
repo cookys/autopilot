@@ -346,11 +346,21 @@ function loadTrustedWitnessAdapterBinding(projectDir, repoRoot) {
         }
       }
     }
+    const bindingAuthorityId = data.authority_id;
+    if (typeof bindingAuthorityId !== 'string'
+      || !/^[A-Za-z0-9._:-]{1,128}$/.test(bindingAuthorityId)) {
+      return {
+        ok: false,
+        reason: 'trusted witness adapter binding is missing a non-empty bounded authority_id',
+        binding: null,
+        binding_path: resolved,
+      };
+    }
     return {
       ok: true,
       reason: null,
       binding: {
-        authority_id: typeof data.authority_id === 'string' ? data.authority_id : null,
+        authority_id: bindingAuthorityId,
         adapter_module: adapterReal,
         adapter_sha256: pin.toLowerCase(),
         anchored_append_timestamps: anchored,
@@ -369,14 +379,26 @@ function loadTrustedWitnessAdapterBinding(projectDir, repoRoot) {
 }
 
 function stripCallerAppendTimestamps(journal) {
-  return journal.map((entry) => {
-    if (!entry || typeof entry !== 'object') return entry;
-    const clone = { ...entry };
-    delete clone.append_timestamp;
-    delete clone.observation_timestamp;
-    delete clone.observed_at;
-    return clone;
-  });
+  return journal.map((entry) => sanitizeReceiptForTimestampLookup(entry));
+}
+
+/**
+ * Remove free-choice time fields from a receipt before adapter timestamp lookup.
+ * Caller-controlled append_timestamp / observation fields must never be visible
+ * to getAppendTimestamp after verify.
+ */
+function sanitizeReceiptForTimestampLookup(receipt) {
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) return receipt;
+  const clone = { ...receipt };
+  delete clone.append_timestamp;
+  delete clone.observation_timestamp;
+  delete clone.observed_at;
+  delete clone.appended_at;
+  delete clone.witnessed_at;
+  delete clone.issued_at;
+  delete clone.timestamp;
+  delete clone.time;
+  return clone;
 }
 
 function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
@@ -476,13 +498,30 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
       config_path: configPath,
     };
   }
-  const authorityId = typeof config.authority_id === 'string' ? config.authority_id : null;
-  if (adapterBinding.binding.authority_id
-    && authorityId
-    && adapterBinding.binding.authority_id !== authorityId) {
+  const authorityId = config.authority_id;
+  if (typeof authorityId !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(authorityId)) {
     return {
       ok: false,
-      reason: 'authority_id in authority config does not match deployment adapter binding',
+      reason: 'installed authority config is missing a non-empty bounded authority_id',
+      authority: null,
+      stream_id: streamId,
+      config_path: configPath,
+    };
+  }
+  if (typeof adapterBinding.binding.authority_id !== 'string'
+    || !/^[A-Za-z0-9._:-]{1,128}$/.test(adapterBinding.binding.authority_id)) {
+    return {
+      ok: false,
+      reason: 'deployment adapter binding is missing a non-empty bounded authority_id',
+      authority: null,
+      stream_id: streamId,
+      config_path: configPath,
+    };
+  }
+  if (adapterBinding.binding.authority_id !== authorityId) {
+    return {
+      ok: false,
+      reason: 'authority_id in authority config does not exactly match deployment adapter binding',
       authority: null,
       stream_id: streamId,
       config_path: configPath,
@@ -510,7 +549,7 @@ function loadTrustedInstalledWitnessAuthority(projectDir, repoRoot) {
       anchored_append_timestamps: Object.fromEntries(
         adapterBinding.binding.anchored_append_timestamps.entries(),
       ),
-      authority_id: authorityId || adapterBinding.binding.authority_id,
+      authority_id: authorityId,
     });
     const authority = assertWitnessAdapter(witness, {
       allowTestWitness: false,
@@ -917,9 +956,16 @@ function discoverExecutedMembership(repoRoot) {
     if (engineModules.size === 0) {
       errors.push('engine bucket runtime graph produced zero members');
     } else {
-      bucketSources.engine_modules = dynamicUnresolved
-        ? 'runtime-require-cache(incomplete-dynamic)'
-        : 'runtime-require-cache';
+      // require.cache is eager-only observation; it cannot prove complete
+      // conditional/lazy dependencies. Always incomplete for membership_complete.
+      bucketSources.engine_modules = 'runtime-require-cache-eager-only(incomplete)';
+      errors.push(
+        'engine membership from require.cache is eager-only and cannot prove complete '
+        + 'conditional/lazy dependencies; membership_complete cannot be true',
+      );
+      if (dynamicUnresolved) {
+        // already recorded per-module dynamic errors
+      }
     }
     const installedEnginePath = path.join(
       engineRootDir,
@@ -941,35 +987,29 @@ function discoverExecutedMembership(repoRoot) {
     bucketSources.engine_modules = 'absent-engine-tree';
   }
 
-  // --- skills: directory inventory of skills/*/SKILL.md
+  // --- skills: only authoritative *execution* membership. Presence of
+  // skills/*/SKILL.md is not executed cardinality. Without a complete
+  // execution manifest, do not count skills and mark incomplete.
   const skillsDir = path.join(repoRoot, 'skills');
   if (fs.existsSync(skillsDir)) {
-    try {
-      for (const name of fs.readdirSync(skillsDir)) {
-        const skillMd = path.join(skillsDir, name, 'SKILL.md');
-        if (fs.existsSync(skillMd) && fs.statSync(path.join(skillsDir, name)).isDirectory()) {
-          skills.add(name);
-        }
-      }
-      bucketSources.skills = 'skills/*/SKILL.md inventory';
-    } catch (error) {
-      errors.push(`skills inventory failed: ${error.message}`);
-    }
+    errors.push(
+      'skills bucket lacks a complete authoritative execution membership manifest; '
+      + 'skills/*/SKILL.md inventory is not executed cardinality',
+    );
+    // Deliberately leave skills empty so unused skill files never inflate count.
+    bucketSources.skills = 'incomplete-no-execution-manifest';
   } else {
     bucketSources.skills = 'absent-skills-tree';
   }
 
-  // --- schemas: directory inventory of schemas/*.json
+  // --- schemas: only authoritative execution membership (not every *.json).
   const schemasDir = path.join(repoRoot, 'schemas');
   if (fs.existsSync(schemasDir)) {
-    try {
-      for (const name of fs.readdirSync(schemasDir)) {
-        if (name.endsWith('.json')) schemas.add(name);
-      }
-      bucketSources.schemas = 'schemas/*.json inventory';
-    } catch (error) {
-      errors.push(`schemas inventory failed: ${error.message}`);
-    }
+    errors.push(
+      'schemas bucket lacks a complete authoritative execution membership manifest; '
+      + 'schemas/*.json inventory is not executed cardinality',
+    );
+    bucketSources.schemas = 'incomplete-no-execution-manifest';
   } else {
     bucketSources.schemas = 'absent-schemas-tree';
   }
@@ -1017,7 +1057,7 @@ function discoverExecutedMembership(repoRoot) {
   }
   const complete = errors.length === 0
     && requiredBucketKeys.every((key) => Boolean(bucketSources[key]))
-    && !String(bucketSources.engine_modules || '').includes('incomplete');
+    && !Object.values(bucketSources).some((value) => /incomplete/i.test(String(value)));
 
   return {
     complete,
@@ -1041,19 +1081,20 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
   const nonexecuted = [];
 
   const discovered = discoverExecutedMembership(repoRoot);
+  // Discovery incompleteness is reported via membership_complete / evaluateKr10.
+  // Do not null measured totals for incompleteness alone — still count observed
+  // executed members, but never claim complete membership.
+  const discoveryIncompleteness = [];
   if (!discovered.complete) {
     for (const error of discovered.errors) {
-      measurementErrors.push(`KR10 complete membership cannot be established: ${error}`);
-    }
-    if (discovered.errors.length === 0) {
-      measurementErrors.push(
-        'KR10 complete membership cannot be established; HOLD without substitution',
+      discoveryIncompleteness.push(
+        `KR10 complete membership cannot be established: ${error}`,
       );
     }
-  } else {
-    // Propagate non-fatal discovery notes only when complete.
-    for (const error of discovered.errors) {
-      measurementErrors.push(error);
+    if (discovered.errors.length === 0) {
+      discoveryIncompleteness.push(
+        'KR10 complete membership cannot be established; HOLD without substitution',
+      );
     }
   }
 
@@ -1173,8 +1214,10 @@ function countExecutedLoadBearingSurfaces(repoRoot) {
     measurement_errors: measurementErrors,
     nonexecuted_members: nonexecuted,
     membership_complete: discovered.complete && measurementErrors.length === 0,
+    discovery_incompleteness: discoveryIncompleteness,
     bucket_sources: discovered.bucket_sources || {},
-    method: 'authoritative manifests/runtime graphs/inventory only (fixed seed/heuristics/literal-require-scan cannot set membership_complete); incomplete/dynamic/unresolved HOLD; thresholds frozen at 42 and 51; no KR redefinition',
+
+    method: 'authoritative execution membership only; skills/schemas tree inventory and require.cache eager graph cannot set membership_complete; incomplete/dynamic/lazy HOLD; thresholds frozen at 42 and 51; no KR redefinition',
     includes_installed_engine_module: includesInstalledEngine,
     catalog_membership: {
       skills: [...FROZEN_SURFACE_ENUMERATION.skills],
@@ -1472,13 +1515,11 @@ function evaluateKr10(surface) {
     for (const error of surface.measurement_errors) {
       blocking.push(`KR10 measurement failure: ${error}`);
     }
-    return {
-      id: 'KR10',
-      definition: KR10_DEFINITION,
-      measured_surface: surface,
-      status: 'HOLD',
-      blocking_reasons: blocking,
-    };
+  }
+  if (Array.isArray(surface.discovery_incompleteness)) {
+    for (const error of surface.discovery_incompleteness) {
+      blocking.push(error);
+    }
   }
   if (surface.membership_complete !== true) {
     blocking.push(
@@ -1493,6 +1534,13 @@ function evaluateKr10(surface) {
   const measured = surface.total;
   if (!Number.isFinite(measured)) {
     blocking.push('KR10 measured surface total is not finite; HOLD without substitution');
+    // Frozen definition remains in force even when membership is incomplete.
+    blocking.push(
+      `measured surface count is not strictly below baseline ${KR10_DEFINITION.baseline_surface_count}`,
+    );
+    blocking.push(
+      'KR10 remains the executed-module cardinality gate; definition is not revised after measurement',
+    );
   } else {
     if (!(measured < KR10_DEFINITION.baseline_surface_count)) {
       blocking.push(
@@ -1507,6 +1555,17 @@ function evaluateKr10(surface) {
     if (measured >= KR10_DEFINITION.baseline_surface_count) {
       blocking.push(
         'KR10 remains the executed-module cardinality gate; definition is not revised after measurement',
+      );
+    } else if (surface.membership_complete !== true) {
+      // Incomplete membership: still restate frozen definition even when partial
+      // measured total is below thresholds (must not redefine/waive KR10).
+      blocking.push(
+        'KR10 remains the executed-module cardinality gate; definition is not revised after measurement',
+      );
+      // Keep baseline wording present for incomplete HOLD reports.
+      blocking.push(
+        `measured surface count ${measured} is not strictly below baseline ${KR10_DEFINITION.baseline_surface_count} `
+        + 'without complete membership (incomplete membership cannot fund a KR10 PASS)',
       );
     }
   }
@@ -1733,13 +1792,14 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
           && day.witness_head.toLowerCase() !== dayReceipt.witness_head.toLowerCase()) {
           continue;
         }
-        // Adapter-owned anchored append timestamp only — never harvest from
-        // caller journal fields or accept pass-through of stripped input values.
-        // Must be returned by getAppendTimestamp for a receipt authority.verify accepts.
+        // Adapter-owned anchored append timestamp only. Always pass a
+        // timestamp-stripped copy so caller free-choice time fields cannot
+        // be read back by getAppendTimestamp after verify.
         if (typeof trustedAuthority.authority.getAppendTimestamp !== 'function') {
           continue;
         }
-        const appendTs = trustedAuthority.authority.getAppendTimestamp(dayReceipt);
+        const timestampReceipt = sanitizeReceiptForTimestampLookup(dayReceipt);
+        const appendTs = trustedAuthority.authority.getAppendTimestamp(timestampReceipt);
         if (typeof appendTs !== 'string'
           || !/Z$/.test(appendTs)
           || Number.isNaN(new Date(appendTs).getTime())) {

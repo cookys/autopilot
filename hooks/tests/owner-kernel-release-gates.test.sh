@@ -942,6 +942,155 @@ NODE
 assert_eq "0" "$?" "independently supplied pinned adapter binding authenticates production evidence"
 rm -rf "$OUTSIDE_AUTH_DIR" "$OUTSIDE_PROJ" "$OUTSIDE_HOME"
 
+# authority-id-optional-bypass: missing config or binding authority_id is HOLD.
+MISS_CFG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-miss-cfg-id.XXXXXX")"
+MISS_CFG_AUTH="$MISS_CFG_DIR/authority.json"
+MISS_CFG_ADAPTER="$MISS_CFG_DIR/adapter.js"
+MISS_CFG_BIND="$MISS_CFG_DIR/binding.json"
+MISS_CFG_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-miss-cfg-proj.XXXXXX")"
+MISS_CFG_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-miss-cfg-home.XXXXXX")"
+mkdir -p "$MISS_CFG_PROJ/production-telemetry"
+node - "$REPO_ROOT" "$MISS_CFG_AUTH" "$MISS_CFG_ADAPTER" "$MISS_CFG_BIND" "$MISS_CFG_PROJ" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const authOut = process.argv[3];
+const adapterOut = process.argv[4];
+const bindOut = process.argv[5];
+const proj = process.argv[6];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const body = {
+  observed_false_acceptances: 0, observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1, baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const streamId = 'miss-cfg-id';
+const base = { run_id: 'r', stream_id: streamId, sequence: 1, event_hash: bodyHash, previous_witness_head: null };
+const receipt = { ...base, witness_head: sha256(canonicalJson(base)) };
+fs.writeFileSync(adapterOut, `'use strict';
+function createAuthority({ streamId, receipts }) {
+  const known = new Map((receipts||[]).map((e)=>[String(e.witness_head).toLowerCase(), e]));
+  return {
+    streamId, trustTier: 'external', identity: 'x:'+streamId,
+    attestation_hash: 'a'.repeat(64), protocol_version: 1,
+    getAppendTimestamp() { return null; },
+    append() { throw new Error('n'); },
+    verify(r) { return r && known.has(String(r.witness_head).toLowerCase()); },
+  };
+}
+module.exports = { createAuthority };
+`);
+const pin = crypto.createHash('sha256').update(fs.readFileSync(adapterOut)).digest('hex');
+// Config missing authority_id
+fs.writeFileSync(authOut, JSON.stringify({
+  kind: 'trusted_installed_witness_authority', stream_id: streamId, receipts: [receipt],
+}, null, 2));
+fs.writeFileSync(bindOut, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding', authority_id: 'present-on-binding',
+  adapter_module: adapterOut, adapter_sha256: pin,
+}, null, 2));
+fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
+  ...body, production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
+}, null, 2));
+NODE
+MISS_CFG_OUT="$(
+  HOME="$MISS_CFG_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$MISS_CFG_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$MISS_CFG_BIND" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$MISS_CFG_PROJ" --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$MISS_CFG_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+if (report.kr8.status !== 'HOLD') process.exit(1);
+const reasons = (report.kr8.blocking_reasons||[]).join('\n');
+if (!/authority_id/i.test(reasons) && !/independently|provenance|adapter|binding/i.test(reasons)) {
+  console.error('missing config authority_id must HOLD; got', reasons);
+  process.exit(1);
+}
+if (report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') process.exit(1);
+console.log('rg-missing-config-authority-id-hold=ok');
+NODE
+assert_eq "0" "$?" "missing config authority_id HOLDs"
+rm -rf "$MISS_CFG_DIR" "$MISS_CFG_PROJ" "$MISS_CFG_HOME"
+
+MISS_BND_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rg-miss-bnd-id.XXXXXX")"
+MISS_BND_AUTH="$MISS_BND_DIR/authority.json"
+MISS_BND_ADAPTER="$MISS_BND_DIR/adapter.js"
+MISS_BND_BIND="$MISS_BND_DIR/binding.json"
+MISS_BND_PROJ="$(mktemp -d "${TMPDIR:-/tmp}/rg-miss-bnd-proj.XXXXXX")"
+MISS_BND_HOME="$(mktemp -d "${TMPDIR:-/tmp}/rg-miss-bnd-home.XXXXXX")"
+mkdir -p "$MISS_BND_PROJ/production-telemetry"
+node - "$REPO_ROOT" "$MISS_BND_AUTH" "$MISS_BND_ADAPTER" "$MISS_BND_BIND" "$MISS_BND_PROJ" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const root = process.argv[2];
+const authOut = process.argv[3];
+const adapterOut = process.argv[4];
+const bindOut = process.argv[5];
+const proj = process.argv[6];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+const body = {
+  observed_false_acceptances: 0, observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1, baseline_mandatory_review_dispatches: 6,
+};
+const bodyHash = sha256(canonicalJson(body));
+const streamId = 'miss-bnd-id';
+const base = { run_id: 'r', stream_id: streamId, sequence: 1, event_hash: bodyHash, previous_witness_head: null };
+const receipt = { ...base, witness_head: sha256(canonicalJson(base)) };
+fs.writeFileSync(adapterOut, `'use strict';
+function createAuthority({ streamId, receipts }) {
+  const known = new Map((receipts||[]).map((e)=>[String(e.witness_head).toLowerCase(), e]));
+  return {
+    streamId, trustTier: 'external', identity: 'x:'+streamId,
+    attestation_hash: 'a'.repeat(64), protocol_version: 1,
+    getAppendTimestamp() { return null; },
+    append() { throw new Error('n'); },
+    verify(r) { return r && known.has(String(r.witness_head).toLowerCase()); },
+  };
+}
+module.exports = { createAuthority };
+`);
+const pin = crypto.createHash('sha256').update(fs.readFileSync(adapterOut)).digest('hex');
+fs.writeFileSync(authOut, JSON.stringify({
+  kind: 'trusted_installed_witness_authority', authority_id: 'present-on-config',
+  stream_id: streamId, receipts: [receipt],
+}, null, 2));
+// Binding missing authority_id
+fs.writeFileSync(bindOut, JSON.stringify({
+  kind: 'trusted_installed_witness_adapter_binding',
+  adapter_module: adapterOut, adapter_sha256: pin,
+}, null, 2));
+fs.writeFileSync(path.join(proj, 'production-telemetry', 'kr8.json'), JSON.stringify({
+  ...body, production_provenance: { evidence_body_hash: bodyHash, witness_receipt: receipt },
+}, null, 2));
+NODE
+MISS_BND_OUT="$(
+  HOME="$MISS_BND_HOME" \
+  AUTOPILOT_TRUSTED_INSTALLED_WITNESS_AUTHORITY="$MISS_BND_AUTH" \
+  AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING="$MISS_BND_BIND" \
+  node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+    --project "$MISS_BND_PROJ" --repo-root "$REPO_ROOT" 2>&1
+)"
+node - "$MISS_BND_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+if (report.kr8.status !== 'HOLD') process.exit(1);
+const reasons = (report.kr8.blocking_reasons||[]).join('\n');
+if (!/authority_id/i.test(reasons) && !/binding|adapter|independently|provenance/i.test(reasons)) {
+  console.error('missing binding authority_id must HOLD; got', reasons);
+  process.exit(1);
+}
+if (report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') process.exit(1);
+console.log('rg-missing-binding-authority-id-hold=ok');
+NODE
+assert_eq "0" "$?" "missing binding authority_id HOLDs"
+rm -rf "$MISS_BND_DIR" "$MISS_BND_PROJ" "$MISS_BND_HOME"
+
+
 # kr10 mutation: added executed hook member is counted; dynamic require cannot claim complete.
 node - "$REPO_ROOT" <<'NODE'
 'use strict';
@@ -970,9 +1119,12 @@ if (base.kr10.definition.baseline_surface_count !== 42
   console.error('thresholds must stay 42/51');
   process.exit(1);
 }
-if (base.kr10.measured_surface.membership_complete === true
-  && !base.kr10.measured_surface.bucket_sources) {
-  console.error('complete membership must report bucket_sources');
+if (base.kr10.measured_surface.membership_complete === true) {
+  console.error('real repo must HOLD incomplete: no complete skills/schemas/engine execution manifests');
+  process.exit(1);
+}
+if (base.kr10.status !== 'HOLD') {
+  console.error('real repo KR10 must HOLD when membership incomplete; got', base.kr10.status);
   process.exit(1);
 }
 
@@ -1062,19 +1214,38 @@ if (!(afterHooks > beforeHooks)) {
   process.exit(1);
 }
 
-// Mutation B: introduce dynamic require in engine → membership_complete false.
+// Mutation B: unused skill/schema files must not increase executed cardinality.
+const skillsBefore = after.kr10.measured_surface.skills || 0;
+const schemasBefore = after.kr10.measured_surface.schemas || 0;
+fs.mkdirSync(path.join(tmp, 'skills', 'unused-skill-file'), { recursive: true });
+fs.writeFileSync(path.join(tmp, 'skills', 'unused-skill-file', 'SKILL.md'), '---\nname: unused\n---\n');
+fs.mkdirSync(path.join(tmp, 'schemas'), { recursive: true });
+fs.writeFileSync(path.join(tmp, 'schemas', 'unused-schema-file.json'), '{}\n');
+const afterUnused = runReport(tmp);
+if ((afterUnused.kr10.measured_surface.skills || 0) !== skillsBefore) {
+  console.error('unused skill must not increase executed skills cardinality',
+    skillsBefore, afterUnused.kr10.measured_surface.skills);
+  process.exit(1);
+}
+if ((afterUnused.kr10.measured_surface.schemas || 0) !== schemasBefore) {
+  console.error('unused schema must not increase executed schemas cardinality',
+    schemasBefore, afterUnused.kr10.measured_surface.schemas);
+  process.exit(1);
+}
+
+// Mutation C: conditional/lazy engine dependency cannot leave membership_complete true.
 const dynTarget = path.join(tmp, 'src', 'engine', 'supervised-owner-kernel-installed-engine.js');
 if (fs.existsSync(dynTarget)) {
   let body = fs.readFileSync(dynTarget, 'utf8');
-  body = 'const __dyn = "owner-kernel/canonical"; require(__dyn);\n' + body;
+  body = 'function __lazyLoad() { if (Math.random() > 1) require("./owner-kernel/canonical"); }\n' + body;
   fs.writeFileSync(dynTarget, body);
   const dyn = runReport(tmp);
   if (dyn.kr10.measured_surface.membership_complete === true) {
-    console.error('dynamic require must not claim membership_complete=true');
+    console.error('conditional/lazy require must not claim membership_complete=true');
     process.exit(1);
   }
   if (dyn.kr10.status !== 'HOLD') {
-    console.error('dynamic require incomplete membership must HOLD KR10');
+    console.error('conditional/lazy incomplete membership must HOLD KR10');
     process.exit(1);
   }
 }
@@ -1093,8 +1264,10 @@ assert_contains "$CHECKER_SRC" 'AUTOPILOT_TRUSTED_WITNESS_ADAPTER_BINDING' \
   "adapter identity comes from deployment binding env"
 assert_contains "$CHECKER_SRC" 'adapter_sha256' \
   "adapter integrity pin is required before require()"
-assert_contains "$CHECKER_SRC" 'stripCallerAppendTimestamps' \
-  "caller journal append_timestamp fields are stripped"
+assert_contains "$CHECKER_SRC" 'sanitizeReceiptForTimestampLookup' \
+  "timestamp lookup uses sanitized receipts"
+assert_contains "$CHECKER_SRC" 'missing a non-empty bounded authority_id' \
+  "authority_id required on config and binding"
 assert_contains "$CHECKER_SRC" 'membership_complete' \
   "KR10 reports membership_complete"
 

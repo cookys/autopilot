@@ -979,6 +979,34 @@ function reviewerQualificationViable(roster) {
     }) !== null;
 }
 
+// Terminal QC seats are independently selected tuples, not aliases for the
+// focused reviewer. A roster-level qualification bit therefore cannot certify
+// a different runner/model/effort. The incumbent remains compatible only when
+// the sealed seat is exactly that qualified tuple; every other terminal seat
+// needs an exact qualified scorecard-ladder row.
+function finalPanelSeatQualified(roster, seat) {
+  if (!roster || !seat) return false;
+  const endpoint = (value) => typeof value === 'string' && value.length > 0 ? value : null;
+  const incumbent = roster.reviewer_qualified === true
+    && roster.reviewer_runner === seat.runner
+    && roster.reviewer_engine === seat.model
+    && roster.reviewer_effort === seat.effort
+    && endpoint(roster.reviewer_endpoint) === endpoint(seat.endpoint);
+  if (incumbent) return true;
+  if (!Array.isArray(roster.fallback_ladder)) return false;
+  return roster.fallback_ladder.some((row) => {
+    if (!row || typeof row !== 'object') return false;
+    const rowModel = typeof row.model === 'string' && row.model.length > 0
+      ? row.model
+      : row.engine;
+    return row.runner === seat.runner
+      && rowModel === seat.model
+      && row.effort === seat.effort
+      && endpoint(row.endpoint) === endpoint(seat.endpoint)
+      && (typeof row.family !== 'string' || row.family === seat.family);
+  });
+}
+
 // Stable codes for managed-strict sealed root-identity precondition failures.
 // Zero-effect release after IMPLEMENTATION_STARTED is gated on these codes —
 // never on prepare shape or free-text reason alone.
@@ -2225,6 +2253,8 @@ class AutopilotEngine {
     // the returned roster self-documents the substitution (it still carries the
     // _low_risk source keys).
     if (
+      input.pinReviewerTuple !== true
+      &&
       reviewRisk === 'low'
       && roster
       && typeof roster.reviewer_engine_low_risk === 'string' && roster.reviewer_engine_low_risk.length > 0
@@ -2289,6 +2319,23 @@ class AutopilotEngine {
       implementerEngine,
       reviewerEngine: roster.reviewer_engine,
     })) {
+      if (input.pinReviewerTuple === true) {
+        const startedAt = this.now();
+        ledger.push(this.ledgerEntry('reviewer_family', 'blocked', startedAt));
+        return {
+          status: 'blocked',
+          phase: 'reviewer_family',
+          reason: 'pinned reviewer and implementer must be different families',
+          verdict: null,
+          roster,
+          resolveResult,
+          reviewResult: null,
+          review: null,
+          reviewArgs,
+          riskClassification,
+          ledger,
+        };
+      }
       // Family-conflict fallback (v2.32.25 design review: gpt-5.5 xhigh REVISE
       // applied): instead of unconditionally hard-blocking — which left the
       // DEFAULT openai×openai roster with a permanently dead in-loop review and
@@ -3159,7 +3206,14 @@ class AutopilotEngine {
       }
     }
 
-    const performReview = ({ candidate, scope, repair_generation: repairGeneration }) => {
+    const performReview = ({
+      candidate,
+      scope,
+      repair_generation: repairGeneration,
+      reviewRoster = roster,
+      reviewStage = null,
+      pinReviewerTuple = false,
+    }) => {
       let diffFile;
       try {
         diffFile = this.diffProvider({
@@ -3185,7 +3239,7 @@ class AutopilotEngine {
       const reviewed = this.reviewDiff({
         diffFile,
         specFile: promptFile,
-        roster,
+        roster: reviewRoster,
         rosterArgs: Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
           ? input.rosterArgs
           : ['--check-scorecard'],
@@ -3204,14 +3258,16 @@ class AutopilotEngine {
         implementerEngine: roster.implementer_engine,
         runId: campaignControl.campaign_id,
         ledger: campaignControl.generation_claim.ledger,
-        reviewStage: scope === 'final'
+        reviewStage: reviewStage || (scope === 'final'
           ? 'campaign-final-review'
-          : `campaign-review#r${repairGeneration + 1}`,
+          : `campaign-review#r${repairGeneration + 1}`
+        ),
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
         },
-        requireQualifiedReviewer,
+        requireQualifiedReviewer: scope === 'final' ? true : requireQualifiedReviewer,
+        pinReviewerTuple,
       });
       ledger.push(...reviewed.ledger);
       reviewChain.push(reviewed);
@@ -3285,12 +3341,126 @@ class AutopilotEngine {
       };
     };
 
+    const finalPanelSeatReceipt = (seat, seatIndex, outcome) => {
+      const isReviewed = outcome && outcome.reviewed === true;
+      let status = 'no_verdict';
+      if (!isReviewed && outcome && outcome.phase === 'product_review_normalization') {
+        status = 'parser_failed';
+      } else if (!isReviewed && outcome && outcome.raw && outcome.raw.reviewResult
+          && (outcome.raw.reviewResult.error || outcome.raw.reviewResult.signal
+            || outcome.raw.reviewResult.status !== 0)) {
+        status = 'transport_failed';
+      } else if (!isReviewed && outcome && outcome.phase === 'reviewer_qualification') {
+        status = 'precondition_failed';
+      }
+      const body = {
+        schema_version: 1,
+        artifact_type: 'implementation_campaign_final_panel_seat',
+        seat_index: seatIndex + 1,
+        runner: seat.runner,
+        model: seat.model,
+        effort: seat.effort,
+        endpoint: seat.endpoint === undefined ? null : seat.endpoint,
+        family: seat.family,
+        status: isReviewed ? 'reviewed' : status,
+        verdict: isReviewed ? outcome.verdict : null,
+        review_digest: isReviewed ? outcome.review_digest : null,
+        reason: isReviewed ? null : `final_panel_seat_${status}`,
+      };
+      return { ...body, receipt_digest: campaignCanonicalDigest(body) };
+    };
+
+    const performFinalPanel = (reviewInput) => {
+      const minPanelSize = roster.min_panel_size;
+      const seats = roster.qc_panel_seats_complete === true
+        && Array.isArray(roster.qc_panel_seats)
+        ? roster.qc_panel_seats
+        : null;
+      if (!Number.isSafeInteger(minPanelSize) || minPanelSize < 1 || !seats) {
+        return {
+          reviewed: false,
+          sealed_min_panel_size: minPanelSize,
+          final_panel_count: 0,
+          final_panel_seat_receipts: [],
+        };
+      }
+      const outcomes = seats.map((seat, index) => {
+        const reviewRoster = {
+          ...roster,
+          reviewer_runner: seat.runner,
+          reviewer_engine: seat.model,
+          reviewer_effort: seat.effort,
+          reviewer_endpoint: seat.endpoint || '',
+          reviewer_qualified: finalPanelSeatQualified(roster, seat),
+        };
+        const outcome = finalPanelSeatQualified(roster, seat)
+          ? performReview({
+            ...reviewInput,
+            scope: 'final',
+            reviewRoster,
+            reviewStage: `campaign-final-review#seat-${index + 1}`,
+            pinReviewerTuple: true,
+          })
+          : {
+            reviewed: false,
+            phase: 'reviewer_qualification',
+            reason: 'final panel seat is not an exact qualified reviewer tuple',
+          };
+        return { seat, outcome };
+      });
+      const seatReceipts = outcomes.map(({ seat, outcome }, index) =>
+        finalPanelSeatReceipt(seat, index, outcome));
+      const reviewedOutcomes = outcomes.filter(({ outcome }) => outcome.reviewed === true);
+      const mergedFindings = [];
+      const findingIds = new Map();
+      let findingsConsistent = true;
+      for (const { outcome } of reviewedOutcomes) {
+        let items;
+        try {
+          items = outcome.findings && outcome.findings.trim().length > 0
+            ? JSON.parse(outcome.findings)
+            : [];
+        } catch (_error) {
+          findingsConsistent = false;
+          break;
+        }
+        for (const item of items) {
+          const prior = findingIds.get(item.finding_id);
+          const digest = campaignCanonicalDigest(item);
+          if (prior && prior !== digest) {
+            findingsConsistent = false;
+            break;
+          }
+          if (!prior) {
+            findingIds.set(item.finding_id, digest);
+            mergedFindings.push(item);
+          }
+        }
+        if (!findingsConsistent) break;
+      }
+      const allReviewed = reviewedOutcomes.length === outcomes.length;
+      return {
+        reviewed: allReviewed && findingsConsistent,
+        verdict: allReviewed && findingsConsistent ? 'SHIP-AS-IS' : null,
+        findings: JSON.stringify(mergedFindings),
+        review_digest: allReviewed && findingsConsistent
+          ? (reviewedOutcomes.length === 1
+            ? reviewedOutcomes[0].outcome.review_digest
+            : campaignCanonicalDigest(seatReceipts.map((seat) => seat.review_digest)))
+          : null,
+        sealed_min_panel_size: minPanelSize,
+        final_panel_count: reviewedOutcomes.length,
+        final_panel_seat_receipts: seatReceipts,
+      };
+    };
+
     const maxRepairGenerations = Math.min(
       campaignControl.contract.max_repair_generations,
       Math.max(0, roster.loop_max_rounds - 1),
     );
     const composition = this.campaignComposer({
       maxRepairGenerations,
+      minPanelSize: roster.min_panel_size,
       lifecycleReceiptRef,
       resume: resumeCandidate && !resumeSetupError
         ? {
@@ -3835,7 +4005,7 @@ class AutopilotEngine {
           gate,
         };
       },
-      finalPanel: (reviewInput) => performReview({ ...reviewInput, scope: 'final' }),
+      finalPanel: (reviewInput) => performFinalPanel(reviewInput),
     });
 
     if (!new Set(['ready', 'follow_up']).has(composition.status)) {
@@ -5364,6 +5534,7 @@ module.exports = {
   implementationResultBlocked,
   reviewLoopResultBlocked,
   reviewResultBlocked,
+  finalPanelSeatQualified,
   validateExtraReviewArgs,
   validateExtraArgs,
   tempNameSegment,

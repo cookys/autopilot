@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { readJson, validateJsonSchema } = require('./validate-json-schema');
 const { validateCanonicalPortfolioOutput } = require('./review-mvp-portfolio');
+const { validateFinalPanelReceipt } = require('../src/engine/campaign-composition');
 
 const CAMPAIGN_RECEIPT_SCHEMA = readJson(
   path.join(__dirname, '..', 'schemas', 'implementation-campaign-receipt.schema.json'),
@@ -124,7 +125,9 @@ function fromCampaign(value, sourceFile) {
       'candidate_tree_sha',
       'verification_receipt_digest',
       'repair_generations',
+      'sealed_min_panel_size',
       'final_panel_count',
+      'final_panel_seat_receipts',
       'follow_up',
       'rejected_findings',
       'unresolved_final_findings',
@@ -135,6 +138,12 @@ function fromCampaign(value, sourceFile) {
     && value.schema_version === 1
     && value.artifact_type === 'implementation_campaign_terminal'
     && value.status === 'follow_up'
+    && validateFinalPanelReceipt({
+      reviewed: true,
+      sealed_min_panel_size: value.sealed_min_panel_size,
+      final_panel_count: value.final_panel_count,
+      final_panel_seat_receipts: value.final_panel_seat_receipts,
+    }, value.sealed_min_panel_size).passed === true
     && Array.isArray(value.unresolved_final_findings)
     && value.unresolved_final_findings.length === 0
     && /^[a-f0-9]{64}$/u.test(value.receipt_digest || '')

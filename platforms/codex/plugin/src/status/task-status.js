@@ -23,6 +23,9 @@ const {
   replayCampaignEvents,
   CampaignStateError,
 } = require('../engine/implementation-campaign');
+const {
+  validateFinalPanelReceipt,
+} = require('../engine/campaign-composition');
 
 const SCHEMA_VERSION = 1;
 const ARTIFACT_TYPE = 'task_status_receipt';
@@ -152,7 +155,9 @@ const TERMINAL_RECEIPT_KEYS = Object.freeze([
   'candidate_tree_sha',
   'verification_receipt_digest',
   'repair_generations',
+  'sealed_min_panel_size',
   'final_panel_count',
+  'final_panel_seat_receipts',
   'follow_up',
   'rejected_findings',
   'unresolved_final_findings',
@@ -515,7 +520,10 @@ function validateTerminalReceipt(terminalReceipt) {
       || !isSha256(terminalReceipt.verification_receipt_digest)
       || !Number.isSafeInteger(terminalReceipt.repair_generations)
       || terminalReceipt.repair_generations < 0
-      || terminalReceipt.final_panel_count !== 1
+      || !Number.isSafeInteger(terminalReceipt.sealed_min_panel_size)
+      || terminalReceipt.sealed_min_panel_size < 1
+      || !Number.isSafeInteger(terminalReceipt.final_panel_count)
+      || !Array.isArray(terminalReceipt.final_panel_seat_receipts)
       || !Array.isArray(terminalReceipt.follow_up)
       || !Array.isArray(terminalReceipt.rejected_findings)
       || !Array.isArray(terminalReceipt.unresolved_final_findings)
@@ -537,6 +545,15 @@ function validateTerminalReceipt(terminalReceipt) {
       || !Array.isArray(terminalReceipt.trace)
       || !terminalReceipt.trace.every((item) => typeof item === 'string' && item.length > 0)) {
     return { ok: false, reason: 'campaign_terminal_receipt_invalid' };
+  }
+  const finalPanel = validateFinalPanelReceipt({
+    reviewed: true,
+    sealed_min_panel_size: terminalReceipt.sealed_min_panel_size,
+    final_panel_count: terminalReceipt.final_panel_count,
+    final_panel_seat_receipts: terminalReceipt.final_panel_seat_receipts,
+  }, terminalReceipt.sealed_min_panel_size);
+  if (finalPanel.passed !== true) {
+    return { ok: false, reason: `campaign_${finalPanel.reason}` };
   }
   const findingShapeValid = (item, classification) => {
     const baseKeys = [

@@ -18,10 +18,26 @@ const {
   runCampaignComposition,
   verificationArgv,
 } = require(path.join(root, 'src', 'engine'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
 
 const TREE_A = 'a'.repeat(40);
 const TREE_B = 'b'.repeat(40);
 const COMMIT_A = 'c'.repeat(40);
+function finalPanelReceipt(overrides = {}) {
+  const seat = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+  };
+  seat.receipt_digest = canonicalDigest(seat);
+  return {
+    reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: 'e'.repeat(64),
+    sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [seat],
+    ...overrides,
+  };
+}
 const LEASE_IDENTITY = {
   pid: 424242,
   start_time: 1785099000,
@@ -627,6 +643,7 @@ const retainedRejected = retainedFinding({
 });
 const composition = runCampaignComposition({
   maxRepairGenerations: 2,
+  minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
   implement(input) {
@@ -691,7 +708,7 @@ const composition = runCampaignComposition({
   convergence: () => ({ passed: true }),
   finalPanel() {
     finalPanels += 1;
-    return { reviewed: true, review_id: 'final' };
+    return finalPanelReceipt();
   },
 });
 assert.strictEqual(composition.status, 'follow_up');
@@ -713,6 +730,7 @@ assert.strictEqual(composition.final_panel_count, 1);
 
 const dispositionConflict = runCampaignComposition({
   maxRepairGenerations: 1,
+  minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
   implement: () => ({ committed: true, tree_sha: TREE_A }),
@@ -745,7 +763,7 @@ const dispositionConflict = runCampaignComposition({
     };
   },
   convergence: () => ({ passed: true }),
-  finalPanel: () => ({ reviewed: true }),
+  finalPanel: () => finalPanelReceipt(),
 });
 assert.strictEqual(dispositionConflict.status, 'blocked');
 assert.strictEqual(dispositionConflict.phase, 'final_adjudication');
@@ -753,6 +771,7 @@ assert.match(dispositionConflict.reason, /conflicting cross-round dispositions/)
 
 const evidenceConflict = runCampaignComposition({
   maxRepairGenerations: 1,
+  minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
   implement: () => ({ committed: true, tree_sha: TREE_A }),
@@ -778,7 +797,7 @@ const evidenceConflict = runCampaignComposition({
     };
   },
   convergence: () => ({ passed: true }),
-  finalPanel: () => ({ reviewed: true }),
+  finalPanel: () => finalPanelReceipt(),
 });
 assert.strictEqual(evidenceConflict.status, 'blocked');
 assert.strictEqual(evidenceConflict.phase, 'final_adjudication');
@@ -786,6 +805,7 @@ assert.match(evidenceConflict.reason, /conflicting cross-round dispositions/);
 
 const missingRetentionEvidence = runCampaignComposition({
   maxRepairGenerations: 0,
+  minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
   implement: () => ({ committed: true, tree_sha: TREE_A }),
@@ -811,7 +831,7 @@ const missingRetentionEvidence = runCampaignComposition({
     rejected: [],
   }),
   convergence: () => ({ passed: true }),
-  finalPanel: () => ({ reviewed: true }),
+  finalPanel: () => finalPanelReceipt(),
 });
 assert.strictEqual(missingRetentionEvidence.status, 'blocked');
 assert.strictEqual(missingRetentionEvidence.phase, 'adjudication_conflict');
@@ -820,6 +840,7 @@ assert.match(missingRetentionEvidence.reason, /bound evidence/);
 let incompleteMutations = 0;
 const incomplete = runCampaignComposition({
   maxRepairGenerations: 2,
+  minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
   implement() {
@@ -844,6 +865,7 @@ let verticalMutations = 0;
 const verticalScopeCheckpoints = [];
 const vertical = runCampaignComposition({
   maxRepairGenerations: 1,
+  minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
   implement() {
@@ -875,7 +897,7 @@ const vertical = runCampaignComposition({
     rejected: [],
   }),
   convergence: () => ({ passed: true }),
-  finalPanel: () => ({ reviewed: true }),
+  finalPanel: () => finalPanelReceipt(),
 });
 assert.strictEqual(vertical.status, 'ready');
 assert.strictEqual(verticalMutations, 2);

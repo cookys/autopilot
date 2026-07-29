@@ -34,6 +34,24 @@ function redigest(body) {
   const { receipt_digest: ignored, ...material } = body;
   return { ...material, receipt_digest: icc.canonicalDigest(material) };
 }
+function finalPanelReceipt(review = {}) {
+  const seat = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: review.verdict || 'SHIP-AS-IS',
+    review_digest: review.review_digest || mission.sha256('final-panel-seat'), reason: null,
+  };
+  seat.receipt_digest = icc.canonicalDigest(seat);
+  return {
+    ...review,
+    reviewed: true,
+    sealed_min_panel_size: 1,
+    final_panel_count: 1,
+    final_panel_seat_receipts: [seat],
+  };
+}
 
 const ROOT_RUN_ID = 'root-run-lsm-p1';
 const REPO = '/tmp/lsm-p1-real-repo';
@@ -305,7 +323,7 @@ function buildCampaignBundle({
     deferral_harm: 'blocks the frozen LSM P1 acceptance contract',
   }));
   const compositionCandidate = { ...candidate, committed: true };
-  const terminal = runCampaignComposition({ maxRepairGenerations: 0 }, {
+  const terminal = runCampaignComposition({ maxRepairGenerations: 0, minPanelSize: 1 }, {
     preflight: () => ({ passed: true }),
     implement: () => compositionCandidate,
     scopeCheck: () => ({ passed: true }),
@@ -325,7 +343,7 @@ function buildCampaignBundle({
       rejected: [],
     }),
     convergence: () => ({ passed: true }),
-    finalPanel: () => ({
+    finalPanel: () => finalPanelReceipt({
       reviewed: true,
       verdict: 'SHIP-AS-IS',
       findings: '[]',
@@ -836,6 +854,35 @@ group('durable-state-authority', () => {
   );
   check('icc-terminal-receipt-digest-substitution-rejected',
     terminalDigestResult.acceptance_verdict === 'unknown');
+
+  const undersizedPanel = clone(campaignBundle);
+  undersizedPanel.terminal_receipt = redigest({
+    ...undersizedPanel.terminal_receipt,
+    final_panel_count: 0,
+  });
+  rebindTerminalLedger(undersizedPanel);
+  const undersizedPanelResult = buildTaskStatus(
+    makeInput({ campaigns: [undersizedPanel] }),
+    makeAdapters(),
+  );
+  check('icc-terminal-panel-minimum-tamper-rejected',
+    undersizedPanelResult.acceptance_verdict === 'unknown');
+
+  const seatDigestTamper = clone(campaignBundle);
+  seatDigestTamper.terminal_receipt = redigest({
+    ...seatDigestTamper.terminal_receipt,
+    final_panel_seat_receipts: [{
+      ...seatDigestTamper.terminal_receipt.final_panel_seat_receipts[0],
+      family: 'forged-family',
+    }],
+  });
+  rebindTerminalLedger(seatDigestTamper);
+  const seatDigestTamperResult = buildTaskStatus(
+    makeInput({ campaigns: [seatDigestTamper] }),
+    makeAdapters(),
+  );
+  check('icc-terminal-panel-seat-tamper-rejected',
+    seatDigestTamperResult.acceptance_verdict === 'unknown');
 
   const malformedFinding = clone(campaignBundle);
   malformedFinding.terminal_receipt = redigest({

@@ -29,9 +29,28 @@ const {
   runCampaignComposition,
   runCampaignIntake,
 } = require(path.join(root, 'src', 'engine'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
 
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
 const sha = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
+function finalPanelReceipt(review = {}) {
+  const seat = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: review.verdict || 'SHIP-AS-IS',
+    review_digest: review.review_digest || 'f'.repeat(64), reason: null,
+  };
+  seat.receipt_digest = canonicalDigest(seat);
+  return {
+    ...review,
+    reviewed: true,
+    sealed_min_panel_size: 1,
+    final_panel_count: 1,
+    final_panel_seat_receipts: [seat],
+  };
+}
 const policy = compileCampaignDispositionPolicy('acceptance-bound');
 const readiness = {
   readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
@@ -221,6 +240,7 @@ let pocFinalPanels = 0;
 const pocKinds = [];
 const poc = runCampaignComposition({
   maxRepairGenerations: 2,
+  minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
   implement({ kind }) {
@@ -250,7 +270,7 @@ const poc = runCampaignComposition({
   convergence: () => ({ passed: true }),
   finalPanel({ repair_generation: generation }) {
     pocFinalPanels += 1;
-    return review([publication], generation, 'final');
+    return finalPanelReceipt(review([publication], generation, 'final'));
   },
 });
 assert.strictEqual(poc.status, 'follow_up');
@@ -269,6 +289,7 @@ const spend = () => {
 };
 assert.throws(() => runCampaignComposition({
   maxRepairGenerations: 2,
+  minPanelSize: 1,
   resume: {
     phase: 'VERTICAL_VERIFICATION',
     repair_generation: 3,
@@ -296,7 +317,7 @@ const productionContract = contract(
   'feat/057-production',
 );
 const productionRepairs = [];
-const production = runCampaignComposition({ maxRepairGenerations: 2 }, {
+const production = runCampaignComposition({ maxRepairGenerations: 2, minPanelSize: 1 }, {
   preflight: () => ({ passed: true }),
   implement({ kind, repair_finding_ids: findingIds }) {
     if (kind !== 'initial') productionRepairs.push(...findingIds);
@@ -314,7 +335,7 @@ const production = runCampaignComposition({ maxRepairGenerations: 2 }, {
     review(generation === 0 ? [publication] : [], generation, scope),
   adjudicate: adjudicator(productionContract),
   convergence: () => ({ passed: true }),
-  finalPanel: ({ repair_generation: generation }) => review([], generation, 'final'),
+  finalPanel: ({ repair_generation: generation }) => finalPanelReceipt(review([], generation, 'final')),
 });
 assert.strictEqual(production.status, 'ready');
 assert.deepStrictEqual(productionRepairs, [publication.finding_id]);
@@ -519,6 +540,11 @@ const roster = {
   implementer_runner: 'fixture',
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 1,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [{
+    role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+  }],
 };
 const engine = new AutopilotEngine({
   cwd: repo,
@@ -598,6 +624,11 @@ const roster = {
   implementer_runner: 'fixture',
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 1,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [{
+    role: 'qc', runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+  }],
 };
 let implementationCalls = 0;
 const engine = new AutopilotEngine({
@@ -747,6 +778,24 @@ const verificationApi = require(path.join(root, 'src', 'engine', 'campaign-verif
 const { runCampaignComposition } = require(
   path.join(root, 'src', 'engine', 'campaign-composition'),
 );
+function finalPanelReceipt(review = {}) {
+  const seat = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: review.verdict || 'SHIP-AS-IS',
+    review_digest: review.review_digest || 'f'.repeat(64), reason: null,
+  };
+  seat.receipt_digest = verificationApi.canonicalDigest(seat);
+  return {
+    ...review,
+    reviewed: true,
+    sealed_min_panel_size: 1,
+    final_panel_count: 1,
+    final_panel_seat_receipts: [seat],
+  };
+}
 const { projectCampaignStatus } = require(path.join(root, 'src', 'campaign', 'status'));
 const { buildTaskStatus } = require(path.join(root, 'src', 'status', 'task-status'));
 const inspected = inspectLifecycleReceipt({ repo, rootRunId: campaignId, receipt: receiptPath });
@@ -827,6 +876,7 @@ const verificationReceipt = verificationApi.createVerificationReceipt({
 });
 const terminal = runCampaignComposition({
   maxRepairGenerations: 0,
+  minPanelSize: 1,
   lifecycleReceiptRef: lifecycleRef,
 }, {
   preflight: () => ({ passed: true }),
@@ -846,7 +896,7 @@ const terminal = runCampaignComposition({
     must_fix_now: [], follow_up: [], rejected: [],
   }),
   convergence: () => ({ passed: true }),
-  finalPanel: () => ({
+  finalPanel: () => finalPanelReceipt({
     reviewed: true,
     verdict: 'SHIP-AS-IS',
     findings: '[]',

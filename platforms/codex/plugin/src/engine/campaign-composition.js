@@ -35,6 +35,108 @@ function blocked(phase, reason, trace, detail = {}) {
   };
 }
 
+const FINAL_PANEL_SEAT_KEYS = [
+  'schema_version',
+  'artifact_type',
+  'seat_index',
+  'runner',
+  'model',
+  'effort',
+  'endpoint',
+  'family',
+  'status',
+  'verdict',
+  'review_digest',
+  'reason',
+  'receipt_digest',
+];
+const FINAL_PANEL_FAILURE_STATUSES = new Set([
+  'no_verdict',
+  'transport_failed',
+  'parser_failed',
+  'precondition_failed',
+]);
+
+function hasExactKeys(value, keys) {
+  return value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.keys(value).length === keys.length
+    && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function validateFinalPanelReceipt(receipt, expectedMinimum) {
+  const detail = {
+    sealed_min_panel_size: expectedMinimum,
+    final_panel_count: 0,
+    final_panel_seat_receipts: Array.isArray(receipt?.final_panel_seat_receipts)
+      ? receipt.final_panel_seat_receipts
+      : [],
+  };
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)
+      || receipt.sealed_min_panel_size !== expectedMinimum
+      || !Array.isArray(receipt.final_panel_seat_receipts)) {
+    return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
+  }
+  const tuples = new Set();
+  let firstFailure = null;
+  for (const seat of receipt.final_panel_seat_receipts) {
+    if (!hasExactKeys(seat, FINAL_PANEL_SEAT_KEYS)
+        || seat.schema_version !== 1
+        || seat.artifact_type !== 'implementation_campaign_final_panel_seat'
+        || !Number.isSafeInteger(seat.seat_index)
+        || seat.seat_index < 1
+        || !['runner', 'model', 'effort', 'family']
+          .every((key) => typeof seat[key] === 'string' && seat[key].length > 0)
+        || !(seat.endpoint === null
+          || (typeof seat.endpoint === 'string' && seat.endpoint.length > 0))) {
+      return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
+    }
+    const { receipt_digest: receiptDigest, ...body } = seat;
+    if (!/^[0-9a-f]{64}$/u.test(receiptDigest)
+        || canonicalDigest(body) !== receiptDigest) {
+      return { passed: false, reason: 'final_panel_receipt_digest_mismatch', ...detail };
+    }
+    const tuple = [
+      seat.runner,
+      seat.model,
+      seat.effort,
+      seat.endpoint === null ? 'null' : seat.endpoint,
+      seat.family,
+    ].join('\u0000');
+    if (tuples.has(tuple)) {
+      return { passed: false, reason: 'final_panel_duplicate_tuple', ...detail };
+    }
+    tuples.add(tuple);
+    if (seat.status === 'reviewed') {
+      if (typeof seat.verdict !== 'string' || seat.verdict.length === 0
+          || !/^[0-9a-f]{64}$/u.test(seat.review_digest || '')
+          || seat.reason !== null) {
+        return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
+      }
+      detail.final_panel_count += 1;
+    } else if (FINAL_PANEL_FAILURE_STATUSES.has(seat.status)
+        && seat.verdict === null
+        && seat.review_digest === null
+        && seat.reason === `final_panel_seat_${seat.status}`) {
+      firstFailure ||= seat.reason;
+    } else {
+      return { passed: false, reason: 'final_panel_metadata_incomplete', ...detail };
+    }
+  }
+  if (receipt.final_panel_count !== detail.final_panel_count) {
+    return { passed: false, reason: 'final_panel_count_mismatch', ...detail };
+  }
+  if (firstFailure) return { passed: false, reason: firstFailure, ...detail };
+  if (detail.final_panel_count < expectedMinimum) {
+    return { passed: false, reason: 'final_panel_below_minimum', ...detail };
+  }
+  if (receipt.reviewed !== true) {
+    return { passed: false, reason: 'final_panel_not_reviewed', ...detail };
+  }
+  return { passed: true, ...detail };
+}
+
 function normalizeLifecycleReceiptRef(value) {
   if (value === undefined || value === null || value === 'unknown') return 'unknown';
   if (!value || typeof value !== 'object' || Array.isArray(value)
@@ -104,6 +206,13 @@ function runCampaignComposition(input = {}, adapters = {}) {
     throw new CampaignCompositionError(
       'INVALID_REPAIR_CAP',
       'maxRepairGenerations must be a non-negative safe integer',
+    );
+  }
+  const minPanelSize = input.minPanelSize;
+  if (!Number.isSafeInteger(minPanelSize) || minPanelSize < 1) {
+    throw new CampaignCompositionError(
+      'INVALID_PANEL_MINIMUM',
+      'minPanelSize must be an explicitly sealed positive safe integer',
     );
   }
   const lifecycleReceiptRef = normalizeLifecycleReceiptRef(input.lifecycleReceiptRef);
@@ -372,8 +481,14 @@ function runCampaignComposition(input = {}, adapters = {}) {
     repair_generation: repairGeneration,
   }), 'finalPanel');
   trace.push('final_panel');
-  if (terminalReview.reviewed !== true) {
-    return blocked('final_panel', terminalReview.reason || 'final panel unavailable', trace);
+  const finalPanelValidation = validateFinalPanelReceipt(terminalReview, minPanelSize);
+  if (finalPanelValidation.passed !== true) {
+    return blocked(
+      'final_panel',
+      finalPanelValidation.reason,
+      trace,
+      finalPanelValidation,
+    );
   }
   const finalAdjudication = requireReceipt(adjudicate({
     review: terminalReview,
@@ -401,7 +516,9 @@ function runCampaignComposition(input = {}, adapters = {}) {
     candidate_tree_sha: candidate.tree_sha,
     verification_receipt_digest: verification.receipt_digest,
     repair_generations: repairGeneration,
-    final_panel_count: 1,
+    sealed_min_panel_size: minPanelSize,
+    final_panel_count: finalPanelValidation.final_panel_count,
+    final_panel_seat_receipts: finalPanelValidation.final_panel_seat_receipts,
     follow_up: followUps,
     rejected_findings: rejectedFindings,
     unresolved_final_findings: finalMustFix,
@@ -417,4 +534,5 @@ function runCampaignComposition(input = {}, adapters = {}) {
 module.exports = {
   CampaignCompositionError,
   runCampaignComposition,
+  validateFinalPanelReceipt,
 };

@@ -19,7 +19,22 @@ const {
   projectCampaignStatus,
   runCampaignComposition,
 } = require(path.join(root, 'src', 'engine'));
+const { canonicalDigest } = require(path.join(root, 'src', 'engine', 'campaign-verification'));
 const D = 'a'.repeat(64);
+function finalPanelReceipt() {
+  const seat = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'fixture', model: 'fixture-reviewer', effort: 'high', endpoint: null, family: 'fixture',
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: '7'.repeat(64), reason: null,
+  };
+  seat.receipt_digest = canonicalDigest(seat);
+  return {
+    reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]', review_digest: '7'.repeat(64),
+    sealed_min_panel_size: 1, final_panel_count: 1, final_panel_seat_receipts: [seat],
+  };
+}
 const transport = createRunnerTransportEnvelope({
   runner: 'fixture',
   model: 'fixture-model',
@@ -233,6 +248,7 @@ const candidate = {
 };
 const composition = runCampaignComposition({
   maxRepairGenerations: 1,
+  minPanelSize: 1,
   resume: {
     phase: 'VERTICAL_VERIFICATION',
     repair_generation: 0,
@@ -261,12 +277,7 @@ const composition = runCampaignComposition({
     rejected: [],
   }),
   convergence: () => ({ passed: true }),
-  finalPanel: () => ({
-    reviewed: true,
-    verdict: 'SHIP-AS-IS',
-    findings: '[]',
-    review_digest: '7'.repeat(64),
-  }),
+  finalPanel: () => finalPanelReceipt(),
 });
 assert.strictEqual(composition.status, 'ready');
 assert.strictEqual(implementationCalls, 0);
@@ -676,8 +687,21 @@ const roster = {
   implementer_runner: 'fixture',
   loop_max_rounds: 3,
   loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 3,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [
+    { role: 'qc', runner: 'fixture-a', model: 'fixture-reviewer-a', effort: 'high', endpoint: null, family: 'fixture-a' },
+    { role: 'qc', runner: 'fixture-b', model: 'fixture-reviewer-b', effort: 'high', endpoint: null, family: 'fixture-b' },
+    { role: 'qc', runner: 'fixture-c', model: 'fixture-reviewer-c', effort: 'high', endpoint: null, family: 'fixture-c' },
+  ],
+  fallback_ladder: [
+    { runner: 'fixture-a', model: 'fixture-reviewer-a', effort: 'high', family: 'fixture-a' },
+    { runner: 'fixture-b', model: 'fixture-reviewer-b', effort: 'high', family: 'fixture-b' },
+    { runner: 'fixture-c', model: 'fixture-reviewer-c', effort: 'high', family: 'fixture-c' },
+  ],
 };
 let implementationCalls = 0;
+let reviewCalls = 0;
 const findings = JSON.stringify([{
   finding_id: 'icc-p3-note',
   claim: 'fixture note is outside the frozen acceptance',
@@ -693,12 +717,13 @@ const focusedDigest = canonicalDigest({
 if (focusedDigest !== durableReviewDigest) {
   throw new Error('fixture focused review digest drifted across processes');
 }
-const finalDigest = canonicalDigest({
+const finalSeatDigest = canonicalDigest({
   verdict: 'SHIP-AS-IS',
   findings,
   scope: 'final',
   tree_sha: tree,
 });
+const finalDigest = canonicalDigest([finalSeatDigest, finalSeatDigest, finalSeatDigest]);
 const decision = {
   finding_id: 'icc-p3-note',
   evidence: {
@@ -741,6 +766,7 @@ const engine = new AutopilotEngine({
     throw new Error('resume must not repeat implementation');
   },
   reviewDispatcher() {
+    reviewCalls += 1;
     return {
       error: null,
       status: 0,
@@ -814,6 +840,7 @@ const result = engine.runImplementationReviewLoop({
 console.log(`resume_status=${result.status}`);
 console.log(`resume_phase=${result.phase}`);
 console.log(`implementation_calls=${implementationCalls}`);
+console.log(`review_calls=${reviewCalls}`);
 console.log(`durable_phase=${result.campaign_control.initial_state
   ? result.campaign_control.initial_state.phase
   : 'missing'}`);
@@ -828,6 +855,8 @@ assert_contains "$RESUME_OUT" "resume_status=converged" \
   "resumed campaign converges from the committed checkpoint"
 assert_contains "$RESUME_OUT" "implementation_calls=0" \
   "resumed campaign does not repeat implementation"
+assert_contains "$RESUME_OUT" "review_calls=4" \
+  "focused review stays single-seat while terminal QC fans out to all three sealed seats"
 assert_contains "$RESUME_OUT" "durable_phase=TERMINAL_READY" \
   "resumed campaign journals its terminal reducer state"
 assert_contains "$RESUME_OUT" "completion=completed" \

@@ -687,7 +687,11 @@ function authenticateProductionProvenance(data, trustedAuthority) {
       reason: `production provenance receipt failed trusted authority verification: ${error.message}`,
     };
   }
-  // Body (counters + baseline fields) must be content-bound to the receipt event_hash.
+  // Body (counters + baseline fields) must be content-bound to the receipt
+  // event_hash. A trusted receipt alone is not enough: event_hash must equal
+  // the canonical KR8 body hash. When evidence_body_hash is present it must
+  // also equal that same body hash — equality with event_hash alone is not a
+  // binding (that would allow an unrelated trusted receipt to pass).
   const body = {
     observed_false_acceptances: data.observed_false_acceptances,
     observed_missed_red_line_escalations: data.observed_missed_red_line_escalations,
@@ -701,13 +705,13 @@ function authenticateProductionProvenance(data, trustedAuthority) {
   const explicit = typeof provenance.evidence_body_hash === 'string'
     ? provenance.evidence_body_hash.toLowerCase()
     : null;
-  if (eventHash !== bodyHash && explicit !== eventHash) {
+  if (eventHash !== bodyHash) {
     return {
       ok: false,
       reason: 'production provenance receipt event_hash is not bound to KR8 evidence body',
     };
   }
-  if (explicit && explicit !== bodyHash && explicit !== eventHash) {
+  if (explicit && explicit !== bodyHash) {
     return {
       ok: false,
       reason: 'production provenance evidence_body_hash does not match KR8 evidence body',

@@ -106,6 +106,91 @@ NODE
 assert_eq "0" "$?" "KR8 rejects negative counters"
 rm -rf "$KR8_DIR"
 
+# kr8-body-provenance-mismatch: an otherwise valid trusted receipt whose
+# event_hash (and optional evidence_body_hash) matches an *unrelated* body —
+# not the mutated KR8 counters — must HOLD for body/provenance mismatch.
+# Evidence_body_hash === receipt.event_hash alone is not a binding.
+KR8_BODY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/kr8-body-bind.XXXXXX")"
+mkdir -p "$KR8_BODY_DIR/production-telemetry"
+node - "$REPO_ROOT" "$KR8_BODY_DIR" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const dir = process.argv[3];
+const { sha256, canonicalJson } = require(path.join(root, 'src/engine/owner-kernel/canonical'));
+
+const originalBody = {
+  observed_false_acceptances: 0,
+  observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 1,
+  baseline_mandatory_review_dispatches: 6,
+};
+const originalBodyHash = sha256(canonicalJson(originalBody));
+
+const runId = 'kr8-body-bind-run';
+const streamId = 'kr8-body-bind-stream';
+const receiptBase = {
+  run_id: runId,
+  stream_id: streamId,
+  sequence: 1,
+  event_hash: originalBodyHash,
+  previous_witness_head: null,
+};
+const witnessHead = sha256(canonicalJson(receiptBase));
+const receipt = { ...receiptBase, witness_head: witnessHead };
+
+// Trusted journal records the receipt for the *original* body only.
+fs.writeFileSync(
+  path.join(dir, 'trusted-installed-witness-authority.json'),
+  JSON.stringify({
+    kind: 'trusted_installed_witness_authority',
+    stream_id: streamId,
+    receipts: [receipt],
+  }, null, 2),
+);
+
+// Mutate KR8 counters while reusing the trusted receipt. The buggy gate
+// accepted this when evidence_body_hash merely equalled receipt.event_hash.
+const mutated = {
+  observed_false_acceptances: 0,
+  observed_missed_red_line_escalations: 0,
+  candidate_mandatory_review_dispatches: 4,
+  baseline_mandatory_review_dispatches: 6,
+  production_provenance: {
+    evidence_body_hash: originalBodyHash,
+    witness_receipt: receipt,
+  },
+};
+fs.writeFileSync(
+  path.join(dir, 'production-telemetry', 'kr8.json'),
+  JSON.stringify(mutated, null, 2),
+);
+NODE
+
+KR8_BODY_OUT="$(node "$REPO_ROOT/scripts/check-owner-kernel-release-gates.js" \
+  --project "$KR8_BODY_DIR" \
+  --repo-root "$REPO_ROOT" 2>&1)"
+node - "$KR8_BODY_OUT" <<'NODE'
+const report = JSON.parse(process.argv[2]);
+if (report.kr8.status !== 'HOLD') {
+  console.error('mutated KR8 counters with unrelated trusted receipt must HOLD; got', report.kr8.status);
+  process.exit(1);
+}
+const reasons = (report.kr8.blocking_reasons || []).join('\n');
+if (!/body|bound|provenance|evidence_body_hash|event_hash/i.test(reasons)) {
+  console.error('KR8 must cite body/provenance mismatch; got:', reasons);
+  process.exit(1);
+}
+if (report.kr8.evidence && report.kr8.evidence.source === 'production_telemetry') {
+  console.error('body-unbound trusted receipt must not classify as production_telemetry');
+  process.exit(1);
+}
+console.log('kr8-body-provenance-mismatch=ok');
+NODE
+assert_eq "0" "$?" "KR8 HOLD for trusted receipt unbound to mutated KR8 body"
+rm -rf "$KR8_BODY_DIR"
+
 # kr10-permanent-hold: thresholds stay 42/51; executed membership is derived;
 # removed/nonexecuted members reduce measured cardinality rather than measurement errors.
 node - "$REPO_ROOT" <<'NODE'

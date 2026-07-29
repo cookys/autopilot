@@ -1,6 +1,6 @@
 # Repair Lineage Convergence
 
-Status: closing
+Status: complete
 
 Plan: `docs/plans/2026-07-30-repair-lineage-convergence.md`
 
@@ -19,7 +19,7 @@ branches for one P3 implementation lineage.
 - [x] Lease-required retained worktrees and clean terminal cleanup
 - [x] Focused regression suites and final 256-file full-suite pass
 - [x] Depth-0 joint review
-- [ ] Merge, push, terminal cleanup, and historical branch disposition
+- [x] Merge, push, terminal cleanup, and historical branch disposition
 
 ## Verification
 

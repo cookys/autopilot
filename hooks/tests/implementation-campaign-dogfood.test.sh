@@ -1228,14 +1228,52 @@ const missing = JSON.parse(missingChunks.join('').trim().split('\n').pop());
 assert.strictEqual(missingRc, 1);
 assert.strictEqual(missing.status, 'not_found');
 
+// Repeated rotation keeps one carried copy per retained segment/root instead of
+// recursively carrying prior copies (which used to grow exponentially).
+for (let i = 8; i < 48; i += 1) {
+  runLedger(
+    'stage-acquire', '--ledger', ledger,
+    '--run-id', `pad-${i}`, '--stage', `pad${i}`,
+    '--pid', String(process.pid),
+  );
+}
+const afterManyRotations = loadRows(ledger);
+const intakeRows = afterManyRotations.filter(
+  (row) => row.run_id === campaignId && row.op === 'campaign_intake',
+);
+assert.ok(intakeRows.length <= 9, `bounded retained intake carries: ${intakeRows.length}`);
+assert.strictEqual(
+  new Set(intakeRows.filter((row) => row._rotation_carry).map((row) => row._rotation_root)).size,
+  1,
+);
+assert.ok(projectCampaign(afterManyRotations, campaignId));
+
+// A second producer-authored intake remains ambiguous even when its payload is
+// byte-identical; only rows marked by the rotation writer are deduplicated.
+runLedger(
+  'journal-add', '--ledger', ledger,
+  '--run-id', campaignId, '--stage', 'campaign',
+  '--generation', String(gen), '--nonce', nonce,
+  '--idempotency-key', `manual-duplicate:${campaignId}`,
+  '--op', 'campaign_intake',
+  '--payload', JSON.stringify(intakePayload),
+);
+assert.throws(
+  () => projectCampaign(loadRows(ledger), campaignId),
+  /exactly one intake root/,
+);
+
 console.log('rotation_campaign_found=true');
 console.log(`rotation_generation_stable=${gen}`);
 console.log('rotation_duplicate_dispatch=0');
+console.log(`rotation_intake_rows_bounded=${intakeRows.length}`);
+console.log('manual_duplicate_intake_rejected=true');
 if (prevExit !== undefined) process.exitCode = prevExit;
 NODE
 )"
 assert_exit_code "$?" "0" "rotation-aware campaign dogfood exits zero"
 assert_contains "$ROT_OUT" "rotation_campaign_found=true" "campaign remains found after forced rotation"
 assert_contains "$ROT_OUT" "rotation_duplicate_dispatch=0" "rotation path records zero duplicate dispatch"
+assert_contains "$ROT_OUT" "manual_duplicate_intake_rejected=true" "manual duplicate intake remains fail-closed"
 
 finalize_test

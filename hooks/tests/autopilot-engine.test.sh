@@ -791,6 +791,32 @@ OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
 const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+const parsed = parseImplementationOutput(JSON.stringify({
+  status: 'acceptance_failed',
+  runner: 'codex',
+  model: 'gpt-test',
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  commit: null,
+  files_changed: 1,
+  insertions: 1,
+  deletions: 0,
+  worktree: '/tmp/contained-worktree',
+  agent_log: '/tmp/log',
+  error: 'acceptance_failed',
+  containment: 'plain',
+  contained: true,
+}));
+console.log(`status=${parsed.status}`);
+NODE
+)"
+assert_eq "0" "$?" "implementer parser accepts canonical acceptance_failed"
+assert_contains "$OUT" "status=acceptance_failed" "acceptance_failed remains a parsed attempt-consuming outcome"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
 
 const valid = {
   status: 'committed',

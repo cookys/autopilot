@@ -11,6 +11,7 @@ const {
   validateInitialCampaignState,
 } = require('../engine/implementation-campaign');
 const { projectCampaignStatus } = require('./status');
+const RUN_LEDGER = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 
 const TERMINAL = new Set([
   CAMPAIGN_STATES.TERMINAL_READY,
@@ -150,25 +151,35 @@ function ledgerScanFiles(ledger) {
 }
 
 function loadRows(ledger) {
-  const files = ledgerScanFiles(ledger);
-  if (files.length === 0) return [];
+  if (typeof ledger !== 'string' || ledger.length === 0) {
+    throw new Error('campaign ledger path is required');
+  }
+  const snapshot = spawnSync('bash', [RUN_LEDGER, 'snapshot', '--ledger', ledger], {
+    encoding: null,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: (64 * 1024 * 1024) + (1024 * 1024),
+  });
+  if (snapshot.error || snapshot.status !== 0) {
+    throw new Error(
+      `campaign ledger snapshot failed: ${
+        snapshot.error
+          ? snapshot.error.message
+          : Buffer.from(snapshot.stderr || '').toString('utf8').trim()
+      }`,
+    );
+  }
+  const bytes = Buffer.from(snapshot.stdout || '');
+  if (bytes.length === 0) return [];
+  if (bytes.length > 64 * 1024 * 1024) throw new Error('campaign ledger exceeds 64 MiB');
   const rows = [];
-  let totalBytes = 0;
   let lineNo = 0;
-  for (const file of files) {
-    const bytes = fs.readFileSync(file);
-    totalBytes += bytes.length;
-    if (totalBytes > 64 * 1024 * 1024) throw new Error('campaign ledger exceeds 64 MiB');
-    const lines = bytes.toString('utf8').split('\n').filter((line) => line.trim() !== '');
-    for (const line of lines) {
-      lineNo += 1;
-      try {
-        rows.push(JSON.parse(line));
-      } catch (error) {
-        throw new Error(
-          `campaign ledger line ${lineNo} (${path.basename(file)}) is invalid JSON: ${error.message}`,
-        );
-      }
+  const lines = bytes.toString('utf8').split('\n').filter((line) => line.trim() !== '');
+  for (const line of lines) {
+    lineNo += 1;
+    try {
+      rows.push(JSON.parse(line));
+    } catch (error) {
+      throw new Error(`campaign ledger snapshot line ${lineNo} is invalid JSON: ${error.message}`);
     }
   }
   return rows;
@@ -262,16 +273,47 @@ function validateCampaignJournalLease(row, currentLease) {
 }
 
 function projectCampaign(rows, campaignId) {
-  const owned = rows.filter((row) => row && row.run_id === campaignId);
+  const rotationRootFor = (row) => Buffer.from(JSON.stringify(
+    Object.fromEntries(Object.entries(row).filter(
+      ([key]) => key !== '_rotation_carry' && key !== '_rotation_root',
+    )),
+  )).toString('base64');
+  const seenRotationRoots = new Set();
+  const owned = [];
+  for (const row of rows.filter((entry) => entry && entry.run_id === campaignId)) {
+    if (row.kind !== 'journal') {
+      owned.push(row);
+      continue;
+    }
+    const root = row._rotation_carry === true ? row._rotation_root : rotationRootFor(row);
+    if (row._rotation_carry === true && seenRotationRoots.has(root)) continue;
+    seenRotationRoots.add(root);
+    owned.push(row);
+  }
   const intakes = owned.filter(
     (row) => row.kind === 'journal' && row.op === 'campaign_intake',
   );
   if (intakes.length === 0) return null;
-  // Last-write across rotated segments (and rotation carry-forward) may
-  // re-materialize the same intake root on the live segment. Prefer the
-  // newest row; reject only when multiple intakes disagree.
+  // Rotation carry rows have explicit provenance. Collapse only those
+  // mechanically generated copies; two manually journaled intake roots remain
+  // ambiguous and fail closed even when their payloads happen to agree.
+  const originalIntakes = intakes.filter((row) => row._rotation_carry !== true);
+  if (originalIntakes.length > 1) {
+    throw new Error('campaign ledger must contain exactly one intake root');
+  }
   const intake = intakes[intakes.length - 1];
-  if (intakes.length > 1) {
+  if (originalIntakes.length === 0) {
+    const carryRoots = new Set(intakes.map((row) => row._rotation_root).filter(Boolean));
+    if (carryRoots.size !== 1 || intakes.some((row) => row._rotation_carry !== true)) {
+      throw new Error('campaign ledger must contain exactly one intake root');
+    }
+  } else if (intakes.length > 1) {
+    const originalRoot = rotationRootFor(originalIntakes[0]);
+    if (intakes.some((row) => (
+      row._rotation_carry === true && row._rotation_root !== originalRoot
+    ))) {
+      throw new Error('campaign ledger must contain exactly one intake root');
+    }
     const digests = new Set(intakes.map((row) => {
       try {
         const payload = parsePayload(row);

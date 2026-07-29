@@ -338,6 +338,8 @@ RESULTS_DIR=""
 RESULT_FILE=""
 EXIT_FILE=""
 HEARTBEAT_SECS="${DISPATCH_HEARTBEAT_SECS:-20}"
+DETACH_PRECLAIM_GEN=""
+DETACH_PRECLAIM_NONCE=""
 OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR=""; OUTCOME_EXIT=1
 CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome); read by classify_outcome
 # shellcheck source=/dev/null
@@ -1490,6 +1492,26 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die_precondition "not inside a git repository"
 git rev-parse --verify --quiet "$BASE" >/dev/null || die_precondition "base ref not found: $BASE"
+# Claim the durable implementation tuple before branch/worktree/manifest
+# creation. The detached child renews this parent-owned preclaim after startup.
+_detach_preclaim=1
+case "${DISPATCH_DETACH:-1}" in
+  0|false|FALSE|no|NO|off|OFF|No|Off) _detach_preclaim=0 ;;
+esac
+if [ "$_detach_preclaim" -eq 1 ] \
+    && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] \
+    && command -v setsid >/dev/null 2>&1 \
+    && setsid --help 2>&1 | grep -q -- --wait; then
+  _preclaim="$(bash "$SELF_DIR/run-ledger.sh" stage-acquire \
+    --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+    --pid "$$" --git-ref "refs/heads/$BRANCH" --exclusive-live 2>&1)" \
+    || die_precondition "durable dispatch claim rejected: ${_preclaim:-unknown}"
+  DETACH_PRECLAIM_GEN="$(printf '%s' "$_preclaim" | jq -r '.generation // empty')"
+  DETACH_PRECLAIM_NONCE="$(printf '%s' "$_preclaim" | jq -r '.nonce // empty')"
+  [ -n "$DETACH_PRECLAIM_GEN" ] && [ -n "$DETACH_PRECLAIM_NONCE" ] \
+    || die_precondition "durable dispatch claim returned invalid ownership identity"
+fi
+unset _detach_preclaim _preclaim
 if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
   die_precondition "branch already exists: $BRANCH"
 fi
@@ -1825,6 +1847,7 @@ try {
 
 # --- isolated worktree (the non-skippable safety rail) ---
 BASE_SHA="$(git rev-parse "$BASE")"
+
 WT_RUN_ID="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
 WT_LOOP_ID="${AUTOPILOT_LOOP_ID:-${LINEAGE_PARENT:-$DISPATCH_RUN_ID}}"
 WT_LOOP_ID="$(printf '%s' "$WT_LOOP_ID" | tr -c 'A-Za-z0-9._-' '-')"
@@ -2657,18 +2680,24 @@ detached_main() {
   # Acquire the lease AS THIS detached process (records our pid/start_time → the watchdog can
   # tell alive-vs-dead). --allow-reopen so an orchestrator pre-lease is renewed, not rejected.
   DETACH_SELF_PID="$$"
-  # Rewrite the manifest with the DETACHED child's pid: the parent pid dies with a killed
-  # caller while this session survives — the manifest must point liveness probes here.
-  write_manifest "$DETACH_SELF_PID"
-  local acq; acq="$(bash "$run_ledger" stage-acquire --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
-    --pid "$DETACH_SELF_PID" --git-ref "refs/heads/$BRANCH" --worktree "$WT" --allow-reopen 2>/dev/null || true)"
+  local acq
+  if ! acq="$(bash "$run_ledger" stage-transfer \
+    --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+    --generation "$DETACH_PRECLAIM_GEN" --nonce "$DETACH_PRECLAIM_NONCE" \
+    --pid "$DETACH_SELF_PID" --git-ref "refs/heads/$BRANCH" \
+    --worktree "$WT" 2>/dev/null)"; then
+    exit 2
+  fi
   DETACH_GEN="$(printf '%s' "$acq" | jq -r '.generation // empty' 2>/dev/null || true)"
   DETACH_NONCE="$(printf '%s' "$acq" | jq -r '.nonce // empty' 2>/dev/null || true)"
-  local hb_pid=""
-  if [ -n "$DETACH_GEN" ] && [ -n "$DETACH_NONCE" ]; then
-    heartbeat_loop &
-    hb_pid=$!
+  if [ -z "$DETACH_GEN" ] || [ -z "$DETACH_NONCE" ]; then
+    exit 2
   fi
+  # Publish child liveness only after durable ownership handoff succeeds.
+  write_manifest "$DETACH_SELF_PID"
+  local hb_pid=""
+  heartbeat_loop &
+  hb_pid=$!
   # run the engine worker (in-session), then finalize by artifact
   run_agent
   [ -n "$hb_pid" ] && { kill "$hb_pid" 2>/dev/null || true; wait "$hb_pid" 2>/dev/null || true; }
@@ -2714,6 +2743,7 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
+    declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container run_worker run_agent compute_artifacts passive_capture \

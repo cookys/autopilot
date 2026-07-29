@@ -1047,6 +1047,12 @@ function attemptsForNode(state, nodeId) {
     .reduce((max, claim) => Math.max(max, claim.graph_attempt || 0), 0);
 }
 
+function consumedGateAttemptsForNode(state, nodeId) {
+  return Object.values(state.claims || {})
+    .filter((claim) => claim.graph_node_id === nodeId && claim.released !== true)
+    .length;
+}
+
 function graphNodeReady(state, node) {
   const progress = state.graph_progress || {};
   for (const dependency of node.dependencies || []) {
@@ -1284,9 +1290,14 @@ function grantMissionCampaign(input = {}) {
       });
     }
     graphNodeReady(state, node);
+    // graph_attempt is a monotonic identity and is never reused. Gate budget,
+    // however, counts only effect-possible claims: an authenticated
+    // no_effect_release frees its budget slot without creating an identity
+    // collision on the next grant.
     const attempt = attemptsForNode(state, nodeId) + 1;
+    const consumedGateAttempts = consumedGateAttemptsForNode(state, nodeId) + 1;
     if (!Number.isSafeInteger(node.gate_attempt_budget)
-        || attempt > node.gate_attempt_budget) {
+        || consumedGateAttempts > node.gate_attempt_budget) {
       fail('MISSION_GATE_BUDGET_EXHAUSTED', `graph node ${nodeId} gate budget exhausted`);
     }
     // Resolve the grant base exactly once per attempt: validate the node

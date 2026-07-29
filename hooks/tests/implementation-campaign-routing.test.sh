@@ -567,6 +567,66 @@ CAMPAIGN_ID="$(printf '%s\n' "$FIRST_OUT" | sed -n 's/^campaign_id=//p')"
 assert_neq "$CAMPAIGN_ID" "" "first campaign process emits durable campaign identity"
 REVIEW_DIGEST="$(printf '%s\n' "$FIRST_OUT" | sed -n 's/^review_digest=//p')"
 assert_neq "$REVIEW_DIGEST" "" "first campaign process emits its bound review digest"
+
+# Managed resume is the only terminal replay path. It must reject any mismatch
+# between the durable candidate and current immutable Git truth before adopting
+# the candidate or dispatching another implementation.
+resume_intake_probe() {
+  node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" "$BASE_SHA" <<'NODE'
+'use strict';
+const path = require('path');
+const [root, repo, contractPath, sealPath, promptFile, base] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const result = runCampaignIntake({
+  repo,
+  contractPath,
+  sealPath,
+  promptFile,
+  branch: 'impl/p3-resume',
+  base,
+  roster: { implementer_engine: 'fixture-implementer' },
+  observedAt: '2026-07-27T00:00:02.400Z',
+  resume: true,
+}, {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+});
+console.log(`status=${result.status}`);
+console.log(`code=${result.rejection ? result.rejection.code : 'none'}`);
+NODE
+}
+
+git -C "$SBX" update-ref refs/heads/impl/p3-resume "$BASE_SHA"
+BRANCH_DRIFT_OUT="$(resume_intake_probe)"
+assert_contains "$BRANCH_DRIFT_OUT" "status=blocked" \
+  "managed resume rejects branch-tip drift"
+assert_contains "$BRANCH_DRIFT_OUT" "code=campaign_resume_git_drift" \
+  "branch-tip drift fails at exact Git-truth reconciliation"
+git -C "$SBX" update-ref refs/heads/impl/p3-resume "$CANDIDATE_SHA"
+
+BASE_TREE="$(git -C "$SBX" rev-parse "$BASE_SHA^{tree}")"
+TREE_REPLACEMENT="$(printf 'tree drift replacement\n' \
+  | git -C "$SBX" commit-tree "$BASE_TREE" -p "$BASE_SHA")"
+git -C "$SBX" replace "$CANDIDATE_SHA" "$TREE_REPLACEMENT"
+TREE_DRIFT_OUT="$(resume_intake_probe)"
+assert_contains "$TREE_DRIFT_OUT" "status=blocked" \
+  "managed resume rejects candidate-tree drift"
+assert_contains "$TREE_DRIFT_OUT" "code=campaign_resume_git_drift" \
+  "tree drift fails at exact Git-truth reconciliation"
+git -C "$SBX" replace -d "$CANDIDATE_SHA" >/dev/null
+
+OFF_BASE="$(printf 'off-base root\n' | git -C "$SBX" commit-tree "$BASE_TREE")"
+BASE_DRIFT_REPLACEMENT="$(printf 'base ancestry drift replacement\n' \
+  | git -C "$SBX" commit-tree "$CANDIDATE_TREE" -p "$OFF_BASE")"
+git -C "$SBX" replace "$CANDIDATE_SHA" "$BASE_DRIFT_REPLACEMENT"
+BASE_DRIFT_OUT="$(resume_intake_probe)"
+assert_contains "$BASE_DRIFT_OUT" "status=blocked" \
+  "managed resume rejects base-ancestry drift"
+assert_contains "$BASE_DRIFT_OUT" "code=campaign_resume_git_drift" \
+  "base ancestry drift fails at exact Git-truth reconciliation"
+git -C "$SBX" replace -d "$CANDIDATE_SHA" >/dev/null
+
 PRE_RESUME_OUT="$(node - "$REPO_ROOT" "$SBX" "$CAMPAIGN_ID" <<'NODE'
 const path = require('path');
 const [root, repo, campaignId] = process.argv.slice(2);

@@ -115,7 +115,6 @@ QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test s
 KEEP=0
 BRANCH=""
 PROMPT_FILE=""
-CONTINUATION_CHECKPOINT=""
 CAMPAIGN_CONTRACT_FILE=""
 CAMPAIGN_CONTRACT_SHA256=""
 CAMPAIGN_SEAL_FILE=""
@@ -339,6 +338,8 @@ RESULTS_DIR=""
 RESULT_FILE=""
 EXIT_FILE=""
 HEARTBEAT_SECS="${DISPATCH_HEARTBEAT_SECS:-20}"
+DETACH_PRECLAIM_GEN=""
+DETACH_PRECLAIM_NONCE=""
 OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR=""; OUTCOME_EXIT=1
 CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome); read by classify_outcome
 # shellcheck source=/dev/null
@@ -1234,7 +1235,6 @@ while [ $# -gt 0 ]; do
     --ledger) LEDGER="${2:-}"; shift 2 ;;
     --run-id) RUN_ID="${2:-}"; shift 2 ;;
     --stage) STAGE="${2:-}"; shift 2 ;;
-    --continuation-checkpoint) CONTINUATION_CHECKPOINT="${2:-}"; shift 2 ;;
     --gc) DO_GC=1; shift ;;
     --reap-unmarked) REAP_UNMARKED=1; shift ;;
     --yes) GC_YES=1; shift ;;
@@ -1492,6 +1492,26 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die_precondition "not inside a git repository"
 git rev-parse --verify --quiet "$BASE" >/dev/null || die_precondition "base ref not found: $BASE"
+# Claim the durable implementation tuple before branch/worktree/manifest
+# creation. The detached child renews this parent-owned preclaim after startup.
+_detach_preclaim=1
+case "${DISPATCH_DETACH:-1}" in
+  0|false|FALSE|no|NO|off|OFF|No|Off) _detach_preclaim=0 ;;
+esac
+if [ "$_detach_preclaim" -eq 1 ] \
+    && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ] \
+    && command -v setsid >/dev/null 2>&1 \
+    && setsid --help 2>&1 | grep -q -- --wait; then
+  _preclaim="$(bash "$SELF_DIR/run-ledger.sh" stage-acquire \
+    --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+    --pid "$$" --git-ref "refs/heads/$BRANCH" --exclusive-live 2>&1)" \
+    || die_precondition "durable dispatch claim rejected: ${_preclaim:-unknown}"
+  DETACH_PRECLAIM_GEN="$(printf '%s' "$_preclaim" | jq -r '.generation // empty')"
+  DETACH_PRECLAIM_NONCE="$(printf '%s' "$_preclaim" | jq -r '.nonce // empty')"
+  [ -n "$DETACH_PRECLAIM_GEN" ] && [ -n "$DETACH_PRECLAIM_NONCE" ] \
+    || die_precondition "durable dispatch claim returned invalid ownership identity"
+fi
+unset _detach_preclaim _preclaim
 if git rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null; then
   die_precondition "branch already exists: $BRANCH"
 fi
@@ -1827,68 +1847,6 @@ try {
 
 # --- isolated worktree (the non-skippable safety rail) ---
 BASE_SHA="$(git rev-parse "$BASE")"
-
-# --- continuation admission (compaction-safe identity; pre-dispatch boundary) ---
-# Optional: --continuation-checkpoint or AUTOPILOT_CONTINUATION_CHECKPOINT.
-# Incomplete checkpoints fail closed before worktree/dispatch. Matching active or
-# terminal runs attach/resume with duplicate_dispatch=0 (no second implementer).
-if [ -z "$CONTINUATION_CHECKPOINT" ] && [ -n "${AUTOPILOT_CONTINUATION_CHECKPOINT:-}" ]; then
-  CONTINUATION_CHECKPOINT="$AUTOPILOT_CONTINUATION_CHECKPOINT"
-fi
-if [ -n "$CONTINUATION_CHECKPOINT" ] || [ "${AUTOPILOT_CONTINUATION_STRICT:-0}" = "1" ]; then
-  _cont_root="${WORKTREE_ROOT_RUN_ID:-${LINEAGE_ROOT:-${AUTOPILOT_ROOT_RUN_ID:-${RUN_ID:-}}}}"
-  _cont_args=(admit)
-  if [ -n "$CONTINUATION_CHECKPOINT" ]; then
-    [ -r "$CONTINUATION_CHECKPOINT" ] \
-      || die_precondition "continuation checkpoint not readable: $CONTINUATION_CHECKPOINT"
-    _cont_args+=(--checkpoint "$CONTINUATION_CHECKPOINT")
-  fi
-  [ -n "$_cont_root" ] && _cont_args+=(--root-run-id "$_cont_root")
-  [ -n "$BRANCH" ] && _cont_args+=(--branch "$BRANCH")
-  [ -n "${STAGE:-}" ] && _cont_args+=(--stage "$STAGE")
-  [ -n "$BASE_SHA" ] && _cont_args+=(--base-sha "$BASE_SHA")
-  [ -n "${MANIFEST_DIR_PATH:-}" ] && _cont_args+=(--manifest-dir "$MANIFEST_DIR_PATH")
-  if [ "${AUTOPILOT_CONTINUATION_STRICT:-0}" = "1" ]; then
-    _cont_args+=(--strict-match)
-  fi
-  # Capture stdout even when admit exits 1 (reject/not_found).
-  _cont_json="$(node "$SELF_DIR/compaction-rehydrate.js" "${_cont_args[@]}" 2>/dev/null || true)"
-  _cont_status="$(printf '%s' "$_cont_json" | jq -r '.status // empty' 2>/dev/null || true)"
-  _cont_action="$(printf '%s' "$_cont_json" | jq -r '.action // empty' 2>/dev/null || true)"
-  if [ -z "$_cont_json" ] || [ -z "$_cont_status" ]; then
-    die_precondition "continuation admission failed closed (no admission result)"
-  fi
-  if [ "$_cont_status" = "reject" ] || [ "$_cont_status" = "not_found" ]; then
-    _cont_reason="$(printf '%s' "$_cont_json" | jq -r '.reason // .reason_code // "continuation admission rejected"' 2>/dev/null || true)"
-    die_precondition "continuation admission: ${_cont_reason:-rejected}"
-  fi
-  if [ "$_cont_action" = "attach_existing" ] || [ "$_cont_action" = "resume_terminal" ]; then
-    _cont_phase="$(printf '%s' "$_cont_json" | jq -r '.phase_cursor // empty' 2>/dev/null || true)"
-    _cont_commit="$(printf '%s' "$_cont_json" | jq -r '.accepted_commit // empty' 2>/dev/null || true)"
-    _cont_run="$(printf '%s' "$_cont_json" | jq -r '.attached_run_id // empty' 2>/dev/null || true)"
-    _cont_next="$(printf '%s' "$_cont_json" | jq -r '.next_action // empty' 2>/dev/null || true)"
-    if [ "$_cont_commit" = "none" ] || [ -z "$_cont_commit" ]; then
-      _cont_commit_json="null"
-    else
-      _cont_commit_json="\"$(_flat_json_escape "$_cont_commit")\""
-    fi
-    printf '{ "status": "%s", "runner": "continuation-admission", "model": null, "branch": "%s", "base": "%s", "commit": %s, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "root_run_id": %s, "phase_cursor": %s, "next_action": %s, "duplicate_dispatch": 0, "continuation_admission": %s, "duplex": null }\n' \
-      "$([ "$_cont_action" = "resume_terminal" ] && echo resumed || echo attached)" \
-      "$(_flat_json_escape "$BRANCH")" \
-      "$(_flat_json_escape "$BASE")" \
-      "$_cont_commit_json" \
-      "$(_flat_json_escape "${EFFECTIVE_SKILL_MODE:-off}")" \
-      "${SKILLS_INJECTED_JSON:-[]}" \
-      "$([ -n "$_cont_run" ] && printf '"%s"' "$(_flat_json_escape "$_cont_run")" || echo null)" \
-      "$([ -n "$_cont_root" ] && printf '"%s"' "$(_flat_json_escape "$_cont_root")" || echo null)" \
-      "$([ -n "$_cont_phase" ] && printf '"%s"' "$(_flat_json_escape "$_cont_phase")" || echo null)" \
-      "$([ -n "$_cont_next" ] && printf '"%s"' "$(_flat_json_escape "$_cont_next")" || echo null)" \
-      "$_cont_json"
-    exit 0
-  fi
-  unset _cont_root _cont_args _cont_json _cont_status _cont_action _cont_reason \
-    _cont_phase _cont_commit _cont_run _cont_next _cont_commit_json
-fi
 
 WT_RUN_ID="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
 WT_LOOP_ID="${AUTOPILOT_LOOP_ID:-${LINEAGE_PARENT:-$DISPATCH_RUN_ID}}"
@@ -2722,18 +2680,24 @@ detached_main() {
   # Acquire the lease AS THIS detached process (records our pid/start_time → the watchdog can
   # tell alive-vs-dead). --allow-reopen so an orchestrator pre-lease is renewed, not rejected.
   DETACH_SELF_PID="$$"
-  # Rewrite the manifest with the DETACHED child's pid: the parent pid dies with a killed
-  # caller while this session survives — the manifest must point liveness probes here.
-  write_manifest "$DETACH_SELF_PID"
-  local acq; acq="$(bash "$run_ledger" stage-acquire --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
-    --pid "$DETACH_SELF_PID" --git-ref "refs/heads/$BRANCH" --worktree "$WT" --allow-reopen 2>/dev/null || true)"
+  local acq
+  if ! acq="$(bash "$run_ledger" stage-transfer \
+    --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
+    --generation "$DETACH_PRECLAIM_GEN" --nonce "$DETACH_PRECLAIM_NONCE" \
+    --pid "$DETACH_SELF_PID" --git-ref "refs/heads/$BRANCH" \
+    --worktree "$WT" 2>/dev/null)"; then
+    exit 2
+  fi
   DETACH_GEN="$(printf '%s' "$acq" | jq -r '.generation // empty' 2>/dev/null || true)"
   DETACH_NONCE="$(printf '%s' "$acq" | jq -r '.nonce // empty' 2>/dev/null || true)"
-  local hb_pid=""
-  if [ -n "$DETACH_GEN" ] && [ -n "$DETACH_NONCE" ]; then
-    heartbeat_loop &
-    hb_pid=$!
+  if [ -z "$DETACH_GEN" ] || [ -z "$DETACH_NONCE" ]; then
+    exit 2
   fi
+  # Publish child liveness only after durable ownership handoff succeeds.
+  write_manifest "$DETACH_SELF_PID"
+  local hb_pid=""
+  heartbeat_loop &
+  hb_pid=$!
   # run the engine worker (in-session), then finalize by artifact
   run_agent
   [ -n "$hb_pid" ] && { kill "$hb_pid" 2>/dev/null || true; wait "$hb_pid" 2>/dev/null || true; }
@@ -2779,6 +2743,7 @@ dispatch_detached_run() {
       STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
+    declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container run_worker run_agent compute_artifacts passive_capture \

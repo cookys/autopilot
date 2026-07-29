@@ -1419,7 +1419,10 @@ function graphGrantContext(state, payload) {
   const node = nodes.find((entry) => entry.id === payload.graph_node_id);
   const progress = state.graph_progress && state.graph_progress[payload.graph_node_id];
   if (!node || !progress) return { node: null, progress: null, error: 'binding_mismatch' };
-  if (payload.graph_attempt > node.gate_attempt_budget) {
+  const consumedGateAttempts = Object.values(state.claims || {}).filter((claim) => (
+    claim.graph_node_id === payload.graph_node_id && claim.released !== true
+  )).length;
+  if (consumedGateAttempts >= node.gate_attempt_budget) {
     return { node, progress, error: 'grant_already_claimed' };
   }
   const acceptance = Array.isArray(payload.acceptance_ids)

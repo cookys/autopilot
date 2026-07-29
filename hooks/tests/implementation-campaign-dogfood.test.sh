@@ -353,6 +353,16 @@ const legacyRoster = {
   implementer_runner: 'fixture',
   loop_max_rounds: 1,
   loop_convergence_verdict: 'SHIP-AS-IS',
+  min_panel_size: 1,
+  qc_panel_seats_complete: true,
+  qc_panel_seats: [{
+    role: 'qc',
+    runner: 'fixture',
+    model: 'fixture-reviewer',
+    effort: 'high',
+    endpoint: null,
+    family: 'fixture',
+  }],
 };
 const legacyEngine = new AutopilotEngine({
   cwd: repo,

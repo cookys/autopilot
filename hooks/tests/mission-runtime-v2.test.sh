@@ -788,6 +788,19 @@ if (runtime) {
     verify_first: false,
     loop_max_rounds: 2,
     loop_convergence_verdict: 'SHIP-AS-IS',
+    min_panel_size: 1,
+    required_review_families: 1,
+    cross_family_required: false,
+    reviewer_qualified: true,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [{
+      role: 'qc',
+      runner: 'codex',
+      model: 'fixture-reviewer',
+      effort: 'medium',
+      endpoint: null,
+      family: 'fixture',
+    }],
   };
   const missionRootRunId = intake.contract
     && intake.contract.mission_runtime

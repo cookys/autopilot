@@ -613,13 +613,43 @@ function resolveEngineUnavailableDirective(roster, dispatchStatus, errorText) {
   return { policy, action, error_class: null, dispatch_status: dispatchStatus };
 }
 
-function validateReviewRoster(roster) {
+function validateReviewRoster(roster, options = {}) {
   if (!roster || typeof roster !== 'object') {
     throw new TypeError('review roster is required');
   }
   for (const field of ['reviewer_runner', 'reviewer_engine', 'reviewer_effort']) {
     if (typeof roster[field] !== 'string' || roster[field].length === 0) {
       throw new TypeError(`review roster field ${field} is required`);
+    }
+  }
+  if (options.requireTerminalPanel !== true) return roster;
+  if (!Number.isSafeInteger(roster.min_panel_size) || roster.min_panel_size < 1) {
+    throw new TypeError('managed review roster min_panel_size must be an integer >= 1');
+  }
+  if (roster.qc_panel_seats_complete !== true) {
+    throw new TypeError('managed review roster requires complete exact QC seat metadata');
+  }
+  if (!Array.isArray(roster.qc_panel_seats)
+      || roster.qc_panel_seats.length < roster.min_panel_size) {
+    throw new TypeError('managed review roster exact QC seats must satisfy min_panel_size');
+  }
+  for (const [index, seat] of roster.qc_panel_seats.entries()) {
+    const fields = seat && typeof seat === 'object' && !Array.isArray(seat)
+      ? Object.keys(seat)
+      : [];
+    const valid = fields.length === 6
+      && fields.every((field) => [
+        'role', 'runner', 'model', 'effort', 'endpoint', 'family',
+      ].includes(field))
+      && seat.role === 'qc'
+      && typeof seat.runner === 'string' && seat.runner.length > 0
+      && typeof seat.model === 'string' && seat.model.length > 0
+      && typeof seat.effort === 'string' && seat.effort.length > 0
+      && typeof seat.family === 'string' && seat.family.length > 0
+      && (seat.endpoint === null
+        || (typeof seat.endpoint === 'string' && /^[A-Za-z0-9_]+$/.test(seat.endpoint)));
+    if (!valid) {
+      throw new TypeError(`managed review roster qc_panel_seats[${index}] is invalid`);
     }
   }
   return roster;
@@ -4415,7 +4445,7 @@ class AutopilotEngine {
     }
 
     try {
-      validateReviewRoster(roster);
+      validateReviewRoster(roster, { requireTerminalPanel: campaignRequested });
       validateImplementerRoster(roster);
     } catch (error) {
       const startedAt = this.now();

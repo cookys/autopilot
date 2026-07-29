@@ -1839,6 +1839,102 @@ assert_contains "$OUT" "reason=implementer roster field implementer_runner is re
 assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation loop does not dispatch with malformed roster"
 assert_contains "$OUT" "ledger=prepare_implementation_loop:blocked" "AutopilotEngine implementation loop records malformed roster as preparation block"
 
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/missing-panel-roster-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+let implementationCalls = 0;
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    implementationCalls += 1;
+    throw new Error('implementation should not dispatch without sealed QC metadata');
+  },
+});
+const baseInput = {
+  promptFile: prompt,
+  branch: 'managed-missing-panel-loop',
+  base: '1111111111111111111111111111111111111111',
+};
+const baseRoster = {
+  reviewer_engine: 'test-review-model',
+  reviewer_effort: 'xhigh',
+  reviewer_runner: 'test-review-runner',
+  implementer_engine: 'test-impl-model',
+  implementer_effort: 'high',
+  implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 1,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+};
+const result = engine.runImplementationReviewLoop({
+  ...baseInput,
+  roster: baseRoster,
+});
+const incomplete = engine.runImplementationReviewLoop({
+  ...baseInput,
+  roster: {
+    ...baseRoster,
+    min_panel_size: 1,
+    qc_panel_seats_complete: false,
+    qc_panel_seats: [],
+  },
+});
+const undersized = engine.runImplementationReviewLoop({
+  ...baseInput,
+  roster: {
+    ...baseRoster,
+    min_panel_size: 2,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [{
+      role: 'qc',
+      runner: 'test-review-runner',
+      model: 'test-review-model',
+      effort: 'xhigh',
+      endpoint: null,
+      family: 'test-family',
+    }],
+  },
+});
+const malformed = engine.runImplementationReviewLoop({
+  ...baseInput,
+  roster: {
+    ...baseRoster,
+    min_panel_size: 1,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [{
+      role: 'qc',
+      runner: 'test-review-runner',
+      model: 'test-review-model',
+      effort: 'xhigh',
+      endpoint: null,
+    }],
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`rounds=${result.rounds}`);
+console.log(`reason=${result.reason}`);
+console.log(`incomplete=${incomplete.status}:${incomplete.phase}:${incomplete.reason}`);
+console.log(`undersized=${undersized.status}:${undersized.phase}:${undersized.reason}`);
+console.log(`malformed=${malformed.status}:${malformed.phase}:${malformed.reason}`);
+console.log(`implementation_calls=${implementationCalls}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine managed loop missing panel roster exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine managed loop blocks missing panel metadata"
+assert_contains "$OUT" "phase=prepare_implementation_loop" "AutopilotEngine managed loop reports panel failure in preparation phase"
+assert_contains "$OUT" "rounds=0" "AutopilotEngine managed loop blocks missing panel metadata before round one"
+assert_contains "$OUT" "reason=managed review roster min_panel_size must be an integer >= 1" "AutopilotEngine managed loop surfaces missing sealed panel minimum"
+assert_contains "$OUT" "incomplete=blocked:prepare_implementation_loop:managed review roster requires complete exact QC seat metadata" "AutopilotEngine managed loop rejects incomplete exact QC metadata"
+assert_contains "$OUT" "undersized=blocked:prepare_implementation_loop:managed review roster exact QC seats must satisfy min_panel_size" "AutopilotEngine managed loop rejects an undersized exact QC roster"
+assert_contains "$OUT" "malformed=blocked:prepare_implementation_loop:managed review roster qc_panel_seats[0] is invalid" "AutopilotEngine managed loop rejects malformed exact QC seat metadata"
+assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine managed loop does not dispatch without sealed panel metadata"
+assert_contains "$OUT" "ledger=prepare_implementation_loop:blocked" "AutopilotEngine managed loop records missing panel metadata as preparation block"
+
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/cwd-propagation-repo" <<'NODE'
 const fs = require('fs');
 const os = require('os');

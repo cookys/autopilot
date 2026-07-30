@@ -358,7 +358,7 @@ function buildCampaignBundle({
     deferral_harm: 'blocks the frozen LSM P1 acceptance contract',
   }));
   const compositionCandidate = { ...candidate, committed: true };
-  const terminal = runCampaignComposition({ maxRepairGenerations: 0, minPanelSize: 1 }, {
+  const terminal = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 0, minPanelSize: 1 }, {
     preflight: () => ({ passed: true }),
     implement: () => compositionCandidate,
     scopeCheck: () => ({ passed: true }),

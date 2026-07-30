@@ -99,28 +99,13 @@
           "src/engine/work-order.js"
         ],
         "output_paths": [
-          "hooks/tests/autopilot-engine.test.sh",
-          "hooks/tests/codex-compaction-rehydration.test.sh",
-          "hooks/tests/dispatch-hetero.test.sh",
-          "hooks/tests/engine-capability-state.test.sh",
-          "hooks/tests/implementation-campaign-dogfood.test.sh",
-          "hooks/tests/implementation-campaign-state.test.sh",
-          "hooks/tests/mission-policy-graph.test.sh",
-          "hooks/tests/mission-routing-admission.test.sh",
           "schemas/implementation-campaign-contract.schema.json",
           "schemas/implementation-campaign-receipt.schema.json",
           "schemas/mission-execution-graph.schema.json",
-          "scripts/compaction-rehydrate.js",
           "scripts/dispatch-hetero.sh",
-          "scripts/mission-routing-admission.js",
-          "scripts/probe-engine-capability.sh",
           "src/campaign/cli.js",
-          "src/engine/autopilot-engine.js",
-          "src/engine/campaign-composition.js",
           "src/engine/campaign-intake.js",
-          "src/engine/implementation-campaign.js",
-          "src/engine/mission-execution-graph.js",
-          "src/engine/work-order.js"
+          "src/engine/mission-execution-graph.js"
         ]
       }
     }

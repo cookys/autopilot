@@ -50,8 +50,7 @@ function panel(minimum, seats, overrides = {}) {
 }
 
 function run(minimum, panelReceipt) {
-  return runCampaignComposition({
-    maxRepairGenerations: 0,
+  return runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 0,
     minPanelSize: minimum,
   }, {
     preflight: () => ({ passed: true }),
@@ -235,7 +234,7 @@ assert.strictEqual(incomplete.status, 'blocked');
 assert.strictEqual(incomplete.reason, 'final_panel_metadata_incomplete');
 
 assert.throws(
-  () => runCampaignComposition({ maxRepairGenerations: 0 }, {}),
+  () => runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 0 }, {}),
   (error) => error && error.code === 'INVALID_PANEL_MINIMUM',
 );
 

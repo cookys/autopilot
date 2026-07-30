@@ -75,3 +75,29 @@ The everyday per-effect admission gate reads `controller.dispatch_records` / `re
 ## Confirmed solid (traced end-to-end by auditors; do not re-litigate without new evidence)
 
 Root CAS lock hierarchy (no TOCTOU within a root's admission); stale-lock reclaim arbitrated by atomic `open wx`; malformed/legacy JSON never silently absent (fail-closed, `.error` rows count as nonterminal); reconcile-receipt re-derivation re-reads live state under lock; all worktree/mutation checks grounded in real git (never JSON claims); controller ledger append-only verification (monotonic timestamps, digest binding); PID-reuse mitigated via pid+start+pgid+sid; multi-node no-op aggregation correct (1-of-N satisfied ≠ zero-dispatch; 0-node/dup-id/empty-path rejected upstream); no-op proof re-hashes live bytes against admission HEAD; `compaction-rehydrate` never trusts summaries; orphan-adoption CLI booleans never trusted; 6/6 effect sites budget-gated before adapter invocation; full-diff barrier ordering correct at current call sites; gate-reuse keys bind candidate+base SHA+generation+WO+root; failed gates ineligible for reuse; gate invalidation requires explicit reason; frozen-denominator partition check hard-fails on drift; recovery receipts re-derive clean/dirty/unique/terminal from live observation; `checkTempCapacity`/`admitHighWater` fail closed; Codex mirrors byte-identical; status enums in parity across layers; test suites: 5 of 6 files strong (real negative + tamper matrices, production-path fixtures, clean isolation) — the one weak seam is the string-grep noted in C1.
+
+---
+
+## Resolution
+
+The frozen production repair is
+`47d0beefcb199f689d39a7c1afd06d6d7f73cd86`; the qualification-contract closure is
+`6af53524be02ff3b2edda45f68147068d5da79a9`.
+
+| Finding | Disposition |
+|---|---|
+| C1 shell `set -u` crash | Closed with bound worktree variables and behavioral shell coverage. |
+| C2 lifecycle side door | Closed with mandatory stale/terminal authority, fresh write-time observation, and immutable tombstones. |
+| C3 no-effect accounting | Closed end-to-end across producer, parser, Engine adapter, campaign accounting, and the isolated boundary/budget bridge oracle. |
+| C4 stale hot-path authority | Closed with exact persisted fence/CAS/controller-digest revalidation before effects. |
+
+An independent frozen whole-diff review returned PASS with no unresolved Critical or Major
+findings. Full hook qualification on `47d0beef` passed 255 of 258 suites; the three failures were
+closed contract/fixture inventory drift. A fresh read-only verifier then ran exactly those three
+suites on `6af53524` and passed all of them: 195, 276, and 12 assertions respectively. The final
+worktree was clean before and after verification.
+
+M1–M10 plus the lower-severity observations were consolidated into nine bounded follow-ups and
+admitted to `docs/BACKLOG.md`. Admission receipt:
+`f172bf5643e83ba5cc446671190bc5275bd72d7b76372c2ee006a55aeb55a6de`
+(9 admitted, 0 duplicate, 0 rejected, current ticket not reopened).

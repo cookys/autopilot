@@ -11,29 +11,45 @@ const CAMPAIGN_STATES = Object.freeze({
   VERTICAL_VERIFICATION: 'VERTICAL_VERIFICATION',
   REVIEWING: 'REVIEWING',
   ADJUDICATING: 'ADJUDICATING',
+  AWAITING_DISPOSITION: 'AWAITING_DISPOSITION',
   REPAIRING: 'REPAIRING',
   TERMINAL_READY: 'TERMINAL_READY',
   TERMINAL_FOLLOW_UP: 'TERMINAL_FOLLOW_UP',
   TERMINAL_STOP: 'TERMINAL_STOP',
+  BOUNDARY_REJECTED: 'BOUNDARY_REJECTED',
+  AWAITING_CONVERGENCE_ADJUDICATION: 'AWAITING_CONVERGENCE_ADJUDICATION',
 });
 const CAMPAIGN_EVENTS = Object.freeze({
   IMPLEMENTATION_STARTED: 'implementation_started',
   IMPLEMENTATION_COMPLETED: 'implementation_completed',
   MUTATION_FAILED: 'mutation_failed',
+  BOUNDARY_REJECTED: 'boundary_rejected',
   VERTICAL_VERIFIED: 'vertical_verified',
   REVIEW_COMPLETED: 'review_completed',
+  AWAITING_DISPOSITION: 'awaiting_disposition',
+  DISPOSITION_RESUMED: 'disposition_resumed',
   REPAIR_AUTHORIZED: 'repair_authorized',
   REPAIR_STARTED: 'repair_started',
   REPAIR_COMPLETED: 'repair_completed',
+  AWAITING_CONVERGENCE: 'awaiting_convergence_adjudication',
   TERMINAL_READY: 'terminal_ready',
   TERMINAL_FOLLOW_UP: 'terminal_follow_up',
   TERMINAL_STOP: 'terminal_stop',
   RESUMED: 'resumed',
 });
+// Hard-closed terminals: no further events (including RESUMED) without a new campaign.
 const TERMINAL_STATES = new Set([
   CAMPAIGN_STATES.TERMINAL_READY,
   CAMPAIGN_STATES.TERMINAL_FOLLOW_UP,
   CAMPAIGN_STATES.TERMINAL_STOP,
+]);
+// Non-success but durable/resumable — not unknown, not mutation_failed fabrication.
+// BOUNDARY_REJECTED preserves candidate_ref + reason and remains resumable when
+// possibly-effectful; it is NOT collapsed into TERMINAL_STOP/mutation_failed.
+const NON_SUCCESS_DURABLE_STATES = new Set([
+  CAMPAIGN_STATES.BOUNDARY_REJECTED,
+  CAMPAIGN_STATES.AWAITING_DISPOSITION,
+  CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION,
 ]);
 const MUTATION_START_EVENTS = new Set([
   CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
@@ -103,13 +119,33 @@ const EVENT_PAYLOAD_KEYS = Object.freeze({
     'failure_receipt_digest',
     'possibly_effectful',
   ],
+  [CAMPAIGN_EVENTS.BOUNDARY_REJECTED]: [
+    'reason',
+    'boundary_reason',
+    'candidate_ref',
+    'boundary_receipt_digest',
+  ],
   [CAMPAIGN_EVENTS.VERTICAL_VERIFIED]: ['passed', 'evidence_digest'],
   [CAMPAIGN_EVENTS.REVIEW_COMPLETED]: ['review_digest'],
+  [CAMPAIGN_EVENTS.AWAITING_DISPOSITION]: [
+    'reason',
+    'findings_digest',
+    'candidate_ref',
+  ],
+  [CAMPAIGN_EVENTS.DISPOSITION_RESUMED]: [
+    'registry_complete',
+    'registry_digest',
+  ],
   [CAMPAIGN_EVENTS.REPAIR_AUTHORIZED]: [
     'registry_complete',
     'registry_digest',
     'repair_gate_passed',
     'repair_gate_digest',
+  ],
+  [CAMPAIGN_EVENTS.AWAITING_CONVERGENCE]: [
+    'reason',
+    'exceeded_axes',
+    'budget_receipt_digest',
   ],
   [CAMPAIGN_EVENTS.REPAIR_STARTED]: ['sealed_contract'],
   [CAMPAIGN_EVENTS.REPAIR_COMPLETED]: [
@@ -198,11 +234,23 @@ function normalizeCampaignArtifactReference(value) {
   if (!isPlainObject(value) || typeof value.kind !== 'string') {
     fail('INVALID_ARTIFACT_REFERENCE', 'campaign artifact reference must be a named object');
   }
+  // Digest-bound artifact kinds emitted by the campaign reducer and controller
+  // helpers. Every kind the reducer can bind as output_artifact_digest must be
+  // accepted here so intake/CLI projection never rejects durable evidence.
   const digestKinds = new Set([
     'verification_receipt',
     'product_review',
     'finding_registry',
     'campaign_terminal',
+    'campaign_boundary_rejected',
+    'campaign_awaiting_disposition',
+    'campaign_convergence_budget',
+    'controller_progress_receipt',
+    'controller_gate_journal',
+    'controller_resource_debt',
+    'controller_repair_ticket',
+    'controller_orphan_adoption_receipt',
+    'controller_postcompact_adapter_receipt',
   ]);
   if (digestKinds.has(value.kind)) {
     const hasRepairLineage = new Set(['product_review', 'campaign_terminal']).has(value.kind)
@@ -761,6 +809,8 @@ function reduceCampaignState(currentState, event) {
     allowBudgetOverrun: new Set([
       CAMPAIGN_EVENTS.MUTATION_FAILED,
       CAMPAIGN_EVENTS.TERMINAL_STOP,
+      CAMPAIGN_EVENTS.BOUNDARY_REJECTED,
+      CAMPAIGN_EVENTS.AWAITING_CONVERGENCE,
     ]).has(event.event_type),
   });
   if (MUTATION_START_EVENTS.has(event.event_type)
@@ -778,6 +828,22 @@ function reduceCampaignState(currentState, event) {
     if (event.usage.changed_files !== currentState.usage.changed_files
         || event.usage.churn !== currentState.usage.churn) {
       fail('RESUME_GROWTH_DRIFT', 'resume cannot change durable file or churn usage');
+    }
+    // Exact replay of BOUNDARY_REJECTED / AWAITING_DISPOSITION preserves durable
+    // wait evidence and never fabricates mutation-failure. Phase stays put.
+    if (NON_SUCCESS_DURABLE_STATES.has(currentState.phase)
+        || currentState.phase === CAMPAIGN_STATES.PREPARED
+        || currentState.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION
+        || currentState.phase === CAMPAIGN_STATES.ADJUDICATING
+        || currentState.phase === CAMPAIGN_STATES.REVIEWING
+        || currentState.phase === CAMPAIGN_STATES.IMPLEMENTING
+        || currentState.phase === CAMPAIGN_STATES.REPAIRING) {
+      // no phase change — idempotent resume ledger marker only
+    } else {
+      fail(
+        'INVALID_TRANSITION',
+        `cannot apply resumed while campaign is ${currentState.phase}`,
+      );
     }
   } else if (currentState.phase === CAMPAIGN_STATES.PREPARED
       && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED) {
@@ -810,6 +876,40 @@ function reduceCampaignState(currentState, event) {
     }
     next.live_lease = null;
     next.phase = CAMPAIGN_STATES.TERMINAL_STOP;
+  } else if (new Set([
+    CAMPAIGN_STATES.IMPLEMENTING,
+    CAMPAIGN_STATES.REPAIRING,
+  ]).has(currentState.phase)
+      && event.event_type === CAMPAIGN_EVENTS.BOUNDARY_REJECTED) {
+    // First-class non-success: preserve candidate_ref + boundary reason; never
+    // collapse to unknown status or fabricated mutation-failure evidence.
+    requireLease(currentState, event);
+    if (typeof event.payload.reason !== 'string' || event.payload.reason.trim() === ''
+        || typeof event.payload.boundary_reason !== 'string'
+        || event.payload.boundary_reason.trim() === ''
+        || !isSha256(event.payload.boundary_receipt_digest)
+        || event.output_artifact_digest !== canonicalDigest({
+          kind: 'campaign_boundary_rejected',
+          digest: event.payload.boundary_receipt_digest,
+        })) {
+      fail(
+        'BOUNDARY_EVIDENCE_REQUIRED',
+        'boundary_rejected requires digest-bound boundary evidence and reason',
+      );
+    }
+    // candidate_ref may be null only when no commit was produced; if present must be sha-like
+    if (event.payload.candidate_ref !== null
+        && (typeof event.payload.candidate_ref !== 'string'
+          || event.payload.candidate_ref.length < 7)) {
+      fail('BOUNDARY_CANDIDATE_REQUIRED', 'boundary_rejected candidate_ref is invalid');
+    }
+    next.live_lease = null;
+    next.phase = CAMPAIGN_STATES.BOUNDARY_REJECTED;
+    next.boundary_rejected = {
+      reason: event.payload.boundary_reason,
+      candidate_ref: event.payload.candidate_ref,
+      receipt_digest: event.payload.boundary_receipt_digest,
+    };
   } else if (currentState.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION
       && event.event_type === CAMPAIGN_EVENTS.VERTICAL_VERIFIED) {
     if (event.payload.passed !== true || !isSha256(event.payload.evidence_digest)) {
@@ -822,6 +922,29 @@ function reduceCampaignState(currentState, event) {
       fail('REVIEW_EVIDENCE_REQUIRED', 'review completion requires a review artifact digest');
     }
     next.phase = CAMPAIGN_STATES.ADJUDICATING;
+  } else if (currentState.phase === CAMPAIGN_STATES.ADJUDICATING
+      && event.event_type === CAMPAIGN_EVENTS.AWAITING_DISPOSITION) {
+    if (typeof event.payload.reason !== 'string' || event.payload.reason.trim() === ''
+        || !isSha256(event.payload.findings_digest)) {
+      fail(
+        'DISPOSITION_WAIT_EVIDENCE_REQUIRED',
+        'awaiting_disposition requires findings digest and reason',
+      );
+    }
+    next.phase = CAMPAIGN_STATES.AWAITING_DISPOSITION;
+    next.awaiting_disposition = {
+      reason: event.payload.reason,
+      findings_digest: event.payload.findings_digest,
+      candidate_ref: event.payload.candidate_ref || null,
+    };
+  } else if (currentState.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION
+      && event.event_type === CAMPAIGN_EVENTS.DISPOSITION_RESUMED) {
+    if (event.payload.registry_complete !== true
+        || !isSha256(event.payload.registry_digest)) {
+      fail('REGISTRY_INCOMPLETE', 'disposition resume requires complete registry');
+    }
+    next.phase = CAMPAIGN_STATES.ADJUDICATING;
+    next.awaiting_disposition = null;
   } else if (new Set([
     CAMPAIGN_STATES.ADJUDICATING,
     CAMPAIGN_STATES.VERTICAL_VERIFICATION,
@@ -873,6 +996,23 @@ function reduceCampaignState(currentState, event) {
       );
     }
     next.phase = CAMPAIGN_STATES.TERMINAL_FOLLOW_UP;
+  } else if (event.event_type === CAMPAIGN_EVENTS.AWAITING_CONVERGENCE
+      && currentState.live_lease === null
+      && !TERMINAL_STATES.has(currentState.phase)) {
+    if (typeof event.payload.reason !== 'string' || event.payload.reason.trim() === ''
+        || !Array.isArray(event.payload.exceeded_axes)
+        || event.payload.exceeded_axes.length === 0
+        || !isSha256(event.payload.budget_receipt_digest)) {
+      fail(
+        'CONVERGENCE_BUDGET_EVIDENCE_REQUIRED',
+        'awaiting_convergence_adjudication requires exceeded axes and budget receipt',
+      );
+    }
+    next.phase = CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION;
+    next.convergence_budget = {
+      exceeded_axes: [...event.payload.exceeded_axes].sort(),
+      budget_receipt_digest: event.payload.budget_receipt_digest,
+    };
   } else if (event.event_type === CAMPAIGN_EVENTS.TERMINAL_STOP
       && currentState.live_lease === null) {
     if (!isSha256(event.payload.stop_receipt_digest)) {
@@ -886,12 +1026,18 @@ function reduceCampaignState(currentState, event) {
     );
   }
 
-  if (TERMINAL_STATES.has(next.phase)) {
+  // Require a reason only when entering a terminal or durable-wait phase — not on
+  // exact RESUMED replay of an already-durable state (payload has no reason key).
+  if (event.event_type !== CAMPAIGN_EVENTS.RESUMED
+      && (TERMINAL_STATES.has(next.phase)
+        || NON_SUCCESS_DURABLE_STATES.has(next.phase))) {
     const reason = event.payload.reason;
     if (typeof reason !== 'string' || reason.trim() === '') {
-      fail('TERMINAL_REASON_REQUIRED', 'terminal campaign event requires a reason');
+      fail('TERMINAL_REASON_REQUIRED', 'terminal/durable-wait campaign event requires a reason');
     }
-    next.terminal_reason = reason;
+    if (TERMINAL_STATES.has(next.phase)) {
+      next.terminal_reason = reason;
+    }
   }
   next.usage = { ...event.usage };
   next.last_event_at = event.timestamp;
@@ -914,6 +1060,7 @@ module.exports = {
   CAMPAIGN_EVENTS,
   CAMPAIGN_SCHEMA_VERSION,
   CAMPAIGN_STATES,
+  NON_SUCCESS_DURABLE_STATES,
   CampaignStateError,
   campaignIdFor,
   canonicalDigest,

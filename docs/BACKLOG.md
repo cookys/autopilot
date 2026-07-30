@@ -39,55 +39,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### P0 — Review repair convergence gate：同 finding 重用原 worktree，禁止整體重派
-- **Status**: Implemented in `docs/projects/2026-07-30-repair-lineage-convergence/`; pending terminal joint review and merge.
-- **Trigger**: Owner Kernel P3.7 U6 完成合併、驗收與 lifecycle cleanup 後立即執行；在修正落地前，任何 managed `engine implement-review` campaign 若同一 normalized finding 第二次出現，depth 0 必須停止自動重派並人工凍結逐 finding 修補工單。
-- **Context**: 2026-07-29 Owner Kernel U6 實跑中，Grok implementer 經多輪才收斂；既有 attempt budget、output allowlist、churn cap、effect destination 與 no-effect accounting 能阻止越界，卻不能阻止「合法但低效率地反覆修」，且 `engine implement-review` 把每次 repair 包成 successor Mission／新 branch／新 checkout，造成已具備可續修狀態的 clean worktree 重複累積。實碼亦確認 `defaultRepairPromptWriter` 只重建文字 prompt，Grok repair rail 沒有 `--continue`／`--resume`／`session-id`，Codex rail還明確使用 `--no-session-persistence`；現有 resume 只接 Git candidate/ledger，不接模型 transcript，因此每輪都重新讀 repo、重建上下文。修正需：(1) reviewer finding 以 stable identity 正規化並跨 round 持久化；(2) 同一 finding lineage 的 repair 預設必須 attach/resume 原 branch 與原 worktree，在同一 checkout 由原 implementer定點續修；只有 ownership、隔離邊界或 base lineage 真正改變，且有 durable disposition receipt 時，才准建立 successor worktree；(3) 同 provider/model、同 finding lineage、transcript source digest 與 last accepted commit 相符、未超 context-window budget 時，優先接回原 implementer session；不符合時才建立 digest-bound compacted handoff 開新 session，且必須記錄未續接原因，絕不能把不相干或過期 transcript 靜默帶入；(4) dispatch admission 以前置 gate 斷言同一 repair lineage 最多一個 active worktree，舊 checkout 未 disposition 時新 worktree 建立數必須為零；(5) 同一 finding 第二次出現時，下一輪必須以 last accepted candidate 為 base，contract 只准修改該 finding 綁定的 production/test paths，並要求新增或引用可重現 regression test；(6) 同類 finding 連續兩輪未收斂時轉為 durable `awaiting_convergence_adjudication`，停止 model spend，不得自動整體重派；(7) repair prompt 必須攜帶 exact prior commit、未解 findings、已通過 assertions 與禁止回歸清單；(8) receipt 分開記錄 inherited candidate churn 與本輪 delta churn/token/cost、transcript reused、新輸入 bytes/tokens，讓 operator 看得出是增量修補而非重寫；(9) resume/compaction 後從同一 finding/resource/session ledger 恢復 worktree、branch、owner、engine session 與 round identity，不得依賴 transcript 摘要；(10) 任何 canonical controller 的 manual/direct CLI fallback 必須先取得等價 gate-parity receipt，機械證明仍執行 finding adjudication、repair-scope seal、cumulative churn、attempt budget、session/worktree identity、deterministic verification 與 lifecycle disposition；缺任何一項只能停在 `precondition_failed`，不得以「手動但有注意」代替；(11) 每輪 repair intake 凍結 `accepted_invariants`（已通過測試、production trust boundary、manifest binding、禁止回歸清單）及其來源 commit/digest，修後除 delta oracle 外必須重跑並逐項證明 invariant 未退化；(12) review ledger 明確區分 `full_diff_generation` 與 `focused_delta_round`，每個 candidate 只允許一個 authoritative full-diff verdict，修補後新 generation 必須把新 finding 與既有 normalized lineage 比對，避免同一語義換 wording 就重置 round budget；(13) full-diff reviewer 提出的 finding 必須附最小反例或被 depth-0 重現後才進 repair，泛化建議／未觸及 frozen spec 的加固不得自動延長 loop；(14) 若修補為關閉 finding A 而在同一 trust/acceptance boundary 引入 finding B，視為同一 convergence family recurrence，不因 finding id 改名重新取得兩輪預算。驗收需重播本次 U6 的重複 authority、manifest-binding、test-seam 與 alias-scan findings，證明第二輪後 successor checkout 建立數為零、同一 worktree/branch/engine-session identity 不變、base commit 與 `accepted_invariants` 不回歸，manual fallback 缺 gate-parity receipt 時模型 spend 為零，且同義 finding／同 boundary 衍生 finding 都進同一 recurrence budget；並量測相較 fresh-session 的輸入 token/bytes 下降。模擬 controller/compaction 後仍須 attach 原 checkout/session；source digest 漂移或 context 超限時可安全退化到 bounded handoff，且只有 explicit adjudication 或已證明的隔離邊界變更才可恢復 spend／建立 successor。
-- **Effort**: L
-- **Source**: 2026-07-29～30 Owner Kernel P3.7 U6 live `/l6` convergence/worktree incident；candidate lineage `ff6e64b` → `bec38c5` → `6292003` → `1823981` → `331e1d6` → `35eefe4` → `4f9db9b` → `1e39459` → `e917ccc`；18 個 worktree 盤點後清至 2 個；`e917ccc` full-diff Sol review exposed manual-fallback gate parity、manifest/test-seam/alias-scan recurrence
-
-### P0 — Controller execution discipline：full-diff 先行、原工單續修、compact 後機械復原
-- **Trigger**: repair-lineage-convergence 合併後立即執行，且必須在下一個 `/l5`／`/l6` 多輪實作 campaign 前完成；完成前由 depth 0 在每次 dispatch 前人工核對 durable task ledger 與 active worktree 唯一性。
-- **Context**: 本次長 session 的時間浪費不是單一模型慢，而是 controller 缺少一個不可繞過的執行順序：局部 gate 跑完就開始修、之後才補 authoritative full-diff；review 退回時有時建立新工單／新 branch／新 checkout，而不是把 finding 回送原 implementer session；compact 後依摘要猜進度，重新命名 phase 或重派已完成工作；進度分母也可由 controller 任意膨脹成 34 phases。修正需：(1) first candidate 在任何 repair spend 前必須取得一次完整 frozen-base→candidate full-diff verdict，focused delta 只能作該 generation 的補充，不能冒充 full-diff；(2) 每個 deliverable 只有一張 durable work order，記錄 original dispatch run、branch、worktree、provider session、accepted commit、unresolved findings、review verdict、next action 與 expiry；review 退回只能 append repair ticket 並 resume 原工單，除非有 machine-readable non-reuse/disposition receipt；(3) admission gate 以 work-order identity 去重，active repair 未 terminal/disposition 時，同 deliverable 的新 dispatch、新 worktree、新 branch 數必須為零；(4) compaction/handoff 後第一個 effectful 動作前，必須從 ledger + Git + process parentage 機械 rehydrate 並 reconcile，摘要只作提示，不能作 authority；(5) frozen project graph 定義總 deliverable/phase 分母，controller 不得把 review finding、重試或測試批次升格成新 phase；(6) 每輪輸出機械化 progress receipt：current project、deliverable、generation、active process、completed/remaining、blocked reason、ETA basis；(7) repair budget同時計入 model calls、fresh input bytes/tokens、wall time、worktree count與 finding recurrence，任一超限即 `awaiting_convergence_adjudication`；(8) full-diff、focused tests、full suite、joint review 各只有一個明確 gate owner與時點，禁止同一 gate 因 controller 忘記結果而重跑；(9) transcript audit 要能由 run/work-order IDs重建「為何重派、誰建立資源、哪個 gate 退回」，並把無 disposition 的資源 debt 擋在下一次 dispatch 前。
-- **Effort**: L
-- **Source**: 2026-07-30 repair-lineage-convergence depth-0 transcript audit；使用者要求統一收錄 full-diff 時點、review repair transcript reuse、worktree reuse、重派限制、compaction recovery、phase/progress honesty 改善
-
-### Live quota probe writes legacy capability partition; strict dispatch needs exact effort/endpoint
-- **Trigger**: before the next managed `/l5`/`/l6` or Mission campaign that uses live `--probe` / readiness refresh under strict dispatch admission; or next time touching `engine-capability-state.js` probe writers and `resolve-endpoint` / strict unit-contract admission together.
-- **Context**: 2026-07-28 real L6 Mission run: live quota probing still writes a **legacy** capability partition (coarse runner/model pool shape), while strict dispatch admission requires an **exact** effort/endpoint tuple. Result: a freshly probed “available” seat can still fail pre-spend as not-admitted, or an exact-tuple seat can be shadowed by a stale legacy row. Fix: probe/record on the same exact-identity key the admission gate reads (runner + model + effort + named endpoint where applicable); refuse to claim readiness from a legacy-only partition when the roster demands exact tuples. Do not weaken strict admission to accept legacy rows.
-- **Effort**: M
-- **Source**: 2026-07-28 Mission Convergence Portfolio real L6 run; related ship note `da78a66` (exact effort/endpoint admit) still incomplete at the live-probe write path
-
-### Mission graph admission: reject non-existent/mistyped output_paths and verify version-mirror closure pre-spend
-- **Trigger**: before the next Mission grant/graph freeze, or immediately after any campaign lists an `output_path` that does not exist in-tree / cannot be produced by the sealed allowlist (e.g. a fabricated root `marketplace.json`); also when version-mirror files are required outputs but transitive sync closure is not checked before model spend.
-- **Context**: 2026-07-28 release-closeout: the original closeout contract declared an impossible non-existent `marketplace.json` output and had to be **superseded before model spend**. Mission graph admission today does not reject non-existent or mistyped `output_paths`, nor verify that declaring version mirrors implies the full `sync-version.js` closure set. Fix: pre-spend structural check that every `output_path` is a real path or an explicitly allowed create under `allowed_path_prefixes`, and that version-related outputs form a closed mirror set (or name the generator that must run). Fail closed with a machine reason before dispatch.
-- **Effort**: M
-- **Source**: 2026-07-28 Mission Convergence Portfolio release-closeout authority correction (`b186eae`); closeout `graph_digest` `6547db664c5818a115347abd3b37b06ecdfc9e93f56d851c6b07c8e45df4b54f`
-
-### Campaign controller treats `boundary_rejected` as unknown status (obscures boundary reason)
-- **Trigger**: next time touching the ICC/Mission campaign controller status enum, dispatch result ingestion, or any path that maps `dispatch-hetero` / unit-contract outcomes into campaign stage transitions.
-- **Context**: `boundary_rejected` is a real dispatch status (sealed path/churn/scope boundary), but the campaign controller rejects it as an **unknown** status and collapses the durable boundary reason into a generic failure. Operators cannot distinguish a correct boundary stop from a transport crash. The 2026-07-30 U6 final repair reproduced this exactly: `dispatch-hetero` returned a valid committed tip plus `boundary_rejected`, then `engine implement-review` rejected the status enum and its terminal journal fell through to `MUTATION_FAILURE_EVIDENCE_REQUIRED`. Fix: admit `boundary_rejected` as a first-class non-success terminal/retryable class, preserve the candidate ref and boundary reason code in the campaign receipt, and do not reclassify it as unknown/mutation_failed.
-- **Effort**: S–M
-- **Source**: 2026-07-28 Mission Convergence Portfolio real L6 run; 2026-07-30 U6 candidate `544391e` / campaign `campaign-v1-96181fe537114c28c294c9ab99f9eee5bbcc097b0f16a92d030b2eeec5b38632`
-
-### Missing finding-disposition authority terminal-stops campaign instead of resumable adjudication
-- **Trigger**: next managed campaign whose review emits findings while depth-0 disposition authority is absent, delayed, or not yet wired; or next touch of `adjudicate-findings.js` dispose / campaign review composition under Mission.
-- **Context**: When finding-disposition authority is missing, the campaign **terminal-stops** rather than entering a resumable adjudication wait (must-fix-now / follow-up / reject-out-of-scope). That burns the campaign and forces re-grant instead of parking on an explicit `awaiting_disposition` state with durable findings. Fix: non-empty findings without a bound disposition artifact should pause resume-safely, not finalize as failed; only missing schema/identity of the findings themselves stays fail-closed hard-stop.
-- **Effort**: M
-- **Source**: 2026-07-28 Mission Convergence Portfolio real L6 run; `adjudicate-findings.js` dispose/repair-gate contract
-
-### QC panel count degradation vs declared `min_panel_size` (final_panel_count: 1 on 3-seat roster)
-- **Trigger**: next QC panel / joint-qc under a multi-seat roster, or next change to `qc-panel.js` / review-loop panel assembly / Mission joint-qc acceptance.
-- **Context**: A configured three-seat QC roster can still produce a terminal receipt with `final_panel_count: 1` without enforcing the declared minimum or disclosing degradation before acceptance. That lets a single surviving seat silently stand in for a decorrelated panel. Fix: either hard-enforce `min_panel_size` (fail closed / retry within budget) or emit an explicit degradation receipt that acceptance predicates must refuse unless the operator sealed a reduced panel. Related reviewer parse losses stay under the existing “Reviewer response/runner exits…” item; this item owns **panel cardinality honesty**.
-- **Effort**: M
-- **Source**: 2026-07-28 Mission Convergence Portfolio real L6 run (joint-qc / terminal receipt)
-
-### Deterministic Mission resume-projection gate (historical-output replay rejection + no-op adoption)
-- **Trigger**: before the next Mission grant that reuses a partially integrated portfolio graph, or immediately after any campaign fails because `output_paths` list files already present in HEAD while the deliverable’s code is already integrated; must land before treating successor-graph editing as optional human folklore. Also fire when a precondition-failed or zero-effect graph attempt burns a gate-budget slot that should have been a no-spend no-op.
-- **Context**: After a deliverable’s required mutations are already in the base (or an authoritative receipt proves satisfaction), resume must project **remaining** nodes only. Today that judgment is human methodology (`dev-flow` / `project-lifecycle` resume-projection rule). A four-node Mission correctly rejected `runtime-control` when its `output_paths` still enumerated historical files from the old portfolio base—most already in HEAD—so a delta repair could not and must not rewrite them for boundary cosmetics. Missing mechanization: bind accepted commit/receipt evidence, drop or receipt-satisfy integrated nodes, require `output_paths` to be the candidate’s required mutation set (not historical inventory), and **reject historical-output replay before grant**. **2026-07-28 L6 release-closeout observation (extend)**: precondition-failed or no-effect graph attempts still **consume gate budget**, and completed outputs cannot be adopted as a no-op because every declared `output_path` is required to appear in the campaign diff—so an already-satisfied node cannot close without cosmetic rewrites or a wasted budget slot. The 2026-07-30 U6 final repair confirmed the same semantic ambiguity on a legitimate narrow delta: the graph listed seven allowed/historical output paths, the candidate correctly changed only the three repair paths, and boundary validation rejected it because an unchanged dogfood path was "missing from changed files". Fix must include: (a) classify precondition/no-effect as non-budget or refundable when `dispatcher_called === false` and no mutation; (b) allow receipt-backed no-op adoption when every required mutation is already present and byte-equal at HEAD without forcing a diff touch; (c) separate `allowed_output_paths` from `required_changed_paths`, so a narrow repair does not need cosmetic touches to every historical output. Do not claim this gate already exists; the successor graph edit is an explicit correction, not proof of automation.
-- **Effort**: L
-- **Source**: 2026-07-28 Mission Convergence Portfolio runtime-control bootstrap campaign rejection; candidate `b9a3f55cf2904c71a276cbaa5f19d5d9fc67ed0d`; successor-graph correction; 2026-07-28 real L6 release-closeout run (gate-budget + output_path no-op); 2026-07-30 U6 candidate `544391e`
-
 ### Mission graph scheduler 與 portfolio optimization
 - **Trigger**: v2.34.0 的 frozen deliverable graph gate 已出貨，且至少兩個真實 portfolio 顯示靜態 dependency batches 造成可量測的 idle time，或使用者明確要求跨專案排程／dashboard。
 - **Context**: v2.34.0 只需要機械阻止 phase explosion：bounded deliverable count、DAG、parallel/batch/depth/gate budget 與 ready-node admission。Critical-path optimization、dynamic reorder、跨 repo portfolio、priority queue、進度 dashboard 與成本最佳化不屬於本次 prevention boundary；過早加入會把一個 P0 correctness gate 再膨脹成 scheduler 專案。啟動後應消費同一 frozen graph/receipt，不得建立第二套 Mission authority。
@@ -100,35 +51,17 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: L
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 
-### Codex compaction recovery 與 dispatch admission 去重
-- **Trigger**: v2.34.0 portfolio archive 後立即執行，且必須在下一個 portfolio-scale Codex `/l4`–`/l6` campaign 開始前完成；目前 v2.34 campaign 每個 phase boundary 先用 authoritative handoff + `/clear` + mechanical rehydrate 止血。
-- **Context**: 三份 2026-07-28 transcript audit 的共同結論是：compact 不刪 stored transcript、不直接建立 worktree，也沒有證據顯示它普遍造成跨 compact 同 branch 重派；它是可能遺失 active orchestration identity 的放大器，不是 worktree 膨脹的直接主因。已證實的主鏈是長任務缺 durable reconcile/foreman wake-up、dispatcher 對 timeout/dirty/failure 刻意保留 worktree、缺 stale GC/容量閘，再疊加 system kill 與 `/tmp` 壓力。個別 root session 仍重現 compact 前正確回報 `16/34`/seq 16、compact 後退回錯誤 WLB P0，證明續跑校準不能只靠摘要。完整修正需：(1) persistent machine checkpoint，至少綁定 `{root_run_id, project, phase_seq/status, agent_id, run_id, branch, head, dirty_digest, active run ids, worktrees, manifest/ledger paths, idempotency key, next action, last accepted commit}`；(2) Codex `PostCompact` rehydration gate 機械比對 Git/tracker/ledger，校準完成前禁止新 dispatch；(3) 以 `{root_run_id, stage, branch/base}` 做 dispatch idempotency，已有 active/terminal run 時 attach/resume；(4) foreman child 完成後的 durable wake-up/reconcile 契約，避免 depth 0 重複 wait/repair；(5) watchdog 將中斷 manifest 結案為 `aborted`/`unknown`，並以 bounded TTL reaper 清 registered/prunable metadata、orphan `.git` pointer 與已完成 branch/worktree；(6) `/tmp` high-water admission gate，容量不足時 fail closed 而非再 checkout。驗收須 replay `16/34 → WLB P0` 序列並證明仍為 16/34、duplicate dispatch 為 0、SIGKILL 後 manifest 進 terminal state、stale metadata 可安全收斂，且 high-water 下不新增 worktree。現有 Codex hook probe只證明 0.145 支援 `PostCompact`，不構成 recovery。
-- **Effort**: L
-- **Source**: 2026-07-28 三份 Codex transcript/worktree audit（不同時間快照）；Mission Convergence Portfolio seq 16 compaction incident
-
-### Retained-worktree lease 與每輪 outcome disposition 機械閘
-- **Trigger**: v2.34.0 portfolio archive 後立即執行，且必須在下一個 portfolio-scale `/l5`／`/l6` campaign 或下次修改 `dispatch-hetero.sh`／worktree reaper 前完成；在此之前，depth 0 每輪人工列出並裁決 retained outcome，不再裸用 `--keep-worktree`。
-- **Context**: 2026-07-28 實地盤點的 26 個 `/tmp` worktree 中，14 個來自明確 `--keep-worktree`、3 個來自 failure／boundary rejection 的 caller-owned retention、9 個由手動或非 dispatcher 流程建立；59 次 compaction 放大了未結 lifecycle debt，但不是建立者。現行 WLB 已交付 schema-2 root ownership、`max_leaf_worktrees_per_root: 4`、clean/dirty 分流、exact branch disposition 與 `LifecycleResidueReceipt.zero_residue`，不可重做或弱化。剩餘修正是：(1) 把 boolean `--keep-worktree` 升級成 lease，強制 `owner`、`reason`、`expires_at`，缺任一欄即 precondition fail；(2) outcome finalizer 當場裁決：committed success 移除 clean checkout，只留 branch/tip；clean failure 若已有 ref/commit 或沒有唯一內容，也在 durable 記錄後移除 checkout；只有 dirty、無 ref 的唯一內容或 identity/lock 不明狀態可保留並阻止無聲前進；(3) durable resource ledger 記錄 `{root_run_id, worktree, branch, tip, owner, reason, created_at, expires_at, dirty_digest, canonical_successor, state, next_action}`，下一輪 dispatch 前檢查每筆都是 active、dirty-blocked 或已 disposition；(4) canonical commit 形成後，機械列出 exact ancestor、patch-equivalent 與 superseded candidate，先產生可驗證 bundle＋cleanup manifest，再移除 dead/clean checkout；patch equivalence 只提供裁決證據，不得單獨授權刪除 ref；(5) phase boundary、handoff、PostCompact rehydrate 與 finish-flow 都跑同一 hygiene gate；compaction 的 checkpoint/dispatch-idempotency 部分由相鄰 backlog「Codex compaction recovery 與 dispatch admission 去重」負責；(6) repo 目前沒有 `.claude/worktree-teardown-config.md`，故 `stale_reaper_age_days: 0`；補 onboarding/default policy 時先 dry-run，僅自動處理過期、dead、clean、marker-owned checkout，dirty/live/unknown 一律警告並阻擋，絕不 `--force` 穿越證據。驗收要覆蓋 keep lease 缺欄、lease expiry、clean failure、dirty failure、無 ref 唯一內容、canonical ancestor、patch-equivalent、過期 clean、過期 dirty與 bundle 還原；並證明超過 retained budget 時新 dispatch 為零、dirty bytes 不變、所有移除項均可由 manifest/bundle 還原。
-- **Effort**: L
-- **Source**: 2026-07-28 user-provided agent worktree lifecycle digest；Mission Convergence Portfolio WLB P1–P4 shipped baseline
-
-### Managed campaign orphan-mutation adoption
-- **Trigger**: v2.34.0 portfolio archive 後立即執行，且必須在下一個長時間 managed `engine implement-review` campaign 前完成；在此之前，頂層 controller 必須以可持久存活的 supervisor 執行，controller 意外死亡時不得重派同一 mutation。
-- **Context**: 2026-07-28 PRO-P3-U5J 實證 controller 在 detached Grok leaf 仍存活、持續 heartbeat 並持有 dirty candidate 時遭 host exec cap 以 137 終止。Durable campaign 留在 `IMPLEMENTING`、`live_lease=campaign-mutation:0`、沒有 `candidate_reference`；`campaign resume` 先回 `campaign_state_lease_open`，而且即使清掉 lease，現行 resume 也不支援 `IMPLEMENTING`／`REPAIRING`。不得手改 ledger、冒用 dead nonce 或重派 implementation。正式修正需：(1) 頂層 controller 與 leaf 同樣具備 durable supervisor/heartbeat，不受 caller exec timeout 連帶終止；(2) 新增 atomic orphan-mutation adoption transition，先以 PID＋start 證明舊 controller 已死，再核對 detached leaf terminal result、branch tip/tree、base ancestry、clean/dirty digest、scope/churn 與 leaf `git_sha`；(3) 取得新 campaign generation，重建 writer fence與 scope receipt，append `IMPLEMENTATION_COMPLETED`／`REPAIR_COMPLETED`、清除 mutation lease並進入 `VERTICAL_VERIFICATION`，之後 normal `--resume` 必須採用同一 candidate 而不再 dispatch；(4) leaf dirty、無 terminal result、git/result 不一致或 identity 不明時 fail closed 並保留 evidence；(5) 增加 dogfood kill point，精確在 leaf commit 完成但 controller 尚未寫 campaign checkpoint 時 SIGKILL controller，驗證 duplicate dispatch=0、candidate byte-identical、generation 單調、verify/review 可續跑與 lifecycle receipt 最終收斂。舊 campaign 必須保持可觀察的 stranded/orphaned 狀態，未經上述 transition 不得宣稱 converged。
-- **Effort**: L
-- **Source**: 2026-07-28 PRO-P3-U5J live controller-death incident；`campaign resume`／campaign-intake 實碼與 CLI probe
-
-### Run-ledger rotation 的 active campaign replay 一致性
-- **Trigger**: v2.34.0 portfolio archive 後立即執行，且必須在任何共用 ledger 可能超過 `RUN_LEDGER_MAX_BYTES` 的 unattended campaign 前完成；在此之前每個 managed campaign 使用專用 ledger，並在 dispatch 前確認容量不會於 active lease 期間觸發 rotation。
-- **Context**: 2026-07-28 PRO-P3-U5N live campaign 在 Grok leaf 持續執行時，共用 `.git/autopilot/implementation-campaign.jsonl` 到達 262144-byte 閾值並輪替成 `.1`；campaign intake、`implementation_started`、campaign stage lease與 leaf stage lease全被移到 `.1`，live ledger只剩後續 heartbeat。`campaign status` 立即從 `IMPLEMENTING/active` 變成 `not_found`；`latest_stage_record`、`has_applied_journal_key`、stage transition／journal-add等一般 reader只掃 live ledger，只有 directive reader明確掃 rotated segments。這會讓 active writer的下一個 heartbeat、commit transition或 campaign event因找不到原 lease/state而失敗，即使 process與 candidate仍有效。正式修正需：(1) 定義所有 ledger reader共用的 rotation-aware oldest-to-live read set，並保持 idempotency與 last-write semantics；或在 rotation 前生成 digest-bound active-state checkpoint並把所有 live lease／pending journal state帶入新 segment；(2) `campaign status/inspect/resume`、stage probe/heartbeat/transition/reconcile、journal-add與 result lookup使用同一視圖；(3) rotation 與 append在同一 lock下，reader不能觀察只有 heartbeat、沒有 lease的中間世界；(4) rotated segment達上限前，任何仍被 active state引用的紀錄不得被 GC；(5) dogfood以極小 max-bytes在 implementation與review途中各觸發一次 rotation，驗證 campaign始終 found、generation/nonce不變、duplicate dispatch=0、commit/review/terminal receipt可正常收斂。
-- **Effort**: L
-- **Source**: 2026-07-28 PRO-P3-U5N live 262144-byte rotation；`run-ledger.sh` rotation與 reader實碼 probe
+### Codex production `PostCompact` recovery wiring
+- **Trigger**: an accepted live Codex hook probe proves the production event name, payload schema, registration path, ordering, and failure behavior for the supported Codex release; or Codex publishes an official hook-adapter contract covering those facts.
+- **Context**: v2.34.1 ships the host-neutral checkpoint/rehydration gate and a `PostCompact`-ready adapter contract, but deliberately does not register a production Codex hook from an unaccepted local probe. Once the trigger fires, wire only the verified adapter, add a live replay proving the first effectful post-compact action is blocked until reconciliation, and update the Codex package boundary without importing Claude hook assumptions.
+- **Effort**: M
+- **Source**: controller-execution-discipline v2.34.1 boundary; preserved user-owned Codex hook-probe workspace
 
 ### Readiness gate 的 session-local qualification provider
 - **Trigger**: `ICC P4` 或 Mission integration 要把 `ProviderReadinessReceipt` 接到 effectful pre-spend gate 之前；具體而言，只要該 gate 需要 implementer、verification-author 或 QC seat 從 `probe-needed` 合法升到 `usable`，此項就必須先完成。
-- **Context**: PRO P4 嚴格保持三軸獨立：transport/live probe 不得推論 role qualification，而 disk-backed `engine-scorecard.js` 依治理規則只是 `untrusted_telemetry`。目前 reviewer 可由既有 live qualifier 取得 session-local authority，但 implementer／verification-author 尚無可自動升格的 role corpus/verifier，QC 也需明確綁定 reviewer-role authority。正規修法是新增 host-injected、不可序列化或外部簽章的 exact-tuple qualification provider，讓 readiness 只消費 authority-bound observation；不得把 provisional scorecard row 或 probe 成功當 qualification。
+- **Context**: PRO P4 嚴格保持三軸獨立：transport/live probe 不得推論 role qualification，而 disk-backed `engine-scorecard.js` 依治理規則只是 `untrusted_telemetry`。目前 reviewer 可由既有 live qualifier 取得 session-local authority，但 implementer／verification-author 尚無可自動升格的 role corpus/verifier，QC 也需明確綁定 reviewer-role authority。v2.34.1 的 real Mission completion campaign 再次命中此邊界：三席 final panel 在 exact QC scorecard qualification precondition 全數停止，沒有任何 seat 被 dispatch；depth 0 因此另以同一 frozen whole-diff roster執行 joint review，而沒有偽造 qualification receipt。正規修法是新增 host-injected、不可序列化或外部簽章的 exact-tuple qualification provider，讓 readiness 只消費 authority-bound observation；不得把 provisional scorecard row 或 probe 成功當 qualification。
 - **Effort**: L（含 implementer／verification-author role eval、QC reviewer-role mapping、ICC intake red/green）
-- **Source**: PRO P4 Heto generation 1，GPT-5.6 Sol finding R2/R6；candidate `d0a05f7`
+- **Source**: PRO P4 Heto generation 1，GPT-5.6 Sol finding R2/R6，candidate `d0a05f7`；2026-07-30 controller-execution-discipline final-panel admission incident
 
 ### Native Kimi author adapter passes mutually exclusive `--prompt` and `--plan`
 - **Trigger**: before the next native Kimi author/reviewer dispatch, or next touch of `src/runners/kimi.js` and `hooks/tests/dispatch-author-kimi.test.sh`.
@@ -921,3 +854,66 @@ onto v2.32.48 by grok-4.5.
 - **Context**: Backlog admission correctly fails closed on a held lock, but an uncatchable process crash can leave the lock directory behind and block all later admissions until manual recovery.
 - **Effort**: S（re-estimate under the new ticket contract）
 - **Source**: depth-0; qwen-p4
+
+<!-- autopilot-follow-up:7b5ad93159eca2090d4069fee65229da2c5e91b3aa5087e3fcff67a3f3c6d8c2 -->
+### Controller helper API fail-closed hardening
+- **Trigger**: Before these helpers are reused outside the current production Engine call sites or exposed to caller-supplied state/evidence.
+- **Context**: Close the helper-level fail-open edges recorded as CED-N01, CED-N02, CED-N03, CED-N05, and CED-N06: require explicit spend projection, preserve/reject empty controller replacement, require repository authority, reject traversal internally, and make test evidence carry production-equivalent binding.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:d1e3cafc6b25e4ccde534f237ecac97b66953f2c76b2d56df8a77993b916fd69 -->
+### Boundary outcome and root dispatch semantics
+- **Trigger**: Before boundary receipts drive automated recovery or parallel independent graph nodes under one root are enabled.
+- **Context**: Derive or remove mutation_failed/unknown_status instead of hardcoding them, and decide whether root-wide nonterminal exclusion is intentional; if not, retain root CAS while scoping dispatch blockers to the exact graph node.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:ecc22ecefe311bf8a185548841308087b4c6c96cf2b73b3ca14471c005ba7bc5 -->
+### Portable byte and Work Order lifecycle hardening
+- **Trigger**: Before Mission paths may contain symlinks, generic Work Order imports are accepted, or reconciliation runs on restricted process-table platforms.
+- **Context**: Unify symlink byte hashing with Git, reject/strip disposition_receipt on non-stale records, and convert PROCESS_TABLE_UNREADABLE into an explicit fail-closed Work Order classification.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:d1d21b3988f6e89eff3964a1e5e56f12171fd4d3cf50b23634364d087380df26 -->
+### Durable resume and review authority binding
+- **Trigger**: Before automatic durable resume, reviewer roster rotation, seat retry, or more than one candidate per repair generation is enabled.
+- **Context**: Make all durable stop payloads pass verbatim resume validation, bind full-diff barriers to the exact candidate and review kind, and include sealed reviewer roster/seat identities in full-diff and joint-review reuse keys.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:aed0cfc35dd07b4cabf1545ca4bdba4d0a308824eaa3b1631f3f6d9c9ce11811 -->
+### Explicit findings identity authority
+- **Trigger**: Before classifyMissingDisposition is reused or exported to any caller that may omit identity validation.
+- **Context**: Remove the fail-open findingsIdentityOk default and require every classifyMissingDisposition call to pass an explicit identity verdict.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:42b943b1cd29c7de6d0b621337c605400ea73e33b531b47ee7d7b2dd04ccfc9f -->
+### Mission graph and campaign capacity boundary hardening
+- **Trigger**: Before graph hot reload/concurrent writers or caller-supplied non-default campaign capacities are supported.
+- **Context**: Read Mission graph bytes once or bind the validation read to the inspected digest, and mirror max_owned_worktrees/temp_capacity_limit/max_prompt_bytes/max_finding_recurrence schema caps in the executable validator.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:d574960cb87250d45554901630cdff86ddfd59f5d313a40e657bf7de3f7b7be3 -->
+### Orphan leaf liveness and resource reconstruction
+- **Trigger**: Before orphan adoption or resource inventory is used as closure/capacity authority after controller or worktree-creation crashes.
+- **Context**: Persist and re-observe leaf process identity before orphan adoption; discover orphan branches and never-registered worktrees; mechanically re-derive active inventory rows.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:516726d963e606a0bf2ec621ad6962a0228863ff976a64a703be7bbd2d4a598d -->
+### Terminal status and receipt trust boundary
+- **Trigger**: Before external/legacy terminal receipts cross a trust boundary or the threat model expands beyond confused controllers.
+- **Context**: Enforce the closed terminal_status enum at receipt validation and Work Order classification, resolve the unused attached disposition, and document integrity-hash versus producer-attestation guarantees under the confused-controller threat model.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:8f70c159902a5d75d701b775ac9378f53ec4e9380a2534cab6674bf06083d475 -->
+### Shared sealed zero-diff validator
+- **Trigger**: When the zero-diff schema next changes or a fourth production consumer is introduced.
+- **Context**: Move sealed zero-diff receipt validation into one deterministic shared helper consumed by shell, Engine, and runner boundaries.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b

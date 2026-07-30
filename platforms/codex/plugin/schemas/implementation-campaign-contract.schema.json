@@ -11,7 +11,11 @@
   },
   "x-optional-properties": [
     "mission_runtime",
-    "strict_dispatch"
+    "strict_dispatch",
+    "max_owned_worktrees",
+    "temp_capacity_limit",
+    "max_prompt_bytes",
+    "max_finding_recurrence"
   ],
   "type": "object",
   "required": [
@@ -101,6 +105,30 @@
       "minimum": 1,
       "maximum": 7200
     },
+    "max_owned_worktrees": {
+      "description": "Joint six-axis absolute owned-worktree capacity for the controller. Equality may reach the limit; the next positive delta enters durable wait.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 64
+    },
+    "temp_capacity_limit": {
+      "description": "Absolute temp/worktree capacity authority for pre-effect admission. Unreachable when omitted from sealed contract.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 256
+    },
+    "max_prompt_bytes": {
+      "description": "Joint fresh_input_bytes axis ceiling when observed via promptFile/promptBytes.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 500000000
+    },
+    "max_finding_recurrence": {
+      "description": "Joint finding_recurrence axis ceiling for repair loops.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 32
+    },
     "verify_cmd": {
       "type": "string",
       "minLength": 1,
@@ -167,6 +195,7 @@
           "additionalProperties": false
         },
         "required_paths": {
+          "description": "Required existing inputs for the sealed mission delta. Existence is checked pre-spend; not every path must change every generation.",
           "type": "array",
           "minItems": 1,
           "maxItems": 128,
@@ -174,11 +203,40 @@
           "items": { "$ref": "#/$defs/relativePath" }
         },
         "output_paths": {
+          "description": "Authorized create/modify surface for campaign strict authority. Narrow repairs need not touch every listed path.",
           "type": "array",
           "minItems": 1,
           "maxItems": 128,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "required_change_paths": {
+          "description": "Paths that MUST appear in an effectful candidate diff. Non-empty unique exact subset of output_paths when present. Digest-bound no-op is the only zero-change exception.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "authorized_creates": {
+          "description": "Optional explicit create authority for absent required/output paths.",
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "version_mirror_paths": {
+          "description": "Optional version-mirror outputs requiring named generator closure.",
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "version_mirror_generator": {
+          "description": "Named generator that must close version_mirror_paths.",
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 512
         },
         "allowed_path_prefixes": {
           "type": "array",

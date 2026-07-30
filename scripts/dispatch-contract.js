@@ -529,7 +529,7 @@ function validateSchema(contract, errors, repoPath = '') {
   if (!contract.output || typeof contract.output !== 'object' || Array.isArray(contract.output)) {
     errors.push('output: expected object');
   } else {
-    const allowed = new Set(['kind', 'paths']);
+    const allowed = new Set(['kind', 'paths', 'required_change_paths', 'zero_diff_receipt']);
     assertNoExtra('output', contract.output, allowed, errors);
     if (!hasKey(contract.output, 'kind')) errors.push('output: missing kind');
     if (!hasKey(contract.output, 'paths')) errors.push('output: missing paths');
@@ -541,11 +541,164 @@ function validateSchema(contract, errors, repoPath = '') {
     if (!Array.isArray(contract.output.paths) || contract.output.paths.length < 1) {
       errors.push('output.paths: must be non-empty array');
     } else {
+      const seenPaths = new Set();
       contract.output.paths.forEach((entry, idx) => {
         if (!isNonEmptyString(entry)) {
           errors.push(`output.paths[${idx}]: must be non-empty string`);
+        } else if (seenPaths.has(entry)) {
+          errors.push(`output.paths[${idx}]: duplicate path`);
+        } else {
+          seenPaths.add(entry);
         }
       });
+    }
+
+    // required_change_paths: present ⇒ non-empty, unique, exact subset of output.paths
+    if (Object.prototype.hasOwnProperty.call(contract.output, 'required_change_paths')) {
+      const req = contract.output.required_change_paths;
+      if (!Array.isArray(req) || req.length < 1) {
+        errors.push('output.required_change_paths: when present must be a non-empty array');
+      } else {
+        const seenReq = new Set();
+        const outPaths = Array.isArray(contract.output.paths) ? contract.output.paths : [];
+        req.forEach((entry, idx) => {
+          if (!isNonEmptyString(entry)) {
+            errors.push(`output.required_change_paths[${idx}]: must be non-empty string`);
+            return;
+          }
+          if (seenReq.has(entry)) {
+            errors.push(`output.required_change_paths[${idx}]: duplicate path`);
+          }
+          seenReq.add(entry);
+          if (!outPaths.includes(entry)) {
+            errors.push(
+              `output.required_change_paths[${idx}]: must be an exact subset of output.paths (${entry})`,
+            );
+          }
+        });
+        // Also enforce within scope.allow_paths when scope is present.
+        if (contract.scope && Array.isArray(contract.scope.allow_paths)) {
+          const allow = contract.scope.allow_paths;
+          for (const entry of req) {
+            if (!isNonEmptyString(entry)) continue;
+            const under = allow.some((p) => entry === p || entry.startsWith(`${p}/`));
+            if (!under) {
+              errors.push(
+                `output.required_change_paths: '${entry}' is outside scope.allow_paths`,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(contract.output, 'zero_diff_receipt')) {
+      const zr = contract.output.zero_diff_receipt;
+      if (!zr || typeof zr !== 'object' || Array.isArray(zr)) {
+        errors.push('output.zero_diff_receipt: expected object');
+      } else {
+        const zrAllowed = new Set([
+          'schema_version', 'artifact_type', 'base_sha', 'acceptance_digest',
+          'campaign_contract_digest', 'strict_dispatch_digest', 'campaign_id',
+          'mission_lineage_id', 'mission_policy_digest', 'mission_graph_digest',
+          'graph_node_id', 'mission_noop_receipt_digest',
+          'source_work_order_id', 'source_work_order_digest',
+          'path_byte_digests', 'candidate_zero_change', 'digest',
+        ]);
+        assertNoExtra('output.zero_diff_receipt', zr, zrAllowed, errors);
+        if (zr.schema_version !== 1) {
+          errors.push('output.zero_diff_receipt.schema_version: must be 1');
+        }
+        if (zr.artifact_type !== 'campaign_zero_diff_receipt'
+            && zr.artifact_type !== 'controller_zero_diff_receipt') {
+          errors.push('output.zero_diff_receipt.artifact_type: unsupported');
+        }
+        if (zr.candidate_zero_change !== true) {
+          errors.push('output.zero_diff_receipt.candidate_zero_change: must be true');
+        }
+        if (!isNonEmptyString(zr.base_sha) || !/^[0-9a-f]{40}$/.test(zr.base_sha)) {
+          errors.push('output.zero_diff_receipt.base_sha: must be 40-hex git object id');
+        }
+        if (!isNonEmptyString(zr.digest) || !/^[0-9a-f]{64}$/.test(zr.digest)) {
+          errors.push('output.zero_diff_receipt.digest: must be 64-hex sha256');
+        }
+        if (!isNonEmptyString(zr.acceptance_digest) || !/^[0-9a-f]{64}$/.test(zr.acceptance_digest)) {
+          errors.push('output.zero_diff_receipt.acceptance_digest: must be 64-hex sha256');
+        }
+        for (const field of [
+          'campaign_contract_digest',
+          'strict_dispatch_digest',
+          'mission_policy_digest',
+          'mission_graph_digest',
+          'mission_noop_receipt_digest',
+          'source_work_order_digest',
+        ]) {
+          if (!isNonEmptyString(zr[field]) || !/^[0-9a-f]{64}$/.test(zr[field])) {
+            errors.push(`output.zero_diff_receipt.${field}: must be 64-hex sha256`);
+          }
+        }
+        for (const field of [
+          'campaign_id',
+          'mission_lineage_id',
+          'graph_node_id',
+          'source_work_order_id',
+        ]) {
+          if (!isNonEmptyString(zr[field])) {
+            errors.push(`output.zero_diff_receipt.${field}: must be non-empty string`);
+          }
+        }
+        if (!zr.path_byte_digests || typeof zr.path_byte_digests !== 'object'
+            || Array.isArray(zr.path_byte_digests)) {
+          errors.push('output.zero_diff_receipt.path_byte_digests: expected object');
+        } else {
+          const outputPaths = Array.isArray(contract.output.paths) ? contract.output.paths : [];
+          const requiredPaths = Array.isArray(contract.output.required_change_paths)
+            ? contract.output.required_change_paths : [];
+          const expectedPaths = [...new Set([...requiredPaths, ...outputPaths])].sort();
+          const receiptPaths = Object.keys(zr.path_byte_digests).sort();
+          if (JSON.stringify(receiptPaths) !== JSON.stringify(expectedPaths)) {
+            errors.push('output.zero_diff_receipt.path_byte_digests: exact output path set required');
+          }
+          for (const [relativePath, digest] of Object.entries(zr.path_byte_digests)) {
+            if (!isNonEmptyString(digest) || !/^[0-9a-f]{64}$/.test(digest)) {
+              errors.push(
+                `output.zero_diff_receipt.path_byte_digests.${relativePath}: must be 64-hex sha256`,
+              );
+            }
+          }
+        }
+        if (zr && typeof zr === 'object' && !Array.isArray(zr)) {
+          const body = { ...zr };
+          delete body.digest;
+          if (isNonEmptyString(zr.digest)
+              && hashHex(Buffer.from(JSON.stringify(body), 'utf8')) !== zr.digest) {
+            errors.push('output.zero_diff_receipt.digest: body digest mismatch');
+          }
+          const projection = contract.campaign_projection || {};
+          for (const [receiptField, projectionField] of [
+            ['campaign_contract_digest', 'campaign_contract_sha256'],
+            ['strict_dispatch_digest', 'strict_dispatch_sha256'],
+            ['campaign_id', 'campaign_id'],
+            ['mission_lineage_id', 'mission_lineage_id'],
+            ['mission_policy_digest', 'mission_policy_digest'],
+            ['mission_graph_digest', 'mission_graph_digest'],
+            ['graph_node_id', 'graph_node_id'],
+          ]) {
+            if (projection[projectionField] !== zr[receiptField]) {
+              errors.push(
+                `output.zero_diff_receipt.${receiptField}: campaign_projection mismatch`,
+              );
+            }
+          }
+          const acceptance = Array.isArray(contract.acceptance)
+            ? contract.acceptance.map((entry) => ({ argv: entry.argv, exit: entry.exit }))
+            : [];
+          if (hashHex(Buffer.from(JSON.stringify(acceptance), 'utf8'))
+              !== zr.acceptance_digest) {
+            errors.push('output.zero_diff_receipt.acceptance_digest: acceptance mismatch');
+          }
+        }
+      }
     }
   }
 

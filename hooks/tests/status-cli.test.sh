@@ -43,8 +43,8 @@ assert_contains "$__RUN_STDOUT" '"status": "available"' "fresh status carried"
 assert_contains "$__RUN_STDOUT" '"reset_at": "2026-08-01T00:00:00Z"' "reset_at carried on fresh exhausted row"
 assert_not_contains "$__RUN_STDOUT" '"model": "m-old"' "TTL-expired observation is ABSENT (= unknown), never shown as live truth"
 
-# a metered-endpoint-class row: wallet identity = named endpoint (store does not
-# record it yet — the caption must declare the ambiguity)
+# a metered-endpoint-class row: wallet identity = named endpoint (store records
+# endpoint on exact tuples; status surface remains non-authorizing telemetry).
 printf '{"schema_version":1,"observed_at":"%s","runner":"cc-shim","model":"MiniMax-M3","role":"reviewer","capability":{"quota":{"status":"available","confidence":"low","ttl_seconds":86400,"reset_at":null,"evidence":null}}}\n' "$NOW_TS" > "$SB/ev.json"
 ENGINE_CAPABILITY_DIR="$SB/cap" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$SB/ev.json" >/dev/null
 
@@ -53,7 +53,8 @@ assert_contains "$__RUN_STDOUT" "[subscription]" "subscription class grouped"
 assert_contains "$__RUN_STDOUT" "PER-MODEL" "subscription caption states per-model pool rule"
 assert_contains "$__RUN_STDOUT" "no remaining-%" "subscription caption states the honesty ceiling"
 assert_contains "$__RUN_STDOUT" "[metered-endpoint]" "metered class grouped"
-assert_contains "$__RUN_STDOUT" "DIFFERENT wallet" "metered caption declares endpoint ambiguity"
+assert_contains "$__RUN_STDOUT" "DIFFERENT wallet" "metered caption states per-endpoint wallet identity"
+assert_contains "$__RUN_STDOUT" "non-authorizing" "metered caption states status is non-authorizing telemetry"
 assert_contains "$__RUN_STDOUT" "ABSENT" "human output explains absent-model semantics"
 run_status quota --json
 assert_contains "$__RUN_STDOUT" '"source_class": "metered-endpoint"' "json rows carry source_class"

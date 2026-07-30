@@ -245,15 +245,19 @@ passive_capture() {
           rate_limited)    quota_status="limited"; confidence="medium" ;;
         esac
         local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        # Exact effort/endpoint tuple — null endpoint means explicit no-endpoint wallet.
         local payload
-        payload="$(OBSERVED_AT="$observed_at" RUNNER="$RUNNER" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" node -e '
+        payload="$(OBSERVED_AT="$observed_at" RUNNER="$RUNNER" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" EFFORT="${EFFORT:-}" ENDPOINT_KEY="${ENDPOINT:-}" node -e '
           const p = process.env;
+          const endpoint = (p.ENDPOINT_KEY && p.ENDPOINT_KEY.length > 0) ? p.ENDPOINT_KEY : null;
           const payload = {
             schema_version: 1,
             observed_at: p.OBSERVED_AT,
             runner: p.RUNNER,
             model: p.MODEL,
             role: "reviewer",
+            effort: p.EFFORT || null,
+            endpoint,
             runner_version: null,
             capability: {
               quota: {

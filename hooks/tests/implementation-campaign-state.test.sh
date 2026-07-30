@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+# Ambient mission harness env must not poison hermetic unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 
 PURE_OUT="$(node - "$REPO_ROOT" <<'NODE'
 'use strict';
@@ -582,6 +586,17 @@ const {
   normalizeCampaignArtifactReference,
   runCampaignIntake,
 } = require(path.join(root, 'src', 'engine'));
+const {
+  createMissionState,
+  reduceMissionState,
+  sha256: missionSha256,
+} = require(path.join(root, 'src', 'engine', 'mission-convergence'));
+const {
+  IDENTITY_SCHEME_V2,
+  missionCampaignIdFor,
+  missionSubjectDigest,
+} = require(path.join(root, 'src', 'engine', 'mission-campaign-identity'));
+const workOrder = require(path.join(root, 'src', 'engine', 'work-order'));
 const roster = {
   reviewer_engine: 'fixture-reviewer',
   reviewer_effort: 'high',
@@ -604,6 +619,11 @@ const roster = {
   loop_convergence_verdict: 'SHIP-AS-IS',
 };
 const order = [];
+function resetControllerWorkOrderFixture(campaignId, graphNode, attempt = 1) {
+  const commonDir = workOrder.resolveGitCommonDir(repo);
+  const exactPath = workOrder.workOrderPath(commonDir, campaignId, graphNode, attempt);
+  fs.rmSync(path.dirname(exactPath), { recursive: true, force: true });
+}
 const adapters = {
   now: () => '2026-07-26T00:00:00.000Z',
   missionClaim() {
@@ -948,12 +968,18 @@ const campaignId = campaignIdFor(
 );
 const campaignLedger = path.join(repo, '.autopilot', 'identity-ledger.jsonl');
 function campaignControlFixture(nonce, initialState = admitted.initial_state) {
+  // Per-nonce ticket becomes the controller graph_node so sequential fixture
+  // scenarios do not attach one shared active controller Work Order (which would
+  // correctly preserve joint-budget usage across independent cases). Production
+  // still attaches the exact active record when the same root/node is re-entered.
+  const ticket = `t-${String(nonce).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 48) || 'x'}`;
   return {
     status: 'admitted',
     campaign_id: campaignId,
     contract_digest: 'c'.repeat(64),
     contract: {
       ...admitted.contract,
+      ticket,
       verify_cmd: 'fixture verify',
       max_repair_generations: 2,
     },
@@ -984,7 +1010,8 @@ const terminalContract = {
     mission_policy_digest: 'b'.repeat(64),
     mission_graph_digest: 'c'.repeat(64),
     graph_node_id: 'engine-terminal',
-    graph_node_digest: 'e'.repeat(64),
+    // sha256(canonicalJson({ id: 'engine-terminal' }))
+    graph_node_digest: 'a364b1f098ef0ad525ced4fe7bc980e285103e86f7717a0532a83fd09e03160f',
   },
 };
 const terminalContractBytes = `${JSON.stringify(terminalContract, null, 2)}\n`;
@@ -1028,7 +1055,25 @@ function durableFailureControl() {
 let terminalEventInput = null;
 let terminalMissionInput = null;
 const terminalStore = {
-  load() { return {}; },
+  load() {
+    return {
+      mission_lineage_id: terminalContract.mission_runtime.mission_lineage_id,
+      mission_policy_digest: terminalContract.mission_runtime.mission_policy_digest,
+      mission_graph_digest: terminalContract.mission_runtime.mission_graph_digest,
+      execution_graph: {
+        graph_digest: terminalContract.mission_runtime.mission_graph_digest,
+        nodes: [{ id: terminalContract.mission_runtime.graph_node_id }],
+      },
+      claims: {
+        [terminalClaimId]: {
+          claim_id: terminalClaimId,
+          graph_node_id: terminalContract.mission_runtime.graph_node_id,
+          // Mission campaign identity on the claim (not ICC campaign-v1-f…).
+          campaign_id: `campaign-v1-${'2'.repeat(64)}`,
+        },
+      },
+    };
+  },
   save() { return true; },
   journalTerminal() { return { status: 'journaled' }; },
   markTerminalApplied() { return true; },
@@ -1221,6 +1266,11 @@ const preconditionEngine = new AutopilotEngine({
         deletions: 0,
         worktree: null,
         agent_log: null,
+        dispatcher_called: false,
+        model_calls: 0,
+        mutation_attempts: 0,
+        gate_attempts: 0,
+        resources_created: 0,
         error: 'campaign contract digest changed after intake',
       },
     };
@@ -1311,6 +1361,11 @@ function zeroEffectLeafResult(overrides = {}) {
       deletions: 0,
       worktree: null,
       agent_log: null,
+      dispatcher_called: false,
+      model_calls: 0,
+      mutation_attempts: 0,
+      gate_attempts: 0,
+      resources_created: 0,
       error: 'fixture zero-effect precondition',
       ...overrides,
     },
@@ -1570,6 +1625,46 @@ const sealedRootRunId = 'sealed-root-identity-v1';
 const strictBranch = 'impl/icc-p1-intake';
 const strictContractPath = path.join(repo, 'strict-root-identity-campaign.json');
 const strictSealPath = path.join(repo, 'strict-root-identity-campaign.seal.json');
+const strictMissionLineage = `lineage-v1-${missionSha256('strict-root-lineage')}`;
+const strictMissionPolicyDigest = missionSha256('strict-root-policy');
+const strictTaskAuthorityId = missionSha256('strict-root-task-authority');
+const strictGraphNode = {
+  id: 'root-identity-node',
+  source_plan_ids: ['STRICT-ROOT'],
+  source_rubric_ids: ['R1'],
+  dependencies: [],
+  acceptance_ids: ['root-identity-acceptance'],
+  verification_commands: ['node fixture.js'],
+  gate_attempt_budget: 3,
+  reservation: {
+    campaigns: 1,
+    wall_seconds: 120,
+    tool_calls: 10,
+    engine_attempts: 2,
+    external_wait_seconds: 0,
+    canonical_changed_files: 4,
+    output_bytes: 4096,
+  },
+  campaign: {
+    profile: 'poc',
+    allowed_path_prefixes: ['src/'],
+    spec: { path: 'src/spec.md', section: 'Root identity' },
+    required_paths: ['src/spec.md'],
+    output_paths: ['src/out.txt'],
+    max_changed_files: 4,
+    baseline_churn: 10,
+    max_growth_ratio: 1.5,
+    max_extra_churn: 5,
+    max_repair_generations: 2,
+    max_wall_seconds: 120,
+  },
+};
+const strictExecutionGraph = {
+  schema_version: 1,
+  artifact_type: 'mission_execution_graph',
+  nodes: [strictGraphNode],
+};
+const strictMissionGraphDigest = missionSha256(strictExecutionGraph);
 const strictContract = {
   schema_version: 1,
   ticket: 'icc-p1-intake',
@@ -1591,11 +1686,11 @@ const strictContract = {
   mission_runtime: {
     schema_version: 1,
     root_run_id: sealedRootRunId,
-    mission_lineage_id: 'lineage-v1-root-identity',
-    mission_policy_digest: 'b'.repeat(64),
-    mission_graph_digest: 'c'.repeat(64),
-    graph_node_id: 'root-identity-node',
-    graph_node_digest: 'd'.repeat(64),
+    mission_lineage_id: strictMissionLineage,
+    mission_policy_digest: strictMissionPolicyDigest,
+    mission_graph_digest: strictMissionGraphDigest,
+    graph_node_id: strictGraphNode.id,
+    graph_node_digest: missionSha256(strictGraphNode),
   },
   strict_dispatch: {
     schema_version: 1,
@@ -1613,6 +1708,116 @@ const strictContract = {
     verification_commands: ['node fixture.js'],
   },
 };
+const strictMissionContract = {
+  schema_version: 1,
+  artifact_type: 'mission_convergence_contract',
+  contract_id: `mission-v1-${missionSha256('strict-root-contract')}`,
+  repo_identity: strictContract.repo_identity,
+  mission_lineage_id: strictMissionLineage,
+  task_authority_id: strictTaskAuthorityId,
+  policy_hash: strictMissionPolicyDigest,
+  mission_policy_digest: strictMissionPolicyDigest,
+  mission_graph_digest: strictMissionGraphDigest,
+  execution_graph: strictExecutionGraph,
+  enforcement_mode: 'enforce',
+  state: 'DRAFT',
+  closure_ratio: 0.75,
+  max_stagnant_campaigns: 2,
+  axes: Object.fromEntries(
+    Object.entries({
+      campaigns: 4,
+      wall_seconds: 1000,
+      tool_calls: 20,
+      engine_attempts: 8,
+      external_wait_seconds: 100,
+      canonical_changed_files: 10,
+      output_bytes: 8192,
+    }).map(([axis, authorized_ceiling]) => [axis, {
+      authorized_ceiling,
+      reserved_active: 0,
+      durable_consumed: 0,
+      known: true,
+      enforced: true,
+    }]),
+  ),
+  grant_contract: {
+    idempotency_key_required: true,
+    single_use: true,
+    expiry_seconds: 3600,
+    bindings: [
+      'mission_lineage_id',
+      'task_authority_id',
+      'campaign_id',
+      'campaign_contract_digest',
+      'mission_subject_digest',
+      'base_sha',
+      'acceptance_ids',
+    ],
+  },
+  control_contract: {
+    actions: ['ceiling_adjust', 'scope_frozen', 'finish_requested', 'abort_requested'],
+    allowed_authorities: [
+      'authenticated_user',
+      'authenticated_doa',
+      'agent',
+      'owner_kernel',
+    ],
+    ceiling_loosen_authority: 'authenticated_user',
+  },
+  lineage_binding: {
+    task_authority_id: strictTaskAuthorityId,
+    root_run_id: sealedRootRunId,
+    policy_hash: strictMissionPolicyDigest,
+    successor_inherits_durable_consumed: true,
+  },
+};
+const strictMissionDraft = createMissionState(strictMissionContract);
+const strictMissionSubject = missionSubjectDigest(strictContract);
+const strictMissionCampaignId = missionCampaignIdFor(
+  strictContract.repo_identity,
+  strictContract.ticket,
+  strictMissionSubject,
+);
+const strictMissionGrant = reduceMissionState(strictMissionDraft, {
+  event_type: 'grant_claimed',
+  sequence: 1,
+  mission_lineage_id: strictMissionLineage,
+  payload: {
+    identity_scheme: IDENTITY_SCHEME_V2,
+    idempotency_key: 'strict-root-grant',
+    mission_lineage_id: strictMissionLineage,
+    task_authority_id: strictTaskAuthorityId,
+    campaign_id: strictMissionCampaignId,
+    campaign_contract_digest: strictMissionSubject,
+    mission_subject_digest: strictMissionSubject,
+    base_sha: base,
+    acceptance_ids: strictGraphNode.acceptance_ids,
+    acceptance_hashes: [],
+    graph_node_id: strictGraphNode.id,
+    graph_attempt: 1,
+    campaign_contract_draft: strictContract,
+    reservation: {
+      per_axis: Object.entries(strictMissionDraft.axes).map(([axis, value]) => ({
+        axis,
+        authorized_ceiling: value.authorized_ceiling,
+        reserved_active: strictGraphNode.reservation[axis],
+        durable_consumed: value.durable_consumed,
+        known: value.known,
+      })),
+    },
+    issued_at: '2026-07-26T00:00:00.000Z',
+    expires_at: '2026-07-26T01:00:00.000Z',
+  },
+});
+if (!strictMissionGrant.receipt
+    || strictMissionGrant.receipt.artifact_type === 'mission_grant_rejected') {
+  throw new Error(`strict Mission fixture grant rejected: ${
+    strictMissionGrant.receipt && strictMissionGrant.receipt.reason
+  }`);
+}
+const strictMissionState = strictMissionGrant.state;
+const strictMissionClaim = Object.values(strictMissionState.claims)[0];
+strictContract.mission_grant_ref = strictMissionClaim.binding_digest;
 const strictContractBytes = `${JSON.stringify(strictContract, null, 2)}\n`;
 fs.writeFileSync(strictContractPath, strictContractBytes);
 const strictContractDigest = crypto.createHash('sha256')
@@ -1638,6 +1843,10 @@ function durableStrictRootIdentityControl(nonce) {
     contract: strictContract,
     contract_path: strictContractPath,
     seal_path: strictSealPath,
+    mission_claim: {
+      claim_id: strictMissionClaim.claim_id,
+      campaign_id: strictMissionClaim.campaign_id,
+    },
   };
 }
 
@@ -1650,6 +1859,15 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
   const engine = new AutopilotEngine({
     cwd: repo,
     clock: () => '2026-07-26T00:00:04.000Z',
+    // Mission-backed contracts require a real Mission store for frozen denominator.
+    missionCampaignStore: {
+      load() {
+        return strictMissionState;
+      },
+      save() { return true; },
+      journalTerminal() { return { status: 'journaled' }; },
+      markTerminalApplied() { return true; },
+    },
     campaignIntake() {
       return durableStrictRootIdentityControl(`durable-identity-${label}`);
     },
@@ -1722,7 +1940,7 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
   });
   const leaf = result.implementation;
   const prepare = leaf || null;
-  return {
+  const fixtureResult = {
     result,
     events,
     releaseRejection,
@@ -1733,6 +1951,12 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
     preparePhase: prepare && prepare.phase,
     dispatcherCalled: prepare && prepare.dispatcher_called,
   };
+  resetControllerWorkOrderFixture(
+    strictCampaignId,
+    strictContract.mission_runtime.graph_node_id,
+    strictMissionClaim.graph_attempt,
+  );
+  return fixtureResult;
 }
 
 function logDurableIdentityCase(prefix, caseResult, expectRelease) {
@@ -1996,6 +2220,7 @@ const implementationCalls = [];
 const implementationEnvs = [];
 const reviewCalls = [];
 const verificationEnvs = [];
+const verificationCommands = [];
 const identityRetainedWorktreeRoot = path.join(path.dirname(repo), 'identity-retained-worktree');
 const identityEngine = new AutopilotEngine({
   cwd: repo,
@@ -2104,6 +2329,7 @@ const identityEngine = new AutopilotEngine({
   },
   verifyCommandRunner({ env, verifyCmd }) {
     verificationEnvs.push(env);
+    verificationCommands.push(verifyCmd);
     return {
       error: null,
       status: 0,
@@ -2138,6 +2364,8 @@ const identityResult = identityEngine.runImplementationReviewLoop({
     CI: 'identity-test',
   },
   verificationEnvAllowlist: ['CI'],
+  // Must never replace the sealed campaign verify_cmd for authoritative suite.
+  fullSuiteCommand: 'true',
 });
 
 const grokLineageCalls = [];
@@ -2619,6 +2847,7 @@ const mismatchedRootResult = identityEngine.implementTask({
   campaignSealFile: sealPath,
   implementationOptions: { env: { PATH: process.env.PATH || '' } },
 });
+resetControllerWorkOrderFixture(campaignId, admitted.contract.ticket);
 const managedResumeResult = identityEngine.runImplementationReviewLoop({
   promptFile,
   branch: 'impl/icc-p1-intake',
@@ -2690,17 +2919,19 @@ console.log(`zero_dispatch_lineage_accepted=${zeroDispatchLineageAccepted}`);
 console.log(`managed_resume_stage=${argValue(managedResumeArgs, '--stage')}`);
 console.log(`implementation_root=${implementationEnvs[0].AUTOPILOT_ROOT_RUN_ID}`);
 console.log(`round_two_root=${implementationEnvs[1].AUTOPILOT_ROOT_RUN_ID}`);
-console.log(`managed_resume_root=${implementationEnvs[2].AUTOPILOT_ROOT_RUN_ID}`);
+console.log(`managed_resume_root=${implementationEnvs[2]?.AUTOPILOT_ROOT_RUN_ID || '<missing>'}`);
 console.log(`implementation_worktree_root=${implementationEnvs[0].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
 console.log(`round_two_worktree_root=${implementationEnvs[1].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
-console.log(`managed_resume_worktree_root=${implementationEnvs[2].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
+console.log(`managed_resume_worktree_root=${
+  implementationEnvs[2]?.AUTOPILOT_WORKTREE_ROOT_RUN_ID || '<missing>'
+}`);
 console.log(`worktree_roots_exact=${
   implementationEnvs.every((env) => env.AUTOPILOT_WORKTREE_ROOT_RUN_ID === campaignId)
 }`);
 console.log(`implementation_parent=${implementationEnvs[0].AUTOPILOT_PARENT_RUN_ID}`);
 console.log(`implementation_depth=${implementationEnvs[0].AUTOPILOT_DISPATCH_DEPTH}`);
 console.log(`round_two_depth=${implementationEnvs[1].AUTOPILOT_DISPATCH_DEPTH}`);
-console.log(`managed_resume_depth=${implementationEnvs[2].AUTOPILOT_DISPATCH_DEPTH}`);
+console.log(`managed_resume_depth=${implementationEnvs[2]?.AUTOPILOT_DISPATCH_DEPTH || '<missing>'}`);
 console.log(`restricted_env_leak=${
   implementationEnvs.some((env) => Object.hasOwn(env, 'AUTOPILOT_AMBIENT_SECRET'))
 }`);
@@ -2711,12 +2942,14 @@ console.log(`mismatched_root_dispatch_delta=${
 }`);
 console.log(`managed_resume_inspect_calls=${resumeInspectCalls}`);
 console.log(`identity_verify_env=${verificationEnvs[0].CI}`);
+console.log(`identity_verify_commands=${verificationCommands.join('|')}`);
 console.log(
   `identity_tree_is_commit=${identityResult.campaign_receipt.candidate_tree_sha === base}`,
 );
 console.log(`managed_no_spec_phase=${managedNoSpecResult.phase}`);
 console.log(`managed_no_spec_rounds=${managedNoSpecResult.rounds}`);
 console.log(`managed_no_spec_impl_delta=${implementationCalls.length - implementationsBeforeNoSpec}`);
+resetControllerWorkOrderFixture(campaignId, admitted.contract.ticket);
 const missingGrokSessionResult = identityEngine.runImplementationReviewLoop({
   promptFile,
   branch: 'impl/icc-p1-intake',
@@ -2733,7 +2966,7 @@ const missingGrokSessionResult = identityEngine.runImplementationReviewLoop({
 });
 console.log(`missing_grok_session_phase=${missingGrokSessionResult.phase}`);
 console.log(`missing_grok_session_disposition=${
-  missingGrokSessionResult.repair_lineage.terminal_worktree_disposition
+  missingGrokSessionResult.repair_lineage?.terminal_worktree_disposition || '<missing>'
 }`);
 NODE
 )"
@@ -3038,6 +3271,8 @@ assert_contains "$INTAKE_OUT" "managed_resume_inspect_calls=0" \
   "managed campaign replay does not require the legacy ahead-branch precheck"
 assert_contains "$INTAKE_OUT" "identity_verify_env=identity-test" \
   "verification executes with the environment used by its fingerprint"
+assert_contains "$INTAKE_OUT" "identity_verify_commands=fixture verify|fixture verify" \
+  "focused verification and authoritative full suite both execute sealed verify_cmd, never caller fullSuiteCommand"
 assert_contains "$INTAKE_OUT" "identity_tree_is_commit=false" \
   "verification identity binds the Git tree object rather than the commit"
 assert_contains "$INTAKE_OUT" "managed_no_spec_phase=campaign_review_spec" \
@@ -3752,5 +3987,711 @@ SECOND_LEASE="$(bash "$REPO_ROOT/scripts/run-ledger.sh" stage-acquire \
 assert_exit_code "$?" "1" "second live campaign lease is rejected"
 assert_contains "$SECOND_LEASE" "already has a live lease" \
   "exclusive ledger rejection names the live lease"
+
+# --- Controller execution discipline (frozen denominator / full-diff / budget / boundary) ---
+CTRL_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root] = process.argv.slice(2);
+const ctrl = require(path.join(root, 'src/engine/controller-execution'));
+const {
+  CAMPAIGN_EVENTS,
+  CAMPAIGN_STATES,
+  createCampaignState,
+  reduceCampaignState,
+  canonicalDigest,
+} = require(path.join(root, 'src/engine/implementation-campaign'));
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+
+// R1 frozen denominator stable across findings/retries.
+const frozen = ctrl.buildFrozenDenominator({
+  projectId: 'controller-discipline',
+  graphDigest: 'a'.repeat(64),
+  deliverableIds: ['n1', 'n2'],
+  nodeId: 'n1',
+});
+assert.strictEqual(frozen.deliverable_count, 2);
+assert.throws(() => ctrl.assertFrozenDenominatorStable(frozen, ['n1', 'n2', 'finding-phase']),
+  (e) => e.code === 'DENOMINATOR_MUTATION');
+const progress = ctrl.buildProgressReceipt({
+  projectId: 'controller-discipline',
+  deliverableId: 'n1',
+  generation: 1,
+  activeProcess: { pid: process.pid },
+  frozenDenominator: frozen,
+  completedDeliverables: ['n1'],
+  blockedReason: null,
+  gateState: { full_diff_review: 'passed' },
+  resourceDebtState: { blocks_dispatch: false },
+});
+assert.strictEqual(progress.remaining_deliverables.join(','), 'n2');
+assert.match(progress.digest, /^[0-9a-f]{64}$/);
+
+// R4 gate journal reuse + explicit invalidation.
+let journal = ctrl.emptyGateJournal();
+const first = ctrl.recordGateEntry(journal, {
+  kind: 'full_diff_review',
+  owner: 'depth-0',
+  input: { base: 'b'.repeat(40), head: 'c'.repeat(40) },
+  result: { success: true, verdict: 'REWORK' },
+  startedAt: '2026-07-30T00:00:00.000Z',
+  finishedAt: '2026-07-30T00:01:00.000Z',
+});
+journal = first.journal;
+const reused = ctrl.recordGateEntry(journal, {
+  kind: 'full_diff_review',
+  owner: 'depth-0',
+  input: { base: 'b'.repeat(40), head: 'c'.repeat(40) },
+  result: { success: true, verdict: 'REWORK' },
+  startedAt: '2026-07-30T00:02:00.000Z',
+  finishedAt: '2026-07-30T00:03:00.000Z',
+});
+assert.strictEqual(reused.reused, true);
+// Changed input without invalidateReason fails closed.
+assert.throws(() => ctrl.recordGateEntry(reused.journal, {
+  kind: 'full_diff_review',
+  owner: 'depth-0',
+  input: { base: 'b'.repeat(40), head: 'd'.repeat(40) },
+  result: { success: true, verdict: 'SHIP' },
+  startedAt: '2026-07-30T00:03:30.000Z',
+  finishedAt: '2026-07-30T00:03:45.000Z',
+}), (e) => e.code === 'GATE_INVALIDATION_REQUIRED');
+const invalidated = ctrl.recordGateEntry(reused.journal, {
+  kind: 'full_diff_review',
+  owner: 'depth-0',
+  input: { base: 'b'.repeat(40), head: 'd'.repeat(40) },
+  result: { success: true, verdict: 'SHIP' },
+  startedAt: '2026-07-30T00:04:00.000Z',
+  finishedAt: '2026-07-30T00:05:00.000Z',
+  invalidateReason: 'candidate tree changed',
+});
+assert.strictEqual(invalidated.reused, false);
+assert.strictEqual(invalidated.journal.entries[0].invalidated, true);
+
+// R5 joint repair budget axes independently trip awaiting_convergence.
+for (const axis of ctrl.REPAIR_BUDGET_AXES) {
+  if (axis === 'fresh_input_tokens') {
+    const unobs = ctrl.checkJointRepairBudget(
+      { ...ctrl.emptyBudgetUsage(), fresh_input_tokens: null },
+      { fresh_input_tokens: 1 },
+    );
+    assert.strictEqual(unobs.ok, true, 'unobserved tokens must not zero-fill');
+    const obs = ctrl.checkJointRepairBudget(
+      ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { fresh_input_tokens: 10 }),
+      { fresh_input_tokens: 5 },
+    );
+    assert.strictEqual(obs.status, ctrl.AWAITING_CONVERGENCE);
+    assert.strictEqual(obs.allow_spend, false);
+    continue;
+  }
+  const usage = ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { [axis]: 100 });
+  const limits = ctrl.defaultBudgetLimits({ [axis]: 10 });
+  const check = ctrl.checkJointRepairBudget(usage, limits);
+  assert.strictEqual(check.status, ctrl.AWAITING_CONVERGENCE, axis);
+  assert.strictEqual(check.allow_spend, false, axis);
+  assert.ok(check.exceeded.includes(axis), axis);
+}
+
+// R3 full-diff before repair (vertical fail still requires barrier).
+let fullDiffCalls = 0;
+let repairCalls = 0;
+const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1, promptBytes: 0 }, {
+  preflight: () => ({ passed: true }),
+  implement: ({ kind }) => {
+    if (kind !== 'initial') repairCalls += 1;
+    return {
+      committed: true,
+      commit: 'a'.repeat(40),
+      tree_sha: 'b'.repeat(40),
+    };
+  },
+  scopeCheck: () => ({ passed: true }),
+  verify: ({ repair_generation: gen }) => ({
+    passed: gen > 0,
+    receipt_digest: 'c'.repeat(64),
+    reason: gen === 0 ? 'vertical fail' : null,
+  }),
+  review: ({ scope }) => {
+    if (scope === 'full_diff' || scope === undefined) fullDiffCalls += 1;
+    return {
+      reviewed: true,
+      review_input_mode: 'full_diff_generation',
+      review_digest: 'd'.repeat(64),
+      findings: '[]',
+      verdict: 'REWORK',
+    };
+  },
+  adjudicate: () => ({
+    registry_complete: true,
+    repair_gate_passed: true,
+    registry_digest: 'e'.repeat(64),
+    must_fix_now: [],
+    follow_up: [],
+    rejected: [],
+  }),
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({
+    reviewed: true,
+    sealed_min_panel_size: 1,
+    final_panel_count: 1,
+    final_panel_seat_receipts: [{
+      schema_version: 1,
+      artifact_type: 'implementation_campaign_final_panel_seat',
+      seat_index: 1,
+      runner: 'f',
+      model: 'm',
+      effort: 'high',
+      endpoint: null,
+      family: 'f',
+      status: 'reviewed',
+      verdict: 'SHIP-AS-IS',
+      review_digest: 'f'.repeat(64),
+      reason: null,
+      receipt_digest: require('crypto').createHash('sha256').update('seat').digest('hex'),
+    }],
+  }),
+});
+assert.ok(fullDiffCalls >= 1, 'full-diff runs before repair on vertical fail');
+assert.ok(repairCalls >= 1, 'repair still happens after full-diff');
+assert.ok(vertical.trace.includes('full_diff_review'), 'trace records full_diff_review');
+
+// Focused-only cannot authorize repair.
+const focusedOnly = ctrl.requireFullDiffBeforeRepair({
+  generation: 0,
+  fullDiffBarriers: {},
+  focusedOnly: true,
+});
+assert.strictEqual(focusedOnly.allow_repair, false);
+
+// R7 boundary_rejected first-class + awaiting_disposition.
+const boundary = ctrl.classifyBoundaryRejected({
+  status: 'boundary_rejected',
+  commit: '1'.repeat(40),
+  error: 'boundary_rejected: changed path violates scope',
+});
+assert.strictEqual(boundary.status, 'boundary_rejected');
+assert.strictEqual(boundary.mutation_failed, false);
+assert.strictEqual(boundary.unknown_status, false);
+assert.strictEqual(boundary.candidate_ref, '1'.repeat(40));
+
+const missingDisp = ctrl.classifyMissingDisposition({
+  findings: [{ id: 'F1' }],
+  dispositionAuthority: null,
+  findingsIdentityOk: true,
+});
+assert.strictEqual(missingDisp.status, ctrl.AWAITING_DISPOSITION);
+assert.strictEqual(missingDisp.resumable, true);
+const badFinding = ctrl.classifyMissingDisposition({
+  findings: [{ id: 'F1' }],
+  dispositionAuthority: null,
+  findingsIdentityOk: false,
+});
+assert.strictEqual(badFinding.status, 'hard_fail');
+
+// Campaign reducer: boundary_rejected preserves candidate, awaiting_disposition resumes.
+const contract = {
+  ticket: 'ctrl-boundary',
+  profile: 'production',
+  max_repair_generations: 2,
+  max_wall_seconds: 3600,
+  max_changed_files: 32,
+  baseline_churn: 100,
+  max_extra_churn: 50,
+};
+const digest = canonicalDigest(contract);
+let state = createCampaignState({
+  contract,
+  contractDigest: digest,
+  repoIdentity: 'git-common-dir:/tmp/ctrl',
+  startedAt: '2026-07-30T00:00:00.000Z',
+});
+const mkEvent = (type, gen, payload, second, input, output) => ({
+  schema_version: 1,
+  event_type: type,
+  campaign_id: state.campaign_id,
+  contract_digest: digest,
+  generation: gen,
+  idempotency_key: `${type}-${second}`,
+  input_artifact_digest: input || state.last_output_artifact_digest,
+  output_artifact_digest: output || canonicalDigest({ t: type, s: second }),
+  timestamp: `2026-07-30T00:00:${String(second).padStart(2, '0')}.000Z`,
+  stage_identity: 'ctrl-stage',
+  usage: {
+    repair_generations: gen,
+    elapsed_wall_seconds: second,
+    changed_files: 1,
+    churn: 1,
+  },
+  payload,
+});
+state = reduceCampaignState(state, mkEvent(
+  CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
+  0,
+  { sealed_contract: true },
+  1,
+  digest,
+  canonicalDigest({ k: 'started' }),
+));
+const brDigest = '9'.repeat(64);
+state = reduceCampaignState(state, mkEvent(
+  CAMPAIGN_EVENTS.BOUNDARY_REJECTED,
+  0,
+  {
+    reason: 'scope boundary',
+    boundary_reason: 'changed path violates scope',
+    candidate_ref: '2'.repeat(40),
+    boundary_receipt_digest: brDigest,
+  },
+  2,
+  state.last_output_artifact_digest,
+  canonicalDigest({ kind: 'campaign_boundary_rejected', digest: brDigest }),
+));
+assert.strictEqual(state.phase, CAMPAIGN_STATES.BOUNDARY_REJECTED);
+assert.strictEqual(state.boundary_rejected.candidate_ref, '2'.repeat(40));
+
+// awaiting_disposition durable wait + resume on same work order identity.
+let state2 = createCampaignState({
+  contract: { ...contract, ticket: 'ctrl-disp' },
+  contractDigest: canonicalDigest({ ...contract, ticket: 'ctrl-disp' }),
+  repoIdentity: 'git-common-dir:/tmp/ctrl',
+  startedAt: '2026-07-30T00:00:00.000Z',
+});
+const d2 = state2.contract_digest;
+const step = (type, gen, payload, second, out) => {
+  state2 = reduceCampaignState(state2, {
+    schema_version: 1,
+    event_type: type,
+    campaign_id: state2.campaign_id,
+    contract_digest: d2,
+    generation: gen,
+    idempotency_key: `${type}-${second}`,
+    input_artifact_digest: state2.last_output_artifact_digest,
+    output_artifact_digest: out,
+    timestamp: `2026-07-30T00:00:${String(second).padStart(2, '0')}.000Z`,
+    stage_identity: 'ctrl-stage',
+    usage: {
+      repair_generations: gen,
+      elapsed_wall_seconds: second,
+      changed_files: 0,
+      churn: 0,
+    },
+    payload,
+  });
+};
+step(CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED, 0, { sealed_contract: true }, 1, canonicalDigest('s'));
+step(CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED, 0, {
+  scope_check_passed: true,
+  scope_check_digest: 'a'.repeat(64),
+}, 2, canonicalDigest('c'));
+step(CAMPAIGN_EVENTS.VERTICAL_VERIFIED, 0, {
+  passed: true,
+  evidence_digest: 'b'.repeat(64),
+}, 3, canonicalDigest('v'));
+step(CAMPAIGN_EVENTS.REVIEW_COMPLETED, 0, { review_digest: 'c'.repeat(64) }, 4, canonicalDigest('r'));
+step(CAMPAIGN_EVENTS.AWAITING_DISPOSITION, 0, {
+  reason: 'missing disposition authority',
+  findings_digest: 'd'.repeat(64),
+  candidate_ref: '3'.repeat(40),
+}, 5, canonicalDigest('w'));
+assert.strictEqual(state2.phase, CAMPAIGN_STATES.AWAITING_DISPOSITION);
+step(CAMPAIGN_EVENTS.DISPOSITION_RESUMED, 0, {
+  registry_complete: true,
+  registry_digest: 'e'.repeat(64),
+}, 6, canonicalDigest('x'));
+assert.strictEqual(state2.phase, CAMPAIGN_STATES.ADJUDICATING);
+
+// Repair tickets append without successor identity.
+let woCtrl = ctrl.emptyControllerState({
+  frozen_denominator: frozen,
+  original_dispatch_run: 'run-1',
+});
+woCtrl = ctrl.appendRepairTicket(woCtrl, {
+  ticket_id: 'rt-1',
+  generation: 1,
+  finding_ids: ['F1'],
+  reuse_lineage: true,
+});
+assert.strictEqual(woCtrl.repair_tickets.length, 1);
+assert.throws(() => ctrl.appendRepairTicket(woCtrl, {
+  ticket_id: 'rt-2',
+  generation: 2,
+  successor_work_order_id: 'wo-other',
+}), (e) => e.code === 'SUCCESSOR_IDENTITY_FORBIDDEN');
+
+// Artifact normalizer accepts reducer + controller kinds (intake/CLI projection).
+const {
+  normalizeCampaignArtifactReference,
+  NON_SUCCESS_DURABLE_STATES,
+} = require(path.join(root, 'src/engine/implementation-campaign'));
+const boundaryArt = normalizeCampaignArtifactReference({
+  kind: 'campaign_boundary_rejected',
+  digest: brDigest,
+});
+assert.strictEqual(boundaryArt.kind, 'campaign_boundary_rejected');
+assert.strictEqual(
+  normalizeCampaignArtifactReference({
+    kind: 'controller_progress_receipt',
+    digest: 'a'.repeat(64),
+  }).kind,
+  'controller_progress_receipt',
+);
+assert.ok(NON_SUCCESS_DURABLE_STATES.has(CAMPAIGN_STATES.BOUNDARY_REJECTED));
+
+// Exact RESUMED replay of boundary_rejected preserves evidence and spends no growth.
+const beforeResume = { ...state };
+state = reduceCampaignState(state, mkEvent(
+  CAMPAIGN_EVENTS.RESUMED,
+  0,
+  {},
+  3,
+  state.last_output_artifact_digest,
+  state.last_output_artifact_digest,
+));
+assert.strictEqual(state.phase, CAMPAIGN_STATES.BOUNDARY_REJECTED);
+assert.strictEqual(state.boundary_rejected.candidate_ref, '2'.repeat(40));
+assert.strictEqual(state.usage.changed_files, beforeResume.usage.changed_files);
+assert.strictEqual(state.usage.churn, beforeResume.usage.churn);
+
+// CLI resume eligibility treats durable waits as resumable with zero attempt spend.
+const { campaignResumeEligibility } = require(path.join(root, 'src/campaign/cli'));
+const eligibility = campaignResumeEligibility({
+  state,
+  latest_lease: { state: 'dead', pid: 1, start_time: 1 },
+  candidate_reference: null,
+  last_artifact_reference: null,
+}, '2026-07-30T00:01:00.000Z');
+assert.strictEqual(eligibility.status, 'resumable');
+
+console.log(JSON.stringify({
+  frozen_denominator_stable: true,
+  progress_digest_valid: true,
+  gate_journal_reuse: true,
+  joint_budget_axes: true,
+  full_diff_before_repair: true,
+  boundary_rejected_first_class: true,
+  awaiting_disposition_resumable: true,
+  repair_ticket_append: true,
+  artifact_kinds_accepted: true,
+  boundary_resume_exact_replay: true,
+  durable_wait_resume_eligible: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "controller execution discipline unit matrix exits zero"
+assert_contains "$CTRL_OUT" '"frozen_denominator_stable":true' "frozen denominator stable"
+assert_contains "$CTRL_OUT" '"progress_digest_valid":true' "progress receipt digest-valid"
+assert_contains "$CTRL_OUT" '"gate_journal_reuse":true' "gate journal reuse/invalidation"
+assert_contains "$CTRL_OUT" '"joint_budget_axes":true' "joint repair budget axes"
+assert_contains "$CTRL_OUT" '"full_diff_before_repair":true' "full-diff before repair"
+assert_contains "$CTRL_OUT" '"boundary_rejected_first_class":true' "boundary_rejected first-class"
+assert_contains "$CTRL_OUT" '"awaiting_disposition_resumable":true' "awaiting_disposition resumable"
+assert_contains "$CTRL_OUT" '"repair_ticket_append":true' "repair tickets append"
+assert_contains "$CTRL_OUT" '"artifact_kinds_accepted":true' "controller artifact kinds accepted"
+assert_contains "$CTRL_OUT" '"boundary_resume_exact_replay":true' "boundary_rejected exact resume"
+assert_contains "$CTRL_OUT" '"durable_wait_resume_eligible":true' "durable wait resume eligible"
+
+# Composition: identity-invalid findings hard-fail (never free-text wait).
+ID_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root] = process.argv.slice(2);
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+const seat = () => {
+  const { canonicalDigest } = require(path.join(root, 'src/engine/campaign-verification'));
+  const s = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'f', model: 'm', effort: 'high', endpoint: null, family: 'f',
+    status: 'reviewed', verdict: 'SHIP-AS-IS',
+    review_digest: 'f'.repeat(64), reason: null,
+  };
+  s.receipt_digest = canonicalDigest(s);
+  return s;
+};
+const result = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1, promptBytes: 0 }, {
+  preflight: () => ({ passed: true }),
+  implement: () => ({ committed: true, commit: 'a'.repeat(40), tree_sha: 'b'.repeat(40) }),
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: 'c'.repeat(64) }),
+  review: () => ({
+    reviewed: true,
+    review_input_mode: 'full_diff_generation',
+    review_digest: 'd'.repeat(64),
+    findings: JSON.stringify([{ finding_id: 'F1', claim: 'x', severity: '🟠', source: 't' }]),
+    verdict: 'REWORK',
+  }),
+  adjudicate: () => ({
+    registry_complete: false,
+    repair_gate_passed: false,
+    reason: 'disposition authority identity mismatch',
+    error_code: 'INVALID_FINDING_IDENTITY',
+    must_fix_now: [],
+    follow_up: [],
+    rejected: [],
+  }),
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({
+    reviewed: true,
+    sealed_min_panel_size: 1,
+    final_panel_count: 1,
+    final_panel_seat_receipts: [seat()],
+  }),
+});
+assert.strictEqual(result.status, 'blocked');
+assert.notStrictEqual(result.status, 'awaiting_disposition');
+assert.strictEqual(result.resumable, false);
+assert.strictEqual(result.code, 'INVALID_FINDING_IDENTITY');
+console.log(JSON.stringify({ identity_invalid_hard_fail: true }));
+NODE
+)"
+assert_exit_code "$?" "0" "identity-invalid composition hard-fail exits zero"
+assert_contains "$ID_OUT" '"identity_invalid_hard_fail":true' "identity-invalid findings hard-fail"
+
+# Work Order controller digest binding + over-budget composition zero implement calls.
+BUDGET_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const { execFileSync } = require('child_process');
+const [root] = process.argv.slice(2);
+const wo = require(path.join(root, 'src/engine/work-order'));
+const ctrl = require(path.join(root, 'src/engine/controller-execution'));
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wo-ctrl-'));
+execFileSync('git', ['-C', dir, 'init', '-q']);
+const common = execFileSync('git', ['-C', dir, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
+
+const legacy = wo.buildWorkOrder({
+  root_run_id: 'root-legacy',
+  graph_node: 'n1',
+  attempt: 1,
+  next_action: 'dispatch',
+  owner: wo.captureProcessIdentity(process.pid),
+});
+assert.ok(legacy.digest);
+assert.strictEqual(legacy.controller, undefined);
+
+const frozen = ctrl.buildFrozenDenominator({
+  projectId: 'p',
+  graphDigest: 'a'.repeat(64),
+  deliverableIds: ['n1'],
+});
+const controller = ctrl.emptyControllerState({
+  frozen_denominator: frozen,
+  repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 0 }),
+  repair_budget_usage: ctrl.emptyBudgetUsage(),
+});
+const written = wo.createOrUpdateWorkOrder(common, {
+  root_run_id: 'root-ctrl',
+  graph_node: 'n1',
+  attempt: 1,
+  next_action: 'dispatch',
+  controller,
+}, { bindArtifacts: false, updateLifecycle: false });
+assert.strictEqual(written.status, 'written');
+const live = JSON.parse(fs.readFileSync(written.path, 'utf8'));
+assert.ok(live.controller);
+assert.ok(live.controller.controller_digest);
+live.controller.repair_budget_usage.model_calls = 99;
+fs.writeFileSync(written.path, `${JSON.stringify(live, null, 2)}\n`);
+const listed = wo.listWorkOrders(common, 'root-ctrl');
+assert.ok(listed.some((e) => e.error && (
+  e.error.reason_code === 'controller_digest_mismatch'
+  || e.error.reason_code === 'work_order_digest_mismatch'
+)));
+
+let implementCalls = 0;
+const over = runCampaignComposition({
+  promptBytes: 0,
+  maxRepairGenerations: 2,
+  minPanelSize: 1,
+  controller: ctrl.emptyControllerState({
+    frozen_denominator: frozen,
+    repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 0 }),
+    repair_budget_usage: { ...ctrl.emptyBudgetUsage(), model_calls: 1 },
+  }),
+  includeControllerMeta: true,
+}, {
+  preflight: () => ({ passed: true }),
+  implement: () => {
+    implementCalls += 1;
+    return { committed: true, commit: 'a'.repeat(40), tree_sha: 'b'.repeat(40) };
+  },
+  scopeCheck: () => ({ passed: true }),
+  verify: () => ({ passed: true, receipt_digest: 'c'.repeat(64) }),
+  review: () => ({
+    reviewed: true, review_input_mode: 'full_diff_generation',
+    review_digest: 'd'.repeat(64), findings: '[]', verdict: 'SHIP-AS-IS',
+  }),
+  adjudicate: () => ({
+    registry_complete: true, repair_gate_passed: true, registry_digest: 'e'.repeat(64),
+    must_fix_now: [], follow_up: [], rejected: [],
+  }),
+  convergence: () => ({ passed: true }),
+  finalPanel: () => {
+    const { canonicalDigest } = require(path.join(root, 'src/engine/campaign-verification'));
+    const s = {
+      schema_version: 1, artifact_type: 'implementation_campaign_final_panel_seat',
+      seat_index: 1, runner: 'f', model: 'm', effort: 'high', endpoint: null, family: 'f',
+      status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+    };
+    s.receipt_digest = canonicalDigest(s);
+    return {
+      reviewed: true, sealed_min_panel_size: 1, final_panel_count: 1,
+      final_panel_seat_receipts: [s],
+    };
+  },
+});
+assert.strictEqual(implementCalls, 0);
+assert.strictEqual(over.status, 'awaiting_convergence_adjudication');
+assert.strictEqual(over.awaiting_convergence_adjudication, true);
+assert.ok(over.controller);
+console.log(JSON.stringify({
+  wo_controller_digest_bound: true,
+  over_budget_zero_implement: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "controller WO digest + over-budget zero implement exits zero"
+assert_contains "$BUDGET_OUT" '"wo_controller_digest_bound":true' "WO controller digest bound"
+assert_contains "$BUDGET_OUT" '"over_budget_zero_implement":true' "over-budget zero implement"
+
+# Awaiting-disposition resume: only adjudication; zero implement/verify/review.
+DISP_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root] = process.argv.slice(2);
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+const ctrl = require(path.join(root, 'src/engine/controller-execution'));
+const { canonicalDigest } = require(path.join(root, 'src/engine/campaign-verification'));
+const frozen = ctrl.buildFrozenDenominator({
+  projectId: 'disp',
+  graphDigest: 'a'.repeat(64),
+  deliverableIds: ['n1', 'n2'],
+});
+const candidate = {
+  committed: true,
+  commit: 'b'.repeat(40),
+  tree_sha: 'c'.repeat(40),
+};
+const review = {
+  reviewed: true,
+  review_input_mode: 'full_diff_generation',
+  review_digest: 'd'.repeat(64),
+  findings: JSON.stringify([{ finding_id: 'F1', claim: 'x', severity: '🟠', source: 't' }]),
+  verdict: 'REWORK',
+};
+const verification = { passed: true, receipt_digest: 'e'.repeat(64) };
+const rejectedFinding = {
+  id: 'F1',
+  claim: 'x',
+  severity: '🟠',
+  source: 't',
+  evidence: {
+    digest: '2'.repeat(64),
+    classification: 'refuted',
+  },
+  adjudication_authority: {
+    authority: 'depth-0',
+    actor_id: 'fixture-depth-0',
+    review_digest: review.review_digest,
+  },
+};
+let implementCalls = 0;
+let verifyCalls = 0;
+let reviewCalls = 0;
+let adjudicateCalls = 0;
+const events = [];
+const seat = () => {
+  const s = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_final_panel_seat',
+    seat_index: 1,
+    runner: 'f', model: 'm', effort: 'high', endpoint: null, family: 'f',
+    status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+  };
+  s.receipt_digest = canonicalDigest(s);
+  return s;
+};
+const result = runCampaignComposition({
+  maxRepairGenerations: 1,
+  minPanelSize: 1,
+  promptBytes: 0,
+  controller: ctrl.emptyControllerState({ frozen_denominator: frozen }),
+  frozenDenominator: frozen,
+  includeControllerMeta: true,
+  resume: {
+    phase: 'awaiting_disposition',
+    repair_generation: 0,
+    candidate,
+    verification,
+    review,
+    findings: [rejectedFinding],
+    full_diff_barriers: {
+      0: { success: true, review_digest: 'd'.repeat(64), candidate_ref: candidate.commit },
+    },
+  },
+}, {
+  onCampaignEvent: (e) => { events.push(e.event_type); },
+  preflight: () => ({ passed: true }),
+  implement: () => {
+    implementCalls += 1;
+    return { committed: true, commit: candidate.commit, tree_sha: candidate.tree_sha };
+  },
+  scopeCheck: () => ({ passed: true }),
+  verify: () => {
+    verifyCalls += 1;
+    return verification;
+  },
+  review: () => {
+    reviewCalls += 1;
+    return review;
+  },
+  adjudicate: () => {
+    adjudicateCalls += 1;
+    return {
+      registry_complete: true,
+      repair_gate_passed: true,
+      registry_digest: '1'.repeat(64),
+      must_fix_now: [],
+      follow_up: [],
+      rejected: [rejectedFinding],
+    };
+  },
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({
+    reviewed: true,
+    sealed_min_panel_size: 1,
+    final_panel_count: 1,
+    final_panel_seat_receipts: [seat()],
+  }),
+});
+assert.strictEqual(implementCalls, 0, 'disposition resume must not re-implement');
+assert.strictEqual(verifyCalls, 0, 'disposition resume must not re-verify');
+assert.strictEqual(reviewCalls, 0, 'disposition resume must not re-review');
+assert.ok(adjudicateCalls >= 1, 'disposition resume must adjudicate');
+assert.ok(events.includes('DISPOSITION_RESUMED'), `events=${events.join(',')}`);
+assert.strictEqual(result.status, 'ready', JSON.stringify(result));
+assert.ok(result.trace && result.trace.includes('resume_disposition_only'));
+console.log(JSON.stringify({
+  disposition_resume_zero_impl: true,
+  disposition_resume_zero_verify: true,
+  disposition_resume_zero_review: true,
+  disposition_event_emitted: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "disposition-only resume matrix exits zero"
+assert_contains "$DISP_OUT" '"disposition_resume_zero_impl":true' "disposition resume zero implement"
+assert_contains "$DISP_OUT" '"disposition_resume_zero_verify":true' "disposition resume zero verify"
+assert_contains "$DISP_OUT" '"disposition_resume_zero_review":true' "disposition resume zero review"
+assert_contains "$DISP_OUT" '"disposition_event_emitted":true' "DISPOSITION_RESUMED emitted"
 
 finalize_test

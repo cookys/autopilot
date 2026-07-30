@@ -115,6 +115,90 @@
         "receipt_digest": { "$ref": "#/$defs/sha256" }
       },
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "status",
+        "boundary_reason",
+        "boundary_code",
+        "candidate_ref",
+        "boundary_receipt_digest",
+        "possibly_effectful",
+        "mutation_failed",
+        "unknown_status",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": {
+          "type": "string",
+          "const": "implementation_campaign_boundary_rejected"
+        },
+        "status": { "type": "string", "const": "boundary_rejected" },
+        "boundary_reason": { "type": "string", "minLength": 1 },
+        "boundary_code": { "type": "string", "minLength": 1 },
+        "candidate_ref": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+            }
+          ]
+        },
+        "boundary_receipt_digest": { "$ref": "#/$defs/sha256" },
+        "possibly_effectful": { "type": "boolean" },
+        "mutation_failed": { "type": "boolean", "const": false },
+        "unknown_status": { "type": "boolean", "const": false },
+        "trace": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "status",
+        "reason",
+        "findings_digest",
+        "candidate_ref",
+        "resumable",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": {
+          "type": "string",
+          "const": "implementation_campaign_awaiting_disposition"
+        },
+        "status": { "type": "string", "const": "awaiting_disposition" },
+        "reason": { "type": "string", "minLength": 1 },
+        "findings_digest": { "$ref": "#/$defs/sha256" },
+        "candidate_ref": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+            }
+          ]
+        },
+        "resumable": { "type": "boolean", "const": true },
+        "trace": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
     }
   ],
   "$defs": {

@@ -5,6 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const {
   CAMPAIGN_STATES,
+  NON_SUCCESS_DURABLE_STATES,
   canonicalDigest,
   normalizeCampaignArtifactReference,
   reduceCampaignState,
@@ -17,6 +18,13 @@ const TERMINAL = new Set([
   CAMPAIGN_STATES.TERMINAL_READY,
   CAMPAIGN_STATES.TERMINAL_FOLLOW_UP,
   CAMPAIGN_STATES.TERMINAL_STOP,
+]);
+// Durable non-success waits: projectable and resumable without fabricating mutation_failed.
+const DURABLE_WAIT = new Set([
+  CAMPAIGN_STATES.BOUNDARY_REJECTED,
+  CAMPAIGN_STATES.AWAITING_DISPOSITION,
+  CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION,
+  ...NON_SUCCESS_DURABLE_STATES,
 ]);
 const RUN_LEDGER_STAGE_STATES = new Set([
   'leased',
@@ -439,6 +447,11 @@ function projectCampaign(rows, campaignId) {
     candidate_reference: candidateReference,
     initial_candidate_reference: initialCandidateReference,
     lifecycle_receipt_ref: lifecycleReceiptRef,
+    // First-class durable non-success projections (parseable, digest-bound).
+    boundary_rejected: state.boundary_rejected || null,
+    awaiting_disposition: state.awaiting_disposition || null,
+    convergence_budget: state.convergence_budget || null,
+    durable_wait: DURABLE_WAIT.has(state.phase),
   };
 }
 
@@ -515,11 +528,22 @@ function campaignResumeEligibility(projection, observedAt) {
     && projection.last_artifact_reference.kind === 'product_review'
     && canonicalDigest(projection.last_artifact_reference)
       === projection.state.last_output_artifact_digest;
+  const durableWait = DURABLE_WAIT.has(projection.state.phase);
+  // boundary_rejected is always durable-resumable. Possibly-effectful candidates keep
+  // candidate_ref; exact replay/no-op adoption spends no new model or gate attempt.
+  const boundaryResumable = projection.state.phase === CAMPAIGN_STATES.BOUNDARY_REJECTED;
+  const dispositionResumable = projection.state.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION
+    && Boolean(projection.state.awaiting_disposition
+      && projection.state.awaiting_disposition.findings_digest);
   const resumePhaseSupported = projection.state.phase === CAMPAIGN_STATES.PREPARED
     || (projection.state.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION && hasCandidate)
     || (projection.state.phase === CAMPAIGN_STATES.ADJUDICATING
       && hasCandidate
-      && hasBoundReview);
+      && hasBoundReview)
+    || boundaryResumable
+    || dispositionResumable
+    || (durableWait && projection.state.phase
+      === CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION);
   if (!resumePhaseSupported) {
     return {
       status: 'blocked',
@@ -604,12 +628,23 @@ function runCampaignCli(argv, options = {}) {
     phase: projection.state.phase,
     generation: projection.state.generation,
     resume_required: eligibility.status === 'resumable',
+    durable_wait: Boolean(projection.durable_wait),
+    boundary_rejected: projection.boundary_rejected || null,
+    awaiting_disposition: projection.awaiting_disposition || null,
+    // Exact replay / no-op adoption must not spend a new model or gate attempt.
+    no_op_resume_eligible: eligibility.status === 'resumable'
+      && (projection.state.phase === CAMPAIGN_STATES.BOUNDARY_REJECTED
+        || projection.state.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION)
+      && true,
+    mutation_attempts_on_resume: 0,
+    gate_attempts_on_resume: 0,
   })}\n`);
   return eligibility.status === 'resumable' ? EXIT_SUCCESS : 1;
 }
 
 module.exports = {
   campaignResumeEligibility,
+  DURABLE_WAIT,
   defaultCampaignLedgerPath,
   ledgerScanFiles,
   loadRows,

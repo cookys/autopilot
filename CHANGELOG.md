@@ -24,6 +24,61 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.1 — Controller execution discipline
+
+**Headline**: Autopilot now treats a long-running deliverable as one durable work order: it freezes
+the whole-diff gate before repair, resumes the same candidate lineage, rehydrates authority after
+compaction, accounts for resource debt, and reports bounded progress without turning retries or
+review findings into new phases.
+
+### Added
+- A controller-execution state machine and schemas for durable work-order identity, exact gate
+  ownership, immutable phase denominators, multi-axis repair budgets, progress receipts, retained
+  resource debt, and high-water admission.
+- Host-neutral checkpoint/rehydration plus orphan-mutation adoption contracts that reconcile Git,
+  campaign, process, worktree, and ledger evidence before the next effectful dispatch.
+- An independently authored cross-component execution oracle covering admission, recovery,
+  convergence, lifecycle, no-op adoption, and boundary behavior.
+
+### Changed
+- Live capability observations use the exact runner/model/effort/endpoint identity required by
+  strict dispatch admission instead of allowing a legacy coarse partition to imply readiness.
+- Mission admission separates allowed outputs from required changed paths, validates allowed
+  creates and version-mirror closure, adopts receipt-proven no-op nodes without cosmetic writes,
+  and does not charge zero-dispatch precondition failures as effectful gate spend.
+- Review repair generations append to one work order, retain accepted invariants and normalized
+  finding lineage, and enter durable `awaiting_disposition` or
+  `awaiting_convergence_adjudication` states instead of burning the campaign.
+- Campaign replay reads rotation-aware state, retained outcomes require explicit leases and
+  disposition, and resource debt blocks new dispatch until reconciled.
+
+### Fixed
+- `boundary_rejected` remains a first-class outcome with its candidate and boundary reason instead
+  of collapsing into an unknown mutation failure.
+- Minimum QC panel cardinality, full-diff generation ownership, duplicate dispatch admission,
+  compaction replay, and interrupted-controller adoption now fail closed with durable receipts.
+- Completed controller/recovery/lifecycle backlog entries were removed; the remaining scheduler,
+  cross-harness authority, production Codex `PostCompact`, and session-local qualification work
+  retain explicit triggers.
+
+### Boundary
+- The release includes a `PostCompact`-ready recovery adapter but does not register a production
+  Codex hook. That wiring remains gated on an accepted live hook probe or official adapter
+  contract.
+- The managed completion campaign correctly stopped before its final panel because exact QC-seat
+  qualification was unavailable. No seat or qualification receipt was fabricated; depth 0 uses
+  the frozen three-family whole-diff panel, while the session-local qualification provider remains
+  Owner Kernel P4 backlog.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.0`
+
+prose-justification: this patch closes one cross-cutting controller execution boundary spanning
+Mission admission, campaign convergence, recovery, resource lifecycle, tests, and operator-facing
+state; the release note records both shipped behavior and the two deliberately unclaimed
+production authority surfaces.
+
 ## v2.34.0 — Mission convergence portfolio (release-ready implementation)
 
 **Headline**: Autopilot can run an unattended Mission through bounded implementation campaigns,

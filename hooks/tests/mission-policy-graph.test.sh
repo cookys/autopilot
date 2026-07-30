@@ -3,6 +3,10 @@ set -uo pipefail
 
 TEST_NAME="mission-policy-graph"
 . "$(dirname "$0")/lib.sh"
+# Ambient mission harness env must not poison hermetic unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 const assert = require('assert/strict');

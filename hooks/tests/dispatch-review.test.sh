@@ -591,9 +591,11 @@ OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB
 assert_eq "1" "$EXIT" "quota failure exit code remains 1 for review"
 assert_contains "$OUT" '"status": "no_verdict"' "quota failure status remains no_verdict for review"
 
-# Verify that the event was recorded in the capability store
+# Verify that the event was recorded in the capability store under the exact
+# runner/model/effort/endpoint tuple dispatch-review uses (default effort=xhigh,
+# endpoint null). Query without effort would miss the exact-tuple partition.
 assert_file_exists "$CAP_TEST_DIR_REVIEW/capability.jsonl" "capability store contains recorded review event"
-recorded_status_review="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner codex --model gpt-5.5 --role reviewer --store "$CAP_TEST_DIR_REVIEW" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
+recorded_status_review="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner codex --model gpt-5.5 --role reviewer --effort xhigh --endpoint @none --store "$CAP_TEST_DIR_REVIEW" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
 assert_eq "exhausted" "$recorded_status_review" "recorded review quota status is exhausted"
 
 # Regression Test 1: codex-chrome stub

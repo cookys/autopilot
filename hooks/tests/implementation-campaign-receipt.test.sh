@@ -617,6 +617,8 @@ let mutations = 0;
 let focusedReviews = 0;
 let finalPanels = 0;
 let authorizedRepairInput = null;
+let compositionPreEffects = 0;
+const compositionWorktreeProjection = [];
 const scopeCheckpoints = [];
 const retainedFollowUp = retainedFinding({
   id: 'F-HARDENING',
@@ -641,11 +643,15 @@ const retainedRejected = retainedFinding({
   evidenceClassification: 'refuted',
   evidenceDigest: '9'.repeat(64),
 });
-const composition = runCampaignComposition({
-  maxRepairGenerations: 2,
+const composition = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 2,
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit({ wouldCreateWorktree }) {
+    compositionPreEffects += 1;
+    compositionWorktreeProjection.push(wouldCreateWorktree === true);
+    return { ok: true };
+  },
   implement(input) {
     const { kind } = input;
     mutations += 1;
@@ -716,6 +722,10 @@ assert.strictEqual(composition.repair_generations, 1);
 assert.strictEqual(mutations, 2);
 assert.strictEqual(focusedReviews, 2);
 assert.strictEqual(finalPanels, 1);
+assert.strictEqual(compositionPreEffects, 7);
+assert.deepStrictEqual(compositionWorktreeProjection, [
+  true, true, false, false, true, false, false,
+]);
 assert.deepStrictEqual(authorizedRepairInput.repair_finding_ids, ['F-IN-SCOPE']);
 assert.deepStrictEqual(authorizedRepairInput.repair_findings, [retainedMustFix]);
 assert.deepStrictEqual(scopeCheckpoints, [
@@ -728,8 +738,7 @@ assert.deepStrictEqual(composition.follow_up, [retainedFollowUp]);
 assert.deepStrictEqual(composition.rejected_findings, [retainedRejected]);
 assert.strictEqual(composition.final_panel_count, 1);
 
-const dispositionConflict = runCampaignComposition({
-  maxRepairGenerations: 1,
+const dispositionConflict = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 1,
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
@@ -769,8 +778,7 @@ assert.strictEqual(dispositionConflict.status, 'blocked');
 assert.strictEqual(dispositionConflict.phase, 'final_adjudication');
 assert.match(dispositionConflict.reason, /conflicting cross-round dispositions/);
 
-const evidenceConflict = runCampaignComposition({
-  maxRepairGenerations: 1,
+const evidenceConflict = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 1,
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
@@ -803,8 +811,7 @@ assert.strictEqual(evidenceConflict.status, 'blocked');
 assert.strictEqual(evidenceConflict.phase, 'final_adjudication');
 assert.match(evidenceConflict.reason, /conflicting cross-round dispositions/);
 
-const missingRetentionEvidence = runCampaignComposition({
-  maxRepairGenerations: 0,
+const missingRetentionEvidence = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 0,
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
@@ -838,8 +845,7 @@ assert.strictEqual(missingRetentionEvidence.phase, 'adjudication_conflict');
 assert.match(missingRetentionEvidence.reason, /bound evidence/);
 
 let incompleteMutations = 0;
-const incomplete = runCampaignComposition({
-  maxRepairGenerations: 2,
+const incomplete = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 2,
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
@@ -856,18 +862,28 @@ const incomplete = runCampaignComposition({
     throw new Error('incomplete registry must not reach final panel');
   },
 });
-assert.strictEqual(incomplete.status, 'blocked');
-assert.strictEqual(incomplete.phase, 'adjudication');
+assert.strictEqual(incomplete.status, 'awaiting_disposition');
+assert.strictEqual(incomplete.phase, 'awaiting_disposition');
+assert.strictEqual(incomplete.resumable, true);
+assert.strictEqual(incomplete.candidate.committed, true);
+assert.strictEqual(incomplete.candidate.tree_sha, TREE_A);
+assert.strictEqual(incomplete.review.review_input_mode, 'full_diff_generation');
 assert.strictEqual(incompleteMutations, 1);
 
 let verticalReviews = 0;
 let verticalMutations = 0;
+let verticalPreEffects = 0;
+const verticalWorktreeProjection = [];
 const verticalScopeCheckpoints = [];
-const vertical = runCampaignComposition({
-  maxRepairGenerations: 1,
+const vertical = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 1,
   minPanelSize: 1,
 }, {
   preflight: () => ({ passed: true }),
+  preEffectAdmit({ wouldCreateWorktree }) {
+    verticalPreEffects += 1;
+    verticalWorktreeProjection.push(wouldCreateWorktree === true);
+    return { ok: true };
+  },
   implement() {
     verticalMutations += 1;
     return {
@@ -901,7 +917,11 @@ const vertical = runCampaignComposition({
 });
 assert.strictEqual(vertical.status, 'ready');
 assert.strictEqual(verticalMutations, 2);
-assert.strictEqual(verticalReviews, 1);
+assert.strictEqual(verticalReviews, 2);
+assert.strictEqual(verticalPreEffects, 7);
+assert.deepStrictEqual(verticalWorktreeProjection, [
+  true, true, false, false, true, false, false,
+]);
 assert.deepStrictEqual(verticalScopeCheckpoints, [
   'after_initial_mutation',
   'before_repair',

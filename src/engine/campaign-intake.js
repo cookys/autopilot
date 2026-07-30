@@ -12,6 +12,7 @@ const {
 const {
   CAMPAIGN_EVENTS,
   CAMPAIGN_STATES,
+  NON_SUCCESS_DURABLE_STATES,
   campaignIdFor,
   canonicalDigest,
   createCampaignState,
@@ -28,6 +29,7 @@ const {
   processLiveness,
   projectCampaign,
 } = require('../campaign/cli');
+
 
 const RUN_LEDGER = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
 const CONTEXT_GATE = path.resolve(__dirname, '..', '..', 'scripts', 'check-context-window.js');
@@ -762,9 +764,13 @@ function defaultGenerationClaim({
     const resumableCandidatePhase = new Set([
       CAMPAIGN_STATES.VERTICAL_VERIFICATION,
       CAMPAIGN_STATES.ADJUDICATING,
+      CAMPAIGN_STATES.BOUNDARY_REJECTED,
+      CAMPAIGN_STATES.AWAITING_DISPOSITION,
     ]).has(existing.state.phase);
+    const durableWaitPhase = NON_SUCCESS_DURABLE_STATES.has(existing.state.phase);
     const resumePhaseSupported = existing.state.phase === CAMPAIGN_STATES.PREPARED
-      || resumableCandidatePhase;
+      || resumableCandidatePhase
+      || durableWaitPhase;
     if (!resumePhaseSupported) {
       return rejected(
         'campaign_generation',
@@ -772,7 +778,39 @@ function defaultGenerationClaim({
         `campaign resume from ${existing.state.phase} is unavailable until phase-aware dispatch ships`,
       );
     }
-    if (resumableCandidatePhase) {
+    // Exact replay / durable-wait no-op adoption: no new model or gate attempt.
+    // Possibly-effectful boundary_rejected preserves candidate without fabricating
+    // mutation-failure evidence.
+    if (durableWaitPhase) {
+      const boundary = existing.state.boundary_rejected || null;
+      const awaiting = existing.state.awaiting_disposition || null;
+      const candidateRef = (boundary && boundary.candidate_ref)
+        || (awaiting && awaiting.candidate_ref)
+        || (existing.candidate_reference && existing.candidate_reference.commit)
+        || null;
+      existing.resume_durable_wait = {
+        phase: existing.state.phase,
+        boundary_rejected: boundary,
+        awaiting_disposition: awaiting,
+        candidate_ref: candidateRef,
+        exact_replay: true,
+        dispatcher_called: false,
+        mutation_attempts: 0,
+        gate_attempts: 0,
+        no_op: true,
+      };
+      // Prefer a bound git candidate when present so later stages can re-attach.
+      if (existing.candidate_reference
+          && existing.candidate_reference.kind === 'git_candidate') {
+        existing.resume_candidate = existing.candidate_reference;
+      } else if (candidateRef && existing.candidate_reference) {
+        existing.resume_candidate = existing.candidate_reference;
+      }
+    }
+    if (resumableCandidatePhase
+        && existing.state.phase !== CAMPAIGN_STATES.BOUNDARY_REJECTED
+        && existing.state.phase !== CAMPAIGN_STATES.AWAITING_DISPOSITION
+        && existing.state.phase !== CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION) {
       try {
         existing.resume_candidate = verifyResumeCandidate({
           projection: existing,
@@ -987,6 +1025,17 @@ function defaultGenerationClaim({
     durable_journal: true,
     resume_candidate: existing ? existing.resume_candidate || null : null,
     resume_review_digest: existing ? existing.resume_review_digest || null : null,
+    resume_durable_wait: existing ? existing.resume_durable_wait || null : null,
+    // Exact durable-wait replay never spends a new model/gate attempt.
+    dispatcher_called: existing && existing.resume_durable_wait
+      ? false
+      : undefined,
+    mutation_attempts: existing && existing.resume_durable_wait
+      ? 0
+      : undefined,
+    gate_attempts: existing && existing.resume_durable_wait
+      ? 0
+      : undefined,
   });
 }
 

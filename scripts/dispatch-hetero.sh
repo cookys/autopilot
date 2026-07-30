@@ -1793,16 +1793,23 @@ case "${DISPATCH_DETACH:-1}" in
 esac
 if [ "$_detach_preclaim" -eq 1 ] \
     && [ -n "$LEDGER" ] && [ -n "$RUN_ID" ] && [ -n "$STAGE" ]; then
+  _preclaim_err="$(mktemp -t 'dispatch-hetero-preclaim-XX''XX''XX')" \
+    || die_precondition "cannot allocate durable dispatch claim diagnostic"
   _preclaim="$(bash "$SELF_DIR/run-ledger.sh" stage-acquire \
     --ledger "$LEDGER" --run-id "$RUN_ID" --stage "$STAGE" \
-    --pid "$$" --git-ref "refs/heads/$BRANCH" --exclusive-live 2>&1)" \
-    || die_precondition "durable dispatch claim rejected: ${_preclaim:-unknown}"
+    --pid "$$" --git-ref "refs/heads/$BRANCH" --exclusive-live 2>"$_preclaim_err")" \
+    || {
+      _preclaim_diag="$(cat "$_preclaim_err" 2>/dev/null || true)"
+      rm -f "$_preclaim_err"
+      die_precondition "durable dispatch claim rejected: ${_preclaim_diag:-unknown}"
+    }
+  rm -f "$_preclaim_err"
   DETACH_PRECLAIM_GEN="$(printf '%s' "$_preclaim" | jq -r '.generation // empty')"
   DETACH_PRECLAIM_NONCE="$(printf '%s' "$_preclaim" | jq -r '.nonce // empty')"
   [ -n "$DETACH_PRECLAIM_GEN" ] && [ -n "$DETACH_PRECLAIM_NONCE" ] \
     || die_precondition "durable dispatch claim returned invalid ownership identity"
 fi
-unset _detach_preclaim _preclaim
+unset _detach_preclaim _preclaim _preclaim_err _preclaim_diag
 
 # Resolve effective skill mode and build prompt-pack if requested
 if [[ "$SKILL_MODE" != "off" ]]; then

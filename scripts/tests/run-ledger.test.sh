@@ -93,6 +93,9 @@ run_cmd() {
 LEDGER_A="$TEST_TMP/ledger-a.jsonl"
 run_cmd init --ledger "$LEDGER_A"
 run_cmd stage-acquire --ledger "$LEDGER_A" --run-id "run-a" --stage "build" --pid "$$" --resources "shared-a"
+NONCE_A="$(jq -r '.nonce // empty' <<<"$CMD_OUT")"
+assert_eq "$CMD_ERR" "" "stage-acquire keeps diagnostics off the JSON channel"
+assert_eq "${#NONCE_A}" "16" "stage-acquire emits a 16-digit nonce"
 GEN_A="$(jq -r '.generation' <<<"$CMD_OUT")"
 run_cmd stage-transition --ledger "$LEDGER_A" --run-id "run-a" --stage "build" --generation "0" --nonce "wrong" --to-state committed
 assert_cmd_rc 11 "late-child fence return code"

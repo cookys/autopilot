@@ -142,7 +142,10 @@ iso_ts() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
 rand_hex() {
   local v
-  v="$(tr -dc 'a-f0-9' < /dev/urandom | head -c 16 || true)"
+  # Read a fixed byte count before formatting it. `tr /dev/urandom | head`
+  # makes GNU tr report its expected SIGPIPE on some hosts; callers that
+  # capture stderr alongside machine JSON then receive a corrupted payload.
+  v="$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || true)"
   echo "${v:-0}"
 }
 

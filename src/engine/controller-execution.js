@@ -153,6 +153,15 @@ function gateInputDigest(kind, input) {
   return sha256Json({ kind, input: input == null ? null : input });
 }
 
+// Git object IDs: SHA-1 (40) or SHA-256 (64), lowercase hex only.
+function isCanonicalGitObjectId(value) {
+  return typeof value === 'string' && /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(value);
+}
+
+function isCanonicalSha256(value) {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+}
+
 function recordGateEntry(journal, {
   kind,
   owner,
@@ -170,25 +179,49 @@ function recordGateEntry(journal, {
   const j = isObj(journal) ? JSON.parse(JSON.stringify(journal)) : emptyGateJournal();
   if (!Array.isArray(j.entries)) j.entries = [];
   const inputDigest = gateInputDigest(kind, input);
+  const success = Boolean(result && result.success === true);
   // Reuse matching successful result when inputs are identical and not invalidated.
-  const prior = [...j.entries].reverse().find((e) => (
+  const matchingPrior = [...j.entries].reverse().find((e) => (
     e.kind === kind
     && e.input_digest === inputDigest
     && e.result
     && e.result.success === true
     && !e.invalidated
   ));
-  if (prior && result && result.success === true && !invalidateReason) {
+  if (matchingPrior && success && !invalidateReason) {
     return {
       journal: j,
       reused: true,
-      entry: prior,
+      entry: matchingPrior,
       reason: 'matching successful gate result reused',
     };
   }
-  if (prior && invalidateReason) {
-    prior.invalidated = true;
-    prior.invalidation_reason = invalidateReason;
+  // Changed input under the same kind supersedes live successful gates and requires
+  // an explicit non-empty invalidation reason. Failed/unrelated kinds are untouched.
+  if (success) {
+    const liveSameKind = j.entries.filter((e) => (
+      e.kind === kind
+      && e.result
+      && e.result.success === true
+      && !e.invalidated
+      && e.input_digest !== inputDigest
+    ));
+    if (liveSameKind.length > 0) {
+      if (typeof invalidateReason !== 'string' || invalidateReason.trim().length === 0) {
+        fail(
+          'GATE_INVALIDATION_REQUIRED',
+          `successful ${kind} gate with changed input requires non-empty invalidateReason`,
+        );
+      }
+      for (const entry of liveSameKind) {
+        entry.invalidated = true;
+        entry.invalidation_reason = invalidateReason;
+      }
+    } else if (matchingPrior && invalidateReason) {
+      // Explicit re-record of the same input with invalidation: supersede the live match.
+      matchingPrior.invalidated = true;
+      matchingPrior.invalidation_reason = invalidateReason;
+    }
   }
   const entry = {
     gate_id: `gate-${kind}-${j.entries.length + 1}`,
@@ -689,12 +722,29 @@ function adoptOrphanLeaf({
       duplicate_mutation: 0,
     };
   }
-  if (!isStr(branchTip) || !isStr(branchTree) || !isStr(worktreeDigest)) {
+  const leafCommit = isStr(leafResult.commit)
+    ? leafResult.commit
+    : (isStr(leafResult.candidate_ref) ? leafResult.candidate_ref : null);
+  if (!isCanonicalGitObjectId(leafCommit)
+      || !isCanonicalGitObjectId(branchTip)
+      || !isCanonicalGitObjectId(branchTree)
+      || !isCanonicalSha256(worktreeDigest)) {
     return {
       ok: false,
       status: 'stopped',
-      reason: 'branch tip/tree/worktree digest binding incomplete',
+      reason: 'orphan adoption requires canonical full git object IDs and sha256 worktree digest',
       code: 'ADOPTION_BINDING_INCOMPLETE',
+      preserve_evidence: true,
+      duplicate_mutation: 0,
+    };
+  }
+  // Leaf result tip must bind exactly to the branch tip — placeholders/mismatches stop.
+  if (leafCommit !== branchTip) {
+    return {
+      ok: false,
+      status: 'stopped',
+      reason: 'leaf result commit does not bind to branch tip',
+      code: 'ADOPTION_LEAF_TIP_MISMATCH',
       preserve_evidence: true,
       duplicate_mutation: 0,
     };
@@ -726,7 +776,7 @@ function adoptOrphanLeaf({
     branch_tree: branchTree,
     worktree_digest: worktreeDigest,
     generation,
-    leaf_commit: leafResult.commit || leafResult.candidate_ref || null,
+    leaf_commit: leafCommit,
     adopted_at: nowIso(),
     duplicate_mutation: 0,
   };
@@ -812,6 +862,17 @@ function runPostCompactAdapter(input = {}) {
  * Mission executable-delta admission (pre-spend).
  * Separates allowed-to-change, required-to-change, and authorized creates.
  */
+function readPathBytes(repoRoot, relativePath) {
+  if (!isStr(repoRoot) || !isStr(relativePath)) return null;
+  const abs = path.join(repoRoot, relativePath);
+  try {
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return null;
+    return fs.readFileSync(abs, 'utf8');
+  } catch (_e) {
+    return null;
+  }
+}
+
 function admitExecutableMissionDelta({
   repoRoot,
   allowedPathPrefixes = [],
@@ -826,8 +887,10 @@ function admitExecutableMissionDelta({
   baseSha = null,
   // Paths declared outside the sealed required/output sets (typos / phantoms).
   extraDeclaredPaths = [],
-  // When true, missing output_paths also require authorized_creates (strict).
-  strictOutputCreates = false,
+  // When true (default for Mission admission), missing output_paths require
+  // explicit authorized_creates. Opt out only for isolated lower-level fixtures
+  // that cannot reach the Mission admission rail.
+  strictOutputCreates = true,
 }) {
   const creates = new Set((authorizedCreates || []).map(String));
   const allowed = (allowedPathPrefixes || []).map(String);
@@ -845,8 +908,8 @@ function admitExecutableMissionDelta({
     }
   }
 
-  // output_paths are the sealed create/modify surface. Missing files are OK by
-  // default (they are the deliverable). Strict mode requires authorized_creates.
+  // Absent outputs always require explicit authorized_creates under strict mode
+  // (Mission admission enables this fail-closed). Existing files may change freely.
   for (const p of outputs) {
     if (!repoRoot) continue;
     const abs = path.join(repoRoot, p);
@@ -860,11 +923,11 @@ function admitExecutableMissionDelta({
     }
   }
 
-  // Required paths must exist unless explicitly authorized as creates (or also outputs).
+  // Required paths must exist unless explicitly authorized as creates.
   for (const p of required) {
     if (!repoRoot) continue;
     const abs = path.join(repoRoot, p);
-    if (!fs.existsSync(abs) && !creates.has(p) && !outputs.includes(p)) {
+    if (!fs.existsSync(abs) && !creates.has(p)) {
       reasons.push({
         code: 'REQUIRED_PATH_MISSING',
         path: p,
@@ -920,17 +983,83 @@ function admitExecutableMissionDelta({
   }
 
   // Digest-bound no-op adoption: no mutation/gate attempt when preconditions hold.
+  // Requires canonical base SHA, acceptance digest, and exact current bytes for
+  // every required/output path — never invent zero/empty evidence.
   if (isObj(noOpReceipt)) {
-    const bound = isStr(noOpReceipt.base_sha)
-      && isStr(noOpReceipt.acceptance_digest)
-      && isObj(noOpReceipt.current_bytes)
-      && (baseSha == null || noOpReceipt.base_sha === baseSha);
-    if (!bound) {
+    const relevantPaths = [...new Set([...required, ...outputs])].sort();
+    const receiptBytes = noOpReceipt.current_bytes;
+    let noopOk = true;
+    if (!isCanonicalGitObjectId(noOpReceipt.base_sha)) {
       reasons.push({
         code: 'NOOP_BINDING_INCOMPLETE',
-        reason: 'no-op adoption requires base, acceptance evidence, and current byte binding',
+        reason: 'no-op base_sha must be a canonical full git object id',
       });
-    } else if (reasons.length === 0) {
+      noopOk = false;
+    } else if (baseSha != null && noOpReceipt.base_sha !== baseSha) {
+      reasons.push({
+        code: 'NOOP_BINDING_INCOMPLETE',
+        reason: 'no-op base_sha does not match admission base',
+      });
+      noopOk = false;
+    }
+    if (!isCanonicalSha256(noOpReceipt.acceptance_digest)) {
+      reasons.push({
+        code: 'NOOP_BINDING_INCOMPLETE',
+        reason: 'no-op acceptance_digest must be a canonical sha256 hex digest',
+      });
+      noopOk = false;
+    }
+    if (!isObj(receiptBytes)) {
+      reasons.push({
+        code: 'NOOP_BINDING_INCOMPLETE',
+        reason: 'no-op current_bytes must be an object of path→string bindings',
+      });
+      noopOk = false;
+    } else {
+      const receiptKeys = Object.keys(receiptBytes).sort();
+      // Exact key set: no missing, no extra.
+      if (JSON.stringify(receiptKeys) !== JSON.stringify(relevantPaths)) {
+        reasons.push({
+          code: 'NOOP_BYTES_MISMATCH',
+          reason: 'no-op current_bytes keys must exactly equal required+output paths',
+        });
+        noopOk = false;
+      }
+      for (const p of receiptKeys) {
+        if (typeof receiptBytes[p] !== 'string') {
+          reasons.push({
+            code: 'NOOP_BYTES_MISMATCH',
+            path: p,
+            reason: 'no-op current_bytes values must be strings (absent evidence is not zero)',
+          });
+          noopOk = false;
+          continue;
+        }
+        if (isObj(currentBytesByPath)) {
+          if (!Object.prototype.hasOwnProperty.call(currentBytesByPath, p)
+              || currentBytesByPath[p] !== receiptBytes[p]) {
+            reasons.push({
+              code: 'NOOP_BYTES_MISMATCH',
+              path: p,
+              reason: 'no-op current_bytes disagree with supplied currentBytesByPath',
+            });
+            noopOk = false;
+          }
+        }
+        if (isStr(repoRoot)) {
+          const live = readPathBytes(repoRoot, p);
+          if (live === null || live !== receiptBytes[p]) {
+            reasons.push({
+              code: 'NOOP_BYTES_MISMATCH',
+              path: p,
+              reason: 'no-op current_bytes disagree with mechanical repository bytes',
+            });
+            noopOk = false;
+          }
+        }
+      }
+    }
+    if (noopOk && reasons.length === 0) {
       return {
         ok: true,
         admitted: true,
@@ -1057,6 +1186,8 @@ module.exports = {
   assertFrozenDenominatorStable,
   emptyGateJournal,
   gateInputDigest,
+  isCanonicalGitObjectId,
+  isCanonicalSha256,
   recordGateEntry,
   findReusableGate,
   checkJointRepairBudget,

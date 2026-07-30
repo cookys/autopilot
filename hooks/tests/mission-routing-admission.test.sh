@@ -260,6 +260,8 @@ function graphNode(index) {
       spec: { path: `docs/sources/plan-${index}.md`, section: `Phase ${index}-0: coverage only` },
       required_paths: [`docs/sources/plan-${index}.md`],
       output_paths: [`docs/output-${index}.txt`],
+      // Absent outputs require explicit create authority under Mission admission.
+      authorized_creates: [`docs/output-${index}.txt`],
     },
   };
 }
@@ -452,13 +454,12 @@ const typo = admitExecutableMissionDelta({
 assert.strictEqual(typo.ok, false);
 assert.ok(typo.reasons.some((r) => r.code === 'REQUIRED_PATH_MISSING'));
 
-// Missing create authority in strict mode.
+// Missing create authority — Mission default is strict (absent outputs need creates).
 const missingCreate = admitExecutableMissionDelta({
   repoRoot: tmp,
   allowedPathPrefixes: ['src'],
   requiredPaths: ['src/exists.js'],
   outputPaths: ['src/new-output.js'],
-  strictOutputCreates: true,
 });
 assert.strictEqual(missingCreate.ok, false);
 assert.ok(missingCreate.reasons.some((r) => r.code === 'OUTPUT_MISSING_CREATE_AUTH'));
@@ -470,7 +471,6 @@ const withCreate = admitExecutableMissionDelta({
   requiredPaths: ['src/exists.js'],
   outputPaths: ['src/new-output.js'],
   authorizedCreates: ['src/new-output.js'],
-  strictOutputCreates: true,
 });
 assert.strictEqual(withCreate.ok, true);
 
@@ -480,6 +480,7 @@ const mirror = admitExecutableMissionDelta({
   allowedPathPrefixes: ['src'],
   requiredPaths: ['src/exists.js'],
   outputPaths: ['src/plugin.json'],
+  authorizedCreates: ['src/plugin.json'],
   versionMirrorPaths: ['src/plugin.json'],
   versionMirrorGenerator: null,
 });
@@ -491,6 +492,7 @@ const mirrorOk = admitExecutableMissionDelta({
   allowedPathPrefixes: ['src'],
   requiredPaths: ['src/exists.js'],
   outputPaths: ['src/plugin.json'],
+  authorizedCreates: ['src/plugin.json'],
   versionMirrorPaths: ['src/plugin.json'],
   versionMirrorGenerator: 'scripts/sync-version.js',
 });
@@ -508,17 +510,38 @@ const hist = admitExecutableMissionDelta({
 assert.strictEqual(hist.ok, false);
 assert.ok(hist.reasons.some((r) => r.code === 'HISTORICAL_OUTPUT_REPLAY'));
 
-// Digest-bound no-op adoption spends zero attempts.
+const baseSha = 'a'.repeat(40);
+const acceptance = 'b'.repeat(64);
+const liveBytes = { 'src/exists.js': 'ok\n', 'src/required.js': 'req\n' };
+// Mismatched no-op bytes reject (must not accept shape-only receipts).
+const noopMismatch = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/exists.js', 'src/required.js'],
+  outputPaths: ['src/exists.js'],
+  baseSha,
+  currentBytesByPath: liveBytes,
+  noOpReceipt: {
+    base_sha: baseSha,
+    acceptance_digest: acceptance,
+    current_bytes: { 'src/exists.js': 'WRONG\n', 'src/required.js': 'req\n' },
+  },
+});
+assert.strictEqual(noopMismatch.ok, false);
+assert.ok(noopMismatch.reasons.some((r) => r.code === 'NOOP_BYTES_MISMATCH'));
+
+// Digest-bound no-op adoption spends zero attempts when bytes bind exactly.
 const noop = admitExecutableMissionDelta({
   repoRoot: tmp,
   allowedPathPrefixes: ['src'],
-  requiredPaths: ['src/exists.js'],
+  requiredPaths: ['src/exists.js', 'src/required.js'],
   outputPaths: ['src/exists.js'],
-  baseSha: 'a'.repeat(40),
+  baseSha,
+  currentBytesByPath: liveBytes,
   noOpReceipt: {
-    base_sha: 'a'.repeat(40),
-    acceptance_digest: 'b'.repeat(64),
-    current_bytes: { 'src/exists.js': 'ok\n' },
+    base_sha: baseSha,
+    acceptance_digest: acceptance,
+    current_bytes: liveBytes,
   },
 });
 assert.strictEqual(noop.ok, true);

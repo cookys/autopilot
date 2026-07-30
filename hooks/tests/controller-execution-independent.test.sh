@@ -126,7 +126,7 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.ok(reused1);
   assert.strictEqual(reused1.gate_id, 'gate-full_diff_review-1');
 
-  // Positive reuse
+  // Positive reuse (identical successful input)
   const record2 = ctrl.recordGateEntry(journal, {
     kind: 'full_diff_review',
     owner: 'verifier',
@@ -137,28 +137,68 @@ console.log("Starting independent verification tests for Controller Execution...
   });
   assert.strictEqual(record2.reused, true);
 
-  // Invalidation: prior entry gets invalidated on subsequent record with invalidateReason
+  // Changed input without invalidateReason must fail closed.
+  assert.throws(() => {
+    ctrl.recordGateEntry(journal, {
+      kind: 'full_diff_review',
+      owner: 'verifier',
+      input: { file: 'src/other.js' },
+      result: { success: true },
+      startedAt: '2026-07-30T12:16:00.000Z',
+      finishedAt: '2026-07-30T12:17:00.000Z',
+    });
+  }, (err) => err.code === 'GATE_INVALIDATION_REQUIRED');
+
+  // Changed input with explicit invalidateReason supersedes all live same-kind successes.
   const record3 = ctrl.recordGateEntry(journal, {
     kind: 'full_diff_review',
     owner: 'verifier',
-    input: gateInput,
+    input: { file: 'src/other.js' },
     result: { success: true },
     startedAt: '2026-07-30T12:20:00.000Z',
     finishedAt: '2026-07-30T12:25:00.000Z',
     invalidateReason: 'code drift',
   });
 
-  assert.strictEqual(record3.reused, false); // should not reuse because we are invalidating
+  assert.strictEqual(record3.reused, false);
   const updatedJournal = record3.journal;
   const oldEntry = updatedJournal.entries[0];
   assert.strictEqual(oldEntry.invalidated, true);
   assert.strictEqual(oldEntry.invalidation_reason, 'code drift');
-
-  // Now findReusableGate returns the new one (if success and not invalidated)
-  const reused2 = ctrl.findReusableGate(updatedJournal, 'full_diff_review', gateInput);
+  // Old input is no longer reusable; new input is.
+  assert.strictEqual(ctrl.findReusableGate(updatedJournal, 'full_diff_review', gateInput), null);
+  const reused2 = ctrl.findReusableGate(updatedJournal, 'full_diff_review', { file: 'src/other.js' });
   assert.ok(reused2);
-  assert.strictEqual(reused2.gate_id, 'gate-full_diff_review-2');
   assert.strictEqual(reused2.invalidated, false);
+
+  // Failed entries and unrelated kinds are not invalidated.
+  let mixed = ctrl.emptyGateJournal();
+  mixed = ctrl.recordGateEntry(mixed, {
+    kind: 'focused_verification',
+    owner: 'verifier',
+    input: { t: 1 },
+    result: { success: true },
+    startedAt: '2026-07-30T13:00:00.000Z',
+    finishedAt: '2026-07-30T13:01:00.000Z',
+  }).journal;
+  mixed = ctrl.recordGateEntry(mixed, {
+    kind: 'full_diff_review',
+    owner: 'verifier',
+    input: { t: 1 },
+    result: { success: false },
+    startedAt: '2026-07-30T13:02:00.000Z',
+    finishedAt: '2026-07-30T13:03:00.000Z',
+  }).journal;
+  mixed = ctrl.recordGateEntry(mixed, {
+    kind: 'full_diff_review',
+    owner: 'verifier',
+    input: { t: 2 },
+    result: { success: true },
+    startedAt: '2026-07-30T13:04:00.000Z',
+    finishedAt: '2026-07-30T13:05:00.000Z',
+  }).journal;
+  assert.strictEqual(mixed.entries[0].invalidated, false);
+  assert.strictEqual(mixed.entries[1].invalidated, false);
 }
 
 // Group 2: Vertical-failure/full-diff ordering
@@ -357,27 +397,52 @@ console.log("Starting independent verification tests for Controller Execution...
 {
   console.log("Testing Group 6: Orphan proof completeness and single adoption");
 
+  const tip = 'a'.repeat(40);
+  const tree = 'b'.repeat(40);
+  const wt = 'c'.repeat(64);
   const baseAdoptArgs = {
     controllerDead: true,
-    leafResult: { committed: true, commit: 'c1' },
-    branchTip: 'b1',
-    branchTree: 't1',
+    leafResult: { committed: true, commit: tip },
+    branchTip: tip,
+    branchTree: tree,
     baseAncestryOk: true,
     scopeOk: true,
     churnOk: true,
-    worktreeDigest: 'd1',
+    worktreeDigest: wt,
     generation: 0,
     alreadyAdopted: false,
   };
 
-  // Positive: adoptOrphanLeaf succeeds
+  // Positive: adoptOrphanLeaf succeeds with canonical bound tip/tree/digest
   const adoptRes1 = ctrl.adoptOrphanLeaf(baseAdoptArgs);
   assert.strictEqual(adoptRes1.ok, true);
   assert.strictEqual(adoptRes1.status, 'adopted');
   assert.strictEqual(adoptRes1.duplicate_mutation, 0);
   assert.ok(adoptRes1.receipt);
-  assert.strictEqual(adoptRes1.receipt.branch_tip, 'b1');
-  assert.strictEqual(adoptRes1.receipt.leaf_commit, 'c1');
+  assert.strictEqual(adoptRes1.receipt.branch_tip, tip);
+  assert.strictEqual(adoptRes1.receipt.leaf_commit, tip);
+
+  // Negative: placeholder/non-canonical evidence stops
+  const adoptPlaceholder = ctrl.adoptOrphanLeaf({
+    ...baseAdoptArgs,
+    leafResult: { committed: true, commit: 'c1' },
+    branchTip: 'b1',
+    branchTree: 't1',
+    worktreeDigest: 'd1',
+  });
+  assert.strictEqual(adoptPlaceholder.ok, false);
+  assert.strictEqual(adoptPlaceholder.code, 'ADOPTION_BINDING_INCOMPLETE');
+  assert.strictEqual(adoptPlaceholder.preserve_evidence, true);
+
+  // Negative: leaf commit must equal branch tip
+  const adoptMismatch = ctrl.adoptOrphanLeaf({
+    ...baseAdoptArgs,
+    leafResult: { committed: true, commit: '1'.repeat(40) },
+    branchTip: '2'.repeat(40),
+  });
+  assert.strictEqual(adoptMismatch.ok, false);
+  assert.strictEqual(adoptMismatch.code, 'ADOPTION_LEAF_TIP_MISMATCH');
+  assert.strictEqual(adoptMismatch.preserve_evidence, true);
 
   // Negative: adoptOrphanLeaf stops when controllerDeath is not proven
   const adoptRes2 = ctrl.adoptOrphanLeaf({ ...baseAdoptArgs, controllerDead: false });
@@ -409,6 +474,9 @@ console.log("Starting independent verification tests for Controller Execution...
   fs.writeFileSync(path.join(tempRepo, 'input.js'), 'input');
   fs.writeFileSync(path.join(tempRepo, 'out.js'), 'out');
 
+  const baseSha = 'd'.repeat(40);
+  const acceptance = 'e'.repeat(64);
+  const liveBytes = { 'input.js': 'input', 'out.js': 'out' };
   const baseDeltaArgs = {
     repoRoot: tempRepo,
     allowedPathPrefixes: ['src', 'input.js', 'out.js'],
@@ -420,17 +488,34 @@ console.log("Starting independent verification tests for Controller Execution...
     historicalOutputs: null,
     currentBytesByPath: null,
     noOpReceipt: null,
-    baseSha: 'base123',
+    baseSha,
     extraDeclaredPaths: [],
-    strictOutputCreates: false,
   };
 
-  // Positive: narrow required-change set is valid and succeeds
+  // Positive: narrow required-change set is valid and succeeds (files exist)
   const deltaRes1 = ctrl.admitExecutableMissionDelta(baseDeltaArgs);
   assert.strictEqual(deltaRes1.ok, true);
   assert.strictEqual(deltaRes1.admitted, true);
   assert.strictEqual(deltaRes1.noop, false);
   assert.strictEqual(deltaRes1.narrow_required_ok, true);
+
+  // Negative: absent output without authorized_creates (Mission strict default)
+  const deltaMissingOut = ctrl.admitExecutableMissionDelta({
+    ...baseDeltaArgs,
+    allowedPathPrefixes: ['src', 'input.js', 'out.js', 'new'],
+    outputPaths: ['new/missing-out.js'],
+  });
+  assert.strictEqual(deltaMissingOut.ok, false);
+  assert.ok(deltaMissingOut.reason.includes('OUTPUT_MISSING_CREATE_AUTH'));
+
+  // Positive: authorized create permits absent output
+  const deltaCreateOk = ctrl.admitExecutableMissionDelta({
+    ...baseDeltaArgs,
+    allowedPathPrefixes: ['src', 'input.js', 'out.js', 'new'],
+    outputPaths: ['new/missing-out.js'],
+    authorizedCreates: ['new/missing-out.js'],
+  });
+  assert.strictEqual(deltaCreateOk.ok, true);
 
   // Negative: nonexistent declared typo without authority
   const deltaRes2 = ctrl.admitExecutableMissionDelta({
@@ -468,22 +553,33 @@ console.log("Starting independent verification tests for Controller Execution...
   // Negative: historical output replay without no-op receipt
   const deltaRes6 = ctrl.admitExecutableMissionDelta({
     ...baseDeltaArgs,
-    historicalOutputs: { 'out.js': 123 },
-    currentBytesByPath: { 'out.js': 123 },
+    historicalOutputs: { 'out.js': 'out' },
+    currentBytesByPath: { 'out.js': 'out' },
   });
   assert.strictEqual(deltaRes6.ok, false);
   assert.ok(deltaRes6.reason.includes('HISTORICAL_OUTPUT_REPLAY'));
 
-  // Positive: valid no-op receipt succeeds
+  // Negative: no-op with wrong current_bytes (shape-only must not pass)
+  const deltaBadBytes = ctrl.admitExecutableMissionDelta({
+    ...baseDeltaArgs,
+    currentBytesByPath: liveBytes,
+    noOpReceipt: {
+      base_sha: baseSha,
+      acceptance_digest: acceptance,
+      current_bytes: { 'input.js': 'input', 'out.js': 'WRONG' },
+    },
+  });
+  assert.strictEqual(deltaBadBytes.ok, false);
+  assert.ok(deltaBadBytes.reason.includes('NOOP_BYTES_MISMATCH'));
+
+  // Positive: valid no-op receipt with exact byte binding succeeds
   const deltaRes7 = ctrl.admitExecutableMissionDelta({
     ...baseDeltaArgs,
-    historicalOutputs: { 'out.js': 123 },
-    currentBytesByPath: { 'out.js': 123 },
-    baseSha: 'base123',
+    currentBytesByPath: liveBytes,
     noOpReceipt: {
-      base_sha: 'base123',
-      acceptance_digest: 'digest123',
-      current_bytes: { 'out.js': 123 },
+      base_sha: baseSha,
+      acceptance_digest: acceptance,
+      current_bytes: liveBytes,
     },
   });
   assert.strictEqual(deltaRes7.ok, true);

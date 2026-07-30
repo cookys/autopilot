@@ -3817,6 +3817,15 @@ const reused = ctrl.recordGateEntry(journal, {
   finishedAt: '2026-07-30T00:03:00.000Z',
 });
 assert.strictEqual(reused.reused, true);
+// Changed input without invalidateReason fails closed.
+assert.throws(() => ctrl.recordGateEntry(reused.journal, {
+  kind: 'full_diff_review',
+  owner: 'depth-0',
+  input: { base: 'b'.repeat(40), head: 'd'.repeat(40) },
+  result: { success: true, verdict: 'SHIP' },
+  startedAt: '2026-07-30T00:03:30.000Z',
+  finishedAt: '2026-07-30T00:03:45.000Z',
+}), (e) => e.code === 'GATE_INVALIDATION_REQUIRED');
 const invalidated = ctrl.recordGateEntry(reused.journal, {
   kind: 'full_diff_review',
   owner: 'depth-0',
@@ -3827,6 +3836,7 @@ const invalidated = ctrl.recordGateEntry(reused.journal, {
   invalidateReason: 'candidate tree changed',
 });
 assert.strictEqual(invalidated.reused, false);
+assert.strictEqual(invalidated.journal.entries[0].invalidated, true);
 
 // R5 joint repair budget axes independently trip awaiting_convergence.
 for (const axis of ctrl.REPAIR_BUDGET_AXES) {

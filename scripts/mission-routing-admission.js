@@ -270,6 +270,8 @@ function validateExecutableDeltaAtAdmission(repoRoot, graph, options = {}) {
     const outputPaths = Array.isArray(campaign.output_paths) ? campaign.output_paths : [];
     const requiredPaths = Array.isArray(campaign.required_paths) ? campaign.required_paths : [];
     const versionMirrors = collectVersionMirrorPaths([...requiredPaths, ...outputPaths]);
+    // Mission admission always enforces strict create authority for absent outputs.
+    // Lower-level admitExecutableMissionDelta may opt out only for isolated fixtures.
     const delta = admitExecutableMissionDelta({
       repoRoot,
       allowedPathPrefixes: campaign.allowed_path_prefixes || [],
@@ -284,6 +286,7 @@ function validateExecutableDeltaAtAdmission(repoRoot, graph, options = {}) {
       currentBytesByPath: options.currentBytesByPath || null,
       noOpReceipt: options.noOpReceipt || null,
       baseSha: options.baseSha || null,
+      strictOutputCreates: true,
     });
     if (!delta.ok) {
       fail(

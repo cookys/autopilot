@@ -7,6 +7,7 @@ const { execFileSync } = require('child_process');
 const { canonicalJson, sha256 } = require('../src/engine/owner-kernel/canonical');
 const { resolveMissionPolicy } = require('../src/engine/mission-policy');
 const { inspect: inspectGraph } = require('./mission-execution-graph-check');
+const { admitExecutableMissionDelta } = require('../src/engine/controller-execution');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const FALLBACKS = new Set(['none', 'solo', 'precondition_failed']);
@@ -239,6 +240,67 @@ function validateGraphSpecsAtBase(repoRoot, graph, baseSha) {
   }
 }
 
+const VERSION_MIRROR_BASENAMES = new Set([
+  'plugin.json',
+  '.claude-plugin/plugin.json',
+  'platforms/codex/plugin/plugin.json',
+  'platforms/codex/.agents/plugins/marketplace.json',
+]);
+
+function collectVersionMirrorPaths(paths) {
+  return paths.filter((p) => (
+    VERSION_MIRROR_BASENAMES.has(p)
+    || p.endsWith('/plugin.json')
+    || p.endsWith('marketplace.json')
+  ));
+}
+
+// Pre-spend executable delta: allowed vs required vs creates, version-mirror
+// generator closure, and rejection of typo/nonexistent outputs.
+function validateExecutableDeltaAtAdmission(repoRoot, graph, options = {}) {
+  const nodes = graph && Array.isArray(graph.nodes) ? graph.nodes : [];
+  for (const node of nodes) {
+    const campaign = node && node.campaign;
+    if (!campaign) {
+      fail(`graph node ${node && node.id} missing campaign`, 'MISSION_GRAPH_DELTA_INVALID');
+    }
+    const authorizedCreates = Array.isArray(campaign.authorized_creates)
+      ? campaign.authorized_creates
+      : (Array.isArray(options.authorizedCreates) ? options.authorizedCreates : []);
+    const outputPaths = Array.isArray(campaign.output_paths) ? campaign.output_paths : [];
+    const requiredPaths = Array.isArray(campaign.required_paths) ? campaign.required_paths : [];
+    const versionMirrors = collectVersionMirrorPaths([...requiredPaths, ...outputPaths]);
+    const delta = admitExecutableMissionDelta({
+      repoRoot,
+      allowedPathPrefixes: campaign.allowed_path_prefixes || [],
+      requiredPaths,
+      outputPaths,
+      authorizedCreates,
+      versionMirrorPaths: versionMirrors,
+      versionMirrorGenerator: versionMirrors.length > 0
+        ? (campaign.version_mirror_generator || options.versionMirrorGenerator || null)
+        : null,
+      historicalOutputs: options.historicalOutputs || null,
+      currentBytesByPath: options.currentBytesByPath || null,
+      noOpReceipt: options.noOpReceipt || null,
+      baseSha: options.baseSha || null,
+    });
+    if (!delta.ok) {
+      fail(
+        `graph node ${node.id} executable delta rejected: ${delta.reason}`,
+        'MISSION_GRAPH_DELTA_INVALID',
+      );
+    }
+    if (delta.noop === true) {
+      node._noop_adoption = {
+        dispatcher_called: false,
+        mutation_attempts: 0,
+        gate_attempts: 0,
+      };
+    }
+  }
+}
+
 function buildAdmission({ repoIdentity, policy, graphResult }) {
   const coverage = graphResult.coverage;
   const sourcesDigest = sha256(canonicalJson({
@@ -302,11 +364,20 @@ function admitMissionRouting(options = {}) {
     // Pre-spend: resolve HEAD once per admission, then validate frozen graph
     // specs against that exact SHA using the already-checked routing graph.
     const admissionBaseSha = resolveAuthoritativeHead(repo.root);
+    const graphJson = readJson(artifacts.graph, 'Mission execution graph');
     validateGraphSpecsAtBase(
       repo.root,
-      readJson(artifacts.graph, 'Mission execution graph'),
+      graphJson,
       admissionBaseSha,
     );
+    validateExecutableDeltaAtAdmission(repo.root, graphJson, {
+      baseSha: admissionBaseSha,
+      authorizedCreates: options.authorizedCreates,
+      versionMirrorGenerator: options.versionMirrorGenerator || 'scripts/sync-version.js',
+      historicalOutputs: options.historicalOutputs,
+      currentBytesByPath: options.currentBytesByPath,
+      noOpReceipt: options.noOpReceipt,
+    });
   } catch (error) {
     if (policy.resolution.policy.enforcement_mode === 'enforce') throw error;
     const shadowFailure = {
@@ -390,4 +461,7 @@ module.exports = {
   isAuthoritativeGitObjectId,
   normalizeRoute,
   observeMarker,
+  validateExecutableDeltaAtAdmission,
+  validateGraphSpecsAtBase,
+  collectVersionMirrorPaths,
 };

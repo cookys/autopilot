@@ -217,6 +217,7 @@ const capabilityEvidence = require('./capability-evidence');
 const campaignAdjudication = require('./campaign-adjudication');
 const campaignIntake = require('./campaign-intake');
 const campaignComposition = require('./campaign-composition');
+const controllerExecution = require('./controller-execution');
 const campaignVerification = require('./campaign-verification');
 const implementationCampaign = require('./implementation-campaign');
 const localDeployment = require('./local-deployment');
@@ -412,6 +413,7 @@ module.exports = {
   ...campaignAdjudication,
   ...campaignVerification,
   ...campaignComposition,
+  ...controllerExecution,
   ...implementationCampaign,
   ...campaignIntake,
   ...campaignDispositionAuthority,

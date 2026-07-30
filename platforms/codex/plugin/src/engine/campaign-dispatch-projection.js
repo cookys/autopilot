@@ -117,7 +117,8 @@ function normalizeCampaignAuthority(contract) {
     'graph_node_id',
     'graph_node_digest',
   ], 'campaign mission_runtime');
-  const strict = requireExactObject(contract.strict_dispatch, [
+  // Required keys plus optional path-role fields (authorized creates / generator closure).
+  const strictRequired = [
     'schema_version',
     'spec',
     'required_paths',
@@ -125,7 +126,28 @@ function normalizeCampaignAuthority(contract) {
     'allowed_path_prefixes',
     'budget',
     'verification_commands',
-  ], 'campaign strict_dispatch');
+  ];
+  const strictOptional = [
+    'authorized_creates',
+    'version_mirror_paths',
+    'version_mirror_generator',
+  ];
+  if (!isPlainObject(contract.strict_dispatch)) {
+    throw new TypeError('campaign strict_dispatch must be an object');
+  }
+  const strictKeys = Object.keys(contract.strict_dispatch).sort();
+  const allowedStrictKeys = new Set([...strictRequired, ...strictOptional]);
+  for (const key of strictKeys) {
+    if (!allowedStrictKeys.has(key)) {
+      throw new TypeError(`campaign strict_dispatch fields do not match the frozen schema (${key})`);
+    }
+  }
+  for (const key of strictRequired) {
+    if (!Object.prototype.hasOwnProperty.call(contract.strict_dispatch, key)) {
+      throw new TypeError(`campaign strict_dispatch missing required field ${key}`);
+    }
+  }
+  const strict = contract.strict_dispatch;
   if (runtime.schema_version !== 1 || strict.schema_version !== 1) {
     throw new TypeError('campaign projection schema_version must be 1');
   }
@@ -143,12 +165,27 @@ function normalizeCampaignAuthority(contract) {
   );
   const requiredPaths = requirePathArray(strict.required_paths, 'strict_dispatch.required_paths');
   const outputPaths = requirePathArray(strict.output_paths, 'strict_dispatch.output_paths');
+  const authorizedCreates = Array.isArray(strict.authorized_creates)
+    && strict.authorized_creates.length > 0
+    ? requirePathArray(strict.authorized_creates, 'strict_dispatch.authorized_creates')
+    : [];
+  const versionMirrorPaths = Array.isArray(strict.version_mirror_paths)
+    && strict.version_mirror_paths.length > 0
+    ? requirePathArray(strict.version_mirror_paths, 'strict_dispatch.version_mirror_paths')
+    : [];
+  if (versionMirrorPaths.length > 0
+      && (typeof strict.version_mirror_generator !== 'string'
+        || strict.version_mirror_generator.trim() === '')) {
+    throw new TypeError('strict_dispatch.version_mirror_paths require version_mirror_generator');
+  }
   const specPath = requireRelativePath(spec.path, 'strict_dispatch.spec.path');
   requireString(spec.section, 'strict_dispatch.spec.section');
   for (const [label, entries] of [
     ['strict_dispatch.spec.path', [specPath]],
     ['strict_dispatch.required_paths', requiredPaths],
     ['strict_dispatch.output_paths', outputPaths],
+    ['strict_dispatch.authorized_creates', authorizedCreates],
+    ['strict_dispatch.version_mirror_paths', versionMirrorPaths],
   ]) {
     for (const entry of entries) {
       if (!pathWithinPrefixes(entry, allowedPaths)) {

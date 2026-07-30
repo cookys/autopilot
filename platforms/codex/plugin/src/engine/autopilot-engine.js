@@ -3674,6 +3674,29 @@ class AutopilotEngine {
     }
 
     if (!parsed || parsed.status !== 'committed') {
+      // Preserve boundary_rejected as a first-class non-success outcome with
+      // candidate reference and exact boundary reason — never collapse to
+      // unknown status or fabricated mutation-failure evidence.
+      if (parsed && parsed.status === 'boundary_rejected') {
+        return {
+          status: 'boundary_rejected',
+          phase: 'boundary_rejected',
+          reason: parsed.error || parsed.reason || 'boundary rejected',
+          boundary_reason: parsed.error || parsed.reason || 'boundary rejected',
+          boundary_code: parsed.boundary_code || 'scope_or_budget_boundary',
+          candidate_ref: parsed.commit || parsed.candidate_ref || parsed.tip || null,
+          possibly_effectful: Boolean(parsed.commit || parsed.candidate_ref || parsed.tip),
+          mutation_failed: false,
+          unknown_status: false,
+          roster,
+          resolveResult,
+          implementationResult,
+          implementationArgs,
+          implementation: parsed,
+          dispatcher_called: true,
+          ledger,
+        };
+      }
       const engineUnavailable = parsed
         ? resolveEngineUnavailableDirective(roster, parsed.status, parsed.error)
         : null;

@@ -167,6 +167,7 @@
           "additionalProperties": false
         },
         "required_paths": {
+          "description": "Required existing inputs for the sealed mission delta. Existence is checked pre-spend; not every path must change every generation.",
           "type": "array",
           "minItems": 1,
           "maxItems": 128,
@@ -174,11 +175,32 @@
           "items": { "$ref": "#/$defs/relativePath" }
         },
         "output_paths": {
+          "description": "Authorized create/modify surface for campaign strict authority. Narrow repairs need not touch every listed path.",
           "type": "array",
           "minItems": 1,
           "maxItems": 128,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "authorized_creates": {
+          "description": "Optional explicit create authority for absent required/output paths.",
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "version_mirror_paths": {
+          "description": "Optional version-mirror outputs requiring named generator closure.",
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "version_mirror_generator": {
+          "description": "Named generator that must close version_mirror_paths.",
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 512
         },
         "allowed_path_prefixes": {
           "type": "array",

@@ -1,6 +1,16 @@
 'use strict';
 
 const { canonicalDigest } = require('./campaign-verification');
+const {
+  AWAITING_DISPOSITION,
+  BOUNDARY_REJECTED,
+  classifyBoundaryRejected,
+  classifyMissingDisposition,
+  requireFullDiffBeforeRepair,
+  recordFullDiffBarrier,
+} = require('./controller-execution');
+
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 class CampaignCompositionError extends Error {
   constructor(code, message) {
@@ -29,6 +39,35 @@ function blocked(phase, reason, trace, detail = {}) {
     status: 'blocked',
     phase,
     reason,
+    trace,
+    final_panel_count: 0,
+    ...detail,
+  };
+}
+
+function awaitingDisposition(reason, trace, detail = {}) {
+  return {
+    status: AWAITING_DISPOSITION,
+    phase: AWAITING_DISPOSITION,
+    reason,
+    trace,
+    resumable: true,
+    final_panel_count: 0,
+    ...detail,
+  };
+}
+
+function boundaryRejected(boundary, trace, detail = {}) {
+  return {
+    status: BOUNDARY_REJECTED,
+    phase: BOUNDARY_REJECTED,
+    reason: boundary.boundary_reason,
+    boundary_reason: boundary.boundary_reason,
+    boundary_code: boundary.boundary_code,
+    candidate_ref: boundary.candidate_ref,
+    possibly_effectful: boundary.possibly_effectful,
+    mutation_failed: false,
+    unknown_status: false,
     trace,
     final_panel_count: 0,
     ...detail,
@@ -230,7 +269,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
   const rejectedFindings = [];
   const findingRegistry = new Map();
   const resume = input.resume || null;
-  const resumablePhases = new Set(['VERTICAL_VERIFICATION', 'ADJUDICATING']);
+  const resumablePhases = new Set([
+    'VERTICAL_VERIFICATION',
+    'ADJUDICATING',
+    'AWAITING_DISPOSITION',
+    AWAITING_DISPOSITION,
+  ]);
   if (resume !== null
       && (!resume
         || !resumablePhases.has(resume.phase)
@@ -254,6 +298,16 @@ function runCampaignComposition(input = {}, adapters = {}) {
   let candidate = resume ? resume.candidate : null;
   let verification = null;
   let lastReview = null;
+  // generation → authoritative full-diff barrier (focused cannot impersonate)
+  let fullDiffBarriers = isObj(input.fullDiffBarriers)
+    ? { ...input.fullDiffBarriers }
+    : {};
+  if (resume && isObj(resume.full_diff_barriers)) {
+    fullDiffBarriers = { ...fullDiffBarriers, ...resume.full_diff_barriers };
+  }
+  const resumeFindings = Array.isArray(resume && resume.findings)
+    ? resume.findings
+    : null;
 
   const stableFindingDigest = (finding) => {
     const stable = { ...finding };
@@ -303,6 +357,33 @@ function runCampaignComposition(input = {}, adapters = {}) {
     repairFindings = [],
     reviewInputMode = 'full_diff_generation',
   ) => {
+    if (kind !== 'initial') {
+      // repairGeneration was already advanced; the full-diff barrier belongs to
+      // the candidate generation that authorized this repair (prior generation).
+      const barrierGeneration = Math.max(0, repairGeneration - 1);
+      const barrier = requireFullDiffBeforeRepair({
+        generation: barrierGeneration,
+        fullDiffBarriers,
+        focusedOnly: reviewInputMode === 'focused_delta_round'
+          && !(fullDiffBarriers[String(barrierGeneration)]
+            && fullDiffBarriers[String(barrierGeneration)].success === true),
+        verticalFailed: kind === 'vertical_repair',
+      });
+      if (!barrier.allow_repair) {
+        return {
+          stop: blocked(
+            'full_diff_before_repair',
+            barrier.reason,
+            trace,
+            {
+              candidate,
+              full_diff_barrier_required: true,
+              code: barrier.code,
+            },
+          ),
+        };
+      }
+    }
     const repairFindingIds = repairFindings.map((finding) => finding.id);
     const mutation = requireReceipt(implement({
       kind,
@@ -313,6 +394,19 @@ function runCampaignComposition(input = {}, adapters = {}) {
       previous_candidate: candidate,
     }), 'implement');
     trace.push(kind === 'initial' ? 'implement' : 'repair');
+    const boundary = classifyBoundaryRejected(mutation);
+    if (boundary) {
+      if (mutation.committed === true || boundary.candidate_ref) {
+        candidate = mutation.committed === true ? mutation : {
+          ...mutation,
+          committed: Boolean(boundary.candidate_ref),
+          commit: boundary.candidate_ref,
+        };
+      }
+      return {
+        stop: boundaryRejected(boundary, trace, { candidate }),
+      };
+    }
     if (mutation.committed !== true) {
       return {
         stop: blocked(
@@ -344,6 +438,63 @@ function runCampaignComposition(input = {}, adapters = {}) {
     if (mutationResult.stop) return mutationResult.stop;
   }
 
+  // Authoritative full-diff for the current candidate generation. Focused
+  // delta may supplement but never replaces this barrier.
+  const ensureFullDiffBarrier = (verticalFailed = false) => {
+    const existing = fullDiffBarriers[String(repairGeneration)];
+    if (existing && existing.success === true) {
+      trace.push('full_diff_barrier_reused');
+      return { stop: null, review: lastReview };
+    }
+    const fullDiff = requireReceipt(review({
+      candidate,
+      verification,
+      repair_generation: repairGeneration,
+      scope: 'full_diff',
+      review_input_mode: 'full_diff_generation',
+      vertical_failed: verticalFailed === true,
+    }), 'review');
+    trace.push('full_diff_review');
+    if (fullDiff.reviewed !== true && fullDiff.success !== true) {
+      // Accept either reviewed=true (legacy) or success=true (controller barrier).
+      if (fullDiff.review_input_mode === 'focused_delta_round' || fullDiff.focused_only === true) {
+        return {
+          stop: blocked(
+            'full_diff_before_repair',
+            'focused-only verdict cannot satisfy the generation full-diff barrier',
+            trace,
+            { candidate, full_diff_barrier_required: true },
+          ),
+        };
+      }
+      return {
+        stop: blocked(
+          fullDiff.phase || 'full_diff_review',
+          fullDiff.reason || 'authoritative full-diff review unavailable',
+          trace,
+          { candidate },
+        ),
+      };
+    }
+    if (fullDiff.review_input_mode === 'focused_delta_round' || fullDiff.focused_only === true) {
+      return {
+        stop: blocked(
+          'full_diff_before_repair',
+          'focused-only verdict cannot satisfy the generation full-diff barrier',
+          trace,
+          { candidate, full_diff_barrier_required: true },
+        ),
+      };
+    }
+    fullDiffBarriers = recordFullDiffBarrier(fullDiffBarriers, repairGeneration, {
+      success: true,
+      review_digest: fullDiff.review_digest || fullDiff.receipt_digest || null,
+      candidate_ref: candidate && (candidate.commit || candidate.tree_sha) || null,
+    });
+    lastReview = fullDiff;
+    return { stop: null, review: fullDiff };
+  };
+
   for (;;) {
     verification = requireReceipt(verify({
       candidate,
@@ -367,6 +518,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
           { candidate, verification, repair_generations: repairGeneration },
         );
       }
+      // Contract: first candidate still gets authoritative full-diff before any repair,
+      // including when vertical verification failed.
+      const barrierResult = ensureFullDiffBarrier(true);
+      if (barrierResult.stop) return barrierResult.stop;
       const beforeRepair = requireReceipt(scopeCheck({
         checkpoint: 'before_repair',
         candidate,
@@ -389,33 +544,82 @@ function runCampaignComposition(input = {}, adapters = {}) {
       const mutationResult = mutate('vertical_repair', [{
         id: 'vertical-acceptance',
         claim: verification.reason || 'contract verification did not pass',
-      }]);
+      }], 'full_diff_generation');
       if (mutationResult.stop) return mutationResult.stop;
       continue;
     }
 
-    lastReview = requireReceipt(review({
-      candidate,
-      verification,
-      repair_generation: repairGeneration,
-      scope: 'focused',
-    }), 'review');
-    trace.push('focused_review');
-    if (lastReview.reviewed !== true) {
-      return blocked(
-        lastReview.phase || 'focused_review',
-        lastReview.reason || 'focused review unavailable',
-        trace,
-      );
+    // Authoritative full-diff is the generation barrier. Adapters may still
+    // return the legacy `reviewed` shape; focused_delta_round alone cannot pass.
+    const barrierResult = ensureFullDiffBarrier(false);
+    if (barrierResult.stop) return barrierResult.stop;
+    if (lastReview && !lastReview.review_input_mode) {
+      lastReview.review_input_mode = 'full_diff_generation';
     }
+    // Optional focused supplement never replaces the barrier.
+    if (typeof adapters.focusedReview === 'function') {
+      const focused = requireReceipt(adapters.focusedReview({
+        candidate,
+        verification,
+        repair_generation: repairGeneration,
+        scope: 'focused',
+        review_input_mode: 'focused_delta_round',
+      }), 'focusedReview');
+      trace.push('focused_review_supplement');
+      if (focused && (focused.reviewed === true || focused.success === true)) {
+        lastReview = {
+          ...lastReview,
+          focused_supplement: focused,
+          review_input_mode: 'full_diff_generation',
+        };
+      }
+    }
+
+    // Resume path may re-bind prior findings awaiting disposition.
+    const reviewForAdjudication = resumeFindings && resume.phase === AWAITING_DISPOSITION
+      ? { ...lastReview, findings: resumeFindings }
+      : lastReview;
+
     const adjudication = requireReceipt(adjudicate({
-      review: lastReview,
+      review: reviewForAdjudication,
       repair_generation: repairGeneration,
       final: false,
     }), 'adjudicate');
     trace.push('adjudicate');
     if (adjudication.registry_complete !== true) {
-      return blocked('adjudication', adjudication.reason || 'finding registry is incomplete', trace);
+      const missing = classifyMissingDisposition({
+        findings: adjudication.findings
+          || (reviewForAdjudication && reviewForAdjudication.findings)
+          || [],
+        dispositionAuthority: adjudication.disposition_authority || null,
+        findingsIdentityOk: adjudication.error_code !== 'FINDING_IDENTITY_INVALID'
+          && adjudication.error_code !== 'INVALID_FINDING_IDENTITY',
+      });
+      if (missing.status === AWAITING_DISPOSITION
+          || adjudication.error_code === 'AUTHORITY_REQUIRED'
+          || (typeof adjudication.reason === 'string'
+            && /authority|disposition/i.test(adjudication.reason)
+            && adjudication.error_code !== 'FINDING_IDENTITY_INVALID')) {
+        return awaitingDisposition(
+          adjudication.reason || missing.reason || 'awaiting disposition authority',
+          trace,
+          {
+            candidate,
+            verification,
+            review: lastReview,
+            findings: missing.findings || adjudication.must_fix_now || [],
+            repair_generations: repairGeneration,
+            full_diff_barriers: fullDiffBarriers,
+            work_order_resumable: true,
+          },
+        );
+      }
+      return blocked(
+        'adjudication',
+        adjudication.reason || 'finding registry is incomplete',
+        trace,
+        { candidate, adjudication },
+      );
     }
     const retention = retainAdjudication(adjudication);
     if (retention.passed !== true) {
@@ -455,6 +659,8 @@ function runCampaignComposition(input = {}, adapters = {}) {
     if (receipt.passed !== true) {
       return blocked('convergence', receipt.reason || 'convergence gate tripped', trace);
     }
+    // Repair may use focused delta for the prompt, but the generation barrier
+    // was already recorded as full_diff above.
     repairGeneration += 1;
     const mutationResult = mutate(
       'review_repair',
@@ -534,14 +740,23 @@ function runCampaignComposition(input = {}, adapters = {}) {
     lifecycle_receipt_ref: lifecycleReceiptRef,
     trace,
   };
-  return {
+  const terminal = {
     ...receiptBody,
     receipt_digest: canonicalDigest(receiptBody),
   };
+  // Controller metadata stays off the exact terminal receipt key set so LSM /
+  // task-status validators remain backward compatible. Callers that need the
+  // barrier map can pass includeControllerMeta: true.
+  if (input.includeControllerMeta === true) {
+    terminal.full_diff_barriers = fullDiffBarriers;
+  }
+  return terminal;
 }
 
 module.exports = {
   CampaignCompositionError,
   runCampaignComposition,
   validateFinalPanelReceipt,
+  AWAITING_DISPOSITION,
+  BOUNDARY_REJECTED,
 };

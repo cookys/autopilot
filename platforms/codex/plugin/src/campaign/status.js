@@ -5,6 +5,11 @@ const TERMINAL = new Set([
   'TERMINAL_FOLLOW_UP',
   'TERMINAL_STOP',
 ]);
+const DURABLE_WAIT = new Set([
+  'BOUNDARY_REJECTED',
+  'AWAITING_DISPOSITION',
+  'AWAITING_CONVERGENCE_ADJUDICATION',
+]);
 const COMPLETED = new Set([
   'committed',
   'reviewed',
@@ -54,12 +59,14 @@ function projectCampaignStatus(projection, rows = [], observedAt, options = {}) 
     || (item.row.state === 'leased' && item.liveness === 'dead')
   ));
   const terminal = TERMINAL.has(state.phase);
+  const durableWait = DURABLE_WAIT.has(state.phase);
   let activity;
   const campaignLeaseCompleted = projection.latest_lease
     && COMPLETED.has(projection.latest_lease.state);
   if (campaignLiveness === 'alive' || liveLeaves.length > 0) activity = 'active';
   else if (terminal && campaignLeaseCompleted) activity = 'completed';
   else if (terminal) activity = 'dead';
+  else if (durableWait) activity = 'awaiting';
   else if (state.phase === 'PREPARED' && state.event_count === 0) activity = 'idle';
   else activity = 'dead';
 
@@ -93,6 +100,9 @@ function projectCampaignStatus(projection, rows = [], observedAt, options = {}) 
     },
     last_artifact: state.last_output_artifact_digest || null,
     terminal_reason: state.terminal_reason,
+    durable_wait: durableWait,
+    boundary_rejected: state.boundary_rejected || null,
+    awaiting_disposition: state.awaiting_disposition || null,
     lifecycle_receipt_ref: terminal
       ? (projection.lifecycle_receipt_ref || 'unknown')
       : null,

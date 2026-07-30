@@ -1259,8 +1259,9 @@ function runCampaignComposition(input = {}, adapters = {}) {
           ? mutation.elapsed_wall_ms
           : Math.max(0, Date.now() - startedAtMs),
         finding_recurrence: findingRecurrenceDelta,
-        owned_worktrees_absolute: ownedAbs,
-        owned_worktrees_is_absolute: ownedAbs != null,
+        ...(ownedAbs === null
+          ? {}
+          : { owned_worktrees_absolute: ownedAbs }),
       });
       const rawImplementation = mutation.raw && mutation.raw.implementation;
       const dispatchRecordBody = {

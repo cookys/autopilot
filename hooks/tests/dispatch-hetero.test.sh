@@ -882,6 +882,7 @@ mkdir -p "$TEST_TMP/no-setsid-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_NOSET" >/dev/null
 OUT="$(cd "$SBX" && PATH="$SETSIDLESS_BIN:$PATH" "$SCRIPT" --branch feat/no-setsid --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --ledger "$LEDGER_NOSET" --run-id rn --stage implement 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (no setsid): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "missing setsid support falls back to inline dispatch"
 assert_contains "$OUT" '"status": "committed"' "setsid-unavailable fallback still returns committed outcome"
 HB_COUNT="$(grep -c '\"kind\":\"heartbeat\"' "$LEDGER_NOSET" 2>/dev/null)"; HB_COUNT="${HB_COUNT:-0}"
@@ -915,6 +916,7 @@ OUT="$(cd "$SBX" && env GROK_EFFORT_CAPTURE="$GROK_EFFORT_CAPTURE" DISPATCH_QUIE
   "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_EFFORT" \
   --branch feat/grok-detached-effort --prompt-file "$PROMPT" --ledger "$LEDGER_GROK" \
   --run-id grok-detached-effort --stage implement 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (detached Grok): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "detached Grok effort path exit code"
 assert_contains "$OUT" '"status": "committed"' "detached Grok effort path commits"
 assert_file_exists "$GROK_EFFORT_CAPTURE" "detached Grok stub received reasoning effort"

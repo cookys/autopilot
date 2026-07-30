@@ -58,13 +58,18 @@ _prev_pwd="$PWD"
 cd "$SBX"
 DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" \
   --branch feat/kill --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" \
-  --ledger "$LEDGER_A" --run-id rk --stage implement >/dev/null 2>&1 &
+  --ledger "$LEDGER_A" --run-id rk --stage implement \
+  >"$TEST_TMP/kill-wrapper.out" 2>"$TEST_TMP/kill-wrapper.err" &
 WRAPPER_PID=$!
 cd "$_prev_pwd"
 
 # Wait until the detached worker is provably running (first heartbeat row), then
 # SIGKILL the wrapper. Fixed sleep races under parallel CPU contention.
 if ! poll_until 20 grep -q '"kind":"heartbeat"' "$LEDGER_A"; then
+  printf 'dispatch-detach diagnostic (kill wrapper stdout): %s\n' \
+    "$(cat "$TEST_TMP/kill-wrapper.out" 2>/dev/null)" >&2
+  printf 'dispatch-detach diagnostic (kill wrapper stderr): %s\n' \
+    "$(cat "$TEST_TMP/kill-wrapper.err" 2>/dev/null)" >&2
   fail "kill-survival: detached worker never heartbeated before SIGKILL (readiness timeout)"
 fi
 kill -9 "$WRAPPER_PID" 2>/dev/null || true
@@ -191,6 +196,7 @@ mk_slow_stub "$STUB_QUICK" 1
 OUT_C="$(cd "$SBX" && DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" \
   --branch feat/normal --prompt-file "$PROMPT" --agy-bin "$STUB_QUICK" \
   --ledger "$LEDGER_C" --run-id rc --stage implement 2>/dev/null)"; EXIT_C=$?
+[ "$EXIT_C" -eq 0 ] || printf 'dispatch-detach diagnostic (transparent normal): %s\n' "$OUT_C" >&2
 reap_wt "$OUT_C"
 assert_eq "0" "$EXIT_C" "transparent normal: relayed exit code is 0 (committed)"
 assert_contains "$OUT_C" '"status": "committed"' "transparent normal: relayed stdout is the committed outcome JSON"

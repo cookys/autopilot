@@ -489,6 +489,8 @@ done
 E2E_DID="$(printf '%s' "$E2E_SENT" | jq -r '.directive_id // empty' 2>/dev/null)"
 assert_neq "$E2E_DID" "" "e2e: directive-send succeeded against the dispatch's live lease"
 wait "$E2E_DISPATCH_PID"; E2E_RC=$?
+[ "$E2E_RC" -eq 0 ] \
+  || printf 'dispatch-pi diagnostic (e2e): %s\n' "$(cat "$E2E_OUT_FILE" 2>/dev/null)" >&2
 assert_eq "$E2E_RC" "0" "e2e: pi dispatch with ledger coords exits 0"
 assert_contains "$(cat "$E2E_OUT_FILE")" '"status": "committed"' "e2e: dispatch committed"
 # git-artifact assertion: the steer (with the prefixed text) reached fake pi's stdin

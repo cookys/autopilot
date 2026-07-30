@@ -125,10 +125,12 @@ assert_contains "$(cat "$ENVDUMP")" "AUTOPILOT_DISPATCH_DEPTH=2" "worker depth =
 # =========================================================================
 if command -v setsid >/dev/null 2>&1; then
   LEDGER="$TEST_TMP/detach-ledger.jsonl"
-  ( cd "$SBX" && env AUTOPILOT_PARENT_RUN_ID=foreman-D AUTOPILOT_ROOT_RUN_ID=root-D AUTOPILOT_DISPATCH_DEPTH=2 \
+  DETACH_OUT="$(cd "$SBX" && env AUTOPILOT_PARENT_RUN_ID=foreman-D AUTOPILOT_ROOT_RUN_ID=root-D AUTOPILOT_DISPATCH_DEPTH=2 \
       AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" DISPATCH_QUIET=1 \
       "$HETERO" --branch feat/detach1 --prompt-file "$PROMPT" --agy-bin "$STUB_OK" \
-      --run-id detach1 --ledger "$LEDGER" --stage implement >/dev/null 2>&1 )
+      --run-id detach1 --ledger "$LEDGER" --stage implement 2>&1)"; DETACH_RC=$?
+  [ "$DETACH_RC" -eq 0 ] \
+    || printf 'dispatch-lineage diagnostic (detach): %s\n' "$DETACH_OUT" >&2
   M_DET="$RUNS/detach1.manifest.json"
   assert_file_exists "$M_DET" "detach manifest written by detached child"
   assert_eq "foreman-D" "$(json_field "$M_DET" parent_run_id)" "detach: parent survived declare -p"

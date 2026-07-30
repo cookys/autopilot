@@ -309,7 +309,7 @@ else
     rel="${file#$REPO_ROOT/}"
     echo ""
     echo "──────── $rel (serial tail) ────────"
-    if bash "$file"; then
+    if AUTOPILOT_TEST_TIMING_FACTOR=1 bash "$file"; then
       :
     else
       FAILED=$((FAILED + 1))

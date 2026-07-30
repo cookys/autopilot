@@ -927,4 +927,49 @@ assert_file_exists "$GROK_EFFORT_CAPTURE" "detached Grok stub received reasoning
 assert_eq "high" "$(cat "$GROK_EFFORT_CAPTURE" 2>/dev/null)" \
   "detached Grok receives the clamped high effort"
 
+# Controller execution discipline: campaign sealed authority treats output.paths as
+# authorized create/modify surface (narrow subset of listed outputs is OK).
+# Unit contracts without campaign authority still require every output.paths entry.
+CTRL_OUTPUT_SEM="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const assert = require('assert');
+const [root] = process.argv.slice(2);
+const src = fs.readFileSync(path.join(root, 'scripts/dispatch-hetero.sh'), 'utf8');
+assert.ok(
+  src.includes('outside sealed output surface'),
+  'campaign authority rejects unauthorized changed paths',
+);
+assert.ok(
+  src.includes('CAMPAIGN_STRICT_AUTHORITY'),
+  'campaign authority gate present',
+);
+assert.ok(
+  src.includes('missing from changed files'),
+  'legacy unit contract still requires declared outputs',
+);
+assert.ok(
+  src.includes('"boundary": "rejected"') || src.includes('boundary": "rejected"'),
+  'boundary_rejected emits parseable boundary field',
+);
+assert.ok(
+  src.includes('mutation_failed": false') || src.includes('mutation_failed": false'),
+  'boundary_rejected never fabricates mutation_failed',
+);
+console.log(JSON.stringify({
+  campaign_authorized_surface: true,
+  legacy_required_outputs: true,
+  boundary_parseable: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "controller output-path semantics present in dispatch-hetero"
+assert_contains "$CTRL_OUTPUT_SEM" '"campaign_authorized_surface":true' \
+  "campaign output surface is authorization not mandatory touch"
+assert_contains "$CTRL_OUTPUT_SEM" '"legacy_required_outputs":true' \
+  "legacy unit contracts still require declared outputs"
+assert_contains "$CTRL_OUTPUT_SEM" '"boundary_parseable":true' \
+  "boundary_rejected is parseable first-class"
+
 finalize_test

@@ -709,19 +709,38 @@ emit() { # status commit files ins del worktree error
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ] && [ "$1" = "committed" ] && [ "${STRICT_POSTCHECK_OK:-0}" -eq 1 ]; then
     strict_boundary_fields=', "boundary": "ok", "acceptance": "ok"'
   fi
+  # First-class boundary_rejected outcome: parseable reason + candidate ref, never
+  # collapsed into unknown/mutation_failed. Possibly-effectful tips stay attached.
+  local boundary_reject_fields=""
+  if [ "$1" = "boundary_rejected" ]; then
+    local boundary_reason_json="null" boundary_code_json="\"scope_or_budget_boundary\""
+    local possibly_effectful_json="false"
+    [ -n "${7:-}" ] && boundary_reason_json="\"$(_flat_json_escape "$7")\""
+    [ -n "${2:-}" ] && possibly_effectful_json="true"
+    case "${7:-}" in
+      *'outside sealed output surface'*) boundary_code_json="\"unauthorized_output_path\"" ;;
+      *'missing from changed files'*) boundary_code_json="\"required_output_missing\"" ;;
+      *'violates scope'*) boundary_code_json="\"scope_violation\"" ;;
+      *'budget exceeded'*) boundary_code_json="\"budget_exceeded\"" ;;
+      *'missing scope allow'*) boundary_code_json="\"scope_misconfigured\"" ;;
+    esac
+    boundary_reject_fields="$(printf \
+      ', "boundary": "rejected", "boundary_code": %s, "boundary_reason": %s, "candidate_ref": %s, "possibly_effectful": %s, "mutation_failed": false, "unknown_status": false' \
+      "$boundary_code_json" "$boundary_reason_json" "$commit_json" "$possibly_effectful_json")"
+  fi
   # ADDITIVE identity_drift — only when the rail detected a mutation (clean runs omit the key).
   local identity_fields=""
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     identity_fields=', "identity_drift": true'
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s }\n' \
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
-    "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$identity_fields"
+    "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields"
 }
 
 check_session_mode_gate() {
@@ -2847,7 +2866,7 @@ run_strict_boundary_postcheck() {
     return 1
   fi
 
-  # output.paths must be a subset of changed files (exact paths, exact paths)
+  # Collect exact changed paths once for output-path role checks.
   while IFS= read -r temp_path; do
     [ -n "$temp_path" ] && changed_paths+=("$temp_path")
   done < <(git -C "$WT" diff --name-only "$BASE_SHA..$HEAD_SHA")
@@ -2856,13 +2875,38 @@ run_strict_boundary_postcheck() {
     changed_set["$temp_path"]=1
   done
 
-  for out_dir in "${STRICT_OUTPUT_PATHS[@]}"; do
-    if [ -z "${changed_set["$out_dir"]+x}" ]; then
-      STRICT_POSTCHECK_STATUS="boundary_rejected"
-      STRICT_POSTCHECK_ERROR="boundary_rejected: output path '$out_dir' missing from changed files"
-      return 1
+  # Output-path roles:
+  # - Unit contracts (legacy): output.paths are required deliverables — every listed
+  #   path must appear in the candidate diff.
+  # - Mission/campaign sealed authority: output.paths are the authorized create/modify
+  #   surface. A narrow repair need not touch every authorized path; changed paths
+  #   that are not authorized (and not generated mirrors) fail closed.
+  if [ "${#STRICT_OUTPUT_PATHS[@]}" -gt 0 ]; then
+    if [ "${CAMPAIGN_STRICT_AUTHORITY:-0}" -eq 1 ]; then
+      local -A authorized_set=()
+      for out_dir in "${STRICT_OUTPUT_PATHS[@]}"; do
+        authorized_set["$out_dir"]=1
+      done
+      for out_dir in "${STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}"; do
+        authorized_set["$out_dir"]=1
+      done
+      for temp_path in "${changed_paths[@]}"; do
+        if [ -z "${authorized_set["$temp_path"]+x}" ]; then
+          STRICT_POSTCHECK_STATUS="boundary_rejected"
+          STRICT_POSTCHECK_ERROR="boundary_rejected: changed path '$temp_path' is outside sealed output surface"
+          return 1
+        fi
+      done
+    else
+      for out_dir in "${STRICT_OUTPUT_PATHS[@]}"; do
+        if [ -z "${changed_set["$out_dir"]+x}" ]; then
+          STRICT_POSTCHECK_STATUS="boundary_rejected"
+          STRICT_POSTCHECK_ERROR="boundary_rejected: output path '$out_dir' missing from changed files"
+          return 1
+        fi
+      done
     fi
-  done
+  fi
 
   STRICT_POSTCHECK_STATUS="ok"
   return 0

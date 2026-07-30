@@ -101,16 +101,36 @@
           }
         },
         "required_paths": {
+          "description": "Required existing inputs (must exist unless covered by authorized_creates). Not every path must change every generation.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/relative_path" }
         },
         "output_paths": {
+          "description": "Authorized create/modify surface. A narrow repair need not touch every listed path; changed product paths must stay inside this surface under campaign authority.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/relative_path" }
+        },
+        "authorized_creates": {
+          "description": "Absent outputs/inputs permitted only when listed here (fail-closed otherwise).",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relative_path" }
+        },
+        "version_mirror_paths": {
+          "description": "Version-mirror outputs that require named generator closure.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relative_path" }
+        },
+        "version_mirror_generator": {
+          "description": "Named generator that must close version_mirror_paths (e.g. scripts/sync-version.js).",
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 512
         },
         "max_changed_files": { "type": "integer", "minimum": 1, "maximum": 4096 },
         "baseline_churn": { "type": "integer", "minimum": 1, "maximum": 10000000 },

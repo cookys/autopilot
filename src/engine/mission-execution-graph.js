@@ -92,7 +92,13 @@ function normalizeReservation(raw, label) {
 
 function normalizeCampaign(raw, label) {
   const value = object(raw, label);
-  const keys = new Set([
+  // Path-role contract (controller execution discipline):
+  // - allowed_path_prefixes: paths allowed to change (prefix allowlist)
+  // - required_paths: required existing inputs (must exist unless authorized create)
+  // - output_paths: authorized create/modify surface (NOT every path must appear in every diff)
+  // - authorized_creates (optional): absent outputs permitted only when listed
+  // - version_mirror_paths + version_mirror_generator (optional): generator closure
+  const requiredKeys = new Set([
     'profile',
     'allowed_path_prefixes',
     'max_changed_files',
@@ -105,8 +111,16 @@ function normalizeCampaign(raw, label) {
     'required_paths',
     'output_paths',
   ]);
+  const optionalKeys = new Set([
+    'authorized_creates',
+    'version_mirror_paths',
+    'version_mirror_generator',
+  ]);
+  const keys = new Set([...requiredKeys, ...optionalKeys]);
   only(value, keys, label);
-  for (const key of keys) if (!Object.prototype.hasOwnProperty.call(value, key)) fail(`${label}.${key} is required`);
+  for (const key of requiredKeys) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) fail(`${label}.${key} is required`);
+  }
   if (!new Set(['poc', 'standard', 'high']).has(value.profile)) fail(`${label}.profile is unsupported`);
   if (!Array.isArray(value.allowed_path_prefixes) || value.allowed_path_prefixes.length === 0) {
     fail(`${label}.allowed_path_prefixes must be non-empty`);
@@ -143,8 +157,9 @@ function normalizeCampaign(raw, label) {
     }
     return entry;
   }
-  function boundedPaths(entries, pathLabel) {
-    if (!Array.isArray(entries) || entries.length === 0) fail(`${pathLabel} must be non-empty`);
+  function boundedPaths(entries, pathLabel, { allowEmpty = false } = {}) {
+    if (!Array.isArray(entries)) fail(`${pathLabel} must be an array`);
+    if (!allowEmpty && entries.length === 0) fail(`${pathLabel} must be non-empty`);
     const normalized = entries.map((entry, index) => boundedPath(entry, `${pathLabel}[${index}]`)).sort();
     if (new Set(normalized).size !== normalized.length) fail(`${pathLabel} must not contain duplicates`);
     return normalized;
@@ -155,8 +170,40 @@ function normalizeCampaign(raw, label) {
       || spec.section.length === 0 || spec.section.length > 512) {
     fail(`${label}.spec.section must be bounded non-empty text`);
   }
+  // required_paths = required existing inputs (not "must change every generation").
   const requiredPaths = boundedPaths(value.required_paths, `${label}.required_paths`);
+  // output_paths = authorized create/modify surface (narrow repair need not touch all).
   const outputPaths = boundedPaths(value.output_paths, `${label}.output_paths`);
+  const authorizedCreates = Object.prototype.hasOwnProperty.call(value, 'authorized_creates')
+    ? boundedPaths(value.authorized_creates, `${label}.authorized_creates`, { allowEmpty: true })
+    : [];
+  const versionMirrorPaths = Object.prototype.hasOwnProperty.call(value, 'version_mirror_paths')
+    ? boundedPaths(value.version_mirror_paths, `${label}.version_mirror_paths`, { allowEmpty: true })
+    : [];
+  let versionMirrorGenerator = null;
+  if (Object.prototype.hasOwnProperty.call(value, 'version_mirror_generator')) {
+    if (value.version_mirror_generator !== null
+        && (typeof value.version_mirror_generator !== 'string'
+          || value.version_mirror_generator.trim() !== value.version_mirror_generator
+          || value.version_mirror_generator.length === 0
+          || value.version_mirror_generator.length > 512)) {
+      fail(`${label}.version_mirror_generator must be bounded non-empty text or null`);
+    }
+    versionMirrorGenerator = value.version_mirror_generator;
+  }
+  if (versionMirrorPaths.length > 0 && !versionMirrorGenerator) {
+    fail(`${label}.version_mirror_paths require version_mirror_generator closure`);
+  }
+  for (const mirror of versionMirrorPaths) {
+    if (!outputPaths.includes(mirror) && !requiredPaths.includes(mirror)) {
+      fail(`${label}.version_mirror_paths must close into required_paths/output_paths (${mirror})`);
+    }
+  }
+  for (const create of authorizedCreates) {
+    if (!outputPaths.includes(create) && !requiredPaths.includes(create)) {
+      fail(`${label}.authorized_creates must be covered by required_paths/output_paths (${create})`);
+    }
+  }
   const maxChangedFiles = int(value.max_changed_files, `${label}.max_changed_files`, 1, 4096);
   if (outputPaths.length > maxChangedFiles) {
     fail(`${label}.output_paths exceed max_changed_files`);
@@ -175,7 +222,7 @@ function normalizeCampaign(raw, label) {
     0,
     PROFILE_REPAIR_CEILINGS[value.profile],
   );
-  return {
+  const result = {
     profile: value.profile,
     allowed_path_prefixes: paths,
     spec: {
@@ -191,6 +238,14 @@ function normalizeCampaign(raw, label) {
     max_repair_generations: maxRepairGenerations,
     max_wall_seconds: int(value.max_wall_seconds, `${label}.max_wall_seconds`, 1, 3600),
   };
+  // Optional path-role fields: only emit when present so legacy graph digests stay stable
+  // when graphs omit them.
+  if (authorizedCreates.length > 0) result.authorized_creates = authorizedCreates;
+  if (versionMirrorPaths.length > 0) {
+    result.version_mirror_paths = versionMirrorPaths;
+    result.version_mirror_generator = versionMirrorGenerator;
+  }
+  return result;
 }
 
 function normalizeNode(raw, index) {

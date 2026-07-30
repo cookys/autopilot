@@ -4078,6 +4078,50 @@ assert.throws(() => ctrl.appendRepairTicket(woCtrl, {
   successor_work_order_id: 'wo-other',
 }), (e) => e.code === 'SUCCESSOR_IDENTITY_FORBIDDEN');
 
+// Artifact normalizer accepts reducer + controller kinds (intake/CLI projection).
+const {
+  normalizeCampaignArtifactReference,
+  NON_SUCCESS_DURABLE_STATES,
+} = require(path.join(root, 'src/engine/implementation-campaign'));
+const boundaryArt = normalizeCampaignArtifactReference({
+  kind: 'campaign_boundary_rejected',
+  digest: brDigest,
+});
+assert.strictEqual(boundaryArt.kind, 'campaign_boundary_rejected');
+assert.strictEqual(
+  normalizeCampaignArtifactReference({
+    kind: 'controller_progress_receipt',
+    digest: 'a'.repeat(64),
+  }).kind,
+  'controller_progress_receipt',
+);
+assert.ok(NON_SUCCESS_DURABLE_STATES.has(CAMPAIGN_STATES.BOUNDARY_REJECTED));
+
+// Exact RESUMED replay of boundary_rejected preserves evidence and spends no growth.
+const beforeResume = { ...state };
+state = reduceCampaignState(state, mkEvent(
+  CAMPAIGN_EVENTS.RESUMED,
+  0,
+  {},
+  3,
+  state.last_output_artifact_digest,
+  state.last_output_artifact_digest,
+));
+assert.strictEqual(state.phase, CAMPAIGN_STATES.BOUNDARY_REJECTED);
+assert.strictEqual(state.boundary_rejected.candidate_ref, '2'.repeat(40));
+assert.strictEqual(state.usage.changed_files, beforeResume.usage.changed_files);
+assert.strictEqual(state.usage.churn, beforeResume.usage.churn);
+
+// CLI resume eligibility treats durable waits as resumable with zero attempt spend.
+const { campaignResumeEligibility } = require(path.join(root, 'src/campaign/cli'));
+const eligibility = campaignResumeEligibility({
+  state,
+  latest_lease: { state: 'dead', pid: 1, start_time: 1 },
+  candidate_reference: null,
+  last_artifact_reference: null,
+}, '2026-07-30T00:01:00.000Z');
+assert.strictEqual(eligibility.status, 'resumable');
+
 console.log(JSON.stringify({
   frozen_denominator_stable: true,
   progress_digest_valid: true,
@@ -4087,6 +4131,9 @@ console.log(JSON.stringify({
   boundary_rejected_first_class: true,
   awaiting_disposition_resumable: true,
   repair_ticket_append: true,
+  artifact_kinds_accepted: true,
+  boundary_resume_exact_replay: true,
+  durable_wait_resume_eligible: true,
 }));
 NODE
 )"
@@ -4099,5 +4146,8 @@ assert_contains "$CTRL_OUT" '"full_diff_before_repair":true' "full-diff before r
 assert_contains "$CTRL_OUT" '"boundary_rejected_first_class":true' "boundary_rejected first-class"
 assert_contains "$CTRL_OUT" '"awaiting_disposition_resumable":true' "awaiting_disposition resumable"
 assert_contains "$CTRL_OUT" '"repair_ticket_append":true' "repair tickets append"
+assert_contains "$CTRL_OUT" '"artifact_kinds_accepted":true' "controller artifact kinds accepted"
+assert_contains "$CTRL_OUT" '"boundary_resume_exact_replay":true' "boundary_rejected exact resume"
+assert_contains "$CTRL_OUT" '"durable_wait_resume_eligible":true' "durable wait resume eligible"
 
 finalize_test

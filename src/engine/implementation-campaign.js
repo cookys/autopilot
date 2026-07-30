@@ -37,14 +37,15 @@ const CAMPAIGN_EVENTS = Object.freeze({
   TERMINAL_STOP: 'terminal_stop',
   RESUMED: 'resumed',
 });
+// Hard-closed terminals: no further events (including RESUMED) without a new campaign.
 const TERMINAL_STATES = new Set([
   CAMPAIGN_STATES.TERMINAL_READY,
   CAMPAIGN_STATES.TERMINAL_FOLLOW_UP,
   CAMPAIGN_STATES.TERMINAL_STOP,
-  CAMPAIGN_STATES.BOUNDARY_REJECTED,
-  CAMPAIGN_STATES.AWAITING_CONVERGENCE_ADJUDICATION,
 ]);
 // Non-success but durable/resumable — not unknown, not mutation_failed fabrication.
+// BOUNDARY_REJECTED preserves candidate_ref + reason and remains resumable when
+// possibly-effectful; it is NOT collapsed into TERMINAL_STOP/mutation_failed.
 const NON_SUCCESS_DURABLE_STATES = new Set([
   CAMPAIGN_STATES.BOUNDARY_REJECTED,
   CAMPAIGN_STATES.AWAITING_DISPOSITION,
@@ -233,11 +234,23 @@ function normalizeCampaignArtifactReference(value) {
   if (!isPlainObject(value) || typeof value.kind !== 'string') {
     fail('INVALID_ARTIFACT_REFERENCE', 'campaign artifact reference must be a named object');
   }
+  // Digest-bound artifact kinds emitted by the campaign reducer and controller
+  // helpers. Every kind the reducer can bind as output_artifact_digest must be
+  // accepted here so intake/CLI projection never rejects durable evidence.
   const digestKinds = new Set([
     'verification_receipt',
     'product_review',
     'finding_registry',
     'campaign_terminal',
+    'campaign_boundary_rejected',
+    'campaign_awaiting_disposition',
+    'campaign_convergence_budget',
+    'controller_progress_receipt',
+    'controller_gate_journal',
+    'controller_resource_debt',
+    'controller_repair_ticket',
+    'controller_orphan_adoption_receipt',
+    'controller_postcompact_adapter_receipt',
   ]);
   if (digestKinds.has(value.kind)) {
     const hasRepairLineage = new Set(['product_review', 'campaign_terminal']).has(value.kind)
@@ -816,6 +829,22 @@ function reduceCampaignState(currentState, event) {
         || event.usage.churn !== currentState.usage.churn) {
       fail('RESUME_GROWTH_DRIFT', 'resume cannot change durable file or churn usage');
     }
+    // Exact replay of BOUNDARY_REJECTED / AWAITING_DISPOSITION preserves durable
+    // wait evidence and never fabricates mutation-failure. Phase stays put.
+    if (NON_SUCCESS_DURABLE_STATES.has(currentState.phase)
+        || currentState.phase === CAMPAIGN_STATES.PREPARED
+        || currentState.phase === CAMPAIGN_STATES.VERTICAL_VERIFICATION
+        || currentState.phase === CAMPAIGN_STATES.ADJUDICATING
+        || currentState.phase === CAMPAIGN_STATES.REVIEWING
+        || currentState.phase === CAMPAIGN_STATES.IMPLEMENTING
+        || currentState.phase === CAMPAIGN_STATES.REPAIRING) {
+      // no phase change — idempotent resume ledger marker only
+    } else {
+      fail(
+        'INVALID_TRANSITION',
+        `cannot apply resumed while campaign is ${currentState.phase}`,
+      );
+    }
   } else if (currentState.phase === CAMPAIGN_STATES.PREPARED
       && event.event_type === CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED) {
     acquireLease(next, event);
@@ -997,8 +1026,11 @@ function reduceCampaignState(currentState, event) {
     );
   }
 
-  if (TERMINAL_STATES.has(next.phase)
-      || next.phase === CAMPAIGN_STATES.AWAITING_DISPOSITION) {
+  // Require a reason only when entering a terminal or durable-wait phase — not on
+  // exact RESUMED replay of an already-durable state (payload has no reason key).
+  if (event.event_type !== CAMPAIGN_EVENTS.RESUMED
+      && (TERMINAL_STATES.has(next.phase)
+        || NON_SUCCESS_DURABLE_STATES.has(next.phase))) {
     const reason = event.payload.reason;
     if (typeof reason !== 'string' || reason.trim() === '') {
       fail('TERMINAL_REASON_REQUIRED', 'terminal/durable-wait campaign event requires a reason');

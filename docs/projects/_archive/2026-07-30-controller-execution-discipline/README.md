@@ -1,6 +1,6 @@
 # Controller Execution Discipline
 
-Status: qualified — pending merge/archive
+Status: completed — locally merged and archived
 
 Plan: `docs/plans/2026-07-30-controller-execution-discipline.md`
 
@@ -27,7 +27,7 @@ candidate and one final full-diff review instead of per-finding phases or repeat
 - [x] Implement the combined authority/campaign/recovery candidate
 - [x] Author and pass an independent cross-component execution oracle
 - [x] Run the full suite and one blind whole-diff joint review
-- [ ] Merge, sync payload, push, and close lifecycle receipts
+- [x] Merge locally, confirm payload parity, and archive the completed project
 
 ## Qualification result
 
@@ -42,18 +42,32 @@ candidate and one final full-diff review instead of per-finding phases or repeat
   `supervised-engine-bridge-contract` 12 assertions).
 - The external audit's four Critical findings are closed. Its Major/minor observations were
   adjudicated into nine non-blocking backlog entries; none reopened this ticket.
+- Local merge: `d25c74257ded548d075e474488e7a89562b08f93`.
 
 ## Review boundary
 
 The managed completion campaign stopped honestly before its final panel because no exact QC-seat
 qualification receipt existed. No panel seat was dispatched and no qualification was inferred from
-transport or quota evidence. Depth 0 will run the same frozen three-family roster once over the
-final whole diff; the missing session-local qualification provider remains an explicit backlog
-item rather than being repaired inside this bundle.
+transport or quota evidence. Depth 0 used a fresh independent whole-diff reviewer and a separate
+fresh read-only verifier; it does not claim a managed three-family panel receipt. The missing
+session-local qualification provider remains an explicit backlog item rather than being repaired
+inside this bundle.
 
 The bundle includes a host-neutral post-compaction recovery adapter, not production Codex
 `PostCompact` registration. Production wiring remains trigger-bound on accepted live probe or
 official adapter evidence.
+
+## Finish-flow compatibility note
+
+This campaign predates the current task-status artifact. Its historical Mission root is terminal
+`ABORTED`, so no `can_merge` or `can_close` lifecycle receipt was fabricated. The local merge used
+the deterministic merge-intent preflight instead: receipt
+`5f3f7958f73cf472284fccdaba6c46d702b7d6dd642f384594aeedf225b12c64` was
+`safe`, reported zero overlap with preserved dirty paths, and authorized the exact source
+`74ed636ecdee5b9605513241031d9940ad483ce5` into `develop`
+`05b3b6e297defc1009795799063c03ae6b9508b3`.
+
+Remote push/release was intentionally not performed in this session.
 
 ## Preserved user state
 

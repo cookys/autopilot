@@ -66,9 +66,10 @@ review findings into new phases.
   Codex hook. That wiring remains gated on an accepted live hook probe or official adapter
   contract.
 - The managed completion campaign correctly stopped before its final panel because exact QC-seat
-  qualification was unavailable. No seat or qualification receipt was fabricated; depth 0 uses
-  the frozen three-family whole-diff panel, while the session-local qualification provider remains
-  Owner Kernel P4 backlog.
+  qualification was unavailable. No seat or qualification receipt was fabricated; depth 0 used a
+  fresh independent whole-diff reviewer plus a separate read-only verifier and does not claim a
+  managed three-family panel receipt. The session-local qualification provider remains Owner
+  Kernel P4 backlog.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`

@@ -985,7 +985,8 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
   // vendor trees are not operator-authored active surfaces.
   function isGeneratedOrBinary(relPath) {
     const n = relPath.replace(/\\/g, '/');
-    if (/\.(png|jpg|jpeg|gif|webp|ico|pdf|woff2?|ttf|eot|zip|gz|tgz|xz|bin|o|so|dylib|wasm|mp4|webm|svg)$/i.test(n)) {
+    // SVG is tracked text (may embed /l3-/l6 callers) — do not treat as binary.
+    if (/\.(png|jpg|jpeg|gif|webp|ico|pdf|woff2?|ttf|eot|zip|gz|tgz|xz|bin|o|so|dylib|wasm|mp4|webm)$/i.test(n)) {
       return true;
     }
     if (n.includes('/node_modules/') || n.startsWith('node_modules/')) return true;

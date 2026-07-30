@@ -1310,6 +1310,44 @@ for (const c of rootManifestCases) {
 }
 console.log('alias_root_manifest_scan_oracles=ok');
 
+// SVG is tracked text, not binary — residual /l3-/l6 tokens must HOLD migration.
+spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
+spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
+fs.mkdirSync(path.join(mechRepo, 'assets'), { recursive: true });
+fs.writeFileSync(
+  path.join(mechRepo, 'assets/clean.svg'),
+  '<svg xmlns="http://www.w3.org/2000/svg"><text>no alias tokens</text></svg>\n',
+);
+commitAll('add clean tracked svg');
+const svgClean = executeDeterministicCallerMigrationScan(mechRepo);
+if (svgClean.complete !== true) {
+  console.error('clean tracked SVG must not block scan complete', svgClean);
+  process.exit(1);
+}
+spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
+spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
+fs.mkdirSync(path.join(mechRepo, 'assets'), { recursive: true });
+fs.writeFileSync(
+  path.join(mechRepo, 'assets/caller.svg'),
+  '<svg xmlns="http://www.w3.org/2000/svg"><text>invoke /l5 here</text></svg>\n',
+);
+commitAll('add residual svg caller');
+const svgResidual = executeDeterministicCallerMigrationScan(mechRepo);
+if (svgResidual.complete === true) {
+  console.error('tracked SVG with /l5 residual must block complete', svgResidual);
+  process.exit(1);
+}
+if (!Array.isArray(svgResidual.residuals) || svgResidual.residuals.length < 1) {
+  console.error('SVG residual must report residuals', svgResidual);
+  process.exit(1);
+}
+const svgHit = svgResidual.residuals.find((r) => r.path === 'assets/caller.svg');
+if (!svgHit || svgHit.token !== '/l5') {
+  console.error('SVG residual must report path assets/caller.svg token /l5', svgResidual.residuals);
+  process.exit(1);
+}
+console.log('alias_svg_text_scan_oracles=ok');
+
 // Exact definition files remain exempt even with /l3 tokens in their body.
 spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
 spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });

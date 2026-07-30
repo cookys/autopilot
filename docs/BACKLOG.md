@@ -854,3 +854,66 @@ onto v2.32.48 by grok-4.5.
 - **Context**: Backlog admission correctly fails closed on a held lock, but an uncatchable process crash can leave the lock directory behind and block all later admissions until manual recovery.
 - **Effort**: S（re-estimate under the new ticket contract）
 - **Source**: depth-0; qwen-p4
+
+<!-- autopilot-follow-up:7b5ad93159eca2090d4069fee65229da2c5e91b3aa5087e3fcff67a3f3c6d8c2 -->
+### Controller helper API fail-closed hardening
+- **Trigger**: Before these helpers are reused outside the current production Engine call sites or exposed to caller-supplied state/evidence.
+- **Context**: Close the helper-level fail-open edges recorded as CED-N01, CED-N02, CED-N03, CED-N05, and CED-N06: require explicit spend projection, preserve/reject empty controller replacement, require repository authority, reject traversal internally, and make test evidence carry production-equivalent binding.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:d1e3cafc6b25e4ccde534f237ecac97b66953f2c76b2d56df8a77993b916fd69 -->
+### Boundary outcome and root dispatch semantics
+- **Trigger**: Before boundary receipts drive automated recovery or parallel independent graph nodes under one root are enabled.
+- **Context**: Derive or remove mutation_failed/unknown_status instead of hardcoding them, and decide whether root-wide nonterminal exclusion is intentional; if not, retain root CAS while scoping dispatch blockers to the exact graph node.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:ecc22ecefe311bf8a185548841308087b4c6c96cf2b73b3ca14471c005ba7bc5 -->
+### Portable byte and Work Order lifecycle hardening
+- **Trigger**: Before Mission paths may contain symlinks, generic Work Order imports are accepted, or reconciliation runs on restricted process-table platforms.
+- **Context**: Unify symlink byte hashing with Git, reject/strip disposition_receipt on non-stale records, and convert PROCESS_TABLE_UNREADABLE into an explicit fail-closed Work Order classification.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:d1d21b3988f6e89eff3964a1e5e56f12171fd4d3cf50b23634364d087380df26 -->
+### Durable resume and review authority binding
+- **Trigger**: Before automatic durable resume, reviewer roster rotation, seat retry, or more than one candidate per repair generation is enabled.
+- **Context**: Make all durable stop payloads pass verbatim resume validation, bind full-diff barriers to the exact candidate and review kind, and include sealed reviewer roster/seat identities in full-diff and joint-review reuse keys.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:aed0cfc35dd07b4cabf1545ca4bdba4d0a308824eaa3b1631f3f6d9c9ce11811 -->
+### Explicit findings identity authority
+- **Trigger**: Before classifyMissingDisposition is reused or exported to any caller that may omit identity validation.
+- **Context**: Remove the fail-open findingsIdentityOk default and require every classifyMissingDisposition call to pass an explicit identity verdict.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:42b943b1cd29c7de6d0b621337c605400ea73e33b531b47ee7d7b2dd04ccfc9f -->
+### Mission graph and campaign capacity boundary hardening
+- **Trigger**: Before graph hot reload/concurrent writers or caller-supplied non-default campaign capacities are supported.
+- **Context**: Read Mission graph bytes once or bind the validation read to the inspected digest, and mirror max_owned_worktrees/temp_capacity_limit/max_prompt_bytes/max_finding_recurrence schema caps in the executable validator.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:d574960cb87250d45554901630cdff86ddfd59f5d313a40e657bf7de3f7b7be3 -->
+### Orphan leaf liveness and resource reconstruction
+- **Trigger**: Before orphan adoption or resource inventory is used as closure/capacity authority after controller or worktree-creation crashes.
+- **Context**: Persist and re-observe leaf process identity before orphan adoption; discover orphan branches and never-registered worktrees; mechanically re-derive active inventory rows.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:516726d963e606a0bf2ec621ad6962a0228863ff976a64a703be7bbd2d4a598d -->
+### Terminal status and receipt trust boundary
+- **Trigger**: Before external/legacy terminal receipts cross a trust boundary or the threat model expands beyond confused controllers.
+- **Context**: Enforce the closed terminal_status enum at receipt validation and Work Order classification, resolve the unused attached disposition, and document integrity-hash versus producer-attestation guarantees under the confused-controller threat model.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+
+<!-- autopilot-follow-up:8f70c159902a5d75d701b775ac9378f53ec4e9380a2534cab6674bf06083d475 -->
+### Shared sealed zero-diff validator
+- **Trigger**: When the zero-diff schema next changes or a fourth production consumer is introduced.
+- **Context**: Move sealed zero-diff receipt validation into one deterministic shared helper consumed by shell, Engine, and runner boundaries.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b

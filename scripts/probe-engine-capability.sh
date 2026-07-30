@@ -13,21 +13,33 @@ LIVE_SPEND=0
 STORE=""
 NOW=""
 ROLE="reviewer"
+EFFORT=""
+ENDPOINT=""
+ENDPOINT_SET=0
 
 usage() {
   cat <<EOF
 Usage:
-  scripts/probe-engine-capability.sh quota --runner <runner> --model <model> [--safe] [--live-spend] [--store <path>] [--now <ISO>]
+  scripts/probe-engine-capability.sh quota --runner <runner> --model <model> \\
+    [--effort <effort>] [--endpoint <name|@none>] [--safe] [--live-spend] \\
+    [--store <path>] [--now <ISO>] [--role <role>]
 
 Options:
   --runner <r>       Specify runner name (e.g. codex, agy, grok, qoderclicn, cc-shim).
   --model <m>        Specify model name.
+  --effort <e>       Exact effort partition written into the capability row.
+  --endpoint <v>     Exact endpoint wallet name, or @none for explicit endpoint:null.
   --safe             Safe mode (default), no paid model prompt.
   --live-spend       Live spend mode, send a tiny prompt to verify quota.
   --store <path>     Override capability store.
   --now <ISO>        Override current timestamp for deterministic tests.
   --role <role>      Override role (default: reviewer).
   -h, --help         Show this help text.
+
+Notes:
+  Live probing writes the same exact runner/model/effort/endpoint identity that
+  strict dispatch admission reads. Omit --effort/--endpoint only for legacy
+  telemetry rows; those cannot authorize exact-tuple dispatch.
 EOF
 }
 
@@ -102,6 +114,23 @@ while [ $# -gt 0 ]; do
         exit 2
       fi
       ROLE="$2"
+      shift 2
+      ;;
+    --effort)
+      if [ $# -lt 2 ]; then
+        echo "ERROR: option --effort requires a value" >&2
+        exit 2
+      fi
+      EFFORT="$2"
+      shift 2
+      ;;
+    --endpoint)
+      if [ $# -lt 2 ]; then
+        echo "ERROR: option --endpoint requires a value" >&2
+        exit 2
+      fi
+      ENDPOINT="$2"
+      ENDPOINT_SET=1
       shift 2
       ;;
     -h|--help)
@@ -302,8 +331,13 @@ if [ -n "$STORE" ]; then
   RECORD_ARGS+=(--store "$STORE")
 fi
 
-# Construct JSON payload using node to ensure values are safely escaped
-JSON_PAYLOAD="$(NOW_ISO="$NOW_ISO" RUNNER="$RUNNER" MODEL="$MODEL" ROLE="$ROLE" RUNNER_VERSION="$RUNNER_VERSION" STATUS="$STATUS" CONFIDENCE="$CONFIDENCE" EVIDENCE="$EVIDENCE" node -e '
+# Construct JSON payload using node to ensure values are safely escaped.
+# When --effort / --endpoint are supplied, write the exact-tuple partition that
+# strict admission reads; omit those fields only for legacy telemetry rows.
+JSON_PAYLOAD="$(NOW_ISO="$NOW_ISO" RUNNER="$RUNNER" MODEL="$MODEL" ROLE="$ROLE" \
+  RUNNER_VERSION="$RUNNER_VERSION" STATUS="$STATUS" CONFIDENCE="$CONFIDENCE" \
+  EVIDENCE="$EVIDENCE" EFFORT="$EFFORT" ENDPOINT="$ENDPOINT" ENDPOINT_SET="$ENDPOINT_SET" \
+  node -e '
   const p = process.env;
   const payload = {
     schema_version: 1,
@@ -322,6 +356,23 @@ JSON_PAYLOAD="$(NOW_ISO="$NOW_ISO" RUNNER="$RUNNER" MODEL="$MODEL" ROLE="$ROLE" 
       }
     }
   };
+  if (p.EFFORT && p.EFFORT.length > 0) {
+    if (!/^[A-Za-z0-9._:-]{1,128}$/.test(p.EFFORT)) {
+      process.stderr.write("ERROR: --effort must be a bounded classification code\n");
+      process.exit(2);
+    }
+    payload.effort = p.EFFORT;
+  }
+  if (p.ENDPOINT_SET === "1") {
+    if (p.ENDPOINT === "@none") {
+      payload.endpoint = null;
+    } else if (/^[A-Za-z0-9_]{1,128}$/.test(p.ENDPOINT || "")) {
+      payload.endpoint = p.ENDPOINT;
+    } else {
+      process.stderr.write("ERROR: --endpoint must be a canonical name or @none\n");
+      process.exit(2);
+    }
+  }
   console.log(JSON.stringify(payload));
 ')"
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+# Ambient mission harness env must not poison hermetic unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 
 PURE_OUT="$(node - "$REPO_ROOT" <<'NODE'
 'use strict';
@@ -3752,5 +3756,348 @@ SECOND_LEASE="$(bash "$REPO_ROOT/scripts/run-ledger.sh" stage-acquire \
 assert_exit_code "$?" "1" "second live campaign lease is rejected"
 assert_contains "$SECOND_LEASE" "already has a live lease" \
   "exclusive ledger rejection names the live lease"
+
+# --- Controller execution discipline (frozen denominator / full-diff / budget / boundary) ---
+CTRL_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root] = process.argv.slice(2);
+const ctrl = require(path.join(root, 'src/engine/controller-execution'));
+const {
+  CAMPAIGN_EVENTS,
+  CAMPAIGN_STATES,
+  createCampaignState,
+  reduceCampaignState,
+  canonicalDigest,
+} = require(path.join(root, 'src/engine/implementation-campaign'));
+const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+
+// R1 frozen denominator stable across findings/retries.
+const frozen = ctrl.buildFrozenDenominator({
+  projectId: 'controller-discipline',
+  graphDigest: 'a'.repeat(64),
+  deliverableIds: ['n1', 'n2'],
+  nodeId: 'n1',
+});
+assert.strictEqual(frozen.deliverable_count, 2);
+assert.throws(() => ctrl.assertFrozenDenominatorStable(frozen, ['n1', 'n2', 'finding-phase']),
+  (e) => e.code === 'DENOMINATOR_MUTATION');
+const progress = ctrl.buildProgressReceipt({
+  projectId: 'controller-discipline',
+  deliverableId: 'n1',
+  generation: 1,
+  activeProcess: { pid: process.pid },
+  frozenDenominator: frozen,
+  completedDeliverables: ['n1'],
+  blockedReason: null,
+  gateState: { full_diff_review: 'passed' },
+  resourceDebtState: { blocks_dispatch: false },
+});
+assert.strictEqual(progress.remaining_deliverables.join(','), 'n2');
+assert.match(progress.digest, /^[0-9a-f]{64}$/);
+
+// R4 gate journal reuse + explicit invalidation.
+let journal = ctrl.emptyGateJournal();
+const first = ctrl.recordGateEntry(journal, {
+  kind: 'full_diff_review',
+  owner: 'depth-0',
+  input: { base: 'b'.repeat(40), head: 'c'.repeat(40) },
+  result: { success: true, verdict: 'REWORK' },
+  startedAt: '2026-07-30T00:00:00.000Z',
+  finishedAt: '2026-07-30T00:01:00.000Z',
+});
+journal = first.journal;
+const reused = ctrl.recordGateEntry(journal, {
+  kind: 'full_diff_review',
+  owner: 'depth-0',
+  input: { base: 'b'.repeat(40), head: 'c'.repeat(40) },
+  result: { success: true, verdict: 'REWORK' },
+  startedAt: '2026-07-30T00:02:00.000Z',
+  finishedAt: '2026-07-30T00:03:00.000Z',
+});
+assert.strictEqual(reused.reused, true);
+const invalidated = ctrl.recordGateEntry(reused.journal, {
+  kind: 'full_diff_review',
+  owner: 'depth-0',
+  input: { base: 'b'.repeat(40), head: 'd'.repeat(40) },
+  result: { success: true, verdict: 'SHIP' },
+  startedAt: '2026-07-30T00:04:00.000Z',
+  finishedAt: '2026-07-30T00:05:00.000Z',
+  invalidateReason: 'candidate tree changed',
+});
+assert.strictEqual(invalidated.reused, false);
+
+// R5 joint repair budget axes independently trip awaiting_convergence.
+for (const axis of ctrl.REPAIR_BUDGET_AXES) {
+  if (axis === 'fresh_input_tokens') {
+    const unobs = ctrl.checkJointRepairBudget(
+      { ...ctrl.emptyBudgetUsage(), fresh_input_tokens: null },
+      { fresh_input_tokens: 1 },
+    );
+    assert.strictEqual(unobs.ok, true, 'unobserved tokens must not zero-fill');
+    const obs = ctrl.checkJointRepairBudget(
+      ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { fresh_input_tokens: 10 }),
+      { fresh_input_tokens: 5 },
+    );
+    assert.strictEqual(obs.status, ctrl.AWAITING_CONVERGENCE);
+    assert.strictEqual(obs.allow_spend, false);
+    continue;
+  }
+  const usage = ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { [axis]: 100 });
+  const limits = ctrl.defaultBudgetLimits({ [axis]: 10 });
+  const check = ctrl.checkJointRepairBudget(usage, limits);
+  assert.strictEqual(check.status, ctrl.AWAITING_CONVERGENCE, axis);
+  assert.strictEqual(check.allow_spend, false, axis);
+  assert.ok(check.exceeded.includes(axis), axis);
+}
+
+// R3 full-diff before repair (vertical fail still requires barrier).
+let fullDiffCalls = 0;
+let repairCalls = 0;
+const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1 }, {
+  preflight: () => ({ passed: true }),
+  implement: ({ kind }) => {
+    if (kind !== 'initial') repairCalls += 1;
+    return {
+      committed: true,
+      commit: 'a'.repeat(40),
+      tree_sha: 'b'.repeat(40),
+    };
+  },
+  scopeCheck: () => ({ passed: true }),
+  verify: ({ repair_generation: gen }) => ({
+    passed: gen > 0,
+    receipt_digest: 'c'.repeat(64),
+    reason: gen === 0 ? 'vertical fail' : null,
+  }),
+  review: ({ scope }) => {
+    if (scope === 'full_diff' || scope === undefined) fullDiffCalls += 1;
+    return {
+      reviewed: true,
+      review_input_mode: 'full_diff_generation',
+      review_digest: 'd'.repeat(64),
+      findings: '[]',
+      verdict: 'REWORK',
+    };
+  },
+  adjudicate: () => ({
+    registry_complete: true,
+    repair_gate_passed: true,
+    registry_digest: 'e'.repeat(64),
+    must_fix_now: [],
+    follow_up: [],
+    rejected: [],
+  }),
+  convergence: () => ({ passed: true }),
+  finalPanel: () => ({
+    reviewed: true,
+    sealed_min_panel_size: 1,
+    final_panel_count: 1,
+    final_panel_seat_receipts: [{
+      schema_version: 1,
+      artifact_type: 'implementation_campaign_final_panel_seat',
+      seat_index: 1,
+      runner: 'f',
+      model: 'm',
+      effort: 'high',
+      endpoint: null,
+      family: 'f',
+      status: 'reviewed',
+      verdict: 'SHIP-AS-IS',
+      review_digest: 'f'.repeat(64),
+      reason: null,
+      receipt_digest: require('crypto').createHash('sha256').update('seat').digest('hex'),
+    }],
+  }),
+});
+assert.ok(fullDiffCalls >= 1, 'full-diff runs before repair on vertical fail');
+assert.ok(repairCalls >= 1, 'repair still happens after full-diff');
+assert.ok(vertical.trace.includes('full_diff_review'), 'trace records full_diff_review');
+
+// Focused-only cannot authorize repair.
+const focusedOnly = ctrl.requireFullDiffBeforeRepair({
+  generation: 0,
+  fullDiffBarriers: {},
+  focusedOnly: true,
+});
+assert.strictEqual(focusedOnly.allow_repair, false);
+
+// R7 boundary_rejected first-class + awaiting_disposition.
+const boundary = ctrl.classifyBoundaryRejected({
+  status: 'boundary_rejected',
+  commit: '1'.repeat(40),
+  error: 'boundary_rejected: changed path violates scope',
+});
+assert.strictEqual(boundary.status, 'boundary_rejected');
+assert.strictEqual(boundary.mutation_failed, false);
+assert.strictEqual(boundary.unknown_status, false);
+assert.strictEqual(boundary.candidate_ref, '1'.repeat(40));
+
+const missingDisp = ctrl.classifyMissingDisposition({
+  findings: [{ id: 'F1' }],
+  dispositionAuthority: null,
+  findingsIdentityOk: true,
+});
+assert.strictEqual(missingDisp.status, ctrl.AWAITING_DISPOSITION);
+assert.strictEqual(missingDisp.resumable, true);
+const badFinding = ctrl.classifyMissingDisposition({
+  findings: [{ id: 'F1' }],
+  dispositionAuthority: null,
+  findingsIdentityOk: false,
+});
+assert.strictEqual(badFinding.status, 'hard_fail');
+
+// Campaign reducer: boundary_rejected preserves candidate, awaiting_disposition resumes.
+const contract = {
+  ticket: 'ctrl-boundary',
+  profile: 'production',
+  max_repair_generations: 2,
+  max_wall_seconds: 3600,
+  max_changed_files: 32,
+  baseline_churn: 100,
+  max_extra_churn: 50,
+};
+const digest = canonicalDigest(contract);
+let state = createCampaignState({
+  contract,
+  contractDigest: digest,
+  repoIdentity: 'git-common-dir:/tmp/ctrl',
+  startedAt: '2026-07-30T00:00:00.000Z',
+});
+const mkEvent = (type, gen, payload, second, input, output) => ({
+  schema_version: 1,
+  event_type: type,
+  campaign_id: state.campaign_id,
+  contract_digest: digest,
+  generation: gen,
+  idempotency_key: `${type}-${second}`,
+  input_artifact_digest: input || state.last_output_artifact_digest,
+  output_artifact_digest: output || canonicalDigest({ t: type, s: second }),
+  timestamp: `2026-07-30T00:00:${String(second).padStart(2, '0')}.000Z`,
+  stage_identity: 'ctrl-stage',
+  usage: {
+    repair_generations: gen,
+    elapsed_wall_seconds: second,
+    changed_files: 1,
+    churn: 1,
+  },
+  payload,
+});
+state = reduceCampaignState(state, mkEvent(
+  CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED,
+  0,
+  { sealed_contract: true },
+  1,
+  digest,
+  canonicalDigest({ k: 'started' }),
+));
+const brDigest = '9'.repeat(64);
+state = reduceCampaignState(state, mkEvent(
+  CAMPAIGN_EVENTS.BOUNDARY_REJECTED,
+  0,
+  {
+    reason: 'scope boundary',
+    boundary_reason: 'changed path violates scope',
+    candidate_ref: '2'.repeat(40),
+    boundary_receipt_digest: brDigest,
+  },
+  2,
+  state.last_output_artifact_digest,
+  canonicalDigest({ kind: 'campaign_boundary_rejected', digest: brDigest }),
+));
+assert.strictEqual(state.phase, CAMPAIGN_STATES.BOUNDARY_REJECTED);
+assert.strictEqual(state.boundary_rejected.candidate_ref, '2'.repeat(40));
+
+// awaiting_disposition durable wait + resume on same work order identity.
+let state2 = createCampaignState({
+  contract: { ...contract, ticket: 'ctrl-disp' },
+  contractDigest: canonicalDigest({ ...contract, ticket: 'ctrl-disp' }),
+  repoIdentity: 'git-common-dir:/tmp/ctrl',
+  startedAt: '2026-07-30T00:00:00.000Z',
+});
+const d2 = state2.contract_digest;
+const step = (type, gen, payload, second, out) => {
+  state2 = reduceCampaignState(state2, {
+    schema_version: 1,
+    event_type: type,
+    campaign_id: state2.campaign_id,
+    contract_digest: d2,
+    generation: gen,
+    idempotency_key: `${type}-${second}`,
+    input_artifact_digest: state2.last_output_artifact_digest,
+    output_artifact_digest: out,
+    timestamp: `2026-07-30T00:00:${String(second).padStart(2, '0')}.000Z`,
+    stage_identity: 'ctrl-stage',
+    usage: {
+      repair_generations: gen,
+      elapsed_wall_seconds: second,
+      changed_files: 0,
+      churn: 0,
+    },
+    payload,
+  });
+};
+step(CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED, 0, { sealed_contract: true }, 1, canonicalDigest('s'));
+step(CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED, 0, {
+  scope_check_passed: true,
+  scope_check_digest: 'a'.repeat(64),
+}, 2, canonicalDigest('c'));
+step(CAMPAIGN_EVENTS.VERTICAL_VERIFIED, 0, {
+  passed: true,
+  evidence_digest: 'b'.repeat(64),
+}, 3, canonicalDigest('v'));
+step(CAMPAIGN_EVENTS.REVIEW_COMPLETED, 0, { review_digest: 'c'.repeat(64) }, 4, canonicalDigest('r'));
+step(CAMPAIGN_EVENTS.AWAITING_DISPOSITION, 0, {
+  reason: 'missing disposition authority',
+  findings_digest: 'd'.repeat(64),
+  candidate_ref: '3'.repeat(40),
+}, 5, canonicalDigest('w'));
+assert.strictEqual(state2.phase, CAMPAIGN_STATES.AWAITING_DISPOSITION);
+step(CAMPAIGN_EVENTS.DISPOSITION_RESUMED, 0, {
+  registry_complete: true,
+  registry_digest: 'e'.repeat(64),
+}, 6, canonicalDigest('x'));
+assert.strictEqual(state2.phase, CAMPAIGN_STATES.ADJUDICATING);
+
+// Repair tickets append without successor identity.
+let woCtrl = ctrl.emptyControllerState({
+  frozen_denominator: frozen,
+  original_dispatch_run: 'run-1',
+});
+woCtrl = ctrl.appendRepairTicket(woCtrl, {
+  ticket_id: 'rt-1',
+  generation: 1,
+  finding_ids: ['F1'],
+  reuse_lineage: true,
+});
+assert.strictEqual(woCtrl.repair_tickets.length, 1);
+assert.throws(() => ctrl.appendRepairTicket(woCtrl, {
+  ticket_id: 'rt-2',
+  generation: 2,
+  successor_work_order_id: 'wo-other',
+}), (e) => e.code === 'SUCCESSOR_IDENTITY_FORBIDDEN');
+
+console.log(JSON.stringify({
+  frozen_denominator_stable: true,
+  progress_digest_valid: true,
+  gate_journal_reuse: true,
+  joint_budget_axes: true,
+  full_diff_before_repair: true,
+  boundary_rejected_first_class: true,
+  awaiting_disposition_resumable: true,
+  repair_ticket_append: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "controller execution discipline unit matrix exits zero"
+assert_contains "$CTRL_OUT" '"frozen_denominator_stable":true' "frozen denominator stable"
+assert_contains "$CTRL_OUT" '"progress_digest_valid":true' "progress receipt digest-valid"
+assert_contains "$CTRL_OUT" '"gate_journal_reuse":true' "gate journal reuse/invalidation"
+assert_contains "$CTRL_OUT" '"joint_budget_axes":true' "joint repair budget axes"
+assert_contains "$CTRL_OUT" '"full_diff_before_repair":true' "full-diff before repair"
+assert_contains "$CTRL_OUT" '"boundary_rejected_first_class":true' "boundary_rejected first-class"
+assert_contains "$CTRL_OUT" '"awaiting_disposition_resumable":true' "awaiting_disposition resumable"
+assert_contains "$CTRL_OUT" '"repair_ticket_append":true' "repair tickets append"
 
 finalize_test

@@ -3,6 +3,10 @@ set -uo pipefail
 
 TEST_NAME="mission-routing-admission"
 . "$(dirname "$0")/lib.sh"
+# Ambient mission harness env must not poison hermetic unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 const assert = require('assert/strict');
@@ -423,5 +427,134 @@ assert_contains "$OUT" '"depth_effect_count":0' "critical-path overflow rejects 
 assert_contains "$OUT" '"reservation_effect_count":0' "aggregate reservation overflow rejects before effects"
 assert_contains "$OUT" '"shadow_honest":true' "shadow reports would-block without claiming authority"
 assert_contains "$OUT" '"legacy_compatible":true' "off mode preserves legacy behavior"
+
+# Executable mission delta admission (output path / create / mirror / replay / no-op).
+DELTA_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const [root] = process.argv.slice(2);
+const { admitExecutableMissionDelta } = require(path.join(root, 'src/engine/controller-execution'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mission-delta-'));
+fs.mkdirSync(path.join(tmp, 'src'), { recursive: true });
+fs.writeFileSync(path.join(tmp, 'src', 'exists.js'), 'ok\n');
+fs.writeFileSync(path.join(tmp, 'src', 'required.js'), 'req\n');
+
+// Typo / nonexistent required path without create auth.
+const typo = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/does-not-exist.js'],
+  outputPaths: ['src/exists.js'],
+});
+assert.strictEqual(typo.ok, false);
+assert.ok(typo.reasons.some((r) => r.code === 'REQUIRED_PATH_MISSING'));
+
+// Missing create authority in strict mode.
+const missingCreate = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/exists.js'],
+  outputPaths: ['src/new-output.js'],
+  strictOutputCreates: true,
+});
+assert.strictEqual(missingCreate.ok, false);
+assert.ok(missingCreate.reasons.some((r) => r.code === 'OUTPUT_MISSING_CREATE_AUTH'));
+
+// Explicit create authority accepts absent output.
+const withCreate = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/exists.js'],
+  outputPaths: ['src/new-output.js'],
+  authorizedCreates: ['src/new-output.js'],
+  strictOutputCreates: true,
+});
+assert.strictEqual(withCreate.ok, true);
+
+// Version mirror incomplete without generator.
+const mirror = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/exists.js'],
+  outputPaths: ['src/plugin.json'],
+  versionMirrorPaths: ['src/plugin.json'],
+  versionMirrorGenerator: null,
+});
+assert.strictEqual(mirror.ok, false);
+assert.ok(mirror.reasons.some((r) => r.code === 'VERSION_MIRROR_GENERATOR_MISSING'));
+
+const mirrorOk = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/exists.js'],
+  outputPaths: ['src/plugin.json'],
+  versionMirrorPaths: ['src/plugin.json'],
+  versionMirrorGenerator: 'scripts/sync-version.js',
+});
+assert.strictEqual(mirrorOk.ok, true);
+
+// Historical replay rejected without no-op binding.
+const hist = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/exists.js'],
+  outputPaths: ['src/exists.js'],
+  historicalOutputs: { 'src/exists.js': 'ok\n' },
+  currentBytesByPath: { 'src/exists.js': 'ok\n' },
+});
+assert.strictEqual(hist.ok, false);
+assert.ok(hist.reasons.some((r) => r.code === 'HISTORICAL_OUTPUT_REPLAY'));
+
+// Digest-bound no-op adoption spends zero attempts.
+const noop = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/exists.js'],
+  outputPaths: ['src/exists.js'],
+  baseSha: 'a'.repeat(40),
+  noOpReceipt: {
+    base_sha: 'a'.repeat(40),
+    acceptance_digest: 'b'.repeat(64),
+    current_bytes: { 'src/exists.js': 'ok\n' },
+  },
+});
+assert.strictEqual(noop.ok, true);
+assert.strictEqual(noop.noop, true);
+assert.strictEqual(noop.dispatcher_called, false);
+assert.strictEqual(noop.mutation_attempts, 0);
+assert.strictEqual(noop.gate_attempts, 0);
+
+// Narrow required-change set accepted.
+const narrow = admitExecutableMissionDelta({
+  repoRoot: tmp,
+  allowedPathPrefixes: ['src'],
+  requiredPaths: ['src/required.js'],
+  outputPaths: ['src/exists.js'],
+});
+assert.strictEqual(narrow.ok, true);
+assert.strictEqual(narrow.narrow_required_ok, true);
+
+console.log(JSON.stringify({
+  typo_rejected: true,
+  missing_create_rejected: true,
+  create_accepted: true,
+  version_mirror_gated: true,
+  historical_replay_rejected: true,
+  noop_zero_spend: true,
+  narrow_required_ok: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "executable mission delta matrix exits zero"
+assert_contains "$DELTA_OUT" '"typo_rejected":true' "typo/missing required rejected"
+assert_contains "$DELTA_OUT" '"missing_create_rejected":true' "missing create authority rejected"
+assert_contains "$DELTA_OUT" '"create_accepted":true' "authorized create accepted"
+assert_contains "$DELTA_OUT" '"version_mirror_gated":true' "version mirror generator gated"
+assert_contains "$DELTA_OUT" '"historical_replay_rejected":true' "historical replay rejected"
+assert_contains "$DELTA_OUT" '"noop_zero_spend":true' "no-op adoption zero spend"
+assert_contains "$DELTA_OUT" '"narrow_required_ok":true' "narrow required set accepted"
 
 finalize_test

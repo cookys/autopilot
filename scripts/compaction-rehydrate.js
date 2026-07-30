@@ -4,14 +4,29 @@ const fs = require('fs');
 const path = require('path');
 const { admitContinuation, buildCheckpoint, loadMatchingRunsFromManifestDir, resolveAuthoritativeIdentity, workOrder,
 } = require('../src/engine/continuation-admission');
+const {
+  runPostCompactAdapter,
+  admitHighWater,
+  buildResourceDebtState,
+  adoptOrphanLeaf,
+  buildProgressReceipt,
+  attachControllerState,
+  emptyControllerState,
+  buildFrozenDenominator,
+} = require('../src/engine/controller-execution');
 function usage(message) { if (message) process.stderr.write(`compaction-rehydrate: ${message}\n`);
-  process.stderr.write( 'usage: compaction-rehydrate.js write|rehydrate|work-order|heartbeat|reconcile|admit [options]\n',);
+  process.stderr.write( 'usage: compaction-rehydrate.js write|rehydrate|work-order|heartbeat|reconcile|admit|postcompact-adapter|high-water|adopt-orphan [options]\n',);
   process.exit(2);}
 function parseArgs(argv) { const command = argv[0];
   if (!command || command === '-h' || command === '--help') usage();
   const out = { command, flags: {} };
   const multi = new Set(['matching-run']);
-  const boolFlags = new Set([ 'strict-match', 'as-durable', 'require-reconcile', 'create-work-order', 'bind-artifacts', 'mission-active', 'require-bound', 'transfer-owner',]);
+  const boolFlags = new Set([
+    'strict-match', 'as-durable', 'require-reconcile', 'create-work-order',
+    'bind-artifacts', 'mission-active', 'require-bound', 'transfer-owner',
+    'probe-evidence-accepted', 'unresolved-debt', 'controller-dead',
+    'already-adopted', 'leaf-committed',
+  ]);
   for (let i = 1; i < argv.length; i += 1) { const arg = argv[i];
     if (!arg.startsWith('--')) usage(`unknown argument: ${arg}`);
     const key = arg.slice(2);
@@ -131,6 +146,114 @@ function cmdAdmit(flags) { const matchingRuns = [];
     requireBoundEvidence: flags['require-bound'] === true || flags['mission-active'] === true,
     ownerPid, controllerPid: ownerPid,});
   emit(result, (result.status === 'reject' || result.status === 'not_found') ? 1 : 0);}
+function readInventory(flags) {
+  if (!flags.inventory) return [];
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.resolve(flags.inventory), 'utf8'));
+    return Array.isArray(raw) ? raw : (Array.isArray(raw.resources) ? raw.resources : []);
+  } catch (error) {
+    emit({
+      status: 'reject',
+      reason_code: 'inventory_unreadable',
+      reason: `inventory is not readable JSON: ${error.message || String(error)}`,
+      duplicate_dispatch: 0,
+    }, 1);
+  }
+  return [];
+}
+
+// Host-neutral PostCompact adapter — same recovery gate as reconcile, plus
+// resource-debt classification. Never wires production Codex hooks and never
+// touches user-owned hook-probe files.
+function cmdPostcompactAdapter(flags) {
+  const gitCwd = flags['git-cwd'] || process.cwd();
+  if (!flags['root-run-id']) {
+    emit({
+      status: 'reject',
+      reason_code: 'root_run_id_required',
+      reason: 'root_run_id is mandatory for PostCompact adapter',
+      production_hook_wired: false,
+      duplicate_dispatch: 0,
+    }, 1);
+  }
+  const durable = flags.durable ? readJsonFlag(flags, 'durable', 'incomplete_checkpoint') : null;
+  const inventory = readInventory(flags);
+  const result = runPostCompactAdapter({
+    reconcileFn: (input) => workOrder.reconcilePostCompact(input),
+    rootRunId: flags['root-run-id'],
+    gitCwd,
+    durable,
+    resourceInventory: inventory,
+    probeEvidenceAccepted: flags['probe-evidence-accepted'] === true,
+  });
+  if (flags['receipt-out'] && result.receipt) {
+    writeAtomic(flags['receipt-out'], result.receipt);
+  }
+  emit(result, result.status === 'ready' ? 0 : 1);
+}
+
+function cmdHighWater(flags) {
+  const currentOwned = flags['current-owned'] != null ? Number(flags['current-owned']) : 0;
+  const highWater = flags['high-water'] != null ? Number(flags['high-water']) : 4;
+  const unresolvedDebt = flags['unresolved-debt'] === true
+    || flags['unresolved-debt'] === 'true'
+    || flags['unresolved-debt'] === '1';
+  const tempCapacityOk = flags['temp-capacity-ok'] !== 'false'
+    && flags['temp-capacity-ok'] !== false
+    && flags['temp-capacity-ok'] !== '0';
+  const result = admitHighWater({
+    currentOwned,
+    highWater,
+    unresolvedDebt,
+    tempCapacityOk,
+  });
+  emit({
+    status: result.ok ? 'admitted' : 'reject',
+    ...result,
+    branch_effects: 0,
+    worktree_effects: 0,
+    runner_effects: 0,
+    duplicate_dispatch: 0,
+  }, result.ok ? 0 : 1);
+}
+
+function cmdAdoptOrphan(flags) {
+  let leaf = null;
+  if (flags['leaf-result']) {
+    try {
+      leaf = JSON.parse(fs.readFileSync(path.resolve(flags['leaf-result']), 'utf8'));
+    } catch (error) {
+      emit({
+        status: 'reject',
+        reason_code: 'leaf_result_unreadable',
+        reason: error.message || String(error),
+        duplicate_dispatch: 0,
+      }, 1);
+    }
+  }
+  const result = adoptOrphanLeaf({
+    controllerDead: flags['controller-dead'] === true
+      || flags['controller-dead'] === 'true'
+      || flags['controller-dead'] === '1',
+    leafResult: leaf || {
+      committed: flags['leaf-committed'] === 'true' || flags['leaf-committed'] === true,
+      commit: flags['leaf-commit'] || null,
+    },
+    branchTip: flags['branch-tip'] || null,
+    branchTree: flags['branch-tree'] || null,
+    baseAncestryOk: flags['base-ancestry-ok'] !== 'false',
+    scopeOk: flags['scope-ok'] !== 'false',
+    churnOk: flags['churn-ok'] !== 'false',
+    worktreeDigest: flags['worktree-digest'] || null,
+    generation: flags.generation != null ? Number(flags.generation) : null,
+    alreadyAdopted: flags['already-adopted'] === true || flags['already-adopted'] === 'true',
+  });
+  emit({
+    ...result,
+    duplicate_mutation: result.duplicate_mutation || 0,
+  }, result.ok ? 0 : 1);
+}
+
 function main(argv) { const parsed = parseArgs(argv);
   switch (parsed.command) { case 'write': return cmdWrite(parsed.flags);
     case 'rehydrate': return cmdRehydrate(parsed.flags);
@@ -138,6 +261,12 @@ function main(argv) { const parsed = parseArgs(argv);
     case 'heartbeat': return cmdHeartbeat(parsed.flags);
     case 'reconcile': return cmdReconcile(parsed.flags);
     case 'admit': return cmdAdmit(parsed.flags);
+    case 'postcompact-adapter': return cmdPostcompactAdapter(parsed.flags);
+    case 'high-water': return cmdHighWater(parsed.flags);
+    case 'adopt-orphan': return cmdAdoptOrphan(parsed.flags);
     default: usage(`unknown command: ${parsed.command}`);}}
 if (require.main === module) main(process.argv.slice(2));
-module.exports = { main, cmdWrite, cmdRehydrate, cmdWorkOrder, cmdHeartbeat, cmdReconcile, cmdAdmit, };
+module.exports = {
+  main, cmdWrite, cmdRehydrate, cmdWorkOrder, cmdHeartbeat, cmdReconcile, cmdAdmit,
+  cmdPostcompactAdapter, cmdHighWater, cmdAdoptOrphan,
+};

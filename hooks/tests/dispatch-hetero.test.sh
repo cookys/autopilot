@@ -8,6 +8,10 @@
 #   (c) exit 0 + no commit       → no_op        (status no_op,      exit 1)
 #   (d) timeout/non-zero + none  → QUESTION_SUSPECTED (status question_suspected, exit 1)
 . "$(dirname "$0")/lib.sh"
+# Ambient mission harness env must not poison hermetic unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 

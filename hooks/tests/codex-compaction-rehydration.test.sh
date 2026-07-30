@@ -1,4 +1,8 @@
 . "$(dirname "$0")/lib.sh"
+# Ambient mission harness env must not poison hermetic unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 RH="$REPO_ROOT/scripts/compaction-rehydrate.js"
 DH="$REPO_ROOT/scripts/dispatch-hetero.sh"
 assert_file_exists "$RH" "compaction-rehydrate production CLI exists"
@@ -870,4 +874,148 @@ NODE
 assert_eq "$(jq -r '[.ok.hb,.ok.file_ok,.ok.cls,.ok.ok,.fail.hb,.fail.cls,.fail.ok,.ok.dig!=null,.lease.ok,.xfer.st,.xfer.ok]|@tsv' <<<"$BIND_OK")" \
   $'written\ttrue\tconsume_terminal\ttrue\twritten\tconsume_terminal\tfalse\ttrue\ttrue\twritten\ttrue' \
   "terminal bind+classify + lease owner-pid + transfer-owner"
+
+# Controller recovery: resource debt, high-water, postcompact adapter, orphan adoption.
+CTRL_RECOVERY="$(node - "$REPO_ROOT" "$SBX" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [root, repo] = process.argv.slice(2);
+const ctrl = require(path.join(root, 'src/engine/controller-execution'));
+const rehydrate = path.join(root, 'scripts/compaction-rehydrate.js');
+const run = (args) => {
+  const r = require('child_process').spawnSync(process.execPath, [rehydrate, ...args], {
+    encoding: 'utf8',
+    cwd: repo,
+  });
+  return { status: r.status, out: r.stdout || '', err: r.stderr || '' };
+};
+
+// Resource disposition matrix.
+const clean = ctrl.classifyResourceOutcome({ dirty: false, unique: false, identity_known: true, clean: true, terminal: true });
+const dirty = ctrl.classifyResourceOutcome({ dirty: true, identity_known: true });
+const unique = ctrl.classifyResourceOutcome({ unique: true, dirty: false, identity_known: true, terminal: false });
+const unknown = ctrl.classifyResourceOutcome({ identity_known: false });
+assert.strictEqual(clean.release, true);
+assert.strictEqual(dirty.blocks_dispatch, true);
+assert.strictEqual(unique.blocks_dispatch, true);
+assert.strictEqual(unknown.blocks_dispatch, true);
+
+const debt = ctrl.buildResourceDebtState([
+  { resource_id: 'wt-clean', worktree: '/tmp/clean', clean: true, terminal: true, recovery_bundle_digest: 'a'.repeat(64) },
+  { resource_id: 'wt-dirty', worktree: '/tmp/dirty', dirty: true },
+]);
+assert.strictEqual(debt.blocks_dispatch, true);
+assert.strictEqual(debt.open.length, 1);
+assert.strictEqual(debt.released.length, 1);
+
+// High-water admission creates zero effects.
+const hw = run(['high-water', '--current-owned', '4', '--high-water', '4']);
+assert.strictEqual(hw.status, 1);
+const hwBody = JSON.parse(hw.out);
+assert.strictEqual(hwBody.allow_checkout, false);
+assert.strictEqual(hwBody.worktree_effects, 0);
+assert.strictEqual(hwBody.runner_effects, 0);
+
+const debtBlock = run(['high-water', '--current-owned', '0', '--high-water', '4', '--unresolved-debt']);
+assert.strictEqual(debtBlock.status, 1);
+assert.strictEqual(JSON.parse(debtBlock.out).code, 'RESOURCE_DEBT_BLOCKS_DISPATCH');
+
+// Orphan adoption once with bound evidence; ambiguity stops.
+const adoptOk = run([
+  'adopt-orphan',
+  '--controller-dead',
+  '--leaf-committed',
+  '--leaf-commit', 'b'.repeat(40),
+  '--branch-tip', 'b'.repeat(40),
+  '--branch-tree', 'c'.repeat(40),
+  '--worktree-digest', 'd'.repeat(64),
+  '--generation', '1',
+]);
+assert.strictEqual(adoptOk.status, 0, adoptOk.err || adoptOk.out);
+assert.strictEqual(JSON.parse(adoptOk.out).duplicate_mutation, 0);
+
+const adoptDup = run([
+  'adopt-orphan',
+  '--controller-dead',
+  '--leaf-committed',
+  '--leaf-commit', 'b'.repeat(40),
+  '--branch-tip', 'b'.repeat(40),
+  '--branch-tree', 'c'.repeat(40),
+  '--worktree-digest', 'd'.repeat(64),
+  '--generation', '1',
+  '--already-adopted',
+]);
+assert.strictEqual(adoptDup.status, 1);
+assert.strictEqual(JSON.parse(adoptDup.out).code, 'ADOPTION_ALREADY_CONSUMED');
+
+const adoptAmb = run([
+  'adopt-orphan',
+  '--leaf-committed',
+  '--branch-tip', 'b'.repeat(40),
+  '--branch-tree', 'c'.repeat(40),
+  '--worktree-digest', 'd'.repeat(64),
+  '--generation', '1',
+]);
+assert.strictEqual(adoptAmb.status, 1);
+assert.strictEqual(JSON.parse(adoptAmb.out).code, 'CONTROLLER_NOT_PROVEN_DEAD');
+
+// PostCompact adapter is hook-ready but does not claim production wiring.
+const rootRun = `root-ctrl-${Date.now()}`;
+const invPath = path.join(repo, '.ctrl-inventory.json');
+fs.writeFileSync(invPath, JSON.stringify([
+  { resource_id: 'open-debt', dirty: true, worktree: '/tmp/open' },
+]));
+const adapter = run([
+  'postcompact-adapter',
+  '--git-cwd', repo,
+  '--root-run-id', rootRun,
+  '--inventory', invPath,
+]);
+// No work orders → reconcile may succeed; resource debt still blocks.
+const adapterBody = JSON.parse(adapter.out || '{}');
+assert.strictEqual(adapterBody.production_hook_wired, false);
+assert.strictEqual(adapterBody.receipt && adapterBody.receipt.hook_probe_files_touched, false);
+
+// Progress receipt replay: 16/34 remains 16/34.
+const frozen = ctrl.buildFrozenDenominator({
+  projectId: 'p',
+  graphDigest: 'e'.repeat(64),
+  deliverableIds: Array.from({ length: 34 }, (_, i) => `d${i}`),
+});
+const completed = Array.from({ length: 16 }, (_, i) => `d${i}`);
+const receipt = ctrl.buildProgressReceipt({
+  frozenDenominator: frozen,
+  completedDeliverables: completed,
+  generation: 2,
+  activeProcess: { pid: 1 },
+});
+assert.strictEqual(receipt.completed_deliverables.length, 16);
+assert.strictEqual(receipt.remaining_deliverables.length, 18);
+const receipt2 = ctrl.buildProgressReceipt({
+  frozenDenominator: frozen,
+  completedDeliverables: completed,
+  generation: 2,
+  activeProcess: { pid: 1 },
+});
+assert.strictEqual(receipt.completed_deliverables.length, receipt2.completed_deliverables.length);
+
+console.log(JSON.stringify({
+  resource_disposition_matrix: true,
+  high_water_zero_effects: true,
+  orphan_adoption: true,
+  postcompact_adapter_ready: true,
+  progress_16_of_34: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "controller recovery matrix exits zero"
+assert_contains "$CTRL_RECOVERY" '"resource_disposition_matrix":true' "resource dispositions"
+assert_contains "$CTRL_RECOVERY" '"high_water_zero_effects":true' "high-water zero effects"
+assert_contains "$CTRL_RECOVERY" '"orphan_adoption":true' "orphan adoption"
+assert_contains "$CTRL_RECOVERY" '"postcompact_adapter_ready":true' "postcompact adapter"
+assert_contains "$CTRL_RECOVERY" '"progress_16_of_34":true' "progress 16/34 stable"
+
 finalize_test

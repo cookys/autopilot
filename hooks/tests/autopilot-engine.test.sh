@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+# Mission harness injects root-run / reconcile receipts that must not poison unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 
 DIFF="$TEST_TMP/review.diff"
 printf '+const answer = 42;\n' > "$DIFF"

@@ -403,6 +403,11 @@ function createOrUpdateWorkOrder(commonDir, fields, options = {}) { const owner 
     }, { bindArtifacts: options.bindArtifacts !== false });
     if (options.updateLifecycle !== false) { wo.owner = { ...wo.owner, ...owner, kind: 'controller' };
       wo.heartbeat_at = nowIso(); wo.updated_at = wo.heartbeat_at; wo.digest = workOrderDigest(wo);}
+    // Controller discipline state is schema-2 optional and outside the digest body.
+    if (isObj(fields.controller)) wo.controller = fields.controller;
+    else if (existing && isObj(existing.controller) && fields.controller === undefined) {
+      wo.controller = existing.controller;
+    }
     writeAtomicJson(file, wo);
     if (wo.disposition === 'consumed' || wo.disposition === 'stale_dispositioned') releaseOwnedLease(file);
     else { const leaseId = isCompleteIdentity(wo.runner) && isProcessLiveStrict(wo.runner) ? wo.runner

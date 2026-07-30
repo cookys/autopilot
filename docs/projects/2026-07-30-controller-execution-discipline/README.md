@@ -1,6 +1,6 @@
 # Controller Execution Discipline
 
-Status: bootstrap
+Status: review-ready
 
 Plan: `docs/plans/2026-07-30-controller-execution-discipline.md`
 
@@ -23,10 +23,23 @@ candidate and one final full-diff review instead of per-finding phases or repeat
 - [x] Reconcile handoff, Git, worktrees, processes, run ledger, and stash inventory
 - [x] Three-surface read-only audit and backlog disposition
 - [x] Freeze one combined deliverable contract and rubric
-- [ ] Admit the new Mission graph and enter L6 execution
-- [ ] Implement the combined authority/campaign/recovery candidate
-- [ ] Run the focused pack, full suite, and one blind joint review
+- [x] Admit the new Mission graph and enter L6 execution
+- [x] Implement the combined authority/campaign/recovery candidate
+- [x] Author and pass an independent cross-component execution oracle
+- [ ] Run the full suite and one blind whole-diff joint review
 - [ ] Merge, sync payload, push, and close lifecycle receipts
+
+## Review boundary
+
+The managed completion campaign stopped honestly before its final panel because no exact QC-seat
+qualification receipt existed. No panel seat was dispatched and no qualification was inferred from
+transport or quota evidence. Depth 0 will run the same frozen three-family roster once over the
+final whole diff; the missing session-local qualification provider remains an explicit backlog
+item rather than being repaired inside this bundle.
+
+The bundle includes a host-neutral post-compaction recovery adapter, not production Codex
+`PostCompact` registration. Production wiring remains trigger-bound on accepted live probe or
+official adapter evidence.
 
 ## Preserved user state
 

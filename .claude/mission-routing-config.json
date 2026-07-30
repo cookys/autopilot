@@ -1,5 +1,5 @@
 {
   "schema_version": 1,
-  "graph_path": "docs/projects/2026-07-30-repair-lineage-convergence/mission-execution-graph.json",
-  "sources_path": "docs/mission-repair-lineage-convergence-sources.json"
+  "graph_path": "docs/projects/2026-07-30-controller-execution-discipline/mission-execution-graph.json",
+  "sources_path": "docs/mission-controller-execution-discipline-sources.json"
 }

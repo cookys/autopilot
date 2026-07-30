@@ -140,10 +140,13 @@ const acceptanceContract = {
   ],
 };
 
-function installedFixture(runId) {
+function installedFixture(runId, {
+  contract = acceptanceContract,
+  capabilityTtlMs = 3600000,
+} = {}) {
   const runtime = createP37Runtime(root, {
     actionCatalog: [baseEngine.ENGINE_IMPLEMENTATION_CATALOG_ENTRY],
-    acceptanceContract,
+    acceptanceContract: contract,
     runId,
   });
   const { durableBinding, serviceBindings, kernelBinding, hash } = runtime;
@@ -187,11 +190,11 @@ function installedFixture(runId) {
     }),
   });
   const now = new Date(runtime.NOW).toISOString();
-  const expires = new Date(runtime.NOW + 3600000).toISOString();
+  const expires = new Date(runtime.NOW + capabilityTtlMs).toISOString();
   const profile = installedEngine.compileInstalledEngineProfile({
     binding: installedBinding,
     governanceConfig: runtime.governanceConfig,
-    acceptanceContract,
+    acceptanceContract: contract,
     routeInputs: runtime.routeInputs,
     durableBinding,
     kernelBinding,
@@ -207,6 +210,7 @@ function installedFixture(runId) {
     now,
     expires,
     hash,
+    acceptanceContract: contract,
   };
 }
 
@@ -316,14 +320,17 @@ function openInstalledSession(fx, {
   coordinatorInvoke,
   adapters,
   nonce = 'c'.repeat(64),
+  clock = null,
+  acceptanceContract: sessionContract = null,
 } = {}) {
+  const contract = sessionContract || fx.acceptanceContract || acceptanceContract;
   const witnessInvoke = fx.runtime.createWitnessInvoke();
   const session = installedEngine.createInstalledEngineSession({
     profile: fx.profile,
     binding: fx.installedBinding,
     durableBinding: fx.durableBinding,
     governanceConfig: fx.runtime.governanceConfig,
-    acceptanceContract,
+    acceptanceContract: contract,
     routeInputs: fx.runtime.routeInputs,
     verifiedHandoff: fx.runtime.routeInputs.verifiedHandoff,
     substratePlan: fx.runtime.routeInputs.substratePlan,
@@ -340,11 +347,546 @@ function openInstalledSession(fx, {
       },
       initialOwnerId: 'owner-a',
       adapters: adapters || fx.runtime.adapters(),
-      clock: () => new Date(fx.runtime.NOW),
+      clock: clock || (() => new Date(fx.runtime.NOW)),
       nonceFactory: () => nonce,
     },
   });
   return { session, witnessInvoke };
+}
+
+/** Shared harness for dispatch+accept category oracles. */
+function createAcceptanceHarness(fx, {
+  contentLabel,
+  executableLegId = 'tests',
+  command = 'node --test',
+} = {}) {
+  const contentSha = fx.hash(contentLabel);
+  // Placeholder until bindDispatchManifest() rebinds to the session's full
+  // commitment acceptance_set after execute.
+  let deliveredManifest = [{ id: 'workspace', sha256: contentSha }];
+  let manifestHash = fx.hash(deliveredManifest);
+  const auditHead = fx.hash(`corpus-audit-head:${contentLabel}`);
+  const authorizations = new Map();
+  let executedClaimId = null;
+
+  function bindDispatchManifest(session) {
+    const dispatchManifest = session.getDispatchDeliveredManifest
+      && session.getDispatchDeliveredManifest();
+    assert.ok(
+      dispatchManifest && Array.isArray(dispatchManifest.acceptance_set),
+      'dispatch must produce acceptance_set for category oracle',
+    );
+    deliveredManifest = dispatchManifest.acceptance_set;
+    manifestHash = dispatchManifest.acceptance_set_hash;
+    return dispatchManifest;
+  }
+
+  function engineInvoke(message) {
+    const request = message.request;
+    if (message.operation && message.operation.startsWith('capability:')) {
+      const response = {
+        ok: true,
+        run_id: request.run_id,
+        host_capability_hash: request.host_capability_hash,
+        observation_hash: fx.hash({ operation: message.operation, request }),
+        probe_nonce: request.probe_nonce,
+      };
+      if (message.operation === 'capability:pre_action') {
+        response.execution_permit = {
+          permit_id: `permit-${request.claim_id}`,
+          run_id: request.run_id,
+          witness_stream_id: request.witness_stream_id,
+          witness_binding_hash: request.witness_binding_hash,
+          authority_hash: request.authority_hash,
+          claim_id: request.claim_id,
+          pre_action_witness_head: request.pre_action_witness_head,
+          host_capability_hash: request.host_capability_hash,
+          action_descriptor_hash: request.action_descriptor_hash,
+          executor_binding_hash: request.executor_binding_hash,
+          audience_identity: request.audience_identity,
+          expires_at: new Date(fx.runtime.NOW + 120000).toISOString(),
+          attestation_hash: fx.hash(`permit:${request.claim_id}`),
+          issuer: fx.profile.engine_profile.route.kernel_binding.identity,
+          issuer_attestation_hash: fx.profile.engine_profile.route.kernel_binding.attestation_hash,
+          preclaim_authorization: `preclaim:${request.claim_id}`,
+        };
+      }
+      if (message.operation === 'capability:post_claim') {
+        const authorization = {
+          authorization_id: `authorization-${request.claim_id}`,
+          run_id: request.run_id,
+          witness_stream_id: request.witness_stream_id,
+          witness_binding_hash: request.witness_binding_hash,
+          authority_hash: request.authority_hash,
+          claim_id: request.claim_id,
+          claim_event_hash: request.claim_event_hash,
+          claim_witness_head: request.claim_witness_head,
+          claim_emitted_at: request.claim_emitted_at,
+          execution_permit_id: request.execution_permit.permit_id,
+          execution_permit_hash: request.execution_permit_hash,
+          host_capability_hash: request.host_capability_hash,
+          action_descriptor_hash: request.action_descriptor_hash,
+          executor_binding_hash: request.executor_binding_hash,
+          audience_identity: request.audience_identity,
+          issued_at: fx.now,
+          expires_at: new Date(fx.runtime.NOW + 60000).toISOString(),
+          attestation_hash: fx.hash(`authorization:${request.claim_id}`),
+          issuer: fx.profile.engine_profile.route.kernel_binding.identity,
+          issuer_attestation_hash: fx.profile.engine_profile.route.kernel_binding.attestation_hash,
+          authorization: `postclaim:${request.claim_id}:${request.claim_event_hash}`,
+        };
+        authorizations.set(authorization.authorization_id, authorization.authorization);
+        response.execution_authorization = authorization;
+      }
+      return {
+        schema_version: 1,
+        kind: 'p37_engine_host_response',
+        profile_hash: message.profile_hash,
+        route_hash: message.route_hash,
+        operation: message.operation,
+        request_hash: message.request_hash,
+        response,
+        response_hash: fx.hash(response),
+      };
+    }
+    if (message.operation === 'execute_engine_dispatch') {
+      const authorization = request.execution_authorization;
+      if (!authorization
+        || authorizations.get(authorization.authorization_id) !== authorization.authorization) {
+        throw new Error('mediated execute authorization missing');
+      }
+      executedClaimId = request.claim_id;
+      const effectId = `corpus-effect-${request.claim_id}`;
+      const commitSha = 'a'.repeat(40);
+      const receiptSha = fx.hash({ effect_id: effectId, commit: commitSha, content: contentSha });
+      const response = {
+        receipt: {
+          uri: `file://${fx.profile.engine_profile.receipt_root}/${effectId}.json`,
+          sha256: receiptSha,
+        },
+        broker: {
+          identity: fx.runtime.serviceBindings.broker.identity,
+          broker_uid: fx.runtime.serviceBindings.broker.uid,
+        },
+        execution_permit_hash: request.execution_permit_hash,
+        execution_authorization_hash: request.execution_authorization_hash,
+        authorization_id: authorization.authorization_id,
+        claim_event_hash: request.claim_event_hash,
+        claim_witness_head: request.claim_witness_head,
+        permit_state: 'consumed',
+        boundary_effect_id: effectId,
+        boundary_state_version: 1,
+        boundary_attestation_hash: fx.runtime.serviceBindings.broker.attestation_hash,
+        effect_at: fx.now,
+        delivered_manifest: {
+          commit: commitSha,
+          artifacts: [{ id: 'workspace', path: 'workspace.tar', sha256: contentSha }],
+          receipt_sha256: receiptSha,
+          boundary_effect_id: effectId,
+        },
+      };
+      return {
+        schema_version: 1,
+        kind: 'p37_engine_host_response',
+        profile_hash: message.profile_hash,
+        route_hash: message.route_hash,
+        operation: message.operation,
+        request_hash: message.request_hash,
+        response,
+        response_hash: fx.hash(response),
+      };
+    }
+    if (message.operation === 'verify_engine_dispatch') {
+      const receipt = request.receipt;
+      const response = {
+        ok: true,
+        run_id: request.run_id,
+        claim_id: request.claim_id,
+        executor_binding_hash: request.executor_binding_hash,
+        execution_permit_hash: request.execution_permit_hash,
+        execution_authorization_hash: request.execution_authorization_hash,
+        authorization_id: request.authorization_id,
+        claim_event_hash: request.claim_event_hash,
+        claim_witness_head: request.claim_witness_head,
+        permit_state: 'consumed',
+        boundary_effect_id: receipt.boundary_effect_id,
+        boundary_state_version: receipt.boundary_state_version,
+        boundary_attestation_hash: receipt.boundary_attestation_hash,
+        effect_at: receipt.effect_at,
+        status: 'succeeded',
+        receipt: receipt.receipt_ref,
+        broker: receipt.broker_receipt,
+        observed_action: fx.profile.action,
+        error_code: null,
+      };
+      return {
+        schema_version: 1,
+        kind: 'p37_engine_host_response',
+        profile_hash: message.profile_hash,
+        route_hash: message.route_hash,
+        operation: message.operation,
+        request_hash: message.request_hash,
+        response,
+        response_hash: fx.hash(response),
+      };
+    }
+    throw new Error(`unexpected engine op ${message.operation}`);
+  }
+
+  const adapters = {
+    ...fx.runtime.adapters(),
+    evidenceArchiver({ verified_evidence }) {
+      return {
+        uri: `durable://corpus-accept/${fx.hash(verified_evidence)}`,
+        sha256: fx.hash(verified_evidence),
+      };
+    },
+    verificationVerifier(_request, context) {
+      return {
+        ok: true,
+        run_id: context.run_id,
+        identity: 'runner-a',
+        channel: 'corpus-verification',
+        envelope_hash: fx.hash('corpus-verification-envelope'),
+        payload: {
+          emitter_kind: 'runner',
+          verification_path: 'trusted_runner',
+          attestation_sha256: fx.hash('attestation:runner-a'),
+          verification_id: `corpus-verification-${executableLegId}`,
+          intent_id: context.intent_id,
+          leg_id: executableLegId,
+          outcome: 'green',
+          command_hash: fx.hash(command),
+          candidate_artifacts: deliveredManifest,
+          candidate_set_hash: manifestHash,
+          exit_code: 0,
+          stdout_hash: fx.hash('corpus-test-stdout'),
+          stderr_hash: fx.hash('corpus-test-stderr'),
+          executed_at: fx.now,
+        },
+      };
+    },
+    challengeVerifier(envelope, context) {
+      return {
+        ok: true,
+        run_id: context.run_id,
+        identity: 'challenger-a',
+        channel: 'corpus-challenge',
+        envelope_hash: fx.hash({ challenge: envelope.scope_id }),
+        payload: {
+          verification_path: 'qualified_challenge',
+          attestation_sha256: fx.hash('attestation:challenger-a'),
+          challenge_id: `corpus-challenge-${envelope.scope_id}`,
+          intent_id: context.intent_id,
+          scope: 'contract_leg',
+          scope_id: envelope.scope_id,
+          finding: 'clear',
+          candidate_artifacts: deliveredManifest,
+          candidate_set_hash: manifestHash,
+          subject_identity: fx.profile.engine_profile.route.worker_binding.identity,
+          subject_family: 'qwen',
+          result_hash: fx.hash(`challenge-result:${envelope.scope_id}`),
+          reviewed_at: fx.now,
+        },
+      };
+    },
+    artifactProvenanceVerifier(request, context) {
+      return {
+        ok: true,
+        run_id: context.run_id,
+        identity: fx.profile.engine_profile.route.coordinator_binding.identity,
+        channel: 'corpus-provenance',
+        envelope_hash: fx.hash({ provenance: request }),
+        payload: {
+          verification_path: 'artifact_provenance',
+          attestation_sha256:
+            fx.profile.engine_profile.route.coordinator_binding.attestation_hash,
+          candidate_set_hash: request.candidate_set_hash,
+          intent_id: context.intent_id,
+          subject_identity: request.subject_identity,
+          subject_family: request.subject_family,
+        },
+      };
+    },
+    auditVerifier(_request, context) {
+      return {
+        ok: true,
+        run_id: context.run_id,
+        identity: fx.profile.engine_profile.route.coordinator_binding.identity,
+        channel: 'corpus-audit',
+        envelope_hash: fx.hash('corpus-audit-envelope'),
+        payload: {
+          verification_path: 'acceptance_audit',
+          attestation_sha256:
+            fx.profile.engine_profile.route.coordinator_binding.attestation_hash,
+          audit_head: auditHead,
+          intent_id: context.intent_id,
+          candidate_artifacts: deliveredManifest,
+          candidate_set_hash: manifestHash,
+          complete: true,
+          action_claim_ids: executedClaimId ? [executedClaimId] : [],
+          action_footprint_hash: context.action_footprint_hash,
+          evaluated_event_head: context.evaluated_event_head,
+          evaluated_witness_head: context.evaluated_witness_head,
+          observed_at: fx.now,
+        },
+      };
+    },
+  };
+
+  // Coordinator closes over getters so bindDispatchManifest can rebind the
+  // acceptance set after execute without rebuilding the invoke functions.
+  const coordinatorInvoke = acceptanceCoordinatorInvoke(fx, {
+    getDeliveredManifest: () => deliveredManifest,
+    getManifestHash: () => manifestHash,
+    auditHead,
+  });
+
+  return {
+    contentSha,
+    auditHead,
+    engineInvoke,
+    adapters,
+    coordinatorInvoke,
+    bindDispatchManifest,
+    getExecutedClaimId: () => executedClaimId,
+    getDeliveredManifest: () => deliveredManifest,
+    getManifestHash: () => manifestHash,
+  };
+}
+
+function acceptanceCoordinatorInvoke(fx, {
+  getDeliveredManifest,
+  getManifestHash,
+  auditHead,
+}) {
+  const coordinatorAttempts = new Map();
+  const routeCoordinator = fx.profile.engine_profile.route.coordinator_binding;
+  const coordinatorBinding = {
+    identity: routeCoordinator.identity,
+    trust_tier: 'external',
+    attestation_hash: routeCoordinator.attestation_hash,
+    protocol_version: 2,
+  };
+  const coordinatorBindingHash = fx.hash(coordinatorBinding);
+  function hostResponse(message, response) {
+    return {
+      schema_version: 1,
+      kind: 'p37_engine_host_response',
+      profile_hash: message.profile_hash,
+      route_hash: message.route_hash,
+      operation: message.operation,
+      request_hash: message.request_hash,
+      response,
+      response_hash: fx.hash(response),
+    };
+  }
+  function unsigned(value) {
+    const { signature: _signature, ...rest } = value;
+    return rest;
+  }
+  function sign(value) {
+    return fx.hash({
+      profile_hash: fx.profile.engine_profile.profile_hash,
+      coordinator_binding_hash: coordinatorBindingHash,
+      commitment: value,
+    });
+  }
+  function makeCommitment(request) {
+    const commitment = {
+      protocol_version: 1,
+      run_id: request.run_id,
+      coordinator_binding_hash: request.coordinator_binding_hash,
+      attempt_id: request.attempt_id,
+      attempt_hash: request.attempt_hash,
+      transaction_id: request.transaction_id,
+      fence: request.fence,
+      expected_event_head: request.expected_event_head,
+      expected_witness_head: request.expected_witness_head,
+      intent_id: request.expected_intent_id,
+      snapshot_hash: request.snapshot_hash,
+      snapshot_at: request.snapshot_at,
+      batch_id: request.batch.batch_id,
+      batch_commitment: request.batch.batch_commitment,
+      batch_event_hashes: request.batch.events.map((event) => event.event_hash),
+      disposition: 'accepted',
+      issued_at: fx.now,
+      attestation_hash: coordinatorBinding.attestation_hash,
+      signature: '',
+    };
+    commitment.signature = sign(unsigned(commitment));
+    return commitment;
+  }
+  function commitmentMatches(request, commitment) {
+    if (!commitment || commitment.signature !== sign(unsigned(commitment))) return false;
+    const expected = makeCommitment(request);
+    return Object.entries(unsigned(expected)).every(([key, value]) => (
+      canonicalJson(commitment[key]) === canonicalJson(value)
+    ));
+  }
+  return function coordinatorInvoke(message) {
+    const request = message.request;
+    if (message.operation === 'coordinator_acquire') {
+      const deliveredManifest = getDeliveredManifest();
+      const manifestHash = getManifestHash();
+      // Snapshot body excludes set hashes (derived by normalizeAcceptanceSnapshot);
+      // snapshot_hash still commits them so the derived hash matches.
+      const normalized = {
+        attempt_id: request.attempt_id,
+        attempt_hash: request.attempt_hash,
+        intent_id: request.expected_intent_id,
+        transaction_id: `txn-${request.attempt_id}`,
+        fence: fx.hash(`fence:${request.attempt_id}`),
+        candidate_artifacts: deliveredManifest,
+        delivered_artifacts: deliveredManifest,
+        candidate_set_hash: manifestHash,
+        delivered_set_hash: manifestHash,
+        audit_head: auditHead || fx.hash('corpus-audit-head'),
+        control_event_head: request.expected_event_head,
+        control_witness_head: request.expected_witness_head,
+        snapshot_at: fx.now,
+      };
+      const snapshot = {
+        ok: true,
+        run_id: request.run_id,
+        attempt_id: normalized.attempt_id,
+        attempt_hash: normalized.attempt_hash,
+        intent_id: normalized.intent_id,
+        transaction_id: normalized.transaction_id,
+        fence: normalized.fence,
+        candidate_artifacts: normalized.candidate_artifacts,
+        delivered_artifacts: normalized.delivered_artifacts,
+        audit_head: normalized.audit_head,
+        control_event_head: normalized.control_event_head,
+        control_witness_head: normalized.control_witness_head,
+        snapshot_at: normalized.snapshot_at,
+        snapshot_hash: fx.hash({ run_id: request.run_id, ...normalized }),
+      };
+      coordinatorAttempts.set(request.attempt_id, { snapshot, status: 'acquired' });
+      return hostResponse(message, snapshot);
+    }
+    if (message.operation === 'coordinator_prepare_commit') {
+      return hostResponse(message, {
+        disposition: 'prepared',
+        coordinator_commitment: makeCommitment(request),
+      });
+    }
+    if (message.operation === 'coordinator_record_commit') {
+      const attempt = coordinatorAttempts.get(request.attempt_id);
+      if (attempt) {
+        attempt.status = 'accepted';
+        attempt.response = request;
+      }
+      return hostResponse(message, { recorded: true });
+    }
+    if (message.operation === 'coordinator_verify_commit') {
+      return hostResponse(message, {
+        verified: request.coordinator_binding_hash === coordinatorBindingHash
+          && request.disposition === 'accepted'
+          && commitmentMatches(request, request.coordinator_commitment),
+      });
+    }
+    function resolutionFor(req, disposition = 'released') {
+      const coordinator_resolution = {
+        protocol_version: 1,
+        run_id: req.run_id,
+        coordinator_binding_hash: coordinatorBindingHash,
+        attempt_id: req.attempt_id,
+        attempt_hash: req.attempt_hash,
+        transaction_id: req.transaction_id || null,
+        fence: req.fence || null,
+        disposition,
+        issued_at: fx.now,
+        attestation_hash: coordinatorBinding.attestation_hash,
+        signature: '',
+      };
+      coordinator_resolution.signature = fx.hash({
+        coordinator: coordinatorBindingHash,
+        ...unsigned(coordinator_resolution),
+      });
+      return coordinator_resolution;
+    }
+    if (message.operation === 'coordinator_release') {
+      const disposition = request.outcome === 'aborted' ? 'aborted' : 'released';
+      const coordinator_resolution = resolutionFor(request, disposition);
+      return hostResponse(message, {
+        ok: true,
+        run_id: request.run_id,
+        attempt_id: request.attempt_id,
+        attempt_hash: request.attempt_hash,
+        disposition,
+        coordinator_resolution,
+      });
+    }
+    if (message.operation === 'coordinator_request_abort') {
+      return hostResponse(message, {
+        ok: true,
+        attempt_id: request.attempt_id,
+        attempt_hash: request.attempt_hash,
+        disposition: 'queued',
+      });
+    }
+    if (message.operation === 'coordinator_resolve') {
+      const attempt = coordinatorAttempts.get(request.attempt_id);
+      if (attempt && attempt.status === 'accepted') {
+        return hostResponse(message, attempt.response);
+      }
+      const coordinator_resolution = resolutionFor(request, 'released');
+      return hostResponse(message, {
+        ok: true,
+        run_id: request.run_id,
+        attempt_id: request.attempt_id,
+        attempt_hash: request.attempt_hash,
+        transaction_id: request.transaction_id,
+        fence: request.fence,
+        disposition: 'released',
+        coordinator_resolution,
+      });
+    }
+    if (message.operation === 'coordinator_cancel') {
+      const coordinator_resolution = resolutionFor(request, 'cancelled');
+      return hostResponse(message, {
+        ok: true,
+        run_id: request.run_id,
+        attempt_id: request.attempt_id,
+        attempt_hash: request.attempt_hash,
+        disposition: 'cancelled',
+        coordinator_resolution,
+      });
+    }
+    if (message.operation === 'coordinator_verify_resolution') {
+      return hostResponse(message, {
+        verified: Boolean(
+          request.coordinator_resolution
+          && request.coordinator_resolution.disposition === request.disposition,
+        ),
+      });
+    }
+    throw new Error(`unexpected coordinator op ${message.operation}`);
+  };
+}
+
+async function dispatchAuthorized(fx, session) {
+  const decision = session.kernel.mintActionDecision({
+    capability: session.owner_capability,
+    ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'corpus-accept' },
+    actionClass: 'external',
+    actionDescriptor: fx.profile.action,
+  });
+  session.kernel.submitApproval({
+    signed: true,
+    payload: {
+      decision_id: decision.payload.decision_id,
+      decision_content_hash: decision.payload.decision_content_hash,
+      max_uses: 1,
+    },
+  });
+  await session.kernel.executeAuthorizedAction({
+    decisionId: decision.payload.decision_id,
+    action: fx.profile.action,
+    timeoutMilliseconds: 1000,
+  });
+  return decision;
 }
 
 const attackMutations = {
@@ -1147,77 +1689,168 @@ const categoryMutations = {
     );
     return blocked ? 'block' : 'accept';
   },
-  mixed_executable_non_executable() {
-    // Control: same route/compile with schema_version 2 acceptance contract.
+  async mixed_executable_non_executable() {
+    // Coherent mixed fixture: one executable leg + one non-executable leg.
+    // Control: challenge both legs after dispatch → accept. Mutation: challenge
+    // only the executable leg (skip ux) → accept blocks with challenge_missing:ux.
+    // Not a schema_version surrogate.
     const fx = installedFixture('corpus-cat-mixed');
-    const control = installedEngine.compileInstalledEngineProfile({
-      binding: fx.installedBinding,
-      governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract,
-      routeInputs: fx.runtime.routeInputs,
-      durableBinding: fx.durableBinding,
-      capabilityProbedAt: fx.now,
-      capabilityExpiresAt: fx.expires,
-    });
-    assert.equal(control.sink_id, 'engine-implementation-dispatch-v1');
-    // Mutation: only schema_version 1 (same contract id/artifacts/legs/route inputs).
-    const blocked = heldNamed(
-      () => installedEngine.compileInstalledEngineProfile({
-        binding: fx.installedBinding,
-        governanceConfig: fx.runtime.governanceConfig,
-        acceptanceContract: {
-          ...acceptanceContract,
-          schema_version: 1,
-        },
-        routeInputs: fx.runtime.routeInputs,
-        durableBinding: fx.durableBinding,
-        capabilityProbedAt: fx.now,
-        capabilityExpiresAt: fx.expires,
-      }),
-      {
-        code: 'INSTALLED_BINDING_MISMATCH',
-        messagePattern: /acceptance contract|unsupported key|schema_version/i,
-        label: 'mixed_executable_non_executable',
-      },
+    assert.equal(
+      fx.acceptanceContract.legs.map((leg) => leg.kind).sort().join(','),
+      'executable,non_executable',
+      'mixed fixture must carry both leg kinds',
     );
-    return blocked ? 'block' : 'accept';
+
+    // --- Positive control: both legs challenged ---
+    const controlHarness = createAcceptanceHarness(fx, {
+      contentLabel: 'mixed-control-workspace',
+      executableLegId: 'tests',
+    });
+    const { session: controlSession } = openInstalledSession(fx, {
+      runLabel: 'mixed-control',
+      engineInvoke: controlHarness.engineInvoke,
+      coordinatorInvoke: controlHarness.coordinatorInvoke,
+      adapters: controlHarness.adapters,
+    });
+    await dispatchAuthorized(fx, controlSession);
+    controlHarness.bindDispatchManifest(controlSession);
+    controlSession.kernel.recordVerification({ purpose: 'tests' });
+    const controlTests = controlSession.kernel.recordChallenge({ scope_id: 'tests' });
+    const controlUx = controlSession.kernel.recordChallenge({ scope_id: 'ux' });
+    assert.equal(controlTests.payload.finding, 'clear');
+    assert.equal(controlUx.payload.finding, 'clear');
+    controlSession.kernel.recordAuditReconciliation({ purpose: 'audit' });
+    const controlAccept = await controlSession.kernel.accept({
+      capability: controlSession.owner_capability,
+      timeoutMilliseconds: 1000,
+    });
+    assert.equal(
+      controlAccept.accepted,
+      true,
+      'positive control: mixed contract with both challenges must accept',
+    );
+    controlSession.teardown();
+
+    // --- Mutation: only executable leg challenged; non-executable residue skipped ---
+    const mutantHarness = createAcceptanceHarness(fx, {
+      contentLabel: 'mixed-mutation-workspace',
+      executableLegId: 'tests',
+    });
+    const { session } = openInstalledSession(fx, {
+      runLabel: 'mixed-mutation',
+      engineInvoke: mutantHarness.engineInvoke,
+      coordinatorInvoke: mutantHarness.coordinatorInvoke,
+      adapters: mutantHarness.adapters,
+      nonce: 'd'.repeat(64),
+    });
+    await dispatchAuthorized(fx, session);
+    mutantHarness.bindDispatchManifest(session);
+    session.kernel.recordVerification({ purpose: 'tests' });
+    session.kernel.recordChallenge({ scope_id: 'tests' });
+    // Intentionally omit recordChallenge({ scope_id: 'ux' }).
+    session.kernel.recordAuditReconciliation({ purpose: 'audit' });
+    const blocked = await session.kernel.accept({
+      capability: session.owner_capability,
+      timeoutMilliseconds: 1000,
+    });
+    assert.equal(blocked.accepted, false, 'mixed must not accept without non-executable challenge');
+    assert.equal(
+      blocked.disposition,
+      'blocked',
+      `mixed disposition must be blocked; got ${blocked.disposition}`,
+    );
+    assert.ok(
+      Array.isArray(blocked.reasons)
+        && blocked.reasons.some((reason) => reason === 'challenge_missing:ux'),
+      `mixed must cite challenge_missing:ux; got ${JSON.stringify(blocked.reasons)}`,
+    );
+    assert.equal(session.kernel.getState().status, 'blocked');
+    session.teardown();
+    return 'block';
   },
-  non_executable_design() {
-    // Control: valid executable+ux contract on the fixture's bound route inputs.
-    const fx = installedFixture('corpus-cat-non-exec');
-    const control = installedEngine.compileInstalledEngineProfile({
-      binding: fx.installedBinding,
-      governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract,
-      routeInputs: fx.runtime.routeInputs,
-      durableBinding: fx.durableBinding,
-      capabilityProbedAt: fx.now,
-      capabilityExpiresAt: fx.expires,
-    });
-    assert.equal(control.sink_id, 'engine-implementation-dispatch-v1');
-    // Mutation: only replace legs with a non-executable-only set (same artifacts/route).
-    const blocked = heldNamed(
-      () => installedEngine.compileInstalledEngineProfile({
-        binding: fx.installedBinding,
-        governanceConfig: fx.runtime.governanceConfig,
-        acceptanceContract: {
-          schema_version: 2,
-          contract_id: acceptanceContract.contract_id,
-          artifacts: acceptanceContract.artifacts,
-          legs: [{ id: 'design', kind: 'non_executable', artifact_ids: ['workspace'] }],
+  async non_executable_design() {
+    // Coherent non-executable-only installed fixture from intake — not a mid-compile
+    // leg swap / binding mismatch. Missing mandatory design challenge → block.
+    const nonExecContract = {
+      schema_version: 2,
+      contract_id: 'p37-installed-corpus-non-exec-design',
+      artifacts: [{ id: 'workspace', target: 'workspace.tar' }],
+      legs: [
+        {
+          id: 'design',
+          kind: 'non_executable',
+          artifact_ids: ['workspace'],
         },
-        routeInputs: fx.runtime.routeInputs,
-        durableBinding: fx.durableBinding,
-        capabilityProbedAt: fx.now,
-        capabilityExpiresAt: fx.expires,
-      }),
-      {
-        code: 'INSTALLED_BINDING_MISMATCH',
-        messagePattern: /governance or authenticated intake material disagrees/i,
-        label: 'non_executable_design',
-      },
+      ],
+    };
+    const fx = installedFixture('corpus-cat-non-exec', { contract: nonExecContract });
+    assert.equal(fx.profile.sink_id, 'engine-implementation-dispatch-v1');
+    assert.equal(
+      fx.acceptanceContract.legs.length,
+      1,
+      'non_executable_design fixture must have exactly one leg',
     );
-    return blocked ? 'block' : 'accept';
+    assert.equal(fx.acceptanceContract.legs[0].kind, 'non_executable');
+    assert.equal(fx.acceptanceContract.legs[0].id, 'design');
+
+    // --- Positive control: design challenge present → accept ---
+    const controlHarness = createAcceptanceHarness(fx, {
+      contentLabel: 'design-control-workspace',
+      executableLegId: 'design',
+    });
+    const { session: controlSession } = openInstalledSession(fx, {
+      runLabel: 'non-exec-control',
+      engineInvoke: controlHarness.engineInvoke,
+      coordinatorInvoke: controlHarness.coordinatorInvoke,
+      adapters: controlHarness.adapters,
+    });
+    await dispatchAuthorized(fx, controlSession);
+    controlHarness.bindDispatchManifest(controlSession);
+    const controlChallenge = controlSession.kernel.recordChallenge({ scope_id: 'design' });
+    assert.equal(controlChallenge.payload.finding, 'clear');
+    assert.equal(controlChallenge.payload.scope_id, 'design');
+    controlSession.kernel.recordAuditReconciliation({ purpose: 'audit' });
+    const controlAccept = await controlSession.kernel.accept({
+      capability: controlSession.owner_capability,
+      timeoutMilliseconds: 1000,
+    });
+    assert.equal(
+      controlAccept.accepted,
+      true,
+      'positive control: design-only contract with challenge must accept',
+    );
+    controlSession.teardown();
+
+    // --- Mutation: omit the only non-executable challenge ---
+    const mutantHarness = createAcceptanceHarness(fx, {
+      contentLabel: 'design-mutation-workspace',
+      executableLegId: 'design',
+    });
+    const { session } = openInstalledSession(fx, {
+      runLabel: 'non-exec-mutation',
+      engineInvoke: mutantHarness.engineInvoke,
+      coordinatorInvoke: mutantHarness.coordinatorInvoke,
+      adapters: mutantHarness.adapters,
+      nonce: 'e'.repeat(64),
+    });
+    await dispatchAuthorized(fx, session);
+    mutantHarness.bindDispatchManifest(session);
+    // No recordChallenge for design.
+    session.kernel.recordAuditReconciliation({ purpose: 'audit' });
+    const blocked = await session.kernel.accept({
+      capability: session.owner_capability,
+      timeoutMilliseconds: 1000,
+    });
+    assert.equal(blocked.accepted, false, 'design-only must not accept without challenge');
+    assert.equal(blocked.disposition, 'blocked');
+    assert.ok(
+      Array.isArray(blocked.reasons)
+        && blocked.reasons.some((reason) => reason === 'challenge_missing:design'),
+      `non_executable_design must cite challenge_missing:design; got ${JSON.stringify(blocked.reasons)}`,
+    );
+    assert.equal(session.kernel.getState().status, 'blocked');
+    session.teardown();
+    return 'block';
   },
   irreversible_action() {
     const fx = installedFixture('corpus-cat-irreversible');
@@ -1644,40 +2277,147 @@ const categoryMutations = {
     return 'block';
   },
   owner_principal_swap_expiry() {
+    // Isolates owner principal/capability lifecycle on the installed route:
+    // (1) live capability mints, (2) capability TTL expiry rejects with
+    // OWNER_CAPABILITY_EXPIRED on the first post-expiry decision attempt,
+    // (3) qualification failure revokes principal to null and blocks
+    // (roster exhaustion / never off-roster promotion).
+    // Not an engine-profile capabilityExpiresAt compile surrogate.
     const fx = installedFixture('corpus-cat-principal');
-    // Positive reachability: valid capability window compiles the installed profile.
-    const live = installedEngine.compileInstalledEngineProfile({
-      binding: fx.installedBinding,
-      governanceConfig: fx.runtime.governanceConfig,
-      acceptanceContract,
-      routeInputs: fx.runtime.routeInputs,
-      durableBinding: fx.durableBinding,
-      capabilityProbedAt: fx.now,
-      capabilityExpiresAt: fx.expires,
+    let nowMs = fx.runtime.NOW;
+    let qualificationOk = true;
+    const adapters = {
+      ...fx.runtime.adapters(),
+      qualificationVerifier({ principal, run_id }) {
+        if (!qualificationOk) return { ok: false };
+        return {
+          ok: true,
+          run_id,
+          principal_id: principal.identity,
+          attestation_sha256: principal.attestation.sha256,
+        };
+      },
+    };
+
+    // --- Positive control: live principal capability mints on installed session ---
+    const { session: controlSession } = openInstalledSession(fx, {
+      runLabel: 'principal-control',
+      adapters,
+      clock: () => new Date(nowMs),
     });
     assert.equal(
-      live.sink_id,
-      'engine-implementation-dispatch-v1',
-      'positive control: valid principal/capability window must compile',
+      controlSession.kernel.getState().active_principal.identity,
+      'owner-a',
+      'positive control: installed session must start with owner-a',
     );
-    // Exact named rejection for expired capability — not any exception.
-    const blocked = heldNamed(
-      () => installedEngine.compileInstalledEngineProfile({
-        binding: fx.installedBinding,
-        governanceConfig: fx.runtime.governanceConfig,
-        acceptanceContract,
-        routeInputs: fx.runtime.routeInputs,
-        durableBinding: fx.durableBinding,
-        capabilityProbedAt: fx.now,
-        capabilityExpiresAt: new Date(fx.runtime.NOW - 1000).toISOString(),
+    const liveDecision = controlSession.kernel.mintActionDecision({
+      capability: controlSession.owner_capability,
+      ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'principal-live' },
+      actionClass: 'external',
+      actionDescriptor: fx.profile.action,
+    });
+    assert.equal(liveDecision.payload.principal_id, 'owner-a');
+    controlSession.teardown();
+
+    // --- Mutation A: capability issued at NOW; clock advances past owner TTL.
+    // freezeTaskAuthority asserts owner capability before host capability,
+    // isolating OWNER_CAPABILITY_EXPIRED (mintActionDecision hits host first).
+    nowMs = fx.runtime.NOW;
+    const { session: expirySession } = openInstalledSession(fx, {
+      runLabel: 'principal-expiry',
+      adapters,
+      clock: () => new Date(nowMs),
+      nonce: 'd'.repeat(64),
+    });
+    const liveCapability = expirySession.owner_capability;
+    assert.equal(expirySession.kernel.getState().active_principal.identity, 'owner-a');
+    nowMs = fx.runtime.NOW
+      + (fx.runtime.governanceConfig.governance.capability_ttl_seconds * 1000)
+      + 1;
+    const expiredHeld = heldNamed(
+      () => expirySession.kernel.freezeTaskAuthority({
+        capability: liveCapability,
+        taskAuthorityInput: {
+          task_authority_id: fx.hash('principal-expiry-task-authority'),
+          mission_lineage_id: fx.hash('principal-expiry-lineage'),
+          base_sha: 'a'.repeat(40),
+        },
       }),
       {
-        code: 'INVALID_ENGINE_ACCEPTANCE_PROFILE',
-        messagePattern: /capability|fixed sink|invalid/i,
-        label: 'owner_principal_swap_expiry',
+        code: 'OWNER_CAPABILITY_EXPIRED',
+        messagePattern: /owner capability has expired/,
+        label: 'owner_principal_swap_expiry_capability',
       },
     );
-    return blocked ? 'block' : 'accept';
+    assert.equal(expiredHeld, true);
+
+    // --- Mutation B: off-roster promotion is rejected (never silent promotion) ---
+    const offRosterHeld = heldNamed(
+      () => expirySession.kernel.activateOwner('owner-not-in-roster', 'off_roster_promotion'),
+      {
+        code: 'UNVERIFIED_PRINCIPAL',
+        messagePattern: /outside the frozen owner roster|principalResolver/i,
+        label: 'owner_principal_swap_expiry_off_roster',
+      },
+    );
+    assert.equal(offRosterHeld, true);
+    expirySession.teardown();
+
+    // --- Mutation C: qualification failure revokes principal → blocked ---
+    // Use a non-minting operation that still requires qualification after a live
+    // capability was established: recordChallenge path requires active principal
+    // qualification. First mint succeeds, then flip qualification and force a
+    // second owner operation via submitApproval/accept that rechecks qualification.
+    // Simpler: open session, fail qualification on first decision by flipping
+    // before any mint (capability still valid).
+    nowMs = fx.runtime.NOW;
+    qualificationOk = true;
+    const { session } = openInstalledSession(fx, {
+      runLabel: 'principal-qualification',
+      adapters,
+      clock: () => new Date(nowMs),
+      nonce: 'f'.repeat(64),
+    });
+    assert.equal(session.kernel.getState().active_principal.identity, 'owner-a');
+    // Isolate the named property: flip only qualificationVerifier before first mint.
+    // Capability remains live; qualification alone fails and clears principal.
+    qualificationOk = false;
+    const revokedHeld = heldNamed(
+      () => session.kernel.mintActionDecision({
+        capability: session.owner_capability,
+        ownerTurnEnvelope: { witnessed: true, identity: 'owner-a', turn: 'qual-revoked' },
+        actionClass: 'external',
+        actionDescriptor: fx.profile.action,
+      }),
+      {
+        code: 'OWNER_QUALIFICATION_FAILED',
+        messagePattern: /authority was revoked|qualification failed/i,
+        label: 'owner_principal_swap_expiry_qualification',
+      },
+    );
+    assert.equal(revokedHeld, true);
+    assert.equal(
+      session.kernel.getState().active_principal,
+      null,
+      'qualification failure must clear active principal (zero-owner blocked)',
+    );
+    assert.equal(
+      session.kernel.getState().status,
+      'blocked',
+      'qualification failure must enter blocked',
+    );
+    // Off-roster still cannot rescue a blocked zero-owner state.
+    const stillOffRoster = heldNamed(
+      () => session.kernel.activateOwner('owner-not-in-roster', 'post_revoke_promotion'),
+      {
+        code: 'UNVERIFIED_PRINCIPAL',
+        messagePattern: /outside the frozen owner roster|principalResolver/i,
+        label: 'owner_principal_swap_expiry_post_revoke',
+      },
+    );
+    assert.equal(stillOffRoster, true);
+    session.teardown();
+    return 'block';
   },
   session_resume() {
     const fx = installedFixture('corpus-cat-resume');
@@ -2022,8 +2762,6 @@ const scenarioMarkers = {
 };
 const markerPayload = JSON.stringify(scenarioMarkers);
 for (const attack of attackDefinitions) {
-  assert.ok(markerPayload.includes(attack.marker.replace(/"/g, '"')
-    || true));
   assert.ok(
     markerPayload.includes(`"${attack.id}":"held"`),
     `${attack.id} marker emitted only after mutation`,

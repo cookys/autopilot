@@ -1259,6 +1259,57 @@ for (const c of cases) {
   }
 }
 
+// Root manifests (plugin.json, package.json) are in the tracked inventory.
+// Positive: clean root manifests without alias tokens keep scan complete.
+// Negative: a residual /l3-/l6 token in either root manifest HOLDs retirement.
+spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
+spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
+fs.writeFileSync(
+  path.join(mechRepo, 'plugin.json'),
+  JSON.stringify({ name: 'autopilot', description: 'no alias tokens' }, null, 2) + '\n',
+);
+fs.writeFileSync(
+  path.join(mechRepo, 'package.json'),
+  JSON.stringify({ name: 'autopilot', private: true }, null, 2) + '\n',
+);
+commitAll('add clean root manifests');
+const rootClean = executeDeterministicCallerMigrationScan(mechRepo);
+if (rootClean.complete !== true) {
+  console.error('clean root plugin.json/package.json must not block scan complete', rootClean);
+  process.exit(1);
+}
+const rootManifestCases = [
+  { rel: 'plugin.json', body: '{\n  "name": "autopilot",\n  "bin": { "l3": "/l3 entry" }\n}\n', token: '/l3' },
+  { rel: 'package.json', body: '{\n  "name": "autopilot",\n  "scripts": { "start": "echo use /l4" }\n}\n', token: '/l4' },
+];
+for (const c of rootManifestCases) {
+  spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
+  spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });
+  // Keep the other root manifest clean so the residual is isolated.
+  const other = c.rel === 'plugin.json' ? 'package.json' : 'plugin.json';
+  fs.writeFileSync(
+    path.join(mechRepo, other),
+    JSON.stringify({ name: 'autopilot', clean: true }, null, 2) + '\n',
+  );
+  fs.writeFileSync(path.join(mechRepo, c.rel), c.body);
+  commitAll(`residual root ${c.rel}`);
+  const scan = executeDeterministicCallerMigrationScan(mechRepo);
+  if (scan.complete === true) {
+    console.error(`root manifest residual ${c.rel} must block complete`, scan);
+    process.exit(1);
+  }
+  if (!Array.isArray(scan.residuals) || scan.residuals.length < 1) {
+    console.error(`root manifest ${c.rel} must report residuals`, scan);
+    process.exit(1);
+  }
+  const hit = scan.residuals.find((r) => r.path === c.rel);
+  if (!hit || hit.token !== c.token) {
+    console.error(`root manifest ${c.rel} must report token ${c.token}`, scan.residuals);
+    process.exit(1);
+  }
+}
+console.log('alias_root_manifest_scan_oracles=ok');
+
 // Exact definition files remain exempt even with /l3 tokens in their body.
 spawnSync('git', ['-C', mechRepo, 'reset', '--hard', cleanRev], { stdio: 'ignore' });
 spawnSync('git', ['-C', mechRepo, 'clean', '-fd'], { stdio: 'ignore' });

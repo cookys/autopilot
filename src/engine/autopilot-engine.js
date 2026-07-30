@@ -6488,6 +6488,35 @@ class AutopilotEngine {
           repairLineage.terminal_worktree_disposition = repairLineage.worktree === null
             ? 'not_created_failed_dispatch'
             : 'retained_failed_dispatch';
+          if (implementation.status === 'boundary_rejected') {
+            const boundaryCandidate = implementation.candidate_ref
+              || (dispatched && (
+                dispatched.commit || dispatched.candidate_ref || dispatched.tip
+              ))
+              || null;
+            return {
+              committed: false,
+              status: 'boundary_rejected',
+              phase: 'boundary_rejected',
+              reason: implementation.boundary_reason
+                || implementation.reason
+                || 'boundary rejected',
+              boundary_reason: implementation.boundary_reason
+                || implementation.reason
+                || 'boundary rejected',
+              boundary_code: implementation.boundary_code
+                || 'scope_or_budget_boundary',
+              candidate_ref: boundaryCandidate,
+              possibly_effectful: implementation.possibly_effectful === true
+                || boundaryCandidate !== null,
+              mutation_failed: false,
+              unknown_status: false,
+              dispatcher_called: implementation.dispatcher_called === true,
+              model_calls: implementation.model_calls,
+              repair_lineage: { ...repairLineage },
+              raw: implementation,
+            };
+          }
           return {
             committed: false,
             phase: implementation.phase || 'dispatch_implementation',

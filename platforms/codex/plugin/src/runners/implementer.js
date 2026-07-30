@@ -32,6 +32,7 @@ const IMPLEMENT_STATUSES = [
   'acceptance_failed',
   'precondition_failed',
   'engine_unavailable',
+  'boundary_rejected',
 ];
 
 function isSealedZeroDiffAdmission(value) {

@@ -145,6 +145,12 @@ printf '%s\n' "$SEQ_FIFTH_TEXT" | tail -n 1 | node -e '
 const value = JSON.parse(require("fs").readFileSync(0, "utf8"));
 if (value.status !== "precondition_failed"
     || value.run_id !== "wlb-sequential-5"
+    || value.dispatcher_called !== false
+    || value.model_calls !== 0
+    || value.mutation_attempts !== 0
+    || value.gate_attempts !== 0
+    || value.resources_created !== 0
+    || value.zero_diff_receipt_digest !== null
     || value.resource_budget.resource !== "leaf_worktrees"
     || value.resource_budget.count !== 4
     || value.resource_budget.limit !== 4) process.exit(1);

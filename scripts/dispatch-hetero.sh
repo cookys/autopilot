@@ -1433,7 +1433,7 @@ die_resource_budget() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
     "$count" "$limit" "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" \

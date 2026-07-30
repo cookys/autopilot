@@ -859,6 +859,50 @@ OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
 const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+const parsed = parseImplementationOutput(JSON.stringify({
+  status: 'boundary_rejected',
+  runner: 'codex',
+  model: 'gpt-test',
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  commit: '2222222222222222222222222222222222222222',
+  files_changed: 1,
+  insertions: 1,
+  deletions: 0,
+  worktree: '/tmp/contained-worktree',
+  agent_log: '/tmp/log',
+  error: 'boundary_rejected: changed path violates scope',
+  containment: 'plain',
+  contained: true,
+  boundary_code: 'scope_or_budget_boundary',
+  boundary_reason: 'boundary_rejected: changed path violates scope',
+  candidate_ref: '2222222222222222222222222222222222222222',
+  possibly_effectful: true,
+  mutation_failed: false,
+  unknown_status: false,
+  dispatcher_called: true,
+  model_calls: 1,
+  mutation_attempts: 1,
+  gate_attempts: 1,
+  resources_created: 1,
+}));
+console.log(`status=${parsed.status}`);
+console.log(`boundary_code=${parsed.boundary_code}`);
+console.log(`candidate_ref=${parsed.candidate_ref}`);
+NODE
+)"
+assert_eq "0" "$?" "implementer parser accepts canonical boundary_rejected"
+assert_contains "$OUT" "status=boundary_rejected" \
+  "boundary_rejected remains a first-class parsed outcome"
+assert_contains "$OUT" "boundary_code=scope_or_budget_boundary" \
+  "boundary parser preserves the exact boundary code"
+assert_contains "$OUT" "candidate_ref=2222222222222222222222222222222222222222" \
+  "boundary parser preserves the candidate identity"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
 
 const valid = {
   status: 'committed',

@@ -584,7 +584,7 @@ const findings = JSON.stringify([{
 const reviewDigest = canonicalDigest({
   verdict: 'SHIP-AS-IS',
   findings,
-  scope: 'focused',
+  scope: 'full_diff',
   tree_sha: tree,
 });
 appended = appendCampaignEvent({
@@ -759,7 +759,7 @@ const findings = JSON.stringify([{
 const focusedDigest = canonicalDigest({
   verdict: 'SHIP-AS-IS',
   findings,
-  scope: 'focused',
+  scope: 'full_diff',
   tree_sha: tree,
 });
 if (focusedDigest !== durableReviewDigest) {

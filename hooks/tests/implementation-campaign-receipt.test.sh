@@ -856,8 +856,12 @@ const incomplete = runCampaignComposition({
     throw new Error('incomplete registry must not reach final panel');
   },
 });
-assert.strictEqual(incomplete.status, 'blocked');
-assert.strictEqual(incomplete.phase, 'adjudication');
+assert.strictEqual(incomplete.status, 'awaiting_disposition');
+assert.strictEqual(incomplete.phase, 'awaiting_disposition');
+assert.strictEqual(incomplete.resumable, true);
+assert.strictEqual(incomplete.candidate.committed, true);
+assert.strictEqual(incomplete.candidate.tree_sha, TREE_A);
+assert.strictEqual(incomplete.review.review_input_mode, 'full_diff_generation');
 assert.strictEqual(incompleteMutations, 1);
 
 let verticalReviews = 0;
@@ -901,7 +905,7 @@ const vertical = runCampaignComposition({
 });
 assert.strictEqual(vertical.status, 'ready');
 assert.strictEqual(verticalMutations, 2);
-assert.strictEqual(verticalReviews, 1);
+assert.strictEqual(verticalReviews, 2);
 assert.deepStrictEqual(verticalScopeCheckpoints, [
   'after_initial_mutation',
   'before_repair',

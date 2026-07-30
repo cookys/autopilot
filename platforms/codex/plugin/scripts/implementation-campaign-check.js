@@ -379,7 +379,7 @@ function validateMissionProjection(contract, required = false) {
     }
   }
 
-  const dispatchFields = [
+  const dispatchRequiredFields = [
     'schema_version',
     'spec',
     'required_paths',
@@ -388,12 +388,28 @@ function validateMissionProjection(contract, required = false) {
     'budget',
     'verification_commands',
   ];
-  if (!validateClosedObject(
-    contract.strict_dispatch,
-    'strict_dispatch',
-    dispatchFields,
-    errors,
-  )) return errors;
+  const dispatchOptionalFields = [
+    'required_change_paths',
+    'authorized_creates',
+    'version_mirror_paths',
+    'version_mirror_generator',
+  ];
+  if (!contract.strict_dispatch || typeof contract.strict_dispatch !== 'object'
+      || Array.isArray(contract.strict_dispatch)) {
+    errors.push('strict_dispatch: expected object');
+    return errors;
+  }
+  {
+    const allowed = new Set([...dispatchRequiredFields, ...dispatchOptionalFields]);
+    for (const key of Object.keys(contract.strict_dispatch)) {
+      if (!allowed.has(key)) errors.push(`strict_dispatch: unknown field '${key}'`);
+    }
+    for (const field of dispatchRequiredFields) {
+      if (!hasOwn(contract.strict_dispatch, field)) {
+        errors.push(`strict_dispatch: missing required field '${field}'`);
+      }
+    }
+  }
   const dispatch = contract.strict_dispatch;
   if (dispatch.schema_version !== 1) errors.push('strict_dispatch.schema_version: must be 1');
 
@@ -441,6 +457,44 @@ function validateMissionProjection(contract, required = false) {
     if (new Set(normalized).size !== normalized.length) {
       errors.push(`strict_dispatch.${field}: duplicate normalized path`);
     }
+  }
+  for (const field of ['required_change_paths', 'authorized_creates', 'version_mirror_paths']) {
+    if (!hasOwn(dispatch, field)) continue;
+    const values = dispatch[field];
+    // required_change_paths when present must be non-empty; other optional arrays may be empty.
+    if (field === 'required_change_paths') {
+      if (!Array.isArray(values) || values.length === 0 || values.length > 128) {
+        errors.push('strict_dispatch.required_change_paths: when present must be non-empty array length 1..128');
+        continue;
+      }
+    } else if (!Array.isArray(values) || values.length > 128) {
+      errors.push(`strict_dispatch.${field}: expected array length 0..128`);
+      continue;
+    }
+    const normalized = values.map((entry, index) => validateStrictPath(
+      entry,
+      `strict_dispatch.${field}[${index}]`,
+      prefixes,
+      errors,
+    )).filter((entry) => entry !== null);
+    if (new Set(normalized).size !== normalized.length) {
+      errors.push(`strict_dispatch.${field}: duplicate normalized path`);
+    }
+    if (field === 'required_change_paths' && Array.isArray(dispatch.output_paths)) {
+      for (const change of normalized) {
+        if (!dispatch.output_paths.includes(change)) {
+          errors.push(
+            `strict_dispatch.required_change_paths must be an exact subset of output_paths (${change})`,
+          );
+        }
+      }
+    }
+  }
+  if (Array.isArray(dispatch.version_mirror_paths)
+      && dispatch.version_mirror_paths.length > 0
+      && (typeof dispatch.version_mirror_generator !== 'string'
+        || dispatch.version_mirror_generator.trim() === '')) {
+    errors.push('strict_dispatch.version_mirror_paths require version_mirror_generator');
   }
 
   const budgetFields = [
@@ -814,6 +868,19 @@ function mintMissionGrantBindingFromStateFile({
       },
       verification_commands: node.verification_commands,
     };
+    if (Array.isArray(node.campaign.required_change_paths)
+        && node.campaign.required_change_paths.length > 0) {
+      expectedDispatch.required_change_paths = node.campaign.required_change_paths;
+    }
+    if (Array.isArray(node.campaign.authorized_creates)
+        && node.campaign.authorized_creates.length > 0) {
+      expectedDispatch.authorized_creates = node.campaign.authorized_creates;
+    }
+    if (Array.isArray(node.campaign.version_mirror_paths)
+        && node.campaign.version_mirror_paths.length > 0) {
+      expectedDispatch.version_mirror_paths = node.campaign.version_mirror_paths;
+      expectedDispatch.version_mirror_generator = node.campaign.version_mirror_generator;
+    }
     if (mission.canonicalJson(contract.mission_runtime)
         !== mission.canonicalJson(expectedRuntime)) {
       throw new CliError(

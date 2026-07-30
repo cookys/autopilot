@@ -7,12 +7,7 @@ const { admitContinuation, buildCheckpoint, loadMatchingRunsFromManifestDir, res
 const {
   runPostCompactAdapter,
   admitHighWater,
-  buildResourceDebtState,
   adoptOrphanLeaf,
-  buildProgressReceipt,
-  attachControllerState,
-  emptyControllerState,
-  buildFrozenDenominator,
 } = require('../src/engine/controller-execution');
 function usage(message) { if (message) process.stderr.write(`compaction-rehydrate: ${message}\n`);
   process.stderr.write( 'usage: compaction-rehydrate.js write|rehydrate|work-order|heartbeat|reconcile|admit|postcompact-adapter|high-water|adopt-orphan [options]\n',);
@@ -26,6 +21,8 @@ function parseArgs(argv) { const command = argv[0];
     'bind-artifacts', 'mission-active', 'require-bound', 'transfer-owner',
     'probe-evidence-accepted', 'unresolved-debt', 'controller-dead',
     'already-adopted', 'leaf-committed',
+    // Orphan adoption proofs: presence means explicit true; absence fails closed.
+    'base-ancestry-ok', 'scope-ok', 'churn-ok',
   ]);
   for (let i = 1; i < argv.length; i += 1) { const arg = argv[i];
     if (!arg.startsWith('--')) usage(`unknown argument: ${arg}`);
@@ -39,6 +36,8 @@ function parseArgs(argv) { const command = argv[0];
   return out;}
 function emit(obj, code) { process.stdout.write(`${JSON.stringify(obj)}\n`);
   process.exit(code);}
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isStr = (v) => typeof v === 'string' && v.length > 0;
 function writeAtomic(outPath, value) { const resolved = path.resolve(outPath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   const tmp = `${resolved}.tmp.${process.pid}`;
@@ -159,7 +158,6 @@ function readInventory(flags) {
       duplicate_dispatch: 0,
     }, 1);
   }
-  return [];
 }
 
 // Host-neutral PostCompact adapter — same recovery gate as reconcile, plus
@@ -176,16 +174,155 @@ function cmdPostcompactAdapter(flags) {
       duplicate_dispatch: 0,
     }, 1);
   }
+  const requestedGraphNode = flags['graph-node'] || null;
+  const requestedAttempt = Number(flags.attempt);
+  if (!isStr(requestedGraphNode)
+      || !Number.isSafeInteger(requestedAttempt)
+      || requestedAttempt < 1) {
+    emit({
+      status: 'reject',
+      reason_code: 'controller_recovery_tuple_required',
+      reason: 'PostCompact adapter requires --graph-node and positive --attempt',
+      production_hook_wired: false,
+      duplicate_dispatch: 0,
+    }, 1);
+  }
   const durable = flags.durable ? readJsonFlag(flags, 'durable', 'incomplete_checkpoint') : null;
-  const inventory = readInventory(flags);
-  const result = runPostCompactAdapter({
+  // Always locate the exact controller Work Order under root and reconstruct
+  // owned inventory mechanically. Caller --inventory is only a digest cross-check.
+  const {
+    resolveGitCommonDir,
+    listWorkOrders,
+  } = require('../src/engine/work-order');
+  const {
+    reconstructOwnedInventory,
+    sha256Json,
+  } = require('../src/engine/controller-execution');
+  const commonDir = resolveGitCommonDir(gitCwd);
+  if (!commonDir) {
+    emit({
+      status: 'reject',
+      reason_code: 'git_common_dir_missing',
+      reason: 'PostCompact requires resolvable git-common-dir',
+      production_hook_wired: false,
+      duplicate_dispatch: 0,
+    }, 1);
+  }
+  let controllerWo = null;
+  try {
+    const listed = listWorkOrders(commonDir, flags['root-run-id']);
+    const integrity = listed.filter((e) => e.error);
+    if (integrity.length > 0) {
+      emit({
+        status: 'reject',
+        reason_code: integrity[0].error.reason_code || 'work_order_integrity',
+        reason: integrity[0].error.reason || 'controller Work Order integrity failure',
+        production_hook_wired: false,
+        duplicate_dispatch: 0,
+      }, 1);
+    }
+    const controllers = listed.filter((e) => e.work_order
+      && e.work_order.role === 'controller'
+      && isObj(e.work_order.controller)
+      && e.work_order.graph_node === requestedGraphNode
+      && e.work_order.attempt === requestedAttempt);
+    // Controller recovery requires exactly one integrity-valid Work Order for
+    // the requested root. Zero, multiple, malformed, or foreign records reject
+    // before effects — empty classification must never fold to ready.
+    if (controllers.length === 0) {
+      emit({
+        status: 'reject',
+        reason_code: 'controller_work_order_missing',
+        reason: 'PostCompact requires exactly one controller Work Order for root',
+        production_hook_wired: false,
+        duplicate_dispatch: 0,
+      }, 1);
+    }
+    if (controllers.length > 1) {
+      emit({
+        status: 'reject',
+        reason_code: 'controller_work_order_ambiguous',
+        reason: 'ambiguous controller Work Orders under root',
+        production_hook_wired: false,
+        duplicate_dispatch: 0,
+      }, 1);
+    }
+    controllerWo = controllers[0].work_order;
+  } catch (error) {
+    emit({
+      status: 'reject',
+      reason_code: 'controller_work_order_list_failed',
+      reason: error.message || String(error),
+      production_hook_wired: false,
+      duplicate_dispatch: 0,
+    }, 1);
+  }
+  const reconstructed = reconstructOwnedInventory({
+    gitCwd,
+    controller: controllerWo && controllerWo.controller,
+    rootRunId: flags['root-run-id'],
+    failClosedOnGitError: true,
+  });
+  if (reconstructed.ok === false) {
+    emit({
+      status: 'reject',
+      reason_code: 'inventory_observation_failed',
+      reason: reconstructed.reason || 'owned inventory reconstruction failed',
+      production_hook_wired: false,
+      duplicate_dispatch: 0,
+      authority_sources: [
+        'controller_work_order',
+        'git_worktree_list',
+        'git_status',
+      ],
+    }, 1);
+  }
+  if (flags.inventory) {
+    const supplied = readInventory(flags);
+    const suppliedDigest = sha256Json(supplied);
+    const liveDigest = reconstructed.digest || sha256Json(reconstructed.inventory || []);
+    if (suppliedDigest !== liveDigest) {
+      emit({
+        status: 'reject',
+        reason_code: 'inventory_crosscheck_mismatch',
+        reason: 'supplied --inventory digest does not match mechanical reconstruction',
+        production_hook_wired: false,
+        duplicate_dispatch: 0,
+      }, 1);
+    }
+  }
+  const adapterInput = {
     reconcileFn: (input) => workOrder.reconcilePostCompact(input),
     rootRunId: flags['root-run-id'],
+    graphNode: requestedGraphNode,
+    attempt: requestedAttempt,
+    workOrderId: controllerWo.work_order_id,
     gitCwd,
     durable,
-    resourceInventory: inventory,
+    workOrder: controllerWo,
+    controller: controllerWo && controllerWo.controller,
     probeEvidenceAccepted: flags['probe-evidence-accepted'] === true,
-  });
+    resourceInventory: reconstructed.inventory || [],
+    inventoryDigest: reconstructed.digest || sha256Json(reconstructed.inventory || []),
+  };
+  const result = runPostCompactAdapter(adapterInput);
+  // Receipt digest is sealed inside the adapter over the complete final body.
+  // Never mutate authority_sources_checked (or any field) after sealing.
+  if (isObj(result.receipt) && isStr(result.receipt.digest)) {
+    const recomputed = sha256Json({
+      ...result.receipt,
+      digest: undefined,
+    });
+    if (recomputed !== result.receipt.digest) {
+      emit({
+        status: 'reject',
+        reason_code: 'postcompact_receipt_digest_mismatch',
+        reason: 'PostCompact receipt digest does not recompute after final body seal',
+        production_hook_wired: false,
+        duplicate_dispatch: 0,
+      }, 1);
+    }
+  }
   if (flags['receipt-out'] && result.receipt) {
     writeAtomic(flags['receipt-out'], result.receipt);
   }
@@ -217,7 +354,81 @@ function cmdHighWater(flags) {
   }, result.ok ? 0 : 1);
 }
 
+function parseExplicitBool(flags, key) {
+  // Missing proof is never true. Require an explicit true/1/yes value.
+  if (!Object.prototype.hasOwnProperty.call(flags, key)) return false;
+  const raw = flags[key];
+  if (raw === true || raw === 'true' || raw === '1' || raw === 'yes') return true;
+  if (raw === false || raw === 'false' || raw === '0' || raw === 'no') return false;
+  return false;
+}
+
 function cmdAdoptOrphan(flags) {
+  // Mechanical adoption: exact repo + Work Order + leaf result references.
+  // Boolean proof flags alone never authorize.
+  if (parseExplicitBool(flags, 'controller-dead')
+      || parseExplicitBool(flags, 'base-ancestry-ok')
+      || parseExplicitBool(flags, 'scope-ok')
+      || parseExplicitBool(flags, 'churn-ok')
+      || parseExplicitBool(flags, 'already-adopted')) {
+    // If ONLY booleans are provided without mechanical authorities, reject.
+    if (!flags['git-cwd'] || !flags['work-order'] && !flags['work-order-path']) {
+      emit({
+        ok: false,
+        status: 'stopped',
+        reason_code: 'ADOPTION_BOOLEAN_FLAGS_NOT_AUTHORITY',
+        reason: 'boolean proof flags alone never authorize orphan adoption',
+        preserve_evidence: true,
+        duplicate_mutation: 0,
+      }, 1);
+    }
+  }
+  const gitCwd = flags['git-cwd'] || flags.repo || null;
+  if (!gitCwd) {
+    emit({
+      ok: false,
+      status: 'stopped',
+      reason_code: 'ADOPTION_AUTHORITY_MISSING',
+      reason: 'adopt-orphan requires --git-cwd and Work Order + leaf authorities',
+      preserve_evidence: true,
+      duplicate_mutation: 0,
+    }, 1);
+  }
+  let workOrder = null;
+  const woPath = flags['work-order-path'] || flags['work-order'] || null;
+  if (woPath) {
+    try {
+      workOrder = JSON.parse(fs.readFileSync(path.resolve(String(woPath)), 'utf8'));
+    } catch (error) {
+      emit({
+        ok: false, status: 'stopped', reason_code: 'work_order_unreadable',
+        reason: error.message || String(error), preserve_evidence: true, duplicate_mutation: 0,
+      }, 1);
+    }
+  }
+  if (!workOrder && flags['root-run-id'] && flags['graph-node']) {
+    try {
+      const { resolveGitCommonDir, listWorkOrders } = require('../src/engine/work-order');
+      const common = resolveGitCommonDir(gitCwd);
+      const entries = listWorkOrders(common, flags['root-run-id']);
+      const hit = entries.find((e) => e.work_order
+        && e.work_order.graph_node === flags['graph-node']
+        && !e.error);
+      if (hit) workOrder = hit.work_order;
+    } catch (error) {
+      emit({
+        ok: false, status: 'stopped', reason_code: 'work_order_lookup_failed',
+        reason: error.message || String(error), preserve_evidence: true, duplicate_mutation: 0,
+      }, 1);
+    }
+  }
+  if (!workOrder) {
+    emit({
+      ok: false, status: 'stopped', reason_code: 'ADOPTION_WO_MISSING',
+      reason: 'exact Work Order required (--work-order-path or --root-run-id + --graph-node)',
+      preserve_evidence: true, duplicate_mutation: 0,
+    }, 1);
+  }
   let leaf = null;
   if (flags['leaf-result']) {
     try {
@@ -230,23 +441,76 @@ function cmdAdoptOrphan(flags) {
         duplicate_dispatch: 0,
       }, 1);
     }
+  } else if (flags['leaf-commit']) {
+    leaf = {
+      committed: true,
+      commit: flags['leaf-commit'],
+    };
+  }
+  if (!leaf) {
+    emit({
+      ok: false, status: 'stopped', reason_code: 'LEAF_RESULT_AMBIGUOUS',
+      reason: 'leaf result required (--leaf-result or --leaf-commit)',
+      preserve_evidence: true, duplicate_mutation: 0,
+    }, 1);
+  }
+  // Sealed scope/churn from Work Order / campaign contract only — CLI path/churn
+  // overrides are not authority (must match sealed values if supplied for equality).
+  const sealedScope = isObj(workOrder.sealed_scope) ? workOrder.sealed_scope : null;
+  if (flags['allow-paths'] || flags['max-changed-files'] != null || flags['max-diff-lines'] != null) {
+    let allowPaths = null;
+    if (flags['allow-paths']) {
+      try {
+        allowPaths = JSON.parse(flags['allow-paths']);
+      } catch (_e) {
+        allowPaths = String(flags['allow-paths']).split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    }
+    const cliScope = {
+      allow_paths: allowPaths,
+      max_files: flags['max-changed-files'] != null ? Number(flags['max-changed-files']) : null,
+      max_diff_lines: flags['max-diff-lines'] != null ? Number(flags['max-diff-lines']) : null,
+    };
+    if (sealedScope) {
+      // Require byte-for-byte equality with sealed scope when CLI restates it.
+      const sealedPaths = Array.isArray(sealedScope.allow_paths)
+        ? [...sealedScope.allow_paths].sort().join('\0') : '';
+      const cliPaths = Array.isArray(cliScope.allow_paths)
+        ? [...cliScope.allow_paths].sort().join('\0') : '';
+      if ((cliPaths && cliPaths !== sealedPaths)
+          || (cliScope.max_files != null
+            && cliScope.max_files !== sealedScope.max_files)
+          || (cliScope.max_diff_lines != null
+            && cliScope.max_diff_lines !== sealedScope.max_diff_lines)) {
+        emit({
+          ok: false,
+          status: 'stopped',
+          reason_code: 'ADOPTION_SCOPE_OVERRIDE_REJECTED',
+          reason: 'CLI scope/churn must match sealed Work Order authority exactly',
+          preserve_evidence: true,
+          duplicate_mutation: 0,
+        }, 1);
+      }
+    } else {
+      // No sealed scope on WO: CLI cannot invent authority.
+      emit({
+        ok: false,
+        status: 'stopped',
+        reason_code: 'ADOPTION_SCOPE_NOT_SEALED',
+        reason: 'orphan adoption requires sealed_scope on the Work Order; CLI cannot supply it',
+        preserve_evidence: true,
+        duplicate_mutation: 0,
+      }, 1);
+    }
   }
   const result = adoptOrphanLeaf({
-    controllerDead: flags['controller-dead'] === true
-      || flags['controller-dead'] === 'true'
-      || flags['controller-dead'] === '1',
-    leafResult: leaf || {
-      committed: flags['leaf-committed'] === 'true' || flags['leaf-committed'] === true,
-      commit: flags['leaf-commit'] || null,
-    },
-    branchTip: flags['branch-tip'] || null,
-    branchTree: flags['branch-tree'] || null,
-    baseAncestryOk: flags['base-ancestry-ok'] !== 'false',
-    scopeOk: flags['scope-ok'] !== 'false',
-    churnOk: flags['churn-ok'] !== 'false',
-    worktreeDigest: flags['worktree-digest'] || null,
-    generation: flags.generation != null ? Number(flags.generation) : null,
-    alreadyAdopted: flags['already-adopted'] === true || flags['already-adopted'] === 'true',
+    gitCwd: path.resolve(String(gitCwd)),
+    workOrder,
+    leafResult: leaf,
+    branch: flags.branch || workOrder.branch || null,
+    baseSha: flags['base-sha'] || workOrder.base_sha || null,
+    sealedScope,
+    leafWorktree: flags['leaf-worktree'] || leaf.worktree || workOrder.worktree || null,
   });
   emit({
     ...result,

@@ -327,20 +327,215 @@ console.log("Starting independent verification tests for Controller Execution...
 {
   console.log("Testing Group 5: Debt/high-water blocking with zero effects");
 
-  // Positive: clean/terminal resource is released with non-empty recovery_bundle_digest
-  const inventory1 = [
-    {
-      resource_id: 'w1',
-      kind: 'worktree',
-      clean: true,
-      identity_known: true,
-      recovery_bundle_digest: 'd123',
-    }
-  ];
-  const debtState1 = ctrl.buildResourceDebtState(inventory1);
+  const { execFileSync } = require('child_process');
+  const os = require('os');
+  const recDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrl-rec-'));
+  execFileSync('git', ['init', '-q', recDir]);
+  execFileSync('git', ['-C', recDir, 'config', 'user.email', 'rec@example.invalid']);
+  execFileSync('git', ['-C', recDir, 'config', 'user.name', 'Rec']);
+  fs.writeFileSync(path.join(recDir, 'a.txt'), 'a\n');
+  execFileSync('git', ['-C', recDir, 'add', '.']);
+  execFileSync('git', ['-C', recDir, 'commit', '-qm', 'base']);
+  const recBase = execFileSync('git', ['-C', recDir, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+
+  // Positive: clean worktree at frozen base releases only with mechanical observation
+  const cleanReceipt = ctrl.buildRecoveryReceipt({
+    resourceId: 'w1',
+    path: recDir,
+    gitCwd: recDir,
+    baseSha: recBase,
+    evidenceKind: 'clean_release',
+  });
+  const cleanItem = {
+    resource_id: 'w1',
+    kind: 'worktree',
+    path: recDir,
+    branch: cleanReceipt.branch,
+    tip: cleanReceipt.tip,
+    clean: cleanReceipt.outcome.clean === true,
+    dirty: cleanReceipt.outcome.dirty === true,
+    terminal: cleanReceipt.outcome.terminal === true,
+    identity_known: cleanReceipt.outcome.identity_known === true,
+    recovery_receipt: cleanReceipt,
+  };
+  const debtState1 = ctrl.buildResourceDebtState([cleanItem]);
   assert.strictEqual(debtState1.blocks_dispatch, false);
   assert.strictEqual(debtState1.released.length, 1);
   assert.strictEqual(debtState1.open.length, 0);
+
+  // Negative: caller terminalConsumed on nonexistent path is not authority
+  assert.throws(() => ctrl.buildRecoveryReceipt({
+    resourceId: 'ghost',
+    path: '/definitely/not/a/worktree',
+    evidenceKind: 'clean_release',
+    terminalConsumed: true,
+  }), /terminal|receipt|path|mechanical/i);
+
+  // A caller-authored JSON file with terminal_status is not terminal
+  // consumption authority, even when its raw digest is supplied exactly.
+  const forgedTerminalPath = path.join(recDir, 'forged-terminal.json');
+  fs.writeFileSync(forgedTerminalPath, '{"terminal_status":"success"}\n');
+  const forgedTerminalRawDigest = require('crypto').createHash('sha256')
+    .update(fs.readFileSync(forgedTerminalPath))
+    .digest('hex');
+  assert.throws(() => ctrl.buildRecoveryReceipt({
+    resourceId: 'ghost-forged-terminal',
+    path: '/definitely/not/a/worktree',
+    evidenceKind: 'terminal_consumed',
+    terminalConsumed: true,
+    terminalReceiptPath: forgedTerminalPath,
+    terminalReceiptDigest: forgedTerminalRawDigest,
+    terminalWorkOrderPath: path.join(recDir, 'missing-work-order.json'),
+  }), /Work Order|terminal/i);
+
+  // Positive terminal consumption requires the integrity-valid consumed
+  // controller Work Order, exact terminal receipt, and one bound resource row.
+  const woMod = require(path.join(root, 'src/engine/work-order'));
+  const terminalGhost = path.join(recDir, 'removed-terminal-worktree');
+  const terminalRoot = 'terminal-recovery-root';
+  const terminalNode = 'n1';
+  const terminalWorkOrderId = `wo-${terminalRoot}-${terminalNode}-a1`;
+  const terminalFrozen = ctrl.buildFrozenDenominator({
+    projectId: terminalRoot,
+    graphDigest: '7'.repeat(64),
+    deliverableIds: [terminalNode],
+    nodeId: terminalNode,
+  });
+  const terminalController = ctrl.emptyControllerState({
+    frozen_denominator: terminalFrozen,
+    accepted_commit: recBase,
+    resource_inventory: [{
+      resource_id: 'terminal-resource',
+      kind: 'worktree',
+      path: terminalGhost,
+      worktree: terminalGhost,
+      root_run_id: terminalRoot,
+      work_order_id: terminalWorkOrderId,
+      identity_known: true,
+      terminal: true,
+    }],
+  });
+  const exactTerminalPath = path.join(recDir, 'exact-terminal.json');
+  const exactTerminal = woMod.buildControllerTerminalReceipt({
+    terminalStatus: 'success',
+    rootRunId: terminalRoot,
+    workOrderId: terminalWorkOrderId,
+    graphNode: terminalNode,
+    campaignId: terminalRoot,
+    acceptedCommit: recBase,
+    controller: terminalController,
+  });
+  fs.writeFileSync(exactTerminalPath, `${JSON.stringify(exactTerminal, null, 2)}\n`);
+  const terminalWorkOrder = woMod.buildWorkOrder({
+    work_order_id: terminalWorkOrderId,
+    root_run_id: terminalRoot,
+    graph_node: terminalNode,
+    attempt: 1,
+    role: 'controller',
+    next_action: 'terminal',
+    branch: 'master',
+    base_sha: recBase,
+    worktree: recDir,
+    accepted_commit: recBase,
+    terminal_status: 'success',
+    disposition: 'consumed',
+    expected_receipt: {
+      path: exactTerminalPath,
+      digest: exactTerminal.digest,
+    },
+    controller: terminalController,
+  }, { bindArtifacts: false });
+  const terminalWorkOrderPath = path.join(recDir, 'terminal-work-order.json');
+  fs.writeFileSync(
+    terminalWorkOrderPath,
+    `${JSON.stringify(terminalWorkOrder, null, 2)}\n`,
+  );
+  const exactTerminalRawDigest = require('crypto').createHash('sha256')
+    .update(fs.readFileSync(exactTerminalPath))
+    .digest('hex');
+  const terminalRecovery = ctrl.buildRecoveryReceipt({
+    resourceId: 'terminal-resource',
+    path: terminalGhost,
+    evidenceKind: 'terminal_consumed',
+    terminalConsumed: true,
+    terminalReceiptPath: exactTerminalPath,
+    terminalReceiptDigest: exactTerminalRawDigest,
+    terminalWorkOrderPath,
+    gitCwd: recDir,
+  });
+  assert.strictEqual(terminalRecovery.terminal_consumed, true);
+  assert.strictEqual(terminalRecovery.outcome.terminal, true);
+  assert.strictEqual(
+    terminalRecovery.terminal_authority.work_order_digest,
+    terminalWorkOrder.digest,
+  );
+
+  // Negative: caller mechanicallyObserved on nonexistent path is not authority
+  assert.throws(() => ctrl.buildRecoveryReceipt({
+    resourceId: 'ghost2',
+    path: '/definitely/not/a/worktree',
+    evidenceKind: 'clean_release',
+    mechanicallyObserved: true,
+  }), /mechanical|path|gitCwd/i);
+
+  // Negative: unique commit ahead of base cannot be clean_release with unique:false
+  fs.writeFileSync(path.join(recDir, 'a.txt'), 'mutated\n');
+  execFileSync('git', ['-C', recDir, 'add', '.']);
+  execFileSync('git', ['-C', recDir, 'commit', '-qm', 'unique']);
+  assert.throws(() => ctrl.buildRecoveryReceipt({
+    resourceId: 'w-unique',
+    path: recDir,
+    gitCwd: recDir,
+    baseSha: recBase,
+    evidenceKind: 'clean_release',
+  }), /clean_release|unique|clean/i);
+  // Mechanical observation still surfaces unique:true when allowed via outcome fields
+  // after hard-reset for remaining suite paths.
+  execFileSync('git', ['-C', recDir, 'reset', '--hard', recBase]);
+  // Re-mint clean receipt after reset (prior unique tip must not linger).
+  {
+    const r = ctrl.buildRecoveryReceipt({
+      resourceId: cleanItem.resource_id,
+      path: cleanItem.path,
+      gitCwd: recDir,
+      baseSha: recBase,
+      evidenceKind: 'clean_release',
+    });
+    cleanItem.recovery_receipt = r;
+    cleanItem.branch = r.branch;
+    cleanItem.tip = r.tip;
+    cleanItem.clean = r.outcome.clean === true;
+    cleanItem.dirty = r.outcome.dirty === true;
+    cleanItem.terminal = r.outcome.terminal === true;
+    cleanItem.identity_known = r.outcome.identity_known === true;
+  }
+
+  // Negative: bare / non-canonical recovery digest string is not accepted
+  const badDigestItem = {
+    resource_id: 'w1',
+    kind: 'worktree',
+    path: recDir,
+    clean: true,
+    terminal: true,
+    identity_known: true,
+    recovery_bundle_digest: 'not-a-digest',
+  };
+  const debtBad = ctrl.buildResourceDebtState([badDigestItem]);
+  assert.strictEqual(debtBad.blocks_dispatch, true);
+  assert.strictEqual(debtBad.released.length, 0);
+
+  // Negative: forged recovery receipt (tampered digest) blocks
+  const forged = {
+    ...cleanItem,
+    recovery_receipt: {
+      ...cleanItem.recovery_receipt,
+      digest: 'f'.repeat(64),
+    },
+  };
+  const debtForged = ctrl.buildResourceDebtState([forged]);
+  assert.strictEqual(debtForged.blocks_dispatch, true);
 
   // Negative: buildResourceDebtState leaves clean-but-unbundled (missing recovery_bundle_digest) in open blocking debt
   const inventory2 = [
@@ -357,18 +552,64 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.strictEqual(debtState2.open.length, 1);
   assert.strictEqual(debtState2.open[0].disposition, 'disposition_blocked');
 
-  // Negative: dirty, unknown, or clean-but-unbundled residue in open blocking debt
+  // Negative: dirty residue in open blocking debt
   const inventory3 = [
     {
       resource_id: 'w2',
       kind: 'worktree',
       dirty: true,
+      identity_known: true,
     }
   ];
   const debtState3 = ctrl.buildResourceDebtState(inventory3);
   assert.strictEqual(debtState3.blocks_dispatch, true);
   assert.strictEqual(debtState3.open.length, 1);
   assert.strictEqual(debtState3.open[0].disposition, 'retained_dirty');
+
+  // A unique active resource cannot self-authorize with terminal:true. The
+  // exact persisted dispatch result receipt must bind the same resource.
+  const terminalReceiptDigest = 'a'.repeat(64);
+  const uniqueActive = {
+    resource_id: 'w-active-unique',
+    kind: 'worktree',
+    path: '/tmp/w-active-unique',
+    identity_known: true,
+    active: true,
+    unique: true,
+    terminal: true,
+    terminal_receipt_digest: terminalReceiptDigest,
+  };
+  const unboundUnique = ctrl.buildResourceDebtState([uniqueActive]);
+  assert.strictEqual(unboundUnique.blocks_dispatch, true);
+  assert.strictEqual(unboundUnique.open[0].disposition, 'retained_unique');
+  const boundUnique = ctrl.buildResourceDebtState([uniqueActive], {
+    dispatchRecords: [{
+      resource_id: uniqueActive.resource_id,
+      result_receipt_digest: terminalReceiptDigest,
+    }],
+  });
+  assert.strictEqual(boundUnique.blocks_dispatch, false);
+  assert.strictEqual(boundUnique.open[0].disposition, 'active');
+  assert.strictEqual(boundUnique.open[0].terminal_receipt_digest, terminalReceiptDigest);
+
+  // Durable-only inventory is explicitly not live-observed. This must remain
+  // canonical JSON for terminal Work Order / manifest / result-index binding.
+  const durableOnlyInventory = ctrl.reconstructOwnedInventory({
+    gitCwd: null,
+    rootRunId: 'root-resource-canonical',
+    controller: {
+      resource_inventory: [{
+        resource_id: '/tmp/not-live-observed',
+        kind: 'worktree',
+        path: '/tmp/not-live-observed',
+        identity_known: true,
+      }],
+    },
+  });
+  assert.strictEqual(durableOnlyInventory.ok, true);
+  assert.strictEqual(durableOnlyInventory.inventory.length, 1);
+  assert.strictEqual(durableOnlyInventory.inventory[0].live_observed, false);
+  assert.doesNotThrow(() => ctrl.sha256Json(durableOnlyInventory.inventory));
 
   // Positive: admitHighWater succeeds
   const highWaterRes1 = ctrl.admitHighWater({ currentOwned: 2, highWater: 4, unresolvedDebt: false, tempCapacityOk: true });
@@ -382,7 +623,10 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.strictEqual(highWaterRes2.effects, 0);
   assert.strictEqual(highWaterRes2.code, 'RESOURCE_DEBT_BLOCKS_DISPATCH');
 
-  const highWaterRes3 = ctrl.admitHighWater({ currentOwned: 4, highWater: 4 });
+  // Equality: projected == limit is admitted; only projected > limit blocks.
+  const highWaterRes3ok = ctrl.admitHighWater({ currentOwned: 4, highWater: 4 });
+  assert.strictEqual(highWaterRes3ok.ok, true);
+  const highWaterRes3 = ctrl.admitHighWater({ currentOwned: 5, highWater: 4 });
   assert.strictEqual(highWaterRes3.ok, false);
   assert.strictEqual(highWaterRes3.effects, 0);
   assert.strictEqual(highWaterRes3.code, 'HIGH_WATER_EXCEEDED');
@@ -393,75 +637,35 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.strictEqual(highWaterRes4.code, 'TEMP_CAPACITY_EXCEEDED');
 }
 
-// Group 6: Orphan proof completeness and single adoption
+// Group 6: Orphan adoption — boolean flags alone never authorize
 {
   console.log("Testing Group 6: Orphan proof completeness and single adoption");
 
   const tip = 'a'.repeat(40);
-  const tree = 'b'.repeat(40);
-  const wt = 'c'.repeat(64);
-  const baseAdoptArgs = {
+  // Boolean proof flags alone never authorize.
+  const boolOnly = ctrl.adoptOrphanLeaf({
     controllerDead: true,
     leafResult: { committed: true, commit: tip },
     branchTip: tip,
-    branchTree: tree,
+    branchTree: 'b'.repeat(40),
     baseAncestryOk: true,
     scopeOk: true,
     churnOk: true,
-    worktreeDigest: wt,
+    worktreeDigest: 'c'.repeat(64),
     generation: 0,
     alreadyAdopted: false,
-  };
-
-  // Positive: adoptOrphanLeaf succeeds with canonical bound tip/tree/digest
-  const adoptRes1 = ctrl.adoptOrphanLeaf(baseAdoptArgs);
-  assert.strictEqual(adoptRes1.ok, true);
-  assert.strictEqual(adoptRes1.status, 'adopted');
-  assert.strictEqual(adoptRes1.duplicate_mutation, 0);
-  assert.ok(adoptRes1.receipt);
-  assert.strictEqual(adoptRes1.receipt.branch_tip, tip);
-  assert.strictEqual(adoptRes1.receipt.leaf_commit, tip);
-
-  // Negative: placeholder/non-canonical evidence stops
-  const adoptPlaceholder = ctrl.adoptOrphanLeaf({
-    ...baseAdoptArgs,
-    leafResult: { committed: true, commit: 'c1' },
-    branchTip: 'b1',
-    branchTree: 't1',
-    worktreeDigest: 'd1',
   });
-  assert.strictEqual(adoptPlaceholder.ok, false);
-  assert.strictEqual(adoptPlaceholder.code, 'ADOPTION_BINDING_INCOMPLETE');
-  assert.strictEqual(adoptPlaceholder.preserve_evidence, true);
+  assert.strictEqual(boolOnly.ok, false);
+  assert.strictEqual(boolOnly.code, 'ADOPTION_BOOLEAN_FLAGS_NOT_AUTHORITY');
+  assert.strictEqual(boolOnly.preserve_evidence, true);
 
-  // Negative: leaf commit must equal branch tip
-  const adoptMismatch = ctrl.adoptOrphanLeaf({
-    ...baseAdoptArgs,
-    leafResult: { committed: true, commit: '1'.repeat(40) },
-    branchTip: '2'.repeat(40),
-  });
-  assert.strictEqual(adoptMismatch.ok, false);
-  assert.strictEqual(adoptMismatch.code, 'ADOPTION_LEAF_TIP_MISMATCH');
-  assert.strictEqual(adoptMismatch.preserve_evidence, true);
-
-  // Negative: adoptOrphanLeaf stops when controllerDeath is not proven
-  const adoptRes2 = ctrl.adoptOrphanLeaf({ ...baseAdoptArgs, controllerDead: false });
-  assert.strictEqual(adoptRes2.ok, false);
-  assert.strictEqual(adoptRes2.status, 'stopped');
-  assert.strictEqual(adoptRes2.code, 'CONTROLLER_NOT_PROVEN_DEAD');
-  assert.strictEqual(adoptRes2.preserve_evidence, true);
-
-  // Negative: adoptOrphanLeaf stops when already adopted once
-  const adoptRes3 = ctrl.adoptOrphanLeaf({ ...baseAdoptArgs, alreadyAdopted: true });
-  assert.strictEqual(adoptRes3.ok, false);
-  assert.strictEqual(adoptRes3.status, 'stopped');
-  assert.strictEqual(adoptRes3.code, 'ADOPTION_ALREADY_CONSUMED');
-
-  // Negative: adoptOrphanLeaf stops when generation is negative
-  const adoptRes4 = ctrl.adoptOrphanLeaf({ ...baseAdoptArgs, generation: -1 });
-  assert.strictEqual(adoptRes4.ok, false);
-  assert.strictEqual(adoptRes4.status, 'stopped');
-  assert.strictEqual(adoptRes4.code, 'ADOPTION_GENERATION_INVALID');
+  // Missing mechanical authorities fail closed.
+  const missing = ctrl.adoptOrphanLeaf({});
+  assert.strictEqual(missing.ok, false);
+  assert.ok(
+    missing.code === 'ADOPTION_AUTHORITY_MISSING'
+    || missing.code === 'ADOPTION_BOOLEAN_FLAGS_NOT_AUTHORITY',
+  );
 }
 
 // Group 7: Executable-delta no-op vs replay/create/mirror failures
@@ -593,26 +797,171 @@ console.log("Starting independent verification tests for Controller Execution...
 {
   console.log("Testing Group 8: PostCompact host neutrality");
 
-  const reconcileFn = ({ gitCwd, root_run_id, durable, requireBoundEvidence }) => {
-    assert.strictEqual(root_run_id, 'run123');
-    assert.strictEqual(requireBoundEvidence, true);
-    return { status: 'reconciled', reason_code: null };
+  const { execFileSync } = require('child_process');
+  const wo = require(path.join(root, 'src', 'engine', 'work-order'));
+
+  const createPostCompactFixture = ({ rootRunId, withResourceDebt = false }) => {
+    const repo = fs.mkdtempSync(path.join(tempRepo, 'pc-host-'));
+    execFileSync('git', ['-C', repo, 'init', '-q']);
+    execFileSync('git', ['-C', repo, 'config', 'user.email', 't@t']);
+    execFileSync('git', ['-C', repo, 'config', 'user.name', 't']);
+    fs.writeFileSync(path.join(repo, 'seed'), 'seed\n');
+    execFileSync('git', ['-C', repo, 'add', '.']);
+    execFileSync('git', ['-C', repo, 'commit', '-qm', 'seed']);
+
+    const graphNode = 'controller';
+    const attempt = 1;
+    const workOrderId = `wo-${rootRunId}-${graphNode}-a${attempt}`;
+    const baseSha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim();
+    const branch = execFileSync(
+      'git',
+      ['-C', repo, 'symbolic-ref', '--quiet', '--short', 'HEAD'],
+      { encoding: 'utf8' },
+    ).trim();
+    const resourceInventory = [];
+    if (withResourceDebt) {
+      const debtBranch = `${rootRunId}-owned`;
+      const debtWorktree = path.join(tempRepo, `${rootRunId}-owned-worktree`);
+      execFileSync(
+        'git',
+        ['-C', repo, 'worktree', 'add', '-q', '-b', debtBranch, debtWorktree, baseSha],
+      );
+      fs.writeFileSync(path.join(debtWorktree, 'dirty'), 'uncommitted\n');
+      resourceInventory.push({
+        resource_id: `${rootRunId}-owned-worktree`,
+        kind: 'worktree',
+        path: debtWorktree,
+        worktree: debtWorktree,
+        branch: debtBranch,
+        base_sha: baseSha,
+        identity_known: true,
+      });
+    }
+
+    const parentage = wo.captureProcessParentage(process.pid);
+    const controller = ctrl.emptyControllerState({
+      phase: 'CONTROLLER',
+      next_action: 'continue',
+      process_parentage: parentage,
+      resource_inventory: resourceInventory,
+      dispatch_records: [],
+      branch,
+      worktree: repo,
+    });
+    const commonDir = wo.resolveGitCommonDir(repo);
+    const authorityDir = path.join(commonDir, 'autopilot', 'postcompact-fixtures', rootRunId);
+    const paths = {
+      durable: path.join(authorityDir, 'durable.json'),
+      checkpoint: path.join(authorityDir, 'checkpoint.json'),
+      ledger: path.join(authorityDir, 'ledger.jsonl'),
+      manifest: path.join(authorityDir, 'manifest.json'),
+      receipt: path.join(authorityDir, 'result-index.json'),
+    };
+    const writtenAt = new Date().toISOString();
+    wo.writeAtomicJson(paths.durable, {
+      schema_version: 1,
+      artifact_type: 'controller_durable_state',
+      root_run_id: rootRunId,
+      graph_node: graphNode,
+      attempt,
+      work_order_id: workOrderId,
+      campaign_id: rootRunId,
+      icc_campaign_id: rootRunId,
+      controller_digest: controller.controller_digest,
+      written_at: writtenAt,
+    });
+    wo.writeAtomicJson(paths.checkpoint, {
+      schema_version: 1,
+      artifact_type: 'controller_checkpoint',
+      root_run_id: rootRunId,
+      graph_node: graphNode,
+      attempt,
+      work_order_id: workOrderId,
+      controller,
+      written_at: writtenAt,
+    });
+    wo.writeAtomicJson(paths.manifest, {
+      schema_version: 1,
+      artifact_type: 'controller_dispatch_manifest_index',
+      root_run_id: rootRunId,
+      graph_node: graphNode,
+      attempt,
+      work_order_id: workOrderId,
+      controller_digest: controller.controller_digest,
+      entries: controller.dispatch_records,
+      written_at: writtenAt,
+    });
+    wo.writeAtomicJson(paths.receipt, {
+      schema_version: 1,
+      artifact_type: 'controller_dispatch_result_index',
+      root_run_id: rootRunId,
+      graph_node: graphNode,
+      attempt,
+      work_order_id: workOrderId,
+      controller_digest: controller.controller_digest,
+      entries: controller.resource_inventory,
+      written_at: writtenAt,
+    });
+    fs.writeFileSync(paths.ledger, `${JSON.stringify({
+      schema_version: 1,
+      event: 'controller_heartbeat',
+      root_run_id: rootRunId,
+      work_order_id: workOrderId,
+      controller_digest: controller.controller_digest,
+      at: writtenAt,
+    })}\n`);
+
+    const written = wo.createOrUpdateWorkOrder(commonDir, {
+      root_run_id: rootRunId,
+      graph_node: graphNode,
+      attempt,
+      role: 'controller',
+      owner: parentage.owner,
+      branch,
+      base_sha: baseSha,
+      worktree: repo,
+      paths,
+      phase_cursor: 'CONTROLLER',
+      next_action: 'continue',
+      controller,
+    }, { bindArtifacts: true });
+    assert.strictEqual(written.status, 'written');
+    return {
+      reconcileFn: wo.reconcilePostCompact,
+      rootRunId,
+      gitCwd: repo,
+      workOrder: written.work_order,
+      probeEvidenceAccepted: true,
+    };
   };
 
-  const input = {
-    reconcileFn,
-    rootRunId: 'run123',
-    gitCwd: '/mock/cwd',
-    resourceInventory: [],
-    probeEvidenceAccepted: true,
-  };
+  const input = createPostCompactFixture({ rootRunId: 'run123' });
 
   // Positive: runPostCompactAdapter returns production_hook_wired: false
+  // with exactly one mechanically recovered, integrity-valid controller Work Order.
   const pcRes1 = ctrl.runPostCompactAdapter(input);
   assert.strictEqual(pcRes1.status, 'ready');
   assert.strictEqual(pcRes1.production_hook_wired, false);
   assert.strictEqual(pcRes1.receipt.production_hook_wired, false);
   assert.strictEqual(pcRes1.receipt.probe_evidence_accepted, true);
+
+  // Negative: empty classification / missing controller WO never ready
+  const pcZero = ctrl.runPostCompactAdapter({
+    ...input,
+    reconcileFn: () => ({ status: 'reconciled', classifications: [] }),
+  });
+  assert.strictEqual(pcZero.status, 'reject');
+  assert.strictEqual(pcZero.reason_code, 'controller_work_order_missing');
+
+  // Negative: caller inventory cannot replace mechanically reconstructed authority.
+  const pcNoDig = ctrl.runPostCompactAdapter({
+    ...input,
+    resourceInventory: [{ resource_id: 'x', dirty: true }],
+  });
+  assert.strictEqual(pcNoDig.status, 'reject');
+  assert.strictEqual(pcNoDig.reason_code, 'inventory_crosscheck_mismatch');
 
   // Negative: reconcile failure rejects
   const failingReconcileFn = () => ({ status: 'failed', reason_code: 'corrupt_pack' });
@@ -623,13 +972,1706 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.strictEqual(pcRes2.status, 'reject');
   assert.strictEqual(pcRes2.reason_code, 'corrupt_pack');
 
-  // Negative: resource debt rejects
-  const pcRes3 = ctrl.runPostCompactAdapter({
+  // Negative: undefined/null/malformed reconcile never becomes ready
+  const pcUndef = ctrl.runPostCompactAdapter({
     ...input,
-    resourceInventory: [{ resource_id: 'w1', dirty: true }],
+    reconcileFn: () => undefined,
   });
+  assert.strictEqual(pcUndef.status, 'reject');
+  assert.strictEqual(pcUndef.reason_code, 'reconcile_missing');
+  const pcNull = ctrl.runPostCompactAdapter({
+    ...input,
+    reconcileFn: () => null,
+  });
+  assert.strictEqual(pcNull.status, 'reject');
+  assert.strictEqual(pcNull.reason_code, 'reconcile_missing');
+  const pcThrow = ctrl.runPostCompactAdapter({
+    ...input,
+    reconcileFn: () => { throw new Error('boom'); },
+  });
+  assert.strictEqual(pcThrow.status, 'reject');
+  assert.strictEqual(pcThrow.reason_code, 'reconcile_threw');
+
+  // Negative: resource debt rejects
+  const debtInput = createPostCompactFixture({
+    rootRunId: 'run-debt',
+    withResourceDebt: true,
+  });
+  const pcRes3 = ctrl.runPostCompactAdapter(debtInput);
   assert.strictEqual(pcRes3.status, 'reject');
   assert.strictEqual(pcRes3.reason_code, 'resource_debt_open');
+}
+
+// Group 10: Production Work Order controller CAS + multi-node denominator + ticket stability
+{
+  console.log("Testing Group 10: Production WO CAS / multi-node / tickets");
+  const { execFileSync } = require('child_process');
+  const os = require('os');
+  const wo = require(path.join(root, 'src', 'engine', 'work-order'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrl-wo-ind-'));
+  execFileSync('git', ['-C', dir, 'init', '-q']);
+  execFileSync('git', ['-C', dir, 'config', 'user.email', 't@t']);
+  execFileSync('git', ['-C', dir, 'config', 'user.name', 't']);
+  fs.writeFileSync(path.join(dir, 'f'), 'x');
+  execFileSync('git', ['-C', dir, 'add', '.']);
+  execFileSync('git', ['-C', dir, 'commit', '-qm', 'i']);
+  const common = wo.resolveGitCommonDir(dir);
+  const multi = ctrl.buildFrozenDenominator({
+    projectId: 'camp-multi',
+    graphDigest: 'c'.repeat(64),
+    deliverableIds: ['node-a', 'node-b', 'node-c'],
+    nodeId: 'node-a',
+  });
+  assert.strictEqual(multi.deliverable_count, 3);
+  assert.deepStrictEqual(multi.deliverable_ids, ['node-a', 'node-b', 'node-c']);
+  let state = ctrl.emptyControllerState({
+    frozen_denominator: multi,
+    repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 4 }),
+  });
+  const written = wo.createOrUpdateWorkOrder(common, {
+    root_run_id: 'camp-multi',
+    graph_node: 'node-a',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'main',
+    base_sha: 'd'.repeat(40),
+    worktree: dir,
+    paths: { checkpoint: path.join(dir, 'cp.json') },
+    controller: state,
+  }, { bindArtifacts: false });
+  assert.strictEqual(written.status, 'written');
+  assert.strictEqual(written.work_order.generation, 1);
+  const woId = written.work_order.work_order_id;
+  // Append progress + repair ticket + budget, same WO identity, monotonic gen.
+  state = ctrl.appendRepairTicket(state, {
+    generation: 1,
+    finding_ids: ['F1'],
+    review_digest: 'e'.repeat(64),
+  });
+  const ticketAgain = ctrl.appendRepairTicket(state, {
+    generation: 1,
+    finding_ids: ['F1'],
+    review_digest: 'e'.repeat(64),
+  });
+  assert.strictEqual(ticketAgain.repair_tickets.length, 1, 'ticket idempotent');
+  const receipt = ctrl.buildProgressReceipt({
+    frozenDenominator: multi,
+    completedDeliverables: ['node-a'],
+    generation: 1,
+    phase: 'FINDINGS',
+  });
+  state = {
+    ...state,
+    progress_receipts: [receipt],
+    repair_budget_usage: ctrl.applyBudgetUsage(state.repair_budget_usage, { model_calls: 1 }),
+  };
+  state.controller_digest = ctrl.controllerStateDigest(state);
+  const updated = wo.createOrUpdateWorkOrder(common, {
+    ...written.work_order,
+    controller: state,
+    next_action: 'repair',
+  }, {
+    expectedGeneration: written.work_order.generation,
+    expectedCasToken: written.work_order.cas_token,
+    expectedControllerDigest: written.work_order.controller.controller_digest,
+    bindArtifacts: false,
+  });
+  assert.strictEqual(updated.status, 'written');
+  assert.strictEqual(updated.work_order.work_order_id, woId);
+  assert.strictEqual(updated.work_order.generation, 2);
+  assert.strictEqual(
+    updated.work_order.controller.frozen_denominator.digest,
+    multi.digest,
+    'resume retains denominator digest',
+  );
+  // Incomplete CAS (missing token/digest) rejects before generation compare.
+  const incomplete = wo.createOrUpdateWorkOrder(common, {
+    ...updated.work_order,
+    controller: state,
+  }, {
+    expectedGeneration: 1,
+    bindArtifacts: false,
+  });
+  assert.strictEqual(incomplete.status, 'reject');
+  assert.strictEqual(incomplete.reason_code, 'cas_incomplete');
+  // Full CAS with wrong generation is cas_conflict.
+  const conflict = wo.createOrUpdateWorkOrder(common, {
+    ...updated.work_order,
+    controller: state,
+  }, {
+    expectedGeneration: 1,
+    expectedCasToken: updated.work_order.cas_token,
+    expectedControllerDigest: updated.work_order.controller.controller_digest,
+    bindArtifacts: false,
+  });
+  assert.strictEqual(conflict.status, 'reject');
+  assert.strictEqual(conflict.reason_code, 'cas_conflict');
+  // Tamper refuse (digest CAS fails without omitting fields).
+  const live = JSON.parse(fs.readFileSync(updated.path, 'utf8'));
+  const priorDigest = live.controller.controller_digest;
+  live.controller.phase = 'TAMPERED';
+  fs.writeFileSync(updated.path, `${JSON.stringify(live, null, 2)}\n`);
+  const tampered = wo.createOrUpdateWorkOrder(common, {
+    ...live,
+    controller: state,
+  }, {
+    expectedGeneration: live.generation,
+    expectedCasToken: live.cas_token,
+    expectedControllerDigest: priorDigest,
+    bindArtifacts: false,
+  });
+  assert.strictEqual(tampered.status, 'reject');
+  // Projected budget equality blocks next spend.
+  const atLimit = ctrl.checkJointRepairBudget(
+    { ...ctrl.emptyBudgetUsage(), model_calls: 2 },
+    { model_calls: 2 },
+    { projectedDelta: { model_calls: 1 } },
+  );
+  assert.strictEqual(atLimit.ok, false);
+  assert.strictEqual(atLimit.allow_spend, false);
+  for (const axis of [
+    'model_calls',
+    'fresh_input_bytes',
+    'fresh_input_tokens',
+    'finding_recurrence',
+  ]) {
+    assert.throws(
+      () => ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { [axis]: -1 }),
+      (error) => error.code === 'INVALID_BUDGET_DELTA',
+      `${axis} negative delta rejects`,
+    );
+  }
+  assert.throws(
+    () => ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { elapsed_wall_ms: -1 }),
+    (error) => error.code === 'INVALID_BUDGET_OBSERVATION',
+  );
+  assert.throws(
+    () => ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), {
+      owned_worktrees_absolute: -1,
+    }),
+    (error) => error.code === 'INVALID_BUDGET_OBSERVATION',
+  );
+  const monotonicHighWater = ctrl.applyBudgetUsage({
+    ...ctrl.emptyBudgetUsage(),
+    elapsed_wall_ms: 9,
+    owned_worktrees: 4,
+  }, {
+    elapsed_wall_ms: 0,
+    owned_worktrees_absolute: 0,
+  });
+  assert.strictEqual(monotonicHighWater.elapsed_wall_ms, 9);
+  assert.strictEqual(monotonicHighWater.owned_worktrees, 4);
+
+  // Production stale disposition: the receipt is minted from the prior live
+  // Work Order, included in the new canonical body, and rejected if either its
+  // exact shape or prior-generation digest authority is altered.
+  const cleanBase = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+  const deadOwner = {
+    pid: 2147483646,
+    process_start_time: 1,
+    pgid: 2147483646,
+    sid: 2147483646,
+    kind: 'controller',
+  };
+  const stale = wo.createOrUpdateWorkOrder(common, {
+    root_run_id: 'stale-receipt-root',
+    graph_node: 'node-a',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'master',
+    base_sha: cleanBase,
+    worktree: dir,
+    owner: deadOwner,
+    paths: {},
+  }, {
+    bindArtifacts: false,
+    updateLifecycle: false,
+  });
+  assert.strictEqual(stale.status, 'written');
+  const reconciled = wo.reconcilePostCompact({
+    commonDir: common,
+    gitCwd: dir,
+    root_run_id: 'stale-receipt-root',
+    requireBoundEvidence: false,
+  });
+  assert.strictEqual(reconciled.status, 'reconciled');
+  assert.strictEqual(reconciled.classifications[0].classification, 'stale_dispositioned');
+  const sealedStale = wo.listWorkOrders(common, 'stale-receipt-root')[0].work_order;
+  assert.ok(sealedStale.disposition_receipt);
+  assert.strictEqual(
+    wo.classifyWorkOrder(sealedStale, {
+      gitCwd: dir,
+      workOrderPath: stale.path,
+      requireBoundEvidence: false,
+    }).classification,
+    'stale_dispositioned',
+  );
+  const forgedDisposition = JSON.parse(JSON.stringify(sealedStale));
+  forgedDisposition.disposition_receipt.work_order_digest = 'f'.repeat(64);
+  forgedDisposition.digest = wo.workOrderDigest(forgedDisposition);
+  fs.writeFileSync(stale.path, `${JSON.stringify(forgedDisposition, null, 2)}\n`);
+  const forgedListed = wo.listWorkOrders(common, 'stale-receipt-root')[0];
+  assert.strictEqual(forgedListed.error.reason_code, 'disposition_receipt_digest_mismatch');
+  const extraDisposition = JSON.parse(JSON.stringify(sealedStale));
+  extraDisposition.disposition_receipt.unsealed = true;
+  extraDisposition.digest = wo.workOrderDigest(extraDisposition);
+  fs.writeFileSync(stale.path, `${JSON.stringify(extraDisposition, null, 2)}\n`);
+  const extraListed = wo.listWorkOrders(common, 'stale-receipt-root')[0];
+  assert.strictEqual(extraListed.error.reason_code, 'disposition_receipt_invalid');
+
+  // C2: public lifecycle patches cannot mint stale/consumed tombstones.
+  const liveLifecycle = wo.createOrUpdateWorkOrder(common, {
+    root_run_id: 'live-lifecycle-root',
+    graph_node: 'node-live',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'master',
+    base_sha: cleanBase,
+    worktree: dir,
+    paths: {},
+  }, { bindArtifacts: false });
+  assert.strictEqual(liveLifecycle.status, 'written');
+  const bareStale = wo.updateWorkOrderLifecycle(common, {
+    path: liveLifecycle.path,
+  }, {
+    disposition: 'stale_dispositioned',
+    terminal_status: 'aborted',
+  }, {
+    expectedGeneration: liveLifecycle.work_order.generation,
+    expectedCasToken: liveLifecycle.work_order.cas_token,
+    bindArtifacts: false,
+    preserveOwner: true,
+    gitCwd: dir,
+  });
+  assert.strictEqual(bareStale.status, 'reject');
+  const bareConsumed = wo.updateWorkOrderLifecycle(common, {
+    path: liveLifecycle.path,
+  }, {
+    disposition: 'consumed',
+    terminal_status: 'success',
+  }, {
+    expectedGeneration: liveLifecycle.work_order.generation,
+    expectedCasToken: liveLifecycle.work_order.cas_token,
+    bindArtifacts: false,
+    preserveOwner: true,
+    gitCwd: dir,
+  });
+  assert.strictEqual(bareConsumed.status, 'reject');
+  const stillActive = wo.readJsonStrict(liveLifecycle.path).value;
+  assert.strictEqual(stillActive.disposition, null);
+  assert.strictEqual(stillActive.terminal_status, null);
+  const duplicateClaim = wo.claimDispatchCas(common, {
+    root_run_id: 'live-lifecycle-root',
+    graph_node: 'node-live',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'dispatch',
+  }, {
+    gitCwd: dir,
+    bindArtifacts: false,
+  });
+  assert.notStrictEqual(duplicateClaim.status, 'claimed');
+  assert.strictEqual(duplicateClaim.duplicate_dispatch, 0);
+
+  const makeDeadWorkOrder = (rootRunId, graphNode = 'node-dead') => (
+    wo.createOrUpdateWorkOrder(common, {
+      root_run_id: rootRunId,
+      graph_node: graphNode,
+      attempt: 1,
+      role: 'controller',
+      next_action: 'continue',
+      branch: 'master',
+      base_sha: cleanBase,
+      worktree: dir,
+      owner: deadOwner,
+      paths: {},
+    }, {
+      bindArtifacts: false,
+      updateLifecycle: false,
+    })
+  );
+  const staleA = makeDeadWorkOrder('closed-stale-a');
+  const staleB = makeDeadWorkOrder('closed-stale-b');
+  const staleAClass = wo.classifyWorkOrder(staleA.work_order, {
+    gitCwd: dir,
+    workOrderPath: staleA.path,
+    requireBoundEvidence: false,
+  });
+  assert.strictEqual(staleAClass.classification, 'stale_dispositioned');
+  const staleReceiptA = {
+    schema_version: 1,
+    artifact_type: 'work_order_disposition_receipt',
+    disposition: 'stale_dispositioned',
+    work_order_id: staleA.work_order.work_order_id,
+    root_run_id: staleA.work_order.root_run_id,
+    graph_node: staleA.work_order.graph_node,
+    attempt: staleA.work_order.attempt,
+    generation: staleA.work_order.generation,
+    work_order_digest: staleA.work_order.digest,
+    cas_token: staleA.work_order.cas_token,
+    observation_digest: staleAClass.stale_observation_digest,
+    issued_at: new Date().toISOString(),
+  };
+  staleReceiptA.digest = wo.sha256Json(staleReceiptA);
+  const missingReceipt = wo.updateWorkOrderLifecycle(common, {
+    path: staleA.path,
+  }, {
+    disposition: 'stale_dispositioned',
+    terminal_status: 'aborted',
+  }, {
+    expectedGeneration: staleA.work_order.generation,
+    expectedCasToken: staleA.work_order.cas_token,
+    bindArtifacts: false,
+    preserveOwner: true,
+    gitCwd: dir,
+  });
+  assert.strictEqual(missingReceipt.status, 'reject');
+  const replayedReceipt = wo.updateWorkOrderLifecycle(common, {
+    path: staleB.path,
+  }, {
+    disposition: 'stale_dispositioned',
+    terminal_status: 'aborted',
+    disposition_receipt: staleReceiptA,
+  }, {
+    expectedGeneration: staleB.work_order.generation,
+    expectedCasToken: staleB.work_order.cas_token,
+    bindArtifacts: false,
+    preserveOwner: true,
+    gitCwd: dir,
+  });
+  assert.strictEqual(replayedReceipt.status, 'reject');
+  const foreignReceipt = JSON.parse(JSON.stringify(staleReceiptA));
+  foreignReceipt.root_run_id = 'foreign-root';
+  delete foreignReceipt.digest;
+  foreignReceipt.digest = wo.sha256Json(foreignReceipt);
+  const foreignTransition = wo.updateWorkOrderLifecycle(common, {
+    path: staleA.path,
+  }, {
+    disposition: 'stale_dispositioned',
+    terminal_status: 'aborted',
+    disposition_receipt: foreignReceipt,
+  }, {
+    expectedGeneration: staleA.work_order.generation,
+    expectedCasToken: staleA.work_order.cas_token,
+    bindArtifacts: false,
+    preserveOwner: true,
+    gitCwd: dir,
+  });
+  assert.strictEqual(foreignTransition.status, 'reject');
+  const validStaleTransition = wo.updateWorkOrderLifecycle(common, {
+    path: staleA.path,
+  }, {
+    disposition: 'stale_dispositioned',
+    terminal_status: 'aborted',
+    disposition_receipt: staleReceiptA,
+  }, {
+    expectedGeneration: staleA.work_order.generation,
+    expectedCasToken: staleA.work_order.cas_token,
+    bindArtifacts: false,
+    preserveOwner: true,
+    gitCwd: dir,
+  });
+  assert.strictEqual(validStaleTransition.status, 'written', JSON.stringify(validStaleTransition));
+
+  const unknownIdentity = wo.createOrUpdateWorkOrder(common, {
+    root_run_id: 'unknown-liveness-root',
+    graph_node: 'node-unknown',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'master',
+    base_sha: cleanBase,
+    worktree: dir,
+    owner: {
+      pid: 2147483645,
+      process_start_time: null,
+      pgid: null,
+      sid: null,
+      kind: 'controller',
+    },
+    paths: {},
+  }, {
+    bindArtifacts: false,
+    updateLifecycle: false,
+  });
+  assert.strictEqual(unknownIdentity.status, 'written');
+  const unknownReconcile = wo.reconcilePostCompact({
+    commonDir: common,
+    gitCwd: dir,
+    root_run_id: 'unknown-liveness-root',
+    requireBoundEvidence: false,
+  });
+  assert.strictEqual(unknownReconcile.classifications[0].classification, 'orphan_blocked');
+  assert.strictEqual(
+    unknownReconcile.classifications[0].reason_code,
+    'owner_identity_incomplete',
+  );
+
+  const dirtyWork = makeDeadWorkOrder('dirty-stale-root', 'node-dirty');
+  fs.writeFileSync(path.join(dir, 'dirty-untracked'), 'dirty\n');
+  const dirtyReconcile = wo.reconcilePostCompact({
+    commonDir: common,
+    gitCwd: dir,
+    root_run_id: 'dirty-stale-root',
+    requireBoundEvidence: false,
+  });
+  assert.strictEqual(dirtyReconcile.classifications[0].classification, 'orphan_blocked');
+  assert.strictEqual(dirtyReconcile.classifications[0].reason_code, 'worktree_dirty');
+  fs.unlinkSync(path.join(dir, 'dirty-untracked'));
+
+  const uniqueDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrl-wo-unique-'));
+  execFileSync('git', ['-C', uniqueDir, 'init', '-q']);
+  execFileSync('git', ['-C', uniqueDir, 'config', 'user.email', 't@t']);
+  execFileSync('git', ['-C', uniqueDir, 'config', 'user.name', 't']);
+  fs.writeFileSync(path.join(uniqueDir, 'f'), 'base\n');
+  execFileSync('git', ['-C', uniqueDir, 'add', '.']);
+  execFileSync('git', ['-C', uniqueDir, 'commit', '-qm', 'base']);
+  const uniqueBase = execFileSync('git', ['-C', uniqueDir, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+  fs.writeFileSync(path.join(uniqueDir, 'f'), 'unique\n');
+  execFileSync('git', ['-C', uniqueDir, 'add', '.']);
+  execFileSync('git', ['-C', uniqueDir, 'commit', '-qm', 'unique']);
+  const uniqueCommon = wo.resolveGitCommonDir(uniqueDir);
+  const uniqueWork = wo.createOrUpdateWorkOrder(uniqueCommon, {
+    root_run_id: 'unique-stale-root',
+    graph_node: 'node-unique',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'master',
+    base_sha: uniqueBase,
+    worktree: uniqueDir,
+    owner: deadOwner,
+    paths: {},
+  }, {
+    bindArtifacts: false,
+    updateLifecycle: false,
+  });
+  assert.strictEqual(uniqueWork.status, 'written');
+  const uniqueReconcile = wo.reconcilePostCompact({
+    commonDir: uniqueCommon,
+    gitCwd: uniqueDir,
+    root_run_id: 'unique-stale-root',
+    requireBoundEvidence: false,
+  });
+  assert.strictEqual(uniqueReconcile.classifications[0].classification, 'orphan_blocked');
+  assert.strictEqual(uniqueReconcile.classifications[0].reason_code, 'head_ahead');
+
+  const liveLeaseWork = makeDeadWorkOrder('live-lease-root', 'node-lease');
+  const liveLeaseIdentity = wo.captureProcessIdentity(process.pid);
+  wo.writeAtomicJson(wo.leasePathFor(liveLeaseWork.path), {
+    schema_version: 1,
+    ...liveLeaseIdentity,
+    nonce: 'live-lease',
+    created_at: new Date().toISOString(),
+  });
+  const liveLeaseReconcile = wo.reconcilePostCompact({
+    commonDir: common,
+    gitCwd: dir,
+    root_run_id: 'live-lease-root',
+    requireBoundEvidence: false,
+  });
+  assert.strictEqual(liveLeaseReconcile.classifications[0].classification, 'orphan_blocked');
+  assert.strictEqual(liveLeaseReconcile.classifications[0].reason_code, 'lease_live');
+
+  // C4: admission compares the caller to the exact current persisted fence
+  // while holding that Work Order lock.
+  let hotController = ctrl.emptyControllerState({
+    frozen_denominator: multi,
+    repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 4 }),
+  });
+  const hotWork = wo.createOrUpdateWorkOrder(common, {
+    root_run_id: 'hot-admit-root',
+    graph_node: 'node-hot',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'master',
+    base_sha: cleanBase,
+    worktree: dir,
+    paths: {},
+    controller: hotController,
+  }, { bindArtifacts: false });
+  assert.strictEqual(hotWork.status, 'written');
+  const admitArgs = (record, controller = record.controller) => ({
+    gitCwd: dir,
+    controller,
+    rootRunId: record.root_run_id,
+    graphNode: record.graph_node,
+    attempt: record.attempt,
+    workOrderId: record.work_order_id,
+    workOrderGeneration: record.generation,
+    workOrderCasToken: record.cas_token,
+    expectedWorkOrderDigest: record.digest,
+    expectedControllerDigest: record.controller.controller_digest,
+    baseSha: cleanBase,
+  });
+  const currentAdmission = ctrl.admitControllerEffects(admitArgs(hotWork.work_order));
+  assert.strictEqual(currentAdmission.ok, true, JSON.stringify(currentAdmission));
+  const oldHotWork = JSON.parse(JSON.stringify(hotWork.work_order));
+  hotController = {
+    ...hotController,
+    phase: 'HOT_N_PLUS_ONE',
+  };
+  hotController.controller_digest = ctrl.controllerStateDigest(hotController);
+  const hotNext = wo.createOrUpdateWorkOrder(common, {
+    ...hotWork.work_order,
+    controller: hotController,
+    next_action: 'continue',
+  }, {
+    expectedGeneration: hotWork.work_order.generation,
+    expectedCasToken: hotWork.work_order.cas_token,
+    expectedControllerDigest: hotWork.work_order.controller.controller_digest,
+    bindArtifacts: false,
+  });
+  assert.strictEqual(hotNext.status, 'written');
+  const staleAdmission = ctrl.admitControllerEffects(admitArgs(
+    oldHotWork,
+    oldHotWork.controller,
+  ));
+  assert.strictEqual(staleAdmission.ok, false);
+  assert.strictEqual(staleAdmission.effects, 0);
+  assert.strictEqual(staleAdmission.code, 'CONTROLLER_WORK_ORDER_FENCE_STALE');
+  const nextAdmission = ctrl.admitControllerEffects(admitArgs(hotNext.work_order));
+  assert.strictEqual(nextAdmission.ok, true, JSON.stringify(nextAdmission));
+  const wrongCasAdmission = ctrl.admitControllerEffects({
+    ...admitArgs(hotNext.work_order),
+    workOrderCasToken: 'foreign-cas',
+  });
+  assert.strictEqual(wrongCasAdmission.ok, false);
+  assert.strictEqual(wrongCasAdmission.effects, 0);
+  const wrongIdAdmission = ctrl.admitControllerEffects({
+    ...admitArgs(hotNext.work_order),
+    workOrderId: 'foreign-work-order',
+  });
+  assert.strictEqual(wrongIdAdmission.ok, false);
+  assert.strictEqual(wrongIdAdmission.effects, 0);
+  const wrongRootAdmission = ctrl.admitControllerEffects({
+    ...admitArgs(hotNext.work_order),
+    rootRunId: 'foreign-root',
+  });
+  assert.strictEqual(wrongRootAdmission.ok, false);
+  assert.strictEqual(wrongRootAdmission.effects, 0);
+}
+
+// Group 11: Gate reuse counters + six-axis budget + transcript exact identity
+// + PostCompact mechanical inventory + orphan CAS adopt-once.
+{
+  console.log('Testing Group 11: production counters / budget / inventory / orphan');
+  const { execFileSync, spawn } = require('child_process');
+  const os = require('os');
+  const { runCampaignComposition } = require(path.join(root, 'src/engine/campaign-composition'));
+  const {
+    canonicalDigest,
+  } = require(path.join(root, 'src/engine/campaign-verification'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrl-g11-'));
+  execFileSync('git', ['-C', dir, 'init', '-q']);
+  execFileSync('git', ['-C', dir, 'config', 'user.email', 't@t']);
+  execFileSync('git', ['-C', dir, 'config', 'user.name', 't']);
+  fs.writeFileSync(path.join(dir, 'f.txt'), 'x\n');
+  execFileSync('git', ['-C', dir, 'add', '.']);
+  execFileSync('git', ['-C', dir, 'commit', '-qm', 'i']);
+  const base = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const tree = execFileSync('git', ['-C', dir, 'rev-parse', `${base}^{tree}`], { encoding: 'utf8' }).trim();
+  const frozen = ctrl.buildFrozenDenominator({
+    projectId: 'g11',
+    graphDigest: 'a'.repeat(64),
+    deliverableIds: ['n1', 'n2'],
+    nodeId: 'n1',
+  });
+  let verifyCalls = 0;
+  let reviewCalls = 0;
+  let panelCalls = 0;
+  let implementCalls = 0;
+  let focusedReviewCalls = 0;
+  let fullSuiteCalls = 0;
+  const fullSuiteCommandDigest = '7'.repeat(64);
+  let preEffectCalls = 0;
+  const preEffectWorktreeProjection = [];
+  const promptPath = path.join(dir, 'prompt.md');
+  fs.writeFileSync(promptPath, 'impl\n');
+  const seat = () => {
+    const s = {
+      schema_version: 1,
+      artifact_type: 'implementation_campaign_final_panel_seat',
+      seat_index: 1,
+      runner: 'f', model: 'm', effort: 'high', endpoint: null, family: 'f',
+      status: 'reviewed', verdict: 'SHIP-AS-IS', review_digest: 'f'.repeat(64), reason: null,
+    };
+    s.receipt_digest = canonicalDigest(s);
+    return s;
+  };
+  const adapters = {
+    preflight: () => ({ passed: true }),
+    preEffectAdmit: ({ wouldCreateWorktree }) => {
+      preEffectCalls += 1;
+      preEffectWorktreeProjection.push(wouldCreateWorktree === true);
+      return {
+        ok: true,
+        inventory: [],
+        inventory_digest: ctrl.sha256Json([]),
+        owned_worktrees: 0,
+        debt: { blocks_dispatch: false, open: [], released: [] },
+      };
+    },
+    implement: () => {
+      implementCalls += 1;
+      return {
+        committed: true, commit: base, tree_sha: tree, base_sha: base,
+        dispatcher_called: true, model_calls: 1, fresh_input_bytes: 5,
+      };
+    },
+    scopeCheck: () => ({ passed: true }),
+    verify: () => {
+      verifyCalls += 1;
+      return { passed: true, receipt_digest: 'c'.repeat(64) };
+    },
+    review: () => {
+      reviewCalls += 1;
+      return {
+        reviewed: true, success: true, review_input_mode: 'full_diff_generation',
+        review_digest: 'd'.repeat(64), findings: '[]', verdict: 'SHIP-AS-IS',
+      };
+    },
+    focusedReview: () => {
+      focusedReviewCalls += 1;
+      return {
+        reviewed: true,
+        success: true,
+        model_calls: 1,
+        fresh_input_bytes: 7,
+        review_digest: '9'.repeat(64),
+      };
+    },
+    fullSuite: () => {
+      fullSuiteCalls += 1;
+      return {
+        executed: true,
+        passed: true,
+        model_calls: 0,
+        fresh_input_bytes: 0,
+        command_digest: fullSuiteCommandDigest,
+        receipt_digest: '8'.repeat(64),
+      };
+    },
+    adjudicate: () => ({
+      registry_complete: true, repair_gate_passed: true, registry_digest: 'e'.repeat(64),
+      must_fix_now: [], follow_up: [], rejected: [],
+    }),
+    convergence: () => ({ passed: true }),
+    finalPanel: () => {
+      panelCalls += 1;
+      const s = seat();
+      return {
+        reviewed: true,
+        sealed_min_panel_size: 1,
+        final_panel_count: 1,
+        final_panel_seat_receipts: [s],
+      };
+    },
+  };
+  const ctrl0 = ctrl.emptyControllerState({
+    frozen_denominator: frozen,
+    started_at_ms: Date.now() - 1000,
+    repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 8 }),
+  });
+  const r1 = runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: ctrl0,
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+    fullSuiteCommandDigest,
+  }, adapters);
+  assert.strictEqual(r1.status, 'ready', JSON.stringify(r1));
+  const terminalBody = { ...r1 };
+  delete terminalBody.receipt_digest;
+  assert.strictEqual(
+    r1.receipt_digest,
+    canonicalDigest(terminalBody),
+    'terminal receipt digest covers its complete enumerable body exactly once',
+  );
+  assert.deepStrictEqual(Object.keys(r1).sort(), [
+    'artifact_type',
+    'candidate_tree_sha',
+    'final_panel_count',
+    'final_panel_seat_receipts',
+    'follow_up',
+    'lifecycle_receipt_ref',
+    'receipt_digest',
+    'rejected_findings',
+    'repair_generations',
+    'schema_version',
+    'sealed_min_panel_size',
+    'status',
+    'trace',
+    'unresolved_final_findings',
+    'verification_receipt_digest',
+  ]);
+  assert.ok(r1.controller, 'Engine-readable controller metadata remains available');
+  assert.strictEqual(
+    Object.prototype.propertyIsEnumerable.call(r1, 'controller'),
+    false,
+    'controller metadata cannot mutate the serialized terminal schema/digest',
+  );
+  assert.strictEqual(
+    r1.controller.dispatch_records.filter((record) => (
+      record.kind === 'implementation'
+    )).length,
+    1,
+    'ordinary effectful implementation is charged/recorded exactly once',
+  );
+  assert.strictEqual(
+    r1.controller.dispatch_records.find((record) => (
+      record.kind === 'implementation'
+    )).model_calls,
+    1,
+  );
+
+  const honestNoOp = runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: ctrl.emptyControllerState({
+      frozen_denominator: frozen,
+      started_at_ms: Date.now() - 1000,
+      repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 8 }),
+    }),
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+  }, {
+    ...adapters,
+    implement: () => ({
+      status: 'no_op',
+      no_op: true,
+      committed: false,
+      commit: null,
+      candidate_ref: null,
+      tree_sha: null,
+      worktree: null,
+      dispatcher_called: false,
+      model_calls: 0,
+      mutation_attempts: 0,
+      gate_attempts: 0,
+      resources_created: 0,
+      zero_diff_receipt_digest: '6'.repeat(64),
+    }),
+  });
+  assert.strictEqual(honestNoOp.status, 'no_op', JSON.stringify(honestNoOp));
+  assert.strictEqual(honestNoOp.dispatcher_called, false);
+  assert.strictEqual(honestNoOp.mutation_attempts, 0);
+  assert.strictEqual(honestNoOp.gate_attempts, 0);
+  assert.strictEqual(honestNoOp.resources_created, 0);
+  assert.strictEqual(honestNoOp.controller.repair_budget_usage.model_calls, 0);
+
+  const fakeNoOp = runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: ctrl.emptyControllerState({
+      frozen_denominator: frozen,
+      started_at_ms: Date.now() - 1000,
+      repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 8 }),
+    }),
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+  }, {
+    ...adapters,
+    implement: () => ({
+      status: 'no_op',
+      no_op: true,
+      committed: false,
+      commit: base,
+      candidate_ref: base,
+      tree_sha: tree,
+      worktree: dir,
+      dispatcher_called: false,
+      model_calls: 0,
+      mutation_attempts: 0,
+      gate_attempts: 0,
+      resources_created: 0,
+      zero_diff_receipt_digest: '6'.repeat(64),
+    }),
+  });
+  assert.strictEqual(fakeNoOp.status, 'blocked', JSON.stringify(fakeNoOp));
+  assert.strictEqual(fakeNoOp.code, 'DISPATCHER_NO_EFFECT_CONTRADICTION');
+  assert.strictEqual(fakeNoOp.charged, true);
+  assert.strictEqual(fakeNoOp.controller.repair_budget_usage.model_calls, 1);
+  assert.strictEqual(implementCalls, 1, 'initial implementation called exactly once');
+  assert.strictEqual(verifyCalls, 1, 'focused verification called exactly once');
+  assert.strictEqual(reviewCalls, 1, 'full-diff review called exactly once');
+  assert.strictEqual(focusedReviewCalls, 1, 'focused supplement called exactly once');
+  assert.strictEqual(fullSuiteCalls, 1, 'full suite called exactly once');
+  assert.strictEqual(panelCalls, 1, 'joint panel called exactly once');
+  assert.strictEqual(preEffectCalls, 6, 'every real first-pass effect has one pre-effect gate');
+  assert.deepStrictEqual(
+    preEffectWorktreeProjection,
+    [true, true, false, false, true, false],
+    'implementation, verification, full-diff, focused, suite, joint projections are exact',
+  );
+  const firstEffectStages = (r1.controller.audit_events || [])
+    .filter((event) => event.event === 'controller_effect_invoked')
+    .map((event) => event.stage);
+  assert.deepStrictEqual(firstEffectStages, [
+    'implementation',
+    'focused_verification',
+    'full_diff_review',
+    'focused_review_supplement',
+    'full_suite',
+    'joint_review',
+  ]);
+  const fullDiffReservedIndex = (r1.controller.audit_events || [])
+    .findIndex((event) => (
+      event.event === 'controller_effect_reserved'
+      && event.stage === 'full_diff_review'
+    ));
+  const fullDiffInvokedIndex = (r1.controller.audit_events || [])
+    .findIndex((event) => (
+      event.event === 'controller_effect_invoked'
+      && event.stage === 'full_diff_review'
+    ));
+  const fullDiffResultIndex = (r1.controller.audit_events || [])
+    .findIndex((event) => (
+      event.event === 'controller_effect_result'
+      && event.stage === 'full_diff_review'
+    ));
+  assert.ok(
+    fullDiffReservedIndex >= 0
+      && fullDiffReservedIndex < fullDiffInvokedIndex
+      && fullDiffInvokedIndex < fullDiffResultIndex,
+    'full-diff reservation is durable before invocation and result persistence',
+  );
+  const firstLiveGateKinds = (r1.controller.gate_journal.entries || [])
+    .filter((entry) => entry.result && entry.result.success === true && !entry.invalidated)
+    .map((entry) => entry.kind)
+    .sort();
+  assert.deepStrictEqual(firstLiveGateKinds, [
+    'focused_verification',
+    'full_diff_review',
+    'full_suite',
+    'joint_review',
+  ]);
+  const v1 = verifyCalls;
+  const rev1 = reviewCalls;
+  const p1 = panelCalls;
+  const focused1 = focusedReviewCalls;
+  const suite1 = fullSuiteCalls;
+  const preEffect1 = preEffectCalls;
+  // Second identical composition with same controller gate journal must reuse gates.
+  const r2 = runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: r1.controller || ctrl0,
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+    fullSuiteCommandDigest,
+    resume: {
+      phase: 'ADJUDICATING',
+      repair_generation: 0,
+      candidate: {
+        committed: true, commit: base, tree_sha: tree, base_sha: base,
+      },
+      verification: { passed: true, receipt_digest: 'c'.repeat(64) },
+      review: {
+        reviewed: true, success: true, review_input_mode: 'full_diff_generation',
+        review_digest: 'd'.repeat(64), findings: '[]',
+      },
+      full_diff_barriers: r1.full_diff_barriers || {
+        0: { success: true, review_digest: 'd'.repeat(64), candidate_ref: base, base_sha: base },
+      },
+    },
+  }, adapters);
+  // Exact gate reuse: all four frozen gates produce zero new effects. The
+  // deliberately non-authoritative focused supplement executes once more.
+  assert.strictEqual(implementCalls, 1, 'resume never re-dispatches implementer');
+  assert.strictEqual(verifyCalls, v1, 'focused verification gate reused exactly');
+  assert.strictEqual(reviewCalls, rev1, 'full-diff gate reused exactly');
+  assert.strictEqual(fullSuiteCalls, suite1, 'full-suite gate reused exactly');
+  assert.strictEqual(panelCalls, p1, 'joint-review gate reused exactly');
+  assert.strictEqual(focusedReviewCalls, focused1 + 1, 'focused supplement is not a reusable gate');
+  assert.strictEqual(preEffectCalls, preEffect1 + 1, 'only the focused supplement admits a new effect');
+  assert.strictEqual(r2.status, 'ready', JSON.stringify(r2));
+  assert.ok(r2.controller, 'ready resume exposes Engine-readable controller metadata');
+  assert.strictEqual(
+    (r2.controller.audit_events || [])
+      .filter((event) => event.event === 'controller_effect_invoked').length,
+    firstEffectStages.length + 1,
+    'resume adds exactly one explained non-gate effect',
+  );
+
+  const exactResumeState = {
+    phase: 'ADJUDICATING',
+    repair_generation: 0,
+    candidate: {
+      committed: true, commit: base, tree_sha: tree, base_sha: base,
+    },
+    verification: { passed: true, receipt_digest: 'c'.repeat(64) },
+    review: {
+      reviewed: true, success: true, review_input_mode: 'full_diff_generation',
+      review_digest: 'd'.repeat(64), findings: '[]',
+    },
+    full_diff_barriers: r1.full_diff_barriers || {
+      0: { success: true, review_digest: 'd'.repeat(64), candidate_ref: base, base_sha: base },
+    },
+  };
+  const fullSuiteCallsBeforeMissingInput = fullSuiteCalls;
+  const missingCommandInput = runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: r1.controller,
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+    resume: exactResumeState,
+  }, adapters);
+  assert.strictEqual(missingCommandInput.status, 'blocked');
+  assert.strictEqual(missingCommandInput.phase, 'full_suite');
+  assert.strictEqual(missingCommandInput.code, 'FULL_SUITE_COMMAND_DIGEST_MISSING');
+  assert.strictEqual(
+    fullSuiteCalls,
+    fullSuiteCallsBeforeMissingInput,
+    'missing sealed command digest blocks before full-suite effects',
+  );
+
+  const controllerWithFullSuiteResultDigest = (commandDigest) => {
+    const controllerCopy = JSON.parse(JSON.stringify(r1.controller));
+    const gate = controllerCopy.gate_journal.entries.find((entry) => (
+      entry.kind === 'full_suite'
+      && entry.result
+      && entry.result.success === true
+      && !entry.invalidated
+    ));
+    assert.ok(gate, 'fixture requires one reusable full-suite gate');
+    if (commandDigest === undefined) delete gate.result.command_digest;
+    else gate.result.command_digest = commandDigest;
+    controllerCopy.gate_journal.digest = ctrl.sha256Json({
+      schema_version: controllerCopy.gate_journal.schema_version,
+      artifact_type: controllerCopy.gate_journal.artifact_type,
+      entries: controllerCopy.gate_journal.entries,
+    });
+    return ctrl.emptyControllerState(controllerCopy);
+  };
+  for (const malformedDigest of [undefined, '6'.repeat(64)]) {
+    const suiteCallsBeforeMalformedReuse = fullSuiteCalls;
+    const malformedReuse = runCampaignComposition({
+      maxRepairGenerations: 1,
+      minPanelSize: 1,
+      promptFile: promptPath,
+      controller: controllerWithFullSuiteResultDigest(malformedDigest),
+      frozenDenominator: frozen,
+      includeControllerMeta: true,
+      gitCwd: dir,
+      baseSha: base,
+      fullSuiteCommandDigest,
+      resume: exactResumeState,
+    }, adapters);
+    assert.strictEqual(malformedReuse.status, 'ready', JSON.stringify(malformedReuse));
+    assert.strictEqual(
+      fullSuiteCalls,
+      suiteCallsBeforeMalformedReuse + 1,
+      'missing/mismatched result command digest cannot reuse a successful full-suite gate',
+    );
+    const liveFullSuiteGates = malformedReuse.controller.gate_journal.entries.filter((entry) => (
+      entry.kind === 'full_suite'
+      && entry.result
+      && entry.result.success === true
+      && !entry.invalidated
+    ));
+    assert.strictEqual(liveFullSuiteGates.length, 1);
+    assert.strictEqual(
+      liveFullSuiteGates[0].result.command_digest,
+      fullSuiteCommandDigest,
+      'replacement live full-suite gate binds the sealed command digest',
+    );
+  }
+
+  // Crash window: a durable full-diff invocation reservation without its
+  // result must block replay on restart. The reviewer adapter is never called.
+  const pendingCandidate = {
+    committed: true, commit: base, tree_sha: tree, base_sha: base,
+  };
+  const pendingVerification = { passed: true, receipt_digest: 'c'.repeat(64) };
+  const pendingGateInput = {
+    generation: 0,
+    candidate_ref: base,
+    base_sha: base,
+    contract_digest: null,
+    strict_contract_digest: null,
+    graph_node_id: null,
+    work_order_id: null,
+    root_run_id: null,
+    verification_receipt_digest: pendingVerification.receipt_digest,
+    vertical_failed: false,
+  };
+  const pendingReviewPayload = {
+    candidate: pendingCandidate,
+    verification: pendingVerification,
+    repair_generation: 0,
+    scope: 'full_diff',
+    review_input_mode: 'full_diff_generation',
+    vertical_failed: false,
+  };
+  const pendingInputIdentity = canonicalDigest({
+    gate_input: pendingGateInput,
+    review_payload: pendingReviewPayload,
+  });
+  const pendingReservationBody = {
+    schema_version: 1,
+    root_run_id: null,
+    work_order_id: null,
+    stage: 'full_diff_review',
+    effect_kind: 'gate',
+    generation: 0,
+    invocation_ordinal: 1,
+    input_identity: pendingInputIdentity,
+  };
+  const pendingReservationIdentity = canonicalDigest(pendingReservationBody);
+  const pendingEventBody = {
+    event: 'controller_effect_reserved',
+    stage: 'full_diff_review',
+    effect_kind: 'gate',
+    input_identity: pendingInputIdentity,
+    reservation_identity: pendingReservationIdentity,
+    invocation_ordinal: 1,
+    root_run_id: null,
+    work_order_id: null,
+    generation: 0,
+  };
+  const pendingController = ctrl.emptyControllerState({
+    frozen_denominator: frozen,
+    started_at_ms: Date.now() - 1000,
+    repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 8 }),
+    audit_events: [{
+      ...pendingEventBody,
+      at: new Date().toISOString(),
+      digest: canonicalDigest(pendingEventBody),
+    }],
+  });
+  const reviewCallsBeforePendingResume = reviewCalls;
+  const implementCallsBeforePendingResume = implementCalls;
+  const pendingResume = runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: pendingController,
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+    resume: {
+      phase: 'ADJUDICATING',
+      repair_generation: 0,
+      candidate: pendingCandidate,
+    },
+  }, adapters);
+  assert.strictEqual(pendingResume.status, 'blocked');
+  assert.strictEqual(pendingResume.phase, 'effect_reconciliation');
+  assert.strictEqual(pendingResume.code, 'EFFECT_RESERVATION_PENDING');
+  assert.strictEqual(
+    reviewCalls,
+    reviewCallsBeforePendingResume,
+    'restart with an in-flight full-diff reservation must not call reviewer again',
+  );
+  assert.strictEqual(
+    implementCalls,
+    implementCallsBeforePendingResume,
+    'reservation reconciliation never re-dispatches implementation',
+  );
+
+  // The same durable reservation identity reaches the real Engine provider
+  // boundary as both an env fence and idempotency option.
+  const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+  const reviewDiffPath = path.join(dir, 'reservation-review.diff');
+  fs.writeFileSync(reviewDiffPath, 'diff --git a/f.txt b/f.txt\n');
+  const providerReservation = '9'.repeat(64);
+  let providerOptions = null;
+  let providerCalls = 0;
+  const reservationEngine = new AutopilotEngine({
+    cwd: dir,
+    reviewDispatcher(_args, options) {
+      providerCalls += 1;
+      providerOptions = options;
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          runner: 'test-review',
+          model: 'claude-test',
+          status: 'reviewed',
+          verdict: 'SHIP-AS-IS',
+          findings: '',
+          no_finding_proof: 'checked=full diff; evidence=bound fixture; conclusion=no finding',
+          raw_log: '/tmp/review.log',
+          error: null,
+        },
+      };
+    },
+  });
+  const reservationReview = reservationEngine.reviewDiff({
+    diffFile: reviewDiffPath,
+    specFile: promptPath,
+    roster: {
+      implementer_engine: 'gpt-5.5',
+      reviewer_engine: 'claude-test',
+      reviewer_effort: 'high',
+      reviewer_runner: 'test-review',
+    },
+    implementerEngine: 'gpt-5.5',
+    reservationIdentity: providerReservation,
+  });
+  assert.strictEqual(reservationReview.status, 'reviewed', JSON.stringify(reservationReview));
+  assert.strictEqual(providerCalls, 1);
+  assert.strictEqual(providerOptions.idempotencyKey, providerReservation);
+  assert.strictEqual(
+    providerOptions.env.AUTOPILOT_EFFECT_RESERVATION_ID,
+    providerReservation,
+  );
+
+  // Six-axis red: each axis independently blocks with zero implement when at limit.
+  for (const axis of ctrl.REPAIR_BUDGET_AXES) {
+    if (axis === 'fresh_input_tokens') {
+      const t = ctrl.checkJointRepairBudget(
+        { ...ctrl.emptyBudgetUsage(), fresh_input_tokens: 5 },
+        { fresh_input_tokens: 5 },
+        { projectedDelta: { fresh_input_tokens: 1 } },
+      );
+      assert.strictEqual(t.allow_spend, false, 'tokens at limit blocks positive delta');
+      continue;
+    }
+    const limits = ctrl.defaultBudgetLimits({ [axis]: 3 });
+    const usage = axis === 'elapsed_wall_ms' || axis === 'owned_worktrees'
+      ? { ...ctrl.emptyBudgetUsage(), [axis]: 3 }
+      : ctrl.applyBudgetUsage(ctrl.emptyBudgetUsage(), { [axis]: 3 });
+    const blocked = ctrl.checkJointRepairBudget(usage, limits, {
+      projectedDelta: axis === 'elapsed_wall_ms' || axis === 'owned_worktrees'
+        ? { [axis]: 4 }
+        : { [axis]: 1 },
+    });
+    assert.strictEqual(blocked.allow_spend, false, axis);
+  }
+  // Attach without replenishment: limits stay frozen, usage preserved.
+  const attached = ctrl.emptyControllerState({
+    frozen_denominator: frozen,
+    repair_budget_limits: { model_calls: 2 },
+    repair_budget_usage: { ...ctrl.emptyBudgetUsage(), model_calls: 2 },
+  });
+  assert.strictEqual(attached.repair_budget_limits.model_calls, 2);
+  assert.strictEqual(attached.repair_budget_usage.model_calls, 2);
+  const attachBlock = ctrl.checkJointRepairBudget(
+    attached.repair_budget_usage,
+    attached.repair_budget_limits,
+    { projectedDelta: { model_calls: 1 } },
+  );
+  assert.strictEqual(attachBlock.allow_spend, false, 'attach does not replenish budget');
+
+  // Transcript exact identity: independent invocation/result events must
+  // explain every concrete row; caller authority is never stamped onto rows.
+  const auditRoot = 'r1';
+  const auditWork = 'w1';
+  const dispatchBody = {
+    kind: 'implementation',
+    root_run_id: auditRoot,
+    work_order_id: auditWork,
+    generation: 0,
+    dispatcher_called: true,
+    model_calls: 1,
+    prompt_bytes: 17,
+    run_id: 'run-1',
+    dispatch_id: 'dispatch-1',
+    provider: 'codex',
+    runner: 'codex',
+    model: 'fixture-model',
+    provider_session_id: null,
+    resource_id: '/tmp/controller-resource-1',
+    result_receipt_digest: 'c'.repeat(64),
+  };
+  const dispatch = {
+    ...dispatchBody,
+    at: '2026-07-30T13:00:00.000Z',
+    digest: canonicalDigest(dispatchBody),
+  };
+  const dispatchEventBody = {
+    event: 'controller_effect_invoked',
+    stage: 'implementation',
+    effect_kind: 'dispatch',
+    root_run_id: auditRoot,
+    work_order_id: auditWork,
+    run_id: dispatch.run_id,
+    dispatch_id: dispatch.dispatch_id,
+    provider: dispatch.provider,
+    runner: dispatch.runner,
+    model: dispatch.model,
+    provider_session_id: dispatch.provider_session_id,
+    resource_identity: dispatch.resource_id,
+    result_receipt_digest: dispatch.result_receipt_digest,
+    model_calls: 1,
+    fresh_input_bytes: 17,
+    generation: 0,
+    effect_identity: dispatch.digest,
+  };
+  const dispatchEvent = {
+    ...dispatchEventBody,
+    at: '2026-07-30T13:00:00.000Z',
+    digest: canonicalDigest(dispatchEventBody),
+  };
+  const resource = {
+    resource_id: dispatch.resource_id,
+    kind: 'worktree',
+    path: dispatch.resource_id,
+    root_run_id: auditRoot,
+    work_order_id: auditWork,
+    identity_known: true,
+    active: true,
+  };
+  const disposition = ctrl.buildResourceDebtState([resource]).open[0];
+  const gateRecorded = ctrl.recordGateEntry(ctrl.emptyGateJournal(), {
+    kind: 'full_diff_review',
+    owner: 'depth-0',
+    input: {
+      root_run_id: auditRoot,
+      work_order_id: auditWork,
+      candidate_ref: base,
+    },
+    result: { success: true, review_digest: 'd'.repeat(64) },
+    startedAt: '2026-07-30T13:01:00.000Z',
+    finishedAt: '2026-07-30T13:02:00.000Z',
+  });
+  const gate = gateRecorded.entry;
+  const gateInvocationResultIdentity = canonicalDigest({ receipt: 'full-diff-result' });
+  const gateInvocationIdentity = canonicalDigest({
+    schema_version: 1,
+    root_run_id: auditRoot,
+    work_order_id: auditWork,
+    stage: gate.kind,
+    effect_kind: 'gate',
+    generation: 0,
+    invocation_ordinal: 1,
+    result_identity: gateInvocationResultIdentity,
+  });
+  const gateInvocationBody = {
+    event: 'controller_effect_invoked',
+    stage: gate.kind,
+    effect_kind: 'gate',
+    effect_identity: gateInvocationIdentity,
+    result_identity: gateInvocationResultIdentity,
+    invocation_ordinal: 1,
+    root_run_id: auditRoot,
+    work_order_id: auditWork,
+    model_calls: 1,
+    fresh_input_bytes: 23,
+    generation: 0,
+  };
+  const gateInvocation = {
+    ...gateInvocationBody,
+    at: '2026-07-30T13:02:00.000Z',
+    digest: canonicalDigest(gateInvocationBody),
+  };
+  const gateEffectResultDigest = canonicalDigest({
+    gate_id: gate.gate_id,
+    kind: gate.kind,
+    owner: gate.owner,
+    root_run_id: gate.root_run_id,
+    work_order_id: gate.work_order_id,
+    input_digest: gate.input_digest,
+    started_at: gate.started_at,
+    finished_at: gate.finished_at,
+    result: gate.result,
+  });
+  const gateResultBody = {
+    event: 'controller_effect_result',
+    effect_kind: 'gate',
+    effect_identity: gate.gate_id,
+    invocation_identity: gateInvocationIdentity,
+    invocation_result_identity: gateInvocationResultIdentity,
+    effect_result_digest: gateEffectResultDigest,
+    input_digest: gate.input_digest,
+    stage: gate.kind,
+    root_run_id: auditRoot,
+    work_order_id: auditWork,
+  };
+  const gateResult = {
+    ...gateResultBody,
+    at: gate.finished_at,
+    digest: canonicalDigest(gateResultBody),
+  };
+  const auditInput = {
+    rootRunId: auditRoot,
+    workOrderId: auditWork,
+    auditEvents: [dispatchEvent, gateInvocation, gateResult],
+    dispatches: [dispatch],
+    resources: [resource],
+    gates: [gate],
+    dispositions: [disposition],
+  };
+  const auditOk = ctrl.rebuildTranscriptAudit(auditInput);
+  assert.strictEqual(auditOk.explains_all, true, auditOk.problems.join('; '));
+  assert.strictEqual(auditOk.blocks_terminal, false);
+
+  const auditDup = ctrl.rebuildTranscriptAudit({
+    ...auditInput,
+    dispatches: [dispatch, dispatch],
+  });
+  assert.strictEqual(auditDup.explains_all, false);
+  assert.strictEqual(auditDup.blocks_terminal, true);
+
+  const foreignDispatch = { ...dispatch, root_run_id: 'foreign-root' };
+  const auditForeign = ctrl.rebuildTranscriptAudit({
+    ...auditInput,
+    dispatches: [foreignDispatch],
+  });
+  assert.strictEqual(auditForeign.explains_all, false);
+  assert.strictEqual(auditForeign.rows.find((row) => row.kind === 'dispatch').root_run_id,
+    'foreign-root', 'audit must preserve rather than stamp the foreign tuple');
+
+  const auditMissing = ctrl.rebuildTranscriptAudit({
+    ...auditInput,
+    dispatches: [],
+  });
+  assert.strictEqual(auditMissing.explains_all, false);
+  assert.ok(auditMissing.problems.some((problem) => problem.includes('missing dispatch')));
+
+  const auditMissingTuple = ctrl.rebuildTranscriptAudit({
+    ...auditInput,
+    auditEvents: [{ ...dispatchEvent, root_run_id: undefined }, gateInvocation, gateResult],
+  });
+  assert.strictEqual(auditMissingTuple.explains_all, false);
+  assert.ok(auditMissingTuple.problems.some((problem) => problem.includes('foreign or missing')));
+
+  // A cross-process resume has no local dispatch invocation for the inherited
+  // candidate worktree. Its exact mechanically observed recovery receipt,
+  // sealed by the canonical controller Work Order, independently explains the
+  // resource; a forged receipt remains unexplained and blocks terminal.
+  const recoveryAuditRoot = 'audit-recovery-root';
+  const recoveryAuditWork = 'audit-recovery-work';
+  const recoveryAuditRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrl-audit-recovery-'));
+  execFileSync('git', ['-C', recoveryAuditRepo, 'init', '-q']);
+  execFileSync('git', ['-C', recoveryAuditRepo, 'config', 'user.email', 't@t']);
+  execFileSync('git', ['-C', recoveryAuditRepo, 'config', 'user.name', 't']);
+  fs.writeFileSync(path.join(recoveryAuditRepo, 'owned.txt'), 'owned\n');
+  execFileSync('git', ['-C', recoveryAuditRepo, 'add', '.']);
+  execFileSync('git', ['-C', recoveryAuditRepo, 'commit', '-qm', 'owned']);
+  const recoveryAuditBase = execFileSync(
+    'git',
+    ['-C', recoveryAuditRepo, 'rev-parse', 'HEAD'],
+    { encoding: 'utf8' },
+  ).trim();
+  const recoveryAuditReceipt = ctrl.buildRecoveryReceipt({
+    resourceId: recoveryAuditRepo,
+    path: recoveryAuditRepo,
+    gitCwd: recoveryAuditRepo,
+    baseSha: recoveryAuditBase,
+    evidenceKind: 'clean_release',
+  });
+  const recoveredResource = {
+    resource_id: recoveryAuditRepo,
+    kind: 'worktree',
+    path: recoveryAuditRepo,
+    branch: recoveryAuditReceipt.branch,
+    tip: recoveryAuditReceipt.tip,
+    clean: recoveryAuditReceipt.outcome.clean,
+    dirty: recoveryAuditReceipt.outcome.dirty,
+    unique: recoveryAuditReceipt.outcome.unique,
+    terminal: recoveryAuditReceipt.outcome.terminal,
+    identity_known: recoveryAuditReceipt.outcome.identity_known,
+    recovery_receipt: recoveryAuditReceipt,
+    root_run_id: recoveryAuditRoot,
+    work_order_id: recoveryAuditWork,
+  };
+  const recoveryController = ctrl.emptyControllerState({
+    resource_inventory: [recoveredResource],
+    recovery_receipts: [recoveryAuditReceipt],
+  });
+  const recoveryWorkOrderModule = require(path.join(root, 'src/engine/work-order'));
+  const recoveryWorkOrder = {
+    schema_version: 2,
+    artifact_type: 'work_order',
+    root_run_id: recoveryAuditRoot,
+    work_order_id: recoveryAuditWork,
+    role: 'controller',
+    controller: recoveryController,
+  };
+  recoveryWorkOrder.digest = recoveryWorkOrderModule.workOrderDigest(recoveryWorkOrder);
+  const recoveredAudit = ctrl.rebuildTranscriptAudit({
+    rootRunId: recoveryAuditRoot,
+    workOrderId: recoveryAuditWork,
+    resources: [recoveredResource],
+    workOrder: recoveryWorkOrder,
+  });
+  assert.strictEqual(
+    recoveredAudit.explains_all,
+    true,
+    recoveredAudit.problems.join('; '),
+  );
+  assert.ok(recoveredAudit.authority_sources_checked.includes(
+    'controller_recovery_receipts',
+  ));
+
+  const forgedRecoveryReceipt = {
+    ...recoveryAuditReceipt,
+    digest: 'f'.repeat(64),
+  };
+  const forgedRecoveredResource = {
+    ...recoveredResource,
+    recovery_receipt: forgedRecoveryReceipt,
+  };
+  const forgedRecoveryController = ctrl.emptyControllerState({
+    resource_inventory: [forgedRecoveredResource],
+    recovery_receipts: [forgedRecoveryReceipt],
+  });
+  const forgedRecoveryWorkOrder = {
+    ...recoveryWorkOrder,
+    controller: forgedRecoveryController,
+  };
+  forgedRecoveryWorkOrder.digest = recoveryWorkOrderModule.workOrderDigest(
+    forgedRecoveryWorkOrder,
+  );
+  const forgedRecoveredAudit = ctrl.rebuildTranscriptAudit({
+    rootRunId: recoveryAuditRoot,
+    workOrderId: recoveryAuditWork,
+    resources: [forgedRecoveredResource],
+    workOrder: forgedRecoveryWorkOrder,
+  });
+  assert.strictEqual(forgedRecoveredAudit.explains_all, false);
+  assert.ok(forgedRecoveredAudit.problems.some((problem) => (
+    problem.includes('recovery receipt') && problem.includes('invalid')
+  )));
+
+  // PostCompact mechanical inventory from real worktree list (not empty default).
+  const common = require(path.join(root, 'src/engine/work-order')).resolveGitCommonDir(dir);
+  const woMod = require(path.join(root, 'src/engine/work-order'));
+  const cstate = ctrl.emptyControllerState({
+    frozen_denominator: frozen,
+    resource_inventory: [],
+  });
+  const w = woMod.createOrUpdateWorkOrder(common, {
+    root_run_id: 'postcompact-root',
+    graph_node: 'controller',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'master',
+    base_sha: base,
+    worktree: dir,
+    paths: { checkpoint: path.join(dir, 'cp.json') },
+    controller: cstate,
+  }, { bindArtifacts: false });
+  assert.strictEqual(w.status, 'written');
+  const rehydrate = path.join(root, 'scripts/compaction-rehydrate.js');
+  const pc = require('child_process').spawnSync(process.execPath, [
+    rehydrate, 'postcompact-adapter',
+    '--git-cwd', dir,
+    '--root-run-id', 'postcompact-root',
+    '--graph-node', 'controller',
+    '--attempt', '1',
+  ], { encoding: 'utf8' });
+  // A controller Work Order without the complete production authority bundle
+  // must deterministically reject; merely emitting output is not an oracle.
+  assert.strictEqual(pc.status, 1, pc.stderr);
+  const pcBody = JSON.parse(pc.stdout);
+  assert.strictEqual(pcBody.production_hook_wired, false);
+  assert.strictEqual(pcBody.status, 'reject');
+  assert.strictEqual(pcBody.reason_code, 'controller_authority_incomplete');
+
+  // Orphan: real worktree branch, dead owner, leaf digest, CAS adopt once.
+  execFileSync('git', ['-C', dir, 'checkout', '-q', '-b', 'orphan-leaf']);
+  fs.writeFileSync(path.join(dir, 'orphan.txt'), 'leaf\n');
+  execFileSync('git', ['-C', dir, 'add', 'orphan.txt']);
+  execFileSync('git', ['-C', dir, 'commit', '-qm', 'leaf']);
+  const leafTip = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const orphanController = spawn(
+    process.execPath,
+    ['-e', 'setInterval(() => {}, 1000)'],
+    { stdio: 'ignore' },
+  );
+  const productionParentage = woMod.captureProcessParentage(orphanController.pid);
+  const deadOwner = productionParentage.owner;
+  assert.ok(woMod.isCompleteIdentity(deadOwner));
+  assert.ok(productionParentage.relationships.length > 0);
+  process.kill(orphanController.pid, 'SIGKILL');
+  orphanController.unref();
+  const deathWait = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 0; attempt < 100 && woMod.isProcessLive(deadOwner); attempt += 1) {
+    Atomics.wait(deathWait, 0, 0, 10);
+  }
+  assert.strictEqual(woMod.isProcessLive(deadOwner), false);
+  const adoptState = ctrl.emptyControllerState({
+    frozen_denominator: frozen,
+    process_parentage: productionParentage,
+  });
+  const aw = woMod.createOrUpdateWorkOrder(common, {
+    root_run_id: 'adopt-root-g11',
+    graph_node: 'n1',
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'orphan-leaf',
+    base_sha: base,
+    worktree: dir,
+    owner: deadOwner,
+    paths: { checkpoint: path.join(dir, 'acp.json') },
+    controller: adoptState,
+    sealed_scope: { allow_paths: ['orphan.txt'], max_files: 10, max_diff_lines: 1000 },
+  }, { bindArtifacts: false, updateLifecycle: false });
+  assert.strictEqual(aw.status, 'written');
+  const live = JSON.parse(fs.readFileSync(aw.path, 'utf8'));
+  live.owner = deadOwner;
+  live.digest = woMod.workOrderDigest(live);
+  fs.writeFileSync(aw.path, `${JSON.stringify(live, null, 2)}\n`);
+  const leafBody = { committed: true, commit: leafTip, worktree: dir };
+  const leaf = { ...leafBody, digest: ctrl.sha256Json(leafBody) };
+  const missingParentWo = {
+    ...live,
+    controller: ctrl.emptyControllerState({
+      ...live.controller,
+      process_parentage: null,
+    }),
+  };
+  missingParentWo.digest = woMod.workOrderDigest(missingParentWo);
+  const missingParentAdopt = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: missingParentWo,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: base,
+    sealedScope: live.sealed_scope,
+    leafWorktree: dir,
+  });
+  assert.strictEqual(missingParentAdopt.ok, false);
+  assert.strictEqual(missingParentAdopt.code, 'ADOPTION_PARENT_CHAIN_MISSING');
+  const badParentWo = {
+    ...live,
+    controller: ctrl.emptyControllerState({
+      ...live.controller,
+      process_parentage: {
+        ...productionParentage,
+        digest: '0'.repeat(64),
+      },
+    }),
+  };
+  badParentWo.digest = woMod.workOrderDigest(badParentWo);
+  const badParentAdopt = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: badParentWo,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: base,
+    sealedScope: live.sealed_scope,
+    leafWorktree: dir,
+  });
+  assert.strictEqual(badParentAdopt.ok, false);
+  assert.strictEqual(badParentAdopt.code, 'ADOPTION_PARENT_CHAIN_INVALID');
+  const adopt1 = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: live,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: base,
+    sealedScope: live.sealed_scope,
+    leafWorktree: dir,
+  });
+  assert.strictEqual(adopt1.ok, true, JSON.stringify(adopt1));
+  assert.strictEqual(adopt1.implementer_redispatch, 0);
+  assert.strictEqual(adopt1.work_order_id, live.work_order_id || aw.work_order.work_order_id);
+  const gen1 = adopt1.generation;
+  const adopt2 = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: adopt1.work_order,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: base,
+    sealedScope: live.sealed_scope,
+    leafWorktree: dir,
+  });
+  assert.strictEqual(adopt2.ok, false);
+  assert.strictEqual(adopt2.code, 'ADOPTION_ALREADY_CONSUMED');
+  assert.ok(Number.isSafeInteger(gen1) && gen1 >= 1);
+  // Negatives: live owner, missing base, path escape.
+  const liveParentage = woMod.captureProcessParentage(process.pid);
+  const liveOwner = liveParentage.owner;
+  const liveWo = {
+    ...live,
+    owner: liveOwner,
+    controller: ctrl.emptyControllerState({
+      ...adoptState,
+      process_parentage: liveParentage,
+    }),
+  };
+  liveWo.digest = woMod.workOrderDigest(liveWo);
+  const liveAdopt = ctrl.adoptOrphanLeaf({
+    gitCwd: dir, workOrder: liveWo, leafResult: leaf, branch: 'orphan-leaf', baseSha: base,
+    sealedScope: live.sealed_scope, leafWorktree: dir,
+  });
+  assert.strictEqual(liveAdopt.ok, false);
+  assert.ok(['CONTROLLER_NOT_PROVEN_DEAD', 'CONTROLLER_DEATH_UNKNOWN'].includes(liveAdopt.code));
+  const legacyUnscoped = { ...live };
+  delete legacyUnscoped.sealed_scope;
+  legacyUnscoped.digest = woMod.workOrderDigest(legacyUnscoped);
+  const unscopedAdopt = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: legacyUnscoped,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: base,
+    leafWorktree: dir,
+  });
+  assert.strictEqual(unscopedAdopt.ok, false);
+  assert.strictEqual(unscopedAdopt.code, 'ADOPTION_SCOPE_NOT_SEALED');
+  const tamperedScope = JSON.parse(JSON.stringify(live));
+  tamperedScope.sealed_scope.allow_paths = ['docs'];
+  const tamperedScopeAdopt = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: tamperedScope,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: base,
+    sealedScope: tamperedScope.sealed_scope,
+    leafWorktree: dir,
+  });
+  assert.strictEqual(tamperedScopeAdopt.ok, false);
+  assert.strictEqual(tamperedScopeAdopt.code, 'work_order_digest_mismatch');
+  const callerScopeOverride = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: live,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: base,
+    sealedScope: { allow_paths: ['docs'], max_files: 10, max_diff_lines: 1000 },
+    leafWorktree: dir,
+  });
+  assert.strictEqual(callerScopeOverride.ok, false);
+  assert.strictEqual(callerScopeOverride.code, 'ADOPTION_SCOPE_OVERRIDE_REJECTED');
+  const noBase = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: { ...live, base_sha: null, controller: adoptState, owner: deadOwner },
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: null,
+    sealedScope: live.sealed_scope,
+    leafWorktree: dir,
+  });
+  assert.strictEqual(noBase.ok, false);
 }
 
 console.log("All inline verification assertions passed successfully!");

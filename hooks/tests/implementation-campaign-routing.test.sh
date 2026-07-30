@@ -246,8 +246,7 @@ const candidate = {
   branch: 'feat/resume',
   writer_fence: { receipt_digest: '3'.repeat(64) },
 };
-const composition = runCampaignComposition({
-  maxRepairGenerations: 1,
+const composition = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 1,
   minPanelSize: 1,
   resume: {
     phase: 'VERTICAL_VERIFICATION',
@@ -377,12 +376,15 @@ printf 'base\n' > "$SBX/src/value.txt"
 git -C "$SBX" add .
 git -C "$SBX" commit -qm "base"
 BASE_SHA="$(git -C "$SBX" rev-parse HEAD)"
-git -C "$SBX" checkout -qb impl/p3-resume
-printf 'candidate\n' > "$SBX/src/value.txt"
-git -C "$SBX" add .
-git -C "$SBX" commit -qm "candidate"
-CANDIDATE_SHA="$(git -C "$SBX" rev-parse HEAD)"
-CANDIDATE_TREE="$(git -C "$SBX" rev-parse HEAD^{tree})"
+CANDIDATE_WORKTREE="$TEST_TMP/resume-candidate-worktree"
+# Keep the controller checkout at the frozen base; the candidate is owned by a
+# separate registered worktree, as it is in the production campaign topology.
+git -C "$SBX" worktree add -q -b impl/p3-resume "$CANDIDATE_WORKTREE" "$BASE_SHA"
+printf 'candidate\n' > "$CANDIDATE_WORKTREE/src/value.txt"
+git -C "$CANDIDATE_WORKTREE" add .
+git -C "$CANDIDATE_WORKTREE" commit -qm "candidate"
+CANDIDATE_SHA="$(git -C "$CANDIDATE_WORKTREE" rev-parse HEAD)"
+CANDIDATE_TREE="$(git -C "$CANDIDATE_WORKTREE" rev-parse HEAD^{tree})"
 COMMON_RAW="$(git -C "$SBX" rev-parse --git-common-dir)"
 COMMON_DIR="$(realpath "$SBX/$COMMON_RAW")"
 CONTRACT="$TEST_TMP/resume-campaign.json"
@@ -431,13 +433,14 @@ assert_exit_code "$?" "1" "malformed disposition authority fails before engine d
 assert_contains "$BAD_AUTH_OUT" '"phase":"campaign_disposition_authority"' \
   "CLI reports a distinct pre-spend disposition-authority failure"
 
-FIRST_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \
+FIRST_OUT="$(node - "$REPO_ROOT" "$SBX" "$CANDIDATE_WORKTREE" "$CONTRACT" "$SEAL" "$PROMPT" \
   "$BASE_SHA" "$CANDIDATE_SHA" "$CANDIDATE_TREE" <<'NODE'
 'use strict';
 const path = require('path');
 const [
   root,
   repo,
+  candidateWorktree,
   contractPath,
   sealPath,
   promptFile,
@@ -452,6 +455,9 @@ const {
   createWriterFence,
   runCampaignIntake,
 } = require(path.join(root, 'src', 'engine'));
+const {
+  worktreeInstanceId,
+} = require(path.join(root, 'src', 'engine', 'repair-lineage-cleanup'));
 const {
   loadRows,
   projectCampaign,
@@ -489,12 +495,12 @@ const writerFence = createWriterFence({
 const repairLineage = {
   lineage_id: control.campaign_id,
   branch: 'impl/p3-resume',
-  worktree: repo,
+  worktree: candidateWorktree,
   provider_session_id: null,
   provider_session_reused: false,
   provider_session_non_reuse_reason: 'runner_resume_not_verified:fixture',
   worktree_reused: false,
-  worktree_instance_id: 'b'.repeat(64),
+  worktree_instance_id: worktreeInstanceId(candidateWorktree),
   cleanup_epoch: 1,
   cleanup_receipt_id: null,
   generation: 0,
@@ -699,13 +705,14 @@ assert_exit_code "$?" "0" "campaign resume command recognizes the adjudication c
 assert_contains "$PRE_RESUME_OUT" '"status":"resumable"' \
   "campaign resume reports the bound adjudication checkpoint as resumable"
 
-RESUME_OUT="$(node - "$REPO_ROOT" "$SBX" "$CONTRACT" "$SEAL" "$PROMPT" \
+RESUME_OUT="$(node - "$REPO_ROOT" "$SBX" "$CANDIDATE_WORKTREE" "$CONTRACT" "$SEAL" "$PROMPT" \
   "$BASE_SHA" "$CANDIDATE_SHA" "$CANDIDATE_TREE" "$CAMPAIGN_ID" "$REVIEW_DIGEST" <<'NODE'
 'use strict';
 const path = require('path');
 const [
   root,
   repo,
+  candidateWorktree,
   contractPath,
   sealPath,
   promptFile,
@@ -848,7 +855,7 @@ const engine = new AutopilotEngine({
       signal: null,
       stdout: '',
       stderr: '',
-      worktree: repo,
+      worktree: candidateWorktree,
       parent: null,
       commit: candidate,
       observed_commit: candidate,
@@ -876,8 +883,8 @@ const engine = new AutopilotEngine({
     };
   },
   repairLineageCleanupTransaction({ cleanupId, record }) {
-    cleanupActions.push('remove');
     if (record.branch !== 'impl/p3-resume'
+        || record.worktree !== candidateWorktree
         || record.expected_tip !== candidate
         || record.lineage_id !== campaignId
         || record.retention_owner !== campaignId
@@ -891,7 +898,7 @@ const engine = new AutopilotEngine({
       'repair-lineage-cleanup.jsonl',
     );
     require('fs').mkdirSync(require('path').dirname(journal), { recursive: true });
-    const rows = ['intent', 'removed_clean'].map((action) => {
+    const makeRow = (action) => {
       const row = {
         schema: 1,
         cleanup_id: cleanupId,
@@ -900,8 +907,15 @@ const engine = new AutopilotEngine({
       };
       row.record_digest = canonicalDigest(row);
       return JSON.stringify(row);
-    });
-    require('fs').appendFileSync(journal, `${rows.join('\n')}\n`);
+    };
+    require('fs').appendFileSync(journal, `${makeRow('intent')}\n`);
+    require('child_process').execFileSync(
+      'git',
+      ['-C', repo, 'worktree', 'remove', record.worktree],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    cleanupActions.push('remove');
+    require('fs').appendFileSync(journal, `${makeRow('removed_clean')}\n`);
     return {
       error: null,
       status: 0,
@@ -935,6 +949,9 @@ const result = engine.runImplementationReviewLoop({
   },
   verificationEnvAllowlist: ['CI'],
 });
+if (result.status !== 'converged') {
+  throw new Error(`managed resume blocked: ${JSON.stringify(result)}`);
+}
 console.log(`resume_status=${result.status}`);
 console.log(`resume_phase=${result.phase}`);
 console.log(`implementation_calls=${implementationCalls}`);
@@ -976,7 +993,6 @@ const cleanupRows = require('fs').readFileSync(
 console.log(`cleanup_transaction=${
   [cleanupRows[0].action, ...cleanupActions, cleanupRows[1].action].join(',')
 }`);
-if (result.status !== 'converged') console.log(`blocked_result=${JSON.stringify(result)}`);
 NODE
 )"
 assert_exit_code "$?" "0" "second campaign process resumes from durable Git truth"

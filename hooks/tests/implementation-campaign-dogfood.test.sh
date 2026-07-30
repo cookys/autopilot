@@ -242,7 +242,7 @@ const pocContract = contract(
 );
 let pocFinalPanels = 0;
 const pocKinds = [];
-const poc = runCampaignComposition({
+const poc = runCampaignComposition({ promptBytes: 0,
   maxRepairGenerations: 2,
   minPanelSize: 1,
 }, {
@@ -291,7 +291,7 @@ const spend = () => {
   modelSpend += 1;
   return { passed: true };
 };
-assert.throws(() => runCampaignComposition({
+assert.throws(() => runCampaignComposition({ promptBytes: 0,
   maxRepairGenerations: 2,
   minPanelSize: 1,
   resume: {
@@ -321,7 +321,7 @@ const productionContract = contract(
   'feat/057-production',
 );
 const productionRepairs = [];
-const production = runCampaignComposition({ maxRepairGenerations: 2, minPanelSize: 1 }, {
+const production = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 2, minPanelSize: 1 }, {
   preflight: () => ({ passed: true }),
   implement({ kind, repair_finding_ids: findingIds }) {
     if (kind !== 'initial') productionRepairs.push(...findingIds);
@@ -489,13 +489,17 @@ done
 
 # Case 5 crosses a real process boundary after the engine durably records the committed mutation.
 KILL_BRANCH="feat/057-kill-resume"
-git -C "$REPO" checkout -qB "$KILL_BRANCH" "$BASE"
-mkdir -p "$REPO/dist"
-printf 'committed exactly once\n' >"$REPO/dist/kill-resume.txt"
-git -C "$REPO" add dist/kill-resume.txt
-git -C "$REPO" commit -qm "057 kill-resume candidate"
-KILL_COMMIT="$(git -C "$REPO" rev-parse HEAD)"
-KILL_TREE="$(git -C "$REPO" rev-parse HEAD^{tree})"
+KILL_WORKTREE="$TEST_TMP/057-kill-resume-worktree"
+# The controller owns the clean base checkout. The implementation candidate is
+# a distinct registered worktree, matching the production ownership topology.
+git -C "$REPO" checkout -qB controller/057-kill-resume "$BASE"
+git -C "$REPO" worktree add -q -b "$KILL_BRANCH" "$KILL_WORKTREE" "$BASE"
+mkdir -p "$KILL_WORKTREE/dist"
+printf 'committed exactly once\n' >"$KILL_WORKTREE/dist/kill-resume.txt"
+git -C "$KILL_WORKTREE" add dist/kill-resume.txt
+git -C "$KILL_WORKTREE" commit -qm "057 kill-resume candidate"
+KILL_COMMIT="$(git -C "$KILL_WORKTREE" rev-parse HEAD)"
+KILL_TREE="$(git -C "$KILL_WORKTREE" rev-parse HEAD^{tree})"
 KILL_CONTRACT="$TEST_TMP/057-kill-resume.json"
 KILL_SEAL="$TEST_TMP/057-kill-resume.seal.json"
 KILL_PROMPT="$TEST_TMP/057-kill-resume.prompt"
@@ -535,13 +539,14 @@ if [ ! -s "$KILL_SEAL" ]; then
 fi
 
 set +e
-KILL_OUT="$(node - "$REPO_ROOT" "$REPO" "$KILL_CONTRACT" "$KILL_SEAL" \
+KILL_OUT="$(node - "$REPO_ROOT" "$REPO" "$KILL_WORKTREE" "$KILL_CONTRACT" "$KILL_SEAL" \
   "$KILL_PROMPT" "$BASE" "$KILL_BRANCH" "$KILL_COMMIT" "$KILL_COUNT" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const [
-  root, repo, contractPath, sealPath, promptFile, base, branch, candidate, countPath,
+  root, repo, candidateWorktree, contractPath, sealPath, promptFile, base, branch,
+  candidate, countPath,
 ] = process.argv.slice(2);
 const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
 const roster = {
@@ -591,7 +596,12 @@ engine.implementTask = () => {
     dispatcher_called: true,
     implementation: {
       commit: candidate,
-      worktree: repo,
+      worktree: candidateWorktree,
+      run_id: 'run-057-kill-resume',
+      dispatch_id: 'dispatch-057-kill-resume',
+      provider: 'fixture',
+      runner: 'fixture',
+      model: 'fixture-implementer',
       provider_session_id: null,
       provider_session_reused: false,
       worktree_reused: false,
@@ -631,14 +641,15 @@ assert_eq "$(tr -d '\n' <"$KILL_COUNT")" "1" \
 assert_contains "$(cat "$KILL_COUNT.checkpoint")" '"phase":"VERTICAL_VERIFICATION"' \
   "kill checkpoint observes the durable post-mutation reducer phase"
 
-RESUME_OUT="$(node - "$REPO_ROOT" "$REPO" "$KILL_CONTRACT" "$KILL_SEAL" \
+RESUME_OUT="$(node - "$REPO_ROOT" "$REPO" "$KILL_WORKTREE" "$KILL_CONTRACT" "$KILL_SEAL" \
   "$KILL_PROMPT" "$BASE" "$KILL_BRANCH" "$KILL_COMMIT" "$KILL_TREE" "$KILL_COUNT" <<'NODE'
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const [
-  root, repo, contractPath, sealPath, promptFile, base, branch, candidate, tree, countPath,
+  root, repo, candidateWorktree, contractPath, sealPath, promptFile, base, branch,
+  candidate, tree, countPath,
 ] = process.argv.slice(2);
 const { AutopilotEngine, runCampaignIntake } = require(path.join(root, 'src', 'engine'));
 const roster = {
@@ -701,7 +712,7 @@ const engine = new AutopilotEngine({
       signal: null,
       stdout: '',
       stderr: '',
-      worktree: repo,
+      worktree: candidateWorktree,
       parent: null,
       commit: candidate,
       observed_commit: candidate,
@@ -712,7 +723,17 @@ const engine = new AutopilotEngine({
   gitWorktreeRemove() {
     return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
   },
-  repairLineageCleanupTransaction() {
+  repairLineageCleanupTransaction({ record }) {
+    if (record.worktree !== candidateWorktree
+        || record.branch !== branch
+        || record.expected_tip !== candidate) {
+      throw new Error('cleanup transaction did not receive the exact candidate worktree');
+    }
+    require('child_process').execFileSync(
+      'git',
+      ['-C', repo, 'worktree', 'remove', record.worktree],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
     return { error: null, status: 0, signal: null, stdout: '', stderr: '' };
   },
   verifyCommandRunner({ verifyCmd }) {
@@ -939,7 +960,7 @@ const verificationReceipt = verificationApi.createVerificationReceipt({
   executedArgv: verificationApi.verificationArgv(contract.verify_cmd),
   stdout: 'ok\n',
 });
-const terminal = runCampaignComposition({
+const terminal = runCampaignComposition({ promptBytes: 0,
   maxRepairGenerations: 0,
   minPanelSize: 1,
   lifecycleReceiptRef: lifecycleRef,

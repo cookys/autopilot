@@ -95,6 +95,7 @@ function normalizeCampaign(raw, label) {
   // Path-role contract (controller execution discipline):
   // - allowed_path_prefixes: paths allowed to change (prefix allowlist)
   // - required_paths: required existing inputs (must exist unless authorized create)
+  // - required_change_paths (optional): paths that MUST appear in an effectful candidate diff
   // - output_paths: authorized create/modify surface (NOT every path must appear in every diff)
   // - authorized_creates (optional): absent outputs permitted only when listed
   // - version_mirror_paths + version_mirror_generator (optional): generator closure
@@ -112,6 +113,7 @@ function normalizeCampaign(raw, label) {
     'output_paths',
   ]);
   const optionalKeys = new Set([
+    'required_change_paths',
     'authorized_creates',
     'version_mirror_paths',
     'version_mirror_generator',
@@ -174,6 +176,19 @@ function normalizeCampaign(raw, label) {
   const requiredPaths = boundedPaths(value.required_paths, `${label}.required_paths`);
   // output_paths = authorized create/modify surface (narrow repair need not touch all).
   const outputPaths = boundedPaths(value.output_paths, `${label}.output_paths`);
+  // required_change_paths = must appear in an effectful candidate diff (unless no-op).
+  // Present empty array is invalid (omit the field or provide non-empty unique paths).
+  let requiredChangePaths = [];
+  if (Object.prototype.hasOwnProperty.call(value, 'required_change_paths')) {
+    if (!Array.isArray(value.required_change_paths) || value.required_change_paths.length === 0) {
+      fail(`${label}.required_change_paths when present must be a non-empty array`);
+    }
+    requiredChangePaths = boundedPaths(
+      value.required_change_paths,
+      `${label}.required_change_paths`,
+      { allowEmpty: false },
+    );
+  }
   const authorizedCreates = Object.prototype.hasOwnProperty.call(value, 'authorized_creates')
     ? boundedPaths(value.authorized_creates, `${label}.authorized_creates`, { allowEmpty: true })
     : [];
@@ -202,6 +217,12 @@ function normalizeCampaign(raw, label) {
   for (const create of authorizedCreates) {
     if (!outputPaths.includes(create) && !requiredPaths.includes(create)) {
       fail(`${label}.authorized_creates must be covered by required_paths/output_paths (${create})`);
+    }
+  }
+  // Exact subset of output_paths — prefix membership alone is insufficient.
+  for (const change of requiredChangePaths) {
+    if (!outputPaths.includes(change)) {
+      fail(`${label}.required_change_paths must be an exact subset of output_paths (${change})`);
     }
   }
   const maxChangedFiles = int(value.max_changed_files, `${label}.max_changed_files`, 1, 4096);
@@ -240,6 +261,7 @@ function normalizeCampaign(raw, label) {
   };
   // Optional path-role fields: only emit when present so legacy graph digests stay stable
   // when graphs omit them.
+  if (requiredChangePaths.length > 0) result.required_change_paths = requiredChangePaths;
   if (authorizedCreates.length > 0) result.authorized_creates = authorizedCreates;
   if (versionMirrorPaths.length > 0) {
     result.version_mirror_paths = versionMirrorPaths;

@@ -805,8 +805,12 @@ if (runtime) {
   const missionRootRunId = intake.contract
     && intake.contract.mission_runtime
     && intake.contract.mission_runtime.root_run_id;
+  // Exact prompt observation for joint budget: create the real prompt file the
+  // Engine/composition path will stat (PROMPT_BYTES_UNOBSERVED if missing).
+  const missionPromptPath = path.join(temp, 'prompt.txt');
+  fs.writeFileSync(missionPromptPath, 'mission runtime v2 implementer prompt\n', 'utf8');
   const loopInput = {
-    promptFile: path.join(temp, 'prompt.txt'),
+    promptFile: missionPromptPath,
     branch: granted.payload.branch,
     base: granted.payload.base_sha,
     roster,
@@ -927,9 +931,18 @@ if (runtime) {
 
   // Fail-closed: enforce precheck needs a store, but adapter factory
   // omits releaseMission so admission release fails closed.
+  const controllerRecoveryWt = path.join(temp, 'controller-recovery-worktree');
+  const controllerRecoveryBranch = 'controller-recovery-oracle';
+  execFileSync('git', [
+    '-C', repo,
+    'worktree', 'add', '-q',
+    '-b', controllerRecoveryBranch,
+    controllerRecoveryWt,
+    granted.payload.base_sha,
+  ]);
   let noAdapterBuilds = 0;
   const noAdapterEngine = new AutopilotEngine({
-    cwd: repo,
+    cwd: controllerRecoveryWt,
     clock: () => '2026-07-28T00:00:01.500Z',
     missionCampaignStore: store,
     missionAdapterFactory: () => {
@@ -972,6 +985,93 @@ if (runtime) {
       || noAdapterRelease.mission_release.code === 'mission_state_store_required'
     ));
 
+  // True canonical producer → Engine → persisted authority → restart attach →
+  // PostCompact CLI. This is the positive recovery oracle; no authority body is
+  // manually authored by the test.
+  let recoveryAttachAdapterBuilds = 0;
+  const recoveryAttachEngine = new AutopilotEngine({
+    cwd: controllerRecoveryWt,
+    clock: () => '2026-07-28T00:00:01.750Z',
+    missionCampaignStore: store,
+    missionAdapterFactory: () => {
+      recoveryAttachAdapterBuilds += 1;
+      return {
+        missionClaim: () => ({
+          owner: 'mission',
+          status: 'claimed',
+          claim_id: granted.payload.claim_id,
+        }),
+        // Intentionally no releaseMission: keep the canonical claim active so
+        // this restart remains a recoverable nonterminal controller.
+      };
+    },
+    campaignIntake() {
+      return preparedControlForEngine();
+    },
+    campaignEventAppender: (input) => intentOnlyAppender(input),
+    implementationDispatcher() {
+      return zeroEffectLeaf;
+    },
+  });
+  const recoveryAttachResult = recoveryAttachEngine.runImplementationReviewLoop(loopInput);
+  check('controller-restart-attaches-same-workorder',
+    recoveryAttachResult.status === 'blocked'
+    && recoveryAttachAdapterBuilds === 1
+    && !/controller attach recovery|controller_worktree_mismatch/i.test(
+      recoveryAttachResult.reason || '',
+    ));
+  const workOrder = require(path.join(root, 'src', 'engine', 'work-order'));
+  const controllerRootRunId = durableLeafControl.campaign_id;
+  const controllerGraphNode = durableLeafControl.contract.mission_runtime.graph_node_id;
+  const controllerMissionClaim = store.load().claims[
+    durableLeafControl.mission_claim.claim_id
+  ];
+  const controllerAttempt = controllerMissionClaim
+    && controllerMissionClaim.graph_attempt;
+  const controllerRecords = workOrder.listWorkOrders(common, controllerRootRunId)
+    .filter((entry) => entry.work_order
+      && entry.work_order.role === 'controller'
+      && entry.work_order.graph_node === controllerGraphNode
+      && entry.work_order.attempt === controllerAttempt);
+  const exactControllerRecord = controllerRecords.length === 1
+    && !controllerRecords[0].error ? controllerRecords[0] : null;
+  check('controller-recovery-production-artifacts-bound',
+    exactControllerRecord !== null
+    && exactControllerRecord.work_order.worktree === controllerRecoveryWt
+    && exactControllerRecord.work_order.branch === controllerRecoveryBranch
+    && fs.existsSync(exactControllerRecord.work_order.paths.durable)
+    && fs.existsSync(exactControllerRecord.work_order.paths.checkpoint)
+    && fs.existsSync(exactControllerRecord.work_order.paths.manifest)
+    && fs.existsSync(exactControllerRecord.work_order.paths.receipt)
+    && fs.existsSync(exactControllerRecord.work_order.paths.mission)
+    && fs.realpathSync(exactControllerRecord.work_order.paths.mission)
+      === fs.realpathSync(store.state_path)
+    && fs.existsSync(`${exactControllerRecord.work_order.paths.ledger}.1`));
+  const postcompact = spawnSync(process.execPath, [
+    path.join(root, 'scripts', 'compaction-rehydrate.js'),
+    'postcompact-adapter',
+    '--git-cwd', controllerRecoveryWt,
+    '--root-run-id', controllerRootRunId,
+    '--graph-node', controllerGraphNode,
+    '--attempt', String(controllerAttempt),
+  ], { encoding: 'utf8' });
+  let postcompactBody = null;
+  try {
+    postcompactBody = JSON.parse(postcompact.stdout);
+  } catch (_error) {
+    postcompactBody = null;
+  }
+  check('controller-postcompact-real-linked-positive',
+    postcompact.status === 0
+    && postcompactBody
+    && postcompactBody.status === 'ready'
+    && postcompactBody.production_hook_wired === false
+    && postcompactBody.reconcile
+    && postcompactBody.reconcile.action === 'attach_active'
+    && postcompactBody.reconcile.authority_sources_checked.includes(
+      'canonical_mission_state_claim',
+    ));
+
   // Real managed composition path: constructor-owned Mission store + default
   // releaseCampaignAdmission. Adapters are built exactly once at intake and
   // the same object is threaded into release (never rebuilt).
@@ -980,7 +1080,7 @@ if (runtime) {
   let retainedReleaseAdapters = null;
   const defaultFactory = mission.createMissionCampaignAdapters;
   const zeroEffectEngine = new AutopilotEngine({
-    cwd: repo,
+    cwd: controllerRecoveryWt,
     clock: () => '2026-07-28T00:00:02.000Z',
     missionCampaignStore: store,
     missionAdapterFactory: (options) => {
@@ -1059,6 +1159,28 @@ if (runtime) {
     && zeroEffectResult.phase !== 'campaign_terminal_reconciliation'
     && !(zeroEffectResult.campaign_control
       && zeroEffectResult.campaign_control.terminal_failure));
+  const disposedControllerRecords = workOrder.listWorkOrders(common, controllerRootRunId)
+    .filter((entry) => entry.work_order
+      && entry.work_order.role === 'controller'
+      && entry.work_order.graph_node === controllerGraphNode
+      && entry.work_order.attempt === controllerAttempt);
+  const disposedControllerRecord = disposedControllerRecords.length === 1
+    && !disposedControllerRecords[0].error ? disposedControllerRecords[0] : null;
+  const disposedControllerClassification = disposedControllerRecord
+    ? workOrder.classifyWorkOrder(disposedControllerRecord.work_order, {
+      gitCwd: controllerRecoveryWt,
+      workOrderPath: disposedControllerRecord.path,
+      requireBoundEvidence: true,
+    })
+    : null;
+  check('controller-zero-effect-exact-aborted-disposition',
+    disposedControllerRecord !== null
+    && disposedControllerRecord.work_order.disposition === 'consumed'
+    && disposedControllerRecord.work_order.terminal_status === 'aborted'
+    && disposedControllerClassification
+    && disposedControllerClassification.classification === 'consume_terminal'
+    && disposedControllerClassification.terminal_status === 'aborted'
+    && disposedControllerClassification.success === false);
 
   const regrantAfterRelease = runCli([
     'grant', '--repo', repo, '--prepared', preparedPath,
@@ -1120,21 +1242,309 @@ if (runtime) {
   check('terminal-requires-frozen-observed-at',
     unfrozenTerminalTime.status === 'rejected'
     && unfrozenTerminalTime.reason === 'MISSION_TERMINAL_TIMESTAMP_REQUIRED');
-  const terminalEngine = new AutopilotEngine({
-    cwd: repo,
-    missionPreparedReceipt: JSON.parse(fs.readFileSync(preparedPath, 'utf8')),
+  // Canonical Mission producer → ordinary Engine intake/composition → Mission
+  // terminal reconciliation → exact consumed controller Work Order. External
+  // adapters perform real Git mutation/checkout observations; no authority
+  // state, terminal receipt, or progress receipt is authored by this fixture.
+  const successControllerWt = path.join(temp, 'controller-success-worktree');
+  const successControllerBranch = 'controller-success-oracle';
+  execFileSync('git', [
+    '-C', repo,
+    'worktree', 'add', '-q',
+    '-b', successControllerBranch,
+    successControllerWt,
+    regranted.payload.base_sha,
+  ]);
+  const successContract = JSON.parse(
+    fs.readFileSync(regranted.payload.contract_path, 'utf8'),
+  );
+  let successImplementationCalls = 0;
+  let successReviewCalls = 0;
+  let successVerificationCalls = 0;
+  let successClock = '2026-07-28T00:00:40.000Z';
+  const dispatchArg = (args, flag) => {
+    const index = args.indexOf(flag);
+    return index >= 0 ? args[index + 1] : null;
+  };
+  const materializeRetainedDispatchOwnership = ({
+    args,
+    dispatchOptions,
+    worktree,
+  }) => {
+    const dispatchBranch = dispatchArg(args, '--branch');
+    const dispatchBase = dispatchArg(args, '--base');
+    const dispatchRunId = dispatchArg(args, '--run-id');
+    const retentionOwner = dispatchArg(args, '--retain-owner');
+    const retentionReason = dispatchArg(args, '--retain-reason');
+    const retentionExpiresAt = dispatchArg(args, '--retain-until');
+    const dispatchEnv = dispatchOptions && dispatchOptions.env;
+    const rootRunId = dispatchEnv
+      && dispatchEnv.AUTOPILOT_WORKTREE_ROOT_RUN_ID;
+    const rawLoopId = (dispatchEnv && (
+      dispatchEnv.AUTOPILOT_LOOP_ID
+      || dispatchEnv.AUTOPILOT_PARENT_RUN_ID
+    )) || dispatchRunId;
+    const sanitizeIdentity = (value) => String(value || '')
+      .replace(/[^A-Za-z0-9._-]/g, '-');
+    if (!args.includes('--keep-worktree')
+        || !dispatchBranch
+        || !/^[0-9a-f]{40,64}$/.test(dispatchBase || '')
+        || !dispatchRunId
+        || !rootRunId
+        || !retentionOwner
+        || !retentionReason
+        || !/^[1-9][0-9]*$/.test(retentionExpiresAt || '')) {
+      throw new Error('managed dispatcher fixture did not receive exact retention authority');
+    }
+    const excludePath = path.join(common, 'info', 'exclude');
+    fs.mkdirSync(path.dirname(excludePath), { recursive: true });
+    const existingExcludes = fs.existsSync(excludePath)
+      ? fs.readFileSync(excludePath, 'utf8').split('\n')
+      : [];
+    const missingExcludes = [
+      '.autopilot-worktree',
+      '.autopilot-worktree.lock',
+    ].filter((entry) => !existingExcludes.includes(entry));
+    if (missingExcludes.length > 0) {
+      fs.appendFileSync(excludePath, `${missingExcludes.join('\n')}\n`);
+    }
+    fs.writeFileSync(path.join(worktree, '.autopilot-worktree'), [
+      'created_at=1',
+      `branch=${dispatchBranch}`,
+      `base_sha=${dispatchBase}`,
+      `run_id=${sanitizeIdentity(dispatchRunId)}`,
+      `root_run_id=${sanitizeIdentity(rootRunId)}`,
+      `loop_id=${sanitizeIdentity(rawLoopId)}`,
+      'retention=lease',
+      `retention_owner=${retentionOwner}`,
+      `retention_reason_sha256=${sha(retentionReason)}`,
+      `retention_expires_at=${retentionExpiresAt}`,
+      'schema=2',
+      '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(worktree, '.autopilot-worktree.lock'), '');
+  };
+  const { verificationArgv } = require(
+    path.join(root, 'src', 'engine', 'campaign-verification'),
+  );
+  const successEngine = new AutopilotEngine({
+    cwd: successControllerWt,
+    clock: () => successClock,
+    missionCampaignStore: store,
+    missionAdapterFactory: (options) => ({
+      ...mission.createMissionCampaignAdapters(options),
+      readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+      contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+      occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+    }),
+    implementationDispatcher(args, dispatchOptions) {
+      successImplementationCalls += 1;
+      if (successImplementationCalls > 2) {
+        throw new Error('two-node Mission must dispatch at most one implementation per node');
+      }
+      const unitIndex = args.indexOf('--contract-file');
+      if (unitIndex < 0 || !args[unitIndex + 1]) {
+        throw new Error('managed implementation did not receive projected unit contract');
+      }
+      const unitPath = args[unitIndex + 1];
+      const unitBytes = fs.readFileSync(unitPath);
+      const unit = JSON.parse(unitBytes.toString('utf8'));
+      const successImplementerWt = path.join(
+        temp,
+        `implementer-success-worktree-${successImplementationCalls}`,
+      );
+      const successAgentLog = path.join(
+        temp,
+        `implementer-success-${successImplementationCalls}.log`,
+      );
+      execFileSync('git', [
+        '-C', successControllerWt,
+        'worktree', 'add', '-q',
+        '-b', unit.campaign_projection.branch,
+        successImplementerWt,
+        unit.base_sha,
+      ]);
+      materializeRetainedDispatchOwnership({
+        args,
+        dispatchOptions,
+        worktree: successImplementerWt,
+      });
+      fs.appendFileSync(
+        path.join(successImplementerWt, 'src', 'value.txt'),
+        `${unit.campaign_projection.graph_node_id}-engine-success\n`,
+      );
+      execFileSync('git', ['-C', successImplementerWt, 'add', 'src/value.txt']);
+      execFileSync('git', [
+        '-C', successImplementerWt,
+        'commit', '-qm', `${unit.campaign_projection.graph_node_id} success`,
+      ]);
+      const commit = execFileSync(
+        'git',
+        ['-C', successImplementerWt, 'rev-parse', 'HEAD'],
+        { encoding: 'utf8' },
+      ).trim();
+      fs.writeFileSync(successAgentLog, 'successful implementation transcript\n');
+      const unitDigest = crypto.createHash('sha256').update(unitBytes).digest('hex');
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: 'committed',
+          runner: unit.campaign_projection.runner,
+          model: unit.campaign_projection.model,
+          branch: unit.campaign_projection.branch,
+          base: unit.base_sha,
+          commit,
+          files_changed: 1,
+          insertions: 1,
+          deletions: 0,
+          worktree: successImplementerWt,
+          worktree_reused: false,
+          agent_log: successAgentLog,
+          error: null,
+          run_id: unit.campaign_projection.campaign_id,
+          dispatch_id: `dispatch-${unit.unit_id}`,
+          resource_id: successImplementerWt,
+          provider: 'fixture-provider',
+          provider_session_id: null,
+          prompt_bytes: fs.statSync(missionPromptPath).size,
+          usage: { input_tokens: null },
+          campaign_contract_sha256:
+            unit.campaign_projection.campaign_contract_sha256,
+          contract_sha256: unitDigest,
+          unit_contract_sha256: unitDigest,
+          unit_id: unit.unit_id,
+          go: 'GO',
+          boundary: 'ok',
+          acceptance: 'ok',
+        },
+      };
+    },
+    reviewDispatcher() {
+      successReviewCalls += 1;
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          runner: 'codex',
+          model: 'fixture-reviewer',
+          status: 'reviewed',
+          verdict: 'SHIP-AS-IS',
+          findings: '',
+          raw_log: null,
+          error: null,
+        },
+      };
+    },
+    verifyCommandRunner({ verifyCmd }) {
+      successVerificationCalls += 1;
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: 'verified\n',
+        stderr: '',
+        executed_argv: verificationArgv(verifyCmd),
+      };
+    },
   });
-  const terminal = terminalEngine.reconcileManagedMissionTerminal({
-    campaignControl: regrantIntake,
-    outcome: 'ready',
-    observedAt: terminalInput.observedAt,
-    cwd: repo,
+  const successResult = successEngine.runImplementationReviewLoop({
+    promptFile: missionPromptPath,
+    branch: regranted.payload.branch,
+    base: regranted.payload.base_sha,
+    roster,
+    campaignManaged: true,
+    campaignContract: regranted.payload.contract_path,
+    campaignSeal: regranted.payload.seal_path,
+    implementationOptions: {
+      env: {
+        ...process.env,
+        AUTOPILOT_ROOT_RUN_ID:
+          successContract.mission_runtime.root_run_id,
+      },
+    },
   });
-  check('engine-terminal-ready-applied', terminal.status === 'applied');
-  check('engine-terminal-binds-both-campaign-identities', terminal.receipt
+  const terminal = successResult.campaign_control
+    && successResult.campaign_control.mission_terminal_reconciliation;
+  check('engine-terminal-ready-through-production-composition',
+    successResult.status === 'converged'
+    && successResult.phase === 'campaign_terminal_ready'
+    && successImplementationCalls === 1
+    && successReviewCalls === 2
+    && successVerificationCalls === 2);
+  check('engine-terminal-ready-applied', terminal && terminal.status === 'applied');
+  check('engine-terminal-binds-both-campaign-identities', terminal
+    && terminal.receipt
     && terminal.receipt.icc_campaign_id === regrantIntake.campaign_id
     && terminal.receipt.mission_campaign_id === regranted.payload.mission_campaign_id
     && terminal.receipt.raw_campaign_contract_digest === regrantIntake.contract_digest);
+  const successControllerRecords = workOrder.listWorkOrders(
+    common,
+    regrantIntake.campaign_id,
+  ).filter((entry) => entry.work_order
+    && entry.work_order.role === 'controller'
+    && entry.work_order.graph_node === 'runtime-control'
+    && entry.work_order.attempt === regranted.payload.graph_attempt);
+  const successControllerRecord = successControllerRecords.length === 1
+    && !successControllerRecords[0].error ? successControllerRecords[0] : null;
+  const successControllerClassification = successControllerRecord
+    ? workOrder.classifyWorkOrder(successControllerRecord.work_order, {
+      gitCwd: successControllerWt,
+      workOrderPath: successControllerRecord.path,
+      requireBoundEvidence: true,
+    })
+    : null;
+  check('controller-success-consumed-classifies-terminal',
+    successControllerRecord !== null
+    && successControllerRecord.work_order.disposition === 'consumed'
+    && successControllerRecord.work_order.terminal_status === 'success'
+    && successControllerClassification
+    && successControllerClassification.classification === 'consume_terminal'
+    && successControllerClassification.success === true);
+  const successTranscript = successControllerRecord
+    && successControllerRecord.work_order.controller
+    && successControllerRecord.work_order.controller.transcript_audit;
+  check('controller-terminal-transcript-exact-production-authority',
+    successTranscript
+    && successTranscript.explains_all === true
+    && successTranscript.blocks_terminal === false
+    && successTranscript.problems.length === 0
+    && successTranscript.expected_counts.dispatches === 1
+    && successTranscript.expected_counts.resources === 1
+    && successTranscript.expected_counts.gates === 4
+    && successTranscript.expected_counts.effect_results === 4
+    && [
+      'controller_work_order',
+      'dispatch_manifest_index',
+      'dispatch_result_index',
+      'rotation_aware_controller_ledger',
+    ].every((source) => successTranscript.authority_sources_checked.includes(source)));
+  const successProgressReceipts = successControllerRecord
+    && successControllerRecord.work_order.controller
+    && successControllerRecord.work_order.controller.progress_receipts;
+  const zeroProgress = successProgressReceipts && successProgressReceipts[0];
+  const successProgress = successProgressReceipts && successProgressReceipts.at(-1);
+  check('controller-progress-real-multinode-zero-of-two',
+    zeroProgress
+    && zeroProgress.deliverable_count === 2
+    && zeroProgress.completed_deliverables.length === 0
+    && zeroProgress.remaining_deliverables.join(',')
+      === 'release-closeout,runtime-control');
+  check('controller-progress-real-multinode-one-of-two',
+    successProgress
+    && successProgress.deliverable_count === 2
+    && successProgress.completed_deliverables.join(',') === 'runtime-control'
+    && successProgress.remaining_deliverables.join(',') === 'release-closeout'
+    && successProgress.frozen_denominator_digest
+      === successControllerRecord.work_order.controller.frozen_denominator.digest);
   const afterTerminal = store.load();
   check('unknown-usage-charges-conservative-reservation',
     afterTerminal.axes.tool_calls.durable_consumed === 3
@@ -1161,17 +1571,21 @@ if (runtime) {
     appliedPendingConflict.status === 'rejected'
     && appliedPendingConflict.reason === 'terminal_receipt_conflict');
   fs.unlinkSync(duplicatePendingPath);
-  const terminalReplay = runtime.reconcileMissionCampaignTerminal(terminalInput);
+  const terminalReplayInput = {
+    ...terminalInput,
+    observedAt: terminal.receipt.observed_at,
+  };
+  const terminalReplay = runtime.reconcileMissionCampaignTerminal(terminalReplayInput);
   check('terminal-exact-replay-noop', terminalReplay.status === 'replay_noop');
   const laterClockReplay = runtime.reconcileMissionCampaignTerminal({
-    ...terminalInput,
+    ...terminalReplayInput,
     now: '2026-07-29T12:00:00.000Z',
   });
   check('terminal-replay-stable-across-later-clock',
     laterClockReplay.status === 'replay_noop'
     && laterClockReplay.receipt.receipt_digest === terminal.receipt.receipt_digest);
   const terminalConflict = runtime.reconcileMissionCampaignTerminal({
-    ...terminalInput,
+    ...terminalReplayInput,
     outcome: 'follow_up',
   });
   check('terminal-conflicting-replay-rejected', terminalConflict.status === 'rejected');
@@ -1245,15 +1659,235 @@ if (runtime) {
     'grant', '--repo', repo, '--prepared', preparedPath,
     '--node', 'release-closeout', '--now', '2026-07-28T00:04:00.000Z',
   ]);
-  const thirdTerminalBase = {
-    grantRef: grant3.payload.mission_grant_ref,
-    claimId: grant3.payload.claim_id,
-    iccCampaignId: `campaign-v1-${sha('third-icc')}`,
-    rawCampaignContractDigest: sha('third-raw'),
-    possiblyEffectful: true,
-    observedAt: '2026-07-28T00:05:00.000Z',
+  const closeoutContract = JSON.parse(
+    fs.readFileSync(grant3.payload.contract_path, 'utf8'),
+  );
+  successClock = '2026-07-28T00:04:30.000Z';
+  const closeoutResult = successEngine.runImplementationReviewLoop({
+    promptFile: missionPromptPath,
+    branch: grant3.payload.branch,
+    base: grant3.payload.base_sha,
+    roster,
+    campaignManaged: true,
+    campaignContract: grant3.payload.contract_path,
+    campaignSeal: grant3.payload.seal_path,
+    implementationOptions: {
+      env: {
+        ...process.env,
+        AUTOPILOT_ROOT_RUN_ID:
+          closeoutContract.mission_runtime.root_run_id,
+      },
+    },
+  });
+  const closeoutTerminal = closeoutResult.campaign_control
+    && closeoutResult.campaign_control.mission_terminal_reconciliation;
+  check('engine-second-node-production-composition',
+    closeoutResult.status === 'converged'
+    && closeoutResult.phase === 'campaign_terminal_ready'
+    && closeoutTerminal
+    && closeoutTerminal.status === 'applied'
+    && successImplementationCalls === 2
+    && successReviewCalls === 4
+    && successVerificationCalls === 4);
+  const closeoutRootRunId = closeoutResult.campaign_control
+    && closeoutResult.campaign_control.campaign_id;
+  const closeoutControllerRecords = closeoutRootRunId
+    ? workOrder.listWorkOrders(common, closeoutRootRunId)
+      .filter((entry) => entry.work_order
+        && entry.work_order.role === 'controller'
+        && entry.work_order.graph_node === 'release-closeout'
+        && entry.work_order.attempt === grant3.payload.graph_attempt)
+    : [];
+  const closeoutControllerRecord = closeoutControllerRecords.length === 1
+    && !closeoutControllerRecords[0].error ? closeoutControllerRecords[0] : null;
+  const closeoutClassification = closeoutControllerRecord
+    ? workOrder.classifyWorkOrder(closeoutControllerRecord.work_order, {
+      gitCwd: successControllerWt,
+      workOrderPath: closeoutControllerRecord.path,
+      requireBoundEvidence: true,
+    })
+    : null;
+  const closeoutProgressReceipts = closeoutControllerRecord
+    && closeoutControllerRecord.work_order.controller.progress_receipts;
+  const closeoutInitialProgress = closeoutProgressReceipts
+    && closeoutProgressReceipts[0];
+  const closeoutFinalProgress = closeoutProgressReceipts
+    && closeoutProgressReceipts.at(-1);
+  const completedMissionState = store.load();
+  check('controller-progress-real-multinode-two-of-two',
+    closeoutControllerRecord
+    && closeoutClassification
+    && closeoutClassification.classification === 'consume_terminal'
+    && closeoutClassification.success === true
+    && closeoutInitialProgress
+    && closeoutInitialProgress.completed_deliverables.join(',') === 'runtime-control'
+    && closeoutInitialProgress.remaining_deliverables.join(',') === 'release-closeout'
+    && closeoutFinalProgress
+    && closeoutFinalProgress.deliverable_count === 2
+    && closeoutFinalProgress.completed_deliverables.join(',')
+      === 'release-closeout,runtime-control'
+    && closeoutFinalProgress.remaining_deliverables.length === 0);
+  check('controller-progress-frozen-denominator-unchanged',
+    exactControllerRecord
+    && postcompactBody
+    && postcompactBody.status === 'ready'
+    && zeroProgress
+    && successProgress
+    && closeoutInitialProgress
+    && closeoutFinalProgress
+    && exactControllerRecord.work_order.controller.frozen_denominator.digest
+      === zeroProgress.frozen_denominator_digest
+    && zeroProgress.frozen_denominator_digest
+      === successProgress.frozen_denominator_digest
+    && zeroProgress.frozen_denominator_digest
+      === closeoutInitialProgress.frozen_denominator_digest
+    && zeroProgress.frozen_denominator_digest
+      === closeoutFinalProgress.frozen_denominator_digest
+    && completedMissionState.state === 'COMPLETE'
+    && completedMissionState.terminal
+    && completedMissionState.terminal.state === 'COMPLETE');
+
+  // Keep the concurrent terminal/stagnation oracle independent from the
+  // completed production path above so a deliberately blocking race cannot
+  // stand in for (or contaminate) 2/2 progress evidence.
+  const stagnationRepo = path.join(temp, 'stagnation-repo');
+  fs.mkdirSync(path.join(stagnationRepo, '.claude'), { recursive: true });
+  fs.mkdirSync(path.join(stagnationRepo, 'src'), { recursive: true });
+  execFileSync('git', ['init', '-q', stagnationRepo]);
+  execFileSync('git', [
+    '-C', stagnationRepo, 'config', 'user.email', 'stagnation@example.invalid',
+  ]);
+  execFileSync('git', [
+    '-C', stagnationRepo, 'config', 'user.name', 'Stagnation Oracle',
+  ]);
+  fs.writeFileSync(path.join(stagnationRepo, 'src', 'value.txt'), [
+    '## Runtime control',
+    'base',
+    '## Release closeout',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(
+    path.join(stagnationRepo, '.claude', 'owner-kernel-governance.json'),
+    `${JSON.stringify(projectGovernance)}\n`,
+  );
+  execFileSync('git', ['-C', stagnationRepo, 'add', '.']);
+  execFileSync('git', ['-C', stagnationRepo, 'commit', '-qm', 'base']);
+  const stagnationCommonRaw = execFileSync(
+    'git',
+    ['-C', stagnationRepo, 'rev-parse', '--git-common-dir'],
+    { encoding: 'utf8' },
+  ).trim();
+  const stagnationCommon = fs.realpathSync(
+    path.isAbsolute(stagnationCommonRaw)
+      ? stagnationCommonRaw : path.join(stagnationRepo, stagnationCommonRaw),
+  );
+  const stagnationRepoIdentity = `git-common-dir:${stagnationCommon}`;
+  const stagnationIntent = {
+    ...intent,
+    objective: 'exercise independent terminal stagnation recovery',
   };
-  const secondState = store.load();
+  const stagnationBinding = {
+    repo_identity: stagnationRepoIdentity,
+    intent: stagnationIntent,
+    initial_required_acceptance_hashes: [
+      acceptance.contract_hash,
+      acceptance.criteria_hash,
+    ].sort(),
+  };
+  const stagnationAdoptionKey = sha(stagnationBinding);
+  const stagnationAuthority = {
+    ...authority,
+    task_id: 'stagnation-runtime-task',
+    task_authority_id: sha('stagnation-task-authority'),
+    policy_hash: sha('stagnation-owner-policy'),
+    intent: stagnationIntent,
+    mission_lineage_id: `lineage-v1-${stagnationAdoptionKey}`,
+  };
+  const stagnationPrepared = runtime.prepareMissionRuntimeForTest({
+    repo: stagnationRepo,
+    taskAuthority: stagnationAuthority,
+    authoritativeGovernance: projectGovernance,
+    executionGraph: graph,
+    preparedAt: '2026-07-28T10:00:00.000Z',
+  }, dependencies);
+  const stagnationPreparedPath = path.join(temp, 'stagnation-prepared.json');
+  fs.writeFileSync(
+    stagnationPreparedPath,
+    `${JSON.stringify(stagnationPrepared.receipt, null, 2)}\n`,
+  );
+  const stagnationStore = runtime.openPreparedMissionStateStore({
+    repo: stagnationRepo,
+    preparedReceipt: stagnationPrepared.receipt,
+  });
+  const stagnationIcc = (grant) => {
+    const bytes = fs.readFileSync(grant.contract_path);
+    const contract = JSON.parse(bytes.toString('utf8'));
+    const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+    const { campaignIdFor } = require(
+      path.join(root, 'src', 'engine', 'implementation-campaign'),
+    );
+    return {
+      campaignId: campaignIdFor(stagnationRepoIdentity, contract.ticket, digest),
+      contractDigest: digest,
+    };
+  };
+  const stagnationPrerequisite = runtime.grantMissionCampaign({
+    repo: stagnationRepo,
+    preparedReceipt: stagnationPrepared.receipt,
+    nodeId: 'runtime-control',
+    now: '2026-07-28T10:00:01.000Z',
+  });
+  const prerequisiteIcc = stagnationIcc(stagnationPrerequisite);
+  const prerequisiteTerminal = runtime.reconcileMissionCampaignTerminal({
+    store: stagnationStore,
+    grantRef: stagnationPrerequisite.mission_grant_ref,
+    claimId: stagnationPrerequisite.claim_id,
+    iccCampaignId: prerequisiteIcc.campaignId,
+    rawCampaignContractDigest: prerequisiteIcc.contractDigest,
+    outcome: 'ready',
+    possiblyEffectful: true,
+    observedAt: '2026-07-28T10:00:02.000Z',
+  });
+  if (prerequisiteTerminal.status !== 'applied') {
+    throw new Error(`stagnation prerequisite failed: ${JSON.stringify(prerequisiteTerminal)}`);
+  }
+  const stagnationGrant1 = runtime.grantMissionCampaign({
+    repo: stagnationRepo,
+    preparedReceipt: stagnationPrepared.receipt,
+    nodeId: 'release-closeout',
+    now: '2026-07-28T10:01:00.000Z',
+  });
+  const stagnationIcc1 = stagnationIcc(stagnationGrant1);
+  const stagnationFirst = runtime.reconcileMissionCampaignTerminal({
+    store: stagnationStore,
+    grantRef: stagnationGrant1.mission_grant_ref,
+    claimId: stagnationGrant1.claim_id,
+    iccCampaignId: stagnationIcc1.campaignId,
+    rawCampaignContractDigest: stagnationIcc1.contractDigest,
+    outcome: 'follow_up',
+    possiblyEffectful: true,
+    observedAt: '2026-07-28T10:02:00.000Z',
+  });
+  if (stagnationFirst.status !== 'applied'
+      || stagnationStore.load().stagnant_campaigns !== 1) {
+    throw new Error(`stagnation first terminal failed: ${JSON.stringify(stagnationFirst)}`);
+  }
+  const stagnationGrant2 = runtime.grantMissionCampaign({
+    repo: stagnationRepo,
+    preparedReceipt: stagnationPrepared.receipt,
+    nodeId: 'release-closeout',
+    now: '2026-07-28T10:03:00.000Z',
+  });
+  const stagnationIcc2 = stagnationIcc(stagnationGrant2);
+  const thirdTerminalBase = {
+    grantRef: stagnationGrant2.mission_grant_ref,
+    claimId: stagnationGrant2.claim_id,
+    iccCampaignId: stagnationIcc2.campaignId,
+    rawCampaignContractDigest: stagnationIcc2.contractDigest,
+    possiblyEffectful: true,
+    observedAt: '2026-07-28T10:04:00.000Z',
+  };
+  const secondState = stagnationStore.load();
   const raceReceiptA = runtime.createCampaignTerminalReceipt({
     ...thirdTerminalBase,
     state: secondState,
@@ -1307,8 +1941,8 @@ fs.writeFileSync(outputPath, JSON.stringify(result));
     process.execPath,
     raceWorker,
     root,
-    repo,
-    preparedPath,
+    stagnationRepo,
+    stagnationPreparedPath,
     barrier,
     receiptAPath,
     outputAPath,
@@ -1321,18 +1955,27 @@ fs.writeFileSync(outputPath, JSON.stringify(result));
   ].sort();
   check('terminal-race-first-writer-wins',
     raceResults.join(',') === 'conflict,journaled');
-  const recoveredRace = runtime.recoverPendingTerminals(store);
+  const recoveredRace = runtime.recoverPendingTerminals(stagnationStore);
   check('terminal-race-recovers-journal-before-cas',
     recoveredRace.status === 'recovered');
   check('second-zero-delta-terminal-blocks-mission',
-    store.load().state === 'BLOCKED'
-    && store.load().stagnant_campaigns === 2);
-  const afterStagnation = runCli([
-    'grant', '--repo', repo, '--prepared', preparedPath,
-    '--node', 'release-closeout',
-  ]);
-  check('next-grant-rejects-after-stagnation', afterStagnation.code !== 0
-    && /stagnation|terminal/i.test(afterStagnation.stdout + afterStagnation.stderr));
+    stagnationStore.load().state === 'BLOCKED'
+    && stagnationStore.load().stagnant_campaigns === 2);
+  let afterStagnationError = null;
+  try {
+    runtime.grantMissionCampaign({
+      repo: stagnationRepo,
+      preparedReceipt: stagnationPrepared.receipt,
+      nodeId: 'release-closeout',
+    });
+  } catch (error) {
+    afterStagnationError = error;
+  }
+  check('next-grant-rejects-after-stagnation',
+    afterStagnationError
+    && /stagnation|terminal/i.test(
+      `${afterStagnationError.code || ''} ${afterStagnationError.message || ''}`,
+    ));
 }
 
 const failed = lines.filter((line) => line.endsWith('\tFAIL'));
@@ -1373,15 +2016,25 @@ for id in \
   grant-ref-mismatch-stagnation-unchanged grant-ref-mismatch-generation-lease-still-live \
   zero-effect-adapter-factory-once \
   zero-effect-adapter-missing-blocks-release zero-effect-adapter-missing-keeps-lease-live \
-  zero-effect-adapter-missing-mission-code \
+  zero-effect-adapter-missing-mission-code controller-restart-attaches-same-workorder \
+  controller-recovery-production-artifacts-bound controller-postcompact-real-linked-positive \
   zero-effect-adapters-built-once zero-effect-release-threads-exact-adapter-object \
   durable-zero-effect-blocks durable-zero-effect-records-intent-only \
   durable-zero-effect-releases-admission durable-zero-effect-mission-release-via-trusted-adapter \
   durable-zero-effect-lease-marked-dead durable-zero-effect-emits-mission-no-effect-release \
   durable-zero-effect-stagnation-unchanged durable-zero-effect-graph-restored-pending \
   durable-zero-effect-no-terminal-reconcile durable-zero-effect-non-terminal-result \
+  controller-zero-effect-exact-aborted-disposition \
   durable-zero-effect-permits-next-graph-attempt \
+  engine-terminal-ready-through-production-composition \
   engine-terminal-ready-applied engine-terminal-binds-both-campaign-identities \
+  controller-success-consumed-classifies-terminal \
+  controller-terminal-transcript-exact-production-authority \
+  controller-progress-real-multinode-zero-of-two \
+  controller-progress-real-multinode-one-of-two \
+  engine-second-node-production-composition \
+  controller-progress-real-multinode-two-of-two \
+  controller-progress-frozen-denominator-unchanged \
   unknown-usage-charges-conservative-reservation \
   terminal-requires-frozen-observed-at \
   terminal-ready-satisfies-acceptance-without-stagnation terminal-exact-replay-noop \

@@ -140,6 +140,77 @@ else
   ok "3b: live-spend failure stderr diagnostic is redacted (no secret leak)"
 fi
 
+# 4. Exact Codex effort + explicit no-endpoint is genuinely applied to argv
+#    before an available row is written.
+reset
+CAPTURE="$TESTDIR/codex-argv.txt"
+cat > "$DUMMY_BIN_DIR/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = "exec" ]; then
+  printf '%s\n' "$*" >"$PROBE_ARGV_CAPTURE"
+  printf 'probe\n'
+  exit 0
+fi
+printf 'codex-cli 1.0.0-mock\n'
+EOF
+chmod +x "$DUMMY_BIN_DIR/codex"
+PROBE_ARGV_CAPTURE="$CAPTURE" bash "$PROBE_CLI" quota --runner codex \
+  --model gpt-5.5 --role implementer --effort high --endpoint @none \
+  --live-spend --store "$TESTDIR" >/dev/null 2>&1
+exact_status=$(node "$STATE_CLI" current --runner codex --model gpt-5.5 \
+  --role implementer --effort high --endpoint @none --store "$TESTDIR" \
+  | jq_get capability.quota.status)
+if [ "$exact_status" = "available" ] \
+    && grep -q 'model_reasoning_effort="high"' "$CAPTURE" \
+    && grep -q -- '--sandbox read-only' "$CAPTURE"; then
+  ok "4: Codex live probe applies exact effort/no-endpoint tuple before authorizing"
+else
+  bad "4: exact_status=$exact_status argv=$(cat "$CAPTURE" 2>/dev/null)"
+fi
+
+# 5. A named endpoint is not a Codex control surface. The exact tuple remains
+#    unknown and the runner must not be called.
+reset
+rm -f "$CAPTURE"
+PROBE_ARGV_CAPTURE="$CAPTURE" bash "$PROBE_CLI" quota --runner codex \
+  --model gpt-5.5 --role implementer --effort high --endpoint primary \
+  --live-spend --store "$TESTDIR" >/dev/null 2>&1
+named_status=$(node "$STATE_CLI" current --runner codex --model gpt-5.5 \
+  --role implementer --effort high --endpoint primary --store "$TESTDIR" \
+  | jq_get capability.quota.status)
+if [ "$named_status" = "unknown" ] && [ ! -e "$CAPTURE" ]; then
+  ok "5: unsupported Codex named-endpoint tuple stays unknown without runner call"
+else
+  bad "5: named_status=$named_status runner_called=$([ -e "$CAPTURE" ] && echo yes || echo no)"
+fi
+
+# 6. cc-shim has a verified named-endpoint transport but no verified effort
+#    control. An effort-bearing tuple must remain unknown without invoking it.
+reset
+CC_CAPTURE="$TESTDIR/cc-shim-argv.txt"
+cat > "$DUMMY_BIN_DIR/claude" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then
+  printf 'claude 1.0.0-mock\n'
+  exit 0
+fi
+printf '%s\n' "$*" >"$PROBE_CC_CAPTURE"
+exit 0
+EOF
+chmod +x "$DUMMY_BIN_DIR/claude"
+rm -f "$CC_CAPTURE"
+PROBE_CC_CAPTURE="$CC_CAPTURE" bash "$PROBE_CLI" quota --runner cc-shim \
+  --model claude-test --role implementer --effort high --endpoint @none \
+  --live-spend --store "$TESTDIR" >/dev/null 2>&1
+cc_status=$(node "$STATE_CLI" current --runner cc-shim --model claude-test \
+  --role implementer --effort high --endpoint @none --store "$TESTDIR" \
+  | jq_get capability.quota.status)
+if [ "$cc_status" = "unknown" ] && [ ! -e "$CC_CAPTURE" ]; then
+  ok "6: unsupported cc-shim effort tuple stays unknown without runner call"
+else
+  bad "6: cc_status=$cc_status runner_called=$([ -e "$CC_CAPTURE" ] && echo yes || echo no)"
+fi
+
 # Restore PATH
 export PATH="$OLD_PATH"
 

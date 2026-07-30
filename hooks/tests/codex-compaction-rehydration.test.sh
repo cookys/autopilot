@@ -881,7 +881,7 @@ CTRL_RECOVERY="$(node - "$REPO_ROOT" "$SBX" <<'NODE'
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 const [root, repo] = process.argv.slice(2);
 const ctrl = require(path.join(root, 'src/engine/controller-execution'));
 const rehydrate = path.join(root, 'scripts/compaction-rehydrate.js');
@@ -898,21 +898,44 @@ const clean = ctrl.classifyResourceOutcome({ dirty: false, unique: false, identi
 const dirty = ctrl.classifyResourceOutcome({ dirty: true, identity_known: true });
 const unique = ctrl.classifyResourceOutcome({ unique: true, dirty: false, identity_known: true, terminal: false });
 const unknown = ctrl.classifyResourceOutcome({ identity_known: false });
+const inferred = ctrl.classifyResourceOutcome({ dirty: false, unique: false }); // missing clean/identity
 assert.strictEqual(clean.release, true);
 assert.strictEqual(dirty.blocks_dispatch, true);
 assert.strictEqual(unique.blocks_dispatch, true);
 assert.strictEqual(unknown.blocks_dispatch, true);
+assert.strictEqual(inferred.blocks_dispatch, true);
 
+const cleanItem = {
+  resource_id: 'wt-clean',
+  worktree: '/tmp/clean',
+  path: '/tmp/clean',
+  clean: true,
+  terminal: true,
+  identity_known: true,
+};
+// Caller terminalConsumed on a nonexistent path is not authority (must-fix red).
+assert.throws(() => ctrl.buildRecoveryReceipt({
+  resourceId: cleanItem.resource_id,
+  path: cleanItem.path,
+  outcome: { clean: true, terminal: true, identity_known: true },
+  evidenceKind: 'clean_release',
+  terminalConsumed: true,
+}), /terminal|receipt|path|mechanical/i);
+// Debt still blocks when dirty + malformed remain open without a valid release receipt.
 const debt = ctrl.buildResourceDebtState([
-  { resource_id: 'wt-clean', worktree: '/tmp/clean', clean: true, terminal: true, recovery_bundle_digest: 'a'.repeat(64) },
-  { resource_id: 'wt-dirty', worktree: '/tmp/dirty', dirty: true },
+  cleanItem,
+  { resource_id: 'wt-dirty', worktree: '/tmp/dirty', dirty: true, identity_known: true },
+  { resource_id: 'wt-malformed', worktree: '/tmp/m', clean: true, terminal: true, identity_known: true, recovery_bundle_digest: 'not-a-digest' },
 ]);
 assert.strictEqual(debt.blocks_dispatch, true);
-assert.strictEqual(debt.open.length, 1);
-assert.strictEqual(debt.released.length, 1);
+assert.strictEqual(debt.released.length, 0);
+assert.ok(debt.open.length >= 2);
 
-// High-water admission creates zero effects.
-const hw = run(['high-water', '--current-owned', '4', '--high-water', '4']);
+// High-water: projected == limit is admitted; projected > limit creates zero effects.
+const hwEq = run(['high-water', '--current-owned', '4', '--high-water', '4']);
+assert.strictEqual(hwEq.status, 0);
+assert.strictEqual(JSON.parse(hwEq.out).allow_checkout, true);
+const hw = run(['high-water', '--current-owned', '5', '--high-water', '4']);
 assert.strictEqual(hw.status, 1);
 const hwBody = JSON.parse(hw.out);
 assert.strictEqual(hwBody.allow_checkout, false);
@@ -923,44 +946,136 @@ const debtBlock = run(['high-water', '--current-owned', '0', '--high-water', '4'
 assert.strictEqual(debtBlock.status, 1);
 assert.strictEqual(JSON.parse(debtBlock.out).code, 'RESOURCE_DEBT_BLOCKS_DISPATCH');
 
-// Orphan adoption once with bound evidence; ambiguity stops.
+// Orphan adoption: boolean flags alone never authorize.
+const adoptBoolOnly = run([
+  'adopt-orphan',
+  '--controller-dead',
+  '--base-ancestry-ok',
+  '--scope-ok',
+  '--churn-ok',
+  '--leaf-committed',
+  '--leaf-commit', 'b'.repeat(40),
+]);
+assert.notStrictEqual(adoptBoolOnly.status, 0);
+assert.ok(
+  (JSON.parse(adoptBoolOnly.out || '{}').code || '').includes('BOOLEAN')
+  || (JSON.parse(adoptBoolOnly.out || '{}').reason_code || '').includes('BOOLEAN')
+  || (JSON.parse(adoptBoolOnly.out || '{}').reason_code || '').includes('AUTHORITY')
+  || (JSON.parse(adoptBoolOnly.out || '{}').reason || '').includes('boolean'),
+);
+
+// Mechanical adoption: dead controller owner + exact leaf on same WO (CAS).
+const woMod = require(path.join(root, 'src/engine/work-order'));
+const adoptDir = path.join(repo, '.adopt-case');
+fs.mkdirSync(adoptDir, { recursive: true });
+// Capture the exact production parentage shape while the controller is live,
+// then kill it so adoption proves death against the persisted identity.
+const orphanController = spawn(
+  process.execPath,
+  ['-e', 'setInterval(() => {}, 1000)'],
+  { stdio: 'ignore' },
+);
+const productionParentage = woMod.captureProcessParentage(orphanController.pid);
+const deadOwner = productionParentage.owner;
+assert.ok(woMod.isCompleteIdentity(deadOwner));
+assert.ok(productionParentage.relationships.length > 0);
+process.kill(orphanController.pid, 'SIGKILL');
+orphanController.unref();
+const deathWait = new Int32Array(new SharedArrayBuffer(4));
+for (let attempt = 0; attempt < 100 && woMod.isProcessLive(deadOwner); attempt += 1) {
+  Atomics.wait(deathWait, 0, 0, 10);
+}
+assert.strictEqual(woMod.isProcessLive(deadOwner), false);
+const adoptFrozen = ctrl.buildFrozenDenominator({
+  projectId: 'adopt-camp',
+  graphDigest: 'a'.repeat(64),
+  deliverableIds: ['n1'],
+});
+const ctrlState = ctrl.emptyControllerState({
+  frozen_denominator: adoptFrozen,
+  process_parentage: productionParentage,
+});
+const baseSha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+// Create a leaf commit on a branch.
+execFileSync('git', ['-C', repo, 'checkout', '-q', '-b', 'orphan-leaf']);
+fs.writeFileSync(path.join(repo, 'orphan-leaf.txt'), 'leaf\n');
+execFileSync('git', ['-C', repo, 'add', 'orphan-leaf.txt']);
+execFileSync('git', ['-C', repo, 'commit', '-qm', 'orphan leaf']);
+const leafTip = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const common = woMod.resolveGitCommonDir(repo);
+const writtenWo = woMod.createOrUpdateWorkOrder(common, {
+  root_run_id: 'adopt-root',
+  graph_node: 'n1',
+  attempt: 1,
+  role: 'controller',
+  next_action: 'continue',
+  branch: 'orphan-leaf',
+  base_sha: baseSha,
+  worktree: repo,
+  owner: deadOwner,
+  paths: { checkpoint: path.join(adoptDir, 'cp.json') },
+  sealed_scope: {
+    allow_paths: ['orphan-leaf.txt'],
+    max_files: 1,
+    max_diff_lines: 2,
+  },
+  controller: ctrlState,
+}, { bindArtifacts: false, updateLifecycle: false });
+assert.strictEqual(writtenWo.status, 'written');
+// Force dead owner onto the WO body (create may overwrite owner with live process).
+{
+  const live = JSON.parse(fs.readFileSync(writtenWo.path, 'utf8'));
+  live.owner = deadOwner;
+  live.digest = woMod.workOrderDigest(live);
+  fs.writeFileSync(writtenWo.path, `${JSON.stringify(live, null, 2)}\n`);
+}
+const leafPath = path.join(adoptDir, 'leaf.json');
+{
+  // Mechanical adoption requires recomputeable leaf digest + real worktree path.
+  const leafBody = {
+    committed: true,
+    commit: leafTip,
+    worktree: repo,
+  };
+  const leafDigest = ctrl.sha256Json(leafBody);
+  fs.writeFileSync(leafPath, JSON.stringify({ ...leafBody, digest: leafDigest }));
+}
 const adoptOk = run([
   'adopt-orphan',
-  '--controller-dead',
-  '--leaf-committed',
-  '--leaf-commit', 'b'.repeat(40),
-  '--branch-tip', 'b'.repeat(40),
-  '--branch-tree', 'c'.repeat(40),
-  '--worktree-digest', 'd'.repeat(64),
-  '--generation', '1',
+  '--git-cwd', repo,
+  '--work-order-path', writtenWo.path,
+  '--leaf-result', leafPath,
+  '--branch', 'orphan-leaf',
+  '--base-sha', baseSha,
 ]);
 assert.strictEqual(adoptOk.status, 0, adoptOk.err || adoptOk.out);
-assert.strictEqual(JSON.parse(adoptOk.out).duplicate_mutation, 0);
+const adoptBody = JSON.parse(adoptOk.out);
+assert.strictEqual(adoptBody.duplicate_mutation, 0);
+assert.strictEqual(adoptBody.work_order_id, writtenWo.work_order.work_order_id
+  || JSON.parse(fs.readFileSync(writtenWo.path, 'utf8')).work_order_id);
+const genAfter = adoptBody.generation;
+assert.ok(Number.isSafeInteger(genAfter) && genAfter >= 1);
 
+// Second adoption of same WO is blocked (adoption_receipts already present).
 const adoptDup = run([
   'adopt-orphan',
-  '--controller-dead',
-  '--leaf-committed',
-  '--leaf-commit', 'b'.repeat(40),
-  '--branch-tip', 'b'.repeat(40),
-  '--branch-tree', 'c'.repeat(40),
-  '--worktree-digest', 'd'.repeat(64),
-  '--generation', '1',
-  '--already-adopted',
+  '--git-cwd', repo,
+  '--work-order-path', writtenWo.path,
+  '--leaf-result', leafPath,
+  '--branch', 'orphan-leaf',
+  '--base-sha', baseSha,
 ]);
 assert.strictEqual(adoptDup.status, 1);
 assert.strictEqual(JSON.parse(adoptDup.out).code, 'ADOPTION_ALREADY_CONSUMED');
 
+// Boolean flags alone still fail even with git-cwd if WO missing.
 const adoptAmb = run([
   'adopt-orphan',
-  '--leaf-committed',
-  '--branch-tip', 'b'.repeat(40),
-  '--branch-tree', 'c'.repeat(40),
-  '--worktree-digest', 'd'.repeat(64),
-  '--generation', '1',
+  '--controller-dead',
+  '--base-ancestry-ok',
+  '--git-cwd', repo,
 ]);
 assert.strictEqual(adoptAmb.status, 1);
-assert.strictEqual(JSON.parse(adoptAmb.out).code, 'CONTROLLER_NOT_PROVEN_DEAD');
 
 // PostCompact adapter is hook-ready but does not claim production wiring.
 const rootRun = `root-ctrl-${Date.now()}`;
@@ -972,12 +1087,18 @@ const adapter = run([
   'postcompact-adapter',
   '--git-cwd', repo,
   '--root-run-id', rootRun,
+  '--graph-node', 'controller',
+  '--attempt', '1',
   '--inventory', invPath,
 ]);
-// No work orders → reconcile may succeed; resource debt still blocks.
+// No controller Work Order exists for this exact root tuple, so production
+// recovery must reject before caller-supplied inventory can act as authority.
 const adapterBody = JSON.parse(adapter.out || '{}');
+assert.strictEqual(adapter.status, 1);
 assert.strictEqual(adapterBody.production_hook_wired, false);
-assert.strictEqual(adapterBody.receipt && adapterBody.receipt.hook_probe_files_touched, false);
+assert.strictEqual(adapterBody.status, 'reject');
+assert.strictEqual(adapterBody.reason_code, 'controller_work_order_missing');
+assert.strictEqual(adapterBody.receipt, undefined);
 
 // Progress receipt replay: 16/34 remains 16/34.
 const frozen = ctrl.buildFrozenDenominator({

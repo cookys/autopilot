@@ -16,6 +16,11 @@
 
 set -uo pipefail   # NOT -e — we want to handle assertion failures explicitly
 
+# Hermetic assert_eq: Node util.inspect under FORCE_COLOR wraps numbers in ANSI
+# (e.g. expected '2' vs got '[33m2[39m'). Disable color for all hook tests.
+export NO_COLOR=1
+unset FORCE_COLOR 2>/dev/null || true
+
 TEST_NAME="${TEST_NAME:-$(basename "${BASH_SOURCE[1]:-$0}" .test.sh)}"
 TEST_TMP=$(mktemp -d -t "autopilot-test-${TEST_NAME}-XXXXXX")
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -605,10 +605,18 @@ assert_eq "1" "$EXIT" "quota failure exit code remains 1"
 assert_contains "$OUT" '"status": "engine_unavailable"' "quota failure status is engine_unavailable"
 assert_contains "$OUT" "engine unavailable (quota_exhausted)" "quota failure error names the classification"
 
-# Verify that the event was recorded in the capability store
+# Verify that the event was recorded in the capability store against the exact
+# runner/model/effort/endpoint tuple (passive capture now binds effort + endpoint:null).
 assert_file_exists "$CAP_TEST_DIR/capability.jsonl" "capability store contains recorded event"
-recorded_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner agy --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
-assert_eq "exhausted" "$recorded_status" "recorded quota status is exhausted"
+recorded_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current \
+  --runner agy --model "gpt-5.5" --role implementer --effort xhigh --endpoint @none \
+  --store "$CAP_TEST_DIR" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
+assert_eq "$recorded_status" "exhausted" "recorded quota status is exhausted"
+# Legacy/neighboring lookup without the exact effort must not inherit the observation.
+legacy_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current \
+  --runner agy --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" \
+  | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
+assert_neq "$legacy_status" "exhausted" "legacy incomplete observation does not authorize exact-tuple exhaustion"
 
 # 10b. real grok 402 fixture string → engine_unavailable (the BACKLOG gap that
 # previously mislabelled HTTP 402 quota death as question_suspected).
@@ -971,5 +979,670 @@ assert_contains "$CTRL_OUTPUT_SEM" '"legacy_required_outputs":true' \
   "legacy unit contracts still require declared outputs"
 assert_contains "$CTRL_OUTPUT_SEM" '"boundary_parseable":true' \
   "boundary_rejected is parseable first-class"
+
+# --- Projected-unit required_change_paths + sealed zero-diff no-op matrix ---
+enable_legacy_scorecard_test_projection
+REQ_MATRIX_OUT="$(node - "$REPO_ROOT" "$SBX" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { execFileSync, spawnSync } = require('child_process');
+const [root, repo, tmp] = process.argv.slice(2);
+const {
+  deriveCampaignDispatchUnit,
+  verifyCampaignDispatchUnit,
+  writeCampaignDispatchUnit,
+} = require(path.join(root, 'src/engine/campaign-dispatch-projection'));
+const { AutopilotEngine } = require(path.join(root, 'src/engine/autopilot-engine'));
+const {
+  campaignIdFor,
+} = require(path.join(root, 'src/engine/implementation-campaign'));
+const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
+const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
+
+// Seed product surface for required_change.
+fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+fs.mkdirSync(path.join(repo, 'specs', 'feat'), { recursive: true });
+fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
+  '- implementer_engine: gpt-5.5',
+  '- implementer_effort: high',
+  '- implementer_runner: agy',
+  '- implementer_endpoint:',
+].join('\n') + '\n');
+const scoreDir = path.join(tmp, 'req-engine-scores');
+const capabilityDir = path.join(tmp, 'req-engine-capabilities');
+fs.mkdirSync(scoreDir, { recursive: true });
+fs.mkdirSync(capabilityDir, { recursive: true });
+const engineScorePath = path.join(tmp, 'req-engine-score.json');
+const engineCapabilityPath = path.join(tmp, 'req-engine-capability.json');
+fs.writeFileSync(engineScorePath, `${JSON.stringify({
+  engine: 'gpt-5.5',
+  runner: 'agy',
+  family: 'openai',
+  role: 'implementer',
+  model_version: 'fixture-v1',
+  version_source: 'manual',
+  corpus_version: 'fixture@1',
+  harness_version: 'dispatch-hetero@fixture',
+  runner_version: 'agy fixture',
+  prompt_config_hash: 'sha256:fixture',
+  date: '2026-07-30',
+  quality: { corpus_pass: '10/10', false_pass_critical: 0, specificity: '3/3' },
+  capability_score: 0.9,
+  cost: {
+    source: 'manual',
+    usd_per_mtok_input: 0,
+    usd_per_mtok_output: 0,
+    sample_tokens: 0,
+  },
+  latency: { sample_wall_time_s: 0 },
+  status: 'qualified',
+  qualified_at: '2026-07-30',
+  expires: '2099-01-01',
+}, null, 2)}\n`);
+fs.writeFileSync(engineCapabilityPath, `${JSON.stringify({
+  schema_version: 1,
+  observed_at: new Date().toISOString(),
+  runner: 'agy',
+  model: 'gpt-5.5',
+  role: 'implementer',
+  effort: 'high',
+  endpoint: null,
+  runner_version: 'agy fixture',
+  capability: {
+    quota: {
+      status: 'available',
+      confidence: 'high',
+      ttl_seconds: 3600,
+      reset_at: null,
+      evidence: 'fixture',
+    },
+  },
+}, null, 2)}\n`);
+process.env.ENGINE_SCORECARD_DIR = scoreDir;
+process.env.ENGINE_CAPABILITY_DIR = capabilityDir;
+execFileSync(process.execPath, [
+  path.join(root, 'scripts', 'engine-scorecard.js'),
+  'record',
+  '--file',
+  engineScorePath,
+], { env: process.env, stdio: 'ignore' });
+execFileSync(process.execPath, [
+  path.join(root, 'scripts', 'engine-capability-state.js'),
+  'record',
+  '--file',
+  engineCapabilityPath,
+], { env: process.env, stdio: 'ignore' });
+fs.writeFileSync(path.join(repo, 'src', 'target.js'), 'v1\n');
+fs.writeFileSync(path.join(repo, 'specs', 'feat', 'x.md'), '# S\nbody\n');
+execFileSync('git', ['-C', repo, 'add', '.']);
+execFileSync('git', ['-C', repo, 'commit', '-qm', 'seed required surface']);
+const base2 = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const campaignId = `campaign-v1-${'a'.repeat(64)}`;
+const rootRunId = 'root-req-1';
+const branch = 'feat/req-change';
+const campaignContract = {
+  ticket: 'T-req',
+  branch,
+  base_sha: base2,
+  profile: 'poc',
+  allowed_path_prefixes: ['src', 'specs'],
+  max_changed_files: 8,
+  baseline_churn: 100,
+  max_extra_churn: 50,
+  max_growth_ratio: 2,
+  max_repair_generations: 1,
+  max_wall_seconds: 600,
+  mission_runtime: {
+    schema_version: 1,
+    root_run_id: rootRunId,
+    mission_lineage_id: 'lineage-v1',
+    mission_policy_digest: 'b'.repeat(64),
+    mission_graph_digest: 'd'.repeat(64),
+    graph_node_id: 'n1',
+    graph_node_digest: 'e'.repeat(64),
+  },
+  strict_dispatch: {
+    schema_version: 1,
+    spec: { path: 'specs/feat/x.md', section: 'S' },
+    required_paths: ['src/target.js'],
+    output_paths: ['src/target.js'],
+    required_change_paths: ['src/target.js'],
+    allowed_path_prefixes: ['src', 'specs'],
+    budget: {
+      max_changed_files: 8,
+      max_wall_seconds: 600,
+      max_output_bytes: 100000,
+      max_tool_calls: 50,
+      max_engine_attempts: 2,
+    },
+    verification_commands: ['true'],
+  },
+};
+const campaignBytes = `${JSON.stringify(campaignContract, null, 2)}\n`;
+const campaignSha = sha256(Buffer.from(campaignBytes, 'utf8'));
+const derived = deriveCampaignDispatchUnit({
+  campaignContract,
+  campaignContractSha256: campaignSha,
+  campaignId,
+  branch,
+  base: base2,
+  runner: 'agy',
+  model: 'gpt-5.5',
+  stage: 'campaign-implementation',
+  rootRunId,
+});
+const contractPath = path.join(tmp, 'unit-req.json');
+fs.writeFileSync(contractPath, `${JSON.stringify(derived, null, 2)}\n`);
+const unit = {
+  contract: derived,
+  contract_path: contractPath,
+  contract_sha256: sha256(fs.readFileSync(contractPath)),
+  cleanup() {},
+};
+
+assert.ok(unit.contract.output.required_change_paths);
+assert.deepStrictEqual(unit.contract.output.required_change_paths, ['src/target.js']);
+
+// dispatch-contract.js must accept required_change_paths (not unknown key).
+const check = spawnSync(process.execPath, [
+  path.join(root, 'scripts/dispatch-contract.js'),
+  'check', '--contract', unit.contract_path, '--repo', repo, '--json',
+], { encoding: 'utf8' });
+const checkOut = `${check.stdout || ''}${check.stderr || ''}`;
+assert.ok(!checkOut.includes("unknown key 'required_change_paths'"), checkOut);
+// This assertion isolates closed-schema acceptance; exact boundary outcomes are
+// asserted by the sealed zero-diff and required-change cases below.
+assert.ok(!/output: unknown key/.test(checkOut), checkOut);
+
+// Seal a zero-diff receipt into the unit for no-op path.
+const liveDigest = sha256(fs.readFileSync(path.join(repo, 'src/target.js')));
+const acceptance = unit.contract.acceptance.map((a) => ({ argv: a.argv, exit: a.exit }));
+const zeroBody = {
+  schema_version: 1,
+  artifact_type: 'campaign_zero_diff_receipt',
+  base_sha: base2,
+  acceptance_digest: sha256Json(acceptance),
+  campaign_contract_digest: unit.contract.campaign_projection.campaign_contract_sha256,
+  strict_dispatch_digest: unit.contract.campaign_projection.strict_dispatch_sha256,
+  campaign_id: unit.contract.campaign_projection.campaign_id,
+  mission_lineage_id: unit.contract.campaign_projection.mission_lineage_id,
+  mission_graph_digest: unit.contract.campaign_projection.mission_graph_digest,
+  graph_node_id: unit.contract.campaign_projection.graph_node_id,
+  path_byte_digests: { 'src/target.js': liveDigest },
+  candidate_zero_change: true,
+};
+zeroBody.digest = sha256Json(zeroBody);
+const sealed = deriveCampaignDispatchUnit({
+  campaignContract,
+  campaignContractSha256: campaignSha,
+  campaignId,
+  branch,
+  base: base2,
+  runner: 'agy',
+  model: 'gpt-5.5',
+  stage: 'campaign-implementation',
+  rootRunId,
+  zeroDiffReceipt: zeroBody,
+});
+assert.deepStrictEqual(sealed.output.zero_diff_receipt, zeroBody);
+assert.deepStrictEqual(
+  verifyCampaignDispatchUnit({
+    campaignContract,
+    campaignContractSha256: campaignSha,
+    campaignId,
+    branch,
+    base: base2,
+    runner: 'agy',
+    model: 'gpt-5.5',
+    stage: 'campaign-implementation',
+    rootRunId,
+    zeroDiffReceipt: sealed.output.zero_diff_receipt,
+    unitContract: sealed,
+  }),
+  sealed,
+  'ordinary projection preflight must rederive the sealed zero-diff field',
+);
+const sealedPath = path.join(tmp, 'unit-sealed-noop.json');
+fs.writeFileSync(sealedPath, `${JSON.stringify(sealed, null, 2)}\n`);
+
+// Ambient STRICT_NOOP_RECEIPT_PATH alone is rejected by postcheck logic (source + behavior).
+const heteroSrc = fs.readFileSync(path.join(root, 'scripts/dispatch-hetero.sh'), 'utf8');
+assert.ok(heteroSrc.includes('ambient STRICT_NOOP_RECEIPT_PATH is not authority'));
+assert.ok(heteroSrc.includes('zero_diff_receipt'));
+
+// Invoke strict postcheck path via a tiny bash harness that sources the function
+// is heavy; instead run dispatch-hetero with a no-op stub + sealed contract when
+// the script supports --contract.
+const stubNoop = path.join(tmp, 'stub-noop.sh');
+fs.writeFileSync(stubNoop, '#!/usr/bin/env bash\nexit 0\n');
+fs.chmodSync(stubNoop, 0o755);
+const sealDuringRun = path.join(tmp, 'seal-zero-diff-during-run.js');
+fs.writeFileSync(sealDuringRun, `#!/usr/bin/env node
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const [contractPath, worktree] = process.argv.slice(2);
+const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+const sha256Json = (value) => sha256(Buffer.from(JSON.stringify(value), 'utf8'));
+const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+const acceptance = contract.acceptance.map((entry) => ({ argv: entry.argv, exit: entry.exit }));
+const projection = contract.campaign_projection || {};
+const relevant = [...new Set([
+  ...(contract.output.required_change_paths || []),
+  ...(contract.output.paths || []),
+])].sort();
+const receipt = {
+  schema_version: 1,
+  artifact_type: 'campaign_zero_diff_receipt',
+  base_sha: contract.base_sha,
+  acceptance_digest: sha256Json(acceptance),
+  campaign_contract_digest: projection.campaign_contract_sha256,
+  strict_dispatch_digest: projection.strict_dispatch_sha256,
+  campaign_id: projection.campaign_id,
+  mission_lineage_id: projection.mission_lineage_id,
+  mission_graph_digest: projection.mission_graph_digest,
+  graph_node_id: projection.graph_node_id,
+  path_byte_digests: Object.fromEntries(relevant.map((rel) => [
+    rel,
+    sha256(fs.readFileSync(path.join(worktree, rel))),
+  ])),
+  candidate_zero_change: true,
+};
+receipt.digest = sha256Json(receipt);
+contract.output.zero_diff_receipt = receipt;
+fs.writeFileSync(contractPath, JSON.stringify(contract, null, 2) + '\\n');
+`);
+fs.chmodSync(sealDuringRun, 0o755);
+const stubEqualityBranch = path.join(tmp, 'stub-equality-branch.sh');
+fs.writeFileSync(stubEqualityBranch, `#!/usr/bin/env bash
+node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
+`);
+fs.chmodSync(stubEqualityBranch, 0o755);
+const stubPostcheckEmptyDiff = path.join(tmp, 'stub-postcheck-empty-diff.sh');
+fs.writeFileSync(stubPostcheckEmptyDiff, `#!/usr/bin/env bash
+node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
+git -c user.email=t@t -c user.name=t commit --allow-empty -q -m empty
+`);
+fs.chmodSync(stubPostcheckEmptyDiff, 0o755);
+const sealedRunnerSentinel = path.join(tmp, 'sealed-runner-called');
+const stubSealed = path.join(tmp, 'stub-sealed-must-not-run.sh');
+fs.writeFileSync(
+  stubSealed,
+  `#!/usr/bin/env bash
+touch ${JSON.stringify(sealedRunnerSentinel)}
+exit 99
+`,
+);
+fs.chmodSync(stubSealed, 0o755);
+
+// Effectful: stub changes a scope-allowed but unsealed file → output boundary.
+const stubWrong = path.join(tmp, 'stub-wrong.sh');
+fs.writeFileSync(stubWrong, `#!/usr/bin/env bash
+echo other > src/other.js
+git add src/other.js
+git -c user.email=t@t -c user.name=t commit -q -m other
+`);
+fs.chmodSync(stubWrong, 0o755);
+
+// Effectful correct: changes required path.
+const stubOk = path.join(tmp, 'stub-ok.sh');
+fs.writeFileSync(stubOk, `#!/usr/bin/env bash
+echo v2 > src/target.js
+git add src/target.js
+git -c user.email=t@t -c user.name=t commit -q -m target
+`);
+fs.chmodSync(stubOk, 0o755);
+
+const script = path.join(root, 'scripts/dispatch-hetero.sh');
+function runDispatch(stub, contractPath, extraEnv = {}) {
+  // Re-seal base_sha to current HEAD so strict preflight does not reject drift
+  // after prior stub commits on sibling branches.
+  const head = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const body = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  body.base_sha = head;
+  if (body.campaign_projection) body.campaign_projection.campaign_base_sha = head;
+  const livePath = path.join(tmp, `live-${path.basename(stub)}.json`);
+  fs.writeFileSync(livePath, `${JSON.stringify(body, null, 2)}\n`);
+  const r = spawnSync('bash', [
+    script,
+    '--runner', 'agy',
+    '--agy-bin', stub,
+    '--branch', `feat/req-${path.basename(stub)}`,
+    '--prompt-file', path.join(tmp, 'p.txt'),
+    '--strict-contract',
+    '--contract-file', livePath,
+    '--model', 'gpt-5.5',
+  ], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TEST_LIVE_CONTRACT: livePath,
+      ...extraEnv,
+      PATH: process.env.PATH,
+    },
+  });
+  return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
+}
+function dispatchBody(run) {
+  const lines = run.out.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines.reverse()) {
+    try {
+      const value = JSON.parse(line);
+      if (value && typeof value.status === 'string') return value;
+    } catch (_error) {
+      // Continue to the preceding line.
+    }
+  }
+  assert.fail(`dispatch emitted no result JSON: ${run.out.slice(0, 800)}`);
+}
+fs.writeFileSync(path.join(tmp, 'p.txt'), 'do work\n');
+
+// A plain projected unit (without the separately sealed campaign file) retains
+// legacy required-output semantics and rejects the unrelated in-scope change.
+const wrong = runDispatch(stubWrong, unit.contract_path);
+const wrongBody = dispatchBody(wrong);
+assert.strictEqual(wrong.status, 1, wrong.out);
+assert.strictEqual(wrongBody.status, 'boundary_rejected', wrong.out);
+assert.match(wrongBody.error, /missing from changed files|required_change_path/);
+
+// Correct effectful change.
+const okRun = runDispatch(stubOk, unit.contract_path);
+const okBody = dispatchBody(okRun);
+assert.strictEqual(okRun.status, 0, okRun.out);
+assert.strictEqual(okBody.status, 'committed', okRun.out);
+assert.ok(/^[0-9a-f]{40}$/.test(okBody.commit), okRun.out);
+
+// Zero-change without sealed receipt → boundary.
+const missingNoop = runDispatch(stubNoop, unit.contract_path);
+const missingNoopBody = dispatchBody(missingNoop);
+assert.strictEqual(missingNoop.status, 1, missingNoop.out);
+assert.strictEqual(missingNoopBody.status, 'no_op', missingNoop.out);
+
+// Ambient env no-op path rejected.
+const ambient = path.join(tmp, 'ambient-noop.json');
+fs.writeFileSync(ambient, JSON.stringify({ forged: true }));
+const ambientRun = runDispatch(stubNoop, unit.contract_path, {
+  STRICT_NOOP_RECEIPT_PATH: ambient,
+});
+const ambientBody = dispatchBody(ambientRun);
+assert.strictEqual(ambientRun.status, 2, ambientRun.out);
+assert.strictEqual(ambientBody.status, 'precondition_failed', ambientRun.out);
+assert.match(ambientBody.error, /ambient STRICT_NOOP_RECEIPT_PATH is not authority/);
+
+// Exact sealed zero-diff receipt admits zero-change (no mutation spend).
+const worktreesBeforeSealed = execFileSync(
+  'git',
+  ['-C', repo, 'worktree', 'list', '--porcelain'],
+  { encoding: 'utf8' },
+);
+const sealedNoop = runDispatch(stubSealed, sealedPath);
+const sealedBody = dispatchBody(sealedNoop);
+assert.strictEqual(sealedNoop.status, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.status, 'no_op', sealedNoop.out);
+assert.strictEqual(sealedBody.runner, 'sealed-zero-diff-admission', sealedNoop.out);
+assert.strictEqual(sealedBody.dispatcher_called, false, sealedNoop.out);
+assert.strictEqual(sealedBody.commit, null, sealedNoop.out);
+assert.strictEqual(sealedBody.files_changed, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.mutation_attempts, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.gate_attempts, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.resources_created, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.worktree, null, sealedNoop.out);
+assert.strictEqual(fs.existsSync(sealedRunnerSentinel), false);
+assert.strictEqual(
+  execFileSync('git', ['-C', repo, 'worktree', 'list', '--porcelain'], {
+    encoding: 'utf8',
+  }),
+  worktreesBeforeSealed,
+);
+
+// Exercise the two later shell validators under set -u, not just the early
+// zero-effect short circuit. The fixture runner models a provider wrapper that
+// discovers and seals the same no-op authority before any model invocation.
+const equalityBranch = runDispatch(stubEqualityBranch, unit.contract_path);
+const equalityBody = dispatchBody(equalityBranch);
+assert.strictEqual(equalityBranch.status, 0, equalityBranch.out);
+assert.strictEqual(equalityBody.status, 'no_op', equalityBranch.out);
+assert.strictEqual(equalityBody.dispatcher_called, false, equalityBranch.out);
+assert.strictEqual(equalityBody.model_calls, 0, equalityBranch.out);
+assert.strictEqual(equalityBody.mutation_attempts, 0, equalityBranch.out);
+assert.strictEqual(equalityBody.gate_attempts, 0, equalityBranch.out);
+assert.strictEqual(equalityBody.resources_created, 0, equalityBranch.out);
+assert.doesNotMatch(equalityBranch.out, /REPO: unbound variable/);
+
+for (const [label, mutate] of [
+  ['forged', (receipt) => { receipt.digest = '0'.repeat(64); }],
+  ['stale', (receipt) => { receipt.base_sha = '0'.repeat(40); receipt.digest = sha256Json({
+    ...receipt,
+    digest: undefined,
+  }); }],
+  ['foreign', (receipt) => { receipt.campaign_id = 'foreign-campaign'; receipt.digest = sha256Json({
+    ...receipt,
+    digest: undefined,
+  }); }],
+]) {
+  const bad = JSON.parse(fs.readFileSync(sealedPath, 'utf8'));
+  mutate(bad.output.zero_diff_receipt);
+  const badPath = path.join(tmp, `unit-sealed-${label}.json`);
+  fs.writeFileSync(badPath, `${JSON.stringify(bad, null, 2)}\n`);
+  const rejected = runDispatch(stubSealed, badPath);
+  const rejectedBody = dispatchBody(rejected);
+  assert.strictEqual(rejected.status, 2, rejected.out);
+  assert.strictEqual(rejectedBody.status, 'precondition_failed', rejected.out);
+  assert.doesNotMatch(rejected.out, /unbound variable/);
+}
+
+// Real Engine dispatch-unit writer carries the receipt, and the ordinary
+// implementTask consumer preserves the exact zero-effect/no-op result.
+const engineRootRunId = 'root-engine-zero-diff-1';
+const commonDir = fs.realpathSync(execFileSync(
+  'git',
+  ['-C', repo, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+  { encoding: 'utf8' },
+).trim());
+const engineContract = {
+  ...campaignContract,
+  schema_version: 1,
+  ticket: 'T-engine-zero-diff',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${commonDir}`,
+  max_growth_ratio: 1.5,
+  vertical_acceptance: ['sealed zero diff'],
+  verify_cmd: 'true',
+  rubric_ids: ['R6'],
+  mission_runtime: {
+    ...campaignContract.mission_runtime,
+    root_run_id: engineRootRunId,
+    mission_lineage_id: `lineage-v1-${'1'.repeat(64)}`,
+  },
+};
+const engineContractPath = path.join(tmp, 'engine-zero-diff-campaign.json');
+const engineSealPath = path.join(tmp, 'engine-zero-diff-campaign.seal.json');
+const engineContractBytes = `${JSON.stringify(engineContract, null, 2)}\n`;
+fs.writeFileSync(engineContractPath, engineContractBytes);
+const sealResult = spawnSync(process.execPath, [
+  path.join(root, 'scripts/implementation-campaign-check.js'),
+  'seal',
+  '--contract', engineContractPath,
+  '--repo', repo,
+  '--mission-mode', 'off',
+  '--out', engineSealPath,
+], { encoding: 'utf8' });
+assert.strictEqual(sealResult.status, 0, sealResult.stderr || sealResult.stdout);
+const engineContractDigest = sha256(Buffer.from(engineContractBytes, 'utf8'));
+const engineCampaignId = campaignIdFor(
+  engineContract.repo_identity,
+  engineContract.ticket,
+  engineContractDigest,
+);
+const engineUnit = deriveCampaignDispatchUnit({
+  campaignContract: engineContract,
+  campaignContractSha256: engineContractDigest,
+  campaignId: engineCampaignId,
+  branch,
+  base: base2,
+  runner: 'agy',
+  model: 'gpt-5.5',
+  stage: 'campaign-implementation',
+  rootRunId: engineRootRunId,
+});
+const engineAcceptance = engineUnit.acceptance.map((entry) => ({
+  argv: entry.argv,
+  exit: entry.exit,
+}));
+const engineZeroBody = {
+  schema_version: 1,
+  artifact_type: 'campaign_zero_diff_receipt',
+  base_sha: base2,
+  acceptance_digest: sha256Json(engineAcceptance),
+  campaign_contract_digest: engineContractDigest,
+  strict_dispatch_digest: engineUnit.campaign_projection.strict_dispatch_sha256,
+  campaign_id: engineCampaignId,
+  mission_lineage_id: engineContract.mission_runtime.mission_lineage_id,
+  mission_graph_digest: engineContract.mission_runtime.mission_graph_digest,
+  graph_node_id: engineContract.mission_runtime.graph_node_id,
+  path_byte_digests: { 'src/target.js': liveDigest },
+  candidate_zero_change: true,
+};
+engineZeroBody.digest = sha256Json(engineZeroBody);
+const engineUnitNoReceiptPath = path.join(tmp, 'engine-zero-diff-unit-no-receipt.json');
+fs.writeFileSync(engineUnitNoReceiptPath, `${JSON.stringify(engineUnit, null, 2)}\n`);
+function runCampaignPostcheckDispatch() {
+  const livePath = path.join(tmp, 'engine-zero-diff-unit-postcheck-live.json');
+  fs.writeFileSync(livePath, fs.readFileSync(engineUnitNoReceiptPath));
+  const result = spawnSync('bash', [
+    script,
+    '--runner', 'agy',
+    '--agy-bin', stubPostcheckEmptyDiff,
+    '--branch', branch,
+    '--base', base2,
+    '--prompt-file', path.join(tmp, 'p.txt'),
+    '--strict-contract',
+    '--contract-file', livePath,
+    '--campaign-contract', engineContractPath,
+    '--campaign-contract-sha256', engineContractDigest,
+    '--campaign-seal', engineSealPath,
+    '--run-id', engineCampaignId,
+    '--stage', 'campaign-implementation',
+    '--model', 'gpt-5.5',
+  ], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      AUTOPILOT_PARENT_RUN_ID: 'test-foreman-zero-diff',
+      AUTOPILOT_ROOT_RUN_ID: engineRootRunId,
+      AUTOPILOT_DISPATCH_DEPTH: '1',
+      TEST_LIVE_CONTRACT: livePath,
+      PATH: process.env.PATH,
+    },
+  });
+  return {
+    status: result.status,
+    out: `${result.stdout || ''}${result.stderr || ''}`,
+  };
+}
+const postcheckEmptyDiff = runCampaignPostcheckDispatch();
+const postcheckBody = dispatchBody(postcheckEmptyDiff);
+assert.strictEqual(postcheckEmptyDiff.status, 0, postcheckEmptyDiff.out);
+assert.strictEqual(postcheckBody.status, 'committed', postcheckEmptyDiff.out);
+assert.strictEqual(postcheckBody.files_changed, 0, postcheckEmptyDiff.out);
+assert.doesNotMatch(postcheckEmptyDiff.out, /REPO: unbound variable/);
+
+let engineBoundaryCalls = 0;
+const engineResult = new AutopilotEngine({
+  cwd: repo,
+  implementationDispatcher(args) {
+    engineBoundaryCalls += 1;
+    const unitArg = args[args.indexOf('--contract-file') + 1];
+    const projected = JSON.parse(fs.readFileSync(unitArg, 'utf8'));
+    assert.deepStrictEqual(projected.output.zero_diff_receipt, engineZeroBody);
+    return {
+      error: null,
+      status: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      parseError: null,
+      result: {
+        status: 'no_op',
+        runner: 'sealed-zero-diff-admission',
+        model: null,
+        branch,
+        base: base2,
+        commit: null,
+        files_changed: 0,
+        insertions: 0,
+        deletions: 0,
+        worktree: null,
+        agent_log: null,
+        error: null,
+        dispatcher_called: false,
+        mutation_attempts: 0,
+        gate_attempts: 0,
+        resources_created: 0,
+        zero_diff_receipt_digest: engineZeroBody.digest,
+      },
+    };
+  },
+}).implementTask({
+  promptFile: path.join(tmp, 'p.txt'),
+  branch,
+  base: base2,
+  roster: {
+    implementer_engine: 'gpt-5.5',
+    implementer_effort: 'high',
+    implementer_runner: 'agy',
+  },
+  runId: engineCampaignId,
+  implementationRound: 1,
+  implementationStage: 'campaign-implementation',
+  campaignContractFile: engineContractPath,
+  campaignContractDigest: engineContractDigest,
+  campaignSealFile: engineSealPath,
+  zeroDiffReceipt: engineZeroBody,
+  implementationOptions: {
+    cwd: repo,
+    env: {
+      AUTOPILOT_ROOT_RUN_ID: engineRootRunId,
+    },
+  },
+});
+assert.strictEqual(engineBoundaryCalls, 1, JSON.stringify(engineResult));
+assert.strictEqual(engineResult.status, 'no_op', JSON.stringify(engineResult));
+assert.strictEqual(engineResult.dispatcher_called, false);
+assert.strictEqual(engineResult.implementation.zero_diff_receipt_digest, engineZeroBody.digest);
+
+console.log(JSON.stringify({
+  required_change_schema_ok: true,
+  wrong_surface_rejected: true,
+  ambient_noop_rejected: true,
+  sealed_noop_path_exercised: true,
+  equality_noop_path_exercised: true,
+  postcheck_empty_diff_path_exercised: true,
+  sealed_noop_substitutions_rejected: true,
+  engine_zero_diff_wired: true,
+  effectful_required_ok: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "required_change/no-op projected-unit matrix exits zero"
+assert_contains "$REQ_MATRIX_OUT" '"required_change_schema_ok":true' "required_change accepted by contract checker"
+assert_contains "$REQ_MATRIX_OUT" '"wrong_surface_rejected":true' "unrelated change rejected"
+assert_contains "$REQ_MATRIX_OUT" '"ambient_noop_rejected":true' "ambient no-op rejected"
+assert_contains "$REQ_MATRIX_OUT" '"sealed_noop_path_exercised":true' "sealed no-op path exercised"
+assert_contains "$REQ_MATRIX_OUT" '"equality_noop_path_exercised":true' \
+  "equality/no-commit validator executes under set -u"
+assert_contains "$REQ_MATRIX_OUT" '"postcheck_empty_diff_path_exercised":true' \
+  "postcheck empty-diff validator executes under set -u"
+assert_contains "$REQ_MATRIX_OUT" '"sealed_noop_substitutions_rejected":true' \
+  "forged, stale, and foreign no-op receipts reject cleanly"
+assert_contains "$REQ_MATRIX_OUT" '"engine_zero_diff_wired":true' \
+  "Engine writes, projects, and consumes the sealed zero-diff receipt"
 
 finalize_test

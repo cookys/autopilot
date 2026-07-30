@@ -68,6 +68,26 @@ const RESERVATION_KEYS = Object.freeze([
   'canonical_changed_files',
   'output_bytes',
 ]);
+const MISSION_NOOP_KEYS = Object.freeze([
+  'schema_version',
+  'artifact_type',
+  'admission_digest',
+  'noop_adoptions',
+  'noop_short_circuit',
+  'dispatcher_called',
+  'mutation_attempts',
+  'gate_attempts',
+  'resources_created',
+  'digest',
+]);
+const NOOP_ADOPTION_KEYS = Object.freeze([
+  'graph_node_id',
+  'dispatcher_called',
+  'mutation_attempts',
+  'gate_attempts',
+  'resources_created',
+  'noop_receipt_digest',
+]);
 
 function markerDir() {
   return process.env.AUTOPILOT_SESSION_MODE_DIR
@@ -139,7 +159,50 @@ function verifyMissionRoutingProjection(marker, expected) {
       return reject(`marker Mission ${field} does not match campaign projection`);
     }
   }
-  return { valid: true, admission_digest: admissionDigest };
+  let missionNoop = null;
+  if (Object.prototype.hasOwnProperty.call(marker, 'mission_noop')) {
+    missionNoop = marker.mission_noop;
+    if (!exactKeys(missionNoop, MISSION_NOOP_KEYS)) {
+      return reject('marker Mission no-op shape is invalid');
+    }
+    const { digest, ...noopBody } = missionNoop;
+    const allDeliverablesNoop = Array.isArray(missionNoop.noop_adoptions)
+      && missionNoop.noop_adoptions.length > 0
+      && missionNoop.noop_adoptions.length === admission.deliverable_count;
+    if (!/^[a-f0-9]{64}$/u.test(digest || '')
+        || canonicalDigest(noopBody) !== digest
+        || missionNoop.schema_version !== 1
+        || missionNoop.artifact_type !== 'mission_noop_adoption_set'
+        || missionNoop.admission_digest !== admissionDigest
+        || !Array.isArray(missionNoop.noop_adoptions)
+        || missionNoop.noop_adoptions.some((item) => (
+          !exactKeys(item, NOOP_ADOPTION_KEYS)
+          || typeof item.graph_node_id !== 'string'
+          || item.dispatcher_called !== false
+          || item.mutation_attempts !== 0
+          || item.gate_attempts !== 0
+          || item.resources_created !== 0
+          || !/^[a-f0-9]{64}$/u.test(item.noop_receipt_digest || '')
+        ))
+        || missionNoop.noop_short_circuit
+          !== (missionNoop.noop_adoptions.length > 0)
+        || (allDeliverablesNoop
+          ? (missionNoop.dispatcher_called !== false
+            || missionNoop.mutation_attempts !== 0
+            || missionNoop.gate_attempts !== 0
+            || missionNoop.resources_created !== 0)
+          : (missionNoop.dispatcher_called !== null
+            || missionNoop.mutation_attempts !== null
+            || missionNoop.gate_attempts !== null
+            || missionNoop.resources_created !== null))) {
+      return reject('marker Mission no-op digest/bindings are invalid');
+    }
+  }
+  return {
+    valid: true,
+    admission_digest: admissionDigest,
+    mission_noop: missionNoop,
+  };
 }
 
 function gitToplevel() {
@@ -180,6 +243,7 @@ function cmdSet(args) {
       entryLevel: args['entry-level'] || level,
       fallback: args.fallback || 'none',
       markerFile: markerPath(),
+      // Ordinary production: no allowTestCallerEvidence; registry-only evidence.
     });
   } catch (error) {
     process.stderr.write(`session-mode: Mission routing rejected: ${error.message}\n`);
@@ -192,6 +256,7 @@ function cmdSet(args) {
     );
     return 2;
   }
+  // Surface ordinary zero-spend no-op adoption on the marker for consumers.
   const now = Date.now();
   const marker = {
     level,
@@ -202,12 +267,30 @@ function cmdSet(args) {
   if (missionRouting.status !== 'LEGACY') {
     marker.entry_level = missionRouting.route.entry_level;
     marker.fallback_reason = missionRouting.route.fallback_reason;
+    // mission_routing shape is frozen for verifyMissionRoutingProjection exactKeys.
     marker.mission_routing = {
       status: missionRouting.status,
       admitted: missionRouting.admitted,
       would_block: missionRouting.would_block,
       prior_marker_status: missionRouting.marker.status,
       admission: missionRouting.admission,
+    };
+    // Ordinary zero-spend no-op surface — sibling of mission_routing, not inside it.
+    const noopBody = {
+      schema_version: 1,
+      artifact_type: 'mission_noop_adoption_set',
+      admission_digest: missionRouting.admission.admission_digest,
+      noop_adoptions: Array.isArray(missionRouting.noop_adoptions)
+        ? missionRouting.noop_adoptions : [],
+      noop_short_circuit: missionRouting.noop_short_circuit === true,
+      dispatcher_called: missionRouting.dispatcher_called,
+      mutation_attempts: missionRouting.mutation_attempts,
+      gate_attempts: missionRouting.gate_attempts,
+      resources_created: missionRouting.resources_created,
+    };
+    marker.mission_noop = {
+      ...noopBody,
+      digest: canonicalDigest(noopBody),
     };
   }
   fs.mkdirSync(markerDir(), { recursive: true });

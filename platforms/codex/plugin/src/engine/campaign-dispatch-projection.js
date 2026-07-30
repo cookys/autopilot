@@ -9,6 +9,21 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const GIT_OBJECT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const ROOT_RUN_ID = /^[A-Za-z0-9._-]+$/;
 const CAMPAIGN_STAGE = /^campaign-implementation(?:#r((?:[2-9]|[1-9][0-9]+)))?$/;
+const ZERO_DIFF_RECEIPT_KEYS = [
+  'schema_version',
+  'artifact_type',
+  'base_sha',
+  'acceptance_digest',
+  'campaign_contract_digest',
+  'strict_dispatch_digest',
+  'campaign_id',
+  'mission_lineage_id',
+  'mission_graph_digest',
+  'graph_node_id',
+  'path_byte_digests',
+  'candidate_zero_change',
+  'digest',
+];
 
 function isPlainObject(value) {
   return value !== null
@@ -128,6 +143,7 @@ function normalizeCampaignAuthority(contract) {
     'verification_commands',
   ];
   const strictOptional = [
+    'required_change_paths',
     'authorized_creates',
     'version_mirror_paths',
     'version_mirror_generator',
@@ -165,6 +181,27 @@ function normalizeCampaignAuthority(contract) {
   );
   const requiredPaths = requirePathArray(strict.required_paths, 'strict_dispatch.required_paths');
   const outputPaths = requirePathArray(strict.output_paths, 'strict_dispatch.output_paths');
+  // Present empty array is invalid — omit the key or provide a non-empty unique set.
+  let requiredChangePaths = [];
+  if (Object.prototype.hasOwnProperty.call(strict, 'required_change_paths')) {
+    if (!Array.isArray(strict.required_change_paths)
+        || strict.required_change_paths.length === 0) {
+      throw new TypeError(
+        'strict_dispatch.required_change_paths when present must be a non-empty array',
+      );
+    }
+    requiredChangePaths = requirePathArray(
+      strict.required_change_paths,
+      'strict_dispatch.required_change_paths',
+    );
+    for (const change of requiredChangePaths) {
+      if (!outputPaths.includes(change)) {
+        throw new TypeError(
+          `strict_dispatch.required_change_paths must be an exact subset of output_paths (${change})`,
+        );
+      }
+    }
+  }
   const authorizedCreates = Array.isArray(strict.authorized_creates)
     && strict.authorized_creates.length > 0
     ? requirePathArray(strict.authorized_creates, 'strict_dispatch.authorized_creates')
@@ -184,6 +221,7 @@ function normalizeCampaignAuthority(contract) {
     ['strict_dispatch.spec.path', [specPath]],
     ['strict_dispatch.required_paths', requiredPaths],
     ['strict_dispatch.output_paths', outputPaths],
+    ['strict_dispatch.required_change_paths', requiredChangePaths],
     ['strict_dispatch.authorized_creates', authorizedCreates],
     ['strict_dispatch.version_mirror_paths', versionMirrorPaths],
   ]) {
@@ -287,6 +325,12 @@ function normalizeCampaignAuthority(contract) {
     spec: { path: specPath, section: spec.section },
     requiredPaths,
     outputPaths,
+    requiredChangePaths,
+    authorizedCreates,
+    versionMirrorPaths,
+    versionMirrorGenerator: versionMirrorPaths.length > 0
+      ? strict.version_mirror_generator
+      : null,
     allowedPaths,
     verificationCommands,
     maxChangedFiles,
@@ -300,6 +344,66 @@ function hasCampaignDispatchAuthority(contract) {
   return isPlainObject(contract)
     && Object.prototype.hasOwnProperty.call(contract, 'mission_runtime')
     && Object.prototype.hasOwnProperty.call(contract, 'strict_dispatch');
+}
+
+function validateZeroDiffReceipt(receipt, context) {
+  requireExactObject(receipt, ZERO_DIFF_RECEIPT_KEYS, 'zeroDiffReceipt');
+  if (receipt.schema_version !== 1
+      || !['campaign_zero_diff_receipt', 'controller_zero_diff_receipt']
+        .includes(receipt.artifact_type)
+      || receipt.candidate_zero_change !== true) {
+    throw new TypeError('zeroDiffReceipt shape is invalid');
+  }
+  requireString(receipt.base_sha, 'zeroDiffReceipt.base_sha', /^[0-9a-f]{40}$/);
+  for (const field of [
+    'acceptance_digest',
+    'campaign_contract_digest',
+    'strict_dispatch_digest',
+    'mission_graph_digest',
+    'digest',
+  ]) {
+    requireString(receipt[field], `zeroDiffReceipt.${field}`, SHA256);
+  }
+  requireString(receipt.campaign_id, 'zeroDiffReceipt.campaign_id');
+  requireString(receipt.mission_lineage_id, 'zeroDiffReceipt.mission_lineage_id');
+  requireString(receipt.graph_node_id, 'zeroDiffReceipt.graph_node_id');
+  if (receipt.base_sha !== context.base
+      || receipt.campaign_contract_digest !== context.campaignProjection.campaign_contract_sha256
+      || receipt.strict_dispatch_digest !== context.campaignProjection.strict_dispatch_sha256
+      || receipt.campaign_id !== context.campaignProjection.campaign_id
+      || receipt.mission_lineage_id !== context.campaignProjection.mission_lineage_id
+      || receipt.mission_graph_digest !== context.campaignProjection.mission_graph_digest
+      || receipt.graph_node_id !== context.campaignProjection.graph_node_id
+      || receipt.acceptance_digest !== bytesDigest(
+        Buffer.from(JSON.stringify(context.acceptance), 'utf8'),
+      )) {
+    throw new TypeError('zeroDiffReceipt does not exactly bind the campaign projection');
+  }
+  if (!isPlainObject(receipt.path_byte_digests)) {
+    throw new TypeError('zeroDiffReceipt.path_byte_digests must be an object');
+  }
+  const relevantPaths = [...new Set([
+    ...context.requiredChangePaths,
+    ...context.outputPaths,
+  ])].sort();
+  const receiptPaths = Object.keys(receipt.path_byte_digests).sort();
+  if (JSON.stringify(receiptPaths) !== JSON.stringify(relevantPaths)) {
+    throw new TypeError('zeroDiffReceipt path-byte set does not match sealed output paths');
+  }
+  for (const relativePath of receiptPaths) {
+    requireString(
+      receipt.path_byte_digests[relativePath],
+      `zeroDiffReceipt.path_byte_digests.${relativePath}`,
+      SHA256,
+    );
+  }
+  const body = { ...receipt };
+  delete body.digest;
+  const digest = bytesDigest(Buffer.from(JSON.stringify(body), 'utf8'));
+  if (receipt.digest !== digest) {
+    throw new TypeError('zeroDiffReceipt digest mismatch');
+  }
+  return JSON.parse(JSON.stringify(receipt));
 }
 
 function deriveCampaignDispatchUnit(input) {
@@ -360,6 +464,22 @@ function deriveCampaignDispatchUnit(input) {
     model,
   };
   const dependsOn = generation === 0 ? [] : [campaignBase];
+  const acceptance = authority.verificationCommands.map((command) => ({
+    argv: ['sh', '-lc', command],
+    exit: 0,
+  }));
+  const zeroDiffReceipt = Object.prototype.hasOwnProperty.call(
+    input || {},
+    'zeroDiffReceipt',
+  )
+    ? validateZeroDiffReceipt(input.zeroDiffReceipt, {
+      base,
+      campaignProjection,
+      acceptance,
+      requiredChangePaths: authority.requiredChangePaths,
+      outputPaths: authority.outputPaths,
+    })
+    : null;
   return {
     schema: 1,
     unit_id: `${campaignProjection.ticket}:${stage}:g${generation}`,
@@ -392,11 +512,13 @@ function deriveCampaignDispatchUnit(input) {
     output: {
       kind: 'commit',
       paths: authority.outputPaths,
+      // Effectful candidates must change every required_change_path; no-op is the only exception.
+      ...(authority.requiredChangePaths && authority.requiredChangePaths.length > 0
+        ? { required_change_paths: authority.requiredChangePaths }
+        : {}),
+      ...(zeroDiffReceipt ? { zero_diff_receipt: zeroDiffReceipt } : {}),
     },
-    acceptance: authority.verificationCommands.map((command) => ({
-      argv: ['sh', '-lc', command],
-      exit: 0,
-    })),
+    acceptance,
     budget: {
       wall_seconds: authority.maxWallSeconds,
       max_attempts: authority.maxEngineAttempts,
@@ -447,6 +569,7 @@ module.exports = {
   generationForStage,
   hasCampaignDispatchAuthority,
   normalizeCampaignAuthority,
+  validateZeroDiffReceipt,
   verifyCampaignDispatchUnit,
   writeCampaignDispatchUnit,
 };

@@ -97,8 +97,10 @@ function probeQuotaSafe(rows, stderr) {
 //                     PER-MODEL (2026-07-14 lesson), reset windows, no remaining-%.
 //   metered-endpoint  token-billed via a named endpoint (cc-shim /
 //                     anthropic-compatible): the WALLET identity is the endpoint,
-//                     not runner+model — the capability store does not record the
-//                     endpoint yet (BACKLOG'd), so rows here are endpoint-ambiguous.
+//                     not runner+model. The capability store records exact
+//                     runner/model/effort/endpoint tuples for strict admission;
+//                     this status surface is non-authorizing telemetry and must
+//                     not present endpoint-omitted rows as authoritative.
 //   provider-config   pi: metered OR local depending on ~/.pi/agent/models.json.
 //   local             no quota concept at all — availability/load is the signal
 //                     (no local runner is wired yet; class reserved).
@@ -113,7 +115,7 @@ const RUNNER_SOURCE_CLASS = {
 };
 const CLASS_CAPTION = {
   subscription: 'vendor pools, PER-MODEL — never extrapolate across models; no remaining-% API, status+reset+age is the ceiling',
-  'metered-endpoint': 'token-billed; wallet identity = the NAMED ENDPOINT, which the store does not record yet — same model via another endpoint is a DIFFERENT wallet (rows endpoint-ambiguous)',
+  'metered-endpoint': 'token-billed; wallet identity = the NAMED ENDPOINT (DIFFERENT wallet per endpoint). Store records endpoint on exact tuples for admission; this status probe is non-authorizing telemetry and must not treat endpoint-omitted rows as authoritative',
   'provider-config': 'pi routes per ~/.pi/agent/models.json — semantics follow the configured provider (metered or local)',
   local: 'no quota concept — availability/load is the signal',
   unknown: 'unrecognized runner — semantics unknown, verify before relying',

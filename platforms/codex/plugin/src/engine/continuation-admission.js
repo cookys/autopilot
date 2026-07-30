@@ -427,7 +427,8 @@ function admitContinuation(input = {}) { const identityInput = isObj(input.ident
       base_sha: matchIdentity.base_sha, worktree: input.worktree || null, paths: { manifest: input.manifestPath || null, ledger: input.ledgerPath || null,
         receipt: input.receiptPath || null, mission: input.missionPath || null, durable: input.durablePath || null, checkpoint: input.checkpointPath || null,},
       phase_cursor: identity.phase_cursor, accepted_commit: identity.accepted_commit,
-      next_action: identity.next_action || 'dispatch', artifact_digests: input.artifactDigests || {},}, {
+      next_action: identity.next_action || 'dispatch', artifact_digests: input.artifactDigests || {},
+      ...(isObj(input.sealedScope) ? { sealed_scope: input.sealedScope } : {}),}, {
       owner: claimOwner, pid: claimOwner.pid, reconcileReceipt: reconcileGate.receipt || input.reconcileReceipt || null,
       reconcileReceiptPath: input.reconcileReceiptPath, expectedGeneration: input.expectedGeneration,
       expectedCasToken: input.expectedCasToken, gitCwd: input.gitCwd || null,

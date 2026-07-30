@@ -123,6 +123,54 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "minItems": 1
+        },
+        "required_change_paths": {
+          "description": "Exact paths that MUST appear in an effectful candidate diff. Non-empty unique exact subset of output.paths when present. Zero-change only via sealed no-op receipt.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "zero_diff_receipt": {
+          "description": "Optional closed structured zero-diff receipt sealed into the dispatch unit (not ambient env).",
+          "type": "object",
+          "required": [
+            "schema_version",
+            "artifact_type",
+            "base_sha",
+            "acceptance_digest",
+            "campaign_contract_digest",
+            "strict_dispatch_digest",
+            "campaign_id",
+            "mission_lineage_id",
+            "mission_graph_digest",
+            "graph_node_id",
+            "path_byte_digests",
+            "candidate_zero_change",
+            "digest"
+          ],
+          "properties": {
+            "schema_version": { "type": "integer", "const": 1 },
+            "artifact_type": {
+              "type": "string",
+              "enum": ["campaign_zero_diff_receipt", "controller_zero_diff_receipt"]
+            },
+            "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+            "acceptance_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "campaign_contract_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "strict_dispatch_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "campaign_id": { "type": "string", "minLength": 1 },
+            "mission_lineage_id": { "type": "string" },
+            "mission_graph_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "graph_node_id": { "type": "string" },
+            "path_byte_digests": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            },
+            "candidate_zero_change": { "type": "boolean", "const": true },
+            "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

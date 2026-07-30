@@ -138,6 +138,9 @@ CAMPAIGN_CONTRACT_SNAPSHOT=""
 CAMPAIGN_ID=""
 MISSION_CAMPAIGN_ID=""
 CAMPAIGN_MISSION_MODE=""
+MISSION_NOOP_SHORT_CIRCUIT=0
+MISSION_NOOP_RECEIPT_DIGEST=""
+MISSION_NOOP_GRAPH_NODE=""
 CAMPAIGN_STRICT_AUTHORITY=0
 CAMPAIGN_PROJECTION_BOUND=0
 RUNNER="auto"
@@ -196,6 +199,7 @@ STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS=()
 STRICT_SCOPE_MAX_FILES=""
 STRICT_SCOPE_MAX_DIFF_LINES=""
 STRICT_OUTPUT_PATHS=()
+STRICT_REQUIRED_CHANGE_PATHS=()
 STRICT_POSTCHECK_OK=0
 STRICT_POSTCHECK_STATUS=""
 STRICT_POSTCHECK_ERROR=""
@@ -357,6 +361,12 @@ HEARTBEAT_SECS="${DISPATCH_HEARTBEAT_SECS:-20}"
 DETACH_PRECLAIM_GEN=""
 DETACH_PRECLAIM_NONCE=""
 OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR=""; OUTCOME_EXIT=1
+OUTCOME_DISPATCHER_CALLED=1
+OUTCOME_MODEL_CALLS=1
+OUTCOME_MUTATION_ATTEMPTS=1
+OUTCOME_GATE_ATTEMPTS=0
+OUTCOME_RESOURCES_CREATED=0
+OUTCOME_ZERO_DIFF_RECEIPT_DIGEST=""
 CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome); read by classify_outcome
 # shellcheck source=/dev/null
 . "$SELF_DIR/lib/worktree-reap.sh"
@@ -733,10 +743,18 @@ emit() { # status commit files ins del worktree error
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     identity_fields=', "identity_drift": true'
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s }\n' \
+  local dispatcher_called_json="true" zero_diff_receipt_json="null"
+  [ "${OUTCOME_DISPATCHER_CALLED:-1}" -eq 0 ] && dispatcher_called_json="false"
+  if [[ "${OUTCOME_ZERO_DIFF_RECEIPT_DIGEST:-}" =~ ^[0-9a-f]{64}$ ]]; then
+    zero_diff_receipt_json="\"$OUTCOME_ZERO_DIFF_RECEIPT_DIGEST\""
+  fi
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
+    "$dispatcher_called_json" "${OUTCOME_MODEL_CALLS:-1}" \
+    "${OUTCOME_MUTATION_ATTEMPTS:-1}" "${OUTCOME_GATE_ATTEMPTS:-0}" \
+    "${OUTCOME_RESOURCES_CREATED:-0}" "$zero_diff_receipt_json" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$orphan_json" \
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
@@ -871,6 +889,9 @@ run_strict_contract_preflight() {
   while IFS= read -r __strict_path; do
     [ -n "$__strict_path" ] && STRICT_OUTPUT_PATHS+=("$__strict_path")
   done < <(read_contract_array_lines "$CONTRACT_FILE" "output.paths")
+  while IFS= read -r __strict_path; do
+    [ -n "$__strict_path" ] && STRICT_REQUIRED_CHANGE_PATHS+=("$__strict_path")
+  done < <(read_contract_array_lines "$CONTRACT_FILE" "output.required_change_paths")
   unset __strict_path
   [ "${#STRICT_SCOPE_ALLOW_PATHS[@]}" -gt 0 ] || die_precondition "contract missing scope.allow_paths"
 
@@ -1060,6 +1081,10 @@ try {
     stage,
     rootRunId,
     unitContract,
+    ...(unitContract
+      && unitContract.output
+      && unitContract.output.zero_diff_receipt
+      ? { zeroDiffReceipt: unitContract.output.zero_diff_receipt } : {}),
   });
   process.stdout.write('BOUND\n');
 } catch (error) {
@@ -1165,7 +1190,16 @@ try {
   if (!verdict.valid) {
     throw new TypeError(verdict.reason || 'marker Mission admission does not match campaign');
   }
-  process.stdout.write(`BOUND:${data.level}`);
+  const nodeId = campaign.mission_runtime.graph_node_id;
+  const noOpSet = verdict.mission_noop;
+  const adoption = noOpSet && noOpSet.noop_short_circuit === true
+    ? noOpSet.noop_adoptions.find((item) => item.graph_node_id === nodeId)
+    : null;
+  if (adoption) {
+    process.stdout.write(`NOOP:${nodeId}:${adoption.noop_receipt_digest}`);
+  } else {
+    process.stdout.write(`BOUND:${data.level}`);
+  }
 } catch (error) {
   process.stdout.write(error.message || String(error));
   process.exit(3);
@@ -1176,6 +1210,23 @@ NODE
     if [ "$bridge_rc" -ne 0 ]; then
       die_precondition "marker-to-campaign admission bridge failed: $bridge_state"
     fi
+    case "$bridge_state" in
+      NOOP:*)
+        _noop_payload="${bridge_state#NOOP:}"
+        _noop_node="${_noop_payload%%:*}"
+        _noop_digest="${_noop_payload#*:}"
+        [[ "$_noop_digest" =~ ^[0-9a-f]{64}$ ]] \
+          || die_precondition "marker Mission no-op receipt digest is invalid"
+        if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ] \
+            && { [ "$MISSION_NOOP_GRAPH_NODE" != "$_noop_node" ] \
+              || [ "$MISSION_NOOP_RECEIPT_DIGEST" != "$_noop_digest" ]; }; then
+          die_precondition "conflicting active Mission no-op marker authorities"
+        fi
+        MISSION_NOOP_SHORT_CIRCUIT=1
+        MISSION_NOOP_GRAPH_NODE="$_noop_node"
+        MISSION_NOOP_RECEIPT_DIGEST="$_noop_digest"
+        ;;
+    esac
   done
 }
 
@@ -1225,10 +1276,113 @@ die_precondition() {
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
   exit 2
+}
+
+emit_mission_noop() {
+  printf '{ "status": "no_op", "runner": "mission-admission", "model": null, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": null, "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "mission_noop": true, "graph_node_id": "%s", "noop_receipt_digest": "%s", "skill_mode_effective": "off", "skills_injected": [], "retention_lease": null }\n' \
+    "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
+    "$(_flat_json_escape "$MISSION_NOOP_GRAPH_NODE")" "$MISSION_NOOP_RECEIPT_DIGEST"
+  exit 0
+}
+
+emit_sealed_zero_diff_if_authorized() {
+  [ "$STRICT_CONTRACT" -eq 1 ] || return 0
+  [ -n "${CONTRACT_FILE:-}" ] && [ -r "$CONTRACT_FILE" ] || return 0
+  [ -z "${STRICT_NOOP_RECEIPT_PATH:-}" ] \
+    || die_precondition "ambient STRICT_NOOP_RECEIPT_PATH is not authority; seal zero_diff_receipt into the dispatch unit"
+  local repo base_sha result rc
+  repo="${CONSUMING_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null)}"
+  [ -n "$repo" ] || die_precondition "sealed zero-diff admission requires repository root"
+  base_sha="$(git -C "$repo" rev-parse "${BASE}^{commit}" 2>/dev/null)" \
+    || die_precondition "sealed zero-diff admission cannot resolve immutable base"
+  if result="$(
+    node - "$CONTRACT_FILE" "$repo" "$base_sha" <<'NODE'
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const { execFileSync } = require('child_process');
+const [contractPath, repo, baseSha] = process.argv.slice(2);
+const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+const sha256Json = (value) => sha256(Buffer.from(JSON.stringify(value), 'utf8'));
+const fail = (code, exit = 2) => {
+  process.stdout.write(code);
+  process.exit(exit);
+};
+try {
+  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
+  if (!receipt || typeof receipt !== 'object') fail('absent', 3);
+  if (receipt.schema_version !== 1
+      || !new Set([
+        'campaign_zero_diff_receipt',
+        'controller_zero_diff_receipt',
+      ]).has(receipt.artifact_type)
+      || receipt.candidate_zero_change !== true
+      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')) {
+    fail('bad_shape');
+  }
+  const body = { ...receipt };
+  delete body.digest;
+  if (sha256Json(body) !== receipt.digest) fail('forged');
+  if (receipt.base_sha !== baseSha) fail('stale_base');
+  const projection = contract.campaign_projection || {};
+  for (const [receiptKey, projectionKey, code] of [
+    ['campaign_id', 'campaign_id', 'foreign_campaign'],
+    ['campaign_contract_digest', 'campaign_contract_sha256', 'foreign_contract'],
+    ['strict_dispatch_digest', 'strict_dispatch_sha256', 'foreign_strict'],
+    ['mission_lineage_id', 'mission_lineage_id', 'foreign_lineage'],
+    ['mission_graph_digest', 'mission_graph_digest', 'foreign_graph'],
+    ['graph_node_id', 'graph_node_id', 'foreign_node'],
+  ]) {
+    if (projection[projectionKey] && receipt[receiptKey] !== projection[projectionKey]) {
+      fail(code);
+    }
+  }
+  const acceptance = Array.isArray(contract.acceptance)
+    ? contract.acceptance.map((entry) => ({ argv: entry.argv, exit: entry.exit }))
+    : [];
+  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')
+      || sha256Json(acceptance) !== receipt.acceptance_digest) {
+    fail('acceptance_mismatch');
+  }
+  const required = Array.isArray(contract.output.required_change_paths)
+    ? contract.output.required_change_paths : [];
+  const outputs = Array.isArray(contract.output.paths) ? contract.output.paths : [];
+  const relevant = [...new Set([...required, ...outputs])].sort();
+  const digests = receipt.path_byte_digests;
+  if (!digests || typeof digests !== 'object'
+      || JSON.stringify(Object.keys(digests).sort()) !== JSON.stringify(relevant)) {
+    fail('path_set_mismatch');
+  }
+  for (const relativePath of relevant) {
+    let bytes;
+    try {
+      bytes = execFileSync('git', [
+        '-C', repo, 'show', `${baseSha}:${relativePath}`,
+      ], { encoding: null, stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (_error) {
+      fail('path_missing');
+    }
+    if (sha256(bytes) !== digests[relativePath]) fail('byte_digest_mismatch');
+  }
+  process.stdout.write(receipt.digest);
+} catch (error) {
+  fail(error && error.message ? String(error.message).slice(0, 80) : 'verify_threw');
+}
+NODE
+  )"; then
+    printf '{ "status": "no_op", "runner": "sealed-zero-diff-admission", "model": null, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": null, "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": "%s", "skill_mode_effective": "off", "skills_injected": [], "retention_lease": null }\n' \
+      "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$result"
+    exit 0
+  else
+    rc=$?
+  fi
+  [ "$rc" -eq 3 ] && return 0
+  die_precondition "sealed zero_diff_receipt rejected before effects: ${result:-verification_failed}"
 }
 
 die_resource_budget() {
@@ -1538,7 +1692,11 @@ else
   # Sealed strict projection is present: still bind active L5/L6 (and L3
   # fallback) markers to the campaign's policy/graph digests before spend.
   check_marker_campaign_admission_bridge
+  if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
+    emit_mission_noop
+  fi
 fi
+emit_sealed_zero_diff_if_authorized
 set_runner_flags
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then
@@ -2881,6 +3039,9 @@ run_strict_boundary_postcheck() {
   # - Mission/campaign sealed authority: output.paths are the authorized create/modify
   #   surface. A narrow repair need not touch every authorized path; changed paths
   #   that are not authorized (and not generated mirrors) fail closed.
+  # - required_change_paths: every listed path MUST appear in an effectful candidate
+  #   diff. Digest-bound no-op (zero changed paths + sealed no-op proof) is the only
+  #   exemption.
   if [ "${#STRICT_OUTPUT_PATHS[@]}" -gt 0 ]; then
     if [ "${CAMPAIGN_STRICT_AUTHORITY:-0}" -eq 1 ]; then
       local -A authorized_set=()
@@ -2902,6 +3063,110 @@ run_strict_boundary_postcheck() {
         if [ -z "${changed_set["$out_dir"]+x}" ]; then
           STRICT_POSTCHECK_STATUS="boundary_rejected"
           STRICT_POSTCHECK_ERROR="boundary_rejected: output path '$out_dir' missing from changed files"
+          return 1
+        fi
+      done
+    fi
+  fi
+
+  if [ "${#STRICT_REQUIRED_CHANGE_PATHS[@]}" -gt 0 ]; then
+    local effectful=1
+    if [ "${#changed_paths[@]}" -eq 0 ]; then
+      # Zero-change candidates require the sealed zero_diff_receipt embedded in
+      # the dispatch-unit contract. Ambient STRICT_NOOP_RECEIPT_PATH is never
+      # authority (caller-injectable env is rejected).
+      if [ -n "${STRICT_NOOP_RECEIPT_PATH:-}" ]; then
+        STRICT_POSTCHECK_STATUS="boundary_rejected"
+        STRICT_POSTCHECK_ERROR="boundary_rejected: ambient STRICT_NOOP_RECEIPT_PATH is not authority; seal zero_diff_receipt into the dispatch unit"
+        return 1
+      fi
+      local __noop_verify
+      # shellcheck disable=SC2016
+      __noop_verify="$(
+        WORKTREE_CWD="$WT" \
+        node - "$CONTRACT_FILE" "$BASE_SHA" <<'NODE' 2>/dev/null || true
+'use strict';
+const fs = require('fs');
+const crypto = require('crypto');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [contractPath, baseSha] = process.argv.slice(2);
+const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
+const fail = (code) => { process.stdout.write(code); process.exit(2); };
+try {
+  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
+  if (!receipt || typeof receipt !== 'object') fail('missing_sealed_receipt');
+  if (receipt.schema_version !== 1) fail('bad_schema');
+  if (receipt.artifact_type !== 'campaign_zero_diff_receipt'
+      && receipt.artifact_type !== 'controller_zero_diff_receipt') {
+    fail('bad_artifact');
+  }
+  if (receipt.candidate_zero_change !== true) fail('not_zero_change');
+  if (!/^[0-9a-f]{64}$/.test(receipt.digest || '')) fail('bad_digest');
+  const body = { ...receipt };
+  delete body.digest;
+  if (sha256Json(body) !== receipt.digest) fail('forged');
+  if (!/^[0-9a-f]{40}$/.test(receipt.base_sha || '')) fail('stale_base');
+  if (baseSha && receipt.base_sha !== baseSha) fail('stale_base');
+  // Bind campaign projection identity when present on the sealed unit.
+  const proj = contract.campaign_projection || {};
+  if (proj.campaign_id && receipt.campaign_id !== proj.campaign_id) {
+    fail('foreign_campaign');
+  }
+  if (proj.campaign_contract_sha256
+      && receipt.campaign_contract_digest !== proj.campaign_contract_sha256) {
+    fail('foreign_contract');
+  }
+  if (proj.strict_dispatch_sha256
+      && receipt.strict_dispatch_digest !== proj.strict_dispatch_sha256) {
+    fail('foreign_strict');
+  }
+  // Recompute live path byte digests from the worktree and compare.
+  const digests = receipt.path_byte_digests;
+  if (!digests || typeof digests !== 'object') fail('missing_path_digests');
+  const cwd = process.env.WORKTREE_CWD || process.cwd();
+  const required = Array.isArray(contract.output.required_change_paths)
+    ? contract.output.required_change_paths : [];
+  const outputs = Array.isArray(contract.output.paths) ? contract.output.paths : [];
+  const relevant = [...new Set([...required, ...outputs])].sort();
+  const receiptKeys = Object.keys(digests).sort();
+  if (JSON.stringify(receiptKeys) !== JSON.stringify(relevant)) fail('path_set_mismatch');
+  for (const rel of relevant) {
+    const abs = path.join(cwd, rel);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) fail('path_missing');
+    const live = sha256(fs.readFileSync(abs));
+    if (live !== digests[rel]) fail('byte_digest_mismatch');
+  }
+  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')) {
+    fail('acceptance_missing');
+  }
+  if (Array.isArray(contract.acceptance)) {
+    const accBody = contract.acceptance.map((a) => ({ argv: a.argv, exit: a.exit }));
+    const recomputed = sha256Json(accBody);
+    if (recomputed !== receipt.acceptance_digest) fail('acceptance_mismatch');
+  }
+  process.stdout.write('ok');
+  process.exit(0);
+} catch (e) {
+  process.stdout.write('unreadable');
+  process.exit(2);
+}
+NODE
+)"
+      if [ "$__noop_verify" != "ok" ]; then
+        STRICT_POSTCHECK_STATUS="boundary_rejected"
+        STRICT_POSTCHECK_ERROR="boundary_rejected: no-op receipt failed verification (${__noop_verify:-missing})"
+        return 1
+      fi
+      effectful=0
+    fi
+    if [ "$effectful" -eq 1 ]; then
+      for req_path in "${STRICT_REQUIRED_CHANGE_PATHS[@]}"; do
+        if [ -z "${changed_set["$req_path"]+x}" ]; then
+          STRICT_POSTCHECK_STATUS="boundary_rejected"
+          STRICT_POSTCHECK_ERROR="boundary_rejected: required_change_path '$req_path' missing from candidate diff"
           return 1
         fi
       done
@@ -2954,15 +3219,20 @@ passive_capture() {
         [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
         [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
         local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        # Exact effort/endpoint tuple — null endpoint means explicit no-endpoint wallet.
+        local _ep_key="${ENDPOINT:-}"
         local payload
-        payload="$(OBSERVED_AT="$observed_at" RUNNER="$runner" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" node -e '
+        payload="$(OBSERVED_AT="$observed_at" RUNNER="$runner" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" EFFORT="${EFFORT:-}" ENDPOINT_KEY="$_ep_key" node -e '
           const p = process.env;
+          const endpoint = (p.ENDPOINT_KEY && p.ENDPOINT_KEY.length > 0) ? p.ENDPOINT_KEY : null;
           const payload = {
             schema_version: 1,
             observed_at: p.OBSERVED_AT,
             runner: p.RUNNER,
             model: p.MODEL,
             role: "implementer",
+            effort: p.EFFORT || null,
+            endpoint,
             runner_version: null,
             capability: {
               quota: {
@@ -3001,6 +3271,13 @@ _is_engine_unavailable() {
 # assert the resulting stdout/exit byte-for-byte, guarding this refactor.
 classify_outcome() {
   OUTCOME_STATUS=""; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"; OUTCOME_ERR=""; OUTCOME_EXIT=1
+  OUTCOME_DISPATCHER_CALLED=1
+  OUTCOME_MODEL_CALLS=1
+  OUTCOME_MUTATION_ATTEMPTS=1
+  OUTCOME_GATE_ATTEMPTS=0
+  OUTCOME_RESOURCES_CREATED=1
+  [ "${WORKTREE_REUSED:-0}" -eq 1 ] && OUTCOME_RESOURCES_CREATED=0
+  OUTCOME_ZERO_DIFF_RECEIPT_DIGEST=""
   if [ "$HEAD_SHA" != "$BASE_SHA" ]; then
     # --- a new commit exists ---
     if [ -n "$DIRTY" ]; then
@@ -3039,7 +3316,11 @@ classify_outcome() {
       fi
     fi
   else
-    # --- no new commit: split by HOW the worker ended ---
+    # --- no new commit: equality branch ---
+    # Exact sealed zero_diff_receipt must be validated HERE (not only inside the
+    # HEAD!=BASE strict postcheck path). Valid receipt → explicit successful
+    # no-op with dispatcher_called:false semantics. Missing/forged/stale/foreign
+    # receipt remains ordinary no_op/failure.
     if [ -n "$DIRTY" ]; then
       # edits exist but were never committed — e.g. the agy wrapper-commit above failed,
       # or the worker hand-edited without committing. Surface it (don't mis-score no_op).
@@ -3047,10 +3328,127 @@ classify_outcome() {
       OUTCOME_STATUS="dirty"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
       OUTCOME_ERR="edits left uncommitted, no commit made (wrapper commit may have failed; agent exit $AGENT_EXIT); worktree kept"; OUTCOME_EXIT=1
     elif [ "$AGENT_EXIT" -eq 0 ]; then
-      # clean exit, nothing committed → agent legitimately decided nothing was needed
-      passive_capture "no_op"
-      OUTCOME_STATUS="no_op"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
-      OUTCOME_ERR="agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept"; OUTCOME_EXIT=1
+      local __eq_noop_status=""
+      if [ "$STRICT_CONTRACT" -eq 1 ] && [ -n "${STRICT_NOOP_RECEIPT_PATH:-}" ]; then
+        passive_capture "failure"
+        OUTCOME_STATUS="failure"
+        OUTCOME_COMMIT=""
+        OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+        OUTCOME_ERR="ambient STRICT_NOOP_RECEIPT_PATH is not authority; seal zero_diff_receipt into the dispatch unit"
+        OUTCOME_EXIT=1
+        __eq_noop_status="rejected"
+      elif [ "$STRICT_CONTRACT" -eq 1 ] && [ -n "${CONTRACT_FILE:-}" ] && [ -r "${CONTRACT_FILE:-}" ]; then
+        local __eq_noop_verify
+        __eq_noop_verify="$(
+          WORKTREE_CWD="$WT" \
+          node - "$CONTRACT_FILE" "$BASE_SHA" <<'NODE' 2>/dev/null || true
+'use strict';
+const fs = require('fs');
+const crypto = require('crypto');
+const path = require('path');
+const [contractPath, baseSha] = process.argv.slice(2);
+const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
+const fail = (code) => { process.stdout.write(code); process.exit(2); };
+try {
+  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
+  if (!receipt || typeof receipt !== 'object') fail('missing_sealed_receipt');
+  if (receipt.schema_version !== 1) fail('bad_schema');
+  if (receipt.artifact_type !== 'campaign_zero_diff_receipt'
+      && receipt.artifact_type !== 'controller_zero_diff_receipt') {
+    fail('bad_artifact');
+  }
+  if (receipt.candidate_zero_change !== true) fail('not_zero_change');
+  if (!/^[0-9a-f]{64}$/.test(receipt.digest || '')) fail('bad_digest');
+  const body = { ...receipt };
+  delete body.digest;
+  if (sha256Json(body) !== receipt.digest) fail('forged');
+  if (!/^[0-9a-f]{40}$/.test(receipt.base_sha || '')) fail('stale_base');
+  if (baseSha && receipt.base_sha !== baseSha) fail('stale_base');
+  const projection = contract.campaign_projection || {};
+  if (projection.campaign_id && receipt.campaign_id !== projection.campaign_id) {
+    fail('foreign_campaign');
+  }
+  if (projection.campaign_contract_sha256
+      && receipt.campaign_contract_digest !== projection.campaign_contract_sha256) {
+    fail('foreign_contract');
+  }
+  if (projection.strict_dispatch_sha256
+      && receipt.strict_dispatch_digest !== projection.strict_dispatch_sha256) {
+    fail('foreign_strict');
+  }
+  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')) {
+    fail('acceptance_missing');
+  }
+  const digests = receipt.path_byte_digests;
+  if (!digests || typeof digests !== 'object') fail('missing_path_digests');
+  const cwd = process.env.WORKTREE_CWD || process.cwd();
+  const required = Array.isArray(contract.output && contract.output.required_change_paths)
+    ? contract.output.required_change_paths : [];
+  const outputs = Array.isArray(contract.output && contract.output.paths)
+    ? contract.output.paths : [];
+  const relevant = [...new Set([...required, ...outputs])].sort();
+  const receiptKeys = Object.keys(digests).sort();
+  if (JSON.stringify(receiptKeys) !== JSON.stringify(relevant)) fail('path_set_mismatch');
+  for (const rel of relevant) {
+    const abs = path.join(cwd, rel);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) fail('path_missing');
+    const live = sha256(fs.readFileSync(abs));
+    if (live !== digests[rel]) fail('byte_digest_mismatch');
+  }
+  if (Array.isArray(contract.acceptance)) {
+    const acceptance = contract.acceptance.map((entry) => ({
+      argv: entry.argv,
+      exit: entry.exit,
+    }));
+    if (sha256Json(acceptance) !== receipt.acceptance_digest) {
+      fail('acceptance_mismatch');
+    }
+  }
+  process.stdout.write('ok');
+  process.exit(0);
+} catch (error) {
+  fail(error && error.message ? String(error.message).slice(0, 80) : 'verify_threw');
+}
+NODE
+        )" || __eq_noop_verify="verify_failed"
+        if [ "$__eq_noop_verify" = "ok" ]; then
+          __eq_noop_status="sealed_zero_diff"
+        elif [ -n "$__eq_noop_verify" ] && [ "$__eq_noop_verify" != "missing_sealed_receipt" ]; then
+          # Forged/stale/foreign sealed receipt is fail-closed, not soft no_op.
+          passive_capture "failure"
+          OUTCOME_STATUS="failure"
+          OUTCOME_COMMIT=""
+          OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+          OUTCOME_ERR="zero_diff_receipt rejected on equality branch: $__eq_noop_verify"
+          OUTCOME_EXIT=1
+          __eq_noop_status="rejected"
+        fi
+      fi
+      if [ "$__eq_noop_status" = "sealed_zero_diff" ]; then
+        # Explicit successful sealed no-op: zero model/mutation effects; dispatcher_called=false.
+        passive_capture "no_op"
+        OUTCOME_STATUS="no_op"
+        OUTCOME_COMMIT=""
+        OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+        OUTCOME_ERR="sealed zero_diff_receipt validated on equality branch (dispatcher_called=false)"
+        OUTCOME_EXIT=0
+        OUTCOME_DISPATCHER_CALLED=0
+        OUTCOME_MODEL_CALLS=0
+        OUTCOME_MUTATION_ATTEMPTS=0
+        OUTCOME_GATE_ATTEMPTS=0
+        OUTCOME_RESOURCES_CREATED=0
+        OUTCOME_ZERO_DIFF_RECEIPT_DIGEST="$(
+          extract_file_json_value "$CONTRACT_FILE" "output.zero_diff_receipt.digest" \
+            2>/dev/null || true
+        )"
+      elif [ "$__eq_noop_status" != "rejected" ]; then
+        # Ordinary no-op (no sealed receipt or not under strict contract)
+        passive_capture "no_op"
+        OUTCOME_STATUS="no_op"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+        OUTCOME_ERR="agent exited cleanly with no commit — judged nothing was needed (agent exit 0); worktree kept"; OUTCOME_EXIT=1
+      fi
     else
       # timeout or non-zero exit, nothing committed → likely paused on a clarifying
       # question (auto-approve does not silence the model's own question) or stalled.
@@ -3173,15 +3571,18 @@ dispatch_detached_run() {
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_PROJECTION_BOUND \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
+      OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \
       CLASSIFIED_ERROR \
       ORPHAN_LOG OUTCOME_ORPHAN WT_LOCK_FD LINEAGE_PARENT LINEAGE_ROOT WORKTREE_ROOT_RUN_ID LINEAGE_DEPTH \
-      STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
+      STRICT_SCOPE_ALLOW_PATHS STRICT_SCOPE_DENY_PATHS STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS STRICT_SCOPE_MAX_FILES STRICT_SCOPE_MAX_DIFF_LINES STRICT_OUTPUT_PATHS STRICT_REQUIRED_CHANGE_PATHS STRICT_POSTCHECK_OK STRICT_POSTCHECK_STATUS STRICT_POSTCHECK_ERROR \
       DISPATCH_RUN_ID DISPATCH_STARTED_EPOCH MANIFEST_DIR_PATH MANIFEST_FILE MANIFEST_CONTAINMENT \
       MANIFEST_SCOPE_UNIT MANIFEST_PID_RECORDED MANIFEST_ENDED_AT MANIFEST_ENDED_EPOCH MANIFEST_FINAL_STATUS 2>/dev/null
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
+    # Preserve pi supervisor poll/stall bounds across setsid detach.
+    declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
       _cont_terminal_on_exit _cont_finalize_or_die \

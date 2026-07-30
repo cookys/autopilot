@@ -114,6 +114,13 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/relative_path" }
         },
+        "required_change_paths": {
+          "description": "Paths that MUST appear in an effectful candidate diff. Non-empty unique exact subset of output_paths when present. A digest-bound accepted no-op is the only zero-change exception.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relative_path" }
+        },
         "authorized_creates": {
           "description": "Absent outputs/inputs permitted only when listed here (fail-closed otherwise).",
           "type": "array",

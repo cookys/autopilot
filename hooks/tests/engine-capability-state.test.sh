@@ -193,36 +193,45 @@ impl_status=$(node "$CLI" current --runner grok --model grok-4.5 --role implemen
 [ "$impl_status" = "exhausted" ] && ok "13: cross-role unknown never clobbers a valid real signal" \
   || bad "13: impl_status=$impl_status (want exhausted)"
 
-# 14. Exact effort/endpoint identity: probe/record writes and reads the same exact
-#     runner/model/effort/endpoint tuple; legacy and neighboring tuples do not authorize it.
+# 14. Exact effort/no-endpoint identity: a successful live probe itself writes
+#     the authorizing row; no manually injected "available" event is allowed.
 reset
 PROBE="$ROOT/scripts/probe-engine-capability.sh"
-# Probe writer must emit effort+endpoint into the store (safe mode status may be unknown).
-bash "$PROBE" quota --runner codex --model gpt-5.5 --role implementer \
-  --effort high --endpoint primary --safe --store "$TESTDIR" \
+PROBE_BIN="$TESTDIR/probe-bin"
+mkdir -p "$PROBE_BIN"
+cat >"$PROBE_BIN/codex" <<'EOF'
+#!/usr/bin/env bash
+if [ "$1" = "exec" ]; then
+  printf 'probe\n'
+  exit 0
+fi
+printf 'codex-cli 1.0.0-test\n'
+EOF
+chmod +x "$PROBE_BIN/codex"
+PATH="$PROBE_BIN:$PATH" bash "$PROBE" quota --runner codex --model gpt-5.5 \
+  --role implementer --effort high --endpoint @none --live-spend --store "$TESTDIR" \
   --now 2026-07-30T00:00:00Z >/dev/null 2>&1
 probe_effort=$(node -e "const fs=require('fs');const l=fs.readFileSync(process.argv[1],'utf8').trim().split(/\n/).pop();process.stdout.write(JSON.parse(l).effort||'');" "$TESTDIR/capability.jsonl")
 probe_endpoint=$(node -e "const fs=require('fs');const l=fs.readFileSync(process.argv[1],'utf8').trim().split(/\n/).pop();const j=JSON.parse(l);process.stdout.write(Object.prototype.hasOwnProperty.call(j,'endpoint')?String(j.endpoint):'');" "$TESTDIR/capability.jsonl")
-# Record an available exact-tuple row for admission semantics.
-cat <<'JSON' | node "$CLI" record --store "$TESTDIR" >/dev/null
-{"schema_version":1,"observed_at":"2026-07-30T00:00:30Z","runner":"codex","model":"gpt-5.5","role":"implementer","effort":"high","endpoint":"primary","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"exact probe"}}}
-JSON
 exact_status=$(node "$CLI" current --runner codex --model gpt-5.5 --role implementer \
-  --effort high --endpoint primary --store "$TESTDIR" --now 2026-07-30T00:01:00Z | jq_get capability.quota.status)
+  --effort high --endpoint @none --store "$TESTDIR" --now 2026-07-30T00:01:00Z | jq_get capability.quota.status)
 # Neighboring effort must not inherit the exact available row.
 neighbor_raw=$(node "$CLI" current --runner codex --model gpt-5.5 --role implementer \
-  --effort low --endpoint primary --store "$TESTDIR" --now 2026-07-30T00:01:00Z 2>/dev/null || true)
-neighbor_status=$(printf '%s' "$neighbor_raw" | jq_get capability.quota.status 2>/dev/null || echo unknown)
+  --effort low --endpoint @none --store "$TESTDIR" --now 2026-07-30T00:01:00Z 2>&1)
+neighbor_rc=$?
+neighbor_status=$(printf '%s' "$neighbor_raw" | jq_get capability.quota.status 2>/dev/null)
+neighbor_parse_rc=$?
 # Legacy exhausted row must not clobber exact-tuple available.
 echo "$(event_json codex gpt-5.5 implementer exhausted high 3600 2026-07-30T00:02:00Z)" | node "$CLI" record --store "$TESTDIR" >/dev/null
 exact_after_legacy=$(node "$CLI" current --runner codex --model gpt-5.5 --role implementer \
-  --effort high --endpoint primary --store "$TESTDIR" --now 2026-07-30T00:03:00Z | jq_get capability.quota.status)
+  --effort high --endpoint @none --store "$TESTDIR" --now 2026-07-30T00:03:00Z | jq_get capability.quota.status)
 legacy_only=$(node "$CLI" current --runner codex --model gpt-5.5 --role implementer \
   --store "$TESTDIR" --now 2026-07-30T00:03:00Z | jq_get capability.quota.status)
-[ "$probe_effort" = "high" ] && [ "$probe_endpoint" = "primary" ] \
+[ "$probe_effort" = "high" ] && [ "$probe_endpoint" = "null" ] \
   && [ "$exact_status" = "available" ] && [ "$exact_after_legacy" = "available" ] \
-  && [ "$neighbor_status" != "available" ] \
-  && ok "14: exact effort/endpoint probe authorizes only matching strict tuple" \
+  && [ "$neighbor_rc" = "0" ] && [ "$neighbor_parse_rc" = "0" ] \
+  && [ "$neighbor_status" = "unknown" ] \
+  && ok "14: live exact effort/no-endpoint probe authorizes only matching strict tuple" \
   || bad "14: probe_effort=$probe_effort probe_endpoint=$probe_endpoint exact=$exact_status neighbor=$neighbor_status exact_after_legacy=$exact_after_legacy legacy_only=$legacy_only"
 
 echo "----"

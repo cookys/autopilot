@@ -1861,7 +1861,8 @@ function createOrUpdateWorkOrder(commonDir, fields, options = {}) { const owner 
       }
     }
     if (enteringConsumed
-        && Object.prototype.hasOwnProperty.call(fields, 'disposition_receipt')) {
+        && fields.disposition_receipt !== null
+        && fields.disposition_receipt !== undefined) {
       return {
         status: 'reject',
         reason_code: 'terminal_receipt_invalid',

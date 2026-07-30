@@ -776,6 +776,11 @@ if (runtime) {
       worktree: null,
       agent_log: null,
       error: 'fixture zero-effect precondition',
+      dispatcher_called: false,
+      model_calls: 0,
+      mutation_attempts: 0,
+      gate_attempts: 0,
+      resources_created: 0,
     },
   };
   const roster = {

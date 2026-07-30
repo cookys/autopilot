@@ -1170,8 +1170,12 @@ const zeroBody = {
   strict_dispatch_digest: unit.contract.campaign_projection.strict_dispatch_sha256,
   campaign_id: unit.contract.campaign_projection.campaign_id,
   mission_lineage_id: unit.contract.campaign_projection.mission_lineage_id,
+  mission_policy_digest: unit.contract.campaign_projection.mission_policy_digest,
   mission_graph_digest: unit.contract.campaign_projection.mission_graph_digest,
   graph_node_id: unit.contract.campaign_projection.graph_node_id,
+  mission_noop_receipt_digest: 'a'.repeat(64),
+  source_work_order_id: 'wo-source-zero-diff',
+  source_work_order_digest: 'b'.repeat(64),
   path_byte_digests: { 'src/target.js': liveDigest },
   candidate_zero_change: true,
 };
@@ -1245,8 +1249,12 @@ const receipt = {
   strict_dispatch_digest: projection.strict_dispatch_sha256,
   campaign_id: projection.campaign_id,
   mission_lineage_id: projection.mission_lineage_id,
+  mission_policy_digest: projection.mission_policy_digest,
   mission_graph_digest: projection.mission_graph_digest,
   graph_node_id: projection.graph_node_id,
+  mission_noop_receipt_digest: 'c'.repeat(64),
+  source_work_order_id: 'wo-source-equality-zero-diff',
+  source_work_order_digest: 'd'.repeat(64),
   path_byte_digests: Object.fromEntries(relevant.map((rel) => [
     rel,
     sha256(fs.readFileSync(path.join(worktree, rel))),
@@ -1504,8 +1512,12 @@ const engineZeroBody = {
   strict_dispatch_digest: engineUnit.campaign_projection.strict_dispatch_sha256,
   campaign_id: engineCampaignId,
   mission_lineage_id: engineContract.mission_runtime.mission_lineage_id,
+  mission_policy_digest: engineContract.mission_runtime.mission_policy_digest,
   mission_graph_digest: engineContract.mission_runtime.mission_graph_digest,
   graph_node_id: engineContract.mission_runtime.graph_node_id,
+  mission_noop_receipt_digest: 'e'.repeat(64),
+  source_work_order_id: 'wo-source-engine-zero-diff',
+  source_work_order_digest: 'f'.repeat(64),
   path_byte_digests: { 'src/target.js': liveDigest },
   candidate_zero_change: true,
 };
@@ -1557,38 +1569,9 @@ assert.doesNotMatch(postcheckEmptyDiff.out, /REPO: unbound variable/);
 let engineBoundaryCalls = 0;
 const engineResult = new AutopilotEngine({
   cwd: repo,
-  implementationDispatcher(args) {
+  implementationDispatcher() {
     engineBoundaryCalls += 1;
-    const unitArg = args[args.indexOf('--contract-file') + 1];
-    const projected = JSON.parse(fs.readFileSync(unitArg, 'utf8'));
-    assert.deepStrictEqual(projected.output.zero_diff_receipt, engineZeroBody);
-    return {
-      error: null,
-      status: 0,
-      signal: null,
-      stdout: '',
-      stderr: '',
-      parseError: null,
-      result: {
-        status: 'no_op',
-        runner: 'sealed-zero-diff-admission',
-        model: null,
-        branch,
-        base: base2,
-        commit: null,
-        files_changed: 0,
-        insertions: 0,
-        deletions: 0,
-        worktree: null,
-        agent_log: null,
-        error: null,
-        dispatcher_called: false,
-        mutation_attempts: 0,
-        gate_attempts: 0,
-        resources_created: 0,
-        zero_diff_receipt_digest: engineZeroBody.digest,
-      },
-    };
+    throw new Error('caller-supplied zero-diff authority must not reach dispatcher');
   },
 }).implementTask({
   promptFile: path.join(tmp, 'p.txt'),
@@ -1613,10 +1596,11 @@ const engineResult = new AutopilotEngine({
     },
   },
 });
-assert.strictEqual(engineBoundaryCalls, 1, JSON.stringify(engineResult));
-assert.strictEqual(engineResult.status, 'no_op', JSON.stringify(engineResult));
+assert.strictEqual(engineBoundaryCalls, 0, JSON.stringify(engineResult));
+assert.strictEqual(engineResult.status, 'blocked', JSON.stringify(engineResult));
+assert.strictEqual(engineResult.phase, 'prepare_implementation');
+assert.strictEqual(engineResult.code, 'CALLER_ZERO_DIFF_AUTHORITY_FORBIDDEN');
 assert.strictEqual(engineResult.dispatcher_called, false);
-assert.strictEqual(engineResult.implementation.zero_diff_receipt_digest, engineZeroBody.digest);
 
 console.log(JSON.stringify({
   required_change_schema_ok: true,
@@ -1626,7 +1610,7 @@ console.log(JSON.stringify({
   equality_noop_path_exercised: true,
   postcheck_empty_diff_path_exercised: true,
   sealed_noop_substitutions_rejected: true,
-  engine_zero_diff_wired: true,
+  engine_caller_zero_diff_forbidden: true,
   effectful_required_ok: true,
 }));
 NODE
@@ -1642,7 +1626,7 @@ assert_contains "$REQ_MATRIX_OUT" '"postcheck_empty_diff_path_exercised":true' \
   "postcheck empty-diff validator executes under set -u"
 assert_contains "$REQ_MATRIX_OUT" '"sealed_noop_substitutions_rejected":true' \
   "forged, stale, and foreign no-op receipts reject cleanly"
-assert_contains "$REQ_MATRIX_OUT" '"engine_zero_diff_wired":true' \
-  "Engine writes, projects, and consumes the sealed zero-diff receipt"
+assert_contains "$REQ_MATRIX_OUT" '"engine_caller_zero_diff_forbidden":true' \
+  "Engine rejects caller-minted zero-diff authority before dispatch"
 
 finalize_test

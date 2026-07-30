@@ -79,10 +79,12 @@ const {
   inspectLifecycleReceipt,
 } = require('../../scripts/lifecycle-residue-receipt');
 const {
+  buildMissionZeroDiffReceipt,
   hasCampaignDispatchAuthority,
   normalizeCampaignAuthority,
   writeCampaignDispatchUnit,
 } = require('./campaign-dispatch-projection');
+const { admitMissionRouting } = require('../../scripts/mission-routing-admission');
 const {
   admitContinuation,
   loadMatchingRunsFromManifestDir,
@@ -838,6 +840,8 @@ function buildImplementationArgs({
   campaignContractDigest = null,
   campaignSealFile = null,
   campaignUnitContractFile = null,
+  campaignRunId = null,
+  campaignStage = null,
   keepWorktree = false,
   reuseWorktree = null,
   expectedWorktreeInstanceId = null,
@@ -923,10 +927,20 @@ function buildImplementationArgs({
     '--effort',
     roster.implementer_effort,
   ];
-  appendDispatchIdentity(
-    args,
-    normalizeDispatchIdentity(dispatchIdentity, 'dispatchIdentity'),
+  const normalizedDispatchIdentity = normalizeDispatchIdentity(
+    dispatchIdentity,
+    'dispatchIdentity',
   );
+  appendDispatchIdentity(args, normalizedDispatchIdentity);
+  if (campaignContractFile && normalizedDispatchIdentity === null) {
+    if (typeof campaignRunId !== 'string' || campaignRunId.length === 0
+        || typeof campaignStage !== 'string' || campaignStage.length === 0) {
+      throw new TypeError(
+        'managed campaign dispatch requires campaignRunId and campaignStage',
+      );
+    }
+    args.push('--run-id', campaignRunId, '--stage', campaignStage);
+  }
   if (campaignContractFile) {
     args.push('--campaign-contract', path.resolve(cwd || process.cwd(), campaignContractFile));
     args.push('--campaign-contract-sha256', campaignContractDigest);
@@ -1236,6 +1250,11 @@ function zeroEffectLeafFacts(result) {
       files_changed: leaf.files_changed,
       insertions: leaf.insertions,
       deletions: leaf.deletions,
+      dispatcher_called: leaf.dispatcher_called,
+      model_calls: leaf.model_calls,
+      mutation_attempts: leaf.mutation_attempts,
+      gate_attempts: leaf.gate_attempts,
+      resources_created: leaf.resources_created,
     };
   }
   // Sealed root-identity prepare rejections (missing/malformed/mismatched
@@ -1301,6 +1320,35 @@ function isExactSealedZeroDiffLeaf(leaf, unitContract = null) {
     && isObj(expectedReceipt)
     && isStr(expectedReceipt.digest)
     && leaf.zero_diff_receipt_digest === expectedReceipt.digest;
+}
+
+function dispatcherUsageAuthorityViolation(result) {
+  if (!isObj(result)) return null;
+  for (const field of [
+    'model_calls',
+    'fresh_input_bytes',
+    'fresh_input_tokens',
+    'finding_recurrence',
+    'elapsed_wall_ms',
+    'owned_worktrees_current',
+    'mutation_attempts',
+    'gate_attempts',
+    'resources_created',
+  ]) {
+    if (!Object.prototype.hasOwnProperty.call(result, field)
+        || result[field] === null) continue;
+    if (!Number.isSafeInteger(result[field]) || result[field] < 0) {
+      return `${field} must be a nonnegative safe integer when reported`;
+    }
+  }
+  if (isObj(result.usage)
+      && Object.prototype.hasOwnProperty.call(result.usage, 'input_tokens')
+      && result.usage.input_tokens !== null
+      && (!Number.isSafeInteger(result.usage.input_tokens)
+        || result.usage.input_tokens < 0)) {
+    return 'usage.input_tokens must be null or a nonnegative safe integer';
+  }
+  return null;
 }
 
 function isCampaignPreSpendRejection(result) {
@@ -2190,6 +2238,8 @@ class AutopilotEngine {
   constructor(options = {}) {
     this.reviewLoopResolver = options.reviewLoopResolver || resolveReviewLoopJson;
     this.reviewDispatcher = options.reviewDispatcher || dispatchReviewJson;
+    this.reviewPostProviderHook = typeof options.reviewPostProviderHook === 'function'
+      ? options.reviewPostProviderHook : null;
     this.implementationDispatcher = options.implementationDispatcher || dispatchImplementJson;
     this.diffProvider = options.diffProvider || defaultDiffProvider;
     this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
@@ -3012,8 +3062,9 @@ class AutopilotEngine {
     }
     const startedAt = this.now();
     let reviewResult;
+    let reviewOptions;
     try {
-      const reviewOptions = {
+      reviewOptions = {
         ...(input.reviewOptions || {}),
       };
       if (reservationIdentity !== null) {
@@ -3034,6 +3085,14 @@ class AutopilotEngine {
         result: null,
         parseError: null,
       };
+    }
+    if (this.reviewPostProviderHook) {
+      this.reviewPostProviderHook({
+        reservation_identity: reservationIdentity,
+        review_args: reviewArgs,
+        review_options: reviewOptions,
+        provider_result: reviewResult,
+      });
     }
     const blockedReason = reviewResultBlocked(reviewResult);
     const parsed = reviewResult && reviewResult.result ? reviewResult.result : null;
@@ -3151,6 +3210,23 @@ class AutopilotEngine {
       };
     }
     const resolvedTaskCwd = path.resolve(taskCwd);
+    if (Object.prototype.hasOwnProperty.call(input, 'zeroDiffReceipt')) {
+      const startedAt = this.now();
+      ledger.push(this.ledgerEntry('prepare_implementation', 'blocked', startedAt));
+      return {
+        status: 'blocked',
+        phase: 'prepare_implementation',
+        code: 'CALLER_ZERO_DIFF_AUTHORITY_FORBIDDEN',
+        reason: 'zero-diff authority must come from ordinary durable Mission admission',
+        dispatcher_called: false,
+        roster,
+        resolveResult,
+        implementationResult: null,
+        implementationArgs: null,
+        implementation: null,
+        ledger,
+      };
+    }
 
     if (!roster) {
       const rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
@@ -3266,6 +3342,39 @@ class AutopilotEngine {
               ledger,
             };
           }
+          let missionZeroDiffReceipt = null;
+          const missionRoutingConfig = path.join(
+            resolvedTaskCwd,
+            '.claude',
+            'mission-routing-config.json',
+          );
+          if (projectMissionMode(resolvedTaskCwd) === 'enforce'
+              && fs.existsSync(missionRoutingConfig)) {
+            const missionRouting = admitMissionRouting({
+              repoRoot: resolvedTaskCwd,
+              entryLevel: 'l6',
+              fallback: 'none',
+            });
+            const missionAdoption = Array.isArray(missionRouting.noop_adoptions)
+              ? missionRouting.noop_adoptions.find((item) => (
+                item && item.graph_node_id
+                  === campaignAuthority.contract.mission_runtime.graph_node_id
+              )) : null;
+            if (missionAdoption) {
+              missionZeroDiffReceipt = buildMissionZeroDiffReceipt({
+                missionNoopAdoption: missionAdoption,
+                campaignContract: campaignAuthority.contract,
+                campaignContractSha256: input.campaignContractDigest,
+                campaignId: campaignAuthority.campaign_id,
+                branch: input.branch,
+                base: input.base,
+                runner: roster.implementer_runner,
+                model: roster.implementer_engine,
+                stage: resolvedImplementationStage,
+                rootRunId: implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID,
+              });
+            }
+          }
           campaignUnit = writeCampaignDispatchUnit({
             campaignContract: campaignAuthority.contract,
             campaignContractSha256: input.campaignContractDigest,
@@ -3276,8 +3385,8 @@ class AutopilotEngine {
             model: roster.implementer_engine,
             stage: resolvedImplementationStage,
             rootRunId: implementationBaseEnv.AUTOPILOT_ROOT_RUN_ID,
-            ...(isObj(input.zeroDiffReceipt)
-              ? { zeroDiffReceipt: input.zeroDiffReceipt } : {}),
+            ...(missionZeroDiffReceipt
+              ? { zeroDiffReceipt: missionZeroDiffReceipt } : {}),
           });
         }
       }
@@ -3301,6 +3410,8 @@ class AutopilotEngine {
         campaignContractDigest: input.campaignContractDigest || null,
         campaignSealFile: input.campaignSealFile || null,
         campaignUnitContractFile: campaignUnit ? campaignUnit.contract_path : null,
+        campaignRunId: input.runId || null,
+        campaignStage: resolvedImplementationStage,
         keepWorktree: input.keepWorktree === true,
         reuseWorktree: input.reuseWorktree || null,
         resumeSessionId: input.resumeSessionId || null,
@@ -3714,6 +3825,7 @@ class AutopilotEngine {
         };
       }
     }
+    const usageAuthorityViolation = dispatcherUsageAuthorityViolation(parsed);
     if (!blockedReason && campaignUnit && parsed && parsed.status === 'committed') {
       blockedReason = campaignStrictResultBlocked(parsed, {
         campaign_contract_sha256: input.campaignContractDigest,
@@ -3754,6 +3866,24 @@ class AutopilotEngine {
         wall_secs: parsed && Number.isInteger(parsed.wall_secs) ? parsed.wall_secs : null,
       }),
     );
+
+    if (usageAuthorityViolation) {
+      return {
+        status: 'blocked',
+        phase: 'dispatcher_outcome_authority',
+        reason: `invalid dispatcher usage evidence: ${usageAuthorityViolation}`,
+        roster,
+        resolveResult,
+        implementationResult,
+        implementationArgs,
+        implementation: parsed,
+        dispatcher_called: true,
+        // The rail was invoked. Reject its forged observation and charge one
+        // conservative call rather than silently normalizing the supplied value.
+        model_calls: 1,
+        ledger,
+      };
+    }
 
     if (misplacedWrites) {
       const misplacedReason = (
@@ -4240,14 +4370,14 @@ class AutopilotEngine {
       }
     }
 
-    const performReview = ({
+    const prepareReview = ({
       candidate,
       scope,
       repair_generation: repairGeneration,
       reviewRoster = roster,
-      reviewStage = null,
-      pinReviewerTuple = false,
-      reservation_identity: reservationIdentity = null,
+      review_input_mode: reviewInputMode = null,
+      vertical_failed: verticalFailed = false,
+      verification = null,
     }) => {
       let diffFile;
       try {
@@ -4260,8 +4390,119 @@ class AutopilotEngine {
           cwd: loopCwd,
         });
       } catch (error) {
+        return { prepared: false, reason: error.message || String(error) };
+      }
+      const specFile = promptFile;
+      let diffDigest;
+      let specDigest;
+      try {
+        diffDigest = crypto.createHash('sha256')
+          .update(fs.readFileSync(diffFile)).digest('hex');
+        specDigest = crypto.createHash('sha256')
+          .update(fs.readFileSync(specFile)).digest('hex');
+      } catch (error) {
+        return { prepared: false, reason: error.message || String(error) };
+      }
+      const reviewPayload = {
+        candidate,
+        verification,
+        repair_generation: repairGeneration,
+        scope,
+        review_input_mode: reviewInputMode,
+        vertical_failed: verticalFailed === true,
+      };
+      return {
+        prepared: true,
+        authority: {
+          schema_version: 1,
+          artifact_type: 'controller_full_diff_review_input',
+          candidate_ref: candidate && (candidate.commit || candidate.tree_sha),
+          candidate_tree_sha: candidate && candidate.tree_sha,
+          base_sha: candidate && candidate.base_sha || base,
+          diff_digest: diffDigest,
+          spec_digest: specDigest,
+          review_input_digest: campaignCanonicalDigest(reviewPayload),
+          reviewer: {
+            runner: reviewRoster.reviewer_runner,
+            model: reviewRoster.reviewer_engine,
+            effort: reviewRoster.reviewer_effort,
+            endpoint: reviewRoster.reviewer_endpoint || null,
+          },
+        },
+        diff_file: path.resolve(diffFile),
+        spec_file: path.resolve(specFile),
+      };
+    };
+
+    const performReview = ({
+      candidate,
+      verification = null,
+      scope,
+      repair_generation: repairGeneration,
+      review_input_mode: reviewInputMode = null,
+      vertical_failed: verticalFailed = false,
+      reviewRoster = roster,
+      reviewStage = null,
+      pinReviewerTuple = false,
+      prepared_review: preparedReview = null,
+      reservation_identity: reservationIdentity = null,
+    }) => {
+      const prepared = preparedReview || prepareReview({
+        candidate,
+        verification,
+        scope,
+        repair_generation: repairGeneration,
+        review_input_mode: reviewInputMode,
+        vertical_failed: verticalFailed,
+        reviewRoster,
+      });
+      if (!isObj(prepared)
+          || prepared.prepared !== true
+          || !isObj(prepared.authority)
+          || !isStr(prepared.diff_file)
+          || !isStr(prepared.spec_file)) {
+        return {
+          reviewed: false,
+          reason: prepared && prepared.reason
+            ? prepared.reason : 'full-diff review preparation is incomplete',
+        };
+      }
+      const authority = prepared.authority;
+      const reviewPayload = {
+        candidate,
+        verification,
+        repair_generation: repairGeneration,
+        scope,
+        review_input_mode: reviewInputMode,
+        vertical_failed: verticalFailed === true,
+      };
+      let observedDiffDigest;
+      let observedSpecDigest;
+      try {
+        observedDiffDigest = crypto.createHash('sha256')
+          .update(fs.readFileSync(prepared.diff_file)).digest('hex');
+        observedSpecDigest = crypto.createHash('sha256')
+          .update(fs.readFileSync(prepared.spec_file)).digest('hex');
+      } catch (error) {
         return { reviewed: false, reason: error.message || String(error) };
       }
+      if (authority.candidate_ref !== (candidate && (candidate.commit || candidate.tree_sha))
+          || authority.candidate_tree_sha !== (candidate && candidate.tree_sha)
+          || authority.base_sha !== (candidate && candidate.base_sha || base)
+          || authority.diff_digest !== observedDiffDigest
+          || authority.spec_digest !== observedSpecDigest
+          || authority.review_input_digest !== campaignCanonicalDigest(reviewPayload)
+          || !isObj(authority.reviewer)
+          || authority.reviewer.runner !== reviewRoster.reviewer_runner
+          || authority.reviewer.model !== reviewRoster.reviewer_engine
+          || authority.reviewer.effort !== reviewRoster.reviewer_effort
+          || authority.reviewer.endpoint !== (reviewRoster.reviewer_endpoint || null)) {
+        return {
+          reviewed: false,
+          reason: 'prepared full-diff authority drifted before provider invocation',
+        };
+      }
+      const diffFile = prepared.diff_file;
       const budgetAt = this.now();
       const budget = campaignWallBudgetStatus(campaignControl, budgetAt);
       if (budget.exhausted) {
@@ -4790,6 +5031,7 @@ class AutopilotEngine {
     });
     let controllerWorkOrder = null;
     let controllerWorkOrderPath = null;
+    let priorTerminalController = null;
     // Corrupt/ambiguous/foreign/tampered exact controller records must stop
     // before effects — never catch-and-reseed into a "fresh" controller.
     {
@@ -4828,17 +5070,54 @@ class AutopilotEngine {
           err.code = detail.reason_code || first.reason_code || 'controller_work_order_integrity';
           throw err;
         }
-        const matches = listed.filter((e) => e.work_order
+        const nodeControllers = listed.filter((e) => e.work_order
           && !e.error
           && e.work_order.graph_node === controllerGraphNode
           && e.work_order.role === 'controller');
+        const recordIsTerminal = (record) => {
+          const recordController = isObj(record && record.controller)
+            ? record.controller : null;
+          return Boolean(record && (
+            record.disposition === 'consumed'
+            || record.disposition === 'stale_dispositioned'
+            || (isStr(record.terminal_status)
+              && !['running', 'active', 'none'].includes(record.terminal_status))
+            || (recordController && (
+              recordController.phase === 'COMPLETED'
+              || recordController.phase === 'TERMINAL'
+              || recordController.next_action === 'terminal'
+            ))
+          ));
+        };
+        const matches = nodeControllers.filter((e) => (
+          e.work_order.attempt === controllerAttempt
+          && e.work_order.work_order_id === controllerWorkOrderId
+        ));
         if (matches.length > 1) {
           const err = new Error(
-            'ambiguous controller Work Orders for campaign root/node; refuse reseed',
+            'ambiguous controller Work Orders for exact campaign root/node/attempt; refuse reseed',
           );
           err.code = 'controller_work_order_ambiguous';
           throw err;
         }
+        const blockingPrior = nodeControllers.filter((e) => (
+          !matches.includes(e) && !recordIsTerminal(e.work_order)
+        ));
+        if (blockingPrior.length > 0) {
+          const err = new Error(
+            'a prior controller attempt remains nonterminal; refuse a new attempt',
+          );
+          err.code = 'controller_prior_attempt_nonterminal';
+          throw err;
+        }
+        const terminalHistory = nodeControllers
+          .filter((e) => !matches.includes(e) && recordIsTerminal(e.work_order))
+          .sort((left, right) => (
+            Number(right.work_order.attempt || 0) - Number(left.work_order.attempt || 0)
+          ));
+        priorTerminalController = terminalHistory.length > 0
+          && isObj(terminalHistory[0].work_order.controller)
+          ? terminalHistory[0].work_order.controller : null;
         if (matches.length === 1) {
           controllerWorkOrder = matches[0].work_order;
           controllerWorkOrderPath = matches[0].path;
@@ -4873,6 +5152,13 @@ class AutopilotEngine {
       && !resumeSetupError
       && priorController,
     );
+    if (controllerWorkOrder && priorTerminal) {
+      const err = new Error(
+        'the exact controller Work Order attempt is already terminal; refuse new effects',
+      );
+      err.code = 'controller_work_order_already_terminal';
+      throw err;
+    }
     // Attach exact state whenever prior controller exists and is not terminal,
     // or when explicitly resuming. Never catch-and-reseed over active state.
     const attachingExistingController = Boolean(
@@ -4950,7 +5236,11 @@ class AutopilotEngine {
         if (!isStr(controllerWorkOrder.worktree)
             || registeredControllerWorktree !== currentControllerWorktree) {
           const err = new Error(
-            'existing controller attach must continue in the exact registered Work Order worktree',
+            'existing controller attach must continue in the exact registered Work Order '
+              + `worktree (registered=${registeredControllerWorktree || '<missing>'}, `
+              + `current=${currentControllerWorktree}, attempt=${controllerAttempt}, `
+              + `claim=${exactMissionClaim && exactMissionClaim.claim_id}, `
+              + `work_order=${controllerWorkOrderId})`,
           );
           err.code = 'controller_worktree_mismatch';
           throw err;
@@ -4996,14 +5286,16 @@ class AutopilotEngine {
         campaignController.controller_digest = controllerStateDigest(campaignController);
       }
     } else {
+      const historicalController = priorController || priorTerminalController;
       campaignController = emptyControllerState({
         frozen_denominator: frozenDenominator,
         original_dispatch_run: campaignControl.campaign_id,
         started_at_ms: Date.now(),
-        historical_outputs: priorController ? priorController.historical_outputs : null,
-        historical_outputs_digest: priorController
-          ? priorController.historical_outputs_digest : null,
-        noop_receipt: priorController ? priorController.noop_receipt : null,
+        historical_outputs: historicalController
+          ? historicalController.historical_outputs : null,
+        historical_outputs_digest: historicalController
+          ? historicalController.historical_outputs_digest : null,
+        noop_receipt: historicalController ? historicalController.noop_receipt : null,
         completed_deliverables: missionCompletedDeliverables,
         repair_budget_limits: defaultBudgetLimitsSeed,
         temp_capacity_limit: sealedTempCapacity,
@@ -5348,6 +5640,7 @@ class AutopilotEngine {
         registeredControllerBranch = 'HEAD';
       }
       const baseFields = {
+        work_order_id: controllerWorkOrderId,
         root_run_id: controllerRootRunId,
         graph_node: controllerGraphNode,
         attempt: controllerAttempt,
@@ -6072,8 +6365,6 @@ class AutopilotEngine {
           retentionOwner: campaignControl.campaign_id,
           retentionReason: 'implementation-campaign-repair-lineage',
           retentionExpiresAt,
-          ...(isObj(input.zeroDiffReceipt)
-            ? { zeroDiffReceipt: input.zeroDiffReceipt } : {}),
           implementationOptions: {
             ...(input.implementationOptions || {}),
             cwd: loopCwd,
@@ -6102,6 +6393,31 @@ class AutopilotEngine {
             resources_created: 0,
             zero_diff_receipt_digest:
               implementation.implementation.zero_diff_receipt_digest,
+            raw: implementation,
+          };
+        }
+        if (implementation.status === 'blocked'
+            && implementation.dispatcher_called === false
+            && isExactZeroEffectPreconditionLeaf(implementation.implementation)) {
+          const leaf = implementation.implementation;
+          return {
+            committed: false,
+            status: 'precondition_failed',
+            phase: implementation.phase || 'precondition_failed',
+            reason: implementation.reason || 'implementation precondition failed',
+            commit: null,
+            worktree: null,
+            agent_log: null,
+            files_changed: 0,
+            insertions: 0,
+            deletions: 0,
+            dispatcher_called: false,
+            model_calls: 0,
+            fresh_input_bytes: 0,
+            fresh_input_tokens: null,
+            mutation_attempts: 0,
+            gate_attempts: 0,
+            resources_created: 0,
             raw: implementation,
           };
         }
@@ -6174,7 +6490,10 @@ class AutopilotEngine {
             : 'retained_failed_dispatch';
           return {
             committed: false,
+            phase: implementation.phase || 'dispatch_implementation',
             reason: implementation.reason || `implementation status ${implementation.status}`,
+            dispatcher_called: implementation.dispatcher_called === true,
+            model_calls: implementation.model_calls,
             repair_lineage: { ...repairLineage },
             raw: implementation,
           };
@@ -6739,6 +7058,7 @@ class AutopilotEngine {
         };
       },
       review: (reviewInput) => performReview(reviewInput),
+      prepareReview: (reviewInput) => prepareReview(reviewInput),
       adjudicate: ({ review, repair_generation: repairGeneration, final }) => {
         let dispositionAuthority = null;
         if (typeof this.campaignDispositionProvider === 'function') {
@@ -8203,21 +8523,49 @@ class AutopilotEngine {
     }
 
     if (campaignControl && campaignControl.status === 'admitted') {
-      return finish(this._runManagedCampaignComposition({
-        input,
-        campaignControl,
-        roster,
-        resolveResult,
-        loopCwd,
-        promptFile,
-        branch,
-        base,
-        verifyCmd,
-        convergenceVerdict,
-        requireQualifiedReviewer,
-        ledger,
-        releaseCampaignNoEffect,
-      }));
+      try {
+        return finish(this._runManagedCampaignComposition({
+          input,
+          campaignControl,
+          roster,
+          resolveResult,
+          loopCwd,
+          promptFile,
+          branch,
+          base,
+          verifyCmd,
+          convergenceVerdict,
+          requireQualifiedReviewer,
+          ledger,
+          releaseCampaignNoEffect,
+        }));
+      } catch (error) {
+        const failureAt = this.now();
+        const code = error && error.code
+          ? error.code : 'controller_execution_authority_failed';
+        ledger.push(this.ledgerEntry(
+          'controller_execution_authority',
+          'blocked',
+          failureAt,
+          { rejection_code: code, dispatcher_called: false },
+        ));
+        return finish({
+          status: 'blocked',
+          phase: 'controller_execution_authority',
+          code,
+          reason: error && error.message ? error.message : String(error),
+          dispatcher_called: false,
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          ledger,
+        });
+      }
     }
 
     const implementationChain = [];

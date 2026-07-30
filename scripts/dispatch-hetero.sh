@@ -1300,12 +1300,19 @@ emit_sealed_zero_diff_if_authorized() {
   base_sha="$(git -C "$repo" rev-parse "${BASE}^{commit}" 2>/dev/null)" \
     || die_precondition "sealed zero-diff admission cannot resolve immutable base"
   if result="$(
-    node - "$CONTRACT_FILE" "$repo" "$base_sha" <<'NODE'
+    node - "$CONTRACT_FILE" "$repo" "$base_sha" \
+      "${MISSION_NOOP_RECEIPT_DIGEST:-}" "${MISSION_NOOP_GRAPH_NODE:-}" <<'NODE'
 'use strict';
 const crypto = require('crypto');
 const fs = require('fs');
 const { execFileSync } = require('child_process');
-const [contractPath, repo, baseSha] = process.argv.slice(2);
+const [
+  contractPath,
+  repo,
+  baseSha,
+  missionNoopReceiptDigest,
+  missionNoopGraphNode,
+] = process.argv.slice(2);
 const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const sha256Json = (value) => sha256(Buffer.from(JSON.stringify(value), 'utf8'));
 const fail = (code, exit = 2) => {
@@ -1316,13 +1323,38 @@ try {
   const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
   const receipt = contract && contract.output && contract.output.zero_diff_receipt;
   if (!receipt || typeof receipt !== 'object') fail('absent', 3);
+  const expectedKeys = [
+    'schema_version',
+    'artifact_type',
+    'base_sha',
+    'acceptance_digest',
+    'campaign_contract_digest',
+    'strict_dispatch_digest',
+    'campaign_id',
+    'mission_lineage_id',
+    'mission_policy_digest',
+    'mission_graph_digest',
+    'graph_node_id',
+    'mission_noop_receipt_digest',
+    'source_work_order_id',
+    'source_work_order_digest',
+    'path_byte_digests',
+    'candidate_zero_change',
+    'digest',
+  ].sort();
   if (receipt.schema_version !== 1
       || !new Set([
         'campaign_zero_diff_receipt',
         'controller_zero_diff_receipt',
       ]).has(receipt.artifact_type)
       || receipt.candidate_zero_change !== true
-      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')) {
+      || JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
+      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
+      || typeof receipt.source_work_order_id !== 'string'
+      || receipt.source_work_order_id.length === 0) {
     fail('bad_shape');
   }
   const body = { ...receipt };
@@ -1335,12 +1367,20 @@ try {
     ['campaign_contract_digest', 'campaign_contract_sha256', 'foreign_contract'],
     ['strict_dispatch_digest', 'strict_dispatch_sha256', 'foreign_strict'],
     ['mission_lineage_id', 'mission_lineage_id', 'foreign_lineage'],
+    ['mission_policy_digest', 'mission_policy_digest', 'foreign_policy'],
     ['mission_graph_digest', 'mission_graph_digest', 'foreign_graph'],
     ['graph_node_id', 'graph_node_id', 'foreign_node'],
   ]) {
-    if (projection[projectionKey] && receipt[receiptKey] !== projection[projectionKey]) {
+    if (receipt[receiptKey] !== projection[projectionKey]) {
       fail(code);
     }
+  }
+  if (missionNoopReceiptDigest
+      && receipt.mission_noop_receipt_digest !== missionNoopReceiptDigest) {
+    fail('foreign_mission_noop');
+  }
+  if (missionNoopGraphNode && receipt.graph_node_id !== missionNoopGraphNode) {
+    fail('foreign_marker_node');
   }
   const acceptance = Array.isArray(contract.acceptance)
     ? contract.acceptance.map((entry) => ({ argv: entry.argv, exit: entry.exit }))
@@ -1692,11 +1732,12 @@ else
   # Sealed strict projection is present: still bind active L5/L6 (and L3
   # fallback) markers to the campaign's policy/graph digests before spend.
   check_marker_campaign_admission_bridge
-  if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
-    emit_mission_noop
-  fi
 fi
 emit_sealed_zero_diff_if_authorized
+if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
+  die_precondition \
+    "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
+fi
 set_runner_flags
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then
@@ -3098,13 +3139,40 @@ try {
   const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
   const receipt = contract && contract.output && contract.output.zero_diff_receipt;
   if (!receipt || typeof receipt !== 'object') fail('missing_sealed_receipt');
+  const expectedKeys = [
+    'schema_version',
+    'artifact_type',
+    'base_sha',
+    'acceptance_digest',
+    'campaign_contract_digest',
+    'strict_dispatch_digest',
+    'campaign_id',
+    'mission_lineage_id',
+    'mission_policy_digest',
+    'mission_graph_digest',
+    'graph_node_id',
+    'mission_noop_receipt_digest',
+    'source_work_order_id',
+    'source_work_order_digest',
+    'path_byte_digests',
+    'candidate_zero_change',
+    'digest',
+  ].sort();
   if (receipt.schema_version !== 1) fail('bad_schema');
   if (receipt.artifact_type !== 'campaign_zero_diff_receipt'
       && receipt.artifact_type !== 'controller_zero_diff_receipt') {
     fail('bad_artifact');
   }
   if (receipt.candidate_zero_change !== true) fail('not_zero_change');
-  if (!/^[0-9a-f]{64}$/.test(receipt.digest || '')) fail('bad_digest');
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
+      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
+      || typeof receipt.source_work_order_id !== 'string'
+      || receipt.source_work_order_id.length === 0) {
+    fail('bad_digest');
+  }
   const body = { ...receipt };
   delete body.digest;
   if (sha256Json(body) !== receipt.digest) fail('forged');
@@ -3122,6 +3190,21 @@ try {
   if (proj.strict_dispatch_sha256
       && receipt.strict_dispatch_digest !== proj.strict_dispatch_sha256) {
     fail('foreign_strict');
+  }
+  if (proj.mission_lineage_id
+      && receipt.mission_lineage_id !== proj.mission_lineage_id) {
+    fail('foreign_lineage');
+  }
+  if (proj.mission_policy_digest
+      && receipt.mission_policy_digest !== proj.mission_policy_digest) {
+    fail('foreign_policy');
+  }
+  if (proj.mission_graph_digest
+      && receipt.mission_graph_digest !== proj.mission_graph_digest) {
+    fail('foreign_graph');
+  }
+  if (proj.graph_node_id && receipt.graph_node_id !== proj.graph_node_id) {
+    fail('foreign_node');
   }
   // Recompute live path byte digests from the worktree and compare.
   const digests = receipt.path_byte_digests;
@@ -3354,13 +3437,40 @@ try {
   const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
   const receipt = contract && contract.output && contract.output.zero_diff_receipt;
   if (!receipt || typeof receipt !== 'object') fail('missing_sealed_receipt');
+  const expectedKeys = [
+    'schema_version',
+    'artifact_type',
+    'base_sha',
+    'acceptance_digest',
+    'campaign_contract_digest',
+    'strict_dispatch_digest',
+    'campaign_id',
+    'mission_lineage_id',
+    'mission_policy_digest',
+    'mission_graph_digest',
+    'graph_node_id',
+    'mission_noop_receipt_digest',
+    'source_work_order_id',
+    'source_work_order_digest',
+    'path_byte_digests',
+    'candidate_zero_change',
+    'digest',
+  ].sort();
   if (receipt.schema_version !== 1) fail('bad_schema');
   if (receipt.artifact_type !== 'campaign_zero_diff_receipt'
       && receipt.artifact_type !== 'controller_zero_diff_receipt') {
     fail('bad_artifact');
   }
   if (receipt.candidate_zero_change !== true) fail('not_zero_change');
-  if (!/^[0-9a-f]{64}$/.test(receipt.digest || '')) fail('bad_digest');
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
+      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
+      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
+      || typeof receipt.source_work_order_id !== 'string'
+      || receipt.source_work_order_id.length === 0) {
+    fail('bad_digest');
+  }
   const body = { ...receipt };
   delete body.digest;
   if (sha256Json(body) !== receipt.digest) fail('forged');
@@ -3377,6 +3487,21 @@ try {
   if (projection.strict_dispatch_sha256
       && receipt.strict_dispatch_digest !== projection.strict_dispatch_sha256) {
     fail('foreign_strict');
+  }
+  if (projection.mission_lineage_id
+      && receipt.mission_lineage_id !== projection.mission_lineage_id) {
+    fail('foreign_lineage');
+  }
+  if (projection.mission_policy_digest
+      && receipt.mission_policy_digest !== projection.mission_policy_digest) {
+    fail('foreign_policy');
+  }
+  if (projection.mission_graph_digest
+      && receipt.mission_graph_digest !== projection.mission_graph_digest) {
+    fail('foreign_graph');
+  }
+  if (projection.graph_node_id && receipt.graph_node_id !== projection.graph_node_id) {
+    fail('foreign_node');
   }
   if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')) {
     fail('acceptance_missing');

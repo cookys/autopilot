@@ -600,7 +600,9 @@ function validateSchema(contract, errors, repoPath = '') {
         const zrAllowed = new Set([
           'schema_version', 'artifact_type', 'base_sha', 'acceptance_digest',
           'campaign_contract_digest', 'strict_dispatch_digest', 'campaign_id',
-          'mission_lineage_id', 'mission_graph_digest', 'graph_node_id',
+          'mission_lineage_id', 'mission_policy_digest', 'mission_graph_digest',
+          'graph_node_id', 'mission_noop_receipt_digest',
+          'source_work_order_id', 'source_work_order_digest',
           'path_byte_digests', 'candidate_zero_change', 'digest',
         ]);
         assertNoExtra('output.zero_diff_receipt', zr, zrAllowed, errors);
@@ -626,13 +628,21 @@ function validateSchema(contract, errors, repoPath = '') {
         for (const field of [
           'campaign_contract_digest',
           'strict_dispatch_digest',
+          'mission_policy_digest',
           'mission_graph_digest',
+          'mission_noop_receipt_digest',
+          'source_work_order_digest',
         ]) {
           if (!isNonEmptyString(zr[field]) || !/^[0-9a-f]{64}$/.test(zr[field])) {
             errors.push(`output.zero_diff_receipt.${field}: must be 64-hex sha256`);
           }
         }
-        for (const field of ['campaign_id', 'mission_lineage_id', 'graph_node_id']) {
+        for (const field of [
+          'campaign_id',
+          'mission_lineage_id',
+          'graph_node_id',
+          'source_work_order_id',
+        ]) {
           if (!isNonEmptyString(zr[field])) {
             errors.push(`output.zero_diff_receipt.${field}: must be non-empty string`);
           }
@@ -670,6 +680,7 @@ function validateSchema(contract, errors, repoPath = '') {
             ['strict_dispatch_digest', 'strict_dispatch_sha256'],
             ['campaign_id', 'campaign_id'],
             ['mission_lineage_id', 'mission_lineage_id'],
+            ['mission_policy_digest', 'mission_policy_digest'],
             ['mission_graph_digest', 'mission_graph_digest'],
             ['graph_node_id', 'graph_node_id'],
           ]) {

@@ -87,6 +87,9 @@ const NOOP_ADOPTION_KEYS = Object.freeze([
   'gate_attempts',
   'resources_created',
   'noop_receipt_digest',
+  'noop_receipt',
+  'source_work_order_id',
+  'source_work_order_digest',
 ]);
 
 function markerDir() {
@@ -183,6 +186,17 @@ function verifyMissionRoutingProjection(marker, expected) {
           || item.gate_attempts !== 0
           || item.resources_created !== 0
           || !/^[a-f0-9]{64}$/u.test(item.noop_receipt_digest || '')
+          || !item.noop_receipt
+          || typeof item.noop_receipt !== 'object'
+          || Array.isArray(item.noop_receipt)
+          || item.noop_receipt.artifact_type !== 'noop_receipt'
+          || item.noop_receipt.digest !== item.noop_receipt_digest
+          || canonicalDigest(Object.fromEntries(
+            Object.entries(item.noop_receipt).filter(([key]) => key !== 'digest'),
+          )) !== item.noop_receipt_digest
+          || typeof item.source_work_order_id !== 'string'
+          || item.source_work_order_id.length === 0
+          || !/^[a-f0-9]{64}$/u.test(item.source_work_order_digest || '')
         ))
         || missionNoop.noop_short_circuit
           !== (missionNoop.noop_adoptions.length > 0)

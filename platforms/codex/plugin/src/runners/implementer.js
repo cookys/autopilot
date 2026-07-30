@@ -34,6 +34,25 @@ const IMPLEMENT_STATUSES = [
   'engine_unavailable',
 ];
 
+function isSealedZeroDiffAdmission(value) {
+  return value.status === 'no_op'
+    && value.runner === 'sealed-zero-diff-admission'
+    && value.model === null
+    && value.commit === null
+    && value.worktree === null
+    && value.agent_log === null
+    && value.error === null
+    && value.dispatcher_called === false
+    && value.files_changed === 0
+    && value.insertions === 0
+    && value.deletions === 0
+    && value.model_calls === 0
+    && value.mutation_attempts === 0
+    && value.gate_attempts === 0
+    && value.resources_created === 0
+    && typeof value.zero_diff_receipt_digest === 'string'
+    && /^[0-9a-f]{64}$/.test(value.zero_diff_receipt_digest);
+}
 
 function validateImplementationResult(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -55,7 +74,9 @@ function validateImplementationResult(value) {
   if (typeof value.runner !== 'string' || value.runner.length === 0) {
     throw new Error('dispatch-hetero output JSON field runner must be a non-empty string');
   }
-  if (typeof value.model !== 'string' || value.model.length === 0) {
+  const sealedZeroDiffAdmission = isSealedZeroDiffAdmission(value);
+  if (!sealedZeroDiffAdmission
+      && (typeof value.model !== 'string' || value.model.length === 0)) {
     throw new Error('dispatch-hetero output JSON field model must be a non-empty string');
   }
   if (value.status !== 'precondition_failed') {
@@ -65,10 +86,11 @@ function validateImplementationResult(value) {
     if (typeof value.base !== 'string' || value.base.length === 0) {
       throw new Error('dispatch-hetero output JSON field base must be a non-empty string');
     }
-    if (typeof value.containment !== 'string' || value.containment.length === 0) {
+    if (!sealedZeroDiffAdmission
+        && (typeof value.containment !== 'string' || value.containment.length === 0)) {
       throw new Error('dispatch-hetero output JSON field containment must be a non-empty string');
     }
-    if (typeof value.contained !== 'boolean') {
+    if (!sealedZeroDiffAdmission && typeof value.contained !== 'boolean') {
       throw new Error('dispatch-hetero output JSON field contained must be a boolean');
     }
   }

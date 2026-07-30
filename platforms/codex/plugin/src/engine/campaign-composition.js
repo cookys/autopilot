@@ -26,6 +26,46 @@ const {
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isStr = (v) => typeof v === 'string' && v.length > 0;
 const isCanonicalSha256 = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+const REVIEW_AUTHORITY_KEYS = [
+  'schema_version',
+  'artifact_type',
+  'candidate_ref',
+  'candidate_tree_sha',
+  'base_sha',
+  'diff_digest',
+  'spec_digest',
+  'review_input_digest',
+  'reviewer',
+];
+
+function validateReviewAuthority(authority, reviewPayload) {
+  const reviewer = authority && authority.reviewer;
+  const reviewerKeys = ['runner', 'model', 'effort', 'endpoint'];
+  if (!isObj(authority)
+      || Object.keys(authority).sort().join('\0')
+        !== [...REVIEW_AUTHORITY_KEYS].sort().join('\0')
+      || authority.schema_version !== 1
+      || authority.artifact_type !== 'controller_full_diff_review_input'
+      || !isStr(authority.candidate_ref)
+      || !isStr(authority.candidate_tree_sha)
+      || !isStr(authority.base_sha)
+      || !isCanonicalSha256(authority.diff_digest)
+      || !isCanonicalSha256(authority.spec_digest)
+      || !isCanonicalSha256(authority.review_input_digest)
+      || authority.review_input_digest !== canonicalDigest(reviewPayload)
+      || !isObj(reviewer)
+      || Object.keys(reviewer).sort().join('\0') !== reviewerKeys.sort().join('\0')
+      || !isStr(reviewer.runner)
+      || !isStr(reviewer.model)
+      || !isStr(reviewer.effort)
+      || (reviewer.endpoint !== null && !isStr(reviewer.endpoint))) {
+    throw new CampaignCompositionError(
+      'REVIEW_AUTHORITY_INVALID',
+      'full-diff reservation requires exact candidate/base/tree/diff/spec/input and reviewer authority',
+    );
+  }
+  return authority;
+}
 
 class CampaignCompositionError extends Error {
   constructor(code, message) {
@@ -339,6 +379,8 @@ function runCampaignComposition(input = {}, adapters = {}) {
   const scopeCheck = requireAdapter(adapters, 'scopeCheck');
   const verify = requireAdapter(adapters, 'verify');
   const review = requireAdapter(adapters, 'review');
+  const prepareReview = typeof adapters.prepareReview === 'function'
+    ? adapters.prepareReview : null;
   const adjudicate = requireAdapter(adapters, 'adjudicate');
   const convergence = requireAdapter(adapters, 'convergence');
   const finalPanel = requireAdapter(adapters, 'finalPanel');
@@ -593,10 +635,12 @@ function runCampaignComposition(input = {}, adapters = {}) {
     stage,
     effectKind,
     inputIdentity,
+    authority,
   }) => {
     if (!isStr(stage)
         || !isStr(effectKind)
-        || !isCanonicalSha256(inputIdentity)) {
+        || !isCanonicalSha256(inputIdentity)
+        || !isObj(authority)) {
       throw new CampaignCompositionError(
         'EFFECT_RESERVATION_IDENTITY_MISSING',
         'effect reservation requires exact stage, kind, and input identity',
@@ -643,6 +687,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       generation: repairGeneration,
       invocation_ordinal: invocationOrdinal,
       input_identity: inputIdentity,
+      authority,
     };
     const reservationIdentity = canonicalDigest(reservationBody);
     const eventBody = {
@@ -655,6 +700,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       root_run_id: input.rootRunId || null,
       work_order_id: input.workOrderId || null,
       generation: repairGeneration,
+      authority,
     };
     persistController({
       ...controller,
@@ -1504,14 +1550,63 @@ function runCampaignComposition(input = {}, adapters = {}) {
       };
       return { stop: null, review: lastReview };
     }
+    // Reservation identity must survive restart/gate reuse.  The reusable
+    // verification object carries transport-only fields (gate_reused and gate
+    // timestamps) that were absent on the original invocation, so bind and
+    // review the durable verification facts rather than those replay markers.
+    const reviewVerification = isObj(verification) ? {
+      passed: verification.passed === true,
+      receipt_digest: isStr(verification.receipt_digest)
+        ? verification.receipt_digest : null,
+      ...(typeof verification.retriable === 'boolean'
+        ? { retriable: verification.retriable } : {}),
+      ...(isStr(verification.phase) ? { phase: verification.phase } : {}),
+      ...(isStr(verification.reason) ? { reason: verification.reason } : {}),
+    } : null;
     const reviewPayload = {
       candidate,
-      verification,
+      verification: reviewVerification,
       repair_generation: repairGeneration,
       scope: 'full_diff',
       review_input_mode: 'full_diff_generation',
       vertical_failed: verticalFailed === true,
     };
+    const preparedReview = prepareReview
+      ? requireReceipt(prepareReview(reviewPayload), 'prepareReview')
+      : {
+        authority: {
+          schema_version: 1,
+          artifact_type: 'controller_full_diff_review_input',
+          candidate_ref: candidateRef || 'unbound-candidate',
+          candidate_tree_sha: candidate && candidate.tree_sha
+            ? candidate.tree_sha : 'unbound-tree',
+          base_sha: gateInput.base_sha || 'unbound-base',
+          diff_digest: canonicalDigest({
+            synthetic_diff: {
+              base_sha: gateInput.base_sha || null,
+              candidate_ref: candidateRef,
+              candidate_tree_sha: candidate && candidate.tree_sha || null,
+            },
+          }),
+          spec_digest: canonicalDigest({
+            prompt_file: input.promptFile || null,
+            contract_digest: input.campaignContractDigest || null,
+          }),
+          review_input_digest: canonicalDigest(reviewPayload),
+          reviewer: {
+            runner: input.reviewerRunner || 'synthetic-reviewer',
+            model: input.reviewerModel || 'synthetic-reviewer',
+            effort: input.reviewerEffort || 'synthetic',
+            endpoint: input.reviewerEndpoint || null,
+          },
+        },
+        diff_file: null,
+        spec_file: input.promptFile || null,
+      };
+    const reviewAuthority = validateReviewAuthority(
+      preparedReview.authority,
+      reviewPayload,
+    );
     const reviewInputBytes = effectInputBytes(reviewPayload);
     const reviewAdmission = admitEffect({
       stage: 'full_diff_review',
@@ -1541,7 +1636,9 @@ function runCampaignComposition(input = {}, adapters = {}) {
       inputIdentity: canonicalDigest({
         gate_input: gateInput,
         review_payload: reviewPayload,
+        review_authority: reviewAuthority,
       }),
+      authority: reviewAuthority,
     });
     if (!reviewReservation.ok) {
       persistController({
@@ -1567,6 +1664,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
     }
     const fullDiff = requireReceipt(review({
       ...reviewPayload,
+      prepared_review: preparedReview,
       reservation_identity: reviewReservation.reservation_identity,
     }), 'review');
     const fullDiffResultIdentity = canonicalDigest(fullDiff);

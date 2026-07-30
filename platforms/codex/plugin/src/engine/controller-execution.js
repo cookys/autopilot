@@ -855,6 +855,10 @@ function buildRecoveryReceipt({
   terminalReceiptPath = null,
   terminalReceiptDigest = null,
   terminalWorkOrderPath = null,
+  terminalRootRunId = null,
+  terminalGraphNode = null,
+  terminalAttempt = null,
+  terminalWorkOrderId = null,
 }) {
   if (!isStr(resourceId)) fail('INVALID_RECOVERY_RECEIPT', 'resourceId required');
   if (!RECOVERY_EVIDENCE_KINDS.has(evidenceKind)) {
@@ -890,10 +894,15 @@ function buildRecoveryReceipt({
         'terminal_consumed requires terminalReceiptPath + terminalReceiptDigest',
       );
     }
-    if (!isStr(terminalWorkOrderPath) || !fs.existsSync(terminalWorkOrderPath)) {
+    if (!isStr(gitCwd)
+        || !isStr(terminalRootRunId)
+        || !isStr(terminalGraphNode)
+        || !Number.isSafeInteger(terminalAttempt)
+        || terminalAttempt < 1
+        || !isStr(terminalWorkOrderId)) {
       fail(
         'INVALID_RECOVERY_RECEIPT',
-        'terminal_consumed requires an existing terminalWorkOrderPath',
+        'terminal_consumed requires gitCwd plus the exact root/node/attempt/work-order identity',
       );
     }
     if (!fs.existsSync(terminalReceiptPath)) {
@@ -903,9 +912,39 @@ function buildRecoveryReceipt({
       const {
         classifyWorkOrder,
         readJsonStrict,
+        resolveGitCommonDir,
         validateStoredWorkOrderIntegrity,
+        workOrderPath,
       } = require('./work-order');
-      const loadedWorkOrder = readJsonStrict(terminalWorkOrderPath);
+      const terminalCommonDir = resolveGitCommonDir(gitCwd);
+      if (!isStr(terminalCommonDir)) {
+        fail(
+          'INVALID_RECOVERY_RECEIPT',
+          'terminal Work Order authority requires a resolvable Git common dir',
+        );
+      }
+      const canonicalWorkOrderPath = workOrderPath(
+        terminalCommonDir,
+        terminalRootRunId,
+        terminalGraphNode,
+        terminalAttempt,
+      );
+      if (terminalWorkOrderPath !== null
+          && (!isStr(terminalWorkOrderPath)
+            || path.resolve(terminalWorkOrderPath)
+              !== path.resolve(canonicalWorkOrderPath))) {
+        fail(
+          'INVALID_RECOVERY_RECEIPT',
+          'caller terminalWorkOrderPath is not the canonical Git-common-dir Work Order path',
+        );
+      }
+      if (!fs.existsSync(canonicalWorkOrderPath)) {
+        fail(
+          'INVALID_RECOVERY_RECEIPT',
+          'canonical terminal Work Order path does not exist',
+        );
+      }
+      const loadedWorkOrder = readJsonStrict(canonicalWorkOrderPath);
       if (!loadedWorkOrder.ok || !isObj(loadedWorkOrder.value)) {
         fail(
           'INVALID_RECOVERY_RECEIPT',
@@ -918,6 +957,10 @@ function buildRecoveryReceipt({
       const workOrderIntegrity = validateStoredWorkOrderIntegrity(terminalWorkOrder);
       if (!workOrderIntegrity.ok
           || terminalWorkOrder.role !== 'controller'
+          || terminalWorkOrder.root_run_id !== terminalRootRunId
+          || terminalWorkOrder.graph_node !== terminalGraphNode
+          || terminalWorkOrder.attempt !== terminalAttempt
+          || terminalWorkOrder.work_order_id !== terminalWorkOrderId
           || terminalWorkOrder.disposition !== 'consumed'
           || !isStr(terminalWorkOrder.terminal_status)
           || !isObj(terminalWorkOrder.controller)
@@ -939,7 +982,7 @@ function buildRecoveryReceipt({
       const parsed = JSON.parse(raw.toString('utf8'));
       const classified = classifyWorkOrder(terminalWorkOrder, {
         terminalReceipt: parsed,
-        workOrderPath: terminalWorkOrderPath,
+        workOrderPath: canonicalWorkOrderPath,
         gitCwd: observeRoot || terminalWorkOrder.worktree || null,
         requireBoundEvidence: true,
       });
@@ -971,7 +1014,7 @@ function buildRecoveryReceipt({
         );
       }
       terminalAuthority = {
-        work_order_path: path.resolve(terminalWorkOrderPath),
+        work_order_path: path.resolve(canonicalWorkOrderPath),
         work_order_digest: terminalWorkOrder.digest,
         root_run_id: terminalWorkOrder.root_run_id,
         work_order_id: terminalWorkOrder.work_order_id,

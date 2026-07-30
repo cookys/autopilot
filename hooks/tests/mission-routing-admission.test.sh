@@ -760,6 +760,10 @@ const {
   campaignIdFor,
 } = require(path.join(root, 'src/engine/implementation-campaign'));
 const {
+  AutopilotEngine,
+} = require(path.join(root, 'src/engine/autopilot-engine'));
+const {
+  buildMissionZeroDiffReceipt,
   deriveCampaignDispatchUnit,
 } = require(path.join(root, 'src/engine/campaign-dispatch-projection'));
 
@@ -1142,12 +1146,12 @@ const controllerTerminal = wo.buildControllerTerminalReceipt({
   issuedAt: '2026-07-30T00:00:00.000Z',
 });
 fs.writeFileSync(terminalPath, `${JSON.stringify(controllerTerminal, null, 2)}\n`);
-const written = wo.createOrUpdateWorkOrder(common, {
+const activeWritten = wo.createOrUpdateWorkOrder(common, {
   root_run_id: iccId,
   graph_node: 'n1',
   attempt: 1,
   role: 'controller',
-  next_action: 'terminal',
+  next_action: 'continue',
   branch: 'main',
   base_sha: baseSha,
   worktree: repo,
@@ -1157,6 +1161,12 @@ const written = wo.createOrUpdateWorkOrder(common, {
     receipt: terminalPath,
   },
   controller: ctrlState,
+}, { bindArtifacts: true });
+assert.strictEqual(activeWritten.status, 'written', JSON.stringify(activeWritten));
+const written = wo.updateWorkOrderLifecycle(common, {
+  path: activeWritten.path,
+}, {
+  next_action: 'terminal',
   expected_receipt: {
     path: terminalPath,
     digest: controllerTerminal.digest,
@@ -1164,7 +1174,14 @@ const written = wo.createOrUpdateWorkOrder(common, {
   terminal_status: 'success',
   disposition: 'consumed',
   accepted_commit: baseSha,
-}, { bindArtifacts: true });
+}, {
+  expectedGeneration: activeWritten.work_order.generation,
+  expectedCasToken: activeWritten.work_order.cas_token,
+  expectedControllerDigest: activeWritten.work_order.controller.controller_digest,
+  bindArtifacts: true,
+  preserveOwner: true,
+  gitCwd: repo,
+});
 assert.strictEqual(written.status, 'written');
 assert.strictEqual(
   wo.classifyWorkOrder(written.work_order, {
@@ -1249,6 +1266,18 @@ assert.strictEqual(
   noop.digest,
 );
 
+const zeroDiffReceipt = buildMissionZeroDiffReceipt({
+  missionNoopAdoption: routed.noop_adoptions[0],
+  campaignContract,
+  campaignContractSha256: strictContractDigest,
+  campaignId: iccId,
+  branch: grant.branch,
+  base: grant.base_sha,
+  runner: 'agy',
+  model: dispatchModel,
+  stage: 'campaign-implementation',
+  rootRunId: campaignContract.mission_runtime.root_run_id,
+});
 const unit = deriveCampaignDispatchUnit({
   campaignContract,
   campaignContractSha256: strictContractDigest,
@@ -1259,6 +1288,7 @@ const unit = deriveCampaignDispatchUnit({
   model: dispatchModel,
   stage: 'campaign-implementation',
   rootRunId: campaignContract.mission_runtime.root_run_id,
+  zeroDiffReceipt,
 });
 const unitPath = path.join(authorityDir, 'dispatch-unit.json');
 fs.writeFileSync(unitPath, `${JSON.stringify(unit, null, 2)}\n`);
@@ -1304,12 +1334,58 @@ const dispatch = spawnSync('bash', [
 assert.strictEqual(dispatch.status, 0, `${dispatch.stdout}\n${dispatch.stderr}`);
 const dispatchReceipt = JSON.parse(dispatch.stdout);
 assert.strictEqual(dispatchReceipt.status, 'no_op');
-assert.strictEqual(dispatchReceipt.runner, 'mission-admission');
+assert.strictEqual(dispatchReceipt.runner, 'sealed-zero-diff-admission');
 assert.strictEqual(dispatchReceipt.dispatcher_called, false);
 assert.strictEqual(dispatchReceipt.mutation_attempts, 0);
 assert.strictEqual(dispatchReceipt.gate_attempts, 0);
 assert.strictEqual(dispatchReceipt.resources_created, 0);
 assert.strictEqual(dispatchReceipt.worktree, null);
+assert.strictEqual(fs.existsSync(runnerSentinel), false);
+assert.strictEqual(
+  execFileSync('git', ['-C', repo, 'worktree', 'list', '--porcelain'], {
+    encoding: 'utf8',
+  }),
+  worktreesBefore,
+);
+
+// Production bridge: ordinary registry/Work Order admission is re-derived by
+// Engine, sealed into the projected unit, parsed from the real shell boundary,
+// and never invokes the provider runner.
+const engineResult = new AutopilotEngine({ cwd: repo }).implementTask({
+  promptFile: promptPath,
+  branch: grant.branch,
+  base: grant.base_sha,
+  roster: {
+    implementer_engine: dispatchModel,
+    implementer_effort: 'high',
+    implementer_runner: 'agy',
+  },
+  runId: iccId,
+  implementationRound: 1,
+  implementationStage: 'campaign-implementation',
+  campaignContractFile: grant.contract_path,
+  campaignContractDigest: strictContractDigest,
+  campaignSealFile: grant.seal_path,
+  extraImplementationArgs: ['--agy-bin', runnerStub],
+  implementationOptions: {
+    cwd: repo,
+    env: {
+      ...sessionEnv,
+      AUTOPILOT_PARENT_RUN_ID: 'ordinary-noop-engine-parent',
+      AUTOPILOT_ROOT_RUN_ID: campaignContract.mission_runtime.root_run_id,
+      AUTOPILOT_DISPATCH_MANIFEST: '0',
+    },
+  },
+});
+assert.strictEqual(engineResult.status, 'no_op', JSON.stringify(engineResult));
+assert.strictEqual(engineResult.phase, 'sealed_zero_diff');
+assert.strictEqual(engineResult.dispatcher_called, false);
+assert.strictEqual(engineResult.model_calls, 0);
+assert.strictEqual(engineResult.implementation.runner, 'sealed-zero-diff-admission');
+assert.strictEqual(
+  engineResult.implementation.zero_diff_receipt_digest,
+  zeroDiffReceipt.digest,
+);
 assert.strictEqual(fs.existsSync(runnerSentinel), false);
 assert.strictEqual(
   execFileSync('git', ['-C', repo, 'worktree', 'list', '--porcelain'], {
@@ -1422,12 +1498,12 @@ fs.writeFileSync(
   terminalPathN2,
   `${JSON.stringify(controllerTerminalN2, null, 2)}\n`,
 );
-const writtenN2 = wo.createOrUpdateWorkOrder(common, {
+const activeWrittenN2 = wo.createOrUpdateWorkOrder(common, {
   root_run_id: iccIdN2,
   graph_node: 'n2',
   attempt: 1,
   role: 'controller',
-  next_action: 'terminal',
+  next_action: 'continue',
   branch: 'main',
   base_sha: baseSha,
   worktree: repo,
@@ -1437,6 +1513,16 @@ const writtenN2 = wo.createOrUpdateWorkOrder(common, {
     receipt: terminalPathN2,
   },
   controller: ctrlStateN2,
+}, { bindArtifacts: true });
+assert.strictEqual(
+  activeWrittenN2.status,
+  'written',
+  JSON.stringify(activeWrittenN2),
+);
+const writtenN2 = wo.updateWorkOrderLifecycle(common, {
+  path: activeWrittenN2.path,
+}, {
+  next_action: 'terminal',
   expected_receipt: {
     path: terminalPathN2,
     digest: controllerTerminalN2.digest,
@@ -1444,7 +1530,15 @@ const writtenN2 = wo.createOrUpdateWorkOrder(common, {
   terminal_status: 'success',
   disposition: 'consumed',
   accepted_commit: baseSha,
-}, { bindArtifacts: true });
+}, {
+  expectedGeneration: activeWrittenN2.work_order.generation,
+  expectedCasToken: activeWrittenN2.work_order.cas_token,
+  expectedControllerDigest:
+    activeWrittenN2.work_order.controller.controller_digest,
+  bindArtifacts: true,
+  preserveOwner: true,
+  gitCwd: repo,
+});
 assert.strictEqual(writtenN2.status, 'written');
 assert.strictEqual(
   wo.classifyWorkOrder(writtenN2.work_order, {
@@ -1476,6 +1570,20 @@ assert.strictEqual(allSessBody.mission_noop.dispatcher_called, false);
 assert.strictEqual(allSessBody.mission_noop.mutation_attempts, 0);
 assert.strictEqual(allSessBody.mission_noop.gate_attempts, 0);
 assert.strictEqual(allSessBody.mission_noop.resources_created, 0);
+const zeroDiffReceiptN2 = buildMissionZeroDiffReceipt({
+  missionNoopAdoption: allRouted.noop_adoptions.find(
+    (entry) => entry.graph_node_id === 'n2',
+  ),
+  campaignContract: campaignContractN2,
+  campaignContractSha256: strictContractDigestN2,
+  campaignId: iccIdN2,
+  branch: grantN2.branch,
+  base: grantN2.base_sha,
+  runner: 'agy',
+  model: dispatchModel,
+  stage: 'campaign-implementation',
+  rootRunId: campaignContractN2.mission_runtime.root_run_id,
+});
 const unitN2 = deriveCampaignDispatchUnit({
   campaignContract: campaignContractN2,
   campaignContractSha256: strictContractDigestN2,
@@ -1486,6 +1594,7 @@ const unitN2 = deriveCampaignDispatchUnit({
   model: dispatchModel,
   stage: 'campaign-implementation',
   rootRunId: campaignContractN2.mission_runtime.root_run_id,
+  zeroDiffReceipt: zeroDiffReceiptN2,
 });
 const unitPathN2 = path.join(authorityDirN2, 'dispatch-unit.json');
 fs.writeFileSync(unitPathN2, `${JSON.stringify(unitN2, null, 2)}\n`);
@@ -1517,7 +1626,12 @@ const dispatchN2 = spawnSync('bash', [
 assert.strictEqual(dispatchN2.status, 0, `${dispatchN2.stdout}\n${dispatchN2.stderr}`);
 const dispatchReceiptN2 = JSON.parse(dispatchN2.stdout);
 assert.strictEqual(dispatchReceiptN2.status, 'no_op');
+assert.strictEqual(dispatchReceiptN2.runner, 'sealed-zero-diff-admission');
 assert.strictEqual(dispatchReceiptN2.dispatcher_called, false);
+assert.strictEqual(
+  dispatchReceiptN2.zero_diff_receipt_digest,
+  zeroDiffReceiptN2.digest,
+);
 assert.strictEqual(fs.existsSync(runnerSentinel), false);
 
 // Ambient canonical ready history cannot degrade to "first run" when its
@@ -1531,6 +1645,25 @@ assert.throws(() => {
   });
 }, (e) => e && e.code === 'MISSION_EVIDENCE_MISSING'
   && /Work Order/i.test(String(e.message)));
+const missingWoMarkerDir = path.join(tmp, 'missing-wo-session-markers');
+const missingWoSession = spawnSync(process.execPath, [
+  sessionCli, 'set', '--level', 'l6', '--repo-root', repo,
+], {
+  encoding: 'utf8',
+  env: {
+    ...sessionEnv,
+    AUTOPILOT_SESSION_MODE_DIR: missingWoMarkerDir,
+    CLAUDE_CODE_SESSION_ID: 'missing-wo-routing-session',
+  },
+});
+assert.strictEqual(missingWoSession.status, 2);
+assert.match(missingWoSession.stderr, /Mission routing rejected:.*Work Order/i);
+assert.strictEqual(
+  fs.existsSync(missingWoMarkerDir)
+    && fs.readdirSync(missingWoMarkerDir).some((name) => name.endsWith('.json')),
+  false,
+  'session-mode must not mint a marker when registry terminal Work Order authority is missing',
+);
 fs.writeFileSync(written.path, missingWoBytes);
 
 // Missing terminal journal → no evidence → first-run may proceed (no historical).
@@ -1572,6 +1705,7 @@ console.log(JSON.stringify({
   ordinary_all_satisfied_zero_spend: true,
   ordinary_dispatch_runner_not_called: true,
   ordinary_dispatch_worktree_not_created: true,
+  ordinary_engine_shell_bridge: true,
   ambient_ready_missing_wo_fail_closed: true,
   ordinary_missing_terminal_first_run: true,
   ordinary_corrupt_registry_fail_closed: true,
@@ -1590,6 +1724,8 @@ assert_contains "$ORDINARY_OUT" '"ordinary_one_of_many_node_scoped":true' "one-o
 assert_contains "$ORDINARY_OUT" '"ordinary_all_satisfied_zero_spend":true' "all-satisfied admission is zero spend"
 assert_contains "$ORDINARY_OUT" '"ordinary_dispatch_runner_not_called":true' "ordinary no-op bypasses runner"
 assert_contains "$ORDINARY_OUT" '"ordinary_dispatch_worktree_not_created":true' "ordinary no-op creates no worktree"
+assert_contains "$ORDINARY_OUT" '"ordinary_engine_shell_bridge":true' \
+  "ordinary Work Order authority reaches Engine and the real dispatch shell"
 assert_contains "$ORDINARY_OUT" '"ambient_ready_missing_wo_fail_closed":true' \
   "ambient canonical ready history with missing Work Order fails closed"
 assert_contains "$ORDINARY_OUT" '"ordinary_corrupt_registry_fail_closed":true' "corrupt registry fails closed"

@@ -417,6 +417,27 @@ console.log("Starting independent verification tests for Controller Execution...
       terminal: true,
     }],
   });
+  const terminalCommon = woMod.resolveGitCommonDir(recDir);
+  const activeTerminalWorkOrder = woMod.createOrUpdateWorkOrder(terminalCommon, {
+    root_run_id: terminalRoot,
+    graph_node: terminalNode,
+    attempt: 1,
+    role: 'controller',
+    next_action: 'continue',
+    branch: 'master',
+    base_sha: recBase,
+    worktree: recDir,
+    controller: terminalController,
+  }, { bindArtifacts: false });
+  assert.strictEqual(
+    activeTerminalWorkOrder.status,
+    'written',
+    JSON.stringify(activeTerminalWorkOrder),
+  );
+  assert.strictEqual(
+    activeTerminalWorkOrder.work_order.work_order_id,
+    terminalWorkOrderId,
+  );
   const exactTerminalPath = path.join(recDir, 'exact-terminal.json');
   const exactTerminal = woMod.buildControllerTerminalReceipt({
     terminalStatus: 'success',
@@ -428,30 +449,37 @@ console.log("Starting independent verification tests for Controller Execution...
     controller: terminalController,
   });
   fs.writeFileSync(exactTerminalPath, `${JSON.stringify(exactTerminal, null, 2)}\n`);
-  const terminalWorkOrder = woMod.buildWorkOrder({
-    work_order_id: terminalWorkOrderId,
-    root_run_id: terminalRoot,
-    graph_node: terminalNode,
-    attempt: 1,
-    role: 'controller',
+  const consumedTerminalWorkOrder = woMod.updateWorkOrderLifecycle(
+    terminalCommon,
+    { path: activeTerminalWorkOrder.path },
+    {
     next_action: 'terminal',
-    branch: 'master',
-    base_sha: recBase,
-    worktree: recDir,
     accepted_commit: recBase,
     terminal_status: 'success',
     disposition: 'consumed',
+    paths: { receipt: exactTerminalPath },
     expected_receipt: {
       path: exactTerminalPath,
       digest: exactTerminal.digest,
     },
     controller: terminalController,
-  }, { bindArtifacts: false });
-  const terminalWorkOrderPath = path.join(recDir, 'terminal-work-order.json');
-  fs.writeFileSync(
-    terminalWorkOrderPath,
-    `${JSON.stringify(terminalWorkOrder, null, 2)}\n`,
+    },
+    {
+      expectedGeneration: activeTerminalWorkOrder.work_order.generation,
+      expectedCasToken: activeTerminalWorkOrder.work_order.cas_token,
+      expectedControllerDigest:
+        activeTerminalWorkOrder.work_order.controller.controller_digest,
+      bindArtifacts: false,
+      preserveOwner: true,
+      gitCwd: recDir,
+    },
   );
+  assert.strictEqual(
+    consumedTerminalWorkOrder.status,
+    'written',
+    JSON.stringify(consumedTerminalWorkOrder),
+  );
+  const terminalWorkOrderPath = activeTerminalWorkOrder.path;
   const exactTerminalRawDigest = require('crypto').createHash('sha256')
     .update(fs.readFileSync(exactTerminalPath))
     .digest('hex');
@@ -463,14 +491,40 @@ console.log("Starting independent verification tests for Controller Execution...
     terminalReceiptPath: exactTerminalPath,
     terminalReceiptDigest: exactTerminalRawDigest,
     terminalWorkOrderPath,
+    terminalRootRunId: terminalRoot,
+    terminalGraphNode: terminalNode,
+    terminalAttempt: 1,
+    terminalWorkOrderId,
     gitCwd: recDir,
   });
   assert.strictEqual(terminalRecovery.terminal_consumed, true);
   assert.strictEqual(terminalRecovery.outcome.terminal, true);
   assert.strictEqual(
     terminalRecovery.terminal_authority.work_order_digest,
-    terminalWorkOrder.digest,
+    consumedTerminalWorkOrder.work_order.digest,
   );
+  const arbitraryTerminalWorkOrderPath = path.join(
+    recDir,
+    'standalone-terminal-work-order.json',
+  );
+  fs.writeFileSync(
+    arbitraryTerminalWorkOrderPath,
+    `${JSON.stringify(consumedTerminalWorkOrder.work_order, null, 2)}\n`,
+  );
+  assert.throws(() => ctrl.buildRecoveryReceipt({
+    resourceId: 'terminal-resource',
+    path: terminalGhost,
+    evidenceKind: 'terminal_consumed',
+    terminalConsumed: true,
+    terminalReceiptPath: exactTerminalPath,
+    terminalReceiptDigest: exactTerminalRawDigest,
+    terminalWorkOrderPath: arbitraryTerminalWorkOrderPath,
+    terminalRootRunId: terminalRoot,
+    terminalGraphNode: terminalNode,
+    terminalAttempt: 1,
+    terminalWorkOrderId,
+    gitCwd: recDir,
+  }), /canonical Git-common-dir Work Order path/i);
 
   // Negative: caller mechanicallyObserved on nonexistent path is not authority
   assert.throws(() => ctrl.buildRecoveryReceipt({
@@ -1816,11 +1870,15 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.strictEqual(focusedReviewCalls, 1, 'focused supplement called exactly once');
   assert.strictEqual(fullSuiteCalls, 1, 'full suite called exactly once');
   assert.strictEqual(panelCalls, 1, 'joint panel called exactly once');
-  assert.strictEqual(preEffectCalls, 6, 'every real first-pass effect has one pre-effect gate');
+  assert.strictEqual(
+    preEffectCalls,
+    8,
+    'six real first-pass effects plus two no-op attempts each have one pre-effect gate',
+  );
   assert.deepStrictEqual(
     preEffectWorktreeProjection,
-    [true, true, false, false, true, false],
-    'implementation, verification, full-diff, focused, suite, joint projections are exact',
+    [true, true, false, false, true, false, true, true],
+    'implementation, verification, reviews, suite, joint, and no-op projections are exact',
   );
   const firstEffectStages = (r1.controller.audit_events || [])
     .filter((event) => event.event === 'controller_effect_invoked')
@@ -2003,75 +2061,125 @@ console.log("Starting independent verification tests for Controller Execution...
     );
   }
 
-  // Crash window: a durable full-diff invocation reservation without its
-  // result must block replay on restart. The reviewer adapter is never called.
+  // Crash window: exercise the real composition → Engine → review provider
+  // boundary. The controller must persist an authority-bound reservation
+  // before provider invocation; a crash immediately after the provider returns
+  // leaves that reservation pending, and restart must not call the provider.
   const pendingCandidate = {
     committed: true, commit: base, tree_sha: tree, base_sha: base,
   };
-  const pendingVerification = { passed: true, receipt_digest: 'c'.repeat(64) };
-  const pendingGateInput = {
-    generation: 0,
-    candidate_ref: base,
-    base_sha: base,
-    contract_digest: null,
-    strict_contract_digest: null,
-    graph_node_id: null,
-    work_order_id: null,
-    root_run_id: null,
-    verification_receipt_digest: pendingVerification.receipt_digest,
-    vertical_failed: false,
+  const crashReviewDiffPath = path.join(dir, 'crash-reservation-review.diff');
+  fs.writeFileSync(
+    crashReviewDiffPath,
+    'diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n',
+  );
+  const fileSha256 = (file) => require('crypto').createHash('sha256')
+    .update(fs.readFileSync(file)).digest('hex');
+  const crashReviewRoster = {
+    implementer_engine: 'gpt-5.5',
+    reviewer_engine: 'claude-test',
+    reviewer_effort: 'high',
+    reviewer_runner: 'test-review',
+    reviewer_endpoint: '',
   };
-  const pendingReviewPayload = {
-    candidate: pendingCandidate,
-    verification: pendingVerification,
-    repair_generation: 0,
-    scope: 'full_diff',
-    review_input_mode: 'full_diff_generation',
-    vertical_failed: false,
-  };
-  const pendingInputIdentity = canonicalDigest({
-    gate_input: pendingGateInput,
-    review_payload: pendingReviewPayload,
+  const { AutopilotEngine: CrashEngine } = require(path.join(root, 'src', 'engine'));
+  let crashProviderCalls = 0;
+  const crashEngine = new CrashEngine({
+    cwd: dir,
+    reviewDispatcher(_args, options) {
+      crashProviderCalls += 1;
+      assert.ok(
+        /^[0-9a-f]{64}$/.test(options.idempotencyKey),
+        'provider receives the durable reservation as its idempotency key',
+      );
+      assert.strictEqual(
+        options.env.AUTOPILOT_EFFECT_RESERVATION_ID,
+        options.idempotencyKey,
+      );
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          runner: 'test-review',
+          model: 'claude-test',
+          status: 'reviewed',
+          verdict: 'SHIP-AS-IS',
+          findings: '',
+          no_finding_proof:
+            'checked=full diff; evidence=authority-bound crash fixture; conclusion=no finding',
+          raw_log: '/tmp/crash-review.log',
+          error: null,
+        },
+      };
+    },
+    reviewPostProviderHook() {
+      throw new Error('crash-after-review-provider');
+    },
   });
-  const pendingReservationBody = {
-    schema_version: 1,
-    root_run_id: null,
-    work_order_id: null,
-    stage: 'full_diff_review',
-    effect_kind: 'gate',
-    generation: 0,
-    invocation_ordinal: 1,
-    input_identity: pendingInputIdentity,
+  const prepareCrashReview = (payload) => ({
+    prepared: true,
+    authority: {
+      schema_version: 1,
+      artifact_type: 'controller_full_diff_review_input',
+      candidate_ref: payload.candidate.commit,
+      candidate_tree_sha: payload.candidate.tree_sha,
+      base_sha: payload.candidate.base_sha,
+      diff_digest: fileSha256(crashReviewDiffPath),
+      spec_digest: fileSha256(promptPath),
+      review_input_digest: canonicalDigest(payload),
+      reviewer: {
+        runner: crashReviewRoster.reviewer_runner,
+        model: crashReviewRoster.reviewer_engine,
+        effort: crashReviewRoster.reviewer_effort,
+        endpoint: null,
+      },
+    },
+    diff_file: crashReviewDiffPath,
+    spec_file: promptPath,
+  });
+  const crashReview = (payload) => {
+    const prepared = payload.prepared_review;
+    const reviewed = crashEngine.reviewDiff({
+      diffFile: prepared.diff_file,
+      specFile: prepared.spec_file,
+      roster: crashReviewRoster,
+      implementerEngine: crashReviewRoster.implementer_engine,
+      pinReviewerTuple: true,
+      reservationIdentity: payload.reservation_identity,
+    });
+    return {
+      reviewed: reviewed.status === 'reviewed',
+      success: reviewed.status === 'reviewed',
+      review_input_mode: 'full_diff_generation',
+      review_digest: reviewed.review && reviewed.review.review_digest,
+      findings: reviewed.review && reviewed.review.findings || '[]',
+      verdict: reviewed.verdict,
+    };
   };
-  const pendingReservationIdentity = canonicalDigest(pendingReservationBody);
-  const pendingEventBody = {
-    event: 'controller_effect_reserved',
-    stage: 'full_diff_review',
-    effect_kind: 'gate',
-    input_identity: pendingInputIdentity,
-    reservation_identity: pendingReservationIdentity,
-    invocation_ordinal: 1,
-    root_run_id: null,
-    work_order_id: null,
-    generation: 0,
-  };
-  const pendingController = ctrl.emptyControllerState({
+  const crashController = ctrl.emptyControllerState({
     frozen_denominator: frozen,
     started_at_ms: Date.now() - 1000,
     repair_budget_limits: ctrl.defaultBudgetLimits({ model_calls: 8 }),
-    audit_events: [{
-      ...pendingEventBody,
-      at: new Date().toISOString(),
-      digest: canonicalDigest(pendingEventBody),
-    }],
   });
-  const reviewCallsBeforePendingResume = reviewCalls;
+  let persistedAfterCrash = null;
+  const crashAdapters = {
+    ...adapters,
+    prepareReview: prepareCrashReview,
+    review: crashReview,
+    onControllerUpdate(nextController) {
+      persistedAfterCrash = JSON.parse(JSON.stringify(nextController));
+    },
+  };
   const implementCallsBeforePendingResume = implementCalls;
-  const pendingResume = runCampaignComposition({
+  assert.throws(() => runCampaignComposition({
     maxRepairGenerations: 1,
     minPanelSize: 1,
     promptFile: promptPath,
-    controller: pendingController,
+    controller: crashController,
     frozenDenominator: frozen,
     includeControllerMeta: true,
     gitCwd: dir,
@@ -2081,13 +2189,55 @@ console.log("Starting independent verification tests for Controller Execution...
       repair_generation: 0,
       candidate: pendingCandidate,
     },
-  }, adapters);
+  }, crashAdapters), /crash-after-review-provider/);
+  assert.strictEqual(crashProviderCalls, 1);
+  assert.ok(persistedAfterCrash, 'reservation state persisted before provider crash');
+  const pendingReservation = persistedAfterCrash.audit_events.find((event) => (
+    event.event === 'controller_effect_reserved'
+    && event.stage === 'full_diff_review'
+  ));
+  assert.ok(pendingReservation, 'real full-diff reservation is durable');
+  assert.deepStrictEqual(
+    pendingReservation.authority,
+    prepareCrashReview({
+      candidate: pendingCandidate,
+      verification: { passed: true, receipt_digest: 'c'.repeat(64) },
+      repair_generation: 0,
+      scope: 'full_diff',
+      review_input_mode: 'full_diff_generation',
+      vertical_failed: false,
+    }).authority,
+    'reservation binds exact candidate/base/tree/diff/spec/input/reviewer authority',
+  );
+  assert.strictEqual(
+    persistedAfterCrash.audit_events.some((event) => (
+      event.event === 'controller_effect_invoked'
+      && event.reservation_identity === pendingReservation.reservation_identity
+    )),
+    false,
+    'provider crash leaves no fabricated invoked/result event',
+  );
+  const pendingResume = runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: persistedAfterCrash,
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+    resume: {
+      phase: 'ADJUDICATING',
+      repair_generation: 0,
+      candidate: pendingCandidate,
+    },
+  }, crashAdapters);
   assert.strictEqual(pendingResume.status, 'blocked');
   assert.strictEqual(pendingResume.phase, 'effect_reconciliation');
   assert.strictEqual(pendingResume.code, 'EFFECT_RESERVATION_PENDING');
   assert.strictEqual(
-    reviewCalls,
-    reviewCallsBeforePendingResume,
+    crashProviderCalls,
+    1,
     'restart with an in-flight full-diff reservation must not call reviewer again',
   );
   assert.strictEqual(
@@ -2148,6 +2298,67 @@ console.log("Starting independent verification tests for Controller Execution...
     providerOptions.env.AUTOPILOT_EFFECT_RESERVATION_ID,
     providerReservation,
   );
+
+  // Engine boundary rejects negative provider telemetry instead of clamping it
+  // to zero, and conservatively charges the already-invoked rail once.
+  const negativeTelemetryBranch = execFileSync(
+    'git',
+    ['-C', dir, 'symbolic-ref', '--short', 'HEAD'],
+    { encoding: 'utf8' },
+  ).trim();
+  let negativeTelemetryCalls = 0;
+  const negativeTelemetryEngine = new AutopilotEngine({
+    cwd: dir,
+    implementationDispatcher() {
+      negativeTelemetryCalls += 1;
+      return {
+        error: null,
+        status: 0,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        parseError: null,
+        result: {
+          status: 'committed',
+          runner: 'agy',
+          model: 'gpt-5.5',
+          containment: 'worktree',
+          contained: true,
+          branch: negativeTelemetryBranch,
+          base,
+          commit: base,
+          files_changed: 0,
+          insertions: 0,
+          deletions: 0,
+          worktree: dir,
+          agent_log: '/tmp/negative-telemetry.log',
+          error: null,
+          dispatcher_called: true,
+          model_calls: -1,
+          mutation_attempts: 1,
+          gate_attempts: 0,
+          resources_created: 0,
+        },
+      };
+    },
+  });
+  const negativeTelemetry = negativeTelemetryEngine.implementTask({
+    promptFile: promptPath,
+    branch: negativeTelemetryBranch,
+    base,
+    roster: {
+      implementer_engine: 'gpt-5.5',
+      implementer_effort: 'high',
+      implementer_runner: 'agy',
+    },
+    implementationOptions: { cwd: dir },
+  });
+  assert.strictEqual(negativeTelemetryCalls, 1);
+  assert.strictEqual(negativeTelemetry.status, 'blocked');
+  assert.strictEqual(negativeTelemetry.phase, 'dispatcher_outcome_authority');
+  assert.match(negativeTelemetry.reason, /model_calls.*nonnegative/i);
+  assert.strictEqual(negativeTelemetry.dispatcher_called, true);
+  assert.strictEqual(negativeTelemetry.model_calls, 1);
 
   // Six-axis red: each axis independently blocks with zero implement when at limit.
   for (const axis of ctrl.REPAIR_BUDGET_AXES) {
@@ -2662,6 +2873,92 @@ console.log("Starting independent verification tests for Controller Execution...
   });
   assert.strictEqual(callerScopeOverride.ok, false);
   assert.strictEqual(callerScopeOverride.code, 'ADOPTION_SCOPE_OVERRIDE_REJECTED');
+
+  const rejectRealGitOrphan = ({
+    rootRunId,
+    branch,
+    files,
+    sealedScope,
+    reason,
+  }) => {
+    execFileSync('git', ['-C', dir, 'checkout', '-q', '-B', branch, base]);
+    for (const [relativePath, bytes] of Object.entries(files)) {
+      const absolutePath = path.join(dir, relativePath);
+      fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+      fs.writeFileSync(absolutePath, bytes);
+      execFileSync('git', ['-C', dir, 'add', relativePath]);
+    }
+    execFileSync('git', ['-C', dir, 'commit', '-qm', rootRunId]);
+    const tip = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+    }).trim();
+    const negativeWorkOrder = woMod.buildWorkOrder({
+      root_run_id: rootRunId,
+      graph_node: 'n1',
+      attempt: 1,
+      role: 'controller',
+      next_action: 'continue',
+      branch,
+      base_sha: base,
+      worktree: dir,
+      owner: deadOwner,
+      controller: adoptState,
+      sealed_scope: sealedScope,
+    }, { bindArtifacts: false });
+    const negativeLeafBody = { committed: true, commit: tip, worktree: dir };
+    const rejected = ctrl.adoptOrphanLeaf({
+      gitCwd: dir,
+      workOrder: negativeWorkOrder,
+      leafResult: {
+        ...negativeLeafBody,
+        digest: ctrl.sha256Json(negativeLeafBody),
+      },
+      branch,
+      baseSha: base,
+      sealedScope,
+      leafWorktree: dir,
+    });
+    assert.strictEqual(rejected.ok, false, JSON.stringify(rejected));
+    assert.strictEqual(rejected.code, 'ADOPTION_BINDING_FAILED');
+    assert.match(rejected.reason, reason);
+  };
+  rejectRealGitOrphan({
+    rootRunId: 'adopt-outside-path',
+    branch: 'orphan-outside-path',
+    files: { 'outside.txt': 'outside\n' },
+    sealedScope: {
+      allow_paths: ['scope'],
+      max_files: 10,
+      max_diff_lines: 100,
+    },
+    reason: /outside sealed scope: outside\.txt/,
+  });
+  rejectRealGitOrphan({
+    rootRunId: 'adopt-file-count',
+    branch: 'orphan-file-count',
+    files: {
+      'scope/a.txt': 'a\n',
+      'scope/b.txt': 'b\n',
+    },
+    sealedScope: {
+      allow_paths: ['scope'],
+      max_files: 1,
+      max_diff_lines: 100,
+    },
+    reason: /changed file count 2 exceeds max 1/,
+  });
+  rejectRealGitOrphan({
+    rootRunId: 'adopt-churn',
+    branch: 'orphan-churn',
+    files: { 'scope/churn.txt': 'one\ntwo\nthree\n' },
+    sealedScope: {
+      allow_paths: ['scope'],
+      max_files: 10,
+      max_diff_lines: 1,
+    },
+    reason: /diff-line churn 3 exceeds max 1/,
+  });
+
   const noBase = ctrl.adoptOrphanLeaf({
     gitCwd: dir,
     workOrder: { ...live, base_sha: null, controller: adoptState, owner: deadOwner },

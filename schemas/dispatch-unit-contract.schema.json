@@ -143,8 +143,12 @@
             "strict_dispatch_digest",
             "campaign_id",
             "mission_lineage_id",
+            "mission_policy_digest",
             "mission_graph_digest",
             "graph_node_id",
+            "mission_noop_receipt_digest",
+            "source_work_order_id",
+            "source_work_order_digest",
             "path_byte_digests",
             "candidate_zero_change",
             "digest"
@@ -161,8 +165,12 @@
             "strict_dispatch_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
             "campaign_id": { "type": "string", "minLength": 1 },
             "mission_lineage_id": { "type": "string" },
+            "mission_policy_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
             "mission_graph_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
             "graph_node_id": { "type": "string" },
+            "mission_noop_receipt_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "source_work_order_id": { "type": "string", "minLength": 1 },
+            "source_work_order_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
             "path_byte_digests": {
               "type": "object",
               "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }

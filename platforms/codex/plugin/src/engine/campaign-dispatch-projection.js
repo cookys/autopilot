@@ -18,8 +18,12 @@ const ZERO_DIFF_RECEIPT_KEYS = [
   'strict_dispatch_digest',
   'campaign_id',
   'mission_lineage_id',
+  'mission_policy_digest',
   'mission_graph_digest',
   'graph_node_id',
+  'mission_noop_receipt_digest',
+  'source_work_order_id',
+  'source_work_order_digest',
   'path_byte_digests',
   'candidate_zero_change',
   'digest',
@@ -359,7 +363,10 @@ function validateZeroDiffReceipt(receipt, context) {
     'acceptance_digest',
     'campaign_contract_digest',
     'strict_dispatch_digest',
+    'mission_policy_digest',
     'mission_graph_digest',
+    'mission_noop_receipt_digest',
+    'source_work_order_digest',
     'digest',
   ]) {
     requireString(receipt[field], `zeroDiffReceipt.${field}`, SHA256);
@@ -367,11 +374,13 @@ function validateZeroDiffReceipt(receipt, context) {
   requireString(receipt.campaign_id, 'zeroDiffReceipt.campaign_id');
   requireString(receipt.mission_lineage_id, 'zeroDiffReceipt.mission_lineage_id');
   requireString(receipt.graph_node_id, 'zeroDiffReceipt.graph_node_id');
+  requireString(receipt.source_work_order_id, 'zeroDiffReceipt.source_work_order_id');
   if (receipt.base_sha !== context.base
       || receipt.campaign_contract_digest !== context.campaignProjection.campaign_contract_sha256
       || receipt.strict_dispatch_digest !== context.campaignProjection.strict_dispatch_sha256
       || receipt.campaign_id !== context.campaignProjection.campaign_id
       || receipt.mission_lineage_id !== context.campaignProjection.mission_lineage_id
+      || receipt.mission_policy_digest !== context.campaignProjection.mission_policy_digest
       || receipt.mission_graph_digest !== context.campaignProjection.mission_graph_digest
       || receipt.graph_node_id !== context.campaignProjection.graph_node_id
       || receipt.acceptance_digest !== bytesDigest(
@@ -404,6 +413,76 @@ function validateZeroDiffReceipt(receipt, context) {
     throw new TypeError('zeroDiffReceipt digest mismatch');
   }
   return JSON.parse(JSON.stringify(receipt));
+}
+
+function buildMissionZeroDiffReceipt(input = {}) {
+  const adoption = input.missionNoopAdoption;
+  if (!isPlainObject(adoption)
+      || !isPlainObject(adoption.noop_receipt)
+      || adoption.noop_receipt_digest !== adoption.noop_receipt.digest
+      || !SHA256.test(adoption.noop_receipt_digest || '')
+      || !SHA256.test(adoption.source_work_order_digest || '')
+      || typeof adoption.source_work_order_id !== 'string'
+      || adoption.source_work_order_id.length === 0) {
+    throw new TypeError('Mission no-op adoption lacks exact controller Work Order authority');
+  }
+  const source = adoption.noop_receipt;
+  const sourceBody = { ...source };
+  delete sourceBody.digest;
+  if (source.artifact_type !== 'noop_receipt'
+      || canonicalDigest(sourceBody) !== source.digest
+      || source.dispatcher_called !== false
+      || source.mutation_attempts !== 0
+      || source.gate_attempts !== 0) {
+    throw new TypeError('Mission no-op source receipt is invalid');
+  }
+  const projectionInput = { ...input };
+  delete projectionInput.missionNoopAdoption;
+  delete projectionInput.zeroDiffReceipt;
+  const unit = deriveCampaignDispatchUnit(projectionInput);
+  const projection = unit.campaign_projection;
+  const relevantPaths = [...new Set([
+    ...(unit.output.required_change_paths || []),
+    ...unit.output.paths,
+  ])].sort();
+  if (source.base_sha !== input.base
+      || source.accepted_commit !== input.base
+      || source.mission_lineage_id !== projection.mission_lineage_id
+      || source.mission_policy_digest !== projection.mission_policy_digest
+      || source.mission_graph_digest !== projection.mission_graph_digest
+      || source.graph_node_id !== projection.graph_node_id
+      || adoption.graph_node_id !== projection.graph_node_id
+      || !isPlainObject(source.path_byte_digests)
+      || JSON.stringify(Object.keys(source.path_byte_digests).sort())
+        !== JSON.stringify(relevantPaths)) {
+    throw new TypeError('Mission no-op source does not bind the current sealed graph node');
+  }
+  const acceptance = unit.acceptance.map((entry) => ({
+    argv: entry.argv,
+    exit: entry.exit,
+  }));
+  const body = {
+    schema_version: 1,
+    artifact_type: 'campaign_zero_diff_receipt',
+    base_sha: input.base,
+    acceptance_digest: bytesDigest(Buffer.from(JSON.stringify(acceptance), 'utf8')),
+    campaign_contract_digest: projection.campaign_contract_sha256,
+    strict_dispatch_digest: projection.strict_dispatch_sha256,
+    campaign_id: projection.campaign_id,
+    mission_lineage_id: projection.mission_lineage_id,
+    mission_policy_digest: projection.mission_policy_digest,
+    mission_graph_digest: projection.mission_graph_digest,
+    graph_node_id: projection.graph_node_id,
+    mission_noop_receipt_digest: source.digest,
+    source_work_order_id: adoption.source_work_order_id,
+    source_work_order_digest: adoption.source_work_order_digest,
+    path_byte_digests: source.path_byte_digests,
+    candidate_zero_change: true,
+  };
+  return {
+    ...body,
+    digest: bytesDigest(Buffer.from(JSON.stringify(body), 'utf8')),
+  };
 }
 
 function deriveCampaignDispatchUnit(input) {
@@ -564,6 +643,7 @@ function writeCampaignDispatchUnit(input) {
 }
 
 module.exports = {
+  buildMissionZeroDiffReceipt,
   canonicalDigest,
   deriveCampaignDispatchUnit,
   generationForStage,

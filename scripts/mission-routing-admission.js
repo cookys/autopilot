@@ -531,6 +531,7 @@ function loadControllerEvidenceFromRoot(
 function loadDurableMissionEvidence(repoRoot, options = {}) {
   let historicalOutputs = null;
   let noOpReceipt = null;
+  let workOrder = null;
   const allowTest = options.allowTestCallerEvidence === true;
   const enforce = options.enforceEvidence === true;
 
@@ -557,7 +558,13 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
         fail('git common dir unavailable for Mission evidence', 'MISSION_EVIDENCE_CORRUPT');
       }
       // Non-enforce without common dir: no durable history proven.
-      return finalizeMissionEvidence(historicalOutputs, noOpReceipt, allowTest, options);
+      return finalizeMissionEvidence(
+        historicalOutputs,
+        noOpReceipt,
+        workOrder,
+        allowTest,
+        options,
+      );
     }
 
     // 1) Canonical Mission registry under git-common-dir.
@@ -779,6 +786,7 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
       );
       if (!historicalOutputs) historicalOutputs = loaded.historicalOutputs;
       if (!noOpReceipt) noOpReceipt = loaded.noOpReceipt;
+      if (!workOrder) workOrder = loaded.workOrder;
       // A canonical ready terminal is durable history, regardless of whether
       // it was discovered from an explicit path or the ordinary registry.
       // Once that history exists, its exact controller Work Order is required:
@@ -812,10 +820,22 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
     }
   }
 
-  return finalizeMissionEvidence(historicalOutputs, noOpReceipt, allowTest, options);
+  return finalizeMissionEvidence(
+    historicalOutputs,
+    noOpReceipt,
+    workOrder,
+    allowTest,
+    options,
+  );
 }
 
-function finalizeMissionEvidence(historicalOutputs, noOpReceipt, allowTest, options) {
+function finalizeMissionEvidence(
+  historicalOutputs,
+  noOpReceipt,
+  workOrder,
+  allowTest,
+  options,
+) {
   if (allowTest) {
     if (!historicalOutputs && isStr(options.historicalEvidencePath)) {
       try {
@@ -836,7 +856,7 @@ function finalizeMissionEvidence(historicalOutputs, noOpReceipt, allowTest, opti
       } catch (_e) { /* ignore test-path */ }
     }
   }
-  return { historicalOutputs, noOpReceipt };
+  return { historicalOutputs, noOpReceipt, workOrder };
 }
 
 function isObj(v) {
@@ -917,6 +937,9 @@ function validateExecutableDeltaAtAdmission(repoRoot, graph, options = {}) {
         noop_receipt_digest: isObj(durable.noOpReceipt) && isStr(durable.noOpReceipt.digest)
           ? durable.noOpReceipt.digest
           : null,
+        noop_receipt: durable.noOpReceipt,
+        source_work_order_id: durable.workOrder && durable.workOrder.work_order_id,
+        source_work_order_digest: durable.workOrder && durable.workOrder.digest,
       };
       // Production surface: returned from admission, not a discarded local property.
       node.noop_adoption = adoption;

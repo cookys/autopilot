@@ -304,7 +304,8 @@ WO_TERM="$(wo_write root-term-fail done --receipt "$TERM_RCPT")"
 node -e '
 const wo=require(process.argv[1]);
 const r=wo.updateWorkOrderLifecycle(process.argv[2],{root_run_id:"root-term-fail",graph_node:"implement",attempt:1},{
-  terminal_status:"failed", expected_receipt:{path:process.argv[3],digest:process.argv[5]},
+  terminal_status:"failed", disposition:"consumed",
+  expected_receipt:{path:process.argv[3],digest:process.argv[5]},
   paths:{receipt:process.argv[3],durable:process.argv[4]}
 },{bindArtifacts:false});
 if(r.status!=="written"){console.error(JSON.stringify(r)); process.exit(1);}
@@ -590,10 +591,11 @@ const vRel=wo.validateReconcileReceipt(relabel,{root_run_id:"root-relabel",commo
 out.relabel_ok=vRel.ok; out.relabel_rc=vRel.reason_code;
 // 2) consumed without validated terminal receipt orphan_blocks (no disposition-only trust)
 const wCons=wo.createOrUpdateWorkOrder(cd,{root_run_id:"root-cons-bare",graph_node:"implement",attempt:1,role:"implementer",
-  next_action:"x",phase_cursor:"1/1",accepted_commit:"none",owner:own,paths:{ledger},
-  terminal_status:"success",disposition:"consumed"},
+  next_action:"x",phase_cursor:"1/1",accepted_commit:"none",owner:own,paths:{ledger}},
   {bindArtifacts:false,preserveOwner:true,updateLifecycle:false});
-const cBare=wo.classifyWorkOrder(wCons.work_order,{workOrderPath:wCons.path,skipBindCheck:true});
+const consBare={...wCons.work_order,terminal_status:"success",disposition:"consumed"};
+consBare.digest=wo.workOrderDigest(consBare); wo.writeAtomicJson(wCons.path,consBare);
+const cBare=wo.classifyWorkOrder(consBare,{workOrderPath:wCons.path,skipBindCheck:true});
 out.cons_bare=cBare.classification; out.cons_bare_rc=cBare.reason_code;
 // 3) tombstone blocks dispatch_new overwrite
 const claimTomb=wo.claimDispatchCas(cd,{root_run_id:"root-cons-bare",graph_node:"implement",attempt:1,role:"implementer",

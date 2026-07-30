@@ -75,6 +75,7 @@ const REQUIRED_CONTROL_SINK_REGISTRY = Object.freeze({
   'campaign-post-commit-checkpoint': Object.freeze({ seam: 'campaignPostCommitCheckpoint', requires_action_catalog_binding: true }),
   'review-loop-resolution': Object.freeze({ seam: 'reviewLoopResolver', requires_action_catalog_binding: false }),
   'review-dispatch': Object.freeze({ seam: 'reviewDispatcher', requires_action_catalog_binding: true }),
+  'review-post-provider-hook': Object.freeze({ seam: 'reviewPostProviderHook', requires_action_catalog_binding: false }),
   'implementation-dispatch': Object.freeze({ seam: 'implementationDispatcher', requires_action_catalog_binding: true }),
   'diff-provenance': Object.freeze({ seam: 'diffProvider', requires_action_catalog_binding: true }),
   'repair-prompt-write': Object.freeze({ seam: 'repairPromptWriter', requires_action_catalog_binding: true }),
@@ -260,6 +261,13 @@ const AUTOPILOT_ENGINE_CONTROL_SINKS = freezeEntries([
       minimum_action_class: 'external',
       requires_mediator: true,
     },
+  },
+  {
+    id: 'review-post-provider-hook',
+    seam: 'reviewPostProviderHook',
+    kind: 'fault_injection',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
   },
   {
     id: 'implementation-dispatch',

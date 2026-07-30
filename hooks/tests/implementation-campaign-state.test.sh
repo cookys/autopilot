@@ -596,6 +596,7 @@ const {
   missionCampaignIdFor,
   missionSubjectDigest,
 } = require(path.join(root, 'src', 'engine', 'mission-campaign-identity'));
+const workOrder = require(path.join(root, 'src', 'engine', 'work-order'));
 const roster = {
   reviewer_engine: 'fixture-reviewer',
   reviewer_effort: 'high',
@@ -618,6 +619,11 @@ const roster = {
   loop_convergence_verdict: 'SHIP-AS-IS',
 };
 const order = [];
+function resetControllerWorkOrderFixture(campaignId, graphNode, attempt = 1) {
+  const commonDir = workOrder.resolveGitCommonDir(repo);
+  const exactPath = workOrder.workOrderPath(commonDir, campaignId, graphNode, attempt);
+  fs.rmSync(path.dirname(exactPath), { recursive: true, force: true });
+}
 const adapters = {
   now: () => '2026-07-26T00:00:00.000Z',
   missionClaim() {
@@ -1260,6 +1266,11 @@ const preconditionEngine = new AutopilotEngine({
         deletions: 0,
         worktree: null,
         agent_log: null,
+        dispatcher_called: false,
+        model_calls: 0,
+        mutation_attempts: 0,
+        gate_attempts: 0,
+        resources_created: 0,
         error: 'campaign contract digest changed after intake',
       },
     };
@@ -1350,6 +1361,11 @@ function zeroEffectLeafResult(overrides = {}) {
       deletions: 0,
       worktree: null,
       agent_log: null,
+      dispatcher_called: false,
+      model_calls: 0,
+      mutation_attempts: 0,
+      gate_attempts: 0,
+      resources_created: 0,
       error: 'fixture zero-effect precondition',
       ...overrides,
     },
@@ -1924,7 +1940,7 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
   });
   const leaf = result.implementation;
   const prepare = leaf || null;
-  return {
+  const fixtureResult = {
     result,
     events,
     releaseRejection,
@@ -1935,6 +1951,12 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
     preparePhase: prepare && prepare.phase,
     dispatcherCalled: prepare && prepare.dispatcher_called,
   };
+  resetControllerWorkOrderFixture(
+    strictCampaignId,
+    strictContract.mission_runtime.graph_node_id,
+    strictMissionClaim.graph_attempt,
+  );
+  return fixtureResult;
 }
 
 function logDurableIdentityCase(prefix, caseResult, expectRelease) {
@@ -2825,6 +2847,7 @@ const mismatchedRootResult = identityEngine.implementTask({
   campaignSealFile: sealPath,
   implementationOptions: { env: { PATH: process.env.PATH || '' } },
 });
+resetControllerWorkOrderFixture(campaignId, admitted.contract.ticket);
 const managedResumeResult = identityEngine.runImplementationReviewLoop({
   promptFile,
   branch: 'impl/icc-p1-intake',
@@ -2896,17 +2919,19 @@ console.log(`zero_dispatch_lineage_accepted=${zeroDispatchLineageAccepted}`);
 console.log(`managed_resume_stage=${argValue(managedResumeArgs, '--stage')}`);
 console.log(`implementation_root=${implementationEnvs[0].AUTOPILOT_ROOT_RUN_ID}`);
 console.log(`round_two_root=${implementationEnvs[1].AUTOPILOT_ROOT_RUN_ID}`);
-console.log(`managed_resume_root=${implementationEnvs[2].AUTOPILOT_ROOT_RUN_ID}`);
+console.log(`managed_resume_root=${implementationEnvs[2]?.AUTOPILOT_ROOT_RUN_ID || '<missing>'}`);
 console.log(`implementation_worktree_root=${implementationEnvs[0].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
 console.log(`round_two_worktree_root=${implementationEnvs[1].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
-console.log(`managed_resume_worktree_root=${implementationEnvs[2].AUTOPILOT_WORKTREE_ROOT_RUN_ID}`);
+console.log(`managed_resume_worktree_root=${
+  implementationEnvs[2]?.AUTOPILOT_WORKTREE_ROOT_RUN_ID || '<missing>'
+}`);
 console.log(`worktree_roots_exact=${
   implementationEnvs.every((env) => env.AUTOPILOT_WORKTREE_ROOT_RUN_ID === campaignId)
 }`);
 console.log(`implementation_parent=${implementationEnvs[0].AUTOPILOT_PARENT_RUN_ID}`);
 console.log(`implementation_depth=${implementationEnvs[0].AUTOPILOT_DISPATCH_DEPTH}`);
 console.log(`round_two_depth=${implementationEnvs[1].AUTOPILOT_DISPATCH_DEPTH}`);
-console.log(`managed_resume_depth=${implementationEnvs[2].AUTOPILOT_DISPATCH_DEPTH}`);
+console.log(`managed_resume_depth=${implementationEnvs[2]?.AUTOPILOT_DISPATCH_DEPTH || '<missing>'}`);
 console.log(`restricted_env_leak=${
   implementationEnvs.some((env) => Object.hasOwn(env, 'AUTOPILOT_AMBIENT_SECRET'))
 }`);
@@ -2924,6 +2949,7 @@ console.log(
 console.log(`managed_no_spec_phase=${managedNoSpecResult.phase}`);
 console.log(`managed_no_spec_rounds=${managedNoSpecResult.rounds}`);
 console.log(`managed_no_spec_impl_delta=${implementationCalls.length - implementationsBeforeNoSpec}`);
+resetControllerWorkOrderFixture(campaignId, admitted.contract.ticket);
 const missingGrokSessionResult = identityEngine.runImplementationReviewLoop({
   promptFile,
   branch: 'impl/icc-p1-intake',
@@ -2940,7 +2966,7 @@ const missingGrokSessionResult = identityEngine.runImplementationReviewLoop({
 });
 console.log(`missing_grok_session_phase=${missingGrokSessionResult.phase}`);
 console.log(`missing_grok_session_disposition=${
-  missingGrokSessionResult.repair_lineage.terminal_worktree_disposition
+  missingGrokSessionResult.repair_lineage?.terminal_worktree_disposition || '<missing>'
 }`);
 NODE
 )"

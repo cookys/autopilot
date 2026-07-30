@@ -145,6 +145,7 @@ const EXPECTED_CONTROL_SINKS = [
   ['campaign-post-commit-checkpoint', 'campaignPostCommitCheckpoint', 'campaign_control', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['review-loop-resolution', 'reviewLoopResolver', 'policy_read', [], false],
   ['review-dispatch', 'reviewDispatcher', 'challenge_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate', 'recordChallenge'], true],
+  ['review-post-provider-hook', 'reviewPostProviderHook', 'fault_injection', [], false],
   ['implementation-dispatch', 'implementationDispatcher', 'worker_dispatch', ['mintActionDecision', 'executeAuthorizedAction', 'delegate'], true],
   ['diff-provenance', 'diffProvider', 'filesystem_mutation', ['mintActionDecision', 'executeAuthorizedAction', 'recordEvidence'], true],
   ['repair-prompt-write', 'repairPromptWriter', 'filesystem_mutation', ['mintActionDecision', 'executeAuthorizedAction'], true],
@@ -829,7 +830,7 @@ NODE
 NODE_STATUS=$?
 
 assert_eq "$NODE_STATUS" "0" "supervised engine bridge contract node fixture exits successfully"
-assert_contains "$OUT" "sink_inventory=28" "all injected engine control sinks are covered"
+assert_contains "$OUT" "sink_inventory=29" "all injected engine control sinks are covered"
 assert_contains "$OUT" "action_catalog_bindings=16" "every mutable sink requires a frozen catalog binding"
 assert_contains "$OUT" "sensitive_inputs_omitted=true" "compiled contract contains hashes rather than raw sensitive inputs"
 assert_contains "$OUT" "contract_only=true" "bridge remains explicitly non-authoritative"

@@ -952,6 +952,8 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
   }
 
   // Exact compatibility definition files/mirrors only (not whole definition trees).
+  // Justification: these ARE the alias skill definitions; residual tokens inside
+  // them are definitional, not active callers.
   function isExactAliasDefinition(relPath) {
     const n = relPath.replace(/\\/g, '/');
     for (const level of retired) {
@@ -963,7 +965,11 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
     return false;
   }
 
-  function isHistoricalOrFixture(relPath) {
+  // Historical / archive / scenario-test surfaces — mechanically enumerated.
+  // Justification: archives and fixtures preserve historical /l3-/l6 mentions;
+  // scenario tests intentionally exercise residual tokens; neither is an
+  // active production caller that must migrate before alias retirement.
+  function isHistoricalArchiveOrScenarioTest(relPath) {
     const n = relPath.replace(/\\/g, '/');
     if (n.includes('/_archive/') || n.startsWith('_archive/')) return true;
     if (n.includes('/hooks/tests/') || n.startsWith('hooks/tests/')) return true;
@@ -974,29 +980,30 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
     return false;
   }
 
-  // Active caller surfaces only (authoritative tracked set).
-  function isActiveCallerSurface(relPath) {
+  // Generated / binary surfaces — mechanically enumerated.
+  // Justification: binary assets cannot carry text callers; known generated
+  // vendor trees are not operator-authored active surfaces.
+  function isGeneratedOrBinary(relPath) {
     const n = relPath.replace(/\\/g, '/');
-    if (isExactAliasDefinition(n) || isHistoricalOrFixture(n)) return false;
-    if (n.startsWith('skills/')
-      || n.startsWith('agents/')
-      || n.startsWith('hooks/')
-      || n.startsWith('scripts/')
-      || n.startsWith('platforms/')
-      || n.startsWith('references/')
-      || n.startsWith('docs/')
-      || n.startsWith('.opencode/')
-      || n.startsWith('project-config-template/')
-      || n.startsWith('src/')
-      || n === 'AGENTS.md'
-      || n === 'CLAUDE.md'
-      || n === 'README.md'
-      || n === 'README.zh-TW.md'
-      || n.startsWith('.claude')
-      || n.startsWith('.agents/')) {
+    // SVG is tracked text (may embed /l3-/l6 callers) — do not treat as binary.
+    if (/\.(png|jpg|jpeg|gif|webp|ico|pdf|woff2?|ttf|eot|zip|gz|tgz|xz|bin|o|so|dylib|wasm|mp4|webm)$/i.test(n)) {
       return true;
     }
+    if (n.includes('/node_modules/') || n.startsWith('node_modules/')) return true;
+    if (n.includes('/.git/') || n.startsWith('.git/')) return true;
     return false;
+  }
+
+  // Inventory EVERY tracked text file in the canonical revision except the
+  // mechanically enumerated exclusions above. Root manifests (plugin.json,
+  // package.json, settings.example.json, …) are in scope — an allowlist of
+  // path prefixes previously let active /l3-/l6 callers hide in unlisted roots.
+  function isScannableCallerSurface(relPath) {
+    const n = relPath.replace(/\\/g, '/');
+    if (isExactAliasDefinition(n)) return false;
+    if (isHistoricalArchiveOrScenarioTest(n)) return false;
+    if (isGeneratedOrBinary(n)) return false;
+    return true;
   }
 
   // Canonical invocation spellings: /l3-/l6 and autopilot:l3-autopilot:l6.
@@ -1051,11 +1058,7 @@ function executeDeterministicCallerMigrationScan(repoRoot) {
   const residuals = [];
   const remainingSet = new Set();
   for (const rel of files) {
-    if (!isActiveCallerSurface(rel)) continue;
-    // Skip binary-ish extensions.
-    if (/\.(png|jpg|jpeg|gif|webp|ico|pdf|woff2?|ttf|eot|zip|gz|tgz|xz|bin|o|so|dylib|wasm)$/i.test(rel)) {
-      continue;
-    }
+    if (!isScannableCallerSurface(rel)) continue;
     // Read candidate bytes from HEAD only — never mutable worktree content.
     const show = spawnSync(
       'git',

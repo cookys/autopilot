@@ -456,9 +456,23 @@ scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (se
   with `--usage-only`.
 - **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
   artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
-- **Trace lineage contract (telemetry only):** dispatchers inherit lineage from incoming env
+- **Trace lineage contract:** dispatchers inherit lineage from incoming env
   (`AUTOPILOT_PARENT_RUN_ID`, `AUTOPILOT_ROOT_RUN_ID`, `AUTOPILOT_DISPATCH_DEPTH`) and stamp
   each manifest with `parent_run_id` + `root_run_id` + `depth` so dispatch trees are auditable.
+  - ⚠️ **`AUTOPILOT_ROOT_RUN_ID` alone does not set the LINEAGE root.** It is read only inside
+    the has-parent branch, so without `AUTOPILOT_PARENT_RUN_ID` the dispatch becomes its own
+    lineage root. It is **not** discarded, though, and passing it alone is **supported**: the
+    continuation/rehydration resolver still honours it (`_cont_root`), which is how a run
+    re-attaches to an existing root after compaction. Do **not** add a fail-closed guard on
+    root-without-parent — tried 2026-07-31, it broke 8 assertions in
+    `codex-compaction-rehydration.test.sh`. To set the lineage root, **set both to that id**.
+  - ⚠️ **Lineage is telemetry-only ONLY off the sealed-campaign rail.** With
+    `--campaign-contract`, `root_run_id` is load-bearing: `deriveCampaignDispatchUnit`
+    requires `rootRunId === campaignContract.mission_runtime.root_run_id` and otherwise
+    rejects with `caller root_run_id disagrees with campaign mission_runtime` — an error
+    that names neither env var, so read this bullet before believing the campaign contract
+    is at fault. A Mission leaf therefore dispatches with
+    `AUTOPILOT_PARENT_RUN_ID=AUTOPILOT_ROOT_RUN_ID=<mission_runtime.root_run_id>`.
 - **HONEST BOUNDARY (observability scope):** lineage spans only layers passing through
   `dispatch-hetero.sh` / `dispatch-review.sh`; engine-internal spawns (e.g. codex `spawn_agent`,
   agy recursion) and depth-0-only tooling do not appear unless they emit one of those

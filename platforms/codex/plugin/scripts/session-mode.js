@@ -290,22 +290,40 @@ function cmdSet(args) {
       admission: missionRouting.admission,
     };
     // Ordinary zero-spend no-op surface — sibling of mission_routing, not inside it.
-    const noopBody = {
-      schema_version: 1,
-      artifact_type: 'mission_noop_adoption_set',
-      admission_digest: missionRouting.admission.admission_digest,
-      noop_adoptions: Array.isArray(missionRouting.noop_adoptions)
-        ? missionRouting.noop_adoptions : [],
-      noop_short_circuit: missionRouting.noop_short_circuit === true,
-      dispatcher_called: missionRouting.dispatcher_called,
-      mutation_attempts: missionRouting.mutation_attempts,
-      gate_attempts: missionRouting.gate_attempts,
-      resources_created: missionRouting.resources_created,
-    };
-    marker.mission_noop = {
-      ...noopBody,
-      digest: canonicalDigest(noopBody),
-    };
+    //
+    // Emitted ONLY when there is an admission to bind it to. `admitMissionRouting`
+    // returns `admission: null` on the SHADOW routing-failure path (shadow mode is
+    // deliberately observe-only: mission-routing-admission.js throws under
+    // `enforce` but returns a non-fatal `shadowFailure` otherwise). Dereferencing
+    // `admission.admission_digest` there turned that deliberately-non-blocking
+    // outcome into a hard TypeError that wrote no marker at all — strictly worse
+    // than `off` mode. Omitting the surface is the correct degradation, not a
+    // silent loss: `mission_noop` is optional to `verifyMissionRoutingProjection`
+    // (hasOwnProperty-gated), and that verifier already rejects any marker whose
+    // routing is not a READY/admitted/non-blocking admission — so a SHADOW marker
+    // could never have supplied a usable no-op set anyway. Fabricating a digest
+    // over a non-existent admission would be the only alternative, and that would
+    // assert provenance nothing produced.
+    // Oracle (incl. the negative control that keeps this from degrading into
+    // "never emit mission_noop"): hooks/tests/session-mode.test.sh cases 11-12.
+    if (missionRouting.admission) {
+      const noopBody = {
+        schema_version: 1,
+        artifact_type: 'mission_noop_adoption_set',
+        admission_digest: missionRouting.admission.admission_digest,
+        noop_adoptions: Array.isArray(missionRouting.noop_adoptions)
+          ? missionRouting.noop_adoptions : [],
+        noop_short_circuit: missionRouting.noop_short_circuit === true,
+        dispatcher_called: missionRouting.dispatcher_called,
+        mutation_attempts: missionRouting.mutation_attempts,
+        gate_attempts: missionRouting.gate_attempts,
+        resources_created: missionRouting.resources_created,
+      };
+      marker.mission_noop = {
+        ...noopBody,
+        digest: canonicalDigest(noopBody),
+      };
+    }
   }
   fs.mkdirSync(markerDir(), { recursive: true });
   const tmp = `${markerPath()}.tmp-${process.pid}`;

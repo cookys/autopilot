@@ -578,6 +578,34 @@ function parseRecordArgs(args) {
   return { file };
 }
 
+function physicalPathWithMissingTail(target) {
+  const suffix = [];
+  let existing = path.resolve(target);
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) break;
+    suffix.unshift(path.basename(existing));
+    existing = parent;
+  }
+  return path.resolve(fs.realpathSync(existing), ...suffix);
+}
+
+function isSameOrDescendant(candidate, root) {
+  const relative = path.relative(root, candidate);
+  return relative === ''
+    || (relative !== '..'
+      && !relative.startsWith(`..${path.sep}`)
+      && !path.isAbsolute(relative));
+}
+
+function outputOverlapsTranscriptRoot(output, root) {
+  const outputPaths = new Set([output, physicalPathWithMissingTail(output)]);
+  const rootPaths = new Set([root, physicalPathWithMissingTail(root)]);
+  return [...outputPaths].some((candidate) => (
+    [...rootPaths].some((boundary) => isSameOrDescendant(candidate, boundary))
+  ));
+}
+
 function parseTranscriptImportArgs(args) {
   const roots = [];
   let output = null;
@@ -611,8 +639,7 @@ function parseTranscriptImportArgs(args) {
   for (const spec of roots) unique.set(`${spec.provider}\0${spec.root}`, spec);
   const sortedRoots = [...unique.values()]
     .sort((a, b) => a.provider.localeCompare(b.provider) || a.root.localeCompare(b.root));
-  if (output && sortedRoots.some(({ root }) => output === root
-      || output.startsWith(`${root}${path.sep}`))) {
+  if (output && sortedRoots.some(({ root }) => outputOverlapsTranscriptRoot(output, root))) {
     failUsage('--output must be outside transcript roots');
   }
   return { roots: sortedRoots, output };

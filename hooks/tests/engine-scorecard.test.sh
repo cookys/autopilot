@@ -270,6 +270,42 @@ no_root_ec=$(node "$CLI" import-transcripts >/dev/null 2>&1; echo $?)
   && ok "17: transcript import is aggregate-only, deterministic, honest, and non-authoritative" \
   || bad "17: import check=$import_check ladder=$import_ladder no-root=$no_root_ec"
 
+# 18: output containment is a physical-path boundary. An ancestor symlink on the
+# transcript root must not make an output inside that root look external. Reject
+# identically whether the output leaf is missing or already exists, and never
+# create/replace it before the rejection.
+REAL_PARENT="$TESTDIR/real-parent"
+ALIAS_PARENT="$TESTDIR/alias-parent"
+ALIAS_ROOT="$ALIAS_PARENT/transcripts"
+ALIAS_OUTPUT="$REAL_PARENT/transcripts/aggregate.json"
+mkdir -p "$REAL_PARENT/transcripts"
+ln -s "$REAL_PARENT" "$ALIAS_PARENT"
+cp "$ROOT/plugin.json" "$REAL_PARENT/transcripts/session.json"
+
+node "$CLI" import-transcripts --root "codex=$ALIAS_ROOT" \
+  --output "$ALIAS_OUTPUT" > /dev/null 2>"$TESTDIR/alias-missing.err"
+alias_missing_ec=$?
+alias_missing_err="$(cat "$TESTDIR/alias-missing.err")"
+alias_missing_created=false
+[ -e "$ALIAS_OUTPUT" ] && alias_missing_created=true
+
+printf '%s\n' '{"sentinel":"preserve-existing-output"}' > "$ALIAS_OUTPUT"
+alias_existing_before="$(cat "$ALIAS_OUTPUT")"
+node "$CLI" import-transcripts --root "codex=$ALIAS_ROOT" \
+  --output "$ALIAS_OUTPUT" > /dev/null 2>"$TESTDIR/alias-existing.err"
+alias_existing_ec=$?
+alias_existing_err="$(cat "$TESTDIR/alias-existing.err")"
+alias_existing_after="$(cat "$ALIAS_OUTPUT")"
+
+[ "$alias_missing_ec" = "2" ] \
+  && [ "$alias_existing_ec" = "2" ] \
+  && [ "$alias_missing_created" = "false" ] \
+  && [ "$alias_existing_after" = "$alias_existing_before" ] \
+  && [ "$alias_missing_err" = "$alias_existing_err" ] \
+  && printf '%s' "$alias_missing_err" | grep -q -- '--output must be outside transcript roots' \
+  && ok "18: realpath containment rejects ancestor-alias output deterministically" \
+  || bad "18: missing=$alias_missing_ec/$alias_missing_created existing=$alias_existing_ec preserved=$([ "$alias_existing_after" = "$alias_existing_before" ] && echo true || echo false) err-stable=$([ "$alias_missing_err" = "$alias_existing_err" ] && echo true || echo false)"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

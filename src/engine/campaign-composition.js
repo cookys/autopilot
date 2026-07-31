@@ -67,6 +67,67 @@ function validateReviewAuthority(authority, reviewPayload) {
   return authority;
 }
 
+function stableCandidateGatePayload(candidate) {
+  if (!isObj(candidate)) return null;
+  return {
+    committed: candidate.committed === true,
+    commit: candidate.commit || null,
+    tree_sha: candidate.tree_sha || null,
+    base_sha: candidate.base_sha || null,
+    branch: candidate.branch || null,
+  };
+}
+
+function stableVerificationGatePayload(verification) {
+  if (!isObj(verification)) return null;
+  const evidence = isObj(verification.receipt) ? verification.receipt : verification;
+  return {
+    passed: verification.passed === true,
+    receipt_digest: isStr(verification.receipt_digest)
+      ? verification.receipt_digest : null,
+    tree_sha: isStr(evidence.tree_sha) ? evidence.tree_sha : null,
+    argv_hash: isCanonicalSha256(evidence.argv_hash) ? evidence.argv_hash : null,
+    env_fingerprint: isCanonicalSha256(evidence.env_fingerprint)
+      ? evidence.env_fingerprint : null,
+    request_digest: isCanonicalSha256(evidence.request_digest)
+      ? evidence.request_digest : null,
+    ...(typeof verification.retriable === 'boolean'
+      ? { retriable: verification.retriable } : {}),
+    ...(isStr(verification.phase) ? { phase: verification.phase } : {}),
+    ...(isStr(verification.reason) ? { reason: verification.reason } : {}),
+  };
+}
+
+function stableReviewGatePayload(review) {
+  if (!isObj(review)) return null;
+  const focused = isObj(review.focused_supplement)
+    ? {
+      reviewed: review.focused_supplement.reviewed === true,
+      success: review.focused_supplement.success === true,
+      review_digest: review.focused_supplement.review_digest
+        || review.focused_supplement.receipt_digest
+        || null,
+      findings: Object.prototype.hasOwnProperty.call(
+        review.focused_supplement,
+        'findings',
+      ) ? review.focused_supplement.findings : null,
+      verdict: review.focused_supplement.verdict || null,
+    }
+    : null;
+  return {
+    reviewed: review.reviewed === true,
+    success: review.success === true || review.reviewed === true,
+    review_input_mode: review.review_input_mode || null,
+    review_digest: review.review_digest || review.receipt_digest || null,
+    review_authority_digest: isCanonicalSha256(review.review_authority_digest)
+      ? review.review_authority_digest : null,
+    findings: Object.prototype.hasOwnProperty.call(review, 'findings')
+      ? review.findings : null,
+    verdict: review.verdict || null,
+    focused_supplement: focused,
+  };
+}
+
 class CampaignCompositionError extends Error {
   constructor(code, message) {
     super(message);
@@ -1516,61 +1577,22 @@ function runCampaignComposition(input = {}, adapters = {}) {
   // entry without calling the review adapter again.
   const ensureFullDiffBarrier = (verticalFailed = false) => {
     const candidateRef = candidate && (candidate.commit || candidate.tree_sha) || null;
-    // Gate journal key binds generation + candidate + sealed inputs — never
-    // generation alone (early-return without candidate match is forbidden).
-    const gateInput = {
-      generation: repairGeneration,
-      candidate_ref: candidateRef,
-      base_sha: candidate && candidate.base_sha || input.baseSha || null,
-      contract_digest: input.campaignContractDigest || null,
-      strict_contract_digest: input.strictContractDigest || null,
-      graph_node_id: input.graphNodeId || null,
-      work_order_id: input.workOrderId || null,
-      root_run_id: input.rootRunId || null,
-      verification_receipt_digest: verification && verification.receipt_digest || null,
-      vertical_failed: verticalFailed === true,
-    };
-    const reusable = findReusableGate(controller.gate_journal, 'full_diff_review', gateInput);
-    if (reusable && reusable.result && reusable.result.success === true) {
-      trace.push('full_diff_gate_reused');
-      fullDiffBarriers = recordFullDiffBarrier(fullDiffBarriers, repairGeneration, {
-        success: true,
-        review_digest: reusable.result.review_digest || null,
-        candidate_ref: candidateRef,
-        base_sha: gateInput.base_sha,
-      });
-      lastReview = {
-        reviewed: true,
-        success: true,
-        review_input_mode: 'full_diff_generation',
-        review_digest: reusable.result.review_digest || null,
-        findings: reusable.result.findings || '[]',
-        verdict: reusable.result.verdict || null,
-        gate_reused: true,
-      };
-      return { stop: null, review: lastReview };
-    }
-    // Reservation identity must survive restart/gate reuse.  The reusable
-    // verification object carries transport-only fields (gate_reused and gate
-    // timestamps) that were absent on the original invocation, so bind and
-    // review the durable verification facts rather than those replay markers.
-    const reviewVerification = isObj(verification) ? {
-      passed: verification.passed === true,
-      receipt_digest: isStr(verification.receipt_digest)
-        ? verification.receipt_digest : null,
-      ...(typeof verification.retriable === 'boolean'
-        ? { retriable: verification.retriable } : {}),
-      ...(isStr(verification.phase) ? { phase: verification.phase } : {}),
-      ...(isStr(verification.reason) ? { reason: verification.reason } : {}),
-    } : null;
+    const candidateTreeSha = candidate && candidate.tree_sha || null;
+    const gateBaseSha = candidate && candidate.base_sha || input.baseSha || null;
+    // Reservation identity must survive restart/gate reuse.  Bind the durable
+    // candidate and verification facts, not transport-only adapter fields.
+    const reviewVerification = stableVerificationGatePayload(verification);
     const reviewPayload = {
-      candidate,
+      candidate: stableCandidateGatePayload(candidate),
       verification: reviewVerification,
       repair_generation: repairGeneration,
       scope: 'full_diff',
       review_input_mode: 'full_diff_generation',
       vertical_failed: verticalFailed === true,
     };
+    // Material review authority must be prepared before reuse lookup: changed
+    // diff/spec bytes or reviewer tuple invalidate the old gate without a
+    // provider/model call.
     const preparedReview = prepareReview
       ? requireReceipt(prepareReview(reviewPayload), 'prepareReview')
       : {
@@ -1578,14 +1600,13 @@ function runCampaignComposition(input = {}, adapters = {}) {
           schema_version: 1,
           artifact_type: 'controller_full_diff_review_input',
           candidate_ref: candidateRef || 'unbound-candidate',
-          candidate_tree_sha: candidate && candidate.tree_sha
-            ? candidate.tree_sha : 'unbound-tree',
-          base_sha: gateInput.base_sha || 'unbound-base',
+          candidate_tree_sha: candidateTreeSha || 'unbound-tree',
+          base_sha: gateBaseSha || 'unbound-base',
           diff_digest: canonicalDigest({
             synthetic_diff: {
-              base_sha: gateInput.base_sha || null,
+              base_sha: gateBaseSha,
               candidate_ref: candidateRef,
-              candidate_tree_sha: candidate && candidate.tree_sha || null,
+              candidate_tree_sha: candidateTreeSha,
             },
           }),
           spec_digest: canonicalDigest({
@@ -1607,6 +1628,52 @@ function runCampaignComposition(input = {}, adapters = {}) {
       preparedReview.authority,
       reviewPayload,
     );
+    const reviewAuthorityDigest = canonicalDigest(reviewAuthority);
+    // Gate journal key binds generation + candidate + sealed inputs — never
+    // generation alone (early-return without candidate match is forbidden).
+    const gateInput = {
+      owner: 'depth-0',
+      generation: repairGeneration,
+      candidate_ref: candidateRef,
+      candidate_tree_sha: candidateTreeSha,
+      base_sha: gateBaseSha,
+      contract_digest: input.campaignContractDigest || null,
+      strict_contract_digest: input.strictContractDigest || null,
+      graph_node_id: input.graphNodeId || null,
+      work_order_id: input.workOrderId || null,
+      root_run_id: input.rootRunId || null,
+      verification_receipt_digest: verification && verification.receipt_digest || null,
+      diff_digest: reviewAuthority.diff_digest,
+      spec_digest: reviewAuthority.spec_digest,
+      review_input_digest: reviewAuthority.review_input_digest,
+      reviewer_digest: canonicalDigest(reviewAuthority.reviewer),
+      review_authority_digest: reviewAuthorityDigest,
+      vertical_failed: verticalFailed === true,
+    };
+    const reusable = findReusableGate(controller.gate_journal, 'full_diff_review', gateInput);
+    if (reusable
+        && reusable.result
+        && reusable.result.success === true
+        && reusable.result.review_authority_digest === reviewAuthorityDigest) {
+      trace.push('full_diff_gate_reused');
+      fullDiffBarriers = recordFullDiffBarrier(fullDiffBarriers, repairGeneration, {
+        success: true,
+        review_digest: reusable.result.review_digest || null,
+        candidate_ref: candidateRef,
+        base_sha: gateInput.base_sha,
+      });
+      lastReview = {
+        reviewed: true,
+        success: true,
+        review_input_mode: 'full_diff_generation',
+        review_digest: reusable.result.review_digest || null,
+        review_authority_digest: reviewAuthorityDigest,
+        findings: reusable.result.findings || '[]',
+        verdict: reusable.result.verdict || null,
+        gate_reused: true,
+      };
+      return { stop: null, review: lastReview };
+    }
     const reviewInputBytes = effectInputBytes(reviewPayload);
     const reviewAdmission = admitEffect({
       stage: 'full_diff_review',
@@ -1698,6 +1765,7 @@ function runCampaignComposition(input = {}, adapters = {}) {
       result: {
         success: fullDiffSuccess,
         review_digest: fullDiff.review_digest || fullDiff.receipt_digest || null,
+        review_authority_digest: reviewAuthorityDigest,
         findings: fullDiff.findings || null,
         verdict: fullDiff.verdict || null,
       },
@@ -1749,27 +1817,65 @@ function runCampaignComposition(input = {}, adapters = {}) {
       ...controller,
       full_diff_barriers: fullDiffBarriers,
     });
-    lastReview = fullDiff;
-    return { stop: null, review: fullDiff };
+    lastReview = {
+      ...fullDiff,
+      review_authority_digest: reviewAuthorityDigest,
+    };
+    return { stop: null, review: lastReview };
   };
 
   for (;;) {
     if (!dispositionOnlyResume) {
     // Lookup reusable focused verification BEFORE the effect (never verify then search).
     {
+      const candidateTreeSha = candidate && candidate.tree_sha || null;
+      const verificationArgvHash = input.verificationArgvHash || null;
+      const verificationEnvFingerprint = input.verificationEnvFingerprint || null;
+      const verificationMaterialComplete = isStr(candidateTreeSha)
+        && isCanonicalSha256(verificationArgvHash)
+        && isCanonicalSha256(verificationEnvFingerprint);
+      const verificationRequestDigest = verificationMaterialComplete
+        ? canonicalDigest({
+          tree_sha: candidateTreeSha,
+          argv_hash: verificationArgvHash,
+          env_fingerprint: verificationEnvFingerprint,
+        })
+        : null;
       const vInput = {
+        owner: 'depth-0',
         generation: repairGeneration,
         candidate_ref: candidate && (candidate.commit || candidate.tree_sha) || null,
+        candidate_tree_sha: candidateTreeSha,
         base_sha: candidate && candidate.base_sha || input.baseSha || null,
         contract_digest: input.campaignContractDigest || null,
+        strict_contract_digest: input.strictContractDigest || null,
+        graph_node_id: input.graphNodeId || null,
         work_order_id: input.workOrderId || null,
         root_run_id: input.rootRunId || null,
+        argv_hash: verificationArgvHash,
+        env_fingerprint: verificationEnvFingerprint,
+        request_digest: verificationRequestDigest,
       };
-      const reusableV = findReusableGate(controller.gate_journal, 'focused_verification', vInput);
-      if (reusableV && reusableV.result && reusableV.result.success === true) {
+      const reusableV = verificationMaterialComplete
+        ? findReusableGate(controller.gate_journal, 'focused_verification', vInput)
+        : null;
+      const reusableVerificationBound = reusableV
+        && reusableV.result
+        && reusableV.result.candidate_tree_sha === candidateTreeSha
+        && reusableV.result.argv_hash === verificationArgvHash
+        && reusableV.result.env_fingerprint === verificationEnvFingerprint
+        && reusableV.result.request_digest === verificationRequestDigest;
+      if (reusableV
+          && reusableV.result
+          && reusableV.result.success === true
+          && reusableVerificationBound) {
         verification = {
           passed: true,
           receipt_digest: reusableV.result.receipt_digest || null,
+          tree_sha: reusableV.result.candidate_tree_sha,
+          argv_hash: reusableV.result.argv_hash,
+          env_fingerprint: reusableV.result.env_fingerprint,
+          request_digest: reusableV.result.request_digest,
           gate_reused: true,
           started_at: reusableV.started_at,
           finished_at: reusableV.finished_at,
@@ -1805,6 +1911,24 @@ function runCampaignComposition(input = {}, adapters = {}) {
           candidate,
           repair_generation: repairGeneration,
         }), 'verify');
+        const verificationEvidence = stableVerificationGatePayload(verification);
+        const verificationAuthorityBound = verificationMaterialComplete
+          && verificationEvidence
+          && verificationEvidence.tree_sha === candidateTreeSha
+          && verificationEvidence.argv_hash === verificationArgvHash
+          && verificationEvidence.env_fingerprint === verificationEnvFingerprint
+          && verificationEvidence.request_digest === verificationRequestDigest;
+        if (verification.passed === true
+            && input.requireGateMaterialAuthority === true
+            && !verificationAuthorityBound) {
+          verification = {
+            ...verification,
+            passed: false,
+            retriable: false,
+            phase: 'verification_authority',
+            reason: 'focused verification result does not bind candidate tree, argv, and environment',
+          };
+        }
         const verificationResultIdentity = canonicalDigest(verification);
         const verificationInvocationIdentity = chargeEffect({
           stage: 'focused_verification',
@@ -1832,8 +1956,13 @@ function runCampaignComposition(input = {}, adapters = {}) {
           owner: 'depth-0',
           input: vInput,
           result: {
-            success: verification.passed === true,
+            success: verification.passed === true && verificationAuthorityBound,
             receipt_digest: verification.receipt_digest || null,
+            candidate_tree_sha: verificationEvidence && verificationEvidence.tree_sha || null,
+            argv_hash: verificationEvidence && verificationEvidence.argv_hash || null,
+            env_fingerprint: verificationEvidence
+              && verificationEvidence.env_fingerprint || null,
+            request_digest: verificationEvidence && verificationEvidence.request_digest || null,
           },
           startedAt: verification.started_at || new Date().toISOString(),
           finishedAt: verification.finished_at || new Date().toISOString(),
@@ -1968,15 +2097,34 @@ function runCampaignComposition(input = {}, adapters = {}) {
 
     // Full suite only when the adapter is present and the suite actually runs.
     if (typeof adapters.fullSuite === 'function') {
+      const suiteCandidateTreeSha = candidate && candidate.tree_sha || null;
+      const suiteArgvHash = input.fullSuiteArgvHash || null;
+      const suiteEnvFingerprint = input.fullSuiteEnvFingerprint || null;
+      const suiteMaterialComplete = isStr(suiteCandidateTreeSha)
+        && isCanonicalSha256(suiteArgvHash)
+        && isCanonicalSha256(suiteEnvFingerprint);
+      const suiteRequestDigest = suiteMaterialComplete
+        ? canonicalDigest({
+          tree_sha: suiteCandidateTreeSha,
+          argv_hash: suiteArgvHash,
+          env_fingerprint: suiteEnvFingerprint,
+        })
+        : null;
       const sInput = {
+        owner: 'depth-0',
         generation: repairGeneration,
         candidate_ref: candidate && (candidate.commit || candidate.tree_sha) || null,
+        candidate_tree_sha: suiteCandidateTreeSha,
         base_sha: candidate && candidate.base_sha || input.baseSha || null,
         contract_digest: input.campaignContractDigest || null,
         strict_contract_digest: input.strictContractDigest || null,
+        graph_node_id: input.graphNodeId || null,
         work_order_id: input.workOrderId || null,
         root_run_id: input.rootRunId || null,
         command_digest: input.fullSuiteCommandDigest || null,
+        argv_hash: suiteArgvHash,
+        env_fingerprint: suiteEnvFingerprint,
+        request_digest: suiteRequestDigest,
         suite: 'full',
       };
       if (!isCanonicalSha256(sInput.command_digest)) {
@@ -1991,14 +2139,30 @@ function runCampaignComposition(input = {}, adapters = {}) {
           },
         );
       }
+      if (!suiteMaterialComplete) {
+        return blocked(
+          'full_suite',
+          'full suite requires sealed candidate-tree, argv, and environment authority',
+          trace,
+          {
+            code: 'FULL_SUITE_AUTHORITY_MISSING',
+            candidate,
+            terminalize: false,
+          },
+        );
+      }
       const reusableS = findReusableGate(controller.gate_journal, 'full_suite', sInput);
-      const reusableCommandBound = reusableS
+      const reusableSuiteBound = reusableS
         && reusableS.result
-        && reusableS.result.command_digest === sInput.command_digest;
+        && reusableS.result.command_digest === sInput.command_digest
+        && reusableS.result.candidate_tree_sha === sInput.candidate_tree_sha
+        && reusableS.result.argv_hash === sInput.argv_hash
+        && reusableS.result.env_fingerprint === sInput.env_fingerprint
+        && reusableS.result.request_digest === sInput.request_digest;
       if (reusableS
           && reusableS.result
           && reusableS.result.success === true
-          && reusableCommandBound) {
+          && reusableSuiteBound) {
         trace.push('full_suite_gate_reused');
       } else {
         const suiteAdmission = admitEffect({
@@ -2045,11 +2209,15 @@ function runCampaignComposition(input = {}, adapters = {}) {
             && !e.invalidated
           ))
           : [];
-        const commandBound = isCanonicalSha256(sInput.command_digest)
-          && suite.command_digest === sInput.command_digest;
+        const suiteAuthorityBound = isCanonicalSha256(sInput.command_digest)
+          && suite.command_digest === sInput.command_digest
+          && suite.candidate_tree_sha === sInput.candidate_tree_sha
+          && suite.argv_hash === sInput.argv_hash
+          && suite.env_fingerprint === sInput.env_fingerprint
+          && suite.request_digest === sInput.request_digest;
         const suiteSuccess = suite.executed === true
           && suite.passed === true
-          && commandBound;
+          && suiteAuthorityBound;
         const sGate = recordGateEntry(controller.gate_journal, {
           kind: 'full_suite',
           owner: 'depth-0',
@@ -2058,6 +2226,10 @@ function runCampaignComposition(input = {}, adapters = {}) {
             success: suiteSuccess,
             receipt_digest: suite.receipt_digest || null,
             command_digest: suite.command_digest || null,
+            candidate_tree_sha: suite.candidate_tree_sha || null,
+            argv_hash: suite.argv_hash || null,
+            env_fingerprint: suite.env_fingerprint || null,
+            request_digest: suite.request_digest || null,
           },
           startedAt: suite.started_at || new Date().toISOString(),
           finishedAt: suite.finished_at || new Date().toISOString(),
@@ -2069,8 +2241,8 @@ function runCampaignComposition(input = {}, adapters = {}) {
         if (!suiteSuccess) {
           return blocked(
             'full_suite',
-            !commandBound
-              ? 'full suite result does not bind the sealed verification command'
+            !suiteAuthorityBound
+              ? 'full suite result does not bind the sealed command, tree, argv, and environment'
               : (suite.reason || 'full suite did not execute and pass'),
             trace,
             { candidate, suite },
@@ -2262,9 +2434,26 @@ function runCampaignComposition(input = {}, adapters = {}) {
   // Final joint review/panel: lookup exact input before effect.
   let terminalReview;
   {
+    const stablePanelReview = stableReviewGatePayload(lastReview);
+    const focusedSupplement = stablePanelReview
+      ? stablePanelReview.focused_supplement : null;
+    const fullDiffReview = stablePanelReview
+      ? { ...stablePanelReview, focused_supplement: null } : null;
+    const panelPayload = {
+      candidate: stableCandidateGatePayload(candidate),
+      verification: stableVerificationGatePayload(verification),
+      focused_review: {
+        ...fullDiffReview,
+        focused_supplement: focusedSupplement,
+      },
+      repair_generation: repairGeneration,
+    };
+    const reviewerRosterDigest = input.jointReviewRosterDigest || null;
     const jInput = {
+      owner: 'depth-0',
       generation: repairGeneration,
       candidate_ref: candidate && (candidate.commit || candidate.tree_sha) || null,
+      candidate_tree_sha: candidate && candidate.tree_sha || null,
       base_sha: candidate && candidate.base_sha || input.baseSha || null,
       contract_digest: input.campaignContractDigest || null,
       strict_contract_digest: input.strictContractDigest || null,
@@ -2274,9 +2463,48 @@ function runCampaignComposition(input = {}, adapters = {}) {
       verification_receipt_digest: verification && verification.receipt_digest || null,
       panel: true,
       min_panel_size: minPanelSize,
+      panel_payload_digest: canonicalDigest(panelPayload),
+      verification_payload_digest: canonicalDigest(panelPayload.verification),
+      full_diff_payload_digest: canonicalDigest(fullDiffReview),
+      focused_supplement_digest: canonicalDigest(focusedSupplement),
+      reviewer_roster_digest: reviewerRosterDigest,
     };
-    const reusableJ = findReusableGate(controller.gate_journal, 'joint_review', jInput);
+    if (input.requireGateMaterialAuthority === true
+        && !isCanonicalSha256(reviewerRosterDigest)) {
+      return blocked(
+        'joint_review',
+        'joint review requires the exact sealed reviewer roster before effects',
+        trace,
+        {
+          code: 'JOINT_REVIEW_AUTHORITY_MISSING',
+          candidate,
+          terminalize: false,
+        },
+      );
+    }
+    const reusableJ = isCanonicalSha256(reviewerRosterDigest)
+      ? findReusableGate(controller.gate_journal, 'joint_review', jInput)
+      : null;
+    const reusablePanelBound = reusableJ
+      && reusableJ.result
+      && reusableJ.result.panel_payload_digest === jInput.panel_payload_digest
+      && reusableJ.result.verification_payload_digest === jInput.verification_payload_digest
+      && reusableJ.result.full_diff_payload_digest === jInput.full_diff_payload_digest
+      && reusableJ.result.focused_supplement_digest === jInput.focused_supplement_digest
+      && reusableJ.result.reviewer_roster_digest === jInput.reviewer_roster_digest;
+    const reusableFindingsPresent = reusableJ
+      && reusableJ.result
+      && Object.prototype.hasOwnProperty.call(reusableJ.result, 'findings');
+    const reusableAdjudicationStateComplete = reusableJ
+      && reusableJ.result
+      && isStr(reusableJ.result.verdict)
+      && reusableFindingsPresent
+      && (reusableJ.result.findings === null
+        || typeof reusableJ.result.findings === 'string'
+        || Array.isArray(reusableJ.result.findings));
     if (reusableJ && reusableJ.result && reusableJ.result.success === true
+        && reusablePanelBound
+        && reusableAdjudicationStateComplete
         && Array.isArray(reusableJ.result.seat_receipts)
         && reusableJ.result.seat_receipts.length >= minPanelSize) {
       const reusablePanelCount = reusableJ.result.seat_receipts
@@ -2298,12 +2526,6 @@ function runCampaignComposition(input = {}, adapters = {}) {
       };
       trace.push('final_panel_gate_reused');
     } else {
-      const panelPayload = {
-        candidate,
-        verification,
-        focused_review: lastReview,
-        repair_generation: repairGeneration,
-      };
       const panelInputBytes = effectInputBytes(panelPayload);
       const panelAdmission = admitEffect({
         stage: 'joint_review',
@@ -2340,12 +2562,20 @@ function runCampaignComposition(input = {}, adapters = {}) {
       });
       trace.push('final_panel');
       const panelValidationEarly = validateFinalPanelReceipt(terminalReview, minPanelSize);
+      const panelFindingsPresent = Object.prototype.hasOwnProperty.call(
+        terminalReview,
+        'findings',
+      );
+      const panelAdjudicationStateComplete = isStr(terminalReview.verdict)
+        && panelFindingsPresent
+        && (terminalReview.findings === null
+          || typeof terminalReview.findings === 'string'
+          || Array.isArray(terminalReview.findings));
       const priorLiveJ = Array.isArray(controller.gate_journal && controller.gate_journal.entries)
         ? controller.gate_journal.entries.filter((e) => (
           e.kind === 'joint_review'
           && e.result && e.result.success === true
           && !e.invalidated
-          && e.input && e.input.panel === true
         ))
         : [];
       const jGate = recordGateEntry(controller.gate_journal, {
@@ -2353,19 +2583,43 @@ function runCampaignComposition(input = {}, adapters = {}) {
         owner: 'depth-0',
         input: jInput,
         result: {
-          success: panelValidationEarly.passed === true,
+          success: panelValidationEarly.passed === true
+            && panelAdjudicationStateComplete,
           sealed_min_panel_size: panelValidationEarly.sealed_min_panel_size,
           final_panel_count: panelValidationEarly.final_panel_count,
           seat_receipts: panelValidationEarly.final_panel_seat_receipts || [],
           review_digest: terminalReview.review_digest || terminalReview.receipt_digest || null,
+          verdict: terminalReview.verdict || null,
+          findings: Array.isArray(terminalReview.findings)
+            ? JSON.parse(JSON.stringify(terminalReview.findings))
+            : (panelFindingsPresent ? terminalReview.findings : null),
+          panel_payload_digest: jInput.panel_payload_digest,
+          verification_payload_digest: jInput.verification_payload_digest,
+          full_diff_payload_digest: jInput.full_diff_payload_digest,
+          focused_supplement_digest: jInput.focused_supplement_digest,
+          reviewer_roster_digest: jInput.reviewer_roster_digest,
         },
         startedAt: terminalReview.started_at || new Date().toISOString(),
         finishedAt: terminalReview.finished_at || new Date().toISOString(),
-        invalidateReason: panelValidationEarly.passed === true && priorLiveJ.length > 0
+        invalidateReason: panelValidationEarly.passed === true
+          && panelAdjudicationStateComplete
+          && priorLiveJ.length > 0
           ? `generation ${repairGeneration} supersedes prior final panel`
           : null,
       });
       persistGateResult(jGate, panelInvocationIdentity, panelResultIdentity);
+      if (panelValidationEarly.passed === true && !panelAdjudicationStateComplete) {
+        return blocked(
+          'final_panel',
+          'successful final panel omitted exact verdict/findings replay state',
+          trace,
+          {
+            code: 'FINAL_PANEL_REPLAY_STATE_INCOMPLETE',
+            candidate,
+            terminalize: false,
+          },
+        );
+      }
     }
   }
   const finalPanelValidation = validateFinalPanelReceipt(terminalReview, minPanelSize);

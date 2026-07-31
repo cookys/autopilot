@@ -680,8 +680,51 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
         if (sealedGraph && sealedGraph !== state.mission_graph_digest) {
           continue;
         }
+        const expectedReadyReceiptDigests = new Set();
+        for (const [nodeId, progress] of Object.entries(
+          isObj(state.graph_progress) ? state.graph_progress : {},
+        )) {
+          if (graphNode && nodeId !== graphNode) continue;
+          if (!isObj(progress) || progress.status !== 'ready') continue;
+          if (!SHA256.test(progress.last_receipt_digest || '')) {
+            if (enforce) {
+              fail(
+                `current ready Mission state for ${nodeId} lacks a canonical terminal receipt digest`,
+                'MISSION_EVIDENCE_CORRUPT',
+              );
+            }
+            continue;
+          }
+          const matchingClaim = Object.values(
+            isObj(state.claims) ? state.claims : {},
+          ).find((claim) => (
+            isObj(claim)
+              && claim.graph_node_id === nodeId
+              && claim.terminal === true
+              && claim.reconciled === true
+          ));
+          if (!matchingClaim) {
+            if (enforce) {
+              fail(
+                `current ready Mission state for ${nodeId} lacks a terminal reconciled claim`,
+                'MISSION_EVIDENCE_CORRUPT',
+              );
+            }
+            continue;
+          }
+          expectedReadyReceiptDigests.add(progress.last_receipt_digest);
+        }
+        const observedReadyReceiptDigests = new Set();
         const journalDir = path.join(missionRoot, 'journals', adoptionKey);
-        if (!fs.existsSync(journalDir)) continue;
+        if (!fs.existsSync(journalDir)) {
+          if (enforce && expectedReadyReceiptDigests.size > 0) {
+            fail(
+              `current ready Mission state for ${adoptionKey} is missing its applied terminal journal`,
+              'MISSION_EVIDENCE_MISSING',
+            );
+          }
+          continue;
+        }
         let names;
         try {
           names = fs.readdirSync(journalDir).filter((n) => n.endsWith('.applied.json'));
@@ -705,10 +748,6 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
               continue;
             }
             if (graphNode && rec.graph_node_id !== graphNode) continue;
-            if (explicitTerminalReceipt
-                && rec.receipt_digest !== explicitTerminalReceipt.receipt_digest) {
-              continue;
-            }
             const valid = validateCampaignTerminalReceipt(rec, state);
             if (!valid.ok) {
               // Old applied attempts can coexist with a later current terminal;
@@ -729,6 +768,11 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
               continue;
             }
             if (rec.outcome !== 'ready') continue;
+            observedReadyReceiptDigests.add(rec.receipt_digest);
+            if (explicitTerminalReceipt
+                && rec.receipt_digest !== explicitTerminalReceipt.receipt_digest) {
+              continue;
+            }
             candidateTerminals.push({ receipt: rec, state, claim: valid.claim });
           } catch (error) {
             if (enforce) {
@@ -738,6 +782,14 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
               );
             }
           }
+        }
+        const missingReadyReceipt = [...expectedReadyReceiptDigests]
+          .find((digest) => !observedReadyReceiptDigests.has(digest));
+        if (missingReadyReceipt && enforce) {
+          fail(
+            `current ready Mission state for ${adoptionKey} is missing applied terminal receipt ${missingReadyReceipt}`,
+            'MISSION_EVIDENCE_MISSING',
+          );
         }
       }
       if (candidateTerminals.length > 1) {

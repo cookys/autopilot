@@ -322,39 +322,62 @@ const planted = {
   openai: ['sk-', 'abcdefghijklmnopqrstuvwxyz123456'].join(''),
   github: ['ghp_', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJ'].join(''),
 };
-for (const [name, model] of Object.entries(planted)) {
-  fs.writeFileSync(path.join(root, 'grok', `${name}.json`), JSON.stringify({
-    model,
-    status: 'completed',
-    response_text: 'ok',
-  }));
+const sess = 'sess_9f8e7d6c';
+const session = 'session-01HZX3Y9K8M7N6P5Q4R3S2T1V0';
+const uuid = '123e4567-e89b-12d3-a456-426614174000';
+const rejected = {
+  codex: [
+    sess, session, uuid, `gpt-${session}`, `gpt-${uuid}`,
+    'Customer roadmap', 'gpt-5.6-customer-roadmap', 'gpt-9.9-future',
+  ],
+  grok: [
+    ...Object.values(planted), sess, session, uuid,
+    `grok-${session}`, `grok-${uuid}`, 'Customer roadmap',
+    'grok-4.5-customer-roadmap', 'grok-9.9',
+  ],
+  opencode: [
+    sess, session, uuid, `glm-${session}`, `glm-${uuid}`,
+    'Customer roadmap', 'glm-5.2-customer-roadmap', 'glm-9.9',
+  ],
+  agy: ['Customer roadmap', 'Gemini 9.9 Flash (High)'],
+};
+const accepted = {
+  codex: ['gpt-5.6-sol', 'o3-mini'],
+  grok: ['grok-4.5', 'grok-composer-2.5-fast'],
+  opencode: ['glm-5.2', 'MiniMax-M3'],
+  agy: ['Gemini 3.6 Flash (High)', 'Gemini 3.6 Pro (Medium)'],
+};
+const writeCodex = (name, model) => {
+  const rows = [
+    { type: 'session_meta', payload: { model } },
+    { type: 'response_item', payload: { type: 'message', role: 'assistant', content: 'ok' } },
+    { type: 'turn.completed' },
+  ];
+  fs.writeFileSync(
+    path.join(root, 'codex', `${name}.jsonl`),
+    `${rows.map(JSON.stringify).join('\n')}\n`,
+  );
+};
+const writeRoot = (provider, name, model) => {
+  const row = provider === 'opencode'
+    ? { modelID: model, status: 'completed', messages: [{ role: 'assistant', content: 'ok' }] }
+    : provider === 'agy'
+      ? { model, status: 'completed', output_text: 'ok' }
+      : { model, status: 'completed', response_text: 'ok' };
+  fs.writeFileSync(path.join(root, provider, `${name}.json`), JSON.stringify(row));
+};
+for (const [provider, models] of Object.entries(rejected)) {
+  models.forEach((model, index) => {
+    if (provider === 'codex') writeCodex(`rejected-${index}`, model);
+    else writeRoot(provider, `rejected-${index}`, model);
+  });
 }
-fs.writeFileSync(path.join(root, 'grok', 'prose.json'), JSON.stringify({
-  model: 'Customer roadmap', status: 'completed', response_text: 'ok',
-}));
-fs.writeFileSync(path.join(root, 'opencode', 'minimax.json'), JSON.stringify({
-  modelID: 'MiniMax-M3', status: 'completed',
-  messages: [{ role: 'assistant', content: 'ok' }],
-}));
-fs.writeFileSync(path.join(root, 'opencode', 'prose.json'), JSON.stringify({
-  modelID: 'Customer roadmap', status: 'completed',
-  messages: [{ role: 'assistant', content: 'ok' }],
-}));
-fs.writeFileSync(path.join(root, 'agy', 'gemini.json'), JSON.stringify({
-  model: 'Gemini 3.6 Flash (High)', status: 'completed', output_text: 'ok',
-}));
-fs.writeFileSync(path.join(root, 'agy', 'prose.json'), JSON.stringify({
-  model: 'Customer roadmap', status: 'completed', output_text: 'ok',
-}));
-const codex = [
-  { type: 'session_meta', payload: { model: 'Customer roadmap' } },
-  { type: 'response_item', payload: { type: 'message', role: 'assistant', content: 'ok' } },
-  { type: 'turn.completed' },
-];
-fs.writeFileSync(
-  path.join(root, 'codex', 'prose.jsonl'),
-  `${codex.map(JSON.stringify).join('\n')}\n`,
-);
+for (const [provider, models] of Object.entries(accepted)) {
+  models.forEach((model, index) => {
+    if (provider === 'codex') writeCodex(`accepted-${index}`, model);
+    else writeRoot(provider, `accepted-${index}`, model);
+  });
+}
 NODE
 node "$CLI" import-transcripts \
   --root "codex=$SECRET_MODEL_ROOT/codex" \
@@ -374,18 +397,36 @@ const planted = [
   ['sk-', 'abcdefghijklmnopqrstuvwxyz123456'].join(''),
   ['ghp_', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJ'].join(''),
 ];
-const secretsAbsent = planted.every((secret) => !raw.includes(secret));
-const rejected = find('grok', 'unknown')?.sample_size === planted.length + 1
-  && find('codex', 'unknown')?.sample_size === 1
-  && find('opencode', 'unknown')?.sample_size === 1
-  && find('agy', 'unknown')?.sample_size === 1
-  && !raw.includes('Customer roadmap');
-const ordinaryPreserved = find('opencode', 'MiniMax-M3')?.sample_size === 1
-  && find('agy', 'Gemini 3.6 Flash (High)')?.sample_size === 1;
-process.stdout.write([secretsAbsent, rejected, ordinaryPreserved].join(':'));
+const sess = 'sess_9f8e7d6c';
+const session = 'session-01HZX3Y9K8M7N6P5Q4R3S2T1V0';
+const uuid = '123e4567-e89b-12d3-a456-426614174000';
+const rejectedValues = [
+  ...planted, sess, session, uuid,
+  `gpt-${session}`, `gpt-${uuid}`, `grok-${session}`, `grok-${uuid}`,
+  `glm-${session}`, `glm-${uuid}`, 'Customer roadmap',
+  'gpt-5.6-customer-roadmap', 'gpt-9.9-future',
+  'grok-4.5-customer-roadmap', 'grok-9.9',
+  'glm-5.2-customer-roadmap', 'glm-9.9', 'Gemini 9.9 Flash (High)',
+];
+const rejected = find('codex', 'unknown')?.sample_size === 8
+  && find('grok', 'unknown')?.sample_size === 11
+  && find('opencode', 'unknown')?.sample_size === 8
+  && find('agy', 'unknown')?.sample_size === 2
+  && rejectedValues.every((value) => !raw.includes(value));
+const ordinaryPreserved = [
+  ['codex', 'gpt-5.6-sol'],
+  ['codex', 'o3-mini'],
+  ['grok', 'grok-4.5'],
+  ['grok', 'grok-composer-2.5-fast'],
+  ['opencode', 'glm-5.2'],
+  ['opencode', 'MiniMax-M3'],
+  ['agy', 'Gemini 3.6 Flash (High)'],
+  ['agy', 'Gemini 3.6 Pro (Medium)'],
+].every(([provider, engine]) => find(provider, engine)?.sample_size === 1);
+process.stdout.write([rejected, ordinaryPreserved].join(':'));
 NODE
 )"
-[ "$secret_model_check" = "true:true:true" ] \
+[ "$secret_model_check" = "true:true" ] \
   && ok "19: provider model contracts reject secrets/prose and preserve legitimate identifiers" \
   || bad "19: secret model sanitization check=$secret_model_check"
 
@@ -596,7 +637,7 @@ const invalidMetrics = [
 invalidMetrics.forEach(([name, value]) => writeJson(
   path.join(root, 'metrics', `${name}.json`),
   {
-    model: 'grok-metric-boundary',
+    model: 'grok-4.5',
     status: 'completed',
     response_text: 'ok',
     usage: {
@@ -610,7 +651,7 @@ invalidMetrics.forEach(([name, value]) => writeJson(
   },
 ));
 writeJson(path.join(root, 'metrics', 'valid-zero.json'), {
-  model: 'grok-metric-boundary',
+  model: 'grok-4.5',
   status: 'completed',
   response_text: 'ok',
   usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0, cost_usd: 0 },
@@ -618,21 +659,21 @@ writeJson(path.join(root, 'metrics', 'valid-zero.json'), {
   tool: { exit_code: 0 },
 });
 writeJson(path.join(root, 'cost-precedence', 'usage-only.json'), {
-  model: 'grok-cost-usage-only',
+  modelID: 'glm-5.2',
   status: 'completed',
-  response_text: 'ok',
+  messages: [{ role: 'assistant', content: 'ok' }],
   usage: { cost_usd: 0.01 },
 });
 writeJson(path.join(root, 'cost-precedence', 'root-only.json'), {
-  model: 'grok-cost-root-only',
+  modelID: 'MiniMax-M3',
   status: 'completed',
-  response_text: 'ok',
+  messages: [{ role: 'assistant', content: 'ok' }],
   cost_usd: 0.02,
 });
 writeJson(path.join(root, 'cost-precedence', 'both.json'), {
-  model: 'grok-cost-both',
+  modelID: 'qwen-3.8',
   status: 'completed',
-  response_text: 'ok',
+  messages: [{ role: 'assistant', content: 'ok' }],
   usage: { cost_usd: 0.03 },
   cost_usd: 0.99,
 });
@@ -651,7 +692,7 @@ NODE
 node "$CLI" import-transcripts \
   --root "grok=$STRICT_ROOT/session-models" \
   --root "grok=$STRICT_ROOT/metrics" \
-  --root "grok=$STRICT_ROOT/cost-precedence" \
+  --root "opencode=$STRICT_ROOT/cost-precedence" \
   --root "codex=$STRICT_ROOT/codex" \
   > "$TESTDIR/strict-schema-import.json"
 strict_schema_check="$(node - "$TESTDIR/strict-schema-import.json" <<'NODE'
@@ -662,7 +703,7 @@ const find = (provider, engine) => report.aggregates.find((row) => (
   row.provider === provider && row.engine === engine
 ));
 const unknown = find('grok', 'unknown');
-const metrics = find('grok', 'grok-metric-boundary');
+const metrics = find('grok', 'grok-4.5');
 const codex = find('codex', 'gpt-5.6-sol');
 const sessionIdsRejected = unknown?.sample_size === 3 && [
   'sess_9f8e7d6c',
@@ -681,13 +722,13 @@ const strictMetrics = metrics?.sample_size === 10
   && metrics.tool_failure_rate === 0;
 const codexToolStrict = codex?.tool_failure_rate === 0;
 const exactCost = (engine, expected) => {
-  const row = find('grok', engine);
+  const row = find('opencode', engine);
   return row?.cost.availability === 'available'
     && row.cost.observed_samples === 1 && row.cost.usd_total === expected;
 };
-const costPrecedence = exactCost('grok-cost-usage-only', 0.01)
-  && exactCost('grok-cost-root-only', 0.02)
-  && exactCost('grok-cost-both', 0.03);
+const costPrecedence = exactCost('glm-5.2', 0.01)
+  && exactCost('MiniMax-M3', 0.02)
+  && exactCost('qwen-3.8', 0.03);
 process.stdout.write([
   sessionIdsRejected,
   strictMetrics,
@@ -737,17 +778,17 @@ writeJson(path.join(root, 'coverage', 'grok', 'recognized.json'), {
   response_text: 'ok',
 });
 writeJson(path.join(root, 'cohort', 'not-swe-calibrate-backup', 'session.json'), {
-  modelID: 'glm-cohort-general',
+  modelID: 'glm-5.2',
   status: 'completed',
   messages: [{ role: 'assistant', content: 'ok' }],
 });
 writeJson(path.join(root, 'cohort', 'swe-calibrate', 'below', 'session.json'), {
-  modelID: 'glm-cohort-calibrate',
+  modelID: 'MiniMax-M3',
   status: 'completed',
   messages: [{ role: 'assistant', content: 'ok' }],
 });
 writeJson(path.join(root, 'overlap', 'parent', 'child', 'session.json'), {
-  model: 'grok-overlap-engine',
+  model: 'grok-composer-2.5-fast',
   status: 'completed',
   response_text: 'ok',
 });
@@ -793,8 +834,8 @@ const schemaCoverage = codexSource?.candidate_files === 4
 const cohortRow = (engine, name) => cohort.aggregates.find((row) => (
   row.engine === engine && row.cohort === name
 ));
-const exactCohorts = cohortRow('glm-cohort-general', 'general')?.sample_size === 1
-  && cohortRow('glm-cohort-calibrate', 'swe-calibrate')?.sample_size === 1;
+const exactCohorts = cohortRow('glm-5.2', 'general')?.sample_size === 1
+  && cohortRow('MiniMax-M3', 'swe-calibrate')?.sample_size === 1;
 const overlap = JSON.parse(overlapFirstRaw);
 const overlapSource = source(overlap, 'grok');
 const overlapDeduped = overlapFirstRaw === overlapSecondRaw
@@ -802,7 +843,7 @@ const overlapDeduped = overlapFirstRaw === overlapSecondRaw
   && overlapSource.parsed_sessions === 1
   && overlapSource.schema_coverage_rate === 1
   && overlap.aggregates.length === 1
-  && overlap.aggregates[0].engine === 'grok-overlap-engine'
+  && overlap.aggregates[0].engine === 'grok-composer-2.5-fast'
   && overlap.aggregates[0].sample_size === 1;
 process.stdout.write([schemaCoverage, exactCohorts, overlapDeduped].join(':'));
 NODE

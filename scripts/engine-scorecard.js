@@ -690,28 +690,74 @@ function parseTranscriptFile(file) {
   }
 }
 
+const SESSION_IDENTIFIER_FRAGMENT = /(?:^|[^A-Za-z0-9])sess(?:ion)?[_-][A-Za-z0-9][A-Za-z0-9_-]{7,}(?=$|[^A-Za-z0-9])/i;
+const UUID_IDENTIFIER_FRAGMENT = /(?:^|[^A-Za-z0-9])[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?=$|[^A-Za-z0-9])/i;
+const CODEX_ENGINE_NAMES = new Set([
+  'gpt-5.3-codex-spark',
+  'gpt-5.4-mini',
+  'gpt-5.5',
+  'gpt-5.6-luna',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'o1',
+  'o1-mini',
+  'o1-preview',
+  'o1-pro',
+  'o3',
+  'o3-mini',
+  'o3-pro',
+  'o4-mini',
+]);
+const GROK_ENGINE_NAMES = new Set([
+  'grok-4.5',
+  'grok-4.5-fast',
+  'grok-composer-2.5-fast',
+]);
+const OPENCODE_ENGINE_NAMES = new Set([
+  ...CODEX_ENGINE_NAMES,
+  ...GROK_ENGINE_NAMES,
+  'glm-4.6',
+  'glm-4.7',
+  'glm-5.2',
+  'qwen-3.8',
+  'minimax-m2.7',
+  'minimax-m3',
+  'claude-3-haiku-20240307',
+  'claude-3-5-sonnet',
+  'claude-haiku-4-5',
+  'claude-haiku-4-5-20251001',
+  'claude-opus-4-7',
+  'claude-opus-4-8',
+  'claude-sonnet-4-6',
+  'claude-sonnet-5',
+  'gemini-1.5',
+  'gemini-3-flash',
+  'gemini-3.5-flash',
+  'deepseek-r1',
+  'deepseek-v3',
+  'kimi-k2.5',
+]);
+
 function safeEngineName(provider, value) {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
-  const looksLikeSessionId = /^sess(?:ion)?[_-][A-Za-z0-9][A-Za-z0-9_-]{7,}$/i.test(normalized)
-    || /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(normalized);
   if (!/^[A-Za-z0-9][A-Za-z0-9._:+()/ -]{0,119}$/.test(normalized)
       || /(?:secret|token|password|bearer|api[_ -]?key|credential)/i.test(normalized)
-      || looksLikeSessionId
+      || SESSION_IDENTIFIER_FRAGMENT.test(normalized)
+      || UUID_IDENTIFIER_FRAGMENT.test(normalized)
       || transcriptSecrets.scan(normalized).length > 0
       || normalized.includes('/') || normalized.includes('\\')) return null;
-  const compactSuffix = '[A-Za-z0-9][A-Za-z0-9._-]*';
-  const providerPatterns = {
-    codex: new RegExp(`^(?:gpt-|codex-)${compactSuffix}$|^o[0-9]+(?:[._-]${compactSuffix})*$`, 'i'),
-    grok: new RegExp(`^grok-${compactSuffix}$`, 'i'),
-    opencode: new RegExp(
-      `^(?:(?:glm|qwen|minimax|claude|gpt|gemini|deepseek|kimi|grok)-${compactSuffix}`
-        + `|o[0-9]+(?:[._-]${compactSuffix})*)$`,
-      'i',
-    ),
-    agy: /^Gemini [0-9]+(?:\.[0-9]+)* (?:Flash|Pro)(?: \((?:Low|Medium|High)\))?$/i,
-  };
-  return providerPatterns[provider]?.test(normalized) ? normalized : null;
+  const key = normalized.toLowerCase();
+  const admitted = provider === 'codex'
+    ? CODEX_ENGINE_NAMES.has(key)
+    : provider === 'grok'
+      ? GROK_ENGINE_NAMES.has(key)
+      : provider === 'opencode'
+        ? OPENCODE_ENGINE_NAMES.has(key)
+        : provider === 'agy'
+          ? /^Gemini 3\.6 (?:Flash|Pro)(?: \((?:Low|Medium|High)\))?$/i.test(normalized)
+          : false;
+  return admitted ? normalized : null;
 }
 
 function nonEmptyContent(value) {

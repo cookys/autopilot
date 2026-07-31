@@ -57,7 +57,7 @@ budget accordingly.
 development. It is not part of the default `autopilot-local` skills package.
 
 The probe package declares warning-only command hooks for `SessionStart`,
-`PreToolUse`, `PostToolUse`, `PreCompact`, and `Stop`. The hook script writes
+`PreToolUse`, `PostToolUse`, `PreCompact`, `PostCompact`, and `Stop`. The hook script writes
 normalized shape-only telemetry to Codex `PLUGIN_DATA` and always exits 0. It
 records value types, key counts, and fixed field-presence booleans, but omits
 raw payloads, path values, payload key names, identifiers, and tool input/output

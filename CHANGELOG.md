@@ -39,6 +39,9 @@ review findings into new phases.
   campaign, process, worktree, and ledger evidence before the next effectful dispatch.
 - An independently authored cross-component execution oracle covering admission, recovery,
   convergence, lifecycle, no-op adoption, and boundary behavior.
+- The separate warning-only Codex hook probe now declares `PostCompact` so live compaction
+  payload and firing semantics can be measured. This proves package declaration and installation,
+  not production recovery wiring or live event delivery.
 
 ### Changed
 - Live capability observations use the exact runner/model/effort/endpoint identity required by

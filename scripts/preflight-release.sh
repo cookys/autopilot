@@ -164,6 +164,36 @@ measure_surface() {
   SURF_ENGINE=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
 }
 
+changelog_version_section() {
+  local changelog="$1"
+  local version="$2"
+  awk -v target="$version" '
+    /^##[[:space:]]+v/ {
+      if (inside) exit
+      heading = $0
+      sub(/^##[[:space:]]+v/, "", heading)
+      sub(/[[:space:]].*$/, "", heading)
+      if (heading == target) {
+        inside = 1
+        found = 1
+      }
+      next
+    }
+    inside { print }
+    END { if (!found) exit 1 }
+  ' "$changelog"
+}
+
+current_changelog_has_justification() {
+  local changelog="$1"
+  local version="$2"
+  local section=""
+  if ! section="$(changelog_version_section "$changelog" "$version")"; then
+    return 1
+  fi
+  grep -qE "prose-justification:" <<<"$section"
+}
+
 check_north_star() {
   measure_surface
   if [ ! -f "$SURFACE_BASELINE" ]; then
@@ -185,11 +215,11 @@ check_north_star() {
   echo "    prose=$SURF_PROSE engine=$SURF_ENGINE (baseline v$base_version: prose=$base_prose engine=$base_engine; Δprose=$d_prose (${pct}%), Δengine=$d_engine)"
   local limit=$(( base_prose * 105 / 100 ))
   if [ "$SURF_PROSE" -gt "$limit" ]; then
-    if grep -qE "prose-justification:" "$CHANGELOG"; then
-      echo "    WARNING: prose grew >+5% vs baseline — CHANGELOG justification found, allowed"
+    if current_changelog_has_justification "$CHANGELOG" "$VERSION"; then
+      echo "    WARNING: prose grew >+5% vs baseline — current-version CHANGELOG justification found, allowed"
       return 0
     fi
-    echo "    prose grew >+5% vs baseline ($base_prose → $SURF_PROSE) with NO 'prose-justification:' line in $CHANGELOG" >&2
+    echo "    prose grew >+5% vs baseline ($base_prose → $SURF_PROSE) with NO 'prose-justification:' line in the v$VERSION section of $CHANGELOG" >&2
     echo "    north star is prose↓ engine↑ — justify the growth in the CHANGELOG or reduce it" >&2
     return 1
   fi

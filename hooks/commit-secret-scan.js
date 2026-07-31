@@ -35,11 +35,32 @@ try {
     timeout: 5000,
     encoding: 'utf8',
   });
+  if (diff.error || diff.status !== 0) {
+    throw new Error(diff.error
+      ? `git diff failed: ${diff.error.message}`
+      : `git diff failed with status ${diff.status}`);
+  }
 
   const staged = diff.stdout || '';
   if (!staged) process.exit(0);
 
-  const hits = secrets.scan(staged);
+  // Commit blocking is about secrets introduced by this commit. Restrict the
+  // scan to added hunk content so removing an existing secret is never blocked
+  // by the deleted `-` line or by diff metadata.
+  const additions = [];
+  let inHunk = false;
+  for (const line of staged.split(/\r?\n/)) {
+    if (line.startsWith('diff --git ')) {
+      inHunk = false;
+    } else if (line.startsWith('@@ ')) {
+      inHunk = true;
+    } else if (inHunk && line.startsWith('+')) {
+      additions.push(line.slice(1));
+    }
+  }
+  if (additions.length === 0) process.exit(0);
+
+  const hits = secrets.scan(additions.join('\n'));
 
   if (hits.length > 0) {
     const names = hits.map(h => `  - ${h.name}: ${h.match}`).join('\n');

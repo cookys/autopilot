@@ -75,29 +75,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S（(b)/(c)）／M（(a)，需驗證載入行為）
 - **Source**: v2.32.58 push 後 CI 紅（`check-claude-md-inventory` 23/24）
 
-### `preflight-release.sh` 的 prose-justification 檢查掃全檔，等同永久放行
-- **Trigger**: 下次 north-star 閘要真正約束 prose 成長時；或發現某版 prose 暴增卻通過閘時。
-- **Context**: 第 188 行是 `grep -qE "prose-justification:" "$CHANGELOG"` — 掃**整個 CHANGELOG**而非當前版本段落。CHANGELOG 裡已有 5+ 條歷史 justification 行（最早可追到 v2.28 以前），所以自 v2.32.x 起這個檢查對每一版都自動通過，north-star 的 +5% 煞車實質失效。v2.32.58 實測：gate 印 "CHANGELOG justification found, allowed"，但找到的是 v2.32.57 的行。**修法**：把搜尋範圍限縮到當前版本的 CHANGELOG 段落（從 `## v<current>` 到下一個 `## v`），與 `check-optin-changelog.js` 已經在做的段落切分方式一致。
-- **Effort**: S
-- **Source**: v2.32.58 finish-flow L-5.5 release-hygiene gate
-
 ### `hooks/tests/dispatch-output-quiescence.test.sh` 時間敏感 flake 未根治
 - **Trigger**: 下次 CI 或 finish-flow 因它變紅時；或要把它納入 blocking gate 之前。
 - **Context**: v2.32.57 的 merge（`d90433b`，標題明寫 "kill dispatch-output-quiescence flake"）以 worker count 縮放 parallel timing factor，但未根治。v2.32.58 期間三次觀測：base SHA 上 FAIL（`immediate-content returns quickly: expected <= 5, got 6`）、一次全套件 PASS、pre-merge 全套件再度 FAIL 且**失敗的斷言換成 `genuine-empty-fast`** — 斷言隨機漂移是負載敏感 flake 的特徵而非邏輯錯誤。`verify-preexisting.sh` 正式判定 `{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}`。可能修法：把絕對 tick 上限改成相對於實測 baseline tick 的比值，或在高負載下自動放寬。
 - **Effort**: S–M
 - **Source**: v2.32.58 finish-flow L-5.2 pre-merge 全套件
-
-### `verify-red-green.sh` 對「從 `$0` 推導 REPO_ROOT」的測試套件失效（＝autopilot 自己全部）
-- **Trigger**: 下次要在 autopilot repo 內用 `verify-red-green.sh` 當紅綠閘時；或要把它接進 `/l5`／`/l6` 的自動驗收路徑時。
-- **Context**: `run_verify_cmd()` 雖然 `cd "$wt"` 進 base worktree，但用**主 repo 的絕對路徑**執行 `$VERIFY_CMD`（第 174 行刻意 canonicalize，header 有說明理由）。autopilot 的 `hooks/tests/*.test.sh` 一律 `. "$(dirname "$0")/lib.sh"`，`lib.sh` 再由 `$0` 推出 `REPO_ROOT` — 於是 base run 實際上是拿**主 repo（＝head）的產品碼**在跑，永遠綠，verdict 恆為 `NOT_RED_ON_BASE`。v2.32.58 實測：工具報 `NOT_RED_ON_BASE`（base green），但手動在 base worktree 內用相對路徑跑同一測試檔 ⇒ **exit 1、大量斷言失敗**（真 RED）。工具傳了 `"$wt"` 當 `$1` 給 verify-cmd，顯示設計意圖是測試自己要吃這個參數；autopilot 的 `lib.sh` 不看 `$1`。**兩條可能修法**：(a) `lib.sh` 優先採用 `$1`／`AUTOPILOT_TEST_REPO_ROOT` 當 REPO_ROOT（消費端修，影響 158 個測試檔的共用底座）；(b) `verify-red-green.sh` 改成在 worktree 內解析同名相對路徑（工具端修，但會改變既有使用者語意）。**未修之前，本 repo 的紅綠驗證必須手動做**（建 detached worktree at base → 只 apply 測試檔 patch → `cd` 進去用相對路徑跑）。
-- **Effort**: S（任一修法）＋需回歸既有消費者
-- **Source**: v2.32.58 context-window gate 的紅綠驗收（`docs/projects/2026-07-25-context-budget-gate/README.md`）
-
-### Engine-transcript → scorecard importer（四家引擎真實遙測灌進決策層）
-- **Trigger**: 下次要調 `resolve-review-loop.sh` roster／`resolve-dispatch.sh`／DOA tier，而手上只有軼事沒有基率時；或 `engine-scorecard.js` 的 row 數再度落後真實派遣量一個數量級時。
-- **Context**: 2026-07-25 遙測盤點發現決策層與觀測層嚴重脫節——`engine-scorecard.jsonl` 138 rows、`engine-capability.jsonl` 141 rows、`calibration/samples.jsonl` **5 rows**，而本機磁碟上躺著 codex 1231 個 headless dispatch session（含完整 `event_msg.token_count`）、grok 369 個（`signals.json` 有 30+ 行為欄位含 `editAndRetryCount`／`agentLinesAdded`／`toolFailureCount`）、opencode 372 個（**唯一有真實金額** `cost` 欄位）從未被讀過。importer 應輸出去識別化聚合（絕不含 transcript 原文）：per-engine 的完成率／撞牆率／toolFailure 率／零產出率。**注意母體偏差**：opencode 那 372 個 99% 是 `swe-calibrate`，非日常派遣路徑，不可外推成本。
-- **Effort**: M（codex schema 已實測驗證；grok/agy/opencode 各自 parser）
-- **Source**: v2.32.58 context-window gate 的前置遙測調查（`docs/plans/2026-07-25-context-budget-gate.md` § Scope boundary）
 
 ### agy 遙測盲區 — transcript 無 token 欄位且 91% 被平台截斷
 - **Trigger**: 要把 agy 納入任何成本／容量決策之前；或 antigravity 上游補上 usage 欄位時。
@@ -206,12 +188,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
   **Boundaries**: 不做中途訊息注入（Stage 2：pi RPC / cc-shim stream-json 雙工）；不做自動砍除策略（本階段 report-only，policy 是 Stage 3）；artifact 驗證與 fail-closed verdict 軌一律不動；不得為了 telemetry 開任何 worker 自寫狀態檔的口子。
 - **Effort**: L
 - **Source**: 2026-07-11 Fable 5 session（Board 方向討論：hetero engine 失聯 → 監察/協調/溝通三機制分層；pi 定位為 Stage 2 雙工儀器）。
-
-### Orchestration-eval failure-triage rule — every FAIL must carry a classified cause before it may be scored
-- **Trigger**: next time touching `evals/orchestration/` (runner or score.js), OR the next campaign round.
-- **Context**: 2026-07-04 R2: a mid-campaign Claude Code re-login killed 15/40 runs (1-2s, "Not logged in") which were silently scored as oracle failures — publishing a wrong "60%/60% attention-slip" conclusion until a duration sanity sweep caught it (correction shipped same day). Board sharpened the principle (2026-07-04): duration floors / auth-signature scans are just heuristic INSTANCES — the real rule is **no unexplained failures in the data: a FAIL row is scoreable ONLY once triaged to `capability_fail` (model attempted, oracle rejects the work) vs `infra_fail` (auth/timeout/spawn/empty — excluded from stats, loudly counted)**. Implementation: runner emits a `failure_class` field derived from run.log evidence (auth signatures, timeout status, zero-output) + oracle outcome; `score.js` REFUSES rows with `oracle_pass:false` lacking a classification, and prints an infra-excluded tally in every report (silent-cap honesty rule applies). Mirrors quality-pipeline's PRE_EXISTING/INTRODUCED discipline and adjudicate-findings' "no unverified verdicts": the same fail-closed epistemics, applied to the eval's own data pipeline.
-- **Effort**: S
-- **Source**: 2026-07-04 campaign-r2 correction + Board directive "失敗都要先確認失敗原因".
 
 ### skills frontmatter `tier:` 欄位（B4 step 2 — 分層進 frontmatter）
 - **Trigger**: 先在 Claude Code ＋ codex 兩平台各做一次「帶未知 frontmatter 欄位」的 plugin load dry-run 且確認解析容忍（R1-F5：未驗不得宣稱無行為影響）；兩平台紀錄在手才動工。
@@ -705,19 +681,6 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 ### ✅ DONE (2026-07-08, develop `c35dc88`) — l6-resilience R0-R5 + fix pass merged
 - **Resolution**: fix pass 於 `fix/l6-fixpass` 完成後 merge develop。原 4 Critical/6 Major 全修；re-qc（gpt-5.5/gemini-flash/sonnet 跨家族 panel＋depth-0 親驗，涵蓋全 6 支含 R1）再揪出並修復：run-ledger 5 組重複函式定義（stale 早期版僅靠 bash 後定義蓋前碰巧未生效）、`command_init` 無鎖截斷、**M1 TOCTOU 實際未修**（原 harness 過關靠 generation fencing 巧合）、`stale_ignored` marker 世代污染（修＝generation-scoped 三步驟解析＋確定性重現 test；fix round 的鎖內 re-read 自身引入、engine verify 輪抓到）、stage-acquire 鎖外算 gen、engine fallback Map 無界、resilience test 空洞斷言、setsid 缺失 fallback、classify a/b 連續 strip 過剝、detach stderr sidecar、`PACKED_PROMPT_TEMP` detach 交棒、R4 doc 錯用無網路 `endpoints doctor`（改 `endpoints test`）、裝飾性 `risk_family_decorrelation_always_on` key（實際強制力在 engine `ensureDistinctReviewFamily`）。驗收＝depth-0 親跑 108/110（2 失敗與乾淨 develop baseline 一致）＋concurrency test 15 連跑綠。R1 detach 測試（真 kill -9＋heartbeat＋resume）被 panel 評為全 diff 驗證最扎實部分。
 
-### MiniMax-M3（anthropic-compatible）reviewer 校準：自信但錯誤的 central finding 比率過高
-- **Trigger**: 下次 resolve roster 把 MiniMax-M3 放 reviewer 席、或維護 engine scorecard 時。
-- **Context**: 2026-07-08 l6-resilience campaign 6 次 MiniMax review 有 5 次 central claim 查證不成立（U2 implementationRound「未 thread」／U3 prefix-strip 誤解／FR-2 不對稱指控／FR-3「HAVE_SETSID 未初始化」（reviewer 只看 diff、看不到未變動 context 行）／FR-4「只改鏡像」），僅 1 次屬實且有價值（FR-1 repair 漏 nonce 比對）。每次誤判都需 depth-0/foreman 對原始碼親自查證，是 campaign 最大時間稅。深因之一＝diff-only 餵入的 context 盲點。
-- **Options**: (a) scorecard 對 MiniMax reviewer 降 confidence／註記 diff-context 盲點；(b) dispatch-review 對此 runner 附 touched-file 全文（trusted baseline 通道）；(c) SOP 明文「MiniMax findings 必二次查證後才採信」。
-- **Effort**: S-M。
-- **Source**: l6-resilience fix-pass campaign，2026-07-08。
-
-### classify-diff-risk.sh：binary diff 無 ---/+++ 行 → 路徑不進風險規則
-- **Trigger**: 下次碰 classify-diff-risk.sh，或 risk 規則需涵蓋 protected-path 的 binary 變更時。
-- **Context**: binary 變更（無 --text）只有 `diff --git a/x b/x`＋`Binary files ... differ` 行；`collect_touched_paths` 只解析 ---/+++/rename 行 → protected path 的 binary 變更逃逸 risk 規則。re-qc panel（gemini）發現、depth-0 親驗確認。修法＝fallback 解析 `diff --git` 行（注意含空白檔名的引號規則）。
-- **Effort**: S。
-- **Source**: l6-resilience re-qc panel，2026-07-08。
-
 ### M3-band fixtures（t15-t17）若供對抗性 implementer 情境重用，需 process-isolation 邊界
 - **Trigger**: 下次把 `evals/orchestration/tasks/t15-cache-invalidation`、`t16-findings-triage`、`t17-purity-invariant` 用於對抗性 implementer 情境（`/l5`、`/l6` hetero 派遣、或任何候選碼不可信的場合）。
 - **Context**: 這三個 oracle 的判分 python 與候選碼在**同一個 process** 內執行，候選模組 import 時可用 `sys._getframe()` 走訪呼叫端 frame 的 globals/locals，撈出判分器從未匯出的密鑰。opus 2026-07-09 對抗性重攻實測兩條可靠（5/5 PASS）exploit：N2（t15）——撈出真 `NONCE` 偽造 token 且從不呼叫注入的 `compute_fn`，fidelity 與 cache 軸皆假過；N2'（t17）——重同步 purity 檢查區塊的 `snapshot` 局部變數，一邊 mutate 一邊讓 `snapshot == recs` 恆真。R2 硬化（4 條 planted-file/env/stdout 攻擊）已修好且仍成立，但這條 in-process introspection 類別是**架構性**盲點，不是 R2 修復範圍。真正封死需要候選函式呼叫跑在與判分器分離的 subprocess/interpreter（process isolation），對映 `check-test-integrity.sh` L1 block-mode 在 CLAUDE.md 已記錄的同一結論（no local-only same-process mechanism 對抗同帳號候選碼是防偽的）。
@@ -766,13 +729,6 @@ Shipped items are tracked in [`CHANGELOG.md`](../CHANGELOG.md) (source of truth)
 - **Context**: 2026-07-13 /tmp usrquota 撐爆事故（cookys 名下 ~21.3 GiB → EDQUOT → 整台機器 Claude Code Bash 假死；`df -h` 全域量誤導，probe 法=直接寫檔看 "disk quota exceeded"）。四個修法中 (a) 各 dispatch 腳本啟動 prune 自家過期 log/scratch（`scripts/lib/prune-tmp-residue.sh`）、(b) manifest reaper（`dispatch-status.js --reap`）、(c) hooks/tests 全域 TMPDIR 重導＋trap 鏈修復 —— **均已於 v2.32.22 出貨**。剩 (d)：`swe-calibrate-*`（44 個 ×~110M）這類大型校準 clone 仍寫 `${TMPDIR}`，單體大、非逐日累積，mtime prune 不合適；候選 = 改預設寫 `~/.autopilot/scratch/`（非配額路徑）+ 完跑即清。附帶教訓（已入 memory）：清理腳本的排除清單必須套用到**所有** phase——dirty-skip 的 worktree 曾被後續 glob 撈走刪掉。
 - **Effort**: S。
 - **Source**: 2026-07-13 session 實地診斷＋v2.32.22 fix/tmp-residue-retention。
-
-### commit-secret-scan hook 掃 deletion 行造成 false positive 死路
-- **Context**: 2026-07-15 TWGameProject 落地時，staged diff 的 `-` 行含 HEAD 既有、`.gitleaks.toml` 已 allowlist 的 AWS 文件範例金鑰（AKIA…EXAMPLE），hook 掃 `git diff --cached` 全文（含 deletion 行）→ 任何修改/移除該行的 commit 都被硬擋；照此邏輯「從 repo 移除真洩漏密鑰」的 commit 也會被擋。當次以 hook 自身的 `--amend --no-edit` 豁免分兩步落地。
-- **Fix 方向**: `hooks/commit-secret-scan.js` 只掃新增行（`^+` 且非 `+++`），並考慮讀取 repo `.gitleaks.toml` allowlist。
-- **Trigger**: 下次碰 hooks/_shared/secret-patterns.js 或有人再撞此 FP。
-- **Effort**: S。
-- **Source**: 2026-07-15 TWGameProject commit-secret-scan false-positive incident。
 
 ## dispatch worker git-identity containment（2026-07-16, Test Bot 事故）— ✅ SHIPPED v2.32.51
 

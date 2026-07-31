@@ -15,12 +15,12 @@ No failed orchestration-eval row enters a score without an evidence-backed cause
 
 ## Tasks
 
-- [ ] Plant unclassified, auth, timeout/empty, and real oracle-reject fixtures.
-- [ ] Prove the existing scorer accepts the planted unclassified failure before the repair.
-- [ ] Emit the class from the real runner result path.
-- [ ] Enforce the class in `score.js`.
-- [ ] Add the explicit infra-excluded report row/footer.
-- [ ] Run the full orchestration-eval hermetic suite.
+- [x] Plant unclassified, auth, timeout/empty, and real oracle-reject fixtures.
+- [x] Prove the existing scorer accepts the planted unclassified failure before the repair.
+- [x] Emit the class from the real runner result path.
+- [x] Enforce the class in `score.js`.
+- [x] Add the explicit infra-excluded report row/footer.
+- [x] Run the full orchestration-eval hermetic suite.
 
 ## Verification
 

@@ -13,11 +13,11 @@ Prevent the recorded MiniMax-M3 diff-only limitation from being invisible at ros
 
 ## Tasks
 
-- [ ] Encode or project the limitation through the existing scorecard/config/resolver surface.
-- [ ] Add a roster test that asserts the warning/limitation or safe demotion.
-- [ ] Perturb/remove the guard and prove the test fails.
-- [ ] Re-run provisional/empty-ladder authority invariants.
-- [ ] Document the evidence date and scope without copying review transcripts.
+- [x] Encode or project the limitation through the existing scorecard/config/resolver surface.
+- [x] Add a roster test that asserts the warning/limitation or safe demotion.
+- [x] Perturb/remove the guard and prove the test fails.
+- [x] Re-run provisional/empty-ladder authority invariants.
+- [x] Document the evidence date and scope without copying review transcripts.
 
 ## Verification
 

@@ -4,13 +4,20 @@
 
 Binary-only diff paths reach the existing risk-domain and checklist rules.
 
+## Design
+
+- Parse quoted `diff --git` paths with Git escape decoding and carry the two paths through a
+  NUL-delimited boundary so spaces and control characters survive.
+- For unquoted headers, select the sole matching `a/<path> b/<path>` pair instead of splitting
+  at the first literal ` b/`; this preserves a genuine top-level `b/` component in the filename.
+
 ## Tasks
 
-- [ ] Add an unquoted protected binary-path fixture.
-- [ ] Add quoted/space-containing binary-path fixtures.
-- [ ] Prove current path collection misses the protected binary change.
-- [ ] Parse `diff --git` headers as a fallback without regressing `---/+++` or rename handling.
-- [ ] Preserve a genuine top-level `b/` path.
+- [x] Add an unquoted protected binary-path fixture.
+- [x] Add quoted/space-containing binary-path fixtures.
+- [x] Prove current path collection misses the protected binary change.
+- [x] Parse `diff --git` headers as a fallback without regressing `---/+++` or rename handling.
+- [x] Preserve a genuine top-level `b/` path.
 
 ## Verification
 

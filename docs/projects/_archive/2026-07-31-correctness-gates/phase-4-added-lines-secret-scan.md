@@ -6,11 +6,11 @@ Commit-time secret scanning blocks introduction, not removal, of matching conten
 
 ## Tasks
 
-- [ ] Plant an existing committed secret-like fixture and stage only its deletion.
-- [ ] Prove the current hook blocks that deletion.
-- [ ] Restrict scanning to added hunk content, excluding `+++`.
-- [ ] Prove adding the same secret remains blocked and redacted.
-- [ ] Preserve clean commit and unexpected-infrastructure fail-open behavior.
+- [x] Plant an existing committed secret-like fixture and stage only its deletion.
+- [x] Prove the current hook blocks that deletion.
+- [x] Restrict scanning to added hunk content, excluding `+++`.
+- [x] Prove adding the same secret remains blocked and redacted.
+- [x] Preserve clean commit and unexpected-infrastructure fail-open behavior.
 
 ## Verification
 

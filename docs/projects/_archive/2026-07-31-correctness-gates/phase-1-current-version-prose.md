@@ -6,11 +6,11 @@ Historical CHANGELOG justifications cannot permanently bypass the north-star gro
 
 ## Tasks
 
-- [ ] Add a fixture with an old justification and none in the current section.
-- [ ] Prove the planted case false-greens before the repair.
-- [ ] Scope the search from `## v<current>` to the next `## v`.
-- [ ] Prove a current-section justification still passes.
-- [ ] Prove under-threshold behavior is unchanged.
+- [x] Add a fixture with an old justification and none in the current section.
+- [x] Prove the planted case false-greens before the repair.
+- [x] Scope the search from `## v<current>` to the next `## v`.
+- [x] Prove a current-section justification still passes.
+- [x] Prove under-threshold behavior is unchanged.
 
 ## Verification
 

@@ -30,6 +30,14 @@ Skill body is in `skills/<name>/SKILL.md`. Methodology agent prompt body is in `
 - **No hardcoded dispatch metadata** in skill files. Use `scripts/resolve-dispatch.sh` to map role → `{model, mode, agent}` JSON.
 - **Prefer scripts over LLM judgment** for mechanical work (regex scans, JSON parsing, diff filtering). When you write a new script, wire it into both `CLAUDE.md` scripts inventory and the relevant skill's "Available Scripts" table.
 
+## Change Policy (autopilot-added)
+
+- **Compatibility**: preserve published and user-facing contracts by default. Remove internal compatibility shims after every in-repository consumer is migrated; do not retain them speculatively.
+- **Authorized breaking changes**: a deliberate public break requires explicit authorization, a versioning decision, migration notes, CHANGELOG coverage, rollback guidance, and contract validation.
+- **Simplicity**: choose the least lifecycle-complex implementation that fully satisfies the current requirements; do not optimize only for line count or initial implementation speed.
+- **Reuse order**: prefer, in order, the platform or standard library, an existing dependency, an established well-maintained library, then a custom implementation.
+- **New dependency bar**: justify maintenance health, license compatibility, transitive footprint, and supported-platform fit before adding a dependency.
+
 ## Testing (spec)
 
 - **Skill structure**: `scripts/validate.sh` validates every `SKILL.md` has the required YAML frontmatter (`name`, `description`) and structure.

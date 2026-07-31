@@ -43,6 +43,10 @@ review findings into new phases.
 ### Changed
 - Live capability observations use the exact runner/model/effort/endpoint identity required by
   strict dispatch admission instead of allowing a legacy coarse partition to imply readiness.
+- Plan authoring and review now record explicit compatibility-impact and dependency decisions:
+  published contracts remain compatible unless a break is authorized with migration/rollback
+  evidence, while implementation choices follow platform/stdlib → existing dependency →
+  established library → custom code.
 - Mission admission separates allowed outputs from required changed paths, validates allowed
   creates and version-mirror closure, adopts receipt-proven no-op nodes without cosmetic writes,
   and does not charge zero-dispatch precondition failures as effectful gate spend.

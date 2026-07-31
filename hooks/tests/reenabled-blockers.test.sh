@@ -58,11 +58,22 @@ run_hook "branch-protection.js" '{"tool_input":{"command":"ls -la"}}'
 assert_exit_code "$__RUN_EXIT" "0" "branch-protection ignores non-git commands"
 
 # ---- commit-secret-scan: PreToolUse/Bash (scans staged diff) ----
+AWS_TEST_KEY='AKIA''IOSFODNN7EXAMPLE'
 mkgit "$TEST_TMP/repo-secret" feature
-printf 'key = "AKIAIOSFODNN7EXAMPLE"\n' > creds.txt; git add creds.txt
+printf 'key = "%s"\n' "$AWS_TEST_KEY" > creds.txt; git add creds.txt
 run_hook "commit-secret-scan.js" '{"tool_input":{"command":"git commit -m x"}}'
 assert_exit_code "$__RUN_EXIT" "2" "commit-secret-scan blocks commit with a staged AWS key"
 assert_contains "$__RUN_STDERR" "secrets" "commit-secret-scan reports the secret"
+assert_not_contains "$__RUN_STDERR" "$AWS_TEST_KEY" "commit-secret-scan redacts the full added secret"
+
+mkgit "$TEST_TMP/repo-secret-removal" feature
+printf 'key = "%s"\n' "$AWS_TEST_KEY" > creds.txt
+git add creds.txt
+git commit -qm initial
+printf 'key removed\n' > creds.txt
+git add creds.txt
+run_hook "commit-secret-scan.js" '{"tool_input":{"command":"git commit -m remove-secret"}}'
+assert_exit_code "$__RUN_EXIT" "0" "commit-secret-scan allows deletion-only removal of a secret"
 
 mkgit "$TEST_TMP/repo-clean" feature
 echo "clean code" > app.js; git add app.js

@@ -9,9 +9,9 @@
 #   scripts/verify-red-green.sh --base <ref> --head <ref> --verify-cmd <script-path> \
 #       [--test-glob <glob>]... [--repo <dir>]
 #
-#   --verify-cmd may be a relative path; it is canonicalized to an absolute path
-#   against the CALLER's cwd at startup, because execution happens inside
-#   detached worktrees (a caller-relative path would not resolve after the cd).
+#   --verify-cmd may be a relative path; it is validated against the CALLER's
+#   cwd at startup. A repo-owned executable is then resolved to the same relative
+#   path in each detached worktree; an external absolute executable is unchanged.
 #
 # Output: JSON on stdout:
 #   { verdict, red_green_validated, base_sha, head_sha, head_result, base_result,
@@ -149,6 +149,8 @@ fi
 if ! git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
   err_usage "not a git repository: $REPO"
 fi
+REPO="$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" || err_usage "not a git repository: $REPO"
+REPO="$(cd "$REPO" && pwd -P)" || err_usage "repository path unresolvable: $REPO"
 
 if [[ -n "$RANGE" ]]; then
   if [[ "$RANGE" != *".."* ]]; then
@@ -179,6 +181,20 @@ fi
 if [[ ! -x "$VERIFY_CMD" ]]; then
   err_usage "verify-cmd not found or not executable: $VERIFY_CMD"
 fi
+
+# A tracked verify executable belongs to the repository rather than the caller
+# checkout. Keep its relative identity and resolve it under each worktree at run
+# time. Truly external absolute commands continue to execute at their original
+# path with the worktree passed as argv[1].
+VERIFY_CMD_REPO_REL=""
+case "$VERIFY_CMD" in
+  "$REPO"/*)
+    VERIFY_CMD_CANDIDATE="${VERIFY_CMD#"$REPO"/}"
+    if git -C "$REPO" ls-files --error-unmatch -- "$VERIFY_CMD_CANDIDATE" >/dev/null 2>&1; then
+      VERIFY_CMD_REPO_REL="$VERIFY_CMD_CANDIDATE"
+    fi
+    ;;
+esac
 
 if [[ ${#TEST_GLOBS[@]} -eq 0 ]]; then
   TEST_GLOBS=("${DEFAULT_TEST_GLOBS[@]}")
@@ -223,11 +239,15 @@ trap cleanup EXIT
 
 run_verify_cmd() {
   local wt="$1"
+  local verify_cmd="$VERIFY_CMD"
   local ec=0
+  if [[ -n "$VERIFY_CMD_REPO_REL" ]]; then
+    verify_cmd="$wt/$VERIFY_CMD_REPO_REL"
+  fi
   set +e
   (
     cd "$wt" || exit 1
-    "$VERIFY_CMD" "$wt"
+    "$verify_cmd" "$wt"
   )
   ec=$?
   set -e

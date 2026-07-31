@@ -89,6 +89,44 @@ VC_EOF
     assert_eq "$(json_field "$out" verdict)" "VALIDATED" "nested-path VALIDATED verdict"
 }
 
+# 1c. A repo-owned verify script must execute from the matching detached
+#     worktree. Reusing the caller checkout's HEAD script makes the base run
+#     inspect HEAD production code and falsely report NOT_RED_ON_BASE.
+test_repo_owned_verify_cmd_uses_worktree_copy() {
+    local repo="$TEST_TMP/repo_owned_verify"
+    $GIT init "$repo" >/dev/null 2>&1
+    mkdir -p "$repo/tests"
+    printf 'echo 3\n' > "$repo/calc.sh"
+    cat > "$repo/tests/repo-owned.test.sh" <<'TEST_EOF'
+#!/usr/bin/env bash
+repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
+[ "$(bash "$repo_dir/calc.sh")" = "3" ]
+TEST_EOF
+    chmod +x "$repo/tests/repo-owned.test.sh"
+    $GIT -C "$repo" add -A >/dev/null 2>&1
+    $GIT -C "$repo" commit -m base >/dev/null 2>&1
+    local base; base=$($GIT -C "$repo" rev-parse HEAD)
+
+    printf 'echo 5\n' > "$repo/calc.sh"
+    cat > "$repo/tests/repo-owned.test.sh" <<'TEST_EOF'
+#!/usr/bin/env bash
+repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
+[ "$(bash "$repo_dir/calc.sh")" = "5" ]
+TEST_EOF
+    chmod +x "$repo/tests/repo-owned.test.sh"
+    $GIT -C "$repo" add -A >/dev/null 2>&1
+    $GIT -C "$repo" commit -m head >/dev/null 2>&1
+    local head; head=$($GIT -C "$repo" rev-parse HEAD)
+
+    local out
+    out=$("$SCRIPT" --range "$base..$head" \
+        --verify-cmd "$repo/tests/repo-owned.test.sh" --repo "$repo" 2>&1)
+    local ec=$?
+    assert_eq "$ec" "0" "repo-owned verify-cmd VALIDATED exits 0"
+    assert_eq "$(json_field "$out" verdict)" "VALIDATED" "repo-owned verify-cmd runs from each worktree"
+    assert_contains "$out" '"tests/repo-owned.test.sh"' "repo-owned negative control is applied to base"
+}
+
 # 2. NOT_RED_ON_BASE: test only checks file existence (true at base too) => base GREEN.
 test_not_red_on_base() {
     local repo="$TEST_TMP/repo_not_red" vc="$TEST_TMP/verify_not_red.sh"
@@ -193,6 +231,7 @@ test_verify_cmd_dirname_plain_file() {
 
 test_validated
 test_validated_nested
+test_repo_owned_verify_cmd_uses_worktree_copy
 test_not_red_on_base
 test_not_green_on_head
 test_inconclusive_no_test_files

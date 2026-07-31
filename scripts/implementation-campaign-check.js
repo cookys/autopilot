@@ -7,6 +7,8 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { resolveMissionPolicy } = require('../src/engine/mission-policy');
 const { resolveGovernancePolicy } = require('../src/engine/owner-kernel/policy');
+const { campaignIdFor } = require('../src/engine/implementation-campaign');
+const { hasCampaignDispatchAuthority } = require('../src/engine/campaign-dispatch-projection');
 
 const MAX_CONTRACT_BYTES = 1024 * 1024;
 const SCHEMA_PATH = path.resolve(
@@ -1250,7 +1252,21 @@ function inspectSealedCampaignContract({
     contract: contractFile.value,
     identity_scheme: seal.identity_scheme || null,
     mission_subject_digest: seal.mission_subject_digest || recomputedSubject || null,
+    // NOTE: this field carries the Mission-v2 SUBJECT identity (campaign-v2-…),
+    // not the ICC v1 lifecycle identity. `campaign-intake.js` compares it against
+    // a recomputed v2 id, so the name is load-bearing here and must not change.
+    // Everywhere else in the system (engine `deriveCampaignLifecycleRoot`,
+    // `campaign_projection.campaign_id`, `dispatch-hetero.sh`) a bare
+    // `campaign_id` means ICC v1 — which is why the CLI projection below emits
+    // `icc_campaign_id` under that name. Seam oracle:
+    // hooks/tests/implementation-campaign-cli-seam.test.sh
     campaign_id: seal.campaign_id || recomputedCampaignId || null,
+    mission_campaign_id: seal.campaign_id || recomputedCampaignId || null,
+    // ICC v1 lifecycle identity, derived from raw contract bytes exactly as
+    // `deriveCampaignLifecycleRoot` does, so a dispatcher can bind the leaf
+    // identity without re-reading and re-hashing the contract itself.
+    icc_campaign_id: campaignIdFor(repoIdentity, contractFile.value.ticket, contractFile.digest),
+    strict_authority: hasCampaignDispatchAuthority(contractFile.value),
     claim_id: seal.claim_id || null,
     mission_grant_ref: seal.mission_grant_ref || null,
   };
@@ -1364,11 +1380,26 @@ function main() {
       missionModeAssertion: options.missionMode,
     });
     if (!inspection.ok) emit(inspection, 3);
+    // This projection is the ONLY thing a shell dispatcher can see: fields kept
+    // in `inspection` but dropped here are invisible to every caller. Omitting
+    // the identity/mode/authority quartet is what made the sealed-campaign rail
+    // in dispatch-hetero.sh structurally unreachable while the suite stayed
+    // green — the projection helper's own tests derive the identity inside the
+    // fixture and never cross this boundary. Keep this set in sync with the
+    // caller's success-path reads; the seam is pinned (and the field list
+    // enumerated FROM dispatch-hetero.sh) by
+    // hooks/tests/implementation-campaign-cli-seam.test.sh.
     emit({
       verdict: inspection.verdict,
       contract_sha256: inspection.contract_sha256,
       sealed_sha256: inspection.sealed_sha256,
       repo_identity: inspection.repo_identity,
+      // Bare `campaign_id` is ICC v1 here, matching the engine and the caller's
+      // ^campaign-v1- guard. The Mission-v2 subject id stays separate.
+      campaign_id: inspection.icc_campaign_id,
+      mission_campaign_id: inspection.mission_campaign_id,
+      mission_mode: inspection.mission_mode,
+      strict_authority: inspection.strict_authority,
     }, 0);
   } catch (error) {
     const code = error instanceof CliError ? error.exitCode : 2;

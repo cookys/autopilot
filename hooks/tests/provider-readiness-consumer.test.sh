@@ -6,6 +6,7 @@ cat > "$TEST_TMP/review-loop-config.md" <<'CFG'
 - reviewer_effort: high
 - reviewer_runner: cc-shim
 - reviewer_endpoint: minimax
+- reviewer_limitation: minimax-false-central-claim-5-of-6
 - implementer_engine: grok-4.5
 - implementer_effort: high
 - implementer_runner: grok

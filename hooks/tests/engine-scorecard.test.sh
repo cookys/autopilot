@@ -306,6 +306,54 @@ alias_existing_after="$(cat "$ALIAS_OUTPUT")"
   && ok "18: realpath containment rejects ancestor-alias output deterministically" \
   || bad "18: missing=$alias_missing_ec/$alias_missing_created existing=$alias_existing_ec preserved=$([ "$alias_existing_after" = "$alias_existing_before" ] && echo true || echo false) err-stable=$([ "$alias_missing_err" = "$alias_existing_err" ] && echo true || echo false)"
 
+# 19: transcript model fields are untrusted output. Known credential/token shapes
+# must collapse to "unknown", while ordinary model identifiers retain exact spelling.
+# Construct planted controls in pieces so repository secret scanners do not mistake
+# these inert test values for live credentials.
+SECRET_MODEL_ROOT="$TESTDIR/secret-model-transcripts"
+mkdir -p "$SECRET_MODEL_ROOT"
+node - "$SECRET_MODEL_ROOT" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const models = {
+  aws: ['AKIA', 'IOSFODNN7EXAMPLE'].join(''),
+  openai: ['sk-', 'abcdefghijklmnopqrstuvwxyz123456'].join(''),
+  github: ['ghp_', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJ'].join(''),
+  minimax: 'MiniMax-M3',
+  gemini: 'Gemini 3.6 Flash (High)',
+};
+for (const [name, model] of Object.entries(models)) {
+  fs.writeFileSync(path.join(root, `${name}.json`), JSON.stringify({
+    model,
+    status: 'completed',
+    response_text: 'ok',
+  }));
+}
+NODE
+node "$CLI" import-transcripts --root "grok=$SECRET_MODEL_ROOT" \
+  > "$TESTDIR/secret-model-import.json"
+secret_model_check="$(node - "$TESTDIR/secret-model-import.json" <<'NODE'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[2], 'utf8');
+const report = JSON.parse(raw);
+const groups = new Map(report.aggregates.map((row) => [row.engine, row.sample_size]));
+const planted = [
+  ['AKIA', 'IOSFODNN7EXAMPLE'].join(''),
+  ['sk-', 'abcdefghijklmnopqrstuvwxyz123456'].join(''),
+  ['ghp_', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJ'].join(''),
+];
+const secretsAbsent = planted.every((secret) => !raw.includes(secret));
+const rejected = groups.get('unknown') === planted.length;
+const ordinaryPreserved = groups.get('MiniMax-M3') === 1
+  && groups.get('Gemini 3.6 Flash (High)') === 1;
+process.stdout.write([secretsAbsent, rejected, ordinaryPreserved].join(':'));
+NODE
+)"
+[ "$secret_model_check" = "true:true:true" ] \
+  && ok "19: transcript engine names reject credential shapes without altering legitimate models" \
+  || bad "19: secret model sanitization check=$secret_model_check"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const process = require('process');
+const transcriptSecrets = require('../hooks/_shared/secret-patterns');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 const {
   buildCapabilityEvidenceReceipt,
@@ -711,6 +712,7 @@ function safeEngineName(value) {
   const normalized = value.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._:+()/ -]{0,119}$/.test(normalized)
       || /(?:secret|token|password|bearer|api[_ -]?key|credential)/i.test(normalized)
+      || transcriptSecrets.scan(normalized).length > 0
       || normalized.includes('/') || normalized.includes('\\')) return null;
   return normalized;
 }

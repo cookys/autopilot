@@ -90,6 +90,26 @@ NO_CAVEAT_EXIT=$?
 assert_eq "3" "$NO_CAVEAT_EXIT" "MiniMax exact seat is rejected when its limitation tag is removed"
 assert_contains "$NO_CAVEAT_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "removed MiniMax caveat is diagnosed"
 
+# Removing or falsifying the legacy required flag must not weaken the exact-seat
+# guard. The tuple itself is the authority boundary.
+NO_MINIMAX_GUARD_FIELDS_CFG="$TEST_TMP/no-minimax-guard-fields.md"
+sed -e '/^[[:space:]]*- reviewer_limitation:/d' \
+  -e '/^[[:space:]]*- reviewer_limitation_required:/d' \
+  "$REPO_ROOT/.claude/review-loop-config.md" > "$NO_MINIMAX_GUARD_FIELDS_CFG"
+NO_GUARD_FIELDS_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$NO_MINIMAX_GUARD_FIELDS_CFG" bash "$SCRIPT" 2>&1)"
+NO_GUARD_FIELDS_EXIT=$?
+assert_eq "3" "$NO_GUARD_FIELDS_EXIT" "MiniMax exact seat rejects caveat removal even when required flag is deleted"
+assert_contains "$NO_GUARD_FIELDS_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "deleted MiniMax guard fields are diagnosed"
+
+MINIMAX_FALSE_REQUIRED_CFG="$TEST_TMP/minimax-false-required.md"
+sed -e '/^[[:space:]]*- reviewer_limitation:/d' \
+  -e 's/^[[:space:]]*- reviewer_limitation_required:.*/- reviewer_limitation_required: false/' \
+  "$REPO_ROOT/.claude/review-loop-config.md" > "$MINIMAX_FALSE_REQUIRED_CFG"
+FALSE_REQUIRED_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$MINIMAX_FALSE_REQUIRED_CFG" bash "$SCRIPT" 2>&1)"
+FALSE_REQUIRED_EXIT=$?
+assert_eq "3" "$FALSE_REQUIRED_EXIT" "MiniMax exact seat rejects caveat removal when required flag is false"
+assert_contains "$FALSE_REQUIRED_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "false MiniMax required flag cannot silence diagnosis"
+
 # 4. --field accessors
 # DOGFOOD PIN (Board decision A roster — see §3 rationale).
 assert_eq "MiniMax-M3" "$(bash "$SCRIPT" --field reviewer_engine)" "--field reviewer_engine"

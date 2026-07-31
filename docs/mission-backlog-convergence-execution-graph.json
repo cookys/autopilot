@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "backlog-convergence",
+      "source_plan_ids": [
+        "plan-003712f29cc7b4bb625f0ece00b535f1ae1edfb562a3e74d4b2cd7b7ee47f77c"
+      ],
+      "source_rubric_ids": [
+        "R526071154685956512202387396811330283337723332974507148097297686086907677086",
+        "R11684750516419018263989367563022451061378493331216433983140089611796739624780",
+        "R16582834188548926990150867876377342278267500226673163325581125089723440907351",
+        "R38957197531816319914777169034754675823923495978957868018715179448065703788680",
+        "R18549476524722955459140706203231012318202734738754909237312949727977611918482",
+        "R50699207224198345817713554374639712571582735075381002659824426741075501443125",
+        "R55776409061404353417038304337650524803362134509166416797182023098123505830769",
+        "R49141224359208947996976429373518594587191423305411484580528478417133574799683",
+        "R89130518984892573959766347003843168974354209570536175829350573951398130294923",
+        "R1548196143067165597292836910371868839666927009335345269061500891471692289989",
+        "R18483443980781044800696735954120032707566673369825060771453002755935478701542",
+        "R66678740113855845218688211973512827623365795470165281031404661982193606588478"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "inventory-bounded",
+        "authority-reconciled",
+        "admission-deterministic",
+        "tests-isolated",
+        "manifest-provenance",
+        "codex-lifecycle-current",
+        "portability-rerunnable",
+        "agy-isolated",
+        "identity-contained",
+        "qualification-bound",
+        "deferred-tracks-held",
+        "combined-final-evidence"
+      ],
+      "verification_commands": [
+        "node scripts/mission-routing-admission.js --repo-root . --level l3",
+        "bash hooks/tests/mission-routing-admission.test.sh",
+        "bash hooks/tests/mission-authority-ownership.test.sh",
+        "bash hooks/tests/session-mode.test.sh",
+        "bash hooks/tests/dispatch-author-claude-native.test.sh",
+        "bash hooks/tests/dispatch-author-session-mode.test.sh",
+        "bash hooks/tests/status-finish-followup.test.sh",
+        "bash hooks/tests/codex-enforcement-probe.test.sh",
+        "bash hooks/tests/codex-hook-probe-package.test.sh",
+        "bash hooks/tests/preflight-meta-smoke.test.sh",
+        "bash hooks/tests/dispatch-identity-containment.test.sh",
+        "bash hooks/tests/provider-readiness.test.sh",
+        "bash hooks/tests/provider-readiness-consumer.test.sh",
+        "bash hooks/tests/engine-scorecard.test.sh",
+        "bash hooks/tests/resolve-review-loop.test.sh",
+        "bash scripts/sync-all.sh --check"
+      ],
+      "gate_attempt_budget": 8,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 14400,
+        "tool_calls": 1200,
+        "engine_attempts": 3,
+        "external_wait_seconds": 7200,
+        "canonical_changed_files": 60,
+        "output_bytes": 15000000
+      },
+      "campaign": {
+        "profile": "high",
+        "allowed_path_prefixes": [
+          "docs",
+          "docs/plans",
+          "docs/projects/2026-07-20-owner-kernel-governance",
+          "hooks/tests",
+          "platforms/codex/plugin/references",
+          "platforms/codex/plugin/scripts",
+          "references",
+          "scripts",
+          "scripts/lib",
+          "src/engine",
+          "src/readiness"
+        ],
+        "max_changed_files": 60,
+        "baseline_churn": 5000,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 2500,
+        "max_repair_generations": 3,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-08-01-backlog-convergence-plan-set.md",
+          "section": "Track 1 — Mission admission and authority hygiene"
+        },
+        "required_paths": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-01-backlog-convergence-plan-set.md",
+          "docs/plans/2026-08-01-backlog-convergence-plan-set.rubric.md",
+          "docs/projects/2026-07-20-owner-kernel-governance/README.md",
+          "hooks/tests/mission-routing-admission.test.sh",
+          "hooks/tests/mission-authority-ownership.test.sh",
+          "hooks/tests/preflight-meta-smoke.test.sh",
+          "scripts/mission-routing-admission.js",
+          "src/engine/controller-execution.js",
+          "src/engine/work-order.js"
+        ],
+        "output_paths": [
+          "docs/BACKLOG.md",
+          "docs/projects/2026-07-20-owner-kernel-governance/README.md",
+          "hooks/tests/codex-enforcement-probe.test.sh",
+          "hooks/tests/codex-hook-probe-package.test.sh",
+          "hooks/tests/dispatch-author-claude-native.test.sh",
+          "hooks/tests/dispatch-author-session-mode.test.sh",
+          "hooks/tests/dispatch-identity-containment.test.sh",
+          "hooks/tests/engine-scorecard.test.sh",
+          "hooks/tests/mission-authority-ownership.test.sh",
+          "hooks/tests/mission-backlog-convergence.test.sh",
+          "hooks/tests/mission-routing-admission.test.sh",
+          "hooks/tests/preflight-meta-smoke.test.sh",
+          "hooks/tests/provider-readiness-consumer.test.sh",
+          "hooks/tests/provider-readiness.test.sh",
+          "hooks/tests/resolve-review-loop.test.sh",
+          "hooks/tests/session-mode.test.sh",
+          "hooks/tests/status-finish-followup.test.sh",
+          "platforms/codex/plugin/references/multi-agent-portability.md",
+          "platforms/codex/plugin/scripts/dispatch-author.sh",
+          "platforms/codex/plugin/scripts/dispatch-hetero.sh",
+          "platforms/codex/plugin/scripts/engine-scorecard.js",
+          "platforms/codex/plugin/scripts/mission-routing-admission.js",
+          "platforms/codex/plugin/scripts/preflight-portability.sh",
+          "platforms/codex/plugin/scripts/resolve-review-loop.sh",
+          "references/multi-agent-portability.md",
+          "scripts/dispatch-author.sh",
+          "scripts/dispatch-hetero.sh",
+          "scripts/engine-capability-state.js",
+          "scripts/engine-scorecard.js",
+          "scripts/mission-routing-admission.js",
+          "scripts/mission-terminal-reconcile.js",
+          "scripts/preflight-portability.sh",
+          "scripts/resolve-review-loop.sh",
+          "src/engine/controller-execution.js",
+          "src/engine/work-order.js",
+          "src/readiness/provider-readiness.js",
+          "src/readiness/qualification-provider.js",
+          "src/readiness/receipt.js",
+          "src/readiness/status.js"
+        ],
+        "authorized_creates": [
+          "hooks/tests/mission-backlog-convergence.test.sh",
+          "scripts/mission-terminal-reconcile.js",
+          "src/readiness/qualification-provider.js"
+        ]
+      }
+    }
+  ]
+}

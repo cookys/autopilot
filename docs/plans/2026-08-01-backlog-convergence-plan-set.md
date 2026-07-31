@@ -1,5 +1,5 @@
 ---
-status: draft
+status: approved
 date: 2026-08-01
 size: L
 entry_level: l6
@@ -15,9 +15,9 @@ repair generation, and a documentation sync are coverage or gates inside one del
 becomes a new Mission node. This plan therefore groups the inventory into five bounded tracks and
 leaves trigger-gated work in the backlog until its stated trigger is observed.
 
-No code, version, release, branch, or project bootstrap is authorized by this draft. Existing
-plans and the active Owner Kernel project remain the owners of their work; this document is the
-portfolio map and overlap guard.
+No version, release, or external publish is authorized by this plan. The three executable tracks
+below are now admitted as one bounded Mission graph; existing plans and the active Owner Kernel
+project remain the owners of their work. Track 4 and Track 5 stay design/Board-only.
 
 ## Inventory result
 

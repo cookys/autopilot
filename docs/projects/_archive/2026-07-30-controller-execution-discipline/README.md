@@ -1,6 +1,6 @@
 # Controller Execution Discipline
 
-Status: completed — locally merged and archived
+Status: completed — final qualification repair merged to `develop` and archived
 
 Plan: `docs/plans/2026-07-30-controller-execution-discipline.md`
 
@@ -28,6 +28,8 @@ candidate and one final full-diff review instead of per-finding phases or repeat
 - [x] Author and pass an independent cross-component execution oracle
 - [x] Run the full suite and one blind whole-diff joint review
 - [x] Merge locally, confirm payload parity, and archive the completed project
+- [x] Apply the consolidated post-review authority repair and independently requalify its complete
+  13-file diff
 
 ## Qualification result
 
@@ -44,6 +46,21 @@ candidate and one final full-diff review instead of per-finding phases or repeat
   adjudicated into nine non-blocking backlog entries; none reopened this ticket.
 - Local merge: `d25c74257ded548d075e474488e7a89562b08f93`.
 
+The bullets above preserve the initial qualification history. The authoritative final state is:
+
+- Consolidated post-review repair:
+  `1a52dae97c038a4331111027d0dc049a57826c0b`.
+- Exact reviewed diff SHA-256:
+  `0be278f5405df631f74fcff2302b6b25933151ac0319d9c98cf0dabff0abd02c`.
+- Fresh independent verifier: Aquinas (`/root/fresh_final_full_qualification`), PASS with zero
+  unresolved Critical or Major findings, all 258 hook test files passing, and all seven prescribed
+  mechanical gates passing.
+- The verifier's initial and final candidate fingerprints were identical; qualification performed
+  no implementation mutation.
+- Final merge:
+  `86f202f007505ee44125e555011bf5ce82f76a41`, carrying
+  `QC-Verdict: PASS (reviewer Aquinas, 2026-07-31)`.
+
 ## Review boundary
 
 The managed completion campaign stopped honestly before its final panel because no exact QC-seat
@@ -51,7 +68,8 @@ qualification receipt existed. No panel seat was dispatched and no qualification
 transport or quota evidence. Depth 0 used a fresh independent whole-diff reviewer and a separate
 fresh read-only verifier; it does not claim a managed three-family panel receipt. The missing
 session-local qualification provider remains an explicit backlog item rather than being repaired
-inside this bundle.
+inside this bundle. The 2026-07-31 post-review repair reused that independent-verifier boundary; it
+did not dispatch another implementer or another review panel.
 
 The bundle includes a host-neutral post-compaction recovery adapter, not production Codex
 `PostCompact` registration. Production wiring remains trigger-bound on accepted live probe or
@@ -67,9 +85,18 @@ the deterministic merge-intent preflight instead: receipt
 `74ed636ecdee5b9605513241031d9940ad483ce5` into `develop`
 `05b3b6e297defc1009795799063c03ae6b9508b3`.
 
-Remote push/release was intentionally not performed in this session.
+For the final repair, the same historical task-status limitation remained: the archived Mission
+root cannot retroactively produce a truthful `can_merge=true` receipt. After the Board explicitly
+authorized completion, a fresh deterministic merge-intent preflight returned `safe`, with zero
+incoming/dirty overlap and no blockers. Its receipt digest is
+`c5444765656094b285ecb961005bd3b92069f67d960347e93cd687077378326f`
+(manifest seal
+`be2015fd0285bee6998d407e33cf0fdd8785ef3a9f6ebeb46c2a130f15424345`).
+The earlier no-push statement applies to the original merge; the 2026-07-31 continuation is the
+publishing finish-flow.
 
 ## Preserved user state
 
-The existing dirty Codex hook-probe files, `docs/HANDOFF.md`, the untracked mission-convergence
-portfolio directory, and all six stashes are outside this project's commit set.
+All pre-existing dirty files, untracked trees, archive refs/stashes, and concurrent B/C worktrees
+remain outside the final repair commit. The main checkout's status, unstaged-diff, and staged-diff
+fingerprints were identical before and after the merge.

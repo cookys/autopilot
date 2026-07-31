@@ -1,11 +1,12 @@
 name: tests
 
 on:
+  # Full CI is release-gated: the canonical plugin manifest changes on every
+  # version bump, while ordinary code pushes and pull requests stay quiet.
   push:
     branches: [develop, main]
-  pull_request:
-    branches: [develop, main]
-  workflow_dispatch:
+    paths:
+      - '.claude-plugin/plugin.json'
 
 # A superseded push's run is dead signal — cancel it instead of queueing.
 concurrency:

@@ -462,18 +462,18 @@ CAP_TEST_DIR="$TEST_TMP/cap-store"
 mkdir -p "$CAP_TEST_DIR"
 
 # A. Empty store test (capability state is enabled by default)
-# Omitting --capability-state (or empty store) keeps capability state unknown while
-# the independent MiniMax calibration limitation remains visible.
+# Omitting --capability-state (or empty store) keeps capability state unknown.
+# MiniMax calibration is a resolver diagnostic, not an operational capability warning.
 EMPTY_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
-assert_contains "$(json_get "$EMPTY_OUT" capability_warnings)" "5/6 recorded central claims were false" "empty store does not hide MiniMax calibration limitation"
+assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
 
 # B. --capability-state off test
 OFF_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
 assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
 assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
-assert_contains "$(json_get "$OFF_OUT" capability_warnings)" "5/6 recorded central claims were false" "--capability-state off does not hide MiniMax calibration limitation"
+assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
 
 # C. Record a fresh exhausted/high implementer event
 cat <<'JSON' > "$TEST_TMP/event-exhausted.json"

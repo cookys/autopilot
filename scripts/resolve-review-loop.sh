@@ -208,6 +208,7 @@ else
 fi
 REV_ENDPOINT="$(read_field "$CONFIG" reviewer_endpoint "$DEF_REV_ENDPOINT")"
 REV_LIMITATION="$(read_field "$CONFIG" reviewer_limitation "")"
+REV_LIMITATION_REQUIRED="$(read_field "$CONFIG" reviewer_limitation_required "false")"
 IMPL_ENDPOINT="$(read_field "$CONFIG" implementer_endpoint "$DEF_IMPL_ENDPOINT")"
 VER_AUTH_PRESENT="$(read_field "$CONFIG" verification_author_present "$DEF_VER_AUTHOR_PRESENT")"
 VER_AUTH_ENGINE="$(read_field "$CONFIG" verification_author_engine "$DEF_VER_AUTHOR_ENGINE")"
@@ -220,12 +221,17 @@ VER_AUTH_ENDPOINT="$(read_field "$CONFIG" verification_author_endpoint "$DEF_VER
 [[ -z "$REV_ENDPOINT"  || "$REV_ENDPOINT"  =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid reviewer_endpoint (must be [A-Za-z0-9_]): $REV_ENDPOINT" >&2; REV_ENDPOINT=""; }
 [[ -z "$IMPL_ENDPOINT" || "$IMPL_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid implementer_endpoint (must be [A-Za-z0-9_]): $IMPL_ENDPOINT" >&2; IMPL_ENDPOINT=""; }
 [[ -z "$VER_AUTH_ENDPOINT" || "$VER_AUTH_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: invalid verification_author_endpoint (must be [A-Za-z0-9_]): $VER_AUTH_ENDPOINT" >&2; exit 3; }
-# The exact dogfood MiniMax diff-only tuple has a recorded false-central-claim
-# limitation. Refuse to resolve that seat if the caveat is deleted or weakened.
-if [[ "$REV_ENGINE" == "MiniMax-M3" && "$REV_RUNNER" == "cc-shim" && "$REV_ENDPOINT" == "minimax" \
-      && "$REV_LIMITATION" != "minimax-false-central-claim-5-of-6" ]]; then
-  echo "resolve-review-loop: MiniMax-M3 cc-shim/minimax reviewer requires reviewer_limitation=minimax-false-central-claim-5-of-6" >&2
-  exit 3
+# The exact MiniMax diff-only tuple has a recorded false-central-claim limitation.
+# Keep calibration telemetry out of capability_warnings: that array is an operational
+# dispatch channel. A diagnostic makes every exact-seat resolution non-silent, while
+# managed rosters can opt into the fail-closed tag guard used by dogfood.
+if [[ "$REV_ENGINE" == "MiniMax-M3" && "$REV_RUNNER" == "cc-shim" && "$REV_ENDPOINT" == "minimax" ]]; then
+  echo "resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification." >&2
+  if [[ "$REV_LIMITATION_REQUIRED" == "true" \
+        && "$REV_LIMITATION" != "minimax-false-central-claim-5-of-6" ]]; then
+    echo "resolve-review-loop: MiniMax-M3 cc-shim/minimax reviewer requires reviewer_limitation=minimax-false-central-claim-5-of-6" >&2
+    exit 3
+  fi
 fi
 case "$VER_AUTH_PRESENT" in
   true|false) ;;
@@ -1140,20 +1146,6 @@ process.stdout.write(JSON.stringify([...(Array.isArray(a) ? a : []), ...(Array.i
 ' "$CAP_WARNINGS_JSON" "$_cb_new_warnings" 2> /dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
     fi
   fi
-fi
-
-# Calibration remains telemetry, not authority. Surface the known MiniMax
-# limitation through the existing warning channel without changing qualification,
-# fallback, acceptance, or merge decisions.
-if [[ "$(printf '%s' "$REV_ENGINE" | tr '[:upper:]' '[:lower:]')" == *minimax* ]]; then
-  CAP_WARNINGS_JSON="$(node -e '
-let warnings = [];
-try { warnings = JSON.parse(process.argv[1]); } catch { warnings = []; }
-if (!Array.isArray(warnings)) warnings = [];
-const warning = "MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification.";
-if (!warnings.includes(warning)) warnings.push(warning);
-process.stdout.write(JSON.stringify(warnings));
-' "$CAP_WARNINGS_JSON" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
 fi
 
 if [[ -n "$FIELD" ]]; then

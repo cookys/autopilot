@@ -28,6 +28,7 @@
 - reviewer_runner: cc-shim
 - reviewer_endpoint: minimax
 - reviewer_limitation: minimax-false-central-claim-5-of-6
+- reviewer_limitation_required: true
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
 - on_family_conflict: fallback
@@ -90,8 +91,8 @@
 > Reviewer limitation (2026-07-31): the current MiniMax diff-only seat produced false
 > central claims in 5 of 6 recorded observations. This is calibration telemetry, not
 > authority or a demotion by itself. The resolver requires the machine-readable
-> `reviewer_limitation` tag above and surfaces the limitation in
-> `capability_warnings`; independent verification remains required.
+> `reviewer_limitation` tag above when `reviewer_limitation_required` is true and
+> surfaces the limitation as a diagnostic; independent verification remains required.
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

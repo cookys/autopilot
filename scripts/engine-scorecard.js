@@ -691,9 +691,6 @@ function parseTranscriptFile(file) {
 }
 
 function safeEngineName(value) {
-  if (value && typeof value === 'object') {
-    value = value.modelID || value.model_id || value.id || value.name;
-  }
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._:+()/ -]{0,119}$/.test(normalized)
@@ -857,12 +854,13 @@ function inspectRootTranscript(provider, parsed) {
   return result;
 }
 
-function inspectTranscript(provider, parsed, file) {
+function inspectTranscript(provider, parsed, file, rootBasename) {
   const inspected = provider === 'codex'
     ? inspectCodexTranscript(parsed)
     : inspectRootTranscript(provider, parsed);
 
-  const pathParts = file.split(path.sep).map((part) => part.toLowerCase());
+  const pathParts = [rootBasename, ...file.split(path.sep)]
+    .map((part) => part.toLowerCase());
   let cohort = 'general';
   if (provider === 'opencode' && pathParts.some((part) => part.includes('swe-calibrate'))) {
     cohort = 'swe-calibrate';
@@ -954,7 +952,12 @@ function cmdImportTranscripts(args) {
       const parsed = parseTranscriptFile(file);
       if (parsed === null) continue;
       current.parsed_sessions += 1;
-      sessions.push(inspectTranscript(provider, parsed, path.relative(root, file)));
+      sessions.push(inspectTranscript(
+        provider,
+        parsed,
+        path.relative(root, file),
+        path.basename(root),
+      ));
     }
     coverage.set(provider, current);
   }

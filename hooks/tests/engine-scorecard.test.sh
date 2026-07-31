@@ -438,6 +438,92 @@ NODE
   && ok "20: provider metadata extraction never recurses into opaque content" \
   || bad "20: opaque content isolation check=$opaque_content_check"
 
+# 21: recognized provider model fields accept direct strings only, and an
+# explicit OpenCode root retains its own cohort context. Object-shaped session
+# metadata must not become an engine identifier, and both general and nested
+# swe-calibrate roots must keep their established behavior.
+BOUNDARY_ROOT="$TESTDIR/provider-boundary-transcripts"
+mkdir -p "$BOUNDARY_ROOT/codex" "$BOUNDARY_ROOT/grok" "$BOUNDARY_ROOT/agy" \
+  "$BOUNDARY_ROOT/opencode/general-root/nested/swe-calibrate" \
+  "$BOUNDARY_ROOT/opencode/swe-calibrate"
+node - "$BOUNDARY_ROOT" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const writeJson = (file, value) => fs.writeFileSync(file, JSON.stringify(value));
+const codex = [
+  { type: 'session_meta', payload: { model: { id: 'codex_session_ref' } } },
+  { type: 'response_item', payload: { type: 'message', role: 'assistant', content: 'ok' } },
+  { type: 'turn.completed' },
+];
+fs.writeFileSync(
+  path.join(root, 'codex', 'session.jsonl'),
+  `${codex.map(JSON.stringify).join('\n')}\n`,
+);
+writeJson(path.join(root, 'grok', 'session.json'), {
+  model: { id: 'sess_9f8e7d6c' },
+  status: 'completed',
+  response_text: 'ok',
+});
+writeJson(path.join(root, 'agy', 'session.json'), {
+  model: { model_id: 'agy_session_ref' },
+  status: 'completed',
+  output_text: 'ok',
+});
+writeJson(path.join(root, 'opencode', 'general-root', 'object-model.json'), {
+  modelID: { name: 'opencode_session_ref' },
+  status: 'completed',
+  messages: [{ role: 'assistant', content: 'ok' }],
+});
+writeJson(path.join(root, 'opencode', 'general-root', 'general.json'), {
+  modelID: 'glm-5.2',
+  status: 'completed',
+  messages: [{ role: 'assistant', content: 'ok' }],
+});
+writeJson(path.join(root, 'opencode', 'general-root', 'nested', 'swe-calibrate', 'nested.json'), {
+  modelID: 'glm-5.2',
+  status: 'completed',
+  messages: [{ role: 'assistant', content: 'ok' }],
+});
+writeJson(path.join(root, 'opencode', 'swe-calibrate', 'explicit-root.json'), {
+  modelID: 'glm-5.2',
+  status: 'completed',
+  messages: [{ role: 'assistant', content: 'ok' }],
+});
+NODE
+node "$CLI" import-transcripts \
+  --root "codex=$BOUNDARY_ROOT/codex" \
+  --root "grok=$BOUNDARY_ROOT/grok" \
+  --root "agy=$BOUNDARY_ROOT/agy" \
+  --root "opencode=$BOUNDARY_ROOT/opencode/general-root" \
+  --root "opencode=$BOUNDARY_ROOT/opencode/swe-calibrate" \
+  > "$TESTDIR/provider-boundary-import.json"
+provider_boundary_check="$(node - "$TESTDIR/provider-boundary-import.json" <<'NODE'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[2], 'utf8');
+const report = JSON.parse(raw);
+const find = (provider, engine, cohort) => report.aggregates.find((row) => (
+  row.provider === provider && row.engine === engine && row.cohort === cohort
+));
+const directStringsOnly = find('codex', 'unknown', 'general')?.sample_size === 1
+  && find('grok', 'unknown', 'general')?.sample_size === 1
+  && find('agy', 'unknown', 'general')?.sample_size === 1
+  && find('opencode', 'unknown', 'general')?.sample_size === 1;
+const cohorts = find('opencode', 'glm-5.2', 'general')?.sample_size === 1
+  && find('opencode', 'glm-5.2', 'swe-calibrate')?.sample_size === 2;
+const objectFragmentsAbsent = [
+  'codex_session_ref',
+  'sess_9f8e7d6c',
+  'agy_session_ref',
+  'opencode_session_ref',
+].every((fragment) => !raw.includes(fragment));
+process.stdout.write([directStringsOnly, cohorts, objectFragmentsAbsent].join(':'));
+NODE
+)"
+[ "$provider_boundary_check" = "true:true:true" ] \
+  && ok "21: provider model fields are direct-string-only and explicit roots retain cohort context" \
+  || bad "21: provider boundary check=$provider_boundary_check"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

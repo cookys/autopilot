@@ -97,6 +97,47 @@ OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --effort turbo
 assert_eq "2" "$EXIT" "bad --effort exit code"
 assert_contains "$OUT" "effort must be one of" "bad --effort error text"
 
+# 3a-lineage. Pins the LINEAGE ENV CONTRACT, which is easy to get backwards:
+#
+#   AUTOPILOT_ROOT_RUN_ID alone   → does NOT set the lineage root (no parent means
+#                                   no lineage to join, so this dispatch becomes its
+#                                   own root) — but it IS a SUPPORTED call: the
+#                                   continuation/rehydration resolver still reads it
+#                                   (`_cont_root`), which is how a run re-attaches to
+#                                   an existing root after compaction.
+#   PARENT + ROOT together        → sets the lineage root to that id.
+#
+# ⛔ Do NOT "fail closed" on root-without-parent. That reflex was tried on
+# 2026-07-31 (it looked like a silently-ignored misconfiguration) and broke 8
+# assertions in codex-compaction-rehydration.test.sh, which dispatches with ROOT
+# and no PARENT in three separate places. The confusing symptom that motivated the
+# guard — `caller root_run_id disagrees with campaign mission_runtime` on the
+# sealed-campaign rail — is a DOC problem, not a missing guard: only that rail
+# needs both ids. See references/hetero-dispatch.md § Trace lineage contract.
+lineage_root_of() { # <dispatch stdout> → manifest root_run_id (or a marker string)
+  local mf
+  mf="$(printf '%s\n' "$1" | sed -n 's/.*manifest=\([^ ]*\).*/\1/p' | head -1)"
+  if [ -z "$mf" ] || [ ! -f "$mf" ]; then printf 'NO_MANIFEST'; return; fi
+  node -e '
+    const fs = require("fs");
+    process.stdout.write(String(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).root_run_id));
+  ' "$mf"
+}
+
+OUT_ROOT_ONLY="$(cd "$SBX" && AUTOPILOT_ROOT_RUN_ID=lineage-probe-root \
+  "$SCRIPT" --branch t-lineage-root-only --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"
+assert_contains "$OUT_ROOT_ONLY" '"status": "committed"' \
+  "root-without-parent is supported and must not fail closed"
+assert_neq "$(lineage_root_of "$OUT_ROOT_ONLY")" "lineage-probe-root" \
+  "ROOT alone does not set the lineage root"
+
+OUT_BOTH="$(cd "$SBX" && AUTOPILOT_PARENT_RUN_ID=lineage-probe-root \
+  AUTOPILOT_ROOT_RUN_ID=lineage-probe-root \
+  "$SCRIPT" --branch t-lineage-both --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"
+assert_contains "$OUT_BOTH" '"status": "committed"' "parent+root dispatches"
+assert_eq "$(lineage_root_of "$OUT_BOTH")" "lineage-probe-root" \
+  "PARENT+ROOT sets the lineage root"
+
 # 3b. codex routing: a non-gpt-5.5 codex model still routes to codex (the old bug routed
 # only *gpt-5.5* to codex, so gpt-5.3-codex-spark silently fell through to the agy branch).
 # Route to codex and make codex absent (PATH without ~/.local/bin, keeping system tools);

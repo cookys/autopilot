@@ -1589,6 +1589,16 @@ if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
     LINEAGE_DEPTH=1
   fi
 else
+  # NOTE: AUTOPILOT_ROOT_RUN_ID is deliberately NOT read here. Without a parent
+  # there is no lineage to attach to, so this dispatch becomes its own lineage
+  # root. That does not discard the variable: the continuation/rehydration
+  # resolver below still honours it (see `_cont_root`), which is how a dispatch
+  # re-attaches to an existing root after compaction — exercised by
+  # hooks/tests/codex-compaction-rehydration.test.sh with ROOT set and no PARENT.
+  # ⇒ Do NOT "fail closed" on root-without-parent; that rejects a supported
+  # configuration. (Tried 2026-07-31; it broke 8 assertions in that test.)
+  # The sealed-campaign rail is the case that needs BOTH — see
+  # references/hetero-dispatch.md § Trace lineage contract.
   LINEAGE_ROOT="$DISPATCH_RUN_ID"
   LINEAGE_DEPTH=0
 fi

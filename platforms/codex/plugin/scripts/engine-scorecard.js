@@ -693,8 +693,11 @@ function parseTranscriptFile(file) {
 function safeEngineName(value) {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
+  const looksLikeSessionId = /^sess(?:ion)?[_-][A-Za-z0-9][A-Za-z0-9_-]{7,}$/i.test(normalized)
+    || /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(normalized);
   if (!/^[A-Za-z0-9][A-Za-z0-9._:+()/ -]{0,119}$/.test(normalized)
       || /(?:secret|token|password|bearer|api[_ -]?key|credential)/i.test(normalized)
+      || looksLikeSessionId
       || transcriptSecrets.scan(normalized).length > 0
       || normalized.includes('/') || normalized.includes('\\')) return null;
   return normalized;
@@ -708,12 +711,50 @@ function nonEmptyContent(value) {
 }
 
 function finiteMetric(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function transcriptObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function hasDirectField(obj, fields) {
+  return fields.some((field) => Object.prototype.hasOwnProperty.call(obj, field));
+}
+
+function recognizedTranscriptSchema(provider, parsed) {
+  if (provider === 'codex') {
+    const records = Array.isArray(parsed) ? parsed : [parsed];
+    return records.some((value) => {
+      const record = transcriptObject(value);
+      if (!record) return false;
+      const type = String(record.type || '').toLowerCase();
+      const payload = transcriptObject(record.payload);
+      if (type === 'session_meta') return payload !== null;
+      if (type === 'turn.completed' || type === 'turn.failed') return true;
+      if (type === 'event_msg') {
+        return payload !== null && String(payload.type || '').toLowerCase() === 'token_count';
+      }
+      if (type !== 'response_item' || !payload) return false;
+      const payloadType = String(payload.type || '').toLowerCase();
+      return payloadType === 'message'
+        || /^(?:tool|function_call)(?:[._-](?:output|result))?$/.test(payloadType);
+    });
+  }
+
+  const root = transcriptObject(parsed);
+  if (!root) return false;
+  const commonFields = [
+    'status', 'state', 'completed', 'success', 'usage', 'cost_usd', 'costUSD',
+    'tool', 'tool_status', 'tool_state', 'tool_exit_code', 'finish_reason',
+    'stop_reason', 'truncated',
+  ];
+  const providerFields = {
+    grok: ['model', 'response_text'],
+    opencode: ['modelID', 'messages'],
+    agy: ['model', 'output_text'],
+  };
+  return hasDirectField(root, [...commonFields, ...(providerFields[provider] || [])]);
 }
 
 function directCompletion(obj) {
@@ -845,24 +886,26 @@ function inspectRootTranscript(provider, parsed) {
   }
   if (provider !== 'agy') {
     addRecognizedUsage(result.usage, root.usage);
-    const rootCost = finiteMetric(root.cost_usd ?? root.costUSD);
-    if (rootCost !== null) {
-      result.usage.cost += rootCost;
-      result.usage.costSeen = true;
+    if (!result.usage.costSeen) {
+      const rootCost = finiteMetric(root.cost_usd ?? root.costUSD);
+      if (rootCost !== null) {
+        result.usage.cost += rootCost;
+        result.usage.costSeen = true;
+      }
     }
   }
   return result;
 }
 
-function inspectTranscript(provider, parsed, file, rootBasename) {
+function inspectTranscript(provider, parsed, file, rootHasCalibrationComponent) {
   const inspected = provider === 'codex'
     ? inspectCodexTranscript(parsed)
     : inspectRootTranscript(provider, parsed);
 
-  const pathParts = [rootBasename, ...file.split(path.sep)]
-    .map((part) => part.toLowerCase());
+  const pathParts = file.split(path.sep).map((part) => part.toLowerCase());
   let cohort = 'general';
-  if (provider === 'opencode' && pathParts.some((part) => part.includes('swe-calibrate'))) {
+  if (provider === 'opencode' && (rootHasCalibrationComponent
+      || pathParts.some((part) => part === 'swe-calibrate'))) {
     cohort = 'swe-calibrate';
   }
   if (inspected.completion === null) inspected.completion = inspected.hasOutput;
@@ -944,21 +987,35 @@ function cmdImportTranscripts(args) {
   const { roots, output } = parseTranscriptImportArgs(args);
   const sessions = [];
   const coverage = new Map();
+  const seenFilesByProvider = new Map();
   for (const { provider, root } of roots) {
     const files = transcriptFiles(root);
     const current = coverage.get(provider) || { candidate_files: 0, parsed_sessions: 0 };
-    current.candidate_files += files.length;
+    const seenFiles = seenFilesByProvider.get(provider) || new Set();
+    const rootHasCalibrationComponent = root.split(path.sep)
+      .some((part) => part.toLowerCase() === 'swe-calibrate');
     for (const file of files) {
+      let physicalFile;
+      try {
+        physicalFile = fs.realpathSync(file);
+      } catch {
+        physicalFile = path.resolve(file);
+      }
+      if (seenFiles.has(physicalFile)) continue;
+      seenFiles.add(physicalFile);
+      current.candidate_files += 1;
       const parsed = parseTranscriptFile(file);
       if (parsed === null) continue;
+      if (!recognizedTranscriptSchema(provider, parsed)) continue;
       current.parsed_sessions += 1;
       sessions.push(inspectTranscript(
         provider,
         parsed,
         path.relative(root, file),
-        path.basename(root),
+        rootHasCalibrationComponent,
       ));
     }
+    seenFilesByProvider.set(provider, seenFiles);
     coverage.set(provider, current);
   }
   const sources = [...coverage.entries()]

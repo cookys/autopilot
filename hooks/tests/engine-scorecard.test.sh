@@ -524,6 +524,258 @@ NODE
   && ok "21: provider model fields are direct-string-only and explicit roots retain cohort context" \
   || bad "21: provider boundary check=$provider_boundary_check"
 
+# 22: direct model strings that match bounded session identifier shapes are not
+# engine names. Metrics accept only actual finite nonnegative JSON numbers:
+# invalid scalar/container types stay unavailable, while numeric zero remains
+# observed. Both root and Codex response-item tool exit-code paths share this
+# strict boundary.
+STRICT_ROOT="$TESTDIR/strict-schema-transcripts"
+mkdir -p "$STRICT_ROOT/session-models" "$STRICT_ROOT/metrics" \
+  "$STRICT_ROOT/cost-precedence" "$STRICT_ROOT/codex"
+node - "$STRICT_ROOT" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const writeJson = (file, value) => fs.writeFileSync(file, JSON.stringify(value));
+const sessionIds = [
+  'sess_9f8e7d6c',
+  'session-01HZX3Y9K8M7N6P5Q4R3S2T1V0',
+  '123e4567-e89b-12d3-a456-426614174000',
+];
+sessionIds.forEach((model, index) => writeJson(
+  path.join(root, 'session-models', `session-${index}.json`),
+  { model, status: 'completed', response_text: 'ok' },
+));
+
+const invalidMetrics = [
+  ['null', null],
+  ['empty', ''],
+  ['whitespace', '   '],
+  ['numeric-string', '7'],
+  ['false', false],
+  ['true', true],
+  ['object', { value: 1 }],
+  ['array', [1]],
+  ['negative', -1],
+];
+invalidMetrics.forEach(([name, value]) => writeJson(
+  path.join(root, 'metrics', `${name}.json`),
+  {
+    model: 'metric-boundary',
+    status: 'completed',
+    response_text: 'ok',
+    usage: {
+      input_tokens: value,
+      output_tokens: value,
+      total_tokens: value,
+      cost_usd: value,
+    },
+    cost_usd: value,
+    tool: { exit_code: value },
+  },
+));
+writeJson(path.join(root, 'metrics', 'valid-zero.json'), {
+  model: 'metric-boundary',
+  status: 'completed',
+  response_text: 'ok',
+  usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0, cost_usd: 0 },
+  cost_usd: 0,
+  tool: { exit_code: 0 },
+});
+writeJson(path.join(root, 'cost-precedence', 'usage-only.json'), {
+  model: 'cost-usage-only',
+  status: 'completed',
+  response_text: 'ok',
+  usage: { cost_usd: 0.01 },
+});
+writeJson(path.join(root, 'cost-precedence', 'root-only.json'), {
+  model: 'cost-root-only',
+  status: 'completed',
+  response_text: 'ok',
+  cost_usd: 0.02,
+});
+writeJson(path.join(root, 'cost-precedence', 'both.json'), {
+  model: 'cost-both',
+  status: 'completed',
+  response_text: 'ok',
+  usage: { cost_usd: 0.03 },
+  cost_usd: 0.99,
+});
+
+const codex = [
+  { type: 'session_meta', payload: { model: 'gpt-5.6-sol' } },
+  { type: 'response_item', payload: { type: 'tool_output', exit_code: true } },
+  { type: 'response_item', payload: { type: 'message', role: 'assistant', content: 'ok' } },
+  { type: 'turn.completed' },
+];
+fs.writeFileSync(
+  path.join(root, 'codex', 'session.jsonl'),
+  `${codex.map(JSON.stringify).join('\n')}\n`,
+);
+NODE
+node "$CLI" import-transcripts \
+  --root "grok=$STRICT_ROOT/session-models" \
+  --root "grok=$STRICT_ROOT/metrics" \
+  --root "grok=$STRICT_ROOT/cost-precedence" \
+  --root "codex=$STRICT_ROOT/codex" \
+  > "$TESTDIR/strict-schema-import.json"
+strict_schema_check="$(node - "$TESTDIR/strict-schema-import.json" <<'NODE'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[2], 'utf8');
+const report = JSON.parse(raw);
+const find = (provider, engine) => report.aggregates.find((row) => (
+  row.provider === provider && row.engine === engine
+));
+const unknown = find('grok', 'unknown');
+const metrics = find('grok', 'metric-boundary');
+const codex = find('codex', 'gpt-5.6-sol');
+const sessionIdsRejected = unknown?.sample_size === 3 && [
+  'sess_9f8e7d6c',
+  'session-01HZX3Y9K8M7N6P5Q4R3S2T1V0',
+  '123e4567-e89b-12d3-a456-426614174000',
+].every((value) => !raw.includes(value));
+const strictMetrics = metrics?.sample_size === 10
+  && metrics.tokens.availability === 'available'
+  && metrics.tokens.observed_samples === 1
+  && metrics.tokens.input_tokens_total === 0
+  && metrics.tokens.output_tokens_total === 0
+  && metrics.tokens.total_tokens === 0
+  && metrics.cost.availability === 'available'
+  && metrics.cost.observed_samples === 1
+  && metrics.cost.usd_total === 0
+  && metrics.tool_failure_rate === 0;
+const codexToolStrict = codex?.tool_failure_rate === 0;
+const exactCost = (engine, expected) => {
+  const row = find('grok', engine);
+  return row?.cost.availability === 'available'
+    && row.cost.observed_samples === 1 && row.cost.usd_total === expected;
+};
+const costPrecedence = exactCost('cost-usage-only', 0.01)
+  && exactCost('cost-root-only', 0.02)
+  && exactCost('cost-both', 0.03);
+process.stdout.write([
+  sessionIdsRejected,
+  strictMetrics,
+  codexToolStrict,
+  costPrecedence,
+].join(':'));
+NODE
+)"
+[ "$strict_schema_check" = "true:true:true:true" ] \
+  && ok "22: session IDs, strict metrics, and cost precedence enforce schema boundaries" \
+  || bad "22: strict schema check=$strict_schema_check"
+
+# 23: schema coverage counts only recognized provider shapes; cohort matching is
+# exact by path component (including explicit roots below swe-calibrate); and
+# overlapping roots count each physical file once per provider regardless of
+# argument order.
+IMPORT_BOUNDARY_ROOT="$TESTDIR/import-boundary-transcripts"
+mkdir -p "$IMPORT_BOUNDARY_ROOT/coverage/codex" \
+  "$IMPORT_BOUNDARY_ROOT/coverage/grok" \
+  "$IMPORT_BOUNDARY_ROOT/cohort/not-swe-calibrate-backup" \
+  "$IMPORT_BOUNDARY_ROOT/cohort/swe-calibrate/below" \
+  "$IMPORT_BOUNDARY_ROOT/overlap/parent/child"
+node - "$IMPORT_BOUNDARY_ROOT" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const writeRaw = (file, value) => fs.writeFileSync(file, `${value}\n`);
+const writeJson = (file, value) => writeRaw(file, JSON.stringify(value));
+for (const provider of ['codex', 'grok']) {
+  const dir = path.join(root, 'coverage', provider);
+  writeJson(path.join(dir, 'unsupported-object.json'), {});
+  writeJson(path.join(dir, 'unsupported-array.json'), []);
+  writeJson(path.join(dir, 'unsupported-string.json'), 'hello');
+}
+const codex = [
+  { type: 'session_meta', payload: { model: 'gpt-5.6-sol' } },
+  { type: 'response_item', payload: { type: 'message', role: 'assistant', content: 'ok' } },
+  { type: 'turn.completed' },
+];
+writeRaw(
+  path.join(root, 'coverage', 'codex', 'recognized.jsonl'),
+  codex.map(JSON.stringify).join('\n'),
+);
+writeJson(path.join(root, 'coverage', 'grok', 'recognized.json'), {
+  model: 'grok-4.5',
+  status: 'completed',
+  response_text: 'ok',
+});
+writeJson(path.join(root, 'cohort', 'not-swe-calibrate-backup', 'session.json'), {
+  modelID: 'cohort-general',
+  status: 'completed',
+  messages: [{ role: 'assistant', content: 'ok' }],
+});
+writeJson(path.join(root, 'cohort', 'swe-calibrate', 'below', 'session.json'), {
+  modelID: 'cohort-calibrate',
+  status: 'completed',
+  messages: [{ role: 'assistant', content: 'ok' }],
+});
+writeJson(path.join(root, 'overlap', 'parent', 'child', 'session.json'), {
+  model: 'overlap-engine',
+  status: 'completed',
+  response_text: 'ok',
+});
+NODE
+node "$CLI" import-transcripts \
+  --root "codex=$IMPORT_BOUNDARY_ROOT/coverage/codex" \
+  --root "grok=$IMPORT_BOUNDARY_ROOT/coverage/grok" \
+  > "$TESTDIR/schema-coverage-import.json"
+node "$CLI" import-transcripts \
+  --root "opencode=$IMPORT_BOUNDARY_ROOT/cohort/not-swe-calibrate-backup" \
+  --root "opencode=$IMPORT_BOUNDARY_ROOT/cohort/swe-calibrate/below" \
+  > "$TESTDIR/cohort-boundary-import.json"
+node "$CLI" import-transcripts \
+  --root "grok=$IMPORT_BOUNDARY_ROOT/overlap/parent" \
+  --root "grok=$IMPORT_BOUNDARY_ROOT/overlap/parent/child" \
+  > "$TESTDIR/overlap-first.json"
+node "$CLI" import-transcripts \
+  --root "grok=$IMPORT_BOUNDARY_ROOT/overlap/parent/child" \
+  --root "grok=$IMPORT_BOUNDARY_ROOT/overlap/parent" \
+  > "$TESTDIR/overlap-second.json"
+import_boundary_check="$(node - \
+  "$TESTDIR/schema-coverage-import.json" \
+  "$TESTDIR/cohort-boundary-import.json" \
+  "$TESTDIR/overlap-first.json" \
+  "$TESTDIR/overlap-second.json" <<'NODE'
+const fs = require('fs');
+const [coverageFile, cohortFile, overlapFirstFile, overlapSecondFile] = process.argv.slice(2);
+const coverage = JSON.parse(fs.readFileSync(coverageFile, 'utf8'));
+const cohort = JSON.parse(fs.readFileSync(cohortFile, 'utf8'));
+const overlapFirstRaw = fs.readFileSync(overlapFirstFile, 'utf8');
+const overlapSecondRaw = fs.readFileSync(overlapSecondFile, 'utf8');
+const source = (report, provider) => report.sources.find((row) => row.provider === provider);
+const codexSource = source(coverage, 'codex');
+const grokSource = source(coverage, 'grok');
+const schemaCoverage = codexSource?.candidate_files === 4
+  && codexSource.parsed_sessions === 1
+  && codexSource.schema_coverage_rate === 0.25
+  && grokSource?.candidate_files === 4
+  && grokSource.parsed_sessions === 1
+  && grokSource.schema_coverage_rate === 0.25
+  && coverage.aggregates.length === 2
+  && coverage.aggregates.every((row) => row.engine !== 'unknown');
+const cohortRow = (engine, name) => cohort.aggregates.find((row) => (
+  row.engine === engine && row.cohort === name
+));
+const exactCohorts = cohortRow('cohort-general', 'general')?.sample_size === 1
+  && cohortRow('cohort-calibrate', 'swe-calibrate')?.sample_size === 1;
+const overlap = JSON.parse(overlapFirstRaw);
+const overlapSource = source(overlap, 'grok');
+const overlapDeduped = overlapFirstRaw === overlapSecondRaw
+  && overlapSource?.candidate_files === 1
+  && overlapSource.parsed_sessions === 1
+  && overlapSource.schema_coverage_rate === 1
+  && overlap.aggregates.length === 1
+  && overlap.aggregates[0].engine === 'overlap-engine'
+  && overlap.aggregates[0].sample_size === 1;
+process.stdout.write([schemaCoverage, exactCohorts, overlapDeduped].join(':'));
+NODE
+)"
+[ "$import_boundary_check" = "true:true:true" ] \
+  && ok "23: schema coverage, cohort components, and overlapping roots are deterministic" \
+  || bad "23: import boundary check=$import_boundary_check"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

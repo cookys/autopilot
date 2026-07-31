@@ -80,6 +80,15 @@ assert_contains "$OUT" '"required_review_families": 2' "default required_review_
 assert_contains "$OUT" '"l1_required": true' "default l1_required"
 assert_contains "$OUT" '"cross_family_required": true' "default cross_family_required"
 assert_contains "$OUT" '"cross_family_satisfied": true' "default cross_family_satisfied"
+assert_contains "$OUT" 'MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false' "default MiniMax seat surfaces calibration limitation"
+
+# A2 perturbation: deleting the exact-seat caveat makes the roster fail closed.
+NO_MINIMAX_CAVEAT_CFG="$TEST_TMP/no-minimax-caveat.md"
+sed '/^[[:space:]]*- reviewer_limitation:/d' "$REPO_ROOT/.claude/review-loop-config.md" > "$NO_MINIMAX_CAVEAT_CFG"
+NO_CAVEAT_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$NO_MINIMAX_CAVEAT_CFG" bash "$SCRIPT" 2>&1)"
+NO_CAVEAT_EXIT=$?
+assert_eq "3" "$NO_CAVEAT_EXIT" "MiniMax exact seat is rejected when its limitation tag is removed"
+assert_contains "$NO_CAVEAT_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "removed MiniMax caveat is diagnosed"
 
 # 4. --field accessors
 # DOGFOOD PIN (Board decision A roster — see §3 rationale).
@@ -453,17 +462,18 @@ CAP_TEST_DIR="$TEST_TMP/cap-store"
 mkdir -p "$CAP_TEST_DIR"
 
 # A. Empty store test (capability state is enabled by default)
-# Omitting --capability-state (or empty store) => source: unknown, status: unknown, warnings: []
+# Omitting --capability-state (or empty store) keeps capability state unknown while
+# the independent MiniMax calibration limitation remains visible.
 EMPTY_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
-assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => capability_warnings is empty []"
+assert_contains "$(json_get "$EMPTY_OUT" capability_warnings)" "5/6 recorded central claims were false" "empty store does not hide MiniMax calibration limitation"
 
 # B. --capability-state off test
 OFF_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
 assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
 assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
-assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => capability_warnings is empty []"
+assert_contains "$(json_get "$OFF_OUT" capability_warnings)" "5/6 recorded central claims were false" "--capability-state off does not hide MiniMax calibration limitation"
 
 # C. Record a fresh exhausted/high implementer event
 cat <<'JSON' > "$TEST_TMP/event-exhausted.json"

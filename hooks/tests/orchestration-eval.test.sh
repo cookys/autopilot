@@ -523,6 +523,17 @@ INNER_EOF
 Acceptance: A3 fidelity (byte-identical extraction), A2 perturbation on the consumer.
 INNER_EOF
     ;;
+  timeout_t1)
+    echo "transport timed out" >&2
+    exit 124
+    ;;
+  auth_t1)
+    echo "Authentication failed: token expired" >&2
+    exit 1
+    ;;
+  empty_t1)
+    # Exit zero with no output and no repository effect: an empty-provider response.
+    ;;
 esac
 EOF
 chmod +x "$STUB_BIN"
@@ -555,6 +566,12 @@ echo "Running T2 Correct..."
 export STUB_MODE="correct_t2"
 bash "$EVAL_DIR/run-orchestration-eval.sh" --task t2-extract-verbatim --arm on --runner stub --model test-model --out "$TEST_OUT_DIR/run_d" >> "$RESULTS_FILE"
 
+# Infrastructure signatures must be classified without entering capability rates.
+for mode in timeout_t1 auth_t1 empty_t1; do
+  export STUB_MODE="$mode"
+  bash "$EVAL_DIR/run-orchestration-eval.sh" --task t1-fix-with-decoy --arm off --runner stub --model test-model --out "$TEST_OUT_DIR/run_$mode" >> "$RESULTS_FILE"
+done
+
 echo "=== Verifying results.jsonl contents ==="
 cat "$RESULTS_FILE"
 
@@ -579,6 +596,10 @@ if ! grep -q '"oracle_pass":false' <<< "$res_b"; then
   echo "Assertion failed: case b oracle_pass should be false" >&2
   exit 1
 fi
+if ! grep -q '"failure_class":"capability_fail"' <<< "$res_b"; then
+  echo "Assertion failed: case b should be a capability failure" >&2
+  exit 1
+fi
 
 echo "Verifying Case (c) assertions..."
 # case c (run_c): stub leaves no artifacts → adherence fields false, run still completes
@@ -597,8 +618,41 @@ res_t2=$(grep '"task_id":"t2-extract-verbatim"' "$RESULTS_FILE")
 if ! echo "$res_t2" | grep -q '"oracle_pass":true'; then echo "Assertion failed: T2 oracle_pass should be true" >&2; exit 1; fi
 if ! echo "$res_t2" | grep -q '"fidelity_ok":true'; then echo "Assertion failed: T2 fidelity_ok should be true" >&2; exit 1; fi
 
+for pair in "timeout_t1:runner_timeout" "auth_t1:authentication" "empty_t1:empty_output"; do
+  mode="${pair%%:*}"
+  cause="${pair#*:}"
+  infra_result="$(cat "$TEST_OUT_DIR/run_$mode/result.json")"
+  if ! grep -q '"failure_class":"infra_fail"' <<< "$infra_result" \
+      || ! grep -q '"failure_cause":"'"$cause"'"' <<< "$infra_result"; then
+    echo "Assertion failed: $mode should classify as infra_fail/$cause" >&2
+    exit 1
+  fi
+done
+
 echo "=== Running score.js on results ==="
-node "$EVAL_DIR/score.js" "$RESULTS_FILE"
+SCORE_OUT="$(node "$EVAL_DIR/score.js" "$RESULTS_FILE")"
+echo "$SCORE_OUT"
+if ! grep -q 'EXCLUDED INFRASTRUCTURE FAILURES' <<< "$SCORE_OUT" \
+    || ! grep -q 'runner_timeout' <<< "$SCORE_OUT" \
+    || ! grep -q 'authentication' <<< "$SCORE_OUT" \
+    || ! grep -q 'empty_output' <<< "$SCORE_OUT"; then
+  echo "Assertion failed: score report must loudly tally excluded infrastructure failures" >&2
+  exit 1
+fi
+
+# A5 negative controls: unexplained and unknown failed rows are rejected before scoring.
+printf '%s\n' '{"task_id":"bad","arm":"on","oracle_pass":false}' > "$TEST_OUT_DIR/unclassified.jsonl"
+if node "$EVAL_DIR/score.js" "$TEST_OUT_DIR/unclassified.jsonl" >"$TEST_OUT_DIR/unclassified.out" 2>&1; then
+  echo "Assertion failed: score accepted an unclassified failed row" >&2
+  exit 1
+fi
+grep -q 'invalid failure_class' "$TEST_OUT_DIR/unclassified.out" \
+  || { echo "Assertion failed: unclassified rejection was not diagnosed" >&2; exit 1; }
+printf '%s\n' '{"task_id":"bad","arm":"on","oracle_pass":false,"failure_class":"mystery"}' > "$TEST_OUT_DIR/unknown-class.jsonl"
+if node "$EVAL_DIR/score.js" "$TEST_OUT_DIR/unknown-class.jsonl" >/dev/null 2>&1; then
+  echo "Assertion failed: score accepted an unknown failure class" >&2
+  exit 1
+fi
 
 # Clean up
 rm -rf "$TEST_OUT_DIR"

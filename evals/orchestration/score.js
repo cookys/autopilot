@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const readline = require('readline');
+const VALID_FAILURE_CLASSES = new Set(['capability_fail', 'infra_fail']);
 
 function usage() {
   console.log('Usage: node score.js <results.jsonl>');
@@ -75,6 +76,17 @@ async function main() {
     process.exit(0);
   }
 
+  for (const [index, row] of data.entries()) {
+    if (row.oracle_pass !== false) continue;
+    if (!VALID_FAILURE_CLASSES.has(row.failure_class)) {
+      console.error(
+        `Error: row ${index + 1} has oracle_pass:false but invalid failure_class `
+        + `'${String(row.failure_class)}' (expected capability_fail|infra_fail)`,
+      );
+      process.exit(1);
+    }
+  }
+
   // Aggregation maps
   // task_id -> arm -> { count, pass_count, decoy_count, decoy_total, fidelity_count, fidelity_total }
   const taskStats = {};
@@ -83,6 +95,7 @@ async function main() {
     on: { count: 0, adj_count: 0, pattern_count: 0, probe_count: 0 },
     off: { count: 0, adj_count: 0, pattern_count: 0, probe_count: 0 }
   };
+  const excludedInfra = new Map();
 
   for (const row of data) {
     const taskId = row.task_id || 'unknown';
@@ -95,17 +108,27 @@ async function main() {
       };
     }
 
+    const isInfraFailure = row.oracle_pass === false && row.failure_class === 'infra_fail';
+    if (isInfraFailure) {
+      const cause = typeof row.failure_cause === 'string' && row.failure_cause.length > 0
+        ? row.failure_cause : 'unspecified';
+      const key = `${arm}\u0000${cause}`;
+      excludedInfra.set(key, (excludedInfra.get(key) || 0) + 1);
+    }
+
     const t = taskStats[taskId][arm];
     if (t) {
-      t.count++;
-      if (row.oracle_pass === true) t.pass_count++;
-      if (row.decoy_respected !== null && row.decoy_respected !== undefined) {
-        t.decoy_total++;
-        if (row.decoy_respected === true) t.decoy_count++;
-      }
-      if (row.fidelity_ok !== null && row.fidelity_ok !== undefined) {
-        t.fidelity_total++;
-        if (row.fidelity_ok === true) t.fidelity_count++;
+      if (!isInfraFailure) {
+        t.count++;
+        if (row.oracle_pass === true) t.pass_count++;
+        if (row.decoy_respected !== null && row.decoy_respected !== undefined) {
+          t.decoy_total++;
+          if (row.decoy_respected === true) t.decoy_count++;
+        }
+        if (row.fidelity_ok !== null && row.fidelity_ok !== undefined) {
+          t.fidelity_total++;
+          if (row.fidelity_ok === true) t.fidelity_count++;
+        }
       }
     }
 
@@ -148,6 +171,18 @@ async function main() {
     }
   }
   printTable('PER-TASK ON-VS-OFF OUTCOMES', taskHeaders, taskRows);
+
+  const infraRows = [...excludedInfra.entries()]
+    .map(([key, count]) => {
+      const [arm, cause] = key.split('\u0000');
+      return [arm.toUpperCase(), cause, count];
+    })
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  printTable(
+    'EXCLUDED INFRASTRUCTURE FAILURES',
+    ['Arm', 'Cause', 'Excluded Runs'],
+    infraRows.length > 0 ? infraRows : [['-', 'none', 0]],
+  );
 
   // Print Adherence Report
   const adjHeaders = ['Arm', 'Total Runs', 'Adjudication Valid', 'Patterns Named', 'Probe Evidence Present'];

@@ -15,6 +15,8 @@ fi
 if [ "${1:-}" = "--help" ]; then
   if [ "${KIMI_FAKE_SURFACE:-complete}" = "incomplete" ]; then
     printf '%s\n' 'Usage: kimi --model <model> --prompt <prompt>'
+  elif [ "${KIMI_FAKE_SURFACE:-complete}" = "prompt-only" ]; then
+    printf '%s\n' 'Usage: kimi --model=<model>, --prompt <prompt>; --output-format=text'
   elif [ "${KIMI_FAKE_SURFACE:-complete}" = "adversarial" ]; then
     printf '%s\n' \
       'Usage: kimi --modelish --prompt-injection --output-formatting --planning'
@@ -26,6 +28,16 @@ fi
 printf '%s\n' "$PWD" >"$KIMI_CAPTURE_DIR/cwd"
 node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(2)))' \
   "$KIMI_CAPTURE_DIR/argv.json" "$@"
+has_prompt=0
+has_plan=0
+for arg in "$@"; do
+  [ "$arg" = "--prompt" ] && has_prompt=1
+  [ "$arg" = "--plan" ] && has_plan=1
+done
+if [ "$has_prompt" -eq 1 ] && [ "$has_plan" -eq 1 ]; then
+  printf '%s\n' 'Cannot combine --prompt with --plan.' >&2
+  exit 2
+fi
 case "${KIMI_FAKE_SCENARIO:-success}" in
   success) printf 'bounded authored response\n' ;;
   nonzero) printf 'private failure bytes\n' >&2; exit 7 ;;
@@ -53,7 +65,7 @@ try {
   }
   throw error;
 }
-const { MODEL, inspectKimiSurface, runKimiAuthor } = adapter;
+const { MODEL, REQUIRED_HELP_TOKENS, inspectKimiSurface, runKimiAuthor } = adapter;
 const capture = path.join(tmp, 'capture');
 const marker = path.join(tmp, 'shell-injection-marker');
 const prompt = `literal $(touch ${marker}) ; "quotes" \n second line`;
@@ -105,7 +117,6 @@ assert.deepStrictEqual(argv, [
   '--model', 'kimi-code/k3',
   '--prompt', prompt,
   '--output-format', 'text',
-  '--plan',
 ]);
 assert(!fs.existsSync(marker));
 const observedCwd = fs.readFileSync(path.join(capture, 'cwd'), 'utf8').trim();
@@ -128,6 +139,18 @@ collectKeys(success);
 for (const claim of ['qualified', 'qualification', 'read_only', 'no_effect']) {
   assert(!publicKeys.includes(claim));
 }
+
+assert.deepStrictEqual(REQUIRED_HELP_TOKENS, [
+  '--model',
+  '--prompt',
+  '--output-format',
+]);
+const promptOnly = inspectKimiSurface({
+  bin: fake,
+  env: { ...base.env, KIMI_FAKE_SURFACE: 'prompt-only' },
+  cwd: tmp,
+});
+assert.deepStrictEqual(promptOnly, { ready: true, version: '0.28.0', reason: null });
 
 const scenario = (name, timeoutMs = 1000) => runKimiAuthor({
   ...base,
@@ -179,22 +202,40 @@ done
 
 if [ "${AUTOPILOT_KIMI_LIVE:-0}" = "1" ]; then
   LIVE_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const { spawnSync } = require('child_process');
 const path = require('path');
 const { runKimiAuthor } = require(path.join(process.argv[2], 'src', 'runners', 'kimi'));
+const repoRoot = path.resolve(process.argv[2]);
+let authorCwd = null;
+const execute = (bin, argv, options) => {
+  if (argv.includes('--prompt')) authorCwd = path.resolve(options.cwd);
+  return spawnSync(bin, argv, options);
+};
 const result = runKimiAuthor({
   model: 'kimi-code/k3',
   prompt: 'Return one short sentence confirming this native Kimi author transport smoke.',
   timeoutMs: 120000,
-});
+}, { spawnSync: execute });
+const repositoryUnexposed = authorCwd !== null
+  && authorCwd !== repoRoot
+  && !authorCwd.startsWith(`${repoRoot}${path.sep}`);
 process.stdout.write(JSON.stringify({
   status: result.status,
   output_digest: result.output_digest,
+  nonempty_output_digest: typeof result.output_digest === 'string'
+    && /^[0-9a-f]{64}$/.test(result.output_digest),
+  repository_unexposed: repositoryUnexposed,
   error: result.error,
 }));
 NODE
 )"
   assert_contains "$LIVE_OUT" '"status":"authored"' \
     "opt-in live Kimi smoke returns non-empty authored output"
+  assert_contains "$LIVE_OUT" '"nonempty_output_digest":true' \
+    "opt-in live Kimi smoke returns a non-empty output digest"
+  assert_contains "$LIVE_OUT" '"repository_unexposed":true' \
+    "opt-in live Kimi smoke executes outside the repository"
 fi
 
 finalize_test

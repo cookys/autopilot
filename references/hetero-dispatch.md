@@ -128,7 +128,7 @@ Usage is derived from declared `pi-rpc` parsing only: `message_end` messages are
 `pi-rpc` is intentionally separated from the generic JSONL scanner so nested `cost` fields cannot
 pollute totals. A stalled stream gets one report-only `supervisor_stall_probe` steer injection
 (`no_event_timeout`) and remains report-only by default unless `PI_RPC_MAX_SECS` is set.
-Evidence + residuals: [`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](../docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
+Evidence + residuals: [`docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](https://github.com/cookys/autopilot/blob/develop/docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
 (`worktree` isolation, wrapper-commit, artifact verification) remain unchanged.
 
 ### Directive reachability (Phase 2 — advisory nudge channel)

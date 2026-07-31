@@ -1,6 +1,6 @@
 # Surface-Area Reduction — B Group (thin-shelling)
 
-> Plan: [`docs/plans/2026-07-04-surface-area-reduction.md`](../../plans/2026-07-04-surface-area-reduction.md) (CONVERGED — MiniMax-M3 ×2 + gpt-5.5 ×2 SHIP-AS-IS)
+> Plan: [`docs/plans/2026-07-04-surface-area-reduction.md`](../../../plans/2026-07-04-surface-area-reduction.md) (CONVERGED — MiniMax-M3 ×2 + gpt-5.5 ×2 SHIP-AS-IS)
 > Branch: `feat/v2.31.16-surface-area-b` · Target: v2.31.16 (PATCH — no new skill/agent)
 
 ## Project Goal

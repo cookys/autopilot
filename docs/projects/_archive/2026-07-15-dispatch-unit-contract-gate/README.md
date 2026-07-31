@@ -1,8 +1,8 @@
 # Dispatch unit contract gate
 
-> Status: C1-C7 COMPLETE — v2.32.38 release gates running; pending final merge to develop
+> Status: Complete — C1-C7 shipped and merged to develop in v2.32.42
 > Target: v2.32.36
-> Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../plans/2026-07-15-dispatch-unit-contract-gate.md)
+> Plan: [`../../plans/2026-07-15-dispatch-unit-contract-gate.md`](../../../plans/2026-07-15-dispatch-unit-contract-gate.md)
 > Origin: verification-author roster-gate dogfood and Board decision on 2026-07-15
 > Branch: `feat/dispatch-unit-contract-gate` from `edad7025486ad196d1124785794c39ff86e092b2`
 

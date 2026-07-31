@@ -3,7 +3,7 @@
 **Date**: 2026-07-08 · **Version**: v2.32.10 · **Run**: /l6 (depth-1 foreman) · **Size**: S
 
 Follows up the 2026-07-06 eval-instruments series
-([report](../_archive/2026-07-06-eval-instruments/report.md) DATA B, L194-221), which
+([report](../2026-07-06-eval-instruments/report.md) DATA B, L194-221), which
 defined "mechanical per-turn constraint re-injection" as the next instrument after prose
 asset packs failed to hold long-horizon constraints (t14 n=35: constraints-held ON 3/17
 vs OFF 1/18, one-tailed Fisher p=0.279, **not significant**).
@@ -90,7 +90,7 @@ run errors). Depth-0-owned collection (per-run auth-liveness circuit breaker + r
    the *tie with the prose pack* is the load-bearing observation, and that is robust to n:
    two different delivery mechanisms for the same constraint text produced the same ~18-20%.
 
-### Follow-up (BACKLOG candidate)
+### Follow-up (tracked in `docs/BACKLOG.md`)
 Per-turn mechanical **verification/gating** (reject a turn whose output violates a
 constraint, force a retry) is the untested lever left — distinct from re-injection, which
 this measurement shows is not the answer. Re-injection is now available as a harness knob if

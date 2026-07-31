@@ -1,7 +1,7 @@
 # context-budget-gate
 
 **Target version**: v2.32.58 | **Branch**: `feat/v2.32.58-context-budget-gate` | **Size**: L
-**Plan**: [`docs/plans/2026-07-25-context-budget-gate.md`](../../plans/2026-07-25-context-budget-gate.md)
+**Plan**: [`docs/plans/2026-07-25-context-budget-gate.md`](../../../plans/2026-07-25-context-budget-gate.md)
 
 ## Project Goal
 

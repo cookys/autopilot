@@ -1,6 +1,6 @@
 # distill cross-machine consolidate — v2.11.0
 
-**Shipped**: 2026-06-04 · **Plan**: [`docs/plans/2026-06-04-distill-consolidate.md`](../../plans/2026-06-04-distill-consolidate.md)
+**Shipped**: 2026-06-04 · **Plan**: [`docs/plans/2026-06-04-distill-consolidate.md`](../../../plans/2026-06-04-distill-consolidate.md)
 
 ## OKR
 **Objective**: when two fleet machines distil the *same* recurring procedure, converge them

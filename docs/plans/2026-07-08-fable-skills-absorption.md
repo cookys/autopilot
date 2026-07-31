@@ -1,6 +1,6 @@
 # Plan - fable-skills absorption
 
-> Status: R0 authored, implementation gated.
+> Status: R0 authored; implementation gated and triaged to `docs/BACKLOG.md` for an explicit Board decision (2026-07-31).
 > Owner: pending Board decision.
 > Branch: develop.
 > Frame: absorb useful methodology from `DizzyMii/fable-skills` without vendoring the package.

@@ -3,7 +3,7 @@
 **Mode**: CEO L (inline design + hetero panel critique + dispatched wiring)
 **Branch**: `feat/quality-floor-engine`
 **Target**: v2.31.11 (PATCH — references + protocol wiring, no new skill)
-**Plan**: [docs/plans/2026-07-04-quality-floor-engine.md](../../plans/2026-07-04-quality-floor-engine.md)
+**Plan**: [docs/plans/2026-07-04-quality-floor-engine.md](../../../plans/2026-07-04-quality-floor-engine.md)
 
 ## OKR
 Make a weak orchestrating model sustain frontier-floor output quality on long tasks, by

@@ -1,7 +1,7 @@
 # Dispatch Observability — Stage 1（失聯歸零）
 
 > Status: SHIPPED v2.32.20（2026-07-11, inline depth-0 execution）
-> Origin: Board 方向討論 2026-07-11 — 「hetero engine 一派發下去就失聯，需要更好的監察、協調、溝通機制」。三階段路線的第一階段（監察）；Stage 2（pi RPC / cc-shim stream-json 雙工溝通）與 Stage 3（自適應調度 policy）留在 BACKLOG。
+> Origin: Board 方向討論 2026-07-11 — 「hetero engine 一派發下去就失聯，需要更好的監察、協調、溝通機制」。三階段路線的第一階段（監察）；Stage 2（pi RPC 雙工溝通）已於 v2.32.21 出貨，Stage 3（自適應調度 policy）保留在 `docs/BACKLOG.md` 的 R6 協調條目。
 > Six-element task: docs/BACKLOG.md「Dispatch observability Stage 1」條目（本專案為其執行紀錄）。
 
 ## Problem

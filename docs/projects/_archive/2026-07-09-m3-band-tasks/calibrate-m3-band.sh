@@ -26,7 +26,7 @@
 
 set -u
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 EVAL_RUNNER="$REPO_ROOT/evals/orchestration/run-orchestration-eval.sh"
 SCORE="$REPO_ROOT/evals/orchestration/score.js"
 
@@ -35,7 +35,7 @@ ARMS="on off"
 N=3
 MODEL="MiniMax-M3"
 ENDPOINT="minimax"
-OUT_DIR="$REPO_ROOT/docs/projects/2026-07-09-m3-band-tasks/runs"
+OUT_DIR="$REPO_ROOT/docs/projects/_archive/2026-07-09-m3-band-tasks/runs"
 RESULTS=""
 TIMEOUT="10m"
 SLEEP=2

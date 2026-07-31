@@ -1,7 +1,7 @@
 # distill — recurring corrections + rituals → candidate user-level skills
 
-> **Status**: In progress (L-size). P1 value-gate PASSED narrowly 2026-06-03 → scope NARROWED.
-> **Branch**: `feat/distill-skill` · **Plan**: [../../plans/2026-06-03-distill-skill.md](../../plans/2026-06-03-distill-skill.md)
+> **Status**: Complete — shipped in v2.9.0 and archived.
+> **Branch**: `feat/distill-skill` · **Plan**: [../../plans/2026-06-03-distill-skill.md](../../../plans/2026-06-03-distill-skill.md)
 > **Owner**: cookys (Board) / CEO-agent (how). **Created**: 2026-06-03.
 
 ## OKR (narrowed post-P1)

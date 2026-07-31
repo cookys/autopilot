@@ -183,22 +183,22 @@ PASS on the exploit):
 
 ## How depth-0 runs the calibration batch
 
-Runner: `docs/projects/2026-07-09-m3-band-tasks/calibrate-m3-band.sh`
+Runner: `docs/projects/_archive/2026-07-09-m3-band-tasks/calibrate-m3-band.sh`
 (parameterized, resumable, per-round auth circuit-breaker, strictly serial for
 MiniMax rate-limits, ORCH_CC_SHIM=1).
 
 ```
 # preview the plan + confirm the endpoint resolves (no spend):
-docs/projects/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --dry-run
+docs/projects/_archive/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --dry-run
 
 # full batch: 3 tasks × {on,off} × n=3 = 18 cells, M3 via the minimax endpoint:
-docs/projects/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --n 3
+docs/projects/_archive/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --n 3
 
 # resume after an interruption (done cells are skipped automatically):
-docs/projects/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --n 3
+docs/projects/_archive/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --n 3
 
 # score whenever:
-node evals/orchestration/score.js docs/projects/2026-07-09-m3-band-tasks/runs/results.jsonl
+node evals/orchestration/score.js docs/projects/_archive/2026-07-09-m3-band-tasks/runs/results.jsonl
 ```
 
 Suggested first pass: **OFF arm only, n≥5 per task** to establish M3's baseline
@@ -223,7 +223,7 @@ runner), all three tasks × both arms:
 **M3 ceilings 18/18** across all three tasks, both arms, both axes (including
 the decoy/purity axis each task was specifically built to make M3 slip on).
 Raw per-run data preserved at the end of this report (source:
-`docs/projects/2026-07-09-m3-band-tasks/runs/results.jsonl`, gitignored).
+`docs/projects/_archive/2026-07-09-m3-band-tasks/runs/results.jsonl`, gitignored).
 
 Honest conclusions (negative result — recorded as-is, not softened):
 
@@ -260,7 +260,7 @@ Honest conclusions (negative result — recorded as-is, not softened):
 
 ## Raw per-run data (n=18, preserved — `runs/` is gitignored)
 
-Source: `docs/projects/2026-07-09-m3-band-tasks/runs/results.jsonl` (fields
+Source: `docs/projects/_archive/2026-07-09-m3-band-tasks/runs/results.jsonl` (fields
 trimmed to the ones relevant to this report):
 
 ```

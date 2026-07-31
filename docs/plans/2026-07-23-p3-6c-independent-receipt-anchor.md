@@ -1,5 +1,5 @@
 # Plan - P3.6c Independent Receipt Anchor and P0-A0 Corpus
-> Status: in progress | Owner: CEO autonomous run | Branch: `feat/owner-kernel-governance` | Frame: preserve A0 no-effect boundary before Engine integration
+> Status: Complete — receipt anchor and P0-A0 corpus consumed by P3.7 | Owner: CEO autonomous run | Branch: `develop` | Frame: preserve A0 no-effect boundary before Engine integration
 
 ## 0. Context
 

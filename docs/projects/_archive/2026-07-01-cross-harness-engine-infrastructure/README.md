@@ -1,6 +1,6 @@
 # Cross-Harness Engine Infrastructure
 
-> Plan: [docs/plans/2026-07-01-cross-harness-engine-infrastructure.md](../../plans/2026-07-01-cross-harness-engine-infrastructure.md)
+> Plan: [docs/plans/2026-07-01-cross-harness-engine-infrastructure.md](../../../plans/2026-07-01-cross-harness-engine-infrastructure.md)
 > Branch: `feat/v2.28.1-hook-adapter-framework`
 > Process: CEO-inline (`/l3` posture), not `/l5`, because this phase builds hook/probe infrastructure that `/l5` will later depend on.
 > Session start SHA: `cd8ee41b46a3b597febcd08e169b87d5e97dfd4c`

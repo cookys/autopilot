@@ -1,7 +1,7 @@
 # Multi-Agent Portability Correction — v2.7.3
 
 **Status**: ✅ Shipped 2026-05-27 — merged to develop as `5099d75`
-**Plan doc**: [`docs/plans/2026-05-22-multi-agent-portability-correction.md`](../../plans/2026-05-22-multi-agent-portability-correction.md)
+**Plan doc**: [`docs/plans/2026-05-22-multi-agent-portability-correction.md`](../../../plans/2026-05-22-multi-agent-portability-correction.md)
 **Branch**: `fix/v2.7.3-multi-agent-portability-correction`
 **Size**: M-L (originally scoped M; bloated to L via 4 rounds dialectic review)
 **Canonical version bump**: `2.7.2` → `2.7.3`
@@ -111,7 +111,7 @@ preflight-portability — autopilot v2.7.3+ acceptance gate
 
 ## Related
 
-- Plan: [`docs/plans/2026-05-22-multi-agent-portability-correction.md`](../../plans/2026-05-22-multi-agent-portability-correction.md)
+- Plan: [`docs/plans/2026-05-22-multi-agent-portability-correction.md`](../../../plans/2026-05-22-multi-agent-portability-correction.md)
 - Reverted commits: `bf0c637`, `b7d1adb`, `139ca49`
 - Merge commit: [`5099d75`](../../../../commit/5099d75)
-- Predecessor (also labelled v2.7.3 but no canonical bump): [retro-roundup](../_archive/2026-05-14-retro-roundup/README.md) → relabelled as `v2.7.2-followup` in INDEX
+- Predecessor (also labelled v2.7.3 but no canonical bump): [retro-roundup](../2026-05-14-retro-roundup/README.md) → relabelled as `v2.7.2-followup` in INDEX

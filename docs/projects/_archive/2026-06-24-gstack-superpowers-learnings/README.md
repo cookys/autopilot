@@ -1,6 +1,6 @@
 # gstack / superpowers learnings — dispatch-suppression check + plan Global Constraints
 
-**Size**: L · **Branch**: `feat/v2.25.0-dispatch-suppression` · **Plan**: [`docs/plans/2026-06-24-gstack-superpowers-learnings.md`](../../plans/2026-06-24-gstack-superpowers-learnings.md)
+**Size**: L · **Branch**: `feat/v2.25.0-dispatch-suppression` · **Plan**: [`docs/plans/2026-06-24-gstack-superpowers-learnings.md`](../../../plans/2026-06-24-gstack-superpowers-learnings.md)
 
 ## Project Goal
 

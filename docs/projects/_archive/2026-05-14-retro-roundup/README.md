@@ -1,7 +1,7 @@
 # Retro Roundup — Post-v2.7.2 Plumbing + Process Improvements
 
-**Status**: 🟡 In progress — L-1 setup
-**Plan doc**: [`docs/plans/2026-05-14-retro-roundup.md`](../../plans/2026-05-14-retro-roundup.md)
+**Status**: Complete — shipped as the v2.7.2 follow-up and archived.
+**Plan doc**: [`docs/plans/2026-05-14-retro-roundup.md`](../../../plans/2026-05-14-retro-roundup.md)
 **Branch**: `feat/v2.7.3-retro-roundup`
 **Scope mode**: Selective (Tier 1 ships; Tier 2-3 catalog with triggers; Tier 5 explicit skip)
 

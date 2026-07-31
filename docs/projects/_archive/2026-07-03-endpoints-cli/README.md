@@ -1,6 +1,6 @@
 # `autopilot endpoints` CLI + opt-in per-repo overlay
 
-- **Plan**: [`docs/plans/2026-07-03-endpoints-cli.md`](../../plans/2026-07-03-endpoints-cli.md)
+- **Plan**: [`docs/plans/2026-07-03-endpoints-cli.md`](../../../plans/2026-07-03-endpoints-cli.md)
 - **Branch**: `feat/v2.31.8-endpoints-cli`
 - **Target version**: v2.31.8
 

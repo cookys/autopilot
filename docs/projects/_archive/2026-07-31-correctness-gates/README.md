@@ -1,6 +1,6 @@
 # Correctness Gates
 
-> **Status**: Product complete · lifecycle evidence hold · **Size**: L · **Entry**: L6 · **Branch**: `develop`
+> **Status**: Product complete · archived with lifecycle evidence debt tracked in BACKLOG · **Size**: L · **Entry**: L6 · **Branch**: `develop`
 > **Started**: 2026-07-31 · **Plan**:
 > [correctness-gates](../../../plans/2026-07-31-correctness-gates.md)
 
@@ -45,7 +45,7 @@ Only this row is executable. P1–P4 are coverage and gates inside it.
 | P3 — binary path risk | complete | [phase-3](phase-3-binary-path-risk.md) |
 | P4 — added-lines secret scan | complete | [phase-4](phase-4-added-lines-secret-scan.md) |
 | Product qualification | complete | 259/259 merged-head test files; artifact-only Google/OpenAI/Anthropic terminal panel |
-| Lifecycle closeout | hold | canonical task-status input is unavailable, so `can_close` is not asserted and the L6 marker remains |
+| Lifecycle closeout | deferred | Historical campaign lacks canonical task-status input and an exact controller Work Order; `can_close` is not asserted, no receipt is forged, and migration/reconciliation is tracked in BACKLOG |
 
 ## Scope completeness record
 
@@ -110,7 +110,7 @@ combined artifact exceeded the proven transport argument limit. The final merged
 | 2026-07-31 | Combined B/C terminal qualification passed | Google/OpenAI/Anthropic `SHIP-AS-IS`; zero blocking findings |
 | 2026-07-31 | Initial B/C landing and repair chain completed | merge `9f26e082`; repairs through `6aea50fa` |
 | 2026-07-31 | Current upstream integrated and merged head requalified | merge `0941e277`; 259/259 test files |
-| 2026-07-31 | Lifecycle close receipt held fail-closed | required task-status input unavailable; marker retained |
+| 2026-07-31 | Lifecycle close receipt held fail-closed | task-status and exact controller Work Order unavailable; marker retained and migration/reconciliation tracked in BACKLOG |
 
 ## Final results
 

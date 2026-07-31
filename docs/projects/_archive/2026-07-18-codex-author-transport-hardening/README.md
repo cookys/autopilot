@@ -3,7 +3,7 @@
 **Status**: Complete — merged to develop  
 **Target**: v2.32.54  
 **Branch**: `feat/v2.32.54-author-transport-hardening`  
-**Plan**: [2026-07-18-codex-author-transport-hardening.md](../../plans/2026-07-18-codex-author-transport-hardening.md)  
+**Plan**: [2026-07-18-codex-author-transport-hardening.md](../../../plans/2026-07-18-codex-author-transport-hardening.md)
 **Session base**: `661ac1399b33a61bfb624fa694af192db22cd5b2`
 
 ## Project Goal

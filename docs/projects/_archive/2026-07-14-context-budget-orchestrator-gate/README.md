@@ -12,7 +12,7 @@
 > - IN: session-mode.js marker CLI; two hooks (lib/wrapper/tests); hooks.json + opt-in manifest + hooks/README wiring; l4/l5/l6/level-front-door/finish-flow prose write-points; CHANGELOG + version 2.32.26 + inventory/parity gates; BACKLOG entries for deferred items.
 > - OUT (BACKLOG'd): T3 deny tier (needs warn-mode calibration from ≥3 real /l5 runs), E1 dispatch-manifest merge gate, B1/B2 review-path fixes, per-repo config resolver ladder for these hooks.
 
-Plan: [`docs/plans/2026-07-14-context-budget-orchestrator-gate.md`](../../plans/2026-07-14-context-budget-orchestrator-gate.md)
+Plan: [`docs/plans/2026-07-14-context-budget-orchestrator-gate.md`](../../../plans/2026-07-14-context-budget-orchestrator-gate.md)
 Panel: 3-family hetero review (Gemini 3.5 Flash High / GPT-OSS 120B / MiniMax-M3), all FIX-THEN-SHIP, findings folded. SPIKE-1 resolved (CC 2.1.208: subagent hook payload carries `agent_id`/`agent_type`; session_id + transcript_path shared with parent).
 
 ## L-1.5 Scope Completeness Audit

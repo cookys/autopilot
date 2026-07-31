@@ -1,7 +1,7 @@
 # harness-integration + release-ritual (v2.10.0)
 
 > CEO-mode L-ship. Picks up all open **Next candidates** from
-> [2026-06-03-distill-handoff.md](../../plans/2026-06-03-distill-handoff.md).
+> [2026-06-03-distill-handoff.md](../../../plans/2026-06-03-distill-handoff.md).
 > Direction grounded in the verified memo [[project-harness-integration-direction]]
 > (2026-06-02), which already resolved the `/goal`×Stop-hook spike.
 

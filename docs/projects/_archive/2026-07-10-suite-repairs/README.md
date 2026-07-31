@@ -1,6 +1,6 @@
 # Suite Repairs (2026-07-10) — /l6 workstreams B + C
 
-**Status**: in progress (depth-1 foreman, /l6 B+C).
+**Status**: Complete — merged to develop; scoped repairs and integrity gate verified.
 **Base**: v2.32.16 `8639587`.
 
 ## OKR

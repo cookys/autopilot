@@ -1,6 +1,8 @@
 # terse-reviewer-contracts — project tracking
 
-> Plan: [`docs/plans/2026-07-05-terse-reviewer-contracts.md`](../../plans/2026-07-05-terse-reviewer-contracts.md)
+**Status**: Complete — all three slimmed contracts shipped in v2.32.16 and v2.32.18.
+
+> Plan: [`docs/plans/2026-07-05-terse-reviewer-contracts.md`](../../../plans/2026-07-05-terse-reviewer-contracts.md)
 > Branch: `worktree-agent-a4dc64ce28e8dd57a` (off `feat/terse-reviewer-contracts` @ bb2518c)
 > Run: /l6 — depth-1 foreman executes M2 + verification-harness authoring (Phase A); depth-0 holds the phase checkpoint.
 
@@ -61,3 +63,11 @@ See [`phase-a-status.md`](phase-a-status.md) for the Phase A per-unit ledger and
 - Three BACKLOG entries carry the follow-ups: terse-contracts retry (S), reviewer-harness
   calibration (S–M; measured lead: haiku scored 12/12 on this corpus and may be the better
   leg engine), Path-C faithful instrument (M).
+
+### Final resolution
+
+The halted first measurement was superseded on 2026-07-10. The Board-selected
+`claude-native` haiku leg certified the prompt template, which shipped in v2.32.16.
+The faithful `--system-prompt-file` Path-C instrument then certified `reviewer.md` and
+`code-review.md`; both shipped in v2.32.18. See `m3-rerun-haiku.md` and
+`m3-pathc-syscontract.md` for the final evidence.

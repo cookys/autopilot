@@ -1,6 +1,6 @@
 # Evidence and Eval Truth
 
-> **Status**: Product complete · lifecycle evidence hold · **Size**: L · **Entry**: L6 · **Branch**: `develop`
+> **Status**: Product complete · archived with lifecycle evidence debt tracked in BACKLOG · **Size**: L · **Entry**: L6 · **Branch**: `develop`
 > **Started**: 2026-07-31 · **Plan**:
 > [evidence-eval-truth](../../../plans/2026-07-31-evidence-eval-truth.md)
 
@@ -45,7 +45,7 @@ Only this row is executable. The source phases below are coverage and gates insi
 | P2 — transcript aggregation | complete | [phase-2](phase-2-transcript-aggregation.md) |
 | P3 — MiniMax calibration | complete | [phase-3](phase-3-minimax-calibration.md) |
 | Product qualification | complete | 259/259 merged-head test files; artifact-only Google/OpenAI/Anthropic terminal panel |
-| Lifecycle closeout | hold | canonical task-status input is unavailable, so `can_close` is not asserted and the L6 marker remains |
+| Lifecycle closeout | deferred | Historical campaign lacks canonical task-status input and an exact controller Work Order; `can_close` is not asserted, no receipt is forged, and migration/reconciliation is tracked in BACKLOG |
 
 ## Scope completeness record
 
@@ -112,7 +112,7 @@ all 259 test files in a clean independent clone.
 | 2026-07-31 | Combined B/C terminal qualification passed | Google/OpenAI/Anthropic `SHIP-AS-IS`; zero blocking findings |
 | 2026-07-31 | Initial B/C landing and repair chain completed | merge `9f26e082`; repairs through `6aea50fa` |
 | 2026-07-31 | Current upstream integrated and merged head requalified | merge `0941e277`; 259/259 test files |
-| 2026-07-31 | Lifecycle close receipt held fail-closed | required task-status input unavailable; marker retained |
+| 2026-07-31 | Lifecycle close receipt held fail-closed | task-status and exact controller Work Order unavailable; marker retained and migration/reconciliation tracked in BACKLOG |
 
 ## Final results
 

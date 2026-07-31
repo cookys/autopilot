@@ -1,5 +1,35 @@
-<!-- last-verified: 2026-07-27 -->
+<!-- last-verified: 2026-07-31 -->
 # Architecture Lessons
+
+## Persistent transcript continuity is not canonical ICC evidence
+
+**Date**: 2026-07-31 | **Context**: An L6 B/C backlog package reused persistent
+Codex implementer transcripts after the canonical heterogeneous launcher was
+unavailable.
+
+**Problem**: Transcript continuity prevented repeated redispatch and preserved
+implementation context, but it did not emit the canonical ICC campaign
+contract/events, verification receipt, or lifecycle-status input. Mission could
+truthfully reach `COMPLETE`, the full suite and an independent reviewer could
+pass, and the product could be pushed, while `status task` still had no
+authoritative input and `session-mode clear` correctly failed closed. Creating a
+synthetic `can_close` receipt after the fact would turn observed success into
+forged lifecycle evidence; rerunning completed implementation merely to create
+the missing lineage would waste work and change the evidence identity.
+
+**Solution**: Decide the lifecycle authority before the first effect. If an
+L5/L6 run must end with canonical `can_close`, every fallback implementer still
+needs to run behind an ICC/WLB adapter that preserves one `root_run_id` and
+writes the normal campaign and residue artifacts. Treat an attached transcript
+only as a continuity mechanism, never as a receipt substitute. If work has
+already escaped that adapter, report `product_merged`, `consumer_updated`,
+`pushed`, and `zero_residue` independently, preserve the fail-closed marker,
+and explicitly disclose the protocol deviation instead of fabricating status
+input.
+
+**Related**: `src/status/task-runtime.js`, `src/status/task-status.js`,
+`scripts/session-mode.js`, `skills/finish-flow/SKILL.md`,
+`skills/ceo-agent/references/level-front-door.md`.
 
 ## Absence is not zero: admit resources before proving cleanup
 

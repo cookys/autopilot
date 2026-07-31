@@ -177,6 +177,13 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-07-14 評估報告 §Q2；quant-codex-cookys-report。
 - **範圍修正（2026-07-14 回溯校準，calib-codex）**：「delta re-dispatch」只對 **review 側**成立（dispatch-review 每輪重餵整份 spec/diff 是 prompt 構造問題，delta 有效）；**implementer 側被資料推翻** — codex re-dispatch 起始 prompt 各輪 flat 17-20k、斜率 ≈ 0（無狀態 fresh prompt，本來就不累積），早前把 financial-order-r7 的 9.28M 歸因累積 prompt 是誤判，真實量是 session 內 agentic context 成長。implementer 側的真壓力點：預設 spark 視窗只有 121,600，44% dispatch 吃到 ≥90% — lever 是縮 dispatch scope 或把大 context 單元路由到 258k/353k 引擎（視窗相對門檻 75% warn / 90% hard），不是壓 prompt。
 
+### `dispatch-review.sh` runner-aware reviewer output-token budget (`--max-tokens`)
+- **Status**: TRIGGERED — user requested the capability to be tracked; implementation intentionally deferred。
+- **Trigger**: 下一次需要限制 reviewer 回覆的 output-token 上限，或再次為 `scripts/dispatch-review.sh` 增加 runner CLI/API 參數時；先完成各 runner 的參數映射與 unsupported 行為定義，再接線。
+- **Context**: `dispatch-review.sh` 目前只接受 `--effort`、`--timeout` 等選項，沒有 `--max-tokens`；現有 context-window gate 只限制送入的 diff/spec/pack 大小，不是 output budget。Codex、agy、Grok、cc-shim、Anthropic-compatible、Claude-native、Qoder 的 token 參數語意不保證同名，不能把一個 generic flag 盲目轉發；需建立 canonical budget contract、runner-specific mapping、fail-closed unsupported path 與 fixture coverage。此項與 B1/B2 的 prompt/delta 效率工作相關但不重複。
+- **Effort**: M。
+- **Source**: 2026-08-01 user report；`scripts/dispatch-review.sh` usage/parser audit（lines 33–37、119–136）。
+
 ### skills frontmatter `tier:` 欄位（B4 step 2 — 分層進 frontmatter）
 - **Trigger**: 先在 Claude Code ＋ codex 兩平台各做一次「帶未知 frontmatter 欄位」的 plugin load dry-run 且確認解析容忍（R1-F5：未驗不得宣稱無行為影響）；兩平台紀錄在手才動工。
 - **Context**: v2.31.16 B4 step 1 已把 docs/skills.md 排成 core/delegation/pioneer 三層（純排版）。step 2 = 把層級寫進各 SKILL.md frontmatter `tier:` 欄位，讓工具可機讀。風險面＝frontmatter 是路由面。

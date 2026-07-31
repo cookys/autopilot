@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const process = require('process');
+const transcriptSecrets = require('../hooks/_shared/secret-patterns');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 const {
   buildCapabilityEvidenceReceipt,
@@ -578,6 +579,34 @@ function parseRecordArgs(args) {
   return { file };
 }
 
+function physicalPathWithMissingTail(target) {
+  const suffix = [];
+  let existing = path.resolve(target);
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) break;
+    suffix.unshift(path.basename(existing));
+    existing = parent;
+  }
+  return path.resolve(fs.realpathSync(existing), ...suffix);
+}
+
+function isSameOrDescendant(candidate, root) {
+  const relative = path.relative(root, candidate);
+  return relative === ''
+    || (relative !== '..'
+      && !relative.startsWith(`..${path.sep}`)
+      && !path.isAbsolute(relative));
+}
+
+function outputOverlapsTranscriptRoot(output, root) {
+  const outputPaths = new Set([output, physicalPathWithMissingTail(output)]);
+  const rootPaths = new Set([root, physicalPathWithMissingTail(root)]);
+  return [...outputPaths].some((candidate) => (
+    [...rootPaths].some((boundary) => isSameOrDescendant(candidate, boundary))
+  ));
+}
+
 function parseTranscriptImportArgs(args) {
   const roots = [];
   let output = null;
@@ -611,8 +640,7 @@ function parseTranscriptImportArgs(args) {
   for (const spec of roots) unique.set(`${spec.provider}\0${spec.root}`, spec);
   const sortedRoots = [...unique.values()]
     .sort((a, b) => a.provider.localeCompare(b.provider) || a.root.localeCompare(b.root));
-  if (output && sortedRoots.some(({ root }) => output === root
-      || output.startsWith(`${root}${path.sep}`))) {
+  if (output && sortedRoots.some(({ root }) => outputOverlapsTranscriptRoot(output, root))) {
     failUsage('--output must be outside transcript roots');
   }
   return { roots: sortedRoots, output };
@@ -662,42 +690,74 @@ function parseTranscriptFile(file) {
   }
 }
 
-function walkTranscriptObjects(value, visitor, depth = 0, budget = { count: 0 }) {
-  if (depth > 16 || budget.count > 100000 || value === null || value === undefined) return;
-  if (Array.isArray(value)) {
-    for (const item of value) walkTranscriptObjects(item, visitor, depth + 1, budget);
-    return;
-  }
-  if (typeof value !== 'object') return;
-  budget.count += 1;
-  visitor(value);
-  for (const item of Object.values(value)) {
-    walkTranscriptObjects(item, visitor, depth + 1, budget);
-  }
-}
+const SESSION_IDENTIFIER_FRAGMENT = /(?:^|[^A-Za-z0-9])sess(?:ion)?[_-][A-Za-z0-9][A-Za-z0-9_-]{7,}(?=$|[^A-Za-z0-9])/i;
+const UUID_IDENTIFIER_FRAGMENT = /(?:^|[^A-Za-z0-9])[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?=$|[^A-Za-z0-9])/i;
+const CODEX_ENGINE_NAMES = new Set([
+  'gpt-5.3-codex-spark',
+  'gpt-5.4-mini',
+  'gpt-5.5',
+  'gpt-5.6-luna',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'o1',
+  'o1-mini',
+  'o1-preview',
+  'o1-pro',
+  'o3',
+  'o3-mini',
+  'o3-pro',
+  'o4-mini',
+]);
+const GROK_ENGINE_NAMES = new Set([
+  'grok-4.5',
+  'grok-4.5-fast',
+  'grok-composer-2.5-fast',
+]);
+const OPENCODE_ENGINE_NAMES = new Set([
+  ...CODEX_ENGINE_NAMES,
+  ...GROK_ENGINE_NAMES,
+  'glm-4.6',
+  'glm-4.7',
+  'glm-5.2',
+  'qwen-3.8',
+  'minimax-m2.7',
+  'minimax-m3',
+  'claude-3-haiku-20240307',
+  'claude-3-5-sonnet',
+  'claude-haiku-4-5',
+  'claude-haiku-4-5-20251001',
+  'claude-opus-4-7',
+  'claude-opus-4-8',
+  'claude-sonnet-4-6',
+  'claude-sonnet-5',
+  'gemini-1.5',
+  'gemini-3-flash',
+  'gemini-3.5-flash',
+  'deepseek-r1',
+  'deepseek-v3',
+  'kimi-k2.5',
+]);
 
-function safeEngineName(value) {
-  if (value && typeof value === 'object') {
-    value = value.modelID || value.model_id || value.id || value.name;
-  }
+function safeEngineName(provider, value) {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._:+()/ -]{0,119}$/.test(normalized)
       || /(?:secret|token|password|bearer|api[_ -]?key|credential)/i.test(normalized)
+      || SESSION_IDENTIFIER_FRAGMENT.test(normalized)
+      || UUID_IDENTIFIER_FRAGMENT.test(normalized)
+      || transcriptSecrets.scan(normalized).length > 0
       || normalized.includes('/') || normalized.includes('\\')) return null;
-  return normalized;
-}
-
-function transcriptEngine(parsed) {
-  let engine = null;
-  walkTranscriptObjects(parsed, (obj) => {
-    if (engine) return;
-    for (const key of ['model', 'model_id', 'modelID', 'engine']) {
-      engine = safeEngineName(obj[key]);
-      if (engine) break;
-    }
-  });
-  return engine || 'unknown';
+  const key = normalized.toLowerCase();
+  const admitted = provider === 'codex'
+    ? CODEX_ENGINE_NAMES.has(key)
+    : provider === 'grok'
+      ? GROK_ENGINE_NAMES.has(key)
+      : provider === 'opencode'
+        ? OPENCODE_ENGINE_NAMES.has(key)
+        : provider === 'agy'
+          ? /^Gemini 3\.6 (?:Flash|Pro)(?: \((?:Low|Medium|High)\))?$/i.test(normalized)
+          : false;
+  return admitted ? normalized : null;
 }
 
 function nonEmptyContent(value) {
@@ -708,97 +768,222 @@ function nonEmptyContent(value) {
 }
 
 function finiteMetric(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : null;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-function inspectTranscript(provider, parsed, file) {
-  let completion = null;
-  let hasOutput = false;
-  let toolFailure = false;
-  let truncated = false;
-  const usageObjects = new WeakSet();
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let totalTokens = 0;
-  let inputSeen = false;
-  let outputSeen = false;
-  let totalSeen = false;
-  let costUsd = 0;
-  let costSeen = false;
+function transcriptObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
 
-  walkTranscriptObjects(parsed, (obj) => {
-    const type = String(obj.type || obj.event || obj.kind || '').toLowerCase();
-    const status = String(obj.status || obj.state || '').toLowerCase();
-    if (typeof obj.completed === 'boolean') completion = obj.completed;
-    if (typeof obj.success === 'boolean') completion = obj.success;
-    if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)
-        || /(?:turn|session|task)[._-]completed/.test(type)) completion = true;
-    if (['failed', 'error', 'cancelled', 'canceled'].includes(status)
-        && /(?:turn|session|task|run)/.test(type)) completion = false;
+function hasDirectField(obj, fields) {
+  return fields.some((field) => Object.prototype.hasOwnProperty.call(obj, field));
+}
 
-    const role = String(obj.role || obj.actor || '').toLowerCase();
-    if (role === 'assistant') {
-      for (const key of ['content', 'text', 'message', 'output', 'response']) {
-        if (nonEmptyContent(obj[key])) hasOutput = true;
+function recognizedTranscriptSchema(provider, parsed) {
+  if (provider === 'codex') {
+    const records = Array.isArray(parsed) ? parsed : [parsed];
+    return records.some((value) => {
+      const record = transcriptObject(value);
+      if (!record) return false;
+      const type = String(record.type || '').toLowerCase();
+      const payload = transcriptObject(record.payload);
+      if (type === 'session_meta') return payload !== null;
+      if (type === 'turn.completed' || type === 'turn.failed') return true;
+      if (type === 'event_msg') {
+        return payload !== null && String(payload.type || '').toLowerCase() === 'token_count';
       }
-    } else {
-      for (const key of ['output_text', 'final_output', 'response_text']) {
-        if (nonEmptyContent(obj[key])) hasOutput = true;
+      if (type !== 'response_item' || !payload) return false;
+      const payloadType = String(payload.type || '').toLowerCase();
+      return payloadType === 'message'
+        || /^(?:tool|function_call)(?:[._-](?:output|result))?$/.test(payloadType);
+    });
+  }
+
+  const root = transcriptObject(parsed);
+  if (!root) return false;
+  const commonFields = [
+    'status', 'state', 'completed', 'success', 'usage', 'cost_usd', 'costUSD',
+    'tool', 'tool_status', 'tool_state', 'tool_exit_code', 'finish_reason',
+    'stop_reason', 'truncated',
+  ];
+  const providerFields = {
+    grok: ['model', 'response_text'],
+    opencode: ['modelID', 'messages'],
+    agy: ['model', 'output_text'],
+  };
+  return hasDirectField(root, [...commonFields, ...(providerFields[provider] || [])]);
+}
+
+function directCompletion(obj) {
+  if (!obj) return null;
+  if (typeof obj.completed === 'boolean') return obj.completed;
+  if (typeof obj.success === 'boolean') return obj.success;
+  const status = String(obj.status || obj.state || '').toLowerCase();
+  if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)) return true;
+  if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) return false;
+  return null;
+}
+
+function directTruncation(obj) {
+  if (!obj) return false;
+  const finishReason = String(obj.finish_reason || obj.stop_reason || '').toLowerCase();
+  return obj.truncated === true
+    || ['length', 'max_tokens', 'token_limit'].includes(finishReason);
+}
+
+function directToolFailure(obj) {
+  if (!obj) return false;
+  const tool = transcriptObject(obj.tool);
+  const status = String(
+    (tool && (tool.status || tool.state)) || obj.tool_status || obj.tool_state || '',
+  ).toLowerCase();
+  const exitCode = tool
+    ? finiteMetric(tool.exit_code)
+    : finiteMetric(obj.tool_exit_code);
+  return ['failed', 'error'].includes(status) || (exitCode !== null && exitCode > 0);
+}
+
+function emptyUsageAccumulator() {
+  return {
+    input: 0,
+    output: 0,
+    total: 0,
+    cost: 0,
+    inputSeen: false,
+    outputSeen: false,
+    totalSeen: false,
+    costSeen: false,
+  };
+}
+
+function addRecognizedUsage(accumulator, value) {
+  const usage = transcriptObject(value);
+  if (!usage) return;
+  const input = finiteMetric(usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens);
+  const output = finiteMetric(
+    usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens,
+  );
+  const total = finiteMetric(usage.total_tokens ?? usage.totalTokens);
+  const cost = finiteMetric(usage.cost_usd ?? usage.costUSD);
+  if (input !== null) { accumulator.input += input; accumulator.inputSeen = true; }
+  if (output !== null) { accumulator.output += output; accumulator.outputSeen = true; }
+  if (total !== null) { accumulator.total += total; accumulator.totalSeen = true; }
+  if (cost !== null) { accumulator.cost += cost; accumulator.costSeen = true; }
+}
+
+function inspectCodexTranscript(parsed) {
+  const result = {
+    engine: 'unknown',
+    completion: null,
+    hasOutput: false,
+    toolFailure: false,
+    truncated: false,
+    usage: emptyUsageAccumulator(),
+  };
+  const records = Array.isArray(parsed) ? parsed : [parsed];
+  for (const value of records) {
+    const record = transcriptObject(value);
+    if (!record) continue;
+    const type = String(record.type || '').toLowerCase();
+    const payload = transcriptObject(record.payload);
+    if (type === 'session_meta' && payload && result.engine === 'unknown') {
+      result.engine = safeEngineName('codex', payload.model) || 'unknown';
+    } else if (type === 'response_item' && payload) {
+      const payloadType = String(payload.type || '').toLowerCase();
+      if (payloadType === 'message' && String(payload.role || '').toLowerCase() === 'assistant') {
+        result.hasOutput = result.hasOutput || nonEmptyContent(payload.content);
+      }
+      if (/^(?:tool|function_call)(?:[._-](?:output|result))?$/.test(payloadType)) {
+        const status = String(payload.status || payload.state || '').toLowerCase();
+        const exitCode = finiteMetric(payload.exit_code);
+        if (['failed', 'error'].includes(status) || (exitCode !== null && exitCode > 0)) {
+          result.toolFailure = true;
+        }
+      }
+    } else if (type === 'event_msg' && payload
+        && String(payload.type || '').toLowerCase() === 'token_count') {
+      const info = transcriptObject(payload.info);
+      addRecognizedUsage(result.usage, info && info.last_token_usage);
+    } else if (type === 'turn.completed') {
+      result.completion = true;
+    } else if (type === 'turn.failed') {
+      result.completion = false;
+    }
+  }
+  return result;
+}
+
+function inspectRootTranscript(provider, parsed) {
+  const root = transcriptObject(parsed);
+  const result = {
+    engine: 'unknown',
+    completion: null,
+    hasOutput: false,
+    toolFailure: false,
+    truncated: false,
+    usage: emptyUsageAccumulator(),
+  };
+  if (!root) return result;
+  result.engine = safeEngineName(
+    provider,
+    provider === 'opencode' ? root.modelID : root.model,
+  ) || 'unknown';
+  result.completion = directCompletion(root);
+  result.toolFailure = directToolFailure(root);
+  result.truncated = directTruncation(root);
+  if (provider === 'grok') {
+    result.hasOutput = nonEmptyContent(root.response_text);
+  } else if (provider === 'opencode') {
+    if (Array.isArray(root.messages)) {
+      result.hasOutput = root.messages.some((value) => {
+        const message = transcriptObject(value);
+        return message && String(message.role || '').toLowerCase() === 'assistant'
+          && nonEmptyContent(message.content);
+      });
+    }
+  } else if (provider === 'agy') {
+    result.hasOutput = nonEmptyContent(root.output_text);
+  }
+  if (provider !== 'agy') {
+    addRecognizedUsage(result.usage, root.usage);
+    if (!result.usage.costSeen) {
+      const rootCost = finiteMetric(root.cost_usd ?? root.costUSD);
+      if (rootCost !== null) {
+        result.usage.cost += rootCost;
+        result.usage.costSeen = true;
       }
     }
+  }
+  return result;
+}
 
-    const toolLike = /tool|function_call/.test(type)
-      || obj.tool !== undefined || obj.tool_name !== undefined;
-    if (toolLike && (['failed', 'error'].includes(status)
-        || finiteMetric(obj.exit_code) > 0 || /tool[._-](?:failed|error)/.test(type))) {
-      toolFailure = true;
-    }
-    const finishReason = String(obj.finish_reason || obj.stop_reason || '').toLowerCase();
-    if (obj.truncated === true || ['length', 'max_tokens', 'token_limit'].includes(finishReason)) {
-      truncated = true;
-    }
-
-    const usageCandidates = [obj.usage, obj.token_usage, obj.last_token_usage];
-    for (const usage of usageCandidates) {
-      if (!usage || typeof usage !== 'object' || usageObjects.has(usage)) continue;
-      usageObjects.add(usage);
-      const input = finiteMetric(usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens);
-      const output = finiteMetric(
-        usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens,
-      );
-      const total = finiteMetric(usage.total_tokens ?? usage.totalTokens);
-      if (input !== null) { inputTokens += input; inputSeen = true; }
-      if (output !== null) { outputTokens += output; outputSeen = true; }
-      if (total !== null) { totalTokens += total; totalSeen = true; }
-      const cost = finiteMetric(usage.cost_usd ?? usage.costUSD);
-      if (cost !== null) { costUsd += cost; costSeen = true; }
-    }
-    const directCost = usageObjects.has(obj)
-      ? null : finiteMetric(obj.cost_usd ?? obj.costUSD);
-    if (directCost !== null) { costUsd += directCost; costSeen = true; }
-  });
+function inspectTranscript(provider, parsed, file, rootHasCalibrationComponent) {
+  const inspected = provider === 'codex'
+    ? inspectCodexTranscript(parsed)
+    : inspectRootTranscript(provider, parsed);
 
   const pathParts = file.split(path.sep).map((part) => part.toLowerCase());
   let cohort = 'general';
-  if (provider === 'opencode' && pathParts.some((part) => part.includes('swe-calibrate'))) {
+  if (provider === 'opencode' && (rootHasCalibrationComponent
+      || pathParts.some((part) => part === 'swe-calibrate'))) {
     cohort = 'swe-calibrate';
   }
-  if (completion === null) completion = hasOutput;
+  if (inspected.completion === null) inspected.completion = inspected.hasOutput;
+  const usage = inspected.usage;
   return {
     provider,
-    engine: transcriptEngine(parsed),
+    engine: inspected.engine,
     cohort,
-    completed: completion,
-    zeroOutput: !hasOutput,
-    toolFailure,
-    truncated,
+    completed: inspected.completion,
+    zeroOutput: !inspected.hasOutput,
+    toolFailure: inspected.toolFailure,
+    truncated: inspected.truncated,
     tokens: provider === 'agy' ? null : {
-      input: inputSeen ? inputTokens : null,
-      output: outputSeen ? outputTokens : null,
-      total: totalSeen ? totalTokens : null,
+      input: usage.inputSeen ? usage.input : null,
+      output: usage.outputSeen ? usage.output : null,
+      total: usage.totalSeen ? usage.total : null,
     },
-    costUsd: provider === 'agy' || !costSeen ? null : costUsd,
+    costUsd: provider === 'agy' || !usage.costSeen ? null : usage.cost,
   };
 }
 
@@ -862,16 +1047,35 @@ function cmdImportTranscripts(args) {
   const { roots, output } = parseTranscriptImportArgs(args);
   const sessions = [];
   const coverage = new Map();
+  const seenFilesByProvider = new Map();
   for (const { provider, root } of roots) {
     const files = transcriptFiles(root);
     const current = coverage.get(provider) || { candidate_files: 0, parsed_sessions: 0 };
-    current.candidate_files += files.length;
+    const seenFiles = seenFilesByProvider.get(provider) || new Set();
+    const rootHasCalibrationComponent = root.split(path.sep)
+      .some((part) => part.toLowerCase() === 'swe-calibrate');
     for (const file of files) {
+      let physicalFile;
+      try {
+        physicalFile = fs.realpathSync(file);
+      } catch {
+        physicalFile = path.resolve(file);
+      }
+      if (seenFiles.has(physicalFile)) continue;
+      seenFiles.add(physicalFile);
+      current.candidate_files += 1;
       const parsed = parseTranscriptFile(file);
       if (parsed === null) continue;
+      if (!recognizedTranscriptSchema(provider, parsed)) continue;
       current.parsed_sessions += 1;
-      sessions.push(inspectTranscript(provider, parsed, path.relative(root, file)));
+      sessions.push(inspectTranscript(
+        provider,
+        parsed,
+        path.relative(root, file),
+        rootHasCalibrationComponent,
+      ));
     }
+    seenFilesByProvider.set(provider, seenFiles);
     coverage.set(provider, current);
   }
   const sources = [...coverage.entries()]

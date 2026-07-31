@@ -11,11 +11,11 @@ Keep genuinely external absolute executables absolute. Do not modify the shared 
 
 ## Tasks
 
-- [ ] Add a repo-owned test script whose product dependency differs between base and head.
-- [ ] Prove the current tool incorrectly reads head product code for the base run.
-- [ ] Implement worktree-relative resolution for repo-owned scripts.
-- [ ] Add an external absolute executable compatibility case.
-- [ ] Preserve CLI, JSON, and exit-code behavior.
+- [x] Add a repo-owned test script whose product dependency differs between base and head.
+- [x] Prove the current tool incorrectly reads head product code for the base run.
+- [x] Implement worktree-relative resolution for repo-owned scripts.
+- [x] Add an external absolute executable compatibility case.
+- [x] Preserve CLI, JSON, and exit-code behavior.
 
 ## Verification
 

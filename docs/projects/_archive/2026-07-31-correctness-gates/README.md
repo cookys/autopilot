@@ -1,6 +1,6 @@
 # Correctness Gates
 
-> **Status**: Completed · **Size**: L · **Entry**: L6 · **Branch**: `develop`
+> **Status**: Product complete · lifecycle evidence hold · **Size**: L · **Entry**: L6 · **Branch**: `develop`
 > **Started**: 2026-07-31 · **Plan**:
 > [correctness-gates](../../../plans/2026-07-31-correctness-gates.md)
 
@@ -44,7 +44,8 @@ Only this row is executable. P1–P4 are coverage and gates inside it.
 | P2 — worktree red-green | complete | [phase-2](phase-2-worktree-red-green.md) |
 | P3 — binary path risk | complete | [phase-3](phase-3-binary-path-risk.md) |
 | P4 — added-lines secret scan | complete | [phase-4](phase-4-added-lines-secret-scan.md) |
-| Finish-flow | complete | 258/258 tests, independent Gemini review, no-ff integration, archive |
+| Product qualification | complete | 259/259 merged-head test files; artifact-only Google/OpenAI/Anthropic terminal panel |
+| Lifecycle closeout | hold | canonical task-status input is unavailable, so `can_close` is not asserted and the L6 marker remains |
 
 ## Scope completeness record
 
@@ -65,7 +66,7 @@ Only this row is executable. P1–P4 are coverage and gates inside it.
 | C backlog becomes a complete project/phase | This README, four phase files, plan, rubric |
 | CEO uses L6 and a sub-orchestrator | Mission attempt-3 claim plus persistent Codex implementer transcript |
 | dev-flow progression | Mission admission, four phase commits, aggregate L-5 gates |
-| Easy merge | Disjoint ownership and merge `9f26e082` |
+| Easy merge | Disjoint ownership, initial merge `9f26e082`, repair chain through `6aea50fa`, and upstream integration `0941e277` |
 
 ## File ownership
 
@@ -94,8 +95,11 @@ bash hooks/tests/reenabled-blockers.test.sh
 ```
 
 The foreman's result is first-pass only. Depth 0 reruns every command from the candidate commit and
-owns the authoritative QC verdict. Final depth-0 evidence: all 258 test files passed and Gemini
-3.6 Flash High returned `SHIP-AS-IS` with no findings.
+owns the authoritative QC verdict. The terminal artifact-only panel produced valid
+`SHIP-AS-IS` receipts from Google, OpenAI, and Anthropic with zero blocking findings. OpenAI and
+Anthropic reviewed the combined B/C artifact; Google's terminal seat reviewed full B because the
+combined artifact exceeded the proven transport argument limit. The final merged head passed all
+259 test files in a clean independent clone.
 
 ## Progress log
 
@@ -103,18 +107,22 @@ owns the authoritative QC verdict. Final depth-0 evidence: all 258 test files pa
 |---|---|---|
 | 2026-07-31 | Project bootstrapped from four triggered backlog entries | plan + rubric + Mission graph |
 | 2026-07-31 | P1–P4 implemented as four reviewable commits | `1cab214e` through `4812a7ab` |
-| 2026-07-31 | Combined B/C qualification passed | 258/258 test files; Gemini `SHIP-AS-IS` |
-| 2026-07-31 | Landed to `develop` and archived | merge `9f26e082` |
+| 2026-07-31 | Combined B/C terminal qualification passed | Google/OpenAI/Anthropic `SHIP-AS-IS`; zero blocking findings |
+| 2026-07-31 | Initial B/C landing and repair chain completed | merge `9f26e082`; repairs through `6aea50fa` |
+| 2026-07-31 | Current upstream integrated and merged head requalified | merge `0941e277`; 259/259 test files |
+| 2026-07-31 | Lifecycle close receipt held fail-closed | required task-status input unavailable; marker retained |
 
 ## Final results
 
 - Release prose justification is scoped to the current canonical version section.
 - Repo-owned verification commands execute the matching detached-worktree copy while external
   absolute executables retain their prior identity and exit behavior.
-- Binary-only, quoted, and space-containing paths reach existing risk rules.
+- Binary-only, quoted, space-containing, control-character, and literal top-level `b/` paths
+  reach existing risk rules without ambiguous header splitting.
 - Commit secret scanning examines added lines only: additions still block with redaction and
   deletion-only cleanup passes.
-- All six targeted suites and the repository aggregate of 258 test files passed.
+- The six targeted suites passed (9, 25, 24, 14, 6, and 16 assertions respectively), and the
+  merged-head repository aggregate passed all 259 test files.
 
 ## Decisions
 

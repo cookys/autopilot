@@ -91,8 +91,9 @@
 > Reviewer limitation (2026-07-31): the current MiniMax diff-only seat produced false
 > central claims in 5 of 6 recorded observations. This is calibration telemetry, not
 > authority or a demotion by itself. The resolver requires the machine-readable
-> `reviewer_limitation` tag above when `reviewer_limitation_required` is true and
-> surfaces the limitation as a diagnostic; independent verification remains required.
+> `reviewer_limitation` tag above unconditionally for this exact tuple and surfaces the
+> limitation as a diagnostic; `reviewer_limitation_required` remains compatibility
+> metadata only and cannot weaken the guard. Independent verification remains required.
 
 > Fallback preference rationale (2026-07-14): with an openai implementer BOTH
 > roster reviewers (gpt-5.5, sol) hit the family gate, so the in-loop reviewer

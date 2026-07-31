@@ -6,21 +6,25 @@ No failed orchestration-eval row enters a score without an evidence-backed cause
 
 ## Design
 
-- Add a closed `failure_class` vocabulary: `capability_fail|infra_fail`.
+- Add a closed `failure_class` vocabulary: `capability_fail|infra_fail`, plus a class-specific
+  `failure_cause` vocabulary: capability failures permit only `oracle_rejected`; infrastructure
+  failures permit only `runner_timeout|authentication|runner_error|empty_output|missing_oracle|oracle_error`.
 - Use runner exit, timeout/auth/empty-output evidence, and oracle outcome; duration alone is not
   sufficient.
 - Reject absent/unknown classification at scoring time.
-- Exclude infrastructure failure from capability rates while printing its count and causes.
-- Preserve successful rows and already-valid historical rows.
+- Reject successful rows that carry either failure metadata field.
+- Exclude infrastructure failure from both capability and adherence denominators while printing
+  its count and causes.
+- Preserve already-valid historical rows.
 
 ## Tasks
 
-- [ ] Plant unclassified, auth, timeout/empty, and real oracle-reject fixtures.
-- [ ] Prove the existing scorer accepts the planted unclassified failure before the repair.
-- [ ] Emit the class from the real runner result path.
-- [ ] Enforce the class in `score.js`.
-- [ ] Add the explicit infra-excluded report row/footer.
-- [ ] Run the full orchestration-eval hermetic suite.
+- [x] Plant unclassified, auth, timeout/empty, and real oracle-reject fixtures.
+- [x] Prove the existing scorer accepts the planted unclassified failure before the repair.
+- [x] Emit the class from the real runner result path.
+- [x] Enforce the class in `score.js`.
+- [x] Add the explicit infra-excluded report row/footer.
+- [x] Run the full orchestration-eval hermetic suite.
 
 ## Verification
 

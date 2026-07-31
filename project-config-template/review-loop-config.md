@@ -31,6 +31,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - reviewer_engine: gpt-5.5
 - reviewer_effort: xhigh
 - reviewer_runner: codex
+- reviewer_limitation:
+- reviewer_limitation_required: false
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
 - implementer_engine: gpt-5.3-codex-spark
@@ -82,6 +84,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 |-------|---------|--------|
 | `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
 | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
+| `reviewer_limitation` | exact reviewer-tuple limitation tag. The `MiniMax-M3` + `cc-shim` + `minimax` tuple must use `minimax-false-central-claim-5-of-6`; the resolver warns and rejects that tuple when the tag is absent | the exact limitation tag, or empty |
+| `reviewer_limitation_required` | compatibility metadata only; it cannot enable, disable, or weaken the exact MiniMax tuple guard | `true\|false` |
 | `reviewer_engine_low_risk` | **risk-tiered overlay**: when BOTH `_low_risk` keys are set, the loop reviewer for computed `review_risk=low` becomes this pair (same `reviewer_runner`); `review_risk=high` ALWAYS uses `reviewer_engine`/`reviewer_effort`. Empty = tiering off. Adopt a faster engine on low-risk diffs only after it clears `engine-qualify.sh` (scorecard-first) | a model name (e.g. `gpt-5.6-sol`), or empty |
 | `reviewer_effort_low_risk` | effort for the low-risk reviewer; garbage → empty (tiering off — fail-safe reviews with the stronger incumbent) | `low\|medium\|high\|xhigh\|max`, or empty |
 | `on_family_conflict` | engine `reviewDiff` policy when the (effective) reviewer shares the implementer's model family: `fallback` = substitute the first cross-family QUALIFIED scorecard-ladder row (runner allowlist `codex\|agy\|grok\|claude-native`; codex rows need a calibrated `effort` on the row; ladder provenance must match the actual implementer family) so the in-loop decorrelated review actually runs; `block` = hard-block (pre-v2.32.25 behavior — for the default openai implementer + openai reviewer this means the in-loop review NEVER runs and convergence rides verify-first). Garbage → `block` (fail-closed) | `fallback` (default) \| `block` |
@@ -252,9 +256,14 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   EDIT-ONLY + wrapper-commit (implementer); prompt via STDIN. **cc-shim as a `reviewer_runner`** is
   read-INTENT best-effort surface reduction (`--setting-sources project` + `--strict-mcp-config` +
   `--tools ""` + `HOME`/scratch cwd + no skip-permissions), **NOT a hard sandbox** — for a genuinely
-  untrusted diff prefer the `codex` reviewer with `bwrap` installed. **MiniMax-M3 is calibrated as a
-  reviewer** (2026-06-30: 10/10 `evals/known-bad` caught, false-pass-on-critical = 0, 3/3 clean) → safe
-  in a `qc_panel`. **GLM-5.2** is endpoint-verified but was 529-overloaded under load — re-Spike before trusting.
+  untrusted diff prefer the `codex` reviewer with `bwrap` installed. **MiniMax-M3 has strong
+  reviewer calibration** (2026-06-30: 10/10 `evals/known-bad` caught,
+  false-pass-on-critical = 0, 3/3 clean), but a 2026-07-31 diff-only observation produced false
+  central claims in 5 of 6 cases. The exact `MiniMax-M3` + `cc-shim` + `minimax` reviewer tuple
+  therefore requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; the resolver
+  emits an advisory and rejects a missing tag. This is telemetry, not automatic demotion or
+  authority, and independent verification remains required. **GLM-5.2** is endpoint-verified but
+  was 529-overloaded under load — re-Spike before trusting.
 - The implementer's own passing tests are **not** the criterion — keep
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the

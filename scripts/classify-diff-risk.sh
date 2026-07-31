@@ -435,13 +435,28 @@ if (source.startsWith('"')) {
   while (source[offset] === ' ') offset += 1;
   if (before === null || after === null || offset !== source.length) process.exit(1);
 } else {
-  const separator = source.indexOf(' b/', 2);
-  if (separator < 0) process.exit(1);
-  before = source.slice(0, separator);
-  after = source.slice(separator + 1);
+  const candidates = [];
+  let separator = source.indexOf(' b/', 2);
+  while (separator >= 0) {
+    const candidateBefore = source.slice(0, separator);
+    const candidateAfter = source.slice(separator + 1);
+    if (candidateBefore.startsWith('a/')
+        && candidateAfter.startsWith('b/')
+        && candidateBefore.slice(2) === candidateAfter.slice(2)) {
+      candidates.push([candidateBefore, candidateAfter]);
+    }
+    separator = source.indexOf(' b/', separator + 1);
+  }
+  if (candidates.length !== 1) process.exit(1);
+  [before, after] = candidates[0];
 }
 
-process.stdout.write(`${before}\n${after}\n`);
+process.stdout.write(Buffer.concat([
+  Buffer.from(before, 'utf8'),
+  Buffer.from([0]),
+  Buffer.from(after, 'utf8'),
+  Buffer.from([0]),
+]));
 NODE
 }
 
@@ -483,7 +498,7 @@ collect_touched_paths() {
   while IFS= read -r line; do
     if [[ "$line" == diff\ --git\ * ]]; then
       header_paths=()
-      mapfile -t header_paths < <(parse_diff_git_header_paths "$line")
+      mapfile -d '' -t header_paths < <(parse_diff_git_header_paths "$line")
       if [ "${#header_paths[@]}" -eq 2 ]; then
         collect_path "${header_paths[0]}" a
         collect_path "${header_paths[1]}" b

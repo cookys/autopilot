@@ -173,6 +173,9 @@ function recordGateEntry(journal, {
 }) {
   if (!GATE_KINDS.includes(kind)) fail('INVALID_GATE_KIND', `unknown gate kind ${kind}`);
   if (!isStr(owner)) fail('INVALID_GATE_OWNER', 'gate owner required');
+  if (isObj(input) && isStr(input.owner) && input.owner !== owner) {
+    fail('INVALID_GATE_OWNER', 'gate input owner must match the recording owner');
+  }
   if (!isStr(startedAt) || !isStr(finishedAt)) {
     fail('INVALID_GATE_TIMING', 'gate start/finish times required');
   }
@@ -183,6 +186,7 @@ function recordGateEntry(journal, {
   // Reuse matching successful result when inputs are identical and not invalidated.
   const matchingPrior = [...j.entries].reverse().find((e) => (
     e.kind === kind
+    && (!isObj(input) || !isStr(input.owner) || e.owner === input.owner)
     && e.input_digest === inputDigest
     && e.result
     && e.result.success === true
@@ -204,7 +208,7 @@ function recordGateEntry(journal, {
       && e.result
       && e.result.success === true
       && !e.invalidated
-      && e.input_digest !== inputDigest
+      && (e.input_digest !== inputDigest || e.owner !== owner)
     ));
     if (liveSameKind.length > 0) {
       if (typeof invalidateReason !== 'string' || invalidateReason.trim().length === 0) {
@@ -246,6 +250,7 @@ function findReusableGate(journal, kind, input) {
   const inputDigest = gateInputDigest(kind, input);
   return journal.entries.find((e) => (
     e.kind === kind
+    && (!isObj(input) || !isStr(input.owner) || e.owner === input.owner)
     && e.input_digest === inputDigest
     && e.result
     && e.result.success === true
@@ -1585,9 +1590,11 @@ function adoptOrphanLeafMechanical({
   const {
     isCompleteIdentity,
     createOrUpdateWorkOrder,
+    readJsonStrict,
     resolveGitCommonDir,
     validateControllerProcessParentage,
     validateStoredWorkOrderIntegrity,
+    workOrderPath,
   } = require('./work-order');
   const { execFileSync } = require('child_process');
   if (!isObj(workOrder) || !isStr(workOrder.work_order_id)) {
@@ -1605,6 +1612,73 @@ function adoptOrphanLeafMechanical({
       preserve_evidence: true, duplicate_mutation: 0,
     };
   }
+  if (!isStr(workOrder.root_run_id)
+      || !isStr(workOrder.graph_node)
+      || !Number.isSafeInteger(workOrder.attempt)
+      || workOrder.attempt < 1) {
+    return {
+      ok: false, status: 'stopped', code: 'ADOPTION_WO_IDENTITY_INCOMPLETE',
+      reason: 'canonical root/node/attempt Work Order identity required',
+      preserve_evidence: true, duplicate_mutation: 0,
+    };
+  }
+  const commonDir = resolveGitCommonDir(gitCwd);
+  if (!commonDir) {
+    return {
+      ok: false, status: 'stopped', code: 'ADOPTION_COMMON_DIR_MISSING',
+      reason: 'git common dir required for canonical Work Order authority',
+      preserve_evidence: true, duplicate_mutation: 0,
+    };
+  }
+  const canonicalPath = workOrderPath(
+    commonDir,
+    workOrder.root_run_id,
+    workOrder.graph_node,
+    workOrder.attempt,
+  );
+  const canonicalRead = readJsonStrict(canonicalPath);
+  if (!canonicalRead.ok || !isObj(canonicalRead.value)) {
+    return {
+      ok: false,
+      status: 'stopped',
+      code: canonicalRead.reason_code || 'ADOPTION_WO_MISSING',
+      reason: canonicalRead.reason || 'canonical persisted Work Order is missing',
+      preserve_evidence: true,
+      duplicate_mutation: 0,
+    };
+  }
+  const canonicalWorkOrder = canonicalRead.value;
+  const canonicalIntegrity = validateStoredWorkOrderIntegrity(canonicalWorkOrder);
+  if (!canonicalIntegrity.ok) {
+    return {
+      ok: false,
+      status: 'stopped',
+      code: canonicalIntegrity.reason_code || 'ADOPTION_WO_INTEGRITY',
+      reason: canonicalIntegrity.reason || 'canonical Work Order integrity validation failed',
+      preserve_evidence: true,
+      duplicate_mutation: 0,
+    };
+  }
+  if (canonicalWorkOrder.root_run_id !== workOrder.root_run_id
+      || canonicalWorkOrder.graph_node !== workOrder.graph_node
+      || canonicalWorkOrder.attempt !== workOrder.attempt
+      || canonicalWorkOrder.work_order_id !== workOrder.work_order_id) {
+    return {
+      ok: false, status: 'stopped', code: 'ADOPTION_WO_IDENTITY_MISMATCH',
+      reason: 'caller Work Order does not match the canonical persisted identity',
+      preserve_evidence: true, duplicate_mutation: 0,
+    };
+  }
+  if (canonicalWorkOrder.digest !== workOrder.digest) {
+    return {
+      ok: false, status: 'stopped', code: 'ADOPTION_WO_SNAPSHOT_MISMATCH',
+      reason: 'caller Work Order snapshot digest does not match canonical persisted authority',
+      preserve_evidence: true, duplicate_mutation: 0,
+    };
+  }
+  // From this point onward, derive every adoption decision from the persisted
+  // authority. The caller object is only a snapshot/fence, never the source.
+  workOrder = canonicalWorkOrder;
   const controller = isObj(workOrder.controller) ? workOrder.controller : null;
   if (!controller) {
     return {
@@ -1923,14 +1997,6 @@ function adoptOrphanLeafMechanical({
   // controller_digest recomputed by createOrUpdateWorkOrder / caller.
   let persisted = null;
   try {
-    const commonDir = resolveGitCommonDir(gitCwd);
-    if (!commonDir) {
-      return {
-        ok: false, status: 'stopped', code: 'ADOPTION_COMMON_DIR_MISSING',
-        reason: 'git common dir required for CAS adoption append',
-        preserve_evidence: true, duplicate_mutation: 0,
-      };
-    }
     nextController.controller_digest = controllerStateDigest(nextController);
     persisted = createOrUpdateWorkOrder(commonDir, {
       ...workOrder,
@@ -1940,6 +2006,7 @@ function adoptOrphanLeafMechanical({
       campaign_phase: 'ADOPTED_ORPHAN',
     }, {
       expectedGeneration: workOrder.generation,
+      expectedWorkOrderDigest: workOrder.digest,
       expectedCasToken: workOrder.cas_token,
       expectedControllerDigest: controller.controller_digest,
       bindArtifacts: false,

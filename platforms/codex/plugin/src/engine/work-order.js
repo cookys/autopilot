@@ -1709,6 +1709,14 @@ function createOrUpdateWorkOrder(commonDir, fields, options = {}) { const owner 
       };
     }
     const existing = parsed.value;
+    if (!existing && options.expectedWorkOrderDigest != null) {
+      return {
+        status: 'reject',
+        reason_code: 'cas_conflict',
+        reason: 'expected existing work order is missing',
+        path: file,
+      };
+    }
     if (existing) {
       // Never silently reseal a tampered stored Work Order / controller.
       const integrity = validateStoredWorkOrderIntegrity(existing);
@@ -1742,6 +1750,16 @@ function createOrUpdateWorkOrder(commonDir, fields, options = {}) { const owner 
           status: 'reject', reason_code: 'cas_conflict',
           reason: `work order generation ${existing.generation} != expected ${options.expectedGeneration}`,
           work_order: existing, path: file,
+        };
+      }
+      if (options.expectedWorkOrderDigest != null
+          && existing.digest !== options.expectedWorkOrderDigest) {
+        return {
+          status: 'reject',
+          reason_code: 'cas_conflict',
+          reason: 'work order digest CAS mismatch',
+          work_order: existing,
+          path: file,
         };
       }
       if (options.expectedCasToken != null && existing.cas_token !== options.expectedCasToken) {

@@ -4133,6 +4133,9 @@ const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize:
   convergence: () => ({ passed: true }),
   finalPanel: () => ({
     reviewed: true,
+    verdict: 'SHIP-AS-IS',
+    findings: '[]',
+    review_digest: 'f'.repeat(64),
     sealed_min_panel_size: 1,
     final_panel_count: 1,
     final_panel_seat_receipts: [{
@@ -4435,6 +4438,9 @@ const result = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1
   convergence: () => ({ passed: true }),
   finalPanel: () => ({
     reviewed: true,
+    verdict: 'SHIP-AS-IS',
+    findings: '[]',
+    review_digest: 'f'.repeat(64),
     sealed_min_panel_size: 1,
     final_panel_count: 1,
     final_panel_seat_receipts: [seat()],
@@ -4543,7 +4549,8 @@ const over = runCampaignComposition({
     };
     s.receipt_digest = canonicalDigest(s);
     return {
-      reviewed: true, sealed_min_panel_size: 1, final_panel_count: 1,
+      reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]',
+      review_digest: 'f'.repeat(64), sealed_min_panel_size: 1, final_panel_count: 1,
       final_panel_seat_receipts: [s],
     };
   },
@@ -4668,6 +4675,9 @@ const result = runCampaignComposition({
   convergence: () => ({ passed: true }),
   finalPanel: () => ({
     reviewed: true,
+    verdict: 'SHIP-AS-IS',
+    findings: '[]',
+    review_digest: 'f'.repeat(64),
     sealed_min_panel_size: 1,
     final_panel_count: 1,
     final_panel_seat_receipts: [seat()],

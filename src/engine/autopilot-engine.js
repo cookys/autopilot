@@ -70,6 +70,7 @@ const {
   createVerificationReceipt,
   createVerificationRequest,
   createWriterFence,
+  environmentFingerprint,
   reusableGreenReceipt,
   verificationArgv,
 } = require('./campaign-verification');
@@ -5987,6 +5988,18 @@ class AutopilotEngine {
     campaignControl.controller_work_order_id = controllerWorkOrder
       && controllerWorkOrder.work_order_id;
     campaignControl.controller_work_order_path = controllerWorkOrderPath;
+    // Freeze the exact verification command/environment and terminal reviewer
+    // roster before composition. Gate keys and the effects they authorize must
+    // observe the same material inputs even if ambient process state changes.
+    const verificationEnvironment = { ...(input.verificationEnv || process.env) };
+    const verificationEnvAllowlist = Array.isArray(input.verificationEnvAllowlist)
+      ? [...input.verificationEnvAllowlist] : undefined;
+    const verificationArgvHash = campaignCanonicalDigest(verificationArgv(verifyCmd));
+    const verificationEnvFingerprint = environmentFingerprint(
+      verificationEnvironment,
+      verificationEnvAllowlist,
+    );
+    const jointReviewRosterDigest = campaignCanonicalDigest(roster);
     const composition = this.campaignComposer({
       maxRepairGenerations,
       minPanelSize: roster.min_panel_size,
@@ -6124,6 +6137,12 @@ class AutopilotEngine {
         : (campaignControl.contract_digest || null),
       strictContractDigest: campaignControl.contract_digest || null,
       fullSuiteCommandDigest: campaignCanonicalDigest(verifyCmd),
+      verificationArgvHash,
+      verificationEnvFingerprint,
+      fullSuiteArgvHash: verificationArgvHash,
+      fullSuiteEnvFingerprint: verificationEnvFingerprint,
+      jointReviewRosterDigest,
+      requireGateMaterialAuthority: true,
       baseSha: exactMissionClaim
         ? exactMissionClaim.base_sha
         : (base || currentBase || null),
@@ -6793,12 +6812,11 @@ class AutopilotEngine {
             }),
           };
         }
-        const verificationEnv = input.verificationEnv || process.env;
         const request = createVerificationRequest({
           treeSha: candidate.tree_sha,
           verifyCmd,
-          env: verificationEnv,
-          envAllowlist: input.verificationEnvAllowlist,
+          env: verificationEnvironment,
+          envAllowlist: verificationEnvAllowlist,
         });
         const cached = verificationCache.get(request.request_digest);
         if (reusableGreenReceipt(cached, request)) {
@@ -6857,7 +6875,7 @@ class AutopilotEngine {
             verifyResult = this.verifyCommandRunner({
               verifyCmd,
               cwd: worktree,
-              env: verificationEnv,
+              env: verificationEnvironment,
               round: repairGeneration + 1,
               commit: candidate.commit,
               branch: candidate.branch,
@@ -6987,6 +7005,12 @@ class AutopilotEngine {
         // campaign contract. An ambient/caller fullSuiteCommand is never
         // executable authority (including a trivially successful "true").
         const fullSuiteCmd = verifyCmd;
+        const suiteRequest = createVerificationRequest({
+          treeSha: candidate.tree_sha,
+          verifyCmd: fullSuiteCmd,
+          env: verificationEnvironment,
+          envAllowlist: verificationEnvAllowlist,
+        });
         const startedAt = this.now();
         let addResult = null;
         let worktree = null;
@@ -7016,7 +7040,7 @@ class AutopilotEngine {
             suiteResult = this.verifyCommandRunner({
               verifyCmd: fullSuiteCmd,
               cwd: worktree,
-              env: input.verificationEnv || process.env,
+              env: verificationEnvironment,
               round: repairGeneration + 1001,
               commit: candidate.commit,
               branch: candidate.branch,
@@ -7056,9 +7080,16 @@ class AutopilotEngine {
         }
         const executed = !setupReason && isObj(suiteResult);
         const blockedReason = executed ? verifyResultBlocked(suiteResult) : setupReason;
+        const executedArgvHash = executed
+          && Array.isArray(suiteResult.executed_argv)
+          && suiteResult.executed_argv.every((part) => typeof part === 'string')
+          ? campaignCanonicalDigest(suiteResult.executed_argv)
+          : null;
+        const runnerArgvAttested = executedArgvHash === suiteRequest.argv_hash;
         const passed = executed
           && !blockedReason
           && suiteResult.status === 0
+          && runnerArgvAttested
           && !cleanupReason;
         const body = {
           schema_version: 1,
@@ -7067,6 +7098,10 @@ class AutopilotEngine {
           candidate_commit: candidate.commit,
           candidate_tree_sha: candidate.tree_sha,
           command_digest: campaignCanonicalDigest(fullSuiteCmd),
+          argv_hash: executedArgvHash,
+          env_fingerprint: suiteRequest.env_fingerprint,
+          request_digest: runnerArgvAttested ? suiteRequest.request_digest : null,
+          runner_argv_attested: runnerArgvAttested,
           checkout_attestation_digest: checkoutAttestation
             ? checkoutAttestation.receipt_digest : null,
           executed,
@@ -7077,7 +7112,10 @@ class AutopilotEngine {
           cleanup_reason: cleanupReason || null,
           reason: passed
             ? null
-            : (blockedReason || cleanupReason || 'full suite failed'),
+            : (blockedReason
+              || (!runnerArgvAttested ? 'full suite runner argv attestation failed' : null)
+              || cleanupReason
+              || 'full suite failed'),
           started_at: startedAt,
           finished_at: this.now(),
         };

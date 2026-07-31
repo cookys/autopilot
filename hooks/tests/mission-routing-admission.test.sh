@@ -1666,15 +1666,17 @@ assert.strictEqual(
 );
 fs.writeFileSync(written.path, missingWoBytes);
 
-// Missing terminal journal → no evidence → first-run may proceed (no historical).
+// A canonical terminal+reconciled claim makes its applied journal mandatory.
+// Deleting that receipt must fail closed rather than replay as a first run.
 fs.unlinkSync(journalPath);
-const empty = loadDurableMissionEvidence(repo, {
-  enforceEvidence: true,
-  missionGraphDigest: graphDig,
-  graphNodeId: 'n1',
-});
-// Without terminal, no WO loaded via icc → no historical (first-run).
-assert.equal(empty.historicalOutputs, null);
+assert.throws(() => {
+  loadDurableMissionEvidence(repo, {
+    enforceEvidence: true,
+    missionGraphDigest: graphDig,
+    graphNodeId: 'n1',
+  });
+}, (e) => e && e.code === 'MISSION_EVIDENCE_MISSING'
+  && /applied terminal (journal|receipt)/i.test(String(e.message)));
 
 // Foreign graph digest on terminal when present again must fail closed.
 fs.writeFileSync(
@@ -1707,7 +1709,7 @@ console.log(JSON.stringify({
   ordinary_dispatch_worktree_not_created: true,
   ordinary_engine_shell_bridge: true,
   ambient_ready_missing_wo_fail_closed: true,
-  ordinary_missing_terminal_first_run: true,
+  ordinary_missing_terminal_fail_closed: true,
   ordinary_corrupt_registry_fail_closed: true,
   session_mode_ordinary_cli: true,
   dispatcher_called: false,

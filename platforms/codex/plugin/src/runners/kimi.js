@@ -14,7 +14,6 @@ const REQUIRED_HELP_TOKENS = Object.freeze([
   '--model',
   '--prompt',
   '--output-format',
-  '--plan',
 ]);
 const LONG_OPTION_PATTERN = /(^|[^A-Za-z0-9_-])(--[A-Za-z0-9][A-Za-z0-9-]*)(?=$|[\s=,.;:()[\]{}<>])/gm;
 
@@ -140,7 +139,6 @@ function runKimiAuthor(input = {}, options = {}) {
     '--model', MODEL,
     '--prompt', input.prompt,
     '--output-format', 'text',
-    '--plan',
   ];
   let child;
   try {

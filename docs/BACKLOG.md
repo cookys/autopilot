@@ -63,12 +63,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: L（含 implementer／verification-author role eval、QC reviewer-role mapping、ICC intake red/green）
 - **Source**: PRO P4 Heto generation 1，GPT-5.6 Sol finding R2/R6，candidate `d0a05f7`；2026-07-30 controller-execution-discipline final-panel admission incident
 
-### Native Kimi author adapter passes mutually exclusive `--prompt` and `--plan`
-- **Trigger**: before the next native Kimi author/reviewer dispatch, or next touch of `src/runners/kimi.js` and `hooks/tests/dispatch-author-kimi.test.sh`.
-- **Context**: 2026-07-29 bounded backlog intake used Kimi Code CLI 0.28.0. The shipped adapter's exact argv includes both non-interactive `--prompt` and interactive `--plan`; the real CLI deterministically rejects it with `Cannot combine --prompt with --plan.` The hermetic test currently asserts that invalid argv, so it cannot catch the live incompatibility. The review succeeded only through an isolated empty-cwd direct invocation without `--plan`; that workaround is not an adapter fix. Smallest repair: remove the incompatible flag from native author mode (or select a probed read-only mode that is actually compatible), update the surface contract/test, and add an opt-in live smoke that proves a non-empty authored result while the repository remains unexposed.
-- **Effort**: S
-- **Source**: 2026-07-29 bounded-backlog-intake real Kimi K3 review dispatch; Kimi Code CLI 0.28.0
-
 ### CLAUDE.md 逼近 40k 硬上限（餘裕 54 bytes）— 每個新 script 都要加 row，下一個必撞
 - **Trigger**: 下次任何人要在 Scripts inventory 加 row 時（幾乎等於「下一個新 script」）；或 `check-claude-md-inventory.js` 再次在 CI 變紅時。
 - **Context**: v2.32.57 才剛把 CLAUDE.md 從 81KB 瘦到 38.5KB 並加上 40000 bytes 硬 cap。三週後（v2.32.58）就回到 **39946/40000，只剩 54 bytes 餘裕** —— 因為兩條並行管線各加一個 inventory row 就直接撞破（40223），CI 紅。這次靠把新 row 縮回索引形態（783→~420 bytes）救回，但那是一次性的：**inventory 是單調成長的（每個新 script 一列），而 cap 是固定的**，所以這個閘會週期性地在「兩人同時加 row」時炸掉，且炸的是無辜的第二個 push 者。可能修法：(a) 把 inventory 拆成 `references/scripts-inventory.md` 由 CLAUDE.md 單行引用（CLAUDE.md 回到真正的 session-entry 內容）；(b) cap 改成隨 script 數線性放寬並保留 per-line cap；(c) 維持現狀但把 Row shape rule 的字數上限機械化（目前只有 per-line 800 bytes，太寬）。**(a) 最貼近 40k 存在的理由**（harness 每 session 吞它），但要確認被引用的 reference 不會反而每 session 都被載入。

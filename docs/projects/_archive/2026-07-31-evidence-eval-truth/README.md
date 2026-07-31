@@ -116,8 +116,9 @@ all 259 test files in a clean independent clone.
 
 ## Final results
 
-- Failed eval rows now use the closed `capability_fail|infra_fail` vocabulary; invalid or
-  missing classifications are rejected, while infrastructure failures are excluded and tallied.
+- Failed eval rows now use closed class-specific `failure_class`/`failure_cause` vocabularies;
+  invalid or missing metadata is rejected, successful rows cannot carry failure metadata, and
+  infrastructure failures are tallied but excluded from capability and adherence denominators.
 - Transcript import is explicit-root, aggregate-only, deterministic, idempotent, and remains
   non-authoritative; agy missing usage and OpenCode calibration cohorts stay honest.
 - Provider model extraction accepts exact known labels only; secret/prose/session/UUID-shaped,

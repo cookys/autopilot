@@ -640,6 +640,25 @@ if ! grep -q 'EXCLUDED INFRASTRUCTURE FAILURES' <<< "$SCORE_OUT" \
   exit 1
 fi
 
+# Infra failures remain visible in the excluded-cause tally but must not dilute
+# any capability or adherence denominator.
+cat > "$TEST_OUT_DIR/infra-adherence.jsonl" <<'JSONL'
+{"task_id":"infra-adherence","arm":"on","oracle_pass":true,"adjudication_valid":true,"patterns_named":true,"probe_evidence_present":true}
+{"task_id":"infra-adherence","arm":"on","oracle_pass":false,"failure_class":"infra_fail","failure_cause":"runner_timeout","adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false}
+JSONL
+INFRA_ADHERENCE_OUT="$(node "$EVAL_DIR/score.js" "$TEST_OUT_DIR/infra-adherence.jsonl")"
+INFRA_ADHERENCE_SECTION="$(sed -n '/ADHERENCE REPORT/,/Honest footer/p' <<< "$INFRA_ADHERENCE_OUT")"
+if ! grep -Eq '^ON[[:space:]]*\|[[:space:]]*1[[:space:]]*\|[[:space:]]*100\.0% \(1/1\)[[:space:]]*\|[[:space:]]*100\.0% \(1/1\)[[:space:]]*\|[[:space:]]*100\.0% \(1/1\)' <<< "$INFRA_ADHERENCE_SECTION"; then
+  echo "Assertion failed: infra failure diluted the adherence denominator" >&2
+  echo "$INFRA_ADHERENCE_SECTION" >&2
+  exit 1
+fi
+if ! sed -n '/EXCLUDED INFRASTRUCTURE FAILURES/,/ADHERENCE REPORT/p' <<< "$INFRA_ADHERENCE_OUT" \
+    | grep -Eq '^ON[[:space:]]*\|[[:space:]]*runner_timeout[[:space:]]*\|[[:space:]]*1'; then
+  echo "Assertion failed: excluded infra failure disappeared from cause tally" >&2
+  exit 1
+fi
+
 # A5 negative controls: unexplained and unknown failed rows are rejected before scoring.
 printf '%s\n' '{"task_id":"bad","arm":"on","oracle_pass":false}' > "$TEST_OUT_DIR/unclassified.jsonl"
 if node "$EVAL_DIR/score.js" "$TEST_OUT_DIR/unclassified.jsonl" >"$TEST_OUT_DIR/unclassified.out" 2>&1; then

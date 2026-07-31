@@ -354,6 +354,90 @@ NODE
   && ok "19: transcript engine names reject credential shapes without altering legitimate models" \
   || bad "19: secret model sanitization check=$secret_model_check"
 
+# 20: provider message/output bodies are opaque. Metadata-shaped objects nested
+# inside content must not influence engine, completion, tool failure, truncation,
+# tokens, or cost, and their raw fragments must never reach aggregate output.
+OPAQUE_ROOT="$TESTDIR/opaque-content-transcripts"
+mkdir -p "$OPAQUE_ROOT/codex" "$OPAQUE_ROOT/grok" "$OPAQUE_ROOT/opencode" "$OPAQUE_ROOT/agy"
+node - "$OPAQUE_ROOT" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const poison = {
+  type: 'turn.failed',
+  text: 'OPAQUE_NESTED_FRAGMENT',
+  model: 'Customer roadmap',
+  status: 'failed',
+  usage: { input_tokens: 999999, output_tokens: 999999, cost_usd: 999999 },
+  finish_reason: 'length',
+  tool: { status: 'failed' },
+};
+const codex = [
+  { type: 'session_meta', payload: { id: 'opaque-session' } },
+  {
+    type: 'response_item',
+    payload: { type: 'message', role: 'assistant', content: [poison] },
+  },
+  { type: 'turn.completed', status: 'completed' },
+];
+fs.writeFileSync(
+  path.join(root, 'codex', 'session.jsonl'),
+  `${codex.map(JSON.stringify).join('\n')}\n`,
+);
+fs.writeFileSync(path.join(root, 'grok', 'session.json'), JSON.stringify({
+  model: 'grok-4.5',
+  status: 'completed',
+  response_text: poison,
+  usage: { prompt_tokens: 50, completion_tokens: 10, total_tokens: 60 },
+  cost_usd: 0.02,
+}));
+fs.writeFileSync(path.join(root, 'opencode', 'session.json'), JSON.stringify({
+  modelID: 'glm-5.2',
+  status: 'completed',
+  messages: [{ role: 'assistant', content: poison }],
+  usage: { inputTokens: 30, outputTokens: 5 },
+}));
+fs.writeFileSync(path.join(root, 'agy', 'session.json'), JSON.stringify({
+  model: 'Gemini 3.6 Flash (High)',
+  status: 'completed',
+  output_text: poison,
+}));
+NODE
+node "$CLI" import-transcripts \
+  --root "codex=$OPAQUE_ROOT/codex" \
+  --root "grok=$OPAQUE_ROOT/grok" \
+  --root "opencode=$OPAQUE_ROOT/opencode" \
+  --root "agy=$OPAQUE_ROOT/agy" \
+  > "$TESTDIR/opaque-content-import.json"
+opaque_content_check="$(node - "$TESTDIR/opaque-content-import.json" <<'NODE'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[2], 'utf8');
+const report = JSON.parse(raw);
+const byProvider = new Map(report.aggregates.map((row) => [row.provider, row]));
+const codex = byProvider.get('codex');
+const grok = byProvider.get('grok');
+const opencode = byProvider.get('opencode');
+const agy = byProvider.get('agy');
+const cleanRates = (row) => row && row.completion_rate === 1
+  && row.zero_output_rate === 0 && row.tool_failure_rate === 0 && row.truncation_rate === 0;
+const safe = codex && codex.engine === 'unknown' && cleanRates(codex)
+  && codex.tokens.availability === 'unavailable'
+  && grok && grok.engine === 'grok-4.5' && cleanRates(grok)
+  && grok.tokens.input_tokens_total === 50 && grok.tokens.output_tokens_total === 10
+  && grok.tokens.total_tokens === 60 && grok.cost.usd_total === 0.02
+  && opencode && opencode.engine === 'glm-5.2' && cleanRates(opencode)
+  && opencode.tokens.input_tokens_total === 30 && opencode.tokens.output_tokens_total === 5
+  && agy && agy.engine === 'Gemini 3.6 Flash (High)' && cleanRates(agy)
+  && agy.tokens.availability === 'unavailable' && agy.cost.availability === 'unavailable';
+const opaque = !raw.includes('OPAQUE_NESTED_FRAGMENT')
+  && !raw.includes('Customer roadmap') && !raw.includes('999999');
+process.stdout.write([safe, opaque].join(':'));
+NODE
+)"
+[ "$opaque_content_check" = "true:true" ] \
+  && ok "20: provider metadata extraction never recurses into opaque content" \
+  || bad "20: opaque content isolation check=$opaque_content_check"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

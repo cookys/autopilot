@@ -100,4 +100,41 @@ B_PREFIX_CHECKLISTS="$(json_get "$B_PREFIX_OUT" checklists)"
 assert_contains "$B_PREFIX_DOMAINS" '"b-prefix"' "path rule matches when file path truly starts with b/"
 assert_contains "$B_PREFIX_CHECKLISTS" '"b-prefix-check"' "matched b/ path rule emits configured checklist"
 
+# 4. A literal " b/" inside an unchanged unquoted path is not the header
+# separator. Git emits this shape without quoting, so the parser must identify
+# the unique split whose a/ and b/ payloads are equal.
+AMBIGUOUS_RULES_FILE="$TEST_TMP/ambiguous-rules.tsv"
+printf 'ambiguous-path\tpath\t^secure b/permission\\.bin$\tambiguous-path-review\n' > "$AMBIGUOUS_RULES_FILE"
+AMBIGUOUS_DIFF="$TEST_TMP/ambiguous.diff"
+cat > "$AMBIGUOUS_DIFF" <<'DIFF'
+diff --git a/secure b/permission.bin b/secure b/permission.bin
+index 1111111..2222222 100644
+GIT binary patch
+literal 4
+LcmeZQzW1
+DIFF
+AMBIGUOUS_OUT="$(bash "$SCRIPT" --repo "$TEST_TMP" --diff-file "$AMBIGUOUS_DIFF" --rules-file "$AMBIGUOUS_RULES_FILE" --sampling-ratio 0)"
+assert_contains "$(json_get "$AMBIGUOUS_OUT" domains)" '"ambiguous-path"' "literal b-slash segment does not steal the diff-header separator"
+assert_contains "$(json_get "$AMBIGUOUS_OUT" checklists)" '"ambiguous-path-review"' "ambiguous path emits its custom checklist"
+assert_eq "$(json_get "$AMBIGUOUS_OUT" risk_flags.protected_path)" "1" "ambiguous protected path sets the risk flag"
+assert_eq "$(json_get "$AMBIGUOUS_OUT" adversarial_review)" "true" "ambiguous protected path requires adversarial review"
+
+# 5. Git C-quotes control characters. Decoding a quoted newline must remain one
+# path record rather than becoming extra mapfile lines.
+NEWLINE_RULES_FILE="$TEST_TMP/newline-rules.tsv"
+printf 'newline-path\tpath\tpermission\\.bin$\tnewline-path-review\n' > "$NEWLINE_RULES_FILE"
+NEWLINE_DIFF="$TEST_TMP/newline.diff"
+cat > "$NEWLINE_DIFF" <<'DIFF'
+diff --git "a/secure\npermission.bin" "b/secure\npermission.bin"
+index 1111111..2222222 100644
+GIT binary patch
+literal 4
+LcmeZQzW1
+DIFF
+NEWLINE_OUT="$(bash "$SCRIPT" --repo "$TEST_TMP" --diff-file "$NEWLINE_DIFF" --rules-file "$NEWLINE_RULES_FILE" --sampling-ratio 0)"
+assert_contains "$(json_get "$NEWLINE_OUT" domains)" '"newline-path"' "quoted newline remains inside one decoded path record"
+assert_contains "$(json_get "$NEWLINE_OUT" checklists)" '"newline-path-review"' "quoted newline path emits its custom checklist"
+assert_eq "$(json_get "$NEWLINE_OUT" risk_flags.protected_path)" "1" "quoted newline protected path sets the risk flag"
+assert_eq "$(json_get "$NEWLINE_OUT" adversarial_review)" "true" "quoted newline protected path requires adversarial review"
+
 finalize_test

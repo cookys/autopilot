@@ -133,7 +133,7 @@ async function main() {
     }
 
     const a = armStats[arm];
-    if (a) {
+    if (a && !isInfraFailure) {
       a.count++;
       if (row.adjudication_valid === true) a.adj_count++;
       if (row.patterns_named === true) a.pattern_count++;

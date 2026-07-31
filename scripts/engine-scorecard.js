@@ -690,20 +690,6 @@ function parseTranscriptFile(file) {
   }
 }
 
-function walkTranscriptObjects(value, visitor, depth = 0, budget = { count: 0 }) {
-  if (depth > 16 || budget.count > 100000 || value === null || value === undefined) return;
-  if (Array.isArray(value)) {
-    for (const item of value) walkTranscriptObjects(item, visitor, depth + 1, budget);
-    return;
-  }
-  if (typeof value !== 'object') return;
-  budget.count += 1;
-  visitor(value);
-  for (const item of Object.values(value)) {
-    walkTranscriptObjects(item, visitor, depth + 1, budget);
-  }
-}
-
 function safeEngineName(value) {
   if (value && typeof value === 'object') {
     value = value.modelID || value.model_id || value.id || value.name;
@@ -715,18 +701,6 @@ function safeEngineName(value) {
       || transcriptSecrets.scan(normalized).length > 0
       || normalized.includes('/') || normalized.includes('\\')) return null;
   return normalized;
-}
-
-function transcriptEngine(parsed) {
-  let engine = null;
-  walkTranscriptObjects(parsed, (obj) => {
-    if (engine) return;
-    for (const key of ['model', 'model_id', 'modelID', 'engine']) {
-      engine = safeEngineName(obj[key]);
-      if (engine) break;
-    }
-  });
-  return engine || 'unknown';
 }
 
 function nonEmptyContent(value) {
@@ -741,93 +715,174 @@ function finiteMetric(value) {
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
+function transcriptObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function directCompletion(obj) {
+  if (!obj) return null;
+  if (typeof obj.completed === 'boolean') return obj.completed;
+  if (typeof obj.success === 'boolean') return obj.success;
+  const status = String(obj.status || obj.state || '').toLowerCase();
+  if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)) return true;
+  if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) return false;
+  return null;
+}
+
+function directTruncation(obj) {
+  if (!obj) return false;
+  const finishReason = String(obj.finish_reason || obj.stop_reason || '').toLowerCase();
+  return obj.truncated === true
+    || ['length', 'max_tokens', 'token_limit'].includes(finishReason);
+}
+
+function directToolFailure(obj) {
+  if (!obj) return false;
+  const tool = transcriptObject(obj.tool);
+  const status = String(
+    (tool && (tool.status || tool.state)) || obj.tool_status || obj.tool_state || '',
+  ).toLowerCase();
+  const exitCode = tool
+    ? finiteMetric(tool.exit_code)
+    : finiteMetric(obj.tool_exit_code);
+  return ['failed', 'error'].includes(status) || (exitCode !== null && exitCode > 0);
+}
+
+function emptyUsageAccumulator() {
+  return {
+    input: 0,
+    output: 0,
+    total: 0,
+    cost: 0,
+    inputSeen: false,
+    outputSeen: false,
+    totalSeen: false,
+    costSeen: false,
+  };
+}
+
+function addRecognizedUsage(accumulator, value) {
+  const usage = transcriptObject(value);
+  if (!usage) return;
+  const input = finiteMetric(usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens);
+  const output = finiteMetric(
+    usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens,
+  );
+  const total = finiteMetric(usage.total_tokens ?? usage.totalTokens);
+  const cost = finiteMetric(usage.cost_usd ?? usage.costUSD);
+  if (input !== null) { accumulator.input += input; accumulator.inputSeen = true; }
+  if (output !== null) { accumulator.output += output; accumulator.outputSeen = true; }
+  if (total !== null) { accumulator.total += total; accumulator.totalSeen = true; }
+  if (cost !== null) { accumulator.cost += cost; accumulator.costSeen = true; }
+}
+
+function inspectCodexTranscript(parsed) {
+  const result = {
+    engine: 'unknown',
+    completion: null,
+    hasOutput: false,
+    toolFailure: false,
+    truncated: false,
+    usage: emptyUsageAccumulator(),
+  };
+  const records = Array.isArray(parsed) ? parsed : [parsed];
+  for (const value of records) {
+    const record = transcriptObject(value);
+    if (!record) continue;
+    const type = String(record.type || '').toLowerCase();
+    const payload = transcriptObject(record.payload);
+    if (type === 'session_meta' && payload && result.engine === 'unknown') {
+      result.engine = safeEngineName(payload.model) || 'unknown';
+    } else if (type === 'response_item' && payload) {
+      const payloadType = String(payload.type || '').toLowerCase();
+      if (payloadType === 'message' && String(payload.role || '').toLowerCase() === 'assistant') {
+        result.hasOutput = result.hasOutput || nonEmptyContent(payload.content);
+      }
+      if (/^(?:tool|function_call)(?:[._-](?:output|result))?$/.test(payloadType)) {
+        const status = String(payload.status || payload.state || '').toLowerCase();
+        const exitCode = finiteMetric(payload.exit_code);
+        if (['failed', 'error'].includes(status) || (exitCode !== null && exitCode > 0)) {
+          result.toolFailure = true;
+        }
+      }
+    } else if (type === 'event_msg' && payload
+        && String(payload.type || '').toLowerCase() === 'token_count') {
+      const info = transcriptObject(payload.info);
+      addRecognizedUsage(result.usage, info && info.last_token_usage);
+    } else if (type === 'turn.completed') {
+      result.completion = true;
+    } else if (type === 'turn.failed') {
+      result.completion = false;
+    }
+  }
+  return result;
+}
+
+function inspectRootTranscript(provider, parsed) {
+  const root = transcriptObject(parsed);
+  const result = {
+    engine: 'unknown',
+    completion: null,
+    hasOutput: false,
+    toolFailure: false,
+    truncated: false,
+    usage: emptyUsageAccumulator(),
+  };
+  if (!root) return result;
+  result.engine = safeEngineName(provider === 'opencode' ? root.modelID : root.model) || 'unknown';
+  result.completion = directCompletion(root);
+  result.toolFailure = directToolFailure(root);
+  result.truncated = directTruncation(root);
+  if (provider === 'grok') {
+    result.hasOutput = nonEmptyContent(root.response_text);
+  } else if (provider === 'opencode') {
+    if (Array.isArray(root.messages)) {
+      result.hasOutput = root.messages.some((value) => {
+        const message = transcriptObject(value);
+        return message && String(message.role || '').toLowerCase() === 'assistant'
+          && nonEmptyContent(message.content);
+      });
+    }
+  } else if (provider === 'agy') {
+    result.hasOutput = nonEmptyContent(root.output_text);
+  }
+  if (provider !== 'agy') {
+    addRecognizedUsage(result.usage, root.usage);
+    const rootCost = finiteMetric(root.cost_usd ?? root.costUSD);
+    if (rootCost !== null) {
+      result.usage.cost += rootCost;
+      result.usage.costSeen = true;
+    }
+  }
+  return result;
+}
+
 function inspectTranscript(provider, parsed, file) {
-  let completion = null;
-  let hasOutput = false;
-  let toolFailure = false;
-  let truncated = false;
-  const usageObjects = new WeakSet();
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let totalTokens = 0;
-  let inputSeen = false;
-  let outputSeen = false;
-  let totalSeen = false;
-  let costUsd = 0;
-  let costSeen = false;
-
-  walkTranscriptObjects(parsed, (obj) => {
-    const type = String(obj.type || obj.event || obj.kind || '').toLowerCase();
-    const status = String(obj.status || obj.state || '').toLowerCase();
-    if (typeof obj.completed === 'boolean') completion = obj.completed;
-    if (typeof obj.success === 'boolean') completion = obj.success;
-    if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)
-        || /(?:turn|session|task)[._-]completed/.test(type)) completion = true;
-    if (['failed', 'error', 'cancelled', 'canceled'].includes(status)
-        && /(?:turn|session|task|run)/.test(type)) completion = false;
-
-    const role = String(obj.role || obj.actor || '').toLowerCase();
-    if (role === 'assistant') {
-      for (const key of ['content', 'text', 'message', 'output', 'response']) {
-        if (nonEmptyContent(obj[key])) hasOutput = true;
-      }
-    } else {
-      for (const key of ['output_text', 'final_output', 'response_text']) {
-        if (nonEmptyContent(obj[key])) hasOutput = true;
-      }
-    }
-
-    const toolLike = /tool|function_call/.test(type)
-      || obj.tool !== undefined || obj.tool_name !== undefined;
-    if (toolLike && (['failed', 'error'].includes(status)
-        || finiteMetric(obj.exit_code) > 0 || /tool[._-](?:failed|error)/.test(type))) {
-      toolFailure = true;
-    }
-    const finishReason = String(obj.finish_reason || obj.stop_reason || '').toLowerCase();
-    if (obj.truncated === true || ['length', 'max_tokens', 'token_limit'].includes(finishReason)) {
-      truncated = true;
-    }
-
-    const usageCandidates = [obj.usage, obj.token_usage, obj.last_token_usage];
-    for (const usage of usageCandidates) {
-      if (!usage || typeof usage !== 'object' || usageObjects.has(usage)) continue;
-      usageObjects.add(usage);
-      const input = finiteMetric(usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens);
-      const output = finiteMetric(
-        usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens,
-      );
-      const total = finiteMetric(usage.total_tokens ?? usage.totalTokens);
-      if (input !== null) { inputTokens += input; inputSeen = true; }
-      if (output !== null) { outputTokens += output; outputSeen = true; }
-      if (total !== null) { totalTokens += total; totalSeen = true; }
-      const cost = finiteMetric(usage.cost_usd ?? usage.costUSD);
-      if (cost !== null) { costUsd += cost; costSeen = true; }
-    }
-    const directCost = usageObjects.has(obj)
-      ? null : finiteMetric(obj.cost_usd ?? obj.costUSD);
-    if (directCost !== null) { costUsd += directCost; costSeen = true; }
-  });
+  const inspected = provider === 'codex'
+    ? inspectCodexTranscript(parsed)
+    : inspectRootTranscript(provider, parsed);
 
   const pathParts = file.split(path.sep).map((part) => part.toLowerCase());
   let cohort = 'general';
   if (provider === 'opencode' && pathParts.some((part) => part.includes('swe-calibrate'))) {
     cohort = 'swe-calibrate';
   }
-  if (completion === null) completion = hasOutput;
+  if (inspected.completion === null) inspected.completion = inspected.hasOutput;
+  const usage = inspected.usage;
   return {
     provider,
-    engine: transcriptEngine(parsed),
+    engine: inspected.engine,
     cohort,
-    completed: completion,
-    zeroOutput: !hasOutput,
-    toolFailure,
-    truncated,
+    completed: inspected.completion,
+    zeroOutput: !inspected.hasOutput,
+    toolFailure: inspected.toolFailure,
+    truncated: inspected.truncated,
     tokens: provider === 'agy' ? null : {
-      input: inputSeen ? inputTokens : null,
-      output: outputSeen ? outputTokens : null,
-      total: totalSeen ? totalTokens : null,
+      input: usage.inputSeen ? usage.input : null,
+      output: usage.outputSeen ? usage.output : null,
+      total: usage.totalSeen ? usage.total : null,
     },
-    costUsd: provider === 'agy' || !costSeen ? null : costUsd,
+    costUsd: provider === 'agy' || !usage.costSeen ? null : usage.cost,
   };
 }
 

@@ -58,6 +58,34 @@ assert_contains "$SENSITIVE_CHECKLISTS" '"authz-boundary"' "auth domain maps to 
 assert_contains "$SENSITIVE_CHECKLISTS" '"tenant-boundary"' "tenant domain maps to tenant-boundary checklist"
 assert_eq "$(json_get "$SENSITIVE_OUT" adversarial_review)" "true" "sensitive diff is marked adversarial_review"
 
+QUOTED_BINARY_RULES="$TEST_TMP/quoted-binary-rules.tsv"
+printf 'quoted-binary\tpath\t^secure dir/auth "key"\\.bin$\tbinary-path-review\n' > "$QUOTED_BINARY_RULES"
+QUOTED_BINARY_DIFF="$TEST_TMP/quoted-binary.diff"
+cat > "$QUOTED_BINARY_DIFF" <<'DIFF'
+diff --git "a/secure dir/auth \"key\".bin" "b/secure dir/auth \"key\".bin"
+index 1111111..2222222 100644
+GIT binary patch
+literal 4
+LcmeZQzW1
+DIFF
+
+QUOTED_BINARY_OUT="$(bash "$SCRIPT" --repo "$TEST_TMP" --diff-file "$QUOTED_BINARY_DIFF" --rules-file "$QUOTED_BINARY_RULES" --sampling-ratio 0)"
+assert_contains "$(json_get "$QUOTED_BINARY_OUT" domains)" '"quoted-binary"' "quoted binary diff header preserves the full path"
+assert_contains "$(json_get "$QUOTED_BINARY_OUT" checklists)" '"binary-path-review"' "protected binary path emits its checklist"
+assert_eq "$(json_get "$QUOTED_BINARY_OUT" risk_flags.protected_path)" "1" "protected binary path sets the risk flag"
+assert_eq "$(json_get "$QUOTED_BINARY_OUT" adversarial_review)" "true" "protected binary path requires adversarial review"
+
+RENAME_DIFF="$TEST_TMP/rename.diff"
+cat > "$RENAME_DIFF" <<'DIFF'
+diff --git a/docs/session.ts b/auth/session.ts
+similarity index 100%
+rename from docs/session.ts
+rename to auth/session.ts
+DIFF
+RENAME_OUT="$(bash "$SCRIPT" --repo "$TEST_TMP" --diff-file "$RENAME_DIFF" --sampling-ratio 0)"
+assert_contains "$(json_get "$RENAME_OUT" domains)" '"auth"' "rename destination still participates in path classification"
+assert_contains "$(json_get "$RENAME_OUT" checklists)" '"authz-boundary"' "rename path behavior remains intact"
+
 BENIGN_DIFF="$TEST_TMP/benign.diff"
 cat > "$BENIGN_DIFF" <<'DIFF'
 diff --git a/docs/readme.md b/docs/readme.md

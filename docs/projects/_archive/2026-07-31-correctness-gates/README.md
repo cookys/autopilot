@@ -1,8 +1,8 @@
 # Correctness Gates
 
-> **Status**: In progress · **Size**: L · **Entry**: L6 · **Branch**: `fix/correctness-gates`
+> **Status**: Completed · **Size**: L · **Entry**: L6 · **Branch**: `develop`
 > **Started**: 2026-07-31 · **Plan**:
-> [correctness-gates](../../plans/2026-07-31-correctness-gates.md)
+> [correctness-gates](../../../plans/2026-07-31-correctness-gates.md)
 
 ## OKR
 
@@ -32,7 +32,7 @@ unrelated interfaces.
 
 | Mission node | Status | Dependencies | Acceptance |
 |---|---|---|---|
-| `correctness-gates` | pending | none | A2 + A5 + A1; six named suites green |
+| `correctness-gates` | complete | none | A2 + A5 + A1; six named suites and aggregate qualification green |
 
 Only this row is executable. P1–P4 are coverage and gates inside it.
 
@@ -40,11 +40,11 @@ Only this row is executable. P1–P4 are coverage and gates inside it.
 
 | Phase | Status | Detail |
 |---|---|---|
-| P1 — current-version prose | pending | [phase-1](phase-1-current-version-prose.md) |
-| P2 — worktree red-green | pending | [phase-2](phase-2-worktree-red-green.md) |
-| P3 — binary path risk | pending | [phase-3](phase-3-binary-path-risk.md) |
-| P4 — added-lines secret scan | pending | [phase-4](phase-4-added-lines-secret-scan.md) |
-| Finish-flow | pending | Authoritative depth-0 QC, integration, archive, cleanup |
+| P1 — current-version prose | complete | [phase-1](phase-1-current-version-prose.md) |
+| P2 — worktree red-green | complete | [phase-2](phase-2-worktree-red-green.md) |
+| P3 — binary path risk | complete | [phase-3](phase-3-binary-path-risk.md) |
+| P4 — added-lines secret scan | complete | [phase-4](phase-4-added-lines-secret-scan.md) |
+| Finish-flow | complete | 258/258 tests, independent Gemini review, no-ff integration, archive |
 
 ## Scope completeness record
 
@@ -63,9 +63,9 @@ Only this row is executable. P1–P4 are coverage and gates inside it.
 | User requirement | Evidence location |
 |---|---|
 | C backlog becomes a complete project/phase | This README, four phase files, plan, rubric |
-| CEO uses L6 and a sub-orchestrator | Run ledger and foreman completion report |
-| dev-flow progression | L-1.5/L-1.6/L-5 gates in foreman report |
-| Easy merge | Exact file ownership and no shared tracking-doc edits |
+| CEO uses L6 and a sub-orchestrator | Mission attempt-3 claim plus persistent Codex implementer transcript |
+| dev-flow progression | Mission admission, four phase commits, aggregate L-5 gates |
+| Easy merge | Disjoint ownership and merge `9f26e082` |
 
 ## File ownership
 
@@ -94,13 +94,27 @@ bash hooks/tests/reenabled-blockers.test.sh
 ```
 
 The foreman's result is first-pass only. Depth 0 reruns every command from the candidate commit and
-owns the authoritative QC verdict.
+owns the authoritative QC verdict. Final depth-0 evidence: all 258 test files passed and Gemini
+3.6 Flash High returned `SHIP-AS-IS` with no findings.
 
 ## Progress log
 
 | Date | Event | Evidence |
 |---|---|---|
 | 2026-07-31 | Project bootstrapped from four triggered backlog entries | plan + rubric + Mission graph |
+| 2026-07-31 | P1–P4 implemented as four reviewable commits | `1cab214e` through `4812a7ab` |
+| 2026-07-31 | Combined B/C qualification passed | 258/258 test files; Gemini `SHIP-AS-IS` |
+| 2026-07-31 | Landed to `develop` and archived | merge `9f26e082` |
+
+## Final results
+
+- Release prose justification is scoped to the current canonical version section.
+- Repo-owned verification commands execute the matching detached-worktree copy while external
+  absolute executables retain their prior identity and exit behavior.
+- Binary-only, quoted, and space-containing paths reach existing risk rules.
+- Commit secret scanning examines added lines only: additions still block with redaction and
+  deletion-only cleanup passes.
+- All six targeted suites and the repository aggregate of 258 test files passed.
 
 ## Decisions
 

@@ -8,6 +8,7 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-07-31 | arch | Persistent implementer transcript 只保證上下文連續，不會自動產生 ICC/WLB/LSM lifecycle evidence；L5/L6 fallback 必須在第一次 effect 前接上 canonical adapter，事後不得偽造 `can_close` receipt | [architecture.md](architecture.md) |
 | 2026-07-29 | debug | CLI `--help` 只證明 option 存在，不證明可組合：Kimi 0.28.0 的 non-interactive `--prompt` 與 interactive `--plan` 互斥；hermetic fixture 若照抄錯誤 argv 也會假綠，需 live smoke | [debug-patterns.md](debug-patterns.md) |
 | 2026-07-27 | arch | Absence 不等於 zero：先用 repo registry admission 記住資源曾存在，再以 Git-ref CAS authority 防 ordinary-file rollback、anchor/registry forward-repair 防 torn write；先凍結 attack matrix、穩定 diff 後才跑昂貴外審 | [architecture.md](architecture.md) |
 | 2026-07-26 | arch | Severity 不等於當票修復權；同模型新 context 是 peer、不是 Heto；主席不可用時改走全部合格異質席聯審，逐票排除 implementation lineage／能力與 context 不足席 | [architecture.md](architecture.md) |

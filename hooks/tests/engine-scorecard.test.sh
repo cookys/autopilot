@@ -199,6 +199,77 @@ cl=$(node "$CLI" current --role reviewer 2>/dev/null | node -e "let d='';process
 ladder_len=$(node "$CLI" ladder --role reviewer 2>/dev/null | arrlen)
 [ "$cl" = "2" ] && [ "$ladder_len" = "0" ] && ok "16: cross-corpus telemetry rows remain distinct without creating a rung" || bad "16: current=$cl ladder=$ladder_len — R7"
 
+# 17 (A4+A1): transcript import is explicit-root, aggregate-only, deterministic,
+# cohort-honest, and cannot mint a scorecard/routing row.
+IMPORT_ROOT="$TESTDIR/transcripts"
+IMPORT_OUT="$TESTDIR/imported-telemetry.json"
+mkdir -p "$IMPORT_ROOT/codex" "$IMPORT_ROOT/grok" \
+  "$IMPORT_ROOT/opencode/general" "$IMPORT_ROOT/opencode/swe-calibrate" "$IMPORT_ROOT/agy"
+cat > "$IMPORT_ROOT/codex/session.jsonl" <<'JSONL'
+{"type":"session_meta","payload":{"id":"secret-session-id","model":"gpt-5.6-sol","cwd":"/private/user/path"}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"RAW_SECRET_SENTINEL"}]}}
+{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}
+{"type":"turn.completed","status":"completed"}
+JSONL
+cat > "$IMPORT_ROOT/grok/session.json" <<'JSON'
+{"model":"grok-4.5","status":"completed","response_text":"RAW_SECRET_SENTINEL","usage":{"prompt_tokens":50,"completion_tokens":10,"total_tokens":60,"cost_usd":0.02},"session_id":"grok-secret"}
+JSON
+cat > "$IMPORT_ROOT/opencode/general/session.json" <<'JSON'
+{"modelID":"glm-5.2","status":"completed","messages":[{"role":"assistant","content":"RAW_SECRET_SENTINEL"}],"usage":{"inputTokens":30,"outputTokens":5}}
+JSON
+cat > "$IMPORT_ROOT/opencode/swe-calibrate/session.json" <<'JSON'
+{"modelID":"glm-5.2","status":"completed","messages":[{"role":"assistant","content":"calibration-only"}],"usage":{"inputTokens":9999,"outputTokens":999}}
+JSON
+cat > "$IMPORT_ROOT/agy/session.json" <<'JSON'
+{"model":"Gemini 3.6 Flash (High)","status":"failed","output_text":"","finish_reason":"length","usage":{"input_tokens":777,"output_tokens":88,"cost_usd":99},"tool":{"status":"failed"},"credential":"RAW_SECRET_SENTINEL"}
+JSON
+printf '%s\n' '{malformed' > "$IMPORT_ROOT/codex/malformed.jsonl"
+
+node "$CLI" import-transcripts \
+  --root "codex=$IMPORT_ROOT/codex" \
+  --root "grok=$IMPORT_ROOT/grok" \
+  --root "opencode=$IMPORT_ROOT/opencode" \
+  --root "agy=$IMPORT_ROOT/agy" \
+  --output "$IMPORT_OUT" > "$TESTDIR/import.stdout"
+cp "$IMPORT_OUT" "$TESTDIR/import.first"
+node "$CLI" import-transcripts \
+  --root "agy=$IMPORT_ROOT/agy" \
+  --root "opencode=$IMPORT_ROOT/opencode" \
+  --root "grok=$IMPORT_ROOT/grok" \
+  --root "codex=$IMPORT_ROOT/codex" \
+  --output "$IMPORT_OUT" > "$TESTDIR/import.second"
+
+import_check=$(node - "$IMPORT_OUT" "$TESTDIR/import.first" "$TESTDIR/import.second" <<'NODE'
+const fs = require('fs');
+const [outFile, firstFile, secondFile] = process.argv.slice(2);
+const raw = fs.readFileSync(outFile, 'utf8');
+const report = JSON.parse(raw);
+const oc = report.aggregates.filter((row) => row.provider === 'opencode');
+const agy = report.aggregates.find((row) => row.provider === 'agy');
+const codexSource = report.sources.find((row) => row.provider === 'codex');
+const stable = raw === fs.readFileSync(firstFile, 'utf8')
+  && raw === fs.readFileSync(secondFile, 'utf8');
+const safe = !/RAW_SECRET_SENTINEL|secret-session-id|private\/user|grok-secret|credential/i.test(raw);
+const cohorts = oc.length === 2
+  && oc.some((row) => row.cohort === 'general' && row.tokens.input_tokens_total === 30)
+  && oc.some((row) => row.cohort === 'swe-calibrate' && row.tokens.input_tokens_total === 9999);
+const agyHonest = agy && agy.tokens.availability === 'unavailable'
+  && agy.cost.availability === 'unavailable' && agy.truncation_rate === 1;
+const coverage = codexSource && codexSource.candidate_files === 2
+  && codexSource.parsed_sessions === 1 && codexSource.schema_coverage_rate === 0.5;
+const authority = report.authority_status === 'untrusted_telemetry'
+  && report.admissible === false && report.imported_scorecard_rows === 0
+  && !raw.includes('"status": "qualified"');
+process.stdout.write([stable, safe, cohorts, agyHonest, coverage, authority].join(':'));
+NODE
+)
+import_ladder=$(node "$CLI" ladder --role reviewer | arrlen)
+no_root_ec=$(node "$CLI" import-transcripts >/dev/null 2>&1; echo $?)
+[ "$import_check" = "true:true:true:true:true:true" ] && [ "$import_ladder" = "0" ] \
+  && [ "$no_root_ec" = "2" ] \
+  && ok "17: transcript import is aggregate-only, deterministic, honest, and non-authoritative" \
+  || bad "17: import check=$import_check ladder=$import_ladder no-root=$no_root_ec"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

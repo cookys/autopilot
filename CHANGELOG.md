@@ -60,6 +60,9 @@ review findings into new phases.
   disposition, and resource debt blocks new dispatch until reconciled.
 
 ### Fixed
+- Shared JSONL-store locks publish their PID-bearing lock path atomically, preventing concurrent
+  provider probes from over-stealing a live lock during initialization; the dispatch required-change
+  fixture now supplies inline Git identity so clean CI runners exercise the contract itself.
 - `boundary_rejected` remains a first-class outcome with its candidate and boundary reason instead
   of collapsing into an unknown mutation failure.
 - Minimum QC panel cardinality, full-diff generation ownership, duplicate dispatch admission,

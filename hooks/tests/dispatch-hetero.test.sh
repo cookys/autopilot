@@ -1120,7 +1120,12 @@ execFileSync(process.execPath, [
 fs.writeFileSync(path.join(repo, 'src', 'target.js'), 'v1\n');
 fs.writeFileSync(path.join(repo, 'specs', 'feat', 'x.md'), '# S\nbody\n');
 execFileSync('git', ['-C', repo, 'add', '.']);
-execFileSync('git', ['-C', repo, 'commit', '-qm', 'seed required surface']);
+execFileSync('git', [
+  '-C', repo,
+  '-c', 'user.email=t@t',
+  '-c', 'user.name=t',
+  'commit', '-qm', 'seed required surface',
+]);
 const base2 = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const campaignId = `campaign-v1-${'a'.repeat(64)}`;
 const rootRunId = 'root-req-1';

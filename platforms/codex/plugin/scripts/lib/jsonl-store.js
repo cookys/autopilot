@@ -61,7 +61,21 @@ function lockHolderAlive(lockFile) {
   return pidStringAlive(content);
 }
 
-// Exclusive O_CREAT|O_EXCL lock file holding the writer's PID, with a PID-liveness
+// Prewrite the PID in a private same-directory candidate, then publish the canonical
+// lock path with an atomic hard link. A competing process can therefore never observe
+// the live holder's lock between O_EXCL creation and the PID write and misclassify that
+// transient empty file as stale.
+function createPidLock(lockFile) {
+  const candidate = `${lockFile}.pending.${process.pid}.${process.hrtime.bigint()}`;
+  try {
+    fs.writeFileSync(candidate, String(process.pid), { flag: 'wx', mode: 0o600 });
+    fs.linkSync(candidate, lockFile);
+  } finally {
+    try { fs.unlinkSync(candidate); } catch { }
+  }
+}
+
+// Exclusive lock file holding the writer's PID, with a PID-liveness
 // STALE-LOCK BREAKER (identity-checked atomic rename-steal) so a crashed writer cannot
 // permanently wedge appends. Preserves the gpt-5.5 P6 F1 r3 steal semantics: a dead
 // holder is broken with an IDENTITY-CHECKED atomic steal (renameSync to a unique name;
@@ -84,9 +98,7 @@ function acquireLock(opts) {
 
   while (true) {
     try {
-      const fd = fs.openSync(lockFile, 'wx');
-      fs.writeSync(fd, String(process.pid));
-      fs.closeSync(fd);
+      createPidLock(lockFile);
       return;
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;

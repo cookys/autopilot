@@ -24,6 +24,10 @@ const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
 const VALID_VERSION_SOURCES = new Set(['runtime', 'manual']);
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
+const TRANSCRIPT_PROVIDERS = new Set(['codex', 'grok', 'opencode', 'agy']);
+const TRANSCRIPT_EXTENSIONS = new Set(['.json', '.jsonl', '.ndjson']);
+const MAX_TRANSCRIPT_FILES = 10000;
+const MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024;
 
 const REQUIRED_FIELDS = [
   'engine',
@@ -61,6 +65,7 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js current --role <role> [--now <ISO-date>] [--require-evidence] [--scope-file <path>] [--identity-file <path>]\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
+  node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
   --role is required for current/report/ladder.\n\
   --key accepts capability (default) or cost.\n\
@@ -71,6 +76,8 @@ const HELP_TEXT = `Usage:\n\
   --scope-file and --identity-file constrain lifecycle evidence to an exact applicability query.\n\
   --implementer-family is optional; if provided, ladder demotes matching family entries.\n\
   verification_author/explorer rows are evidence-only in v1; use current/report, not ladder.\n\
+  import-transcripts requires explicit roots and emits aggregate-only, untrusted telemetry;\n\
+    it never appends scorecard rows. --output atomically writes the same JSON printed to stdout.\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -571,6 +578,328 @@ function parseRecordArgs(args) {
   return { file };
 }
 
+function parseTranscriptImportArgs(args) {
+  const roots = [];
+  let output = null;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (isHelpToken(arg)) usage(0);
+    if (arg === '--root') {
+      if (i + 1 >= args.length) failUsage('--root requires provider=path');
+      const spec = args[++i];
+      const separator = spec.indexOf('=');
+      if (separator <= 0 || separator === spec.length - 1) {
+        failUsage('--root requires provider=path');
+      }
+      const provider = spec.slice(0, separator).toLowerCase();
+      if (!TRANSCRIPT_PROVIDERS.has(provider)) {
+        failUsage(`unsupported transcript provider '${provider}'`);
+      }
+      const root = path.resolve(expandTilde(spec.slice(separator + 1)));
+      roots.push({ provider, root });
+      continue;
+    }
+    if (arg === '--output') {
+      if (i + 1 >= args.length) failUsage('--output requires a path');
+      output = path.resolve(expandTilde(args[++i]));
+      continue;
+    }
+    failUsage(`unknown option: ${arg}`);
+  }
+  if (roots.length === 0) failUsage('import-transcripts requires at least one explicit --root');
+  const unique = new Map();
+  for (const spec of roots) unique.set(`${spec.provider}\0${spec.root}`, spec);
+  const sortedRoots = [...unique.values()]
+    .sort((a, b) => a.provider.localeCompare(b.provider) || a.root.localeCompare(b.root));
+  if (output && sortedRoots.some(({ root }) => output === root
+      || output.startsWith(`${root}${path.sep}`))) {
+    failUsage('--output must be outside transcript roots');
+  }
+  return { roots: sortedRoots, output };
+}
+
+function transcriptFiles(root) {
+  if (!fs.existsSync(root)) failValidation('transcript root does not exist');
+  const result = [];
+  const visit = (target) => {
+    const stat = fs.lstatSync(target);
+    if (stat.isSymbolicLink()) return;
+    if (stat.isFile()) {
+      if (TRANSCRIPT_EXTENSIONS.has(path.extname(target).toLowerCase())) result.push(target);
+      return;
+    }
+    if (!stat.isDirectory()) return;
+    const entries = fs.readdirSync(target, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      visit(path.join(target, entry.name));
+      if (result.length > MAX_TRANSCRIPT_FILES) {
+        failValidation(`transcript root exceeds ${MAX_TRANSCRIPT_FILES} supported files`);
+      }
+    }
+  };
+  visit(root);
+  return result;
+}
+
+function parseTranscriptFile(file) {
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_TRANSCRIPT_BYTES) return null;
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  try {
+    if (path.extname(file).toLowerCase() === '.json') return JSON.parse(raw);
+    const rows = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    if (rows.length === 0) return null;
+    return rows.map((line) => JSON.parse(line));
+  } catch {
+    return null;
+  }
+}
+
+function walkTranscriptObjects(value, visitor, depth = 0, budget = { count: 0 }) {
+  if (depth > 16 || budget.count > 100000 || value === null || value === undefined) return;
+  if (Array.isArray(value)) {
+    for (const item of value) walkTranscriptObjects(item, visitor, depth + 1, budget);
+    return;
+  }
+  if (typeof value !== 'object') return;
+  budget.count += 1;
+  visitor(value);
+  for (const item of Object.values(value)) {
+    walkTranscriptObjects(item, visitor, depth + 1, budget);
+  }
+}
+
+function safeEngineName(value) {
+  if (value && typeof value === 'object') {
+    value = value.modelID || value.model_id || value.id || value.name;
+  }
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:+()/ -]{0,119}$/.test(normalized)
+      || /(?:secret|token|password|bearer|api[_ -]?key|credential)/i.test(normalized)
+      || normalized.includes('/') || normalized.includes('\\')) return null;
+  return normalized;
+}
+
+function transcriptEngine(parsed) {
+  let engine = null;
+  walkTranscriptObjects(parsed, (obj) => {
+    if (engine) return;
+    for (const key of ['model', 'model_id', 'modelID', 'engine']) {
+      engine = safeEngineName(obj[key]);
+      if (engine) break;
+    }
+  });
+  return engine || 'unknown';
+}
+
+function nonEmptyContent(value) {
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(nonEmptyContent);
+  if (!value || typeof value !== 'object') return false;
+  return Object.values(value).some(nonEmptyContent);
+}
+
+function finiteMetric(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function inspectTranscript(provider, parsed, file) {
+  let completion = null;
+  let hasOutput = false;
+  let toolFailure = false;
+  let truncated = false;
+  const usageObjects = new WeakSet();
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
+  let inputSeen = false;
+  let outputSeen = false;
+  let totalSeen = false;
+  let costUsd = 0;
+  let costSeen = false;
+
+  walkTranscriptObjects(parsed, (obj) => {
+    const type = String(obj.type || obj.event || obj.kind || '').toLowerCase();
+    const status = String(obj.status || obj.state || '').toLowerCase();
+    if (typeof obj.completed === 'boolean') completion = obj.completed;
+    if (typeof obj.success === 'boolean') completion = obj.success;
+    if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)
+        || /(?:turn|session|task)[._-]completed/.test(type)) completion = true;
+    if (['failed', 'error', 'cancelled', 'canceled'].includes(status)
+        && /(?:turn|session|task|run)/.test(type)) completion = false;
+
+    const role = String(obj.role || obj.actor || '').toLowerCase();
+    if (role === 'assistant') {
+      for (const key of ['content', 'text', 'message', 'output', 'response']) {
+        if (nonEmptyContent(obj[key])) hasOutput = true;
+      }
+    } else {
+      for (const key of ['output_text', 'final_output', 'response_text']) {
+        if (nonEmptyContent(obj[key])) hasOutput = true;
+      }
+    }
+
+    const toolLike = /tool|function_call/.test(type)
+      || obj.tool !== undefined || obj.tool_name !== undefined;
+    if (toolLike && (['failed', 'error'].includes(status)
+        || finiteMetric(obj.exit_code) > 0 || /tool[._-](?:failed|error)/.test(type))) {
+      toolFailure = true;
+    }
+    const finishReason = String(obj.finish_reason || obj.stop_reason || '').toLowerCase();
+    if (obj.truncated === true || ['length', 'max_tokens', 'token_limit'].includes(finishReason)) {
+      truncated = true;
+    }
+
+    const usageCandidates = [obj.usage, obj.token_usage, obj.last_token_usage];
+    for (const usage of usageCandidates) {
+      if (!usage || typeof usage !== 'object' || usageObjects.has(usage)) continue;
+      usageObjects.add(usage);
+      const input = finiteMetric(usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens);
+      const output = finiteMetric(
+        usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens,
+      );
+      const total = finiteMetric(usage.total_tokens ?? usage.totalTokens);
+      if (input !== null) { inputTokens += input; inputSeen = true; }
+      if (output !== null) { outputTokens += output; outputSeen = true; }
+      if (total !== null) { totalTokens += total; totalSeen = true; }
+      const cost = finiteMetric(usage.cost_usd ?? usage.costUSD);
+      if (cost !== null) { costUsd += cost; costSeen = true; }
+    }
+    const directCost = usageObjects.has(obj)
+      ? null : finiteMetric(obj.cost_usd ?? obj.costUSD);
+    if (directCost !== null) { costUsd += directCost; costSeen = true; }
+  });
+
+  const pathParts = file.split(path.sep).map((part) => part.toLowerCase());
+  let cohort = 'general';
+  if (provider === 'opencode' && pathParts.some((part) => part.includes('swe-calibrate'))) {
+    cohort = 'swe-calibrate';
+  }
+  if (completion === null) completion = hasOutput;
+  return {
+    provider,
+    engine: transcriptEngine(parsed),
+    cohort,
+    completed: completion,
+    zeroOutput: !hasOutput,
+    toolFailure,
+    truncated,
+    tokens: provider === 'agy' ? null : {
+      input: inputSeen ? inputTokens : null,
+      output: outputSeen ? outputTokens : null,
+      total: totalSeen ? totalTokens : null,
+    },
+    costUsd: provider === 'agy' || !costSeen ? null : costUsd,
+  };
+}
+
+function rate(count, total) {
+  return total === 0 ? null : Number((count / total).toFixed(6));
+}
+
+function aggregateTranscriptSessions(sessions) {
+  const grouped = new Map();
+  for (const session of sessions) {
+    const key = `${session.provider}\0${session.engine}\0${session.cohort}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(session);
+  }
+  return [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, rows]) => {
+      const first = rows[0];
+      const tokenRows = rows.filter((row) => row.tokens
+        && Object.values(row.tokens).some((value) => value !== null));
+      const costRows = rows.filter((row) => row.costUsd !== null);
+      const tokens = first.provider === 'agy'
+        ? { availability: 'unavailable', reason: 'agy_schema_not_exposed' }
+        : tokenRows.length === 0
+          ? { availability: 'unavailable', reason: 'source_metric_absent' }
+          : {
+            availability: 'available',
+            observed_samples: tokenRows.length,
+            input_tokens_total: tokenRows.some((row) => row.tokens.input !== null)
+              ? tokenRows.reduce((sum, row) => sum + (row.tokens.input || 0), 0) : null,
+            output_tokens_total: tokenRows.some((row) => row.tokens.output !== null)
+              ? tokenRows.reduce((sum, row) => sum + (row.tokens.output || 0), 0) : null,
+            total_tokens: tokenRows.some((row) => row.tokens.total !== null)
+              ? tokenRows.reduce((sum, row) => sum + (row.tokens.total || 0), 0) : null,
+          };
+      const cost = first.provider === 'agy'
+        ? { availability: 'unavailable', reason: 'agy_schema_not_exposed' }
+        : costRows.length === 0
+          ? { availability: 'unavailable', reason: 'source_metric_absent' }
+          : {
+            availability: 'available',
+            observed_samples: costRows.length,
+            usd_total: Number(costRows.reduce((sum, row) => sum + row.costUsd, 0).toFixed(8)),
+          };
+      return {
+        provider: first.provider,
+        engine: first.engine,
+        cohort: first.cohort,
+        sample_size: rows.length,
+        completion_rate: rate(rows.filter((row) => row.completed).length, rows.length),
+        zero_output_rate: rate(rows.filter((row) => row.zeroOutput).length, rows.length),
+        tool_failure_rate: rate(rows.filter((row) => row.toolFailure).length, rows.length),
+        truncation_rate: rate(rows.filter((row) => row.truncated).length, rows.length),
+        tokens,
+        cost,
+      };
+    });
+}
+
+function cmdImportTranscripts(args) {
+  const { roots, output } = parseTranscriptImportArgs(args);
+  const sessions = [];
+  const coverage = new Map();
+  for (const { provider, root } of roots) {
+    const files = transcriptFiles(root);
+    const current = coverage.get(provider) || { candidate_files: 0, parsed_sessions: 0 };
+    current.candidate_files += files.length;
+    for (const file of files) {
+      const parsed = parseTranscriptFile(file);
+      if (parsed === null) continue;
+      current.parsed_sessions += 1;
+      sessions.push(inspectTranscript(provider, parsed, path.relative(root, file)));
+    }
+    coverage.set(provider, current);
+  }
+  const sources = [...coverage.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([provider, item]) => ({
+      provider,
+      candidate_files: item.candidate_files,
+      parsed_sessions: item.parsed_sessions,
+      schema_coverage_rate: rate(item.parsed_sessions, item.candidate_files),
+    }));
+  const result = {
+    schema_version: 1,
+    authority_status: 'untrusted_telemetry',
+    admissible: false,
+    imported_scorecard_rows: 0,
+    sources,
+    aggregates: aggregateTranscriptSessions(sessions),
+  };
+  const serialized = `${JSON.stringify(result, null, 2)}\n`;
+  if (output) {
+    fs.mkdirSync(path.dirname(output), { recursive: true });
+    const temp = `${output}.tmp-${process.pid}`;
+    fs.writeFileSync(temp, serialized, { mode: 0o600 });
+    fs.renameSync(temp, output);
+  }
+  process.stdout.write(serialized);
+}
+
 function currentRowsForRole(role, nowMs, options = {}) {
   const rows = readStoreRows(false, options.requireEvidence === true);
   const capabilityRows = options.requireEvidence ? readCapabilityEvidenceRows() : null;
@@ -906,5 +1235,6 @@ function cmdLadder(args) {
   else if (command === 'current') cmdCurrent(commandArgs);
   else if (command === 'report') cmdReport(commandArgs);
   else if (command === 'ladder') cmdLadder(commandArgs);
+  else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);
   else failUsage(`unknown subcommand '${command}'`);
 })();

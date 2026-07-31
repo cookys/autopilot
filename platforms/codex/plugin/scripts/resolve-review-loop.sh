@@ -207,6 +207,8 @@ else
   IMPL_RUNNER="$DEF_IMPL_RUNNER"
 fi
 REV_ENDPOINT="$(read_field "$CONFIG" reviewer_endpoint "$DEF_REV_ENDPOINT")"
+REV_LIMITATION="$(read_field "$CONFIG" reviewer_limitation "")"
+REV_LIMITATION_REQUIRED="$(read_field "$CONFIG" reviewer_limitation_required "false")"
 IMPL_ENDPOINT="$(read_field "$CONFIG" implementer_endpoint "$DEF_IMPL_ENDPOINT")"
 VER_AUTH_PRESENT="$(read_field "$CONFIG" verification_author_present "$DEF_VER_AUTHOR_PRESENT")"
 VER_AUTH_ENGINE="$(read_field "$CONFIG" verification_author_engine "$DEF_VER_AUTHOR_ENGINE")"
@@ -219,6 +221,18 @@ VER_AUTH_ENDPOINT="$(read_field "$CONFIG" verification_author_endpoint "$DEF_VER
 [[ -z "$REV_ENDPOINT"  || "$REV_ENDPOINT"  =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid reviewer_endpoint (must be [A-Za-z0-9_]): $REV_ENDPOINT" >&2; REV_ENDPOINT=""; }
 [[ -z "$IMPL_ENDPOINT" || "$IMPL_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid implementer_endpoint (must be [A-Za-z0-9_]): $IMPL_ENDPOINT" >&2; IMPL_ENDPOINT=""; }
 [[ -z "$VER_AUTH_ENDPOINT" || "$VER_AUTH_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: invalid verification_author_endpoint (must be [A-Za-z0-9_]): $VER_AUTH_ENDPOINT" >&2; exit 3; }
+# The exact MiniMax diff-only tuple has a recorded false-central-claim limitation.
+# Keep calibration telemetry out of capability_warnings: that array is an operational
+# dispatch channel. A diagnostic makes every exact-seat resolution non-silent, while
+# managed rosters can opt into the fail-closed tag guard used by dogfood.
+if [[ "$REV_ENGINE" == "MiniMax-M3" && "$REV_RUNNER" == "cc-shim" && "$REV_ENDPOINT" == "minimax" ]]; then
+  echo "resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification." >&2
+  if [[ "$REV_LIMITATION_REQUIRED" == "true" \
+        && "$REV_LIMITATION" != "minimax-false-central-claim-5-of-6" ]]; then
+    echo "resolve-review-loop: MiniMax-M3 cc-shim/minimax reviewer requires reviewer_limitation=minimax-false-central-claim-5-of-6" >&2
+    exit 3
+  fi
+fi
 case "$VER_AUTH_PRESENT" in
   true|false) ;;
   *)

@@ -690,7 +690,7 @@ function parseTranscriptFile(file) {
   }
 }
 
-function safeEngineName(value) {
+function safeEngineName(provider, value) {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   const looksLikeSessionId = /^sess(?:ion)?[_-][A-Za-z0-9][A-Za-z0-9_-]{7,}$/i.test(normalized)
@@ -700,7 +700,18 @@ function safeEngineName(value) {
       || looksLikeSessionId
       || transcriptSecrets.scan(normalized).length > 0
       || normalized.includes('/') || normalized.includes('\\')) return null;
-  return normalized;
+  const compactSuffix = '[A-Za-z0-9][A-Za-z0-9._-]*';
+  const providerPatterns = {
+    codex: new RegExp(`^(?:gpt-|codex-)${compactSuffix}$|^o[0-9]+(?:[._-]${compactSuffix})*$`, 'i'),
+    grok: new RegExp(`^grok-${compactSuffix}$`, 'i'),
+    opencode: new RegExp(
+      `^(?:(?:glm|qwen|minimax|claude|gpt|gemini|deepseek|kimi|grok)-${compactSuffix}`
+        + `|o[0-9]+(?:[._-]${compactSuffix})*)$`,
+      'i',
+    ),
+    agy: /^Gemini [0-9]+(?:\.[0-9]+)* (?:Flash|Pro)(?: \((?:Low|Medium|High)\))?$/i,
+  };
+  return providerPatterns[provider]?.test(normalized) ? normalized : null;
 }
 
 function nonEmptyContent(value) {
@@ -830,7 +841,7 @@ function inspectCodexTranscript(parsed) {
     const type = String(record.type || '').toLowerCase();
     const payload = transcriptObject(record.payload);
     if (type === 'session_meta' && payload && result.engine === 'unknown') {
-      result.engine = safeEngineName(payload.model) || 'unknown';
+      result.engine = safeEngineName('codex', payload.model) || 'unknown';
     } else if (type === 'response_item' && payload) {
       const payloadType = String(payload.type || '').toLowerCase();
       if (payloadType === 'message' && String(payload.role || '').toLowerCase() === 'assistant') {
@@ -867,7 +878,10 @@ function inspectRootTranscript(provider, parsed) {
     usage: emptyUsageAccumulator(),
   };
   if (!root) return result;
-  result.engine = safeEngineName(provider === 'opencode' ? root.modelID : root.model) || 'unknown';
+  result.engine = safeEngineName(
+    provider,
+    provider === 'opencode' ? root.modelID : root.model,
+  ) || 'unknown';
   result.completion = directCompletion(root);
   result.toolFailure = directToolFailure(root);
   result.truncated = directTruncation(root);

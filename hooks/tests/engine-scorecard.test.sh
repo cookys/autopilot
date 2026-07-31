@@ -311,47 +311,82 @@ alias_existing_after="$(cat "$ALIAS_OUTPUT")"
 # Construct planted controls in pieces so repository secret scanners do not mistake
 # these inert test values for live credentials.
 SECRET_MODEL_ROOT="$TESTDIR/secret-model-transcripts"
-mkdir -p "$SECRET_MODEL_ROOT"
+mkdir -p "$SECRET_MODEL_ROOT/codex" "$SECRET_MODEL_ROOT/grok" \
+  "$SECRET_MODEL_ROOT/opencode" "$SECRET_MODEL_ROOT/agy"
 node - "$SECRET_MODEL_ROOT" <<'NODE'
 const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
-const models = {
+const planted = {
   aws: ['AKIA', 'IOSFODNN7EXAMPLE'].join(''),
   openai: ['sk-', 'abcdefghijklmnopqrstuvwxyz123456'].join(''),
   github: ['ghp_', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJ'].join(''),
-  minimax: 'MiniMax-M3',
-  gemini: 'Gemini 3.6 Flash (High)',
 };
-for (const [name, model] of Object.entries(models)) {
-  fs.writeFileSync(path.join(root, `${name}.json`), JSON.stringify({
+for (const [name, model] of Object.entries(planted)) {
+  fs.writeFileSync(path.join(root, 'grok', `${name}.json`), JSON.stringify({
     model,
     status: 'completed',
     response_text: 'ok',
   }));
 }
+fs.writeFileSync(path.join(root, 'grok', 'prose.json'), JSON.stringify({
+  model: 'Customer roadmap', status: 'completed', response_text: 'ok',
+}));
+fs.writeFileSync(path.join(root, 'opencode', 'minimax.json'), JSON.stringify({
+  modelID: 'MiniMax-M3', status: 'completed',
+  messages: [{ role: 'assistant', content: 'ok' }],
+}));
+fs.writeFileSync(path.join(root, 'opencode', 'prose.json'), JSON.stringify({
+  modelID: 'Customer roadmap', status: 'completed',
+  messages: [{ role: 'assistant', content: 'ok' }],
+}));
+fs.writeFileSync(path.join(root, 'agy', 'gemini.json'), JSON.stringify({
+  model: 'Gemini 3.6 Flash (High)', status: 'completed', output_text: 'ok',
+}));
+fs.writeFileSync(path.join(root, 'agy', 'prose.json'), JSON.stringify({
+  model: 'Customer roadmap', status: 'completed', output_text: 'ok',
+}));
+const codex = [
+  { type: 'session_meta', payload: { model: 'Customer roadmap' } },
+  { type: 'response_item', payload: { type: 'message', role: 'assistant', content: 'ok' } },
+  { type: 'turn.completed' },
+];
+fs.writeFileSync(
+  path.join(root, 'codex', 'prose.jsonl'),
+  `${codex.map(JSON.stringify).join('\n')}\n`,
+);
 NODE
-node "$CLI" import-transcripts --root "grok=$SECRET_MODEL_ROOT" \
+node "$CLI" import-transcripts \
+  --root "codex=$SECRET_MODEL_ROOT/codex" \
+  --root "grok=$SECRET_MODEL_ROOT/grok" \
+  --root "opencode=$SECRET_MODEL_ROOT/opencode" \
+  --root "agy=$SECRET_MODEL_ROOT/agy" \
   > "$TESTDIR/secret-model-import.json"
 secret_model_check="$(node - "$TESTDIR/secret-model-import.json" <<'NODE'
 const fs = require('fs');
 const raw = fs.readFileSync(process.argv[2], 'utf8');
 const report = JSON.parse(raw);
-const groups = new Map(report.aggregates.map((row) => [row.engine, row.sample_size]));
+const find = (provider, engine) => report.aggregates.find((row) => (
+  row.provider === provider && row.engine === engine
+));
 const planted = [
   ['AKIA', 'IOSFODNN7EXAMPLE'].join(''),
   ['sk-', 'abcdefghijklmnopqrstuvwxyz123456'].join(''),
   ['ghp_', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJ'].join(''),
 ];
 const secretsAbsent = planted.every((secret) => !raw.includes(secret));
-const rejected = groups.get('unknown') === planted.length;
-const ordinaryPreserved = groups.get('MiniMax-M3') === 1
-  && groups.get('Gemini 3.6 Flash (High)') === 1;
+const rejected = find('grok', 'unknown')?.sample_size === planted.length + 1
+  && find('codex', 'unknown')?.sample_size === 1
+  && find('opencode', 'unknown')?.sample_size === 1
+  && find('agy', 'unknown')?.sample_size === 1
+  && !raw.includes('Customer roadmap');
+const ordinaryPreserved = find('opencode', 'MiniMax-M3')?.sample_size === 1
+  && find('agy', 'Gemini 3.6 Flash (High)')?.sample_size === 1;
 process.stdout.write([secretsAbsent, rejected, ordinaryPreserved].join(':'));
 NODE
 )"
 [ "$secret_model_check" = "true:true:true" ] \
-  && ok "19: transcript engine names reject credential shapes without altering legitimate models" \
+  && ok "19: provider model contracts reject secrets/prose and preserve legitimate identifiers" \
   || bad "19: secret model sanitization check=$secret_model_check"
 
 # 20: provider message/output bodies are opaque. Metadata-shaped objects nested
@@ -561,7 +596,7 @@ const invalidMetrics = [
 invalidMetrics.forEach(([name, value]) => writeJson(
   path.join(root, 'metrics', `${name}.json`),
   {
-    model: 'metric-boundary',
+    model: 'grok-metric-boundary',
     status: 'completed',
     response_text: 'ok',
     usage: {
@@ -575,7 +610,7 @@ invalidMetrics.forEach(([name, value]) => writeJson(
   },
 ));
 writeJson(path.join(root, 'metrics', 'valid-zero.json'), {
-  model: 'metric-boundary',
+  model: 'grok-metric-boundary',
   status: 'completed',
   response_text: 'ok',
   usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0, cost_usd: 0 },
@@ -583,19 +618,19 @@ writeJson(path.join(root, 'metrics', 'valid-zero.json'), {
   tool: { exit_code: 0 },
 });
 writeJson(path.join(root, 'cost-precedence', 'usage-only.json'), {
-  model: 'cost-usage-only',
+  model: 'grok-cost-usage-only',
   status: 'completed',
   response_text: 'ok',
   usage: { cost_usd: 0.01 },
 });
 writeJson(path.join(root, 'cost-precedence', 'root-only.json'), {
-  model: 'cost-root-only',
+  model: 'grok-cost-root-only',
   status: 'completed',
   response_text: 'ok',
   cost_usd: 0.02,
 });
 writeJson(path.join(root, 'cost-precedence', 'both.json'), {
-  model: 'cost-both',
+  model: 'grok-cost-both',
   status: 'completed',
   response_text: 'ok',
   usage: { cost_usd: 0.03 },
@@ -627,7 +662,7 @@ const find = (provider, engine) => report.aggregates.find((row) => (
   row.provider === provider && row.engine === engine
 ));
 const unknown = find('grok', 'unknown');
-const metrics = find('grok', 'metric-boundary');
+const metrics = find('grok', 'grok-metric-boundary');
 const codex = find('codex', 'gpt-5.6-sol');
 const sessionIdsRejected = unknown?.sample_size === 3 && [
   'sess_9f8e7d6c',
@@ -650,9 +685,9 @@ const exactCost = (engine, expected) => {
   return row?.cost.availability === 'available'
     && row.cost.observed_samples === 1 && row.cost.usd_total === expected;
 };
-const costPrecedence = exactCost('cost-usage-only', 0.01)
-  && exactCost('cost-root-only', 0.02)
-  && exactCost('cost-both', 0.03);
+const costPrecedence = exactCost('grok-cost-usage-only', 0.01)
+  && exactCost('grok-cost-root-only', 0.02)
+  && exactCost('grok-cost-both', 0.03);
 process.stdout.write([
   sessionIdsRejected,
   strictMetrics,
@@ -702,17 +737,17 @@ writeJson(path.join(root, 'coverage', 'grok', 'recognized.json'), {
   response_text: 'ok',
 });
 writeJson(path.join(root, 'cohort', 'not-swe-calibrate-backup', 'session.json'), {
-  modelID: 'cohort-general',
+  modelID: 'glm-cohort-general',
   status: 'completed',
   messages: [{ role: 'assistant', content: 'ok' }],
 });
 writeJson(path.join(root, 'cohort', 'swe-calibrate', 'below', 'session.json'), {
-  modelID: 'cohort-calibrate',
+  modelID: 'glm-cohort-calibrate',
   status: 'completed',
   messages: [{ role: 'assistant', content: 'ok' }],
 });
 writeJson(path.join(root, 'overlap', 'parent', 'child', 'session.json'), {
-  model: 'overlap-engine',
+  model: 'grok-overlap-engine',
   status: 'completed',
   response_text: 'ok',
 });
@@ -758,8 +793,8 @@ const schemaCoverage = codexSource?.candidate_files === 4
 const cohortRow = (engine, name) => cohort.aggregates.find((row) => (
   row.engine === engine && row.cohort === name
 ));
-const exactCohorts = cohortRow('cohort-general', 'general')?.sample_size === 1
-  && cohortRow('cohort-calibrate', 'swe-calibrate')?.sample_size === 1;
+const exactCohorts = cohortRow('glm-cohort-general', 'general')?.sample_size === 1
+  && cohortRow('glm-cohort-calibrate', 'swe-calibrate')?.sample_size === 1;
 const overlap = JSON.parse(overlapFirstRaw);
 const overlapSource = source(overlap, 'grok');
 const overlapDeduped = overlapFirstRaw === overlapSecondRaw
@@ -767,7 +802,7 @@ const overlapDeduped = overlapFirstRaw === overlapSecondRaw
   && overlapSource.parsed_sessions === 1
   && overlapSource.schema_coverage_rate === 1
   && overlap.aggregates.length === 1
-  && overlap.aggregates[0].engine === 'overlap-engine'
+  && overlap.aggregates[0].engine === 'grok-overlap-engine'
   && overlap.aggregates[0].sample_size === 1;
 process.stdout.write([schemaCoverage, exactCohorts, overlapDeduped].join(':'));
 NODE

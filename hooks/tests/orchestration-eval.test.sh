@@ -673,6 +673,68 @@ if node "$EVAL_DIR/score.js" "$TEST_OUT_DIR/unknown-class.jsonl" >/dev/null 2>&1
   exit 1
 fi
 
+# Every row is validated before any denominator. Malformed JSON, non-object
+# rows, missing/invalid identity and oracle fields, unexplained failures,
+# stale success metadata, unknown causes, and non-boolean consumed fields all
+# fail closed. Diagnostics must not echo an untrusted cause value.
+if ! node - "$EVAL_DIR/score.js" "$TEST_OUT_DIR" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const cli = process.argv[2];
+const root = process.argv[3];
+const success = { task_id: 'bad', arm: 'on', oracle_pass: true };
+const failed = {
+  task_id: 'bad', arm: 'on', oracle_pass: false,
+  failure_class: 'capability_fail', failure_cause: 'oracle_rejected',
+};
+const cases = [
+  ['missing-oracle', { task_id: 'bad', arm: 'on' }],
+  ['null-oracle', { task_id: 'bad', arm: 'on', oracle_pass: null }],
+  ['string-oracle', { task_id: 'bad', arm: 'on', oracle_pass: 'false' }],
+  ['primitive-row', 42],
+  ['array-row', []],
+  ['missing-task-id', { arm: 'on', oracle_pass: true }],
+  ['numeric-task-id', { task_id: 7, arm: 'on', oracle_pass: true }],
+  ['blank-task-id', { task_id: '   ', arm: 'on', oracle_pass: true }],
+  ['invalid-arm', { task_id: 'bad', arm: 'ON', oracle_pass: true }],
+  ['missing-cause', { task_id: 'bad', arm: 'on', oracle_pass: false, failure_class: 'capability_fail' }],
+  ['unknown-cause', { ...failed, failure_cause: 'RAW_CORRUPT_CAUSE' }],
+  ['mismatched-capability-cause', { ...failed, failure_cause: 'runner_timeout' }],
+  ['mismatched-infra-cause', { ...failed, failure_class: 'infra_fail' }],
+  ['stale-success-class', { ...success, failure_class: 'capability_fail' }],
+  ['stale-success-cause', { ...success, failure_cause: 'oracle_rejected' }],
+  ...[
+    'decoy_respected',
+    'fidelity_ok',
+    'adjudication_valid',
+    'patterns_named',
+    'probe_evidence_present',
+  ].map((field) => [`invalid-${field}`, { ...success, [field]: 'true' }]),
+];
+const accepted = [];
+let leakedCause = false;
+for (const [name, value] of cases) {
+  const file = path.join(root, `invalid-${name}.jsonl`);
+  fs.writeFileSync(file, `${JSON.stringify(value)}\n`);
+  const result = spawnSync(process.execPath, [cli, file], { encoding: 'utf8' });
+  if (result.status === 0) accepted.push(name);
+  if (`${result.stdout}${result.stderr}`.includes('RAW_CORRUPT_CAUSE')) leakedCause = true;
+}
+const malformed = path.join(root, 'invalid-malformed.jsonl');
+fs.writeFileSync(malformed, '{"task_id":"bad"\n');
+const malformedResult = spawnSync(process.execPath, [cli, malformed], { encoding: 'utf8' });
+if (malformedResult.status === 0) accepted.push('malformed-json');
+if (accepted.length > 0 || leakedCause) {
+  process.stderr.write(`accepted=${accepted.join(',')} leakedCause=${leakedCause}\n`);
+  process.exit(1);
+}
+NODE
+then
+  echo "Assertion failed: score row-schema rejection matrix" >&2
+  exit 1
+fi
+
 # Clean up
 rm -rf "$TEST_OUT_DIR"
 rm -f "$STUB_BIN"

@@ -6,6 +6,24 @@
 const fs = require('fs');
 const readline = require('readline');
 const VALID_FAILURE_CLASSES = new Set(['capability_fail', 'infra_fail']);
+const VALID_FAILURE_CAUSES = new Map([
+  ['capability_fail', new Set(['oracle_rejected'])],
+  ['infra_fail', new Set([
+    'runner_timeout',
+    'authentication',
+    'runner_error',
+    'empty_output',
+    'missing_oracle',
+    'oracle_error',
+  ])],
+]);
+const OPTIONAL_BOOLEAN_FIELDS = [
+  'decoy_respected',
+  'fidelity_ok',
+  'adjudication_valid',
+  'patterns_named',
+  'probe_evidence_present',
+];
 
 function usage() {
   console.log('Usage: node score.js <results.jsonl>');
@@ -39,6 +57,45 @@ function printTable(title, headers, rows) {
   }
 }
 
+function rowError(rowNumber, message) {
+  return new Error(`Error: row ${rowNumber} ${message}`);
+}
+
+function validateRow(row, rowNumber) {
+  if (row === null || typeof row !== 'object' || Array.isArray(row)
+      || Object.getPrototypeOf(row) !== Object.prototype) {
+    throw rowError(rowNumber, 'must be a plain object');
+  }
+  if (typeof row.task_id !== 'string' || row.task_id.trim().length === 0) {
+    throw rowError(rowNumber, 'has invalid task_id');
+  }
+  if (row.arm !== 'on' && row.arm !== 'off') {
+    throw rowError(rowNumber, 'has invalid arm (expected on|off)');
+  }
+  if (typeof row.oracle_pass !== 'boolean') {
+    throw rowError(rowNumber, 'has invalid oracle_pass (expected boolean)');
+  }
+  for (const field of OPTIONAL_BOOLEAN_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(row, field)
+        && row[field] !== null && typeof row[field] !== 'boolean') {
+      throw rowError(rowNumber, `has invalid ${field} (expected boolean|null)`);
+    }
+  }
+
+  if (row.oracle_pass === false) {
+    if (!VALID_FAILURE_CLASSES.has(row.failure_class)) {
+      throw rowError(rowNumber, 'has invalid failure_class (expected capability_fail|infra_fail)');
+    }
+    const causes = VALID_FAILURE_CAUSES.get(row.failure_class);
+    if (typeof row.failure_cause !== 'string' || row.failure_cause.trim().length === 0
+        || !causes.has(row.failure_cause)) {
+      throw rowError(rowNumber, 'has invalid failure_cause for failure_class');
+    }
+  } else if (row.failure_class != null || row.failure_cause != null) {
+    throw rowError(rowNumber, 'is successful but carries failure metadata');
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   let inputStream = process.stdin;
@@ -60,31 +117,24 @@ async function main() {
   });
 
   const data = [];
+  let lineNumber = 0;
 
   for await (const line of rl) {
+    lineNumber += 1;
     if (!line.trim()) continue;
+    let obj;
     try {
-      const obj = JSON.parse(line);
-      data.push(obj);
-    } catch (e) {
-      console.error(`Warning: Failed to parse line as JSON: ${line}`);
+      obj = JSON.parse(line);
+    } catch {
+      throw new Error(`Error: line ${lineNumber} is not valid JSON`);
     }
+    validateRow(obj, lineNumber);
+    data.push(obj);
   }
 
   if (data.length === 0) {
     console.log('No results to score.');
     process.exit(0);
-  }
-
-  for (const [index, row] of data.entries()) {
-    if (row.oracle_pass !== false) continue;
-    if (!VALID_FAILURE_CLASSES.has(row.failure_class)) {
-      console.error(
-        `Error: row ${index + 1} has oracle_pass:false but invalid failure_class `
-        + `'${String(row.failure_class)}' (expected capability_fail|infra_fail)`,
-      );
-      process.exit(1);
-    }
   }
 
   // Aggregation maps
@@ -203,4 +253,7 @@ async function main() {
   console.log('\nHonest footer: pilot n is tiny — pipeline validation, not lift evidence.\n');
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : 'Error: unexpected scoring failure');
+  process.exitCode = 1;
+});

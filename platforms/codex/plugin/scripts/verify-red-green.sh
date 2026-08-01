@@ -265,6 +265,11 @@ if ! git -C "$REPO" worktree add --detach "$WT_HEAD" "$HEAD_SHA" >/dev/null 2>&1
   exit 3
 fi
 
+if [[ -n "$VERIFY_CMD_REPO_REL" && ! -x "$WT_HEAD/$VERIFY_CMD_REPO_REL" ]]; then
+  emit_json "INCONCLUSIVE" "false" "$BASE_SHA" "$HEAD_SHA" "skipped" "skipped" "[]" "head-verify-cmd-missing-or-not-executable"
+  exit 3
+fi
+
 if run_verify_cmd "$WT_HEAD"; then
   HEAD_RESULT="green"
 else
@@ -290,6 +295,11 @@ if ! git -C "$WT_BASE" apply "$PATCH_FILE" 2>/dev/null; then
 fi
 
 RED_TESTS_JSON="$(json_array_from_lines "$TEST_FILES")"
+
+if [[ -n "$VERIFY_CMD_REPO_REL" && ! -x "$WT_BASE/$VERIFY_CMD_REPO_REL" ]]; then
+  emit_json "INCONCLUSIVE" "false" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "skipped" "$RED_TESTS_JSON" "base-verify-cmd-missing-or-not-executable"
+  exit 3
+fi
 
 if run_verify_cmd "$WT_BASE"; then
   BASE_RESULT="green"

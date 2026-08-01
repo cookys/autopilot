@@ -17,6 +17,9 @@ const {
 const {
   dispatchAuthorLiveProbe,
 } = require('./live-probe');
+const {
+  qualifyExactRoleNow,
+} = require('./qualification-provider');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CAPABILITY_STATE = path.join(REPO_ROOT, 'scripts', 'engine-capability-state.js');
@@ -339,14 +342,24 @@ function capabilityObservation(boundTuple, now, options = {}) {
   };
 }
 
-function addQualificationObservations(seats, resolved, now, ttlSeconds) {
-  const reviewer = seats.find((seat) => seat.seat_id === 'reviewer');
-  if (reviewer && resolved.reviewer_qualified === true) {
-    reviewer.observations.qualification = qualificationObservation(
-      reviewer.tuple,
-      now,
-      ttlSeconds,
-    );
+function addQualificationObservations(seats, provider, now, ttlSeconds) {
+  for (const seat of seats) {
+    delete seat.observations.qualification;
+    for (const fallback of seat.fallbacks || []) delete fallback.observations.qualification;
+  }
+  if (!provider) return;
+  for (const seat of seats) {
+    const observation = qualifyExactRoleNow(provider, seat.tuple, now, ttlSeconds);
+    if (observation) seat.observations.qualification = observation;
+    for (const fallback of seat.fallbacks || []) {
+      const fallbackObservation = qualifyExactRoleNow(
+        provider,
+        fallback.tuple,
+        now,
+        ttlSeconds,
+      );
+      if (fallbackObservation) fallback.observations.qualification = fallbackObservation;
+    }
   }
 }
 
@@ -398,7 +411,14 @@ function collectProviderReadiness(options = {}) {
       resolved.provider_readiness_fallback_family_constraint || 'different',
   };
   const roster = buildSelectedRoster(resolved, now, ttlSeconds);
-  addQualificationObservations(roster, resolved, now, ttlSeconds);
+  // Disk scorecards and transport probes are telemetry only. Qualification is
+  // admitted exclusively through a live, non-serializable host provider.
+  addQualificationObservations(
+    roster,
+    options.qualificationProvider,
+    now,
+    ttlSeconds,
+  );
 
   for (const seat of roster) {
     if (seat.tuple.runner === 'unresolved') continue;

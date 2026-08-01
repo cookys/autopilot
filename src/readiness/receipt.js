@@ -542,11 +542,38 @@ function consumeProviderReadinessReceipt(receipt, context) {
   };
 }
 
+/** ICC/effectful consumer. A serializable readiness receipt is necessary but
+ * cannot itself confer role authority; re-bind every selected exact tuple to a
+ * live host provider immediately before branch/worktree/runner spend. */
+function consumeProviderReadinessBeforeSpend(receipt, context) {
+  const consumed = consumeProviderReadinessReceipt(receipt, context);
+  if (consumed.status !== 'ready') return consumed;
+  const { qualifyExactRoleNow } = require('./qualification-provider');
+  if (!context || !context.qualificationProvider) {
+    receiptError(
+      'provider_readiness_qualification_authority_missing',
+      'effectful readiness requires a live host-injected qualification provider',
+    );
+  }
+  const now = context.now;
+  for (const selected of consumed.selections) {
+    const tuple = selected.tuple;
+    if (!qualifyExactRoleNow(context.qualificationProvider, tuple, now, 60)) {
+      receiptError(
+        'provider_readiness_qualification_rejected',
+        `host qualification rejected exact role tuple for ${selected.seat_id}`,
+      );
+    }
+  }
+  return { ...consumed, qualification_authority: 'host-injected-exact-role' };
+}
+
 module.exports = {
   ProviderReadinessReceiptError,
   RECEIPT_TTL_MAX_SECONDS,
   canonicalDigest,
   consumeProviderReadinessReceipt,
+  consumeProviderReadinessBeforeSpend,
   createProviderReadinessReceipt,
   validateProviderReadinessReceipt,
 };

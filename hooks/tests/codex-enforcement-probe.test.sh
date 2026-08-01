@@ -92,4 +92,13 @@ assert_contains "$OUT" "without request-bound hook or effect evidence" \
 assert_contains "$(cat "$STUB_ARTIFACT")" '"preserve":"valid-prior-artifact"' \
   "Invalid retry preserves the prior valid disposition artifact"
 
+PORTABILITY="$(cat "$REPO_ROOT/references/multi-agent-portability.md")"
+assert_contains "$PORTABILITY" "codex-cli 0.146.0" "Codex native schema evidence is current"
+assert_contains "$PORTABILITY" 'task_name`, `message`, `fork_turns`, `model`, and `reasoning_effort' \
+  "Current native spawn schema records model and effort fields"
+assert_contains "$PORTABILITY" "interrupt survivors" \
+  "Native child teardown/disposition boundary is explicit"
+assert_not_contains "$PORTABILITY" "Default schema is 3 fields" \
+  "Stale Codex 0.144 locked-schema guidance is retired"
+
 finalize_test

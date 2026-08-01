@@ -457,6 +457,16 @@ family_of() {
   esac
 }
 
+# Canonical agy slug observed by the committed 1.1.9 model-inventory probe.
+# Dispatch rails still re-query `agy models` immediately before spend and fail
+# closed if the installed host no longer offers this slug.
+normalize_agy_alias() {
+  case "$1" in
+    gemini-flash) printf '%s' 'gemini-3.6-flash-high' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
 # Expand the "all-calibrated" preset to the calibrated 5-family roster if matched exactly (trimmed/case-insensitive)
 _qc_panel_norm="$(printf '%s' "$QC_PANEL_RAW" | tr '[:upper:]' '[:lower:]' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
 if [[ "$_qc_panel_norm" == "all-calibrated" ]]; then
@@ -470,6 +480,7 @@ IFS=',' read -ra _parts <<< "$QC_PANEL_RAW"
 for _p in "${_parts[@]}"; do
   _p="$(printf '%s' "$_p" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   [[ -z "$_p" ]] && continue
+  _p="$(normalize_agy_alias "$_p")"
   QC_PANEL+=("$_p")
   [[ $_first -eq 0 ]] && QC_PANEL_JSON+=", "
   QC_PANEL_JSON+="\"$(json_escape "$_p")\""

@@ -1750,6 +1750,32 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
 fi
 set_runner_flags
 
+normalize_agy_model() {
+  local requested="$1" tier="high" models resolved
+  case "$EFFORT" in low) tier=low ;; medium) tier=medium ;; esac
+  models="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
+    || die_precondition "agy model inventory unavailable; alias resolution fails closed"
+  if printf '%s\n' "$models" | grep -Fxq -- "$requested"; then
+    printf '%s' "$requested"; return 0
+  fi
+  case "$requested" in
+    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
+      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
+      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
+      printf '%s' "$resolved" ;;
+    *) die_precondition "agy model '$requested' is not a current canonical slug" ;;
+  esac
+}
+
+if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  MODEL="$(normalize_agy_model "$MODEL")"
+  command -v bwrap >/dev/null 2>&1 \
+    || die_precondition "agy worker requires bwrap filesystem/process isolation"
+fi
+
 if [ "${#SKILLS[@]}" -gt 0 ]; then
   for skill in "${SKILLS[@]}"; do
     skill_no_ns="${skill#autopilot:}"
@@ -2852,8 +2878,9 @@ run build/test or to commit.
 ===
 
 "
-  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" --dangerously-skip-permissions --print-timeout "$5"' \
-      _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT"
+  run_worker bwrap --ro-bind / / --bind "$WT" "$WT" --unshare-pid --die-with-parent \
+      --chdir "$WT" "$AGY_BIN" -p "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" \
+      --model "$MODEL" --dangerously-skip-permissions --print-timeout "$TIMEOUT"
 fi
 }
 

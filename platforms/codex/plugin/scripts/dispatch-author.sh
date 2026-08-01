@@ -640,6 +640,32 @@ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qode
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
+normalize_agy_model() {
+  local requested="$1" agy_bin="$2" tier="high" models resolved
+  case "$EFFORT" in low) tier="low" ;; medium) tier="medium" ;; esac
+  models="$(timeout 20 "$agy_bin" models 2>/dev/null)" \
+    || die_precondition "agy model inventory unavailable; alias resolution fails closed"
+  if printf '%s\n' "$models" | grep -Fxq -- "$requested"; then
+    printf '%s' "$requested"; return 0
+  fi
+  case "$requested" in
+    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
+      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
+      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
+      printf '%s' "$resolved" ;;
+    *) die_precondition "agy model '$requested' is not a current canonical slug" ;;
+  esac
+}
+
+if [ "$RUNNER" = "agy" ]; then
+  AGY_BIN="${BIN:-agy}"
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  MODEL="$(normalize_agy_model "$MODEL" "$AGY_BIN")"
+  command -v bwrap >/dev/null 2>&1 \
+    || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
+fi
+
 if [[ -n "${AUTOPILOT_SETTLE_MS:-}" && ! "$AUTOPILOT_SETTLE_MS" =~ ^[0-9]+$ ]]; then
   die_precondition "AUTOPILOT_SETTLE_MS must be an integer millisecond value (got: $AUTOPILOT_SETTLE_MS)"
 fi
@@ -648,6 +674,16 @@ fi
 # INLINE inside a kill-surviving setsid session and relay its durable result. Byte-identical
 # inline behavior when no coords / DISPATCH_DETACH=0. NEVER returns when it engages.
 dispatch_detach_supervise "$0" "$LEDGER" "$RUN_ID" "$STAGE" "$_AUTHOR_SELF_DIR" -- "${ORIG_ARGS[@]}"
+
+# The explicit non-strict path historically left REPO_ROOT empty and therefore
+# skipped identity containment. Resolve it mechanically from the caller's Git
+# context; scratch/non-repository callers remain read-only and uncontained.
+if [ -z "$REPO_ROOT" ]; then
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$REPO_ROOT" ]; then
+    REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
+  fi
+fi
 
 EP_URL=""; EP_TOKEN_ENV=""; ANTHROPIC_TOKEN_ENV=""
 if [[ -n "$ENDPOINT" ]]; then
@@ -881,8 +917,7 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   RUNNER_EXIT=$?
   set -e
 else
-  AGY_BIN="${BIN:-agy}"
-  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  AGY_BIN="${AGY_BIN:-${BIN:-agy}}"
   # agy -p ignores cwd and drops raw stdout under a non-TTY pipe (#76/#408),
   # so capture through pseudo-TTY and strip CR to preserve exactness.
   RUN_SH="$(mktemp -t dispatch-author-agy-XXXXXX)"
@@ -890,8 +925,8 @@ else
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
+    printf 'exec bwrap --ro-bind / / --bind %q %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$AGY_CWD" "$AGY_CWD" "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   set +e

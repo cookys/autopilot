@@ -552,7 +552,12 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
 
   try {
     const { resolveGitCommonDir } = require('../src/engine/work-order');
-    const commonDir = resolveGitCommonDir(repoRoot);
+    // Tests and host adapters may inject a hermetic authority store while the
+    // repository identity remains the real Git common-dir.  The override is an
+    // explicit caller input, never ambient HOME/global state.
+    const commonDir = isStr(options.authorityStore)
+      ? fs.realpathSync(path.resolve(options.authorityStore))
+      : resolveGitCommonDir(repoRoot);
     if (!commonDir) {
       if (enforce) {
         fail('git common dir unavailable for Mission evidence', 'MISSION_EVIDENCE_CORRUPT');
@@ -1097,6 +1102,7 @@ function admitMissionRouting(options = {}) {
         || policy.resolution.policy_digest
         || null,
       missionLineageId: options.missionLineageId || null,
+      authorityStore: options.authorityStore || null,
     });
   } catch (error) {
     if (policy.resolution.policy.enforcement_mode === 'enforce') throw error;
@@ -1155,6 +1161,7 @@ function usage() {
     'Usage:',
     '  mission-routing-admission.js --repo-root <repo> --level l3|l4|l5|l6',
     '    [--fallback none|solo|precondition_failed] [--marker <session-marker.json>]',
+    '    [--authority-store <hermetic-git-common-dir>]',
   ].join('\n');
 }
 
@@ -1165,6 +1172,7 @@ function parse(argv) {
     ['--level', 'entryLevel'],
     ['--fallback', 'fallback'],
     ['--marker', 'markerFile'],
+    ['--authority-store', 'authorityStore'],
   ]);
   for (let index = 0; index < argv.length; index += 2) {
     const field = fields.get(argv[index]);

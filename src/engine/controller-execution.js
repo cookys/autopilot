@@ -3150,6 +3150,93 @@ function admitExecutableMissionDelta({
 }
 
 /**
+ * E1 merge provenance backstop.
+ *
+ * Product commits are admissible only when every changed product path is
+ * covered by a dispatch manifest that is itself present, byte-for-byte, in an
+ * integrity-valid controller Work Order.  Depth zero may coordinate, review,
+ * and merge; it may not author product bytes.  Commit subjects and trailers
+ * are deliberately ignored because prose is not authority.
+ */
+function validateDispatchMergeProvenance({
+  workOrder,
+  commits = [],
+  manifests = [],
+  productPathPrefixes = [],
+} = {}) {
+  const problems = [];
+  let durable = [];
+  try {
+    const { workOrderDigest } = require('./work-order');
+    if (!isObj(workOrder)
+        || workOrder.role !== 'controller'
+        || !isObj(workOrder.controller)
+        || !isCanonicalSha256(workOrder.digest)
+        || workOrderDigest(workOrder) !== workOrder.digest
+        || workOrder.controller.controller_digest
+          !== controllerStateDigest(workOrder.controller)) {
+      problems.push({ code: 'PROVENANCE_WORK_ORDER_INVALID' });
+    } else {
+      durable = Array.isArray(workOrder.controller.dispatch_records)
+        ? workOrder.controller.dispatch_records : [];
+    }
+  } catch (_error) {
+    problems.push({ code: 'PROVENANCE_WORK_ORDER_INVALID' });
+  }
+
+  const prefixes = [...new Set((productPathPrefixes || []).filter(isStr))];
+  const isProductPath = (p) => prefixes.length === 0
+    || prefixes.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+  const digest = (value) => sha256Json(value);
+  const durableByDigest = new Map(durable.map((record) => [digest(record), record]));
+  const supplied = new Map();
+  for (const manifest of Array.isArray(manifests) ? manifests : []) {
+    if (!isObj(manifest) || !durableByDigest.has(digest(manifest))) {
+      problems.push({ code: 'PROVENANCE_MANIFEST_FOREIGN' });
+      continue;
+    }
+    const commit = manifest.accepted_commit || manifest.commit_sha || manifest.commit;
+    if (!isCanonicalGitObjectId(commit)
+        || manifest.root_run_id !== workOrder.root_run_id
+        || manifest.work_order_id !== workOrder.work_order_id) {
+      problems.push({ code: 'PROVENANCE_MANIFEST_BINDING_INVALID', commit: commit || null });
+      continue;
+    }
+    supplied.set(commit, manifest);
+  }
+
+  for (const commit of Array.isArray(commits) ? commits : []) {
+    if (!isObj(commit) || !isCanonicalGitObjectId(commit.commit_sha)) {
+      problems.push({ code: 'PROVENANCE_COMMIT_INVALID' });
+      continue;
+    }
+    const paths = Array.isArray(commit.changed_paths)
+      ? commit.changed_paths.filter((p) => isStr(p) && isProductPath(p)) : [];
+    if (paths.length === 0) continue;
+    if (commit.dispatch_depth === 0) {
+      problems.push({ code: 'PROVENANCE_DEPTH0_PRODUCT_EDIT', commit: commit.commit_sha, paths });
+      continue;
+    }
+    const manifest = supplied.get(commit.commit_sha);
+    if (!manifest) {
+      problems.push({ code: 'PROVENANCE_MANIFEST_MISSING', commit: commit.commit_sha, paths });
+      continue;
+    }
+    const declared = new Set(Array.isArray(manifest.changed_paths) ? manifest.changed_paths : []);
+    const uncovered = paths.filter((p) => !declared.has(p));
+    if (uncovered.length > 0) {
+      problems.push({ code: 'PROVENANCE_PATH_UNBOUND', commit: commit.commit_sha, paths: uncovered });
+    }
+  }
+  return {
+    ok: problems.length === 0,
+    admitted: problems.length === 0,
+    problems,
+    provenance_source: 'controller_work_order_dispatch_records',
+  };
+}
+
+/**
  * Hash raw Git bytes at an accepted commit for the exact required/output path set.
  * Returns closed historical_outputs + digest suitable for controller persistence.
  */
@@ -3927,6 +4014,8 @@ module.exports = {
   admitControllerEffects,
   runPostCompactAdapter,
   admitExecutableMissionDelta,
+  validateDispatchMergeProvenance,
+  validateMergeProvenance: validateDispatchMergeProvenance,
   buildHistoricalOutputsAtCommit,
   buildNoOpReceipt,
   rebuildTranscriptAudit,

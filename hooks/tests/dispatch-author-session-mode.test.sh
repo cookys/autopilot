@@ -3,6 +3,11 @@
 # Unit 3 verification oracle: l6 session-mode coupling
 . "$(dirname "$0")/lib.sh"
 
+SOURCE_ROOT="$REPO_ROOT"
+git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
+git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
+REPO_ROOT="$TEST_TMP/hermetic-repo"
+
 SCRIPT="$REPO_ROOT/scripts/dispatch-author.sh"
 PROMPT="$TEST_TMP/prompt.txt"
 printf '%s' "Write a verification plan." > "$PROMPT"
@@ -47,6 +52,10 @@ chmod +x "$FAKE_RUNNER"
 # so the real user marker is never read or modified.
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/markers"
 export CLAUDE_CODE_SESSION_ID="test-session-l6-spec"
+# The fixture exercises session-mode coupling, not enforced Mission admission.
+# Keep routing in SHADOW while persisting the real marker in this clone's own
+# hermetic Git/session authority directories.
+export AUTOPILOT_MISSION_ROUTING_MODE=SHADOW
 
 reset_run_count() {
   rm -f "$RUN_COUNT_FILE"

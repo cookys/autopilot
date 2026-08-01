@@ -546,7 +546,12 @@ function consumeProviderReadinessReceipt(receipt, context) {
  * cannot itself confer role authority; re-bind every selected exact tuple to a
  * live host provider immediately before branch/worktree/runner spend. */
 function consumeProviderReadinessBeforeSpend(receipt, context) {
-  const consumed = consumeProviderReadinessReceipt(receipt, context);
+  const validationContext = context && {
+    roster: context.roster,
+    policy: context.policy,
+    now: context.now,
+  };
+  const consumed = consumeProviderReadinessReceipt(receipt, validationContext);
   if (consumed.status !== 'ready') return consumed;
   const { qualifyExactRoleNow } = require('./qualification-provider');
   if (!context || !context.qualificationProvider) {

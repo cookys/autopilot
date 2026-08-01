@@ -3159,80 +3159,82 @@ function admitExecutableMissionDelta({
  * are deliberately ignored because prose is not authority.
  */
 function validateDispatchMergeProvenance({
-  workOrder,
-  commits = [],
-  manifests = [],
-  productPathPrefixes = [],
+  repoRoot,
+  rootRunId,
+  workOrderId,
+  baseSha,
+  headSha,
+  productPathPrefixes = ['src', 'scripts', 'hooks'],
 } = {}) {
   const problems = [];
+  let workOrder = null;
   let durable = [];
   try {
-    const { workOrderDigest } = require('./work-order');
-    if (!isObj(workOrder)
-        || workOrder.role !== 'controller'
-        || !isObj(workOrder.controller)
-        || !isCanonicalSha256(workOrder.digest)
-        || workOrderDigest(workOrder) !== workOrder.digest
-        || workOrder.controller.controller_digest
-          !== controllerStateDigest(workOrder.controller)) {
+    const { execFileSync } = require('child_process');
+    const { listWorkOrders, resolveGitCommonDir, workOrderDigest } = require('./work-order');
+    const root = fs.realpathSync(execFileSync('git', ['-C', repoRoot, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim());
+    const common = resolveGitCommonDir(root);
+    const matches = listWorkOrders(common, rootRunId).filter((entry) => entry.work_order
+      && !entry.error && entry.work_order.work_order_id === workOrderId);
+    if (matches.length !== 1) throw new Error('exact controller Work Order is absent or ambiguous');
+    workOrder = matches[0].work_order;
+    if (workOrder.role !== 'controller' || !isObj(workOrder.controller)
+        || workOrder.base_sha !== baseSha
+        || !isCanonicalSha256(workOrder.digest) || workOrderDigest(workOrder) !== workOrder.digest
+        || workOrder.controller.controller_digest !== controllerStateDigest(workOrder.controller)) {
       problems.push({ code: 'PROVENANCE_WORK_ORDER_INVALID' });
     } else {
-      durable = Array.isArray(workOrder.controller.dispatch_records)
-        ? workOrder.controller.dispatch_records : [];
+      const manifestPath = workOrder.paths && workOrder.paths.manifest;
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (manifest.root_run_id !== rootRunId || manifest.work_order_id !== workOrderId
+          || manifest.controller_digest !== workOrder.controller.controller_digest
+          || !Array.isArray(manifest.entries)
+          || sha256Json(manifest.entries) !== sha256Json(workOrder.controller.dispatch_records || [])) {
+        problems.push({ code: 'PROVENANCE_MANIFEST_FOREIGN' });
+      } else {
+        durable = manifest.entries;
+      }
+      execFileSync('git', ['-C', root, 'merge-base', '--is-ancestor', baseSha, headSha], { stdio: 'ignore' });
+      const commitIds = execFileSync('git', ['-C', root, 'rev-list', '--reverse', `${baseSha}..${headSha}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+      const commits = commitIds.map((commitSha) => ({
+        commit_sha: commitSha,
+        changed_paths: execFileSync('git', ['-C', root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', commitSha], { encoding: 'utf8' }).trim().split('\n').filter(Boolean),
+      }));
+      const prefixes = [...new Set(productPathPrefixes.filter(isStr))];
+      if (prefixes.length === 0) problems.push({ code: 'PROVENANCE_PRODUCT_SCOPE_EMPTY' });
+      const isProductPath = (p) => prefixes.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+      const manifestsByCommit = new Map();
+      for (const record of durable) {
+        const commit = record.accepted_commit || record.commit_sha || record.commit;
+        if (isCanonicalGitObjectId(commit)
+            && record.root_run_id === rootRunId
+            && record.work_order_id === workOrderId) manifestsByCommit.set(commit, record);
+      }
+      for (const commit of commits) {
+        const paths = commit.changed_paths.filter(isProductPath);
+        if (paths.length === 0) continue;
+        const manifest = manifestsByCommit.get(commit.commit_sha);
+        if (!manifest) {
+          problems.push({ code: 'PROVENANCE_MANIFEST_MISSING', commit: commit.commit_sha, paths });
+          continue;
+        }
+        if (manifest.dispatch_depth === 0) {
+          problems.push({ code: 'PROVENANCE_DEPTH0_PRODUCT_EDIT', commit: commit.commit_sha, paths });
+          continue;
+        }
+        const declared = new Set(Array.isArray(manifest.changed_paths) ? manifest.changed_paths : []);
+        const uncovered = paths.filter((p) => !declared.has(p));
+        if (uncovered.length > 0) problems.push({ code: 'PROVENANCE_PATH_UNBOUND', commit: commit.commit_sha, paths: uncovered });
+      }
     }
   } catch (_error) {
     problems.push({ code: 'PROVENANCE_WORK_ORDER_INVALID' });
-  }
-
-  const prefixes = [...new Set((productPathPrefixes || []).filter(isStr))];
-  const isProductPath = (p) => prefixes.length === 0
-    || prefixes.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
-  const digest = (value) => sha256Json(value);
-  const durableByDigest = new Map(durable.map((record) => [digest(record), record]));
-  const supplied = new Map();
-  for (const manifest of Array.isArray(manifests) ? manifests : []) {
-    if (!isObj(manifest) || !durableByDigest.has(digest(manifest))) {
-      problems.push({ code: 'PROVENANCE_MANIFEST_FOREIGN' });
-      continue;
-    }
-    const commit = manifest.accepted_commit || manifest.commit_sha || manifest.commit;
-    if (!isCanonicalGitObjectId(commit)
-        || manifest.root_run_id !== workOrder.root_run_id
-        || manifest.work_order_id !== workOrder.work_order_id) {
-      problems.push({ code: 'PROVENANCE_MANIFEST_BINDING_INVALID', commit: commit || null });
-      continue;
-    }
-    supplied.set(commit, manifest);
-  }
-
-  for (const commit of Array.isArray(commits) ? commits : []) {
-    if (!isObj(commit) || !isCanonicalGitObjectId(commit.commit_sha)) {
-      problems.push({ code: 'PROVENANCE_COMMIT_INVALID' });
-      continue;
-    }
-    const paths = Array.isArray(commit.changed_paths)
-      ? commit.changed_paths.filter((p) => isStr(p) && isProductPath(p)) : [];
-    if (paths.length === 0) continue;
-    if (commit.dispatch_depth === 0) {
-      problems.push({ code: 'PROVENANCE_DEPTH0_PRODUCT_EDIT', commit: commit.commit_sha, paths });
-      continue;
-    }
-    const manifest = supplied.get(commit.commit_sha);
-    if (!manifest) {
-      problems.push({ code: 'PROVENANCE_MANIFEST_MISSING', commit: commit.commit_sha, paths });
-      continue;
-    }
-    const declared = new Set(Array.isArray(manifest.changed_paths) ? manifest.changed_paths : []);
-    const uncovered = paths.filter((p) => !declared.has(p));
-    if (uncovered.length > 0) {
-      problems.push({ code: 'PROVENANCE_PATH_UNBOUND', commit: commit.commit_sha, paths: uncovered });
-    }
   }
   return {
     ok: problems.length === 0,
     admitted: problems.length === 0,
     problems,
-    provenance_source: 'controller_work_order_dispatch_records',
+    provenance_source: 'immutable_git_and_controller_work_order_manifest',
   };
 }
 

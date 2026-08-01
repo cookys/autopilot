@@ -4,56 +4,56 @@ set -u
 
 node - "$REPO_ROOT" <<'NODE'
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const root = process.argv[2];
 const ctrl = require(path.join(root, 'src/engine/controller-execution'));
 const wo = require(path.join(root, 'src/engine/work-order'));
-const commit = 'a'.repeat(40);
+const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'e1-git-'));
+execFileSync('git', ['init', '-q', repo]);
+execFileSync('git', ['-C', repo, 'config', 'user.email', 'e1@example.invalid']);
+execFileSync('git', ['-C', repo, 'config', 'user.name', 'E1']);
+fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+fs.writeFileSync(path.join(repo, 'src', 'product.js'), 'base\n');
+execFileSync('git', ['-C', repo, 'add', '.']);
+execFileSync('git', ['-C', repo, 'commit', '-qm', 'base']);
+const baseSha = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+fs.writeFileSync(path.join(repo, 'src', 'product.js'), 'candidate\n');
+execFileSync('git', ['-C', repo, 'commit', '-qam', 'candidate']);
+const commit = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const rootId = 'mission-e1-fixture';
 const workOrderId = `wo-${rootId}-node-a1`;
-const manifest = {
+const record = {
   schema_version: 1,
   root_run_id: rootId,
   work_order_id: workOrderId,
   accepted_commit: commit,
-  changed_paths: ['src/engine/controller-execution.js'],
+  dispatch_depth: 2,
+  changed_paths: ['src/product.js'],
 };
-const controller = ctrl.emptyControllerState({
-  frozen_denominator: ctrl.buildFrozenDenominator({
-    projectId: rootId,
-    graphDigest: 'b'.repeat(64),
-    deliverableIds: ['node'],
-    nodeId: 'node',
-  }),
-  dispatch_records: [manifest],
-});
-const workOrder = wo.buildWorkOrder({
-  root_run_id: rootId,
-  work_order_id: workOrderId,
-  graph_node: 'node',
-  role: 'controller',
-  next_action: 'merge',
-  branch: 'feat/e1',
-  base_sha: 'c'.repeat(40),
-  controller,
-});
-const base = {
-  workOrder,
-  manifests: [manifest],
-  productPathPrefixes: ['src'],
-  commits: [{ commit_sha: commit, dispatch_depth: 2,
-    changed_paths: ['src/engine/controller-execution.js'] }],
+const common = wo.resolveGitCommonDir(repo);
+const manifestPath = path.join(common, 'e1-manifest.json');
+const persist = (nextRecord) => {
+  const controller = ctrl.emptyControllerState({
+    frozen_denominator: ctrl.buildFrozenDenominator({ projectId: rootId, graphDigest: 'b'.repeat(64), deliverableIds: ['node'], nodeId: 'node' }),
+    dispatch_records: [nextRecord],
+  });
+  fs.writeFileSync(manifestPath, JSON.stringify({ root_run_id: rootId, work_order_id: workOrderId, controller_digest: controller.controller_digest, entries: [nextRecord] }));
+  const workOrder = wo.buildWorkOrder({ root_run_id: rootId, work_order_id: workOrderId, graph_node: 'node', role: 'controller', next_action: 'merge', branch: 'feat/e1', base_sha: baseSha, controller, paths: { manifest: manifestPath } }, { bindArtifacts: true });
+  const workOrderFile = wo.workOrderPath(common, rootId, 'node', 1);
+  fs.mkdirSync(path.dirname(workOrderFile), { recursive: true });
+  wo.writeAtomicJson(workOrderFile, workOrder);
 };
-assert.strictEqual(ctrl.validateDispatchMergeProvenance(base).ok, true);
-assert.strictEqual(ctrl.validateDispatchMergeProvenance({ ...base, manifests: [] }).ok, false);
-assert.strictEqual(ctrl.validateDispatchMergeProvenance({
-  ...base,
-  commits: [{ ...base.commits[0], dispatch_depth: 0 }],
-}).problems[0].code, 'PROVENANCE_DEPTH0_PRODUCT_EDIT');
-assert.strictEqual(ctrl.validateDispatchMergeProvenance({
-  ...base,
-  manifests: [{ ...manifest, changed_paths: ['src/other.js'] }],
-}).ok, false);
+const request = { repoRoot: repo, rootRunId: rootId, workOrderId, baseSha, headSha: commit, productPathPrefixes: ['src'] };
+persist(record);
+assert.strictEqual(ctrl.validateDispatchMergeProvenance(request).ok, true);
+assert.strictEqual(ctrl.validateDispatchMergeProvenance({ ...request, commits: [], manifests: [] }).ok, true);
+persist({ ...record, dispatch_depth: 0 });
+assert.ok(ctrl.validateDispatchMergeProvenance(request).problems.some((item) => item.code === 'PROVENANCE_DEPTH0_PRODUCT_EDIT'));
+persist({ ...record, changed_paths: [] });
+assert.ok(ctrl.validateDispatchMergeProvenance(request).problems.some((item) => item.code === 'PROVENANCE_PATH_UNBOUND'));
 console.log('PASS [backlog-convergence-e1] 4 assertions');
 
 const qp = require(path.join(root, 'src/readiness/qualification-provider'));
@@ -72,11 +72,20 @@ assert.strictEqual(qp.issueExactRoleQualification(provider, { tuple: wrongTuple,
 console.log('PASS [backlog-convergence-qualification] 10 assertions');
 NODE
 
-# An explicitly injected empty authority store must not inherit this checkout's
-# production Mission registry or Work Orders.
-mkdir -p "$TEST_TMP/common"
+# Production authority selection is not a test seam.
+set +e
 AUTH_OUT="$(node "$REPO_ROOT/scripts/mission-routing-admission.js" \
   --repo-root "$REPO_ROOT" --level l3 --authority-store "$TEST_TMP/common" 2>&1)"
-assert_contains "$AUTH_OUT" '"status":"READY"' "hermetic authority store admits independently"
+AUTH_RC=$?
+set -e
+assert_eq "2" "$AUTH_RC" "caller-selected authority store is rejected"
+assert_contains "$AUTH_OUT" "invalid argument" "authority override rejection is explicit"
+
+GRAPH_DIGEST="$(node "$REPO_ROOT/scripts/mission-routing-admission.js" --repo-root "$REPO_ROOT" --level l3 | jq -r '.admission.mission_graph_digest')"
+RECONCILE_OUT="$(node "$REPO_ROOT/scripts/mission-terminal-reconcile.js" --repo-root "$REPO_ROOT" --graph-digest "$GRAPH_DIGEST")"
+assert_eq "2" "$(jq '.dispositions | length' <<<"$RECONCILE_OUT")" "exact B/C terminal pair is dispositioned"
+assert_eq "0" "$(jq '.writes' <<<"$RECONCILE_OUT")" "durable B/C reconciliation replay is idempotent"
+assert_eq "0:0:false" "$(jq -r '[.synthesized_work_orders,.mutated_receipts,.history_rewritten] | join(":")' <<<"$RECONCILE_OUT")" \
+  "reconciliation synthesizes no authority and rewrites no history"
 
 finalize_test

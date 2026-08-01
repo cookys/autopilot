@@ -2330,6 +2330,9 @@ class AutopilotEngine {
     this.missionTerminalReconciler = typeof options.missionTerminalReconciler === 'function'
       ? options.missionTerminalReconciler
       : reconcileMissionCampaignTerminal;
+    this.providerReadinessAuthority = typeof options.providerReadinessAuthority === 'function'
+      ? options.providerReadinessAuthority : null;
+    this.qualificationProvider = options.qualificationProvider || null;
   }
 
   // Constructor-owned adapters only. Free-form runtime input cannot replace
@@ -2346,7 +2349,7 @@ class AutopilotEngine {
     if (!hasAtomicStore && grant === null && !hasGrantRef && Object.keys(extra).length === 0) {
       return null;
     }
-    return this.missionAdapterFactory({
+    const missionAdapters = this.missionAdapterFactory({
       ...extra,
       store: hasAtomicStore ? store : undefined,
       grant: isPlainObject(grant) ? grant : (isPlainObject(extra.grant) ? extra.grant : grant),
@@ -2354,6 +2357,13 @@ class AutopilotEngine {
         ? grantRef
         : (typeof extra.grant_ref === 'string' ? extra.grant_ref : undefined),
     });
+    return {
+      ...missionAdapters,
+      ...(this.providerReadinessAuthority ? {
+        providerReadiness: this.providerReadinessAuthority,
+        qualificationProvider: this.qualificationProvider,
+      } : {}),
+    };
   }
 
   readCampaignContract(contractPath, cwd) {

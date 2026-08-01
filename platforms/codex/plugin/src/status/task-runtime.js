@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { buildTaskStatus } = require('./task-status');
+const { validateDispatchMergeProvenance } = require('../engine/controller-execution');
 const {
   inspectLifecycleReceipt,
 } = require('../../scripts/lifecycle-residue-receipt');
@@ -65,6 +66,16 @@ function runtimeAdapters() {
       return null;
     },
     treeForCommit: ({ repo, commit }) => git(repo, ['rev-parse', '--verify', `${commit}^{tree}`]),
+    inspectMergeProvenance: ({ repo, rootRunId, workOrderId, baseSha, headSha }) => (
+      validateDispatchMergeProvenance({
+        repoRoot: repo,
+        rootRunId,
+        workOrderId,
+        baseSha,
+        headSha,
+        productPathPrefixes: ['src', 'scripts', 'hooks'],
+      })
+    ),
   };
 }
 

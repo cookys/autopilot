@@ -552,12 +552,10 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
 
   try {
     const { resolveGitCommonDir } = require('../src/engine/work-order');
-    // Tests and host adapters may inject a hermetic authority store while the
-    // repository identity remains the real Git common-dir.  The override is an
-    // explicit caller input, never ambient HOME/global state.
-    const commonDir = isStr(options.authorityStore)
-      ? fs.realpathSync(path.resolve(options.authorityStore))
-      : resolveGitCommonDir(repoRoot);
+    // Mission authority is inseparable from the repository's canonical Git
+    // common-dir. Tests that need hermetic authority must create a hermetic Git
+    // repository instead of selecting a production-visible alternate store.
+    const commonDir = resolveGitCommonDir(repoRoot);
     if (!commonDir) {
       if (enforce) {
         fail('git common dir unavailable for Mission evidence', 'MISSION_EVIDENCE_CORRUPT');
@@ -886,6 +884,35 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
   );
 }
 
+function requireExactLegacyTerminalDisposition(repoRoot, currentGraphDigest) {
+  const { resolveGitCommonDir } = require('../src/engine/work-order');
+  const { LEGACY, dispositionPath } = require('./mission-terminal-reconcile');
+  const commonDir = resolveGitCommonDir(repoRoot);
+  if (!commonDir) return;
+  const registryPath = path.join(commonDir, 'autopilot', 'mission', 'registry.json');
+  if (!fs.existsSync(registryPath)) return;
+  const registry = readJson(registryPath, 'Mission runtime registry');
+  const legacyEntry = registry.missions && registry.missions[LEGACY.adoption_key];
+  if (!legacyEntry) return;
+  const file = dispositionPath(commonDir);
+  if (!fs.existsSync(file)) fail('exact legacy B/C terminal disposition is missing', 'MISSION_LEGACY_DISPOSITION_MISSING');
+  const artifact = readJson(file, 'legacy B/C terminal disposition');
+  const { disposition_digest: supplied, ...body } = artifact;
+  const expected = LEGACY.terminals.map((item) => `${item.graph_node_id}:${item.receipt_digest}`).sort();
+  const observed = Array.isArray(artifact.dispositions)
+    ? artifact.dispositions.map((item) => `${item.graph_node_id}:${item.receipt_digest}`).sort() : [];
+  if (supplied !== sha256(canonicalJson(body))
+      || artifact.repo_identity !== `git-common-dir:${commonDir}`
+      || artifact.current_graph_digest !== currentGraphDigest
+      || artifact.legacy_adoption_key !== LEGACY.adoption_key
+      || artifact.synthesized_work_orders !== 0
+      || artifact.mutated_receipts !== 0
+      || artifact.history_rewritten !== false
+      || canonicalJson(observed) !== canonicalJson(expected)) {
+    fail('exact legacy B/C terminal disposition is invalid or belongs to another graph', 'MISSION_LEGACY_DISPOSITION_INVALID');
+  }
+}
+
 function finalizeMissionEvidence(
   historicalOutputs,
   noOpReceipt,
@@ -1061,6 +1088,7 @@ function admitMissionRouting(options = {}) {
       graph: artifacts.graph,
       sources: artifacts.sources,
     });
+    requireExactLegacyTerminalDisposition(repo.root, graphResult.graph_digest);
     if (graphResult.policy_digest !== policy.resolution.policy_digest) {
       fail(
         'authoritative Mission policy changed during admission',
@@ -1102,7 +1130,6 @@ function admitMissionRouting(options = {}) {
         || policy.resolution.policy_digest
         || null,
       missionLineageId: options.missionLineageId || null,
-      authorityStore: options.authorityStore || null,
     });
   } catch (error) {
     if (policy.resolution.policy.enforcement_mode === 'enforce') throw error;
@@ -1161,7 +1188,6 @@ function usage() {
     'Usage:',
     '  mission-routing-admission.js --repo-root <repo> --level l3|l4|l5|l6',
     '    [--fallback none|solo|precondition_failed] [--marker <session-marker.json>]',
-    '    [--authority-store <hermetic-git-common-dir>]',
   ].join('\n');
 }
 
@@ -1172,7 +1198,6 @@ function parse(argv) {
     ['--level', 'entryLevel'],
     ['--fallback', 'fallback'],
     ['--marker', 'markerFile'],
-    ['--authority-store', 'authorityStore'],
   ]);
   for (let index = 0; index < argv.length; index += 2) {
     const field = fields.get(argv[index]);

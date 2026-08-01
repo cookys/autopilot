@@ -35,6 +35,12 @@ claiming they were implemented.
 | Resource reconciliation | Complete | Canonical `no_effect_release`, digest `dd8e06c6…`; reservations zero; graph node remains pending |
 | Final gates and closure | Foreman-owned | Authoritative frozen verification, whole-diff review, repair, and terminal `can_close=true` receipt remain with the L4 foreman |
 
+## Decision history
+
+| Time | Decision |
+|---|---|
+| 2026-08-01 | The foreman granted the sole deadline extension for this attempt; the new hard deadline is `2026-08-01T21:43:37Z`. Candidate status remains pending until the frozen gates clear. |
+
 ## Blocker evidence
 
 The sealed Mission admission and campaign were valid (`admission_digest=f9a9605b…`,

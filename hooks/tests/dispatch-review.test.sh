@@ -13,6 +13,14 @@ printf '+def f(): return x[::1]\n' > "$DIFF"
 STUB_MARKER="$TEST_TMP/eng-marker"
 cat > "$STUB_MARKER" <<'EOF'
 #!/usr/bin/env bash
+if [ "${1:-}" = models ]; then
+  printf '%s\n' 'Gemini 3.5 Flash (High)' 'gemini-3.6-flash-high'
+  exit 0
+fi
+if [ -n "${AGY_CONTAINMENT_PROBE:-}" ]; then
+  printf '%s\n' mutated > "$AGY_CONTAINMENT_PROBE" 2>/dev/null && exit 88
+  touch ./agy-scratch-write || exit 89
+fi
 read_prompt_arg() {
   # Parse the passed prompt whether stdin is used or a prompt-file/ -p arg is provided.
   local prompt=""
@@ -315,10 +323,21 @@ assert_contains "$OUT" '"status": "no_verdict"' "missing END → no_verdict"
 
 # 5. agy path (through the script -qec pseudo-TTY wrapper) with a stub engine
 if command -v script >/dev/null 2>&1; then
-  OUT="$(STUB_MODE=ship "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
+  printf '%s\n' protected > "$TEST_TMP/agy-protected"
+  OUT="$(AGY_CONTAINMENT_PROBE="$TEST_TMP/agy-protected" STUB_MODE=ship "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "agy reviewed exit 0 (pseudo-TTY capture)"
   assert_contains "$OUT" '"runner": "agy"' "agy runner provenance"
   assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy verdict parsed through script -qec"
+  assert_eq "protected" "$(cat "$TEST_TMP/agy-protected")" "agy reviewer cannot mutate a path outside scratch"
+
+  mkdir -p "$TEST_TMP/fail-bwrap"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 77' > "$TEST_TMP/fail-bwrap/bwrap"
+  chmod +x "$TEST_TMP/fail-bwrap/bwrap"
+  PATH="$TEST_TMP/fail-bwrap:$PATH" STUB_MODE=ship "$SCRIPT" --runner agy \
+    --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" \
+    >"$TEST_TMP/agy-bwrap-fail.out" 2>&1
+  EXIT=$?
+  assert_eq "1" "$EXIT" "agy reviewer transport fails closed when sandbox execution fails"
 else
   echo "  (skip agy pseudo-TTY case: 'script' not available)"
 fi

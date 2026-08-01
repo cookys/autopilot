@@ -773,11 +773,20 @@ else
   # agy -p drops stdout under a non-TTY pipe (#76/#408) → capture through a pseudo-TTY.
   RUN_SH="$(mktemp -t dispatch-review-agy-XXXXXX)"
   AGY_CWD="$(mktemp -d -t dispatch-review-agycwd-XXXXXX)"  # scratch cwd, NEVER the repo
+  AGY_APP_BINDS=""
+  for AGY_APP_SUBDIR in log crashes; do
+    AGY_APP_TARGET="${HOME:-}/.gemini/antigravity-cli/$AGY_APP_SUBDIR"
+    if [ -d "$AGY_APP_TARGET" ]; then
+      mkdir -p "$AGY_CWD/$AGY_APP_SUBDIR"
+      printf -v AGY_APP_BINDS '%s --bind %q %q' \
+        "$AGY_APP_BINDS" "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET"
+    fi
+  done
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec bwrap --ro-bind / / --dev /dev --bind %q %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_CWD" "$AGY_CWD" "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
+    printf 'exec bwrap --ro-bind / / --dev /dev%s --bind %q %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$AGY_APP_BINDS" "$AGY_CWD" "$AGY_CWD" "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1 || true

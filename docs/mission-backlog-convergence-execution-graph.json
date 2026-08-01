@@ -61,7 +61,7 @@
         "tool_calls": 1200,
         "engine_attempts": 3,
         "external_wait_seconds": 7200,
-        "canonical_changed_files": 60,
+        "canonical_changed_files": 64,
         "output_bytes": 15000000
       },
       "campaign": {
@@ -74,6 +74,7 @@
           "hooks/tests",
           "platforms/codex/plugin/references",
           "platforms/codex/plugin/scripts",
+          "platforms/codex/plugin/skills",
           "platforms/codex/plugin/src/engine",
           "platforms/codex/plugin/src/readiness",
           "platforms/codex/plugin/src/status",
@@ -85,7 +86,7 @@
           "src/readiness",
           "src/status"
         ],
-        "max_changed_files": 60,
+        "max_changed_files": 64,
         "baseline_churn": 5000,
         "max_growth_ratio": 1.5,
         "max_extra_churn": 2500,
@@ -138,6 +139,10 @@
           "platforms/codex/plugin/scripts/preflight-portability.sh",
           "platforms/codex/plugin/scripts/resolve-review-loop.sh",
           "platforms/codex/plugin/scripts/session-mode.js",
+          "platforms/codex/plugin/skills/dev-flow/references/model-routing.md",
+          "platforms/codex/plugin/skills/quality-pipeline/references/model-routing.md",
+          "platforms/codex/plugin/skills/survey/references/model-routing.md",
+          "platforms/codex/plugin/skills/think-tank/references/model-routing.md",
           "platforms/codex/plugin/src/engine/autopilot-engine.js",
           "platforms/codex/plugin/src/engine/campaign-intake.js",
           "platforms/codex/plugin/src/engine/controller-execution.js",

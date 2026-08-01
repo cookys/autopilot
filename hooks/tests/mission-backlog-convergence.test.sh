@@ -11,6 +11,11 @@ const { execFileSync } = require('child_process');
 const root = process.argv[2];
 const ctrl = require(path.join(root, 'src/engine/controller-execution'));
 const wo = require(path.join(root, 'src/engine/work-order'));
+const taskRuntime = require(path.join(root, 'src/status/task-runtime'));
+assert.deepStrictEqual(taskRuntime.MERGE_PRODUCT_PATH_PREFIXES, [
+  'src', 'scripts', 'hooks',
+  'platforms/codex/plugin/src', 'platforms/codex/plugin/scripts',
+]);
 const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'e1-git-'));
 execFileSync('git', ['init', '-q', repo]);
 execFileSync('git', ['-C', repo, 'config', 'user.email', 'e1@example.invalid']);
@@ -54,7 +59,7 @@ persist({ ...record, dispatch_depth: 0 });
 assert.ok(ctrl.validateDispatchMergeProvenance(request).problems.some((item) => item.code === 'PROVENANCE_DEPTH0_PRODUCT_EDIT'));
 persist({ ...record, changed_paths: [] });
 assert.ok(ctrl.validateDispatchMergeProvenance(request).problems.some((item) => item.code === 'PROVENANCE_PATH_UNBOUND'));
-console.log('PASS [backlog-convergence-e1] 4 assertions');
+console.log('PASS [backlog-convergence-e1] 5 assertions');
 
 const qp = require(path.join(root, 'src/readiness/qualification-provider'));
 const now = '2026-08-02T00:00:00.000Z';

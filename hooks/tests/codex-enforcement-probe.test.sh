@@ -104,6 +104,9 @@ ROUTING="$(cat "$REPO_ROOT/references/model-routing.md")"
 assert_contains "$ROUTING" "codex-cli 0.146.0" "Canonical routing guidance uses the current host version"
 assert_contains "$ROUTING" '`model`, and `reasoning_effort`' "Canonical routing records model/effort request fields"
 assert_contains "$ROUTING" "list/wait/interrupt" "Canonical routing records native lifecycle disposition"
+assert_contains "$PORTABILITY" \
+  'AUTOPILOT_CODEX_NATIVE_CHILD_PROBE=1 bash hooks/tests/codex-enforcement-probe.test.sh' \
+  "Portability guidance names the exact rerunnable native-child probe"
 
 # Opt-in live child probe: only a concrete spawn event, observed child identity,
 # and terminal lifecycle event satisfy the evidence. Prompt/self-report strings

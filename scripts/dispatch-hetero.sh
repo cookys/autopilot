@@ -2878,7 +2878,7 @@ run build/test or to commit.
 ===
 
 "
-  run_worker bwrap --ro-bind / / --bind "$WT" "$WT" --unshare-pid --die-with-parent \
+  run_worker bwrap --ro-bind / / --dev /dev --proc /proc --bind "$WT" "$WT" --unshare-pid --die-with-parent \
       --chdir "$WT" "$AGY_BIN" -p "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" \
       --model "$MODEL" --dangerously-skip-permissions --print-timeout "$TIMEOUT"
 fi

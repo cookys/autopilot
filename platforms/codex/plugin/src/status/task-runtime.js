@@ -9,6 +9,14 @@ const {
   inspectLifecycleReceipt,
 } = require('../../scripts/lifecycle-residue-receipt');
 
+const MERGE_PRODUCT_PATH_PREFIXES = Object.freeze([
+  'src',
+  'scripts',
+  'hooks',
+  'platforms/codex/plugin/src',
+  'platforms/codex/plugin/scripts',
+]);
+
 function git(repo, args) {
   const result = spawnSync('git', ['-C', repo, ...args], {
     encoding: 'utf8',
@@ -73,7 +81,7 @@ function runtimeAdapters() {
         workOrderId,
         baseSha,
         headSha,
-        productPathPrefixes: ['src', 'scripts', 'hooks'],
+        productPathPrefixes: MERGE_PRODUCT_PATH_PREFIXES,
       })
     ),
   };
@@ -118,6 +126,7 @@ function collectTaskStatus(rootRunId, {
 }
 
 module.exports = {
+  MERGE_PRODUCT_PATH_PREFIXES,
   collectTaskStatus,
   repoIdentity,
   resolveCampaignBinding,

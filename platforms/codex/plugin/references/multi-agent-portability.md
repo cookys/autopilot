@@ -76,7 +76,7 @@ A three-probe spike (`agy -p --dangerously-skip-permissions`, Gemini 3.5 Flash (
 - **Recipe to make agy run+verify build/test/E2E**: one synchronous foreground command (no `&` / `nohup` / cross-call poll) + `--print-timeout` above the expected duration + still verify-by-artifact (self-report remains untrustworthy — Invariant 2 / the 1.0.5 "claimed success without printing the commit hash" observation stands).
 - **Honest bound (not yet proven)**: only `sleep` (IO-idle) was tested, not a real CPU-bound `cargo test` with heavy stdout. The mechanism (auto-managed-task + wait) should generalise but the multi-minute real-build case is unverified. The earlier "agy only made cosmetic edits on multi-minute tasks" was most likely an older-version cap (the 1.0.5 spike era) or the model electing to background-and-abandon — not a hard 10s limit on 1.0.14.
 
-### Verified current host (codex-cli 0.146.0, 2026-08-02): native `spawn_agent`
+### Codex native child lifecycle — verified current host (codex-cli 0.146.0, 2026-08-02)
 
 The default `collaboration.spawn_agent` schema now exposes five fields:
 `task_name`, `message`, `fork_turns`, `model`, and `reasoning_effort`. A child can therefore
@@ -84,6 +84,9 @@ receive an explicit model/effort when the caller uses a bounded history fork; a 
 fork inherits the parent and does not accept overrides. The old 0.144 “three fields unless a
 two-line opt-in rewrites the namespace” guidance is retired. This is current-host evidence,
 not a promise for every older Codex installation; the committed probe rechecks the schema.
+
+Rerun the schema, observed-child-identity, and terminal-disposition probe with:
+`AUTOPILOT_CODEX_NATIVE_CHILD_PROBE=1 bash hooks/tests/codex-enforcement-probe.test.sh`.
 
 Lifecycle remains a separate boundary. Native children are visible through Codex collaboration
 list/wait/interrupt operations, but they are not shell workers: they have no process-group or

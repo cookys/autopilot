@@ -331,13 +331,15 @@ if command -v script >/dev/null 2>&1; then
   assert_eq "protected" "$(cat "$TEST_TMP/agy-protected")" "agy reviewer cannot mutate a path outside scratch"
 
   mkdir -p "$TEST_TMP/fail-bwrap"
-  printf '%s\n' '#!/usr/bin/env bash' 'exit 77' > "$TEST_TMP/fail-bwrap/bwrap"
+  printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\\n" "$*" > "$BWRAP_ARGS_FILE"' 'exit 77' > "$TEST_TMP/fail-bwrap/bwrap"
   chmod +x "$TEST_TMP/fail-bwrap/bwrap"
-  PATH="$TEST_TMP/fail-bwrap:$PATH" STUB_MODE=ship "$SCRIPT" --runner agy \
+  BWRAP_ARGS_FILE="$TEST_TMP/bwrap.args" PATH="$TEST_TMP/fail-bwrap:$PATH" STUB_MODE=ship "$SCRIPT" --runner agy \
     --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" \
     >"$TEST_TMP/agy-bwrap-fail.out" 2>&1
   EXIT=$?
   assert_eq "1" "$EXIT" "agy reviewer transport fails closed when sandbox execution fails"
+  assert_contains "$(cat "$TEST_TMP/bwrap.args")" "--proc /proc" \
+    "agy reviewer mounts a fresh proc for its private PID namespace"
 else
   echo "  (skip agy pseudo-TTY case: 'script' not available)"
 fi

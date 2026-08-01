@@ -3,7 +3,7 @@
 > **Plan**: [`docs/plans/2026-08-01-backlog-convergence-plan-set.md`](../../plans/2026-08-01-backlog-convergence-plan-set.md)
 > **Mission graph**: [`docs/mission-backlog-convergence-execution-graph.json`](../../mission-backlog-convergence-execution-graph.json)
 > **Target branch**: `feat/v2.34.1-backlog-convergence`
-> **Workflow**: CEO `/l5`, one bounded deliverable, no external publish
+> **Workflow**: CEO `/l4` attempt `l4-backlog-convergence-20260801T195654Z`, one bounded deliverable, no external publish
 
 ## Goal
 
@@ -31,9 +31,9 @@ claiming they were implemented.
 | Stage | Status | Evidence |
 |---|---|---|
 | Inventory and plan | Complete | Approved plan and rubric; one-node graph admitted |
-| Mission execution | **Blocked before spend** | L5 attempt 1 stopped at `reviewer_qualification`; engine receipt `/tmp/backlog-convergence-engine.raw.log` (`4d5c0132…`); no implementation/review/provider/worktree effect |
+| Mission execution | **Implementation candidate complete; foreman gates pending** | L4 attempt `l4-backlog-convergence-20260801T195654Z` implements Tracks 1–3 as the single admitted node; focused evidence is recorded in the branch commits |
 | Resource reconciliation | Complete | Canonical `no_effect_release`, digest `dd8e06c6…`; reservations zero; graph node remains pending |
-| Final gates and closure | Pending unblock | Scorecard read-only inspection fails `UNRESOLVED_EVIDENCE_REFERENCE` from malformed legacy qualification evidence; do not bypass or synthesize a qualification |
+| Final gates and closure | Foreman-owned | Authoritative frozen verification, whole-diff review, repair, and terminal `can_close=true` receipt remain with the L4 foreman |
 
 ## Blocker evidence
 

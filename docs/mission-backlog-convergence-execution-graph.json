@@ -135,7 +135,6 @@
           "platforms/codex/plugin/scripts/dispatch-author.sh",
           "platforms/codex/plugin/scripts/dispatch-hetero.sh",
           "platforms/codex/plugin/scripts/dispatch-review.sh",
-          "platforms/codex/plugin/scripts/engine-scorecard.js",
           "platforms/codex/plugin/scripts/mission-routing-admission.js",
           "platforms/codex/plugin/scripts/mission-terminal-reconcile.js",
           "platforms/codex/plugin/scripts/preflight-portability.sh",
@@ -146,6 +145,7 @@
           "platforms/codex/plugin/src/readiness/qualification-provider.js",
           "platforms/codex/plugin/src/readiness/receipt.js",
           "platforms/codex/plugin/src/readiness/status.js",
+          "platforms/codex/plugin/src/status/task-runtime.js",
           "platforms/codex/plugin/src/status/task-status.js",
           "references/model-routing.md",
           "references/multi-agent-portability.md",
@@ -153,7 +153,6 @@
           "scripts/dispatch-hetero.sh",
           "scripts/dispatch-review.sh",
           "scripts/engine-capability-state.js",
-          "scripts/engine-scorecard.js",
           "scripts/mission-routing-admission.js",
           "scripts/mission-terminal-reconcile.js",
           "scripts/preflight-portability.sh",
@@ -166,6 +165,7 @@
           "src/readiness/qualification-provider.js",
           "src/readiness/receipt.js",
           "src/readiness/status.js",
+          "src/status/task-runtime.js",
           "src/status/task-status.js"
         ],
         "authorized_creates": [

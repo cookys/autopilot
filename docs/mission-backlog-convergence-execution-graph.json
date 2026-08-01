@@ -61,7 +61,7 @@
         "tool_calls": 1200,
         "engine_attempts": 3,
         "external_wait_seconds": 7200,
-        "canonical_changed_files": 64,
+        "canonical_changed_files": 66,
         "output_bytes": 15000000
       },
       "campaign": {
@@ -86,7 +86,7 @@
           "src/readiness",
           "src/status"
         ],
-        "max_changed_files": 64,
+        "max_changed_files": 66,
         "baseline_churn": 5000,
         "max_growth_ratio": 1.5,
         "max_extra_churn": 2500,
@@ -119,6 +119,8 @@
           "hooks/tests/context-window.test.sh",
           "hooks/tests/dispatch-author-claude-native.test.sh",
           "hooks/tests/dispatch-author-session-mode.test.sh",
+          "hooks/tests/dispatch-author-strict-roster.test.sh",
+          "hooks/tests/dispatch-author.test.sh",
           "hooks/tests/dispatch-review.test.sh",
           "hooks/tests/implementation-campaign-dogfood.test.sh",
           "hooks/tests/mission-backlog-convergence.test.sh",

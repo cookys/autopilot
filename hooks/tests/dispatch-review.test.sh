@@ -324,11 +324,16 @@ assert_contains "$OUT" '"status": "no_verdict"' "missing END → no_verdict"
 # 5. agy path (through the script -qec pseudo-TTY wrapper) with a stub engine
 if command -v script >/dev/null 2>&1; then
   printf '%s\n' protected > "$TEST_TMP/agy-protected"
-  OUT="$(AGY_CONTAINMENT_PROBE="$TEST_TMP/agy-protected" STUB_MODE=ship "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
+  OUT="$(AGY_CONTAINMENT_PROBE="$TEST_TMP/agy-protected" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "agy reviewed exit 0 (pseudo-TTY capture)"
   assert_contains "$OUT" '"runner": "agy"' "agy runner provenance"
   assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy verdict parsed through script -qec"
   assert_eq "protected" "$(cat "$TEST_TMP/agy-protected")" "agy reviewer cannot mutate a path outside scratch"
+
+  OUT="$(STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "agy reviewer generic alias exits 0"
+  assert_contains "$OUT" '"model": "gemini-3.6-flash-high"' "agy reviewer generic alias resolves before spend"
+  assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy reviewer alias path preserves the verdict"
 
   mkdir -p "$TEST_TMP/fail-bwrap"
   printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\\n" "$*" > "$BWRAP_ARGS_FILE"' 'exit 77' > "$TEST_TMP/fail-bwrap/bwrap"

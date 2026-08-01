@@ -643,18 +643,15 @@ case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort mu
 normalize_agy_model() {
   local requested="$1" agy_bin="$2" tier="high" models resolved
   case "$EFFORT" in low) tier="low" ;; medium) tier="medium" ;; esac
-  models="$(timeout 20 "$agy_bin" models 2>/dev/null)" \
-    || die_precondition "agy model inventory unavailable; alias resolution fails closed"
-  if printf '%s\n' "$models" | grep -Fxq -- "$requested"; then
-    printf '%s' "$requested"; return 0
-  fi
   case "$requested" in
     gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      models="$(timeout 20 "$agy_bin" models 2>/dev/null)" \
+        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
       case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
       resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
       [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
       printf '%s' "$resolved" ;;
-    *) die_precondition "agy model '$requested' is not a current canonical slug" ;;
+    *) printf '%s' "$requested" ;;
   esac
 }
 

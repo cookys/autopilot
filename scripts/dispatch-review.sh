@@ -758,18 +758,15 @@ else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy reviewer requires bwrap filesystem/process isolation"
-  AGY_MODELS="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
-    || die_precondition "agy model inventory unavailable; alias resolution fails closed"
-  if ! printf '%s\n' "$AGY_MODELS" | grep -Fxq -- "$MODEL"; then
-    case "$MODEL" in
-      gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
-        AGY_TIER=high
-        case "$MODEL" in *-low) AGY_TIER=low ;; *-medium) AGY_TIER=medium ;; esac
-        MODEL="$(printf '%s\n' "$AGY_MODELS" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${AGY_TIER}$" | sort -Vr | head -n 1)"
-        [ -n "$MODEL" ] || die_precondition "agy alias has no current canonical model" ;;
-      *) die_precondition "agy model is not a current canonical slug" ;;
-    esac
-  fi
+  case "$MODEL" in
+    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      AGY_MODELS="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
+        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
+      AGY_TIER=high
+      case "$MODEL" in *-low) AGY_TIER=low ;; *-medium) AGY_TIER=medium ;; esac
+      MODEL="$(printf '%s\n' "$AGY_MODELS" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${AGY_TIER}$" | sort -Vr | head -n 1)"
+      [ -n "$MODEL" ] || die_precondition "agy alias has no current canonical model" ;;
+  esac
   # agy -p drops stdout under a non-TTY pipe (#76/#408) → capture through a pseudo-TTY.
   RUN_SH="$(mktemp -t dispatch-review-agy-XXXXXX)"
   AGY_CWD="$(mktemp -d -t dispatch-review-agycwd-XXXXXX)"  # scratch cwd, NEVER the repo

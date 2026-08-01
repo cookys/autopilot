@@ -160,13 +160,17 @@ assert_not_contains "$OUT" '"status": "authored"' "cc-shim missing env not autho
 
 # --- 7. optional: agy path can run when script(1) exists and prompt is still raw ---
 if command -v script >/dev/null 2>&1; then
-  AGY_DUMP="$TEST_TMP/prompt.received.agy"
   STUB_AGY_OK="$TEST_TMP/runner-agy-ok"
-  cat > "$STUB_AGY_OK" <<EOF
+  cat > "$STUB_AGY_OK" <<'EOF'
 #!/usr/bin/env bash
-if [ "\$1" = "-p" ]; then
-  printf '%s' "\$2" > "$AGY_DUMP"
+if [ "${1:-}" = "models" ]; then
+  printf '%s\n' 'gemini-3.6-flash-low' 'gemini-3.6-flash-medium' 'gemini-3.6-flash-high'
+  exit 0
 fi
+if [ "$1" = "-p" ]; then
+  printf '%s' "$2" | sha256sum | awk '{print "PROMPT_SHA256=" $1}'
+fi
+printf 'ARG=%s\n' "$@"
 echo "ok from agy"
 EOF
   chmod +x "$STUB_AGY_OK"
@@ -177,16 +181,22 @@ EOF
   PATH="$STUB_BIN_DIR:$PATH"
 
   # Keep a shadow copy for AGY_CWD temp command assertions.
-  OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
+  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gpt-test --prompt-file "$PROMPT" --bin agy 2>&1)"; EXIT=$?
   PATH="$ORIGINAL_PATH"
   assert_eq "0" "$EXIT" "agy path with script wrapper exits 0"
-  assert_file_exists "$AGY_DUMP" "agy stub received prompt text"
-  cmp -s "$PROMPT" "$AGY_DUMP"
-  assert_eq "0" "$?" "agy uses exact prompt bytes"
   assert_contains "$OUT" '"status": "authored"' "agy path returns authored"
   AGY_RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
   assert_file_exists "$AGY_RAW_LOG_PATH" "agy path raw_log exists"
-  assert_contains "$(cat "$AGY_RAW_LOG_PATH")" "ok from agy" "agy raw_log contains stub output"
+  AGY_RAW_LOG_TEXT="$(cat "$AGY_RAW_LOG_PATH")"
+  EXPECTED_PROMPT_SHA="$(sha256sum "$PROMPT" | awk '{print $1}')"
+  assert_contains "$AGY_RAW_LOG_TEXT" "PROMPT_SHA256=$EXPECTED_PROMPT_SHA" "agy uses exact prompt bytes"
+  assert_contains "$AGY_RAW_LOG_TEXT" "ok from agy" "agy raw_log contains stub output"
+
+  OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash --prompt-file "$PROMPT" --bin "$STUB_AGY_OK" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "agy generic alias exits 0"
+  assert_contains "$OUT" '"model": "gemini-3.6-flash-high"' "agy generic alias resolves to the newest canonical tier before spend"
+  AGY_ALIAS_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+  assert_contains "$(cat "$AGY_ALIAS_LOG_PATH")" 'ARG=gemini-3.6-flash-high' "agy runner receives the resolved canonical model"
 
   STUB_AGY_FAIL="$TEST_TMP/runner-agy-fail"
   cat > "$STUB_AGY_FAIL" <<'EOF'

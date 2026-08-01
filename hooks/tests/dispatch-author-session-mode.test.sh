@@ -7,6 +7,7 @@ SOURCE_ROOT="$REPO_ROOT"
 git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
 REPO_ROOT="$TEST_TMP/hermetic-repo"
+cd "$REPO_ROOT"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-author.sh"
 PROMPT="$TEST_TMP/prompt.txt"

@@ -18,7 +18,7 @@ if [ "${1:-}" = models ]; then
   exit 0
 fi
 if [ -n "${AGY_CONTAINMENT_PROBE:-}" ]; then
-  printf '%s\n' mutated > "$AGY_CONTAINMENT_PROBE" 2>/dev/null && exit 88
+  printf '%s\n' mutated 2>/dev/null > "$AGY_CONTAINMENT_PROBE" && exit 88
   touch ./agy-scratch-write || exit 89
 fi
 read_prompt_arg() {

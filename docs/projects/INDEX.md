@@ -8,13 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-08-02 | [reviewer-output-token-budget](2026-08-02-reviewer-output-token-budget/README.md) — `dispatch-review.sh --max-tokens` runner-aware contract；十路徑 candidate 已完成兩條 exact mapping、五條 pre-spend rejection 與 Codex mirror closure，待 depth-0 final QC／integration。 | v2.34.1 (no bump) | `feat/v2.34.1-reviewer-output-budget` |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-08-02 | [reviewer-output-token-budget](2026-08-02-reviewer-output-token-budget/README.md) — optional `--max-tokens` 以兩條 verified native mapping、五條 pre-spend rejection、strict omission/truncation 與 byte-equal Codex mirrors 完成；250＋74 assertions、260-file suite、獨立 verifier 與 depth-0 跨家族 QC 全部收斂。 | v2.34.1 (no bump) | `22175030` | [plan](../plans/2026-08-02-reviewer-output-token-budget.md) |
 | 2026-08-02 | [hook-test-harness-determinism](2026-08-02-hook-test-harness-determinism/README.md) — output-quiescence 改以 production helper 的 logical poll clock 判定，`8>4` planted control 證明非 vacuous；session-start direct Node 明確 EOF，held-open parent regression、260-file suite與三席獨立 QC 全綠。 | v2.34.1 (no bump) | (this local merge) | [plan](../plans/2026-08-02-hook-test-harness-determinism.md) |
 | 2026-08-02 | [skill-transport-implementer-arm](2026-08-02-skill-transport-implementer-arm/README.md) — 8 個固定 base-red micro-repos 的 16 格 Codex pack/no-pack paired matrix 完成；8/8 valid pairs、缺陷 1:1、`D=0`，三家族獨立 QC 通過，H1 confirmed 並維持 production default off。 | v2.34.1 (no bump) | (this local merge) | [plan](../plans/2026-08-02-skill-transport-implementer-arm.md) |
 | 2026-08-01 | [backlog-convergence](_archive/2026-08-01-backlog-convergence/README.md) — 65 筆 backlog 精確盤點；11 個已觸發項以單一 71-path Mission 收斂並通過 260-file suite 與三家族 QC，54 項 trigger/Board work 保持 deferred。 | v2.34.1 (no bump) | `952df77a` | [plan](../plans/2026-08-01-backlog-convergence-plan-set.md) |

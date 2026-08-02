@@ -7,7 +7,7 @@
 - Dependencies: platform/stdlib and existing scripts only
 - Foreman: reuse `/root/backlog_convergence_foreman` transcript
 - Verification authority: independent depth-0 panel, never the implementer/foreman
-- Integration: depth-0 owned; foreman must not merge, push, release, or publish
+- Integration: depth-0 merged locally at `22175030`; no push, release, PR, or publication
 - Successor scope: original eight outputs plus exact generated mirrors at
   `platforms/codex/plugin/scripts/dispatch-review.sh` and
   `platforms/codex/plugin/references/hetero-dispatch.md`
@@ -17,6 +17,12 @@
   `bash -n scripts/dispatch-review.sh` clean
 - Successor evidence: canonical/mirror `cmp` pairs, complete 260-file hook suite, validation,
   version sync, hook inventory, sync-all, completeness/secret scans, and exact-path audit green
+- First-pass verifier: existing `repair_blind_verifier` transcript, `SHIP-AS-IS`, no findings
+- Final QC: Gemini 3.6 Flash (High) and Claude Sonnet 4.6 (Thinking) shipped. GPT-5.5's
+  boundary Major was refuted by the exact `99620e1d..284e8060` seven-file admission diff,
+  exact `284e8060..8523dc4c` ten-file implementation diff, and READY successor graph.
+- Root verification: `dispatch-review` 250 assertions, `dispatch-detach` 74 assertions,
+  syntax, 28/28 skill validation, version, hook inventory, sync-all, graph, and mirrors green
 
 ## Frozen runner matrix
 

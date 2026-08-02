@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "artifact_type": "foreman_coordination_r6",
+  "observed_at": "2026-08-02T21:31:38Z",
+  "implementation": {
+    "base": "f5d1cce4671bc84c50b6b6b7307faf402d769f6e",
+    "commands": [
+      "scripts/run-ledger.sh stage-event|worker-event",
+      "scripts/run-ledger.sh stage-condition",
+      "scripts/run-ledger.sh stage-coordinate --action observe|intervene"
+    ],
+    "feature_gate": "AUTOPILOT_ADAPTIVE_INTERVENTION=1",
+    "rollback": "report-only watcher and advisory directive channel"
+  },
+  "fixtures": {
+    "typed_conditions": ["working", "waiting", "blocked", "dead", "unknown"],
+    "negative_controls": [
+      "mismatched PID/start-time remains unknown",
+      "quiet heartbeat without bounded inquiry remains unknown",
+      "feature-off emits no directive",
+      "acknowledged inquiry prevents replacement",
+      "late generation result is stale_ignored",
+      "pending side effect blocks replacement"
+    ],
+    "replacement_count": 1,
+    "lineage_preserved": true
+  },
+  "verification": {
+    "focused": {
+      "scripts/tests/run-ledger-concurrency.test.sh": "pass",
+      "hooks/tests/watch-foreman.test.sh": "pass"
+    },
+    "exact_commands": [
+      "bash scripts/tests/run-ledger.test.sh",
+      "bash scripts/tests/run-ledger-concurrency.test.sh",
+      "bash hooks/tests/run-ledger-directive.test.sh",
+      "bash hooks/tests/watch-foreman.test.sh",
+      "bash hooks/tests/dispatch-detach.test.sh",
+      "bash hooks/tests/autopilot-engine-resilience.test.sh",
+      "bash scripts/sync-all.sh --check",
+      "bash scripts/validate.sh",
+      "AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh"
+    ],
+    "authoritative_qc": "pending depth-0 whole-diff review"
+  },
+  "receipt": {
+    "zero_residue": true,
+    "same_lineage": true,
+    "replacement_generations": 1,
+    "stale_children_fenced": true,
+    "scope": "foreman-coordination-r6"
+  }
+}

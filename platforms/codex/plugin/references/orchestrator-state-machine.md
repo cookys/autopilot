@@ -142,3 +142,29 @@ Side-effect 需落 `kind=journal`，欄位至少包含：
 - `append` 階段：先落 ledger 暫存檔 `fsync/sync`、rename、最後落 `ledger` 目錄
 
 若環境沒有 `fsync`，允許 fallback `sync`，並以註記標明 durability 降低（僅全域同步，不保證同 fd 同步語意）。
+
+## 9. Stage-3 depth-0 coordination (R6)
+
+`run-ledger.sh stage-condition` derives the typed worker condition from the
+current generation/nonce and durable evidence.  The precedence is
+`unknown → dead → blocked → waiting → working`: malformed or unreadable
+identity evidence is always `unknown`; a quiet heartbeat without a bounded
+inquiry is `unknown`, never `dead`.  `stage-event`/`worker-event` records
+lease-bound `waiting`, `working`, or explicit `blocked` signals.
+
+Adaptive recovery is opt-in (`AUTOPILOT_ADAPTIVE_INTERVENTION=1`, or the
+explicit `--enable` flag) through `stage-coordinate --action intervene`.  The
+handler sends one advisory inquiry, waits the configured bounded interval,
+re-checks the exact PID/start-time and heartbeat, and only then terminates an
+alive non-responsive process group.  SIGKILL is permitted only when the same
+identity still owns the lease after SIGTERM grace.  D-state, identity changes,
+unkillable processes, held resources, or pending side effects quarantine the
+resource and prohibit replacement.
+
+After process/result reconciliation, a committed Git/result truth is adopted
+under the old lease.  Otherwise `stage-acquire --allow-reopen` is called with an
+expected generation and nonce, authorizing at most one same-lineage replacement.
+Late children remain fenced by the generation/nonce transition rail; the
+`coordination` receipt records inquiry, reconciliation, replacement count, and
+idempotency key.  With the gate off, the existing watcher and directive channel
+remain report-only/advisory and never seize a lease.

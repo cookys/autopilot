@@ -15,6 +15,7 @@
 //   LEAF_START <run-id> role=<role> <runner>/<model>      new dispatch manifest
 //   LEAF_END <run-id> <final_status>                      manifest finalized
 //   LEAF_STALL <run-id> log quiet <age>s (report-only)    live leaf log went quiet
+//   CONDITION run=<id> <stage> <condition> gen=<g> ...   typed durable condition
 //   QUIET <age>s since last ledger event (report-only)    foreman ledger went quiet
 //   WAIT ledger not created yet                           foreman not started
 //
@@ -78,12 +79,67 @@ function tsToMs(value) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function procStartSeconds(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  let line;
+  try { line = fs.readFileSync(`/proc/${pid}/stat`, 'utf8'); } catch (_e) { return null; }
+  const tail = line.slice(line.lastIndexOf(') ') + 2).trim().split(/\s+/);
+  const ticks = Number(tail[19]);
+  if (!Number.isFinite(ticks)) return null;
+  let btime = null;
+  try {
+    btime = Number(fs.readFileSync('/proc/stat', 'utf8').split('\n').find((x) => x.startsWith('btime '))?.split(/\s+/)[1]);
+  } catch (_e) { return null; }
+  const hz = 100;
+  return Number.isFinite(btime) && btime > 0 ? btime + Math.floor(ticks / hz) : null;
+}
+
+function procState(pid) {
+  try {
+    const line = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return line.slice(line.lastIndexOf(') ') + 2).trim().split(/\s+/)[0] || '?';
+  } catch (_e) { return '?'; }
+}
+
+function stageCondition(record, event, nowMs, quietSecs) {
+  const generation = Number(record?.generation);
+  const expectedStart = Number(record?.start_time);
+  const pid = Number(record?.pid);
+  const heartbeat = Number(record?.heartbeat_ts);
+  const valid = Number.isInteger(generation) && generation > 0
+    && typeof record?.nonce === 'string' && record.nonce.length > 0
+    && Number.isInteger(pid) && pid > 0 && Number.isInteger(expectedStart) && expectedStart > 0
+    && Number.isFinite(heartbeat);
+  if (!valid) return { condition: 'unknown', reason: 'malformed_lease_evidence' };
+  let alive = true;
+  try { process.kill(pid, 0); } catch (_e) { alive = false; }
+  const currentStart = procStartSeconds(pid);
+  if (alive && (currentStart === null || currentStart !== expectedStart)) {
+    return { condition: 'unknown', reason: 'identity_unreadable_or_mismatched' };
+  }
+  const state = alive ? procState(pid) : 'absent';
+  if (state.startsWith('D')) return { condition: 'blocked', reason: 'd_state_resource_holder' };
+  if (!alive || state.startsWith('Z')) {
+    return record.resources ? { condition: 'unknown', reason: 'owner_absent_resource_holder' } : { condition: 'dead', reason: 'owner_absent' };
+  }
+  if (event && event.generation === record.generation && event.nonce === record.nonce) {
+    if (event.condition === 'blocked') return { condition: 'blocked', reason: event.reason || 'explicit_blocked_event' };
+    if (event.condition === 'waiting') return { condition: 'waiting', reason: event.reason || 'explicit_wait_event' };
+  }
+  const age = Math.max(0, Math.round((Date.now() - heartbeat * 1000) / 1000));
+  if (age >= quietSecs && quietSecs > 0) return { condition: 'unknown', reason: 'stale_without_bounded_inquiry' };
+  return { condition: 'working', reason: 'fresh_heartbeat' };
+}
+
 const state = {
   ledgerOffset: 0,
   ledgerSeenWait: false,
   lastLedgerEventMs: null,
   quietAnnounced: false,
   stageState: new Map(),   // stage -> `${state}:${generation}`
+  stageRecords: new Map(), // stage -> latest stage lease row
+  workerEvents: new Map(), // stage -> latest generation-bound worker event
+  conditionState: new Map(),
   leaves: new Map(),       // run_id -> { ended: bool, stallAnnounced: bool }
 };
 
@@ -110,12 +166,33 @@ function tickLedger(args, nowMs) {
       try { rec = JSON.parse(t); } catch (_e) { continue; }
       const ms = tsToMs(rec.heartbeat_ts) || tsToMs(rec.ts);
       if (ms && (!state.lastLedgerEventMs || ms > state.lastLedgerEventMs)) state.lastLedgerEventMs = ms;
+      if (rec.kind === 'stage' && rec.stage) {
+        state.stageRecords.set(rec.stage, rec);
+      } else if ((rec.kind === 'worker_event' || rec.kind === 'worker_signal') && rec.stage) {
+        state.workerEvents.set(rec.stage, rec);
+        const lease = state.stageRecords.get(rec.stage);
+        if (lease) {
+          const c = stageCondition(lease, rec, nowMs, args.quietSecs);
+          const cKey = `${c.condition}:${lease.generation}:${c.reason}`;
+          if (state.conditionState.get(rec.stage) !== cKey) {
+            state.conditionState.set(rec.stage, cKey);
+            emit(`CONDITION run=${lease.run_id || '?'} ${rec.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}`);
+          }
+        }
+        continue;
+      }
       if (rec.kind !== 'stage' || !rec.stage) continue;
       if (rec.reason === 'heartbeat') continue; // liveness signal, not an event
       const key = `${rec.state}:${rec.generation}`;
       if (state.stageState.get(rec.stage) !== key) {
         state.stageState.set(rec.stage, key);
         emit(`STAGE run=${rec.run_id || '?'} ${rec.stage} ${rec.state} gen=${rec.generation} reason=${rec.reason || ''}`);
+      }
+      const c = stageCondition(rec, state.workerEvents.get(rec.stage), nowMs, args.quietSecs);
+      const cKey = `${c.condition}:${rec.generation}:${c.reason}`;
+      if (state.conditionState.get(rec.stage) !== cKey) {
+        state.conditionState.set(rec.stage, cKey);
+        emit(`CONDITION run=${rec.run_id || '?'} ${rec.stage} ${c.condition} gen=${rec.generation} reason=${c.reason}`);
       }
     }
   }

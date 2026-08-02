@@ -29,6 +29,9 @@
 #   directive-poll
 #   directive-list
 #   directive-ack
+#   stage-event / worker-event
+#   stage-condition
+#   stage-coordinate
 #
 # Notes:
 #   - The default lock order is global and explicit: resource locks (sorted by resource id)
@@ -46,6 +49,8 @@ DEFAULT_LOCK_TIMEOUT=15
 DEFAULT_MAX_BYTES=${RUN_LEDGER_MAX_BYTES:-262144}
 DEFAULT_MAX_ROTATIONS=${RUN_LEDGER_MAX_ROTATIONS:-4}
 DEFAULT_QUARANTINE_TTL_SECS=${RUN_LEDGER_QUARANTINE_TTL_SECS:-43200}
+DEFAULT_INQUIRY_WAIT_SECS=${RUN_LEDGER_INQUIRY_WAIT_SECS:-30}
+DEFAULT_TERMINATION_GRACE_SECS=${RUN_LEDGER_TERMINATION_GRACE_SECS:-5}
 DEFAULT_LOCK_DIR_SUFFIX=".run-ledger-lock"
 
 SCRIPT_NAME="$(basename "$0")"
@@ -333,6 +338,114 @@ is_process_alive() {
   return 0
 }
 
+# Stage-3 uses a stricter identity check than the legacy probe above.  A
+# successful kill -0 is not enough: if the kernel cannot read the current
+# start-time, the identity is unknown and intervention is forbidden.
+process_state() {
+  local pid="$1" value=""
+  if [ -r "/proc/$pid/stat" ]; then
+    if ! value="$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)"; then
+      value=""
+    fi
+  fi
+  if [ -z "$value" ]; then
+    if ! value="$(ps -o stat= -p "$pid" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]].*$//')"; then
+      value=""
+    fi
+  fi
+  printf '%s' "${value:-?}"
+}
+
+process_group_id() {
+  local pid="$1" value=""
+  if [ -r "/proc/$pid/stat" ]; then
+    # /proc stat fields: pid, comm, state, ppid, pgrp.  The command name may
+    # contain ')' so strip through the final delimiter before field splitting.
+    local line tail
+    IFS= read -r line < "/proc/$pid/stat" || line=""
+    tail="${line##*) }"
+    local proc_state ppid pgrp
+    read -r proc_state ppid pgrp _ _ <<< "$tail"
+    value="$pgrp"
+  fi
+  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    if ! value="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d '[:space:]')"; then
+      value=""
+    fi
+  fi
+  printf '%s' "${value:-0}"
+}
+
+# Set global STAGE_IDENTITY_STATUS / STAGE_IDENTITY_START / STAGE_IDENTITY_STATE.
+# Values are exact, absent, d_state, or unknown.  expected_start must be a
+# positive, previously recorded start-time; zero/malformed evidence is unknown.
+observe_process_identity() {
+  local pid="$1" expected_start="$2" current_start state
+  STAGE_IDENTITY_STATUS="unknown"
+  STAGE_IDENTITY_START="0"
+  STAGE_IDENTITY_STATE="?"
+  if ! [[ "$pid" =~ ^[1-9][0-9]*$ ]] || ! [[ "$expected_start" =~ ^[1-9][0-9]*$ ]]; then
+    return 0
+  fi
+  if ! kill -0 "$pid" 2>/dev/null; then
+    STAGE_IDENTITY_STATUS="absent"
+    STAGE_IDENTITY_START="$expected_start"
+    STAGE_IDENTITY_STATE="absent"
+    return 0
+  fi
+  current_start="$(get_process_start_time "$pid")"
+  STAGE_IDENTITY_START="${current_start:-0}"
+  if ! [[ "$current_start" =~ ^[1-9][0-9]*$ ]]; then
+    return 0
+  fi
+  if [ "$current_start" -ne "$expected_start" ]; then
+    return 0
+  fi
+  state="$(process_state "$pid")"
+  STAGE_IDENTITY_STATE="${state:-?}"
+  if [[ "$state" == D* ]]; then
+    STAGE_IDENTITY_STATUS="d_state"
+  elif [[ "$state" == Z* ]]; then
+    STAGE_IDENTITY_STATUS="absent"
+  else
+    STAGE_IDENTITY_STATUS="exact"
+  fi
+}
+
+resource_holder_state() {
+  local ledger="$1" resource_id="$2" path fd
+  if [ "$(audit_resource_contention "$ledger" "$resource_id")" = "quarantined" ]; then
+    printf '%s' quarantined
+    return 0
+  fi
+  path="$(resource_lock_path "$ledger" "$resource_id")"
+  mkdir -p "$(dirname "$path")"
+  exec {fd}>"$path"
+  if flock -n -x "$fd"; then
+    release_lock "$fd"
+    printf '%s' clear
+  else
+    if ! eval "exec ${fd}>&-" 2>/dev/null; then
+      :
+    fi
+    printf '%s' held
+  fi
+}
+
+resources_holder_state() {
+  local ledger="$1" resources="$2" resource state
+  STAGE_RESOURCES_STATE="clear"
+  local IFS=','
+  for resource in $resources; do
+    [ -z "$resource" ] && continue
+    state="$(resource_holder_state "$ledger" "$resource")"
+    case "$state" in
+      quarantined) STAGE_RESOURCES_STATE="quarantined"; return 0 ;;
+      held) STAGE_RESOURCES_STATE="held"; return 0 ;;
+    esac
+  done
+}
+
 with_run_lock() {
   local ledger="$1" run_id="$2" timeout="$3"
   local out_var="${4:-}"
@@ -468,6 +581,7 @@ write_side_effect_row() {
 
 command_stage_acquire() {
   local ledger="" run_id="" stage="" pid="" start_time="" heartbeat_ts="" git_ref="" git_sha="" worktree="" resources="" allow_reopen="0" exclusive_live="0" timeout="$DEFAULT_LOCK_TIMEOUT" stale_secs="$DEFAULT_STALE_SECS"
+  local expected_generation="" expected_nonce="" reason="acquire" campaign_id="" ticket_id="" lineage_id=""
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -483,6 +597,12 @@ command_stage_acquire() {
       --resources) resources="$2"; shift 2 ;;
       --allow-reopen) allow_reopen=1; shift ;;
       --exclusive-live) exclusive_live=1; shift ;;
+      --expected-generation) expected_generation="$2"; shift 2 ;;
+      --expected-nonce) expected_nonce="$2"; shift 2 ;;
+      --reason) reason="$2"; shift 2 ;;
+      --campaign-id) campaign_id="$2"; shift 2 ;;
+      --ticket-id) ticket_id="$2"; shift 2 ;;
+      --lineage-id) lineage_id="$2"; shift 2 ;;
       --timeout) timeout="$2"; shift 2 ;;
       --stale-seconds) stale_secs="$2"; shift 2 ;;
       *) usage ;;
@@ -518,6 +638,17 @@ command_stage_acquire() {
     latest_state="$(jq -r '.state' <<<"$latest")"
     latest_gen="$(jq -r '.generation // 0' <<<"$latest")"
     latest_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
+
+    if [ -n "$expected_generation" ] && [ "$latest_gen" != "$expected_generation" ]; then
+      flock -u "$run_fd"; eval "exec ${run_fd}>&-"
+      [ -n "$resource_fds" ] && for fd in $resource_fds; do release_lock "$fd"; done
+      error "stage ownership changed (generation expected=$expected_generation actual=$latest_gen)"
+    fi
+    if [ -n "$expected_nonce" ] && [ "$latest_nonce" != "$expected_nonce" ]; then
+      flock -u "$run_fd"; eval "exec ${run_fd}>&-"
+      [ -n "$resource_fds" ] && for fd in $resource_fds; do release_lock "$fd"; done
+      error "stage ownership changed (nonce mismatch)"
+    fi
 
     local latest_alive=1
     if [ "$latest_state" = "leased" ]; then
@@ -564,6 +695,14 @@ command_stage_acquire() {
   local nonce
   nonce="$(rand_hex)"
 
+  if [ -n "$latest" ] && { [ -z "$campaign_id" ] || [ -z "$ticket_id" ] || [ -z "$lineage_id" ]; }; then
+    local inherited_metadata
+    inherited_metadata="$(jq -r '[.campaign_id // "", .ticket_id // "", .lineage_id // ""] | @tsv' <<<"$latest")"
+    IFS=$'\t' read -r inherited_campaign inherited_ticket inherited_lineage <<<"$inherited_metadata"
+    [ -n "$campaign_id" ] || campaign_id="$inherited_campaign"
+    [ -n "$ticket_id" ] || ticket_id="$inherited_ticket"
+    [ -n "$lineage_id" ] || lineage_id="$inherited_lineage"
+  fi
   local line
   line="$(jq -nc \
     --arg kind "stage" \
@@ -580,7 +719,11 @@ command_stage_acquire() {
     --arg git_sha_v "$git_sha" \
     --arg wt "$worktree" \
     --arg resources_v "$resources" \
-    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($hb|tonumber),git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v,reason:"acquire"}')"
+    --arg reason_v "$reason" \
+    --arg campaign_v "$campaign_id" \
+    --arg ticket_v "$ticket_id" \
+    --arg lineage_v "$lineage_id" \
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($hb|tonumber),git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v,reason:$reason_v,campaign_id:$campaign_v,ticket_id:$ticket_v,lineage_id:$lineage_v}')"
   append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
 
   for fd in $resource_fds; do release_lock "$fd"; done
@@ -1050,6 +1193,418 @@ command_stage_apply() {
     --timeout "$timeout" \
     >/dev/null
   echo '{"status":"applied"}'
+}
+
+adaptive_intervention_enabled() {
+  case "${AUTOPILOT_ADAPTIVE_INTERVENTION:-${RUN_LEDGER_ADAPTIVE_INTERVENTION:-0}}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+latest_worker_event() {
+  local ledger="$1" run_id="$2" stage="$3"
+  ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" '
+    [ .[] | select((.kind=="worker_event" or .kind=="worker_signal") and .run_id==$rid and .stage==$stg) ]
+    | if length==0 then {} else .[-1] end'
+}
+
+directive_terminal_status() {
+  local ledger="$1" run_id="$2" directive_id="$3"
+  ledger_jq_slurp "$ledger" -r --arg rid "$run_id" --arg did "$directive_id" '
+    [ .[] | select((.kind=="directive_delivered" or .kind=="directive_expired") and .run_id==$rid and .directive_id==$did) ]
+    | if length==0 then "pending" else .[-1].kind end' 2>/dev/null || echo pending
+}
+
+# Compute the Stage-3 typed condition without mutating the ledger.  The caller
+# supplies --inquiry-id only after a bounded directive wait; a stale heartbeat
+# without that evidence is deliberately unknown (quiet is not dead).
+compute_stage_condition() {
+  local ledger="$1" run_id="$2" stage="$3" stale_secs="$4" now="$5" inquiry_id="${6:-}"
+  if [ ! -f "$ledger" ]; then
+    jq -nc --arg rid "$run_id" --arg stg "$stage" \
+      '{condition:"unknown",reason:"ledger_missing",run_id:$rid,stage:$stg,generation:null,nonce:null,identity:{status:"unknown"},resources_state:"unknown"}'
+    return 0
+  fi
+
+  local latest
+  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+  if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+    jq -nc --arg rid "$run_id" --arg stg "$stage" \
+      '{condition:"unknown",reason:"lease_missing",run_id:$rid,stage:$stg,generation:null,nonce:null,identity:{status:"unknown"},resources_state:"unknown"}'
+    return 0
+  fi
+
+  local state generation nonce pid start_time hb resources event event_condition event_reason
+  state="$(jq -r '.state // ""' <<<"$latest")"
+  generation="$(jq -r '.generation // ""' <<<"$latest")"
+  nonce="$(jq -r '.nonce // ""' <<<"$latest")"
+  pid="$(jq -r '.pid // ""' <<<"$latest")"
+  start_time="$(jq -r '.start_time // ""' <<<"$latest")"
+  hb="$(jq -r '.heartbeat_ts // ""' <<<"$latest")"
+  resources="$(jq -r '.resources // ""' <<<"$latest")"
+
+  if ! [[ "$generation" =~ ^[1-9][0-9]*$ ]] || [ -z "$nonce" ] \
+      || ! [[ "$pid" =~ ^[1-9][0-9]*$ ]] || ! [[ "$start_time" =~ ^[1-9][0-9]*$ ]] \
+      || ! [[ "$hb" =~ ^-?[0-9]+$ ]]; then
+    jq -nc --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" \
+      '{condition:"unknown",reason:"malformed_lease_evidence",run_id:$rid,stage:$stg,generation:($gen|tonumber? // null),nonce:$nonce_v,identity:{status:"unknown"},resources_state:"unknown"}'
+    return 0
+  fi
+
+  observe_process_identity "$pid" "$start_time"
+  local identity_status="$STAGE_IDENTITY_STATUS" identity_start="$STAGE_IDENTITY_START" identity_state="$STAGE_IDENTITY_STATE"
+  resources_holder_state "$ledger" "$resources"
+  local resource_state="$STAGE_RESOURCES_STATE"
+  event="$(latest_worker_event "$ledger" "$run_id" "$stage")"
+  if ! event_condition="$(jq -r --arg gen "$generation" --arg nonce_v "$nonce" 'select((.generation|tostring)==$gen and .nonce==$nonce_v) | .condition // ""' <<<"$event" 2>/dev/null)"; then
+    event_condition=""
+  fi
+  if ! event_reason="$(jq -r --arg gen "$generation" --arg nonce_v "$nonce" 'select((.generation|tostring)==$gen and .nonce==$nonce_v) | .reason // ""' <<<"$event" 2>/dev/null)"; then
+    event_reason=""
+  fi
+  local age=$((now - hb))
+  [ "$age" -lt 0 ] && age=0
+  local inquiry_state="none"
+  if [ -n "$inquiry_id" ]; then
+    inquiry_state="$(directive_terminal_status "$ledger" "$run_id" "$inquiry_id")"
+  fi
+
+  local condition reason
+  # Unknown is evaluated first: identity/readability/resource ambiguity cannot
+  # be converted into permission to signal, advance, or replace.
+  if [ "$identity_status" = "unknown" ]; then
+    condition="unknown"; reason="identity_unreadable_or_mismatched"
+  elif [ "$identity_status" = "d_state" ]; then
+    condition="blocked"; reason="d_state_resource_holder"
+  elif [ "$identity_status" = "absent" ]; then
+    if [ "$resource_state" = "clear" ]; then
+      condition="dead"; reason="owner_absent"
+    else
+      condition="unknown"; reason="owner_absent_resource_holder"
+    fi
+  elif [ "$event_condition" = "blocked" ]; then
+    condition="blocked"; reason="${event_reason:-explicit_blocked_event}"
+  elif [ "$event_condition" = "waiting" ]; then
+    condition="waiting"; reason="${event_reason:-explicit_wait_event}"
+  elif [ "$event_condition" = "working" ] && [ "$age" -lt "$stale_secs" ]; then
+    condition="working"; reason="${event_reason:-fresh_progress}"
+  elif [ "$age" -ge "$stale_secs" ] && [ "$inquiry_state" = "pending" ]; then
+    condition="blocked"; reason="nonresponsive_after_inquiry"
+  elif [ "$age" -ge "$stale_secs" ] && [ "$inquiry_state" = "directive_delivered" ]; then
+    condition="waiting"; reason="inquiry_acknowledged"
+  elif [ "$age" -ge "$stale_secs" ]; then
+    condition="unknown"; reason="stale_without_bounded_inquiry"
+  else
+    condition="working"; reason="fresh_heartbeat"
+  fi
+
+  jq -nc \
+    --arg condition "$condition" --arg reason "$reason" --arg rid "$run_id" --arg stg "$stage" \
+    --arg state_v "$state" --arg gen "$generation" --arg nonce_v "$nonce" --arg pid_v "$pid" \
+    --arg start_v "$start_time" --arg hb_v "$hb" --argjson age "$age" \
+    --arg identity "$identity_status" --arg identity_start "$identity_start" --arg identity_state "$identity_state" \
+    --arg resources_state "$resource_state" --arg inquiry "$inquiry_state" --arg inquiry_id "$inquiry_id" \
+    '{condition:$condition,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:($gen|tonumber),nonce:$nonce_v,identity:{status:$identity,start_time:($identity_start|tonumber?),state:$identity_state,pid:($pid_v|tonumber)},heartbeat_ts:($hb_v|tonumber),age_seconds:$age,resources_state:$resources_state,inquiry:{directive_id:$inquiry_id,status:$inquiry}}'
+}
+
+append_coordination_row() {
+  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" action="$6" status="$7" idempotency_key="$8" payload="$9" timeout="${10:-$DEFAULT_LOCK_TIMEOUT}"
+  local line payload_json="$payload"
+  [ -n "$payload_json" ] || payload_json='{}'
+  line="$(jq -nc \
+    --arg kind "coordination" --arg ts "$(iso_ts)" --arg rid "$run_id" --arg stg "$stage" \
+    --arg action_v "$action" --arg status_v "$status" --arg gen "$generation" --arg nonce_v "$nonce" \
+    --arg key "$idempotency_key" --argjson payload "$payload_json" \
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,generation:($gen|tonumber),nonce:$nonce_v,action:$action_v,status:$status_v,idempotency_key:$key,payload:$payload}')"
+  append_record "$ledger" "$run_id" "$line" "$timeout"
+  printf '%s\n' "$line"
+}
+
+command_stage_event() {
+  local ledger="" run_id="" stage="" condition="" reason="" progress_ts="" generation="" nonce="" pid="" start_time="" timeout="$DEFAULT_LOCK_TIMEOUT"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;; --run-id) run_id="$2"; shift 2 ;; --stage) stage="$2"; shift 2 ;;
+      --condition) condition="$2"; shift 2 ;; --reason) reason="$2"; shift 2 ;; --progress-ts) progress_ts="$2"; shift 2 ;;
+      --generation) generation="$2"; shift 2 ;; --nonce) nonce="$2"; shift 2 ;; --pid) pid="$2"; shift 2 ;; --start-time) start_time="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;; *) usage ;;
+    esac
+  done
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  [ -n "$run_id" ] || error "--run-id required"
+  [ -n "$stage" ] || error "--stage required"
+  case "$condition" in working|waiting|blocked) ;; *) error "--condition must be working, waiting, or blocked" ;; esac
+  local latest latest_generation latest_nonce
+  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+  [ -n "$latest" ] || error "no stage exists for run=$run_id stage=$stage"
+  [ -n "$generation" ] || generation="$(jq -r '.generation // ""' <<<"$latest")"
+  [ -n "$nonce" ] || nonce="$(jq -r '.nonce // ""' <<<"$latest")"
+  latest_generation="$(jq -r '.generation // ""' <<<"$latest")"
+  latest_nonce="$(jq -r '.nonce // ""' <<<"$latest")"
+  if [ "$generation" != "$latest_generation" ] || [ "$nonce" != "$latest_nonce" ]; then
+    local stale_line
+    stale_line="$(jq -nc --arg kind worker_event_fenced --arg ts "$(iso_ts)" --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" --arg reason_v stale_generation '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,generation:($gen|tonumber?),nonce:$nonce_v,reason:$reason_v,condition:"unknown"}')"
+    append_record "$ledger" "$run_id" "$stale_line" "$timeout"
+    printf '%s\n' "$stale_line"
+    return 11
+  fi
+  [ -n "$pid" ] || pid="$(jq -r '.pid // ""' <<<"$latest")"
+  [ -n "$start_time" ] || start_time="$(jq -r '.start_time // ""' <<<"$latest")"
+  [ -n "$progress_ts" ] || progress_ts="$(now_ts)"
+  local line
+  line="$(jq -nc --arg kind worker_event --arg ts "$(iso_ts)" --arg rid "$run_id" --arg stg "$stage" --arg condition_v "$condition" --arg reason_v "$reason" --arg gen "$generation" --arg nonce_v "$nonce" --arg pid_v "$pid" --arg start_v "$start_time" --arg progress_v "$progress_ts" '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,condition:$condition_v,reason:$reason_v,generation:($gen|tonumber),nonce:$nonce_v,pid:($pid_v|tonumber?),start_time:($start_v|tonumber?),progress_ts:($progress_v|tonumber)}')"
+  append_record "$ledger" "$run_id" "$line" "$timeout"
+  printf '%s\n' "$line"
+}
+
+command_stage_condition() {
+  local ledger="" run_id="" stage="" stale_secs="$DEFAULT_STALE_SECS" now="" inquiry_id=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;; --run-id) run_id="$2"; shift 2 ;; --stage) stage="$2"; shift 2 ;;
+      --stale-seconds) stale_secs="$2"; shift 2 ;; --now) now="$2"; shift 2 ;; --inquiry-id) inquiry_id="$2"; shift 2 ;; *) usage ;;
+    esac
+  done
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  [ -n "$run_id" ] || error "--run-id required"
+  [ -n "$stage" ] || error "--stage required"
+  [ -n "$now" ] || now="$(now_ts)"
+  [[ "$now" =~ ^[0-9]+$ ]] || error "--now must be an epoch integer"
+  compute_stage_condition "$ledger" "$run_id" "$stage" "$stale_secs" "$now" "$inquiry_id"
+}
+
+coordination_lookup() {
+  local ledger="$1" run_id="$2" stage="$3" key="$4"
+  ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key_v "$key" '
+    [ .[] | select(.kind=="coordination" and .run_id==$rid and .stage==$stg and .idempotency_key==$key_v) ]
+    | if length==0 then {} else .[-1] end'
+}
+
+terminate_exact_process() {
+  local pid="$1" expected_start="$2" grace_secs="$3"
+  TERMINATION_STATUS="identity_changed"
+  TERMINATION_PGID="0"
+  observe_process_identity "$pid" "$expected_start"
+  if [ "$STAGE_IDENTITY_STATUS" = "absent" ]; then
+    TERMINATION_STATUS="already_absent"
+    return 0
+  fi
+  if [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
+    TERMINATION_STATUS="$STAGE_IDENTITY_STATUS"
+    return 0
+  fi
+  local pgid own_pgid
+  pgid="$(process_group_id "$pid")"
+  own_pgid="$(process_group_id "$$")"
+  TERMINATION_PGID="$pgid"
+  # Never let a recovery command kill its own controller process group.  A
+  # dispatcher must create a separate process group (setsid) for intervention.
+  if ! [[ "$pgid" =~ ^[1-9][0-9]*$ ]] || [ "$pgid" -le 1 ] || [ "$pgid" = "$own_pgid" ]; then
+    TERMINATION_STATUS="unsafe_process_group"
+    return 0
+  fi
+  if ! kill -TERM -- "-$pgid" 2>/dev/null; then
+    :
+  fi
+  local elapsed=0
+  while [ "$elapsed" -lt "$grace_secs" ]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    observe_process_identity "$pid" "$expected_start"
+    [ "$STAGE_IDENTITY_STATUS" = "absent" ] && { TERMINATION_STATUS="terminated"; return 0; }
+    [ "$STAGE_IDENTITY_STATUS" = "d_state" ] && { TERMINATION_STATUS="d_state"; return 0; }
+    [ "$STAGE_IDENTITY_STATUS" != "exact" ] && { TERMINATION_STATUS="identity_changed"; return 0; }
+  done
+  observe_process_identity "$pid" "$expected_start"
+  if [ "$STAGE_IDENTITY_STATUS" = "exact" ]; then
+    if ! kill -KILL -- "-$pgid" 2>/dev/null; then
+      :
+    fi
+  fi
+  elapsed=0
+  while [ "$elapsed" -lt "$grace_secs" ]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    observe_process_identity "$pid" "$expected_start"
+    [ "$STAGE_IDENTITY_STATUS" = "absent" ] && { TERMINATION_STATUS="terminated"; return 0; }
+    [ "$STAGE_IDENTITY_STATUS" = "d_state" ] && { TERMINATION_STATUS="d_state"; return 0; }
+    [ "$STAGE_IDENTITY_STATUS" != "exact" ] && { TERMINATION_STATUS="identity_changed"; return 0; }
+  done
+  observe_process_identity "$pid" "$expected_start"
+  if [ "$STAGE_IDENTITY_STATUS" = "absent" ]; then
+    TERMINATION_STATUS="terminated"
+  elif [ "$STAGE_IDENTITY_STATUS" = "d_state" ]; then
+    TERMINATION_STATUS="d_state"
+  else
+    TERMINATION_STATUS="unkillable"
+  fi
+}
+
+quarantine_stage_resources() {
+  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" resources="$6" reason="$7" timeout="$8" resource
+  local IFS=','
+  for resource in $resources; do
+    [ -z "$resource" ] && continue
+    if ! command_resource_mark "$ledger" "$resource" "$run_id" "$generation" "$nonce" "$reason" "$timeout" >/dev/null; then
+      :
+    fi
+  done
+}
+
+command_stage_coordinate() {
+  local ledger="" run_id="" stage="" action="observe" stale_secs="$DEFAULT_STALE_SECS" now="" wait_secs="$DEFAULT_INQUIRY_WAIT_SECS" grace_secs="$DEFAULT_TERMINATION_GRACE_SECS"
+  local idempotency_key="" inquiry_text="" result_path="" git_dir="" enable=0 timeout="$DEFAULT_LOCK_TIMEOUT"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;; --run-id) run_id="$2"; shift 2 ;; --stage) stage="$2"; shift 2 ;; --action) action="$2"; shift 2 ;;
+      --stale-seconds) stale_secs="$2"; shift 2 ;; --now) now="$2"; shift 2 ;; --wait-seconds) wait_secs="$2"; shift 2 ;; --grace-seconds) grace_secs="$2"; shift 2 ;;
+      --idempotency-key) idempotency_key="$2"; shift 2 ;; --inquiry-text) inquiry_text="$2"; shift 2 ;; --result-json) result_path="$2"; shift 2 ;; --git-dir) git_dir="$2"; shift 2 ;;
+      --enable) enable=1; shift ;; --timeout) timeout="$2"; shift 2 ;; *) usage ;;
+    esac
+  done
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  [ -n "$run_id" ] || error "--run-id required"
+  [ -n "$stage" ] || error "--stage required"
+  [ -n "$now" ] || now="$(now_ts)"
+  [[ "$now" =~ ^[0-9]+$ ]] || error "--now must be an epoch integer"
+  [[ "$wait_secs" =~ ^[0-9]+$ ]] || error "--wait-seconds must be a non-negative integer"
+  [[ "$grace_secs" =~ ^[0-9]+$ ]] || error "--grace-seconds must be a non-negative integer"
+  case "$action" in observe|intervene) ;; *) error "--action must be observe or intervene" ;; esac
+
+  local condition_json condition condition_reason generation nonce state pid start_time resources
+  condition_json="$(compute_stage_condition "$ledger" "$run_id" "$stage" "$stale_secs" "$now")"
+  condition="$(jq -r '.condition // "unknown"' <<<"$condition_json")"
+  condition_reason="$(jq -r '.reason // ""' <<<"$condition_json")"
+  generation="$(jq -r '.generation // empty' <<<"$condition_json")"
+  nonce="$(jq -r '.nonce // empty' <<<"$condition_json")"
+  state="$(jq -r '.state // ""' <<<"$condition_json")"
+  pid="$(jq -r '.identity.pid // empty' <<<"$condition_json")"
+  start_time="$(jq -r '.identity.start_time // empty' <<<"$condition_json")"
+  resources="$(jq -r '.resources // ""' <<<"$(latest_stage_record "$ledger" "$run_id" "$stage")")"
+
+  if [ "$action" = "observe" ]; then
+    jq -nc --argjson condition "$condition_json" '{status:"observed",condition:$condition}'
+    return 0
+  fi
+  [ "$enable" -eq 1 ] || adaptive_intervention_enabled || {
+    jq -nc --argjson condition "$condition_json" '{status:"feature_disabled",rollback:"report_only",condition:$condition}'
+    return 0
+  }
+  [ -n "$idempotency_key" ] || idempotency_key="coord-$(rand_hex)"
+  local prior
+  prior="$(coordination_lookup "$ledger" "$run_id" "$stage" "$idempotency_key")"
+  if [ "$(jq -r '.status // ""' <<<"$prior")" = "replacement_authorized" ] || [ "$(jq -r '.status // ""' <<<"$prior")" = "adopted" ]; then
+    jq -nc --arg key "$idempotency_key" --argjson prior "$prior" '{status:"already_applied",idempotency_key:$key,receipt:$prior}'
+    return 0
+  fi
+  if [ "$condition" = "unknown" ] && [ "$condition_reason" != "stale_without_bounded_inquiry" ]; then
+    append_coordination_row "$ledger" "$run_id" "$stage" "${generation:-0}" "$nonce" "intervene" "unknown" "$idempotency_key" "$(jq -nc --argjson c "$condition_json" '{condition:$c,action:"observe_only"}')" "$timeout" >/dev/null
+    jq -nc --arg key "$idempotency_key" --argjson condition "$condition_json" '{status:"unknown",idempotency_key:$key,condition:$condition,action:"observe_only"}'
+    return 0
+  fi
+
+  local latest directive_json directive_id ack_status
+  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+  if [ -z "$latest" ] || [ "$(jq -r '.state // ""' <<<"$latest")" != "leased" ]; then
+    jq -nc --argjson condition "$condition_json" '{status:"no_live_lease",condition:$condition}'
+    return 0
+  fi
+  generation="$(jq -r '.generation' <<<"$latest")"; nonce="$(jq -r '.nonce' <<<"$latest")"
+  pid="$(jq -r '.pid // ""' <<<"$latest")"; start_time="$(jq -r '.start_time // ""' <<<"$latest")"; resources="$(jq -r '.resources // ""' <<<"$latest")"
+  [ -n "$inquiry_text" ] || inquiry_text="depth-0 inquiry: report working, waiting, or blocked state before the bounded deadline"
+  directive_json="$(command_directive_send --ledger "$ledger" --run-id "$run_id" --stage "$stage" --text "$inquiry_text" --from depth-0 --timeout "$timeout")"
+  directive_id="$(jq -r '.directive_id' <<<"$directive_json")"
+  if [ "$wait_secs" -gt 0 ]; then sleep "$wait_secs"; fi
+  ack_status="$(directive_terminal_status "$ledger" "$run_id" "$directive_id")"
+  local reobserve_json recondition
+  reobserve_json="$(compute_stage_condition "$ledger" "$run_id" "$stage" "$stale_secs" "$now" "$directive_id")"
+  recondition="$(jq -r '.condition // "unknown"' <<<"$reobserve_json")"
+  if [ "$ack_status" = "directive_delivered" ]; then
+    append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "inquire" "acknowledged" "$idempotency_key" "$(jq -nc --arg did "$directive_id" --argjson c "$reobserve_json" '{directive_id:$did,condition:$c}')" "$timeout" >/dev/null
+    jq -nc --arg key "$idempotency_key" --arg did "$directive_id" --argjson condition "$reobserve_json" '{status:"acknowledged",idempotency_key:$key,directive_id:$did,condition:$condition,action:"no_intervention"}'
+    return 0
+  fi
+  if [ "$recondition" != "blocked" ] && [ "$recondition" != "dead" ]; then
+    append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "inquire" "no_action" "$idempotency_key" "$(jq -nc --arg did "$directive_id" --argjson c "$reobserve_json" '{directive_id:$did,condition:$c}')" "$timeout" >/dev/null
+    jq -nc --arg key "$idempotency_key" --arg did "$directive_id" --argjson condition "$reobserve_json" '{status:"no_action",idempotency_key:$key,directive_id:$did,condition:$condition}'
+    return 0
+  fi
+
+  if [ "$recondition" = "blocked" ]; then
+    observe_process_identity "$pid" "$start_time"
+    if [ "$STAGE_IDENTITY_STATUS" = "d_state" ]; then
+      quarantine_stage_resources "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$resources" d_state "$timeout"
+      append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "intervene" "quarantined" "$idempotency_key" "$(jq -nc --arg did "$directive_id" --argjson c "$reobserve_json" '{directive_id:$did,condition:$c,reason:"d_state"}')" "$timeout" >/dev/null
+      jq -nc --arg key "$idempotency_key" --argjson condition "$reobserve_json" '{status:"quarantined",idempotency_key:$key,condition:$condition,replacement:false}'
+      return 0
+    fi
+    if [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
+      jq -nc --arg key "$idempotency_key" --argjson condition "$reobserve_json" '{status:"unknown",idempotency_key:$key,condition:$condition,action:"observe_only"}'
+      return 0
+    fi
+    terminate_exact_process "$pid" "$start_time" "$grace_secs"
+    if [ "$TERMINATION_STATUS" != "terminated" ] && [ "$TERMINATION_STATUS" != "already_absent" ]; then
+      quarantine_stage_resources "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$resources" "$TERMINATION_STATUS" "$timeout"
+      append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "terminate" "quarantined" "$idempotency_key" "$(jq -nc --arg did "$directive_id" --arg term "$TERMINATION_STATUS" --argjson c "$reobserve_json" '{directive_id:$did,termination:$term,condition:$c}')" "$timeout" >/dev/null
+      jq -nc --arg key "$idempotency_key" --arg term "$TERMINATION_STATUS" --argjson condition "$reobserve_json" '{status:"quarantined",idempotency_key:$key,condition:$condition,termination:$term,replacement:false}'
+      return 0
+    fi
+  fi
+
+  resources_holder_state "$ledger" "$resources"
+  if [ "$STAGE_RESOURCES_STATE" != "clear" ]; then
+    quarantine_stage_resources "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$resources" resource_holder "$timeout"
+    append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "reconcile" "blocked" "$idempotency_key" "$(jq -nc --arg rs "$STAGE_RESOURCES_STATE" '{resources_state:$rs,replacement:false}')" "$timeout" >/dev/null
+    jq -nc --arg key "$idempotency_key" --arg rs "$STAGE_RESOURCES_STATE" '{status:"blocked",idempotency_key:$key,reason:"resource_holder",resources_state:$rs,replacement:false}'
+    return 0
+  fi
+
+  local reconciliation reconciliation_status
+  local -a reconcile_args=(--ledger "$ledger" --run-id "$run_id" --stage "$stage" --timeout "$timeout")
+  if [[ -n "$result_path" ]]; then
+    reconcile_args+=(--result-json "$result_path")
+  fi
+  if [[ -n "$git_dir" ]]; then
+    reconcile_args+=(--git-dir "$git_dir")
+  fi
+  reconciliation="$(command_stage_reconcile "${reconcile_args[@]}")"
+  reconciliation_status="$(jq -r '.status // "incomplete"' <<<"$reconciliation")"
+  if [ "$reconciliation_status" = "resolved" ]; then
+    local adopt_out adopt_rc
+    set +e
+    adopt_out="$(command_stage_transition --ledger "$ledger" --run-id "$run_id" --stage "$stage" --generation "$generation" --nonce "$nonce" --to-state committed --timeout "$timeout" 2>&1)"
+    adopt_rc=$?
+    set -e
+    if [ "$adopt_rc" -eq 0 ]; then
+      append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "reconcile" "adopted" "$idempotency_key" "$(jq -nc --arg did "$directive_id" --argjson r "$reconciliation" '{directive_id:$did,reconciliation:$r,replacement:false}')" "$timeout" >/dev/null
+      jq -nc --arg key "$idempotency_key" --argjson reconciliation "$reconciliation" '{status:"adopted",idempotency_key:$key,reconciliation:$reconciliation,replacement:false}'
+      return 0
+    fi
+    jq -nc --arg key "$idempotency_key" --arg out "$adopt_out" '{status:"fenced",idempotency_key:$key,error:$out,replacement:false}'
+    return 11
+  fi
+  if [ "$(jq -r '.pending_side_effects // 0' <<<"$reconciliation")" -gt 0 ]; then
+    quarantine_stage_resources "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$resources" pending_side_effect "$timeout"
+    append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "reconcile" "blocked" "$idempotency_key" "$(jq -nc --argjson r "$reconciliation" '{reconciliation:$r,replacement:false}')" "$timeout" >/dev/null
+    jq -nc --arg key "$idempotency_key" --argjson reconciliation "$reconciliation" '{status:"blocked",idempotency_key:$key,reason:"pending_side_effect",reconciliation:$reconciliation,replacement:false}'
+    return 0
+  fi
+
+  local replacement replacement_rc
+  set +e
+  replacement="$(command_stage_acquire --ledger "$ledger" --run-id "$run_id" --stage "$stage" --pid "$$" --start-time "$(get_process_start_time "$$")" --heartbeat-ts "$now" --git-ref "$(jq -r '.git_ref // ""' <<<"$latest")" --git-sha "$(jq -r '.git_sha // ""' <<<"$latest")" --worktree "$(jq -r '.worktree // ""' <<<"$latest")" --resources "$resources" --campaign-id "$(jq -r '.campaign_id // ""' <<<"$latest")" --ticket-id "$(jq -r '.ticket_id // ""' <<<"$latest")" --lineage-id "$(jq -r '.lineage_id // ""' <<<"$latest")" --expected-generation "$generation" --expected-nonce "$nonce" --allow-reopen --reason replacement --timeout "$timeout" 2>&1)"
+  replacement_rc=$?
+  set -e
+  if [ "$replacement_rc" -ne 0 ]; then
+    jq -nc --arg key "$idempotency_key" --arg out "$replacement" '{status:"fenced",idempotency_key:$key,error:$out,replacement:false}'
+    return 11
+  fi
+  local new_generation new_nonce
+  new_generation="$(jq -r '.generation' <<<"$replacement")"
+  new_nonce="$(jq -r '.nonce' <<<"$replacement")"
+  append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "redispatch" "replacement_authorized" "$idempotency_key" "$(jq -nc --arg did "$directive_id" --arg ng "$new_generation" --arg nn "$new_nonce" --argjson r "$reconciliation" '{directive_id:$did,reconciliation:$r,replacement:{count:1,generation:($ng|tonumber),nonce:$nn,authorized:true}}')" "$timeout" >/dev/null
+  jq -nc --arg key "$idempotency_key" --arg did "$directive_id" --argjson condition "$reobserve_json" --argjson reconciliation "$reconciliation" --argjson replacement "$replacement" '{status:"replaced",idempotency_key:$key,directive_id:$did,condition:$condition,reconciliation:$reconciliation,replacement:$replacement,replacement_count:1}'
 }
 
 command_stage_probe() {
@@ -2277,6 +2832,15 @@ case "$command" in
 
   stage-apply)
     command_stage_apply "$@" ;;
+
+  stage-event|worker-event)
+    command_stage_event "$@" ;;
+
+  stage-condition)
+    command_stage_condition "$@" ;;
+
+  stage-coordinate|coordinate-stage)
+    command_stage_coordinate "$@" ;;
 
   stage-probe)
     command_stage_probe "$@" ;;

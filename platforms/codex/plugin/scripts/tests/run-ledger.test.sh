@@ -120,7 +120,10 @@ RUN_ID="$3"
 STAGE="$4"
 GEN="$5"
 NONCE="$6"
-sleep 0.3
+# Leave enough time for resume to complete its reconciliation and generation
+# advance; the child is intentionally a late writer, not a scheduler-speed
+# race.
+sleep 2
 bash "$SCRIPT_PATH" stage-transition --ledger "$LEDGER_PATH" --run-id "$RUN_ID" --stage "$STAGE" --generation "$GEN" --nonce "$NONCE" --to-state committed --idempotency-key "late-$RUN_ID"
 CHILD
 chmod +x "$TEST_TMP/resume-late-child.sh"
@@ -232,7 +235,15 @@ while [ "$attempt" -lt 20 ]; do
 
   bash "$TEST_TMP/kill-child.sh" "$SCRIPT" "$LEDGER_E" "$RUN_E" "$STAGE_E" >"$TEST_TMP/child.out" 2>"$TEST_TMP/child.err" &
   KPID=$!
-  sleep 0.1
+  # Wait for the durable lease row before killing the child.  A fixed 100ms
+  # sleep made this recovery-window test host-speed dependent and could kill
+  # the process before stage-acquire had appended anything.
+  for _ in $(seq 1 30); do
+    if [ -s "$LEDGER_E" ] && jq -e --arg rid "$RUN_E" --arg stg "$STAGE_E" 'select(.kind=="stage" and .run_id==$rid and .stage==$stg)' "$LEDGER_E" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.05
+  done
   if kill -0 "$KPID" 2>/dev/null; then
     kill -9 "$KPID"
     kill_found=1

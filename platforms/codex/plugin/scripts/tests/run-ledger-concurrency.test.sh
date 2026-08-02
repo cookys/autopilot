@@ -354,6 +354,72 @@ assert_json_eq "$VAL8_B" '.state' "committed" "fresh transition still commits"
 
 rm -f "$OUT8_A" "$OUT8_B" "$ACQ8_OUT_A" "$ACQ8_OUT_B"
 
+# 9. Stage-3 typed conditions and fail-closed recovery controls (R6)
+R6_LEDGER="$TEST_TMP/ledger-r6.jsonl"
+run_cmd init --ledger "$R6_LEDGER"
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-working --stage work --pid "$$"
+assert_json_eq "$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id r6-working --stage work)" '.condition' "working" "fresh exact lease is working"
+run_cmd stage-event --ledger "$R6_LEDGER" --run-id r6-working --stage work --condition waiting --reason child-boundary
+assert_json_eq "$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id r6-working --stage work)" '.condition' "waiting" "explicit wait event is waiting"
+
+# Mismatched identity is unknown and cannot be signalled or replaced.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --pid "$$" --start-time 1 --heartbeat-ts 1
+UNKNOWN_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --idempotency-key r6-unknown-key)"
+assert_json_eq "$UNKNOWN_COORD" '.status' "unknown" "identity mismatch blocks intervention"
+assert_json_eq "$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --stale-seconds 1)" '.condition' "unknown" "identity mismatch remains unknown"
+
+# Feature-off rollback is report-only.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-off --stage work --pid "$$" --heartbeat-ts 1
+OFF_COORD="$(bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-off --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --idempotency-key r6-off-key)"
+assert_json_eq "$OFF_COORD" '.status' "feature_disabled" "adaptive recovery is disabled by default"
+assert_eq "$(jq -s --arg rid r6-off '[.[]|select(.kind=="directive" and .run_id==$rid)]|length' "$R6_LEDGER")" "0" "feature-off emits no directive"
+
+# A quiet worker is killed only after inquiry and exactly one replacement is authorized.
+cat > "$TEST_TMP/r6-quiet-worker.sh" <<'R6WORKER'
+#!/usr/bin/env bash
+while :; do sleep 1; done
+R6WORKER
+chmod +x "$TEST_TMP/r6-quiet-worker.sh"
+setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
+R6_PID=$!
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --pid "$R6_PID" --heartbeat-ts 1 --campaign-id campaign-r6 --ticket-id ticket-r6 --lineage-id lineage-r6
+BLOCKED_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --grace-seconds 0 --idempotency-key r6-replace-key)"
+assert_json_eq "$BLOCKED_COORD" '.status' "replaced" "quiet nonresponsive worker is replaced after inquiry"
+assert_eq "$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|map(.generation)|unique|length' "$R6_LEDGER")" "2" "one replacement generation only"
+assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="coordination" and .run_id==$rid and .status=="replacement_authorized")]|length' "$R6_LEDGER")" "1" "replacement receipt is durable exactly once"
+assert_eq "$(jq -sr --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="replacement")][0].campaign_id' "$R6_LEDGER")" "campaign-r6" "replacement preserves campaign lineage"
+OLD_GEN="$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].generation' "$R6_LEDGER")"
+OLD_NONCE="$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].nonce' "$R6_LEDGER")"
+run_cmd stage-transition --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$OLD_GEN" --nonce "$OLD_NONCE" --to-state committed
+assert_cmd_rc 11 "late old-generation result is fenced after replacement"
+assert_json_eq "$CMD_OUT" '.state' "stale_ignored" "late result records stale_ignored"
+if ! kill "$R6_PID" 2>/dev/null; then :; fi
+if ! wait "$R6_PID" 2>/dev/null; then :; fi
+
+# An acknowledgement before the bounded deadline prevents kill/re-dispatch.
+setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
+R6_ACK_PID=$!
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-ack --stage work --pid "$R6_ACK_PID" --heartbeat-ts 1
+AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-ack --stage work --action intervene --stale-seconds 1 --wait-seconds 2 --grace-seconds 0 --idempotency-key r6-ack-key >"$TEST_TMP/r6-ack.out" 2>"$TEST_TMP/r6-ack.err" &
+R6_COORD_PID=$!
+R6_DIRECTIVE_ID=""
+for _ in $(seq 1 20); do
+  if ! R6_DIRECTIVE_ID="$(jq -r --arg rid r6-ack 'select(.kind=="directive" and .run_id==$rid) | .directive_id' "$R6_LEDGER" 2>/dev/null | tail -n 1)"; then
+    R6_DIRECTIVE_ID=""
+  fi
+  [ -n "$R6_DIRECTIVE_ID" ] && break
+  sleep 0.1
+done
+if [ -n "$R6_DIRECTIVE_ID" ]; then
+  bash "$SCRIPT" directive-ack --ledger "$R6_LEDGER" --run-id r6-ack --directive-id "$R6_DIRECTIVE_ID" --by fixture >/dev/null
+fi
+if ! wait "$R6_COORD_PID"; then :; fi
+ACK_COORD="$(cat "$TEST_TMP/r6-ack.out")"
+assert_json_eq "$ACK_COORD" '.status' "acknowledged" "acknowledged inquiry prevents kill/replacement"
+assert_eq "$(jq -s --arg rid r6-ack '[.[]|select(.kind=="stage" and .run_id==$rid)]|map(.generation)|unique|length' "$R6_LEDGER")" "1" "acknowledgement prevents generation advance"
+if ! kill "$R6_ACK_PID" 2>/dev/null; then :; fi
+if ! wait "$R6_ACK_PID" 2>/dev/null; then :; fi
+
 # 9. Concurrent stage-acquire must allocate distinct generations
 LEDGER_9="$TEST_TMP/ledger-9.jsonl"
 run_cmd init --ledger "$LEDGER_9"

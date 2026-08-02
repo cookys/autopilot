@@ -37,7 +37,7 @@ so no terminal Mission receipt is fabricated or retroactively attached. Closure 
 | Product implementation | **Complete** | Product repair commits `baa76ba7` and `bbe23863`; exact authorized diff is 71/71 paths with zero missing or unbound paths and clean `git diff --check` |
 | Original native Mission attempt | **Zero-effect released; history preserved** | Canonical `no_effect_release` digest `dd8e06c6…`; reservations zero; no terminal receipt or Work Order was synthesized |
 | Frozen verification | **Complete** | Current graph digest `7dd2e6f3…`, admission digest `8d17b82b…`; all 19 graph commands and `AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh` pass (`260` test files) |
-| Independent QC | **Pending final panel** | The previously accepted candidate remains the baseline; the post-`91571def` repair/documentation delta is queued for fresh Codex, Claude, and Gemini review |
+| Independent QC | **Complete — zero verified blockers** | Claude `review-1785629161-3706202-2d83` and Gemini `review-1785629161-3706201-9d9a` returned `SHIP-AS-IS`. Codex `review-1785629161-3706214-1ece` requested extending reviewer-style `bwrap` isolation to the write-intent implementer; exact baseline and frozen R8 adjudication rejected that scope expansion |
 | Finish flow | In progress | Local merge, post-merge doc-sync, archive, session cleanup, and branch cleanup are depth-0 owned |
 
 ## Decision history
@@ -48,6 +48,7 @@ so no terminal Mission receipt is fabricated or retroactively attached. Closure 
 | 2026-08-02 | The hard deadline expired and the foreman was stopped. The original implementer transcript was re-attached until the platform returned `agent thread limit reached`; no replacement implementer was introduced. Under the user's explicit fallback authority, depth 0 completed the final bounded repair. |
 | 2026-08-02 | The explicit `/l4` route supersedes the plan header's original `l6` entry posture. Product acceptance remains frozen; only the unavailable L5/L6 task-level receipt ceremony is not claimed. |
 | 2026-08-02 | The first complete suite exposed three stale contract fixtures plus load-sensitive wall-clock bounds. Five exact repair paths were added to the Mission graph and re-admitted; the contract batch was repaired together, and the complete 260-file suite then passed with the repository's built-in timing factor. |
+| 2026-08-02 | The final Codex/Claude/Gemini delta panel closed with two `SHIP-AS-IS` verdicts and zero verified Critical/Major findings. The lone Major claim would have converted the write-intent agy implementer into the reviewer sandbox; it was rejected because frozen R8 covers only reviewer and verification-author isolation and explicitly excludes malicious same-UID isolation. |
 
 ## Historical blocker disposition
 
@@ -64,8 +65,9 @@ old receipt, or rewrite the old Mission state.
 
 ## Verification contract
 
-The plan and rubric stayed frozen. After the first complete-suite run found contract drift, the
-Mission graph was explicitly expanded from 66 to 71 output paths and from 16 to 19 commands, then
+The plan and rubric stayed frozen. Candidate commit `baa76ba7` first restored the stale 64-path
+candidate graph to the frozen 66-path authority. After the first complete-suite run found contract
+drift, five exact repair paths expanded it from 66 to 71 output paths and from 16 to 19 commands, then
 reconciled and re-admitted (`legacy disposition 8bca70dd…`, first write `1`, replay write `0`). The
 final run also preserves repository invariants and must leave no owned unintegrated worktree,
 branch, session marker, or review process after the local merge and archive complete.

@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "source": "evals/skill-transport/results/implementer-matrix.jsonl",
+  "expected_pairs": 8,
+  "rows": 16,
+  "unique_terminal_keys": 16,
+  "task_count": 8,
+  "arm_counts": {
+    "nopack": 8,
+    "pack": 8
+  },
+  "terminal_counts": {
+    "completed": 16,
+    "infra_failed": 0,
+    "invalid": 0
+  },
+  "implementer_tuples": [
+    "codex|gpt-5.3-codex-spark|high"
+  ],
+  "reviewer_tuples": [
+    "agy|Gemini 3.6 Flash (High)|high"
+  ],
+  "seeds": [
+    "20260802"
+  ],
+  "structurally_complete": true,
+  "consistency_errors": [],
+  "valid_pairs": 8,
+  "per_task": [
+    {
+      "task": "t1-fix-with-decoy",
+      "nopack_status": "completed",
+      "pack_status": "completed",
+      "nopack_defects": 1,
+      "pack_defects": 1,
+      "valid_pair": true
+    },
+    {
+      "task": "t11-boundary-fix",
+      "nopack_status": "completed",
+      "pack_status": "completed",
+      "nopack_defects": 0,
+      "pack_defects": 0,
+      "valid_pair": true
+    },
+    {
+      "task": "t13-log-parser",
+      "nopack_status": "completed",
+      "pack_status": "completed",
+      "nopack_defects": 0,
+      "pack_defects": 0,
+      "valid_pair": true
+    },
+    {
+      "task": "t15-cache-invalidation",
+      "nopack_status": "completed",
+      "pack_status": "completed",
+      "nopack_defects": 0,
+      "pack_defects": 0,
+      "valid_pair": true
+    },
+    {
+      "task": "t3-vacuous-test",
+      "nopack_status": "completed",
+      "pack_status": "completed",
+      "nopack_defects": 0,
+      "pack_defects": 0,
+      "valid_pair": true
+    },
+    {
+      "task": "t4-config-layer",
+      "nopack_status": "completed",
+      "pack_status": "completed",
+      "nopack_defects": 0,
+      "pack_defects": 0,
+      "valid_pair": true
+    },
+    {
+      "task": "t7-config-rename",
+      "nopack_status": "completed",
+      "pack_status": "completed",
+      "nopack_defects": 0,
+      "pack_defects": 0,
+      "valid_pair": true
+    },
+    {
+      "task": "t8-log-redaction",
+      "nopack_status": "completed",
+      "pack_status": "completed",
+      "nopack_defects": 0,
+      "pack_defects": 0,
+      "valid_pair": true
+    }
+  ],
+  "defects": {
+    "nopack": 1,
+    "pack": 1,
+    "delta_nopack_minus_pack": 0
+  },
+  "comparable_cost_ratio_pack_over_nopack": null,
+  "decision": "h1_confirmed_keep_off"
+}

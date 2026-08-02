@@ -8,13 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-08-02 | [skill-transport-implementer-arm](2026-08-02-skill-transport-implementer-arm/README.md) — 以 8 個固定 base-red micro-repos 跑 16 格 Codex pack/no-pack paired matrix，獨立 oracle/reviewer 判定並收斂 H1；不更動 production default。 | no bump | `pending Mission READY` |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-08-02 | [skill-transport-implementer-arm](2026-08-02-skill-transport-implementer-arm/README.md) — 8 個固定 base-red micro-repos 的 16 格 Codex pack/no-pack paired matrix 完成；8/8 valid pairs、缺陷 1:1、`D=0`，三家族獨立 QC 通過，H1 confirmed 並維持 production default off。 | v2.34.1 (no bump) | (this local merge) | [plan](../plans/2026-08-02-skill-transport-implementer-arm.md) |
 | 2026-08-01 | [backlog-convergence](_archive/2026-08-01-backlog-convergence/README.md) — 65 筆 backlog 精確盤點；11 個已觸發項以單一 71-path Mission 收斂並通過 260-file suite 與三家族 QC，54 項 trigger/Board work 保持 deferred。 | v2.34.1 (no bump) | `952df77a` | [plan](../plans/2026-08-01-backlog-convergence-plan-set.md) |
 | 2026-07-31 | [evidence-eval-truth](_archive/2026-07-31-evidence-eval-truth/README.md) — orchestration failures now use a closed evidence-backed classification; score reports exclude and tally infrastructure failures; explicit-root transcript imports are deterministic aggregate-only telemetry; MiniMax's diff-only limitation is mechanically visible without contaminating readiness contracts. | v2.34.1 | `9f26e082` | [plan](../plans/2026-07-31-evidence-eval-truth.md) |
 | 2026-07-31 | [correctness-gates](_archive/2026-07-31-correctness-gates/README.md) — current-version prose, detached-worktree red/green execution, quoted binary-path risk classification, and added-lines-only secret scanning now reject their planted defects while preserving safe operations and existing interfaces. | v2.34.1 | `9f26e082` | [plan](../plans/2026-07-31-correctness-gates.md) |

@@ -1,0 +1,18 @@
+SKILL-TRANSPORT IMPLEMENTER A/B — deterministic report
+source: evals/skill-transport/results/implementer-matrix.jsonl
+rows: 16/16; unique keys: 16; structurally complete: true
+terminal: completed=16 infra_failed=0 invalid=0
+valid pairs: 8/8
+defects: nopack=1 pack=1 D=0
+comparable cost ratio (pack/nopack): null
+decision: h1_confirmed_keep_off
+
+task	nopack_status	pack_status	nopack_defects	pack_defects	valid_pair
+t1-fix-with-decoy	completed	completed	1	1	true
+t11-boundary-fix	completed	completed	0	0	true
+t13-log-parser	completed	completed	0	0	true
+t15-cache-invalidation	completed	completed	0	0	true
+t3-vacuous-test	completed	completed	0	0	true
+t4-config-layer	completed	completed	0	0	true
+t7-config-rename	completed	completed	0	0	true
+t8-log-redaction	completed	completed	0	0	true

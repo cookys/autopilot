@@ -4,9 +4,18 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { buildTaskStatus } = require('./task-status');
+const { validateDispatchMergeProvenance } = require('../engine/controller-execution');
 const {
   inspectLifecycleReceipt,
 } = require('../../scripts/lifecycle-residue-receipt');
+
+const MERGE_PRODUCT_PATH_PREFIXES = Object.freeze([
+  'src',
+  'scripts',
+  'hooks',
+  'platforms/codex/plugin/src',
+  'platforms/codex/plugin/scripts',
+]);
 
 function git(repo, args) {
   const result = spawnSync('git', ['-C', repo, ...args], {
@@ -65,6 +74,16 @@ function runtimeAdapters() {
       return null;
     },
     treeForCommit: ({ repo, commit }) => git(repo, ['rev-parse', '--verify', `${commit}^{tree}`]),
+    inspectMergeProvenance: ({ repo, rootRunId, workOrderId, baseSha, headSha }) => (
+      validateDispatchMergeProvenance({
+        repoRoot: repo,
+        rootRunId,
+        workOrderId,
+        baseSha,
+        headSha,
+        productPathPrefixes: MERGE_PRODUCT_PATH_PREFIXES,
+      })
+    ),
   };
 }
 
@@ -107,6 +126,7 @@ function collectTaskStatus(rootRunId, {
 }
 
 module.exports = {
+  MERGE_PRODUCT_PATH_PREFIXES,
   collectTaskStatus,
   repoIdentity,
   resolveCampaignBinding,

@@ -404,6 +404,8 @@ assert.deepEqual([...AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS].sort(), [
   'missionPreparedReceipt',
   'missionPreparedReceiptPath',
   'missionStatePath',
+  'providerReadinessAuthority',
+  'qualificationProvider',
 ].sort());
 assert.equal(validateAutopilotEngineControlSinkInventory(getAutopilotEngineControlSinkInventory()), true);
 const duplicateSinkInventory = getAutopilotEngineControlSinkInventory();

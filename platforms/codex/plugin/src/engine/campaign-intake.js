@@ -29,6 +29,9 @@ const {
   processLiveness,
   projectCampaign,
 } = require('../campaign/cli');
+const {
+  consumeProviderReadinessBeforeSpend,
+} = require('../readiness/receipt');
 
 
 const RUN_LEDGER = path.resolve(__dirname, '..', '..', 'scripts', 'run-ledger.sh');
@@ -1274,6 +1277,30 @@ function releaseCampaignAdmission(input = {}, adapters = {}) {
   };
 }
 
+function consumeEnforcedProviderReadiness({ adapters, contract, inspection, roster, now }) {
+  const bundle = typeof adapters.providerReadiness === 'function'
+    ? adapters.providerReadiness({ contract, inspection, roster, now }) : null;
+  if (!bundle || !bundle.receipt || !bundle.roster || !bundle.policy) {
+    throw new CampaignIntakeError(
+      'provider_readiness_authority_missing',
+      'enforced campaign intake requires host-owned readiness evidence',
+    );
+  }
+  const result = consumeProviderReadinessBeforeSpend(bundle.receipt, {
+    roster: bundle.roster,
+    policy: bundle.policy,
+    now,
+    qualificationProvider: adapters.qualificationProvider,
+  });
+  if (result.status !== 'ready') {
+    throw new CampaignIntakeError(
+      'provider_readiness_not_ready',
+      'enforced campaign exact-role readiness is not ready',
+    );
+  }
+  return result;
+}
+
 function runCampaignIntake(input = {}, adapters = {}) {
   const repo = path.resolve(input.repo || process.cwd());
   const contractPath = input.contractPath && path.resolve(repo, input.contractPath);
@@ -1544,6 +1571,33 @@ function runCampaignIntake(input = {}, adapters = {}) {
     seal_path: inspection.seal_path,
   }));
 
+  // Enforced ICC may not delegate exact-role authority to a serializable
+  // decision adapter. The constructor-owned host must supply both the sealed
+  // readiness inputs and the live provider, and consumption occurs before the
+  // context, occupancy, generation, branch, worktree, or runner seams.
+  if (missionMode === 'enforce') {
+    let boundReadiness;
+    try {
+      boundReadiness = consumeEnforcedProviderReadiness({
+        adapters,
+        contract,
+        inspection,
+        roster: input.roster,
+        now,
+      });
+    } catch (error) {
+      return releaseAfterRejection(rejected(
+        'provider_readiness',
+        error.code || 'provider_readiness_authority_invalid',
+        error.message || String(error),
+      ));
+    }
+    steps.push(step('provider_readiness_authority', 'ready', {
+      receipt_digest: boundReadiness.receipt_digest,
+      qualification_authority: boundReadiness.qualification_authority,
+    }));
+  }
+
   const readinessAdapter = adapters.readiness || defaultReadiness;
   let readiness;
   try {
@@ -1699,6 +1753,7 @@ module.exports = {
   CampaignIntakeError,
   buildNoEffectReceipt,
   completeCampaignAdmission,
+  consumeEnforcedProviderReadiness,
   defaultCampaignSealPath,
   repairLineageCleanupState,
   releaseCampaignAdmission,

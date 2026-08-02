@@ -94,12 +94,15 @@ const tmp = process.argv[3];
 const {
   canonicalDigest,
   consumeProviderReadinessReceipt,
+  consumeProviderReadinessBeforeSpend,
   createProviderReadinessReceipt,
   validateProviderReadinessReceipt,
 } = require(path.join(root, 'src', 'readiness', 'receipt'));
 const {
   buildSelectedRoster,
 } = require(path.join(root, 'src', 'readiness', 'status'));
+const { createQualificationProvider } = require(path.join(root, 'src', 'readiness', 'qualification-provider'));
+const { consumeEnforcedProviderReadiness } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
 
 const NOW = '2026-07-27T12:00:00.000Z';
 const policy = {
@@ -429,6 +432,29 @@ assert.throws(
   (error) => error && error.code === 'provider_readiness_receipt_incomplete',
 );
 
+const provider = createQualificationProvider({ qualify: (bound) => bound.role === 'reviewer' });
+const bound = consumeProviderReadinessBeforeSpend(fallbackReceipt, {
+  roster: fallbackRoster,
+  policy,
+  now: '2026-07-27T12:01:00.000Z',
+  qualificationProvider: provider,
+});
+assert.strictEqual(bound.status, 'ready');
+assert.strictEqual(bound.qualification_authority, 'host-injected-exact-role');
+assert.throws(() => consumeProviderReadinessBeforeSpend(fallbackReceipt, {
+  roster: fallbackRoster,
+  policy,
+  now: '2026-07-27T12:01:00.000Z',
+}), (error) => error.code === 'provider_readiness_qualification_authority_missing');
+const iccBound = consumeEnforcedProviderReadiness({
+  adapters: {
+    providerReadiness: () => ({ receipt: fallbackReceipt, roster: fallbackRoster, policy }),
+    qualificationProvider: createQualificationProvider({ qualify: (candidate) => candidate.role === 'reviewer' }),
+  },
+  contract: {}, inspection: {}, roster: {}, now: '2026-07-27T12:01:00.000Z',
+});
+assert.strictEqual(iccBound.status, 'ready');
+
 fs.writeFileSync(
   path.join(tmp, 'provider-readiness-receipt.json'),
   `${JSON.stringify(fallbackReceipt, null, 2)}\n`,
@@ -440,12 +466,15 @@ console.log('fallback_order_and_family=true');
 console.log('configured_fallback_projection=true');
 console.log('unqualified_not_promoted=true');
 console.log('receipt_drift_guards=true');
+console.log('host_authority_pre_spend=true');
+console.log('icc_consumes_host_authority=true');
 NODE
 )"
 assert_exit_code "$?" "0" "provider readiness receipt consumer matrix executes"
 for key in four_distinct_decisions blocked_consumer_rejection unknown_preserved \
   fallback_order_and_family configured_fallback_projection \
-  unqualified_not_promoted receipt_drift_guards; do
+  unqualified_not_promoted receipt_drift_guards host_authority_pre_spend \
+  icc_consumes_host_authority; do
   assert_contains "$OUT" "$key=true" "PRO P4 proves $key"
 done
 

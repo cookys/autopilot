@@ -132,6 +132,10 @@ assert_eq "$(jq -r .action <<<"$ADMIT2")" "attach_active" "second action still a
 PROMPT="$TEST_TMP/prompt.md"; echo 'implement phase 16' > "$PROMPT"
 STUB_RUNNER="$TEST_TMP/agy-must-not-run"
 cat > "$STUB_RUNNER" <<'EOF'
+if [ "${1:-}" = "models" ]; then
+  printf '%s\n' 'Gemini 3.5 Flash (High)'
+  exit 0
+fi
 echo STUB_RAN >> "$(dirname "$0")/runner-calls"; exit 99
 EOF
 chmod +x "$STUB_RUNNER"; : > "$TEST_TMP/runner-calls"

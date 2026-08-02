@@ -127,6 +127,37 @@ TEST_EOF
     assert_contains "$out" '"tests/repo-owned.test.sh"' "repo-owned negative control is applied to base"
 }
 
+# 1d. A repo-owned verify executable introduced only at head is infrastructure,
+#     not valid RED evidence. The base worktree must report INCONCLUSIVE instead
+#     of treating command-not-found as a product/test failure.
+test_repo_owned_verify_cmd_missing_on_base_is_inconclusive() {
+    local repo="$TEST_TMP/repo_owned_verify_missing_base"
+    $GIT init "$repo" >/dev/null 2>&1
+    printf 'echo 3\n' > "$repo/calc.sh"
+    $GIT -C "$repo" add -A >/dev/null 2>&1
+    $GIT -C "$repo" commit -m base >/dev/null 2>&1
+    local base; base=$($GIT -C "$repo" rev-parse HEAD)
+
+    mkdir -p "$repo/tests" "$repo/tools"
+    printf '[ "$(bash calc.sh)" = "3" ]\n' > "$repo/tests/new.test.sh"
+    cat > "$repo/tools/new-verify.sh" <<'VERIFY_EOF'
+#!/usr/bin/env bash
+bash tests/new.test.sh
+VERIFY_EOF
+    chmod +x "$repo/tools/new-verify.sh"
+    $GIT -C "$repo" add -A >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "head adds verify command" >/dev/null 2>&1
+    local head; head=$($GIT -C "$repo" rev-parse HEAD)
+
+    local out
+    out=$("$SCRIPT" --range "$base..$head" \
+        --verify-cmd "$repo/tools/new-verify.sh" --repo "$repo" 2>&1)
+    local ec=$?
+    assert_eq "$ec" "3" "base-missing repo-owned verify-cmd exits 3"
+    assert_eq "$(json_field "$out" verdict)" "INCONCLUSIVE" "base-missing repo-owned verify-cmd is inconclusive"
+    assert_contains "$out" 'base-verify-cmd-missing-or-not-executable' "base-missing reason names verify-cmd infrastructure"
+}
+
 # 2. NOT_RED_ON_BASE: test only checks file existence (true at base too) => base GREEN.
 test_not_red_on_base() {
     local repo="$TEST_TMP/repo_not_red" vc="$TEST_TMP/verify_not_red.sh"
@@ -232,6 +263,7 @@ test_verify_cmd_dirname_plain_file() {
 test_validated
 test_validated_nested
 test_repo_owned_verify_cmd_uses_worktree_copy
+test_repo_owned_verify_cmd_missing_on_base_is_inconclusive
 test_not_red_on_base
 test_not_green_on_head
 test_inconclusive_no_test_files

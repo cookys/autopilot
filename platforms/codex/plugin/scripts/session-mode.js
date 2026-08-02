@@ -367,6 +367,7 @@ function validateCloseReceipt(file, rootRunId, marker = readMarker()) {
   ];
   const evidenceKeys = [
     'mission', 'campaigns', 'lifecycle', 'integration', 'merge_preflight', 'merge_execution',
+    'merge_provenance',
   ];
   if (required.some((key) => !Object.prototype.hasOwnProperty.call(value, key))
       || !Array.isArray(value.accepted_blockers)

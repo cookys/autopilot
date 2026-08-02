@@ -42,6 +42,7 @@ const INPUT_KEYS = Object.freeze([
   'integration',
   'merge_preflight',
   'merge_execution',
+  'merge_provenance',
 ]);
 const INPUT_KEY_SET = new Set(INPUT_KEYS);
 
@@ -52,6 +53,7 @@ const ADAPTER_KEYS = Object.freeze([
   'resolveRef',
   'isAncestor',
   'treeForCommit',
+  'inspectMergeProvenance',
 ]);
 const ADAPTER_KEY_SET = new Set(ADAPTER_KEYS);
 
@@ -1343,7 +1345,28 @@ function resolveCandidateTree(adapters, candidate, gitContext) {
   if (tree.value !== candidate.tree_sha) {
     return { ok: false, reason: 'candidate_commit_tree_mismatch' };
   }
-  return { ok: true, commit: candidate.commit, tree_sha: candidate.tree_sha };
+  return { ok: true, commit: candidate.commit, tree_sha: candidate.tree_sha, base: candidate.base };
+}
+
+function validateMergeProvenance(value, adapters, gitContext, candidate) {
+  if (!isPlainObject(value)
+      || !hasExactKeySet(value, ['root_run_id', 'work_order_id'])
+      || typeof value.root_run_id !== 'string' || value.root_run_id.length === 0
+      || typeof value.work_order_id !== 'string' || value.work_order_id.length === 0
+      || !candidate.ok || !isGitOid(candidate.base) || !isGitOid(candidate.commit)) {
+    return { ok: false, evidence: { status: 'invalid', reason: 'merge_provenance_shape_invalid' } };
+  }
+  const inspected = safeCall(adapters.inspectMergeProvenance, [{
+    ...gitContext,
+    rootRunId: value.root_run_id,
+    workOrderId: value.work_order_id,
+    baseSha: candidate.base,
+    headSha: candidate.commit,
+  }], 'inspectMergeProvenance');
+  if (!inspected.ok || !isPlainObject(inspected.value) || inspected.value.ok !== true) {
+    return { ok: false, evidence: { status: 'invalid', reason: inspected.error || 'merge_provenance_rejected' } };
+  }
+  return { ok: true, evidence: { status: 'valid', reason: null, provenance_source: inspected.value.provenance_source } };
 }
 
 function collectCandidate(campaignResult, adapters, gitContext) {
@@ -1737,11 +1760,16 @@ function computePredicates({
   integrationInput,
   mergePreflight,
   mergeExecution,
+  mergeProvenance,
+  adapters,
+  gitContext,
+  candidateResult,
   rootRunId,
 }) {
   const failed = [];
   const preflight = validateMergePreflight(mergePreflight);
   const execution = validateMergeExecution(mergeExecution, rootRunId, preflight);
+  const provenance = validateMergeProvenance(mergeProvenance, adapters, gitContext, candidateResult);
 
   if (!preflight.valid) {
     pushFailed(failed, 'merge_preflight_unknown');
@@ -1830,15 +1858,19 @@ function computePredicates({
     pushFailed(failed, 'merge_edges_incomplete');
   }
 
+  if (!provenance.ok) pushFailed(failed, 'merge_provenance_invalid');
+
   const canMerge = preflight.safe
     && acceptance.acceptance_verdict === 'accepted'
-    && acceptance.accepted_blockers.length === 0;
+    && acceptance.accepted_blockers.length === 0
+    && provenance.ok;
   return {
     can_merge: canMerge,
     can_close: failed.length === 0,
     failed_predicates: failed,
     merge_preflight: preflight,
     merge_execution: execution,
+    merge_provenance: provenance,
   };
 }
 
@@ -1907,6 +1939,9 @@ function buildTaskStatus(input, adapters) {
   if (input.merge_execution !== null && !isPlainObject(input.merge_execution)) {
     throw new TaskStatusError('merge_execution must be an object or null', 'TASK_STATUS_SHAPE');
   }
+  if (input.merge_provenance !== null && !isPlainObject(input.merge_provenance)) {
+    throw new TaskStatusError('merge_provenance must be an object or null', 'TASK_STATUS_SHAPE');
+  }
 
   if (input.lifecycle_receipt_path !== null
       && typeof input.lifecycle_receipt_path !== 'string') {
@@ -1947,7 +1982,11 @@ function buildTaskStatus(input, adapters) {
     integrationInput: input.integration,
     mergePreflight: input.merge_preflight,
     mergeExecution: input.merge_execution,
+    mergeProvenance: input.merge_provenance,
     rootRunId: input.root_run_id,
+    adapters,
+    gitContext,
+    candidateResult,
   });
 
   let repoIdentity = 'unknown';
@@ -1996,6 +2035,9 @@ function buildTaskStatus(input, adapters) {
       },
       merge_execution: {
         ...predicates.merge_execution.evidence,
+      },
+      merge_provenance: {
+        ...predicates.merge_provenance.evidence,
       },
     },
     can_merge: predicates.can_merge,

@@ -19,13 +19,13 @@ mirrors, then make one conservative GO/NO-GO decision without performing the mig
 | Install lifecycle | Native automatic install-and-upgrade generation hook is positively proven, or marked absent/unproven. |
 | Decision | GO only on three passes; otherwise NO-GO and committed mirrors/drift gates explicitly remain. |
 | Hygiene | Zero fixture plugin, marketplace, repo, process, or named config residue. |
-| Lifecycle | Six-path candidate, deterministic gates, independent reviews, local merge, no push. |
+| Lifecycle | Seven-path successor candidate, deterministic gates, one independent first-pass review, depth-0 integration, no push. |
 
 ## Fixed scope
 
 - One admitted report-only deliverable containing all three probes and the final disposition.
-- Six documentation/evidence outputs only.
-- No production code, tests, package payload, manifest, generator, mirror, version, release, or push.
+- Seven outputs only: the original six documentation/evidence paths plus the canonically generated Codex portability-reference mirror.
+- No production code, tests, skill payload, manifest, generator change, hand-edited mirror, version, release, or push.
 
 ## Scope audit
 

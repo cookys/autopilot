@@ -1750,6 +1750,27 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
 fi
 set_runner_flags
 
+normalize_agy_model() {
+  local requested="$1" tier="high" models resolved
+  case "$EFFORT" in low) tier=low ;; medium) tier=medium ;; esac
+  case "$requested" in
+    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      models="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
+        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
+      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
+      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
+      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
+      printf '%s' "$resolved" ;;
+    *) printf '%s' "$requested" ;;
+  esac
+}
+
+if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  MODEL="$(normalize_agy_model "$MODEL")"
+fi
+
 if [ "${#SKILLS[@]}" -gt 0 ]; then
   for skill in "${SKILLS[@]}"; do
     skill_no_ns="${skill#autopilot:}"

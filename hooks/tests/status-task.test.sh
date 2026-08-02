@@ -497,6 +497,10 @@ function makeInput(overrides = {}) {
     },
     merge_preflight: null,
     merge_execution: null,
+    merge_provenance: {
+      root_run_id: 'controller-root',
+      work_order_id: 'controller-work-order',
+    },
     ...overrides,
   };
 }
@@ -532,6 +536,10 @@ function makeAdapters(overrides = {}) {
       || (ancestor === TARGET_SHA && descendant === REMOTE_SHA)
     ),
     treeForCommit: ({ commit }) => commit === CANDIDATE_COMMIT ? CANDIDATE_TREE : null,
+    inspectMergeProvenance: () => ({
+      ok: true,
+      provenance_source: 'immutable_git_and_controller_work_order_manifest',
+    }),
     ...overrides,
   };
 }

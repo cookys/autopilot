@@ -5,10 +5,13 @@
 # Run: bash hooks/tests/session-mode.test.sh
 set -u
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CLI="$REPO_ROOT/scripts/session-mode.js"
+SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+git clone -q --no-local "$SOURCE_ROOT" "$TMP/hermetic-repo"
+git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TMP/hermetic-repo" apply
+REPO_ROOT="$TMP/hermetic-repo"
+CLI="$REPO_ROOT/scripts/session-mode.js"
 
 export AUTOPILOT_SESSION_MODE_DIR="$TMP/markers"
 export CLAUDE_CODE_SESSION_ID="test-session-aaa"

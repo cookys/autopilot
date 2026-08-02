@@ -1188,6 +1188,7 @@ const task = buildTaskStatus({
   },
   merge_preflight: null,
   merge_execution: null,
+  merge_provenance: null,
 }, {
   resolveRepoIdentity: () => repoIdentity,
   inspectLifecycleReceipt: ({ repo: target, rootRunId, receipt }) =>
@@ -1202,6 +1203,7 @@ const task = buildTaskStatus({
   resolveRef: () => null,
   isAncestor: () => null,
   treeForCommit: () => null,
+  inspectMergeProvenance: () => ({ ok: false, error: 'not_applicable' }),
 });
 if (task.campaigns_terminal !== true) {
   console.error(`lsm_campaign_diagnostic=${JSON.stringify(task.evidence.campaigns)}`);

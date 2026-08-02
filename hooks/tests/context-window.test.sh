@@ -11,6 +11,11 @@
 # oversized payload reaching a small-window engine silently.
 . "$(dirname "$0")/lib.sh"
 
+SOURCE_ROOT="$REPO_ROOT"
+git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
+git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
+REPO_ROOT="$TEST_TMP/hermetic-repo"
+
 GATE="$REPO_ROOT/scripts/check-context-window.js"
 LIB="$REPO_ROOT/scripts/lib/context-window.sh"
 

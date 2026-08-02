@@ -188,26 +188,27 @@ cat <<'EOF' > "$CASE8_DIR/.claude/review-loop-config.md"
 - implementer_engine: gpt-5.3-codex-spark
 EOF
 
-AGY_ARGS="$TEST_TMP/agy-args"
-export AGY_ARGS
 FAKE_AGY_RUNNER="$TEST_TMP/fake-agy-runner"
 cat <<'EOF' > "$FAKE_AGY_RUNNER"
 #!/usr/bin/env bash
-printf '%s\n' "$@" > "$AGY_ARGS"
-touch "$SENTINEL"
+touch "$SENTINEL" 2>/dev/null || true
+printf 'ARG=%s\n' "$@"
 printf '%s\n' "AGY-AUTHORED"
 EOF
 chmod +x "$FAKE_AGY_RUNNER"
 
-rm -f "$SENTINEL" "$AGY_ARGS"
+rm -f "$SENTINEL"
 OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --strict-roster --repo-root "$CASE8_DIR" --prompt-file "$PROMPT" --bin "$FAKE_AGY_RUNNER" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "Case 8: isolated Gemini roster succeeds"
 assert_contains "$OUT" '"status": "authored"' "Case 8: status authored"
 assert_contains "$OUT" '"selection_source": "strict_roster"' "Case 8: strict_roster selection"
 assert_contains "$OUT" '"selection_path": "'"$CASE8_DIR/.claude/review-loop-config.md"'"' "Case 8: selection path is isolated config"
 assert_contains "$OUT" '"verification_author": { "engine": "Gemini 3.1 Pro (High)", "runner": "agy", "effort": "high", "endpoint": "", "family": "google" }' "Case 8: resolved Gemini verification-author tuple"
-assert_file_exists "$SENTINEL" "Case 8: fake AGY runner executed"
-AGY_ARG_TEXT="$(cat "$AGY_ARGS")"
+assert_file_absent "$SENTINEL" "Case 8: isolated AGY runner cannot write its host sentinel"
+AGY_RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read()).get('raw_log', ''))" <<<"$OUT")"
+assert_file_exists "$AGY_RAW_LOG_PATH" "Case 8: fake AGY runner produced a raw log"
+AGY_ARG_TEXT="$(cat "$AGY_RAW_LOG_PATH")"
+assert_contains "$AGY_ARG_TEXT" 'AGY-AUTHORED' "Case 8: fake AGY runner executed"
 assert_contains "$AGY_ARG_TEXT" '-p' "Case 8: AGY prompt flag composition"
 assert_contains "$AGY_ARG_TEXT" 'Write a verification plan.' "Case 8: AGY prompt composition"
 assert_contains "$AGY_ARG_TEXT" '--model' "Case 8: AGY model flag composition"

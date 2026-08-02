@@ -20,12 +20,69 @@ const mission = require(path.join(root, 'src', 'engine', 'mission-convergence'))
 const { runMissionCli } = require(path.join(root, 'src', 'mission', 'cli'));
 const { runCampaignIntake } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine', 'autopilot-engine'));
+const { createProviderReadinessReceipt } = require(path.join(root, 'src', 'readiness', 'receipt'));
+const {
+  createQualificationProvider,
+  qualifyExactRoleNow,
+} = require(path.join(root, 'src', 'readiness', 'qualification-provider'));
 
 const lines = [];
 const check = (id, value) => lines.push(`${id}\t${value ? 'PASS' : 'FAIL'}`);
 const sha = (value) => crypto.createHash('sha256').update(
   typeof value === 'string' ? value : mission.canonicalJson(value),
 ).digest('hex');
+const readinessIssuedAt = '2026-07-28T00:00:00.000Z';
+const readinessPolicy = {
+  receipt_ttl_seconds: 600,
+  fallback_family_constraint: 'different',
+};
+const readinessTuples = [
+  { role: 'implementer', runner: 'codex', model: 'gpt-5.3-codex-spark', effort: 'high', endpoint: null },
+  { role: 'verification_author', runner: 'agy', model: 'gemini-2.5-pro', effort: 'high', endpoint: null },
+  { role: 'qc', runner: 'codex', model: 'gpt-5.5', effort: 'xhigh', endpoint: null },
+];
+const qualificationProvider = createQualificationProvider({ qualify: (tuple) => (
+  readinessTuples.some((candidate) => JSON.stringify(candidate) === JSON.stringify(tuple))
+) });
+const readinessObservation = (tuple, axis) => ({
+  schema_version: 1,
+  artifact_type: 'provider_axis_observation',
+  tuple,
+  axis,
+  status: 'ready',
+  observed_at: readinessIssuedAt,
+  ttl_seconds: 600,
+  evidence_class: 'fixture-probe',
+  reason: null,
+});
+const readinessRoster = readinessTuples.map((tuple) => ({
+  seat_id: tuple.role,
+  required: true,
+  family: tuple.runner === 'agy' ? 'google' : 'openai',
+  tuple,
+  observations: Object.fromEntries(
+    ['transport', 'live', 'qualification'].map((axis) => [
+      axis,
+      axis === 'qualification'
+        ? qualifyExactRoleNow(qualificationProvider, tuple, readinessIssuedAt, 600)
+        : readinessObservation(tuple, axis),
+    ]),
+  ),
+  fallbacks: [],
+}));
+const readinessReceipt = createProviderReadinessReceipt({
+  roster: readinessRoster,
+  policy: readinessPolicy,
+  now: readinessIssuedAt,
+});
+const readinessAdapters = {
+  providerReadiness: () => ({
+    receipt: readinessReceipt,
+    roster: readinessRoster,
+    policy: readinessPolicy,
+  }),
+  qualificationProvider,
+};
 const repo = path.join(temp, 'repo');
 fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
 fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
@@ -642,6 +699,7 @@ if (runtime) {
       mission_subject_digest: granted.payload.mission_subject_digest,
       campaign_id: granted.payload.mission_campaign_id,
     }),
+    ...readinessAdapters,
     readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
     contextGate: () => ({ owner: 'context_window', status: 'ready' }),
     occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
@@ -1205,6 +1263,7 @@ if (runtime) {
       mission_subject_digest: regranted.payload.mission_subject_digest,
       campaign_id: regranted.payload.mission_campaign_id,
     }),
+    ...readinessAdapters,
     readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
     contextGate: () => ({ owner: 'context_window', status: 'ready' }),
     occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
@@ -1336,6 +1395,8 @@ if (runtime) {
     cwd: successControllerWt,
     clock: () => successClock,
     missionCampaignStore: store,
+    providerReadinessAuthority: readinessAdapters.providerReadiness,
+    qualificationProvider,
     missionAdapterFactory: (options) => ({
       ...mission.createMissionCampaignAdapters(options),
       readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),

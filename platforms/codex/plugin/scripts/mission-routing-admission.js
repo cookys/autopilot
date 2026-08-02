@@ -552,6 +552,9 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
 
   try {
     const { resolveGitCommonDir } = require('../src/engine/work-order');
+    // Mission authority is inseparable from the repository's canonical Git
+    // common-dir. Tests that need hermetic authority must create a hermetic Git
+    // repository instead of selecting a production-visible alternate store.
     const commonDir = resolveGitCommonDir(repoRoot);
     if (!commonDir) {
       if (enforce) {
@@ -881,6 +884,35 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
   );
 }
 
+function requireExactLegacyTerminalDisposition(repoRoot, currentGraphDigest) {
+  const { resolveGitCommonDir } = require('../src/engine/work-order');
+  const { LEGACY, dispositionPath } = require('./mission-terminal-reconcile');
+  const commonDir = resolveGitCommonDir(repoRoot);
+  if (!commonDir) return;
+  const registryPath = path.join(commonDir, 'autopilot', 'mission', 'registry.json');
+  if (!fs.existsSync(registryPath)) return;
+  const registry = readJson(registryPath, 'Mission runtime registry');
+  const legacyEntry = registry.missions && registry.missions[LEGACY.adoption_key];
+  if (!legacyEntry) return;
+  const file = dispositionPath(commonDir);
+  if (!fs.existsSync(file)) fail('exact legacy B/C terminal disposition is missing', 'MISSION_LEGACY_DISPOSITION_MISSING');
+  const artifact = readJson(file, 'legacy B/C terminal disposition');
+  const { disposition_digest: supplied, ...body } = artifact;
+  const expected = LEGACY.terminals.map((item) => `${item.graph_node_id}:${item.receipt_digest}`).sort();
+  const observed = Array.isArray(artifact.dispositions)
+    ? artifact.dispositions.map((item) => `${item.graph_node_id}:${item.receipt_digest}`).sort() : [];
+  if (supplied !== sha256(canonicalJson(body))
+      || artifact.repo_identity !== `git-common-dir:${commonDir}`
+      || artifact.current_graph_digest !== currentGraphDigest
+      || artifact.legacy_adoption_key !== LEGACY.adoption_key
+      || artifact.synthesized_work_orders !== 0
+      || artifact.mutated_receipts !== 0
+      || artifact.history_rewritten !== false
+      || canonicalJson(observed) !== canonicalJson(expected)) {
+    fail('exact legacy B/C terminal disposition is invalid or belongs to another graph', 'MISSION_LEGACY_DISPOSITION_INVALID');
+  }
+}
+
 function finalizeMissionEvidence(
   historicalOutputs,
   noOpReceipt,
@@ -1056,6 +1088,7 @@ function admitMissionRouting(options = {}) {
       graph: artifacts.graph,
       sources: artifacts.sources,
     });
+    requireExactLegacyTerminalDisposition(repo.root, graphResult.graph_digest);
     if (graphResult.policy_digest !== policy.resolution.policy_digest) {
       fail(
         'authoritative Mission policy changed during admission',

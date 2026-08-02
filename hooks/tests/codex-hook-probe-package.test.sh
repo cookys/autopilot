@@ -232,4 +232,39 @@ if command -v codex >/dev/null 2>&1; then
   assert_contains "$ADD_PLUGIN_OUT" "\"pluginId\": \"autopilot-hook-probe@autopilot-hook-probe-local\"" "Codex plugin add reports installed hook probe"
 fi
 
+# Committed, rerunnable Codex slash/skill-entry behavioral probe. It is opt-in
+# because it spends a live model call; absence/quota self-skips, while a live
+# unsupported surface fails closed.
+if [ "${AUTOPILOT_CODEX_SLASH_PROBE:-0}" = "1" ]; then
+  if ! command -v codex >/dev/null 2>&1; then
+    echo "SKIP [codex-slash-entry] codex CLI absent"
+  else
+    MODEL="${AUTOPILOT_CODEX_PROBE_MODEL:-gpt-5.6-sol}"
+    LIVE_LOG="$TEST_TMP/codex-slash-entry.jsonl"
+    set +e
+    timeout 180 codex exec --json -m "$MODEL" \
+      'Use the autopilot:l5 skill. Read its MUST-READ hetero-impl-loop reference with a shell command, then reply only CODEX_SLASH_ENTRY_OK.' \
+      >"$LIVE_LOG" 2>&1
+    LIVE_RC=$?
+    set -e
+    if [ "$LIVE_RC" -ne 0 ] && grep -Eqi 'usage limit|quota|rate.limit|capacity' "$LIVE_LOG"; then
+      echo "SKIP [codex-slash-entry] live quota unavailable"
+    else
+      assert_eq "0" "$LIVE_RC" "Codex slash-entry probe exits cleanly"
+      EXEC_EVIDENCE="$(jq -c 'select(.type == "item.completed")
+        | .item
+        | select(.type == "command_execution")
+        | select((.command // "") | contains("hetero-impl-loop.md"))
+        | select(.exit_code == 0)
+        | select((.aggregated_output // "") | contains("hetero implementation loop (per-level reference)"))' "$LIVE_LOG" | head -n 1)"
+      [ -n "$EXEC_EVIDENCE" ] \
+        && pass "Codex slash-entry has a concrete successful MUST-READ command event" \
+        || fail "Codex slash-entry lacks a successful command/output event for the installed MUST-READ"
+      assert_contains "$(cat "$LIVE_LOG")" "CODEX_SLASH_ENTRY_OK" "Codex probe completes the skill entry"
+    fi
+  fi
+else
+  echo "SKIP [codex-slash-entry] set AUTOPILOT_CODEX_SLASH_PROBE=1 for live probe"
+fi
+
 finalize_test

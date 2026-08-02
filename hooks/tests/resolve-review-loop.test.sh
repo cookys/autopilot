@@ -246,12 +246,12 @@ assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QXFCFG" bash "$SCRIPT" --sourc
 # whose qc_panel is a moving target (pinned to Gemini 3.6 Flash (High) on 2026-07-23) — this
 # case asserts the BUILT-IN default roster, so it must not read the live config.
 OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT")"
-assert_contains "$OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash"]' "default qc_panel array emitted"
+assert_contains "$OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-3.6-flash-high"]' "default qc_panel array emits canonical agy slug"
 assert_contains "$OUT" '"qc_panel_aggregation": "union-on-verified-critical"' "default aggregation"
-assert_eq "gpt-5.5 claude-opus gemini-flash" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
+assert_eq "gpt-5.5 claude-opus gemini-3.6-flash-high" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
 assert_eq "true" "$(json_get "$OUT" qc_panel_seats_complete)" \
   "built-in panel has a complete exact-tuple roster"
-assert_eq '[{"role":"qc","runner":"codex","model":"gpt-5.5","effort":"xhigh","endpoint":null,"family":"openai"},{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"agy","model":"gemini-flash","effort":"high","endpoint":null,"family":"google"}]' \
+assert_eq '[{"role":"qc","runner":"codex","model":"gpt-5.5","effort":"xhigh","endpoint":null,"family":"openai"},{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"agy","model":"gemini-3.6-flash-high","effort":"high","endpoint":null,"family":"google"}]' \
   "$(json_get "$OUT" qc_panel_seats)" \
   "built-in QC seats bind runner, model, effort, endpoint, role, and family"
 assert_eq "300" "$(json_get "$OUT" provider_readiness_receipt_ttl_seconds)" \
@@ -263,7 +263,7 @@ assert_eq "different" "$(json_get "$OUT" provider_readiness_fallback_family_cons
 AC_CFG="$TEST_TMP/all-calibrated.md"
 printf -- '- qc_panel: all-calibrated\n' > "$AC_CFG"
 AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" bash "$SCRIPT")"
-assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
+assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-3.6-flash-high", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset expands to canonical 5-family roster"
 assert_not_contains "$(json_get "$AC_OUT" qc_panel)" "all-calibrated" "alias string is absent from parsed qc_panel value"
 assert_eq "false" "$(json_get "$AC_OUT" qc_panel_seats_complete)" \
   "an explicit panel without exact companion metadata fails closed"
@@ -285,7 +285,7 @@ assert_eq "any" "$(json_get "$EXACT_QC_OUT" provider_readiness_fallback_family_c
 AC_CFG_CASE="$TEST_TMP/all-calibrated-case.md"
 printf -- '- qc_panel:   All-Calibrated  \n' > "$AC_CFG_CASE"
 AC_OUT_CASE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG_CASE" bash "$SCRIPT")"
-assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
+assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-3.6-flash-high", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
 
 # cross-family field computed over the expanded list
 AC_CFG_XFAM="$TEST_TMP/all-calibrated-xfam.md"

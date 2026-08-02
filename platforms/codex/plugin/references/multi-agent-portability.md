@@ -76,46 +76,25 @@ A three-probe spike (`agy -p --dangerously-skip-permissions`, Gemini 3.5 Flash (
 - **Recipe to make agy run+verify build/test/E2E**: one synchronous foreground command (no `&` / `nohup` / cross-call poll) + `--print-timeout` above the expected duration + still verify-by-artifact (self-report remains untrustworthy — Invariant 2 / the 1.0.5 "claimed success without printing the commit hash" observation stands).
 - **Honest bound (not yet proven)**: only `sleep` (IO-idle) was tested, not a real CPU-bound `cargo test` with heavy stdout. The mechanism (auto-managed-task + wait) should generalise but the multi-minute real-build case is unverified. The earlier "agy only made cosmetic edits on multi-minute tasks" was most likely an older-version cap (the 1.0.5 spike era) or the model electing to background-and-abandon — not a hard 10s limit on 1.0.14.
 
-### Verified by Spike (codex-cli 0.144.0 + gpt-5.6-sol, 2026-07-13; re-verified UNCHANGED on 0.144.3 same day): `spawn_agent` subagent MODEL routing
+### Codex native child lifecycle — verified current host (codex-cli 0.146.0, 2026-08-02)
 
-Matters to any user running autopilot **on a Codex host**: skills that say "dispatch a
-subagent with model X" (role routing per `resolve-dispatch.sh`) cannot express the model
-through codex's native `spawn_agent` under default config. autopilot's own dispatch scripts
-(`codex exec -m <model>`) are UNAFFECTED — this is about codex-as-host interactive sessions.
-Four facts, all artifact-verified (child rollout JSONL under `~/.codex/sessions/…`, matched
-via `thread_spawn.parent_thread_id` — never the parent's self-report):
+The default `collaboration.spawn_agent` schema now exposes five fields:
+`task_name`, `message`, `fork_turns`, `model`, and `reasoning_effort`. A child can therefore
+receive an explicit model/effort when the caller uses a bounded history fork; a full-history
+fork inherits the parent and does not accept overrides. The old 0.144 “three fields unless a
+two-line opt-in rewrites the namespace” guidance is retired. This is current-host evidence,
+not a promise for every older Codex installation; the committed probe rechecks the schema.
 
-1. **Default schema is 3 fields** (`task_name`/`message`/`fork_turns`) — no `model`. On
-   MultiAgentV2 models (gpt-5.6-sol) the trimmed schema is **server-reserved**: flipping only
-   `hide_spawn_agent_metadata=false` gets every turn rejected with
-   `Function 'collaboration.spawn_agent' is reserved for use by this model and must match the
-   configured schema` (HTTP 400). Client side, `codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
-   `hide_spawn_agent_metadata_options()` removes `agent_type`/`model`/`reasoning_effort`/`service_tier`.
-2. **The official custom-agent TOML path routes but does NOT switch the model** (0.144.0):
-   `~/.codex/agents/<name>.toml` with `model = "gpt-5.4-mini"`, spawned via
-   `task_name=<name>` → spawn accepted, profile matched, but the child rollout shows
-   `"model":"gpt-5.6-sol"` — **it inherited the parent's model; the TOML `model` was ignored**
-   (the openai/codex#26868 defect class is still live). Also: agent names must match
-   `[a-z0-9_]` — hyphens are rejected by the tool router.
-3. **Working opt-in escape (two lines, BOTH required)** in the user's `~/.codex/config.toml`:
-   ```toml
-   [features.multi_agent_v2]
-   hide_spawn_agent_metadata = false
-   tool_namespace = "agents"
-   ```
-   Renaming the namespace off the reserved `collaboration.*` restores the full 7-field schema,
-   and a `model="gpt-5.4-mini"` child verifiably runs as gpt-5.4-mini (rollout artifact).
-   Spawn-target coverage (0.144.3, sol parent, all rollout-artifact-verified): `gpt-5.6-terra`,
-   `gpt-5.6-luna`, `gpt-5.3-codex-spark`, `gpt-5.4-mini` all run as the requested model —
-   including luna (a MultiAgentV1-flagged model), so V1/V2 flags don't gate spawn TARGETS.
-   Untested as children: `gpt-5.5`, `gpt-5.4`, `codex-auto-review` (same mechanism expected,
-   not verified).
-   Caveats: undocumented upstream, may be closed by a future codex release; failure mode is
-   loud (spawn → 400). This is a **user-owned opt-in** — autopilot must never auto-edit
-   `~/.codex/config.toml`. Recipe + guidance: `platforms/codex/README.md` § Subagent model routing.
-4. **Re-verification probe** (one short `codex exec`): ask the model to print the exact JSON
-   parameter schema of its spawn_agent tool; 3 fields = still locked, 7 fields = open.
-   Upstream watch: openai/codex #31814 / #31097 / #26868 (BACKLOG'd).
+Rerun the schema, observed-child-identity, and terminal-disposition probe with:
+`AUTOPILOT_CODEX_NATIVE_CHILD_PROBE=1 bash hooks/tests/codex-enforcement-probe.test.sh`.
+
+Lifecycle remains a separate boundary. Native children are visible through Codex collaboration
+list/wait/interrupt operations, but they are not shell workers: they have no process-group or
+cgroup identity and are not covered by autopilot's shell reapers. Before terminal status, a
+Codex controller must list its native children, wait for completed results, interrupt survivors,
+and record a terminal disposition for every child. Merge-back and worktree GC still use the
+ordinary Git/controller rails. If the host cannot list or interrupt native children, native
+spawn is unsupported for unattended `/l4`–`/l6`; route through autopilot's dispatch scripts.
 
 ---
 

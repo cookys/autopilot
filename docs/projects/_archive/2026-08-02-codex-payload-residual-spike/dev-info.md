@@ -1,7 +1,7 @@
 # Developer info — Codex payload residual install-time spike
 
 - Target branch: `develop`
-- Feature branch: `chore/codex-payload-residual-spike`
+- Feature branch: `chore/codex-payload-residual-spike` (merged and deleted after archive)
 - Size: L, one Mission deliverable
 - Foreman: reuse `/root/backlog_convergence_foreman`; no replacement implementer transcript
 - Verification authority: independent first-pass reviewer plus resolver-selected depth-0 QC
@@ -22,8 +22,8 @@
 - Native automatic generation lifecycle: `fail`
 - Committed mirrors and sync/drift gates: preserved
 - Fixture cleanup: plugin, marketplace, cache, temp repo, and owned processes absent
-- Review state: candidate is ready for the single post-commit first-pass reviewer
-- Depth-0 state: authoritative QC, local integration, merge hash, archive, and lifecycle GC remain
+- Review state: independent Gemini first-pass reviewer returned `SHIP-AS-IS`; Codex seat was reviewed; unavailable Claude seat was recorded as `no_verdict`
+- Depth-0 state: complete; merged locally as `ded66265523285595e6a9498355d4c6273c37116` with `QC-Verdict: PASS (reviewer Gemini 3.6 Flash (High), 2026-08-02)`; archived and lifecycle-cleaned
 
 ## Boundary-correction receipt
 
@@ -44,10 +44,10 @@
   worktree, and successor-authorized seven-path scope.
 - `autopilot:test-strategy` required transcript tool-path evidence, planted behavioral oracles, exit
   codes, immutable tree checks, and negative lifecycle controls instead of accepting self-report.
-- `autopilot:quality-pipeline` is reserved for one bundled first-pass review of the committed
-  seven-path candidate; deterministic repository gates run once over the complete bundle.
-- `autopilot:project-lifecycle` updates this existing tracker and `docs/projects/INDEX.md` only;
-  depth-0 retains merge, archive, and worktree/branch cleanup authority.
+- `autopilot:quality-pipeline` ran once over the complete seven-path bundle; deterministic repository
+  gates and the independent first-pass review passed with no blocking findings.
+- `autopilot:project-lifecycle` updated this tracker and `docs/projects/INDEX.md`; depth-0 completed
+  merge, archive, and worktree/branch cleanup locally with no push or release.
 
 ## Required repository gates
 

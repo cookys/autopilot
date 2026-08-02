@@ -1,9 +1,9 @@
 # Codex payload residual install-time spike
 
-> Status: CANDIDATE READY — NO-GO; depth-0 integration remains
+> Status: COMPLETE — NO-GO; locally merged to `develop` as `ded66265523285595e6a9498355d4c6273c37116`
 > Owner: depth-0 CEO + existing worktree-isolated L4 foreman transcript
-> Plan: [`docs/plans/2026-08-02-codex-payload-residual-spike.md`](../../plans/2026-08-02-codex-payload-residual-spike.md)
-> Boundary correction: [`docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md`](../../plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md)
+> Plan: [`docs/plans/2026-08-02-codex-payload-residual-spike.md`](../../../plans/2026-08-02-codex-payload-residual-spike.md)
+> Boundary correction: [`docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md`](../../../plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md)
 
 ## Goal
 
@@ -42,7 +42,7 @@ mirrors, then make one conservative GO/NO-GO decision without performing the mig
 
 | Mission node | State | Evidence |
 |--------------|-------|----------|
-| `codex-payload-residual-spike` | candidate ready | Installed payload PASS; marketplace Git-refresh prerequisite UNPROVEN; native lifecycle FAIL; conjunctive NO-GO. See [`evidence.json`](evidence.json). |
+| `codex-payload-residual-spike` | integrated | Installed payload PASS; marketplace Git-refresh prerequisite UNPROVEN; native lifecycle FAIL; conjunctive NO-GO. See [`evidence.json`](evidence.json). |
 
 ## Decision
 
@@ -50,8 +50,8 @@ mirrors, then make one conservative GO/NO-GO decision without performing the mig
 the supported Git snapshot refresh path, and no automatic fail-loud install/upgrade generation
 lifecycle was found. The committed Codex skill payload mirrors and their sync/drift gates remain;
 the only payload-tree change is the canonically generated portability-reference copy authorized by
-the successor. Migration, merge, archive, worktree cleanup, push, publication, and release are
-outside this candidate and remain depth-0 responsibilities where applicable.
+the successor. The candidate was merged locally with the QC trailer above, archived, and cleaned
+up without push, publication, release, or payload migration.
 
 ## Successor boundary correction
 
@@ -82,3 +82,5 @@ the canonical sync script; it is not a migration or a new semantic claim.
 | 2026-08-02 | Original gate boundary | Six-path evidence bundle passed all direct gates, but `sync-all --check` exposed the omitted deterministic portability mirror; no commit was made. |
 | 2026-08-02 | Successor admission | Old stage superseded honestly; same lineage fast-forwarded to the frozen seven-path correction without re-running probes. |
 | 2026-08-02 | Candidate handoff | Seven-path evidence bundle is ready for one post-commit first-pass review and depth-0 integration checks. |
+| 2026-08-02 | Authoritative QC and integration | Deterministic gates and independent Gemini first-pass review passed; merge `ded66265523285595e6a9498355d4c6273c37116` landed on `develop` with no push. |
+| 2026-08-02 | Archive and lifecycle closure | Project archived; merged feature branch and disposable worktree removed; session marker cleared after final hygiene checks. |

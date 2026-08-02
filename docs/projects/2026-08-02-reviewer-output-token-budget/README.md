@@ -29,3 +29,4 @@ supports it, explicit pre-spend rejection where it does not, and no change when 
 | 2026-08-02 | Backlog selection | Highest immediately executable non-Board triggered entry after hook-harness closure |
 | 2026-08-02 | Runner spike | Anthropic-compatible and Qoder have verified cap surfaces; Codex, agy, Grok, and Claude CLI rails do not |
 | 2026-08-02 | Plan/rubric freeze | One deliverable; exact eight-path output boundary; no feature worktree/model effect yet |
+| 2026-08-02 | Successor boundary correction | Sync check exposed two omitted deterministic Codex mirrors before either mirror was written. Original stage became `stale_ignored`; same foreman/worktree/branch preserved under a ten-path successor graph. |

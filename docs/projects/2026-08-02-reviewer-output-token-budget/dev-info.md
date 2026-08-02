@@ -8,6 +8,9 @@
 - Foreman: reuse `/root/backlog_convergence_foreman` transcript
 - Verification authority: independent depth-0 panel, never the implementer/foreman
 - Integration: depth-0 owned; foreman must not merge, push, release, or publish
+- Successor scope: original eight outputs plus exact generated mirrors at
+  `platforms/codex/plugin/scripts/dispatch-review.sh` and
+  `platforms/codex/plugin/references/hetero-dispatch.md`
 
 ## Frozen runner matrix
 

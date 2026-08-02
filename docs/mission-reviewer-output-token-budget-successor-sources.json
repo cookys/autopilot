@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-02-reviewer-output-token-budget.md",
+      "rubric_path": "plans/2026-08-02-reviewer-output-token-budget.rubric.md",
+      "plan_sha256": "d0b6a5e4802d7f0933b196a5500522863b6b5f93e9754bec0fcf74eda1603301",
+      "rubric_sha256": "4f988642998161ec54de5a236a1f974f8b98f15783e587c37e88a7e8b7cff343"
+    },
+    {
+      "plan_path": "plans/2026-08-02-reviewer-output-token-budget-mirror-correction.md",
+      "rubric_path": "plans/2026-08-02-reviewer-output-token-budget-mirror-correction.rubric.md",
+      "plan_sha256": "f70acfe34d6be8e629328985c5e7666d1c88a7e0c39e9476905496da30b2ea52",
+      "rubric_sha256": "da633b24f5bbf4d71630cf5c375fd5ccaad8cde18d2526ff14eff63a95ca56e6"
+    }
+  ]
+}

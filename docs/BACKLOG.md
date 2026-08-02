@@ -94,12 +94,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S。
 - **Source**: 2026-07-31 backlog hygiene audit。
 
-### `hooks/tests/dispatch-output-quiescence.test.sh` 時間敏感 flake 未根治
-- **Trigger**: 下次 CI 或 finish-flow 因它變紅時；或要把它納入 blocking gate 之前。
-- **Context**: v2.32.57 的 merge（`d90433b`，標題明寫 "kill dispatch-output-quiescence flake"）以 worker count 縮放 parallel timing factor，但未根治。v2.32.58 期間三次觀測：base SHA 上 FAIL（`immediate-content returns quickly: expected <= 5, got 6`）、一次全套件 PASS、pre-merge 全套件再度 FAIL 且**失敗的斷言換成 `genuine-empty-fast`** — 斷言隨機漂移是負載敏感 flake 的特徵而非邏輯錯誤。`verify-preexisting.sh` 正式判定 `{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}`。可能修法：把絕對 tick 上限改成相對於實測 baseline tick 的比值，或在高負載下自動放寬。
-- **Effort**: S–M
-- **Source**: v2.32.58 finish-flow L-5.2 pre-merge 全套件
-
 ### agy 遙測盲區 — transcript 無 token 欄位且 91% 被平台截斷
 - **Trigger**: 要把 agy 納入任何成本／容量決策之前；或 antigravity 上游補上 usage 欄位時。
 - **Context**: `~/.gemini/antigravity-cli/brain/*/。system_generated/logs/transcript.jsonl` 的 schema 是 `{step_index, source, type, status, created_at, content, truncated_fields}` — **完全沒有 token/usage 欄位**，且 500 個 session 中 454 個（91%）帶 `truncated_fields`（平台自行截斷內容）。目前只能用 content bytes 當極粗代理指標，不可與 codex/grok/opencode 的 token 數同軸比較。**不可測 ⇒ 不可優化**：在補上遙測前，任何 agy 的成本結論都是猜測。

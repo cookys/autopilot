@@ -14,6 +14,26 @@ PROMPT_FILE="$TEST_TMP/prompt.txt"
 printf 'Write a short answer.\n' > "$PROMPT_FILE"
 EXTRA_ARGS=()
 
+# Observe the production helper's logical 250 ms poll ticks without replacing
+# dispatch-author.sh or its quiescence implementation. Wall time includes arbitrary
+# scheduler delay on a saturated host; the helper's own elapsed budget advances once
+# per `sleep 0.25`, which is the semantic clock its grace/deadline decisions use.
+REAL_SLEEP="$(command -v sleep)"
+QUIESCENCE_POLL_LOG="$TEST_TMP/quiescence-polls.log"
+TIMING_BIN="$TEST_TMP/timing-bin"
+mkdir -p "$TIMING_BIN"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'if [ "$#" -eq 1 ] && [ "$1" = "0.25" ]; then' \
+  '  printf "tick\\n" >> "$AUTOPILOT_TEST_QUIESCENCE_POLL_LOG"' \
+  'fi' \
+  'exec "$AUTOPILOT_TEST_REAL_SLEEP" "$@"' \
+  > "$TIMING_BIN/sleep"
+chmod +x "$TIMING_BIN/sleep"
+export AUTOPILOT_TEST_REAL_SLEEP="$REAL_SLEEP"
+export AUTOPILOT_TEST_QUIESCENCE_POLL_LOG="$QUIESCENCE_POLL_LOG"
+export PATH="$TIMING_BIN:$PATH"
+
 make_stub() {
   local name="$1"
   local body="$2"
@@ -48,6 +68,7 @@ run_dispatch() {
   local stdout_file="$TEST_TMP/dispatch-stdout.$$"
   local stderr_file="$TEST_TMP/dispatch-stderr.$$"
 
+  : > "$QUIESCENCE_POLL_LOG"
   START_TS=$(date +%s)
   set +e
   DISPATCH_QUIET=1 "$@" "$SCRIPT" \
@@ -65,8 +86,37 @@ run_dispatch() {
   DISPATCH_ELAPSED=$((END_TS - START_TS))
   DISPATCH_STATUS=$(json_field "$DISPATCH_STDOUT" "status")
   DISPATCH_RAW_LOG=$(json_field "$DISPATCH_STDOUT" "raw_log")
+  DISPATCH_QUIESCENCE_POLLS=$(wc -l < "$QUIESCENCE_POLL_LOG")
 
   rm -f "$stdout_file" "$stderr_file"
+}
+
+poll_budget_ok() {
+  [ "$1" -le "$2" ]
+}
+
+assert_poll_budget() {
+  local actual="$1"
+  local max="$2"
+  local msg="$3"
+
+  if poll_budget_ok "$actual" "$max"; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "$msg: expected <= $max logical polls, got $actual"
+  fi
+}
+
+assert_poll_budget_rejects() {
+  local actual="$1"
+  local max="$2"
+  local msg="$3"
+
+  if poll_budget_ok "$actual" "$max"; then
+    fail "$msg: planted over-budget path unexpectedly passed ($actual <= $max)"
+  else
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  fi
 }
 
 assert_le() {
@@ -109,7 +159,7 @@ empty_stub=$(make_stub "codex-genuine-empty" 'exit 0')
 run_dispatch "$empty_stub" env AUTOPILOT_EMPTY_GRACE_MS=1000
 assert_eq "$DISPATCH_EXIT" "1" "genuine-empty-fast exit"
 assert_eq "$DISPATCH_STATUS" "empty_output" "genuine-empty-fast status"
-assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 5)" "genuine-empty-fast uses tuned empty grace"
+assert_poll_budget "$DISPATCH_QUIESCENCE_POLLS" "4" "genuine-empty-fast uses tuned empty grace"
 
 immediate_body='echo "OpenAI Codex v0.test.0" >&2
 echo "--------" >&2
@@ -140,7 +190,15 @@ immediate_stub=$(make_stub "codex-immediate-content" "$immediate_body")
 run_dispatch "$immediate_stub" env
 assert_eq "$DISPATCH_EXIT" "0" "immediate-content exit"
 assert_eq "$DISPATCH_STATUS" "authored" "immediate-content status"
-assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 5)" "immediate-content returns quickly"
+assert_poll_budget "$DISPATCH_QUIESCENCE_POLLS" "4" "immediate-content returns after stable poll window"
+
+# Discriminating negative control: the same real dispatch path is forced to require
+# eight stable polls. The four-poll semantic oracle above must reject that planted
+# over-budget path, proving it is not an unconditional pass.
+run_dispatch "$immediate_stub" env AUTOPILOT_STABLE_POLLS=8
+assert_eq "$DISPATCH_EXIT" "0" "over-budget-control exit"
+assert_eq "$DISPATCH_STATUS" "authored" "over-budget-control status"
+assert_poll_budget_rejects "$DISPATCH_QUIESCENCE_POLLS" "4" "over-budget-control is rejected"
 
 drip_stub=$(make_stub "ccshim-drip-writer" 'setsid bash -c '"'"'for i in $(seq 1 50); do printf x; sleep 0.2; done'"'"' &
 exit 0')
@@ -190,6 +248,6 @@ big_stub=$(make_stub "codex-big-output" "$big_body")
 run_dispatch "$big_stub" env
 assert_eq "$DISPATCH_EXIT" "0" "big-output-pipefail exit"
 assert_eq "$DISPATCH_STATUS" "authored" "big-output-pipefail status (must not false-empty)"
-assert_le "$DISPATCH_ELAPSED" "$(test_timing_scale 6)" "big-output-pipefail returns promptly"
+assert_poll_budget "$DISPATCH_QUIESCENCE_POLLS" "4" "big-output-pipefail returns after stable poll window"
 
 finalize_test

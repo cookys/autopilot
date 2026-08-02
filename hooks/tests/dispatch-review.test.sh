@@ -171,6 +171,12 @@ case "$MODE" in
     echo "VERDICT: FIX-THEN-SHIP"
     echo "FINDINGS: none"
     ;;
+  ship_no_end)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=capped fixture; evidence=partial favourable block lacks the closing marker; conclusion=truncation cannot authorize shipping"
+    ;;
   oversized)
     echo "$BEGIN"
     echo "VERDICT: SHIP-AS-IS"
@@ -211,6 +217,7 @@ STUB_SHIP="$STUB_MARKER"
 STUB_QODERCN_MARKER="$TEST_TMP/qoderclicn-marker"
 cat > "$STUB_QODERCN_MARKER" <<'EOF'
 #!/usr/bin/env bash
+[ -z "${QODER_ARGV_FILE:-}" ] || printf '%s\n' "$@" > "$QODER_ARGV_FILE"
 PROMPT="$(cat)"
 begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
 end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
@@ -222,6 +229,38 @@ echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=t
 echo "$end"
 EOF
 chmod +x "$STUB_QODERCN_MARKER"
+
+STUB_SPAWN_MARKER="$TEST_TMP/spawn-marker-runner"
+cat > "$STUB_SPAWN_MARKER" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' spawned > "$SPAWN_MARKER_FILE"
+exit 99
+EOF
+chmod +x "$STUB_SPAWN_MARKER"
+
+FAKE_NODE_DIR="$TEST_TMP/fake-node-bin"
+mkdir -p "$FAKE_NODE_DIR"
+cat > "$FAKE_NODE_DIR/node" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$ANTHROPIC_ARGV_FILE"
+prompt_file=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--prompt-file" ]; then
+    prompt_file="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+prompt="$(cat "$prompt_file")"
+begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+echo "$begin"
+echo "VERDICT: FIX-THEN-SHIP"
+echo "FINDINGS: fixture finding"
+echo "$end"
+EOF
+chmod +x "$FAKE_NODE_DIR/node"
 
 # 1. --help
 HELP_OUT="$("$SCRIPT" --help 2>&1)"; assert_eq "0" "$?" "--help exit code"
@@ -237,6 +276,60 @@ assert_eq "2" "$EXIT" "missing diff-file exit 2"
 OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --spec-file /nonexistent-spec 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing spec-file exit 2"
 OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --effort turbo 2>&1)"; assert_eq "2" "$?" "bad effort exit 2"
+
+# 2b. --max-tokens validation is strict, JSON-valid, and happens before any runner spawn.
+for VALUE in 0 -1 1.5 01 abc 200001 999999999999999999999999999999; do
+  SPAWN_MARKER_FILE="$TEST_TMP/invalid-max-spawn-$VALUE"; export SPAWN_MARKER_FILE
+  rm -f "$SPAWN_MARKER_FILE"
+  OUT="$("$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens "$VALUE" 2>&1)"; EXIT=$?
+  assert_eq "2" "$EXIT" "invalid --max-tokens '$VALUE' exits 2"
+  assert_contains "$OUT" '"status": "precondition_failed"' "invalid --max-tokens '$VALUE' is a precondition"
+  node -e 'JSON.parse(process.argv[1])' "$OUT"
+  assert_eq "0" "$?" "invalid --max-tokens '$VALUE' emits valid JSON"
+  assert_file_absent "$SPAWN_MARKER_FILE" "invalid --max-tokens '$VALUE' does not spawn runner"
+done
+SPAWN_MARKER_FILE="$TEST_TMP/missing-max-spawn"; export SPAWN_MARKER_FILE
+rm -f "$SPAWN_MARKER_FILE"
+OUT="$("$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "missing --max-tokens value exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "missing --max-tokens value is a precondition"
+node -e 'JSON.parse(process.argv[1])' "$OUT"
+assert_eq "0" "$?" "missing --max-tokens value emits valid JSON"
+assert_file_absent "$SPAWN_MARKER_FILE" "missing --max-tokens value does not spawn runner"
+
+for RUNNER_NAME in codex agy grok cc-shim claude-native; do
+  SPAWN_MARKER_FILE="$TEST_TMP/unsupported-$RUNNER_NAME-spawn"; export SPAWN_MARKER_FILE
+  rm -f "$SPAWN_MARKER_FILE"
+  OUT="$("$SCRIPT" --runner "$RUNNER_NAME" --model fixture --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens 100 2>&1)"; EXIT=$?
+  assert_eq "2" "$EXIT" "$RUNNER_NAME rejects --max-tokens"
+  assert_contains "$OUT" '"status": "precondition_failed"' "$RUNNER_NAME rejection is a precondition"
+  assert_contains "$OUT" "runner '$RUNNER_NAME'" "$RUNNER_NAME rejection names the runner"
+  assert_contains "$OUT" 'no verified enforceable output-token mapping' "$RUNNER_NAME rejection states the unsupported contract"
+  node -e 'JSON.parse(process.argv[1])' "$OUT"
+  assert_eq "0" "$?" "$RUNNER_NAME rejection emits valid JSON"
+  assert_file_absent "$SPAWN_MARKER_FILE" "$RUNNER_NAME rejects before runner spawn"
+done
+
+# 2c. Supported rails receive their exact native argv; omission synthesizes no argument or result field.
+QODER_ARGV_FILE="$TEST_TMP/qoder-max.argv"; export QODER_ARGV_FILE
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" --max-tokens 200000 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "qoder accepts upper-bound --max-tokens"
+assert_contains "$(paste -sd ' ' "$QODER_ARGV_FILE")" '--max-output-tokens 200000' "qoder receives exact output-token argv"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "qoder omission preserves reviewed behavior"
+assert_not_contains "$(cat "$QODER_ARGV_FILE")" '--max-output-tokens' "qoder omission adds no output-token argv"
+assert_not_contains "$OUT" 'max_tokens' "qoder omission adds no result field"
+
+ANTHROPIC_ARGV_FILE="$TEST_TMP/anthropic-max.argv"; export ANTHROPIC_ARGV_FILE
+OUT="$(PATH="$FAKE_NODE_DIR:$PATH" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --context-window off --max-tokens 1 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "anthropic-compatible accepts lower-bound --max-tokens"
+assert_contains "$(paste -sd ' ' "$ANTHROPIC_ARGV_FILE")" '--max-tokens 1' "anthropic-compatible receives exact adapter argv"
+OUT="$(PATH="$FAKE_NODE_DIR:$PATH" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --context-window off 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "anthropic-compatible omission preserves reviewed behavior"
+assert_not_contains "$(cat "$ANTHROPIC_ARGV_FILE")" '--max-tokens' "anthropic-compatible omission adds no adapter argv"
+RESULT_KEYS="$(node -e 'const v=JSON.parse(process.argv[1]); console.log(Object.keys(v).sort().join(","))' "$OUT")"
+assert_eq "error,findings,model,no_finding_proof,raw_log,runner,status,verdict" "$RESULT_KEYS" \
+  "omitted --max-tokens preserves result JSON shape"
 
 # 3. codex path: verdict parsed → reviewed, exit 0
 OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
@@ -357,6 +450,10 @@ assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn verdict parsed"
 OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "qoderclicn empty clean exit is no_verdict"
 assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn empty clean output fails closed"
+OUT="$(STUB_MODE=ship_no_end "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_VERDICT" --max-tokens 5 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "qoderclicn capped partial wrapped block is no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn capped partial SHIP never passes"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn partial SHIP is not accepted"
 
 # 6. anthropic-compatible: transport precondition failures collapse to no_verdict, exit 1 (no network)
 OUT="$(env -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_COMPATIBLE_AUTH_TOKEN -u MINIMAX_API_KEY \
@@ -430,6 +527,7 @@ const server = http.createServer((req, res) => {
     }
     const payload = JSON.parse(body);
     fs.appendFileSync(logPath, `[model=${payload.model}]\n`);
+    fs.appendFileSync(logPath, `[call=${calls} max_tokens=${payload.max_tokens}]\n`);
     if (Object.prototype.hasOwnProperty.call(payload, 'thinking')) {
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end('{"error":"unexpected thinking"}');
@@ -552,9 +650,10 @@ OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT/v1" ANTHROPIC_
 assert_eq "0" "$EXIT" "anthropic-compatible /v1 base-url reviewed exit 0"
 assert_not_contains "$(cat "$MOCK_LOG")" 'POST /v1/v1/messages' "anthropic-compatible /v1 base-url does not double-append /v1"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
-  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" --max-tokens 17 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "anthropic-compatible max_tokens exit 1"
 assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible max_tokens → no_verdict"
+assert_contains "$(cat "$MOCK_LOG")" '[call=7 max_tokens=17]' "anthropic-compatible forwards the requested cap into the API payload"
 assert_not_contains "$(cat "$MOCK_LOG")" 'POST /v1/v1/messages' "anthropic-compatible max_tokens does not double-append /v1"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?

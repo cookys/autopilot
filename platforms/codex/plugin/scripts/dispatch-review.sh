@@ -35,6 +35,7 @@
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # agy --print-timeout (default 5m)
+#       [--max-tokens <n>]      # response-token cap (1..200000): anthropic-compatible/qoderclicn only
 #       [--bin <path>]          # override the runner binary (test seam)
 #       [--checklists <c1,c2>]  # optional adversarial checklist
 #       [--context-window off|warn|block]  # pre-dispatch context-window gate (default: block;
@@ -111,6 +112,7 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$_REVIEW_SELF_DIR/lib/json-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/json-emit.sh" || true
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""
+MAX_TOKENS=""; MAX_TOKENS_SUPPLIED=0; MAX_TOKENS_PARSE_ERROR=""
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND
 # DISPATCH_DETACH!=0 (default on), the review runs inside a kill-surviving setsid session that
@@ -125,6 +127,16 @@ while [[ $# -gt 0 ]]; do
     --pack-file) PACK_FILE="${2:-}"; shift 2 ;;
     --effort)    EFFORT="${2:-}"; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
+    --max-tokens)
+      MAX_TOKENS_SUPPLIED=1
+      if [ "$#" -lt 2 ] || [ -z "${2:-}" ] || [[ "${2:-}" = --* ]]; then
+        MAX_TOKENS_PARSE_ERROR="--max-tokens requires a non-empty value"
+        shift
+      else
+        MAX_TOKENS="$2"
+        shift 2
+      fi
+      ;;
     --bin)       BIN="${2:-}"; shift 2 ;;
     --checklists) CHECKLISTS="${2:-}"; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
@@ -146,6 +158,17 @@ die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precond
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
+[[ -z "$MAX_TOKENS_PARSE_ERROR" ]] || die_precondition "$MAX_TOKENS_PARSE_ERROR"
+if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
+  [[ "$MAX_TOKENS" =~ ^[1-9][0-9]*$ ]] \
+    && [ "${#MAX_TOKENS}" -le 6 ] \
+    && (( 10#$MAX_TOKENS <= 200000 )) \
+    || die_precondition "--max-tokens must be a base-10 integer in 1..200000"
+  case "$RUNNER" in
+    anthropic-compatible|qoderclicn) ;;
+    *) die_precondition "--max-tokens is unsupported for runner '$RUNNER': current rail has no verified enforceable output-token mapping" ;;
+  esac
+fi
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 if [[ -n "$SPEC_FILE" ]]; then
@@ -634,9 +657,15 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   QODER_OUT="$(mktemp -t dispatch-review-qoder-out-XXXXXX)"
   QODER_ERR="$(mktemp -t dispatch-review-qoder-err-XXXXXX)"
   QODER_CWD="$(mktemp -d -t dispatch-review-qodercwd-XXXXXX)"
+  QODER_TOKEN_ARGS=()
+  if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
+    QODER_TOKEN_ARGS+=(--max-output-tokens "$MAX_TOKENS")
+  fi
   timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --model "$3" -w "$1" \
-      --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence < "$5"' \
-      _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" > "$QODER_OUT" 2> "$QODER_ERR"
+      --reasoning-effort "$4" --tools "" --dangerously-skip-permissions --no-session-persistence \
+      "${@:6}" < "$5"' \
+      _ "$QODER_CWD" "$QODER_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" \
+      "${QODER_TOKEN_ARGS[@]}" > "$QODER_OUT" 2> "$QODER_ERR"
   QODER_RC=$?   # no set -e in this script (top is `set -uo pipefail`, see grok branch) — capturing $? is safe
   wait_output_quiescent "$QODER_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
   rm -rf "$QODER_CWD"; QODER_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
@@ -742,6 +771,9 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   )
   if [[ -n "$ANTHROPIC_TOKEN_ENV" ]]; then
     ANTHROPIC_ARGS+=(--token-env "$ANTHROPIC_TOKEN_ENV")
+  fi
+  if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
+    ANTHROPIC_ARGS+=(--max-tokens "$MAX_TOKENS")
   fi
   node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
   ANTHROPIC_RC=$?

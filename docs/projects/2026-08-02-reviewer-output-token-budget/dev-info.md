@@ -11,6 +11,12 @@
 - Successor scope: original eight outputs plus exact generated mirrors at
   `platforms/codex/plugin/scripts/dispatch-review.sh` and
   `platforms/codex/plugin/references/hetero-dispatch.md`
+- Candidate boundary: exactly ten successor-authorized output paths; no plan/rubric, adapter,
+  version-manifest, release, or adjacent review-efficiency changes
+- Preserved focused evidence: `dispatch-review` 250 assertions; `dispatch-detach` 74 assertions;
+  `bash -n scripts/dispatch-review.sh` clean
+- Successor evidence: canonical/mirror `cmp` pairs, complete 260-file hook suite, validation,
+  version sync, hook inventory, sync-all, completeness/secret scans, and exact-path audit green
 
 ## Frozen runner matrix
 
@@ -26,6 +32,8 @@
 bash -n scripts/dispatch-review.sh
 bash hooks/tests/dispatch-review.test.sh
 bash hooks/tests/dispatch-detach.test.sh
+cmp -s scripts/dispatch-review.sh platforms/codex/plugin/scripts/dispatch-review.sh
+cmp -s references/hetero-dispatch.md platforms/codex/plugin/references/hetero-dispatch.md
 AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh
 bash scripts/validate.sh
 node scripts/sync-version.js --check

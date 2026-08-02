@@ -32,6 +32,11 @@ compaction, accounts for resource debt, and reports bounded progress without tur
 review findings into new phases.
 
 ### Added
+- `dispatch-review.sh --max-tokens <n>` now enforces an optional 1..200000 reviewer response-token
+  budget on the two verified rails (`anthropic-compatible` → adapter `--max-tokens`, `qoderclicn`
+  → `--max-output-tokens`) and rejects Codex, agy, Grok, cc-shim, and Claude-native before spend;
+  omission preserves existing runner defaults and the result JSON shape, while truncated output
+  remains fail-closed.
 - A controller-execution state machine and schemas for durable work-order identity, exact gate
   ownership, immutable phase denominators, multi-axis repair budgets, progress receipts, retained
   resource debt, and high-water admission.

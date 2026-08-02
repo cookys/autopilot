@@ -2,7 +2,7 @@
   "artifact_type": "mission_execution_graph",
   "calculated_batches": 2,
   "calculated_depth": 2,
-  "graph_digest": "9c295505872fe0b3ea727e441e69a9f95ed4b9408a1f349028edd2b7212d6378",
+  "graph_digest": "74256aadd8b02fa743f49564ae43d932acab9b46b45f0244d721d04294700687",
   "nodes": [
     {
       "acceptance_ids": [
@@ -95,18 +95,7 @@
         "spec": {
           "path": "docs/plans/2026-08-02-foreman-depth0-coordination-r6.md",
           "section": "Deliverable contract"
-        },
-        "version_mirror_generator": "bash scripts/sync-codex-plugin-skills.sh",
-        "version_mirror_paths": [
-          "platforms/codex/plugin/references/orchestrator-state-machine.md",
-          "platforms/codex/plugin/scripts/run-ledger.sh",
-          "platforms/codex/plugin/scripts/tests/run-ledger-concurrency.test.sh",
-          "platforms/codex/plugin/scripts/tests/run-ledger.test.sh",
-          "platforms/codex/plugin/scripts/watch-foreman.js",
-          "platforms/codex/plugin/skills/ceo-agent/references/level-front-door.md",
-          "platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md",
-          "platforms/codex/plugin/skills/l6/references/full-dispatch-pipeline.md"
-        ]
+        }
       },
       "dependencies": [],
       "gate_attempt_budget": 4,
@@ -286,19 +275,7 @@
         "spec": {
           "path": "docs/plans/2026-08-02-review-path-efficiency.md",
           "section": "Deliverable contract"
-        },
-        "version_mirror_generator": "bash scripts/sync-codex-plugin-skills.sh",
-        "version_mirror_paths": [
-          "platforms/codex/plugin/references/blind-dispatch.md",
-          "platforms/codex/plugin/schemas/review-result.schema.json",
-          "platforms/codex/plugin/scripts/diff-since-last-round.sh",
-          "platforms/codex/plugin/scripts/dispatch-author.sh",
-          "platforms/codex/plugin/scripts/dispatch-review.sh",
-          "platforms/codex/plugin/scripts/verify-red-green.sh",
-          "platforms/codex/plugin/skills/quality-pipeline/references/code-review.md",
-          "platforms/codex/plugin/skills/quality-pipeline/references/test-policy.md",
-          "platforms/codex/plugin/src/engine/autopilot-engine.js"
-        ]
+        }
       },
       "dependencies": [
         "foreman-coordination-r6",
@@ -523,38 +500,7 @@
         "spec": {
           "path": "docs/plans/2026-08-02-skill-metadata-portability-hygiene.md",
           "section": "Deliverable contract"
-        },
-        "version_mirror_generator": "bash scripts/sync-codex-plugin-skills.sh",
-        "version_mirror_paths": [
-          "platforms/codex/plugin/skills/audit/SKILL.md",
-          "platforms/codex/plugin/skills/brainstorm/SKILL.md",
-          "platforms/codex/plugin/skills/ceo-agent/SKILL.md",
-          "platforms/codex/plugin/skills/debug/SKILL.md",
-          "platforms/codex/plugin/skills/dev-flow/SKILL.md",
-          "platforms/codex/plugin/skills/distill/SKILL.md",
-          "platforms/codex/plugin/skills/doc-sync/SKILL.md",
-          "platforms/codex/plugin/skills/engine-onboarding/SKILL.md",
-          "platforms/codex/plugin/skills/finish-flow/SKILL.md",
-          "platforms/codex/plugin/skills/handoff/SKILL.md",
-          "platforms/codex/plugin/skills/harness-maintenance/SKILL.md",
-          "platforms/codex/plugin/skills/l3/SKILL.md",
-          "platforms/codex/plugin/skills/l4/SKILL.md",
-          "platforms/codex/plugin/skills/l5/SKILL.md",
-          "platforms/codex/plugin/skills/l6/SKILL.md",
-          "platforms/codex/plugin/skills/learn/SKILL.md",
-          "platforms/codex/plugin/skills/next/SKILL.md",
-          "platforms/codex/plugin/skills/onboard/SKILL.md",
-          "platforms/codex/plugin/skills/profiling/SKILL.md",
-          "platforms/codex/plugin/skills/project-lifecycle/SKILL.md",
-          "platforms/codex/plugin/skills/quality-pipeline/SKILL.md",
-          "platforms/codex/plugin/skills/research-to-ship/SKILL.md",
-          "platforms/codex/plugin/skills/retro/SKILL.md",
-          "platforms/codex/plugin/skills/survey/SKILL.md",
-          "platforms/codex/plugin/skills/team/SKILL.md",
-          "platforms/codex/plugin/skills/test-strategy/SKILL.md",
-          "platforms/codex/plugin/skills/think-tank-dialectic/SKILL.md",
-          "platforms/codex/plugin/skills/think-tank/SKILL.md"
-        ]
+        }
       },
       "dependencies": [],
       "gate_attempt_budget": 3,

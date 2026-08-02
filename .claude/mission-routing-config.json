@@ -1,5 +1,5 @@
 {
   "schema_version": 1,
-  "graph_path": "docs/mission-reviewer-output-token-budget-execution-graph.json",
-  "sources_path": "docs/mission-reviewer-output-token-budget-sources.json"
+  "graph_path": "docs/mission-reviewer-output-token-budget-successor-execution-graph.json",
+  "sources_path": "docs/mission-reviewer-output-token-budget-successor-sources.json"
 }

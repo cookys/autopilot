@@ -85,6 +85,26 @@ echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","
 
 [`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
+## Reviewer output-token budget
+
+`dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through
+200000 tokens. This is an output-token budget only: it does not limit input context, prompt bytes,
+visible characters, wall time, tool turns, reasoning effort, or monetary spend. The flag is mapped
+only where the installed runner exposes a verified enforceable surface:
+
+| Reviewer runner | Mapping when `--max-tokens <n>` is supplied |
+|-----------------|-----------------------------------------------|
+| `anthropic-compatible` | Direct adapter `--max-tokens <n>` (Anthropic API `max_tokens`) |
+| `qoderclicn` | Qoder CLI `--max-output-tokens <n>` |
+| `codex`, `agy`, `grok`, `cc-shim`, `claude-native` | Unsupported: exit 2 with `status=precondition_failed` before runner resolution or spawn |
+
+The value must be an unpadded positive base-10 integer in the inclusive range; missing, zero,
+negative, fractional, non-numeric, or over-range values fail before spend. Omitting the flag adds no
+runner argument, synthesizes no wrapper default, and adds no result field, so each transport keeps
+its existing default and the review JSON schema is unchanged. Truncation never authorizes a review:
+Anthropic `stop_reason=max_tokens` and a Qoder exit-0 response missing the complete wrapped block
+both remain `no_verdict`; a partial `SHIP-AS-IS` is not parsed.
+
 ## Script
 
 ```bash

@@ -1,12 +1,16 @@
 ---
-status: approved
+status: shipped
 date: 2026-08-01
 size: L
 entry_level: l6
 project: backlog-convergence-plan-set
+merged_commit: 952df77ad3ce785a046425f025cce43270f3b85f
 ---
 
 # Backlog Convergence Plan Set
+
+Status: ✅ Shipped in v2.34.1 (no version bump) — merged locally as
+`952df77ad3ce785a046425f025cce43270f3b85f`.
 
 ## Decision
 
@@ -21,8 +25,9 @@ project remain the owners of their work. Track 4 and Track 5 stay design/Board-o
 
 ## Inventory result
 
-`docs/BACKLOG.md` contains 66 `###` headings, of which one is the format example. The real
-inventory is **65 entries**:
+At plan freeze, `docs/BACKLOG.md` contained 66 `###` headings, of which one was the format example.
+The real intake inventory was **65 entries**. Archive closeout removed the 11 completed entries from
+the active backlog, leaving **54 trigger-bearing entries**:
 
 | Classification | Count | Meaning |
 |---|---:|---|

@@ -1,7 +1,8 @@
 # Backlog convergence
 
-> **Plan**: [`docs/plans/2026-08-01-backlog-convergence-plan-set.md`](../../plans/2026-08-01-backlog-convergence-plan-set.md)
-> **Mission graph**: [`docs/mission-backlog-convergence-execution-graph.json`](../../mission-backlog-convergence-execution-graph.json)
+> **Status**: Product complete; archived after local merge `952df77ad3ce785a046425f025cce43270f3b85f`
+> **Plan**: [`docs/plans/2026-08-01-backlog-convergence-plan-set.md`](../../../plans/2026-08-01-backlog-convergence-plan-set.md)
+> **Mission graph**: [`docs/mission-backlog-convergence-execution-graph.json`](../../../mission-backlog-convergence-execution-graph.json)
 > **Target branch**: `feat/v2.34.1-backlog-convergence`
 > **Workflow**: CEO `/l4` attempt `l4-backlog-convergence-20260801T195654Z`, one bounded deliverable, no external publish
 
@@ -33,12 +34,12 @@ so no terminal Mission receipt is fabricated or retroactively attached. Closure 
 
 | Stage | Status | Evidence |
 |---|---|---|
-| Inventory and plan | Complete | 65 real entries mapped exactly once; Tracks 1–3 contain 11 shipped entries; Tracks 4–5 and 40-entry trigger bank remain deferred |
+| Inventory and plan | Complete | 65 real entries mapped exactly once; Tracks 1–3 shipped 11 entries, which archive closeout removed from the active backlog; Tracks 4–5 and the trigger bank leave 54 entries deferred |
 | Product implementation | **Complete** | Product repair commits `baa76ba7` and `bbe23863`; exact authorized diff is 71/71 paths with zero missing or unbound paths and clean `git diff --check` |
 | Original native Mission attempt | **Zero-effect released; history preserved** | Canonical `no_effect_release` digest `dd8e06c6…`; reservations zero; no terminal receipt or Work Order was synthesized |
 | Frozen verification | **Complete** | Current graph digest `7dd2e6f3…`, admission digest `8d17b82b…`; all 19 graph commands and `AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh` pass (`260` test files) |
 | Independent QC | **Complete — zero verified blockers** | Claude `review-1785629161-3706202-2d83` and Gemini `review-1785629161-3706201-9d9a` returned `SHIP-AS-IS`. Codex `review-1785629161-3706214-1ece` requested extending reviewer-style `bwrap` isolation to the write-intent implementer; exact baseline and frozen R8 adjudication rejected that scope expansion |
-| Finish flow | In progress | Local merge, post-merge doc-sync, archive, session cleanup, and branch cleanup are depth-0 owned |
+| Finish flow | **Complete through archive** | L-5.1–L-5.5 complete; L-5.6/L-5.7 repository session and branch hygiene run after archive and are outside the archived product scope |
 
 ## Decision history
 

@@ -8,13 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-08-01 | [backlog-convergence](2026-08-01-backlog-convergence/README.md) — 將 65 筆 backlog 正規化為一個 bounded Mission；只執行已觸發的 Mission authority、cross-harness readiness、Owner Kernel P4，Reviewer budget/Board 項目保留 deferred。 | v2.34.1 (no bump) | `feat/v2.34.1-backlog-convergence` |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立；P4 role qualification 另行執行。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-08-01 | [backlog-convergence](_archive/2026-08-01-backlog-convergence/README.md) — 65 筆 backlog 精確盤點；11 個已觸發項以單一 71-path Mission 收斂並通過 260-file suite 與三家族 QC，54 項 trigger/Board work 保持 deferred。 | v2.34.1 (no bump) | `952df77a` | [plan](../plans/2026-08-01-backlog-convergence-plan-set.md) |
 | 2026-07-31 | [evidence-eval-truth](_archive/2026-07-31-evidence-eval-truth/README.md) — orchestration failures now use a closed evidence-backed classification; score reports exclude and tally infrastructure failures; explicit-root transcript imports are deterministic aggregate-only telemetry; MiniMax's diff-only limitation is mechanically visible without contaminating readiness contracts. | v2.34.1 | `9f26e082` | [plan](../plans/2026-07-31-evidence-eval-truth.md) |
 | 2026-07-31 | [correctness-gates](_archive/2026-07-31-correctness-gates/README.md) — current-version prose, detached-worktree red/green execution, quoted binary-path risk classification, and added-lines-only secret scanning now reject their planted defects while preserving safe operations and existing interfaces. | v2.34.1 | `9f26e082` | [plan](../plans/2026-07-31-correctness-gates.md) |
 | 2026-07-30 | [controller-execution-discipline](_archive/2026-07-30-controller-execution-discipline/README.md) — Controller P0、Mission admission、compaction recovery、resource debt 與 orphan adoption 收斂為單一 durable work order；四項 Critical repair、獨立 whole-diff review、獨立 qualification 與九項 bounded follow-up admission 完成。 | v2.34.1 | `d25c742` | [plan](../plans/2026-07-30-controller-execution-discipline.md) |

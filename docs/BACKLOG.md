@@ -95,13 +95,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: M
 - **Source**: controller-execution-discipline v2.34.1 boundary; preserved user-owned Codex hook-probe workspace
 
-### Readiness gate 的 session-local qualification provider
-- **Status**: SHIPPED — backlog-convergence Track 3；host-injected exact-role authority is required pre-spend。
-- **Trigger**: `ICC P4` 或 Mission integration 要把 `ProviderReadinessReceipt` 接到 effectful pre-spend gate 之前；具體而言，只要該 gate 需要 implementer、verification-author 或 QC seat 從 `probe-needed` 合法升到 `usable`，此項就必須先完成。
-- **Context**: PRO P4 嚴格保持三軸獨立：transport/live probe 不得推論 role qualification，而 disk-backed `engine-scorecard.js` 依治理規則只是 `untrusted_telemetry`。目前 reviewer 可由既有 live qualifier 取得 session-local authority，但 implementer／verification-author 尚無可自動升格的 role corpus/verifier，QC 也需明確綁定 reviewer-role authority。v2.34.1 的 real Mission completion campaign 再次命中此邊界：三席 final panel 在 exact QC scorecard qualification precondition 全數停止，沒有任何 seat 被 dispatch；depth 0 因此另以同一 frozen whole-diff roster執行 joint review，而沒有偽造 qualification receipt。正規修法是新增 host-injected、不可序列化或外部簽章的 exact-tuple qualification provider，讓 readiness 只消費 authority-bound observation；不得把 provisional scorecard row 或 probe 成功當 qualification。
-- **Effort**: L（含 implementer／verification-author role eval、QC reviewer-role mapping、ICC intake red/green）
-- **Source**: PRO P4 Heto generation 1，GPT-5.6 Sol finding R2/R6，candidate `d0a05f7`；2026-07-30 controller-execution-discipline final-panel admission incident
-
 ### CLAUDE.md 逼近 40k 硬上限（目前僅餘 6 bytes）
 - **Trigger**: 下一個需要新增或擴寫 `CLAUDE.md` inventory row 的變更。
 - **Context**: 2026-08-01 實測 `CLAUDE.md` 為 39,994/40,000 bytes；inventory gate 目前仍綠，但任何正常新增都會撞上限。先把可搬的沿革／細節移到正主 reference，再新增 row。
@@ -150,25 +143,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S。
 - **Source**: 2026-07-31 exhaustive backlog audit；targeted gate test目前 20 assertions green。
 
-### codex-native `spawn_agent` lifecycle / teardown 盲區納管（codex 當 depth-0 時）
-- **Status**: SHIPPED — backlog-convergence Track 2；native child disposition is explicit and shell reaping is not claimed。
-- **Trigger**: 下次 codex 擔任 depth-0 orchestrator 跑 /l4-/l6 前；或下次改版 `platforms/codex/plugin/skills/ceo-agent` payload 時。
-- **Context**: 2026-07-14 稽核時的 Codex 0.144 原生 `spawn_agent`（該次 976 呼叫）完全在 autopilot 軌道外；當時 schema 也無 `model` 參數。Codex 0.146 已顯示 `model` 與 `effort`，所以 model pinning 不再是本條的已證缺口。仍未解的是 lifecycle/teardown：它不是 Agent-tool（無 TaskStop）、不是 shell-dispatched（無 pgid 可 reap），且 merge-back/GC 零覆蓋。修法：先完成 0.146 fresh spawn probe，再決定要求 Codex orchestrator 全走 autopilot dispatch 軌道，或在 finish gate 偵測未終止的 native children / session 殘留。
-- **Effort**: S（payload prose 禁令）/ M（收尾偵測 gate）
-- **Source**: 2026-07-14 codex-worktree audit §2/§4/§5。
-
 ### context-budget T3 deny tier — calibration and obedience evidence
 - **Trigger**: 有可持久化的 context calibration／handoff obedience receipts，或再次觀察到 T3 後新派遣造成 spiral。
 - **Context**: 先前 finish-flow marker blocker 已解；真正未完成的是用 session evidence 校準 deny threshold、handoff structure 與 anti-spiral policy，不能只靠靜態 token 比例。
 - **Effort**: M。
 - **Source**: context-budget follow-up audit。
-
-### E1 dispatch-manifest 合規 merge gate（/lN 宣稱 ⇒ 機器可驗）
-- **Status**: SHIPPED — backlog-convergence Track 1；controller Work Order provenance is the merge backstop。
-- **Trigger**: 下次發現 depth-0 繞過 dispatch 路徑手做實作（如 2026-07-14 研究中 92d8784a 用裸 codex exec 繞 dispatch-hetero、user 質問才自白），或 orchestrator-edit-gate 進 block 模式時（Bash 寫檔是它宣告的盲區，E1 是 backstop）。
-- **Context**: merge 時驗「product commits 是否可溯源到 dispatch run manifests」（`${TMPDIR}/autopilot-dispatch-runs/*.manifest.json` 已存在）+ depth-0 Edit 計數；不符 ⇒ 擋 merge（qc-gate 同級）。A1 是事前預防（honest-agent 級），E1 是事後偵測 — 兩者合起來才閉環。
-- **Effort**: M。
-- **Source**: 2026-07-14 transcript 研究 S3（協議合規無 gate、adjudicate-findings 零呼叫）；plan § Declared limits。**追加證據（2026-07-14 codex-worktree audit）**：codex 當 depth-0 時自承下海 implement + 用原生 `spawn_agent`（976 次）完全繞過 dispatch 軌道 — 又一筆「協議合規純靠模型自覺、無機器可驗」的 S3 實例。
 
 ### B1/B2 review 路徑效率（diff-only 強制 + delta re-review）
 - **Trigger**: 下次任何 /l5 /l6 run 的 review dispatch 出現 repo 爬讀（review session token 中位數異常）或 marathon loop（>5 輪）時；或 Board 排程。
@@ -190,13 +169,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: S（含兩平台 dry-run）
 - **Source**: docs/plans/2026-07-04-surface-area-reduction.md §B4；v2.31.16 收尾 deferred。
 
-### codex 宿主 slash-entry 探針入 gate(committed、可重跑)
-- **Status**: SHIPPED — backlog-convergence Track 2；committed opt-in live probe is rerunnable。
-- **Trigger**: 下次改動 `platforms/codex/plugin` payload 產生邏輯,OR C1a Spike 動工時(兩者都會重驗安裝面)。
-- **Context**: 2026-07-05 已一次性實測:codex 0.142.2 裝 v2.31.16 payload 後五個薄殼入口全部浮現、l5 wiring probe 以 `cat` exec 事件證明 MUST-READ 連結在 plugin cache 內解析並被讀取(記錄在 `references/multi-agent-portability.md`)。缺的是把它做成 committed 可重跑 gate(`slash-entry-probe.test.sh` 的 codex 版:`codex exec -m <model>` + stderr exec-event 斷言),與 CC 版同一 self-skip 慣例。注意 quota:Spark 額度枯竭時換 `-m gpt-5.5`(capability-state 已記 2026-07-07 12:44 重置)。
-- **Effort**: S
-- **Source**: 2026-07-05 /l6 cross-harness 薄殼驗證 run。
-
 ### distill/learn 邊界句進 description(+ retro「session」詞彙鄰接註記)
 - **Trigger**: 下次修改 `skills/distill/SKILL.md` 或 `skills/learn/SKILL.md` 的 description;OR 實際觀察到一次 distill↔learn(或 distill↔retro)誤路由。
 - **Context**: v2.31.18 episodic 觸發語(「這個專案的方法論值得留」等)使 distill 的觸發面更靠近 learn 領域;「learn 記事實、distill 產程序」的邊界句目前只住在 finish-flow L-5.6 的提示裡,不在兩個 skill 自身的 description/Not-for(gap 先於本次變更存在,review 判非阻斷)。retro 的 "session analysis" 與 "distill this project/session" 詞彙鄰接、動詞相異,今日無字面碰撞。改 description = 路由面 = L 待遇。
@@ -208,13 +180,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: 2026-07-10 syscontract campaign 實測:12 個「clean」標籤(merged-未被翻 標注法)倒了 5 個(舊01/舊03/06/08/新03),其中新03 的 flag 還抓到當日 develop 現行真 bug(ladder-run.sh pipefail,v2.32.18 修)。全火力 reviewer(sonnet+全契約+tools)比「merged=clean」標注法強。配對一致性協議(m3-pathc-syscontract.md final protocol)不需要標籤,已作為現行量測法;真 certified-clean 集需逐案對抗性預審(每案先過一輪全火力 review + 人工裁決),成本高,等有絕對認證需求再建。
 - **Effort**: M
 - **Source**: 2026-07-10 L6-r2 WS-A campaign;MiniMax R2 的「reviewer-circular 標注」警告實證。
-
-### preflight-portability.sh meta-smoke test
-- **Status**: SHIPPED — backlog-convergence Track 2；clean/planted-failure cases run in a sandbox tree。
-- **Trigger**: a preflight false-green incident (gate passes while an invariant is actually broken), OR next time adding a check to `preflight-portability.sh`.
-- **Context**: the 17-check gate itself has no test. Panel consensus (2026-07-04): meta-smoke = copy script into a sandbox tree, seed ONE violation (e.g. adapter file with wrong `name:`), assert exit != 0; full per-check decomposition is diminishing returns. Deferred to bound the v2.31.10 release; `dispatch-explore.test.sh` + anthropic mock coverage were the higher-priority gaps and shipped.
-- **Effort**: S
-- **Source**: 2026-07-04 review-closeout design panel Q2.
 
 ### distill-scan 校準：friction bucket 混入非使用者文本 ＋ 複合命令儀式盲點
 - **Trigger**: next time touching `scripts/distill-scan.js`，OR 下一輪 /distill 再次觀察到同類噪音。
@@ -254,13 +219,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: 2026-06-26 dogfood found best-model is **domain-dependent** (`gemini-3.5-flash` leads Rust 54% of that exam; `opus-4.8` matches-or-leads backend-cli, autopilot's own shape) — but the evidence is thin and the routing target (`gemini` reviewer) isn't plumbed. The 5-round gpt-5.5 loop converged the whole plan to **measure-now-route-later**: ship `probe-diff-domain.sh` + the resolver's `work_domain`/`domain_source` telemetry keys + the `/l5` ledger column (done), defer ALL routing here. `qc_panel`/`cross_family_*`/`--enforce` stay untouched by domain. Plan: [`docs/plans/2026-06-26-domain-aware-roster.md`](plans/2026-06-26-domain-aware-roster.md).
 - **Effort**: L (each prerequisite is its own sub-task; (1) alone is S–M).
 - **Source**: 2026-06-26 domain-telemetry ship (Phase 4); the deferred KR4 of the plan.
-
-### agy reviewer/author hard isolation
-- **Status**: SHIPPED — backlog-convergence Track 2；bwrap filesystem/process isolation is fail-closed。
-- **Trigger**: 現在；在下一次 agy reviewer／verification-author production dispatch 前完成 probe 與接線。
-- **Context**: 合併原 reviewer sandbox、OS-sandboxed hetero reviewer，以及 verification-author no-repo-mutation 缺口。先實測 agy `--sandbox` 的 filesystem/process 邊界，再 wire reviewer + author rails；Codex/bwrap 可作獨立對照。L1 override 是否解鎖仍是後續獨立裁決。
-- **Effort**: M。
-- **Source**: v2.25.9 residual + 2026-07-08 campaign deviation + 2026-07-31 live capability audit。
 
 ### L1 block-mode override re-enable — needs a REAL isolation boundary (cgroup is NOT enough)
 - **Trigger**: when a `/l5` block-mode project hits a legitimate `executed_set_shrink` that should be waivable, AND a real isolation boundary is available.
@@ -333,23 +291,6 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 - **Effort**: S。
 - **Source**: 2026-07-14 status CLI design + 2026-07-31 code audit。
 
-### Codex 0.146 native `spawn_agent` schema/docs reconciliation
-- **Status**: SHIPPED — backlog-convergence Track 2；0.146 schema and lifecycle evidence recorded。
-- **Trigger**: 現在；完成 fresh minimal spawn probe 後修正兩份仍描述 0.144 鎖欄位的文件。
-- **Context**: 0.144 時代的兩行 opt-in 說明已過時；重驗 default schema、agent TOML inheritance 與 child model identity，再同步 canonical/Codex docs。不要在 probe 完成前宣稱所有 routing 問題都已解。
-- **Effort**: S。
-- **Source**: 2026-07-31 local Codex 0.146 schema audit。
-
-### identity rail on dispatch-author non-strict path（2026-07-17, 低優先）
-- **Status**: SHIPPED — backlog-convergence Track 2；non-strict Git root resolution activates identity containment。
-- **Trigger**: Before the next non-strict explicit-CLI author dispatch that relies on identity containment, or next touch of `scripts/dispatch-author.sh` identity setup.
-- **Context**: `REPO_ROOT` is populated only for strict contract/roster paths, so the non-strict explicit author path silently skips the identity snapshot/restore rail; fall back to `git rev-parse --show-toplevel` without changing the read-only author threat model.
-- **Effort**: S。
-- **Source**: 2026-07-17 MiniMax aggregate review of the identity-containment port。
-- **Evidence note**: detach path 已查核為正確（IDENTITY_REPO_ROOT 在 dispatch_detached_run 的 declare -p 序列化
-  列表、snapshot 在 detach fork 前的 parent main flow、值傳入 child）——碼序＋序列化＋對抗實證
-  三證，但尚無端到端 detach drift 實測（目前無呼叫者傳 ledger coords，低風險）。
-
 ### broader shared-config containment / per-worktree isolation（2026-07-17, follow-up）
 
 - **Trigger**: when a dispatched worker poisons a non-identity shared `.git/config` key
@@ -366,13 +307,6 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
      (containment is teardown hygiene, not a malicious-worker boundary).
 - **Effort**: L (design + isolation semantics).
 - **Source**: 2026-07-17 U1b panel findings remediation on identity-containment port.
-
-### agy generic model alias normalization（`gemini-flash`）
-- **Status**: SHIPPED — backlog-convergence Track 2；generic alias resolves against current canonical model inventory before spend。
-- **Trigger**: 下一次 agy QC／author roster resolution 前。
-- **Context**: agy 1.1.8 `models` 已列 canonical slugs；真正缺口是 autopilot 的 generic alias（如 `gemini-flash`）到當前 slug 的 normalization 與 live probe，不應硬寫 UI display string。
-- **Effort**: S。
-- **Source**: 2026-07-17 incident + 2026-07-31 live CLI audit。
 
 <!-- autopilot-follow-up:fd4e5ef9e4a86709fb80a378b69cc780160e2e9701d83472daf5f7a8fc16cd64 -->
 ### Durable merge execution crash recovery
@@ -458,20 +392,6 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 - **Context**: Enforce the closed terminal_status enum at receipt validation and Work Order classification, resolve the unused attached disposition, and document integrity-hash versus producer-attestation guarantees under the confused-controller threat model.
 - **Effort**: S（re-estimate under the new ticket contract）
 - **Source**: depth-0-adjudication-760b
-
-### Legacy ready Mission terminals lack exact controller Work Orders
-- **Status**: SHIPPED — backlog-convergence Track 1；read-only reconciliation retires validated foreign-graph history without synthetic Work Orders。
-- **Trigger**: Before the next production `mission-routing-admission` use in this repository, or any attempt to migrate, reuse, or retire the legacy B/C terminal state.
-- **Context**: `node scripts/mission-routing-admission.js --repo-root . --level l3` exits 2 because the canonical ready, possibly-effectful B/C journals bind ICC roots `campaign-v1-80c477b59fa440d324cc2b98032e101a9a630cc6c5c60057a062e7c1393f3e50` and `campaign-v1-28cf3f20d7676a2a9dad182a8c28c3b52f92e720fada00bf35038bcf6e090773`, but `.git/autopilot/work-orders/` has no exact controller Work Order for either root. Add an authority-preserving migration/reconciliation disposition that validates canonical state, journal, and accepted Git history, then explicitly binds or retires the legacy terminals without replay; never synthesize/backdate Work Orders, mutate existing receipts, or relabel ready history.
-- **Effort**: M。
-- **Source**: B/C merge `9f26e082`; canonical claims `claim-v1-e77cd11c6474fe45a5917965818e27d53bf38be5bfcd48987d5abd2712a3e232` and `claim-v1-5722fe1082e7bedb1ce459f4ac1863d888f4aafcfa230a69a0eb1ebc3682fd01`; 2026-08-01 production admission reproduction。
-
-### Dispatch/session tests inherit production Mission authority state
-- **Status**: SHIPPED — backlog-convergence Track 1；explicit hermetic authority-store injection prevents production-state inheritance。
-- **Trigger**: Before requiring a green full suite while this repository has an active/terminal Mission registry, or the next change to dispatch/session-mode test setup.
-- **Context**: Six tests launch dispatch or session flows against the real repo and inherit `.git/autopilot` durable evidence: `context-window`, `dispatch-author-claude-native`, `dispatch-author-session-mode`, `mission-routing-admission`, `session-mode`, and `status-finish-followup`. The legacy ready terminals then fail admission for missing exact controller Work Orders before the fixture's intended assertion. At HEAD `3c54031c`, the first two pass 52/52 and 7/7 in a clean shared clone, proving checkout-local authority-state coupling. Make non-Mission tests use an isolated Git common dir/authority store; make Mission tests seed the exact state they assert. Never delete or bypass production evidence to make tests green.
-- **Effort**: M.
-- **Source**: 2026-08-01 full-suite Summary (7/259 files failed), solo reproduction, and clean-clone controls; sibling timing-only failure remains tracked separately under `dispatch-output-quiescence`.
 
 <!-- autopilot-follow-up:8f70c159902a5d75d701b775ac9378f53ec4e9380a2534cab6674bf06083d475 -->
 ### Shared sealed zero-diff validator

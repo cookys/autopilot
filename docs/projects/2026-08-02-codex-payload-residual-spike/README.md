@@ -1,8 +1,9 @@
 # Codex payload residual install-time spike
 
-> Status: ADMITTED — residual probes pending
+> Status: CANDIDATE READY — NO-GO; depth-0 integration remains
 > Owner: depth-0 CEO + existing worktree-isolated L4 foreman transcript
 > Plan: [`docs/plans/2026-08-02-codex-payload-residual-spike.md`](../../plans/2026-08-02-codex-payload-residual-spike.md)
+> Boundary correction: [`docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md`](../../plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md)
 
 ## Goal
 
@@ -18,13 +19,13 @@ mirrors, then make one conservative GO/NO-GO decision without performing the mig
 | Install lifecycle | Native automatic install-and-upgrade generation hook is positively proven, or marked absent/unproven. |
 | Decision | GO only on three passes; otherwise NO-GO and committed mirrors/drift gates explicitly remain. |
 | Hygiene | Zero fixture plugin, marketplace, repo, process, or named config residue. |
-| Lifecycle | Six-path candidate, deterministic gates, independent reviews, local merge, no push. |
+| Lifecycle | Seven-path successor candidate, deterministic gates, one independent first-pass review, depth-0 integration, no push. |
 
 ## Fixed scope
 
 - One admitted report-only deliverable containing all three probes and the final disposition.
-- Six documentation/evidence outputs only.
-- No production code, tests, package payload, manifest, generator, mirror, version, release, or push.
+- Seven outputs only: the original six documentation/evidence paths plus the canonically generated Codex portability-reference mirror.
+- No production code, tests, skill payload, manifest, generator change, hand-edited mirror, version, release, or push.
 
 ## Scope audit
 
@@ -41,7 +42,35 @@ mirrors, then make one conservative GO/NO-GO decision without performing the mig
 
 | Mission node | State | Evidence |
 |--------------|-------|----------|
-| `codex-payload-residual-spike` | pending | Candidate must populate `evidence.json`, disposition the backlog, and synchronize the portability/project records. |
+| `codex-payload-residual-spike` | candidate ready | Installed payload PASS; marketplace Git-refresh prerequisite UNPROVEN; native lifecycle FAIL; conjunctive NO-GO. See [`evidence.json`](evidence.json). |
+
+## Decision
+
+`NO-GO`. The installed Autopilot payload works end to end, but a local marketplace does not prove
+the supported Git snapshot refresh path, and no automatic fail-loud install/upgrade generation
+lifecycle was found. The committed Codex skill payload mirrors and their sync/drift gates remain;
+the only payload-tree change is the canonically generated portability-reference copy authorized by
+the successor. Migration, merge, archive, worktree cleanup, push, publication, and release are
+outside this candidate and remain depth-0 responsibilities where applicable.
+
+## Successor boundary correction
+
+The original six-path graph omitted the deterministic Codex payload copy of
+`references/multi-agent-portability.md`. The bundled `sync-all --check` gate exposed that omission
+before the mirror was written and before any candidate commit. Depth-0 froze a successor admission;
+the old `probe_bundle` lease was transitioned to `stale_ignored`, the same dirty worktree and branch
+fast-forwarded to successor bootstrap `a78385b3df1bf68d9514af3c7f4546e330fa7ef6`, and the successor
+stage retained the original probe results and NO-GO decision. The seventh path is generated only by
+the canonical sync script; it is not a migration or a new semantic claim.
+
+## Probe result
+
+| Prerequisite | Verdict | Mechanical evidence |
+|--------------|---------|---------------------|
+| Installed payload e2e | PASS | Exit 0; transcript read cached audit skill + linked support reference; exact planted differences returned; scratch tree unchanged. |
+| Marketplace semantics | UNPROVEN | Installed local snapshot stayed at generation A after source changed to B; loader read cached A; local `marketplace upgrade` exited 1 as non-Git. No external Git claim made. |
+| Native install/upgrade generation | FAIL | Accepted `scripts`/`lifecycle` fields did not run an exit-17 generator; add succeeded; curated installed corpus contained no such fields. |
+| Cleanup | PASS | Named plugin, marketplace, cache, temp repo, and owned processes all absent. |
 
 ## Execution ledger
 
@@ -49,3 +78,7 @@ mirrors, then make one conservative GO/NO-GO decision without performing the mig
 |------|-------|--------|
 | 2026-08-02 | Trigger intake | Live logged-in Codex environment is available; residual C-spike trigger is met. |
 | 2026-08-02 | Scope freeze | One report-only L4 deliverable; no migration or product changes authorized. |
+| 2026-08-02 | Probe bundle | Three probes completed as one bundle; decision is NO-GO and zero residue was verified. |
+| 2026-08-02 | Original gate boundary | Six-path evidence bundle passed all direct gates, but `sync-all --check` exposed the omitted deterministic portability mirror; no commit was made. |
+| 2026-08-02 | Successor admission | Old stage superseded honestly; same lineage fast-forwarded to the frozen seven-path correction without re-running probes. |
+| 2026-08-02 | Candidate handoff | Seven-path evidence bundle is ready for one post-commit first-pass review and depth-0 integration checks. |

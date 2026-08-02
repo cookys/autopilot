@@ -2,7 +2,7 @@
 
 How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL, an empirical-verification note, or is explicitly marked as unverified.** Past lesson (cuts both ways): a previous version of this doc fabricated env vars and CLI subcommands; the *correction* of that version then over-corrected — it labelled `agy plugin validate` and the root-`plugin.json` requirement as "fabricated," but installing real `agy` 1.0.1 (2026-05-29) showed both are genuine. Assert only what you've run or cited.
 
-Last verified: 2026-07-02 (Codex local plugin packaging against `codex-cli 0.142.5`; Codex plugin-bundled hook docs checked 2026-07-02; P0 spikes: CC task persistence on `claude` 2.1.175 + agy judge mode on `agy` 1.0.7; agy headless dispatch empirical against `agy` 1.0.5; agy `run_command` duration + bg-job reaping against `agy` 1.0.14 (2026-07-02, see § Update below); earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
+Last verified: 2026-08-02 (Codex installed-payload, local marketplace snapshot, and install-lifecycle residual probes against `codex-cli 0.146.0`; earlier Codex packaging against 0.142.5; P0 spikes: CC task persistence on `claude` 2.1.175 + agy judge mode on `agy` 1.0.7; agy headless dispatch empirical against `agy` 1.0.5; agy `run_command` duration + bg-job reaping against `agy` 1.0.14; earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
 
 ---
 
@@ -15,7 +15,7 @@ Last verified: 2026-07-02 (Codex local plugin packaging against `codex-cli 0.142
 | Skill discovery paths | `<plugin>/skills/`, `.claude/skills/` | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`, `~/.config/opencode/skills/`, `~/.claude/skills/` ([docs](https://opencode.ai/docs/skills/)) | `<repo>/.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills/`, bundled ([docs](https://developers.openai.com/codex/skills)); installed Codex plugins can also declare `skills: "./skills/"` in `.codex-plugin/plugin.json` (verified 2026-07-01). | imported via `agy plugin install <repo>` (registry, not a scan path). `agy plugin validate <repo>` reads `skills/` by convention. The codelabs `~/.gemini/antigravity/skills/` path is NOT the plugin mechanism — superseded by empirical agy 1.0.1 testing. |
 | Plugin code | bash/JS hooks invoked by Claude Code via `hooks.json` | in-process TypeScript module exporting hooks ([docs](https://opencode.ai/docs/plugins/)) | Codex plugins can bundle lifecycle hooks, but Autopilot's default Codex package remains skills-only. A separate `platforms/codex/hook-probe/` package is warning-only telemetry for probing payload/cwd/env/failure semantics before any blocking hook ships. | imports Claude Code plugins directly (`source: claude-code`); reuses `hooks/hooks.json` + `skills/` + `agents/` |
 | Plugin env vars | `CLAUDE_PLUGIN_ROOT` (in hook commands; [issue #27145](https://github.com/anthropics/claude-code/issues/27145)) | none injected; plugins receive `{ project, client, $, directory, worktree }` as context argument ([docs](https://opencode.ai/docs/plugins/)) | `CODEX_HOME` (defaults to `~/.codex/`); plugin hooks receive `PLUGIN_ROOT` / `PLUGIN_DATA` plus `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` compatibility vars per Codex docs; **no** `CODEX_PLUGIN_ROOT` | unverified — `agy plugin validate/install` don't reveal runtime hook env injection (would need to observe a hook process spawned by agy) |
-| Plugin CLI | n/a (loaded at install) | n/a (auto-discovered) | `codex plugin {marketplace,add,list,remove}` — verified codex-cli 0.142.5. Local install flow: `codex plugin marketplace add ./platforms/codex`, then `codex plugin add autopilot@autopilot-local`. | `agy plugin {validate,install,uninstall,list,enable,disable,import,link}` — verified agy 1.0.1. `validate <path>` + `install <path>` both exit `[ok]` on this repo. |
+| Plugin CLI | n/a (loaded at install) | n/a (auto-discovered) | `codex plugin {marketplace,add,list,remove}` — verified through codex-cli 0.146.0. `marketplace upgrade` refreshes configured **Git** snapshots and rejects a local marketplace name. Local install flow: `codex plugin marketplace add ./platforms/codex`, then `codex plugin add autopilot@autopilot-local`. | `agy plugin {validate,install,uninstall,list,enable,disable,import,link}` — verified agy 1.0.1. `validate <path>` + `install <path>` both exit `[ok]` on this repo. |
 | Hook event names | `SessionStart / PreCompact / PreToolUse / PostToolUse / Stop` ([docs](https://code.claude.com/docs/en/hooks)) | `session.created / session.compacted / tool.execute.before / tool.execute.after / …` ([docs](https://opencode.ai/docs/plugins/)) | `SessionStart / PreToolUse / PermissionRequest / PostToolUse / PreCompact / PostCompact / UserPromptSubmit / SubagentStart / SubagentStop / Stop` documented; plugin hooks require trust review before running. | imports Claude Code `hooks.json`; runtime event-firing behavior unverified |
 | **Capability tier** | **full-plugin** (skills + agents + hooks load natively) | **full-plugin** (skills via `.agents/skills/`, agent bodies via `{file:..}`, plugin hooks in-process) | **adapter-tier** for skills + warning-only hook probes; no Autopilot blocking hook/gate until probe artifacts verify payload/cwd/env/failure semantics. | **instruction-tier** (skills do NOT load in `-p`; methodology must travel inside the prompt — see § agy spike; interactive-mode untested) |
 
@@ -95,6 +95,33 @@ Codex controller must list its native children, wait for completed results, inte
 and record a terminal disposition for every child. Merge-back and worktree GC still use the
 ordinary Git/controller rails. If the host cannot list or interrupt native children, native
 spawn is unsupported for unattended `/l4`–`/l6`; route through autopilot's dispatch scripts.
+
+### Codex installed payload and generation lifecycle — residual probe (0.146.0, 2026-08-02)
+
+One logged-in `codex exec --ephemeral --sandbox read-only --json` run from a disposable clean Git
+repo with no `.agents/skills/` proved the installed Autopilot package end to end. Transcript tool
+events read both the cached `skills/audit/SKILL.md` and its linked cached
+`references/routing-tiebreaks.md`; the final audit identified the planted `beta` → `BETA` case
+change and target-only `delta` line. The command exited zero and the scratch tree hash and clean
+status were unchanged. This is installed-path evidence, not model self-report.
+
+Marketplace observations must stay split by source type. A uniquely named local marketplace was
+installed at generation A (0.1.0), then its source manifests and skill were changed to generation B
+(0.2.0). Without reinstalling, `plugin list` remained at installed 0.1.0 and a fresh loader run read
+the cached generation-A skill. Exact `codex plugin marketplace upgrade <local-name> --json` exited
+1 because that name was not configured as Git. The help contract says the command refreshes Git
+marketplace snapshots, but no external Git fixture was published in this bounded probe; therefore
+Git snapshot refresh semantics remain **unproven**, and local behavior must not be generalized.
+
+No native pre-discovery install/upgrade generation lifecycle was proven. The disposable plugin
+manifest carried `scripts.postinstall`, `scripts.postupgrade`, `lifecycle.install`, and
+`lifecycle.upgrade`, all targeting an exit-17 marker script. Codex accepted and cached those fields,
+but plugin add exited zero and never invoked the script; the local marketplace upgrade was
+inapplicable. The four installed curated plugin manifests inspected contained neither `scripts` nor
+`lifecycle`. Unknown accepted fields and ordinary runtime hooks are not an install-time lifecycle
+contract. Result: **NO-GO** for retiring committed payload mirrors; keep the mirrors and sync/drift
+gates until Codex exposes an automatic, fail-loud generator point on both install and applicable Git
+upgrade/refetch paths (or an officially supported equivalent proven by executable evidence).
 
 ---
 

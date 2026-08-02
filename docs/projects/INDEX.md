@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-08-02 | [codex-payload-residual-spike](2026-08-02-codex-payload-residual-spike/README.md) — 用已登入 Codex 實機一次收斂 installed payload exec、marketplace re-read/upgrade 與 native install hook 三個殘餘前提；只做證據與 GO/NO-GO，不遷移 mirrors。 | v2.34.1 (no bump) | `chore/codex-payload-residual-spike` |
+| 2026-08-02 | [codex-payload-residual-spike](2026-08-02-codex-payload-residual-spike/README.md) — 三 probe bundle 已完成：installed payload PASS、Git marketplace refresh UNPROVEN、native automatic generation lifecycle FAIL，故 conjunctive NO-GO；successor-authorized seven-path candidate ready，等待 depth-0 integration，不遷移 skill mirrors。 | v2.34.1 (no bump) | `chore/codex-payload-residual-spike` |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)

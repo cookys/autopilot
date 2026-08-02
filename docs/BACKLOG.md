@@ -12,11 +12,11 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ---
 
-### Codex payload install-time generation（C-Spike ✅ SPIKE-PASS 2026-07-17，think-tank P6 裁決）
-- **Trigger**: 下一個 symlink-hostile 平台要接入之前；或 payload 鏡像 churn 噪音升級為 blocking；或有 live Codex 環境可跑 `codex exec` e2e 時（quota 7/23 復位後）
-- **Context**: think-tank（Architect C-conditional / Ops A-high / QA A-high）一致否決 release-time payload branch（B）於現階段；Architect 路線＝驗證 Codex plugin loader 能否吃 install 時才由 `sync-codex-plugin-skills.sh` 生成的 git-ignored 目錄。**SPIKE-PASS 2026-07-17**：codex loader end-to-end 接受 install 時生成的 payload（marketplace add + plugin add → `installed:true`/`enabled:true`），且 sync 腳本零 git 依賴。**遷移 L 的殘餘前置**：(1) `codex exec` e2e 信心（blocked on quota until 7/23）；(2) `marketplace upgrade` live re-read 語意未測；(3) 需要一個 install-time hook 設計（何時觸發生成）。三者到位即可退役 committed mirror＋其 drift gates；否則 A 維持。
-- **Effort**: S（剩餘 Spike）＋L（若遷移）
-- **Source**: health-roadmap P6 Decision Brief（2026-07-17）；SPIKE-PASS 2026-07-17
+### Codex payload install-time generation（2026-08-02 residual spike：NO-GO）
+- **Trigger**: Codex 提供受支援的 native plugin lifecycle：在 plugin install **與** Git marketplace upgrade/refetch 兩條適用路徑上，都能於 payload discovery 前自動執行 deterministic generator，且 generator 非零退出會讓外層 install/upgrade fail-loud；或官方提供具同等順序與失敗語意、可由 live CLI 驗證的機制。
+- **Context**: codex-cli 0.146.0 的 logged-in `codex exec` 已實證 installed Autopilot cache payload 與 linked support reference 可被讀取，且 audit 結果正確。殘餘 probe 同時反證把 local source 當 Git refresh：generation A 安裝後即使 local fixture 改為 B，`plugin list` 仍為 0.1.0、loader 仍讀 cache generation A，`marketplace upgrade <local>` 以「not configured as a Git marketplace」exit 1；未發布外部 Git fixture，故 Git snapshot refresh 語意維持 `unproven`。帶 `scripts`/`lifecycle` 的 disposable manifest 雖被接受並複製，install 仍成功、exit-17 generator 未執行，四份 installed curated manifests 也無這兩個欄位；native install/upgrade generation lifecycle 為 `fail`。結論維持 committed Codex payload mirrors 與所有 sync/drift gates，不做遷移。
+- **Effort**: L（trigger 成立後另立 migration mission）
+- **Source**: health-roadmap P6 Decision Brief（2026-07-17）；[`codex-payload-residual-spike`](projects/2026-08-02-codex-payload-residual-spike/README.md) evidence（2026-08-02）
 
 ### Release-time payload branch（B）重啟條件
 - **Trigger**: CI 連續數週綠＋真實 tag/release 節奏存在（非每 push 即 shippable）＋ C-Spike 已否決 install-time 路線

@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-08-02T09:08:51Z",
+  "environment": {
+    "codex_version": "codex-cli 0.146.0",
+    "installed_plugin_id": "autopilot@autopilot-local",
+    "installed_plugin_version": "2.34.1",
+    "installed_payload_root": "<CODEX_HOME>/plugins/cache/autopilot-local/autopilot/2.34.1",
+    "marketplace_source_type": "local",
+    "scratch_git_repo": true,
+    "scratch_repo_local_skills": false
+  },
+  "prerequisites": {
+    "installed_payload_e2e": {
+      "verdict": "pass",
+      "sanitized_command": "codex exec --ephemeral --sandbox read-only --json -C <scratch-repo> '<invoke $autopilot:audit; read linked routing-tiebreaks.md; compare source.txt and target.txt>'",
+      "exit_code": 0,
+      "observations": [
+        "JSON tool events read <CODEX_HOME>/plugins/cache/autopilot-local/autopilot/2.34.1/skills/audit/SKILL.md.",
+        "JSON tool events read the linked <CODEX_HOME>/plugins/cache/autopilot-local/autopilot/2.34.1/references/routing-tiebreaks.md before the verdict.",
+        "The final result reported the planted line-2 beta-to-BETA case change and target-only line-4 delta addition.",
+        "The scratch repository had no .agents/skills directory; status stayed clean and its tree hash stayed 205de3295f0a7577477fa0838ea740800f331065."
+      ]
+    },
+    "marketplace_semantics": {
+      "verdict": "unproven",
+      "sanitized_command": "codex plugin marketplace add <local-fixture> --json; codex plugin add <fixture>@<marketplace> --json; mutate A-to-B; codex plugin list --marketplace <marketplace> --available --json; codex plugin marketplace upgrade <marketplace> --json; codex exec --ephemeral --sandbox read-only --json -C <scratch-repo> '<read installed generation marker>'",
+      "exit_code": 1,
+      "observations": [
+        "Generation A installed at version 0.1.0 from a uniquely named local marketplace.",
+        "After the local source changed to generation B version 0.2.0, plugin list still reported installed version 0.1.0.",
+        "A fresh loader run read the cached 0.1.0 skill and returned PAYLOAD_GENERATION_A, not generation B.",
+        "Exact marketplace upgrade for the local fixture exited 1 because the marketplace was not configured as Git.",
+        "CLI help defines marketplace upgrade as Git snapshot refresh; no external Git marketplace was published, so its refresh behavior was not inferred from the local probe."
+      ]
+    },
+    "native_install_time_hook": {
+      "verdict": "fail",
+      "sanitized_command": "codex plugin --help; codex plugin marketplace upgrade --help; codex plugin add <fixture>@<marketplace> --json; inspect structural keys of installed curated .codex-plugin/plugin.json corpus",
+      "exit_code": 0,
+      "observations": [
+        "The disposable manifest included scripts.postinstall, scripts.postupgrade, lifecycle.install, and lifecycle.upgrade entries targeting a marker script that exits 17.",
+        "Plugin add accepted and cached the fields but exited 0; the marker was absent, proving the generator was not invoked on install.",
+        "The applicable local marketplace upgrade path rejected the source as non-Git and did not invoke the generator.",
+        "Four installed curated plugin manifests contained neither scripts nor lifecycle fields.",
+        "No native automatic pre-discovery generation point with fail-loud install and applicable upgrade behavior was demonstrated."
+      ]
+    }
+  },
+  "final_decision": "NO-GO",
+  "committed_mirrors_preserved": true,
+  "cleanup": {
+    "plugin": true,
+    "marketplace": true,
+    "temp_repo": true,
+    "processes": true,
+    "zero_residue": true
+  }
+}

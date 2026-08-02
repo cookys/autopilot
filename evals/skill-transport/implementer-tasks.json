@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "pack_sha256": "3f29d5fd224d45ac96630e642fa9ada1f24446d538b6c2b2ed020ad3f8a7beca",
+  "tasks": [
+    {
+      "id": "t1-fix-with-decoy",
+      "path": "t1-fix-with-decoy",
+      "task_sha256": "6390dee4b6309a8b908e32ad9e92445ffaea98df93f5a3147eada2c401f88972",
+      "oracle_sha256": "3fdfa257b46cea5c4df2deabf521073b64cca38802e2fce50bba012c407aeee3",
+      "verify_cmd": ["bash", "oracle.sh"]
+    },
+    {
+      "id": "t3-vacuous-test",
+      "path": "t3-vacuous-test",
+      "task_sha256": "f49de6e3bc05396cb23419bba2626d50ee76777a1cde0a8914fcfa6666600d34",
+      "oracle_sha256": "08376cedac311ef4774cdef054da342fb9fa325e639d85996ff7b15db02b90cc",
+      "verify_cmd": ["bash", "oracle.sh"]
+    },
+    {
+      "id": "t4-config-layer",
+      "path": "t4-config-layer",
+      "task_sha256": "620d37d875742a1d2845a1ed6c121ecab9629d05368bbf29a9616a2c34ad1609",
+      "oracle_sha256": "58348ec7484857a02574c32add0a246c766e96aab1035ad6c43d290675bbd574",
+      "verify_cmd": ["bash", "oracle.sh"]
+    },
+    {
+      "id": "t7-config-rename",
+      "path": "t7-config-rename",
+      "task_sha256": "449a1768639f35e4e78a3e24d542ce01240a5bdf6945569a88d99738ba4b9264",
+      "oracle_sha256": "155267ed8301a96320a7694437609c16e27efe0882dd920f4c36ce84b2a54f65",
+      "verify_cmd": ["bash", "oracle.sh"]
+    },
+    {
+      "id": "t8-log-redaction",
+      "path": "t8-log-redaction",
+      "task_sha256": "84422dd8ba514ef5358d036ee724076c2fdaa834eb2cdab0e7cab6ce7c4621dd",
+      "oracle_sha256": "46499e82bfc8f6bbff6bf48d1c527f3780ead2de08a9d1c5b78872b9bab45097",
+      "verify_cmd": ["bash", "oracle.sh"]
+    },
+    {
+      "id": "t11-boundary-fix",
+      "path": "t11-boundary-fix",
+      "task_sha256": "023550d2a225192be8b226aba952b5b679f94489d5f6cb96a12fef63d7a95a52",
+      "oracle_sha256": "ef929f5d652528232819ab470339d677a5150b35717c4ef431ef696920b81406",
+      "verify_cmd": ["bash", "oracle.sh"]
+    },
+    {
+      "id": "t13-log-parser",
+      "path": "t13-log-parser",
+      "task_sha256": "2d2613c20e0538ba367f9375ffc02c34fcf712dfe3d3c5cebf0464e31fb08170",
+      "oracle_sha256": "110781e4155f177fe9dc57573d541123d1739cab29f9c1b33075e85c00fb4f64",
+      "verify_cmd": ["bash", "oracle.sh"]
+    },
+    {
+      "id": "t15-cache-invalidation",
+      "path": "t15-cache-invalidation",
+      "task_sha256": "a7504978f8f2a4ec2654a9bf6f93c44a12623c7d034d7cb26b9bec9dc6ca25f9",
+      "oracle_sha256": "31e2b35aa4122574b034b83156d49fe4213fe96731062d68f32445cc6c443604",
+      "verify_cmd": ["bash", "oracle.sh"]
+    }
+  ]
+}

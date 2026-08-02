@@ -39,13 +39,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ## Active entries
 
-### Skill-transport payoff A/B — implementer arm Phase 2 closure
-- **Status**: TRIGGERED — reviewer arm shipped; frozen plan says Phase 2 runs regardless, but no backlog ticket existed。
-- **Trigger**: 現在；在下次 skill transport/default decision 前，執行 implementer arm or record an explicit won’t-do decision。
-- **Context**: Reviewer arm refuted transport payoff for reviewer seats；implementer H1 remains unmeasured, so the plan cannot be treated as wholly closed。
-- **Effort**: M。
-- **Source**: `docs/plans/2026-07-15-skill-transport-payoff-ab.md` review log。
-
 ### Fable skills absorption plan — Board triage
 - **Status**: UNDECIDED — genuine orphan plan found during exhaustive 111-plan audit。
 - **Trigger**: Before implementing any of its P1–P4 methodology changes, or when selecting the next behavior-rule improvement。

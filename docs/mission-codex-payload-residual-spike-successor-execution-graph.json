@@ -1,0 +1,128 @@
+{
+  "artifact_type": "mission_execution_graph",
+  "calculated_batches": 1,
+  "calculated_depth": 1,
+  "graph_digest": "1410e933dbb8da7f1d4f7c7564667505b8ec8a2f74149d00fb47b6ddbb515533",
+  "nodes": [
+    {
+      "acceptance_ids": [
+        "installed-payload-e2e",
+        "marketplace-semantics-honest",
+        "native-lifecycle-hook-proven-or-absent",
+        "conjunctive-decision",
+        "reproducible-zero-residue-evidence",
+        "scoped-reviewed-lifecycle-closure",
+        "pre-correction-boundary-honest",
+        "exact-portability-mirror-closure",
+        "original-residual-contract-frozen",
+        "successor-lifecycle-closure"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.rubric.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike.rubric.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike",
+          "docs/projects/INDEX.md",
+          "platforms/codex/plugin/.codex-plugin/plugin.json",
+          "platforms/codex/plugin/references/multi-agent-portability.md",
+          "platforms/codex/plugin/references/routing-tiebreaks.md",
+          "platforms/codex/plugin/skills/audit/SKILL.md",
+          "references/multi-agent-portability.md",
+          "scripts/sync-all.sh",
+          "scripts/sync-codex-plugin-skills.sh"
+        ],
+        "authorized_creates": [
+          "docs/projects/2026-08-02-codex-payload-residual-spike/evidence.json"
+        ],
+        "baseline_churn": 800,
+        "max_changed_files": 7,
+        "max_extra_churn": 400,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 1,
+        "max_wall_seconds": 1800,
+        "output_paths": [
+          "docs/BACKLOG.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/README.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/dev-info.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/evidence.json",
+          "docs/projects/INDEX.md",
+          "platforms/codex/plugin/references/multi-agent-portability.md",
+          "references/multi-agent-portability.md"
+        ],
+        "profile": "poc",
+        "required_change_paths": [
+          "docs/BACKLOG.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/README.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/dev-info.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/evidence.json",
+          "docs/projects/INDEX.md",
+          "platforms/codex/plugin/references/multi-agent-portability.md",
+          "references/multi-agent-portability.md"
+        ],
+        "required_paths": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.rubric.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike.rubric.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/README.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/dev-info.md",
+          "docs/projects/INDEX.md",
+          "platforms/codex/plugin/.codex-plugin/plugin.json",
+          "platforms/codex/plugin/references/multi-agent-portability.md",
+          "platforms/codex/plugin/references/routing-tiebreaks.md",
+          "platforms/codex/plugin/skills/audit/SKILL.md",
+          "references/multi-agent-portability.md",
+          "scripts/sync-all.sh",
+          "scripts/sync-codex-plugin-skills.sh"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-08-02-codex-payload-residual-spike-mirror-correction.md",
+          "section": "Deliverable contract"
+        }
+      },
+      "dependencies": [],
+      "gate_attempt_budget": 2,
+      "id": "codex-payload-residual-spike-successor",
+      "reservation": {
+        "campaigns": 1,
+        "canonical_changed_files": 7,
+        "engine_attempts": 1,
+        "external_wait_seconds": 1200,
+        "output_bytes": 500000,
+        "tool_calls": 180,
+        "wall_seconds": 3600
+      },
+      "source_plan_ids": [
+        "plan-8e20ae62ae223a239610248b765715397cf05891f1480dbb6c4016bfb67b196b",
+        "plan-1972e28fc54b20ddb3513155b44e3d7ff42fd5a1bd932657a1c4d8b1ec7f4cca"
+      ],
+      "source_rubric_ids": [
+        "R100240976491396737577424971077866655752112195769462622907497513965085896538566",
+        "R60912842449827076804179904285695729727140533787848024192718444471891638068725",
+        "R50153929063124352734866085591725565937132079349031402705869409677324101442625",
+        "R87745548533300558928835285863679029216969407585973970912457984485660552512070",
+        "R97484739642263964315897240077576752673794880309889545634432919555826225768619",
+        "R56472705609112376442090732221073785006862931312253486645848551430931931578131",
+        "R67588909519064089155928905146756789447690805920217236743169539411541610000440",
+        "R59741815097564553384679129151994685922950137125944099163170897359997968451444",
+        "R89556020508380676429195204993607665175522339619211658243853513581519388098486",
+        "R105907679461825039651242677460671246012854173745634122992637419990499502319857"
+      ],
+      "verification_commands": [
+        "node -e 'const e=require(\"./docs/projects/2026-08-02-codex-payload-residual-spike/evidence.json\"); if(e.schema_version!==1||!e.final_decision||e.cleanup?.zero_residue!==true) process.exit(1)'",
+        "cmp -s references/multi-agent-portability.md platforms/codex/plugin/references/multi-agent-portability.md",
+        "git diff --check",
+        "bash scripts/validate.sh",
+        "node scripts/sync-version.js --check",
+        "node scripts/check-hook-inventory.js --check",
+        "bash scripts/sync-codex-plugin-skills.sh --check",
+        "bash scripts/sync-all.sh --check"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

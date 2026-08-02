@@ -13,8 +13,26 @@ assert_exit_code "$__RUN_EXIT" 0 "exit code 0 for normal run"
 assert_contains "$__RUN_STDOUT" '"hookSpecificOutput"' "plugin output structure when CLAUDE_PLUGIN_ROOT is set"
 assert_contains "$__RUN_STDOUT" "autopilot:dev-flow" "contains dev-flow skill trigger"
 
-# Test environment without CLAUDE_PLUGIN_ROOT
-stdout_no_root=$(HOME="$HOOK_HOME" node "$HOOKS_DIR/session-start.js" 2>/dev/null)
+# Test environment without CLAUDE_PLUGIN_ROOT. Keep the parent stdin deliberately
+# open through a FIFO while the direct hook invocation receives explicit EOF. The
+# bounded timeout is an assertion: rc=124 means the hook inherited stdin and hung.
+held_open_stdin="$TEST_TMP/held-open.stdin"
+mkfifo "$held_open_stdin"
+(
+  exec 9>"$held_open_stdin"
+  sleep 30
+) &
+stdin_holder_pid=$!
+set +e
+stdout_no_root=$(timeout 3s bash -c \
+  'env -u CLAUDE_PLUGIN_ROOT HOME="$1" TMPDIR="$2" node "$3" </dev/null' \
+  _ "$HOOK_HOME" "$HOOK_TMPDIR" "$HOOKS_DIR/session-start.js" \
+  < "$held_open_stdin" 2>/dev/null)
+stdout_no_root_exit=$?
+set +e
+kill "$stdin_holder_pid" 2>/dev/null || true
+wait "$stdin_holder_pid" 2>/dev/null || true
+assert_exit_code "$stdout_no_root_exit" 0 "no-root hook completes while parent stdin remains open"
 assert_contains "$stdout_no_root" '"additional_context"' "raw output structure when CLAUDE_PLUGIN_ROOT is absent"
 
 # 2. Test Compaction State Recovery (within TTL)

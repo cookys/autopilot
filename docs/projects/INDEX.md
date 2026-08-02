@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-02 | [reviewer-output-token-budget](2026-08-02-reviewer-output-token-budget/README.md) — `dispatch-review.sh --max-tokens` runner-aware contract；已實機凍結兩條 supported mapping 與五條 pre-spend unsupported rail。 | v2.34.1 (no bump) | `feat/v2.34.1-reviewer-output-budget` |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)

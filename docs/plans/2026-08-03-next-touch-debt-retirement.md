@@ -125,7 +125,11 @@ bash hooks/tests/mission-routing-admission.test.sh
 Port the established `systemd-run --user --scope` containment tier to the Codex author transport,
 retain an honestly labelled fallback where the host has no supported user cgroup, and verify an
 empty `cgroup.procs` before accepting the result. Treat this as teardown hygiene, not a security
-attestation against a malicious same-UID process.
+attestation against a malicious same-UID process. Also close the live 2026-08-04 caller-boundary
+failure: `dispatch-plan-review.js` currently launches the Codex author from an untrusted temporary
+cwd, so Codex 0.146.0 exits before model invocation. Bind the child to the canonical reviewed repo
+cwd (while retaining the private prompt artifact) or use an equally explicit verified trust flag;
+do not globally disable repository trust checks for unrelated author calls.
 
 **Acceptance**
 
@@ -134,11 +138,14 @@ attestation against a malicious same-UID process.
 - Unsupported hosts use the existing process-tree/fd-holder fallback and report that provenance;
   they never claim cgroup containment.
 - Existing honest-orphan, deleted-fd-holder, timeout, and normal-success matrices remain green.
+- A real Codex plan-review seat launched through `dispatch-plan-review.js` clears repository-trust
+  preflight from its private prompt cwd, and a wrong/untrusted repo binding still fails closed.
 
 ```bash
 bash hooks/tests/dispatch-author-codex-transport.test.sh
 bash hooks/tests/dispatch-author-contract.test.sh
 bash hooks/tests/dispatch-author-result-provenance.test.sh
+bash hooks/tests/dispatch-plan-review.test.sh
 ```
 
 ## D4 — Reviewer framing that cannot pass prompt echo

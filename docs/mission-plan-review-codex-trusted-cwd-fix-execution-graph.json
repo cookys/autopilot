@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "plan-review-codex-trusted-cwd-fix",
+      "source_plan_ids": [
+        "plan-00d268bdafe7be44639764783d2e4048cdccc821e50ef2979e509d5058ed9513"
+      ],
+      "source_rubric_ids": [
+        "R13450530525394749550866677938811101254228545717510766791943470167118439891652",
+        "R58637086248770446539548061034870257466118824970979057971028411563255721792903",
+        "R16382593056988446889564127623183433528469558110005919051599564043718191456229",
+        "R61126092642156148438251066226489303320739934455559696064398809795171654120604"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "canonical-repo-binding",
+        "private-prompt-preserved",
+        "invalid-binding-pre-spend-rejection",
+        "codex-mirror-closure"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/dispatch-plan-review.test.sh",
+        "cmp -s scripts/dispatch-plan-review.js platforms/codex/plugin/scripts/dispatch-plan-review.js",
+        "bash scripts/sync-all.sh --check",
+        "bash scripts/validate.sh",
+        "git diff --check"
+      ],
+      "gate_attempt_budget": 3,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 200,
+        "engine_attempts": 1,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 3,
+        "output_bytes": 1000000
+      },
+      "campaign": {
+        "profile": "standard",
+        "allowed_path_prefixes": [
+          "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
+          "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.rubric.md",
+          "hooks/tests/dispatch-plan-review.test.sh",
+          "platforms/codex/plugin/scripts/dispatch-plan-review.js",
+          "scripts/dispatch-plan-review.js",
+          "scripts/sync-codex-plugin-skills.sh"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
+          "docs/plans/2026-08-04-plan-review-codex-trusted-cwd-fix.rubric.md",
+          "hooks/tests/dispatch-plan-review.test.sh",
+          "platforms/codex/plugin/scripts/dispatch-plan-review.js",
+          "scripts/dispatch-plan-review.js",
+          "scripts/sync-codex-plugin-skills.sh"
+        ],
+        "output_paths": [
+          "hooks/tests/dispatch-plan-review.test.sh",
+          "platforms/codex/plugin/scripts/dispatch-plan-review.js",
+          "scripts/dispatch-plan-review.js"
+        ],
+        "required_change_paths": [
+          "hooks/tests/dispatch-plan-review.test.sh",
+          "platforms/codex/plugin/scripts/dispatch-plan-review.js",
+          "scripts/dispatch-plan-review.js"
+        ],
+        "max_changed_files": 3,
+        "baseline_churn": 120,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 60,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600
+      }
+    }
+  ],
+  "calculated_depth": 1,
+  "calculated_batches": 1,
+  "graph_digest": "0eb721dd5fa75412bd70ce354779d398d5c8eafcc345f2e86822e75ca17a22ee"
+}

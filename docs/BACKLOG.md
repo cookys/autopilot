@@ -13,12 +13,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 
-## Audit snapshot（2026-08-03，`develop` @ `2879dac8`）
+## Audit snapshot（2026-08-04，`develop` @ `33cfd513`）
 
-- **48 real entries**：2 個 Board decisions、14 個已排入執行計畫的 technical gaps、32 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
-- 本輪逐條對照 code、tests、git history 後，**0 個已完整完成可刪、0 個可安全視為重複合併**。看到 partial rail 或 helper 不等於原 acceptance gap 已關閉。
-- 14 個 technical gaps 已依序收斂為 [`2026-08-03-next-touch-debt-retirement.md`](plans/2026-08-03-next-touch-debt-retirement.md) 的 D1–D8；其中 12 個來自已取消的 next-touch deferral，另 2 個是原本已觸發的 Grok calibration 與 findings identity。
-- 32 個 conditional entries 主要是四類：等待外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
+- **49 real entries**：2 個 Board decisions、18 個已排入執行計畫的 technical gaps、29 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
+- 本輪逐條對照 code、tests、installed CLI、live probes 與 upstream CHANGELOG/release evidence 後，**0 個已完整完成可刪、0 個可安全視為重複合併**。Codex `PostCompact`、agy structured usage 與 strict `/l5` CLI trust-root 三個舊 conditional trigger 已成立，但 production implementation 尚未完成，所以改列 PLANNED，不誤刪為 done。
+- 14 個既有 technical gaps 仍依序收斂於 [`2026-08-03-next-touch-debt-retirement.md`](plans/2026-08-03-next-touch-debt-retirement.md) 的 D1–D8；本輪新增／轉列的 4 項收斂於 [`2026-08-04-platform-capability-trigger-activation.md`](plans/2026-08-04-platform-capability-trigger-activation.md) 的 D1–D4。
+- 29 個 conditional entries 主要是四類：等待仍未出現的外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
 
 ---
 
@@ -56,6 +56,13 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: Board decision (then S per selected slice)。
 - **Source**: `docs/plans/2026-07-08-fable-skills-absorption.md`。
 
+### Harness capability-state refresh after 2026-08 platform releases
+- **Status**: PLANNED — D1 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Trigger**: ADMITTED 2026-08-04 — installed Codex 0.146.0, Claude Code 2.1.220, agy 1.1.10, OpenCode 1.17.15（latest 1.18.11 亦已 isolated probe）與 Grok 0.2.118 已超過多個 committed capability baseline；Codex、agy、Grok changelog 亦新增本 repo 會消費的 hook／structured-output／usage surface。
+- **Context**: 版本或 changelog 只足以觸發重測，不能自動升級 capability。D1 會用 exact binary/version 的 live event/behavior probe 重新分類各 surface，產出帶 command/output digest 的 aggregate receipt；agy structured usage 與 Codex `PostCompact` 是 D2/D3 的必需證據，Grok hooks 必須有真實 firing receipt 才能由 warning 升級。OpenCode truncation、Codex install-generator、`tier:` metadata 等現有 negative/inconclusive 結論則保留，除非 exact probe 真正翻轉。
+- **Effort**: L。
+- **Source**: 2026-08-04 code + installed CLI + CHANGELOG capability re-audit；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D1。
+
 ### OpenCode `debug skill` truncation — restore portability check 16 to hard-fail
 - **Trigger**: Upstream OpenCode fixes the corpus-volume-dependent `opencode debug skill` output truncation, or a supported OpenCode release changes the plugin/serve discovery surface again.
 - **Context**: `scripts/preflight-portability.sh` check 16 is intentionally advisory while OpenCode 1.17 can omit discovered skills from `debug skill` output. Re-probe the real CLI after the upstream fix; if deterministic, restore the check to hard-fail. Do not treat the current advisory as a permanent acceptance of missing skill discovery.
@@ -88,16 +95,18 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 
 ### Codex production `PostCompact` recovery wiring
-- **Trigger**: an accepted live Codex hook probe proves the production event name, payload schema, registration path, ordering, and failure behavior for the supported Codex release; or Codex publishes an official hook-adapter contract covering those facts.
-- **Context**: v2.34.1 ships the host-neutral checkpoint/rehydration gate and a `PostCompact`-ready adapter contract, but deliberately does not register a production Codex hook from an unaccepted local probe. Once the trigger fires, wire only the verified adapter, add a live replay proving the first effectful post-compact action is blocked until reconciliation, and update the Codex package boundary without importing Claude hook assumptions.
+- **Status**: PLANNED — D3 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Trigger**: ADMITTED 2026-08-04 — Codex 0.129.0 official release/PR #19905 documents `PreCompact`/`PostCompact`, `manual|auto` matchers, payload, ordering and failure semantics；installed 0.146.0 source contains the matching hook schema/runtime and plugin registration surface。D1 仍須把 exact live manual/auto firing receipt 凍結後，D3 才能接 production adapter。
+- **Context**: v2.34.1 已有 host-neutral checkpoint/rehydration gate、`postcompact-adapter` CLI 與 continuation admission，缺的是 production Codex `hooks.json`＋官方 payload translation。D3 只接這條既有 authority，並以 effectful sentinel 證明 reconciliation 前第一個 effectful action 被阻擋；不得複製 Claude payload 假設或另造 recovery path。
 - **Effort**: M
-- **Source**: controller-execution-discipline v2.34.1 boundary; preserved user-owned Codex hook-probe workspace
+- **Source**: controller-execution-discipline v2.34.1 boundary；Codex 0.129.0 / PR #19905 + installed 0.146.0 re-audit；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D3。
 
-### agy 遙測盲區 — transcript 無 token 欄位且 77.1% files 被平台截斷
-- **Trigger**: 要把 agy 納入任何成本／容量決策之前；或 antigravity 上游補上 usage 欄位時。
-- **Context**: 2026-08-03 live scan 的正確路徑是 `~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl`。agy 1.1.10 corpus 為 262 files / 8,850 rows，其中 202 files（77.1%）帶 truncation；top-level schema 已比舊紀錄多出 `thinking`、`tool_calls`、`error*`、`exit_code`，但仍是 **0 token/usage fields**。現行 scorecard importer 對這個 transcript JSONL surface 也仍無法形成可用 session telemetry。不可與 codex/grok/opencode token 同軸比較；**不可測 ⇒ 不可優化**。
-- **Effort**: S（若上游有欄位）／M（若需自建量測 harness）
-- **Source**: 2026-07-25 context-window telemetry audit recorded by `9bc10591`。
+### agy structured-output telemetry integration
+- **Status**: PLANNED — D2 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Trigger**: ADMITTED 2026-08-04 — agy 1.1.8 CHANGELOG added structured JSON/stream-JSON output and usage；live agy 1.1.10 returned `input_tokens`／`output_tokens`／`thinking_tokens`／`cache_read_tokens`／`total_tokens` from the exact harness process。
+- **Context**: 舊 transcript 事實仍成立：2026-08-03 corpus 262 files / 8,850 rows、202 files（77.1%）truncated，且 transcript top-level 仍 0 token/usage fields；不可回填歷史 token。新的 authoritative surface 是 dispatch 時的 native structured envelope，但現行 `dispatch-review.sh`／`dispatch-hetero.sh` 仍走 plain PTY，`engine-scorecard.js` 也硬編碼 `agy_schema_not_exposed`。D2 會分離 response 與 usage、保住既有 framing、拒絕 worker 假 telemetry，並讓新 dispatch samples 可量測；歷史 transcript samples 繼續明示 unavailable。
+- **Effort**: L。
+- **Source**: 2026-07-25 telemetry audit `9bc10591`；agy 1.1.8 CHANGELOG + 1.1.10 live structured-output probe；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D2。
 
 ### grok implementer 摩擦調校（toolFailure 28%／零 commit 72%／effort 反效果假說）
 - **Status**: PLANNED — trigger satisfied；D8 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md). `develop` 已有 52 個 `dispatch-hetero(grok): edits` commits（原條目後新增 28 個），尚未做同任務 A/B。
@@ -109,9 +118,9 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ### dispatch-author codex transport：cgroup supervision tier（fd-less inter-poll escapee 殘差閉環）
 - **Status**: PLANNED — D3 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md)；2026-07-18 後 transport 已被多次修改（含 `1361ed01`），但 cgroup tier 尚未實作。
 - **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；原 trigger 也已被 post-entry transport edits 滿足。
-- **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）；deadline 路徑的 `reap_tree(pgid,10,worker_pid)` 做 kill 前 worker-rooted tree walk。**已驗證涵蓋 honest-failure orphan**：deadline_setsid_orphan／orphan_deleted_fd_holder 兩個 executable 負控對現行實作 157/157 GREEN（regression 已 bank）。**殘差全屬對抗性 worker（out of threat model，v2.25.8 先例）**：(1) poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫；(2) deadline 前蓄意兩層 setsid reparent-race 搶在 pre-kill walk 前脫離 worker 樹（gpt-5.5 P3-panel F2，depth-0 以 mutation-validation 判 non-reproducible-honestly、adversarial-only）；(3) 同 uid inode-rebind／`(deleted)` fd 自替換（gpt-5.5 F3/F4、非升權，worker 本就控自身輸出）；(4) model 在 CLI chrome 前注入 fake banner（F1，需 CLI compromise）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation。
+- **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）；deadline 路徑的 `reap_tree(pgid,10,worker_pid)` 做 kill 前 worker-rooted tree walk。**已驗證涵蓋 honest-failure orphan**：deadline_setsid_orphan／orphan_deleted_fd_holder 兩個 executable 負控對現行實作 157/157 GREEN（regression 已 bank）。**殘差全屬對抗性 worker（out of threat model，v2.25.8 先例）**：(1) poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫；(2) deadline 前蓄意兩層 setsid reparent-race 搶在 pre-kill walk 前脫離 worker 樹（gpt-5.5 P3-panel F2，depth-0 以 mutation-validation 判 non-reproducible-honestly、adversarial-only）；(3) 同 uid inode-rebind／`(deleted)` fd 自替換（gpt-5.5 F3/F4、非升權，worker 本就控自身輸出）；(4) model 在 CLI chrome 前注入 fake banner（F1，需 CLI compromise）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation。**同一 D3 新增 caller-boundary acceptance**：2026-08-04 live plan-review 證明 `dispatch-plan-review.js` 從 untrusted `/tmp` cwd 啟動 Codex author，0.146.0 兩次皆在 model 前以 repository-trust error exit；須綁 canonical reviewed repo cwd／等價 verified trust flag，並保留 wrong-binding fail-closed 負控，不能再讓 formal hetero gate 被 transport 假死。
 - **Effort**: S–M。
-- **Source**: 2026-07-18 v2.32.54 P1 review round 4 + P3 terminal qc panel（gpt-5.5/opus）＋ depth-0 mutation-validated adjudication（project ledger p1 round-4 / p3 finding_adjudicated events）。
+- **Source**: 2026-07-18 v2.32.54 P1 review round 4 + P3 terminal qc panel（gpt-5.5/opus）＋ depth-0 mutation-validated adjudication（project ledger p1 round-4 / p3 finding_adjudicated events）；[`platform-capability-trigger-activation` review receipt](plans/2026-08-04-platform-capability-trigger-activation.review.md)（2026-08-04）。
 
 ### classify-error quota 共現 gate 偏寬 — 裸 `status`/`error` 子串共現即判 quota
 - **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
@@ -263,10 +272,11 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 - **Source**: opus 對抗性重攻，2026-07-09。`docs/projects/_archive/2026-07-09-m3-band-tasks/report.md` § "Residual: in-process introspection"。
 
 ### Strict `/l5` provider-readiness CLI trust root
-- **Trigger**: Before the next strict `/l5` run uses `bin/autopilot.js engine implement-review`, or when a host-owned provider qualification/readiness authority becomes available to that CLI.
-- **Context**: The ordinary CLI path currently has no host-owned `providerReadinessAuthority` or `qualificationProvider`, so strict `/l5` fails closed with `provider_readiness_authority_missing`. Build one repo-owned fixed bootstrap that binds the exact live provider tuple, negative matrix, and observation provenance; never treat a disk receipt as authority. Until then, use an honestly labelled lower-level flow instead of forging strict-L5 task status.
+- **Status**: PLANNED — D4 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Trigger**: ADMITTED 2026-08-04 — code audit proves this is no longer waiting on an external authority surface：`AutopilotEngine` and campaign intake already accept constructor-owned `providerReadinessAuthority`／`qualificationProvider`, while the ordinary `bin/autopilot.js engine implement-review` constructor path simply does not inject them and deterministically emits `provider_readiness_authority_missing`。
+- **Context**: D4 will build one repo-owned fixed bootstrap binding the exact live provider tuple, negative matrix, freshness and observation provenance, then inject it only through the constructor before spend。Serialized/disk receipts remain evidence rather than authority；missing/stale/mismatched/replayed evidence and provider-probe failure must produce zero dispatcher calls。Until D4 ships, lower-level execution must stay honestly labelled and cannot claim strict L5。
 - **Effort**: L.
-- **Source**: [backlog-actionable-successor closeout](projects/_archive/2026-08-02-backlog-actionable-successor/dev-info.md), 2026-08-03 effective-L4 execution.
+- **Source**: [backlog-actionable-successor closeout](projects/_archive/2026-08-02-backlog-actionable-successor/dev-info.md), 2026-08-03 effective-L4 execution；2026-08-04 CLI/Engine composition re-audit；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D4。
 
 ### First local runner capability semantics（availability/load，不是 quota）
 - **Trigger**: 第一個 local runner（例如 ollama 類）接入 capability-state producer。

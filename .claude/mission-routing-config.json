@@ -1,5 +1,5 @@
 {
   "schema_version": 1,
-  "graph_path": "docs/mission-backlog-actionable-successor-execution-graph.json",
-  "sources_path": "docs/mission-backlog-actionable-successor-sources.json"
+  "graph_path": "docs/mission-plan-review-codex-trusted-cwd-fix-execution-graph.json",
+  "sources_path": "docs/mission-plan-review-codex-trusted-cwd-fix-sources.json"
 }

@@ -53,6 +53,8 @@ VALIDATE_ONLY=0
 RECEIPT_FILE=""
 RECEIPT_OUT=""
 declare -a TEST_GLOBS=()
+declare -a ASSERTION_ARTIFACT_PATHS=()
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd -P)/$(basename "${BASH_SOURCE[0]:-$0}")"
 
 usage() {
   sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
@@ -132,7 +134,9 @@ NODE
 # receipt must be rejected before a verification-author workflow can treat it as evidence.
 validate_receipt() {
   local receipt_file="$1" repo="$2" base_ref="$3" head_ref="$4" verify_cmd="$5"
-  node - "$receipt_file" "$repo" "$base_ref" "$head_ref" "$verify_cmd" <<'NODE'
+  local validation validation_rc
+  set +e
+  validation="$(node - "$receipt_file" "$repo" "$base_ref" "$head_ref" "$verify_cmd" <<'NODE'
 "use strict";
 const fs = require('fs');
 const crypto = require('crypto');
@@ -193,6 +197,7 @@ const base = fullCommit(receipt.base_sha, 'receipt base_sha');
 const head = fullCommit(receipt.head_sha, 'receipt head_sha');
 if (expectedBase && fullCommit(expectedBase, 'expected base') !== base) reject('receipt is bound to a different base candidate');
 if (expectedHead && fullCommit(expectedHead, 'expected head') !== head) reject('receipt is bound to a different head candidate');
+if (base === head) reject('receipt base_sha and head_sha must be different commits');
 try { git(['merge-base', '--is-ancestor', base, head]); }
 catch (_error) { reject('receipt commits are not in an ancestor relationship'); }
 if (receipt.base_result !== 'red' || receipt.head_result !== 'green'
@@ -240,8 +245,84 @@ process.stdout.write(JSON.stringify({
   head_sha: head,
   assertion_artifact_digest: receipt.assertion_artifact_digest,
   test_command_digest: receipt.test_command_digest,
+  assertion_artifacts: receipt.assertion_artifacts.map((item) => item.path),
 }) + '\n');
 NODE
+  )"
+  validation_rc=$?
+  set -e
+  if [ "$validation_rc" -ne 0 ]; then
+    printf '%s\n' "$validation"
+    return "$validation_rc"
+  fi
+
+  # A receipt is only shippable when the controller supplies the immutable
+  # candidate identities and the exact verification command.  Re-run the
+  # command against detached base/head worktrees and compare the resulting
+  # receipt fields; a producer cannot make a self-consistent forged claim pass
+  # this boundary.
+  if [[ -n "$base_ref" || -n "$head_ref" ]]; then
+    [[ -n "$base_ref" && -n "$head_ref" && -n "$verify_cmd" ]] || {
+      printf '%s\n' '{"valid":false,"status":"rejected","reason":"independent polarity observation requires base, head, and verify command"}'
+      return 1
+    }
+    local observed receipt_paths_json observed_rc observed_file
+    observed_file="$(mktemp -t verify-red-green-observed-XXXXXX.json)"
+    trap 'rm -f "$observed_file"' RETURN
+    mapfile -t receipt_paths < <(node - "$validation" <<'NODE'
+"use strict";
+const value = JSON.parse(process.argv[2]);
+for (const item of value.assertion_artifacts || []) process.stdout.write(String(item) + "\n");
+NODE
+    )
+    local -a observe_args=(--base "$base_ref" --head "$head_ref" --verify-cmd "$verify_cmd" --repo "$repo" --receipt-out "$observed_file")
+    local artifact
+    for artifact in "${receipt_paths[@]}"; do
+      observe_args+=(--assertion-artifact "$artifact")
+    done
+    set +e
+    observed="$(bash "$SCRIPT_PATH" "${observe_args[@]}" 2>&1)"
+    observed_rc=$?
+    set -e
+    if [ "$observed_rc" -ne 0 ]; then
+      printf '%s\n' '{"valid":false,"status":"rejected","reason":"independent polarity observation did not validate"}'
+      return 1
+    fi
+    set +e
+    node - "$receipt_file" "$observed_file" <<'NODE'
+"use strict";
+const fs = require('fs');
+const crypto = require('crypto');
+const [claimedPath, observedPath] = process.argv.slice(2);
+const claimed = JSON.parse(fs.readFileSync(claimedPath, 'utf8'));
+const observed = JSON.parse(fs.readFileSync(observedPath, 'utf8'));
+const canonical = (value) => Array.isArray(value)
+  ? '[' + value.map(canonical).join(',') + ']'
+  : (value && typeof value === 'object'
+    ? '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}'
+    : JSON.stringify(value));
+const same = (left, right) => canonical(left) === canonical(right);
+const fields = [
+  'verdict', 'red_green_validated', 'base_sha', 'head_sha', 'head_result',
+  'base_result', 'red_tests', 'test_command_digest', 'assertion_artifact_path',
+  'assertion_artifacts', 'assertion_artifact_digest', 'expected_red_exit_class',
+  'green_result', 'base_exit_code', 'head_exit_code', 'receipt_digest',
+];
+for (const field of fields) {
+  if (!same(claimed[field], observed[field])) {
+    process.stdout.write(JSON.stringify({ valid: false, status: 'rejected', reason: 'receipt differs from independently observed polarity: ' + field }) + '\n');
+    process.exit(1);
+  }
+}
+process.stdout.write(JSON.stringify({ valid: true, status: 'validated', observation: 'independent', receipt_digest: claimed.receipt_digest }) + '\n');
+NODE
+    local compare_rc=$?
+    set -e
+    rm -f "$observed_file"
+    trap - RETURN
+    return "$compare_rc"
+  fi
+  printf '%s\n' "$validation"
 }
 
 # Parse CLI
@@ -274,6 +355,11 @@ while [[ $# -gt 0 ]]; do
     --test-glob)
       [[ $# -ge 2 ]] || err_usage "missing value for --test-glob"
       TEST_GLOBS+=("$2")
+      shift 2
+      ;;
+    --assertion-artifact)
+      [[ $# -ge 2 ]] || err_usage "missing value for --assertion-artifact"
+      ASSERTION_ARTIFACT_PATHS+=("$2")
       shift 2
       ;;
     --repo)
@@ -370,7 +456,23 @@ case "$VERIFY_CMD" in
     ;;
 esac
 
-if [[ ${#TEST_GLOBS[@]} -eq 0 ]]; then
+if [[ ${#ASSERTION_ARTIFACT_PATHS[@]} -gt 0 ]]; then
+  # Controller-supplied artifact paths are the immutable assertion boundary.
+  # They must be tracked files changed by this candidate; silently accepting an
+  # arbitrary path would let a receipt bind to an unrelated green test.
+  declare -A _artifact_seen=()
+  for _artifact_path in "${ASSERTION_ARTIFACT_PATHS[@]}"; do
+    [[ -n "$_artifact_path" && "$_artifact_path" != /* && "$_artifact_path" != *'..'* ]] \
+      || err_usage "invalid --assertion-artifact path: $_artifact_path"
+    [[ -z "${_artifact_seen[$_artifact_path]:-}" ]] || err_usage "duplicate --assertion-artifact path: $_artifact_path"
+    _artifact_seen[$_artifact_path]=1
+    git -C "$REPO" ls-files --error-unmatch -- "$_artifact_path" >/dev/null 2>&1 \
+      || err_usage "assertion artifact is not tracked: $_artifact_path"
+    git -C "$REPO" diff --quiet "$BASE_SHA..$HEAD_SHA" -- "$_artifact_path" \
+      && err_usage "assertion artifact is not changed by candidate: $_artifact_path"
+  done
+  TEST_FILES="$(printf '%s\n' "${ASSERTION_ARTIFACT_PATHS[@]}")"
+elif [[ ${#TEST_GLOBS[@]} -eq 0 ]]; then
   TEST_GLOBS=("${DEFAULT_TEST_GLOBS[@]}")
 fi
 
@@ -390,7 +492,9 @@ collect_test_files() {
   done
 }
 
-TEST_FILES="$(collect_test_files)"
+if [[ -z "${TEST_FILES:-}" ]]; then
+  TEST_FILES="$(collect_test_files)"
+fi
 if [[ -z "$TEST_FILES" ]]; then
   emit_json "INCONCLUSIVE" "false" "$BASE_SHA" "$HEAD_SHA" "skipped" "skipped" "[]" "no-test-files-in-diff"
   exit 3

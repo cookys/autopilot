@@ -196,6 +196,22 @@ function pathsFromFinding(finding) {
   }
   return [...paths].map((item) => JSON.parse(item)).sort((left, right) => left.path.localeCompare(right.path));
 }
+function expectedDelta(previous, current, findings, allPaths = changedPaths(previous, current)) {
+  const changedSet = new Set(allPaths);
+  return findings.map((finding) => {
+    const referenced = pathsFromFinding(finding);
+    const relevant = referenced.filter((item) => changedSet.has(item.path)).map((item) => item.path);
+    const unknown = referenced.filter((item) => item.explicit && !changedSet.has(item.path)).map((item) => item.path);
+    let patch = '';
+    for (const item of relevant) patch += git(['diff', '--no-ext-diff', '--unified=80', previous, current, '--', item]);
+    return {
+      finding_id: finding.finding_id,
+      changed_paths: relevant,
+      patch,
+      binding: relevant.length > 0 && unknown.length === 0 ? 'bound' : 'needs_full_review',
+    };
+  });
+}
 function writeOutput(body) {
   const text = `${JSON.stringify(body, null, 2)}\n`;
   if (opts.out || opts.output) {
@@ -216,21 +232,7 @@ try {
     const findings = extractFindings(readJson(opts['findings-file'] || opts.findings, 'findings-file', true));
     const allPaths = changedPaths(previous, current);
     const changedSet = new Set(allPaths);
-    const delta = findings.map((finding) => {
-      const referenced = pathsFromFinding(finding);
-      const relevant = referenced.filter((item) => changedSet.has(item.path)).map((item) => item.path);
-      const unknown = referenced.filter((item) => item.explicit && !changedSet.has(item.path)).map((item) => item.path);
-      let patch = '';
-      for (const item of relevant) {
-        patch += git(['diff', '--no-ext-diff', '--unified=80', previous, current, '--', item]);
-      }
-      return {
-        finding_id: finding.finding_id,
-        changed_paths: relevant,
-        patch,
-        binding: relevant.length > 0 && unknown.length === 0 ? 'bound' : 'needs_full_review',
-      };
-    });
+    const delta = expectedDelta(previous, current, findings, allPaths);
     const unbound = delta.filter((item) => item.binding !== 'bound').map((item) => item.finding_id);
     const body = {
       schema_version: 1,
@@ -295,6 +297,22 @@ try {
     const expected = new Map(contracts.map((item) => [item.finding_id, item]));
     if (delta.finding_contract_digest !== sha256(canonical(contracts))) {
       throw new Error('delta finding contract binding is invalid');
+    }
+    const allPaths = changedPaths(previous, current);
+    if (!Array.isArray(delta.changed_paths) || canonical(delta.changed_paths) !== canonical(allPaths)) {
+      throw new Error('delta changed_paths do not match the exact candidate diff');
+    }
+    const rebuiltDelta = expectedDelta(previous, current, contracts, allPaths);
+    if (!Array.isArray(delta.delta) || canonical(delta.delta) !== canonical(rebuiltDelta)) {
+      throw new Error('delta patches or finding-path bindings do not match the exact candidate diff');
+    }
+    const expectedUnbound = rebuiltDelta.filter((item) => item.binding !== 'bound').map((item) => item.finding_id);
+    const expectedStatus = expectedUnbound.length === 0 && allPaths.length > 0 ? 'ready' : 'needs_full_review';
+    const expectedFallback = expectedUnbound.length > 0
+      ? `findings cannot be bound to changed paths: ${expectedUnbound.join(', ')}`
+      : (allPaths.length === 0 ? 'current commit has no changed paths' : null);
+    if (delta.status !== expectedStatus || delta.fallback_reason !== expectedFallback) {
+      throw new Error('delta status/fallback is stale or self-asserted');
     }
     const resultKeys = [
       'artifact_type', 'authority', 'current_commit', 'delta_digest', 'finding_contract_digest',

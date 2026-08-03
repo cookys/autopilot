@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "artifact_type": "review_path_efficiency",
-  "status": "implementation_complete_pending_authoritative_qc",
-  "observed_at": "2026-08-03T00:00:00Z",
+  "status": "repair_generation_1_implementation_evidence_pending_authoritative_qc",
+  "observed_at": "2026-08-03T10:00:00Z",
   "implementation": {
-    "base": "6488d244766d702270c77adfd2155a3ac55f19ad",
+    "base": "e287704340c2d3afd3116d4b44a1bc3edfb5bdd8",
     "scope": [
       "scripts/diff-since-last-round.sh",
       "scripts/dispatch-review.sh",
@@ -19,16 +19,18 @@
     "contracts": [
       "full-diff blind discovery remains authoritative",
       "named remediation checker is non-authoritative and status-limited",
-      "red-before/green-after receipts bind exact commits, command, and assertion artifacts",
+      "red-before/green-after receipts bind exact commits, command, and assertion artifacts and require independent observation at shipping",
+      "remediation checker re-derives changed paths and patches from exact candidate commits",
+      "full-diff review remains authoritative on every repair generation",
       "structural prompt echo fails closed while natural-language detector vocabulary remains valid"
     ]
   },
   "verification": {
     "focused": {
-      "hooks/tests/review-path-efficiency.test.sh": "pass (14 assertions)",
+      "hooks/tests/review-path-efficiency.test.sh": "pass (15 assertions)",
       "hooks/tests/verify-red-green.test.sh": "pass (35 assertions)",
       "hooks/tests/dispatch-review.test.sh": "pass (252 assertions)",
-      "hooks/tests/dispatch-author.test.sh": "pass (83 assertions)"
+      "hooks/tests/dispatch-author.test.sh": "repair fixture added; full dispatch suite is environment-sensitive and remains pending"
     },
     "exact_commands": [
       "bash -n scripts/dispatch-review.sh scripts/dispatch-author.sh scripts/diff-since-last-round.sh scripts/verify-red-green.sh",
@@ -41,11 +43,11 @@
       "bash scripts/validate.sh",
       "AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh"
     ],
-    "authoritative_qc": "pending depth-0 whole-diff review"
+    "authoritative_qc": "pending depth-0 whole-diff review; this receipt is implementation evidence only"
   },
   "receipt": {
     "same_lineage": true,
-    "base_commit": "6488d244766d702270c77adfd2155a3ac55f19ad",
+    "base_commit": "e287704340c2d3afd3116d4b44a1bc3edfb5bdd8",
     "remediation_authority": "non_authoritative",
     "polarity_authority": "machine_validated_receipt",
     "rollback": "disable remediation use and return to full blind review; retain polarity gate"

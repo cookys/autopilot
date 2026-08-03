@@ -45,6 +45,7 @@ if [ "$MODE" = "validate" ]; then
   node - "$VALIDATE" <<'NODE'
 'use strict';
 const fs = require('fs');
+const path = require('path');
 const file = process.argv[2];
 let value;
 const errors = [];
@@ -52,6 +53,7 @@ try { value = JSON.parse(fs.readFileSync(file, 'utf8')); }
 catch (error) { console.error('invalid JSON: ' + error.message); process.exit(1); }
 const isHex = (input) => typeof input === 'string' && /^[0-9a-f]{64}$/.test(input);
 const outcomes = new Set(['pass', 'fail', 'inconclusive']);
+const isPath = (input) => typeof input === 'string' && path.isAbsolute(input);
 if (!value || value.schema_version !== 1) errors.push('schema_version must be 1');
 if (value && value.artifact_type !== 'skill_frontmatter_portability') errors.push('artifact_type mismatch');
 if (!value || !value.observed_at || Number.isNaN(Date.parse(value.observed_at))) errors.push('observed_at missing');
@@ -75,6 +77,24 @@ for (const attempt of attempts) {
   for (const key of ['stdout_sha256', 'stderr_sha256', 'fixture_sha256']) if (!isHex(attempt[key])) errors.push(attempt.runtime + ': ' + key + ' invalid');
   for (const key of ['stdout_excerpt', 'stderr_excerpt']) if (typeof attempt[key] !== 'string') errors.push(attempt.runtime + ': ' + key + ' missing');
   if (typeof attempt.stdout_bytes !== 'number' || typeof attempt.stderr_bytes !== 'number') errors.push(attempt.runtime + ': log byte counts missing');
+  for (const key of ['stdout_log_path', 'stderr_log_path']) {
+    if (!isPath(attempt[key])) { errors.push(attempt.runtime + ': ' + key + ' missing'); continue; }
+    try {
+      const logPath = path.resolve(attempt[key]);
+      const evidenceDir = value && value.cleanup && value.cleanup.retained_evidence_dir
+        ? path.resolve(value.cleanup.retained_evidence_dir) : '';
+      const relative = evidenceDir ? path.relative(evidenceDir, logPath) : '..';
+      if (!evidenceDir || relative.startsWith('..') || path.isAbsolute(relative)) errors.push(attempt.runtime + ': raw log escapes retained evidence directory');
+      const stat = fs.lstatSync(logPath);
+      if (!stat.isFile() || (stat.mode & 0o777) !== 0o600) errors.push(attempt.runtime + ': raw log must be a regular 0600 file');
+      const raw = fs.readFileSync(logPath);
+      const digest = require('crypto').createHash('sha256').update(raw).digest('hex');
+      const bytes = raw.length;
+      const isStdout = key === 'stdout_log_path';
+      if (digest !== attempt[isStdout ? 'stdout_sha256' : 'stderr_sha256']) errors.push(attempt.runtime + ': raw log digest mismatch');
+      if (bytes !== attempt[isStdout ? 'stdout_bytes' : 'stderr_bytes']) errors.push(attempt.runtime + ': raw log byte count mismatch');
+    } catch (error) { errors.push(attempt.runtime + ': raw log unavailable: ' + error.message); }
+  }
 }
 if (!names.has('claude') || !names.has('codex')) errors.push('claude and codex attempts are required');
 const expected = attempts.some((row) => row.outcome === 'fail') ? 'fail'
@@ -83,6 +103,13 @@ if (!value || value.classification !== expected) errors.push('classification doe
 if (!value || !value.cleanup || value.cleanup.zero_residue !== true
     || !Array.isArray(value.cleanup.residue_paths) || value.cleanup.residue_paths.length !== 0) errors.push('cleanup residue receipt is not empty');
 if (!value || !value.cleanup || value.cleanup.attempt_dir_mode !== '0700') errors.push('attempt directory mode is not 0700');
+if (!value || !value.cleanup || !isPath(value.cleanup.retained_evidence_dir)) errors.push('retained evidence directory missing');
+else {
+  try {
+    const stat = fs.lstatSync(value.cleanup.retained_evidence_dir);
+    if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700) errors.push('retained evidence directory must be a regular 0700 directory');
+  } catch (error) { errors.push('retained evidence directory unavailable: ' + error.message); }
+}
 if (!value || !value.fixture || value.fixture.unknown_field !== 'tier') errors.push('unknown tier field not recorded');
 if (errors.length) { errors.forEach((error) => console.error('receipt: ' + error)); process.exit(1); }
 console.log('valid=true classification=' + value.classification);
@@ -91,13 +118,16 @@ NODE
 fi
 
 mkdir -p "$(dirname "$OUTPUT")"
+RETAINED_ROOT="$(mktemp -d -t autopilot-frontmatter-evidence-XXXXXX)"
+chmod 700 "$RETAINED_ROOT"
 SUFFIX='X'
 SUFFIX="${SUFFIX}X"
 SUFFIX="${SUFFIX}X"
 ROOT="$(mktemp -d -t "autopilot-frontmatter-probe-${SUFFIX}")"
 chmod 700 "$ROOT"
-trap 'rm -rf "$ROOT"' EXIT HUP INT TERM
-mkdir -p "$ROOT/tmp" "$ROOT/claude-home" "$ROOT/claude-config" "$ROOT/codex-home" "$ROOT/codex-home-home"
+cleanup_runtime() { rm -rf -- "$ROOT"; }
+trap cleanup_runtime EXIT HUP INT TERM
+mkdir -p "$ROOT/tmp" "$ROOT/claude-home" "$ROOT/claude-config" "$ROOT/codex-home" "$ROOT/codex-home-home" "$ROOT/codex-scratch"
 chmod 700 "$ROOT/claude-home" "$ROOT/claude-config" "$ROOT/codex-home" "$ROOT/codex-home-home"
 
 PLUGIN="$ROOT/claude-plugin"
@@ -173,7 +203,7 @@ run_capture() {
   local name="$1"; shift
   local stdout="$ROOT/$name.stdout" stderr="$ROOT/$name.stderr" rc
   set +e
-  timeout 45 "$@" >"$stdout" 2>"$stderr"
+  timeout --foreground --kill-after=5s 45 "$@" < /dev/null >"$stdout" 2>"$stderr"
   rc=$?
   set -e
   printf '%s\n' "$rc" > "$ROOT/$name.rc"
@@ -197,15 +227,16 @@ if command -v codex >/dev/null 2>&1; then
   run_capture codex_probe env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" codex plugin marketplace add "$CODEX_MARKETPLACE" --json
   run_capture codex_list env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" codex plugin list --marketplace autopilot-frontmatter-probe-local --available --json
   run_capture codex_add env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" codex plugin add autopilot-frontmatter-probe@autopilot-frontmatter-probe-local --json
+  run_capture codex_exec env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" codex exec --ephemeral --sandbox read-only --json --skip-git-repo-check -C "$ROOT/codex-scratch" '<invoke $autopilot-frontmatter-probe:portability-probe; respond with exactly AUTOPILOT_FRONTMATTER_SENTINEL_8f4>'
 else
   CODEX_VERSION=""
   printf '%s\n' "codex executable not found" > "$ROOT/codex_probe.stderr" "$ROOT/codex_list.stderr" "$ROOT/codex_add.stderr"
-  printf '%s\n' "127" > "$ROOT/codex_probe.rc" "$ROOT/codex_list.rc" "$ROOT/codex_add.rc"
+  printf '%s\n' "127" > "$ROOT/codex_probe.rc" "$ROOT/codex_list.rc" "$ROOT/codex_add.rc" "$ROOT/codex_exec.rc"
 fi
 
 CLAUDE_AFTER="$(inventory "$ROOT/claude-home")"
 CODEX_AFTER="$(inventory "$ROOT/codex-home")"
-export ROOT OUTPUT CLAUDE_VERSION CODEX_VERSION CLAUDE_BEFORE CLAUDE_AFTER CODEX_BEFORE CODEX_AFTER
+export ROOT OUTPUT RETAINED_ROOT CLAUDE_VERSION CODEX_VERSION CLAUDE_BEFORE CLAUDE_AFTER CODEX_BEFORE CODEX_AFTER
 
 node - <<'NODE'
 'use strict';
@@ -214,6 +245,7 @@ const crypto = require('crypto');
 const path = require('path');
 const root = process.env.ROOT;
 const output = path.resolve(process.env.OUTPUT);
+const retainedRoot = path.resolve(process.env.RETAINED_ROOT);
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const read = (name) => fs.existsSync(path.join(root, name)) ? fs.readFileSync(path.join(root, name), 'utf8') : '';
 const rc = (name) => Number.parseInt(read(name + '.rc').trim(), 10);
@@ -223,12 +255,12 @@ const body = fs.readFileSync(path.join(root, 'claude-plugin/skills/portability-p
 const fixtureSha = sha256(body);
 const command = {
   claude: ['claude', 'plugin', 'validate', '<plugin>', '&&', 'claude', '--bare', '--plugin-dir', '<plugin>', '-p', '/portability-probe', '--output-format', 'json', '--max-budget-usd', '0.01', '--no-session-persistence'],
-  codex: ['codex', 'plugin', 'marketplace', 'add', '<marketplace>', '--json', '&&', 'codex', 'plugin', 'list', '--marketplace', 'autopilot-frontmatter-probe-local', '--available', '--json', '&&', 'codex', 'plugin', 'add', 'autopilot-frontmatter-probe@autopilot-frontmatter-probe-local', '--json'],
+  codex: ['codex', 'plugin', 'marketplace', 'add', '<marketplace>', '--json', '&&', 'codex', 'plugin', 'list', '--marketplace', 'autopilot-frontmatter-probe-local', '--available', '--json', '&&', 'codex', 'plugin', 'add', 'autopilot-frontmatter-probe@autopilot-frontmatter-probe-local', '--json', '&&', 'codex', 'exec', '--ephemeral', '--sandbox', 'read-only', '--json', '--skip-git-repo-check', '-C', '<scratch>', '<invoke $autopilot-frontmatter-probe:portability-probe; respond with exact sentinel>'],
 };
 const claudeStdout = read('claude_probe.stdout') + read('claude_exec.stdout');
 const claudeStderr = read('claude_probe.stderr') + read('claude_exec.stderr');
-const codexStdout = read('codex_probe.stdout') + read('codex_list.stdout') + read('codex_add.stdout');
-const codexStderr = read('codex_probe.stderr') + read('codex_list.stderr') + read('codex_add.stderr');
+const codexStdout = read('codex_probe.stdout') + read('codex_list.stdout') + read('codex_add.stdout') + read('codex_exec.stdout');
+const codexStderr = read('codex_probe.stderr') + read('codex_list.stderr') + read('codex_add.stderr') + read('codex_exec.stderr');
 const claudeInstalled = Boolean(process.env.CLAUDE_VERSION);
 const codexInstalled = Boolean(process.env.CODEX_VERSION);
 const claudeNoAuth = /not logged in|run \/login|authentication|auth/i.test(claudeStdout + '\n' + claudeStderr);
@@ -244,11 +276,20 @@ const installedSkill = installedPath ? path.join(installedPath, 'skills/portabil
 const installedBody = installedSkill && fs.existsSync(installedSkill) ? fs.readFileSync(installedSkill) : Buffer.alloc(0);
 const codexDiscovery = JSON.stringify(list || '').includes('autopilot-frontmatter-probe@autopilot-frontmatter-probe-local');
 const codexSkillExact = installedBody.length > 0 && installedBody.equals(body);
+const codexSentinel = codexStdout.includes('AUTOPILOT_FRONTMATTER_SENTINEL_8f4');
 const codexVersionOk = /^codex-cli 0\.146\.0(?:\s|$)/.test(process.env.CODEX_VERSION.trim());
 const codexNoAuth = /not logged in|authentication|auth required/i.test(codexStdout + '\n' + codexStderr);
 const codexOutcome = !codexInstalled || !codexVersionOk || codexNoAuth ? 'inconclusive'
-  : (rc('codex_probe') !== 0 || rc('codex_list') !== 0 || rc('codex_add') !== 0 || !codexDiscovery || !codexSkillExact ? 'fail' : 'pass');
-const attempt = (runtime, installed, version, outcome, before, after, stdout, stderr, commands, details) => ({
+  : (rc('codex_probe') !== 0 || rc('codex_list') !== 0 || rc('codex_add') !== 0 || rc('codex_exec') !== 0 || !codexDiscovery || !codexSkillExact || !codexSentinel ? 'fail' : 'pass');
+fs.mkdirSync(retainedRoot, { recursive: true, mode: 0o700 });
+fs.chmodSync(retainedRoot, 0o700);
+const retainLog = (runtime, stream, content) => {
+  const target = path.join(retainedRoot, runtime + '.' + stream + '.log');
+  fs.writeFileSync(target, content, { mode: 0o600 });
+  fs.chmodSync(target, 0o600);
+  return target;
+};
+const attempt = (runtime, installed, version, outcome, before, after, stdout, stderr, commands, details, exitCode) => ({
   runtime,
   expected_version: runtime === 'claude' ? '2.1.220' : 'codex-cli 0.146.0',
   version: String(version || '').trim(),
@@ -256,7 +297,7 @@ const attempt = (runtime, installed, version, outcome, before, after, stdout, st
   execution_attempted: installed,
   command: commands,
   command_text: commands.join(' '),
-  exit_code: runtime === 'claude' ? rc('claude_exec') : rc('codex_add'),
+  exit_code: exitCode,
   outcome,
   before_inventory: JSON.parse(before),
   after_inventory: JSON.parse(after),
@@ -269,11 +310,13 @@ const attempt = (runtime, installed, version, outcome, before, after, stdout, st
   stderr_excerpt: excerpt(stderr),
   stdout_truncated: stdout.length > 8192,
   stderr_truncated: stderr.length > 8192,
+  stdout_log_path: retainLog(runtime, 'stdout', stdout),
+  stderr_log_path: retainLog(runtime, 'stderr', stderr),
   details,
 });
 const attempts = [
-  attempt('claude', claudeInstalled, process.env.CLAUDE_VERSION, claudeOutcome, process.env.CLAUDE_BEFORE, process.env.CLAUDE_AFTER, claudeStdout, claudeStderr, command.claude, { manifest_validation: claudeValidationOk, sentinel_seen: claudeSentinel, version_match: claudeVersionOk }),
-  attempt('codex', codexInstalled, process.env.CODEX_VERSION, codexOutcome, process.env.CODEX_BEFORE, process.env.CODEX_AFTER, codexStdout, codexStderr, command.codex, { marketplace_discovered: codexDiscovery, installed_skill_exact: codexSkillExact, installed_path: installedPath || null, version_match: codexVersionOk }),
+  attempt('claude', claudeInstalled, process.env.CLAUDE_VERSION, claudeOutcome, process.env.CLAUDE_BEFORE, process.env.CLAUDE_AFTER, claudeStdout, claudeStderr, command.claude, { manifest_validation: claudeValidationOk, sentinel_seen: claudeSentinel, version_match: claudeVersionOk }, rc('claude_exec')),
+  attempt('codex', codexInstalled, process.env.CODEX_VERSION, codexOutcome, process.env.CODEX_BEFORE, process.env.CODEX_AFTER, codexStdout, codexStderr, command.codex, { marketplace_discovered: codexDiscovery, installed_skill_exact: codexSkillExact, installed_path: installedPath || null, runtime_invocation: true, sentinel_seen: codexSentinel, version_match: codexVersionOk }, rc('codex_exec')),
 ];
 const classification = attempts.some((row) => row.outcome === 'fail') ? 'fail'
   : attempts.some((row) => row.outcome === 'inconclusive') ? 'inconclusive' : 'pass';
@@ -285,7 +328,7 @@ const receipt = {
   attempts,
   classification,
   policy: classification === 'pass' ? 'Dual runtime pass permits a separately reviewed tier migration.' : 'Do not change canonical skill frontmatter; retain the portability backlog entry.',
-  cleanup: { attempt_dir: root, attempt_dir_mode: '0700', zero_residue: false, residue_paths: [] },
+  cleanup: { attempt_dir: root, attempt_dir_mode: '0700', retained_evidence_dir: retainedRoot, zero_residue: false, residue_paths: [] },
 };
 fs.mkdirSync(path.dirname(output), { recursive: true });
 fs.writeFileSync(output, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
@@ -293,6 +336,7 @@ try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
 const residue = fs.existsSync(root) ? [root] : [];
 receipt.cleanup.zero_residue = residue.length === 0;
 receipt.cleanup.residue_paths = residue;
+receipt.cleanup.retained_evidence_dir = retainedRoot;
 fs.writeFileSync(output, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
 console.log(JSON.stringify({ classification, receipt: output, zero_residue: receipt.cleanup.zero_residue }));
 NODE

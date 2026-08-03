@@ -2,7 +2,7 @@
   "artifact_type": "mission_execution_graph",
   "calculated_batches": 2,
   "calculated_depth": 2,
-  "graph_digest": "b676838cba9b1dda4fb173b274b7bf0f5fcad991324cf58378424d6cafd6d879",
+  "graph_digest": "74256aadd8b02fa743f49564ae43d932acab9b46b45f0244d721d04294700687",
   "nodes": [
     {
       "acceptance_ids": [
@@ -341,12 +341,11 @@
           "skills",
           "src/engine"
         ],
-      "authorized_creates": [
-        "docs/projects/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
-        "hooks/tests/skill-frontmatter-portability.test.sh",
-        "platforms/codex/plugin/scripts/probe-skill-frontmatter-portability.sh",
-        "scripts/probe-skill-frontmatter-portability.sh"
-      ],
+        "authorized_creates": [
+          "docs/projects/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
+          "hooks/tests/skill-frontmatter-portability.test.sh",
+          "scripts/probe-skill-frontmatter-portability.sh"
+        ],
         "baseline_churn": 1400,
         "max_changed_files": 100,
         "max_extra_churn": 700,
@@ -383,11 +382,10 @@
           "platforms/codex/plugin/skills/retro/SKILL.md",
           "platforms/codex/plugin/skills/survey/SKILL.md",
           "platforms/codex/plugin/skills/team/SKILL.md",
-        "platforms/codex/plugin/skills/test-strategy/SKILL.md",
-        "platforms/codex/plugin/skills/think-tank-dialectic/SKILL.md",
-        "platforms/codex/plugin/skills/think-tank/SKILL.md",
-        "platforms/codex/plugin/scripts/probe-skill-frontmatter-portability.sh",
-        "scripts/probe-skill-frontmatter-portability.sh",
+          "platforms/codex/plugin/skills/test-strategy/SKILL.md",
+          "platforms/codex/plugin/skills/think-tank-dialectic/SKILL.md",
+          "platforms/codex/plugin/skills/think-tank/SKILL.md",
+          "scripts/probe-skill-frontmatter-portability.sh",
           "skills/audit/SKILL.md",
           "skills/brainstorm/SKILL.md",
           "skills/ceo-agent/SKILL.md",
@@ -422,10 +420,9 @@
           "CLAUDE.md",
           "docs/BACKLOG.md",
           "docs/projects/2026-08-02-backlog-actionable-successor/evidence/skill-metadata-portability.json",
-        "hooks/tests/skill-frontmatter-portability.test.sh",
-        "platforms/codex/plugin/skills/harness-maintenance/SKILL.md",
-        "platforms/codex/plugin/scripts/probe-skill-frontmatter-portability.sh",
-        "scripts/probe-skill-frontmatter-portability.sh",
+          "hooks/tests/skill-frontmatter-portability.test.sh",
+          "platforms/codex/plugin/skills/harness-maintenance/SKILL.md",
+          "scripts/probe-skill-frontmatter-portability.sh",
           "skills/harness-maintenance/SKILL.md"
         ],
         "required_paths": [
@@ -463,11 +460,10 @@
           "platforms/codex/plugin/skills/retro/SKILL.md",
           "platforms/codex/plugin/skills/survey/SKILL.md",
           "platforms/codex/plugin/skills/team/SKILL.md",
-        "platforms/codex/plugin/skills/test-strategy/SKILL.md",
-        "platforms/codex/plugin/skills/think-tank-dialectic/SKILL.md",
-        "platforms/codex/plugin/skills/think-tank/SKILL.md",
-        "platforms/codex/plugin/scripts/probe-skill-frontmatter-portability.sh",
-        "scripts/check-claude-md-inventory.js",
+          "platforms/codex/plugin/skills/test-strategy/SKILL.md",
+          "platforms/codex/plugin/skills/think-tank-dialectic/SKILL.md",
+          "platforms/codex/plugin/skills/think-tank/SKILL.md",
+          "scripts/check-claude-md-inventory.js",
           "scripts/doc-drift-gate.js",
           "scripts/preflight-portability.sh",
           "scripts/probe-skill-frontmatter-portability.sh",

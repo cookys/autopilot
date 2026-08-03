@@ -362,6 +362,14 @@ assert_json_eq "$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id 
 run_cmd stage-event --ledger "$R6_LEDGER" --run-id r6-working --stage work --condition waiting --reason child-boundary
 assert_json_eq "$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id r6-working --stage work)" '.condition' "waiting" "explicit wait event is waiting"
 
+# A stale explicit wait is not an indefinite waiting verdict: without a fresh
+# exact heartbeat it falls back to the bounded inquiry/unknown rail.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-stale-wait --stage work --pid "$$" --heartbeat-ts 1
+run_cmd stage-event --ledger "$R6_LEDGER" --run-id r6-stale-wait --stage work --condition waiting --reason child-boundary
+STALE_WAIT_CONDITION="$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id r6-stale-wait --stage work --stale-seconds 1)"
+assert_json_eq "$STALE_WAIT_CONDITION" '.condition' "unknown" "stale explicit wait requires fresh heartbeat"
+assert_json_eq "$STALE_WAIT_CONDITION" '.reason' "stale_without_bounded_inquiry" "stale explicit wait names bounded inquiry fallback"
+
 # Mismatched identity is unknown and cannot be signalled or replaced.
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --pid "$$" --start-time 1 --heartbeat-ts 1
 UNKNOWN_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --idempotency-key r6-unknown-key)"

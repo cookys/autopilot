@@ -87,4 +87,32 @@ EXIT=$?
 set -e
 assert_exit_code "$EXIT" 1 "validator rejects missing runtime evidence"
 
+LOG_METADATA_TAMPER="$TEST_TMP/log-metadata-tamper.json"
+node - "$ARTIFACT" "$LOG_METADATA_TAMPER" <<'NODE'
+const fs = require('fs');
+const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+source.attempts[0].stdout_bytes += 1;
+fs.writeFileSync(process.argv[3], JSON.stringify(source));
+NODE
+set +e
+bash "$PROBE" --validate "$LOG_METADATA_TAMPER" >"$TEST_TMP/log-metadata-tamper.out" 2>&1
+EXIT=$?
+set -e
+assert_exit_code "$EXIT" 1 "validator recomputes retained raw-log byte counts"
+assert_contains "$(cat "$TEST_TMP/log-metadata-tamper.out")" "raw log byte count mismatch" "validator explains raw-log metadata tamper"
+
+RAW_LOG_TO_TAMPER="$(node - "$ARTIFACT" <<'NODE'
+const fs = require('fs');
+const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+process.stdout.write(source.attempts[0].stdout_log_path);
+NODE
+)"
+printf '%s' 'tamper' >> "$RAW_LOG_TO_TAMPER"
+set +e
+bash "$PROBE" --validate "$ARTIFACT" >"$TEST_TMP/raw-tamper.out" 2>&1
+EXIT=$?
+set -e
+assert_exit_code "$EXIT" 1 "validator rejects modified retained raw log"
+assert_contains "$(cat "$TEST_TMP/raw-tamper.out")" "raw log digest mismatch" "validator explains raw-log content tamper"
+
 finalize_test

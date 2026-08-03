@@ -53,6 +53,8 @@
 #   scripts/dispatch-author.sh --strict-contract --contract-file <json> --repo-root <consuming-repo> --prompt-file <file>
 #       # GO-gated verification-author contract mode.
 #       --polarity-receipt <file> [--require-polarity-receipt]
+#       --polarity-base-sha <full-sha> --polarity-head-sha <full-sha>
+#       --polarity-verify-cmd <path> [--polarity-assertion-artifact <path>]...
 #       # carry a machine-validated red-before/green-after receipt for deliberately buggy assertions.
 #   Fail closed if strict config/roster tuple is absent, malformed, same-family, unknown-family,
 #   or endpoint resolution is not ready.
@@ -120,6 +122,8 @@ RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPO
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
 POLARITY_RECEIPT=""; REQUIRE_POLARITY_RECEIPT=0; POLARITY_RECEIPT_DIGEST=""
+POLARITY_BASE_SHA=""; POLARITY_HEAD_SHA=""; POLARITY_VERIFY_CMD=""
+declare -a POLARITY_ASSERTION_ARTIFACTS=()
 RUNNER_SUPPLIED=0; MODEL_SUPPLIED=0; EFFORT_SUPPLIED=0; ENDPOINT_SUPPLIED=0
 STRICT_CONTRACT_RESULT_FIELDS=0
 STRICT_UNIT_ID=""; STRICT_CONTRACT_SHA=""; STRICT_SPEC_SHA=""; STRICT_GO=""
@@ -143,6 +147,10 @@ while [[ $# -gt 0 ]]; do
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --polarity-receipt) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-receipt requires a non-empty value" >&2; exit 2; }; POLARITY_RECEIPT="$2"; shift 2 ;;
     --require-polarity-receipt) REQUIRE_POLARITY_RECEIPT=1; shift ;;
+    --polarity-base-sha|--polarity-base) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "$1 requires a non-empty value" >&2; exit 2; }; POLARITY_BASE_SHA="$2"; shift 2 ;;
+    --polarity-head-sha|--polarity-head) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "$1 requires a non-empty value" >&2; exit 2; }; POLARITY_HEAD_SHA="$2"; shift 2 ;;
+    --polarity-verify-cmd) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-verify-cmd requires a non-empty value" >&2; exit 2; }; POLARITY_VERIFY_CMD="$2"; shift 2 ;;
+    --polarity-assertion-artifact) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-assertion-artifact requires a non-empty value" >&2; exit 2; }; POLARITY_ASSERTION_ARTIFACTS+=("$2"); shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
     -h|--help)     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
@@ -221,9 +229,19 @@ validate_polarity_receipt() {
   [ -n "$POLARITY_RECEIPT" ] || die_precondition "--require-polarity-receipt requires --polarity-receipt <file>"
   [ -r "$POLARITY_RECEIPT" ] || die_precondition "polarity receipt is not readable: $POLARITY_RECEIPT"
   [ -n "$REPO_ROOT" ] || die_precondition "polarity receipt validation requires a repository context"
+  [ -n "$POLARITY_BASE_SHA" ] || die_precondition "polarity receipt shipping validation requires --polarity-base-sha"
+  [ -n "$POLARITY_HEAD_SHA" ] || die_precondition "polarity receipt shipping validation requires --polarity-head-sha"
+  [ -n "$POLARITY_VERIFY_CMD" ] || die_precondition "polarity receipt shipping validation requires --polarity-verify-cmd"
+  local artifact_args=()
+  local artifact
+  for artifact in "${POLARITY_ASSERTION_ARTIFACTS[@]}"; do
+    artifact_args+=(--assertion-artifact "$artifact")
+  done
   local validation validation_rc
   validation="$(bash "$_AUTHOR_SELF_DIR/verify-red-green.sh" --validate \
-    --receipt "$POLARITY_RECEIPT" --repo "$REPO_ROOT" 2>&1)"
+    --receipt "$POLARITY_RECEIPT" --repo "$REPO_ROOT" \
+    --base "$POLARITY_BASE_SHA" --head "$POLARITY_HEAD_SHA" \
+    --verify-cmd "$POLARITY_VERIFY_CMD" "${artifact_args[@]}" 2>&1)"
   validation_rc=$?
   if [ "$validation_rc" -ne 0 ]; then
     die_precondition "polarity receipt rejected: $(printf '%s' "$validation" | tr '\n' ' ')"
@@ -383,7 +401,7 @@ emit_result() {
     extra_fields="${extra_fields}, \"identity_drift\": true"
   fi
   if [ -n "${POLARITY_RECEIPT_DIGEST:-}" ]; then
-    extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape \"$POLARITY_RECEIPT_DIGEST\")\""
+    extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape "$POLARITY_RECEIPT_DIGEST")\""
   fi
 
   local raw_log_json="null"

@@ -1285,14 +1285,17 @@ compute_stage_condition() {
     fi
   elif [ "$event_condition" = "blocked" ]; then
     condition="blocked"; reason="${event_reason:-explicit_blocked_event}"
-  elif [ "$event_condition" = "waiting" ]; then
+  elif [ "$event_condition" = "waiting" ] && [ "$age" -lt "$stale_secs" ]; then
     condition="waiting"; reason="${event_reason:-explicit_wait_event}"
   elif [ "$event_condition" = "working" ] && [ "$age" -lt "$stale_secs" ]; then
     condition="working"; reason="${event_reason:-fresh_progress}"
   elif [ "$age" -ge "$stale_secs" ] && [ "$inquiry_state" = "pending" ]; then
     condition="blocked"; reason="nonresponsive_after_inquiry"
   elif [ "$age" -ge "$stale_secs" ] && [ "$inquiry_state" = "directive_delivered" ]; then
-    condition="waiting"; reason="inquiry_acknowledged"
+    # Delivery/acknowledgement alone is not a fresh heartbeat. Keep the
+    # bounded inquiry visible, but do not let an acknowledged stale wait live
+    # forever without current exact identity + heartbeat evidence.
+    condition="unknown"; reason="stale_after_inquiry_ack"
   elif [ "$age" -ge "$stale_secs" ]; then
     condition="unknown"; reason="stale_without_bounded_inquiry"
   else
@@ -1510,6 +1513,15 @@ command_stage_coordinate() {
     jq -nc --argjson condition "$condition_json" '{status:"no_live_lease",condition:$condition}'
     return 0
   fi
+  # A second controller may have completed the same idempotent intervention
+  # between the initial lookup and this refresh. Re-check under the latest
+  # lease before sending another inquiry; the expected generation/nonce fence
+  # below remains the final race guard.
+  prior="$(coordination_lookup "$ledger" "$run_id" "$stage" "$idempotency_key")"
+  if [ "$(jq -r '.status // ""' <<<"$prior")" = "replacement_authorized" ] || [ "$(jq -r '.status // ""' <<<"$prior")" = "adopted" ]; then
+    jq -nc --arg key "$idempotency_key" --argjson prior "$prior" '{status:"already_applied",idempotency_key:$key,receipt:$prior}'
+    return 0
+  fi
   generation="$(jq -r '.generation' <<<"$latest")"; nonce="$(jq -r '.nonce' <<<"$latest")"
   pid="$(jq -r '.pid // ""' <<<"$latest")"; start_time="$(jq -r '.start_time // ""' <<<"$latest")"; resources="$(jq -r '.resources // ""' <<<"$latest")"
   [ -n "$inquiry_text" ] || inquiry_text="depth-0 inquiry: report working, waiting, or blocked state before the bounded deadline"
@@ -1518,7 +1530,12 @@ command_stage_coordinate() {
   if [ "$wait_secs" -gt 0 ]; then sleep "$wait_secs"; fi
   ack_status="$(directive_terminal_status "$ledger" "$run_id" "$directive_id")"
   local reobserve_json recondition
-  reobserve_json="$(compute_stage_condition "$ledger" "$run_id" "$stage" "$stale_secs" "$now" "$directive_id")"
+  # Re-observe with a fresh wall-clock sample and exact owner identity. Reusing
+  # the initial timestamp made an explicit wait appear fresh forever even when
+  # no heartbeat arrived during the bounded inquiry window.
+  local reobserve_now
+  reobserve_now="$(now_ts)"
+  reobserve_json="$(compute_stage_condition "$ledger" "$run_id" "$stage" "$stale_secs" "$reobserve_now" "$directive_id")"
   recondition="$(jq -r '.condition // "unknown"' <<<"$reobserve_json")"
   if [ "$ack_status" = "directive_delivered" ]; then
     append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "inquire" "acknowledged" "$idempotency_key" "$(jq -nc --arg did "$directive_id" --argjson c "$reobserve_json" '{directive_id:$did,condition:$c}')" "$timeout" >/dev/null

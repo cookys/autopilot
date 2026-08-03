@@ -1562,6 +1562,97 @@ function defaultCampaignRepairChangedPaths({ repo, base, head }) {
   };
 }
 
+// Named remediation is an efficiency hint only.  The authoritative reviewer
+// still receives the complete candidate diff on every generation; this helper
+// merely binds a post-finding status report to exact Git commits and finding
+// contracts through diff-since-last-round.sh.  Any tool, contract, or ancestry
+// ambiguity returns needs_full_review and never clears a gate.
+function defaultRemediationChecker({ repo, previousCommit, currentCommit, previousFindings, currentFindings }) {
+  const fallback = (reason) => ({
+    schema_version: 1,
+    artifact_type: 'review_remediation_check',
+    status: 'needs_full_review',
+    authority: 'non_authoritative',
+    whole_candidate_pass: false,
+    gate_clear: false,
+    fallback_to_full_blind_review: true,
+    reason,
+  });
+  if (!isImmutableGitSha(previousCommit) || !isImmutableGitSha(currentCommit)
+      || previousCommit === currentCommit) {
+    return fallback('remediation checker requires two distinct immutable commits');
+  }
+  if (!Array.isArray(previousFindings) || previousFindings.length === 0) {
+    return fallback('no complete prior finding contracts available');
+  }
+  const allowedKeys = ['claim', 'finding_id', 'severity', 'source'];
+  const contracts = previousFindings.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    if (Object.keys(item).sort().join(',') !== allowedKeys.join(',')) return null;
+    return {
+      finding_id: item.finding_id,
+      claim: item.claim,
+      severity: item.severity,
+      source: item.source,
+    };
+  });
+  if (contracts.some((item) => !item)) return fallback('prior review findings are not named contract objects');
+  const currentById = new Map((Array.isArray(currentFindings) ? currentFindings : [])
+    .filter((item) => item && typeof item === 'object' && typeof item.finding_id === 'string')
+    .map((item) => [item.finding_id, item]));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-remediation-check-'));
+  const findingsFile = path.join(tempDir, 'findings.json');
+  const deltaFile = path.join(tempDir, 'delta.json');
+  const resultFile = path.join(tempDir, 'result.json');
+  try {
+    fs.writeFileSync(findingsFile, `${JSON.stringify({ findings: contracts })}\n`, { mode: 0o600 });
+    const script = resolveScriptPath('scripts/diff-since-last-round.sh');
+    const built = spawnSync('bash', [
+      script, 'remediation', '--previous', previousCommit, '--current', currentCommit,
+      '--findings-file', findingsFile, '--repo', repo, '--out', deltaFile,
+    ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const delta = fs.existsSync(deltaFile) ? parseJsonFromLastLine(fs.readFileSync(deltaFile, 'utf8')) : null;
+    if (!delta || built.error || built.status !== 0 || delta.status !== 'ready') {
+      return fallback((delta && delta.reason) || 'remediation delta is not ready for named checking');
+    }
+    const findings = contracts.map((finding) => {
+      const current = currentById.get(finding.finding_id);
+      return {
+        finding_id: finding.finding_id,
+        status: current ? 'unresolved' : 'resolved',
+        evidence: current
+          ? `finding remains in the current full-diff review: ${String(current.claim || finding.claim)}`
+          : 'finding id is absent from the current full-diff review',
+      };
+    });
+    fs.writeFileSync(resultFile, `${JSON.stringify({
+      schema_version: 1,
+      artifact_type: 'review_remediation_result',
+      authority: 'non_authoritative',
+      whole_candidate_pass: false,
+      gate_clear: false,
+      previous_commit: delta.previous_commit,
+      current_commit: delta.current_commit,
+      delta_digest: delta.delta_digest,
+      finding_contract_digest: delta.finding_contract_digest,
+      findings,
+    })}\n`, { mode: 0o600 });
+    const checked = spawnSync('bash', [
+      script, 'check-remediation', '--delta-file', deltaFile, '--result-file', resultFile,
+      '--repo', repo,
+    ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const result = parseJsonFromLastLine(checked.stdout);
+    if (!result || checked.error || checked.status !== 0) {
+      return fallback((result && result.reason) || 'named remediation checker did not produce a valid receipt');
+    }
+    return result;
+  } catch (error) {
+    return fallback(error.message || String(error));
+  } finally {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_error) { /* best effort */ }
+  }
+}
+
 function checkCampaignScope({ session, repo, head }) {
   if (!session
       || repairScopeContractDigest(session.contract) !== session.seal_digest) {
@@ -2160,6 +2251,19 @@ function collectFindings(review) {
   return [];
 }
 
+function namedReviewFindings(review) {
+  let findings = null;
+  if (review && review.review && Object.prototype.hasOwnProperty.call(review.review, 'findings')) {
+    findings = review.review.findings;
+  } else if (review && Object.prototype.hasOwnProperty.call(review, 'findings')) {
+    findings = review.findings;
+  }
+  if (typeof findings === 'string') {
+    try { findings = JSON.parse(findings); } catch (_error) { return null; }
+  }
+  return Array.isArray(findings) ? findings : null;
+}
+
 function verificationRank(verifyPass) {
   return verifyPass === true ? 1 : 0;
 }
@@ -2244,6 +2348,7 @@ class AutopilotEngine {
     this.implementationDispatcher = options.implementationDispatcher || dispatchImplementJson;
     this.diffProvider = options.diffProvider || defaultDiffProvider;
     this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
+    this.remediationChecker = options.remediationChecker || defaultRemediationChecker;
     this.verifyCommandRunner = options.verifyCommandRunner || defaultVerifyCommandRunner;
     this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
     this.gitWorktreeRemove = options.gitWorktreeRemove || defaultGitWorktreeRemove;
@@ -4526,7 +4631,8 @@ class AutopilotEngine {
           reason: 'campaign wall budget exhausted before review',
         };
       }
-      const reviewed = this.reviewDiff({
+      const previousReviewForRemediation = repairGeneration > 0 ? latestReview : null;
+      let reviewed = this.reviewDiff({
         diffFile,
         specFile: promptFile,
         roster: reviewRoster,
@@ -4568,6 +4674,47 @@ class AutopilotEngine {
           reviewed: false,
           reason: reviewed.reason || `review status ${reviewed.status}`,
           raw: reviewed,
+        };
+      }
+      if (repairGeneration > 0 && previousReviewForRemediation) {
+        const priorFindings = namedReviewFindings(previousReviewForRemediation);
+        const currentFindings = namedReviewFindings(reviewed) || [];
+        let remediationCheck;
+        try {
+          remediationCheck = this.remediationChecker({
+            repo: loopCwd,
+            previousCommit: currentBase,
+            currentCommit: candidate.commit,
+            previousFindings: priorFindings,
+            currentFindings,
+            repairGeneration,
+          });
+        } catch (error) {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: error.message || String(error),
+          };
+        }
+        reviewed = {
+          ...reviewed,
+          remediation_check: remediationCheck && typeof remediationCheck === 'object'
+            ? remediationCheck
+            : {
+              schema_version: 1,
+              artifact_type: 'review_remediation_check',
+              status: 'needs_full_review',
+              authority: 'non_authoritative',
+              whole_candidate_pass: false,
+              gate_clear: false,
+              fallback_to_full_blind_review: true,
+              reason: 'remediation checker returned no receipt',
+            },
         };
       }
       let findings = reviewed.review && typeof reviewed.review.findings === 'string'
@@ -9087,6 +9234,7 @@ class AutopilotEngine {
         });
       }
 
+      const previousReviewForRemediation = round > 1 ? review : null;
       review = this.reviewDiff({
         diffFile,
         specFile: input.noReviewSpec !== true ? promptFile : undefined,
@@ -9122,6 +9270,47 @@ class AutopilotEngine {
         },
         requireQualifiedReviewer,
       });
+      if (round > 1 && previousReviewForRemediation) {
+        const priorFindings = namedReviewFindings(previousReviewForRemediation);
+        const currentFindings = namedReviewFindings(review) || [];
+        let remediationCheck;
+        try {
+          remediationCheck = this.remediationChecker({
+            repo: loopCwd,
+            previousCommit: nextBase,
+            currentCommit: commit,
+            previousFindings: priorFindings,
+            currentFindings,
+            repairGeneration: round - 1,
+          });
+        } catch (error) {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: error.message || String(error),
+          };
+        }
+        if (!remediationCheck || typeof remediationCheck !== 'object') {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: 'remediation checker returned no receipt',
+          };
+        }
+        // Keep this receipt outside the reviewer authority digest. It is a
+        // dispatcher-side annotation and can never make a full review pass.
+        review = { ...review, remediation_check: remediationCheck };
+      }
       ledger.push(...review.ledger);
       reviewChain.push(review);
       if (lifecycleObservation) lifecycleObservation.observeReviewResult(review, round);

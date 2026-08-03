@@ -122,11 +122,15 @@ function stageCondition(record, event, nowMs, quietSecs) {
   if (!alive || state.startsWith('Z')) {
     return record.resources ? { condition: 'unknown', reason: 'owner_absent_resource_holder' } : { condition: 'dead', reason: 'owner_absent' };
   }
+  const age = Math.max(0, Math.round((nowMs - heartbeat * 1000) / 1000));
   if (event && event.generation === record.generation && event.nonce === record.nonce) {
     if (event.condition === 'blocked') return { condition: 'blocked', reason: event.reason || 'explicit_blocked_event' };
-    if (event.condition === 'waiting') return { condition: 'waiting', reason: event.reason || 'explicit_wait_event' };
+    // A waiting event is authoritative only while the exact owner continues
+    // to publish a fresh heartbeat; a stale wait enters bounded inquiry.
+    if (event.condition === 'waiting' && (quietSecs <= 0 || age < quietSecs)) {
+      return { condition: 'waiting', reason: event.reason || 'explicit_wait_event' };
+    }
   }
-  const age = Math.max(0, Math.round((Date.now() - heartbeat * 1000) / 1000));
   if (age >= quietSecs && quietSecs > 0) return { condition: 'unknown', reason: 'stale_without_bounded_inquiry' };
   return { condition: 'working', reason: 'fresh_heartbeat' };
 }
@@ -136,15 +140,21 @@ const state = {
   ledgerSeenWait: false,
   lastLedgerEventMs: null,
   quietAnnounced: false,
-  stageState: new Map(),   // stage -> `${state}:${generation}`
-  stageRecords: new Map(), // stage -> latest stage lease row
-  workerEvents: new Map(), // stage -> latest generation-bound worker event
-  conditionState: new Map(),
+  stageState: new Map(),   // run_id + stage -> `${state}:${generation}`
+  stageRecords: new Map(), // run_id + stage -> latest stage lease row
+  workerEvents: new Map(), // run_id + stage -> latest generation-bound worker event
+  conditionState: new Map(), // run_id + stage -> last typed condition
   leaves: new Map(),       // run_id -> { ended: bool, stallAnnounced: bool }
 };
 
 function emit(line) {
   process.stdout.write(`${line}\n`);
+}
+
+function stageKey(runId, stage) {
+  // JSON tuple avoids stage-only collisions without emitting a NUL byte into
+  // --once snapshot output (shell command substitutions drop NULs).
+  return JSON.stringify([runId || '', stage || '']);
 }
 
 function tickLedger(args, nowMs) {
@@ -167,15 +177,16 @@ function tickLedger(args, nowMs) {
       const ms = tsToMs(rec.heartbeat_ts) || tsToMs(rec.ts);
       if (ms && (!state.lastLedgerEventMs || ms > state.lastLedgerEventMs)) state.lastLedgerEventMs = ms;
       if (rec.kind === 'stage' && rec.stage) {
-        state.stageRecords.set(rec.stage, rec);
+        state.stageRecords.set(stageKey(rec.run_id, rec.stage), rec);
       } else if ((rec.kind === 'worker_event' || rec.kind === 'worker_signal') && rec.stage) {
-        state.workerEvents.set(rec.stage, rec);
-        const lease = state.stageRecords.get(rec.stage);
+        const identity = stageKey(rec.run_id, rec.stage);
+        state.workerEvents.set(identity, rec);
+        const lease = state.stageRecords.get(identity);
         if (lease) {
           const c = stageCondition(lease, rec, nowMs, args.quietSecs);
           const cKey = `${c.condition}:${lease.generation}:${c.reason}`;
-          if (state.conditionState.get(rec.stage) !== cKey) {
-            state.conditionState.set(rec.stage, cKey);
+          if (state.conditionState.get(identity) !== cKey) {
+            state.conditionState.set(identity, cKey);
             emit(`CONDITION run=${lease.run_id || '?'} ${rec.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}`);
           }
         }
@@ -184,14 +195,15 @@ function tickLedger(args, nowMs) {
       if (rec.kind !== 'stage' || !rec.stage) continue;
       if (rec.reason === 'heartbeat') continue; // liveness signal, not an event
       const key = `${rec.state}:${rec.generation}`;
-      if (state.stageState.get(rec.stage) !== key) {
-        state.stageState.set(rec.stage, key);
+      const identity = stageKey(rec.run_id, rec.stage);
+      if (state.stageState.get(identity) !== key) {
+        state.stageState.set(identity, key);
         emit(`STAGE run=${rec.run_id || '?'} ${rec.stage} ${rec.state} gen=${rec.generation} reason=${rec.reason || ''}`);
       }
-      const c = stageCondition(rec, state.workerEvents.get(rec.stage), nowMs, args.quietSecs);
+      const c = stageCondition(rec, state.workerEvents.get(identity), nowMs, args.quietSecs);
       const cKey = `${c.condition}:${rec.generation}:${c.reason}`;
-      if (state.conditionState.get(rec.stage) !== cKey) {
-        state.conditionState.set(rec.stage, cKey);
+      if (state.conditionState.get(identity) !== cKey) {
+        state.conditionState.set(identity, cKey);
         emit(`CONDITION run=${rec.run_id || '?'} ${rec.stage} ${c.condition} gen=${rec.generation} reason=${c.reason}`);
       }
     }

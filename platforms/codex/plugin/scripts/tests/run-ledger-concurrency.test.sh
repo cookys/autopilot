@@ -401,6 +401,8 @@ chmod +x "$TEST_TMP/r6-quiet-worker.sh"
 setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
 R6_PID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --pid "$R6_PID" --heartbeat-ts 1 --campaign-id campaign-r6 --ticket-id ticket-r6 --lineage-id lineage-r6
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation 1 --nonce missing --pid "$R6_PID" --timeout 5
+assert_cmd_rc 1 "direct transfer without ledger authorization is rejected"
 BLOCKED_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --grace-seconds 0 --idempotency-key r6-replace-key)"
 R6_COORD_STATUS="$(jq -r '.status' <<<"$BLOCKED_COORD")"
 case "$R6_COORD_STATUS" in
@@ -411,12 +413,33 @@ assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="coordination" and .
 assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="replacement")]|length' "$R6_LEDGER")" "0" "coordinator never leases a short-lived replacement"
 OLD_GEN="$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].generation' "$R6_LEDGER")"
 OLD_NONCE="$(jq -sr --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].nonce' "$R6_LEDGER")"
+printf '%s\n' '{"status":"no_effect","effects":[]}' > "$TEST_TMP/r6-no-effect.json"
+AUTHORIZED_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --grace-seconds 0 --idempotency-key r6-authorize-key --authorize-transfer --result-json "$TEST_TMP/r6-no-effect.json")"
+assert_json_eq "$AUTHORIZED_COORD" '.status' "transfer_authorized" "safe no-effect reconciliation authorizes explicit handoff"
+AUTH_KEY="$(jq -r '.authorization_key' <<<"$AUTHORIZED_COORD")"
 setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
 R6_REPLACEMENT_PID=$!
-TRANSFERRED="$(bash "$SCRIPT" stage-transfer --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$OLD_GEN" --nonce "$OLD_NONCE" --pid "$R6_REPLACEMENT_PID" --git-ref refs/heads/r6 --worktree "$TEST_TMP" --timeout 5)"
+TRANSFERRED="$(bash "$SCRIPT" stage-transfer --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$OLD_GEN" --nonce "$OLD_NONCE" --authorization-key "$AUTH_KEY" --pid "$R6_REPLACEMENT_PID" --timeout 5)"
 assert_json_eq "$TRANSFERRED" '.generation' "2" "real replacement worker advances the exact tuple explicitly"
 assert_eq "$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|map(.generation)|unique|length' "$R6_LEDGER")" "2" "one explicit replacement generation only"
 assert_eq "$(jq -sr --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="ownership_transfer")][0].campaign_id' "$R6_LEDGER")" "campaign-r6" "explicit handoff preserves campaign lineage"
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$OLD_GEN" --nonce "$OLD_NONCE" --authorization-key "$AUTH_KEY" --pid "$R6_REPLACEMENT_PID" --timeout 5
+assert_cmd_rc 1 "consumed transfer authorization cannot be replayed"
+
+# Even a forged-looking authorization cannot seize a live owner.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-live-owner --stage work --pid "$R6_REPLACEMENT_PID" --campaign-id campaign-r6 --ticket-id ticket-r6 --lineage-id lineage-r6
+LIVE_GEN="$(jq -r '.generation' <<<"$CMD_OUT")"; LIVE_NONCE="$(jq -r '.nonce' <<<"$CMD_OUT")"; LIVE_START="$(jq -r '.start_time' <<<"$CMD_OUT")"
+jq -nc --arg rid r6-live-owner --arg stg work --arg gen "$LIVE_GEN" --arg nonce "$LIVE_NONCE" --arg key live-key --arg pid "$R6_REPLACEMENT_PID" --arg start "$LIVE_START" '{kind:"coordination",ts:"fixture",run_id:$rid,stage:$stg,generation:($gen|tonumber),nonce:$nonce,action:"transfer",status:"authorized",idempotency_key:$key,payload:{authorization:"stage-transfer",no_effect_proof:true,old_pid:($pid|tonumber),old_start_time:($start|tonumber)}}' >> "$R6_LEDGER"
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-live-owner --stage work --generation "$LIVE_GEN" --nonce "$LIVE_NONCE" --authorization-key live-key --pid "$R6_REPLACEMENT_PID" --timeout 5
+assert_cmd_rc 1 "live owner blocks authorized transfer"
+
+# A quarantined resource is not clear for handoff, even when owner evidence is absent.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-quarantine --stage work --pid 999999 --start-time 1 --resources r6-resource
+Q_GEN="$(jq -r '.generation' <<<"$CMD_OUT")"; Q_NONCE="$(jq -r '.nonce' <<<"$CMD_OUT")"
+jq -nc --arg rid r6-quarantine --arg stg work --arg gen "$Q_GEN" --arg nonce "$Q_NONCE" '{kind:"resource",ts:"fixture",run_id:$rid,resource_id:"r6-resource",state:"quarantined",reason:"fixture",generation:($gen|tonumber),nonce:$nonce}' >> "$R6_LEDGER"
+jq -nc --arg rid r6-quarantine --arg stg work --arg gen "$Q_GEN" --arg nonce "$Q_NONCE" --arg key quarantine-key '{kind:"coordination",ts:"fixture",run_id:$rid,stage:$stg,generation:($gen|tonumber),nonce:$nonce,action:"transfer",status:"authorized",idempotency_key:$key,payload:{authorization:"stage-transfer",no_effect_proof:true,old_pid:999999,old_start_time:1}}' >> "$R6_LEDGER"
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-quarantine --stage work --generation "$Q_GEN" --nonce "$Q_NONCE" --authorization-key quarantine-key --pid "$R6_REPLACEMENT_PID" --timeout 5
+assert_cmd_rc 1 "quarantined resource blocks transfer"
 run_cmd stage-transition --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$OLD_GEN" --nonce "$OLD_NONCE" --to-state committed
 assert_cmd_rc 11 "late old-generation result is fenced after replacement"
 assert_json_eq "$CMD_OUT" '.state' "stale_ignored" "late result records stale_ignored"

@@ -170,7 +170,7 @@ printf '%s\n' '#!/usr/bin/env bash' '[ "$(bash calc.sh)" = "5" ]' > "$POL_VERIFY
 chmod +x "$POL_VERIFY"
 POL_RECEIPT="$TEST_TMP/polarity-valid.json"
 "$REPO_ROOT/scripts/verify-red-green.sh" --base "$POL_BASE" --head "$POL_HEAD" \
-  --verify-cmd "$POL_VERIFY" --repo "$POL_REPO" --receipt-out "$POL_RECEIPT" >/dev/null
+  --verify-cmd "$POL_VERIFY" --repo "$POL_REPO" --assertion-artifact calc.test.sh --receipt-out "$POL_RECEIPT" >/dev/null
 # The Grok-shaped transport owns a live stdin under its timeout wrapper.  Keep
 # this polarity acceptance fixture independent of stdin so a valid receipt
 # cannot be mistaken for a transport hang.
@@ -183,7 +183,7 @@ chmod +x "$STUB_GROK"
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model gpt-test --prompt-file "$PROMPT" \
   --bin "$STUB_GROK" --require-polarity-receipt --polarity-receipt "$POL_RECEIPT" \
   --repo-root "$POL_REPO" --polarity-base-sha "$POL_BASE" --polarity-head-sha "$POL_HEAD" \
-  --polarity-verify-cmd "$POL_VERIFY" 2>&1)"; EXIT=$?
+  --polarity-verify-cmd "$POL_VERIFY" --polarity-assertion-artifact calc.test.sh 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "independently observed polarity receipt permits dispatch"
 assert_contains "$OUT" '"polarity_receipt_digest": "' "dispatch result carries polarity receipt digest"
 assert_not_contains "$OUT" '\\"' "polarity receipt digest serialization has no literal quote escapes"
@@ -201,7 +201,7 @@ NODE
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model gpt-test --prompt-file "$PROMPT" \
   --bin "$STUB_GROK" --require-polarity-receipt --polarity-receipt "$POL_FORGED" \
   --repo-root "$POL_REPO" --polarity-base-sha "$POL_BASE" --polarity-head-sha "$POL_HEAD" \
-  --polarity-verify-cmd "$POL_VERIFY" 2>&1)"; EXIT=$?
+  --polarity-verify-cmd "$POL_VERIFY" --polarity-assertion-artifact calc.test.sh 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "forged self-digested polarity receipt is rejected"
 assert_contains "$OUT" "red-before/green-after" "forged polarity rejection names observed transition"
 

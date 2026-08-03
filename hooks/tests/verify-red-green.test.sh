@@ -65,16 +65,18 @@ test_validated() {
     assert_file_exists "$receipt" "VALIDATED writes a polarity receipt"
     assert_contains "$(cat "$receipt")" '"artifact_type": "red_green_polarity_receipt"' "receipt has polarity artifact type"
     assert_contains "$(cat "$receipt")" '"expected_red_exit_class": "nonzero"' "receipt binds expected red exit class"
-    local validated; validated=$("$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$vc" 2>&1); ec=$?
+    local validated; validated=$("$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$vc" --assertion-artifact calc.test.sh 2>&1); ec=$?
     assert_eq "$ec" "0" "matching polarity receipt validates"
     assert_contains "$validated" '"status":"validated"' "matching polarity receipt returns validated status"
-    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --base "$head" >/dev/null 2>&1; ec=$?
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --base "$head" --assertion-artifact calc.test.sh >/dev/null 2>&1; ec=$?
     assert_eq "$ec" "1" "cross-base polarity receipt is rejected"
     local other_vc="$TEST_TMP/verify_validated_other.sh"
     printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$other_vc"
     chmod +x "$other_vc"
-    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$other_vc" >/dev/null 2>&1; ec=$?
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$other_vc" --assertion-artifact calc.test.sh >/dev/null 2>&1; ec=$?
     assert_eq "$ec" "1" "cross-command polarity receipt is rejected"
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$vc" --assertion-artifact calc.sh >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "1" "cross-assertion polarity receipt is rejected"
 }
 
 # 1b. VALIDATED with test at a NESTED path (tests/unit_test.sh) — regression guard:

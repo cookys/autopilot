@@ -4718,9 +4718,22 @@ class AutopilotEngine {
       }
       if (repairGeneration > 0 && previousReviewForRemediation) {
         const priorFindings = namedReviewFindings(previousReviewForRemediation);
-        const currentFindings = namedReviewFindings(reviewed) || [];
+        const currentFindings = namedReviewFindings(reviewed);
         let remediationCheck;
-        try {
+        if (!priorFindings || !currentFindings) {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: !currentFindings
+              ? 'current full-review findings are missing or malformed'
+              : 'prior full-review findings are missing or malformed',
+          };
+        } else try {
           remediationCheck = this.remediationChecker({
             repo: loopCwd,
             previousCommit: currentBase,
@@ -9312,9 +9325,22 @@ class AutopilotEngine {
       });
       if (round > 1 && previousReviewForRemediation) {
         const priorFindings = namedReviewFindings(previousReviewForRemediation);
-        const currentFindings = namedReviewFindings(review) || [];
+        const currentFindings = namedReviewFindings(review);
         let remediationCheck;
-        try {
+        if (!priorFindings || !currentFindings) {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: !currentFindings
+              ? 'current full-review findings are missing or malformed'
+              : 'prior full-review findings are missing or malformed',
+          };
+        } else try {
           remediationCheck = this.remediationChecker({
             repo: loopCwd,
             previousCommit: nextBase,

@@ -9,6 +9,7 @@
 #   scripts/verify-red-green.sh --base <ref> --head <ref> --verify-cmd <script-path> \
 #       [--test-glob <glob>]... [--repo <dir>] [--receipt-out <file>]
 #   scripts/verify-red-green.sh --validate --receipt <file> [--repo <dir>] \
+#       --assertion-artifact <git-path>... \
 #       [--base <full-sha> --head <full-sha> --verify-cmd <script-path>]
 #
 #   --verify-cmd may be a relative path; it is validated against the CALLER's
@@ -139,15 +140,17 @@ NODE
 # receipt must be rejected before a verification-author workflow can treat it as evidence.
 validate_receipt() {
   local receipt_file="$1" repo="$2" base_ref="$3" head_ref="$4" verify_cmd="$5"
+  shift 5
+  local -a caller_artifacts=("$@")
   local validation validation_rc
   set +e
-  validation="$(node - "$receipt_file" "$repo" "$base_ref" "$head_ref" "$verify_cmd" <<'NODE'
+  validation="$(node - "$receipt_file" "$repo" "$base_ref" "$head_ref" "$verify_cmd" "${caller_artifacts[@]}" <<'NODE'
 "use strict";
 const fs = require('fs');
 const crypto = require('crypto');
 const child = require('child_process');
 const path = require('path');
-const [receiptFile, repo, expectedBase, expectedHead, verifyCmd] = process.argv.slice(2);
+const [receiptFile, repo, expectedBase, expectedHead, verifyCmd, ...callerArtifacts] = process.argv.slice(2);
 const canonical = (value) => Array.isArray(value)
   ? '[' + value.map(canonical).join(',') + ']'
   : (value && typeof value === 'object'
@@ -217,10 +220,23 @@ if (!Array.isArray(receipt.red_tests)
   reject('receipt is missing red test and assertion artifact path fields');
 }
 const actualArtifacts = receipt.assertion_artifacts.map((item) => item && item.path).sort();
+const normalizeArtifacts = (items, label) => {
+  if (!Array.isArray(items) || items.length === 0) reject(label + ' must contain at least one assertion artifact');
+  const paths = items.map((item) => String(item || ''));
+  if (paths.some((item) => item.length === 0 || path.posix.isAbsolute(item) || item.split('/').includes('..'))) {
+    reject(label + ' contains a malformed path');
+  }
+  if (new Set(paths).size !== paths.length) reject(label + ' contains duplicate paths');
+  return paths.sort();
+};
+const callerArtifactPaths = normalizeArtifacts(callerArtifacts, 'caller assertion artifacts');
 if (actualArtifacts.some((item) => typeof item !== 'string' || item.length === 0
     || path.posix.isAbsolute(item) || item.split('/').includes('..'))
     || receipt.red_tests.slice().sort().join('\0') !== actualArtifacts.join('\0')) {
   reject('receipt assertion artifact paths are malformed or inconsistent');
+}
+if (callerArtifactPaths.join('\0') !== actualArtifacts.join('\0')) {
+  reject('caller assertion artifacts do not exactly match the receipt');
 }
 for (const item of receipt.assertion_artifacts) {
   if (!/^[0-9a-f]{64}$/.test(item.sha256 || '') || blobSha(head, item.path) !== item.sha256) {
@@ -285,18 +301,12 @@ NODE
       printf '%s\n' '{"valid":false,"status":"rejected","reason":"independent polarity observation requires base, head, and verify command"}'
       return 1
     }
-    local observed receipt_paths_json observed_rc observed_file
+    local observed observed_rc observed_file
     observed_file="$(mktemp -t verify-red-green-observed-XXXXXX.json)"
     trap 'rm -f "$observed_file"' RETURN
-    mapfile -t receipt_paths < <(node - "$validation" <<'NODE'
-"use strict";
-const value = JSON.parse(process.argv[2]);
-for (const item of value.assertion_artifacts || []) process.stdout.write(String(item) + "\n");
-NODE
-    )
     local -a observe_args=(--base "$base_ref" --head "$head_ref" --verify-cmd "$verify_cmd" --repo "$repo" --receipt-out "$observed_file")
     local artifact
-    for artifact in "${receipt_paths[@]}"; do
+    for artifact in "${caller_artifacts[@]}"; do
       observe_args+=(--assertion-artifact "$artifact")
     done
     set +e
@@ -429,7 +439,7 @@ REPO="$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" || err_usage "not
 REPO="$(cd "$REPO" && pwd -P)" || err_usage "repository path unresolvable: $REPO"
 
 if [[ "$VALIDATE_ONLY" -eq 1 ]]; then
-  validate_receipt "$RECEIPT_FILE" "$REPO" "$BASE_REF" "$HEAD_REF" "$VERIFY_CMD"
+  validate_receipt "$RECEIPT_FILE" "$REPO" "$BASE_REF" "$HEAD_REF" "$VERIFY_CMD" "${ASSERTION_ARTIFACT_PATHS[@]}"
   exit $?
 fi
 

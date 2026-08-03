@@ -379,23 +379,25 @@ assert_json_eq "$STALE_WAIT_CONDITION" '.condition' "unknown" "stale explicit wa
 assert_json_eq "$STALE_WAIT_CONDITION" '.reason' "stale_without_bounded_inquiry" "stale explicit wait names bounded inquiry fallback"
 
 # Mismatched identity is unknown and cannot be signalled or replaced.
-run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --pid "$$" --start-time 1 --heartbeat-ts 1
-UNKNOWN_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-unknown-key)"
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --pid "$$" --start-time 1 --heartbeat-ts 1; UNKNOWN_GEN="$(jq -r .generation <<<"$CMD_OUT")"; UNKNOWN_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+UNKNOWN_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --action intervene --generation "$UNKNOWN_GEN" --nonce "$UNKNOWN_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-unknown-key)"
 assert_json_eq "$UNKNOWN_COORD" '.status' "unknown" "identity mismatch blocks intervention"
 assert_json_eq "$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id r6-unknown --stage work --stale-seconds 1)" '.condition' "unknown" "identity mismatch remains unknown"
 
-run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-legacy-no-pgid --stage work --pid 999999 --start-time 1 --heartbeat-ts 1
-LEGACY_NO_PGID="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-legacy-no-pgid --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key no-pgid)"
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-legacy-no-pgid --stage work --pid 999999 --start-time 1 --heartbeat-ts 1; LEGACY_GEN="$(jq -r .generation <<<"$CMD_OUT")"; LEGACY_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+LEGACY_NO_PGID="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-legacy-no-pgid --stage work --action intervene --generation "$LEGACY_GEN" --nonce "$LEGACY_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key no-pgid)"
 assert_json_eq "$LEGACY_NO_PGID" '.status' unknown "missing durable PGID fails intervention closed as unknown"
 
 # Feature-off rollback is report-only.
-run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-off --stage work --pid "$$" --heartbeat-ts 1
-OFF_COORD="$(bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-off --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --idempotency-key r6-off-key)"
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-off --stage work --pid "$$" --heartbeat-ts 1; OFF_GEN="$(jq -r .generation <<<"$CMD_OUT")"; OFF_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+OFF_COORD="$(bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-off --stage work --action intervene --generation "$OFF_GEN" --nonce "$OFF_NONCE" --stale-seconds 1 --wait-seconds 0 --idempotency-key r6-off-key)"
 assert_json_eq "$OFF_COORD" '.status' "feature_disabled" "adaptive recovery is disabled by default"
 assert_eq "$(jq -s --arg rid r6-off '[.[]|select(.kind=="directive" and .run_id==$rid)]|length' "$R6_LEDGER")" "0" "feature-off emits no directive"
-run_cmd stage-coordinate --ledger "$R6_LEDGER" --run-id r6-off --stage work --action intervene --enable --wait-seconds 0 --grace-seconds 1
+run_cmd stage-coordinate --ledger "$R6_LEDGER" --run-id r6-off --stage work --action intervene --enable --wait-seconds 1 --grace-seconds 1
+assert_cmd_rc 1 "intervention requires caller-pinned generation and nonce"
+run_cmd stage-coordinate --ledger "$R6_LEDGER" --run-id r6-off --stage work --action intervene --generation "$OFF_GEN" --nonce "$OFF_NONCE" --enable --wait-seconds 0 --grace-seconds 1
 assert_cmd_rc 1 "enabled intervention rejects zero wait"
-run_cmd stage-coordinate --ledger "$R6_LEDGER" --run-id r6-off --stage work --action intervene --enable --wait-seconds 1 --grace-seconds 0
+run_cmd stage-coordinate --ledger "$R6_LEDGER" --run-id r6-off --stage work --action intervene --generation "$OFF_GEN" --nonce "$OFF_NONCE" --enable --wait-seconds 1 --grace-seconds 0
 assert_cmd_rc 1 "enabled intervention rejects zero grace"
 
 # Legacy argv remains valid outside the guarded recovery lineage; omission inside one fails closed.
@@ -410,8 +412,11 @@ jq -nc --arg gen "$GUARD_GEN" --arg nonce "$GUARD_NONCE" '{kind:"coordination",r
 run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-guarded --stage work --generation "$GUARD_GEN" --nonce "$GUARD_NONCE" --pid "$$"; assert_cmd_rc 1 "destructive recovery state requires authorization"
 setsid sh -c 'trap "" HUP; sleep 30 & echo $! > "$1"' _ "$TEST_TMP/r6-intruder.pid"
 R6_INTRUDER_PID="$(cat "$TEST_TMP/r6-intruder.pid")"
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-feature-off-handoff --stage work --pid "$$"; OFF_HANDOFF_GEN="$(jq -r .generation <<<"$CMD_OUT")"; OFF_HANDOFF_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-feature-off-handoff --stage work --generation "$OFF_HANDOFF_GEN" --nonce "$OFF_HANDOFF_NONCE" --pid "$R6_INTRUDER_PID"
+assert_cmd_rc 0 "feature-off prior argv preserves ordinary CAS transfer semantics"
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-live-ordinary --stage work --pid "$$"; LIVE_ORD_GEN="$(jq -r .generation <<<"$CMD_OUT")"; LIVE_ORD_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
-run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-live-ordinary --stage work --generation "$LIVE_ORD_GEN" --nonce "$LIVE_ORD_NONCE" --pid "$R6_INTRUDER_PID"
+AUTOPILOT_ADAPTIVE_INTERVENTION=1 run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-live-ordinary --stage work --generation "$LIVE_ORD_GEN" --nonce "$LIVE_ORD_NONCE" --pid "$R6_INTRUDER_PID"
 assert_cmd_rc 1 "unrelated live controller cannot seize ordinary handoff with known tuple"
 kill "$R6_INTRUDER_PID" 2>/dev/null || true; wait "$R6_INTRUDER_PID" 2>/dev/null || true
 
@@ -426,22 +431,17 @@ chmod +x "$TEST_TMP/r6-quiet-worker.sh"
 setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
 R6_PID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --pid "$R6_PID" --heartbeat-ts 1 --campaign-id campaign-r6 --ticket-id ticket-r6 --lineage-id lineage-r6
+BLOCK_GEN="$(jq -r .generation <<<"$CMD_OUT")"; BLOCK_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
 run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation 1 --nonce missing --pid "$R6_PID" --timeout 5
 assert_cmd_rc 1 "direct transfer without ledger authorization is rejected"
-BLOCKED_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-replace-key)"
-R6_COORD_STATUS="$(jq -r '.status' <<<"$BLOCKED_COORD")"
-case "$R6_COORD_STATUS" in
-  blocked|quarantined) PASS_COUNT=$((PASS_COUNT + 1)) ;;
-  *) FAILS+=("quiet nonresponsive worker requires explicit reconciliation before replacement: unexpected status $R6_COORD_STATUS") ;;
-esac
-assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="coordination" and .run_id==$rid and .status=="replacement_authorized")]|length' "$R6_LEDGER")" "0" "incomplete reconciliation emits no replacement receipt"
-assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="replacement")]|length' "$R6_LEDGER")" "0" "coordinator never leases a short-lived replacement"
 OLD_GEN="$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].generation' "$R6_LEDGER")"
 OLD_NONCE="$(jq -sr --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].nonce' "$R6_LEDGER")"
 R6_LEASE="$(jq -sc --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[-1]' "$R6_LEDGER")"
 jq -nc --argjson l "$R6_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:$l.campaign_id,ticket_id:$l.ticket_id,lineage_id:$l.lineage_id,git_ref:($l.git_ref//""),git_sha:($l.git_sha//""),worktree:($l.worktree//""),status:"no_effect",effects:[]}' > "$TEST_TMP/r6-no-effect.json"
-AUTHORIZED_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-authorize-key --authorize-transfer --result-json "$TEST_TMP/r6-no-effect.json")"
+AUTHORIZED_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --action intervene --generation "$BLOCK_GEN" --nonce "$BLOCK_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-authorize-key --authorize-transfer --result-json "$TEST_TMP/r6-no-effect.json")"
 assert_json_eq "$AUTHORIZED_COORD" '.status' "transfer_authorized" "safe no-effect reconciliation authorizes explicit handoff"
+assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="directive" and .run_id==$rid)]|length' "$R6_LEDGER")" "1" "one exact lease intervention emits one directive"
+assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="replacement")]|length' "$R6_LEDGER")" "0" "coordinator never leases a short-lived replacement"
 AUTH_KEY="$(jq -r '.authorization_key' <<<"$AUTHORIZED_COORD")"
 setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
 R6_REPLACEMENT_PID=$!
@@ -462,14 +462,16 @@ setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 & ADV_PID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-advanced --stage work --pid "$ADV_PID" --heartbeat-ts 1 --git-ref refs/heads/main --git-sha "$ADV_BASE" --worktree "$ADV_REPO"; ADV_LEASE="$CMD_OUT"
 kill "$ADV_PID" 2>/dev/null || true; wait "$ADV_PID" 2>/dev/null || true
 jq -nc --argjson l "$ADV_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:"",ticket_id:"",lineage_id:"",git_ref:$l.git_ref,git_sha:$l.git_sha,worktree:$l.worktree,status:"no_effect",effects:[]}' > "$TEST_TMP/r6-advanced-result.json"
-ADV_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-advanced --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-advanced-key --authorize-transfer --result-json "$TEST_TMP/r6-advanced-result.json" --git-dir "$ADV_REPO")"; assert_json_eq "$ADV_COORD" '.status' adopted "advanced Git truth is adopted"; assert_eq "$(jq -s --arg rid r6-advanced '[.[]|select(.kind=="coordination" and .run_id==$rid and .action=="transfer" and .status=="authorized")]|length' "$R6_LEDGER")" 0 "advanced Git truth emits no transfer authorization"
+ADV_GEN="$(jq -r .generation <<<"$ADV_LEASE")"; ADV_NONCE="$(jq -r .nonce <<<"$ADV_LEASE")"
+ADV_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-advanced --stage work --action intervene --generation "$ADV_GEN" --nonce "$ADV_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-advanced-key --authorize-transfer --result-json "$TEST_TMP/r6-advanced-result.json" --git-dir "$ADV_REPO")"; assert_json_eq "$ADV_COORD" '.status' adopted "advanced Git truth is adopted"; assert_eq "$(jq -s --arg rid r6-advanced '[.[]|select(.kind=="coordination" and .run_id==$rid and .action=="transfer" and .status=="authorized")]|length' "$R6_LEDGER")" 0 "advanced Git truth emits no transfer authorization"
 
 # Same-key controllers reserve one exact lease tuple under the run lock.
 setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 & IDEM_PID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-idem --stage work --pid "$IDEM_PID" --heartbeat-ts 1; IDEM_LEASE="$CMD_OUT"
 kill "$IDEM_PID" 2>/dev/null || true; wait "$IDEM_PID" 2>/dev/null || true
 jq -nc --argjson l "$IDEM_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:"",ticket_id:"",lineage_id:"",git_ref:"",git_sha:"",worktree:"",status:"no_effect",effects:[]}' > "$TEST_TMP/r6-idem-result.json"
-IDEM_PIDS=(); for i in 1 2; do AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-idem --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-idem-key --authorize-transfer --result-json "$TEST_TMP/r6-idem-result.json" >"$TEST_TMP/idem-$i.out" 2>&1 & IDEM_PIDS+=("$!"); done; for p in "${IDEM_PIDS[@]}"; do wait "$p" || true; done
+IDEM_GEN="$(jq -r .generation <<<"$IDEM_LEASE")"; IDEM_NONCE="$(jq -r .nonce <<<"$IDEM_LEASE")"
+IDEM_PIDS=(); for i in 1 2; do AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-idem --stage work --action intervene --generation "$IDEM_GEN" --nonce "$IDEM_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key r6-idem-key --authorize-transfer --result-json "$TEST_TMP/r6-idem-result.json" >"$TEST_TMP/idem-$i.out" 2>&1 & IDEM_PIDS+=("$!"); done; for p in "${IDEM_PIDS[@]}"; do wait "$p" || true; done
 assert_eq "$(jq -s --arg rid r6-idem '[.[]|select(.kind=="coordination" and .run_id==$rid and .action=="transfer" and .status=="authorized")]|length' "$R6_LEDGER")" 1 "same-key concurrent authorization is at-most one"
 run_cmd stage-event --ledger "$R6_LEDGER" --run-id r6-idem --stage work --condition waiting --reason lock-check; assert_cmd_rc 0 "idempotency reservation releases its run lock"
 
@@ -478,7 +480,8 @@ setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 & MULTI_PID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-multikey --stage work --pid "$MULTI_PID" --heartbeat-ts 1; MULTI_LEASE="$CMD_OUT"
 kill "$MULTI_PID" 2>/dev/null || true; wait "$MULTI_PID" 2>/dev/null || true
 jq -nc --argjson l "$MULTI_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:"",ticket_id:"",lineage_id:"",git_ref:"",git_sha:"",worktree:"",status:"no_effect",effects:[]}' > "$TEST_TMP/r6-multikey-result.json"
-MULTI_PIDS=(); for key in a b; do AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-multikey --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key "multi-$key" --authorize-transfer --result-json "$TEST_TMP/r6-multikey-result.json" >/dev/null 2>&1 & MULTI_PIDS+=("$!"); done; for p in "${MULTI_PIDS[@]}"; do wait "$p" || true; done
+MULTI_GEN="$(jq -r .generation <<<"$MULTI_LEASE")"; MULTI_NONCE="$(jq -r .nonce <<<"$MULTI_LEASE")"
+MULTI_PIDS=(); for key in a b; do AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-multikey --stage work --action intervene --generation "$MULTI_GEN" --nonce "$MULTI_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key "multi-$key" --authorize-transfer --result-json "$TEST_TMP/r6-multikey-result.json" >/dev/null 2>&1 & MULTI_PIDS+=("$!"); done; for p in "${MULTI_PIDS[@]}"; do wait "$p" || true; done
 assert_eq "$(jq -s --arg rid r6-multikey '[.[]|select(.kind=="coordination" and .run_id==$rid and .action=="transfer" and .status=="authorized")]|length' "$R6_LEDGER")" 1 "different keys cannot double-authorize one tuple"
 
 # Even a forged-looking authorization cannot seize a live owner.
@@ -503,11 +506,22 @@ if ! wait "$R6_PID" 2>/dev/null; then :; fi
 if ! kill "$R6_REPLACEMENT_PID" 2>/dev/null; then :; fi
 if ! wait "$R6_REPLACEMENT_PID" 2>/dev/null; then :; fi
 
+# A durable PGID that is not the live isolated leader identity is never signalled.
+setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 & R6_MISBOUND_PID=$!
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-pgid-misbound --stage work --pid "$R6_MISBOUND_PID" --heartbeat-ts 1
+MISBOUND_GEN="$(jq -r .generation <<<"$CMD_OUT")"; MISBOUND_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+jq -c '.pgid=(.pid+10000) | .ts="misbound-fixture"' <<<"$CMD_OUT" >> "$R6_LEDGER"
+MISBOUND_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-pgid-misbound --stage work --action intervene --generation "$MISBOUND_GEN" --nonce "$MISBOUND_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key pgid-misbound)"
+assert_json_eq "$MISBOUND_COORD" '.status' unknown "live PID to durable PGID misbinding fails closed"
+if kill -0 "$R6_MISBOUND_PID" 2>/dev/null; then PASS_COUNT=$((PASS_COUNT + 1)); else FAILS+=("PGID misbinding does not signal the live worker"); fi
+kill "$R6_MISBOUND_PID" 2>/dev/null || true; wait "$R6_MISBOUND_PID" 2>/dev/null || true
+
 # A captured group is not terminated merely because its leader exits on TERM.
 printf '%s\n' '#!/usr/bin/env bash' 'trap "exit 0" TERM' '(trap "" TERM; while :; do sleep 1; done) &' 'while :; do sleep 1; done' > "$TEST_TMP/r6-lingering-group.sh"; chmod +x "$TEST_TMP/r6-lingering-group.sh"
 setsid "$TEST_TMP/r6-lingering-group.sh" >/dev/null 2>&1 & R6_LINGER_PGID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-lingering --stage work --pid "$R6_LINGER_PGID" --heartbeat-ts 1
-LINGER_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-lingering --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 2 --idempotency-key linger)"
+LINGER_GEN="$(jq -r .generation <<<"$CMD_OUT")"; LINGER_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+LINGER_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-lingering --stage work --action intervene --generation "$LINGER_GEN" --nonce "$LINGER_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 2 --idempotency-key linger)"
 assert_json_eq "$LINGER_COORD" '.status' quarantined "leader exit with captured group survivor quarantines"; assert_json_eq "$LINGER_COORD" '.termination' group_survived "captured group survivor forbids replacement"
 kill -KILL -- "-$R6_LINGER_PGID" 2>/dev/null || true; wait "$R6_LINGER_PGID" 2>/dev/null || true
 
@@ -515,7 +529,8 @@ kill -KILL -- "-$R6_LINGER_PGID" 2>/dev/null || true; wait "$R6_LINGER_PGID" 2>/
 printf '%s\n' '#!/usr/bin/env bash' '(trap "" TERM; while :; do sleep 1; done) &' 'sleep 0.2' > "$TEST_TMP/r6-leader-race.sh"; chmod +x "$TEST_TMP/r6-leader-race.sh"
 setsid "$TEST_TMP/r6-leader-race.sh" >/dev/null 2>&1 & R6_RACE_PGID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-leader-race --stage work --pid "$R6_RACE_PGID" --heartbeat-ts 1
-RACE_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-leader-race --stage work --action intervene --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key leader-race)"
+RACE_GEN="$(jq -r .generation <<<"$CMD_OUT")"; RACE_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+RACE_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-leader-race --stage work --action intervene --generation "$RACE_GEN" --nonce "$RACE_NONCE" --stale-seconds 1 --wait-seconds 1 --grace-seconds 1 --idempotency-key leader-race)"
 assert_json_eq "$RACE_COORD" '.status' quarantined "leader exit before terminate observation quarantines surviving captured group"
 assert_json_eq "$RACE_COORD" '.termination' group_survived "durable PGID detects leader-exit race survivors"
 kill -KILL -- "-$R6_RACE_PGID" 2>/dev/null || true; wait "$R6_RACE_PGID" 2>/dev/null || true
@@ -524,7 +539,8 @@ kill -KILL -- "-$R6_RACE_PGID" 2>/dev/null || true; wait "$R6_RACE_PGID" 2>/dev/
 setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
 R6_ACK_PID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-ack --stage work --pid "$R6_ACK_PID" --heartbeat-ts 1
-AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-ack --stage work --action intervene --stale-seconds 1 --wait-seconds 2 --grace-seconds 1 --idempotency-key r6-ack-key >"$TEST_TMP/r6-ack.out" 2>"$TEST_TMP/r6-ack.err" &
+ACK_GEN="$(jq -r .generation <<<"$CMD_OUT")"; ACK_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-ack --stage work --action intervene --generation "$ACK_GEN" --nonce "$ACK_NONCE" --stale-seconds 1 --wait-seconds 2 --grace-seconds 1 --idempotency-key r6-ack-key >"$TEST_TMP/r6-ack.out" 2>"$TEST_TMP/r6-ack.err" &
 R6_COORD_PID=$!
 R6_DIRECTIVE_ID=""
 for _ in $(seq 1 20); do
@@ -543,6 +559,33 @@ assert_json_eq "$ACK_COORD" '.status' "acknowledged" "acknowledged inquiry preve
 assert_eq "$(jq -s --arg rid r6-ack '[.[]|select(.kind=="stage" and .run_id==$rid)]|map(.generation)|unique|length' "$R6_LEDGER")" "1" "acknowledgement prevents generation advance"
 if ! kill "$R6_ACK_PID" 2>/dev/null; then :; fi
 if ! wait "$R6_ACK_PID" 2>/dev/null; then :; fi
+
+# Different caller keys join one exact-tuple inquiry and replay its acknowledgement.
+setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 & R6_JOIN_PID=$!
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-distinct-key-ack --stage work --pid "$R6_JOIN_PID" --heartbeat-ts 1
+JOIN_GEN="$(jq -r .generation <<<"$CMD_OUT")"; JOIN_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-distinct-key-ack --stage work --action intervene --generation "$JOIN_GEN" --nonce "$JOIN_NONCE" --stale-seconds 1 --wait-seconds 2 --grace-seconds 1 --idempotency-key caller-a >"$TEST_TMP/join-a.out" 2>&1 & JOIN_COORD_PID=$!
+JOIN_DIRECTIVE_ID=""
+for _ in $(seq 1 20); do JOIN_DIRECTIVE_ID="$(jq -r --arg rid r6-distinct-key-ack 'select(.kind=="directive" and .run_id==$rid)|.directive_id' "$R6_LEDGER" 2>/dev/null | tail -n1)"; [ -n "$JOIN_DIRECTIVE_ID" ] && break; sleep 0.1; done
+JOIN_B="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-distinct-key-ack --stage work --action intervene --generation "$JOIN_GEN" --nonce "$JOIN_NONCE" --stale-seconds 1 --wait-seconds 2 --grace-seconds 1 --idempotency-key caller-b)"
+bash "$SCRIPT" directive-ack --ledger "$R6_LEDGER" --run-id r6-distinct-key-ack --directive-id "$JOIN_DIRECTIVE_ID" --by fixture >/dev/null
+wait "$JOIN_COORD_PID" || true; JOIN_A="$(cat "$TEST_TMP/join-a.out")"
+assert_json_eq "$JOIN_B" '.status' joined "distinct key joins the active exact-tuple inquiry"
+assert_json_eq "$JOIN_B" '.idempotency_key' caller-b "joined response preserves caller correlation key"
+assert_json_eq "$JOIN_A" '.status' acknowledged "single inquiry acknowledgement owns the tuple outcome"
+assert_eq "$(jq -s --arg rid r6-distinct-key-ack '[.[]|select(.kind=="directive" and .run_id==$rid)]|length' "$R6_LEDGER")" 1 "distinct keys emit exactly one directive"
+kill "$R6_JOIN_PID" 2>/dev/null || true; wait "$R6_JOIN_PID" 2>/dev/null || true
+
+# A controller pinned to an old tuple is fenced when an ordinary successor wins during inquiry.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-stale-controller --stage work --pid "$$" --heartbeat-ts 1
+STALE_GEN="$(jq -r .generation <<<"$CMD_OUT")"; STALE_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-stale-controller --stage work --action intervene --generation "$STALE_GEN" --nonce "$STALE_NONCE" --stale-seconds 1 --wait-seconds 2 --grace-seconds 1 --idempotency-key stale-controller >"$TEST_TMP/stale-controller.out" 2>&1 & STALE_COORD_PID=$!
+for _ in $(seq 1 20); do STALE_DIRECTIVE="$(jq -r --arg rid r6-stale-controller 'select(.kind=="directive" and .run_id==$rid)|.directive_id' "$R6_LEDGER" 2>/dev/null | tail -n1)"; [ -n "$STALE_DIRECTIVE" ] && break; sleep 0.1; done
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-stale-controller --stage work --generation "$STALE_GEN" --nonce "$STALE_NONCE" --pid "$$"
+assert_cmd_rc 0 "feature-off successor can win the exact ordinary CAS"
+set +e; wait "$STALE_COORD_PID"; STALE_COORD_RC=$?; set -e
+assert_eq "$STALE_COORD_RC" 11 "stale intervention controller is fenced after successor transfer"
+assert_json_eq "$(cat "$TEST_TMP/stale-controller.out")" '.status' fenced "stale intervention never rebinds successor tuple"
 
 # 9. Concurrent stage-acquire must allocate distinct generations
 LEDGER_9="$TEST_TMP/ledger-9.jsonl"

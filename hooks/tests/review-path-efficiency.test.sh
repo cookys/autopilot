@@ -94,20 +94,22 @@ assert_eq "$?" "1" "reversed ancestry fails closed"
 OUT="$(node - "$REPO_ROOT" "$REPO" "$BASE" "$HEAD" <<'NODE'
 const { _defaultRemediationChecker: defaultChecker, _runRemediationCheckerBoundary: check } = require(`${process.argv[2]}/src/engine/autopilot-engine`);
 const finding = { finding_id: 'F1', claim: 'src/value.js:1 changed value is wrong', severity: '🟠', source: 'panel review' };
-for (const currentFindings of [[{ ...finding, finding_id: 'F2' }], [{ ...finding, claim: 'reused id, different contract' }]]) console.log(check(defaultChecker, { repo: process.argv[3], previousCommit: process.argv[4], currentCommit: process.argv[5], previousFindings: [finding], currentFindings }).status);
+for (const currentFindings of [[{ ...finding, finding_id: 'F2' }], [{ ...finding, claim: 'reused id, different contract' }]]) { let calls = 0; const result = check((input) => { calls += 1; return defaultChecker(input); }, { repo: process.argv[3], previousCommit: process.argv[4], currentCommit: process.argv[5], previousFindings: [finding], currentFindings }); console.log(`${result.status}:${calls}`); }
 NODE
 )"
-assert_eq "$OUT" $'needs_full_review\nneeds_full_review' "renumbered or reused finding IDs require full blind review"
+assert_eq "$OUT" $'needs_full_review:0\nneeds_full_review:0' "current finding identity mismatch falls back before invoking checker extension"
 
 OUT="$(node - "$REPO_ROOT" "$REPO" "$BASE" "$HEAD" <<'NODE'
+const fs = require('fs');
 const { _runRemediationCheckerBoundary: check } = require(`${process.argv[2]}/src/engine/autopilot-engine`);
 const finding = { finding_id: 'F1', claim: 'src/value.js:1 changed value is wrong', severity: '🟠', source: 'panel review' };
-let observed;
-const result = check((input) => { observed = input; return {}; }, { repo: process.argv[3], previousCommit: process.argv[4], currentCommit: process.argv[5], previousFindings: [finding], currentFindings: [finding] });
+let observed; let artifactsExcludeCurrent = false;
+const result = check((input) => { observed = input; const artifacts = fs.readFileSync(input.deltaFile, 'utf8') + fs.readFileSync(input.findingContractsFile, 'utf8'); artifactsExcludeCurrent = !artifacts.includes('current_finding_contract') && !artifacts.includes('"current"'); return {}; }, { repo: process.argv[3], previousCommit: process.argv[4], currentCommit: process.argv[5], previousFindings: [finding], currentFindings: [finding] });
 console.log(Boolean(observed && observed.cwd && observed.deltaFile && observed.findingContractsFile && observed.resultFile && !observed.repo && !observed.previousFindings && !observed.currentFindings));
+console.log(artifactsExcludeCurrent);
 console.log(result.status);
 NODE
 )"
-assert_eq "$OUT" $'true\nneeds_full_review' "injected checker receives only isolated artifacts and malformed output is validated fail-closed"
+assert_eq "$OUT" $'true\ntrue\nneeds_full_review' "checker receives only prior contracts/safe delta and malformed output is validated fail-closed"
 
 finalize_test

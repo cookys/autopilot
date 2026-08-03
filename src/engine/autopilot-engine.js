@@ -1594,10 +1594,6 @@ function defaultRemediationChecker({ deltaFile, resultFile }) {
     finding_contract_digest: delta.finding_contract_digest,
     findings,
   };
-  if (Array.isArray(delta.current_finding_contracts)) {
-    result.current_finding_contracts = delta.current_finding_contracts;
-    result.current_finding_contract_digest = delta.current_finding_contract_digest;
-  }
   fs.writeFileSync(resultFile, `${JSON.stringify(result)}\n`, { mode: 0o600 });
 }
 
@@ -1633,19 +1629,21 @@ function runRemediationCheckerBoundary(checker, {
   const currentContracts = freezeContracts(currentFindings, 'current', true);
   if (!contracts) return remediationFallback('prior review findings are not named contract objects');
   if (!currentContracts) return remediationFallback('current review findings are not named contract objects');
+  const currentById = new Map(currentContracts.map((item) => [item.finding_id, item]));
+  if (contracts.some((finding) => {
+    const current = currentById.get(finding.finding_id);
+    return !current || allowedKeys.some((key) => current[key] !== finding[key]);
+  })) return remediationFallback('current review does not preserve exact frozen prior finding identities');
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-remediation-check-'));
   const findingsFile = path.join(tempDir, 'findings.json');
   const deltaFile = path.join(tempDir, 'delta.json');
-  const currentFindingsFile = path.join(tempDir, 'current-findings.json');
   const checkerDir = path.join(tempDir, 'checker');
   try {
     fs.writeFileSync(findingsFile, `${JSON.stringify({ findings: contracts })}\n`, { mode: 0o600 });
-    fs.writeFileSync(currentFindingsFile, `${JSON.stringify({ findings: currentContracts })}\n`, { mode: 0o600 });
     const script = resolveScriptPath('scripts/diff-since-last-round.sh');
     const built = spawnSync('bash', [
       script, 'remediation', '--previous', previousCommit, '--current', currentCommit,
-      '--findings-file', findingsFile, '--current-findings-file', currentFindingsFile,
-      '--repo', repo, '--out', deltaFile,
+      '--findings-file', findingsFile, '--repo', repo, '--out', deltaFile,
     ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     const delta = fs.existsSync(deltaFile) ? parseJsonFromLastLine(fs.readFileSync(deltaFile, 'utf8')) : null;
     if (!delta || built.error || built.status !== 0 || delta.status !== 'ready') {
@@ -1656,10 +1654,7 @@ function runRemediationCheckerBoundary(checker, {
     const safeContractsFile = path.join(checkerDir, 'finding-contracts.json');
     const resultFile = path.join(checkerDir, 'result.json');
     fs.copyFileSync(deltaFile, safeDeltaFile); fs.chmodSync(safeDeltaFile, 0o600);
-    fs.writeFileSync(safeContractsFile, `${JSON.stringify({
-      prior: delta.finding_contracts,
-      current: delta.current_finding_contracts || [],
-    })}\n`, { mode: 0o600 });
+    fs.writeFileSync(safeContractsFile, `${JSON.stringify({ prior: delta.finding_contracts })}\n`, { mode: 0o600 });
     const originalCwd = process.cwd();
     let checkerResult;
     try {

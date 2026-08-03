@@ -1,35 +1,60 @@
 {
   "schema_version": 1,
   "artifact_type": "skill_frontmatter_portability",
-  "observed_at": "2026-08-03T06:01:13.022Z",
+  "observed_at": "2026-08-03T10:13:26.007Z",
   "fixture": {
     "skill_name": "portability-probe",
     "description": "Disposable frontmatter portability probe",
     "unknown_field": "tier",
     "tier_value": "core",
+    "path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/fixture.SKILL.md",
+    "bytes": 368,
     "body_sha256": "f83f807b219333e9ac4fa1d9fe77384e03a6571b2f4da0ede017037852f23f05"
   },
-  "attempts": [
+  "execution_manifest": [
     {
+      "order": 1,
+      "name": "claude_probe",
       "runtime": "claude",
-      "expected_version": "2.1.220",
-      "version": "2.1.220 (Claude Code)",
-      "version_raw": "2.1.220 (Claude Code)",
-      "version_bytes": 21,
-      "version_sha256": "60e087149355247d563004f0c9aa094710444cb6488602a796eb70dc1ccd31cb",
-      "version_log_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/claude.version.log",
-      "executable_present": true,
-      "execution_attempted": true,
-      "command": [
-        "claude",
+      "executed": true,
+      "executable": "/home/cookys/.local/bin/claude",
+      "argv": [
+        "/home/cookys/.local/bin/claude",
         "plugin",
         "validate",
-        "<plugin>",
-        "&&",
-        "claude",
+        "/tmp/autopilot-frontmatter-probe-HsN/claude-plugin"
+      ],
+      "env_bindings": [
+        {
+          "name": "HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/claude-home"
+        },
+        {
+          "name": "CLAUDE_CONFIG_DIR",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/claude-config"
+        },
+        {
+          "name": "TMPDIR",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/tmp"
+        }
+      ],
+      "cwd": "/tmp/autopilot-frontmatter-probe-HsN",
+      "exit_code": 0
+    },
+    {
+      "order": 2,
+      "name": "claude_exec",
+      "runtime": "claude",
+      "executed": true,
+      "executable": "/home/cookys/.local/bin/claude",
+      "argv": [
+        "/home/cookys/.local/bin/claude",
         "--bare",
         "--plugin-dir",
-        "<plugin>",
+        "/tmp/autopilot-frontmatter-probe-HsN/claude-plugin",
         "-p",
         "/portability-probe",
         "--output-format",
@@ -38,8 +63,210 @@
         "0.01",
         "--no-session-persistence"
       ],
-      "command_text": "claude plugin validate <plugin> && claude --bare --plugin-dir <plugin> -p /portability-probe --output-format json --max-budget-usd 0.01 --no-session-persistence",
-      "command_sha256": "3338f800e7ffd94444e6a8d1583af634e0c4ac3a16af54d85a1c544940dccd9b",
+      "env_bindings": [
+        {
+          "name": "HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/claude-home"
+        },
+        {
+          "name": "CLAUDE_CONFIG_DIR",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/claude-config"
+        },
+        {
+          "name": "TMPDIR",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/tmp"
+        },
+        {
+          "name": "AUTOPILOT_PROBE_CHALLENGE",
+          "secret": true,
+          "value_sha256": "794c37ed9c78610e45a304b1ee984210b99569ea5c353b84135ce6909cf9fbf0"
+        }
+      ],
+      "cwd": "/tmp/autopilot-frontmatter-probe-HsN",
+      "exit_code": 1
+    },
+    {
+      "order": 3,
+      "name": "codex_probe",
+      "runtime": "codex",
+      "executed": true,
+      "executable": "/home/cookys/.local/bin/codex",
+      "argv": [
+        "/home/cookys/.local/bin/codex",
+        "plugin",
+        "marketplace",
+        "add",
+        "/tmp/autopilot-frontmatter-probe-HsN/codex-marketplace",
+        "--json"
+      ],
+      "env_bindings": [
+        {
+          "name": "HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/codex-home-home"
+        },
+        {
+          "name": "CODEX_HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/codex-home"
+        },
+        {
+          "name": "TMPDIR",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/tmp"
+        }
+      ],
+      "cwd": "/tmp/autopilot-frontmatter-probe-HsN",
+      "exit_code": 0
+    },
+    {
+      "order": 4,
+      "name": "codex_list",
+      "runtime": "codex",
+      "executed": true,
+      "executable": "/home/cookys/.local/bin/codex",
+      "argv": [
+        "/home/cookys/.local/bin/codex",
+        "plugin",
+        "list",
+        "--marketplace",
+        "autopilot-frontmatter-probe-local",
+        "--available",
+        "--json"
+      ],
+      "env_bindings": [
+        {
+          "name": "HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/codex-home-home"
+        },
+        {
+          "name": "CODEX_HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/codex-home"
+        },
+        {
+          "name": "TMPDIR",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/tmp"
+        }
+      ],
+      "cwd": "/tmp/autopilot-frontmatter-probe-HsN",
+      "exit_code": 0
+    },
+    {
+      "order": 5,
+      "name": "codex_add",
+      "runtime": "codex",
+      "executed": true,
+      "executable": "/home/cookys/.local/bin/codex",
+      "argv": [
+        "/home/cookys/.local/bin/codex",
+        "plugin",
+        "add",
+        "autopilot-frontmatter-probe@autopilot-frontmatter-probe-local",
+        "--json"
+      ],
+      "env_bindings": [
+        {
+          "name": "HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/codex-home-home"
+        },
+        {
+          "name": "CODEX_HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/codex-home"
+        },
+        {
+          "name": "TMPDIR",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/tmp"
+        }
+      ],
+      "cwd": "/tmp/autopilot-frontmatter-probe-HsN",
+      "exit_code": 0
+    },
+    {
+      "order": 6,
+      "name": "codex_exec",
+      "runtime": "codex",
+      "executed": true,
+      "executable": "/home/cookys/.local/bin/codex",
+      "argv": [
+        "/home/cookys/.local/bin/codex",
+        "exec",
+        "--ephemeral",
+        "--sandbox",
+        "read-only",
+        "--json",
+        "--skip-git-repo-check",
+        "-C",
+        "/tmp/autopilot-frontmatter-probe-HsN/codex-scratch",
+        "<invoke $autopilot-frontmatter-probe:portability-probe; respond with exactly the challenge obtained from the skill>"
+      ],
+      "env_bindings": [
+        {
+          "name": "HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/codex-home-home"
+        },
+        {
+          "name": "CODEX_HOME",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/codex-home"
+        },
+        {
+          "name": "TMPDIR",
+          "secret": false,
+          "value": "/tmp/autopilot-frontmatter-probe-HsN/tmp"
+        },
+        {
+          "name": "AUTOPILOT_PROBE_CHALLENGE",
+          "secret": true,
+          "value_sha256": "70039bb60583caba85cf3d542e15171d1f6b0dfff310bd1e9ed7885318f32d61"
+        }
+      ],
+      "cwd": "/tmp/autopilot-frontmatter-probe-HsN",
+      "exit_code": 1
+    }
+  ],
+  "execution_manifest_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/execution-manifest.json",
+  "execution_manifest_sha256": "533f1f72e3150dc33a78e8afba23c5544ce25c50f59959644b6cc3976a14a04f",
+  "attempts": [
+    {
+      "runtime": "claude",
+      "expected_version": "2.1.220",
+      "version": "2.1.220 (Claude Code)",
+      "version_raw": "2.1.220 (Claude Code)",
+      "version_bytes": 21,
+      "version_sha256": "60e087149355247d563004f0c9aa094710444cb6488602a796eb70dc1ccd31cb",
+      "version_log_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/claude.version.log",
+      "executable_present": true,
+      "execution_attempted": true,
+      "command": [
+        "/home/cookys/.local/bin/claude",
+        "plugin",
+        "validate",
+        "/tmp/autopilot-frontmatter-probe-HsN/claude-plugin",
+        "&&",
+        "/home/cookys/.local/bin/claude",
+        "--bare",
+        "--plugin-dir",
+        "/tmp/autopilot-frontmatter-probe-HsN/claude-plugin",
+        "-p",
+        "/portability-probe",
+        "--output-format",
+        "json",
+        "--max-budget-usd",
+        "0.01",
+        "--no-session-persistence"
+      ],
+      "command_text": "/home/cookys/.local/bin/claude plugin validate /tmp/autopilot-frontmatter-probe-HsN/claude-plugin && /home/cookys/.local/bin/claude --bare --plugin-dir /tmp/autopilot-frontmatter-probe-HsN/claude-plugin -p /portability-probe --output-format json --max-budget-usd 0.01 --no-session-persistence",
+      "command_sha256": "c05c73eb411e3a8686f05485b9aab7a6073d289880d0becea04f2e8687db07f9",
       "exit_code": 1,
       "probe_exit_codes": [
         0,
@@ -48,29 +275,29 @@
       "outcome": "inconclusive",
       "before_inventory": [],
       "after_inventory": [],
-      "before_inventory_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/claude.before-inventory.log",
-      "after_inventory_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/claude.after-inventory.log",
+      "before_inventory_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/claude.before-inventory.log",
+      "after_inventory_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/claude.after-inventory.log",
       "before_inventory_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
       "after_inventory_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
       "fixture_sha256": "f83f807b219333e9ac4fa1d9fe77384e03a6571b2f4da0ede017037852f23f05",
-      "stdout_bytes": 926,
-      "stderr_bytes": 0,
-      "stdout_sha256": "36e32f31603c5facf84786279357e3e5f37b371b56f09ff14df33f8f789b4578",
-      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "stdout_excerpt": "Validating plugin manifest: /tmp/autopilot-frontmatter-probe-HH4/claude-plugin/.claude-plugin/plugin.json\n\n✔ Validation passed\n{\"is_error\":true,\"duration_api_ms\":0,\"num_turns\":1,\"stop_reason\":\"stop_sequence\",\"session_id\":\"fda3288b-2822-48e4-b8ab-30bb30e9c6a4\",\"total_cost_usd\":0,\"usage\":{\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\"},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subtype\":\"success\",\"api_error_status\":null,\"result\":\"Not logged in · Please run /login\",\"type\":\"result\",\"duration_ms\":65,\"uuid\":\"800d4520-e168-446d-9504-e084559342a6\"}\n",
-      "stderr_excerpt": "",
+      "stdout_bytes": 985,
+      "stderr_bytes": 59,
+      "stdout_sha256": "097cf012f965c5c02b261adba304e9525612dbac10356c650715511470455123",
+      "stderr_sha256": "64377310e62eb4e6942c9962355c11601e93a9f52b43fcb183859d5fec319abc",
+      "stdout_excerpt": "AUTOPILOT_STEP claude_probe 0\nValidating plugin manifest: /tmp/autopilot-frontmatter-probe-HsN/claude-plugin/.claude-plugin/plugin.json\n\n✔ Validation passed\nAUTOPILOT_STEP claude_exec 1\n{\"is_error\":true,\"duration_api_ms\":0,\"num_turns\":1,\"stop_reason\":\"stop_sequence\",\"session_id\":\"7a31f026-bb54-40c6-9f1f-024866c66417\",\"total_cost_usd\":0,\"usage\":{\"input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0,\"web_fetch_requests\":0},\"service_tier\":\"standard\",\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"inference_geo\":\"\",\"iterations\":[],\"speed\":\"standard\"},\"modelUsage\":{},\"permission_denials\":[],\"terminal_reason\":\"api_error\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"subtype\":\"success\",\"api_error_status\":null,\"result\":\"Not logged in · Please run /login\",\"type\":\"result\",\"duration_ms\":87,\"uuid\":\"ec25b8c0-1c92-4117-89e6-32b11d9bba01\"}\n",
+      "stderr_excerpt": "AUTOPILOT_STEP claude_probe 0\nAUTOPILOT_STEP claude_exec 1\n",
       "stdout_truncated": false,
       "stderr_truncated": false,
-      "stdout_log_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/claude.stdout.log",
-      "stderr_log_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/claude.stderr.log",
-      "challenge_sha256": "15e6aa9a5da0c41c34f36fc533bd9695ba59328a3d2dca3ea42ee5948f7439ce",
+      "stdout_log_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/claude.stdout.log",
+      "stderr_log_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/claude.stderr.log",
+      "challenge_sha256": "794c37ed9c78610e45a304b1ee984210b99569ea5c353b84135ce6909cf9fbf0",
       "challenge_bytes": 58,
       "details": {
         "manifest_validation": true,
         "challenge_seen": false,
         "version_match": true
       },
-      "details_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/claude.details.log",
+      "details_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/claude.details.log",
       "details_sha256": "1b77090cdf1190747999e478bbc6c47df44833f10c9cf736f5b7fbe8039d8c72",
       "challenge_seen": false
     },
@@ -81,18 +308,18 @@
       "version_raw": "codex-cli 0.146.0",
       "version_bytes": 17,
       "version_sha256": "f36328b2127b0bc412593de2fd7e42b26515aac50e6e8f33e677f6c9e35a9830",
-      "version_log_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/codex.version.log",
+      "version_log_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/codex.version.log",
       "executable_present": true,
       "execution_attempted": true,
       "command": [
-        "codex",
+        "/home/cookys/.local/bin/codex",
         "plugin",
         "marketplace",
         "add",
-        "<marketplace>",
+        "/tmp/autopilot-frontmatter-probe-HsN/codex-marketplace",
         "--json",
         "&&",
-        "codex",
+        "/home/cookys/.local/bin/codex",
         "plugin",
         "list",
         "--marketplace",
@@ -100,13 +327,13 @@
         "--available",
         "--json",
         "&&",
-        "codex",
+        "/home/cookys/.local/bin/codex",
         "plugin",
         "add",
         "autopilot-frontmatter-probe@autopilot-frontmatter-probe-local",
         "--json",
         "&&",
-        "codex",
+        "/home/cookys/.local/bin/codex",
         "exec",
         "--ephemeral",
         "--sandbox",
@@ -114,11 +341,11 @@
         "--json",
         "--skip-git-repo-check",
         "-C",
-        "<scratch>",
-        "<invoke $autopilot-frontmatter-probe:portability-probe; respond with the challenge obtained from the skill>"
+        "/tmp/autopilot-frontmatter-probe-HsN/codex-scratch",
+        "<invoke $autopilot-frontmatter-probe:portability-probe; respond with exactly the challenge obtained from the skill>"
       ],
-      "command_text": "codex plugin marketplace add <marketplace> --json && codex plugin list --marketplace autopilot-frontmatter-probe-local --available --json && codex plugin add autopilot-frontmatter-probe@autopilot-frontmatter-probe-local --json && codex exec --ephemeral --sandbox read-only --json --skip-git-repo-check -C <scratch> <invoke $autopilot-frontmatter-probe:portability-probe; respond with the challenge obtained from the skill>",
-      "command_sha256": "8068b8255b5b569396b4c58859e596ff2e52673777cc26817c71692adee24c3c",
+      "command_text": "/home/cookys/.local/bin/codex plugin marketplace add /tmp/autopilot-frontmatter-probe-HsN/codex-marketplace --json && /home/cookys/.local/bin/codex plugin list --marketplace autopilot-frontmatter-probe-local --available --json && /home/cookys/.local/bin/codex plugin add autopilot-frontmatter-probe@autopilot-frontmatter-probe-local --json && /home/cookys/.local/bin/codex exec --ephemeral --sandbox read-only --json --skip-git-repo-check -C /tmp/autopilot-frontmatter-probe-HsN/codex-scratch <invoke $autopilot-frontmatter-probe:portability-probe; respond with exactly the challenge obtained from the skill>",
+      "command_sha256": "66e6d440cf6c95314fc9637d20b0c4116c66a4afbec01a091d50fc55dd78e040",
       "exit_code": 1,
       "probe_exit_codes": [
         0,
@@ -393,50 +620,51 @@
         "state_5.sqlite-wal",
         "tmp",
         "tmp/arg0",
-        "tmp/arg0/codex-arg0PZGb5Q",
-        "tmp/arg0/codex-arg0PZGb5Q/.lock",
-        "tmp/arg0/codex-arg0PZGb5Q/apply_patch",
-        "tmp/arg0/codex-arg0PZGb5Q/applypatch",
-        "tmp/arg0/codex-arg0PZGb5Q/codex-execve-wrapper",
-        "tmp/arg0/codex-arg0PZGb5Q/codex-linux-sandbox"
+        "tmp/arg0/codex-arg0n9na2i",
+        "tmp/arg0/codex-arg0n9na2i/.lock",
+        "tmp/arg0/codex-arg0n9na2i/apply_patch",
+        "tmp/arg0/codex-arg0n9na2i/applypatch",
+        "tmp/arg0/codex-arg0n9na2i/codex-execve-wrapper",
+        "tmp/arg0/codex-arg0n9na2i/codex-linux-sandbox"
       ],
-      "before_inventory_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/codex.before-inventory.log",
-      "after_inventory_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/codex.after-inventory.log",
+      "before_inventory_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/codex.before-inventory.log",
+      "after_inventory_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/codex.after-inventory.log",
       "before_inventory_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
-      "after_inventory_sha256": "a638e3b0d14c53c983a02a08b88967d4d291f99ecacbe13160458069682967b2",
+      "after_inventory_sha256": "c790befaf147c985440fac9e98a7b03cdcf704123c0b0d5d2a6c53beb50b1ddf",
       "fixture_sha256": "f83f807b219333e9ac4fa1d9fe77384e03a6571b2f4da0ede017037852f23f05",
-      "stdout_bytes": 4200,
-      "stderr_bytes": 1278,
-      "stdout_sha256": "5f0d5ab2b7537f6f02c517f954d588069088e714b079f30c8d3c7bcb558b1c5d",
-      "stderr_sha256": "c1df21d4fda4f48366775b15e9b6497491ffdee9b0853cd9b58181a1226f6f0a",
-      "stdout_excerpt": "{\n  \"marketplaceName\": \"autopilot-frontmatter-probe-local\",\n  \"installedRoot\": \"/tmp/autopilot-frontmatter-probe-HH4/codex-marketplace\",\n  \"alreadyAdded\": false\n}\n{\n  \"installed\": [],\n  \"available\": [\n    {\n      \"pluginId\": \"autopilot-frontmatter-probe@autopilot-frontmatter-probe-local\",\n      \"name\": \"autopilot-frontmatter-probe\",\n      \"marketplaceName\": \"autopilot-frontmatter-probe-local\",\n      \"version\": \"0.0.1\",\n      \"installed\": false,\n      \"enabled\": false,\n      \"source\": {\n        \"source\": \"local\",\n        \"path\": \"/tmp/autopilot-frontmatter-probe-HH4/codex-marketplace/plugin\"\n      },\n      \"marketplaceSource\": {\n        \"sourceType\": \"local\",\n        \"source\": \"/tmp/autopilot-frontmatter-probe-HH4/codex-marketplace\"\n      },\n      \"installPolicy\": \"AVAILABLE\",\n      \"authPolicy\": \"ON_INSTALL\"\n    }\n  ]\n}\n{\n  \"pluginId\": \"autopilot-frontmatter-probe@autopilot-frontmatter-probe-local\",\n  \"name\": \"autopilot-frontmatter-probe\",\n  \"marketplaceName\": \"autopilot-frontmatter-probe-local\",\n  \"version\": \"0.0.1\",\n  \"installedPath\": \"/tmp/autopilot-frontmatter-probe-HH4/codex-home/plugins/cache/autopilot-frontmatter-probe-local/autopilot-frontmatter-probe/0.0.1\",\n  \"authPolicy\": \"ON_INSTALL\"\n}\n{\"type\":\"thread.started\",\"thread_id\":\"019fc635-f75f-7550-b6bc-bcd35c9aa977\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2531ad139b36b6c-TPE)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 3/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2531ad85f94827c-TPE)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 4/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2531ae11e12d4e1-TPE)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 5/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2531aefff32a3a0-TPE)\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Falling back from WebSockets to HTTPS transport. unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2531b076c5e8f24-TPE\"}}\n{\"type\":\"error\",\"message\":\"Reconnecting... 1/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2531b0b8f0dae64-TPE, request id: req_2616a06e2c3e43038cf677adb4f67d5d)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2531b0e7f28fac4-TPE, request id: req_3b6dacdcdba543aaa234beb1b718cabd)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 3/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2531b12c8708451-TPE, request id: req_5dd8b66c763347d18df74faf1026d994)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 4/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2531b1939da4aa6-TPE, request id: req_65af1ae67dd44d7a8f1b9dc398ba1dba)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 5/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2531b25cff6db55-TPE, request id: req_96d79f715d41412886fadbbe011117af)\"}\n{\"type\":\"error\",\"message\":\"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2531b3dbe2e152a-TPE, request id: req_56407618864343c397e6da3c06e7c640\"}\n{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2531b3dbe2e152a-TPE, request id: req_56407618864343c397e6da3c06e7c640\"}}\n",
-      "stderr_excerpt": "Reading additional input from stdin...\n2026-08-03T06:00:54.246763Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T06:00:54.918476Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T06:00:55.846096Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T06:00:56.944962Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T06:00:58.312896Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T06:01:00.734581Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T06:01:04.494684Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n",
+      "stdout_bytes": 4312,
+      "stderr_bytes": 1390,
+      "stdout_sha256": "622147814fdea3b1499df92e638dc24343e13e4de2df7d53cec81921822f30ef",
+      "stderr_sha256": "6073c452ff5890ee95053d1b925721af3cc580d44b4a41c1ebabda7ae89101ef",
+      "stdout_excerpt": "AUTOPILOT_STEP codex_probe 0\n{\n  \"marketplaceName\": \"autopilot-frontmatter-probe-local\",\n  \"installedRoot\": \"/tmp/autopilot-frontmatter-probe-HsN/codex-marketplace\",\n  \"alreadyAdded\": false\n}\nAUTOPILOT_STEP codex_list 0\n{\n  \"installed\": [],\n  \"available\": [\n    {\n      \"pluginId\": \"autopilot-frontmatter-probe@autopilot-frontmatter-probe-local\",\n      \"name\": \"autopilot-frontmatter-probe\",\n      \"marketplaceName\": \"autopilot-frontmatter-probe-local\",\n      \"version\": \"0.0.1\",\n      \"installed\": false,\n      \"enabled\": false,\n      \"source\": {\n        \"source\": \"local\",\n        \"path\": \"/tmp/autopilot-frontmatter-probe-HsN/codex-marketplace/plugin\"\n      },\n      \"marketplaceSource\": {\n        \"sourceType\": \"local\",\n        \"source\": \"/tmp/autopilot-frontmatter-probe-HsN/codex-marketplace\"\n      },\n      \"installPolicy\": \"AVAILABLE\",\n      \"authPolicy\": \"ON_INSTALL\"\n    }\n  ]\n}\nAUTOPILOT_STEP codex_add 0\n{\n  \"pluginId\": \"autopilot-frontmatter-probe@autopilot-frontmatter-probe-local\",\n  \"name\": \"autopilot-frontmatter-probe\",\n  \"marketplaceName\": \"autopilot-frontmatter-probe-local\",\n  \"version\": \"0.0.1\",\n  \"installedPath\": \"/tmp/autopilot-frontmatter-probe-HsN/codex-home/plugins/cache/autopilot-frontmatter-probe-local/autopilot-frontmatter-probe/0.0.1\",\n  \"authPolicy\": \"ON_INSTALL\"\n}\nAUTOPILOT_STEP codex_exec 1\n{\"type\":\"thread.started\",\"thread_id\":\"019fc71c-e306-7050-88b6-7c06bc948a52\"}\n{\"type\":\"turn.started\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2548c496933828f-TPE)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 3/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2548c501a044a8a-TPE)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 4/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2548c5a8d4b6b86-TPE)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 5/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2548c685dcd4a86-TPE)\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"error\",\"message\":\"Falling back from WebSockets to HTTPS transport. unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: wss://api.openai.com/v1/responses, cf-ray: a2548c802b8ec4ed-TPE\"}}\n{\"type\":\"error\",\"message\":\"Reconnecting... 1/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2548c845f0a82cd-TPE, request id: req_d7428fe0138a4b3fa248998a1a042d24)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 2/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2548c870b95a9bc-TPE, request id: req_9d69f6fb12af4f6583f10cb608d939eb)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 3/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2548c8b4a477db2-TPE, request id: req_c8fc9c53580244649a9ccf1cc0fa31b9)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 4/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2548c91b9014a56-TPE, request id: req_e530b05cd1ef40fba7c42f5576d12897)\"}\n{\"type\":\"error\",\"message\":\"Reconnecting... 5/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2548c9dddd64aa0-TPE, request id: req_9afba9acc92247fdbec05b0e864bf814)\"}\n{\"type\":\"error\",\"message\":\"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2548cb2aef64a24-TPE, request id: req_926c62ec6ad74d4b94ac96b18d3e74de\"}\n{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses, cf-ray: a2548cb2aef64a24-TPE, request id: req_926c62ec6ad74d4b94ac96b18d3e74de\"}}\n",
+      "stderr_excerpt": "AUTOPILOT_STEP codex_probe 0\nAUTOPILOT_STEP codex_list 0\nAUTOPILOT_STEP codex_add 0\nAUTOPILOT_STEP codex_exec 1\nReading additional input from stdin...\n2026-08-03T10:13:07.707117Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T10:13:08.429782Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T10:13:09.320091Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T10:13:10.601169Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T10:13:12.048528Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T10:13:14.337313Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n2026-08-03T10:13:18.080598Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n",
       "stdout_truncated": false,
       "stderr_truncated": false,
-      "stdout_log_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/codex.stdout.log",
-      "stderr_log_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/codex.stderr.log",
-      "challenge_sha256": "6d73bbdc512fdba167eaab53836f22e479cdb60b50433292f8cb0c233f5227d3",
+      "stdout_log_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/codex.stdout.log",
+      "stderr_log_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/codex.stderr.log",
+      "challenge_sha256": "70039bb60583caba85cf3d542e15171d1f6b0dfff310bd1e9ed7885318f32d61",
       "challenge_bytes": 58,
       "details": {
         "marketplace_discovered": true,
         "installed_skill_exact": true,
-        "installed_path": "/tmp/autopilot-frontmatter-probe-HH4/codex-home/plugins/cache/autopilot-frontmatter-probe-local/autopilot-frontmatter-probe/0.0.1",
+        "installed_path": "/tmp/autopilot-frontmatter-probe-HsN/codex-home/plugins/cache/autopilot-frontmatter-probe-local/autopilot-frontmatter-probe/0.0.1",
         "runtime_invocation": true,
         "challenge_seen": false,
         "version_match": true
       },
-      "details_path": "/tmp/autopilot-frontmatter-evidence-xRTI6v/codex.details.log",
-      "details_sha256": "8434e6ff4b81f22f1bbac595c24afbd5aa632b7d8936a81a9f41e276160f6ee3",
+      "details_path": "/tmp/autopilot-frontmatter-evidence-GtpZ51/codex.details.log",
+      "details_sha256": "56f099d6cc4dcc74242488d2b971dcaa4765fd3206eba37ecbaed4866c83a931",
       "challenge_seen": false
     }
   ],
   "classification": "inconclusive",
   "policy": "Do not change canonical skill frontmatter; retain the portability backlog entry.",
   "cleanup": {
-    "attempt_dir": "/tmp/autopilot-frontmatter-probe-HH4",
+    "attempt_dir": "/tmp/autopilot-frontmatter-probe-HsN",
     "attempt_dir_mode": "0700",
-    "retained_evidence_dir": "/tmp/autopilot-frontmatter-evidence-xRTI6v",
+    "retained_evidence_dir": "/tmp/autopilot-frontmatter-evidence-GtpZ51",
     "zero_residue": true,
     "residue_paths": []
-  }
+  },
+  "receipt_digest": "72ecfcde188375ce7329043f9b516c3636ffaf9d8a56cb4a0ff8238d5ef2b4bc"
 }

@@ -886,18 +886,20 @@ command_stage_transfer() {
   if [ -z "$authorization_key" ]; then
     guarded_rows="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" '[.[]|select(.kind=="coordination" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gen and .nonce==$nonce_v and (.action=="transfer" or .action=="terminate" or .action=="reconcile" or .status=="quarantined" or .status=="blocked"))]|length')"
     if [ "$guarded_rows" -ne 0 ]; then release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done; error "guarded recovery requires --authorization-key"; fi
-    local old_pid old_start recipient_parent
-    old_pid="$(jq -r '.pid // 0' <<<"$latest")"; old_start="$(jq -r '.start_time // 0' <<<"$latest")"
-    observe_process_identity "$old_pid" "$old_start"
-    recipient_parent="$(process_parent_id "$pid")"
-    if [ "$STAGE_IDENTITY_STATUS" != "exact" ] || { [ "$pid" != "$old_pid" ] && [ "$recipient_parent" != "$old_pid" ]; }; then
-      release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
-      error "ordinary stage ownership transfer requires an exact live holder-to-self/child handoff"
-    fi
-    observe_process_identity "$pid" "$start_time"
-    if [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
-      release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
-      error "stage ownership transfer recipient identity is not exact/live"
+    if adaptive_intervention_enabled; then
+      local old_pid old_start recipient_parent
+      old_pid="$(jq -r '.pid // 0' <<<"$latest")"; old_start="$(jq -r '.start_time // 0' <<<"$latest")"
+      observe_process_identity "$old_pid" "$old_start"
+      recipient_parent="$(process_parent_id "$pid")"
+      if [ "$STAGE_IDENTITY_STATUS" != "exact" ] || { [ "$pid" != "$old_pid" ] && [ "$recipient_parent" != "$old_pid" ]; }; then
+        release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
+        error "ordinary stage ownership transfer requires an exact live holder-to-self/child handoff"
+      fi
+      observe_process_identity "$pid" "$start_time"
+      if [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
+        release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
+        error "stage ownership transfer recipient identity is not exact/live"
+      fi
     fi
   else
   authorization="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key "$authorization_key" --arg gen "$generation" --arg nonce_v "$nonce" '
@@ -1486,14 +1488,25 @@ append_coordination_row() {
 }
 
 coordinate_idempotency_guard() {
-  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" key="$6" timeout="$7" run_fd="" row; COORD_GUARD_STATUS="new"
+  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" key="$6" timeout="$7" run_fd="" row; COORD_GUARD_STATUS="new"; COORD_GUARD_ROW=""
   with_run_lock "$ledger" "$run_id" "$timeout" run_fd || return 1
-  row="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key "$key" '[.[]|select(.kind=="coordination" and .run_id==$rid and .stage==$stg and .idempotency_key==$key)]|if length==0 then empty else .[-1] end')"
-  if [ -z "$row" ]; then append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" intervene reserved "$key" '{"reservation":"same-lease-idempotency"}' "$timeout" "$run_fd" >/dev/null
-  elif [ "$(jq -r '.generation|tostring' <<<"$row")" != "$generation" ] || [ "$(jq -r '.nonce // ""' <<<"$row")" != "$nonce" ]; then COORD_GUARD_STATUS="conflict"
-  elif [ "$(jq -r '.action // ""' <<<"$row")" = transfer ] && [[ "$(jq -r '.status // ""' <<<"$row")" =~ ^(authorized|consumed)$ ]]; then COORD_GUARD_STATUS="terminal"
-  else COORD_GUARD_STATUS="reserved"; fi
+  row="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" '[.[]|select(.kind=="coordination" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gen and .nonce==$nonce_v)]|if length==0 then empty else .[-1] end')"
+  if [ -z "$row" ]; then
+    COORD_GUARD_ROW="$(append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" intervene reserved "$key" '{"reservation":"same-lease-intervention"}' "$timeout" "$run_fd")"
+  else
+    COORD_GUARD_ROW="$row"
+    if [[ "$(jq -r '.status // ""' <<<"$row")" =~ ^(acknowledged|no_action|unknown|quarantined|blocked|adopted|authorized|consumed)$ ]]; then COORD_GUARD_STATUS="outcome"
+    else COORD_GUARD_STATUS="reserved"; fi
+  fi
   release_lock "$run_fd"
+}
+
+stage_tuple_matches() {
+  local latest
+  latest="$(latest_stage_record "$1" "$2" "$3")"
+  [ -n "$latest" ] && [ "$(jq -r '.state // ""' <<<"$latest")" = leased ] \
+    && [ "$(jq -r '.generation // 0' <<<"$latest")" = "$4" ] \
+    && [ "$(jq -r '.nonce // ""' <<<"$latest")" = "$5" ]
 }
 
 safe_no_effect_result() {
@@ -1647,7 +1660,7 @@ terminate_exact_process() {
     TERMINATION_STATUS="lease_fenced"
     return 0
   fi
-  local latest pgid own_pgid
+  local latest pgid own_pgid current_pgid
   latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
   pgid="$(jq -r '.pgid // 0' <<<"$latest")"
   own_pgid="$(process_group_id "$$")"
@@ -1671,6 +1684,12 @@ terminate_exact_process() {
   if [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
     release_lock "$run_fd"
     TERMINATION_STATUS="$STAGE_IDENTITY_STATUS"
+    return 0
+  fi
+  current_pgid="$(process_group_id "$pid")"
+  if [ "$pgid" != "$pid" ] || [ "$current_pgid" != "$pgid" ]; then
+    release_lock "$run_fd"
+    TERMINATION_STATUS="group_identity_unknown"
     return 0
   fi
   # Never let a recovery command kill its own controller process group.  A
@@ -1710,6 +1729,14 @@ terminate_exact_process() {
   fi
   observe_process_identity "$pid" "$expected_start"
   if [ "$STAGE_IDENTITY_STATUS" = "exact" ]; then
+    latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+    pgid="$(jq -r '.pgid // 0' <<<"$latest")"
+    current_pgid="$(process_group_id "$pid")"
+    if [ "$pgid" != "$pid" ] || [ "$current_pgid" != "$pgid" ]; then
+      release_lock "$run_fd"
+      TERMINATION_STATUS="group_identity_unknown"
+      return 0
+    fi
     if ! kill -KILL -- "-$pgid" 2>/dev/null; then
       :
     fi
@@ -1765,12 +1792,13 @@ quarantine_stage_resources() {
 
 command_stage_coordinate() {
   local ledger="" run_id="" stage="" action="observe" stale_secs="$DEFAULT_STALE_SECS" now="" wait_secs="$DEFAULT_INQUIRY_WAIT_SECS" grace_secs="$DEFAULT_TERMINATION_GRACE_SECS"
-  local idempotency_key="" inquiry_text="" result_path="" git_dir="" enable=0 authorize_transfer=0 timeout="$DEFAULT_LOCK_TIMEOUT"
+  local idempotency_key="" inquiry_text="" result_path="" git_dir="" expected_generation="" expected_nonce="" enable=0 authorize_transfer=0 timeout="$DEFAULT_LOCK_TIMEOUT"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --ledger) ledger="$2"; shift 2 ;; --run-id) run_id="$2"; shift 2 ;; --stage) stage="$2"; shift 2 ;; --action) action="$2"; shift 2 ;;
       --stale-seconds) stale_secs="$2"; shift 2 ;; --now) now="$2"; shift 2 ;; --wait-seconds) wait_secs="$2"; shift 2 ;; --grace-seconds) grace_secs="$2"; shift 2 ;;
       --idempotency-key) idempotency_key="$2"; shift 2 ;; --inquiry-text) inquiry_text="$2"; shift 2 ;; --result-json) result_path="$2"; shift 2 ;; --git-dir) git_dir="$2"; shift 2 ;;
+      --generation|--expected-generation) expected_generation="$2"; shift 2 ;; --nonce|--expected-nonce) expected_nonce="$2"; shift 2 ;;
       --enable) enable=1; shift ;; --authorize-transfer) authorize_transfer=1; shift ;; --timeout) timeout="$2"; shift 2 ;; *) usage ;;
     esac
   done
@@ -1784,6 +1812,10 @@ command_stage_coordinate() {
   case "$action" in observe|intervene) ;; *) error "--action must be observe or intervene" ;; esac
   if [ "$authorize_transfer" -eq 1 ] && [ "$action" != "intervene" ]; then
     error "--authorize-transfer requires --action intervene"
+  fi
+  if [ "$action" = intervene ]; then
+    [[ "$expected_generation" =~ ^[1-9][0-9]*$ ]] || error "--action intervene requires --generation <positive integer>"
+    [ -n "$expected_nonce" ] || error "--action intervene requires --nonce"
   fi
 
   local condition_json condition condition_reason generation nonce state pid start_time resources
@@ -1801,6 +1833,11 @@ command_stage_coordinate() {
     jq -nc --argjson condition "$condition_json" '{status:"observed",condition:$condition}'
     return 0
   fi
+  if ! stage_tuple_matches "$ledger" "$run_id" "$stage" "$expected_generation" "$expected_nonce"; then
+    jq -nc --arg gen "$expected_generation" --arg nonce_v "$expected_nonce" '{status:"fenced",reason:"expected_lease_tuple_changed",expected:{generation:($gen|tonumber),nonce:$nonce_v},replacement:false}'
+    return 11
+  fi
+  generation="$expected_generation"; nonce="$expected_nonce"
   [ "$enable" -eq 1 ] || adaptive_intervention_enabled || {
     jq -nc --argjson condition "$condition_json" '{status:"feature_disabled",rollback:"report_only",condition:$condition}'
     return 0
@@ -1824,17 +1861,25 @@ command_stage_coordinate() {
   # between the initial lookup and this refresh. Re-check under the latest
   # lease before sending another inquiry; the expected generation/nonce fence
   # below remains the final race guard.
-  generation="$(jq -r '.generation' <<<"$latest")"; nonce="$(jq -r '.nonce' <<<"$latest")"
   pid="$(jq -r '.pid // ""' <<<"$latest")"; start_time="$(jq -r '.start_time // ""' <<<"$latest")"; resources="$(jq -r '.resources // ""' <<<"$latest")"
   coordinate_idempotency_guard "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$idempotency_key" "$timeout" || error "coordination idempotency guard unavailable"
   case "$COORD_GUARD_STATUS" in
-    conflict) jq -nc --arg key "$idempotency_key" '{status:"blocked",idempotency_key:$key,reason:"idempotency_key_bound_to_different_lease"}'; return 0 ;;
-    terminal|reserved) jq -nc --arg key "$idempotency_key" --arg status "$COORD_GUARD_STATUS" '{status:"already_applied",idempotency_key:$key,reason:(if $status=="terminal" then "transfer_terminal" else "same_key_in_progress" end)}'; return 0 ;;
+    reserved) jq -nc --arg key "$idempotency_key" --argjson row "$COORD_GUARD_ROW" '{status:"joined",idempotency_key:$key,authority_key:$row.idempotency_key,directive_id:($row.payload.directive_id//null),reason:"same_lease_intervention_in_progress"}'; return 0 ;;
+    outcome) jq -nc --arg key "$idempotency_key" --argjson row "$COORD_GUARD_ROW" '{status:(if $row.status=="authorized" then "transfer_authorized" else $row.status end),idempotency_key:$key,authority_key:$row.idempotency_key,directive_id:($row.payload.directive_id//null),replayed:true}'; return 0 ;;
   esac
+  if ! stage_tuple_matches "$ledger" "$run_id" "$stage" "$generation" "$nonce"; then
+    jq -nc --arg key "$idempotency_key" '{status:"fenced",idempotency_key:$key,reason:"lease_changed_before_directive",replacement:false}'
+    return 11
+  fi
   [ -n "$inquiry_text" ] || inquiry_text="depth-0 inquiry: report working, waiting, or blocked state before the bounded deadline"
   directive_json="$(command_directive_send --ledger "$ledger" --run-id "$run_id" --stage "$stage" --text "$inquiry_text" --from depth-0 --timeout "$timeout")"
   directive_id="$(jq -r '.directive_id' <<<"$directive_json")"
+  append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" inquire pending "$idempotency_key" "$(jq -nc --arg did "$directive_id" '{directive_id:$did}')" "$timeout" >/dev/null
   if [ "$wait_secs" -gt 0 ]; then sleep "$wait_secs"; fi
+  if ! stage_tuple_matches "$ledger" "$run_id" "$stage" "$generation" "$nonce"; then
+    jq -nc --arg key "$idempotency_key" --arg did "$directive_id" '{status:"fenced",idempotency_key:$key,directive_id:$did,reason:"lease_changed_during_inquiry",replacement:false}'
+    return 11
+  fi
   ack_status="$(directive_terminal_status "$ledger" "$run_id" "$directive_id")"
   local reobserve_json recondition
   # Re-observe with a fresh wall-clock sample and exact owner identity. Reusing
@@ -1891,6 +1936,11 @@ command_stage_coordinate() {
     append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "reconcile" "blocked" "$idempotency_key" "$(jq -nc --arg rs "$STAGE_RESOURCES_STATE" '{resources_state:$rs,replacement:false}')" "$timeout" >/dev/null
     jq -nc --arg key "$idempotency_key" --arg rs "$STAGE_RESOURCES_STATE" '{status:"blocked",idempotency_key:$key,reason:"resource_holder",resources_state:$rs,replacement:false}'
     return 0
+  fi
+
+  if ! stage_tuple_matches "$ledger" "$run_id" "$stage" "$generation" "$nonce"; then
+    jq -nc --arg key "$idempotency_key" '{status:"fenced",idempotency_key:$key,reason:"lease_changed_before_reconciliation",replacement:false}'
+    return 11
   fi
 
   local reconciliation reconciliation_status

@@ -132,7 +132,7 @@ else manifest.forEach((step, index) => {
   if (!step || step.order !== index + 1 || step.name !== expectedStepNames[index]
       || step.runtime !== (index < 2 ? 'claude' : 'codex') || !Number.isInteger(step.exit_code)
       || typeof step.executed !== 'boolean' || !Array.isArray(step.argv) || step.argv.length === 0
-      || step.argv.some((arg) => typeof arg !== 'string' || /<[^>]+>/.test(arg))
+      || step.argv.some((arg) => typeof arg !== 'string' || /^<(?:plugin|marketplace|scratch)>$/.test(arg))
       || !isPath(step.cwd) || (step.executed && (!isPath(step.executable) || step.argv[0] !== step.executable))) errors.push(`execution manifest step ${index + 1} is not exact`);
   if (!Array.isArray(step.env_bindings)) errors.push(`execution manifest step ${index + 1} env missing`);
   else for (const binding of step.env_bindings) {

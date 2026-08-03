@@ -67,7 +67,8 @@ test_validated() {
     assert_contains "$out" '"red_green_validated": true' "VALIDATED sets red_green_validated true"
     assert_file_exists "$receipt" "VALIDATED writes a polarity receipt"
     assert_contains "$(cat "$receipt")" '"artifact_type": "red_green_polarity_receipt"' "receipt has polarity artifact type"
-    assert_contains "$(cat "$receipt")" '"expected_red_exit_class": "assertion_nonzero_excluding_infrastructure"' "receipt binds explicit assertion red exit class"
+    assert_contains "$(cat "$receipt")" '"expected_red_exit_class": "exact_exit_code"' "receipt binds exact assertion red exit class"
+    assert_contains "$(cat "$receipt")" '"expected_red_exit_code": 1' "receipt binds the expected assertion failure code"
     local validated; validated=$("$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$repo/calc.test.sh" --assertion-artifact calc.test.sh 2>&1); ec=$?
     assert_eq "$ec" "0" "matching polarity receipt validates"
     assert_contains "$validated" '"status":"validated"' "matching polarity receipt returns validated status"
@@ -94,11 +95,16 @@ test_validated() {
     "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" >/dev/null 2>&1; ec=$?
     assert_eq "$ec" "3" "base infrastructure exit 125 is inconclusive"
     local infra
-    for infra in 124 126 127 137 143; do
+    for infra in 124 126 127 137 139 143; do
       printf '%s\n' '#!/usr/bin/env bash' 'grep -q "echo 5" "$1/calc.sh" && exit 0' "exit $infra" > "$sentinel"; chmod +x "$sentinel"
       "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" >/dev/null 2>&1; ec=$?
       assert_eq "$ec" "3" "base infrastructure exit $infra is inconclusive"
     done
+    printf '%s\n' '#!/usr/bin/env bash' 'grep -q "echo 5" "$1/calc.sh" && exit 0 || exit 2' > "$sentinel"; chmod +x "$sentinel"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "3" "unexpected ordinary nonzero cannot satisfy exact assertion polarity"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" --expected-red-exit-code 2 >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "0" "caller-declared exact ordinary assertion exit code validates"
 }
 
 # 1b. VALIDATED with test at a NESTED path (tests/unit_test.sh) — regression guard:

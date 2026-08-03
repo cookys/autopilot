@@ -46,7 +46,7 @@ assert_fields() {
   printf '%s\n' '{"type":"user","timestamp":"2026-07-27T09:00:08.000Z","message":{"role":"user","content":[{"type":"tool_result","content":"ran scripts/dispatch-hetero.sh --runner auto and dispatch-review.sh --runner codex"}]}}'
 } >"$FIX/session-a.jsonl"
 
-OUT="$(RETRO_TRANSCRIPT_DIR="$FIX" node "$SCRIPT" --no-git --json 2>&1)"
+OUT="$(RETRO_TRANSCRIPT_DIR="$FIX" node "$SCRIPT" --no-git --json --days 30 --now 2026-08-03T00:00:00.000Z 2>&1)"
 EXIT=$?
 assert_fields <<'EOF'
 transcript.sessions	1	legacy explicit root includes one session

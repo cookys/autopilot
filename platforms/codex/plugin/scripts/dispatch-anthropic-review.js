@@ -23,7 +23,7 @@
 // schemes should be added behind explicit adapter configuration, not by default.
 //
 // OUTPUT: one JSON object on stdout (same shape as dispatch-review.sh):
-//   { runner, model, status, verdict, findings, no_finding_proof, raw_log, error }
+//   { runner, model, status, verdict, findings, no_finding_proof, raw_log, error, usage }
 // In --raw mode, outputs ONLY the raw model response text to stdout; NO review JSON.
 //
 // EXIT: 0 = reviewed ; 1 = no_verdict (HTTP/timeout/unparseable) ; 2 = precondition_failed
@@ -304,7 +304,8 @@ function emitResult(result) {
     + `"findings": ${jsonField(result.findings)}, `
     + `"no_finding_proof": ${jsonField(result.no_finding_proof)}, `
     + `"raw_log": ${jsonField(result.raw_log)}, `
-    + `"error": ${jsonField(result.error)} }\n`,
+    + `"error": ${jsonField(result.error)}, `
+    + `"usage": ${jsonField(result.usage)} }\n`,
   );
 }
 
@@ -318,6 +319,7 @@ function diePrecondition(model, error) {
     no_finding_proof: null,
     raw_log: null,
     error,
+    usage: null,
   });
   process.exit(2);
 }
@@ -332,6 +334,7 @@ function dieNoVerdict(model, rawLog, error) {
     no_finding_proof: null,
     raw_log: rawLog,
     error,
+    usage: null,
   });
   process.exit(1);
 }
@@ -698,6 +701,7 @@ async function main() {
       : null,
     raw_log: rawLog,
     error: null,
+    usage: null,
   });
   process.exit(0);
 }

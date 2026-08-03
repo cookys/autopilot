@@ -152,6 +152,7 @@ for (const rel of [
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json',
   'docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
   'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ]) {
@@ -300,6 +301,7 @@ for rel in \
   docs/plans/2026-06-04-distill-consolidate.md \
   docs/plans/2026-06-22-ceo-fleet-autonomy.md \
   docs/plans/2026-06-26-trust-tiered-review-policy.md \
+  docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json \
   docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
   docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md
 do

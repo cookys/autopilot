@@ -16,7 +16,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ## Audit snapshot（2026-08-04，`develop` @ `33cfd513`）
 
 - **49 real entries**：2 個 Board decisions、18 個已排入執行計畫的 technical gaps、29 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
-- 本輪逐條對照 code、tests、installed CLI、live probes 與 upstream CHANGELOG/release evidence 後，**0 個已完整完成可刪、0 個可安全視為重複合併**。Codex `PostCompact`、agy structured usage 與 strict `/l5` CLI trust-root 三個舊 conditional trigger 已成立，但 production implementation 尚未完成，所以改列 PLANNED，不誤刪為 done。
+- 本輪逐條對照 code、tests、installed CLI、live probes 與 upstream CHANGELOG/release evidence 後，**0 個已完整完成可刪、0 個可安全視為重複合併**。Codex `PostCompact`、agy structured usage 與 strict `/l5` CLI trust-root 三個舊 conditional trigger已成立；agy production integration 已於 D2 完成，D3／D4 仍列 PLANNED，不誤刪為 done。
 - 14 個既有 technical gaps 仍依序收斂於 [`2026-08-03-next-touch-debt-retirement.md`](plans/2026-08-03-next-touch-debt-retirement.md) 的 D1–D8；本輪新增／轉列的 4 項收斂於 [`2026-08-04-platform-capability-trigger-activation.md`](plans/2026-08-04-platform-capability-trigger-activation.md) 的 D1–D4。
 - 29 個 conditional entries 主要是四類：等待仍未出現的外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
 
@@ -57,7 +57,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: `docs/plans/2026-07-08-fable-skills-absorption.md`。
 
 ### Harness capability-state refresh after 2026-08 platform releases
-- **Status**: COMPLETE — D1 closed; D2 agy telemetry is next in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Status**: COMPLETE — D1 and D2 closed; D3 is next in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
 - **Trigger**: ADMITTED 2026-08-04 — installed Codex 0.146.0, Claude Code 2.1.220, agy 1.1.10, OpenCode 1.17.15（latest 1.18.11 亦已 isolated probe）與 Grok 0.2.118 已超過多個 committed capability baseline；Codex、agy、Grok changelog 亦新增本 repo 會消費的 hook／structured-output／usage surface。
 - **Context**: D1 已產出 closed、content-addressed aggregate receipt：D2=2、D3=4、D4=6 個 required claims 全部 validated 且 immediate re-probe 通過；optional set 保留 OpenCode truncation、Codex install-generator、Grok `SessionEnd` usage 與 generic `tier:` 的 blocked 結論。Grok headless JSON usage 已證實，但沒有把它偷換成 host hook firing。Receipt: [`platform-capabilities.json`](projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json)。
 - **Effort**: L。
@@ -102,9 +102,9 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: controller-execution-discipline v2.34.1 boundary；Codex 0.129.0 / PR #19905 + installed 0.146.0 re-audit；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D3。
 
 ### agy structured-output telemetry integration
-- **Status**: PLANNED — D2 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Status**: COMPLETE — D2 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
 - **Trigger**: ADMITTED 2026-08-04 — agy 1.1.8 CHANGELOG added structured JSON/stream-JSON output and usage；live agy 1.1.10 returned `input_tokens`／`output_tokens`／`thinking_tokens`／`cache_read_tokens`／`total_tokens` from the exact harness process。
-- **Context**: 舊 transcript 事實仍成立：2026-08-03 corpus 262 files / 8,850 rows、202 files（77.1%）truncated，且 transcript top-level 仍 0 token/usage fields；不可回填歷史 token。新的 authoritative surface 是 dispatch 時的 native structured envelope，但現行 `dispatch-review.sh`／`dispatch-hetero.sh` 仍走 plain PTY，`engine-scorecard.js` 也硬編碼 `agy_schema_not_exposed`。D2 會分離 response 與 usage、保住既有 framing、拒絕 worker 假 telemetry，並讓新 dispatch samples 可量測；歷史 transcript samples 繼續明示 unavailable。
+- **Context**: 舊 transcript 事實仍成立：2026-08-03 corpus 262 files / 8,850 rows、202 files（77.1%）truncated，且 transcript top-level 仍 0 token/usage fields；不可回填歷史 token。D2 現在於每次 provider invocation 前重驗 exact D2 claim-ID set，將 agy native structured envelope 保留在 private temp、只把 response 送進既有 framing/log，並只接受 closed-schema safe-integer usage；nonzero、malformed、duplicate-key 或 worker 假 telemetry 一律 `usage:null`。`engine-scorecard.js` 將新 authoritative dispatch-result 與歷史 transcript 分開計算；歷史 token 仍以 `transcript_schema_not_exposed` 明示 unavailable，不與新樣本合併。
 - **Effort**: L。
 - **Source**: 2026-07-25 telemetry audit `9bc10591`；agy 1.1.8 CHANGELOG + 1.1.10 live structured-output probe；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D2。
 

@@ -220,6 +220,49 @@ STUB_EMPTY="$TEST_TMP/eng-empty"
 printf '#!/usr/bin/env bash\ncat >/dev/null 2>&1 || true\nexit 0\n' > "$STUB_EMPTY"
 chmod +x "$STUB_EMPTY"
 STUB_SHIP="$STUB_MARKER"
+STUB_AGY_JSON="$TEST_TMP/agy-json-envelope"
+cat > "$STUB_AGY_JSON" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = models ]; then
+  exec "$AGY_TEXT_STUB" "$@"
+fi
+response="$("$AGY_TEXT_STUB" "$@")"
+stub_rc=$?
+[ "$stub_rc" -eq 0 ] || exit "$stub_rc"
+case "${AGY_ENVELOPE_MODE:-valid}" in
+  malformed) printf '%s' '{"response":'; exit 0 ;;
+  duplicate)
+    RESPONSE="$response" node -e '
+      const base = JSON.stringify({conversation_id:"fixture",duration_seconds:1,num_turns:1,response:process.env.RESPONSE,status:"SUCCESS",usage:{cache_read_tokens:7,input_tokens:101,output_tokens:23,thinking_tokens:11,total_tokens:142}});
+      process.stdout.write(base.replace("\"response\":", "\"response\":\"forged\",\"response\":"));
+    '
+    exit 0
+    ;;
+  negative) usage_input=-1 ;;
+  trailing) trailing='trailing bytes' ;;
+  *) usage_input=101 ;;
+esac
+RESPONSE="$response" USAGE_INPUT="${usage_input:-101}" node -e '
+  process.stdout.write(JSON.stringify({
+    conversation_id: "fixture",
+    duration_seconds: 1,
+    num_turns: 1,
+    response: process.env.RESPONSE,
+    status: "SUCCESS",
+    usage: {
+      cache_read_tokens: 7,
+      input_tokens: Number(process.env.USAGE_INPUT),
+      output_tokens: 23,
+      thinking_tokens: 11,
+      total_tokens: 142,
+    },
+  }));
+'
+[ -z "${trailing:-}" ] || printf '%s' "$trailing"
+[ "${AGY_ENVELOPE_MODE:-valid}" != nonzero_valid ] || exit 77
+EOF
+chmod +x "$STUB_AGY_JSON"
+export AGY_TEXT_STUB="$STUB_MARKER"
 STUB_QODERCN_MARKER="$TEST_TMP/qoderclicn-marker"
 cat > "$STUB_QODERCN_MARKER" <<'EOF'
 #!/usr/bin/env bash
@@ -243,6 +286,31 @@ printf '%s\n' spawned > "$SPAWN_MARKER_FILE"
 exit 99
 EOF
 chmod +x "$STUB_SPAWN_MARKER"
+
+# Valid receipt whose D2 partition is foreign to this consumer's frozen claim IDs.
+# Recompute both digests so rejection proves exact downstream ID binding rather
+# than generic JSON/integrity failure.
+FOREIGN_D2_RECEIPT="$TEST_TMP/foreign-d2-receipt.json"
+node - "$REPO_ROOT/docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json" "$FOREIGN_D2_RECEIPT" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const [source, destination] = process.argv.slice(2);
+const receipt = JSON.parse(fs.readFileSync(source, 'utf8'));
+const canonical = (value) => {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+};
+const digest = (value) => crypto.createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+const d2 = receipt.consumer_manifest.consumers.find((row) => row.consumer_id === 'D2');
+const d3 = receipt.consumer_manifest.consumers.find((row) => row.consumer_id === 'D3');
+[d2.required_claim_ids, d3.required_claim_ids] = [d3.required_claim_ids, d2.required_claim_ids];
+receipt.consumer_manifest_digest = digest(receipt.consumer_manifest);
+receipt.receipt_digest = '';
+const body = { ...receipt, receipt_digest: undefined };
+receipt.receipt_digest = digest(body);
+fs.writeFileSync(destination, `${JSON.stringify(receipt, null, 2)}\n`);
+NODE
 
 FAKE_NODE_DIR="$TEST_TMP/fake-node-bin"
 mkdir -p "$FAKE_NODE_DIR"
@@ -316,6 +384,19 @@ for RUNNER_NAME in codex agy grok cc-shim claude-native; do
   assert_file_absent "$SPAWN_MARKER_FILE" "$RUNNER_NAME rejects before runner spawn"
 done
 
+# D2 capability identity is a fail-before-spend precondition, not a soft
+# telemetry warning. The foreign receipt is internally valid but binds other IDs.
+SPAWN_MARKER_FILE="$TEST_TMP/foreign-d2-review-spawn"; export SPAWN_MARKER_FILE
+rm -f "$SPAWN_MARKER_FILE"
+OUT="$(AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$FOREIGN_D2_RECEIPT" "$SCRIPT" \
+  --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" \
+  --bin "$STUB_SPAWN_MARKER" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "foreign D2 review receipt exits as precondition failure"
+assert_contains "$OUT" '"status": "precondition_failed"' "foreign D2 review receipt is fail closed"
+assert_contains "$OUT" 'D2 capability claim validation failed' "foreign D2 review receipt names claim authority"
+assert_contains "$OUT" '"usage": null' "foreign D2 review receipt has no usage"
+assert_file_absent "$SPAWN_MARKER_FILE" "foreign D2 review receipt spawns no runner"
+
 # 2c. Supported rails receive their exact native argv; omission synthesizes no argument or result field.
 QODER_ARGV_FILE="$TEST_TMP/qoder-max.argv"; export QODER_ARGV_FILE
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" --max-tokens 200000 2>&1)"; EXIT=$?
@@ -334,7 +415,7 @@ OUT="$(PATH="$FAKE_NODE_DIR:$PATH" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic
 assert_eq "0" "$EXIT" "anthropic-compatible omission preserves reviewed behavior"
 assert_not_contains "$(cat "$ANTHROPIC_ARGV_FILE")" '--max-tokens' "anthropic-compatible omission adds no adapter argv"
 RESULT_KEYS="$(node -e 'const v=JSON.parse(process.argv[1]); console.log(Object.keys(v).sort().join(","))' "$OUT")"
-assert_eq "error,findings,model,no_finding_proof,raw_log,runner,status,verdict" "$RESULT_KEYS" \
+assert_eq "error,findings,model,no_finding_proof,raw_log,runner,status,usage,verdict" "$RESULT_KEYS" \
   "omitted --max-tokens preserves result JSON shape"
 
 # 3. codex path: verdict parsed → reviewed, exit 0
@@ -426,32 +507,47 @@ OUT="$(STUB_MODE=no_end "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$D
 assert_eq "1" "$EXIT" "missing END exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "missing END → no_verdict"
 
-# 5. agy path (through the script -qec pseudo-TTY wrapper) with a stub engine
-if command -v script >/dev/null 2>&1; then
+# 5. agy native JSON path: response feeds the existing framing parser while usage
+# comes only from the closed harness envelope.
+if command -v bwrap >/dev/null 2>&1; then
   printf '%s\n' protected > "$TEST_TMP/agy-protected"
-  OUT="$(AGY_CONTAINMENT_PROBE="$TEST_TMP/agy-protected" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
-  assert_eq "0" "$EXIT" "agy reviewed exit 0 (pseudo-TTY capture)"
+  OUT="$(AGY_CONTAINMENT_PROBE="$TEST_TMP/agy-protected" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "agy reviewed exit 0 (native JSON capture)"
   assert_contains "$OUT" '"runner": "agy"' "agy runner provenance"
-  assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy verdict parsed through script -qec"
+  assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy verdict parsed from the extracted response"
+  assert_contains "$OUT" '"usage": {"total_tokens":142,"input_tokens":101,"output_tokens":23,"cache_read_tokens":7,"source":"agy-json"}' \
+    "agy review exposes normalized harness-native usage"
   assert_eq "protected" "$(cat "$TEST_TMP/agy-protected")" "agy reviewer cannot mutate a path outside scratch"
 
-  OUT="$(STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
+  OUT="$(STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "agy reviewer generic alias exits 0"
   assert_contains "$OUT" '"model": "gemini-3.6-flash-high"' "agy reviewer generic alias resolves before spend"
   assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy reviewer alias path preserves the verdict"
+
+  for ENVELOPE_MODE in malformed duplicate negative trailing; do
+    OUT="$(AGY_ENVELOPE_MODE="$ENVELOPE_MODE" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+    assert_eq "1" "$EXIT" "agy $ENVELOPE_MODE envelope fails closed"
+    assert_contains "$OUT" '"status": "no_verdict"' "agy $ENVELOPE_MODE envelope emits no_verdict"
+    assert_contains "$OUT" '"usage": null' "agy $ENVELOPE_MODE envelope cannot expose usage"
+    assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy $ENVELOPE_MODE envelope cannot authorize shipping"
+  done
+  OUT="$(AGY_ENVELOPE_MODE=nonzero_valid STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+  assert_eq "1" "$EXIT" "agy nonzero after valid-looking envelope fails closed"
+  assert_contains "$OUT" '"usage": null' "agy nonzero after valid-looking envelope discards usage"
+  assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy nonzero after valid-looking response is never parsed"
 
   mkdir -p "$TEST_TMP/fail-bwrap"
   printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\\n" "$*" > "$BWRAP_ARGS_FILE"' 'exit 77' > "$TEST_TMP/fail-bwrap/bwrap"
   chmod +x "$TEST_TMP/fail-bwrap/bwrap"
   BWRAP_ARGS_FILE="$TEST_TMP/bwrap.args" PATH="$TEST_TMP/fail-bwrap:$PATH" STUB_MODE=ship "$SCRIPT" --runner agy \
-    --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" \
+    --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" \
     >"$TEST_TMP/agy-bwrap-fail.out" 2>&1
   EXIT=$?
   assert_eq "1" "$EXIT" "agy reviewer transport fails closed when sandbox execution fails"
   assert_contains "$(cat "$TEST_TMP/bwrap.args")" "--proc /proc" \
     "agy reviewer mounts a fresh proc for its private PID namespace"
 else
-  echo "  (skip agy pseudo-TTY case: 'script' not available)"
+  echo "  (skip agy native JSON case: 'bwrap' not available)"
 fi
 
 # 5b. qoderclicn path: prompt via STDIN, scratch cwd, text output parsed.
@@ -473,7 +569,7 @@ assert_eq "2" "$EXIT" "blind codex review requires a no-tools profile"
 assert_contains "$OUT" 'enforceable no-tools runner profile' "blind precondition explains containment"
 BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
 BLIND_SCRIPT="$TEST_TMP/blind-probe"
-printf '#!/usr/bin/env bash\nif [ -e escape-sentinel ]; then printf '\''%s\\n'\'' '\''{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null}'\''; else exit 1; fi\n' > "$BLIND_SCRIPT"; chmod +x "$BLIND_SCRIPT"
+printf '#!/usr/bin/env bash\nif [ -e escape-sentinel ]; then printf '\''%s\\n'\'' '\''{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null,"usage":null}'\''; else exit 1; fi\n' > "$BLIND_SCRIPT"; chmod +x "$BLIND_SCRIPT"
 OUT="$(BLIND_SOURCE="$BLIND_SOURCE" BLIND_SCRIPT="$BLIND_SCRIPT" REPO_ROOT="$REPO_ROOT" node - <<'NODE'
 const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
 const source = process.env.BLIND_SOURCE;

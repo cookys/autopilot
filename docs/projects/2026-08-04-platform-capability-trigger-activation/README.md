@@ -1,6 +1,6 @@
 # Platform capability trigger activation
 
-> **Status:** D1 capability claims complete / D2 agy telemetry next
+> **Status:** D1 capability claims + D2 agy telemetry complete / D3 Codex PostCompact next
 > **Branch:** `feat/platform-capability-trigger-activation`
 > **Plan:** [platform capability trigger activation](../../plans/2026-08-04-platform-capability-trigger-activation.md)
 
@@ -26,7 +26,7 @@ Every promoted platform fact must first pass the closed dual-evidence claim cont
 
 | Deliverable | Status | Internal gates | Exit condition |
 |---|---|---|---|
-| Platform capability trigger activation | in progress; D1 complete, D2 next | D1 capability claims ✓ → D2 agy telemetry next → D3 Codex PostCompact → D4 strict-L5 bootstrap | Cumulative implementation, verification, and docs finish gate pass on the frozen range |
+| Platform capability trigger activation | in progress; D1–D2 complete, D3 next | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact next → D4 strict-L5 bootstrap | Cumulative implementation, verification, and docs finish gate pass on the frozen range |
 
 The tracker has one deliverable. D1–D4 are ordered internal gates, not independently claimable phases;
 tests, reviews, repairs, and doc sync remain inside this row and its existing budgets.
@@ -43,7 +43,7 @@ The exact D2/D3/D4 consumer-manifest repair stayed in the same R4 lineage. Gener
 `next_generation` is `null`. The immutable artifact is
 `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
 (SHA-256 `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`).
-Implementation is authorized. D1 emitted the closed [platform capability receipt](evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 is the next internal gate.
+Implementation is authorized. D1 emitted the closed [platform capability receipt](evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 now consumes its exact two-claim set before every agy provider invocation, captures the native JSON envelope privately, preserves only the response framing in worker-visible logs, and admits only validated usage into result/scorecard telemetry. D3 is the next internal gate.
 
 ## Scope boundaries
 

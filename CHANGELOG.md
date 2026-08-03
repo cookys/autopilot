@@ -24,6 +24,33 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## Unreleased — Authoritative agy structured telemetry
+
+**Headline**: agy review and implementation dispatches now consume a freshly revalidated D2
+capability receipt, keep the provider's native JSON envelope private, preserve the existing
+response framing, and expose only strictly validated usage telemetry.
+
+### Added
+- Closed, required `usage` contracts for review and runner results, with safe nonnegative token
+  counts and explicit `source:"agy-json"` attribution for authoritative agy samples.
+- Scorecard evidence classes that keep new dispatch-result usage separate from historical agy
+  transcripts, whose token data remains unavailable as `transcript_schema_not_exposed`.
+
+### Changed
+- `dispatch-review.sh` and `dispatch-hetero.sh` validate the exact D2 claim-ID set immediately
+  before every agy invocation and capture `--output-format json` into private temporary files.
+- Only the validated response reaches worker-visible logs and the existing nonce/commit framing;
+  usage flows separately into result JSON and scorecard aggregation.
+
+### Fixed
+- Malformed, truncated, duplicate-key, extra-key, invalid-number, trailing-data, and nonzero-exit
+  agy envelopes now fail closed without admitting response or usage; worker-authored fake usage
+  cannot promote itself into telemetry.
+
+### Rollback
+- Revert the D2 telemetry commit to restore the prior plain-output transport and result schemas;
+  no stored historical transcript data is rewritten by this change.
+
 ## v2.34.1 — Controller execution discipline
 
 **Headline**: Autopilot now treats a long-running deliverable as one durable work order: it freezes

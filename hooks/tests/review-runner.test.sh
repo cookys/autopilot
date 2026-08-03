@@ -144,7 +144,7 @@ const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'
 const parsed = parseReviewOutput([
   '{not valid json}',
   '{"foo":1}',
-  '{"runner":"codex","model":"gpt-5.5","status":"reviewed","verdict":"SHIP-AS-IS","findings":"none","no_finding_proof":"checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains","raw_log":"/tmp/log","error":null}',
+  '{"runner":"codex","model":"gpt-5.5","status":"reviewed","verdict":"SHIP-AS-IS","findings":"none","no_finding_proof":"checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains","raw_log":"/tmp/log","error":null,"usage":null}',
 ].join('\n'));
 console.log(parsed.status);
 console.log(parsed.verdict);
@@ -167,6 +167,13 @@ const parsed = parseReviewOutput(JSON.stringify({
   no_finding_proof: 'checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains',
   raw_log: '/tmp/log',
   error: null,
+  usage: {
+    total_tokens: 142,
+    input_tokens: 101,
+    output_tokens: 23,
+    cache_read_tokens: 7,
+    source: 'agy-json',
+  },
 }, null, 2));
 console.log(parsed.status);
 console.log(parsed.verdict);
@@ -190,6 +197,7 @@ try {
     no_finding_proof: null,
     raw_log: '/tmp/log',
     error: null,
+    usage: null,
   }));
   console.log('unexpected-ok');
 } catch (err) {
@@ -214,6 +222,7 @@ try {
     no_finding_proof: 'checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains',
     raw_log: '/tmp/log',
     error: null,
+    usage: null,
   }));
   console.log('unexpected-ok');
 } catch (error) {
@@ -238,6 +247,7 @@ try {
     no_finding_proof: null,
     raw_log: '/tmp/log',
     error: null,
+    usage: null,
   }));
   console.log('unexpected-ok');
 } catch (error) {
@@ -262,6 +272,7 @@ try {
     no_finding_proof: 'checked=fixture diff and acceptance contract; evidence=changed behavior is covered by the supplied regression test; conclusion=no concrete acceptance discrepancy remains',
     raw_log: '/tmp/log',
     error: null,
+    usage: null,
     extra: true,
   }));
   console.log('unexpected-ok');
@@ -272,5 +283,48 @@ NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "review output parser rejects unknown field process exits 0"
 assert_contains "$OUT" "unknown field: extra" "review output parser rejects additionalProperties drift"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseReviewOutput } = require(path.join(root, 'src', 'runners', 'review'));
+const base = {
+  runner: 'agy',
+  model: 'Gemini 3.6 Flash (High)',
+  status: 'reviewed',
+  verdict: 'FIX-THEN-SHIP',
+  findings: 'fixture',
+  no_finding_proof: null,
+  raw_log: '/tmp/log',
+  error: null,
+  usage: {
+    total_tokens: 142,
+    input_tokens: 101,
+    output_tokens: 23,
+    cache_read_tokens: 7,
+    source: 'agy-json',
+  },
+};
+const valid = parseReviewOutput(JSON.stringify(base));
+const invalid = [
+  { ...base, usage: { ...base.usage, input_tokens: -1 } },
+  { ...base, usage: { ...base.usage, output_tokens: 1.5 } },
+  { ...base, usage: { ...base.usage, total_tokens: Number.MAX_SAFE_INTEGER + 1 } },
+  { ...base, usage: { ...base.usage, extra: 1 } },
+  { ...base, usage: { ...base.usage, source: '' } },
+];
+let rejected = 0;
+for (const value of invalid) {
+  try { parseReviewOutput(JSON.stringify(value)); } catch (_error) { rejected += 1; }
+}
+console.log(`source=${valid.usage.source}`);
+console.log(`total=${valid.usage.total_tokens}`);
+console.log(`rejected=${rejected}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "review usage consumer matrix process exits 0"
+assert_contains "$OUT" "source=agy-json" "review consumer accepts closed native usage source"
+assert_contains "$OUT" "total=142" "review consumer preserves native usage total"
+assert_contains "$OUT" "rejected=5" "review consumer rejects invalid, overflow, and open usage"
 
 finalize_test

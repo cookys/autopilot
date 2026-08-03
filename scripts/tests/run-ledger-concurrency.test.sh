@@ -413,7 +413,8 @@ assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="coordination" and .
 assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="replacement")]|length' "$R6_LEDGER")" "0" "coordinator never leases a short-lived replacement"
 OLD_GEN="$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].generation' "$R6_LEDGER")"
 OLD_NONCE="$(jq -sr --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].nonce' "$R6_LEDGER")"
-printf '%s\n' '{"status":"no_effect","effects":[]}' > "$TEST_TMP/r6-no-effect.json"
+R6_LEASE="$(jq -sc --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[-1]' "$R6_LEDGER")"
+jq -nc --argjson l "$R6_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:$l.campaign_id,ticket_id:$l.ticket_id,lineage_id:$l.lineage_id,git_ref:($l.git_ref//""),git_sha:($l.git_sha//""),worktree:($l.worktree//""),status:"no_effect",effects:[]}' > "$TEST_TMP/r6-no-effect.json"
 AUTHORIZED_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --grace-seconds 0 --idempotency-key r6-authorize-key --authorize-transfer --result-json "$TEST_TMP/r6-no-effect.json")"
 assert_json_eq "$AUTHORIZED_COORD" '.status' "transfer_authorized" "safe no-effect reconciliation authorizes explicit handoff"
 AUTH_KEY="$(jq -r '.authorization_key' <<<"$AUTHORIZED_COORD")"
@@ -425,6 +426,22 @@ assert_eq "$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stag
 assert_eq "$(jq -sr --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="ownership_transfer")][0].campaign_id' "$R6_LEDGER")" "campaign-r6" "explicit handoff preserves campaign lineage"
 run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$OLD_GEN" --nonce "$OLD_NONCE" --authorization-key "$AUTH_KEY" --pid "$R6_REPLACEMENT_PID" --timeout 5
 assert_cmd_rc 1 "consumed transfer authorization cannot be replayed"
+NEXT_GEN="$(jq -sr --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid)]|sort_by(.generation)|.[-1].generation' "$R6_LEDGER")"; NEXT_NONCE="$(jq -sr --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid)]|sort_by(.generation)|.[-1].nonce' "$R6_LEDGER")"
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$NEXT_GEN" --nonce "$NEXT_NONCE" --authorization-key "$AUTH_KEY" --pid "$R6_REPLACEMENT_PID" --timeout 5
+assert_cmd_rc 1 "consumed transfer key cannot operate on successor generation"
+
+# Committed/advanced Git truth is adopted, never handed off as no-effect.
+ADV_REPO="$TEST_TMP/r6-advanced-git"; git init -q "$ADV_REPO"; git -C "$ADV_REPO" branch -M main; git -C "$ADV_REPO" config user.email t@t; git -C "$ADV_REPO" config user.name t
+printf base > "$ADV_REPO/state"; git -C "$ADV_REPO" add state; git -C "$ADV_REPO" commit -qm base; ADV_BASE="$(git -C "$ADV_REPO" rev-parse HEAD)"; printf advanced > "$ADV_REPO/state"; git -C "$ADV_REPO" commit -qam advanced
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-advanced --stage work --pid 999999 --start-time 1 --heartbeat-ts 1 --git-ref refs/heads/main --git-sha "$ADV_BASE" --worktree "$ADV_REPO"; ADV_LEASE="$CMD_OUT"
+jq -nc --argjson l "$ADV_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:"",ticket_id:"",lineage_id:"",git_ref:$l.git_ref,git_sha:$l.git_sha,worktree:$l.worktree,status:"no_effect",effects:[]}' > "$TEST_TMP/r6-advanced-result.json"
+ADV_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-advanced --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --idempotency-key r6-advanced-key --authorize-transfer --result-json "$TEST_TMP/r6-advanced-result.json" --git-dir "$ADV_REPO")"; assert_json_eq "$ADV_COORD" '.status' adopted "advanced Git truth is adopted"; assert_eq "$(jq -s --arg rid r6-advanced '[.[]|select(.kind=="coordination" and .run_id==$rid and .action=="transfer" and .status=="authorized")]|length' "$R6_LEDGER")" 0 "advanced Git truth emits no transfer authorization"
+
+# Same-key controllers reserve one exact lease tuple under the run lock.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-idem --stage work --pid 999999 --start-time 1 --heartbeat-ts 1; IDEM_LEASE="$CMD_OUT"
+jq -nc --argjson l "$IDEM_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:"",ticket_id:"",lineage_id:"",git_ref:"",git_sha:"",worktree:"",status:"no_effect",effects:[]}' > "$TEST_TMP/r6-idem-result.json"
+IDEM_PIDS=(); for i in 1 2; do AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-idem --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --idempotency-key r6-idem-key --authorize-transfer --result-json "$TEST_TMP/r6-idem-result.json" >"$TEST_TMP/idem-$i.out" 2>&1 & IDEM_PIDS+=("$!"); done; for p in "${IDEM_PIDS[@]}"; do wait "$p" || true; done
+assert_eq "$(jq -s --arg rid r6-idem '[.[]|select(.kind=="coordination" and .run_id==$rid and .action=="transfer" and .status=="authorized")]|length' "$R6_LEDGER")" 1 "same-key concurrent authorization is at-most one"
 
 # Even a forged-looking authorization cannot seize a live owner.
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-live-owner --stage work --pid "$R6_REPLACEMENT_PID" --campaign-id campaign-r6 --ticket-id ticket-r6 --lineage-id lineage-r6

@@ -880,7 +880,7 @@ command_stage_transfer() {
   local auth_result_path auth_result_sha actual_result_sha
   auth_result_path="$(jq -r '.payload.result_path // ""' <<<"$authorization")"
   auth_result_sha="$(jq -r '.payload.result_sha256 // ""' <<<"$authorization")"
-  actual_result_sha="$(safe_no_effect_result "$auth_result_path" 2>/dev/null || true)"
+  actual_result_sha="$(bound_no_effect_result "$auth_result_path" "$latest" 2>/dev/null || true)"
   if [ -z "$actual_result_sha" ] || [ "$actual_result_sha" != "$auth_result_sha" ]; then
     release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
     error "stage ownership transfer no-effect proof is stale or invalid"
@@ -1446,6 +1446,17 @@ append_coordination_row() {
   printf '%s\n' "$line"
 }
 
+coordinate_idempotency_guard() {
+  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" key="$6" timeout="$7" run_fd="" row reserved=0; COORD_GUARD_STATUS="new"
+  with_run_lock "$ledger" "$run_id" "$timeout" run_fd || return 1
+  row="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key "$key" '[.[]|select(.kind=="coordination" and .run_id==$rid and .stage==$stg and .idempotency_key==$key)]|if length==0 then empty else .[-1] end')"
+  if [ -z "$row" ]; then append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" intervene reserved "$key" '{"reservation":"same-lease-idempotency"}' "$timeout" "$run_fd" >/dev/null; reserved=1
+  elif [ "$(jq -r '.generation|tostring' <<<"$row")" != "$generation" ] || [ "$(jq -r '.nonce // ""' <<<"$row")" != "$nonce" ]; then COORD_GUARD_STATUS="conflict"
+  elif [ "$(jq -r '.action // ""' <<<"$row")" = transfer ] && [[ "$(jq -r '.status // ""' <<<"$row")" =~ ^(authorized|consumed)$ ]]; then COORD_GUARD_STATUS="terminal"
+  else COORD_GUARD_STATUS="reserved"; fi
+  [ "$reserved" -eq 1 ] || release_lock "$run_fd"
+}
+
 safe_no_effect_result() {
   local result_path="$1"
   [ -f "$result_path" ] || return 1
@@ -1456,11 +1467,15 @@ safe_no_effect_result() {
   sha256sum "$result_path" | awk '{print $1}'
 }
 
+bound_no_effect_result() {
+  local result_path="$1" record="$2"; safe_no_effect_result "$result_path" >/dev/null || return 1
+  jq -e --argjson r "$record" '.run_id==$r.run_id and .stage==$r.stage and (.generation|tostring)==($r.generation|tostring) and .nonce==$r.nonce and (.campaign_id//"")==($r.campaign_id//"") and (.ticket_id//"")==($r.ticket_id//"") and (.lineage_id//"")==($r.lineage_id//"") and (.git_ref//"")==($r.git_ref//"") and (.git_sha//"")==($r.git_sha//"") and (.worktree//"")==($r.worktree//"")' "$result_path" >/dev/null 2>&1 || return 1
+  sha256sum "$result_path" | awk '{print $1}'
+}
+
 authorize_stage_transfer() {
   local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" idempotency_key="$6" result_path="$7" timeout="$8"
-  local proof_digest
-  proof_digest="$(safe_no_effect_result "$result_path")" || error "transfer authorization requires a deterministic no-effect result"
-  local pre_latest pre_resources run_fds="" run_fd latest old_pid old_start pending resource resource_state
+  local proof_digest pre_latest pre_resources run_fds="" run_fd latest old_pid old_start pending resource resource_state
   pre_latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
   [ -n "$pre_latest" ] || error "transfer authorization stage is missing"
   pre_resources="$(jq -r '.resources // ""' <<<"$pre_latest")"
@@ -1474,6 +1489,12 @@ authorize_stage_transfer() {
     release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
     error "transfer authorization tuple is stale"
   fi
+  local terminal_auth
+  terminal_auth="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key "$idempotency_key" --arg gen "$generation" --arg nonce_v "$nonce" '[.[]|select(.kind=="coordination" and .action=="transfer" and .run_id==$rid and .stage==$stg and .idempotency_key==$key and (.generation|tostring)==$gen and .nonce==$nonce_v and (.status=="authorized" or .status=="consumed"))]|if length==0 then empty else .[-1] end')"
+  if [ -n "$terminal_auth" ]; then release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done; printf '%s\n' "$terminal_auth"; return 0; fi
+  proof_digest="$(bound_no_effect_result "$result_path" "$latest")" || {
+    release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done; error "transfer authorization requires a bound deterministic no-effect result"
+  }
   for resource in ${pre_resources//,/ }; do
     [ -z "$resource" ] && continue
     resource_state="$(audit_resource_contention "$ledger" "$resource")"
@@ -1736,12 +1757,6 @@ command_stage_coordinate() {
     return 0
   }
   [ -n "$idempotency_key" ] || idempotency_key="coord-$(rand_hex)"
-  local prior
-  prior="$(coordination_lookup "$ledger" "$run_id" "$stage" "$idempotency_key")"
-  if [ "$(jq -r '.status // ""' <<<"$prior")" = "replacement_authorized" ] || [ "$(jq -r '.status // ""' <<<"$prior")" = "adopted" ]; then
-    jq -nc --arg key "$idempotency_key" --argjson prior "$prior" '{status:"already_applied",idempotency_key:$key,receipt:$prior}'
-    return 0
-  fi
   if [ "$condition" = "unknown" ] && [ "$condition_reason" != "stale_without_bounded_inquiry" ]; then
     append_coordination_row "$ledger" "$run_id" "$stage" "${generation:-0}" "$nonce" "intervene" "unknown" "$idempotency_key" "$(jq -nc --argjson c "$condition_json" '{condition:$c,action:"observe_only"}')" "$timeout" >/dev/null
     jq -nc --arg key "$idempotency_key" --argjson condition "$condition_json" '{status:"unknown",idempotency_key:$key,condition:$condition,action:"observe_only"}'
@@ -1758,13 +1773,13 @@ command_stage_coordinate() {
   # between the initial lookup and this refresh. Re-check under the latest
   # lease before sending another inquiry; the expected generation/nonce fence
   # below remains the final race guard.
-  prior="$(coordination_lookup "$ledger" "$run_id" "$stage" "$idempotency_key")"
-  if [ "$(jq -r '.status // ""' <<<"$prior")" = "replacement_authorized" ] || [ "$(jq -r '.status // ""' <<<"$prior")" = "adopted" ]; then
-    jq -nc --arg key "$idempotency_key" --argjson prior "$prior" '{status:"already_applied",idempotency_key:$key,receipt:$prior}'
-    return 0
-  fi
   generation="$(jq -r '.generation' <<<"$latest")"; nonce="$(jq -r '.nonce' <<<"$latest")"
   pid="$(jq -r '.pid // ""' <<<"$latest")"; start_time="$(jq -r '.start_time // ""' <<<"$latest")"; resources="$(jq -r '.resources // ""' <<<"$latest")"
+  coordinate_idempotency_guard "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$idempotency_key" "$timeout" || error "coordination idempotency guard unavailable"
+  case "$COORD_GUARD_STATUS" in
+    conflict) jq -nc --arg key "$idempotency_key" '{status:"blocked",idempotency_key:$key,reason:"idempotency_key_bound_to_different_lease"}'; return 0 ;;
+    terminal|reserved) jq -nc --arg key "$idempotency_key" --arg status "$COORD_GUARD_STATUS" '{status:"already_applied",idempotency_key:$key,reason:(if $status=="terminal" then "transfer_terminal" else "same_key_in_progress" end)}'; return 0 ;;
+  esac
   [ -n "$inquiry_text" ] || inquiry_text="depth-0 inquiry: report working, waiting, or blocked state before the bounded deadline"
   directive_json="$(command_directive_send --ledger "$ledger" --run-id "$run_id" --stage "$stage" --text "$inquiry_text" --from depth-0 --timeout "$timeout")"
   directive_id="$(jq -r '.directive_id' <<<"$directive_json")"
@@ -1833,6 +1848,9 @@ command_stage_coordinate() {
   reconciliation="$(command_stage_reconcile "${reconcile_args[@]}")"
   reconciliation_status="$(jq -r '.status // "incomplete"' <<<"$reconciliation")"
   if [ "$reconciliation_status" = "resolved" ]; then
+    if [ "$authorize_transfer" -eq 1 ] && [ "$(jq -r '.git_exact // false' <<<"$reconciliation")" != "true" ]; then
+      authorize_transfer=0
+    fi
     if [ "$authorize_transfer" -eq 1 ]; then
       local proof_digest authorization_row
       if ! proof_digest="$(safe_no_effect_result "$result_path")"; then
@@ -2120,7 +2138,8 @@ command_stage_reconcile() {
     blocked_state=1
   fi
 
-  local git_truth=0
+  local git_truth=0 git_exact=0 git_advanced=0
+  [ -z "$git_sha" ] && git_exact=1
   if [ -n "$git_sha" ]; then
     if [ -z "$git_dir" ] && [ -n "$worktree" ]; then
       git_dir="$worktree"
@@ -2133,9 +2152,9 @@ command_stage_reconcile() {
           ref_sha="$(git -C "$git_dir" rev-parse -q "$git_ref" 2>/dev/null || true)"
           if [ -n "$ref_sha" ]; then
             if [ "$ref_sha" = "$git_sha" ]; then
-              git_truth=1
+              git_truth=1; git_exact=1
             elif git -C "$git_dir" merge-base --is-ancestor "$git_sha" "$ref_sha" 2>/dev/null; then
-              git_truth=1
+              git_truth=1; git_advanced=1
             fi
           fi
         else
@@ -2187,12 +2206,14 @@ command_stage_reconcile() {
     --arg nonce_v "$nonce" \
     --argjson has_result "$has_result" \
     --argjson git_truth "$git_truth" \
+    --argjson git_exact "$git_exact" \
+    --argjson git_advanced "$git_advanced" \
     --argjson pending "$pending_side_effects" \
     --argjson terminal "$terminal_state" \
     --argjson blocked "$blocked_state" \
     --argjson is_alive "$alive" \
     --arg resources "$resources" \
-    '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result == 1),git_truth:($git_truth == 1),pending_side_effects:($pending|tonumber),terminal:($terminal == 1),blocked_state:($blocked == 1),holder_alive:($is_alive == 1),resources:$resources}'
+    '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result == 1),git_truth:($git_truth == 1),git_exact:($git_exact == 1),git_advanced:($git_advanced == 1),pending_side_effects:($pending|tonumber),terminal:($terminal == 1),blocked_state:($blocked == 1),holder_alive:($is_alive == 1),resources:$resources}'
 }
 
 command_resume() {

@@ -4701,6 +4701,7 @@ class AutopilotEngine {
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
+          blindDiscovery: true,
         },
         requireQualifiedReviewer: scope === 'final' ? true : requireQualifiedReviewer,
         pinReviewerTuple,

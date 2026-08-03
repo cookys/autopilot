@@ -157,17 +157,18 @@ assert_contains "$OUT" "shipping validation requires --polarity-base-sha" "polar
 POL_REPO="$TEST_TMP/polarity-repo"
 $GIT init "$POL_REPO" >/dev/null 2>&1
 printf '%s\n' 'echo 3' > "$POL_REPO/calc.sh"
-$GIT -C "$POL_REPO" add calc.sh >/dev/null 2>&1
+printf '%s\n' '#!/usr/bin/env bash' '[ "$(bash calc.sh)" = "5" ]' > "$POL_REPO/calc.test.sh"
+chmod +x "$POL_REPO/calc.test.sh"
+$GIT -C "$POL_REPO" add calc.sh calc.test.sh >/dev/null 2>&1
 $GIT -C "$POL_REPO" commit -m base >/dev/null 2>&1
 POL_BASE="$($GIT -C "$POL_REPO" rev-parse HEAD)"
 printf '%s\n' 'echo 5' > "$POL_REPO/calc.sh"
-printf '%s\n' '[ "$(bash calc.sh)" = "5" ]' > "$POL_REPO/calc.test.sh"
+printf '%s\n' '#!/usr/bin/env bash' '[ "$(bash calc.sh)" = "5" ] # head artifact' > "$POL_REPO/calc.test.sh"
+chmod +x "$POL_REPO/calc.test.sh"
 $GIT -C "$POL_REPO" add -A >/dev/null 2>&1
 $GIT -C "$POL_REPO" commit -m head >/dev/null 2>&1
 POL_HEAD="$($GIT -C "$POL_REPO" rev-parse HEAD)"
-POL_VERIFY="$TEST_TMP/polarity-verify.sh"
-printf '%s\n' '#!/usr/bin/env bash' '[ "$(bash calc.sh)" = "5" ]' > "$POL_VERIFY"
-chmod +x "$POL_VERIFY"
+POL_VERIFY="$POL_REPO/calc.test.sh"
 POL_RECEIPT="$TEST_TMP/polarity-valid.json"
 "$REPO_ROOT/scripts/verify-red-green.sh" --base "$POL_BASE" --head "$POL_HEAD" \
   --verify-cmd "$POL_VERIFY" --repo "$POL_REPO" --assertion-artifact calc.test.sh --receipt-out "$POL_RECEIPT" >/dev/null

@@ -158,6 +158,12 @@ die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precond
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
+if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
+  case "$RUNNER" in
+    qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
+    *) die_precondition "blind review requires an enforceable no-tools runner profile (got: $RUNNER)" ;;
+  esac
+fi
 [[ -z "$MAX_TOKENS_PARSE_ERROR" ]] || die_precondition "$MAX_TOKENS_PARSE_ERROR"
 if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
   [[ "$MAX_TOKENS" =~ ^[1-9][0-9]*$ ]] \

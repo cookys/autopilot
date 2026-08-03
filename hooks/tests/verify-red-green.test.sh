@@ -20,12 +20,15 @@ create_test_repo() {
     $GIT init "$repo" >/dev/null 2>&1
 
     printf '%s\n' "$base_calc" > "$repo/calc.sh"
-    $GIT -C "$repo" add calc.sh >/dev/null 2>&1
+    printf '%s\n' '#!/usr/bin/env bash' "$test_content" > "$repo/calc.test.sh"
+    chmod +x "$repo/calc.test.sh"
+    $GIT -C "$repo" add calc.sh calc.test.sh >/dev/null 2>&1
     $GIT -C "$repo" commit -m base >/dev/null 2>&1
     local base_sha; base_sha=$($GIT -C "$repo" rev-parse HEAD)
 
     printf '%s\n' "$head_calc" > "$repo/calc.sh"
-    printf '%s\n' "$test_content" > "$repo/calc.test.sh"
+    printf '%s\n' '#!/usr/bin/env bash' "$test_content # head artifact" > "$repo/calc.test.sh"
+    chmod +x "$repo/calc.test.sh"
     $GIT -C "$repo" add calc.sh calc.test.sh >/dev/null 2>&1
     $GIT -C "$repo" commit -m "head with test" >/dev/null 2>&1
     local head_sha; head_sha=$($GIT -C "$repo" rev-parse HEAD)
@@ -58,14 +61,14 @@ test_validated() {
     local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
     local base head; base=${shas%% *}; head=${shas##* }
     create_verify_cmd "$vc"
-    local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$vc" --repo "$repo" --receipt-out "$receipt" 2>&1); local ec=$?
+    local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" --assertion-artifact calc.test.sh --receipt-out "$receipt" 2>&1); local ec=$?
     assert_eq "$ec" "0" "VALIDATED exits 0"
     assert_eq "$(json_field "$out" verdict)" "VALIDATED" "VALIDATED verdict"
     assert_contains "$out" '"red_green_validated": true' "VALIDATED sets red_green_validated true"
     assert_file_exists "$receipt" "VALIDATED writes a polarity receipt"
     assert_contains "$(cat "$receipt")" '"artifact_type": "red_green_polarity_receipt"' "receipt has polarity artifact type"
     assert_contains "$(cat "$receipt")" '"expected_red_exit_class": "nonzero"' "receipt binds expected red exit class"
-    local validated; validated=$("$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$vc" --assertion-artifact calc.test.sh 2>&1); ec=$?
+    local validated; validated=$("$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$repo/calc.test.sh" --assertion-artifact calc.test.sh 2>&1); ec=$?
     assert_eq "$ec" "0" "matching polarity receipt validates"
     assert_contains "$validated" '"status":"validated"' "matching polarity receipt returns validated status"
     "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --base "$head" --assertion-artifact calc.test.sh >/dev/null 2>&1; ec=$?
@@ -75,8 +78,21 @@ test_validated() {
     chmod +x "$other_vc"
     "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$other_vc" --assertion-artifact calc.test.sh >/dev/null 2>&1; ec=$?
     assert_eq "$ec" "1" "cross-command polarity receipt is rejected"
-    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$vc" --assertion-artifact calc.sh >/dev/null 2>&1; ec=$?
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$repo/calc.test.sh" --assertion-artifact calc.sh >/dev/null 2>&1; ec=$?
     assert_eq "$ec" "1" "cross-assertion polarity receipt is rejected"
+
+    local unrelated="$TEST_TMP/unrelated-assertion.sh"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$unrelated"; chmod +x "$unrelated"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$unrelated" --repo "$repo" --assertion-artifact calc.test.sh >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "3" "named artifact not attested by unrelated command is inconclusive"
+    local mutate="$TEST_TMP/mutate-verify.sh"
+    printf '%s\n' '#!/usr/bin/env bash' 'printf x >> "$0"; exit 0' > "$mutate"; chmod +x "$mutate"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$mutate" --repo "$repo" >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "3" "verification command byte mutation is inconclusive"
+    local sentinel="$TEST_TMP/exit125-verify.sh"
+    printf '%s\n' '#!/usr/bin/env bash' 'grep -q "echo 5" "$1/calc.sh" && exit 0 || exit 125' > "$sentinel"; chmod +x "$sentinel"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "3" "base infrastructure exit 125 is inconclusive"
 }
 
 # 1b. VALIDATED with test at a NESTED path (tests/unit_test.sh) — regression guard:

@@ -76,7 +76,8 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
-#     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...", "raw_log": "<path>", "error": "..." }
+#     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...",
+#     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "..." }
 #
 # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
 #   NOT treat as pass) ; 2 = precondition_failed.
@@ -141,7 +142,7 @@ done
 # a parsing caller reads as a transport failure rather than a precondition failure.
 # Falls back to raw interpolation only if json-emit.sh could not be sourced.
 _rv_esc() { if declare -F json_escape >/dev/null 2>&1; then json_escape "$(printf '%s' "${1:-}" | tr '\n' ' ')"; else printf '%s' "${1:-}"; fi; }
-die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "raw_log": null, "error": "%s" }\n' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")"; exit 2; }
+die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s" }\n' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")"; exit 2; }
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
@@ -244,15 +245,19 @@ passive_capture() {
           rate_limited)    quota_status="limited"; confidence="medium" ;;
         esac
         local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        # Exact effort/endpoint tuple — null endpoint means explicit no-endpoint wallet.
         local payload
-        payload="$(OBSERVED_AT="$observed_at" RUNNER="$RUNNER" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" node -e '
+        payload="$(OBSERVED_AT="$observed_at" RUNNER="$RUNNER" MODEL="$MODEL" STATUS="$quota_status" CONFIDENCE="$confidence" EFFORT="${EFFORT:-}" ENDPOINT_KEY="${ENDPOINT:-}" node -e '
           const p = process.env;
+          const endpoint = (p.ENDPOINT_KEY && p.ENDPOINT_KEY.length > 0) ? p.ENDPOINT_KEY : null;
           const payload = {
             schema_version: 1,
             observed_at: p.OBSERVED_AT,
             runner: p.RUNNER,
             model: p.MODEL,
             role: "reviewer",
+            effort: p.EFFORT || null,
+            endpoint,
             runner_version: null,
             capability: {
               quota: {
@@ -280,7 +285,7 @@ passive_capture() {
 emit_no_verdict() {
   local reason="$1"
   passive_capture "no_verdict"
-  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "%s" }\n' \
+  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s" }\n' \
     "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")"
   exit 1
 }
@@ -463,6 +468,7 @@ EOF
   cat <<'EOF'
 VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
 FINDINGS: one finding per line, or the single word none
+NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
 
 and ending with:
 EOF
@@ -470,6 +476,17 @@ EOF
   cat <<'EOF'
 
 Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
+
+Bounded convergence contract:
+- Deliver a bounded keep/cut list and a minimum shippable version, not an unbounded hunt for more defects.
+- Judge only against the supplied frozen specification and the actual current diff/baseline. Do not invent requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Every non-empty finding line MUST use a normalizer-compatible severity emoji (or Critical/Major/Minor/Suggestion) plus a stable ID in brackets, and MUST retain the mandatory classification in the claim, for example:
+  🟠 [stable-id] MUST-FIX <concrete failure, impact, smallest remediation>
+  🔵 [stable-id] CUT/FOLLOW-UP <optional item and exclusion rationale>
+  MUST-FIX requires a concrete in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP names optional hardening or aspiration and why it is excluded from the current version; it never blocks. Bare MUST-FIX/CUT labels without severity and [stable-id] are invalid.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a valid finding.
+- When the MUST-FIX list is empty and the supplied acceptance evidence passes, return SHIP-AS-IS. Do not prolong the loop with new wish-list items or renamed versions of requirements the current artifact already satisfies.
+- SHIP-AS-IS requires the exact anchored NO-FINDING-PROOF line shown above. Name the acceptance surfaces actually checked, concrete evidence observed, and the reason no MUST-FIX remains. Bare claims such as "none", "no findings", "looks good", or "all passed" are invalid. FIX-THEN-SHIP must omit this line.
 EOF
   if [[ -n "$PACK_FILE" ]]; then
     cat <<'EOF'
@@ -550,7 +567,7 @@ if [[ "$RUNNER" = "codex" ]]; then
     printf '\n[dispatch-review: codex exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$CODEX_RC" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "codex exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "codex exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CODEX_RC"
     exit 1
   fi
@@ -590,7 +607,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
     printf '\n[dispatch-review: grok exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$GROK_RC" "$([ "$GROK_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "grok exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "grok exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$GROK_RC"
     exit 1
   fi
@@ -631,7 +648,7 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
     printf '\n[dispatch-review: qoder exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$QODER_RC" "$([ "$QODER_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "qoder exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "qoder exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$QODER_RC"
     exit 1
   fi
@@ -683,7 +700,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CCSHIM_RC" "$([ "$CCSHIM_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CCSHIM_RC"
     exit 1
   fi
@@ -711,7 +728,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     printf '\n[dispatch-review: claude-native (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CNATIVE_RC" "$([ "$CNATIVE_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "claude-native exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "claude-native exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CNATIVE_RC"
     exit 1
   fi
@@ -732,7 +749,7 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
     printf '\n[dispatch-review: anthropic-compatible transport exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$ANTHROPIC_RC" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "raw_log": "%s", "error": "anthropic-compatible transport exited non-zero (rc=%s) — fail-closed, raw output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "anthropic-compatible transport exited non-zero (rc=%s) — fail-closed, raw output not parsed" }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$ANTHROPIC_RC"
     exit 1
   fi
@@ -840,12 +857,54 @@ FINDINGS="$(awk '
   }
   !capture { next }
   capture && /^```/ { in_fence = 1 - in_fence; next }
+  !in_fence && /^NO-FINDING-PROOF:/ { exit }
   !in_fence && length($0) > 0 { print $0 }
 ' "$BLOCK_FILE")"
 if [ -z "${FINDINGS:-}" ]; then
   FINDINGS="none"
 fi
 
-printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "raw_log": "%s", "error": null }\n' \
-  "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" "$(json_escape "$RAW_LOG")"
+PROOF_LINE_COUNT="$(awk '
+  BEGIN { c = 0; in_fence = 0 }
+  /^```/ { in_fence = 1 - in_fence; next }
+  !in_fence && /^NO-FINDING-PROOF:/ { c += 1 }
+  END { print c + 0 }
+' "$BLOCK_FILE")"
+NO_FINDING_PROOF=""
+if [ "$VERDICT" = "SHIP-AS-IS" ]; then
+  if [ "${PROOF_LINE_COUNT:-0}" -ne 1 ]; then
+    emit_no_verdict "SHIP-AS-IS requires exactly one anchored NO-FINDING-PROOF line"
+  fi
+  NO_FINDING_PROOF="$(awk '
+    BEGIN { in_fence = 0 }
+    /^```/ { in_fence = 1 - in_fence; next }
+    !in_fence && /^NO-FINDING-PROOF:/ {
+      sub(/^NO-FINDING-PROOF:[[:space:]]*/, "", $0)
+      print
+    }
+  ' "$BLOCK_FILE")"
+  if [[ ! "$NO_FINDING_PROOF" =~ ^checked=(.+)\;[[:space:]]*evidence=(.+)\;[[:space:]]*conclusion=(.+)$ ]]; then
+    emit_no_verdict "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"
+  fi
+  PROOF_CHECKED="$(printf '%s' "${BASH_REMATCH[1]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  PROOF_EVIDENCE="$(printf '%s' "${BASH_REMATCH[2]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  PROOF_CONCLUSION="$(printf '%s' "${BASH_REMATCH[3]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  for PROOF_VALUE in "$PROOF_CHECKED" "$PROOF_EVIDENCE" "$PROOF_CONCLUSION"; do
+    PROOF_NORMALIZED="$(printf '%s' "$PROOF_VALUE" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:][:punct:]]*//; s/[[:space:][:punct:]]*$//')"
+    case "$PROOF_NORMALIZED" in
+      ""|none|"no finding"|"no findings"|"no must-fix"|"no must-fix remains"|n/a|na|checked|"all passed"|"looks good"|diff|tests|spec|code|"acceptance criteria"|"requirements satisfied")
+        emit_no_verdict "NO-FINDING-PROOF contains a tautological checked, evidence, or conclusion value"
+        ;;
+    esac
+  done
+else
+  if [ "${PROOF_LINE_COUNT:-0}" -ne 0 ]; then
+    emit_no_verdict "FIX-THEN-SHIP must omit NO-FINDING-PROOF"
+  fi
+fi
+
+printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null }\n' \
+  "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" \
+  "$([ -n "$NO_FINDING_PROOF" ] && printf '"%s"' "$(json_escape "$NO_FINDING_PROOF")" || printf 'null')" \
+  "$(json_escape "$RAW_LOG")"
 exit 0

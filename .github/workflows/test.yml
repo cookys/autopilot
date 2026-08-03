@@ -1,11 +1,12 @@
 name: tests
 
 on:
+  # Full CI is release-gated: the canonical plugin manifest changes on every
+  # version bump, while ordinary code pushes and pull requests stay quiet.
   push:
     branches: [develop, main]
-  pull_request:
-    branches: [develop, main]
-  workflow_dispatch:
+    paths:
+      - '.claude-plugin/plugin.json'
 
 # A superseded push's run is dead signal — cancel it instead of queueing.
 concurrency:
@@ -91,6 +92,12 @@ jobs:
         with:
           path: ${{ runner.temp }}/autopilot-test-cache
           key: ${{ runner.os }}-l1-js-runtime-jest29.7.0-vitest2.1.8
+
+      # Fail fast on the detached ledger handoff before paying for the full
+      # integration suite. This path depends on the hosted runner's real
+      # process/session semantics and previously surfaced only at the end.
+      - name: Detached dispatch ledger smoke
+        run: bash hooks/tests/run.sh dispatch-detach
 
       - name: Run hooks test suite (L1 unit + L2 integration)
         # Explicit `shell: bash` is LOAD-BEARING: it makes GH run `bash -eo

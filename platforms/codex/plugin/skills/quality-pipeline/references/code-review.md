@@ -83,10 +83,49 @@ Task tool:
 
 Whichever reviewer the chain selects, the agent (canonical scope also consumed by `agents/reviewer.md`) will:
 1. Read every file affected by the diff and the **original task / plan / commit message** as baseline. Callers / tests / config only when a finding depends on them.
-2. Run the full correctness / security / boundary / error-handling / performance / API-usage / scope-creep checklist (scope-creep in "Scope Creep / Surgical Changes Scan" below).
+2. Run the full correctness / security / boundary / error-handling / performance / API-usage / change-policy / scope-creep checklist (scope-creep in "Scope Creep / Surgical Changes Scan" below).
 3. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`.
 
 (Non-autopilot reviewers may use another shape — see "Handoff Consumption" for enum vocabulary; foreign shapes → quality-pipeline inline interpretation.)
+
+### Bounded convergence contract
+
+Reviewer output is a **bounded keep/cut list and a minimum shippable version**, not an unbounded
+search for further defects.
+
+- Grade only against the frozen task/spec and actual current artifact/baseline. Preferences,
+  nitpicks, ideal-architecture deltas, and invented requirements are not defects.
+- Classify every item as `MUST-FIX` or `CUT/FOLLOW-UP`. A `MUST-FIX` item names a concrete
+  in-scope failure and impact plus the smallest concrete remediation. `CUT/FOLLOW-UP` records why
+  optional hardening or aspiration is excluded from this version and never blocks.
+- An attack or edge case without a concrete failure and smallest concrete remediation is invalid.
+- When the `MUST-FIX` list is empty and the supplied acceptance evidence passes, the review is
+  complete and must return a passing verdict. Do not extend the loop with a new wish list or a
+  renamed version of a requirement the current artifact already satisfies.
+- A no-finding verdict must include a concrete no-finding proof receipt: acceptance surfaces
+  checked, evidence observed, and why no `MUST-FIX` remains. Bare `none`, `no findings`, `looks
+  good`, or `all passed` claims fail closed. This is an auditable reviewer attestation, not proof
+  of hidden cognition; the gate proves that a structured, non-tautological review trace exists.
+
+## Change Policy Review
+
+Every review records two decision fields against the actual diff and frozen task:
+
+- **Compatibility impact**: `internal-only`, `published-compatible`, or `authorized-breaking`.
+  Published and user-facing contracts are preserved by default. Internal compatibility shims are
+  removed after all in-repository consumers migrate. An authorized public break must include its
+  authorization, versioning decision, migration notes, CHANGELOG coverage, rollback guidance, and
+  contract validation.
+- **Dependency decision**: `none`, `platform/stdlib`, `existing`, `established-new`, or `custom`.
+  Enforce that preference order. A new library needs evidence for maintenance health, license
+  compatibility, transitive footprint, and supported-platform fit; custom code must explain why
+  every earlier option is insufficient.
+
+An implementation-review report's `### Summary` includes both fields with concrete evidence. A
+plan-readiness review instead verifies the plan's §2.6 fields and reports any violation through its
+existing rubric-bound JSON finding contract. Missing fields or an unjustified public break/new
+dependency/custom implementation are blocking when they violate the frozen task or repository
+policy. This is a checklist receipt, not a new review generation.
 
 ## Handoff Consumption
 
@@ -106,15 +145,24 @@ Methodology agents never call each other. Re-dispatch is quality-pipeline's job,
 
 ### Consuming a finding — verify before implementing (findings are suggestions to evaluate, not orders)
 
-A finding is a *claim to check*, not a command. Before acting:
+A finding is a *claim to check*, not a command. **Severity alone does not authorize scope expansion.** Before dispatching any repair:
 
-1. **Verify against the codebase.** Open cited `file:line`; confirm the claim. Reviewers confabulate — unreproducible = false positive, not a task. (Consumer half of the Fact-driven Red Line.)
-2. **Push back with technical reasoning when wrong** — breaks existing behavior, missing context, legacy/compat, or conflicts a prior decision. Cite refuting test/code. No defensive dismissal; no blind compliance.
-3. **YAGNI-check "do it properly"** — "implement X fully" → `grep` if X is used; unused → propose removal, not expansion.
-4. **No performative agreement.** Never "You're absolutely right!", "Great catch!", or thanks. State the fix (`Fixed — <what changed>`) or reasoned pushback. Actions over affect; the diff shows you heard it.
-5. **One fix at a time, re-verify** — no batch-apply-and-hope; each fix checked (re-review loop enforces at round level).
+1. **Verify the claim** against the codebase. Open cited `file:line`; confirm it. Reviewers confabulate — unreproducible = false positive, not a task. (Consumer half of the Fact-driven Red Line.) Mechanical form: adjudication table (`scripts/adjudicate-findings.js`) — statuses `REPRODUCED` / `REFUTED` / `UNPROBED` / `PROOF_BY_TRACE`. `gate --ids` remains the backward-compatible “is this claim real?” check (`actionable`).
+2. **Classify relevance (disposition)** — required for every surviving Critical/Major before repair. Exactly one of:
+   - `must-fix-now` — names a frozen acceptance/rubric ID or allowed task surface **and** the concrete harm of deferral;
+   - `follow-up` — context + trigger (backlog / next ticket; does **not** enter this repair loop);
+   - `reject-out-of-scope` — rationale (does not enter repair).
+   Record via `adjudicate-findings.js dispose`. Missing, malformed, conflicting, or uncertain disposition **fails closed** — return to depth-0 scope adjudication; never default to “fix it”.
+3. **Blocking completeness** — before fix dispatch **and** before acceptance, run `adjudicate-findings.js completeness --store …`. It enumerates every actionable Critical/Major in the registry (not a caller `--ids` subset), fails on missing or conflicting disposition, and distinguishes `must-fix-now` IDs from follow-up/reject IDs. Subset `repair-gate --ids` alone is never complete.
+4. **Scope check** — freeze once at intake with `check-repair-scope.js seal --contract <contract.json> --out <seal.json>` (independent seal path; same-path/self-comparison rejected). Then enforce with `scripts/check-repair-scope.js check --contract <contract.json> --seal <seal.json>`. Full `base_sha..HEAD` accounting (never per-round sums); path/new-file allowlists; ratio + absolute churn caps; symlink/traversal containment; contract digest must match the frozen seal (no in-place reset). **Required** (a) before the fixer runs, (b) **after every repair mutation**, and (c) once more **before acceptance**/commit. A TRIP ends automatic repair.
+5. **Dispatch fix only for repair-eligible findings** — `adjudicate-findings.js repair-gate --ids …` passes **only** when each id is actionable **and** disposed `must-fix-now` without conflict. Severity remains orthogonal: `union-on-verified-critical` still unions verified Critical/Major, but only the `must-fix-now` class may mutate the ticket. Always pair with step 3 completeness (registry-wide).
+6. **YAGNI-check "do it properly"** — "implement X fully" → `grep` if X is used; unused → propose removal / `follow-up`, not expansion of the current ticket.
+7. **No performative agreement.** Never "You're absolutely right!", "Great catch!", or thanks. State the fix (`Fixed — <what changed>`) or reasoned pushback / disposition.
+8. **One fix at a time, re-verify** — no batch-apply-and-hope; each fix checked (re-review loop enforces at round level). Re-run scope check after every repair mutation and before acceptance.
 
-Mechanical form: adjudication table (`scripts/adjudicate-findings.js`, statuses `REPRODUCED` / `REFUTED` / `UNPROBED` / `PROOF_BY_TRACE`); `union-on-verified-critical` "verified" = actionable status there.
+**Action order (binding):** verify claim → classify relevance → completeness → scope check → dispatch fix → (after mutation) scope check → … → completeness + scope check before acceptance.
+
+Mechanical form: `scripts/adjudicate-findings.js` (`gate` = claim-real; `dispose` + `repair-gate` = relevance; `completeness` = all-blocking disposition coverage); `scripts/check-repair-scope.js` = cumulative stop-loss with independent `--seal`. `union-on-verified-critical` "verified" = actionable status; repair authority additionally requires `must-fix-now`.
 
 ## Scope Creep / Surgical Changes Scan
 
@@ -186,6 +234,15 @@ When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.
 
 - **Any panelist's _verified_ Critical/Major blocks.** Correlated-blind-spot catches appear to ONE reviewer (often cross-family). **Majority would suppress exactly the finding the panel exists for** — majority **forbidden** (`resolve-review-loop.sh` rejects `qc_panel_aggregation: majority` → `union-on-verified-critical`).
 - **"Verified" gates the union, not raw count.** Before a single-track finding blocks: reproduce it — **executable** via `independent_harness` (execution = decorrelation ceiling, zero shared LLM lineage); non-executable (design/spec-fit) → depth-0 second-look. Stops noisy false-blocks; never lets a real single-track Critical through.
+- **MVP portfolio selection is a separate bounded two-pass synthesis, never raw suggestion
+  union.** When a panel is asked to prioritize explicit subitems under a fixed budget, depth-0
+  first deduplicates and freezes the candidate union, then every roster member scores that exact
+  same matrix. Run `scripts/review-mvp-portfolio.js` to union verified `MUST-FIX` items, satisfy
+  frozen prerequisites, and select the deterministic maximum-score portfolio; unselected eligible
+  items become nonblocking backlog candidates only when they carry `follow_up` metadata and have
+  positive aggregate value. Do not auto-implement the union. Canonical input,
+  scoring, tie-break, and backlog handoff:
+  [`references/reviewer-mvp-portfolio.md`](../../../references/reviewer-mvp-portfolio.md).
 - **No-verdict = FAIL-CLOSED.** Empty/unparseable (e.g. `dispatch-review.sh` `status:no_verdict` from agy stdout-drop) = **"did not clear"**, never silent pass. Re-dispatch or treat as blocking unknown.
 - **Decorrelate by _family_, not just lens.** Same-vendor N share failure modes; panel needs **≥1 family ≠ implementer's** (`cross_family_required`/`cross_family_satisfied` from `resolve-review-loop.sh`; **unknown-family** fails closed = unsatisfied). Grounding: PoLL (disjoint families beat one large judge + cut intra-model bias) + same-family self-preference/familiarity bias.
 - **Risk-tiered depth, honest terminals (v2.25.11).** Depth follows deterministic `implementation_review_risk` (NOT source-trust alone — diff risk, oracle availability, security surface; `resolve-review-loop.sh`), not who implemented. **High risk**: cross-family hard-required + **decorrelated execution oracle (`l1_required`) mandatory** — absence → `block`/non-automerge (`--enforce` exit 3). Terminals, never forged softer: **`verified`** (decorrelated oracle/reviewer cleared), **`unverified-nonblocking`** (low-risk, proceeds but HONESTLY unverified — NOT green), **`unverified-blocking`** (high-risk missing L1/cross-family — blocked). `warn`/`off` may suppress BLOCKING but **never** relabel `unverified` as `verified`. Design (honest-but-weak only, not malicious-proof): [`docs/plans/2026-06-26-trust-tiered-review-policy.md`](../../../docs/plans/2026-06-26-trust-tiered-review-policy.md).
@@ -210,16 +267,25 @@ When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.
 
 ## Re-review Loop (Critical / Major)
 
-Fix Critical/Major → re-review until only Suggestion/Minor or LGTM.
+Critical/Major **claims** still surface via `union-on-verified-critical`. Only findings that pass **repair-gate** (`must-fix-now`) enter the fix loop; `follow-up` / `reject-out-of-scope` / unclassified do not mutate the ticket.
 
 ```
 review → findings?
-├── Has Critical/Major → fix → re-review (repeat until clean)
+├── Has Critical/Major
+│     → verify claim (adjudicate gate / probe|trace)
+│     → classify relevance (dispose: must-fix-now | follow-up | reject-out-of-scope)
+│     → completeness (all actionable Critical/Major disposed; not --ids subset)
+│     → scope check (check-repair-scope.js --seal; TRIP ⇒ stop automatic repair)
+│     → repair-gate --ids <must-fix-now set>
+│     → fix only repair-eligible
+│     → scope check after every repair mutation (full base_sha..HEAD)
+│     → re-review (repeat until clean or stop-loss)
+│     → completeness + scope check before acceptance / commit
 ├── Only Suggestion/Minor → process per below → commit
-└── Clean (LGTM) → commit
+└── Clean (LGTM) → completeness + scope check before acceptance → commit
 ```
 
-**Re-review scope:** After each fix round, re-review the **entire diff**, not just the fix. Fixes can introduce new issues.
+**Re-review scope:** After each fix round, re-review the **entire diff**, not just the fix. Fixes can introduce new issues. Re-run the repair-scope checker on the full `base_sha..HEAD` after every repair mutation and once more before acceptance.
 
 **Re-review checkpoint (dispatcher-only)**: Before round 1, `scripts/diff-since-last-round.sh mark` snapshots HEAD; between rounds `scripts/diff-since-last-round.sh stat` → JSON `{changed_files, insertions, deletions, doc_only}`. If `doc_only=true` and `changed_files` trivially small, dispatcher MAY short-circuit. Decision + data stay **in the dispatcher only** — never pass delta to the reviewer (leaks round-cycle meta-signal per [`references/blind-dispatch.md`](../../../references/blind-dispatch.md)). Loop closed → `scripts/diff-since-last-round.sh clear`.
 

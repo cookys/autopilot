@@ -1,6 +1,6 @@
 # Engine-Lifecycle Methodology — implementation
 
-> Plan: [`docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md`](../../plans/2026-06-30-hetero-engine-lifecycle-methodology.md) (CONVERGED v8)
+> Plan: [`docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md`](../../../plans/2026-06-30-hetero-engine-lifecycle-methodology.md) (CONVERGED v8)
 > Branch: `feat/engine-lifecycle-methodology`
 > Process: `/l5` — hetero implementer (gpt-5.3-codex-spark via codex) + decorrelated gpt-5.5 xhigh review loop + depth-0 independent harness.
 

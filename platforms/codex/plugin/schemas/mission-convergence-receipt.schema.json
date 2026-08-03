@@ -1,0 +1,570 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/mission-convergence-receipt.schema.json",
+  "title": "MissionConvergenceReceipt",
+  "description": "Mission Convergence Supervisor receipts: grant claim / no-effect release / reconciliation / closure allowlist / authenticated control / terminal receipt.",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/grant_claimed" },
+    { "$ref": "#/$defs/grant_rejected" },
+    { "$ref": "#/$defs/no_effect_release" },
+    { "$ref": "#/$defs/reconciliation_receipt" },
+    { "$ref": "#/$defs/campaign_terminal_receipt" },
+    { "$ref": "#/$defs/closure_allowlist_receipt" },
+    { "$ref": "#/$defs/authenticated_control_receipt" },
+    { "$ref": "#/$defs/terminal_receipt" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "axis_usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axis", "authorized_ceiling", "reserved_active", "durable_consumed", "known"],
+      "properties": {
+        "axis": {
+          "type": "string",
+          "enum": [
+            "campaigns",
+            "wall_seconds",
+            "tool_calls",
+            "engine_attempts",
+            "external_wait_seconds",
+            "canonical_changed_files",
+            "output_bytes"
+          ]
+        },
+        "authorized_ceiling": { "type": "integer", "minimum": 0 },
+        "reserved_active": { "type": "integer", "minimum": 0 },
+        "durable_consumed": { "type": "integer", "minimum": 0 },
+        "active_actual": { "type": "integer", "minimum": 0 },
+        "known": { "type": "boolean" }
+      }
+    },
+    "campaign_terminal_receipt": {
+      "oneOf": [
+        { "$ref": "#/$defs/campaign_terminal_receipt_v1" },
+        { "$ref": "#/$defs/campaign_terminal_receipt_v2" }
+      ]
+    },
+    "campaign_terminal_receipt_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "claim_id",
+        "mission_lineage_id",
+        "campaign_id",
+        "campaign_contract_digest",
+        "actual_usage",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "campaign_terminal_receipt" },
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "mission_lineage_id": {
+          "type": "string",
+          "pattern": "^lineage-v1-[0-9a-f]{64}$"
+        },
+        "campaign_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "campaign_contract_digest": { "$ref": "#/$defs/sha256" },
+        "actual_usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "campaign_terminal_receipt_v2": {
+      "type": "object",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": { "const": "ready" }
+            },
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {
+              "satisfied_acceptance_hashes": { "minItems": 1 }
+            }
+          },
+          "else": {
+            "properties": {
+              "satisfied_acceptance_hashes": { "maxItems": 0 }
+            }
+          }
+        }
+      ],
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "claim_id",
+        "mission_lineage_id",
+        "campaign_id",
+        "mission_campaign_id",
+        "icc_campaign_id",
+        "campaign_contract_digest",
+        "raw_campaign_contract_digest",
+        "graph_node_id",
+        "graph_attempt",
+        "outcome",
+        "possibly_effectful",
+        "actual_usage",
+        "satisfied_acceptance_hashes",
+        "observed_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "campaign_terminal_receipt" },
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "mission_lineage_id": {
+          "type": "string",
+          "pattern": "^lineage-v1-[0-9a-f]{64}$"
+        },
+        "campaign_id": {
+          "type": "string",
+          "pattern": "^campaign-v2-[0-9a-f]{64}$"
+        },
+        "mission_campaign_id": {
+          "type": "string",
+          "pattern": "^campaign-v2-[0-9a-f]{64}$"
+        },
+        "icc_campaign_id": {
+          "type": "string",
+          "pattern": "^campaign-v1-[0-9a-f]{64}$"
+        },
+        "campaign_contract_digest": { "$ref": "#/$defs/sha256" },
+        "raw_campaign_contract_digest": { "$ref": "#/$defs/sha256" },
+        "graph_node_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "graph_attempt": { "type": "integer", "minimum": 1 },
+        "outcome": {
+          "type": "string",
+          "enum": ["ready", "follow_up", "blocked", "abort", "unknown"]
+        },
+        "possibly_effectful": { "type": "boolean", "const": true },
+        "actual_usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "satisfied_acceptance_hashes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "grant_claimed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "claim_id",
+        "idempotency_key",
+        "mission_lineage_id",
+        "campaign_id",
+        "campaign_contract_digest",
+        "base_sha",
+        "acceptance_ids",
+        "control_sequence",
+        "reservation",
+        "issued_at",
+        "expires_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "mission_campaign_grant_claimed" },
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
+        "campaign_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "campaign_contract_digest": { "$ref": "#/$defs/sha256" },
+        "base_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "acceptance_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "control_sequence": { "type": "integer", "minimum": 1 },
+        "reservation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "grant_rejected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "reason",
+        "mission_lineage_id",
+        "idempotency_key",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "mission_campaign_grant_rejected" },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "grant_already_claimed",
+            "stagnation",
+            "resource_ceiling",
+            "ceiling_loosen_unauthorized",
+            "control_sequence_stale",
+            "mission_config_invalid",
+            "review_authority_invalid",
+            "scope_frozen",
+            "finish_requested",
+            "abort_requested",
+            "accounting_breach",
+            "expired",
+            "binding_mismatch"
+          ]
+        },
+        "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
+        "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "no_effect_release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "claim_id",
+        "actual_usage",
+        "reservation",
+        "released_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "mission_no_effect_release" },
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "actual_usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "reservation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "released_at": { "type": "string", "format": "date-time" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "reconciliation_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "claim_id",
+        "actual_usage",
+        "reservation_consumed",
+        "reservation_freed",
+        "reconciled_at",
+        "replay",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "mission_reconciliation" },
+        "claim_id": { "type": "string", "pattern": "^claim-v1-[0-9a-f]{64}$" },
+        "actual_usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "reservation_consumed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "reservation_freed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["per_axis"],
+          "properties": {
+            "per_axis": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/axis_usage" }
+            }
+          }
+        },
+        "reconciled_at": { "type": "string", "format": "date-time" },
+        "replay": {
+          "type": "string",
+          "enum": ["idempotent", "replay_noop", "replay_accounting_breach"]
+        },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "closure_allowlist_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "effect_class",
+        "control_sequence",
+        "expires_at",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "mission_closure_allowlist" },
+        "effect_class": {
+          "type": "string",
+          "enum": [
+            "frozen_acceptance",
+            "blocker_repair",
+            "targeted_verification",
+            "required_docs_version",
+            "receipt_production"
+          ]
+        },
+        "acceptance_or_blocker_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "control_sequence": { "type": "integer", "minimum": 1 },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "authenticated_control_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "mission_lineage_id",
+        "action",
+        "authority",
+        "sequence",
+        "issued_at",
+        "reason",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "mission_authenticated_control" },
+        "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
+        "action": {
+          "type": "string",
+          "enum": [
+            "ceiling_adjust",
+            "scope_frozen",
+            "finish_requested",
+            "abort_requested"
+          ]
+        },
+        "authority": {
+          "type": "string",
+          "enum": ["authenticated_user", "authenticated_doa"]
+        },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "ceiling_before": { "$ref": "#/$defs/axis_usage" },
+        "ceiling_after": { "$ref": "#/$defs/axis_usage" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "terminal_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "mission_lineage_id",
+        "task_authority_id",
+        "policy_hash",
+        "frozen_intent_hash",
+        "acceptance_hashes",
+        "lineage_total",
+        "terminal_state",
+        "terminal_reason",
+        "undelegated_decisions",
+        "sibling_receipt_refs",
+        "mission_terminal",
+        "receipt_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": { "type": "string", "const": "mission_terminal_receipt" },
+        "mission_lineage_id": { "type": "string", "pattern": "^lineage-v1-[0-9a-f]{64}$" },
+        "task_authority_id": { "$ref": "#/$defs/sha256" },
+        "policy_hash": { "$ref": "#/$defs/sha256" },
+        "frozen_intent_hash": { "$ref": "#/$defs/sha256" },
+        "acceptance_hashes": {
+          "type": "array",
+          "minItems": 0,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "lineage_total": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["campaign_grants", "campaign_receipts", "known_counters", "unknown_counters"],
+          "properties": {
+            "campaign_grants": { "type": "integer", "minimum": 0 },
+            "campaign_receipts": { "type": "integer", "minimum": 0 },
+            "known_counters": { "type": "integer", "minimum": 0 },
+            "unknown_counters": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "terminal_state": {
+          "type": "string",
+          "enum": ["COMPLETE", "BLOCKED", "ABORTED"]
+        },
+        "terminal_reason": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "open_blockers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+        },
+        "deferred_backlog_candidates": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "undelegated_decisions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/undelegated_decision" }
+        },
+        "sibling_receipt_refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/receipt_ref" }
+        },
+        "mission_terminal": { "type": "boolean", "const": true },
+        "can_close": { "type": "boolean" },
+        "receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "undelegated_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision",
+        "reason",
+        "alternatives",
+        "impact",
+        "evidence_state"
+      ],
+      "properties": {
+        "decision": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "alternatives": {
+          "type": "array",
+          "minItems": 0,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "impact": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "evidence_ref_digest": { "$ref": "#/$defs/sha256" },
+        "evidence_state": { "type": "string", "enum": ["known", "unknown"] }
+      }
+    },
+    "receipt_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "digest", "state"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "campaign_receipt",
+            "provider_readiness",
+            "lifecycle_residue",
+            "acceptance_snapshot"
+          ]
+        },
+        "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "state": {
+          "type": "string",
+          "enum": [
+            "known",
+            "unknown",
+            "complete",
+            "follow_up",
+            "ready",
+            "ready_unbound",
+            "blocked"
+          ]
+        }
+      }
+    }
+  }
+}

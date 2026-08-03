@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 # dispatch-hetero --runner pi (RPC duplex) integration test.
+#
+# Outer bound: umbrella parallel runs must never hang indefinitely on the
+# directive E2E tail. Individual cases already use `timeout 30`; this bounds
+# the whole suite and cleans up stray children on expiry.
+if [ -z "${DISPATCH_PI_OUTER_BOUNDED:-}" ]; then
+  export DISPATCH_PI_OUTER_BOUNDED=1
+  # 240s is well above a healthy serial run (~20s) and still bounds umbrella
+  # serial-tail load (~8-minute hang class). Individual cases still use timeout 30.
+  exec timeout --signal=TERM --kill-after=15s 240 bash "$0" "$@"
+fi
 . "$(dirname "$0")/lib.sh"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
@@ -475,20 +485,65 @@ chmod +x "$STUB_E2E"
 LGR_E2E="$TEST_TMP/e2e.jsonl"
 bash "$RUN_LEDGER" init --ledger "$LGR_E2E" >/dev/null
 E2E_OUT_FILE="$TEST_TMP/e2e-dispatch.out"
-( cd "$SBX" && PI_MODELS_JSON="$PI_MODELS_JSON" PI_RPC_STALL_PROBE_SECS=999 PI_RPC_DIRECTIVE_POLL_SECS=1 \
+# Bound production detach E2E: never wait unbounded for a missing directive.
+# PI_RPC_* env is now re-exported into the detach state file so poll interval
+# survives setsid. Outer timeout keeps the umbrella serial tail finite.
+( cd "$SBX" && \
+    PI_MODELS_JSON="$PI_MODELS_JSON" \
+    PI_RPC_STALL_PROBE_SECS=999 \
+    PI_RPC_DIRECTIVE_POLL_SECS=1 \
+    timeout --signal=TERM --kill-after=15s 120 \
     "$SCRIPT" --runner pi --model MiniMax-M3 --branch feat/pi-e2e-directive --prompt-file "$PROMPT" \
     --pi-bin "$STUB_E2E" --ledger "$LGR_E2E" --run-id E2ERUN --stage implement > "$E2E_OUT_FILE" 2>&1 ) &
 E2E_DISPATCH_PID=$!
+# Always reap the dispatch process group on suite exit so a hung stub cannot
+# outlive the outer bound and poison later umbrella runs.
+e2e_cleanup() {
+  local lease detached_pid
+  if [ -n "${E2E_DISPATCH_PID:-}" ] && kill -0 "$E2E_DISPATCH_PID" 2>/dev/null; then
+    kill -TERM "-$E2E_DISPATCH_PID" 2>/dev/null || kill -TERM "$E2E_DISPATCH_PID" 2>/dev/null || true
+    wait "$E2E_DISPATCH_PID" 2>/dev/null || true
+  fi
+  # Detach intentionally survives its caller. On a failed/timeout test, reap
+  # only the exact test-owned detached lease before removing TEST_TMP.
+  lease="$(bash "$RUN_LEDGER" query-latest --ledger "$LGR_E2E" --run-id E2ERUN --stage implement 2>/dev/null || true)"
+  detached_pid="$(printf '%s' "$lease" | jq -r '.pid // empty' 2>/dev/null)"
+  if [[ "$detached_pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$detached_pid" 2>/dev/null; then
+    kill -TERM -- "-$detached_pid" 2>/dev/null || kill -TERM "$detached_pid" 2>/dev/null || true
+  fi
+  # The fake pi path is unique beneath this test's private TEST_TMP.
+  pkill -f "$TEST_TMP/pi-e2e" 2>/dev/null || true
+}
+trap 'e2e_cleanup; cleanup_test_tmp' EXIT
 # Send the directive mid-run: retry until the dispatch's OWN lease exists (send refuses
 # before that — the refusal is the contract, so the retry loop IS the boundary).
+# Wait for the post-transfer detached lease. A directive bound to the parent's
+# generation must remain stale by design; never weaken that fencing or race a resend.
 E2E_SENT=""
-for _i in $(seq 1 60); do
-  E2E_SENT="$(bash "$RUN_LEDGER" directive-send --ledger "$LGR_E2E" --run-id E2ERUN --stage implement --text 'nudge-e2e' --from depth-0 2>/dev/null)" && break
-  sleep 0.5
+E2E_LEASE=""
+for _i in $(seq 1 80); do
+  E2E_LEASE="$(bash "$RUN_LEDGER" query-latest --ledger "$LGR_E2E" --run-id E2ERUN --stage implement 2>/dev/null || true)"
+  E2E_LEASE_PID="$(printf '%s' "$E2E_LEASE" | jq -r '.pid // empty' 2>/dev/null)"
+  if printf '%s' "$E2E_LEASE" | jq -e '
+      .state == "leased"
+      and (.generation // 0) >= 2
+      and ((.worktree // "") | length) > 0
+    ' >/dev/null 2>&1 \
+    && [[ "$E2E_LEASE_PID" =~ ^[1-9][0-9]*$ ]] \
+    && kill -0 "$E2E_LEASE_PID" 2>/dev/null; then
+    if E2E_SENT="$(bash "$RUN_LEDGER" directive-send --ledger "$LGR_E2E" --run-id E2ERUN --stage implement --text 'nudge-e2e' --from depth-0 2>/dev/null)"; then
+      break
+    fi
+  fi
+  sleep 0.25
 done
 E2E_DID="$(printf '%s' "$E2E_SENT" | jq -r '.directive_id // empty' 2>/dev/null)"
 assert_neq "$E2E_DID" "" "e2e: directive-send succeeded against the dispatch's live lease"
 wait "$E2E_DISPATCH_PID"; E2E_RC=$?
+e2e_cleanup
+trap cleanup_test_tmp EXIT
+[ "$E2E_RC" -eq 0 ] \
+  || printf 'dispatch-pi diagnostic (e2e): %s\n' "$(cat "$E2E_OUT_FILE" 2>/dev/null)" >&2
 assert_eq "$E2E_RC" "0" "e2e: pi dispatch with ledger coords exits 0"
 assert_contains "$(cat "$E2E_OUT_FILE")" '"status": "committed"' "e2e: dispatch committed"
 # git-artifact assertion: the steer (with the prefixed text) reached fake pi's stdin

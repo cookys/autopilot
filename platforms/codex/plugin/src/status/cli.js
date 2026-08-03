@@ -10,17 +10,23 @@
 //   autopilot status quota [--json] [--probe]
 //   autopilot status runs  [--json]
 //   autopilot status roster [--json]
+//   autopilot status readiness [--json] [--probe]
 //
 // HONESTY CONTRACT: subscription CLIs (codex/grok/agy) expose no "remaining %"
 // programmatically — what we CAN show is the recorded per-pool status, its
 // reset_at, and HOW OLD the observation is (quota pools are per-model, not
 // per-vendor: the 2026-07-14 lesson — gpt-5.3-codex-spark stayed available
-// while gpt-5.5/gpt-5.6-sol were exhausted). `--probe` refreshes via
+// while gpt-5.5/gpt-5.6-sol were exhausted). `quota --probe` refreshes via
 // probe-engine-capability.sh --safe (binary/auth surface only, NO model spend).
-// Stale rows are flagged, never silently trusted.
+// `readiness --probe` is explicit bounded live spend through the readiness
+// coordinator. Stale rows are flagged, never silently trusted.
 
 const path = require('path');
 const { spawnSync } = require('child_process');
+const {
+  collectProviderReadiness,
+} = require('../readiness/status');
+const { collectTaskStatus } = require('./task-runtime');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
@@ -91,8 +97,10 @@ function probeQuotaSafe(rows, stderr) {
 //                     PER-MODEL (2026-07-14 lesson), reset windows, no remaining-%.
 //   metered-endpoint  token-billed via a named endpoint (cc-shim /
 //                     anthropic-compatible): the WALLET identity is the endpoint,
-//                     not runner+model — the capability store does not record the
-//                     endpoint yet (BACKLOG'd), so rows here are endpoint-ambiguous.
+//                     not runner+model. The capability store records exact
+//                     runner/model/effort/endpoint tuples for strict admission;
+//                     this status surface is non-authorizing telemetry and must
+//                     not present endpoint-omitted rows as authoritative.
 //   provider-config   pi: metered OR local depending on ~/.pi/agent/models.json.
 //   local             no quota concept at all — availability/load is the signal
 //                     (no local runner is wired yet; class reserved).
@@ -107,7 +115,7 @@ const RUNNER_SOURCE_CLASS = {
 };
 const CLASS_CAPTION = {
   subscription: 'vendor pools, PER-MODEL — never extrapolate across models; no remaining-% API, status+reset+age is the ceiling',
-  'metered-endpoint': 'token-billed; wallet identity = the NAMED ENDPOINT, which the store does not record yet — same model via another endpoint is a DIFFERENT wallet (rows endpoint-ambiguous)',
+  'metered-endpoint': 'token-billed; wallet identity = the NAMED ENDPOINT (DIFFERENT wallet per endpoint). Store records endpoint on exact tuples for admission; this status probe is non-authorizing telemetry and must not treat endpoint-omitted rows as authoritative',
   'provider-config': 'pi routes per ~/.pi/agent/models.json — semantics follow the configured provider (metered or local)',
   local: 'no quota concept — availability/load is the signal',
   unknown: 'unrecognized runner — semantics unknown, verify before relying',
@@ -300,14 +308,92 @@ function rosterHuman(ro, stdout) {
   stdout.write(`  qc panel:           ${JSON.stringify(ro.qc_panel)}\n`);
 }
 
+// --- readiness ----------------------------------------------------------------
+
+function readinessHuman(receipt, stdout) {
+  stdout.write(`READINESS (${receipt.overall_status})\n`);
+  for (const seat of receipt.seats) {
+    const selected = seat.selected
+      ? ` via ${seat.selected.source}:${seat.selected.tuple.runner}/${seat.selected.tuple.model}`
+      : '';
+    const axes = seat.failing_axes.length === 0
+      ? 'all axes ready'
+      : seat.failing_axes
+        .map((axis) => `${axis.axis}=${axis.status}:${axis.reason}`)
+        .join(', ');
+    stdout.write(`  ${seat.seat_id}: ${seat.status}${selected} (${axes})\n`);
+  }
+  stdout.write(`  receipt: ${receipt.receipt_digest} expires ${receipt.expires_at}\n`);
+}
+
+// --- task ---------------------------------------------------------------------
+
+const NEXT_ACTION = Object.freeze({
+  mission_terminal_false: 'finish the Mission and issue a terminal receipt',
+  mission_terminal_unknown: 'repair or provide the authoritative Mission receipt',
+  mission_not_complete: 'satisfy the remaining Mission acceptance and budget predicates',
+  campaigns_terminal_false: 'finish every required implementation campaign',
+  campaigns_terminal_unknown: 'repair or provide the complete campaign evidence set',
+  campaigns_not_terminal: 'finish every required implementation campaign',
+  acceptance_unknown: 'repair the Mission-to-campaign acceptance evidence',
+  acceptance_not_accepted: 'resolve the first accepted blocker under its current campaign',
+  accepted_blockers_present: 'resolve the first accepted blocker under its current campaign',
+  product_merged_false: 'execute the sealed required product merge edge',
+  product_merged_unknown: 'repair the integration refs or candidate evidence',
+  consumer_updated_false: 'execute the sealed required consumer update edge',
+  consumer_updated_unknown: 'repair the consumer integration evidence',
+  pushed_false: 'push the required integration ref after explicit approval',
+  pushed_unknown: 'repair the remote-ref evidence',
+  zero_residue_false: 'reap or explicitly preserve owned worktrees and branches, then issue a fresh lifecycle receipt',
+  zero_residue_unknown: 'issue and validate a fresh lifecycle residue receipt',
+  merge_edges_incomplete: 'execute every required sealed merge edge',
+  merge_edges_unknown: 'provide a digest-valid merge preflight or execution receipt',
+  merge_execution_unknown: 'execute the sealed merge intent and provide its receipt',
+  merge_preflight_unknown: 'produce a fresh sealed merge preflight',
+  merge_preflight_not_safe: 'resolve the preflight blockers or approve exact preservation paths',
+});
+
+function stateLabel(value) {
+  if (value === true) return 'true';
+  if (value === false) return 'false';
+  return 'unknown';
+}
+
+function taskHuman(receipt, stdout) {
+  const labels = [
+    `product_merged=${stateLabel(receipt.product_merged)}`,
+    `consumer_updated=${stateLabel(receipt.consumer_updated)}`,
+    `pushed=${stateLabel(receipt.pushed)}`,
+    `zero_residue=${stateLabel(receipt.zero_residue)}`,
+  ].join(' ');
+  stdout.write(`${receipt.can_close === true ? 'DONE' : 'NOT DONE'} ${labels}\n`);
+  if (receipt.can_close !== true) {
+    const blocker = receipt.failed_predicates[0] || 'can_close_unknown';
+    stdout.write(`Blocker: ${blocker}\n`);
+    stdout.write(`Next action: ${NEXT_ACTION[blocker] || 'inspect the JSON evidence and repair this predicate'}\n`);
+  }
+}
+
 // --- entry --------------------------------------------------------------------
 
-function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, cwd = process.cwd() } = {}) {
+function runStatusCli(argv, {
+  stdout = process.stdout,
+  stderr = process.stderr,
+  cwd = process.cwd(),
+  env = process.env,
+  collectTask = collectTaskStatus,
+} = {}) {
   const args = argv.slice();
   const sub = args[0] && !args[0].startsWith('--') ? args.shift() : 'overview';
   const json = args.includes('--json');
   const tree = args.includes('--tree');
   const probe = args.includes('--probe');
+  let rootRunId = null;
+  const rootRunIndex = args.indexOf('--root-run-id');
+  if (rootRunIndex !== -1) {
+    rootRunId = args[rootRunIndex + 1] || null;
+    args.splice(rootRunIndex, 2);
+  }
   for (const a of args) {
     if (a !== '--json' && a !== '--probe' && !(a === '--tree' && sub === 'runs')) {
       stderr.write(`unknown status argument: ${a}\n`);
@@ -315,6 +401,26 @@ function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, 
     }
   }
 
+  if (sub === 'task') {
+    if (!rootRunId) {
+      stderr.write('status task requires --root-run-id <id>\n');
+      return 2;
+    }
+    let receipt;
+    try {
+      receipt = collectTask(rootRunId, { cwd, env });
+    } catch (error) {
+      stderr.write(`task status: ${error.code || 'unavailable'}: ${error.message}\n`);
+      return 1;
+    }
+    if (json) stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
+    else taskHuman(receipt, stdout);
+    return 0;
+  }
+  if (rootRunId !== null) {
+    stderr.write('--root-run-id is only valid for status task\n');
+    return 2;
+  }
   if (sub === 'quota') {
     let rows = collectQuota();
     if (probe) { probeQuotaSafe(rows, stderr); rows = collectQuota(); }
@@ -335,6 +441,18 @@ function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, 
     else rosterHuman(ro, stdout);
     return 0;
   }
+  if (sub === 'readiness') {
+    let receipt;
+    try {
+      receipt = collectProviderReadiness({ cwd, probe });
+    } catch (error) {
+      stderr.write(`readiness: ${error.code || 'unavailable'}\n`);
+      return 1;
+    }
+    if (json) stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
+    else readinessHuman(receipt, stdout);
+    return 0;
+  }
   if (sub === 'overview') {
     if (json) {
       stdout.write(`${JSON.stringify({ quota: collectQuota(), runs: collectRuns(), roster: collectRoster(cwd) }, null, 2)}\n`);
@@ -347,8 +465,8 @@ function runStatusCli(argv, { stdout = process.stdout, stderr = process.stderr, 
     rosterHuman(collectRoster(cwd), stdout);
     return 0;
   }
-  stderr.write(`unknown status subcommand: ${sub} (quota|runs|roster or no subcommand for overview)\n`);
+  stderr.write(`unknown status subcommand: ${sub} (quota|runs|roster|readiness|task or no subcommand for overview)\n`);
   return 2;
 }
 
-module.exports = { runStatusCli };
+module.exports = { runStatusCli, taskHuman };

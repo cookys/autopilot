@@ -4,7 +4,7 @@
 > code-review.md −14% (v2.32.18, syscontract instrument v3, protocol-c paired concordance: kb 1.000×3,
 > fp-critical=0, injection 6/6, all 5 clean discordances adjudicated non-weakening at depth-0).
 > Instrument iterations + protocol change + corpus reframing recorded in
-> `docs/projects/2026-07-10-terse-reviewer-contracts/` (phase-b-results.md, m3-rerun-haiku.md,
+> `docs/projects/_archive/2026-07-10-terse-reviewer-contracts/` (phase-b-results.md, m3-rerun-haiku.md,
 > m3-pathc-syscontract.md). Aggregate: reviewer-contract surface ~19.7k → ~16.6k tokens (−16%).
 
 ## 1. 問題

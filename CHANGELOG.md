@@ -24,6 +24,208 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.1 — Controller execution discipline
+
+**Headline**: Autopilot now treats a long-running deliverable as one durable work order: it freezes
+the whole-diff gate before repair, resumes the same candidate lineage, rehydrates authority after
+compaction, accounts for resource debt, and reports bounded progress without turning retries or
+review findings into new phases.
+
+### Added
+- A controller-execution state machine and schemas for durable work-order identity, exact gate
+  ownership, immutable phase denominators, multi-axis repair budgets, progress receipts, retained
+  resource debt, and high-water admission.
+- Host-neutral checkpoint/rehydration plus orphan-mutation adoption contracts that reconcile Git,
+  campaign, process, worktree, and ledger evidence before the next effectful dispatch.
+- An independently authored cross-component execution oracle covering admission, recovery,
+  convergence, lifecycle, no-op adoption, and boundary behavior.
+- The separate warning-only Codex hook probe now declares `PostCompact` so live compaction
+  payload and firing semantics can be measured. This proves package declaration and installation,
+  not production recovery wiring or live event delivery.
+
+### Changed
+- Live capability observations use the exact runner/model/effort/endpoint identity required by
+  strict dispatch admission instead of allowing a legacy coarse partition to imply readiness.
+- Plan authoring and review now record explicit compatibility-impact and dependency decisions:
+  published contracts remain compatible unless a break is authorized with migration/rollback
+  evidence, while implementation choices follow platform/stdlib → existing dependency →
+  established library → custom code.
+- Mission admission separates allowed outputs from required changed paths, validates allowed
+  creates and version-mirror closure, adopts receipt-proven no-op nodes without cosmetic writes,
+  and does not charge zero-dispatch precondition failures as effectful gate spend.
+- Review repair generations append to one work order, retain accepted invariants and normalized
+  finding lineage, and enter durable `awaiting_disposition` or
+  `awaiting_convergence_adjudication` states instead of burning the campaign.
+- Campaign replay reads rotation-aware state, retained outcomes require explicit leases and
+  disposition, and resource debt blocks new dispatch until reconciled.
+
+### Fixed
+- Shared JSONL-store locks publish their PID-bearing lock path atomically, preventing concurrent
+  provider probes from over-stealing a live lock during initialization; the dispatch required-change
+  fixture now supplies inline Git identity so clean CI runners exercise the contract itself.
+- `boundary_rejected` remains a first-class outcome with its candidate and boundary reason instead
+  of collapsing into an unknown mutation failure.
+- Minimum QC panel cardinality, full-diff generation ownership, duplicate dispatch admission,
+  compaction replay, and interrupted-controller adoption now fail closed with durable receipts.
+- Completed controller/recovery/lifecycle backlog entries were removed; the remaining scheduler,
+  cross-harness authority, production Codex `PostCompact`, and session-local qualification work
+  retain explicit triggers.
+
+### Boundary
+- The release includes a `PostCompact`-ready recovery adapter but does not register a production
+  Codex hook. That wiring remains gated on an accepted live hook probe or official adapter
+  contract.
+- The managed completion campaign correctly stopped before its final panel because exact QC-seat
+  qualification was unavailable. No seat or qualification receipt was fabricated; depth 0 used a
+  fresh independent whole-diff reviewer plus a separate read-only verifier and does not claim a
+  managed three-family panel receipt. The session-local qualification provider remains Owner
+  Kernel P4 backlog.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.0`
+
+prose-justification: this patch closes one cross-cutting controller execution boundary spanning
+Mission admission, campaign convergence, recovery, resource lifecycle, tests, and operator-facing
+state; the release note records both shipped behavior and the two deliberately unclaimed
+production authority surfaces.
+
+## v2.34.0 — Mission convergence portfolio (release-ready implementation)
+
+**Headline**: Autopilot can run an unattended Mission through bounded implementation campaigns,
+exact provider/readiness admission, worktree lifecycle receipts, authenticated abort finalization,
+task-status merge gates, bounded plan-review sessions, and privacy-safe cross-harness transcript
+retro. The implementation was merged locally to `develop` as `c66349e` and its project record was
+archived on 2026-07-29. L5/L6 lifecycle receipts and remote push are not claimed by this release
+note.
+
+### Added
+- Project-authoritative Mission policy, content-bound source manifest, and execution-graph
+  admission (`mission-routing-admission.js` / execution-graph check) that reject deliverable-count,
+  critical-path, and aggregate-reservation overflow before effects.
+- Implementation Campaign Convergence (ICC) reducer/intake with pre-spend gates, repair composition,
+  transport envelope, and sealed campaign unit projection under L5/L6.
+- Provider Readiness Orchestrator (PRO): pure readiness identity, bounded probe coordinator,
+  readiness receipt + CLI, and exact-tuple admission (including provisional author labor only).
+- Dispatch Worktree Lifecycle Budget (WLB): marker/occupancy budget, lifecycle controller, exact
+  branch disposition, and content-bound `LifecycleResidueReceipt` (resource residue only; never
+  computes task `can_close`).
+- L6 Status and Merge Contract (LSM): task-status aggregation, merge-intent preflight, sealed merge
+  execution receipts, and finish-flow/CEO reporting that keeps `product_merged`, `consumer_updated`,
+  `pushed`, and `zero_residue` as independent booleans.
+- Authenticated Mission abort finalization: durable `ABORTING` → `ABORTED` via `abort_finalized`,
+  fail-closed idempotent replay, and zero-effect release only with sealed-root identity proof and
+  mechanical `dispatcher_called === false`.
+- Bounded Plan Review Session controller (`dispatch-plan-review.js`): durable sessions, rubric
+  freeze, finding normalize/dedupe, transport fail-loud, and research-to-ship Phase 3 wiring.
+  Canonically integrated at `a775262`.
+- Cross-Harness Transcript Retro: privacy-safe adapters, evidence-bound metrics, and synthetic
+  fixtures only (raw transcripts and secrets stay outside the repository). Canonically integrated
+  at `070b7a0`.
+- Frozen candidate-path audit and successor-graph correction after `runtime-control` bootstrap:
+  historical/retired path ownership, one implementation owner per active candidate path, and a
+  corrected one-node closeout graph (`graph_digest`
+  `6547db664c5818a115347abd3b37b06ecdfc9e93f56d851c6b07c8e45df4b54f`) after the original release
+  contract’s impossible non-existent `marketplace.json` output path was superseded before model
+  spend.
+
+### Changed
+- Dev-flow, project bootstrap, CEO mode, and L3–L6 treat plan phases, modules, tests, reviewer
+  seats, and retries as coverage/gates inside caller-authored bounded deliverables. Only graph
+  nodes that pass canonical policy/graph/source admission become implementation tasks.
+- Session-mode markers preserve one admission digest while normal, solo, and precondition-fallback
+  routes change execution topology; explicit close evidence remains mandatory for managed L5/L6
+  clear.
+- Mission graph nodes use ICC-compatible rubric IDs and strict campaign projection ceilings for
+  repair generations, wall time, churn, file count, engine attempts, command size, and output paths.
+- Strict `/l6` verification-author admission accepts exact provisional scorecard rows for
+  `raw-artifact` authoring labor only (`assurance: provisional`); depth-0 remains sole
+  verification/merge authority. Reviewer and other authority-bearing roles stay fail-closed.
+- Managed pre-spend lifecycle: missing/malformed/mismatched sealed root identity after durable
+  `implementation_started` uses ICC + Mission zero-effect release only when the prepare rejection
+  carries an explicit identity code and mechanical no-dispatch proof. Same-shaped prepare failures
+  without that proof remain fail-closed possibly effectful. Stagnation no longer terminalizes
+  Mission while an unreleased nonterminal claim remains live.
+
+### Boundary
+- This release includes the local `develop` merge and project archive. It does **not** claim a
+  remote push, production deployment, L5/L6 lifecycle/status receipt, or `zero_residue=true`.
+- The `/l6` entry degraded explicitly to effective `/l3` after verification-author admission
+  failed; the blocked over-broad Mission lineage remains honest rather than being rewritten into a
+  false successful receipt.
+- Framework defects observed during the real L6 run (legacy quota partition vs exact
+  effort/endpoint admission, gate-budget consumption by precondition/no-effect attempts, missing
+  finding-disposition resume, pre-spend output-path/version-mirror validation, `boundary_rejected`
+  status handling, QC panel-count degradation) are tracked in `docs/BACKLOG.md` and are not fixed
+  by this release-closeout node.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.33.0`
+
+prose-justification: this release consolidates the Mission convergence portfolio (ICC, Mission
+supervisor, provider readiness, worktree lifecycle, task status/merge, plan-review, transcript
+retro) into one user-facing surface with honest closeout boundaries; version mirrors and docs are
+synchronized rather than independently authored.
+
+## v2.33.0 — Capability-adaptive execution profiles
+
+**Headline**: Autopilot remains one product for strong, weak, remote, and local models. It now
+admits an exact deployment by role and task scope before compiling one bounded `guided` or
+`autonomous` payload. Guidance may remove redundant choreography, but it cannot change authority,
+effects, egress, assurance, red lines, review, or acceptance.
+
+### Added
+- Immutable task-authority envelopes and narrowing role grants in Owner Kernel shadow mode, with
+  content-addressed core/guided/autonomous payloads and full-session isolation/context evidence.
+- Scope-, identity-, and freshness-bound capability evidence plus separate reviewer and owner
+  qualification corpora. Remote evaluation uses a one-case Unix-socket broker so credentials,
+  network, returned identity, and the executable oracle stay host-side.
+- An optional Artificial Analysis importer that stores attributed user-local score data only as
+  provisional implementer/explorer discovery telemetry; external scores cannot qualify protected
+  roles or create routing authority.
+- A bounded local OpenAI-compatible author/reviewer adapter with protected non-secret roster,
+  pre/post deployment identity, one-slot lease, capacity, egress, cancellation, recovery, and
+  metadata-only telemetry checks.
+- An advisory cutover evaluator that requires live exact-token, compatibility, lifecycle,
+  assurance, complete-window dogfood, current qualification, independent receipt, and
+  decorrelated-review evidence before recommending an adaptive project default.
+
+### Changed
+- New and omitted project guidance defaults resolve to `guided`; a task can override the selected
+  guidance without modifying the one-time project setting. Static model tables are bootstrap
+  preferences, not qualification.
+- Fallback now conceptually re-runs exact admission and profile selection for the replacement
+  identity. Disk scorecard/evidence rows remain telemetry and cannot recreate session authority.
+- Public documentation now distinguishes the heterogeneous agentic dispatch rails from the raw
+  local author/reviewer transport.
+
+### Fixed
+- Guided active-slice acceptance now compares evidence as an order-independent exact set and
+  permits a role grant to add stricter evidence above the frozen task floor.
+- Raw task-authority and legacy-translation normalization now agree with the project resolver that
+  an omitted guidance profile means `guided`, never an implicit autonomous candidate.
+
+### Boundary
+- Owner Kernel integration remains shadow/projection work and does not claim production authority.
+  The AA adapter is optional and non-authoritative.
+- The local adapter passed fake-server contract tests, but no live local runtime was configured;
+  this release publishes no live local role row and no local agentic runner.
+- The recorded cutover decision is `hold_guided`. Autonomous control source is 113 bytes smaller,
+  but exact host-token measurement, an effectful guided witness, a current live owner verifier,
+  and five complete independent dogfood receipts are absent. The evaluator does not edit config.
+- This is not an `autopilot`/`hetopilot` repository split and adds no host daemon or general-purpose
+  local agent loop.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side (post-marketplace): `/plugin update autopilot @v2.32.59`; setting
+  `governance.guidance_profile` to `guided` is the one-setting profile rollback.
+
+prose-justification: this release adds the public contract and operator boundaries for a new
+cross-cutting execution-profile, qualification, provisional-prior, and local-transport surface;
+generated mirrors remain one-source synchronized rather than independently authored.
+
 ## v2.32.60 — Review scope stop-loss (relevance + cumulative repair budget)
 
 **Headline**: Implementation-review repair no longer treats every verified Critical/Major as
@@ -892,7 +1094,7 @@ runner.
 - `scripts/dispatch-hetero.sh` `--runner pi` (EXPLICIT-only, never auto) + `--pi-bin` seam; precondition on `pi`/`node`/`${PI_MODELS_JSON:-~/.pi/agent/models.json}`.
 - `scripts/dispatch-status.js` declared-format `pi-rpc`: aggregates pi's per-message `message_end.usage` (Σinput/output/cacheRead, total=input+output), counts `tool_execution_start` only — a DISTINCT parser so pi's nested `cost` object can't collide with the generic JSONL scan.
 - `hooks/tests/dispatch-pi.test.sh` (36 assertions: committed/no_op/failure/stall/preconditions via a mock pi + supervisor-direct tests for prompt-failure, UTF-8 chunk split, no-stall-while-flowing, hard cap, parser cost-isolation + multi-message aggregation + usage-null honesty).
-- Residual-spike verification appended to `docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`.
+- Residual-spike verification appended to `docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`.
 
 ### Changed
 - `scripts/dispatch-hetero.sh` final JSON + run manifest gain an ADDITIVE `duplex` field (`"rpc"` for pi, `null` otherwise); pi declares `log_format: "pi-rpc"`. `references/hetero-dispatch.md` + `CLAUDE.md` inventory document the pi runner, the supervisor, and the `pi-rpc` format. Codex plugin payload mirror re-synced.
@@ -945,7 +1147,7 @@ runner.
 
 ### Added
 - `evals/reviewer-bench/panel-cmd-syscontract-claude.sh` — faithful system-prompt-channel contract-measurement adapter (v3: `--system-prompt-file`, read-only tools, `SYSCONTRACT_REPO_CWD`/`SYSCONTRACT_CWD_MANIFEST` timeline worktrees, `SYSCONTRACT_LOG_DIR` raw archives, severity-aware parser, 600s tool-loop timeout, fail-closed rails).
-- Full instrument-iteration + measurement records under `docs/projects/2026-07-10-terse-reviewer-contracts/` (m3-pathc-syscontract.md + raw outputs for every flag, per-case both-leg tables, protocol-change rationale).
+- Full instrument-iteration + measurement records under `docs/projects/_archive/2026-07-10-terse-reviewer-contracts/` (m3-pathc-syscontract.md + raw outputs for every flag, per-case both-leg tables, protocol-change rationale).
 
 ### Changed
 - `agents/reviewer.md` 242→222 lines (semantic-preserving compression; Three Red Lines / claim-decomposition / Verified Clean + Handoff / fail-closed language intact — canonical-invariant seeds green).
@@ -972,7 +1174,7 @@ runner.
 
 ## v2.32.16 — slimmed dispatch-review reviewer prompt (−16%, M3-gated on the haiku leg)
 
-**Headline**: The `dispatch-review.sh` reviewer prompt template ships **16% slimmer** (~353 → ~296 tokens on the per-dispatch heredoc), paid back on EVERY hetero review call. This is the first of the three terse-reviewer-contracts to clear the plan's full M3 measurement gate — after the Board-directed leg-engine switch: `claude-native haiku` proved 2-run stable on the 12-case known-bad corpus (baseline sensitivity **1.0/1.0**, vs gemini-3.5-flash's 0.917/0.833 oscillation that halted the first campaign), fp-on-critical=0 including `08-path-traversal` and both injection cases, slimmed leg 12/12 with zero case-level regressions, clean over-flags adjudicated 0/10 Critical-Major on both legs (binary-mapping raw data + per-flag adjudication recorded in `docs/projects/2026-07-10-terse-reviewer-contracts/m3-rerun-haiku.md`). haiku recorded in the engine scorecard as a qualified reviewer (capability 1.0). `agents/reviewer.md` / `code-review.md` slimming stays parked behind the Path-C faithful-instrument BACKLOG entry.
+**Headline**: The `dispatch-review.sh` reviewer prompt template ships **16% slimmer** (~353 → ~296 tokens on the per-dispatch heredoc), paid back on EVERY hetero review call. This is the first of the three terse-reviewer-contracts to clear the plan's full M3 measurement gate — after the Board-directed leg-engine switch: `claude-native haiku` proved 2-run stable on the 12-case known-bad corpus (baseline sensitivity **1.0/1.0**, vs gemini-3.5-flash's 0.917/0.833 oscillation that halted the first campaign), fp-on-critical=0 including `08-path-traversal` and both injection cases, slimmed leg 12/12 with zero case-level regressions, clean over-flags adjudicated 0/10 Critical-Major on both legs (binary-mapping raw data + per-flag adjudication recorded in `docs/projects/_archive/2026-07-10-terse-reviewer-contracts/m3-rerun-haiku.md`). haiku recorded in the engine scorecard as a qualified reviewer (capability 1.0). `agents/reviewer.md` / `code-review.md` slimming stays parked behind the Path-C faithful-instrument BACKLOG entry.
 
 ### Changed
 - `scripts/dispatch-review.sh` — prompt-assembly heredoc slimmed (semantics preserved verbatim: nonce wrapped-block protocol, VERDICT/FINDINGS contract, read-only injunctions, spec/checklist sections); `evals/reviewer-bench/prompt-skeleton.golden` updated same-commit (plan §4 #9); 3 pinned-string test assertions updated to the new wording (assertion count unchanged, positive+negative pairs preserved).
@@ -989,7 +1191,7 @@ runner.
 
 **Headline**: The full measurement instrument for reviewer-contract work ships; the contract slimming it was built to gate does NOT (parked honest). `dispatch-review.sh` gains a **`claude-native` runner** (local Claude Code CLI with its own ambient auth — first-party models like haiku as harness/probe engines; reuses the canonical PROMPT_FILE, no second prompt-assembly source). `calibration.sh` gains **`run-clean-set`** (specificity/over-flag gate — inverted sibling of `run-known-bad`; a panel "fail" on a clean diff is an over-flag). New **`evals/clean/`** 10-case corpus of real merged known-good develop diffs (with a recorded provenance rule: never source "clean" cases from a subsystem with a multi-round bug-fix history — the first corpus draft was contaminated and produced a false 60% over-flag reading). New **`hooks/tests/dispatch-review-prompt-skeleton.test.sh`** + committed golden — captures the REAL assembled reviewer prompt via the `--bin` stub seam and byte-diffs it against `evals/reviewer-bench/prompt-skeleton.golden` (volatile nonces normalized). New **`evals/reviewer-bench/panel-cmd-contract-claude.sh`** adapter + `expected-sections.md`.
 
-**Campaign outcome (recorded, not shipped)**: the 2026-07-10 /l6 M3 paired measurement HALTED on the plan's gate #2 — gemini-3.5-flash baseline sensitivity oscillated 0.917/0.833 across the 0.9 floor at n=12 (calibration instability, not slimming harm; the slimmed template itself measured stable with injection intact and a flawless 12/12 haiku weak-tier read). Slimmed contracts (−16%/−17%/−14%) are parked on `feat/terse-reviewer-contracts`; three BACKLOG entries carry the retry path. Full per-case data: `docs/projects/2026-07-10-terse-reviewer-contracts/phase-b-results.md`.
+**Campaign outcome (recorded, not shipped)**: the 2026-07-10 /l6 M3 paired measurement HALTED on the plan's gate #2 — gemini-3.5-flash baseline sensitivity oscillated 0.917/0.833 across the 0.9 floor at n=12 (calibration instability, not slimming harm; the slimmed template itself measured stable with injection intact and a flawless 12/12 haiku weak-tier read). Slimmed contracts (−16%/−17%/−14%) are parked on `feat/terse-reviewer-contracts`; three BACKLOG entries carry the retry path. Full per-case data: `docs/projects/_archive/2026-07-10-terse-reviewer-contracts/phase-b-results.md`.
 
 ### Added
 - `dispatch-review.sh --runner claude-native` — native-auth Claude CLI reviewer path (no ANTHROPIC_BASE_URL/AUTH_TOKEN precondition, no HOME redirect; same read-only prompt-injection levers as cc-shim otherwise).
@@ -1090,7 +1292,7 @@ runner.
 
 ## v2.32.10 — orchestration-eval: opt-in per-turn constraint re-injection (`--reinject`)
 
-**Headline**: The multi-turn orchestration-eval harness (`evals/orchestration/run-orchestration-eval.sh`) gains an opt-in `--reinject <relpath>` flag that mechanically re-pastes a `CONSTRAINTS REMINDER` block (verbatim content of the task's `repo/<relpath>`, e.g. `CONSTRAINTS.md`) into EVERY composed turn prompt (turn 1..N), for both the `cc` and `stub` runners. This is the "mechanical re-statement vs prose-once" instrument the 2026-07-06 eval-instruments report defined as the next step after prose asset packs failed to hold long-horizon constraints (t14 DATA B, n=35, p=0.279). Companion first real measurement on t14-constraint-horizon (haiku, 5-turn) is recorded in `docs/projects/2026-07-08-t14-reinject/`.
+**Headline**: The multi-turn orchestration-eval harness (`evals/orchestration/run-orchestration-eval.sh`) gains an opt-in `--reinject <relpath>` flag that mechanically re-pastes a `CONSTRAINTS REMINDER` block (verbatim content of the task's `repo/<relpath>`, e.g. `CONSTRAINTS.md`) into EVERY composed turn prompt (turn 1..N), for both the `cc` and `stub` runners. This is the "mechanical re-statement vs prose-once" instrument the 2026-07-06 eval-instruments report defined as the next step after prose asset packs failed to hold long-horizon constraints (t14 DATA B, n=35, p=0.279). Companion first real measurement on t14-constraint-horizon (haiku, 5-turn) is recorded in `docs/projects/_archive/2026-07-08-t14-reinject/`.
 
 ### Added
 - `--reinject <relpath>` flag on `run-orchestration-eval.sh`; resolves `<relpath>` against the task's frozen source repo (`<task>/repo/<relpath>`), errors `exit 2` on a single-prompt task. Multi-turn `result.json` gains a `"reinject":"<relpath>"` key ONLY when the flag is set.

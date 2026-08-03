@@ -35,14 +35,19 @@ Each script encodes a step the pipeline previously asked the LLM to do by hand. 
 | [`scripts/completeness-scan.sh`](../../scripts/completeness-scan.sh) | Anti-stub regex pass + new-vs-pre-existing classification | Completeness Gate step |
 | [`scripts/error-path-scan.sh`](../../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error paths) | Completeness Gate step (advisory to review) |
 | [`scripts/secret-scan-diff.js`](../../scripts/secret-scan-diff.js) | L0 attention-slip scan for leaked secrets | Completeness Gate step (blocking) |
-| [`scripts/adjudicate-findings.js`](../../scripts/adjudicate-findings.js) | "Is this finding real?" — probe-backed statuses (REPRODUCED/REFUTED/UNPROBED/PROOF_BY_TRACE); `gate --ids` blocks fix dispatch on non-actionable findings | Review step, before acting on any finding |
+| [`scripts/adjudicate-findings.js`](../../scripts/adjudicate-findings.js) | "Is this finding real / repair-eligible?" — probe-backed statuses; `gate --ids` = claim-real; `dispose` + `repair-gate --ids` = relevance (`must-fix-now`); `completeness` = all-blocking Critical/Major dispositions over the full registry | Review step: verify → classify → completeness before fix dispatch and before acceptance |
+| [`scripts/review-mvp-portfolio.js`](../../scripts/review-mvp-portfolio.js) | Bounded multi-reviewer candidate union → verified MUST-FIX/prerequisite admission + deterministic fixed-budget maximum-score MVP, cut list, and evidence-backed backlog candidates | After a panel returns a complete scored candidate matrix; canonical contract: [`references/reviewer-mvp-portfolio.md`](../../references/reviewer-mvp-portfolio.md) |
+| [`scripts/check-repair-scope.js`](../../scripts/check-repair-scope.js) | Cumulative repair stop-loss — sealed contract (`seal --out` + check `--seal`), full `base_sha..HEAD` churn/path/new-file accounting; TRIP ends automatic repair | Before fixer, after every repair mutation, and before acceptance |
 | [`scripts/check-redispatch-prompt.sh`](../../scripts/check-redispatch-prompt.sh) | Round 2+ leaky-phrase detection (per `references/blind-dispatch.md`) | Before every re-review dispatch |
 | [`scripts/diff-file-list.sh`](../../scripts/diff-file-list.sh) | Reviewer's "list every file I read" enumeration in Verified Clean | Reviewer prompt assembly |
 | [`scripts/diff-scope-report.sh`](../../scripts/diff-scope-report.sh) | v2 scope-creep filter: whitespace-only files, files not in message, comment-only hunks, quote-style swaps | Code Review step (Scope Creep Scan) |
 | [`scripts/resolve-dispatch.sh`](../../scripts/resolve-dispatch.sh) | Per-dispatch model/mode lookup against `model-routing-config.md` | Any subagent dispatch |
 | [`scripts/check-test-integrity.sh`](../../scripts/check-test-integrity.sh) | "Did the implementer game the tests?" — deleted / skipped / soloed / weakened existing tests, escaped fixtures/config (see [references/test-integrity-gate.md](references/test-integrity-gate.md)) | After impl, before merge — esp. delegated / `/l5` hetero dispatch |
+| [`scripts/check-owner-kernel-release-gates.js`](../../scripts/check-owner-kernel-release-gates.js) | Owner Kernel P3.7 production-proof, permanent-hold, and alias-retirement release decision | Owner Kernel P3.7 pre-merge and post-merge release checks |
 | [`scripts/verify-preexisting.sh`](../../scripts/verify-preexisting.sh) | Stash + checkout-base + run-test classification | Test Failure Investigation step |
 | [`scripts/verify-red-green.sh`](../../scripts/verify-red-green.sh) | Red-green validation: a change's tests must be GREEN at head and RED at base+tests (else they don't exercise the change) — isolated detached worktrees, verdict from real exit codes | When judging whether new tests actually test the change (see [references/test-policy.md](references/test-policy.md)) |
+| [`scripts/reap-dispatch-worktrees.sh`](../../scripts/reap-dispatch-worktrees.sh) | Exact schema-2 worktree state classification and preserve-first dead/clean reclamation | Before closing a managed root run; `check` blocks while exact owned worktrees remain |
+| [`scripts/lifecycle-residue-receipt.js`](../../scripts/lifecycle-residue-receipt.js) | Issue or freshness-check exact worktree/branch residue evidence | Before handing lifecycle truth to LSM; a valid receipt does not itself compute `can_close` |
 | [`scripts/risk-counter.js`](../../scripts/risk-counter.js) | Cross-round WTF-Likelihood Cap state tracking | Self-Regulation section |
 | [`scripts/diff-since-last-round.sh`](../../scripts/diff-since-last-round.sh) | Round-N checkpoint + delta-since-checkpoint (dispatcher-only) | Re-review Loop short-circuit decision |
 | [`scripts/qc-panel.js`](../../scripts/qc-panel.js) | Cross-family interrogation panel (shadow mode, task-tree engine) | Shadow QC panel section below |
@@ -134,9 +139,17 @@ Follow references/code-review.md (dispatches per .claude/dispatch-config.md '## 
   Agent dispatch: read JSON from `resolve-dispatch.sh --role reviewer`
   Before any round 2+ dispatch: `scripts/check-redispatch-prompt.sh <prompt>` (exit 1 ⇒ leaky, strip and retry)
   Optional short-circuit: `scripts/diff-since-last-round.sh stat` (dispatcher-only — doc_only=true ⇒ skip re-review)
-  → Critical/Major? → fix → re-review (repeat until clean)
+  → Critical/Major claims?
+       → verify (adjudicate-findings gate / probe|trace)
+       → classify relevance (dispose: must-fix-now | follow-up | reject-out-of-scope)
+       → completeness: `adjudicate-findings.js completeness --store <store>` (all-blocking; not --ids subset)
+       → scope check: `scripts/check-repair-scope.js check --contract <contract> --seal <seal.json>`
+       → repair-gate --ids <must-fix-now> → fix only those
+       → scope check after every repair mutation (full base_sha..HEAD) → re-review
+       → completeness + scope check before acceptance / commit
+       (severity orthogonal; union-on-verified Critical/Major intact inside must-fix-now)
   → Suggestion/Minor? → dispatch via Decision Tree below
-  → LGTM? → pass
+  → LGTM? → completeness + scope check before acceptance → pass
 ```
 
 ### Pre-existing Error Cleanup (after main task)

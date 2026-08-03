@@ -39,6 +39,12 @@ const nowBase = 1760000000000;
 const hash = (value) => sha256(value);
 
 const requirementBySink = {
+  'campaign-intake': ['engine_campaign_intake', 'campaign_control', 'external'],
+  'campaign-admission-release': ['engine_campaign_admission_release', 'campaign_control', 'external'],
+  'campaign-event-append': ['engine_campaign_event_append', 'campaign_control', 'external'],
+  'campaign-admission-complete': ['engine_campaign_admission_complete', 'campaign_control', 'external'],
+  'campaign-post-commit-checkpoint': ['engine_campaign_post_commit_checkpoint', 'campaign_control', 'irreversible'],
+  'mission-terminal-reconcile': ['engine_mission_terminal_reconcile', 'mission_control', 'external'],
   'review-dispatch': ['engine_review_dispatch', 'model_runner', 'external'],
   'implementation-dispatch': ['engine_implementation_dispatch', 'model_runner', 'external'],
   'diff-provenance': ['engine_diff_materialization', 'filesystem_git', 'reversible'],
@@ -46,6 +52,7 @@ const requirementBySink = {
   'verification-execution': ['engine_verification_command', 'shell', 'external'],
   'verify-worktree-add': ['engine_verify_worktree_add', 'git', 'external'],
   'verify-worktree-remove': ['engine_verify_worktree_remove', 'git', 'external'],
+  'repair-lineage-cleanup': ['engine_repair_lineage_cleanup', 'git', 'external'],
   'verify-worktree-cleanup': ['engine_verify_worktree_cleanup', 'filesystem', 'irreversible'],
   'branch-force': ['engine_branch_force', 'git', 'external'],
 };

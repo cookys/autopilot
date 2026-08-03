@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-29-bounded-backlog-intake.md",
+      "rubric_path": "plans/2026-07-29-bounded-backlog-intake.rubric.md",
+      "plan_sha256": "00fee24b7d2e502cfcba09b7b2e22547fac70477de3649352bf5932b8582c138",
+      "rubric_sha256": "5f45649e709bcfef4770472a5c812568244e82052fe1ff176746455a5ac8c100"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "artifact_type": "codex_enforcement_probe",
+  "observed_at": "2026-07-27T07:35:43.351Z",
+  "codex_version": "codex-cli 0.145.0",
+  "fixture": "harmless_scratch_touch",
+  "hook_contract": {
+    "event": "PreToolUse",
+    "decision": "block",
+    "reason": "AUTOPILOT_MISSION_BLOCK_FIXTURE"
+  },
+  "evidence": {
+    "marketplace_installed": true,
+    "plugin_installed": true,
+    "execution_started": true,
+    "execution_exit_status": 0,
+    "execution_signal": null,
+    "hook_invoked": true,
+    "request_bound": true,
+    "request_action": "shell_touch_exact",
+    "blocked_target_created": false,
+    "stdout_sha256": "89497412411dc5312b7fb9b27e1ac315d1da6a333fd8e2d23e759819a987c913",
+    "stderr_sha256": "e4de92d68c6e481e0a3dc813fa4f2033cfb35aa2b567b0bc3f0e7e1ce2ab2471"
+  },
+  "codex_enforcement_outcome": "block-capable",
+  "policy": "P2 may implement a current-Codex PreToolUse adapter after identity binding is added."
+}

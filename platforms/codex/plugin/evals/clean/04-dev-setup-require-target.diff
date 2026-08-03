@@ -1,0 +1,45 @@
+diff --git a/hooks/tests/dev-setup.test.sh b/hooks/tests/dev-setup.test.sh
+index 2eb078e..64477a9 100755
+--- a/hooks/tests/dev-setup.test.sh
++++ b/hooks/tests/dev-setup.test.sh
+@@ -35,6 +35,10 @@ assert_contains "$OUT" "--check" "help documents --check"
+ assert_contains "$OUT" "--install" "help documents --install"
+ assert_contains "$OUT" "--harness" "help documents --harness"
+ 
++OUT="$(bash "$SCRIPT" --install 2>&1)"; EXIT=$?
++assert_eq "$EXIT" "1" "--install without harness/all exits 1"
++assert_contains "$OUT" "--install requires --harness" "--install without target explains required selector"
++
+ LEGACY_HOME="$TEST_TMP/legacy-home"
+ make_claude_registry "$LEGACY_HOME"
+ OUT="$(HOME="$LEGACY_HOME" bash "$SCRIPT" 2>&1)"; EXIT=$?
+diff --git a/platforms/codex/plugin/scripts/dev-setup.sh b/platforms/codex/plugin/scripts/dev-setup.sh
+index c2fb1f3..3a91e63 100755
+--- a/platforms/codex/plugin/scripts/dev-setup.sh
++++ b/platforms/codex/plugin/scripts/dev-setup.sh
+@@ -481,6 +481,10 @@ parse_args() {
+     die "--check and --install are mutually exclusive"
+   fi
+ 
++  if [[ "$INSTALL" = "1" && -z "$HARNESS" && "$ALL" = "0" ]]; then
++    die "--install requires --harness <name> or --all"
++  fi
++
+   if [[ "$INSTALL" = "1" ]]; then
+     MODE="setup"
+   elif [[ "$CHECK" = "1" ]]; then
+diff --git a/scripts/dev-setup.sh b/scripts/dev-setup.sh
+index c2fb1f3..3a91e63 100755
+--- a/scripts/dev-setup.sh
++++ b/scripts/dev-setup.sh
+@@ -481,6 +481,10 @@ parse_args() {
+     die "--check and --install are mutually exclusive"
+   fi
+ 
++  if [[ "$INSTALL" = "1" && -z "$HARNESS" && "$ALL" = "0" ]]; then
++    die "--install requires --harness <name> or --all"
++  fi
++
+   if [[ "$INSTALL" = "1" ]]; then
+     MODE="setup"
+   elif [[ "$CHECK" = "1" ]]; then

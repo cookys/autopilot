@@ -2,7 +2,7 @@
 
 **Created**: 2026-06-23
 **Branch**: `feat/l4-l5-dep-graph-fanout`
-**Plan**: [`docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md`](../../plans/2026-06-23-l4-l5-dep-graph-fanout.md)
+**Plan**: [`docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md`](../../../plans/2026-06-23-l4-l5-dep-graph-fanout.md)
 **Origin**: `research-to-ship l4` — Phase 1 research (3 agents) + baseRef spike (v2.21.1, shipped)
 + 2-round Architect/Ops/Skeptic dialectic (**CONVERGED → DESCOPED**).
 **Status**: **S0.a CONCLUDED 2026-06-23 → DESCOPE OVERTURNED → Phase L REOPENED (scoped to

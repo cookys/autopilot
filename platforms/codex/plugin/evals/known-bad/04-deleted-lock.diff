@@ -1,0 +1,12 @@
+--- a/scripts/tree.sh
++++ b/scripts/tree.sh
+@@ -60,10 +60,7 @@ locked_append() {
+   local file="$1"
+   local content="$2"
+-  local lock="${file}.lock"
+-  (
+-    flock -x -w 10 9 || { echo "locked_append: could not acquire lock" >&2; exit 1; }
+-    printf '%s\n' "$content" >> "$file"
+-  ) 9>"$lock"
++  printf '%s\n' "$content" >> "$file"
+ }

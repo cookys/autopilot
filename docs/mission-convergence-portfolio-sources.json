@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-26-l6-status-merge-contract.md",
+      "rubric_path": "plans/2026-07-26-l6-status-merge-contract.rubric.md",
+      "plan_sha256": "7bf74c9685b0fd98320c860a68f886367767967b95f661fb72435e97107952b4",
+      "rubric_sha256": "77f17dff39be90e1cac5b0345957e948a2951b1e18de3a310c700bfda09709ac"
+    },
+    {
+      "plan_path": "plans/2026-07-26-plan-review-session-controller.md",
+      "rubric_path": "plans/2026-07-26-plan-review-session-controller.rubric.md",
+      "plan_sha256": "925badfc6805f93e6e5c3a62a40427e03835b07efe98389ca593463df2341093",
+      "rubric_sha256": "e518a66e34cc94c63e68fa9df3291f0ca844a00e16f2f4f1f34ef48c74753ad6"
+    },
+    {
+      "plan_path": "plans/2026-07-26-cross-harness-transcript-retro.md",
+      "rubric_path": "plans/2026-07-26-cross-harness-transcript-retro.rubric.md",
+      "plan_sha256": "1eed0ef7002319f082df506fdfcb8ec6de673c4c4f6754671c51b15404e49bac",
+      "rubric_sha256": "3b19a4637b6e313e33769d62250d1b897d5827963c7ec50d8d053fc44a0ca9b9"
+    }
+  ]
+}

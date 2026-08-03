@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "inventory": "profiles/rule-inventory.json",
+  "source_manifest": "profiles/rule-source-manifest.json",
+  "artifact_strategy": "generated_profile_specific_payloads_from_canonical_source",
+  "categories": {
+    "core": {
+      "runtime_owner": "TaskAuthorityEnvelope+profiles/core.md",
+      "disposition": "typed_authority_or_core_capsule"
+    },
+    "guided": {
+      "runtime_owner": "skills/dev-flow/SKILL.md+profiles/guided.md",
+      "disposition": "guided_host_or_current_slice"
+    },
+    "autonomous": {
+      "runtime_owner": "profiles/autonomous.md",
+      "disposition": "autonomous_guidance"
+    },
+    "assurance": {
+      "runtime_owner": "RoleExecutionGrant.assurance+required_evidence+invariant_hooks",
+      "disposition": "typed_assurance_or_invariant_hook"
+    },
+    "topology": {
+      "runtime_owner": "RoleExecutionGrant.topology+skills/l3-l6",
+      "disposition": "typed_topology_or_front_door"
+    },
+    "obsolete": {
+      "runtime_owner": null,
+      "disposition": "removed"
+    }
+  }
+}

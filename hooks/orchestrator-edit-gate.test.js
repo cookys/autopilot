@@ -76,6 +76,8 @@ function setup() {
   const repo = path.join(base, 'repo');
   fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
   fs.mkdirSync(path.join(repo, 'docs', 'projects'), { recursive: true });
+  const init = spawnSync('git', ['init', repo], { encoding: 'utf8' });
+  assert.strictEqual(init.status, 0, init.stderr);
   const markers = path.join(base, 'markers');
   const sid = `t-${path.basename(base)}`;
   const env = {

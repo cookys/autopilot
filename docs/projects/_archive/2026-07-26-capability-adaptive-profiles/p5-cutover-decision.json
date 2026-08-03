@@ -1,0 +1,108 @@
+{
+  "apply_automatically": false,
+  "authority_status": "advisory_only",
+  "current_default": "guided",
+  "decision": "hold_guided",
+  "decision_id": "bc0abac6ab8133481e00a38e8da2dc7dd44dcc71a2306e9e28a90a9d71d40545",
+  "evaluated_at": "2026-07-26T09:30:00.000Z",
+  "gates": [
+    {
+      "evidence": {},
+      "id": "guided_authoritative_and_single_setting_rollback",
+      "reason": "guided remains authoritative with one-setting rollback",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "supported_hosts": 2,
+        "verified_measurements": 0
+      },
+      "id": "exact_context_isolation_and_savings",
+      "reason": "supported-host exact-token isolation/savings evidence is incomplete",
+      "status": "hold"
+    },
+    {
+      "evidence": {},
+      "id": "effectful_guided_compatibility",
+      "reason": "effectful_receipt_missing",
+      "status": "hold"
+    },
+    {
+      "evidence": {},
+      "id": "fallback_expiry_demotion_and_fresh_session",
+      "reason": "fallback lifecycle tests or their live witness are failed/unverified",
+      "status": "hold"
+    },
+    {
+      "evidence": {},
+      "id": "assurance_invariance",
+      "reason": "assurance invariance is failed or unverified",
+      "status": "hold"
+    },
+    {
+      "evidence": {
+        "dispatched_tasks": 0,
+        "terminal_receipts": 0
+      },
+      "id": "complete_dogfood_window",
+      "reason": "complete live-verified dogfood window is unavailable",
+      "status": "hold"
+    },
+    {
+      "evidence": {
+        "distinct_tasks": 0,
+        "receipts": 0
+      },
+      "id": "five_fresh_qualified_owner_dogfoods",
+      "reason": "five distinct live-verified fresh-owner dogfood sessions are not available",
+      "status": "hold"
+    },
+    {
+      "evidence": {},
+      "id": "independent_dogfood_receipts",
+      "reason": "independent dogfood receipt verification is incomplete",
+      "status": "hold"
+    },
+    {
+      "evidence": {},
+      "id": "dogfood_acceptance",
+      "reason": "five independently accepted dogfood tasks are not available",
+      "status": "hold"
+    },
+    {
+      "evidence": {},
+      "id": "decorrelated_review",
+      "reason": "dogfood review-family decorrelation is incomplete",
+      "status": "hold"
+    },
+    {
+      "evidence": {},
+      "id": "zero_critical_false_pass_from_profile_reduction",
+      "reason": "no attributable Critical false pass was observed",
+      "status": "pass"
+    }
+  ],
+  "metrics": {
+    "acceptance_passed": 0,
+    "dogfood_tasks": 0,
+    "exact_autonomous_control_tokens": null,
+    "exact_control_tokens_saved": null,
+    "exact_guided_control_tokens": null,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "reviewer_catches": 0,
+    "rework_cycles": 0,
+    "source_control_bytes_saved": 113,
+    "wall_time_ms": 0
+  },
+  "recommended_default": "guided",
+  "rollback": {
+    "changes_authority": false,
+    "changes_task_intent": false,
+    "setting": "governance.guidance_profile",
+    "value": "guided"
+  },
+  "schema_version": 1,
+  "snapshot_hash": "99eec31fcc98f9695fa84c38a2f94cdd7170353b108049852e92facca69743a9",
+  "verification_evidence_hashes": []
+}

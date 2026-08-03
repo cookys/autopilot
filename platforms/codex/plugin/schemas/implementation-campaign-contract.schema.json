@@ -1,0 +1,307 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://autopilot.local/schemas/implementation-campaign-contract.schema.json",
+  "title": "implementation-campaign-contract",
+  "description": "Closed v1 contract for one bounded implementation campaign.",
+  "x-profile-repair-ceilings": {
+    "spike": 1,
+    "poc": 2,
+    "internal-pilot": 5,
+    "production": 5
+  },
+  "x-optional-properties": [
+    "mission_runtime",
+    "strict_dispatch",
+    "max_owned_worktrees",
+    "temp_capacity_limit",
+    "max_prompt_bytes",
+    "max_finding_recurrence"
+  ],
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ticket",
+    "profile",
+    "mission_grant_ref",
+    "repo_identity",
+    "base_sha",
+    "branch",
+    "vertical_acceptance",
+    "allowed_path_prefixes",
+    "max_changed_files",
+    "baseline_churn",
+    "max_growth_ratio",
+    "max_extra_churn",
+    "max_repair_generations",
+    "max_wall_seconds",
+    "verify_cmd",
+    "rubric_ids"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "ticket": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["spike", "poc", "internal-pilot", "production"]
+    },
+    "mission_grant_ref": {
+      "anyOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/sha256" }
+      ]
+    },
+    "repo_identity": { "type": "string", "minLength": 1 },
+    "base_sha": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "branch": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "vertical_acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
+    "allowed_path_prefixes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
+    "max_changed_files": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "baseline_churn": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000000
+    },
+    "max_growth_ratio": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 1.5
+    },
+    "max_extra_churn": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5000000
+    },
+    "max_repair_generations": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "max_wall_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7200
+    },
+    "max_owned_worktrees": {
+      "description": "Joint six-axis absolute owned-worktree capacity for the controller. Equality may reach the limit; the next positive delta enters durable wait.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 64
+    },
+    "temp_capacity_limit": {
+      "description": "Absolute temp/worktree capacity authority for pre-effect admission. Unreachable when omitted from sealed contract.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 256
+    },
+    "max_prompt_bytes": {
+      "description": "Joint fresh_input_bytes axis ceiling when observed via promptFile/promptBytes.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 500000000
+    },
+    "max_finding_recurrence": {
+      "description": "Joint finding_recurrence axis ceiling for repair loops.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 32
+    },
+    "verify_cmd": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "rubric_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]*[0-9]+$"
+      }
+    },
+    "mission_runtime": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "root_run_id",
+        "mission_lineage_id",
+        "mission_policy_digest",
+        "mission_graph_digest",
+        "graph_node_id",
+        "graph_node_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "root_run_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "mission_lineage_id": {
+          "type": "string",
+          "pattern": "^lineage-v1-[0-9a-f]{64}$"
+        },
+        "mission_policy_digest": { "$ref": "#/$defs/sha256" },
+        "mission_graph_digest": { "$ref": "#/$defs/sha256" },
+        "graph_node_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "graph_node_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "strict_dispatch": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "spec",
+        "required_paths",
+        "output_paths",
+        "allowed_path_prefixes",
+        "budget",
+        "verification_commands"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "spec": {
+          "type": "object",
+          "required": ["path", "section"],
+          "properties": {
+            "path": { "$ref": "#/$defs/relativePath" },
+            "section": { "type": "string", "minLength": 1, "maxLength": 512 }
+          },
+          "additionalProperties": false
+        },
+        "required_paths": {
+          "description": "Required existing inputs for the sealed mission delta. Existence is checked pre-spend; not every path must change every generation.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "output_paths": {
+          "description": "Authorized create/modify surface for campaign strict authority. Narrow repairs need not touch every listed path.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "required_change_paths": {
+          "description": "Paths that MUST appear in an effectful candidate diff. Non-empty unique exact subset of output_paths when present. Digest-bound no-op is the only zero-change exception.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "authorized_creates": {
+          "description": "Optional explicit create authority for absent required/output paths.",
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "version_mirror_paths": {
+          "description": "Optional version-mirror outputs requiring named generator closure.",
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "version_mirror_generator": {
+          "description": "Named generator that must close version_mirror_paths.",
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "allowed_path_prefixes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/relativePath" }
+        },
+        "budget": {
+          "type": "object",
+          "required": [
+            "max_changed_files",
+            "max_wall_seconds",
+            "max_output_bytes",
+            "max_tool_calls",
+            "max_engine_attempts"
+          ],
+          "properties": {
+            "max_changed_files": { "type": "integer", "minimum": 1 },
+            "max_wall_seconds": { "type": "integer", "minimum": 1 },
+            "max_output_bytes": { "type": "integer", "minimum": 0 },
+            "max_tool_calls": { "type": "integer", "minimum": 0 },
+            "max_engine_attempts": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "verification_commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 4096 }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": { "properties": { "profile": { "const": "spike" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 1 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "poc" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 2 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "internal-pilot" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 5 } } }
+    },
+    {
+      "if": { "properties": { "profile": { "const": "production" } } },
+      "then": { "properties": { "max_repair_generations": { "maximum": 5 } } }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    }
+  }
+}

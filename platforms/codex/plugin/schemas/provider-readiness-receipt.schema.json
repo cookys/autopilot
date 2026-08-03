@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/provider-readiness-receipt.schema.json",
+  "title": "provider-readiness-receipt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "issued_at",
+    "expires_at",
+    "roster_digest",
+    "policy_digest",
+    "observation_digest",
+    "overall_status",
+    "seats",
+    "receipt_digest"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "provider_readiness_receipt" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "roster_digest": { "$ref": "#/$defs/sha256" },
+    "policy_digest": { "$ref": "#/$defs/sha256" },
+    "observation_digest": { "$ref": "#/$defs/sha256" },
+    "overall_status": { "$ref": "#/$defs/seatStatus" },
+    "seats": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/seat" }
+    },
+    "receipt_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+    },
+    "seatStatus": {
+      "type": "string",
+      "enum": ["usable", "probe-needed", "blocked"]
+    },
+    "tuple": {
+      "type": "object",
+      "required": ["role", "runner", "model", "effort", "endpoint"],
+      "properties": {
+        "role": { "$ref": "#/$defs/code" },
+        "runner": { "$ref": "#/$defs/code" },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "effort": { "$ref": "#/$defs/code" },
+        "endpoint": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_]{1,128}$"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "axis": {
+      "type": "object",
+      "required": [
+        "status",
+        "observed_status",
+        "observed_at",
+        "ttl_seconds",
+        "evidence_class",
+        "freshness",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["ready", "blocked", "unknown"]
+        },
+        "observed_status": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "string",
+              "enum": ["ready", "blocked", "unknown"]
+            }
+          ]
+        },
+        "observed_at": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "format": "date-time" }
+          ]
+        },
+        "ttl_seconds": { "type": "integer", "minimum": 0 },
+        "evidence_class": { "$ref": "#/$defs/code" },
+        "freshness": {
+          "type": "string",
+          "enum": ["fresh", "stale", "missing"]
+        },
+        "reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/code" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "blockingReason": {
+      "type": "object",
+      "required": ["axis", "reason"],
+      "properties": {
+        "axis": {
+          "type": "string",
+          "enum": ["transport", "live", "qualification"]
+        },
+        "reason": { "$ref": "#/$defs/code" }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_type",
+        "tuple",
+        "tuple_digest",
+        "observed_at",
+        "axes",
+        "usable_now",
+        "probe_required",
+        "blocking_reasons",
+        "fallbacks",
+        "decision_digest"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "artifact_type": {
+          "type": "string",
+          "const": "provider_readiness_decision"
+        },
+        "tuple": { "$ref": "#/$defs/tuple" },
+        "tuple_digest": { "$ref": "#/$defs/sha256" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "axes": {
+          "type": "object",
+          "required": ["transport", "live", "qualification"],
+          "properties": {
+            "transport": { "$ref": "#/$defs/axis" },
+            "live": { "$ref": "#/$defs/axis" },
+            "qualification": { "$ref": "#/$defs/axis" }
+          },
+          "additionalProperties": false
+        },
+        "usable_now": { "type": "boolean" },
+        "probe_required": { "type": "boolean" },
+        "blocking_reasons": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/blockingReason" }
+        },
+        "fallbacks": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "decision_digest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "fallback": {
+      "type": "object",
+      "required": [
+        "order",
+        "family",
+        "eligible",
+        "exclusion_reason",
+        "decision"
+      ],
+      "properties": {
+        "order": { "type": "integer", "minimum": 1 },
+        "family": { "$ref": "#/$defs/code" },
+        "eligible": { "type": "boolean", "const": true },
+        "exclusion_reason": { "type": "null" },
+        "decision": { "$ref": "#/$defs/decision" }
+      },
+      "additionalProperties": false
+    },
+    "selected": {
+      "type": "object",
+      "required": ["source", "fallback_order", "family", "tuple"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["primary", "fallback"]
+        },
+        "fallback_order": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1 }
+          ]
+        },
+        "family": { "$ref": "#/$defs/code" },
+        "tuple": { "$ref": "#/$defs/tuple" }
+      },
+      "additionalProperties": false
+    },
+    "failingAxis": {
+      "type": "object",
+      "required": ["axis", "status", "reason"],
+      "properties": {
+        "axis": {
+          "type": "string",
+          "enum": ["transport", "live", "qualification"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["blocked", "unknown"]
+        },
+        "reason": { "$ref": "#/$defs/code" }
+      },
+      "additionalProperties": false
+    },
+    "seat": {
+      "type": "object",
+      "required": [
+        "seat_id",
+        "required",
+        "family",
+        "decision",
+        "fallbacks",
+        "selected",
+        "status",
+        "failing_axes"
+      ],
+      "properties": {
+        "seat_id": { "$ref": "#/$defs/code" },
+        "required": { "type": "boolean" },
+        "family": { "$ref": "#/$defs/code" },
+        "decision": { "$ref": "#/$defs/decision" },
+        "fallbacks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fallback" }
+        },
+        "selected": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/selected" }
+          ]
+        },
+        "status": { "$ref": "#/$defs/seatStatus" },
+        "failing_axes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/failingAxis" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

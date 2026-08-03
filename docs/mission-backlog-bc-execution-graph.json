@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "evidence-eval-truth",
+      "source_plan_ids": [
+        "plan-35ec55ffaf4cced49355457b329bcf501e70e67b12d1ee1edba563564902226b"
+      ],
+      "source_rubric_ids": [
+        "R113673834117794572223396540389413969460881248987975065845621964514729336196156",
+        "R62178112771573933448260197564041033378510828523839093691152124384436041535660",
+        "R81926388360962228112521746731412591758352981723499869733502069382170474901141",
+        "R73998640200555461253372134859703080469378314837070836547600984560427550560357",
+        "R100165803362835423866506685261237996697852437985513418261520568699626900733892",
+        "R55083551198774815532196063367860000926879319817080858158866205876323249869402",
+        "R65141171156923691883405509641802725555365234277122521296016704079794885654767"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "classified-failures",
+        "fail-closed-scoring",
+        "aggregate-only-import",
+        "honest-missing-data",
+        "non-authoritative-telemetry",
+        "minimax-limitation-visible",
+        "negative-controls"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/orchestration-eval.test.sh",
+        "bash hooks/tests/engine-scorecard.test.sh",
+        "bash hooks/tests/resolve-review-loop.test.sh"
+      ],
+      "gate_attempt_budget": 3,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 400,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 8,
+        "output_bytes": 6000000
+      },
+      "campaign": {
+        "profile": "high",
+        "allowed_path_prefixes": [
+          ".claude/review-loop-config.md",
+          "docs/plans/2026-07-31-evidence-eval-truth.md",
+          "evals/orchestration",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 1500,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 750,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-07-31-evidence-eval-truth.md",
+          "section": "Deliverable B contract"
+        },
+        "required_paths": [
+          ".claude/review-loop-config.md",
+          "evals/orchestration/run-orchestration-eval.sh",
+          "evals/orchestration/score.js",
+          "hooks/tests/engine-scorecard.test.sh",
+          "hooks/tests/orchestration-eval.test.sh",
+          "hooks/tests/resolve-review-loop.test.sh",
+          "scripts/engine-scorecard.js",
+          "scripts/resolve-review-loop.sh"
+        ],
+        "output_paths": [
+          ".claude/review-loop-config.md",
+          "evals/orchestration/run-orchestration-eval.sh",
+          "evals/orchestration/score.js",
+          "hooks/tests/engine-scorecard.test.sh",
+          "hooks/tests/orchestration-eval.test.sh",
+          "hooks/tests/resolve-review-loop.test.sh",
+          "scripts/engine-scorecard.js",
+          "scripts/resolve-review-loop.sh"
+        ]
+      }
+    },
+    {
+      "id": "correctness-gates",
+      "source_plan_ids": [
+        "plan-0a83aa1240d903003565e881af5ce833eccae7df29fbf08ae3a6ef26a0d9df96"
+      ],
+      "source_rubric_ids": [
+        "R2633318604265699832221613007155415076931417794058874249872193239297600386940",
+        "R61524068919390838537020623238045166587600095222831976899374197774047593998856",
+        "R57014669349599811939600592348968128352385685528307457901209030176363658566999",
+        "R25218887564544626396875368622575818844541592980971820385083045748291387893948",
+        "R98600831782972981573184571117747101292276586040795142894274970929913861891172",
+        "R78336074005804150909740996923201088062268813945535526186559773934146215502869",
+        "R3758626835649660684259251094120189861053883280826974358164212476234814362063"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "current-version-prose",
+        "worktree-red-green",
+        "external-command-compatibility",
+        "binary-path-risk",
+        "secret-deletion-safe",
+        "interface-stability",
+        "negative-controls"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/preflight-release-routing.test.sh",
+        "bash hooks/tests/verify-red-green.test.sh",
+        "bash hooks/tests/classify-diff-risk.test.sh",
+        "bash hooks/tests/classify-diff-risk-filename-space.test.sh",
+        "bash hooks/tests/secret-scan-diff.test.sh",
+        "bash hooks/tests/reenabled-blockers.test.sh"
+      ],
+      "gate_attempt_budget": 3,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 400,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 8,
+        "output_bytes": 5000000
+      },
+      "campaign": {
+        "profile": "high",
+        "allowed_path_prefixes": [
+          "docs/plans/2026-07-31-correctness-gates.md",
+          "hooks/commit-secret-scan.js",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 1200,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 600,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-07-31-correctness-gates.md",
+          "section": "Deliverable C contract"
+        },
+        "required_paths": [
+          "hooks/commit-secret-scan.js",
+          "hooks/tests/classify-diff-risk-filename-space.test.sh",
+          "hooks/tests/classify-diff-risk.test.sh",
+          "hooks/tests/preflight-release-routing.test.sh",
+          "hooks/tests/reenabled-blockers.test.sh",
+          "hooks/tests/secret-scan-diff.test.sh",
+          "hooks/tests/verify-red-green.test.sh",
+          "scripts/classify-diff-risk.sh",
+          "scripts/preflight-release.sh",
+          "scripts/secret-scan-diff.js",
+          "scripts/verify-red-green.sh"
+        ],
+        "output_paths": [
+          "hooks/commit-secret-scan.js",
+          "hooks/tests/classify-diff-risk.test.sh",
+          "hooks/tests/preflight-release-routing.test.sh",
+          "hooks/tests/reenabled-blockers.test.sh",
+          "hooks/tests/verify-red-green.test.sh",
+          "scripts/classify-diff-risk.sh",
+          "scripts/preflight-release.sh",
+          "scripts/verify-red-green.sh"
+        ]
+      }
+    }
+  ],
+  "calculated_depth": 1,
+  "calculated_batches": 1,
+  "graph_digest": "d904c9d1042c9e78d85c8084c5449e9fe0be381c96870c1efd1318c294baab96"
+}

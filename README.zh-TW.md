@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.32.60-E8A838?style=flat-square" alt="v2.32.60">
+  <img src="https://img.shields.io/badge/version-2.34.1-E8A838?style=flat-square" alt="v2.34.1">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-25-6B8E6B?style=flat-square" alt="25 Hooks">
@@ -51,7 +51,7 @@ Claude Code 仍是最完整的 host。Autopilot 讓 AI coding agent **把整件�
 - **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
 - **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它優先以 Claude Code plugin 出貨 —— **28 個 skill、3 個方法論 agent、22 個 hook、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+它優先以 Claude Code plugin 出貨 —— **28 個 skill、3 個方法論 agent、25 個 hook、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
 
 > 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 
@@ -154,6 +154,22 @@ Autopilot 是 Claude Code-first，但不是 Claude Code-only。依照你實際�
 
 Autopilot 委派 labor，不委派權威。Implementer 的自述永遠不是證據；reviewer 直接讀任務、diff、log 與 artifacts。Deterministic gates 仍是權威，高風險工作需要去相關化的 review coverage，而 `no_verdict` review 永遠不能算通過。
 
+### 能力自適應 Guidance
+
+Autopilot 維持一個產品，同時容納強、弱、遠端與本地模型。系統先驗證精確的
+role + task scope + deployment identity，再只編譯一份 guidance payload：
+`guided` 給較小的當前切片與明確結構；`autonomous` 對已合格的角色移除重複流程。
+兩種 profile 都不會改動紅線、effects、egress、assurance 或 acceptance。
+
+`governance.guidance_profile` 是專案預設（省略時為 `guided`），每個 task 可在 intake
+覆寫而不修改專案設定。外部 benchmark 只能產生 provisional telemetry；owner 與
+reviewer 使用不同的 host-scored eval，磁碟 JSON 不能重建 session authority。
+本 repo 的 v2.33.0 cutover receipt 仍是 `hold_guided`：autonomous control source
+少 113 bytes，但目前沒有 exact host-token measurement、effectful compatibility witness、
+仍有效的 live owner verifier，以及五筆完整獨立 dogfood receipt。本地
+OpenAI-compatible adapter 已通過 fake-contract transport 測試，但不宣稱任何 live
+local runtime 或 agentic local runner。
+
 ### 🔌 接上另一個引擎（選用）
 
 只用 Claude 就夠了。但把 autopilot 指向**第二個引擎家族**，它的 review／implement pipeline 會更強——跨家族 qc panel 能抓到單一廠商跟同家族 reviewer 一起漏掉的問題，還能得到一個異質 implementer 做成本套利。**建議順序：你已經在付的訂閱 ≻ 按量計費的 API key**——OAuth 登入的 runner（`codex` / `agy` / `grok` / explicit-only `qoderclicn`）完全不需要 token；GLM／MiniMax 則放進單一 mode-600 檔案（`~/.autopilot/endpoints.env`），並在 `.claude/review-loop-config.md` 宣告式接線。
@@ -178,7 +194,7 @@ Autopilot 委派 labor，不委派權威。Implementer 的自述永遠不是證�
 
 | Harness | 如何開始 | 目前支援 | 已知限制 |
 |---|---|---|---|
-| **Claude Code** | `/plugin marketplace add cookys/autopilot` 後 `/plugin install autopilot@autopilot` | 完整 plugin 路徑：28 個 skills、3 個方法論 agents、22 個 hooks | 主要 host；Claude-specific hooks 與 slash 行為不會自動轉移到其他 harness |
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` 後 `/plugin install autopilot@autopilot` | 完整 plugin 路徑：28 個 skills、3 個方法論 agents、25 個 hooks | 主要 host；Claude-specific hooks 與 slash 行為不會自動轉移到其他 harness |
 | **Codex** | `.agents/skills/`，或加入 `platforms/codex` marketplace 後 `codex plugin add autopilot@autopilot-local` | Skills-only package、generated support payload、repo-local marketplace | 預設 Codex package 刻意不載入 Claude hooks、apps 或 MCP servers。經 `spawn_agent` 的 subagent model 路由需 user 自行 opt-in — 見 `platforms/codex/README.md` § Subagent model routing |
 | **OpenCode** | 在這個 repo 使用 `.agents/skills/`；agents 走 `.opencode/opencode.json` | 共用 skills、方法論 agent bodies、OpenCode plugin wrapper | Optional TypeScript deps 只在編輯 wrapper 時需要；hook parity 屬平台特定問題 |
 | **Antigravity（`agy`）** | `./scripts/install-antigravity.sh` | 受 guard 保護的 `agy plugin validate` / install / list 流程，採 export-then-install | Runtime hook firing 仍未驗證；install 不代表 hook behavior parity |
@@ -196,7 +212,7 @@ Autopilot 委派 labor，不委派權威。Implementer 的自述永遠不是證�
 | **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
 | **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** —— 22 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
+| **Hooks** —— 25 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

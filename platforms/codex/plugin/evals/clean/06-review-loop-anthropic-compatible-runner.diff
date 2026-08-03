@@ -1,0 +1,81 @@
+diff --git a/hooks/tests/resolve-review-loop.test.sh b/hooks/tests/resolve-review-loop.test.sh
+index 00f6b48..f0d16b0 100755
+--- a/hooks/tests/resolve-review-loop.test.sh
++++ b/hooks/tests/resolve-review-loop.test.sh
+@@ -4,6 +4,11 @@
+ . "$(dirname "$0")/lib.sh"
+ 
+ SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
++
++# Keep default-path assertions hermetic when the surrounding agent/session exports
++# resolver overrides or live engine-state paths.
++unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE ENGINE_SCORECARD_DIR
++
+ json_get() { # json key -> raw json value
+   local json="$1" key="$2"
+   export JSON_VALUE="$json"
+@@ -79,6 +84,12 @@ assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field r
+ RCFG="$TEST_TMP/rl-ccshim-rev.md"
+ printf -- '- reviewer_runner: cc-shim\n- reviewer_engine: MiniMax-M3\n' > "$RCFG"
+ assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RCFG" bash "$SCRIPT" --field reviewer_runner)" "cc-shim reviewer_runner honored (dispatch-review supports it since v2.26.10)"
++ACRCFG="$TEST_TMP/rl-anthropic-compatible-rev.md"
++printf -- '- reviewer_runner: anthropic-compatible\n- reviewer_engine: MiniMax-M3\n' > "$ACRCFG"
++assert_eq "anthropic-compatible" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACRCFG" bash "$SCRIPT" --field reviewer_runner)" "anthropic-compatible reviewer_runner honored (dispatch-review direct HTTP reviewer)"
++ACI_CFG="$TEST_TMP/rl-anthropic-compatible-impl.md"
++printf -- '- implementer_runner: anthropic-compatible\n- implementer_engine: MiniMax-M3\n' > "$ACI_CFG"
++assert_eq "auto" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$ACI_CFG" bash "$SCRIPT" --field implementer_runner)" "anthropic-compatible implementer_runner rejected (dispatch-hetero does not support it)"
+ GCFG="$TEST_TMP/rl-grok-impl.md"
+ printf -- '- implementer_runner: grok\n- implementer_engine: grok-composer-2.5-fast\n' > "$GCFG"
+ assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$GCFG" bash "$SCRIPT" --field implementer_runner)" "grok implementer_runner honored"
+diff --git a/platforms/codex/plugin/project-config-template/review-loop-config.md b/platforms/codex/plugin/project-config-template/review-loop-config.md
+index 95586e5..f49c2fe 100644
+--- a/platforms/codex/plugin/project-config-template/review-loop-config.md
++++ b/platforms/codex/plugin/project-config-template/review-loop-config.md
+@@ -65,7 +65,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
+ |-------|---------|--------|
+ | `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
+ | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
+-| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (any Anthropic-compat model, e.g. MiniMax-M3 — needs the same `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env as the cc-shim implementer) `\| auto` |
++| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| auto` |
+ | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
+ | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
+ | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|cc-shim` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, else agy; **`cc-shim` must be set EXPLICITLY** (see Gotchas) |
+diff --git a/platforms/codex/plugin/scripts/resolve-review-loop.sh b/platforms/codex/plugin/scripts/resolve-review-loop.sh
+index f752e29..db0c8e8 100755
+--- a/platforms/codex/plugin/scripts/resolve-review-loop.sh
++++ b/platforms/codex/plugin/scripts/resolve-review-loop.sh
+@@ -236,7 +236,7 @@ QC_PANEL_JSON+="]"
+ [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
+ 
+ # Validate enums; fall back to defaults on garbage (fail toward the safe roster).
+-case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
++case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim|anthropic-compatible) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
+ case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
+ case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
+ case "$IMPL_RUNNER" in auto|codex|agy|grok|cc-shim) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac
+diff --git a/project-config-template/review-loop-config.md b/project-config-template/review-loop-config.md
+index 95586e5..f49c2fe 100644
+--- a/project-config-template/review-loop-config.md
++++ b/project-config-template/review-loop-config.md
+@@ -65,7 +65,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
+ |-------|---------|--------|
+ | `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
+ | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
+-| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (any Anthropic-compat model, e.g. MiniMax-M3 — needs the same `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env as the cc-shim implementer) `\| auto` |
++| `reviewer_runner` | how the reviewer is invoked (→ `dispatch-review.sh --runner`) | `codex` (`codex exec`) `\| agy` (Gemini) `\| grok` (xAI; read-only) `\| cc-shim` (Claude Code CLI to any Anthropic-compatible endpoint) `\| anthropic-compatible` (direct HTTP reviewer via `dispatch-anthropic-review.js`) `\| auto` |
+ | `implementer_engine` | the heterogeneous implementer | a model name (e.g. `gpt-5.3-codex-spark`, `Gemini 3.5 Flash (High)`, `grok-composer-2.5-fast`, `MiniMax-M3`) |
+ | `implementer_effort` | implementer reasoning effort (codex only) | `low\|medium\|high\|xhigh\|max` |
+ | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|cc-shim` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, else agy; **`cc-shim` must be set EXPLICITLY** (see Gotchas) |
+diff --git a/scripts/resolve-review-loop.sh b/scripts/resolve-review-loop.sh
+index f752e29..db0c8e8 100755
+--- a/scripts/resolve-review-loop.sh
++++ b/scripts/resolve-review-loop.sh
+@@ -236,7 +236,7 @@ QC_PANEL_JSON+="]"
+ [[ ${#QC_PANEL[@]} -eq 0 ]] && QC_PANEL_JSON="[]"
+ 
+ # Validate enums; fall back to defaults on garbage (fail toward the safe roster).
+-case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
++case "$REV_RUNNER" in codex|auto|agy|grok|cc-shim|anthropic-compatible) ;; *) REV_RUNNER="$DEF_REV_RUNNER" ;; esac
+ case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
+ case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
+ case "$IMPL_RUNNER" in auto|codex|agy|grok|cc-shim) ;; *) IMPL_RUNNER="$DEF_IMPL_RUNNER" ;; esac

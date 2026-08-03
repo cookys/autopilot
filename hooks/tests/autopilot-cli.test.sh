@@ -65,6 +65,8 @@ assert_contains "$OUT" "engine review-loop" "autopilot help lists engine review-
 assert_contains "$OUT" "engine implement-review" "autopilot help lists engine implement-review"
 assert_contains "$OUT" "--require-qualified-reviewer" "autopilot help documents reviewer qualification default flag"
 assert_contains "$OUT" "--allow-unqualified-reviewer" "autopilot help documents reviewer qualification escape hatch"
+assert_contains "$OUT" "--campaign-contract" "autopilot help documents the mandatory campaign contract"
+assert_contains "$OUT" "--legacy-unmanaged" "autopilot help documents the temporary compatibility rail"
 
 printf 'implementer loop prompt\n' > "$TEST_TMP/engine-impl-review-prompt.txt"
 BASE_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
@@ -88,11 +90,11 @@ OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-
 assert_eq "2" "$EXIT" "implement-review missing cwd value exits 2"
 assert_contains "$OUT" "--cwd requires a value" "implement-review validates cwd value"
 
-OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base develop 2>&1)"; EXIT=$?
+OUT="$(node "$CLI" engine implement-review --legacy-unmanaged --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base develop 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "implement-review moving base ref exits 1"
 assert_contains "$OUT" "base must be a full immutable git SHA" "implement-review blocks moving base refs before dispatch"
 
-OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base "$BASE_SHA" 2>&1)"; EXIT=$?
+OUT="$(ENGINE_SCORECARD_DIR="$TEST_TMP/empty-scorecard" node "$CLI" engine implement-review --legacy-unmanaged --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base "$BASE_SHA" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "implement-review defaults to failing closed on unqualified reviewer"
 assert_contains "$OUT" '"phase":"reviewer_qualification"' "implement-review default blocks at reviewer qualification"
 assert_contains "$OUT" "reviewer is not qualified or qualification is unknown" "implement-review qualification block explains reason"
@@ -100,6 +102,37 @@ assert_contains "$OUT" "reviewer is not qualified or qualification is unknown" "
 OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base "$BASE_SHA" --require-qualified-reviewer --allow-unqualified-reviewer 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "implement-review rejects conflicting reviewer qualification flags"
 assert_contains "$OUT" "cannot be combined" "implement-review reports conflicting reviewer qualification flags"
+
+OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch loop-branch --base "$BASE_SHA" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "implement-review without a campaign contract exits 2"
+assert_contains "$OUT" "--campaign-contract is required" "implement-review fails closed on missing campaign contract"
+
+legacy_ledger_count() {
+  local ledger_dir="$HOOK_HOME/.autopilot/run-ledger"
+  if [ ! -d "$ledger_dir" ]; then
+    printf '0\n'
+    return
+  fi
+  find "$ledger_dir" -type f | wc -l | tr -d ' '
+}
+for level in l5 l6; do
+  BEFORE_LEGACY_LEDGER="$(legacy_ledger_count)"
+  OUT="$(AUTOPILOT_LEVEL="$level" node "$CLI" engine implement-review \
+    --legacy-unmanaged \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" 2>&1)"
+  EXIT=$?
+  AFTER_LEGACY_LEDGER="$(legacy_ledger_count)"
+  assert_eq "1" "$EXIT" "${level^^} rejects the legacy unmanaged compatibility rail"
+  assert_contains "$OUT" '"legacy_unmanaged_rejected"' \
+    "${level^^} legacy rejection is machine-readable"
+  assert_contains "$OUT" '"removal_release":"v2.35.0"' \
+    "${level^^} rejection retains the dated removal release"
+  assert_contains "$OUT" '"removal_deadline":"2026-08-31"' \
+    "${level^^} rejection retains the dated removal deadline"
+  assert_eq "$BEFORE_LEGACY_LEDGER" "$AFTER_LEGACY_LEDGER" \
+    "${level^^} legacy rejection occurs before any durable runner spend"
+done
 
 OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
 assert_contains "$OUT" "--resume" "autopilot help documents the --resume flag"
@@ -111,7 +144,7 @@ assert_contains "$OUT" "unknown engine implement-review option: --bogus-resume-f
 # --resume against a definitely-nonexistent branch fails closed as resume_invalid
 # (real gitResumeInspect); --allow-unqualified-reviewer bypasses the qualification
 # preflight so the resume precheck is reached. Nothing is mutated.
-OUT="$(node "$CLI" engine implement-review --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch autopilot-no-such-resume-branch-xyz --base "$BASE_SHA" --allow-unqualified-reviewer --resume 2>&1)"; EXIT=$?
+OUT="$(node "$CLI" engine implement-review --legacy-unmanaged --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" --branch autopilot-no-such-resume-branch-xyz --base "$BASE_SHA" --allow-unqualified-reviewer --resume 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "implement-review --resume on a missing branch exits 1"
 assert_contains "$OUT" '"phase":"resume_invalid"' "implement-review --resume fails closed as resume_invalid on a missing branch"
 assert_contains "$OUT" "does not exist or has no commit" "implement-review --resume explains the missing branch"

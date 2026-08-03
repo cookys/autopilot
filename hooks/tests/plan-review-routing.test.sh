@@ -35,6 +35,38 @@ assert_contains "$REVIEWER_BODY" '"blocks_next_slice_or_immediate_integrity": tr
 assert_contains "$REVIEWER_BODY" '"cannot_defer_to_spike": true' "POC blocker deferral predicate is explicit"
 assert_contains "$RESEARCH_BODY" "run \`scripts/dispatch-plan-review.js\`" "research-to-ship uses the bounded controller"
 assert_contains "$RESEARCH_BODY" "never run generation 3" "research-to-ship carries the hard generation stop"
+assert_contains "$RESEARCH_BODY" "plan-review-manifest" "research-to-ship freezes the seat manifest"
+assert_contains "$RESEARCH_BODY" "logical_plan_id" "research-to-ship preserves logical review identity"
+assert_contains "$RESEARCH_BODY" "Depth 0 must disposition" "research-to-ship requires owner adjudication"
+assert_contains "$RESEARCH_BODY" "Transport exhaustion" "transport failure stays non-semantic"
 assert_not_contains "$RESEARCH_BODY" "loop until it converges" "research-to-ship no longer promises unbounded convergence"
+
+# Integration canary: canonical PRS surfaces stay byte-identical to Codex plugin mirrors.
+# One assertion per pair so future drift names the exact surface.
+CODEX_PLUGIN="$REPO_ROOT/platforms/codex/plugin"
+cmp -s "$REPO_ROOT/scripts/dispatch-plan-review.js" \
+  "$CODEX_PLUGIN/scripts/dispatch-plan-review.js"
+assert_exit_code "$?" 0 "dispatch-plan-review.js byte-identical to codex plugin mirror"
+cmp -s "$REPO_ROOT/scripts/lib/plan-review-findings.js" \
+  "$CODEX_PLUGIN/scripts/lib/plan-review-findings.js"
+assert_exit_code "$?" 0 "plan-review-findings.js byte-identical to codex plugin mirror"
+cmp -s "$REPO_ROOT/scripts/lib/plan-review-normalize.js" \
+  "$CODEX_PLUGIN/scripts/lib/plan-review-normalize.js"
+assert_exit_code "$?" 0 "plan-review-normalize.js byte-identical to codex plugin mirror"
+cmp -s "$REPO_ROOT/scripts/rubric-freeze.js" \
+  "$CODEX_PLUGIN/scripts/rubric-freeze.js"
+assert_exit_code "$?" 0 "rubric-freeze.js byte-identical to codex plugin mirror"
+cmp -s "$REPO_ROOT/schemas/plan-review-artifact.schema.json" \
+  "$CODEX_PLUGIN/schemas/plan-review-artifact.schema.json"
+assert_exit_code "$?" 0 "plan-review-artifact.schema.json byte-identical to codex plugin mirror"
+cmp -s "$REPO_ROOT/schemas/plan-review-manifest.schema.json" \
+  "$CODEX_PLUGIN/schemas/plan-review-manifest.schema.json"
+assert_exit_code "$?" 0 "plan-review-manifest.schema.json byte-identical to codex plugin mirror"
+cmp -s "$REPO_ROOT/references/plan-template.md" \
+  "$CODEX_PLUGIN/references/plan-template.md"
+assert_exit_code "$?" 0 "plan-template.md byte-identical to codex plugin mirror"
+cmp -s "$REPO_ROOT/skills/research-to-ship/SKILL.md" \
+  "$CODEX_PLUGIN/skills/research-to-ship/SKILL.md"
+assert_exit_code "$?" 0 "research-to-ship/SKILL.md byte-identical to codex plugin mirror"
 
 finalize_test

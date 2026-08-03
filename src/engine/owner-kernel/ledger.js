@@ -81,6 +81,15 @@ function normalizeFrozenPolicy(policy) {
       ...(Object.prototype.hasOwnProperty.call(policy, 'assurance_profile')
         ? { assurance_profile: policy.assurance_profile }
         : {}),
+      ...(Object.prototype.hasOwnProperty.call(policy, 'guidance_profile')
+        ? { guidance_profile: policy.guidance_profile }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(policy, 'topology_preference')
+        ? { topology_preference: policy.topology_preference }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(policy, 'data_egress')
+        ? { data_egress: policy.data_egress }
+        : {}),
     },
   };
   let resolved;
@@ -94,15 +103,23 @@ function normalizeFrozenPolicy(policy) {
   }
   const p2Fields = ['action_catalog', 'max_recover_cycles', 'max_delegate_per_decision'];
   const p3Fields = ['red_lines', 'assurance_profile'];
+  const p4Fields = ['guidance_profile', 'topology_preference', 'data_egress'];
   const hasAll = (fields) => fields.every((field) => Object.prototype.hasOwnProperty.call(policy, field));
   const hasAny = (fields) => fields.some((field) => Object.prototype.hasOwnProperty.call(policy, field));
   const hasP2Shape = hasAll(p2Fields);
   const hasP3Shape = hasAll(p3Fields);
+  const hasP4Shape = hasAll(p4Fields);
   if (hasAny(p2Fields) && !hasP2Shape) {
     ledgerError('header.policy has a partial P2 action/recovery field set');
   }
   if (hasAny(p3Fields) && !hasP3Shape) {
     ledgerError('header.policy has a partial P3 governance field set');
+  }
+  if (hasAny(p4Fields) && !hasP4Shape) {
+    ledgerError('header.policy has a partial P4 execution-profile field set');
+  }
+  if (hasP4Shape && !hasP3Shape) {
+    ledgerError('header.policy cannot include P4 execution-profile fields without P3 governance fields');
   }
 
   const expectedPolicy = cloneCanonical(resolved.policy);
@@ -110,10 +127,12 @@ function normalizeFrozenPolicy(policy) {
     // P1 headers predate both the P2 action/recovery controls and the P3
     // governance controls. Do not permit a mixed historical/current shape.
     if (hasP3Shape) ledgerError('legacy header.policy cannot include P3 governance fields');
-    for (const field of [...p2Fields, ...p3Fields]) delete expectedPolicy[field];
+    for (const field of [...p2Fields, ...p3Fields, ...p4Fields]) delete expectedPolicy[field];
   } else if (!hasP3Shape) {
     // P2 headers are otherwise canonical, but predate these two P3 fields.
-    for (const field of p3Fields) delete expectedPolicy[field];
+    for (const field of [...p3Fields, ...p4Fields]) delete expectedPolicy[field];
+  } else if (!hasP4Shape) {
+    for (const field of p4Fields) delete expectedPolicy[field];
   }
   if (policy.mode_source !== expectedPolicy.mode_source
     || canonicalJson(policy) !== canonicalJson(expectedPolicy)) {

@@ -23,6 +23,9 @@ const EVENT_TYPES = new Set([
   'suspension',
   'principal_change',
   'translation_used',
+  'task_authority_frozen',
+  'role_grant_issued',
+  'role_grant_revoked',
 ]);
 
 const EVENT_KEYS = new Set([
@@ -94,10 +97,27 @@ function assertEmitter(value, eventType) {
     || ((eventType === 'delegation' || eventType === 'recovery') && kind === 'owner')
     || (eventType === 'suspension' && kind === 'kernel')
     || (eventType === 'principal_change' && kind === 'kernel')
+    || (['task_authority_frozen', 'role_grant_issued', 'role_grant_revoked'].includes(eventType)
+      && kind === 'kernel')
     || (eventType === 'translation_used' && kind === 'translation')
   );
   if (!valid) {
     eventError(`event type "${eventType}" cannot be minted by emitter kind "${kind}"`);
+  }
+  if (['task_authority_frozen', 'role_grant_issued', 'role_grant_revoked'].includes(eventType)) {
+    if (emitter.identity !== 'owner-kernel') {
+      eventError(`event type "${eventType}" must be minted by the owner-kernel identity`);
+    }
+    const validChannel = (
+      (eventType === 'task_authority_frozen' && emitter.channel === 'kernel-task-authority')
+      || (eventType === 'role_grant_issued' && /^kernel-role-grant:.+$/.test(emitter.channel))
+      || (eventType === 'role_grant_revoked'
+        && (emitter.channel === 'kernel-role-grant-revocation'
+          || /^kernel-role-grant-observer:.+$/.test(emitter.channel)))
+    );
+    if (!validChannel) {
+      eventError(`event type "${eventType}" has an invalid Owner Kernel channel`);
+    }
   }
   return cloneCanonical(emitter);
 }

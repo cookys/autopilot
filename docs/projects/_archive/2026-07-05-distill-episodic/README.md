@@ -1,6 +1,6 @@
 # distill episodic mode + periodic-call integration
 
-> Plan: [`docs/plans/2026-07-04-distill-episodic-mode.md`](../../plans/2026-07-04-distill-episodic-mode.md) (R0, converged)
+> Plan: [`docs/plans/2026-07-04-distill-episodic-mode.md`](../../../plans/2026-07-04-distill-episodic-mode.md) (R0, converged)
 > Branch: `feat/v2.31.18-distill-episodic` · Target: v2.31.18 (PATCH) · Process: /l6
 
 ## Project Goal

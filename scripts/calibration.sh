@@ -67,8 +67,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 DATA_DIR="${CALIBRATION_DATA_DIR:-$HOME/.autopilot/calibration}"
 SAMPLES_FILE="$DATA_DIR/samples.jsonl"
-KNOWN_BAD_DIR="$REPO_ROOT/evals/known-bad"
-CLEAN_DIR="$REPO_ROOT/evals/clean"
+KNOWN_BAD_DIR="${CALIBRATION_KNOWN_BAD_DIR:-$REPO_ROOT/evals/known-bad}"
+CLEAN_DIR="${CALIBRATION_CLEAN_DIR:-$REPO_ROOT/evals/clean}"
 
 usage() {
   cat <<'EOF'

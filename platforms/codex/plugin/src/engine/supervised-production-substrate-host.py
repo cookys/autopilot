@@ -49,6 +49,8 @@ FILE_LAYOUT = {
     "errors": "lib/owner-kernel/errors.js",
     "actions": "lib/owner-kernel/actions.js",
     "policy": "lib/owner-kernel/policy.js",
+    # policy.js requires('../mission-policy') — keep snapshot layout identical.
+    "mission_policy": "lib/mission-policy.js",
 }
 FILE_MODES = {
     "host": 0o755,
@@ -60,6 +62,7 @@ FILE_MODES = {
     "errors": 0o644,
     "actions": 0o644,
     "policy": 0o644,
+    "mission_policy": 0o644,
 }
 SNAPSHOT_SOURCE_LAYOUT = {
     "host": "supervised-production-substrate-host.py",
@@ -71,6 +74,7 @@ SNAPSHOT_SOURCE_LAYOUT = {
     "errors": "owner-kernel/errors.js",
     "actions": "owner-kernel/actions.js",
     "policy": "owner-kernel/policy.js",
+    "mission_policy": "mission-policy.js",
 }
 SYSTEM_PATHS = {
     "python_path": "/usr/bin/python3",

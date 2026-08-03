@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-30-controller-execution-discipline.md",
+      "rubric_path": "plans/2026-07-30-controller-execution-discipline.rubric.md",
+      "plan_sha256": "f0a200c711bf74914e869497b2a2b1e1e5319ebca5211238e2356bbb39575559",
+      "rubric_sha256": "5636cf72c64338d5e5e440be97e2c684b91e3eb80ee24a37d4daab330abd780b"
+    }
+  ]
+}

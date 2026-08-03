@@ -278,6 +278,17 @@ function resultFor(event, translation, idempotent, witness) {
   });
 }
 
+function translationFromEvent(event) {
+  const payload = event.payload;
+  return cloneCanonical({
+    schema_version: 1,
+    source: payload.source_detail,
+    target: payload.target_detail,
+    source_hash: payload.source,
+    target_hash: payload.target,
+  });
+}
+
 function matchingTranslationEvent(events, payload) {
   const existing = events.find((event) => event.type === 'translation_used'
     && event.payload && event.payload.translation_id === payload.translation_id);
@@ -286,9 +297,7 @@ function matchingTranslationEvent(events, payload) {
     translation_id: payload.translation_id,
     invocation_id: payload.invocation_id,
     source: payload.source,
-    target: payload.target,
     source_detail: payload.source_detail,
-    target_detail: payload.target_detail,
   };
   const actual = {
     translation_id: existing.payload.translation_id,
@@ -296,21 +305,20 @@ function matchingTranslationEvent(events, payload) {
       ? { invocation_id: existing.payload.invocation_id }
       : {}),
     source: existing.payload.source,
-    target: existing.payload.target,
     ...(Object.prototype.hasOwnProperty.call(existing.payload, 'source_detail')
       ? { source_detail: existing.payload.source_detail }
-      : {}),
-    ...(Object.prototype.hasOwnProperty.call(existing.payload, 'target_detail')
-      ? { target_detail: existing.payload.target_detail }
       : {}),
   };
   if (canonicalJson(actual) !== canonicalJson(expected)) {
     shadowError(
-      'a witnessed translation ID already exists with different frozen source or target',
+      'a witnessed translation ID already exists with a different invocation or frozen source',
       'SHADOW_TRANSLATION_REPLAY_CONFLICT',
     );
   }
-  return existing;
+  return {
+    event: existing,
+    translation: translationFromEvent(existing),
+  };
 }
 
 class ShadowTranslationRuntime {
@@ -455,7 +463,7 @@ class ShadowTranslationRuntime {
     const existing = matchingTranslationEvent(ledger.events, envelope);
     if (existing) {
       assertShadowLedger(ledger, internal.witness);
-      return resultFor(existing, translation, true, internal.witness);
+      return resultFor(existing.event, existing.translation, true, internal.witness);
     }
     const event = internal.kernel.recordTranslation(envelope);
     assertShadowLedger(internal.kernel.getLedger(), internal.witness);

@@ -1,0 +1,1 @@
+{"class":"critical","defect":"flock return code silently dropped; emit_event always returns 0 even when the append fails"}

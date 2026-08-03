@@ -8,6 +8,10 @@
 #   (c) exit 0 + no commit       → no_op        (status no_op,      exit 1)
 #   (d) timeout/non-zero + none  → QUESTION_SUSPECTED (status question_suspected, exit 1)
 . "$(dirname "$0")/lib.sh"
+# Ambient mission harness env must not poison hermetic unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 
@@ -19,6 +23,9 @@ git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 
 PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
+EMPTY_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"
+mkdir -p "$EMPTY_SESSION_MODE_DIR"
+RETAIN_UNTIL="$(( $(date +%s) + 3600 ))"
 
 # --- stub agy: commits one file (ignores all flags, like a cooperative agent) ---
 STUB_OK="$TEST_TMP/agy-ok"
@@ -90,17 +97,64 @@ OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --effort turbo
 assert_eq "2" "$EXIT" "bad --effort exit code"
 assert_contains "$OUT" "effort must be one of" "bad --effort error text"
 
+# 3a-lineage. Pins the LINEAGE ENV CONTRACT, which is easy to get backwards:
+#
+#   AUTOPILOT_ROOT_RUN_ID alone   → does NOT set the lineage root (no parent means
+#                                   no lineage to join, so this dispatch becomes its
+#                                   own root) — but it IS a SUPPORTED call: the
+#                                   continuation/rehydration resolver still reads it
+#                                   (`_cont_root`), which is how a run re-attaches to
+#                                   an existing root after compaction.
+#   PARENT + ROOT together        → sets the lineage root to that id.
+#
+# ⛔ Do NOT "fail closed" on root-without-parent. That reflex was tried on
+# 2026-07-31 (it looked like a silently-ignored misconfiguration) and broke 8
+# assertions in codex-compaction-rehydration.test.sh, which dispatches with ROOT
+# and no PARENT in three separate places. The confusing symptom that motivated the
+# guard — `caller root_run_id disagrees with campaign mission_runtime` on the
+# sealed-campaign rail — is a DOC problem, not a missing guard: only that rail
+# needs both ids. See references/hetero-dispatch.md § Trace lineage contract.
+lineage_root_of() { # <dispatch stdout> → manifest root_run_id (or a marker string)
+  local mf
+  mf="$(printf '%s\n' "$1" | sed -n 's/.*manifest=\([^ ]*\).*/\1/p' | head -1)"
+  if [ -z "$mf" ] || [ ! -f "$mf" ]; then printf 'NO_MANIFEST'; return; fi
+  node -e '
+    const fs = require("fs");
+    process.stdout.write(String(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).root_run_id));
+  ' "$mf"
+}
+
+OUT_ROOT_ONLY="$(cd "$SBX" && AUTOPILOT_ROOT_RUN_ID=lineage-probe-root \
+  "$SCRIPT" --branch t-lineage-root-only --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"
+assert_contains "$OUT_ROOT_ONLY" '"status": "committed"' \
+  "root-without-parent is supported and must not fail closed"
+assert_neq "$(lineage_root_of "$OUT_ROOT_ONLY")" "lineage-probe-root" \
+  "ROOT alone does not set the lineage root"
+
+OUT_BOTH="$(cd "$SBX" && AUTOPILOT_PARENT_RUN_ID=lineage-probe-root \
+  AUTOPILOT_ROOT_RUN_ID=lineage-probe-root \
+  "$SCRIPT" --branch t-lineage-both --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"
+assert_contains "$OUT_BOTH" '"status": "committed"' "parent+root dispatches"
+assert_eq "$(lineage_root_of "$OUT_BOTH")" "lineage-probe-root" \
+  "PARENT+ROOT sets the lineage root"
+
 # 3b. codex routing: a non-gpt-5.5 codex model still routes to codex (the old bug routed
 # only *gpt-5.5* to codex, so gpt-5.3-codex-spark silently fell through to the agy branch).
 # Route to codex and make codex absent (PATH without ~/.local/bin, keeping system tools);
 # the codex precondition must fire — proving routing did NOT fall through to agy.
-OUT="$(cd "$SBX" && PATH=/usr/bin:/bin "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
+  --runner auto --model gpt-5.3-codex-spark 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes gpt-5.3-codex-spark to codex (not agy)"
 assert_contains "$OUT" "codex binary not found" "codex routing does not fall through to agy"
 
 # 3c. qoder routing: a Qwen model auto-routes to qoderclicn (not agy). Route via auto and make
 # qoder absent (PATH without ~/.local/bin) — the qoder precondition must fire, proving routing.
-OUT="$(cd "$SBX" && PATH=/usr/bin:/bin "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
+OUT="$(cd "$SBX" && PATH=/usr/bin:/bin \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t1 --prompt-file "$PROMPT" \
+  --runner auto --model Qwen3.8-Max-Preview 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "auto-detect routes Qwen3.8-Max-Preview to qoder (not agy)"
 assert_contains "$OUT" "qoder binary not found" "qwen routing does not fall through to agy"
 
@@ -114,6 +168,10 @@ assert_contains "$OUT" '"status": "committed"' "qoder committed status"
 assert_contains "$OUT" '"runner": "qoderclicn"' "qoder runner reported"
 
 # 4. committed path: stub commits → exit 0, JSON committed, branch survives, worktree removed
+DIRECT_AUTHORITY_BEFORE="$(
+  git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
+    | wc -l
+)"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "committed path exit code"
 assert_contains "$OUT" '"status": "committed"' "committed status"
@@ -125,11 +183,104 @@ BRANCH_EXISTS="$(git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/smoke 
 assert_eq "yes" "$BRANCH_EXISTS" "branch survives for review/merge"
 SMOKE_CONTENT="$(git -C "$SBX" show feat/smoke:ok.txt)"
 assert_eq "ok" "$SMOKE_CONTENT" "artifact verifiable from branch"
+assert_eq "$(
+  git -C "$SBX" for-each-ref --format='%(refname)' refs/autopilot/lifecycle-roots/ \
+    | wc -l
+)" "$DIRECT_AUTHORITY_BEFORE" \
+  "direct one-shot cleanup does not create managed lifecycle authority"
 
-# 5. duplicate branch → precondition_failed (exit 2)
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+# 4b. managed committed path journals exact custom branch before auto-removal
+MANAGED_ROOT="campaign-v1-$(printf 'a%.0s' {1..64})"
+MANAGED_RETAINED="$TEST_TMP/managed-retained"
+MANAGED_BASE="$(git -C "$SBX" rev-parse develop)"
+git -C "$SBX" worktree add -q -b hetero/managed-retained \
+  "$MANAGED_RETAINED" "$MANAGED_BASE"
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/managed-retained\n'
+  printf 'base_sha=%s\n' "$MANAGED_BASE"
+  printf 'run_id=managed-retained\n'
+  printf 'root_run_id=%s\n' "$MANAGED_ROOT"
+  printf 'loop_id=managed-retained-loop\n'
+  printf 'retention=inspect\n'
+  printf 'schema=2\n'
+} > "$MANAGED_RETAINED/.autopilot-worktree"
+: > "$MANAGED_RETAINED/.autopilot-worktree.lock"
+OUT="$(cd "$SBX" && env AUTOPILOT_PARENT_RUN_ID=foreman-managed \
+  AUTOPILOT_ROOT_RUN_ID=foreman-managed \
+  AUTOPILOT_WORKTREE_ROOT_RUN_ID="$MANAGED_ROOT" AUTOPILOT_DISPATCH_DEPTH=1 \
+  "$SCRIPT" --branch hetero/managed-smoke --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "managed committed path exit code"
+assert_contains "$OUT" '"worktree": null' \
+  "managed committed worktree is controller-reaped"
+assert_file_exists "$MANAGED_RETAINED/.git" \
+  "managed success cleanup preserves another retained leaf for inspection"
+MANAGED_SCAN="$(
+  "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" scan \
+    --repo "$SBX" --root-run-id "$MANAGED_ROOT"
+)"
+assert_contains "$MANAGED_SCAN" '"branch":"hetero/managed-smoke"' \
+  "managed auto-removal leaves exact custom branch inventory"
+assert_eq "yes" "$(
+  git -C "$SBX" rev-parse --verify --quiet refs/heads/hetero/managed-smoke \
+    >/dev/null && echo yes || echo no
+)" "managed custom branch survives for exact disposition"
+git -C "$SBX" worktree remove --force "$MANAGED_RETAINED"
+git -C "$SBX" branch -D hetero/managed-retained >/dev/null
+
+# 4c. Explicit managed identity is exact input, never lossy-sanitized.
+OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID='bad/root' \
+  "$SCRIPT" --branch hetero/invalid-managed-root --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "invalid explicit managed root fails before dispatch"
+assert_contains "$OUT" "AUTOPILOT_WORKTREE_ROOT_RUN_ID must match" \
+  "invalid managed root failure names the exact contract"
+assert_eq "no" "$(
+  git -C "$SBX" rev-parse --verify --quiet \
+    refs/heads/hetero/invalid-managed-root >/dev/null && echo yes || echo no
+)" "invalid managed root cannot create a branch"
+
+# 5. duplicate branch is a read-only precondition: it must fail before the
+# durable tuple claim or any runner/manifest/worktree effect.
+DUP_LEDGER="$TEST_TMP/duplicate-branch-ledger.jsonl"
+DUP_RUNS="$TEST_TMP/duplicate-branch-runs"
+DUP_RUNNER_MARK="$TEST_TMP/duplicate-branch-runner-invoked"
+DUP_STUB="$TEST_TMP/agy-duplicate-branch"
+cat > "$DUP_STUB" <<EOF
+#!/usr/bin/env bash
+touch "$DUP_RUNNER_MARK"
+exit 99
+EOF
+chmod +x "$DUP_STUB"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$DUP_LEDGER" >/dev/null
+DUP_LEDGER_LINES_BEFORE="$(wc -l < "$DUP_LEDGER" | tr -d ' ')"
+DUP_WORKTREES_BEFORE="$(
+  git -C "$SBX" worktree list --porcelain \
+    | awk '/^worktree / { count += 1 } END { print count + 0 }'
+)"
+OUT="$(cd "$SBX" && env AUTOPILOT_DISPATCH_RUNS_DIR="$DUP_RUNS" \
+  "$SCRIPT" --branch feat/smoke --prompt-file "$PROMPT" --agy-bin "$DUP_STUB" \
+  --ledger "$DUP_LEDGER" --run-id duplicate-branch --stage implementation \
+  2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "duplicate branch exit code"
+assert_contains "$OUT" '"status": "precondition_failed"' "duplicate branch status"
 assert_contains "$OUT" "branch already exists" "duplicate branch error"
+assert_eq "$DUP_LEDGER_LINES_BEFORE" \
+  "$(wc -l < "$DUP_LEDGER" | tr -d ' ')" \
+  "duplicate branch creates zero durable lease rows"
+assert_file_absent "$DUP_RUNNER_MARK" "duplicate branch invokes zero runners"
+assert_eq "0" "$(
+  if [ -d "$DUP_RUNS" ]; then
+    find "$DUP_RUNS" -maxdepth 1 -type f -name '*.manifest.json' | wc -l | tr -d ' '
+  else
+    printf '0'
+  fi
+)" "duplicate branch creates zero manifests"
+assert_eq "$DUP_WORKTREES_BEFORE" "$(
+  git -C "$SBX" worktree list --porcelain \
+    | awk '/^worktree / { count += 1 } END { print count + 0 }'
+)" "duplicate branch creates zero worktrees"
 
 # 5b. dirty path: stub commits then leaves an unstaged file → exit 1, status dirty, worktree kept
 STUB_DIRTY="$TEST_TMP/agy-dirty"
@@ -148,15 +299,215 @@ DIRTY_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_file_exists "$DIRTY_WT/unstaged.txt" "dirty worktree kept with unstaged file"
 git -C "$SBX" worktree remove --force "$DIRTY_WT" >/dev/null 2>&1 || true
 
-# 5c. --keep-worktree: success still keeps the worktree, JSON carries its path
-OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/keep --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --keep-worktree 2>&1)"; EXIT=$?
+# 5c. --keep-worktree is a bounded lease, never an ownerless boolean.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/bare-keep --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --keep-worktree 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "bare keep-worktree rejects before runner spend"
+assert_contains "$OUT" '"status": "precondition_failed"' \
+  "bare keep-worktree is a precondition failure"
+assert_contains "$OUT" 'requires --retain-owner' \
+  "bare keep-worktree names missing lease owner"
+assert_eq "0" "$(git -C "$SBX" branch --list feat/bare-keep | wc -l | tr -d ' ')" \
+  "bare keep-worktree creates no branch"
+
+# A partial lease must still emit parseable JSON on the precondition path.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/partial-lease --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --keep-worktree --retain-owner test-campaign \
+  --retain-reason integration-test 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "partial keep lease rejects before runner spend"
+PARTIAL_JSON="$(printf '%s\n' "$OUT" | tail -n 1)"
+assert_eq "null" "$(node -e \
+  'process.stdout.write(String(JSON.parse(process.argv[1]).retention_lease))' \
+  "$PARTIAL_JSON")" "partial keep lease emits parseable null retention metadata"
+
+# 5d. a valid keep lease keeps the worktree and reports its path.
+OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/keep --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" --keep-worktree --retain-owner test-campaign \
+  --retain-reason integration-test --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "keep-worktree exit code"
 assert_contains "$OUT" '"status": "committed"' "keep-worktree committed status"
+assert_contains "$OUT" '"retention_lease": {"owner":"test-campaign"' \
+  "keep-worktree result exposes its bounded lease owner"
 KEEP_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
 assert_file_exists "$KEEP_WT/ok.txt" "kept worktree present on success"
+assert_contains "$(cat "$KEEP_WT/.autopilot-worktree")" 'retention=lease' \
+  "kept worktree marker records lease retention"
+assert_contains "$(cat "$KEEP_WT/.autopilot-worktree")" 'retention_owner=test-campaign' \
+  "kept worktree marker records its owner"
 git -C "$SBX" worktree remove --force "$KEEP_WT" >/dev/null 2>&1 || true
 
-# 5d. codex wrapper-commit path (legacy bug): codex may leave edits uncommitted while
+# 5e. Grok repair lineage reuses the exact retained worktree, branch, and
+# provider session. A dirty retained checkout must fail before runner spend.
+STUB_GROK_REUSE="$TEST_TMP/grok-reuse"
+GROK_REUSE_CAPTURE="$TEST_TMP/grok-reuse-capture.txt"
+cat > "$STUB_GROK_REUSE" <<'EOF'
+#!/usr/bin/env bash
+mode=initial
+session=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --session-id) session="$2"; shift 2 ;;
+    --resume) mode=repair; session="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s:%s\n' "$mode" "$session" >> "$GROK_REUSE_CAPTURE"
+printf '%s\n' "$mode" >> grok-lineage.txt
+EOF
+chmod +x "$STUB_GROK_REUSE"
+GROK_ROOT="campaign-v1-grok-reuse"
+OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --branch feat/grok-reuse --prompt-file "$PROMPT" --keep-worktree \
+  --retain-owner "$GROK_ROOT" --retain-reason repair-lineage \
+  --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "initial Grok retained-lineage exit code"
+assert_contains "$OUT" '"status": "committed"' "initial Grok retained-lineage commits"
+GROK_REUSE_JSON="$(printf '%s\n' "$OUT" | grep '^{' | tail -n 1)"
+GROK_REUSE_WT="$(printf '%s' "$GROK_REUSE_JSON" | node -e '
+  let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).worktree))
+')"
+GROK_REUSE_SESSION="$(printf '%s' "$GROK_REUSE_JSON" | node -e '
+  let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).provider_session_id))
+')"
+GROK_REUSE_COMMIT="$(printf '%s' "$GROK_REUSE_JSON" | node -e '
+  let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).commit))
+')"
+GROK_REUSE_INSTANCE="$(node - "$GROK_REUSE_WT" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const worktree = path.resolve(process.argv[2]);
+const stat = fs.statSync(worktree, { bigint: true });
+process.stdout.write(crypto.createHash('sha256').update(JSON.stringify({
+  birthtime_ns: stat.birthtimeNs.toString(),
+  device: stat.dev.toString(),
+  inode: stat.ino.toString(),
+  schema: 1,
+  worktree,
+})).digest('hex'));
+NODE
+)"
+assert_file_exists "$GROK_REUSE_WT/grok-lineage.txt" \
+  "initial Grok retained worktree remains present"
+assert_contains "$OUT" '"provider_session_reused": false' \
+  "initial Grok dispatch creates a provider session"
+assert_contains "$OUT" '"worktree_reused": false' \
+  "initial Grok dispatch creates one worktree"
+
+# Another same-root leaf must count an unexpired retained lease as occupied and
+# must not reclaim the campaign checkout after its lifetime lock is released.
+OUT_LEASE_PROBE="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  "$SCRIPT" --branch feat/grok-lease-budget-probe --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "same-root admission with one retained lease stays within budget"
+assert_file_exists "$GROK_REUSE_WT/grok-lineage.txt" \
+  "same-root budget reconciliation preserves the unexpired retained lease"
+
+OUT_REPAIR="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --branch feat/grok-reuse --base "$GROK_REUSE_COMMIT" --prompt-file "$PROMPT" \
+  --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
+  --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
+  --resume-session "$GROK_REUSE_SESSION" --retain-owner "$GROK_ROOT" \
+  --retain-reason repair-lineage --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "Grok repair reuse exit code"
+assert_contains "$OUT_REPAIR" '"status": "committed"' "Grok repair reuse commits"
+assert_contains "$OUT_REPAIR" "\"worktree\": \"$GROK_REUSE_WT\"" \
+  "Grok repair returns the same retained worktree"
+assert_contains "$OUT_REPAIR" "\"provider_session_id\": \"$GROK_REUSE_SESSION\"" \
+  "Grok repair returns the same provider session"
+assert_contains "$OUT_REPAIR" '"provider_session_reused": true' \
+  "Grok repair reports provider session reuse"
+assert_contains "$OUT_REPAIR" '"worktree_reused": true' \
+  "Grok repair reports worktree reuse"
+assert_eq "2" "$(wc -l < "$GROK_REUSE_WT/grok-lineage.txt" | tr -d ' ')" \
+  "Grok repair advances content in the same checkout"
+assert_eq "1" "$(git -C "$SBX" branch --list feat/grok-reuse | wc -l | tr -d ' ')" \
+  "Grok repair lineage keeps one branch"
+assert_eq "initial:$GROK_REUSE_SESSION
+repair:$GROK_REUSE_SESSION" "$(cat "$GROK_REUSE_CAPTURE")" \
+  "Grok CLI receives one session id then resumes that exact id"
+
+# A path-compatible replacement must be rejected under the lifetime lock before
+# the runner can mutate it.
+GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
+OUT_INSTANCE_MISMATCH="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --branch feat/grok-reuse --base "$(git -C "$GROK_REUSE_WT" rev-parse HEAD)" \
+  --prompt-file "$PROMPT" --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
+  --expected-worktree-instance "$(printf '0%.0s' {1..64})" \
+  --resume-session "$GROK_REUSE_SESSION" --retain-owner "$GROK_ROOT" \
+  --retain-reason repair-lineage --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "mismatched retained worktree instance rejects reuse"
+assert_contains "$OUT_INSTANCE_MISMATCH" 'retained worktree filesystem instance changed' \
+  "reuse verifies exact filesystem instance under the lifetime lock"
+assert_eq "$GROK_CAPTURE_LINES_BEFORE" \
+  "$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')" \
+  "mismatched retained instance spends zero Grok calls"
+
+# Reuse validation must happen while holding the lifetime lock. Advance HEAD
+# while a candidate reuse is blocked on that lock; it must revalidate and stop
+# before runner spend after the lock is released.
+LOCKED_BASE="$(git -C "$GROK_REUSE_WT" rev-parse HEAD)"
+LOCK_RACE_OUT="$TEST_TMP/grok-reuse-lock-race.out"
+exec {TEST_REUSE_LOCK_FD}> "$GROK_REUSE_WT/.autopilot-worktree.lock"
+flock -x "$TEST_REUSE_LOCK_FD"
+(
+  exec {TEST_REUSE_LOCK_FD}>&-
+  cd "$SBX"
+  env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+    GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+    --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+    --branch feat/grok-reuse --base "$LOCKED_BASE" --prompt-file "$PROMPT" \
+    --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
+    --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
+    --resume-session "$GROK_REUSE_SESSION" --retain-owner "$GROK_ROOT" \
+    --retain-reason repair-lineage --retain-until "$RETAIN_UNTIL"
+) >"$LOCK_RACE_OUT" 2>&1 &
+LOCK_RACE_PID=$!
+sleep 0.2
+printf 'external advance\n' > "$GROK_REUSE_WT/lock-race.txt"
+git -C "$GROK_REUSE_WT" add lock-race.txt
+git -C "$GROK_REUSE_WT" -c user.email=t@t -c user.name=t \
+  commit -q -m "test: advance while reuse waits"
+GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
+exec {TEST_REUSE_LOCK_FD}>&-
+wait "$LOCK_RACE_PID"; LOCK_RACE_EXIT=$?
+OUT_LOCK_RACE="$(cat "$LOCK_RACE_OUT")"
+assert_eq "2" "$LOCK_RACE_EXIT" "reuse revalidates HEAD after acquiring its lifetime lock"
+assert_contains "$OUT_LOCK_RACE" 'retained worktree HEAD does not match --base' \
+  "reuse lock closes the validation-to-marker TOCTOU window"
+assert_eq "$GROK_CAPTURE_LINES_BEFORE" \
+  "$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')" \
+  "stale concurrent reuse spends zero Grok calls"
+
+touch "$GROK_REUSE_WT/uncommitted-user-data.txt"
+GROK_CAPTURE_LINES_BEFORE="$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')"
+OUT_DIRTY_REUSE="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID="$GROK_ROOT" \
+  GROK_REUSE_CAPTURE="$GROK_REUSE_CAPTURE" "$SCRIPT" \
+  --runner grok --model grok-4.5 --grok-bin "$STUB_GROK_REUSE" \
+  --branch feat/grok-reuse --base "$(git -C "$GROK_REUSE_WT" rev-parse HEAD)" \
+  --prompt-file "$PROMPT" --keep-worktree --reuse-worktree "$GROK_REUSE_WT" \
+  --expected-worktree-instance "$GROK_REUSE_INSTANCE" \
+  --resume-session "$GROK_REUSE_SESSION" --retain-owner "$GROK_ROOT" \
+  --retain-reason repair-lineage --retain-until "$RETAIN_UNTIL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "dirty retained Grok worktree rejects reuse"
+assert_contains "$OUT_DIRTY_REUSE" '"status": "precondition_failed"' \
+  "dirty retained Grok worktree fails as a precondition"
+assert_contains "$OUT_DIRTY_REUSE" 'retained worktree is dirty' \
+  "dirty retained Grok worktree names the blocker"
+assert_eq "$GROK_CAPTURE_LINES_BEFORE" \
+  "$(wc -l < "$GROK_REUSE_CAPTURE" | tr -d ' ')" \
+  "dirty retained worktree spends zero Grok calls"
+rm -f "$GROK_REUSE_WT/uncommitted-user-data.txt"
+git -C "$SBX" worktree remove "$GROK_REUSE_WT" >/dev/null 2>&1 || true
+git -C "$SBX" branch -D feat/grok-reuse >/dev/null 2>&1 || true
+
+# 5f. codex wrapper-commit path (legacy bug): codex may leave edits uncommitted while
 # HEAD unchanged; wrapper-commit must still run and produce committed outcome.
 OUT="$( (
   cd "$SBX"
@@ -168,7 +519,7 @@ assert_contains "$OUT" '"files_changed": 1' "codex wrapper-commit diff stat"
 assert_contains "$OUT" '"runner": "codex"' "codex wrapper-commit runner reported"
 assert_eq "dispatch-hetero(codex): edits on feat/codex-no-commit" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-no-commit)" "codex wrapper-commit message"
 
-# 5e. wrapper-commit identity fallback covers author-only environments too.
+# 5g. wrapper-commit identity fallback covers author-only environments too.
 # `git commit` needs both author and committer identity; an author env alone is
 # not enough when HOME has no git config.
 AUTHOR_ONLY_HOME="$TEST_TMP/git-home-author-only"
@@ -182,7 +533,7 @@ assert_eq "0" "$EXIT" "codex wrapper-commit with author-only env exit code"
 assert_contains "$OUT" '"status": "committed"' "codex author-only wrapper-commit status"
 assert_eq "dispatch-hetero(codex): edits on feat/codex-author-only" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-author-only)" "codex author-only wrapper-commit message"
 
-# 5f. feature-detect: a STALE codex (its `exec --help` lacks --dangerously-bypass-hook-trust,
+# 5h. feature-detect: a STALE codex (its `exec --help` lacks --dangerously-bypass-hook-trust,
 # e.g. an old npm-global codex earlier in PATH) must FAIL LOUD as precondition_failed —
 # NOT dispatch to it and get misclassified as question_suspected (root cause fixed 2026-07-02).
 STUB_CODEX_OLD="$TEST_TMP/codex-old"
@@ -201,7 +552,7 @@ assert_contains "$OUT" '"status": "precondition_failed"' "stale codex status pre
 assert_contains "$OUT" 'does not support --dangerously-bypass-hook-trust' "stale codex error names the missing flag"
 assert_file_absent "$SBX/should_not_run.txt" "stale codex never actually dispatched"
 
-# 5g. RELATIVE --codex-bin: feature-detect (caller cwd) and worker exec (inside $WT) must
+# 5i. RELATIVE --codex-bin: feature-detect (caller cwd) and worker exec (inside $WT) must
 # resolve the SAME binary — a relative path is absolutized, not resolved twice (gpt-5.5 review).
 # Run from $TEST_TMP where the flag-supporting stub lives as ./codex; before the fix the
 # worker's post-`cd $WT` exec would miss it.
@@ -212,7 +563,7 @@ OUT="$( (
 assert_eq "0" "$EXIT" "relative --codex-bin absolutized → committed exit 0"
 assert_contains "$OUT" '"status": "committed"' "relative --codex-bin wrapper-commit status"
 
-# 5h. unresolvable path-form --codex-bin must fail closed (NOT silently become /<basename>) — R2
+# 5j. unresolvable path-form --codex-bin must fail closed (NOT silently become /<basename>) — R2
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/codex-badbin --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark --codex-bin nonexistent-dir/codex 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "unresolvable --codex-bin dir → precondition exit 2"
 assert_contains "$OUT" 'not resolvable' "unresolvable --codex-bin names the path"
@@ -295,10 +646,18 @@ assert_eq "1" "$EXIT" "quota failure exit code remains 1"
 assert_contains "$OUT" '"status": "engine_unavailable"' "quota failure status is engine_unavailable"
 assert_contains "$OUT" "engine unavailable (quota_exhausted)" "quota failure error names the classification"
 
-# Verify that the event was recorded in the capability store
+# Verify that the event was recorded in the capability store against the exact
+# runner/model/effort/endpoint tuple (passive capture now binds effort + endpoint:null).
 assert_file_exists "$CAP_TEST_DIR/capability.jsonl" "capability store contains recorded event"
-recorded_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current --runner agy --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
-assert_eq "exhausted" "$recorded_status" "recorded quota status is exhausted"
+recorded_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current \
+  --runner agy --model "gpt-5.5" --role implementer --effort xhigh --endpoint @none \
+  --store "$CAP_TEST_DIR" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
+assert_eq "$recorded_status" "exhausted" "recorded quota status is exhausted"
+# Legacy/neighboring lookup without the exact effort must not inherit the observation.
+legacy_status="$(node "$REPO_ROOT/scripts/engine-capability-state.js" current \
+  --runner agy --model "gpt-5.5" --role implementer --store "$CAP_TEST_DIR" \
+  | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).capability.quota.status)")"
+assert_neq "$legacy_status" "exhausted" "legacy incomplete observation does not authorize exact-tuple exhaustion"
 
 # 10b. real grok 402 fixture string → engine_unavailable (the BACKLOG gap that
 # previously mislabelled HTTP 402 quota death as question_suspected).
@@ -353,6 +712,148 @@ assert_contains "$OUT" '"skills_injected": ["autopilot:dev-flow"]' "skills injec
 assert_file_exists "$TEST_TMP/captured_prompt.txt" "captured prompt file exists"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "=== SKILL: autopilot:dev-flow ===" "prompt contains skill delimiter"
 assert_contains "$(cat "$TEST_TMP/captured_prompt.txt")" "Development Flow Evaluation" "prompt contains skill content"
+
+# 12a. A sealed v1 campaign is not itself a strict leaf projection. Under L6 it
+# must fail before the runner instead of treating prompt text as authority.
+CAMPAIGN_CONTRACT="$TEST_TMP/campaign-boundary.json"
+CAMPAIGN_SEAL="$TEST_TMP/campaign-boundary.seal.json"
+CAMPAIGN_BASE="$(git -C "$SBX" rev-parse develop)"
+CAMPAIGN_REPO_ID="$(node - "$REPO_ROOT" "$SBX" <<'NODE'
+const path = require('path');
+const [root, repo] = process.argv.slice(2);
+const { canonicalRepoIdentity } = require(path.join(root, 'scripts', 'implementation-campaign-check'));
+process.stdout.write(canonicalRepoIdentity(repo));
+NODE
+)"
+printf '%s\n' \
+  "{\"schema_version\":1,\"ticket\":\"campaign-boundary\",\"profile\":\"poc\",\"mission_grant_ref\":null,\"repo_identity\":\"$CAMPAIGN_REPO_ID\",\"base_sha\":\"$CAMPAIGN_BASE\",\"branch\":\"feat/campaign-boundary\",\"vertical_acceptance\":[\"capture bounded prompt\"],\"allowed_path_prefixes\":[\"ok.txt\"],\"max_changed_files\":2,\"baseline_churn\":10,\"max_growth_ratio\":1.5,\"max_extra_churn\":5,\"max_repair_generations\":2,\"max_wall_seconds\":120,\"verify_cmd\":\"true\",\"rubric_ids\":[\"R1\"]}" \
+  > "$CAMPAIGN_CONTRACT"
+SEAL_OUT="$(node "$REPO_ROOT/scripts/implementation-campaign-check.js" seal \
+  --contract "$CAMPAIGN_CONTRACT" --repo "$SBX" --mission-mode off \
+  --out "$CAMPAIGN_SEAL" 2>&1)"; SEAL_EXIT=$?
+assert_eq "0" "$SEAL_EXIT" "campaign boundary fixture seals: $SEAL_OUT"
+CAMPAIGN_CONTRACT_SHA="$(node -e '
+  const crypto = require("crypto");
+  const fs = require("fs");
+  process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+' "$CAMPAIGN_CONTRACT")"
+CAMPAIGN_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode"
+mkdir -p "$CAMPAIGN_SESSION_MODE_DIR"
+
+# A legacy v1 campaign remains admissible outside strict Mission/L5/L6 policy.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
+  "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "sealed v1 campaign remains compatible outside strict governance"
+assert_file_exists "$TEST_TMP/captured_prompt.txt" \
+  "legacy v1 shadow/off campaign still reaches its runner"
+
+printf '%s\n' \
+  "{\"level\":\"l6\",\"repo_root\":\"$(cd "$SBX" && pwd -P)\",\"started_at\":\"2026-07-28T00:00:00Z\",\"expires_at\":\"2099-01-01T00:00:00Z\"}" \
+  > "$CAMPAIGN_SESSION_MODE_DIR/l6.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-boundary --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "sealed v1 campaign cannot bypass active L6 strict projection"
+assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
+  "sealed v1 campaign names the active strict admission requirement"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "sealed v1 campaign rejection spawns no runner"
+
+# 12b. A contract changed after intake is rejected before the runner or worktree exists.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-drift --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$(printf '0%.0s' {1..64})" \
+  --campaign-seal "$CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "campaign contract digest drift exit code"
+assert_contains "$OUT" "campaign contract digest changed after intake" \
+  "campaign contract drift names the intake boundary"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "campaign contract drift spawns no runner"
+
+# 12c. Contract, digest, and intake seal are one inseparable managed boundary.
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-unbound --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "unbound campaign contract exit code"
+assert_contains "$OUT" "are required together" \
+  "campaign contract without its intake digest and seal fails closed"
+
+# 12d. A self-hashed campaign JSON without the intake seal cannot bypass L6.
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-missing-seal --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "campaign contract without seal exit code"
+assert_contains "$OUT" "--campaign-seal" "missing campaign seal names the required admission input"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "missing campaign seal spawns no runner"
+
+# 12e. A forged seal cannot authorize the campaign leaf.
+FORGED_CAMPAIGN_SEAL="$TEST_TMP/campaign-boundary.forged.seal.json"
+node - "$CAMPAIGN_SEAL" "$FORGED_CAMPAIGN_SEAL" <<'NODE'
+const fs = require('fs');
+const [source, target] = process.argv.slice(2);
+const seal = JSON.parse(fs.readFileSync(source, 'utf8'));
+seal.contract_sha256 = '0'.repeat(64);
+fs.writeFileSync(target, `${JSON.stringify(seal)}\n`);
+NODE
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-forged-seal --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" --campaign-contract "$CAMPAIGN_CONTRACT" \
+  --campaign-contract-sha256 "$CAMPAIGN_CONTRACT_SHA" \
+  --campaign-seal "$FORGED_CAMPAIGN_SEAL" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "forged campaign seal exit code"
+assert_contains "$OUT" "campaign contract checker failed" \
+  "forged campaign seal fails the canonical checker"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "forged campaign seal spawns no runner"
+
+# 12f. The new campaign admission path does not weaken the prompt-only session gate.
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$CAMPAIGN_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-non-strict --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "non-strict dispatch remains blocked under active L6"
+assert_contains "$OUT" "active session-mode=l6 requires a sealed campaign strict projection" \
+  "non-strict L6 diagnostic names the required authority"
+
+# 12g. A malformed marker in the authoritative namespace fails closed.
+MALFORMED_SESSION_MODE_DIR="$TEST_TMP/campaign-session-mode-malformed"
+mkdir -p "$MALFORMED_SESSION_MODE_DIR"
+printf '%s\n' 'not-json' > "$MALFORMED_SESSION_MODE_DIR/corrupt.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$MALFORMED_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch feat/campaign-malformed-marker --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "malformed authoritative session marker fails closed"
+assert_contains "$OUT" "authoritative session-mode marker is invalid" \
+  "malformed marker rejection names the authoritative namespace"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "malformed marker rejection spawns no runner"
+
+# 12h. Invalid authoritative Mission governance cannot become an implicit off mode.
+mkdir -p "$SBX/.claude" "$TEST_TMP/empty-session-mode"
+printf '%s\n' '{"mission_convergence":' > "$SBX/.claude/owner-kernel-governance.json"
+rm -f "$TEST_TMP/captured_prompt.txt"
+OUT="$(cd "$SBX" && AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/empty-session-mode" \
+  "$SCRIPT" --branch feat/campaign-invalid-governance --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_CAPTURE_PROMPT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "invalid authoritative Mission governance fails closed"
+assert_contains "$OUT" "authoritative Mission governance is invalid" \
+  "Mission admission preserves the governance projection error"
+assert_eq "false" "$([ -e "$TEST_TMP/captured_prompt.txt" ] && echo true || echo false)" \
+  "invalid governance rejection spawns no runner"
+rm -f "$SBX/.claude/owner-kernel-governance.json"
 
 # 13. --skill-mode prompt with non-existent skill fails with exit 2
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-nonexistent --prompt-file "$PROMPT" --agy-bin "$STUB_OK" --skill-mode prompt --skill autopilot:nonexistent 2>&1)"; EXIT=$?
@@ -434,10 +935,744 @@ mkdir -p "$TEST_TMP/no-setsid-ledger"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_NOSET" >/dev/null
 OUT="$(cd "$SBX" && PATH="$SETSIDLESS_BIN:$PATH" "$SCRIPT" --branch feat/no-setsid --prompt-file "$PROMPT" \
   --agy-bin "$STUB_OK" --ledger "$LEDGER_NOSET" --run-id rn --stage implement 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (no setsid): %s\n' "$OUT" >&2
 assert_eq "0" "$EXIT" "missing setsid support falls back to inline dispatch"
 assert_contains "$OUT" '"status": "committed"' "setsid-unavailable fallback still returns committed outcome"
 HB_COUNT="$(grep -c '\"kind\":\"heartbeat\"' "$LEDGER_NOSET" 2>/dev/null)"; HB_COUNT="${HB_COUNT:-0}"
 assert_eq "0" "$HB_COUNT" "setsid-unavailable fallback bypasses detach-side heartbeats"
 assert_file_absent "${LEDGER_NOSET}.results/rn.implement.result.json" "setsid-unavailable fallback does not emit detached durable result"
+
+# 21a. A detached Grok dispatch must carry the clamped reasoning effort into the
+# serialized child. `run_agent` is serialized for the detached rail, so its
+# sourced Grok helpers must be serialized too; otherwise command substitution
+# yields an empty --reasoning-effort value and Grok exits before a model request.
+STUB_GROK_EFFORT="$TEST_TMP/grok-effort"
+GROK_EFFORT_CAPTURE="$TEST_TMP/grok-effort.txt"
+cat > "$STUB_GROK_EFFORT" <<'EOF'
+#!/usr/bin/env bash
+effort=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --reasoning-effort) effort="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+printf '%s' "$effort" > "$GROK_EFFORT_CAPTURE"
+[ "$effort" = "high" ] || exit 64
+printf 'grok detached effort\n' > grok-effort.txt
+EOF
+chmod +x "$STUB_GROK_EFFORT"
+LEDGER_GROK="$TEST_TMP/grok-detached-ledger/ledger.jsonl"
+mkdir -p "$TEST_TMP/grok-detached-ledger"
+bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$LEDGER_GROK" >/dev/null
+OUT="$(cd "$SBX" && env GROK_EFFORT_CAPTURE="$GROK_EFFORT_CAPTURE" DISPATCH_QUIET=1 \
+  "$SCRIPT" --runner grok --model grok-4.5 --effort high --grok-bin "$STUB_GROK_EFFORT" \
+  --branch feat/grok-detached-effort --prompt-file "$PROMPT" --ledger "$LEDGER_GROK" \
+  --run-id grok-detached-effort --stage implement 2>&1)"; EXIT=$?
+[ "$EXIT" -eq 0 ] || printf 'dispatch-hetero diagnostic (detached Grok): %s\n' "$OUT" >&2
+assert_eq "0" "$EXIT" "detached Grok effort path exit code"
+assert_contains "$OUT" '"status": "committed"' "detached Grok effort path commits"
+assert_file_exists "$GROK_EFFORT_CAPTURE" "detached Grok stub received reasoning effort"
+assert_eq "high" "$(cat "$GROK_EFFORT_CAPTURE" 2>/dev/null)" \
+  "detached Grok receives the clamped high effort"
+
+# Controller execution discipline: campaign sealed authority treats output.paths as
+# authorized create/modify surface (narrow subset of listed outputs is OK).
+# Unit contracts without campaign authority still require every output.paths entry.
+CTRL_OUTPUT_SEM="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const assert = require('assert');
+const [root] = process.argv.slice(2);
+const src = fs.readFileSync(path.join(root, 'scripts/dispatch-hetero.sh'), 'utf8');
+assert.ok(
+  src.includes('outside sealed output surface'),
+  'campaign authority rejects unauthorized changed paths',
+);
+assert.ok(
+  src.includes('CAMPAIGN_STRICT_AUTHORITY'),
+  'campaign authority gate present',
+);
+assert.ok(
+  src.includes('missing from changed files'),
+  'legacy unit contract still requires declared outputs',
+);
+assert.ok(
+  src.includes('"boundary": "rejected"') || src.includes('boundary": "rejected"'),
+  'boundary_rejected emits parseable boundary field',
+);
+assert.ok(
+  src.includes('mutation_failed": false') || src.includes('mutation_failed": false'),
+  'boundary_rejected never fabricates mutation_failed',
+);
+console.log(JSON.stringify({
+  campaign_authorized_surface: true,
+  legacy_required_outputs: true,
+  boundary_parseable: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "controller output-path semantics present in dispatch-hetero"
+assert_contains "$CTRL_OUTPUT_SEM" '"campaign_authorized_surface":true' \
+  "campaign output surface is authorization not mandatory touch"
+assert_contains "$CTRL_OUTPUT_SEM" '"legacy_required_outputs":true' \
+  "legacy unit contracts still require declared outputs"
+assert_contains "$CTRL_OUTPUT_SEM" '"boundary_parseable":true' \
+  "boundary_rejected is parseable first-class"
+
+# --- Projected-unit required_change_paths + sealed zero-diff no-op matrix ---
+enable_legacy_scorecard_test_projection
+REQ_MATRIX_OUT="$(node - "$REPO_ROOT" "$SBX" "$TEST_TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { execFileSync, spawnSync } = require('child_process');
+const [root, repo, tmp] = process.argv.slice(2);
+const {
+  deriveCampaignDispatchUnit,
+  verifyCampaignDispatchUnit,
+  writeCampaignDispatchUnit,
+} = require(path.join(root, 'src/engine/campaign-dispatch-projection'));
+const { AutopilotEngine } = require(path.join(root, 'src/engine/autopilot-engine'));
+const {
+  campaignIdFor,
+} = require(path.join(root, 'src/engine/implementation-campaign'));
+const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
+const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
+
+// Seed product surface for required_change.
+fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+fs.mkdirSync(path.join(repo, 'specs', 'feat'), { recursive: true });
+fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
+  '- implementer_engine: gpt-5.5',
+  '- implementer_effort: high',
+  '- implementer_runner: agy',
+  '- implementer_endpoint:',
+].join('\n') + '\n');
+const scoreDir = path.join(tmp, 'req-engine-scores');
+const capabilityDir = path.join(tmp, 'req-engine-capabilities');
+fs.mkdirSync(scoreDir, { recursive: true });
+fs.mkdirSync(capabilityDir, { recursive: true });
+const engineScorePath = path.join(tmp, 'req-engine-score.json');
+const engineCapabilityPath = path.join(tmp, 'req-engine-capability.json');
+fs.writeFileSync(engineScorePath, `${JSON.stringify({
+  engine: 'gpt-5.5',
+  runner: 'agy',
+  family: 'openai',
+  role: 'implementer',
+  model_version: 'fixture-v1',
+  version_source: 'manual',
+  corpus_version: 'fixture@1',
+  harness_version: 'dispatch-hetero@fixture',
+  runner_version: 'agy fixture',
+  prompt_config_hash: 'sha256:fixture',
+  date: '2026-07-30',
+  quality: { corpus_pass: '10/10', false_pass_critical: 0, specificity: '3/3' },
+  capability_score: 0.9,
+  cost: {
+    source: 'manual',
+    usd_per_mtok_input: 0,
+    usd_per_mtok_output: 0,
+    sample_tokens: 0,
+  },
+  latency: { sample_wall_time_s: 0 },
+  status: 'qualified',
+  qualified_at: '2026-07-30',
+  expires: '2099-01-01',
+}, null, 2)}\n`);
+fs.writeFileSync(engineCapabilityPath, `${JSON.stringify({
+  schema_version: 1,
+  observed_at: new Date().toISOString(),
+  runner: 'agy',
+  model: 'gpt-5.5',
+  role: 'implementer',
+  effort: 'high',
+  endpoint: null,
+  runner_version: 'agy fixture',
+  capability: {
+    quota: {
+      status: 'available',
+      confidence: 'high',
+      ttl_seconds: 3600,
+      reset_at: null,
+      evidence: 'fixture',
+    },
+  },
+}, null, 2)}\n`);
+process.env.ENGINE_SCORECARD_DIR = scoreDir;
+process.env.ENGINE_CAPABILITY_DIR = capabilityDir;
+execFileSync(process.execPath, [
+  path.join(root, 'scripts', 'engine-scorecard.js'),
+  'record',
+  '--file',
+  engineScorePath,
+], { env: process.env, stdio: 'ignore' });
+execFileSync(process.execPath, [
+  path.join(root, 'scripts', 'engine-capability-state.js'),
+  'record',
+  '--file',
+  engineCapabilityPath,
+], { env: process.env, stdio: 'ignore' });
+fs.writeFileSync(path.join(repo, 'src', 'target.js'), 'v1\n');
+fs.writeFileSync(path.join(repo, 'specs', 'feat', 'x.md'), '# S\nbody\n');
+execFileSync('git', ['-C', repo, 'add', '.']);
+execFileSync('git', [
+  '-C', repo,
+  '-c', 'user.email=t@t',
+  '-c', 'user.name=t',
+  'commit', '-qm', 'seed required surface',
+]);
+const base2 = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const campaignId = `campaign-v1-${'a'.repeat(64)}`;
+const rootRunId = 'root-req-1';
+const branch = 'feat/req-change';
+const campaignContract = {
+  ticket: 'T-req',
+  branch,
+  base_sha: base2,
+  profile: 'poc',
+  allowed_path_prefixes: ['src', 'specs'],
+  max_changed_files: 8,
+  baseline_churn: 100,
+  max_extra_churn: 50,
+  max_growth_ratio: 2,
+  max_repair_generations: 1,
+  max_wall_seconds: 600,
+  mission_runtime: {
+    schema_version: 1,
+    root_run_id: rootRunId,
+    mission_lineage_id: 'lineage-v1',
+    mission_policy_digest: 'b'.repeat(64),
+    mission_graph_digest: 'd'.repeat(64),
+    graph_node_id: 'n1',
+    graph_node_digest: 'e'.repeat(64),
+  },
+  strict_dispatch: {
+    schema_version: 1,
+    spec: { path: 'specs/feat/x.md', section: 'S' },
+    required_paths: ['src/target.js'],
+    output_paths: ['src/target.js'],
+    required_change_paths: ['src/target.js'],
+    allowed_path_prefixes: ['src', 'specs'],
+    budget: {
+      max_changed_files: 8,
+      max_wall_seconds: 600,
+      max_output_bytes: 100000,
+      max_tool_calls: 50,
+      max_engine_attempts: 2,
+    },
+    verification_commands: ['true'],
+  },
+};
+const campaignBytes = `${JSON.stringify(campaignContract, null, 2)}\n`;
+const campaignSha = sha256(Buffer.from(campaignBytes, 'utf8'));
+const derived = deriveCampaignDispatchUnit({
+  campaignContract,
+  campaignContractSha256: campaignSha,
+  campaignId,
+  branch,
+  base: base2,
+  runner: 'agy',
+  model: 'gpt-5.5',
+  stage: 'campaign-implementation',
+  rootRunId,
+});
+const contractPath = path.join(tmp, 'unit-req.json');
+fs.writeFileSync(contractPath, `${JSON.stringify(derived, null, 2)}\n`);
+const unit = {
+  contract: derived,
+  contract_path: contractPath,
+  contract_sha256: sha256(fs.readFileSync(contractPath)),
+  cleanup() {},
+};
+
+assert.ok(unit.contract.output.required_change_paths);
+assert.deepStrictEqual(unit.contract.output.required_change_paths, ['src/target.js']);
+
+// dispatch-contract.js must accept required_change_paths (not unknown key).
+const check = spawnSync(process.execPath, [
+  path.join(root, 'scripts/dispatch-contract.js'),
+  'check', '--contract', unit.contract_path, '--repo', repo, '--json',
+], { encoding: 'utf8' });
+const checkOut = `${check.stdout || ''}${check.stderr || ''}`;
+assert.ok(!checkOut.includes("unknown key 'required_change_paths'"), checkOut);
+// This assertion isolates closed-schema acceptance; exact boundary outcomes are
+// asserted by the sealed zero-diff and required-change cases below.
+assert.ok(!/output: unknown key/.test(checkOut), checkOut);
+
+// Seal a zero-diff receipt into the unit for no-op path.
+const liveDigest = sha256(fs.readFileSync(path.join(repo, 'src/target.js')));
+const acceptance = unit.contract.acceptance.map((a) => ({ argv: a.argv, exit: a.exit }));
+const zeroBody = {
+  schema_version: 1,
+  artifact_type: 'campaign_zero_diff_receipt',
+  base_sha: base2,
+  acceptance_digest: sha256Json(acceptance),
+  campaign_contract_digest: unit.contract.campaign_projection.campaign_contract_sha256,
+  strict_dispatch_digest: unit.contract.campaign_projection.strict_dispatch_sha256,
+  campaign_id: unit.contract.campaign_projection.campaign_id,
+  mission_lineage_id: unit.contract.campaign_projection.mission_lineage_id,
+  mission_policy_digest: unit.contract.campaign_projection.mission_policy_digest,
+  mission_graph_digest: unit.contract.campaign_projection.mission_graph_digest,
+  graph_node_id: unit.contract.campaign_projection.graph_node_id,
+  mission_noop_receipt_digest: 'a'.repeat(64),
+  source_work_order_id: 'wo-source-zero-diff',
+  source_work_order_digest: 'b'.repeat(64),
+  path_byte_digests: { 'src/target.js': liveDigest },
+  candidate_zero_change: true,
+};
+zeroBody.digest = sha256Json(zeroBody);
+const sealed = deriveCampaignDispatchUnit({
+  campaignContract,
+  campaignContractSha256: campaignSha,
+  campaignId,
+  branch,
+  base: base2,
+  runner: 'agy',
+  model: 'gpt-5.5',
+  stage: 'campaign-implementation',
+  rootRunId,
+  zeroDiffReceipt: zeroBody,
+});
+assert.deepStrictEqual(sealed.output.zero_diff_receipt, zeroBody);
+assert.deepStrictEqual(
+  verifyCampaignDispatchUnit({
+    campaignContract,
+    campaignContractSha256: campaignSha,
+    campaignId,
+    branch,
+    base: base2,
+    runner: 'agy',
+    model: 'gpt-5.5',
+    stage: 'campaign-implementation',
+    rootRunId,
+    zeroDiffReceipt: sealed.output.zero_diff_receipt,
+    unitContract: sealed,
+  }),
+  sealed,
+  'ordinary projection preflight must rederive the sealed zero-diff field',
+);
+const sealedPath = path.join(tmp, 'unit-sealed-noop.json');
+fs.writeFileSync(sealedPath, `${JSON.stringify(sealed, null, 2)}\n`);
+
+// Ambient STRICT_NOOP_RECEIPT_PATH alone is rejected by postcheck logic (source + behavior).
+const heteroSrc = fs.readFileSync(path.join(root, 'scripts/dispatch-hetero.sh'), 'utf8');
+assert.ok(heteroSrc.includes('ambient STRICT_NOOP_RECEIPT_PATH is not authority'));
+assert.ok(heteroSrc.includes('zero_diff_receipt'));
+
+// Invoke strict postcheck path via a tiny bash harness that sources the function
+// is heavy; instead run dispatch-hetero with a no-op stub + sealed contract when
+// the script supports --contract.
+const stubNoop = path.join(tmp, 'stub-noop.sh');
+fs.writeFileSync(stubNoop, '#!/usr/bin/env bash\nexit 0\n');
+fs.chmodSync(stubNoop, 0o755);
+const sealDuringRun = path.join(tmp, 'seal-zero-diff-during-run.js');
+fs.writeFileSync(sealDuringRun, `#!/usr/bin/env node
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const [contractPath, worktree] = process.argv.slice(2);
+const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+const sha256Json = (value) => sha256(Buffer.from(JSON.stringify(value), 'utf8'));
+const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+const acceptance = contract.acceptance.map((entry) => ({ argv: entry.argv, exit: entry.exit }));
+const projection = contract.campaign_projection || {};
+const relevant = [...new Set([
+  ...(contract.output.required_change_paths || []),
+  ...(contract.output.paths || []),
+])].sort();
+const receipt = {
+  schema_version: 1,
+  artifact_type: 'campaign_zero_diff_receipt',
+  base_sha: contract.base_sha,
+  acceptance_digest: sha256Json(acceptance),
+  campaign_contract_digest: projection.campaign_contract_sha256,
+  strict_dispatch_digest: projection.strict_dispatch_sha256,
+  campaign_id: projection.campaign_id,
+  mission_lineage_id: projection.mission_lineage_id,
+  mission_policy_digest: projection.mission_policy_digest,
+  mission_graph_digest: projection.mission_graph_digest,
+  graph_node_id: projection.graph_node_id,
+  mission_noop_receipt_digest: 'c'.repeat(64),
+  source_work_order_id: 'wo-source-equality-zero-diff',
+  source_work_order_digest: 'd'.repeat(64),
+  path_byte_digests: Object.fromEntries(relevant.map((rel) => [
+    rel,
+    sha256(fs.readFileSync(path.join(worktree, rel))),
+  ])),
+  candidate_zero_change: true,
+};
+receipt.digest = sha256Json(receipt);
+contract.output.zero_diff_receipt = receipt;
+fs.writeFileSync(contractPath, JSON.stringify(contract, null, 2) + '\\n');
+`);
+fs.chmodSync(sealDuringRun, 0o755);
+const stubEqualityBranch = path.join(tmp, 'stub-equality-branch.sh');
+fs.writeFileSync(stubEqualityBranch, `#!/usr/bin/env bash
+node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
+`);
+fs.chmodSync(stubEqualityBranch, 0o755);
+const stubPostcheckEmptyDiff = path.join(tmp, 'stub-postcheck-empty-diff.sh');
+fs.writeFileSync(stubPostcheckEmptyDiff, `#!/usr/bin/env bash
+node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
+git -c user.email=t@t -c user.name=t commit --allow-empty -q -m empty
+`);
+fs.chmodSync(stubPostcheckEmptyDiff, 0o755);
+const sealedRunnerSentinel = path.join(tmp, 'sealed-runner-called');
+const stubSealed = path.join(tmp, 'stub-sealed-must-not-run.sh');
+fs.writeFileSync(
+  stubSealed,
+  `#!/usr/bin/env bash
+touch ${JSON.stringify(sealedRunnerSentinel)}
+exit 99
+`,
+);
+fs.chmodSync(stubSealed, 0o755);
+
+// Effectful: stub changes a scope-allowed but unsealed file → output boundary.
+const stubWrong = path.join(tmp, 'stub-wrong.sh');
+fs.writeFileSync(stubWrong, `#!/usr/bin/env bash
+echo other > src/other.js
+git add src/other.js
+git -c user.email=t@t -c user.name=t commit -q -m other
+`);
+fs.chmodSync(stubWrong, 0o755);
+
+// Effectful correct: changes required path.
+const stubOk = path.join(tmp, 'stub-ok.sh');
+fs.writeFileSync(stubOk, `#!/usr/bin/env bash
+echo v2 > src/target.js
+git add src/target.js
+git -c user.email=t@t -c user.name=t commit -q -m target
+`);
+fs.chmodSync(stubOk, 0o755);
+
+const script = path.join(root, 'scripts/dispatch-hetero.sh');
+function runDispatch(stub, contractPath, extraEnv = {}) {
+  // Re-seal base_sha to current HEAD so strict preflight does not reject drift
+  // after prior stub commits on sibling branches.
+  const head = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const body = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  body.base_sha = head;
+  if (body.campaign_projection) body.campaign_projection.campaign_base_sha = head;
+  const livePath = path.join(tmp, `live-${path.basename(stub)}.json`);
+  fs.writeFileSync(livePath, `${JSON.stringify(body, null, 2)}\n`);
+  const r = spawnSync('bash', [
+    script,
+    '--runner', 'agy',
+    '--agy-bin', stub,
+    '--branch', `feat/req-${path.basename(stub)}`,
+    '--prompt-file', path.join(tmp, 'p.txt'),
+    '--strict-contract',
+    '--contract-file', livePath,
+    '--model', 'gpt-5.5',
+  ], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TEST_LIVE_CONTRACT: livePath,
+      ...extraEnv,
+      PATH: process.env.PATH,
+    },
+  });
+  return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
+}
+function dispatchBody(run) {
+  const lines = run.out.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines.reverse()) {
+    try {
+      const value = JSON.parse(line);
+      if (value && typeof value.status === 'string') return value;
+    } catch (_error) {
+      // Continue to the preceding line.
+    }
+  }
+  assert.fail(`dispatch emitted no result JSON: ${run.out.slice(0, 800)}`);
+}
+fs.writeFileSync(path.join(tmp, 'p.txt'), 'do work\n');
+
+// A plain projected unit (without the separately sealed campaign file) retains
+// legacy required-output semantics and rejects the unrelated in-scope change.
+const wrong = runDispatch(stubWrong, unit.contract_path);
+const wrongBody = dispatchBody(wrong);
+assert.strictEqual(wrong.status, 1, wrong.out);
+assert.strictEqual(wrongBody.status, 'boundary_rejected', wrong.out);
+assert.match(wrongBody.error, /missing from changed files|required_change_path/);
+
+// Correct effectful change.
+const okRun = runDispatch(stubOk, unit.contract_path);
+const okBody = dispatchBody(okRun);
+assert.strictEqual(okRun.status, 0, okRun.out);
+assert.strictEqual(okBody.status, 'committed', okRun.out);
+assert.ok(/^[0-9a-f]{40}$/.test(okBody.commit), okRun.out);
+
+// Zero-change without sealed receipt → boundary.
+const missingNoop = runDispatch(stubNoop, unit.contract_path);
+const missingNoopBody = dispatchBody(missingNoop);
+assert.strictEqual(missingNoop.status, 1, missingNoop.out);
+assert.strictEqual(missingNoopBody.status, 'no_op', missingNoop.out);
+
+// Ambient env no-op path rejected.
+const ambient = path.join(tmp, 'ambient-noop.json');
+fs.writeFileSync(ambient, JSON.stringify({ forged: true }));
+const ambientRun = runDispatch(stubNoop, unit.contract_path, {
+  STRICT_NOOP_RECEIPT_PATH: ambient,
+});
+const ambientBody = dispatchBody(ambientRun);
+assert.strictEqual(ambientRun.status, 2, ambientRun.out);
+assert.strictEqual(ambientBody.status, 'precondition_failed', ambientRun.out);
+assert.match(ambientBody.error, /ambient STRICT_NOOP_RECEIPT_PATH is not authority/);
+
+// Exact sealed zero-diff receipt admits zero-change (no mutation spend).
+const worktreesBeforeSealed = execFileSync(
+  'git',
+  ['-C', repo, 'worktree', 'list', '--porcelain'],
+  { encoding: 'utf8' },
+);
+const sealedNoop = runDispatch(stubSealed, sealedPath);
+const sealedBody = dispatchBody(sealedNoop);
+assert.strictEqual(sealedNoop.status, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.status, 'no_op', sealedNoop.out);
+assert.strictEqual(sealedBody.runner, 'sealed-zero-diff-admission', sealedNoop.out);
+assert.strictEqual(sealedBody.dispatcher_called, false, sealedNoop.out);
+assert.strictEqual(sealedBody.commit, null, sealedNoop.out);
+assert.strictEqual(sealedBody.files_changed, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.mutation_attempts, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.gate_attempts, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.resources_created, 0, sealedNoop.out);
+assert.strictEqual(sealedBody.worktree, null, sealedNoop.out);
+assert.strictEqual(fs.existsSync(sealedRunnerSentinel), false);
+assert.strictEqual(
+  execFileSync('git', ['-C', repo, 'worktree', 'list', '--porcelain'], {
+    encoding: 'utf8',
+  }),
+  worktreesBeforeSealed,
+);
+
+// Exercise the two later shell validators under set -u, not just the early
+// zero-effect short circuit. The fixture runner models a provider wrapper that
+// discovers and seals the same no-op authority before any model invocation.
+const equalityBranch = runDispatch(stubEqualityBranch, unit.contract_path);
+const equalityBody = dispatchBody(equalityBranch);
+assert.strictEqual(equalityBranch.status, 0, equalityBranch.out);
+assert.strictEqual(equalityBody.status, 'no_op', equalityBranch.out);
+assert.strictEqual(equalityBody.dispatcher_called, false, equalityBranch.out);
+assert.strictEqual(equalityBody.model_calls, 0, equalityBranch.out);
+assert.strictEqual(equalityBody.mutation_attempts, 0, equalityBranch.out);
+assert.strictEqual(equalityBody.gate_attempts, 0, equalityBranch.out);
+assert.strictEqual(equalityBody.resources_created, 0, equalityBranch.out);
+assert.doesNotMatch(equalityBranch.out, /REPO: unbound variable/);
+
+for (const [label, mutate] of [
+  ['forged', (receipt) => { receipt.digest = '0'.repeat(64); }],
+  ['stale', (receipt) => { receipt.base_sha = '0'.repeat(40); receipt.digest = sha256Json({
+    ...receipt,
+    digest: undefined,
+  }); }],
+  ['foreign', (receipt) => { receipt.campaign_id = 'foreign-campaign'; receipt.digest = sha256Json({
+    ...receipt,
+    digest: undefined,
+  }); }],
+]) {
+  const bad = JSON.parse(fs.readFileSync(sealedPath, 'utf8'));
+  mutate(bad.output.zero_diff_receipt);
+  const badPath = path.join(tmp, `unit-sealed-${label}.json`);
+  fs.writeFileSync(badPath, `${JSON.stringify(bad, null, 2)}\n`);
+  const rejected = runDispatch(stubSealed, badPath);
+  const rejectedBody = dispatchBody(rejected);
+  assert.strictEqual(rejected.status, 2, rejected.out);
+  assert.strictEqual(rejectedBody.status, 'precondition_failed', rejected.out);
+  assert.doesNotMatch(rejected.out, /unbound variable/);
+}
+
+// Real Engine dispatch-unit writer carries the receipt, and the ordinary
+// implementTask consumer preserves the exact zero-effect/no-op result.
+const engineRootRunId = 'root-engine-zero-diff-1';
+const commonDir = fs.realpathSync(execFileSync(
+  'git',
+  ['-C', repo, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+  { encoding: 'utf8' },
+).trim());
+const engineContract = {
+  ...campaignContract,
+  schema_version: 1,
+  ticket: 'T-engine-zero-diff',
+  mission_grant_ref: null,
+  repo_identity: `git-common-dir:${commonDir}`,
+  max_growth_ratio: 1.5,
+  vertical_acceptance: ['sealed zero diff'],
+  verify_cmd: 'true',
+  rubric_ids: ['R6'],
+  mission_runtime: {
+    ...campaignContract.mission_runtime,
+    root_run_id: engineRootRunId,
+    mission_lineage_id: `lineage-v1-${'1'.repeat(64)}`,
+  },
+};
+const engineContractPath = path.join(tmp, 'engine-zero-diff-campaign.json');
+const engineSealPath = path.join(tmp, 'engine-zero-diff-campaign.seal.json');
+const engineContractBytes = `${JSON.stringify(engineContract, null, 2)}\n`;
+fs.writeFileSync(engineContractPath, engineContractBytes);
+const sealResult = spawnSync(process.execPath, [
+  path.join(root, 'scripts/implementation-campaign-check.js'),
+  'seal',
+  '--contract', engineContractPath,
+  '--repo', repo,
+  '--mission-mode', 'off',
+  '--out', engineSealPath,
+], { encoding: 'utf8' });
+assert.strictEqual(sealResult.status, 0, sealResult.stderr || sealResult.stdout);
+const engineContractDigest = sha256(Buffer.from(engineContractBytes, 'utf8'));
+const engineCampaignId = campaignIdFor(
+  engineContract.repo_identity,
+  engineContract.ticket,
+  engineContractDigest,
+);
+const engineUnit = deriveCampaignDispatchUnit({
+  campaignContract: engineContract,
+  campaignContractSha256: engineContractDigest,
+  campaignId: engineCampaignId,
+  branch,
+  base: base2,
+  runner: 'agy',
+  model: 'gpt-5.5',
+  stage: 'campaign-implementation',
+  rootRunId: engineRootRunId,
+});
+const engineAcceptance = engineUnit.acceptance.map((entry) => ({
+  argv: entry.argv,
+  exit: entry.exit,
+}));
+const engineZeroBody = {
+  schema_version: 1,
+  artifact_type: 'campaign_zero_diff_receipt',
+  base_sha: base2,
+  acceptance_digest: sha256Json(engineAcceptance),
+  campaign_contract_digest: engineContractDigest,
+  strict_dispatch_digest: engineUnit.campaign_projection.strict_dispatch_sha256,
+  campaign_id: engineCampaignId,
+  mission_lineage_id: engineContract.mission_runtime.mission_lineage_id,
+  mission_policy_digest: engineContract.mission_runtime.mission_policy_digest,
+  mission_graph_digest: engineContract.mission_runtime.mission_graph_digest,
+  graph_node_id: engineContract.mission_runtime.graph_node_id,
+  mission_noop_receipt_digest: 'e'.repeat(64),
+  source_work_order_id: 'wo-source-engine-zero-diff',
+  source_work_order_digest: 'f'.repeat(64),
+  path_byte_digests: { 'src/target.js': liveDigest },
+  candidate_zero_change: true,
+};
+engineZeroBody.digest = sha256Json(engineZeroBody);
+const engineUnitNoReceiptPath = path.join(tmp, 'engine-zero-diff-unit-no-receipt.json');
+fs.writeFileSync(engineUnitNoReceiptPath, `${JSON.stringify(engineUnit, null, 2)}\n`);
+function runCampaignPostcheckDispatch() {
+  const livePath = path.join(tmp, 'engine-zero-diff-unit-postcheck-live.json');
+  fs.writeFileSync(livePath, fs.readFileSync(engineUnitNoReceiptPath));
+  const result = spawnSync('bash', [
+    script,
+    '--runner', 'agy',
+    '--agy-bin', stubPostcheckEmptyDiff,
+    '--branch', branch,
+    '--base', base2,
+    '--prompt-file', path.join(tmp, 'p.txt'),
+    '--strict-contract',
+    '--contract-file', livePath,
+    '--campaign-contract', engineContractPath,
+    '--campaign-contract-sha256', engineContractDigest,
+    '--campaign-seal', engineSealPath,
+    '--run-id', engineCampaignId,
+    '--stage', 'campaign-implementation',
+    '--model', 'gpt-5.5',
+  ], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      AUTOPILOT_PARENT_RUN_ID: 'test-foreman-zero-diff',
+      AUTOPILOT_ROOT_RUN_ID: engineRootRunId,
+      AUTOPILOT_DISPATCH_DEPTH: '1',
+      TEST_LIVE_CONTRACT: livePath,
+      PATH: process.env.PATH,
+    },
+  });
+  return {
+    status: result.status,
+    out: `${result.stdout || ''}${result.stderr || ''}`,
+  };
+}
+const postcheckEmptyDiff = runCampaignPostcheckDispatch();
+const postcheckBody = dispatchBody(postcheckEmptyDiff);
+assert.strictEqual(postcheckEmptyDiff.status, 0, postcheckEmptyDiff.out);
+assert.strictEqual(postcheckBody.status, 'committed', postcheckEmptyDiff.out);
+assert.strictEqual(postcheckBody.files_changed, 0, postcheckEmptyDiff.out);
+assert.doesNotMatch(postcheckEmptyDiff.out, /REPO: unbound variable/);
+
+let engineBoundaryCalls = 0;
+const engineResult = new AutopilotEngine({
+  cwd: repo,
+  implementationDispatcher() {
+    engineBoundaryCalls += 1;
+    throw new Error('caller-supplied zero-diff authority must not reach dispatcher');
+  },
+}).implementTask({
+  promptFile: path.join(tmp, 'p.txt'),
+  branch,
+  base: base2,
+  roster: {
+    implementer_engine: 'gpt-5.5',
+    implementer_effort: 'high',
+    implementer_runner: 'agy',
+  },
+  runId: engineCampaignId,
+  implementationRound: 1,
+  implementationStage: 'campaign-implementation',
+  campaignContractFile: engineContractPath,
+  campaignContractDigest: engineContractDigest,
+  campaignSealFile: engineSealPath,
+  zeroDiffReceipt: engineZeroBody,
+  implementationOptions: {
+    cwd: repo,
+    env: {
+      AUTOPILOT_ROOT_RUN_ID: engineRootRunId,
+    },
+  },
+});
+assert.strictEqual(engineBoundaryCalls, 0, JSON.stringify(engineResult));
+assert.strictEqual(engineResult.status, 'blocked', JSON.stringify(engineResult));
+assert.strictEqual(engineResult.phase, 'prepare_implementation');
+assert.strictEqual(engineResult.code, 'CALLER_ZERO_DIFF_AUTHORITY_FORBIDDEN');
+assert.strictEqual(engineResult.dispatcher_called, false);
+
+console.log(JSON.stringify({
+  required_change_schema_ok: true,
+  wrong_surface_rejected: true,
+  ambient_noop_rejected: true,
+  sealed_noop_path_exercised: true,
+  equality_noop_path_exercised: true,
+  postcheck_empty_diff_path_exercised: true,
+  sealed_noop_substitutions_rejected: true,
+  engine_caller_zero_diff_forbidden: true,
+  effectful_required_ok: true,
+}));
+NODE
+)"
+assert_exit_code "$?" "0" "required_change/no-op projected-unit matrix exits zero"
+assert_contains "$REQ_MATRIX_OUT" '"required_change_schema_ok":true' "required_change accepted by contract checker"
+assert_contains "$REQ_MATRIX_OUT" '"wrong_surface_rejected":true' "unrelated change rejected"
+assert_contains "$REQ_MATRIX_OUT" '"ambient_noop_rejected":true' "ambient no-op rejected"
+assert_contains "$REQ_MATRIX_OUT" '"sealed_noop_path_exercised":true' "sealed no-op path exercised"
+assert_contains "$REQ_MATRIX_OUT" '"equality_noop_path_exercised":true' \
+  "equality/no-commit validator executes under set -u"
+assert_contains "$REQ_MATRIX_OUT" '"postcheck_empty_diff_path_exercised":true' \
+  "postcheck empty-diff validator executes under set -u"
+assert_contains "$REQ_MATRIX_OUT" '"sealed_noop_substitutions_rejected":true' \
+  "forged, stale, and foreign no-op receipts reject cleanly"
+assert_contains "$REQ_MATRIX_OUT" '"engine_caller_zero_diff_forbidden":true' \
+  "Engine rejects caller-minted zero-diff authority before dispatch"
 
 finalize_test

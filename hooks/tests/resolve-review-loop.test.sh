@@ -80,6 +80,35 @@ assert_contains "$OUT" '"required_review_families": 2' "default required_review_
 assert_contains "$OUT" '"l1_required": true' "default l1_required"
 assert_contains "$OUT" '"cross_family_required": true' "default cross_family_required"
 assert_contains "$OUT" '"cross_family_satisfied": true' "default cross_family_satisfied"
+assert_contains "$OUT" 'MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false' "default MiniMax seat surfaces calibration limitation"
+
+# A2 perturbation: deleting the exact-seat caveat makes the roster fail closed.
+NO_MINIMAX_CAVEAT_CFG="$TEST_TMP/no-minimax-caveat.md"
+sed '/^[[:space:]]*- reviewer_limitation:/d' "$REPO_ROOT/.claude/review-loop-config.md" > "$NO_MINIMAX_CAVEAT_CFG"
+NO_CAVEAT_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$NO_MINIMAX_CAVEAT_CFG" bash "$SCRIPT" 2>&1)"
+NO_CAVEAT_EXIT=$?
+assert_eq "3" "$NO_CAVEAT_EXIT" "MiniMax exact seat is rejected when its limitation tag is removed"
+assert_contains "$NO_CAVEAT_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "removed MiniMax caveat is diagnosed"
+
+# Removing or falsifying the legacy required flag must not weaken the exact-seat
+# guard. The tuple itself is the authority boundary.
+NO_MINIMAX_GUARD_FIELDS_CFG="$TEST_TMP/no-minimax-guard-fields.md"
+sed -e '/^[[:space:]]*- reviewer_limitation:/d' \
+  -e '/^[[:space:]]*- reviewer_limitation_required:/d' \
+  "$REPO_ROOT/.claude/review-loop-config.md" > "$NO_MINIMAX_GUARD_FIELDS_CFG"
+NO_GUARD_FIELDS_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$NO_MINIMAX_GUARD_FIELDS_CFG" bash "$SCRIPT" 2>&1)"
+NO_GUARD_FIELDS_EXIT=$?
+assert_eq "3" "$NO_GUARD_FIELDS_EXIT" "MiniMax exact seat rejects caveat removal even when required flag is deleted"
+assert_contains "$NO_GUARD_FIELDS_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "deleted MiniMax guard fields are diagnosed"
+
+MINIMAX_FALSE_REQUIRED_CFG="$TEST_TMP/minimax-false-required.md"
+sed -e '/^[[:space:]]*- reviewer_limitation:/d' \
+  -e 's/^[[:space:]]*- reviewer_limitation_required:.*/- reviewer_limitation_required: false/' \
+  "$REPO_ROOT/.claude/review-loop-config.md" > "$MINIMAX_FALSE_REQUIRED_CFG"
+FALSE_REQUIRED_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$MINIMAX_FALSE_REQUIRED_CFG" bash "$SCRIPT" 2>&1)"
+FALSE_REQUIRED_EXIT=$?
+assert_eq "3" "$FALSE_REQUIRED_EXIT" "MiniMax exact seat rejects caveat removal when required flag is false"
+assert_contains "$FALSE_REQUIRED_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "false MiniMax required flag cannot silence diagnosis"
 
 # 4. --field accessors
 # DOGFOOD PIN (Board decision A roster — see §3 rationale).
@@ -220,6 +249,15 @@ OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT")"
 assert_contains "$OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash"]' "default qc_panel array emitted"
 assert_contains "$OUT" '"qc_panel_aggregation": "union-on-verified-critical"' "default aggregation"
 assert_eq "gpt-5.5 claude-opus gemini-flash" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
+assert_eq "true" "$(json_get "$OUT" qc_panel_seats_complete)" \
+  "built-in panel has a complete exact-tuple roster"
+assert_eq '[{"role":"qc","runner":"codex","model":"gpt-5.5","effort":"xhigh","endpoint":null,"family":"openai"},{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"agy","model":"gemini-flash","effort":"high","endpoint":null,"family":"google"}]' \
+  "$(json_get "$OUT" qc_panel_seats)" \
+  "built-in QC seats bind runner, model, effort, endpoint, role, and family"
+assert_eq "300" "$(json_get "$OUT" provider_readiness_receipt_ttl_seconds)" \
+  "readiness receipt TTL default is emitted"
+assert_eq "different" "$(json_get "$OUT" provider_readiness_fallback_family_constraint)" \
+  "readiness fallback family constraint default is emitted"
 
 # 7b. qc_panel preset all-calibrated
 AC_CFG="$TEST_TMP/all-calibrated.md"
@@ -227,6 +265,21 @@ printf -- '- qc_panel: all-calibrated\n' > "$AC_CFG"
 AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" bash "$SCRIPT")"
 assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
 assert_not_contains "$(json_get "$AC_OUT" qc_panel)" "all-calibrated" "alias string is absent from parsed qc_panel value"
+assert_eq "false" "$(json_get "$AC_OUT" qc_panel_seats_complete)" \
+  "an explicit panel without exact companion metadata fails closed"
+
+EXACT_QC_CFG="$TEST_TMP/exact-qc.md"
+printf -- '- qc_panel: gpt-5.5, claude-opus\n- qc_panel_runners: codex, claude-native\n- qc_panel_efforts: xhigh, high\n- qc_panel_endpoints: @none, @none\n- provider_readiness_receipt_ttl_seconds: 450\n- provider_readiness_fallback_family_constraint: any\n' > "$EXACT_QC_CFG"
+EXACT_QC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EXACT_QC_CFG" bash "$SCRIPT")"
+assert_eq "true" "$(json_get "$EXACT_QC_OUT" qc_panel_seats_complete)" \
+  "explicit aligned QC companion metadata produces exact tuples"
+assert_eq '[{"role":"qc","runner":"codex","model":"gpt-5.5","effort":"xhigh","endpoint":null,"family":"openai"},{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null,"family":"anthropic"}]' \
+  "$(json_get "$EXACT_QC_OUT" qc_panel_seats)" \
+  "explicit exact QC tuple roster is emitted in configured order"
+assert_eq "450" "$(json_get "$EXACT_QC_OUT" provider_readiness_receipt_ttl_seconds)" \
+  "configured readiness receipt TTL is emitted"
+assert_eq "any" "$(json_get "$EXACT_QC_OUT" provider_readiness_fallback_family_constraint)" \
+  "configured fallback family constraint is emitted"
 
 # case/trim handling check
 AC_CFG_CASE="$TEST_TMP/all-calibrated-case.md"
@@ -338,7 +391,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
@@ -372,7 +425,7 @@ BASE_OUT="$(bash "$SCRIPT")"
 assert_not_contains "$BASE_OUT" "\"reviewer_qualified\"" "no --check-scorecard output omits reviewer_qualified"
 assert_not_contains "$BASE_OUT" "\"fallback_ladder\"" "no --check-scorecard output omits fallback_ladder"
 
-# 17. --check-scorecard with a qualified reviewer row emits true + ladder from scorecard
+# 17. Legacy unscoped qualification cannot enter the adaptive scorecard gate.
 SCDIR="$TEST_TMP/check-ok"
 mkdir -p "$SCDIR"
 RECQUAL_JSON="$SCDIR/rec.json"
@@ -380,15 +433,13 @@ cat > "$RECQUAL_JSON" <<'JSON'
 {"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
 JSON
 ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECQUAL_JSON" > /dev/null
-EXPECTED_LADDER="$(ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer --implementer-family openai)"
 # ISOLATED: EMPTY_CFG pins the default reviewer (gpt-5.5/codex) + openai implementer so
-# reviewer_qualified matches the gpt-5.5 fixture row and the ladder's implementer-family
-# matches EXPECTED_LADDER's --implementer-family openai — independent of the live roster.
+# this checks that even a matching legacy row cannot bypass exact scope/deployment evidence.
 QUAL_OUT="$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard)"
-assert_eq "true" "$(json_get "$QUAL_OUT" reviewer_qualified)" "qualified reviewer row => reviewer_qualified true"
-assert_eq "$EXPECTED_LADDER" "$(json_get "$QUAL_OUT" fallback_ladder)" "fallback_ladder matches scorecard ladder output"
-assert_eq "true" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "field reviewer_qualified true for qualified row"
-assert_eq "$EXPECTED_LADDER" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "field fallback_ladder matches scorecard ladder output"
+assert_eq "false" "$(json_get "$QUAL_OUT" reviewer_qualified)" "legacy qualified row remains unqualified without exact evidence inputs"
+assert_eq "[]" "$(json_get "$QUAL_OUT" fallback_ladder)" "legacy row cannot enter the evidence-required ladder"
+assert_eq "false" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field reviewer_qualified)" "legacy field gate remains false"
+assert_eq "[]" "$(ENGINE_SCORECARD_DIR="$SCDIR" REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --check-scorecard --field fallback_ladder)" "legacy field ladder remains empty"
 
 # 18. --check-scorecard with NO matching row fail-closes as unqualified
 EMPTY_SCDIR="$TEST_TMP/check-miss"
@@ -431,17 +482,18 @@ CAP_TEST_DIR="$TEST_TMP/cap-store"
 mkdir -p "$CAP_TEST_DIR"
 
 # A. Empty store test (capability state is enabled by default)
-# Omitting --capability-state (or empty store) => source: unknown, status: unknown, warnings: []
+# Omitting --capability-state (or empty store) keeps capability state unknown.
+# MiniMax calibration is a resolver diagnostic, not an operational capability warning.
 EMPTY_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
-assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => capability_warnings is empty []"
+assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
 
 # B. --capability-state off test
 OFF_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
 assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
 assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
-assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => capability_warnings is empty []"
+assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
 
 # C. Record a fresh exhausted/high implementer event
 cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
@@ -637,7 +689,7 @@ assert_eq "unknown" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" REVIEW_LOOP_CONFIG
 assert_eq "false" "$(ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first false for unknown tier"
 assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$R2F1CFG" ENGINE_SCORECARD_DIR="$DENS_UNK_STORE" bash "$SCRIPT" --scale-by-capability --field cross_family_satisfied)" "density-scaled with 1 distinct non-impl family -> satisfied=false"
 
-# 23. --scale-by-capability with qualified implementer row -> high tier + low risk scales down
+# 23. A caller-written disk "qualified" row remains unknown and can only increase verification.
 DENS_HIGH_STORE="$TEST_TMP/dens-high"
 mkdir -p "$DENS_HIGH_STORE"
 RECIMPL_HIGH_JSON="$DENS_HIGH_STORE/rec.json"
@@ -646,27 +698,27 @@ cat > "$RECIMPL_HIGH_JSON" <<'JSON'
 JSON
 ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
 DENS_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability)"
-assert_eq "high" "$(json_get "$DENS_HIGH_OUT" capability_tier)" "qualified implementer -> high tier"
-assert_eq "true" "$(json_get "$DENS_HIGH_OUT" density_scaled)" "high tier + low risk -> density_scaled true"
-assert_eq "2" "$(json_get "$DENS_HIGH_OUT" loop_max_rounds)" "high tier + low risk -> max rounds capped at 2"
-assert_eq "1" "$(json_get "$DENS_HIGH_OUT" required_review_families)" "high tier + low risk -> required_review_families unchanged"
-assert_eq "false" "$(json_get "$DENS_HIGH_OUT" l1_required)" "high tier + low risk -> l1_required unchanged"
-assert_eq "true" "$(json_get "$DENS_HIGH_OUT" verify_first)" "high tier + low risk -> verify_first true"
-assert_eq "true" "$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first true for high tier + low risk"
+assert_eq "unknown" "$(json_get "$DENS_HIGH_OUT" capability_tier)" "disk qualified telemetry cannot become high tier"
+assert_eq "true" "$(json_get "$DENS_HIGH_OUT" density_scaled)" "untrusted disk row triggers conservative scaling"
+assert_eq "7" "$(json_get "$DENS_HIGH_OUT" loop_max_rounds)" "untrusted disk row cannot reduce review rounds"
+assert_eq "2" "$(json_get "$DENS_HIGH_OUT" required_review_families)" "untrusted disk row increases family assurance"
+assert_eq "true" "$(json_get "$DENS_HIGH_OUT" l1_required)" "untrusted disk row requires L1"
+assert_eq "false" "$(json_get "$DENS_HIGH_OUT" verify_first)" "untrusted disk row cannot enable verify-first shortcut"
+assert_eq "false" "$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --field verify_first)" "field verify_first stays false for disk telemetry"
 
 DENS_HIGH_BASE1_CFG="$TEST_TMP/dens-high-base1.md"
 printf -- '- loop_max_rounds: 1\n' > "$DENS_HIGH_BASE1_CFG"
 DENS_HIGH_BASE1_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$DENS_HIGH_BASE1_CFG" ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" bash "$SCRIPT" --scale-by-capability)"
-assert_eq "1" "$(json_get "$DENS_HIGH_BASE1_OUT" loop_max_rounds)" "high tier + base rounds 1 -> stays 1"
-assert_eq "true" "$(json_get "$DENS_HIGH_BASE1_OUT" verify_first)" "high tier + base rounds 1 -> verify_first true"
+assert_eq "3" "$(json_get "$DENS_HIGH_BASE1_OUT" loop_max_rounds)" "disk telemetry + base rounds 1 -> conservatively adds 2"
+assert_eq "false" "$(json_get "$DENS_HIGH_BASE1_OUT" verify_first)" "disk telemetry never enables verify-first"
 
 DENS_HIGH_RISK_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability --security-surface 1)"
-assert_eq "high" "$(json_get "$DENS_HIGH_RISK_OUT" capability_tier)" "qualified implementer high risk -> high tier"
-assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" density_scaled)" "high tier + high risk -> no density reduction"
-assert_eq "5" "$(json_get "$DENS_HIGH_RISK_OUT" loop_max_rounds)" "high tier + high risk -> max rounds unchanged"
-assert_eq "2" "$(json_get "$DENS_HIGH_RISK_OUT" required_review_families)" "high tier + high risk -> high-risk family requirement"
-assert_eq "true" "$(json_get "$DENS_HIGH_RISK_OUT" l1_required)" "high tier + high risk -> high-risk l1 requirement"
-assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" verify_first)" "high tier + high risk -> verify_first false"
+assert_eq "unknown" "$(json_get "$DENS_HIGH_RISK_OUT" capability_tier)" "disk telemetry stays unknown on high risk"
+assert_eq "true" "$(json_get "$DENS_HIGH_RISK_OUT" density_scaled)" "disk telemetry conservatively scales high risk"
+assert_eq "7" "$(json_get "$DENS_HIGH_RISK_OUT" loop_max_rounds)" "disk telemetry cannot reduce high-risk rounds"
+assert_eq "2" "$(json_get "$DENS_HIGH_RISK_OUT" required_review_families)" "high-risk family requirement remains"
+assert_eq "true" "$(json_get "$DENS_HIGH_RISK_OUT" l1_required)" "high-risk l1 requirement remains"
+assert_eq "false" "$(json_get "$DENS_HIGH_RISK_OUT" verify_first)" "high-risk disk telemetry cannot enable verify-first"
 
 # 24. Config density_scaling: on -> scales via config (unknown tier)
 DENS_CFG="$TEST_TMP/dens-on.md"

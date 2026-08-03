@@ -184,6 +184,7 @@ set the execution posture:
 - **`/l5`** — `/l4` with the implementer loop run through `bin/autopilot.js engine
   implement-review` (internally `dispatch-hetero.sh`; engine/runner resolved from
   `scripts/resolve-review-loop.sh`, never hardcoded).
+  The mutating entry requires `--campaign-contract <campaign.json>`.
 - **`/l6`** — `/l5` with verification AUTHORING also leaf-dispatched to a heterogeneous
   engine (different family than the implementer, via the `dispatch-author.sh` raw-prompt
   rail); depth-0 keeps merge authority and the authoritative qc.
@@ -502,3 +503,48 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 | Dispatch Fable-class model as a delegate | Manager (depth 0) is Fable-class; Fable is NEVER dispatched — delegates are opus/sonnet-class at most |
 | Delegate to depth 3 without a Board decision | v1 depth limit is 2 (manager → sub-orchestrator → worker); depth-3 requires a named bound + escalation rule approved by the Board |
 | Archive the project (L-5.5) before emitting final node verdicts | `tree.js` rejects `_archive/<proj>` (proj-name validation) — archived trees are read-only; emit every node's closing verdict BEFORE the archive move (2026-06-12 dogfood divergence) |
+
+## Capability-adaptive projection (shadow)
+
+When a host supplies a verified `TaskAuthorityEnvelope`, current `RoleExecutionGrant`, and matching
+generated profile payload, consume that projection without re-deriving model strength, risk,
+topology, tools, effects, or authority. Missing or mismatched artifacts retain the existing guided
+lifecycle and cannot enable autonomous guidance.
+
+- `guided` receives only the current six-field active slice; task graph, history, and other slices
+  remain host/project state.
+- `autonomous` receives the bounded objective and latitude already present in the grant, without
+  adding lifecycle choreography.
+- A different profile or grant after context load requires a fresh-session handoff; never stack
+  both profiles in one session.
+
+The profile changes guidance only. Existing DOA, hooks, assurance, effect, acceptance, and
+finish-flow gates remain authoritative.
+
+The `profile-session.js prepare -> measure -> run -> check` lane is a no-effect isolation probe.
+`run` yields a same-process observation and `check` only validates rehashable disk structure;
+neither qualifies an effectful child. Until P5 records an independently witnessed transport,
+the already-loaded main plugin session remains the guided compatibility host. Never simulate an
+autonomous switch by appending profile prose to that session.
+
+## Mission Routing Override
+
+When `mission_convergence` is configured, this section overrides every legacy Phase/P0 task
+enumeration rule above. Before any TaskCreate, branch, worktree, runner, or model effect, run:
+
+```bash
+node <plugin>/scripts/mission-routing-admission.js \
+  --repo-root <repo> --level <entry-level>
+```
+
+- Enforce requires `READY`; shadow records `admitted`/`would_block` without claiming authority;
+  off returns `LEGACY`.
+- Plan `Phase`/`P0..PN` headings, modules, reviewer seats, tests, retries, repairs, and fallbacks
+  are coverage or gates inside caller-authored bounded deliverables. They never authorize tasks
+  through one-for-one expansion.
+- In `READY`, a legacy "phase" means one admitted graph node. Create only those nodes as
+  implementation tasks; keep the historical implementation sequence in a separate README ledger.
+- A topology fallback reuses the same policy/graph/source admission. It does not author a second
+  graph, mint new authority, or reset the owning node's gate-attempt budget.
+- Expanding source headings into tasks, or enumerating tasks before Mission admission and the scope
+  audit, is a process violation.

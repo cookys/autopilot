@@ -2,7 +2,7 @@
 
 > **Status**: ✅ Completed (merged to develop) · **Size**: L · **Branch**: `feat/skill-leverage-extraction`
 > **Started**: 2026-06-02 · **Mode**: CEO-agent (autonomous, results-only)
-> **Plan**: [`docs/plans/2026-06-02-skill-leverage-extraction.md`](../../plans/2026-06-02-skill-leverage-extraction.md)
+> **Plan**: [`docs/plans/2026-06-02-skill-leverage-extraction.md`](../../../plans/2026-06-02-skill-leverage-extraction.md)
 
 ## OKR
 

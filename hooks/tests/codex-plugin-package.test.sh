@@ -97,13 +97,17 @@ function compareTree(rel) {
   // Mirror sync-codex-plugin-skills.sh SCRIPT_EXCLUDES: the Codex payload
   // deliberately omits the OpenCode installer scripts.
   const scriptExcludes = new Set(['install-opencode.sh', 'sync-opencode-plugin.sh']);
-  const excluded = (file) => rel === 'scripts' && scriptExcludes.has(file);
+  const excluded = (file) => (
+    (rel === 'scripts' && scriptExcludes.has(file))
+    || (rel === 'profiles' && file.startsWith('baselines/'))
+  );
 
   for (const file of sourceFiles) {
     if (excluded(file)) continue;
     if (!copySet.has(file)) failures.push(`missing ${rel}/${file}`);
   }
   for (const file of copyFiles) {
+    if (excluded(file)) continue;
     if (!sourceSet.has(file)) failures.push(`extra ${rel}/${file}`);
   }
   for (const file of sourceFiles) {
@@ -126,16 +130,42 @@ function compareFile(rel) {
   if (!source.equals(copy)) failures.push(`content ${rel}`);
 }
 
-for (const rel of ['bin', 'src', 'hooks/_shared', 'references', 'scripts', 'project-config-template']) {
+for (const rel of [
+  'bin',
+  'src',
+  'profiles',
+  'schemas',
+  'evals/clean',
+  'evals/known-bad',
+  'hooks/_shared',
+  'references',
+  'scripts',
+  'project-config-template',
+]) {
   compareTree(rel);
 }
 for (const rel of [
+  'evals/capability-evidence-corpus.json',
+  'evals/owner-capability-evidence-corpus.json',
+  'evals/owner-eval-generator.js',
+  'evals/reviewer-eval-generator.js',
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
   'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ]) {
   compareFile(rel);
+}
+const hookSource = path.join(root, 'hooks', 'hooks.json');
+const hookBaseline = path.join(pluginDir, 'profiles', 'baselines', 'claude-hooks.json');
+if (!fs.existsSync(hookBaseline)) {
+  failures.push('missing profiles/baselines/claude-hooks.json');
+} else if (!fs.readFileSync(hookSource).equals(fs.readFileSync(hookBaseline))) {
+  failures.push('content profiles/baselines/claude-hooks.json');
+}
+if (fs.existsSync(path.join(pluginDir, 'hooks', 'hooks.json'))) {
+  failures.push('forbidden hooks/hooks.json');
 }
 
 if (failures.length > 0) {
@@ -152,6 +182,62 @@ assert_eq "$SUPPORT_DIFF_OUT" "support_payload_in_sync" "Codex plugin support pa
 OUT="$(bash "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 on clean payload"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check reports clean payload"
+
+PROFILE_CATALOG_OUT="$(node "$PLUGIN_DIR/scripts/build-profile-payload.js" catalog \
+  --check --repo "$PLUGIN_DIR" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "Codex package validates its profile catalog from its own root"
+assert_contains "$PROFILE_CATALOG_OUT" '"canonical_rules": 798' \
+  "Codex package includes the immutable baseline needed by profile validation"
+
+STANDALONE_PLUGIN="$TEST_TMP/standalone-codex-plugin"
+cp -R "$PLUGIN_DIR" "$STANDALONE_PLUGIN"
+STANDALONE_CATALOG_OUT="$(GIT_CEILING_DIRECTORIES="$TEST_TMP" \
+  node "$STANDALONE_PLUGIN/scripts/build-profile-payload.js" catalog \
+  --check --repo "$STANDALONE_PLUGIN" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "standalone Codex package validates without parent Git discovery"
+assert_contains "$STANDALONE_CATALOG_OUT" '"canonical_rules": 798' \
+  "standalone catalog uses packaged immutable baseline snapshots"
+STANDALONE_BUILD_OUT="$(GIT_CEILING_DIRECTORIES="$TEST_TMP" \
+  node "$STANDALONE_PLUGIN/scripts/build-profile-payload.js" build \
+  --profile guided --out "$TEST_TMP/standalone-guided-bundle" \
+  --repo "$STANDALONE_PLUGIN" 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "standalone Codex package builds a guided payload"
+assert_contains "$STANDALONE_BUILD_OUT" '"effective_profile": "guided"' \
+  "standalone payload build resolves the packaged hook manifest"
+STANDALONE_CORPUS_OUT="$(GIT_CEILING_DIRECTORIES="$TEST_TMP" \
+  node - "$STANDALONE_PLUGIN" <<'NODE'
+const path = require('path');
+const [root] = process.argv.slice(2);
+const { verifyEvaluationCorpus } = require(path.join(root, 'src', 'engine'));
+const result = verifyEvaluationCorpus({
+  root,
+  manifest_path: path.join(root, 'evals', 'capability-evidence-corpus.json'),
+  mutation_control: true,
+});
+process.stdout.write(JSON.stringify(result));
+NODE
+)"; EXIT=$?
+assert_eq "$EXIT" "0" "standalone Codex package verifies its pinned qualification corpus"
+assert_contains "$STANDALONE_CORPUS_OUT" '"expected_original_verdict":"fail"' \
+  "standalone Codex package pins the original defect verdict"
+assert_contains "$STANDALONE_CORPUS_OUT" '"expected_mutated_verdict":"pass"' \
+  "standalone Codex package includes a fail-to-pass defect reversal control"
+STANDALONE_QUALIFY_OUT="$(AUTOPILOT_QUALIFY_NOW="2026-07-26T00:00:00.000Z" \
+  ENGINE_CAPABILITY_DIR="$TEST_TMP/standalone-capability" \
+  node "$STANDALONE_PLUGIN/scripts/engine-qualify.js" reviewer \
+  --engine standalone-review --model standalone-review-exact \
+  --model-version 2026-07-26 --runner standalone-runner --runner-version 1.0.0 \
+  --family test --harness-version standalone-harness-v1 --effort high \
+  --prompt-config-hash aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --semantic-fingerprint bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+  --containment-fingerprint cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
+  --task-class code_review --domain repository --language en --tool diff_read \
+  --panel-cmd "/usr/bin/printf '%s\\n' '{\"verdict\":\"pass\",\"findings\":[]}'" \
+  2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" \
+  "standalone Codex qualifier executes generated cases and rejects an all-pass panel"
+assert_contains "$STANDALONE_QUALIFY_OUT" '"evaluation_passed":false' \
+  "standalone Codex qualifier preserves the strict panel protocol"
 
 # The codex-payload change-scope triggers moved from a bespoke CODEX_PAYLOAD_TRIGGER_RE
 # in .githooks/pre-commit into the sync-codex-plugin-skills row of scripts/sync-manifest.json
@@ -173,6 +259,7 @@ const docFiles = [
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
   'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ];
 const misses = docFiles.filter((rel) => !covers(rel));
@@ -187,11 +274,24 @@ assert_eq "$MANIFEST_TRIGGER_OUT" "manifest_codex_doc_triggers_in_sync" "Codex p
 SYNC_SANDBOX="$TEST_TMP/codex-sync-sandbox"
 mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin"
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"
-for rel in skills bin src hooks/_shared references scripts project-config-template schemas; do
+for rel in skills bin src profiles schemas evals/clean evals/known-bad hooks/_shared references scripts project-config-template; do
   mkdir -p "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
   printf 'payload %s\n' "$rel" > "$SYNC_SANDBOX/$rel/payload.txt"
   cp "$SYNC_SANDBOX/$rel/payload.txt" "$SYNC_SANDBOX/platforms/codex/plugin/$rel/payload.txt"
 done
+mkdir -p "$SYNC_SANDBOX/evals" "$SYNC_SANDBOX/platforms/codex/plugin/evals"
+printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/capability-evidence-corpus.json"
+cp "$SYNC_SANDBOX/evals/capability-evidence-corpus.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/capability-evidence-corpus.json"
+printf "'use strict';\n" > "$SYNC_SANDBOX/evals/reviewer-eval-generator.js"
+cp "$SYNC_SANDBOX/evals/reviewer-eval-generator.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/reviewer-eval-generator.js"
+printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json"
+cp "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-capability-evidence-corpus.json"
+printf "'use strict';\n" > "$SYNC_SANDBOX/evals/owner-eval-generator.js"
+cp "$SYNC_SANDBOX/evals/owner-eval-generator.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-eval-generator.js"
 mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example"
 printf -- '---\nname: example\ndescription: sandbox skill\n---\n# Example\n' > "$SYNC_SANDBOX/skills/example/SKILL.md"
 cp "$SYNC_SANDBOX/skills/example/SKILL.md" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example/SKILL.md"
@@ -200,21 +300,69 @@ for rel in \
   docs/plans/2026-06-04-distill-consolidate.md \
   docs/plans/2026-06-22-ceo-fleet-autonomy.md \
   docs/plans/2026-06-26-trust-tiered-review-policy.md \
+  docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
   docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md
 do
   mkdir -p "$SYNC_SANDBOX/$(dirname "$rel")" "$SYNC_SANDBOX/platforms/codex/plugin/$(dirname "$rel")"
   printf 'doc %s\n' "$rel" > "$SYNC_SANDBOX/$rel"
   cp "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
 done
+printf '{"hooks":{}}\n' > "$SYNC_SANDBOX/hooks/hooks.json"
+mkdir -p "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines"
+cp "$SYNC_SANDBOX/hooks/hooks.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/claude-hooks.json"
+rm -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
 
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 in sandbox"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check sandbox clean report"
 
+printf 'stale baseline\n' \
+  > "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/stale.json"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects an extra baseline"
+assert_contains "$OUT" "profiles/baselines/stale.json" \
+  "sync-codex-plugin-skills --check names the extra baseline"
+rm "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/stale.json"
+
+printf 'stale hook\n' > "$SYNC_SANDBOX/platforms/codex/plugin/hooks/stale.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects an extra Codex hook payload"
+assert_contains "$OUT" "hooks/stale.js" \
+  "sync-codex-plugin-skills --check names the extra Codex hook payload"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+assert_file_absent "$SYNC_SANDBOX/platforms/codex/plugin/hooks/stale.js" \
+  "sync-codex-plugin-skills removes stale Codex hook payloads"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "0" "sync-codex-plugin-skills restores exact generated package parity"
+
+rm "$SYNC_SANDBOX/platforms/codex/plugin/evals/reviewer-eval-generator.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects a missing generator mirror"
+assert_contains "$OUT" "evals/reviewer-eval-generator.js" \
+  "sync-codex-plugin-skills --check names the missing generator"
+cp "$SYNC_SANDBOX/evals/reviewer-eval-generator.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/reviewer-eval-generator.js"
+printf '// drift\n' >> "$SYNC_SANDBOX/evals/reviewer-eval-generator.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects generator source drift"
+assert_contains "$OUT" "evals/reviewer-eval-generator.js" \
+  "sync-codex-plugin-skills --check names the drifted generator"
+cp "$SYNC_SANDBOX/platforms/codex/plugin/evals/reviewer-eval-generator.js" \
+  "$SYNC_SANDBOX/evals/reviewer-eval-generator.js"
+
 printf 'drift\n' >> "$SYNC_SANDBOX/skills/example/SKILL.md"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check exits 1 on source drift"
 assert_contains "$OUT" "skills/example/SKILL.md" "sync-codex-plugin-skills --check names drifted path"
+
+cp "$SYNC_SANDBOX/platforms/codex/plugin/skills/example/SKILL.md" \
+  "$SYNC_SANDBOX/skills/example/SKILL.md"
+printf 'script drift\n' >> "$SYNC_SANDBOX/scripts/payload.txt"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check preserves script diff failure"
+assert_contains "$OUT" "scripts/payload.txt" \
+  "sync-codex-plugin-skills --check names a drifted script"
 
 LINK_CHECK_OUT="$(node - "$PLUGIN_DIR/skills" <<'NODE'
 const fs = require('fs');

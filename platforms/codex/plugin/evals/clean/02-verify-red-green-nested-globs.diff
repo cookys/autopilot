@@ -1,0 +1,76 @@
+diff --git a/hooks/tests/verify-red-green.test.sh b/hooks/tests/verify-red-green.test.sh
+index 40414e7..e7e055a 100755
+--- a/hooks/tests/verify-red-green.test.sh
++++ b/hooks/tests/verify-red-green.test.sh
+@@ -63,6 +63,32 @@ test_validated() {
+     assert_contains "$out" '"red_green_validated": true' "VALIDATED sets red_green_validated true"
+ }
+ 
++# 1b. VALIDATED with test at a NESTED path (tests/unit_test.sh) — regression guard:
++#     the default globs must match test files at any depth, not just repo root.
++test_validated_nested() {
++    local repo="$TEST_TMP/repo_nested" vc="$TEST_TMP/verify_nested.sh"
++    $GIT init "$repo" >/dev/null 2>&1
++    mkdir -p "$repo/src" "$repo/tests"
++    printf 'echo 2\n' > "$repo/src/prod.sh"
++    $GIT -C "$repo" add -A >/dev/null 2>&1
++    $GIT -C "$repo" commit -m base >/dev/null 2>&1
++    local base; base=$($GIT -C "$repo" rev-parse HEAD)
++    printf 'echo 4\n' > "$repo/src/prod.sh"
++    printf '[ "$(bash src/prod.sh)" = "4" ]\n' > "$repo/tests/unit_test.sh"
++    $GIT -C "$repo" add -A >/dev/null 2>&1
++    $GIT -C "$repo" commit -m "fix + nested test" >/dev/null 2>&1
++    local head; head=$($GIT -C "$repo" rev-parse HEAD)
++    cat > "$vc" <<'VC_EOF'
++#!/usr/bin/env bash
++cd "$1" || exit 1
++if [ -f tests/unit_test.sh ]; then bash tests/unit_test.sh; else exit 0; fi
++VC_EOF
++    chmod +x "$vc"
++    local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$vc" --repo "$repo" 2>&1); local ec=$?
++    assert_eq "$ec" "0" "nested-path VALIDATED exits 0"
++    assert_eq "$(json_field "$out" verdict)" "VALIDATED" "nested-path VALIDATED verdict"
++}
++
+ # 2. NOT_RED_ON_BASE: test only checks file existence (true at base too) => base GREEN.
+ test_not_red_on_base() {
+     local repo="$TEST_TMP/repo_not_red" vc="$TEST_TMP/verify_not_red.sh"
+@@ -127,6 +153,7 @@ test_missing_verify_cmd() {
+ }
+ 
+ test_validated
++test_validated_nested
+ test_not_red_on_base
+ test_not_green_on_head
+ test_inconclusive_no_test_files
+diff --git a/scripts/verify-red-green.sh b/scripts/verify-red-green.sh
+index 39bebc9..7d9e61a 100755
+--- a/scripts/verify-red-green.sh
++++ b/scripts/verify-red-green.sh
+@@ -22,15 +22,18 @@
+ 
+ set -euo pipefail
+ 
++# git :(glob) magic: a single '*' does NOT cross '/', so a bare '*test*' only
++# matches basenames at the repo root. Lead every pattern with '**/' so test files
++# at ANY depth (e.g. tests/unit_test.sh, src/foo.spec.ts) are matched.
+ DEFAULT_TEST_GLOBS=(
+-  '*test*'
+-  '*spec*'
+-  '*_test.*'
+-  'test_*'
+-  '*/tests/*'
+-  '*/__tests__/*'
+-  '*.test.*'
+-  '*.spec.*'
++  '**/*test*'
++  '**/*spec*'
++  '**/*_test.*'
++  '**/test_*'
++  '**/tests/**'
++  '**/__tests__/**'
++  '**/*.test.*'
++  '**/*.spec.*'
+ )
+ 
+ RANGE=""

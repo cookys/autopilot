@@ -1,5 +1,5 @@
 # Plan - P3.6 Production Supervised P2 Substrate A0
-> Status: in progress | Owner: CEO autonomous run | Branch: `feat/owner-kernel-governance` | Frame: P3 production substrate before live authority
+> Status: Complete — consumed by the installed P3.7 activation | Owner: CEO autonomous run | Branch: `develop` | Frame: P3 production substrate before live authority
 
 ## 0. CEO Decision Brief
 

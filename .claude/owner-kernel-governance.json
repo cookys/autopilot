@@ -8,6 +8,9 @@
       "no-secret-disclosure"
     ],
     "assurance_profile": "conservative",
+    "guidance_profile": "guided",
+    "topology_preference": "auto",
+    "data_egress": "local-only",
     "owner_roster": [
       {
         "identity": "p1-dogfood-owner-pending-p4",
@@ -81,5 +84,23 @@
     "max_blocked_duration_seconds": 86400,
     "max_recover_cycles": 1,
     "max_delegate_per_decision": 1
+  },
+  "mission_convergence": {
+    "schema_version": 1,
+    "enforcement_mode": "enforce",
+    "max_campaigns": 10,
+    "max_wall_seconds": 36000,
+    "max_tool_calls": 1500,
+    "max_engine_attempts": 50,
+    "max_external_wait_seconds": 14400,
+    "max_canonical_changed_files": 500,
+    "max_output_bytes": 50000000,
+    "max_deliverables": 8,
+    "max_parallel": 3,
+    "max_batches": 2,
+    "max_graph_depth": 2,
+    "max_gate_attempts": 12,
+    "closure_ratio": 1,
+    "max_stagnant_campaigns": 2
   }
 }

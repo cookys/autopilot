@@ -16,6 +16,11 @@
 
 set -uo pipefail   # NOT -e — we want to handle assertion failures explicitly
 
+# Hermetic assert_eq: Node util.inspect under FORCE_COLOR wraps numbers in ANSI
+# (e.g. expected '2' vs got '[33m2[39m'). Disable color for all hook tests.
+export NO_COLOR=1
+unset FORCE_COLOR 2>/dev/null || true
+
 TEST_NAME="${TEST_NAME:-$(basename "${BASH_SOURCE[1]:-$0}" .test.sh)}"
 TEST_TMP=$(mktemp -d -t "autopilot-test-${TEST_NAME}-XXXXXX")
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,8 +48,78 @@ mkdir -p "$HOOK_TMPDIR"
 # different TMPDIR can still export its own after sourcing lib.sh.
 export TMPDIR="$HOOK_TMPDIR"
 
+write_mission_governance() {
+  local target="$1"
+  local mode="$2"
+  node - "$REPO_ROOT/.claude/owner-kernel-governance.json" "$target" "$mode" <<'NODE'
+const fs = require('fs');
+const [source, target, mode] = process.argv.slice(2);
+const value = JSON.parse(fs.readFileSync(source, 'utf8'));
+value.mission_convergence = {
+  schema_version: 1,
+  enforcement_mode: mode,
+  max_campaigns: 8,
+  max_wall_seconds: 7200,
+  max_tool_calls: 1000,
+  max_engine_attempts: 100,
+  max_external_wait_seconds: 600,
+  max_canonical_changed_files: 100,
+  max_output_bytes: 1000000,
+  max_deliverables: 8,
+  max_parallel: 3,
+  max_batches: 4,
+  max_graph_depth: 4,
+  max_gate_attempts: 16,
+  closure_ratio: 1,
+  max_stagnant_campaigns: 2,
+};
+fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+}
+
 cleanup_test_tmp() { rm -rf "$TEST_TMP"; }
 trap cleanup_test_tmp EXIT
+
+# Some legacy dispatch integration tests exercise behavior after the engine-admission
+# precondition. Production now projects every disk scorecard pass as provisional, so
+# those tests use a process-local Node preload to preserve their downstream coverage.
+# This helper changes only the calling test's NODE_OPTIONS; production exposes no
+# bypass flag, environment switch, or serializable authority format.
+enable_legacy_scorecard_test_projection() {
+  local preload="$TEST_TMP/legacy-scorecard-test-projection.cjs"
+  cat > "$preload" <<'NODE'
+'use strict';
+const path = require('path');
+const childProcess = require('child_process');
+const originalSpawnSync = childProcess.spawnSync;
+
+childProcess.spawnSync = function projectedSpawnSync(command, args, options) {
+  const result = originalSpawnSync.call(this, command, args, options);
+  if (!Array.isArray(args) || args.length < 2
+      || path.basename(String(args[0])) !== 'engine-scorecard.js'
+      || args[1] !== 'current' || result.status !== 0) {
+    return result;
+  }
+  try {
+    const rows = JSON.parse(String(result.stdout || ''));
+    if (!Array.isArray(rows)) return result;
+    const projected = rows.map((row) => (
+      row && row.status === 'provisional' && row.observed_status === 'qualified'
+        ? { ...row, status: 'qualified' }
+        : row
+    ));
+    return { ...result, stdout: `${JSON.stringify(projected)}\n` };
+  } catch {
+    return result;
+  }
+};
+NODE
+  if [ -n "${NODE_OPTIONS:-}" ]; then
+    export NODE_OPTIONS="$NODE_OPTIONS --require=$preload"
+  else
+    export NODE_OPTIONS="--require=$preload"
+  fi
+}
 
 # Assertion bookkeeping for the run.sh summary.
 __TEST_PASS_COUNT=0

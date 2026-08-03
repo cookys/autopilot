@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+enable_legacy_scorecard_test_projection
 
 echo "--- Setting up contract dispatch test environment ---"
 
@@ -86,7 +87,8 @@ EOF_BAD_CONTRACT
 
 ENGINE_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
 RUNTIME_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-ENGINE_EVENT="{\"schema_version\":1,\"observed_at\":\"$RUNTIME_UTC\",\"runner\":\"codex\",\"model\":\"gpt-5.3-codex-spark\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"reset_at\":null,\"evidence\":\"test\"}}}"
+# Exact resolver tuple: implementer_effort defaults to high; endpoint "" → null/@none.
+ENGINE_EVENT="{\"schema_version\":1,\"observed_at\":\"$RUNTIME_UTC\",\"runner\":\"codex\",\"model\":\"gpt-5.3-codex-spark\",\"role\":\"implementer\",\"effort\":\"high\",\"endpoint\":null,\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"reset_at\":null,\"evidence\":\"test\"}}}"
 
 printf '%s\n' "$ENGINE_ROW" > "$TEST_TMP/engine-row.json"
 printf '%s\n' "$ENGINE_EVENT" > "$TEST_TMP/engine-event.json"
@@ -305,5 +307,25 @@ assert_not_contains "$json" '"go"'
 assert_not_contains "$json" "contract_sha256"
 assert_not_contains "$json" "spec_sha256"
 assert_file_exists "$RUN_MARKER_PATH"
+
+echo "--- R9: acceptance argv that cannot execute fails BEFORE the runner ---"
+# spawnSync does not throw on ENOENT — it returns status=null with .error set — so the
+# post-run acceptance check reports a generic "exit-code mismatch" only AFTER the engine
+# has been paid for. Executability is provable at base, for free.
+sed 's|"acceptance": \[{"argv": \["true"\], "exit": 0}\]|"acceptance": [{"argv": ["definitely-not-a-real-command-xyz"], "exit": 0}]|' \
+  "$VALID_CONTRACT" > "$TEST_TMP/unrunnable-acceptance.json"
+rm -f "$RUN_MARKER_PATH"
+out=$(run_dispatch "r9" --strict-contract --contract-file "$TEST_TMP/unrunnable-acceptance.json")
+json=$(get_last_json "$out")
+assert_contains "$json" "precondition_failed"
+assert_contains "$json" "acceptance"
+# The decisive property: the engine must NEVER have been started.
+assert_file_absent "$RUN_MARKER_PATH"
+
+echo "--- R9b: negative control — a runnable acceptance still dispatches ---"
+rm -f "$RUN_MARKER_PATH"
+out=$(run_dispatch "r9b" --strict-contract --contract-file "$VALID_CONTRACT")
+json=$(get_last_json "$out")
+assert_not_contains "$json" "precondition_failed"
 
 finalize_test

@@ -31,6 +31,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - reviewer_engine: gpt-5.5
 - reviewer_effort: xhigh
 - reviewer_runner: codex
+- reviewer_limitation:
+- reviewer_limitation_required: false
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
 - implementer_engine: gpt-5.3-codex-spark
@@ -52,7 +54,12 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - spec_review: on
 - independent_harness: on
 - qc_panel: gpt-5.5, claude-opus, gemini-flash
+- qc_panel_runners: codex, claude-native, agy
+- qc_panel_efforts: xhigh, high, high
+- qc_panel_endpoints: @none, @none, @none
 - qc_panel_aggregation: union-on-verified-critical
+- provider_readiness_receipt_ttl_seconds: 300
+- provider_readiness_fallback_family_constraint: different
 - review_diff_scope: full
 - min_panel_size: 3
 - density_scaling: off
@@ -77,6 +84,8 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 |-------|---------|--------|
 | `reviewer_engine` | the **decorrelated** adversarial reviewer (spec + impl loops) | a model name (e.g. `gpt-5.5`); resolved via `reviewer_runner` |
 | `reviewer_effort` | reviewer reasoning effort | `low\|medium\|high\|xhigh\|max` |
+| `reviewer_limitation` | exact reviewer-tuple limitation tag. The `MiniMax-M3` + `cc-shim` + `minimax` tuple must use `minimax-false-central-claim-5-of-6`; the resolver warns and rejects that tuple when the tag is absent | the exact limitation tag, or empty |
+| `reviewer_limitation_required` | compatibility metadata only; it cannot enable, disable, or weaken the exact MiniMax tuple guard | `true\|false` |
 | `reviewer_engine_low_risk` | **risk-tiered overlay**: when BOTH `_low_risk` keys are set, the loop reviewer for computed `review_risk=low` becomes this pair (same `reviewer_runner`); `review_risk=high` ALWAYS uses `reviewer_engine`/`reviewer_effort`. Empty = tiering off. Adopt a faster engine on low-risk diffs only after it clears `engine-qualify.sh` (scorecard-first) | a model name (e.g. `gpt-5.6-sol`), or empty |
 | `reviewer_effort_low_risk` | effort for the low-risk reviewer; garbage → empty (tiering off — fail-safe reviews with the stronger incumbent) | `low\|medium\|high\|xhigh\|max`, or empty |
 | `on_family_conflict` | engine `reviewDiff` policy when the (effective) reviewer shares the implementer's model family: `fallback` = substitute the first cross-family QUALIFIED scorecard-ladder row (runner allowlist `codex\|agy\|grok\|claude-native`; codex rows need a calibrated `effort` on the row; ladder provenance must match the actual implementer family) so the in-loop decorrelated review actually runs; `block` = hard-block (pre-v2.32.25 behavior — for the default openai implementer + openai reviewer this means the in-loop review NEVER runs and convergence rides verify-first). Garbage → `block` (fail-closed) | `fallback` (default) \| `block` |
@@ -95,7 +104,10 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
 | `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
+| `qc_panel_runners` / `qc_panel_efforts` / `qc_panel_endpoints` | positional exact-tuple metadata for readiness. All three lists must align 1:1 with `qc_panel`; endpoint `@none` means literal null. Missing/invalid/misaligned metadata leaves legacy review dispatch unchanged but makes `qc_panel_seats_complete=false`, so readiness fails closed instead of guessing | comma lists; reviewer runner allowlist, effort `low\|medium\|high\|xhigh\|max`, endpoint `@none` or `[A-Za-z0-9_]` |
 | `qc_panel_aggregation` | how panel verdicts combine | `union-on-verified-critical` (default; majority is forbidden → falls back to this) |
+| `provider_readiness_receipt_ttl_seconds` | lifetime of one content-bound readiness receipt and its explicit probe observations | integer `1..86400` (default 300; invalid values fail safe to default) |
+| `provider_readiness_fallback_family_constraint` | family admission for ordered readiness fallbacks; unknown family never satisfies `different` | `different` (default) `\| any` |
 | `min_panel_size` | **minimum panel-size floor** for a homogeneous (single-family) qc panel — a homogeneous panel must not drop below this many distinct-lens reviewers. Emitted **separately** from `required_review_families` on purpose: lens diversity ≠ family decorrelation, and same-family lenses can still share blind spots, so panel size and family count are independent knobs. Standalone integer — NOT coupled to review_risk / families / source-trust | integer ≥ 1 (default 3); garbage / missing / `0` / negative → fail-safe 3 |
 | `review_diff_scope` | how much the per-round reviewer reads (cost vs regression-catching) | `full` (re-read whole `base..HEAD` each round — safe, O(n) cost growth) `\| incremental-mitigated` (read `prev..HEAD` + full content of files-touched + invariants list + periodic/critical-path full re-read + **mandatory final full review before merge**) |
 | `density_scaling` | scale verification density both directions by capability tier/risk: low/unknown implementers fail-closed upward (bump max rounds, require 2 cross-family reviewers, require l1 decorrelated oracle); high-tier + low-risk implementers cap cheap rounds at 2 and emit `verify_first: true` without weakening cross-family policy | `on\|off` (default off) |
@@ -244,9 +256,14 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   EDIT-ONLY + wrapper-commit (implementer); prompt via STDIN. **cc-shim as a `reviewer_runner`** is
   read-INTENT best-effort surface reduction (`--setting-sources project` + `--strict-mcp-config` +
   `--tools ""` + `HOME`/scratch cwd + no skip-permissions), **NOT a hard sandbox** — for a genuinely
-  untrusted diff prefer the `codex` reviewer with `bwrap` installed. **MiniMax-M3 is calibrated as a
-  reviewer** (2026-06-30: 10/10 `evals/known-bad` caught, false-pass-on-critical = 0, 3/3 clean) → safe
-  in a `qc_panel`. **GLM-5.2** is endpoint-verified but was 529-overloaded under load — re-Spike before trusting.
+  untrusted diff prefer the `codex` reviewer with `bwrap` installed. **MiniMax-M3 has strong
+  reviewer calibration** (2026-06-30: 10/10 `evals/known-bad` caught,
+  false-pass-on-critical = 0, 3/3 clean), but a 2026-07-31 diff-only observation produced false
+  central claims in 5 of 6 cases. The exact `MiniMax-M3` + `cc-shim` + `minimax` reviewer tuple
+  therefore requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; the resolver
+  emits an advisory and rejects a missing tag. This is telemetry, not automatic demotion or
+  authority, and independent verification remains required. **GLM-5.2** is endpoint-verified but
+  was 529-overloaded under load — re-Spike before trusting.
 - The implementer's own passing tests are **not** the criterion — keep
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the

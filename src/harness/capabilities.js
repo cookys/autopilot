@@ -25,6 +25,7 @@ const RECORD_FIELDS = new Set([
   'capabilities',
   'auth_domains',
   'notes',
+  'mission_enforcement_probe_digest',
 ]);
 const EVIDENCE_FIELDS = new Set(['source', 'command', 'result']);
 const AUTH_DOMAIN_KEY_RE = /^[a-z0-9][a-z0-9_:-]*$/;
@@ -241,6 +242,13 @@ function validateCapabilityRecord(record, sourceFile = '<memory>') {
       }
       assertNoSecrets(note, `notes.${index}`, sourceFile);
     });
+  }
+
+  if (record.mission_enforcement_probe_digest !== undefined) {
+    if (typeof record.mission_enforcement_probe_digest !== 'string'
+        || !/^[a-f0-9]{64}$/u.test(record.mission_enforcement_probe_digest)) {
+      throw new Error(`${sourceFile}: mission_enforcement_probe_digest must be a lowercase hex sha256`);
+    }
   }
 
   return record;

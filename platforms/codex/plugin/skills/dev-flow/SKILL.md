@@ -179,7 +179,10 @@ Mandatory question: **「這個任務做完,跑什麼命令能客觀證明?」**
 - 紅必須可重現(flaky base-fail 重跑一次確認;不可重現 → 降級)。
 
 Engine wiring: answer flows to `engine implement-review --verify-cmd`;non-gating only per conjunction(紅綠 ∧ scorecard-qualified ∧ risk=low),else keep `--no-verify-first`.
+Campaign identity requires `--campaign-contract <campaign.json>` and automatically owns durable
+ledger/resume.
 Side-effect warning: verify-cmd is dispatcher-authored, isolated-worktree, read-only expectation.
+The campaign contract is the mandatory durable-ledger authority boundary.
 
 ### Scope Creep Detection
 
@@ -659,3 +662,52 @@ User may request skipping process steps. When overridden:
 - SQL injection / security validation
 - Completeness scan on new handlers/routes (invisible data loss)
 - Code review Critical-severity findings (security/correctness)
+
+## Capability-adaptive compatibility
+
+This skill remains the canonical guided compatibility path. When a verified profile session is
+active, the host retains the full task graph, checklist, completed history, and future slices, then
+sends the worker only the current six-field active slice plus its matching envelope and role grant.
+A late profile/grant change requires a fresh-session handoff and never edits the project default.
+The `profile-session.js` lane is a no-effect isolation probe, not an effectful handoff gate;
+rehashable artifacts, same-process observations, and caller-authored traces cannot qualify one.
+
+## Mission Routing Override
+
+When project governance configures `mission_convergence`, this section overrides every legacy
+Phase/P0 task-enumeration rule above.
+
+### Available Scripts
+
+| Script | Purpose |
+|---|---|
+| `scripts/mission-routing-admission.js` | Resolve project Mission policy and admit the authoritative bounded graph/source coverage before L-size TaskCreate or execution topology effects. |
+| `scripts/mission-execution-graph-check.js` | Validate graph limits, exact source/rubric coverage, critical path, batches, gate attempts, aggregate reservations, and ICC campaign projection bounds. |
+
+Before any TaskCreate, branch, worktree, runner, or model effect:
+
+```bash
+node <autopilot-source>/scripts/mission-routing-admission.js \
+  --repo-root "$(git rev-parse --show-toplevel)" --level <l3|l4|l5|l6>
+```
+
+- `READY` is the only enforce-mode admission. Create one implementation TaskCreate per admitted
+  graph node, plus the existing parent forcing-function tasks.
+- `SHADOW` is observation only. Record `admitted`/`would_block` honestly and continue through the
+  legacy workflow without claiming an enforced receipt or grant.
+- `LEGACY` means project Mission policy is off.
+- Source `Phase`/`P0..PN` headings, modules, reviewer seats, tests, retries, repairs, and fallbacks
+  remain coverage or gates inside a caller-authored bounded deliverable. They never become tasks
+  one-for-one.
+- In `READY`, every legacy "phase" above means an admitted graph node, and instructions to extract
+  `P0..PN` from source headings are disabled. Admitted implementation tasks remain blocked by
+  `L-1.6`.
+- Topology fallback reuses the same admission and owning gate-attempt budget; it does not create a
+  second graph or reset authority.
+- The project README keeps historical completed phases in a non-executable ledger and reports only
+  current admitted deliverables as executable work.
+- **Resume projection**: on resume, Mission nodes are remaining deliverables only. An already
+  integrated deliverable is omitted or satisfied by an authoritative receipt/commit — never
+  redispatched. `output_paths` list required mutations for the new candidate, not historical files
+  already in HEAD. Correct campaign rejection of historical-output replay is not a cue to rewrite
+  those paths. This judgment is methodology until a deterministic gate lands (BACKLOG).

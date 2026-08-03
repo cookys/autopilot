@@ -1,6 +1,7 @@
 # Plan — Implementation Campaign Convergence Control
+<!-- autopilot-authority-claims: ["campaign_generation","runner_transport_envelope"] -->
 
-> **Status**: draft, frozen for bounded Heto plan review
+> **Status**: ✅ Shipped in v2.34.0 — merged as `c66349e`
 >
 > **Owner**: Core / depth-0
 >
@@ -61,7 +62,8 @@ an explicit disposition; it cannot turn into an open-ended hardening programme.
   schema, repository, base-SHA, scope, and budget validation.
 - **KR2 — One controlled state machine**: every implementation, verification, review,
   adjudication, repair, and terminal transition is represented in one append-only campaign
-  ledger and is resumable without replaying a completed mutation.
+  ledger and is resumable without replaying a completed mutation. ICC is the sole owner of
+  campaign/repair generations; worktree lifecycle records those IDs only as provenance.
 - **KR3 — Bounded POC**: the `poc` profile admits one vertical slice, at most two automatic
   repair generations, a frozen wall-clock budget, and explicit file/churn growth limits.
   A budget trip returns `STOP_FOLLOW_UP`, never another automatic dispatch.
@@ -70,10 +72,15 @@ an explicit disposition; it cannot turn into an open-ended hardening programme.
   `must-fix-now` set may enter repair.
 - **KR5 — Observable convergence**: `autopilot status runs --json` exposes campaign phase,
   generation, budget remaining, last durable artifact, and terminal reason without reading
-  model prose.
+  model prose. It is a raw campaign projection, not task-level `DONE|NOT DONE` or `can_close`.
 - **KR6 — Regression proof**: a synthetic replay shaped like 057 reaches a visible vertical
-  slice, defers optional preview hardening, stops by generation two, and leaves no orphan
-  worktree/branch. A production-profile control retains the existing stricter review policy.
+  slice, defers optional preview hardening, and stops by generation two. A production-profile
+  control retains the existing stricter review policy. Resource cleanup is proved by consuming,
+  not reimplementing, a WLB lifecycle receipt.
+- **KR7 — Immutable verification receipt**: authoritative verification runs against a frozen
+  candidate with a closed writer lease and emits a reusable receipt keyed by
+  `{tree_sha, argv_hash, env_fingerprint}`. Tree, command, or allowlisted environment drift is
+  a cache miss; red receipts are never reused as green.
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -86,25 +93,42 @@ an explicit disposition; it cannot turn into an open-ended hardening programme.
 - Every mutating dispatch carries explicit allowed paths, maximum changed files, and maximum churn; an omitted budget fails before model spend.
 - Terminal review is one bounded full-scope panel after focused repair validation; reviewer prose cannot schedule another generation.
 - Transport failure, context compaction, or process death may resume the same durable campaign generation but may not reset its clocks, budgets, rubric, or completed stages.
+- ICC is the only controller that claims campaign generations and owns the effectful `engine implement-review` intake composition.
+- A Mission grant, provider-readiness receipt, and worktree-occupancy admission are versioned inputs to the ordered intake; ICC validates/consumes them but does not recompute their source facts.
+- Mission atomic claim precedes ICC contract validation. Any later pre-spawn rejection emits a
+  content-bound `PreSpendNoEffectReceipt` and releases the full Mission reservation exactly once
+  before ICC can claim a generation.
+- Campaign terminal usage must be at or below the claimed reservation on every axis; the receipt
+  splits it into exact actual consumption plus freed reservation. Overspend is an accounting breach,
+  not silently clamped.
+- `CampaignReceipt` never asserts task-level `can_close`; lifecycle, merge, push, and finish authority remain downstream.
 
 ## 3. File-structure map
 
 | File / surface | Responsibility |
 |---|---|
-| `schemas/implementation-campaign-contract.schema.json` | Versioned input contract: ticket, profile, base, vertical acceptance, allowed paths, file/churn limits, time/generation caps, verification command, review rubric. |
+| `schemas/implementation-campaign-contract.schema.json` | Versioned input contract: ticket, profile, Mission grant ref, base, vertical acceptance, allowed paths, file/churn limits, time/generation caps, verification command, review rubric. |
+| `schemas/implementation-campaign-receipt.schema.json` | Campaign terminal and immutable verification receipt bindings. |
+| `schemas/runner-transport-envelope.schema.json` | Shared mechanical runner status/request/private-raw-reference envelope; no semantic payload. |
+| `src/transport/runner-envelope.js` | Sole shared exit/timeout/quota/unavailable classifier and request-binding validator. |
 | `src/engine/implementation-campaign.js` | Pure campaign state machine and transition validation; no process spawning. |
-| `src/engine/autopilot-engine.js` | Compose existing implement/review calls through the state machine and existing stop-loss tools. |
+| `src/engine/campaign-intake.js` | Sole ordered pre-spend composition point: Mission grant → campaign contract → readiness receipt → context gate → worktree occupancy. |
+| `src/engine/autopilot-engine.js` | ICC-owned effectful adapter; compose existing implement/review calls through `campaign-intake` and the state machine. |
 | `bin/autopilot.js` | Require `--campaign-contract` for `engine implement-review`; expose `campaign inspect` and `campaign resume`. |
-| `scripts/implementation-campaign-check.js` | Deterministic schema/seal/base/scope/budget preflight and terminal receipt verifier. |
-| `scripts/run-ledger.sh` | Additive campaign metadata/events only where the generic ledger lacks a required field; retain existing lease/idempotency semantics. |
-| `scripts/dispatch-hetero.sh` / `scripts/dispatch-review.sh` / `scripts/dispatch-author.sh` | Consume controller-issued durable run identity automatically; trim resolved endpoint names/URLs and preserve helper dependencies in detached execution. |
-| `src/status/` and `scripts/dispatch-status.js` | Join campaign ledger state with leaf dispatch telemetry for operator-readable status. |
+| `scripts/implementation-campaign-check.js` | Deterministic schema/seal/grant/base/scope/budget preflight plus campaign/test receipt verifier. |
+| `scripts/run-ledger.sh` | ICC-owned compare-and-swap campaign generation claims and additive campaign events; retain existing lease/idempotency semantics. |
+| `src/status/` and `scripts/dispatch-status.js` | Join campaign ledger state with leaf telemetry for raw campaign status only. |
 | `skills/ceo-agent/`, `skills/l5/`, `skills/l6/`, `skills/dev-flow/`, `skills/quality-pipeline/` | Route canonical mutation through the controller and define Core’s scope-adjudication duty. |
 | `platforms/codex/plugin/**` mirrors | Generated/synchronized packaged copies; never hand-diverge from canonical files. |
 | `hooks/tests/implementation-campaign.test.sh` | State-machine, fail-closed, resume, budget, and synthetic 057 regression cases. |
 | `hooks/tests/autopilot-engine.test.sh` | Engine integration and backward-compatibility assertions. |
-| `hooks/tests/dispatch-*.test.sh` | Durable-detach, dependency closure, endpoint whitespace, and no-orphan regressions. |
+| `hooks/tests/implementation-campaign-receipt.test.sh` | Detached immutable candidate, writer fence, exact receipt hit/miss, red receipt, and generated-sync invalidation. |
 | `docs/projects/<project>/` | Execution evidence and review artifacts after user approves this reviewed plan. |
+
+Existing leaf dispatch scripts are dependencies, not ICC-owned decision surfaces. The
+`autopilot-engine.js` adapter passes their public run/stage identity flags and normalizes their
+result into the common transport envelope; leaf scripts never receive campaign generation or scope
+authority from this plan.
 
 ## 4. Phases
 
@@ -117,6 +141,7 @@ Define schema version 1 with these required fields:
   "schema_version": 1,
   "ticket": "057",
   "profile": "poc",
+  "mission_grant_ref": "<content-addressed parent grant>",
   "repo_identity": "<canonical git identity>",
   "base_sha": "<immutable sha>",
   "branch": "impl/057",
@@ -147,13 +172,18 @@ allowed paths or expand a ticket. `implementation-campaign-check.js seal` writes
 independent digest seal; `check` rejects same-path seals, SHA drift, unknown fields, missing
 budgets, path escape, and ceiling increases.
 
+`mission_grant_ref` is nullable only while Mission supervision is project-configured `off|shadow`;
+the campaign receipt then reports the parent axis as `unknown|shadow`. Once Mission enforcement is
+enabled, it is required and must bind the exact campaign digest before spend. This lets ICC ship
+first without fabricating a parent grant or creating a permanent bypass flag.
+
 Before implementation, add RED fixtures proving current canonical flows can:
 
 1. start without a campaign contract;
 2. re-dispatch beyond a POC’s second repair;
 3. omit finding disposition/scope checks;
 4. reset control state by resuming under a new session;
-5. lose detached helper state or accept endpoint values with trailing whitespace.
+5. run verification against a moving tree or reuse a green receipt after tree/argv/env drift.
 
 **Acceptance**: schema fixture validation is deterministic; all five exploit fixtures fail
 on current `develop` for the intended reason and are recorded before GREEN work.
@@ -187,6 +217,27 @@ artifact digests, timestamp, and process-independent stage identity. The reducer
 the durable campaign by canonical repo identity + ticket, automatically passes ledger/run/stage
 identity to every dispatch, and checks budget before any model process is spawned.
 
+The single ordered intake is:
+
+1. send a Mission `claim_request` and require its `grant_claimed` result when supervision is enabled;
+2. validate campaign seal/base/scope/profile budget;
+3. validate the exact provider-readiness receipt;
+4. run the existing context-window gate;
+5. acquire WLB worktree occupancy admission;
+6. claim the ICC campaign generation and spawn the effect.
+
+Steps 2–5 retain their owning rejection codes. ICC binds any rejection to the Mission claim in one
+`PreSpendNoEffectReceipt`; Mission releases the full reservation, actual usage remains zero, and
+resume cannot reuse the released claim. Terminal `CampaignReceipt` reports per-axis
+`actual_usage + reservation_freed = original_reservation`; observed overspend yields
+`accounting_breach` and blocks further grants.
+
+Sibling modules return pure versioned decisions/receipts. They do not independently wire
+`autopilot-engine.js`.
+Before PRO/WLB/Mission axes ship, their ordered slots may return explicit `unknown|shadow` only;
+the run cannot advertise full L5/L6 enforcement or clean closeout. An enabled/enforced axis may
+never translate missing evidence to ready.
+
 A temporary `--legacy-unmanaged` compatibility flag may exist for one release only, but:
 
 - it emits a machine-readable deprecation terminal;
@@ -216,6 +267,13 @@ Wire the controller in this exact order:
 11. perform focused revalidation for a repair generation;
 12. perform exactly one final full-scope panel, then terminate.
 
+Verification freezes a clean candidate SHA, closes the campaign writer lease, and runs in a
+detached immutable checkout. A green receipt is reusable only for an exact
+`{tree_sha, argv_hash, env_fingerprint}` match. Secret values are excluded from the fingerprint;
+generated-mirror synchronization creates a new tree and invalidates the old receipt. Baseline and
+final full-suite runs are bounded; targeted repair verification remains available inside the
+campaign cap.
+
 Disposition admission:
 
 - `must-fix-now`: maps to a frozen rubric/acceptance ID or proves immediate integrity or
@@ -231,22 +289,29 @@ for lifecycle handling at depth-0. This prevents a reviewer from mutating tracki
 and one refuted Major cause exactly one bounded repair; the other two are retained without
 mutating the ticket. Missing/conflicting dispositions fail closed.
 
-### Phase 3 — Canonical routing, durability, and observability · Size L
+### Phase 3 — Canonical routing, durability, and raw campaign observability · Size L
 
 Update `/l5`, `/l6`, CEO-agent, and dev-flow instructions so their only mutating implementation
 entry is `engine implement-review --campaign-contract`. Low-level scripts remain documented for
 tests, diagnostics, and controller internals, not as an equivalent workflow.
 
-Harden the leaf transport issues observed during 057:
+Supplying campaign identity automatically enables durable detach/ledger behavior; callers do not
+need to discover magic flags. Implement the shared `RunnerTransportEnvelope` as a mechanical
+exit/timeout/quota/unavailable + request-binding + private-raw-reference primitive; it never extracts
+semantic JSON. PRS/PRO consume this module instead of creating another transport truth.
 
-- supplying campaign identity automatically enables durable detach/ledger behavior; callers do
-  not need to discover three magic flags;
-- detached Grok execution serializes the complete helper/function dependency closure, with a
-  fixture for effort-clamp helpers;
-- endpoint loader trims leading/trailing whitespace from non-secret endpoint values before
-  validation and never prints credentials;
-- zero-byte/invalid output is a transport terminal, not an implicit reviewer result;
-- campaign status joins parent and leaf runs and reports idle versus dead versus completed.
+The canonical mutating entry also accepts one structured depth-0 disposition-authority artifact
+or an explicitly selected deterministic policy and binds it to the review digest before invoking
+the Phase 2 `campaignDispositionProvider` seam. A missing, stale, or reviewer-authored authority
+remains fail-closed; the CLI never silently self-authorizes a non-empty review.
+
+ICC separately owns product-review semantic normalization. Zero-byte/invalid/ambiguous product
+review output has no authority. PRS keeps its plan-review normalizer, and PRO keeps readiness
+observation validation. Endpoint normalization and provider truth belong to PRO/common config
+transport; worktree cleanup belongs to WLB.
+
+Campaign status joins campaign and leaf runs and reports idle versus dead versus completed. It does
+not infer Mission terminal, integration, push, residue, `can_merge`, or `can_close`.
 
 Status JSON includes:
 
@@ -266,8 +331,8 @@ Status JSON includes:
 ```
 
 **Acceptance**: kill-and-resume tests adopt git truth and continue the same generation without
-repeating implementation; status remains correct across a new shell/session; successful and
-terminal runs leave no orphan worktree/branch after the existing hygiene gate.
+repeating implementation; status remains correct across a new shell/session; a terminal campaign
+emits an exact lifecycle receipt reference or `unknown`, never an invented zero-residue claim.
 
 ### Phase 4 — Dogfood the 057 failure shape and ship · Size L
 
@@ -282,7 +347,8 @@ review fixture proposes an unrelated authenticated device-publication subsystem.
    publication makes the same finding eligible for `must-fix-now`;
 5. process kill after committed mutation: resume adopts the commit and owes verification/review,
    not a duplicate implementation;
-6. cleanup: no live branch/worktree/run lease remains after terminal close.
+6. lifecycle handoff: campaign terminal references the WLB receipt and remains product-terminal
+   even when residue is nonzero; downstream LSM keeps `can_close=false`.
 
 Run focused tests, the complete dispatch/engine/quality suites, `sync-all`, package parity checks,
 and the standard release/version/changelog workflow. Perform implementation Heto and final QC
@@ -300,7 +366,9 @@ contract; no test weakens existing high-risk review, authorization, or artifact-
 - Pre-spend marker tests: cap/deadline/scope/disposition failures spawn no model process.
 - Full-diff growth accounting and no-reset tests using real temporary Git repositories.
 - Engine integration: vertical-first, one final panel, generation cap, terminal receipts.
-- Transport tests: detached helper closure, whitespace endpoint input, zero-byte output, kill/resume.
+- Receipt tests: immutable checkout, writer fence, exact green reuse, drift misses, red receipt,
+  shared mechanical envelope, purpose-bound semantic normalization, zero-authority invalid
+  transport, and kill/resume.
 - Package parity: canonical and Codex/plugin mirrors match through `sync-all`.
 - Existing `hooks/tests/autopilot-engine.test.sh`, dispatch tests, repair-scope tests,
   adjudication tests, convergence tests, and `scripts/tests/run-ledger*.test.sh`.
@@ -335,6 +403,10 @@ contract; no test weakens existing high-risk review, authorization, or artifact-
 - Rewriting raw dispatch scripts when a narrow adapter or argument propagation is sufficient.
 - Expanding `dispatch-plan-review.js` beyond its current bounded two-seat generation; this plan’s
   own four-seat review is an orchestration requirement, not a product requirement.
+- Mission lineage/aggregate ceilings/authenticated user controls; owned by the Mission supervisor.
+- Provider probing or qualification; owned by PRO.
+- Worktree cleanup, branch disposition, or zero-residue judgment; owned by WLB.
+- Task-level `DONE|NOT DONE`, merge, push, `can_merge`, `can_close`, or finish marker; owned by LSM.
 
 ## 8. Open questions
 
@@ -343,17 +415,19 @@ through at least four heterogeneous Heto seats before implementation.
 
 ## Dependency map
 
-`Phase 0 contract/RED` → `Phase 1 state/pre-spend` → `Phase 2 review composition` →
+`Phase 0 contract/RED` → `Phase 1 state/pre-spend` → `Phase 2 review/receipt composition` →
 `Phase 3 routing/durability/status` → `Phase 4 dogfood/release`.
 
 Phases 1 and 2 may be implemented as separate commits but Phase 2 cannot merge without Phase 1.
 Phase 3 may develop in parallel only after the contract schema freezes. Phase 4 is strictly last.
+ICC ships before Mission supervisor binding. PRO and WLB provide versioned pure receipts; their
+absence remains `unknown|shadow` during ICC core delivery rather than being reimplemented here.
 
 ## Self-review
 
 - **Scope coverage**: campaign drift, review relevance, round/time/growth limits, vertical-first
-  evidence, durability, session boundaries, transport faults, observability, and cleanup each map
-  to a phase and KR.
+  evidence, immutable verification, durability, session boundaries, transport authority, and raw
+  campaign observability each map to a phase and KR; lifecycle cleanup is a consumed receipt.
 - **Placeholder scan**: no `TODO`, `TBD`, or implementation-defining open question remains.
 - **Dependency check**: every consumer names its producer; existing tools remain authoritative.
 - **Inversion check**: the plan fails if it is advisory-only, duplicates state, lets resume reset
@@ -364,3 +438,13 @@ Phase 3 may develop in parallel only after the contract schema freezes. Phase 4 
 - **R0 / 2026-07-26 / Core**: authored from transcript telemetry and current v2.32.60 source.
   Scope deliberately builds on `review-scope-stop-loss` instead of reopening it. Frozen rubric:
   `docs/plans/2026-07-26-implementation-campaign-convergence-control.rubric.md`.
+- **Historical R1 / 2026-07-26**: gpt-5.6-sol, MiniMax, Gemini, and GLM reported READY on the
+  pre-consolidation revision. Their reviewed hash predates the ownership audit.
+- **R2 ownership consolidation / 2026-07-26**: ICC is now the sole campaign-generation and
+  effectful-intake owner; immutable test receipts moved here from TCC; provider/lifecycle/task
+  closeout were removed. A new bounded portfolio review is required before implementation.
+- **R3 depth-0 portfolio-union correction / 2026-07-26**: final supplemental review proved Mission
+  claim order and reservation release needed one exact ICC mirror. Claim now precedes ICC/PRO/WLB
+  checks; any pre-spawn rejection emits one no-effect receipt and releases the full reservation;
+  terminal usage cannot exceed the reservation without an explicit accounting breach. No new
+  standalone review generation was opened.

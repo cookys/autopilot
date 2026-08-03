@@ -1,0 +1,354 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/role-execution-grant.schema.json",
+  "title": "RoleExecutionGrant",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "grant_id",
+    "parent_task_authority_id",
+    "authority_status",
+    "dispatch_id",
+    "role",
+    "capability_scope",
+    "role_admission",
+    "requested_profile",
+    "effective_profile",
+    "profile_reason",
+    "profile_hash",
+    "model_identity",
+    "evidence",
+    "risk",
+    "capability_state",
+    "assurance",
+    "topology",
+    "allowed_tools",
+    "allowed_artifacts",
+    "effect_subset",
+    "egress_subset",
+    "required_evidence",
+    "resource_budget",
+    "context_budget",
+    "authority_projection",
+    "revocation_binding",
+    "issued_at",
+    "expires_at"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "grant_id": { "$ref": "#/$defs/sha256" },
+    "parent_task_authority_id": { "$ref": "#/$defs/sha256" },
+    "authority_status": { "const": "shadow" },
+    "dispatch_id": { "$ref": "#/$defs/token" },
+    "role": { "$ref": "#/$defs/role" },
+    "capability_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_classes", "domains", "languages", "tool_surface"],
+      "properties": {
+        "task_classes": { "$ref": "#/$defs/non_empty_tokens" },
+        "domains": { "$ref": "#/$defs/non_empty_tokens" },
+        "languages": { "$ref": "#/$defs/non_empty_tokens" },
+        "tool_surface": { "$ref": "#/$defs/tokens" }
+      }
+    },
+    "role_admission": { "enum": ["shadow_candidate", "shadow_provisional"] },
+    "requested_profile": { "enum": ["adaptive", "guided", "autonomous"] },
+    "effective_profile": { "enum": ["guided", "autonomous"] },
+    "profile_reason": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "profile_hash": { "$ref": "#/$defs/sha256" },
+    "model_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "model_alias",
+        "model_version",
+        "family",
+        "runner",
+        "runner_version",
+        "harness_version",
+        "effort",
+        "prompt_config_hash",
+        "semantic_fingerprint",
+        "containment_fingerprint",
+        "identity_resolved"
+      ],
+      "properties": {
+        "identity": { "$ref": "#/$defs/token" },
+        "model_alias": { "$ref": "#/$defs/token" },
+        "model_version": { "$ref": "#/$defs/token" },
+        "family": { "$ref": "#/$defs/token" },
+        "runner": { "$ref": "#/$defs/token" },
+        "runner_version": { "$ref": "#/$defs/token" },
+        "harness_version": { "$ref": "#/$defs/token" },
+        "effort": { "$ref": "#/$defs/token" },
+        "prompt_config_hash": { "$ref": "#/$defs/sha256" },
+        "semantic_fingerprint": { "$ref": "#/$defs/sha256" },
+        "containment_fingerprint": { "$ref": "#/$defs/sha256" },
+        "identity_resolved": { "const": true }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence_receipt" }
+    },
+    "risk": { "enum": ["low", "medium", "high", "protected"] },
+    "capability_state": {
+      "enum": ["unknown", "provisional", "qualified", "degraded", "stale", "revoked"]
+    },
+    "assurance": { "enum": ["standard", "conservative"] },
+    "topology": { "enum": ["inline", "foreman", "heterogeneous"] },
+    "allowed_tools": { "$ref": "#/$defs/tokens" },
+    "allowed_artifacts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/relative_path" }
+    },
+    "effect_subset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effects"],
+      "properties": {
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "operation",
+              "tool_class",
+              "action_class",
+              "destinations",
+              "requires_approval",
+              "max_uses",
+              "requires_mediator",
+              "requires_challenge"
+            ],
+            "properties": {
+              "id": { "$ref": "#/$defs/token" },
+              "operation": { "$ref": "#/$defs/token" },
+              "tool_class": { "$ref": "#/$defs/token" },
+              "action_class": {
+                "enum": ["read_only", "reversible", "external", "irreversible"]
+              },
+              "destinations": { "$ref": "#/$defs/non_empty_tokens" },
+              "requires_approval": { "type": "boolean" },
+              "max_uses": { "type": "integer", "minimum": 1 },
+              "requires_mediator": { "type": "boolean" },
+              "requires_challenge": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "egress_subset": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data_class",
+          "route_class",
+          "destination",
+          "transport",
+          "payload_classification"
+        ],
+        "properties": {
+          "data_class": {
+            "enum": [
+              "task_prompt",
+              "source",
+              "diff",
+              "artifact",
+              "test_log",
+              "telemetry_metadata",
+              "benchmark_metadata"
+            ]
+          },
+          "route_class": {
+            "enum": ["runner", "reviewer", "tool", "telemetry", "benchmark_refresh"]
+          },
+          "destination": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+          },
+          "transport": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+          },
+          "payload_classification": {
+            "enum": ["public", "metadata", "task", "source", "sensitive"]
+          }
+        }
+      }
+    },
+    "required_evidence": { "$ref": "#/$defs/non_empty_tokens" },
+    "resource_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_tokens",
+        "max_wall_seconds",
+        "max_tool_calls",
+        "max_cost_usd_micros"
+      ],
+      "properties": {
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "max_wall_seconds": { "type": "integer", "minimum": 1 },
+        "max_tool_calls": { "type": "integer", "minimum": 1 },
+        "max_cost_usd_micros": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "context_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_input_tokens", "max_control_tokens"],
+      "properties": {
+        "max_input_tokens": { "type": "integer", "minimum": 1 },
+        "max_control_tokens": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "authority_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "red_lines_hash",
+        "acceptance_hash",
+        "egress_policy_hash",
+        "effect_permissions_hash"
+      ],
+      "properties": {
+        "red_lines_hash": { "$ref": "#/$defs/sha256" },
+        "acceptance_hash": { "$ref": "#/$defs/sha256" },
+        "egress_policy_hash": { "$ref": "#/$defs/sha256" },
+        "effect_permissions_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "revocation_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity_hash", "semantic_fingerprint", "containment_fingerprint"],
+      "properties": {
+        "identity_hash": { "$ref": "#/$defs/sha256" },
+        "semantic_fingerprint": { "$ref": "#/$defs/sha256" },
+        "containment_fingerprint": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+    },
+    "tokens": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/token" }
+    },
+    "non_empty_tokens": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/token" }
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*[?*\\\\]).+"
+    },
+    "role": {
+      "enum": ["owner", "implementer", "reviewer", "verification_author", "explorer"]
+    },
+    "evidence_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "evidence_id",
+        "evidence_hash",
+        "state",
+        "role",
+        "scope_hash",
+        "identity_hash",
+        "grant_identity_hash",
+        "provenance",
+        "applicability",
+        "issued_at",
+        "observed_at",
+        "expires_at",
+        "methodology_version",
+        "trial_set_hash",
+        "revocation_reason"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "evidence_id": { "$ref": "#/$defs/sha256" },
+        "evidence_hash": { "$ref": "#/$defs/sha256" },
+        "state": {
+          "enum": ["unknown", "provisional", "qualified", "degraded", "stale", "revoked"]
+        },
+        "role": { "$ref": "#/$defs/role" },
+        "scope_hash": { "$ref": "#/$defs/sha256" },
+        "identity_hash": { "$ref": "#/$defs/sha256" },
+        "grant_identity_hash": { "$ref": "#/$defs/sha256" },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source", "source_ref", "methodology_name", "methodology_version"],
+          "properties": {
+            "source": {
+              "enum": [
+                "external_prior",
+                "self_report",
+                "ordinary_receipt",
+                "internal_eval",
+                "runtime_probe"
+              ]
+            },
+            "source_ref": { "$ref": "#/$defs/token" },
+            "methodology_name": { "$ref": "#/$defs/token" },
+            "methodology_version": { "$ref": "#/$defs/token" }
+          }
+        },
+        "applicability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "applicable",
+            "reasons",
+            "requested_scope_hash",
+            "requested_identity_hash"
+          ],
+          "properties": {
+            "applicable": { "const": true },
+            "reasons": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/token" }
+            },
+            "requested_scope_hash": { "$ref": "#/$defs/sha256" },
+            "requested_identity_hash": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "methodology_version": { "$ref": "#/$defs/token" },
+        "trial_set_hash": { "$ref": "#/$defs/sha256" },
+        "revocation_reason": {
+          "enum": [null, "critical_miss", "semantic_identity_drift", "probe_regression"]
+        }
+      }
+    }
+  }
+}

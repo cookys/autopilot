@@ -35,25 +35,48 @@ For each draft plan, check overlap against the plan being bootstrapped:
 | Not found | `ls -lt ~/.claude/plans/*.md | head -5` |
 | User-provided plan | Write to `docs/plans/<name>.md` first, then continue |
 
-**Validation**: open the plan file and confirm it contains actionable phases (headings, tables, or numbered steps).
+**Validation**: open the plan file and confirm it contains an actionable goal, acceptance criteria,
+scope, and source coverage. Phase/P0 headings, modules, review seats, tests, and retries are
+authoring metadata, not an execution graph.
 
-## Step 2: Run Bootstrap Script
+## Step 2: Freeze And Admit The Deliverable Graph
+
+Mission-enabled projects require a caller-authored bounded deliverable graph and source manifest.
+Do not generate graph nodes from plan headings. Before project TaskCreate, branch, worktree, runner,
+or model effects, run:
+
+```bash
+node <autopilot-source>/scripts/mission-routing-admission.js \
+  --repo-root "$(git rev-parse --show-toplevel)" --level l3
+```
+
+`READY` admits the frozen graph. `SHADOW` records whether the same graph would block but cannot
+claim enforcement. `LEGACY` preserves the existing off-mode bootstrap path. In every mode, source
+headings remain provenance/coverage; they are never copied directly into implementation tasks.
+
+## Step 3: Run Bootstrap Script
 
 ```bash
 # Run your project's bootstrap script, or create manually:
-# node .claude/scripts/plan-bootstrap.js --plan <path> --name <name>
+# node .claude/scripts/plan-bootstrap.js --plan <path> --graph <path> --name <name>
 ```
 
-### What the Script Does
+### What The Script Does
 
-1. Parses plan file for `## Phase N:` headings and prerequisite tables
-2. Creates `docs/projects/YYYY-MM-DD-<name>/` directory
-3. Generates `README.md` with: project description, phase table, dependency graph, parallel execution opportunities
-4. Generates `dev-info.md` with branch and base info
-5. Copies plan file into project directory
-6. Creates git branch `feature/<name>` (or uses `--branch`)
-7. Updates `docs/projects/INDEX.md` (adds active project entry)
-8. Runs `git add` on all new files
+1. Records `Phase`/`P0..PN` headings, modules, tests, reviewer seats, and retry language as source
+   coverage metadata
+2. Reads the already-authored admitted Mission graph; it never invents a node
+3. Verifies every source plan/rubric maps exactly once and every deliverable stays within policy
+   count, critical-path, parallel, batch, gate-attempt, and aggregate reservation ceilings
+4. Creates one project tracker row per deliverable, with source authoring units nested as coverage
+5. Creates `docs/projects/YYYY-MM-DD-<name>/` directory
+6. Generates `README.md` with: project description, historical implementation ledger, current
+   deliverable table, dependency graph, and parallel execution opportunities
+7. Generates `dev-info.md` with branch and base info
+8. Copies plan file into project directory
+9. Creates git branch `feature/<name>` (or uses `--branch`)
+10. Updates `docs/projects/INDEX.md` (adds active project entry)
+11. Runs `git add` on all new files
 
 ### Expected Output
 
@@ -62,21 +85,51 @@ For each draft plan, check overlap against the plan being bootstrapped:
   "projectDir": "docs/projects/2026-03-18-my-feature",
   "planCopyPath": "docs/projects/2026-03-18-my-feature/plan.md",
   "branch": "feature/my-feature",
-  "phasesFound": 4,
-  "phaseDeps": { "p1": [], "p2": ["p1"], "p3": ["p1"], "p4": ["p2", "p3"] },
-  "parallelGroups": [["p1"], ["p2", "p3"], ["p4"]],
+  "sourceAuthoringUnitsFound": 34,
+  "deliverablesAdmitted": 3,
+  "deliverableDeps": {
+    "plan-review": [],
+    "transcript-retro": [],
+    "release-closeout": ["plan-review", "transcript-retro"]
+  },
+  "parallelGroups": [
+    ["plan-review", "transcript-retro"],
+    ["release-closeout"]
+  ],
+  "missionAdmissionDigest": "<sha256>",
   "indexUpdated": true,
-  "nextAction": "Review README, commit, start Phase 1"
+  "nextAction": "Review README, commit, start the first ready deliverable"
 }
 ```
 
-## Step 3: Verify + Commit
+Illustrative shape only: the caller-authored graph may drop already-integrated deliverables on
+resume (see resume projection below). Do not copy historical four-node deps from memory.
 
-1. **Check `phasesFound`** — if 0, the plan lacks standard `## Phase N:` headings. Manually edit the generated README to add a phase table.
+## Resume projection (remaining deliverables only)
+
+When bootstrapping or re-admitting after partial integration:
+
+- Graph nodes represent **remaining** deliverables. An already integrated deliverable is omitted or
+  satisfied by an authoritative receipt/commit — never redispatched.
+- `campaign.output_paths` describe **required mutations for the new candidate**, not every file the
+  workstream ever touched historically.
+- Source manifests stay exact-coverage for the **current** graph. Narrow the active manifest when a
+  deliverable leaves the executable set; keep full provenance in git history / project ledger. Never
+  fabricate source hashes.
+- This is methodology and tracker discipline until a deterministic resume-projection gate binds
+  accepted commit/receipt evidence and rejects historical-output replay before grant (BACKLOG).
+
+## Step 4: Verify + Commit
+
+1. **Check `deliverablesAdmitted`** — it must equal the frozen graph node count and stay within
+   policy. A plan with 34 headings and a three-node successor graph reports coverage units for the
+   active source set and three deliverables, never one task per authoring heading.
 2. **Check `indexUpdated`** — if false, INDEX insertion failed. Manually add the project entry to `docs/projects/INDEX.md`.
 3. **Review generated README.md** — verify goals, success criteria, and scope were correctly extracted. Fix any inaccuracies.
-4. **Check `phaseDeps`** — if all empty arrays, the plan table may lack a "prerequisites" column. Manually add dependency info to README if needed.
-5. **Commit**:
+4. **Check `deliverableDeps`** against the admitted graph. Never infer dependencies from heading order.
+5. **Check admission identity** — policy, graph, and source coverage digests must match the
+   pre-effect routing result.
+6. **Commit**:
    ```bash
    git commit -m "feat(<name>): bootstrap project from plan"
    ```
@@ -87,23 +140,27 @@ For each draft plan, check overlap against the plan being bootstrapped:
 |-------|-------|----------|
 | `Project dir already exists` | Re-running bootstrap or name collision | Check if the existing dir is from a prior attempt. If so, reuse it (`--name` with different name, or delete and retry). |
 | `Plan file not found` | Wrong path or file moved | Check `~/.claude/plans/` and `docs/plans/`. Copy the file to the expected location. |
-| `phasesFound: 0` | Plan uses non-standard headings (e.g., "### Step 1" instead of "## Phase 1") | Manually edit README phase table. The project structure is still valid. |
+| Source headings absent | Plan uses prose/tables instead of standard headings | Record the files as source coverage; do not invent placeholder phases. |
+| Graph/source coverage mismatch | A source was omitted, duplicated, drifted, or invented | Correct the caller-authored graph/manifest and rerun Mission admission. |
+| Deliverable/critical-path/reservation limit | The graph exceeds project policy | Regroup source metadata inside bounded deliverables or tighten scope; never split gates/retries into more nodes. |
 | INDEX insertion failed | INDEX.md format changed or active section marker missing | Manually edit `docs/projects/INDEX.md` to add the new project entry. |
 | Branch already exists | Branch name collision | Use `--branch feature/<alternate-name>` or delete the stale branch first. |
 | Script crashes | Node.js version or missing module | Check `node --version` (needs 18+). If persistent, create project structure manually per `project-lifecycle (structure)`. |
 
 ## Manual Bootstrap (When Script Unavailable)
 
-1. Create dir: `mkdir -p docs/projects/YYYY-MM-DD-<name>`
-2. Create README.md using template from `project-lifecycle (structure)`
-3. Create dev-info.md with branch info
-4. Copy plan: `cp <plan-path> docs/projects/YYYY-MM-DD-<name>/plan.md`
-5. Create branch: `git checkout -b feature/<name>`
-6. Update `docs/projects/INDEX.md`
-7. `git add` all new files
+1. Freeze and admit the caller-authored deliverable graph before any TaskCreate or branch effect
+2. Create dir: `mkdir -p docs/projects/YYYY-MM-DD-<name>`
+3. Create README.md using template from `project-lifecycle (structure)` with source coverage nested
+   under admitted deliverables
+4. Create dev-info.md with branch info
+5. Copy plan: `cp <plan-path> docs/projects/YYYY-MM-DD-<name>/plan.md`
+6. Create branch: `git checkout -b feature/<name>`
+7. Update `docs/projects/INDEX.md`
+8. `git add` all new files
 
 ## See Also
 
 - `dev-flow` — calls plan-bootstrap at L-3
 - `project-lifecycle (structure)` — directory conventions and templates
-- `team (project-specific)` — uses `phaseDeps`/`parallelGroups` from bootstrap output
+- `team (project-specific)` — uses admitted `deliverableDeps`/`parallelGroups` from bootstrap output

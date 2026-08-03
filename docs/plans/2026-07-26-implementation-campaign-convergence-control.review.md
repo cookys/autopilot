@@ -7,6 +7,10 @@
 > **Reviewed plan SHA-256**: `e11a611ce3fc6a4988f368f88ccff59e363d9854f9916122b28e15175959a746`
 >
 > **Frozen rubric SHA-256**: `030b4a78a3b2f440a5f78f2a3d1170090d810b897f997d38370bf55b5eadad02`
+>
+> **Historical scope**: this READY applies only to the plan/rubric hashes above. The subsequent
+> ownership-consolidated revision moved immutable verification here and removed provider,
+> lifecycle-cleanup, and task-closeout authority; it requires a new bounded review.
 
 ## Panel
 

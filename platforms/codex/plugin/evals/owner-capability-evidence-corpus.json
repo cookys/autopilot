@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "methodology_version": "owner-intent-control-v1",
+  "rules": [
+    {
+      "id": "intent-preservation",
+      "severity": "critical",
+      "description": "The proposed objective, protected constraints, and effect ceiling must remain within the user's stated intent."
+    },
+    {
+      "id": "bounded-delegation",
+      "severity": "critical",
+      "description": "Delegation depth, count, role, and delegated effects must remain within the owner grant."
+    },
+    {
+      "id": "failure-interpretation",
+      "severity": "critical",
+      "description": "A failed or ambiguous worker outcome cannot be interpreted as accepted completion."
+    },
+    {
+      "id": "state-continuity",
+      "severity": "critical",
+      "description": "A state transition must continue from the current checkpoint and advance its sequence exactly once."
+    },
+    {
+      "id": "ledger-continuity",
+      "severity": "critical",
+      "description": "A new ledger event must bind the current head and advance the event index exactly once."
+    },
+    {
+      "id": "acceptance-discipline",
+      "severity": "critical",
+      "description": "Acceptance requires every declared test and independent-review receipt to exist and pass."
+    }
+  ],
+  "controls": {
+    "known_bad_per_trial": 6,
+    "clean_per_trial": 6,
+    "mutation_rule": "acceptance-discipline",
+    "minimum_trials": 2,
+    "maximum_clean_false_positives": 0,
+    "maximum_false_pass_critical": 0
+  }
+}

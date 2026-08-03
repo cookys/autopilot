@@ -1,0 +1,19 @@
+{"timestamp":"2026-07-27T10:02:00.000Z","type":"session_meta","payload":{"id":"codex-main","cwd":"__WORKTREE__","cli_version":"0.test"}}
+{malformed fixture line
+{"timestamp":"2026-07-27T10:02:10.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Continue the bounded ticket. RAW_CODEX_PROMPT_SENTINEL"}]}}
+{"timestamp":"2026-07-27T10:03:00.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"dispatch-2","arguments":"{\"cmd\":\"bash scripts/dispatch-review.sh --runner grok --ticket-id ticket-alpha --generation 2\"}"}}
+{"timestamp":"2026-07-27T10:03:10.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"dispatch-2","status":"success","output":"{\"exit_code\":0,\"status\":\"reviewed\"}"}}
+{"timestamp":"2026-07-27T10:03:20.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"ordinary-failure","arguments":"{\"cmd\":\"git status --not-a-real-option\"}"}}
+{"timestamp":"2026-07-27T10:03:21.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"ordinary-failure","status":"success","output":"{\"exit_code\":2,\"status\":\"failed\",\"output\":\"RAW_NON_TRANSPORT_FAILURE\"}"}}
+{"timestamp":"2026-07-27T10:04:00.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"worktree-1","arguments":"{\"cmd\":\"git worktree add __OWNED_A__ branch-a\"}"}}
+{"timestamp":"2026-07-27T10:04:01.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"worktree-1","status":"success","output":"{\"event\":\"worktree_created\",\"owned\":true,\"worktree\":\"__OWNED_A__\"}"}}
+{"timestamp":"2026-07-27T10:04:10.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"worktree-2","arguments":"{\"cmd\":\"git worktree add __OWNED_B__ branch-b\"}"}}
+{"timestamp":"2026-07-27T10:04:11.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"worktree-2","status":"success","output":"{\"event\":\"worktree_created\",\"owned\":true,\"worktree\":\"__OWNED_B__\"}"}}
+{"timestamp":"2026-07-27T10:05:00.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"state-code","status":"success","output":"{\"ticket_id\":\"ticket-alpha\",\"state\":\"code_ready\"}"}}
+{"timestamp":"2026-07-27T10:05:10.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"worktree-3","arguments":"{\"cmd\":\"git worktree remove __OWNED_A__\"}"}}
+{"timestamp":"2026-07-27T10:05:11.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"worktree-3","status":"success","output":"{\"event\":\"worktree_removed\",\"owned\":true,\"worktree\":\"__OWNED_A__\"}"}}
+{"timestamp":"2026-07-27T10:05:20.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","call_id":"worktree-4","arguments":"{\"cmd\":\"git worktree remove __OWNED_B__\"}"}}
+{"timestamp":"2026-07-27T10:05:21.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"worktree-4","status":"success","output":"{\"event\":\"worktree_removed\",\"owned\":true,\"worktree\":\"__OWNED_B__\"}"}}
+{"timestamp":"2026-07-27T10:10:00.000Z","type":"response_item","payload":{"type":"function_call_output","call_id":"state-merge","status":"success","output":"{\"ticket_id\":\"ticket-alpha\",\"state\":\"merge_ready\"}"}}
+{"timestamp":"2026-07-27T10:10:10.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":30,"reasoning_output_tokens":5,"total_tokens":155}}}}
+{"timestamp":"2026-07-27T10:10:20.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"RAW_REASONING_SENTINEL"}]}}

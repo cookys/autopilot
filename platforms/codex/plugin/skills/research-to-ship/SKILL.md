@@ -53,23 +53,29 @@ scan / dependency map) before the gate. Use the **real current date** from the e
 
 ### Phase 3 — Bounded plan readiness  · run `scripts/dispatch-plan-review.js`  (PINNED)
 
-Before dispatch, write a small rubric file beside the plan. Give every user requirement and
-next-slice readiness criterion a stable ID (`R1`, `R2`, ...). The Phase 2 human approval freezes this
-rubric; do not add criteria during review.
+Before dispatch, write a small rubric file and a `plan-review-manifest` beside the plan. Give every
+user requirement and next-slice readiness criterion a stable ID (`R1`, `R2`, ...). The manifest
+declares the `logical_plan_id`, 1–4 qualified seats, per-seat budgets, and any attempt-2 fallback.
+The Phase 2 human approval freezes both files; do not add criteria or silently substitute seats.
 
 Resolve the plan chair/deep seats and budgets from `.claude/review-loop-config.md` through
 `scripts/resolve-review-loop.sh`. Require `plan_review:on`; never reuse `spec_review` or the
 implementation reviewer tuple. Invoke `dispatch-plan-review.js` with repo, ticket, plan, rubric,
-session, generation and the resolved seat(s).
+session, generation, and `--manifest-file`. Reuse the same `logical_plan_id` across retries; changing
+the repo/ticket/session tuple does not reset the review.
 
 - Generation 1 may contain both chair and deep reviewer. That is one generation: reviewer width,
   not another loop.
-- Only a controller-admitted POC blocker permits the smallest bounded repair and generation 2.
+- Findings are fingerprinted and deduplicated with full seat provenance. Depth 0 must disposition
+  each blocker candidate before the smallest bounded repair may authorize generation 2.
+- Nonblocking, rejected, deferred, and out-of-rubric findings are backlog candidates, not hidden
+  plan mutations.
 - READY or non-blocking CONDITIONAL is terminal and goes to the human gate.
 - Generation 2 with any admitted blocker is terminal STOP. Split, spike, accept risk, or reset scope
   with the user; never run generation 3.
 - Reviewer prose cannot schedule another pass. The durable repo+ticket controller state owns the
-  cap, 120-minute clock, frozen rubric and 1.25×/1.50× growth rails.
+  cap, 120-minute clock, frozen rubric/manifest and 1.25×/1.50× growth rails. Transport exhaustion
+  has no semantic verdict and can never be reported as STOP.
 
 **Gate**: "bounded review is READY/CONDITIONAL — expand into a tracked project, or stop?" A STOP
 instead asks the user to choose split/spike/risk/scope reset.

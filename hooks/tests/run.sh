@@ -171,18 +171,33 @@ if [ "$PARALLEL" -eq 0 ]; then
 else
   # ── Parallel path: fan L2 files across N workers ──
   # Collect candidate files (same set as serial), apply FILTER, count TOTAL.
+  #
+  # A small serial tail is load-bearing. These tests either inspect the canonical
+  # tree while other tests may have short-lived in-repo fixtures (sync-all), or
+  # exercise detached ledger ownership/process handoff under real timing. Mixing
+  # them into the general worker pool produced reproducible false failures on the
+  # constrained GitHub runner even though each group, including a 32-worker
+  # dispatch-only stress run, passed independently.
   declare -a L2_FILES=()
+  declare -a SERIAL_L2_FILES=()
   for file in "$TESTS_DIR"/*.test.sh "$REPO_ROOT"/scripts/*.test.sh; do
     [ -f "$file" ] || continue
     rel="${file#$REPO_ROOT/}"
     if [ -n "$FILTER" ] && [[ "$rel" != *"$FILTER"* ]]; then
       continue
     fi
-    L2_FILES+=("$file")
+    case "$(basename "$file")" in
+      dispatch-detach.test.sh|dispatch-hetero.test.sh|dispatch-lineage.test.sh|dispatch-pi.test.sh|sync-all.test.sh)
+        SERIAL_L2_FILES+=("$file")
+        ;;
+      *)
+        L2_FILES+=("$file")
+        ;;
+    esac
   done
   shopt -u nullglob
 
-  TOTAL=$((TOTAL + ${#L2_FILES[@]}))
+  TOTAL=$((TOTAL + ${#L2_FILES[@]} + ${#SERIAL_L2_FILES[@]}))
 
   n_files="${#L2_FILES[@]}"
   if [ "$n_files" -eq 0 ]; then
@@ -287,6 +302,20 @@ else
     rm -rf "$PARALLEL_TMP"
     trap - EXIT
   fi
+
+  # Run global-state/timing-sensitive tests only after the parallel pool is fully
+  # reaped, preserving their normal assertions without weakening timeouts.
+  for file in "${SERIAL_L2_FILES[@]}"; do
+    rel="${file#$REPO_ROOT/}"
+    echo ""
+    echo "──────── $rel (serial tail) ────────"
+    if AUTOPILOT_TEST_TIMING_FACTOR=1 bash "$file"; then
+      :
+    else
+      FAILED=$((FAILED + 1))
+      FAILED_TESTS+=("$rel")
+    fi
+  done
 fi
 
 # ── Summary ──

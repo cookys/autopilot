@@ -93,6 +93,9 @@ run_cmd() {
 LEDGER_A="$TEST_TMP/ledger-a.jsonl"
 run_cmd init --ledger "$LEDGER_A"
 run_cmd stage-acquire --ledger "$LEDGER_A" --run-id "run-a" --stage "build" --pid "$$" --resources "shared-a"
+NONCE_A="$(jq -r '.nonce // empty' <<<"$CMD_OUT")"
+assert_eq "$CMD_ERR" "" "stage-acquire keeps diagnostics off the JSON channel"
+assert_eq "${#NONCE_A}" "16" "stage-acquire emits a 16-digit nonce"
 GEN_A="$(jq -r '.generation' <<<"$CMD_OUT")"
 run_cmd stage-transition --ledger "$LEDGER_A" --run-id "run-a" --stage "build" --generation "0" --nonce "wrong" --to-state committed
 assert_cmd_rc 11 "late-child fence return code"
@@ -157,11 +160,32 @@ git init -q "$REPO"
 BASE_SHA="$(git -C "$REPO" rev-parse HEAD)"
 run_cmd init --ledger "$LEDGER_C"
 run_cmd stage-acquire --ledger "$LEDGER_C" --run-id "run-c" --stage "implement" --pid "$$" --resources "git-c" --git-ref "refs/heads/case-c" --git-sha "$BASE_SHA" --worktree "$REPO"
+run_cmd stage-reconcile --ledger "$LEDGER_C" --run-id "run-c" --stage "implement" --git-dir "$REPO"
+assert_json_eq "$CMD_OUT" '.reason' 'git_truth' "git-truth reconciliation reason"
+assert_json_eq "$CMD_OUT" '.holder_alive' 'true' "git-truth reconciliation reports the live holder"
+assert_json_eq "$CMD_OUT" '.git_truth' 'true' "git-truth reconciliation reports Git evidence"
+assert_json_eq "$CMD_OUT" '.terminal' 'false' "leased reconciliation is not terminal"
+assert_json_eq "$CMD_OUT" '.blocked_state' 'false' "leased reconciliation is not blocked"
+assert_json_eq "$CMD_OUT" '.has_result' 'false' "missing result stays false"
 run_cmd resume --ledger "$LEDGER_C" --run-id "run-c" --idempotency-key "resume-key-git-truth"
 assert_json_eq "$CMD_OUT" '.status' 'resumed' "git-truth resume status"
 assert_json_eq "$CMD_OUT" '.adoption.status' 'adopted' "git-truth adopted in resume"
 assert_json_true "$CMD_OUT" '.adoption.reconciled' "resume reconciliation adopted"
 assert_json_eq "$CMD_OUT" '.adoption.reason' 'git_truth' "git-truth reason"
+
+# A terminal row retains the lease identity so reconciliation cannot claim a live
+# writer is closed merely because the state advanced.
+LEDGER_CLOSED="$TEST_TMP/ledger-closed.jsonl"
+run_cmd init --ledger "$LEDGER_CLOSED"
+run_cmd stage-acquire --ledger "$LEDGER_CLOSED" --run-id "run-closed" --stage "implement" --pid "$$"
+CLOSED_GEN="$(jq -r '.generation' <<<"$CMD_OUT")"
+CLOSED_NONCE="$(jq -r '.nonce' <<<"$CMD_OUT")"
+run_cmd stage-transition --ledger "$LEDGER_CLOSED" --run-id "run-closed" --stage "implement" \
+  --generation "$CLOSED_GEN" --nonce "$CLOSED_NONCE" --to-state committed
+run_cmd stage-reconcile --ledger "$LEDGER_CLOSED" --run-id "run-closed" --stage "implement"
+assert_json_eq "$CMD_OUT" '.terminal' 'true' "committed reconciliation is terminal"
+assert_json_eq "$CMD_OUT" '.blocked_state' 'false' "committed reconciliation is not blocked"
+assert_json_eq "$CMD_OUT" '.holder_alive' 'true' "terminal reconciliation retains a live holder"
 
 # 4) quarantined/D-like resource goes to recovery path without trusting release
 LEDGER_D="$TEST_TMP/ledger-d.jsonl"

@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.32.60-E8A838?style=flat-square" alt="v2.32.60">
+  <img src="https://img.shields.io/badge/version-2.34.1-E8A838?style=flat-square" alt="v2.34.1">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-25-6B8E6B?style=flat-square" alt="25 Hooks">
@@ -51,7 +51,7 @@ Claude Code is still the most complete host. Autopilot makes AI coding agents **
 - **Catches the "done" that isn't** — a no-stub/no-TODO scan, your tests, and a real code review, run in the quality gate before you merge (and in the optional pre-push hook above).
 - **Remembers, so your repo doesn't rot** — captures the lessons, tracks the project, tells you what to do next, and adapts to your repo from a single markdown file in `.claude/`.
 
-It ships first as a Claude Code plugin — **28 skills, 3 methodology agents, 22 hooks, zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
+It ships first as a Claude Code plugin — **28 skills, 3 methodology agents, 25 hooks, zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
 
 > This README was written by Claude and adversarially reviewed by GPT-5.5 and Gemini through Autopilot's own second-engine review flow.
 
@@ -154,6 +154,22 @@ The course-sized idea is simple: teach the agent the collaboration discipline on
 
 Autopilot delegates labor, not authority. Implementer self-report is never evidence; reviewers read the task, diff, logs, and artifacts directly. Deterministic gates stay authoritative, higher-risk work needs decorrelated review coverage, and a `no_verdict` review never clears a gate.
 
+### Capability-Adaptive Guidance
+
+Autopilot remains one product for strong, weak, remote, and local models. It first admits an exact
+role + task scope + deployment identity, then compiles exactly one guidance payload:
+`guided` gives a bounded slice and explicit structure; `autonomous` removes redundant choreography
+for a qualified role. Neither profile changes red lines, effects, egress, assurance, or acceptance.
+
+`governance.guidance_profile` is a project default (`guided` when omitted), and a task can override
+it at intake without editing the project. External benchmark data can only create provisional
+telemetry. Owner/reviewer qualification uses separate host-scored evals; stored JSON cannot recreate
+session authority. The repository's v2.33.0 cutover receipt remains `hold_guided`: the autonomous
+control source is 113 bytes smaller, but exact host-token measurements, an effectful compatibility
+witness, a current live owner verifier, and five complete independent dogfood receipts are not yet
+available. The local OpenAI-compatible adapter passed fake-contract transport tests, but no live
+local runtime or agentic local runner is claimed.
+
 ### 🔌 Add another engine (optional)
 
 Claude alone is enough. But point autopilot at a **second engine family** and its review/implement pipeline gets stronger — a cross-family qc panel catches what one vendor and its same-family reviewer jointly miss, and you get a heterogeneous implementer for cost-arbitrage. **Recommended order: a subscription you already pay for ≻ a metered API key** — OAuth-login runners (`codex` / `agy` / `grok` / explicit-only `qoderclicn`) need no token at all; GLM / MiniMax go in one canonical mode-600 file (`~/.autopilot/endpoints.env`) and are wired declaratively in `.claude/review-loop-config.md`.
@@ -178,7 +194,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 | Harness | How to start | Supported today | Known limits |
 |---|---|---|---|
-| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 28 skills, 3 methodology agents, 22 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
+| **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 28 skills, 3 methodology agents, 25 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
 | **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills-only package with generated support payload and repo-local marketplace | The default Codex package intentionally does not load Claude hooks, apps, or MCP servers. Subagent model routing via `spawn_agent` needs a user opt-in — see `platforms/codex/README.md` § Subagent model routing |
 | **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
 | **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
@@ -196,7 +212,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Per-project configuration** — the `.claude/` injection model | [docs/configuration.md](docs/configuration.md) |
 | **Installation & development** — every platform, dev mode | [docs/installation.md](docs/installation.md) |
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
-| **Hooks** — 22 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
+| **Hooks** — 25 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

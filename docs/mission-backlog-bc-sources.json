@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-31-evidence-eval-truth.md",
+      "rubric_path": "plans/2026-07-31-evidence-eval-truth.rubric.md",
+      "plan_sha256": "35ec55ffaf4cced49355457b329bcf501e70e67b12d1ee1edba563564902226b",
+      "rubric_sha256": "0a4cb098c9eb9ed6801eb2b9c0bcf60f6c7bcd3f62a1b54a4dc127b91eac4530"
+    },
+    {
+      "plan_path": "plans/2026-07-31-correctness-gates.md",
+      "rubric_path": "plans/2026-07-31-correctness-gates.rubric.md",
+      "plan_sha256": "0a83aa1240d903003565e881af5ce833eccae7df29fbf08ae3a6ef26a0d9df96",
+      "rubric_sha256": "a814ed51652e2bbc928be62be1962ee2fffc4e50c0e90ec96dfc7cdfd86ba541"
+    }
+  ]
+}

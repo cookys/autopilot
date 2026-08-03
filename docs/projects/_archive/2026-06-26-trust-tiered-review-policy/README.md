@@ -1,6 +1,6 @@
 # Trust-tiered review policy — implementation (v2.25.11)
 
-> Branch `feat/v2.25.11-trust-tiered-review-policy` · Design (gpt-5.5-converged): [`../../plans/2026-06-26-trust-tiered-review-policy.md`](../../plans/2026-06-26-trust-tiered-review-policy.md)
+> Branch `feat/v2.25.11-trust-tiered-review-policy` · Design (gpt-5.5-converged): [`../../plans/2026-06-26-trust-tiered-review-policy.md`](../../../plans/2026-06-26-trust-tiered-review-policy.md)
 > Dogfood: built via `/l5` (codex `gpt-5.3-codex-spark` impl + gpt-5.5 xhigh decorrelated review + depth-0 independent harness).
 
 ## Project Goal

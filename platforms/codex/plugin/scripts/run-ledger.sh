@@ -35,6 +35,8 @@
 #     first, then run lock.
 #   - stage mutations are append-only and never overwrite existing rows.
 #   - stale live checks use PID + process start_time dual verification.
+#   - stage-acquire --exclusive-live rejects a second verified-live lease instead of
+#     preserving the legacy additive reacquire behavior.
 #
 
 set -euo pipefail
@@ -140,7 +142,10 @@ iso_ts() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
 rand_hex() {
   local v
-  v="$(tr -dc 'a-f0-9' < /dev/urandom | head -c 16 || true)"
+  # Read a fixed byte count before formatting it. `tr /dev/urandom | head`
+  # makes GNU tr report its expected SIGPIPE on some hosts; callers that
+  # capture stderr alongside machine JSON then receive a corrupted payload.
+  v="$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || true)"
   echo "${v:-0}"
 }
 
@@ -236,6 +241,23 @@ with_ledger_lock() {
   echo "$lock_fd"
 }
 
+with_ledger_read_lock() {
+  local ledger="$1" timeout="$2" out_var="${3:-}"
+  local lock_file lock_fd
+  lock_file="$(ledger_lock_path "$ledger")"
+  mkdir -p "$(dirname "$lock_file")"
+  exec {lock_fd}>"$lock_file"
+  if ! flock -s -w "$timeout" "$lock_fd"; then
+    exec {lock_fd}>&-
+    return 1
+  fi
+  if [ -n "$out_var" ]; then
+    printf -v "$out_var" '%s' "$lock_fd"
+    return 0
+  fi
+  echo "$lock_fd"
+}
+
 read_lock_owner() {
   local lock_file="$1" key
   if [ ! -f "$lock_file" ]; then
@@ -254,29 +276,48 @@ sort_csv_ids() {
 
 get_process_start_time() {
   local pid="$1"
-  if [ ! -r "/proc/$pid/stat" ]; then
-    echo "0"
-    return
+  if [ -r "/proc/$pid/stat" ]; then
+    local stat_line stat_tail start_ticks btime clock_ticks
+    local -a stat_fields=()
+    IFS= read -r stat_line < "/proc/$pid/stat" || stat_line=""
+    # Field 2 is parenthesized and may contain spaces or ')'. Strip through
+    # its final delimiter, then field 22 is the 20th field in the remainder.
+    stat_tail="${stat_line##*) }"
+    read -r -a stat_fields <<< "$stat_tail"
+    start_ticks="${stat_fields[19]:-}"
+    btime="$(awk '/^btime /{print $2}' /proc/stat 2>/dev/null || echo 0)"
+    clock_ticks="$(getconf CLK_TCK 2>/dev/null || echo 0)"
+    if [[ "$start_ticks" =~ ^[0-9]+$ ]] \
+      && [ "$clock_ticks" -gt 0 ] && [ "$btime" -gt 0 ]; then
+      echo $((btime + start_ticks / clock_ticks))
+      return
+    fi
   fi
-  local start_ticks
-  start_ticks="$(awk '{print $22}' "/proc/$pid/stat")"
-  if [ -z "$start_ticks" ]; then
-    echo "0"
-    return
+  local ps_start parsed
+  if ! ps_start="$(ps -o lstart= -p "$pid" 2>/dev/null \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"; then
+    ps_start=""
   fi
-  local btime clock_ticks
-  btime="$(awk '/^btime /{print $2}' /proc/stat 2>/dev/null || echo 0)"
-  clock_ticks="$(getconf CLK_TCK)"
-  if [ -z "$clock_ticks" ] || [ "$clock_ticks" -le 0 ] || [ -z "$btime" ]; then
-    echo "0"
-    return
+  if [ -n "$ps_start" ]; then
+    if ! parsed="$(date -d "$ps_start" +%s 2>/dev/null)"; then
+      parsed=""
+    fi
+    if [ -z "$parsed" ]; then
+      if ! parsed="$(date -j -f '%a %b %e %T %Y' "$ps_start" +%s 2>/dev/null)"; then
+        parsed=""
+      fi
+    fi
+    if [ -n "$parsed" ]; then
+      echo "$parsed"
+      return
+    fi
   fi
-  echo $((btime + start_ticks / clock_ticks))
+  echo "0"
 }
 
 is_process_alive() {
   local pid="$1" expected_start="$2"
-  if [ -z "$pid" ] || [ "$pid" -le 0 ] || [ ! -d "/proc/$pid" ]; then
+  if [ -z "$pid" ] || [ "$pid" -le 0 ]; then
     return 1
   fi
   if ! kill -0 "$pid" 2>/dev/null; then
@@ -285,7 +326,7 @@ is_process_alive() {
   if [ -n "$expected_start" ] && [ "$expected_start" -gt 0 ]; then
     local current_start
     current_start="$(get_process_start_time "$pid")"
-    if [ "$current_start" -ne "$expected_start" ]; then
+    if [ "$current_start" -gt 0 ] && [ "$current_start" -ne "$expected_start" ]; then
       return 1
     fi
   fi
@@ -426,7 +467,7 @@ write_side_effect_row() {
 }
 
 command_stage_acquire() {
-  local ledger="" run_id="" stage="" pid="" start_time="" heartbeat_ts="" git_ref="" git_sha="" worktree="" resources="" allow_reopen="0" timeout="$DEFAULT_LOCK_TIMEOUT" stale_secs="$DEFAULT_STALE_SECS"
+  local ledger="" run_id="" stage="" pid="" start_time="" heartbeat_ts="" git_ref="" git_sha="" worktree="" resources="" allow_reopen="0" exclusive_live="0" timeout="$DEFAULT_LOCK_TIMEOUT" stale_secs="$DEFAULT_STALE_SECS"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -441,6 +482,7 @@ command_stage_acquire() {
       --worktree) worktree="$2"; shift 2 ;;
       --resources) resources="$2"; shift 2 ;;
       --allow-reopen) allow_reopen=1; shift ;;
+      --exclusive-live) exclusive_live=1; shift ;;
       --timeout) timeout="$2"; shift 2 ;;
       --stale-seconds) stale_secs="$2"; shift 2 ;;
       *) usage ;;
@@ -489,7 +531,12 @@ command_stage_acquire() {
     fi
 
     if [ "$latest_state" = "leased" ] && [ "$latest_alive" -eq 0 ]; then
-      :
+      if [ "$exclusive_live" -eq 1 ]; then
+        flock -u "$run_fd"
+        eval "exec ${run_fd}>&-"
+        [ -n "$resource_fds" ] && for fd in $resource_fds; do release_lock "$fd"; done
+        error "run=$run_id stage=$stage already has a live lease"
+      fi
     elif is_terminal_gc_state "$latest_state" && [ "$allow_reopen" -eq 0 ]; then
       flock -u "$run_fd"
       eval "exec ${run_fd}>&-"
@@ -615,6 +662,61 @@ command_stage_heartbeat() {
   echo "$line"
 }
 
+command_stage_transfer() {
+  local ledger="" run_id="" stage="" generation="" nonce="" pid="" git_ref="" worktree=""
+  local timeout="$DEFAULT_LOCK_TIMEOUT"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;;
+      --run-id) run_id="$2"; shift 2 ;;
+      --stage) stage="$2"; shift 2 ;;
+      --generation) generation="$2"; shift 2 ;;
+      --nonce) nonce="$2"; shift 2 ;;
+      --pid) pid="$2"; shift 2 ;;
+      --git-ref) git_ref="$2"; shift 2 ;;
+      --worktree) worktree="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  [ -n "$run_id" ] || error "--run-id is required"
+  [ -n "$stage" ] || error "--stage is required"
+  [ -n "$generation" ] || error "--generation is required"
+  [ -n "$nonce" ] || error "--nonce is required"
+  [ -n "$pid" ] || pid=$$
+  [[ "$generation" =~ ^[1-9][0-9]*$ ]] || error "--generation must be a positive integer"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || error "--pid must be a positive integer"
+
+  local run_fd latest latest_state latest_generation latest_nonce
+  with_run_lock "$ledger" "$run_id" "$timeout" run_fd || error "run-lock unavailable"
+  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+  latest_state="$(jq -r '.state // empty' <<<"$latest")"
+  latest_generation="$(jq -r '.generation // 0' <<<"$latest")"
+  latest_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
+  if [ "$latest_state" != "leased" ] \
+      || [ "$latest_generation" != "$generation" ] \
+      || [ "$latest_nonce" != "$nonce" ]; then
+    release_lock "$run_fd"
+    error "stage ownership transfer compare-and-swap failed"
+  fi
+
+  local next_generation new_nonce start_time heartbeat_ts line
+  next_generation=$((generation + 1))
+  new_nonce="$(rand_hex)"
+  start_time="$(get_process_start_time "$pid")"
+  [ -n "$start_time" ] || start_time="$(now_ts)"
+  heartbeat_ts="$(now_ts)"
+  line="$(jq -nc \
+    --arg kind "stage" --arg ts "$(iso_ts)" --arg rid "$run_id" --arg stg "$stage" \
+    --arg state "leased" --arg nonce_v "$new_nonce" --argjson gen "$next_generation" \
+    --arg pid_v "$pid" --arg start_v "$start_time" --arg hb "$heartbeat_ts" \
+    --arg git_ref_v "$git_ref" --arg wt "$worktree" \
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($hb|tonumber),git_ref:$git_ref_v,git_sha:"",worktree:$wt,resources:"",reason:"ownership_transfer"}')"
+  append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
+  echo "$line"
+}
+
 command_journal_add() {
   local ledger="" run_id="" stage="" generation="" nonce="" idempotency_key="" op="journal" status="applied" payload='{}' timeout="$DEFAULT_LOCK_TIMEOUT"
 
@@ -708,6 +810,7 @@ command_stage_transition() {
   [ -n "$latest" ] || error "no stage exists for run=$run_id stage=$stage"
 
   local current_state current_gen current_nonce resources git_ref_cur git_sha_cur worktree_cur
+  local pid start_time heartbeat_ts
   current_state="$(jq -r '.state' <<<"$latest")"
   current_gen="$(jq -r '.generation // 0' <<<"$latest")"
   current_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
@@ -722,8 +825,8 @@ command_stage_transition() {
   }
 
   local stage_rows max_gen caller_rows current_row stale_from
-  stage_rows="$(jq -s --arg rid "$run_id" --arg stg "$stage" '
-    [ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stg) ]' "$ledger")"
+  stage_rows="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" '
+    [ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stg) ]')"
   if [ -z "$stage_rows" ] || [ "$stage_rows" = "null" ] || [ "$stage_rows" = "[]" ]; then
     flock -u "$run_fd"
     eval "exec ${run_fd}>&-"
@@ -771,6 +874,9 @@ command_stage_transition() {
   current_gen="$(jq -r '.generation // 0' <<<"$current_row")"
   current_nonce="$(jq -r '.nonce // empty' <<<"$current_row")"
   resources="$(jq -r '.resources // ""' <<<"$current_row")"
+  pid="$(jq -r '.pid // "0"' <<<"$current_row")"
+  start_time="$(jq -r '.start_time // "0"' <<<"$current_row")"
+  heartbeat_ts="$(jq -r '.heartbeat_ts // "0"' <<<"$current_row")"
 
   if [ "$nonce" != "$current_nonce" ]; then
     stale_from="$(jq -r '.state // ""' <<<"$current_row")"
@@ -833,12 +939,15 @@ command_stage_transition() {
     --arg from "$current_state" \
     --argjson gen "$generation" \
     --arg nonce_v "$nonce" \
+    --arg pid_v "$pid" \
+    --arg start_v "$start_time" \
+    --arg heartbeat_v "$heartbeat_ts" \
     --argjson req "$(jq -Rc 'split(",")' <<<"$required_side_effect_keys")" \
     --arg git_ref_v "$git_ref" \
     --arg git_sha_v "$git_sha" \
     --arg wt "$worktree" \
     --arg resources_v "$resources" \
-    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,idempotency_key:$id_key,transition_from:$from,generation:$gen,nonce:$nonce_v,required_side_effect_keys:$req,git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v}')"
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,reason:$reason,idempotency_key:$id_key,transition_from:$from,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($heartbeat_v|tonumber),required_side_effect_keys:$req,git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v}')"
   append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
   for fd in $r_fds; do release_lock "$fd"; done
   echo "$line"
@@ -1208,11 +1317,9 @@ command_stage_reconcile() {
   fi
 
   local pending_side_effects=0
-  if [ -f "$ledger" ]; then
-    pending_side_effects="$(jq -s --arg rid "$run_id" --arg stg "$stage" '
+  pending_side_effects="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" '
       [ .[] | select(.kind=="journal" and .run_id==$rid and .stage==$stg and (.status|ascii_downcase) != "applied") ]
-      | length' "$ledger" 2>/dev/null || echo 0)"
-  fi
+      | length' 2>/dev/null || echo 0)"
   pending_side_effects="${pending_side_effects:-0}"
 
   local status reason=""
@@ -1256,7 +1363,7 @@ command_stage_reconcile() {
     --argjson blocked "$blocked_state" \
     --argjson is_alive "$alive" \
     --arg resources "$resources" \
-    '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result|if . then true else false end),git_truth:($git_truth|if . then true else false end),pending_side_effects:($pending|tonumber),terminal:($terminal|if . then true else false end),blocked_state:($blocked|if . then true else false end),holder_alive:($is_alive|if . then true else false end),resources:$resources}'
+    '{status:$status,reason:$reason,run_id:$rid,stage:$stg,state:$state_v,generation:$generation,nonce:$nonce_v,has_result:($has_result == 1),git_truth:($git_truth == 1),pending_side_effects:($pending|tonumber),terminal:($terminal == 1),blocked_state:($blocked == 1),holder_alive:($is_alive == 1),resources:$resources}'
 }
 
 command_resume() {
@@ -1276,15 +1383,11 @@ command_resume() {
   [ -n "$run_id" ] || error "--run-id required"
   [ -n "$idempotency_key" ] || error "--idempotency-key required"
 
-  if [ ! -f "$ledger" ]; then
-    error "no ledger at $ledger"
-  fi
-
   local resume_stage resume_record resume_generation resume_nonce resume_state resume_resources resume_worktree resume_git_ref resume_git_sha
-  resume_stage="$(jq -s -r --arg rid "$run_id" '[ .[] | select(.kind=="stage" and .run_id==$rid) ] | if length==0 then empty else .[-1].stage end' "$ledger")"
+  resume_stage="$(ledger_jq_slurp "$ledger" -r --arg rid "$run_id" '[ .[] | select(.kind=="stage" and .run_id==$rid) ] | if length==0 then empty else .[-1].stage end')"
   [ -n "$resume_stage" ] || error "no stage rows for run_id=$run_id"
 
-  resume_record="$(jq -s -c --arg rid "$run_id" --arg stage "$resume_stage" '[ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stage) ] | if length==0 then empty else .[-1] end' "$ledger")"
+  resume_record="$(ledger_jq_slurp "$ledger" -c --arg rid "$run_id" --arg stage "$resume_stage" '[ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stage) ] | if length==0 then empty else .[-1] end')"
   [ -n "$resume_record" ] || error "missing resume stage row"
 
   resume_generation="$(jq -r '.generation // 0' <<<"$resume_record")"
@@ -1296,7 +1399,7 @@ command_resume() {
   resume_git_sha="$(jq -r '.git_sha // ""' <<<"$resume_record")"
 
   local review_row review_state review_round_owed review_stage
-  review_row="$(jq -s -c --arg rid "$run_id" '[ .[] | select(.kind=="stage" and .run_id==$rid and .stage=="review") ] | if length==0 then empty else .[-1] end' "$ledger")"
+  review_row="$(ledger_jq_slurp "$ledger" -c --arg rid "$run_id" '[ .[] | select(.kind=="stage" and .run_id==$rid and .stage=="review") ] | if length==0 then empty else .[-1] end')"
   review_state=""
   review_stage="review"
   if [ -n "$review_row" ] && [ "$review_row" != "empty" ] && [ "$review_row" != "null" ]; then
@@ -1487,11 +1590,9 @@ command_gc_check() {
   fi
 
   local pending_side_effects=0
-  if [ -f "$ledger" ]; then
-    pending_side_effects="$(jq -s --arg rid "$run_id" --arg stg "$stage" '
+  pending_side_effects="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" '
       [ .[] | select(.kind=="journal" and .run_id==$rid and .stage==$stg and (.status|ascii_downcase) != "applied") ]
-      | length' "$ledger" 2>/dev/null || echo 0)"
-  fi
+      | length' 2>/dev/null || echo 0)"
   pending_side_effects="${pending_side_effects:-0}"
   if [ "$pending_side_effects" -ne 0 ]; then
     reasons+=("pending_side_effects")
@@ -1583,13 +1684,9 @@ command_query_latest() {
     if [ -z "$ledger" ] || [ -z "$run_id" ]; then
       error "--ledger and --run-id required for resource query"
     fi
-    if [ ! -f "$ledger" ]; then
-      echo '{}'
-      return 0
-    fi
-    jq -s --arg rid "$resource_id" '
+    ledger_jq_slurp "$ledger" --arg rid "$resource_id" '
       [ .[] | select(.kind=="resource" and .resource_id==$rid) ]
-      | if length==0 then {} else .[-1] end' "$ledger"
+      | if length==0 then {} else .[-1] end'
     return 0
   fi
 
@@ -1598,17 +1695,17 @@ command_query_latest() {
     return 0
   fi
 
-  jq -s --arg rid "$run_id" '
+  ledger_jq_slurp "$ledger" --arg rid "$run_id" '
     [ .[] | select(.kind=="stage" and .run_id==$rid) ]
-    | if length==0 then {} else .[-1] end' "$ledger"
+    | if length==0 then {} else .[-1] end'
 }
 
-# directive_scan_files — the directive read set: rotated segments (oldest first) then
-# the live ledger. Ledger rotation (RUN_LEDGER_MAX_BYTES) must not silently drop a
-# pending directive ("a directive never vanishes silently"): poll/ack scan the rotated
-# ${ledger}.N files too, so a directive whose row rotated out is still visible and can
-# still be terminalized. Appends always go to the live ledger only.
-directive_scan_files() {
+# ledger_scan_files — the ONE rotation-aware active view: rotated segments oldest-first,
+# then the live ledger. All campaign/state/lease/journal/status/resume/directive readers
+# MUST use this set so last-write semantics survive RUN_LEDGER_MAX_BYTES rotation and a
+# later heartbeat cannot be observed without its active state and lease.
+# Appends always go to the live ledger only (under the ledger lock with rotation).
+ledger_scan_files() {
   local ledger="$1" idx max_rot
   max_rot="${RUN_LEDGER_MAX_ROTATIONS:-$DEFAULT_MAX_ROTATIONS}"
   idx="$max_rot"
@@ -1622,6 +1719,42 @@ directive_scan_files() {
     printf '%s\n' "$ledger"
   fi
   return 0
+}
+
+# directive_scan_files — alias; directives share the universal rotation-aware view.
+directive_scan_files() {
+  ledger_scan_files "$@"
+}
+
+# ledger_jq_slurp_unlocked <ledger> [jq-args and filter...]
+# Caller must hold the ledger lock. Used by rotation while it owns the exclusive
+# lock so it cannot recursively acquire a shared lock.
+ledger_jq_slurp_unlocked() {
+  local ledger="$1"
+  shift
+  local scan_files=()
+  mapfile -t scan_files < <(ledger_scan_files "$ledger")
+  if [ "${#scan_files[@]}" -eq 0 ]; then
+    jq -s "$@" </dev/null
+  else
+    jq -s "$@" "${scan_files[@]}"
+  fi
+}
+
+# ledger_jq_slurp <ledger> [jq-args and filter...]
+# Take one coherent oldest-to-live snapshot while holding a shared ledger lock.
+# This prevents a reader from observing half of the rename rotation sequence.
+ledger_jq_slurp() {
+  local ledger="$1"
+  shift
+  local ledger_read_fd output rc
+  with_ledger_read_lock "$ledger" "$DEFAULT_LOCK_TIMEOUT" ledger_read_fd \
+    || error "ledger read lock unavailable"
+  output="$(ledger_jq_slurp_unlocked "$ledger" "$@")"
+  rc=$?
+  release_lock "$ledger_read_fd"
+  printf '%s\n' "$output"
+  return "$rc"
 }
 
 command_directive_send() {
@@ -1704,16 +1837,9 @@ command_directive_poll() {
   [ -n "$run_id" ] || error "--run-id is required"
   [ -n "$stage" ] || stage=""
 
-  local scan_files=()
-  mapfile -t scan_files < <(directive_scan_files "$ledger")
-  if [ "${#scan_files[@]}" -eq 0 ]; then
-    echo '[]'
-    return 0
-  fi
-
-  jq -s --arg rid "$run_id" --arg stg "$stage" '
+  ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" '
     (map(select(.kind=="directive_delivered" or .kind=="directive_expired") | .directive_id) | unique) as $acked
-    | [ .[] | select(.kind=="directive" and .run_id==$rid and ($stg=="" or .stage==$stg) and (.directive_id as $d | ($acked | index($d)) | not)) ]' "${scan_files[@]}"
+    | [ .[] | select(.kind=="directive" and .run_id==$rid and ($stg=="" or .stage==$stg) and (.directive_id as $d | ($acked | index($d)) | not)) ]'
 }
 
 command_directive_ack() {
@@ -1745,25 +1871,18 @@ command_directive_ack() {
   fi
 
   local directive_row
-  local scan_files=()
-  mapfile -t scan_files < <(directive_scan_files "$ledger")
-  if [ "${#scan_files[@]}" -eq 0 ]; then
-    release_lock "$run_fd"
-    error "no directive directive_id=$directive_id"
-  fi
-
-  directive_row="$(jq -s --arg rid "$run_id" --arg did "$directive_id" '
+  directive_row="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg did "$directive_id" '
     [ .[] | select(.kind=="directive" and .run_id==$rid and .directive_id==$did) ]
-    | if length==0 then empty else .[-1] end' "${scan_files[@]}")"
+    | if length==0 then empty else .[-1] end')"
   if [ -z "$directive_row" ] || [ "$directive_row" = "empty" ]; then
     release_lock "$run_fd"
     error "no directive directive_id=$directive_id"
   fi
 
   local has_acked
-  has_acked="$(jq -s --arg rid "$run_id" --arg did "$directive_id" '
+  has_acked="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg did "$directive_id" '
     [ .[] | select((.kind=="directive_delivered" or .kind=="directive_expired") and .run_id==$rid and .directive_id==$did) ]
-    | if length==0 then false else true end' "${scan_files[@]}" 2>/dev/null || echo false)"
+    | if length==0 then false else true end' 2>/dev/null || echo false)"
   if [ "$has_acked" = "true" ]; then
     release_lock "$run_fd"
     echo '{"status":"already_acked"}'
@@ -1838,11 +1957,6 @@ command_resource_scan() {
 
   [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
 
-  if [ ! -f "$ledger" ]; then
-    echo '[]'
-    return 0
-  fi
-
   if [ -n "$resource_ids" ]; then
     local output='[' sep=''
     local resource
@@ -1863,21 +1977,21 @@ command_resource_scan() {
   fi
 
   if [ -n "$state_filter" ]; then
-    jq -s --arg state "$state_filter" '
+    ledger_jq_slurp "$ledger" --arg state "$state_filter" '
       [ .[] | select(.kind=="resource") ]
       | reduce .[] as $r ({};
           .[$r.resource_id] = $r.state)
       | to_entries
       | map(select(.value==$state))
-      | map({resource_id:.key,state:.value})' "$ledger"
+      | map({resource_id:.key,state:.value})'
     return 0
   fi
 
-  jq -s '
+  ledger_jq_slurp "$ledger" '
     [ .[] | select(.kind=="resource") ]
     | reduce .[] as $r ({}; .[$r.resource_id] = ($r.state // "active"))
     | to_entries
-    | map({resource_id:.key,state:.value})' "$ledger"
+    | map({resource_id:.key,state:.value})'
 }
 
 command_write_atomic() {
@@ -1952,44 +2066,59 @@ command_init() {
   echo "{\"status\":\"initialized\",\"path\":\"$ledger\"}"
 }
 
+command_snapshot() {
+  local ledger="" timeout="$DEFAULT_LOCK_TIMEOUT"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --ledger) ledger="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  [ -n "$ledger" ] || ledger="$(canonical_ledger_path "$ledger")"
+  local ledger_read_fd scan_files=() file
+  with_ledger_read_lock "$ledger" "$timeout" ledger_read_fd \
+    || error "ledger read lock unavailable"
+  mapfile -t scan_files < <(ledger_scan_files "$ledger")
+  for file in "${scan_files[@]}"; do
+    cat -- "$file" || {
+      release_lock "$ledger_read_fd"
+      error "ledger snapshot read failed: $file"
+    }
+    printf '\n'
+  done
+  release_lock "$ledger_read_fd"
+}
+
 # Correcting JSONL readers in slurp mode for robust scan against jsonl ledger append.
+# All readers use ledger_jq_slurp (oldest-to-live) so rotation cannot hide leases/state.
 latest_stage_record() {
   local ledger="$1" run_id="$2" stage="$3"
-  if [ ! -f "$ledger" ]; then
-    echo ""
-    return
-  fi
-  jq -s --arg rid "$run_id" --arg stg "$stage" '
+  ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" '
     [ .[] | select(.kind=="stage" and .run_id==$rid and .stage==$stg) ]
-    | if length==0 then empty else .[-1] end' "$ledger"
+    | if length==0 then empty else .[-1] end'
 }
 
 has_applied_journal_key() {
   local ledger="$1" run_id="$2" stage="$3" generation="$4" idempotency_key="$5"
-  if [ ! -f "$ledger" ] || [ -z "$idempotency_key" ]; then
+  if [ -z "$idempotency_key" ]; then
     echo "false"
     return
   fi
-
   local exists
-  exists="$(jq -s --arg rid "$run_id" --arg stg "$stage" --arg gid "$generation" --arg key "$idempotency_key" '
+  exists="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg gid "$generation" --arg key "$idempotency_key" '
     [ .[]
       | select(.kind=="journal" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gid and .idempotency_key==$key and .status=="applied") ]
-    | if length>0 then true else false end' "$ledger" 2>/dev/null || echo false)"
+    | if length>0 then true else false end' 2>/dev/null || echo false)"
   echo "${exists:-false}"
 }
 
 audit_resource_contention() {
   local ledger="$1" resource_id="$2"
-  if [ ! -f "$ledger" ]; then
-    echo "active"
-    return
-  fi
-
   local state
-  state="$(jq -r -s --arg rid "$resource_id" '
+  state="$(ledger_jq_slurp "$ledger" -r --arg rid "$resource_id" '
     [ .[] | select(.kind=="resource" and .resource_id==$rid) ]
-    | if length==0 then "active" else .[-1].state end' "$ledger" 2>/dev/null || echo active)"
+    | if length==0 then "active" else .[-1].state end' 2>/dev/null || echo active)"
 
   if [ -z "$state" ] || [ "$state" = "null" ]; then
     echo "active"
@@ -2067,6 +2196,44 @@ atomic_append_ledger() {
         mv "$ledger" "${ledger}.1"
       fi
       : > "$tmp"
+      # Carry forward every still-leased stage row (and its run's journals) so
+      # rotation cannot expose a heartbeat without its active state/lease, and
+      # active campaigns survive segment GC under RUN_LEDGER_MAX_ROTATIONS.
+      # Readers still use the oldest-to-live view; this is belt-and-braces for
+      # the live segment under the same ledger lock as the append.
+      if [ -f "${ledger}.1" ]; then
+        local carry
+        # Compact carry: latest leased stage row per (run_id, stage). Keeps the
+        # new live segment from exposing a post-rotation heartbeat without its
+        # lease, without re-materializing the entire active history (journals
+        # and older stage rows remain readable via oldest-to-live scan).
+        # Compact carry into the new live segment under the same lock:
+        #  1) latest leased stage row per (run_id, stage)
+        #  2) all journal rows for those active run_ids (intake/events/idempotency)
+        # so rotation cannot hide active state/lease, and campaign projection still
+        # finds its intake after older segments are GC'd. -c keeps JSONL compact.
+        carry="$(ledger_jq_slurp_unlocked "$ledger" -c '
+          ([ .[] | select(.kind=="stage") ]
+            | group_by((.run_id // "") + "\u0000" + (.stage // ""))
+            | map(.[-1] | select(.state=="leased"))
+          ) as $leases
+          | ($leases | map(.run_id) | unique) as $active
+          | ([ .[]
+              | select(.kind=="journal" and ((.run_id as $r | $active | index($r)) != null))
+              | . as $row
+              | (($row | del(._rotation_carry, ._rotation_root) | tojson | @base64)) as $root
+              | ($row + {_rotation_carry:true, _rotation_root:($row._rotation_root // $root)})
+            ]
+            | group_by(._rotation_root)
+            | map(.[-1])
+          ) as $journals
+          | ($leases + $journals)
+          | .[]
+        ' 2>/dev/null || true)"
+        if [ -n "$carry" ]; then
+          printf '%s\n' "$carry" >> "$tmp"
+        fi
+      fi
     fi
   fi
 
@@ -2102,6 +2269,9 @@ case "$command" in
   stage-heartbeat)
     command_stage_heartbeat "$@" ;;
 
+  stage-transfer)
+    command_stage_transfer "$@" ;;
+
   stage-transition)
     command_stage_transition "$@" ;;
 
@@ -2131,6 +2301,9 @@ case "$command" in
 
   query-latest)
     command_query_latest "$@" ;;
+
+  snapshot)
+    command_snapshot "$@" ;;
 
   write-result)
     command_write_result "$@" ;;

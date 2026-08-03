@@ -11,10 +11,11 @@ REF_BODY="$(cat "$REF")"
 
 assert_contains "$SKILL_BODY" "role-and-harness-governance.md" "engine-onboarding links governance reference"
 assert_contains "$SKILL_BODY" "planner, implementer, verifier, reviewer, or orchestrator" "engine-onboarding trigger names all governed roles"
-assert_contains "$SKILL_BODY" "Scorecard can record and" "engine-onboarding records scorecard role evidence support"
-assert_contains "$SKILL_BODY" "governed role evidence rows" "engine-onboarding records governed role evidence support"
-assert_contains "$SKILL_BODY" "fallback order for route-enabled roles only" "engine-onboarding scopes ladder to route-enabled roles"
-assert_contains "$SKILL_BODY" "Verifier and orchestrator are scorecard-recordable but not fallback-ladder or auto-routable yet" "engine-onboarding records verifier/orchestrator routing caveat"
+assert_contains "$SKILL_BODY" 'Canonical roles are `owner`, `implementer`, `reviewer`, `verification_author`, and `explorer`' "engine-onboarding records canonical role evidence support"
+assert_contains "$SKILL_BODY" "stored and returned rows are canonical" "engine-onboarding separates legacy aliases from canonical evidence"
+assert_contains "$SKILL_BODY" 'Disk-backed `report`/`ladder` never returns a qualified routing candidate' "engine-onboarding blocks disk-backed ladder authority"
+assert_contains "$SKILL_BODY" "Reviewer and owner end-to-end qualification are shipped gate paths today" "engine-onboarding records implemented protected-role gates"
+assert_contains "$SKILL_BODY" "Implementer, verification-author, and explorer auto-qualification require their own role-specific eval suites" "engine-onboarding records remaining unimplemented-role routing caveat"
 
 for level in H0 H1 H2 H3 H4 H5; do
   assert_contains "$REF_BODY" "$level" "governance reference includes harness level $level"
@@ -24,7 +25,7 @@ for state in "R0 documented" "R1 spike-passed" "R2 scorecard-recordable" "R3 aut
   assert_contains "$REF_BODY" "$state" "governance reference includes role promotion state $state"
 done
 
-for role in Planner Implementer Verifier Reviewer Orchestrator; do
+for role in Owner Implementer "Verification author" Reviewer Explorer; do
   assert_contains "$REF_BODY" "$role" "governance reference includes role $role"
 done
 

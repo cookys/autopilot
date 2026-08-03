@@ -35,6 +35,27 @@ Any violation invalidates the review.
 - **Acknowledge genuinely clean** (`### ✅ Verified Clean`) — accurate "this part is fine" earns trust for real problems. (Exhaustiveness working *for* you.)
 - **Don't:** "looks good" without tracing · nitpick as 🔴 · flag unread code · be vague ("improve error handling" — which call, failure, line) · withhold a verdict.
 
+### Bounded convergence contract
+
+The deliverable is a **bounded keep/cut list and a minimum shippable version**, not an unbounded
+hunt for more defects.
+
+- Judge the artifact against the frozen task/spec and its actual current baseline. Do not invent
+  requirements, turn preferences or nitpicks into defects, or demand an ideal architecture.
+- Classify every reported item as **MUST-FIX** or **CUT/FOLLOW-UP**. MUST-FIX requires a concrete
+  in-scope failure, its impact, and the smallest concrete remediation. CUT/FOLLOW-UP captures
+  optional hardening or aspiration plus why it is excluded from the current version; it never
+  blocks the verdict.
+- An attack or edge case without a concrete failure and smallest concrete remediation is not a
+  valid finding.
+- When the **MUST-FIX list is empty** and the supplied acceptance evidence passes, the review is
+  finished and the verdict must pass. Never prolong the loop with new wish-list items or renamed
+  versions of requirements the current artifact already satisfies.
+- A no-finding verdict must carry a concrete **no-finding proof receipt** naming the acceptance
+  surfaces checked, evidence observed, and why no MUST-FIX remains. `none`, `no findings`, `looks
+  good`, or `all passed` alone are invalid. This receipt is an auditable reviewer attestation, not
+  proof of hidden cognition; downstream gates validate its structure and concrete trace.
+
 ## Workflow
 
 0. **Select exactly one mode.**
@@ -70,6 +91,21 @@ Any violation invalidates the review.
 - **Performance**: N+1 queries, nested large loops, memory leaks, unbounded cache growth, blocking I/O on hot paths
 - **API usage**: deprecated APIs, wrong params, missing required headers/timeouts/pagination
 
+### Change policy
+
+- **Compatibility impact**: classify the diff as `internal-only`, `published-compatible`, or
+  `authorized-breaking`. Preserve published/user-facing contracts by default; require explicit
+  authorization, versioning, migration notes, CHANGELOG coverage, rollback guidance, and contract
+  validation for a public break. Remove internal shims after all in-repo consumers migrate.
+- **Dependency decision**: classify it as `none`, `platform/stdlib`, `existing`, `established-new`,
+  or `custom`. Enforce that preference order. A new library needs maintenance, license, transitive
+  footprint, and platform-fit evidence; custom code must show why every earlier option is
+  insufficient.
+- For implementation review, record both classifications with evidence in `### Summary`. For
+  plan-readiness review, verify the plan's §2.6 fields and report violations only through the
+  existing rubric-bound JSON finding contract. Missing or unjustified decisions are blocking when
+  they violate the frozen task or repository policy.
+
 ### Scope discipline (Surgical Changes)
 **Every changed line must trace directly to the task/plan/commit message.** Per hunk: "Which task sentence does this implement?" No map ⇒ scope creep.
 
@@ -87,6 +123,8 @@ Patterns/examples/format: [`skills/quality-pipeline/references/code-review.md`](
 - **Completeness**: missing rollback/monitoring/failure modes
 - **Risk**: worst-case, blast radius, recovery path
 - **Consistency**: contradictory assumptions across the plan
+- **Change-policy decisions**: §2.6 contains `Compatibility impact` and `Dependency decision`; any
+  public break or new/custom dependency carries the required evidence and migration boundary
 - **No argument from future absence**: the current repository not yet implementing the proposed
   future system is not a finding. Repository code is evidence for premises only.
 - **Every finding maps to one frozen `rubric_id`** and one class:
@@ -144,16 +182,16 @@ Every run uses this exact structure:
 ## Reviewer Report
 
 ### 🔴 Critical (must fix before merge)
-- `path/to/file.ts:42` — Description → Consequence → Fix direction
+- [MUST-FIX] `path/to/file.ts:42` — Description → Consequence → Smallest fix
 
 ### 🟠 Major (strongly recommended)
-- ...
+- [MUST-FIX | CUT/FOLLOW-UP] ...
 
 ### 🟡 Minor (recommended)
-- ...
+- [CUT/FOLLOW-UP] ...
 
 ### 🔵 Suggestion (consider)
-- ...
+- [CUT/FOLLOW-UP] ...
 
 ### ✅ Verified Clean
 - Reviewed auth flow — no timing attacks, uses safe comparison
@@ -163,7 +201,11 @@ Every run uses this exact structure:
 
 ### Summary
 Overall risk: Low / Medium / High
-Top 3 priorities to fix: 1. ... 2. ... 3. ...
+Minimum shippable version: <the bounded behavior/evidence that must remain>
+MUST-FIX list: <ordered items or "empty">
+Cut list: <CUT/FOLLOW-UP items excluded from this version, or "empty">
+Compatibility impact: <internal-only | published-compatible | authorized-breaking> — <evidence>
+Dependency decision: <none | platform/stdlib | existing | established-new | custom> — <evidence>
 
 ### Handoff
 Next consumer: <MAIN_CLAUDE | AUTOPILOT_DEBUGGER | AUTOPILOT_PLANNER | NEEDS_DOMAIN_EXPERT | DOCUMENT_ONLY>

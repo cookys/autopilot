@@ -29,9 +29,17 @@ print('manifest_name', manifest.name);
 print('manifest_hooks', manifest.hooks);
 print('manifest_has_skills', Object.prototype.hasOwnProperty.call(manifest, 'skills'));
 print('manifest_capabilities', Array.isArray(manifest.interface.capabilities) ? manifest.interface.capabilities.join(',') : 'bad');
-for (const eventName of ['SessionStart', 'PreToolUse', 'PostToolUse', 'PreCompact', 'Stop']) {
+for (const eventName of ['SessionStart', 'PreToolUse', 'PostToolUse', 'PreCompact', 'PostCompact', 'Stop']) {
   print(`has_${eventName}`, Array.isArray(hooks.hooks[eventName]));
 }
+const postCompactEntry = hooks.hooks.PostCompact?.[0];
+const postCompactHook = postCompactEntry?.hooks?.[0];
+print('postcompact_declaration_exact',
+  hooks.hooks.PostCompact?.length === 1 &&
+  postCompactEntry?.matcher === 'manual|auto' &&
+  postCompactEntry?.hooks?.length === 1 &&
+  postCompactHook?.type === 'command' &&
+  postCompactHook?.command === 'node "${PLUGIN_ROOT}/hooks/probe.js"');
 const serializedHooks = JSON.stringify(hooks);
 const commands = Object.values(hooks.hooks).flatMap((entries) =>
   entries.flatMap((entry) => (entry.hooks || []).map((hook) => hook.command))
@@ -62,6 +70,8 @@ assert_contains "$OUT" "has_SessionStart=true" "Probe config includes SessionSta
 assert_contains "$OUT" "has_PreToolUse=true" "Probe config includes PreToolUse"
 assert_contains "$OUT" "has_PostToolUse=true" "Probe config includes PostToolUse"
 assert_contains "$OUT" "has_PreCompact=true" "Probe config includes PreCompact"
+assert_contains "$OUT" "has_PostCompact=true" "Probe config includes PostCompact"
+assert_contains "$OUT" "postcompact_declaration_exact=true" "Probe PostCompact declaration has exact matcher and command hook"
 assert_contains "$OUT" "has_Stop=true" "Probe config includes Stop"
 assert_contains "$OUT" "uses_plugin_root=true" "Probe hook commands resolve through PLUGIN_ROOT"
 assert_contains "$OUT" "quotes_plugin_root=true" "Probe hook commands quote PLUGIN_ROOT path"

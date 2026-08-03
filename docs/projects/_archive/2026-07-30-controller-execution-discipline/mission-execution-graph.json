@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "controller-execution-discipline",
+      "source_plan_ids": [
+        "plan-f0a200c711bf74914e869497b2a2b1e1e5319ebca5211238e2356bbb39575559"
+      ],
+      "source_rubric_ids": [
+        "R102830926734817334086182100184716416919776355427915380369975382297565270807710",
+        "R2050602807008477731664398661579751837186566322653580795995389055976715466170",
+        "R21450281817622922374594380155093759377758567170175746022993372611722037676053",
+        "R23633073879776181747565202917199497619804775367605394169661981803076732801551",
+        "R23972691035634977163054828453311885851618930111350151898766931849705921610132",
+        "R30556006982065141916496583152215498866787790134368246420395311426233763772044",
+        "R60384870158693426312821106009481178840363512422918604412978768040279729125484",
+        "R75131351715808450654771271139119661302156531598442079309086496003493429109148",
+        "R77888633686792107432652150106127815282488771448477645193301011429636823033849",
+        "R78526001649852821766901382205935793256110983815463159693063639608060989717181",
+        "R81577430677897678531458246300616481913410454255043448369334579679753001680936",
+        "R8532947560937950624211203733435590540717055153525730418019355217459339431796"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "combined-acceptance",
+        "exact-capability-identity",
+        "executable-mission-delta",
+        "frozen-denominator",
+        "full-diff-before-repair",
+        "honest-terminal-semantics",
+        "joint-repair-budget",
+        "mechanical-progress-gates",
+        "one-durable-work-order",
+        "orphan-adoption",
+        "recovery-resource-debt"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/implementation-campaign-state.test.sh",
+        "bash hooks/tests/implementation-campaign-dogfood.test.sh",
+        "bash hooks/tests/autopilot-engine.test.sh",
+        "bash hooks/tests/dispatch-hetero.test.sh",
+        "bash hooks/tests/codex-compaction-rehydration.test.sh",
+        "bash hooks/tests/mission-policy-graph.test.sh",
+        "bash hooks/tests/mission-routing-admission.test.sh",
+        "bash hooks/tests/engine-capability-state.test.sh"
+      ],
+      "gate_attempt_budget": 3,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 700,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 32,
+        "output_bytes": 15000000
+      },
+      "campaign": {
+        "profile": "high",
+        "allowed_path_prefixes": [
+          "CLAUDE.md",
+          "docs/plans",
+          "hooks/tests",
+          "references",
+          "schemas",
+          "scripts",
+          "skills/l6",
+          "src"
+        ],
+        "max_changed_files": 32,
+        "baseline_churn": 12000,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 6000,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-07-30-controller-execution-discipline.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "hooks/tests/autopilot-engine.test.sh",
+          "hooks/tests/codex-compaction-rehydration.test.sh",
+          "hooks/tests/dispatch-hetero.test.sh",
+          "hooks/tests/engine-capability-state.test.sh",
+          "hooks/tests/implementation-campaign-dogfood.test.sh",
+          "hooks/tests/implementation-campaign-state.test.sh",
+          "hooks/tests/mission-policy-graph.test.sh",
+          "hooks/tests/mission-routing-admission.test.sh",
+          "scripts/compaction-rehydrate.js",
+          "scripts/dispatch-hetero.sh",
+          "scripts/mission-routing-admission.js",
+          "scripts/probe-engine-capability.sh",
+          "src/campaign/cli.js",
+          "src/engine/autopilot-engine.js",
+          "src/engine/campaign-composition.js",
+          "src/engine/campaign-intake.js",
+          "src/engine/implementation-campaign.js",
+          "src/engine/mission-execution-graph.js",
+          "src/engine/work-order.js"
+        ],
+        "output_paths": [
+          "schemas/implementation-campaign-contract.schema.json",
+          "schemas/implementation-campaign-receipt.schema.json",
+          "schemas/mission-execution-graph.schema.json",
+          "scripts/dispatch-hetero.sh",
+          "src/campaign/cli.js",
+          "src/engine/campaign-intake.js",
+          "src/engine/mission-execution-graph.js"
+        ]
+      }
+    }
+  ]
+}

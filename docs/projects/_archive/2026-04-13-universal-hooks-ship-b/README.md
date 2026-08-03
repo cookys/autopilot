@@ -1,7 +1,7 @@
 # Universal Hooks Ship B (v2.5.0)
 
 **Date**: 2026-04-13
-**Status**: In Progress
+**Status**: Complete — shipped in v2.5.0 and archived.
 **Branch**: `feature/v2.5.0-universal-hooks`
 **Plan**: `docs/plans/2026-04-12-universal-hooks.md`
 **Size**: L

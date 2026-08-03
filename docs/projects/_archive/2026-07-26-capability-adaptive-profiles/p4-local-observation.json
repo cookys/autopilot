@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-26T09:18:02.325699876Z",
+  "host": {
+    "local_roster": {
+      "default_path": "~/.autopilot/local-engines.json",
+      "status": "not_configured",
+      "reason": "ROSTER_UNAVAILABLE"
+    },
+    "runtime_commands": [
+      { "command": "ollama", "status": "absent" },
+      { "command": "vllm", "status": "absent" },
+      { "command": "llama-server", "status": "absent" },
+      { "command": "lms", "status": "absent" }
+    ],
+    "harness_observations": [
+      {
+        "command": "codex",
+        "version": "codex-cli 0.145.0",
+        "version_output_sha256": "f9eb0c462cdded1fb971b33c647ff1b8b491dfe962a1506026e07a06f634f651",
+        "help_output_sha256": "e0e9bf467f5eaa19c0d1f3d4db6f10844cdb080d30ddfdcbb384a16cb54171e5",
+        "observed_local_flags": ["--oss", "--local-provider"],
+        "observed_provider_values": ["lmstudio", "ollama"],
+        "qualification_status": "unverified_no_live_runtime"
+      },
+      {
+        "command": "opencode",
+        "version": "1.17.15",
+        "version_output_sha256": "05f6a2182bcb3a3443473745c6ba2abaa30817c188b9d47aef294c3fded61fbe",
+        "qualification_status": "unverified_no_live_runtime"
+      }
+    ]
+  },
+  "contract_verification": {
+    "fake_runtime": "autopilot-contract",
+    "probe_assertions": 50,
+    "raw_dispatch_assertions": 63,
+    "semantic_identity": "verified_against_fake_contract",
+    "operational_identity": "verified_against_fake_contract",
+    "capacity_and_lease": "verified_against_fake_contract",
+    "cancel_and_recovery": "verified_against_fake_contract",
+    "network_containment": "local_endpoint_only_without_live_independent_verifier"
+  },
+  "publication": {
+    "live_runtime_rows": [],
+    "raw_roles_published": [],
+    "agentic_roles_published": [],
+    "runner_registered": false,
+    "containment_trials_run": 0,
+    "status": "unverified_no_live_runtime",
+    "reason": "No configured local endpoint or installed local runtime existed, so no real worktree, credential, network, Git-metadata, symlink, or descendant-process containment claim can be made."
+  }
+}

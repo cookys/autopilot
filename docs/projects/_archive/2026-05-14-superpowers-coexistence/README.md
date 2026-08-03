@@ -1,9 +1,9 @@
 # Superpowers Coexistence — v2.7.0
 
-**Status**: 🟢 Phases complete — pending merge to `develop`
-**Plan doc**: [`docs/plans/2026-05-14-superpowers-coexistence.md`](../../plans/2026-05-14-superpowers-coexistence.md)
+**Status**: Complete — merged as v2.7.0 and archived.
+**Plan doc**: [`docs/plans/2026-05-14-superpowers-coexistence.md`](../../../plans/2026-05-14-superpowers-coexistence.md)
 **Branch**: `feat/v2.7.0-superpowers-coexistence`
-**CHANGELOG**: [v2.7.0 entry shipped](../../../CHANGELOG.md)
+**CHANGELOG**: [v2.7.0 entry shipped](../../../../CHANGELOG.md)
 
 ---
 
@@ -89,8 +89,8 @@ git merge --no-ff feat/v2.7.0-superpowers-coexistence
 
 ## Links
 
-- Plan doc: [`docs/plans/2026-05-14-superpowers-coexistence.md`](../../plans/2026-05-14-superpowers-coexistence.md)
-- CHANGELOG: [v2.7.0 entry](../../../CHANGELOG.md)
+- Plan doc: [`docs/plans/2026-05-14-superpowers-coexistence.md`](../../../plans/2026-05-14-superpowers-coexistence.md)
+- CHANGELOG: [v2.7.0 entry](../../../../CHANGELOG.md)
 - Previous v2.0 刪除 commit: `f08812c`（4 個被砍 skill 的源檔）
 - r1 + r2 + final review 完整紀錄: plan §9
 - Inspired by: 使用者在 hangar session 中發現「superpowers 可以不安裝」的情境

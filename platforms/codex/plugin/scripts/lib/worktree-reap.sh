@@ -155,6 +155,124 @@ _wt_open_lock_fd() {
   return 0
 }
 
+# --- schema-2 ownership -------------------------------------------------------
+# Parse one flat marker into _WT_MARKER_* globals. Every required key must occur
+# exactly once and pass a narrow grammar; callers must treat any failure as
+# unknown ownership.
+_wt_read_schema2_marker() {
+  local marker="$1" key val fd fd_path
+  _WT_MARKER_CREATED_AT=""
+  _WT_MARKER_BRANCH=""
+  _WT_MARKER_BASE_SHA=""
+  _WT_MARKER_RUN_ID=""
+  _WT_MARKER_ROOT_RUN_ID=""
+  _WT_MARKER_LOOP_ID=""
+  _WT_MARKER_RETENTION=""
+  _WT_MARKER_RETENTION_OWNER=""
+  _WT_MARKER_RETENTION_REASON_SHA256=""
+  _WT_MARKER_RETENTION_EXPIRES_AT=""
+  [ -f "$marker" ] && [ ! -L "$marker" ] && [ -O "$marker" ] || return 1
+  exec {fd}<"$marker" || return 1
+  fd_path="/proc/$$/fd/$fd"
+  [ -e "$fd_path" ] || fd_path="/dev/fd/$fd"
+  if [ ! -f "$fd_path" ] || [ ! -O "$fd_path" ] || ! [ "$fd_path" -ef "$marker" ]; then
+    exec {fd}>&-
+    return 1
+  fi
+
+  for key in created_at branch base_sha run_id root_run_id loop_id schema; do
+    if [ "$(grep -c "^${key}=" "$fd_path" 2>/dev/null)" -ne 1 ]; then
+      exec {fd}>&-
+      return 1
+    fi
+  done
+  local line_count
+  line_count="$(wc -l < "$fd_path" | tr -d ' ')"
+  if [ "$line_count" -eq 11 ]; then
+    for key in retention retention_owner retention_reason_sha256 retention_expires_at; do
+      if [ "$(grep -c "^${key}=" "$fd_path" 2>/dev/null)" -ne 1 ]; then
+        exec {fd}>&-
+        return 1
+      fi
+    done
+    _WT_MARKER_RETENTION="$(sed -n 's/^retention=//p' "$fd_path")"
+    _WT_MARKER_RETENTION_OWNER="$(sed -n 's/^retention_owner=//p' "$fd_path")"
+    _WT_MARKER_RETENTION_REASON_SHA256="$(
+      sed -n 's/^retention_reason_sha256=//p' "$fd_path"
+    )"
+    _WT_MARKER_RETENTION_EXPIRES_AT="$(
+      sed -n 's/^retention_expires_at=//p' "$fd_path"
+    )"
+  elif [ "$line_count" -eq 8 ]; then
+    [ "$(grep -c '^retention=' "$fd_path" 2>/dev/null)" -eq 1 ] || {
+      exec {fd}>&-
+      return 1
+    }
+    _WT_MARKER_RETENTION="$(sed -n 's/^retention=//p' "$fd_path")"
+  elif [ "$line_count" -ne 7 ]; then
+    exec {fd}>&-
+    return 1
+  fi
+
+  val="$(sed -n 's/^schema=//p' "$fd_path")"
+  _WT_MARKER_CREATED_AT="$(sed -n 's/^created_at=//p' "$fd_path")"
+  _WT_MARKER_BRANCH="$(sed -n 's/^branch=//p' "$fd_path")"
+  _WT_MARKER_BASE_SHA="$(sed -n 's/^base_sha=//p' "$fd_path")"
+  _WT_MARKER_RUN_ID="$(sed -n 's/^run_id=//p' "$fd_path")"
+  _WT_MARKER_ROOT_RUN_ID="$(sed -n 's/^root_run_id=//p' "$fd_path")"
+  _WT_MARKER_LOOP_ID="$(sed -n 's/^loop_id=//p' "$fd_path")"
+  if ! [ "$fd_path" -ef "$marker" ]; then
+    exec {fd}>&-
+    return 1
+  fi
+  exec {fd}>&-
+
+  [ "$val" = "2" ] || return 1
+  [[ "$_WT_MARKER_CREATED_AT" =~ ^[0-9]+$ ]] || return 1
+  [[ "$_WT_MARKER_BASE_SHA" =~ ^[0-9a-f]{40,64}$ ]] || return 1
+  [[ "$_WT_MARKER_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  [[ "$_WT_MARKER_ROOT_RUN_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  [[ "$_WT_MARKER_LOOP_ID" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  if [ "$_WT_MARKER_RETENTION" = "lease" ]; then
+    [[ "$_WT_MARKER_RETENTION_OWNER" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    [[ "$_WT_MARKER_RETENTION_REASON_SHA256" =~ ^[0-9a-f]{64}$ ]] || return 1
+    [[ "$_WT_MARKER_RETENTION_EXPIRES_AT" =~ ^[0-9]+$ ]] || return 1
+  elif [ -n "$_WT_MARKER_RETENTION" ] && [ "$_WT_MARKER_RETENTION" != "inspect" ]; then
+    return 1
+  fi
+  git check-ref-format --branch "$_WT_MARKER_BRANCH" >/dev/null 2>&1 || return 1
+  return 0
+}
+
+_wt_resolve_common_dir() {
+  local repo="${1:-.}" raw
+  raw="$(git -C "$repo" rev-parse --git-common-dir 2>/dev/null)" || return 1
+  case "$raw" in
+    /*) realpath -e "$raw" 2>/dev/null ;;
+    *) realpath -e "$repo/$raw" 2>/dev/null ;;
+  esac
+}
+
+_wt_is_registered_path() {
+  local repo="$1" expected="$2" line list
+  _WT_REGISTRATION_ERROR=0
+  list="$(git -C "$repo" worktree list --porcelain 2>/dev/null)" || {
+    _WT_REGISTRATION_ERROR=1
+    return 2
+  }
+  while IFS= read -r line; do
+    [ "${line#worktree }" = "$expected" ] && return 0
+  done < <(printf '%s\n' "$list" | sed -n '/^worktree /p')
+  return 1
+}
+
+_wt_is_clean() {
+  local wt="$1" status
+  status="$(git -C "$wt" status --porcelain=v1 2>/dev/null)" || return 2
+  [ -z "$status" ] && return 0
+  return 1
+}
+
 # --- _wt_is_live --------------------------------------------------------------
 # Atomic ownership probe via flock -n on $WT/.autopilot-worktree.lock.
 # Side effect on "owned" (dead owner): sets _WT_PROBE_FD to the held probe fd
@@ -230,7 +348,7 @@ _wt_ensure_config() {
 # on full reclaim. Fail-open on hook error/timeout.
 reap_worktree() {
   local wt="${1:-}"
-  local hook_abs="" repo_root hook_rc rm_status rm_stderr
+  local hook_abs="" repo_root hook_rc rm_status rm_stderr managed_tip=""
 
   OUTCOME_ORPHAN="${OUTCOME_ORPHAN:-}"
   if [ -z "$wt" ]; then
@@ -244,6 +362,26 @@ reap_worktree() {
 
   _wt_ensure_config
   repo_root="$(_wt_resolve_repo_root)"
+
+  if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ] \
+     && [ -n "${SELF_DIR:-}" ] \
+     && [ -x "$SELF_DIR/reap-dispatch-worktrees.sh" ]; then
+    # Release the leaf lifetime proof, then durably journal its exact branch
+    # before any project hook can remove or mutate the worktree.
+    if [ -n "${WT_LOCK_FD:-}" ]; then
+      exec {WT_LOCK_FD}>&- || true
+      WT_LOCK_FD=""
+    fi
+    managed_tip="$(git -C "$wt" rev-parse HEAD 2>/dev/null || true)"
+    if ! [[ "$managed_tip" =~ ^[0-9a-f]{40,64}$ ]] \
+       || ! bash "$SELF_DIR/reap-dispatch-worktrees.sh" journal \
+      --repo "$repo_root" --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+      --path "$wt" >/dev/null 2>&1; then
+      printf 'WARN: managed worktree journal failed; preserving %s\n' "$wt" >&2
+      OUTCOME_ORPHAN="$wt"
+      return 0
+    fi
+  fi
 
   if [ -n "${TEARDOWN_HOOK:-}" ]; then
     if hook_abs="$(_wt_validate_path "$TEARDOWN_HOOK" "$repo_root")"; then
@@ -265,8 +403,26 @@ reap_worktree() {
     fi
   fi
 
-  rm_stderr="$(_wt_git_worktree_remove "$wt")"
-  rm_status=$?
+  if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ] \
+     && [ -n "${SELF_DIR:-}" ] \
+     && [ -x "$SELF_DIR/reap-dispatch-worktrees.sh" ]; then
+    # Managed leaves must enter the exact branch journal before their worktree
+    # disappears. Release this leaf's lifetime proof, then let the lifecycle
+    # controller perform the write-ahead inventory + compare/remove sequence.
+    rm_stderr="$(
+      bash "$SELF_DIR/reap-dispatch-worktrees.sh" reap \
+        --repo "$repo_root" --root-run-id "$AUTOPILOT_WORKTREE_ROOT_RUN_ID" \
+        --path "$wt" --expected-tip "$managed_tip" --yes 2>&1
+    )"
+    rm_status=$?
+    if [ "$rm_status" -eq 0 ] && [ -d "$wt" ]; then
+      rm_status=1
+      rm_stderr="lifecycle controller preserved the managed worktree"
+    fi
+  else
+    rm_stderr="$(_wt_git_worktree_remove "$wt")"
+    rm_status=$?
+  fi
 
   if [ "$rm_status" -ne 0 ] && [ -d "$wt" ]; then
     printf 'WARN: worktree remove failed; orphan kept at %s (%s)\n' "$wt" "$rm_stderr" >&2

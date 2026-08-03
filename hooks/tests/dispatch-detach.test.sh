@@ -11,6 +11,7 @@
 #   (c) TRANSPARENT NORMAL— default (detach on) un-killed run relays the SAME final JSON/exit
 #                           to the caller (so implementer.js's strict parse still works).
 . "$(dirname "$0")/lib.sh"
+enable_legacy_scorecard_test_projection
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 LEDGER_SH="$REPO_ROOT/scripts/run-ledger.sh"
@@ -57,13 +58,18 @@ _prev_pwd="$PWD"
 cd "$SBX"
 DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" \
   --branch feat/kill --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" \
-  --ledger "$LEDGER_A" --run-id rk --stage implement >/dev/null 2>&1 &
+  --ledger "$LEDGER_A" --run-id rk --stage implement \
+  >"$TEST_TMP/kill-wrapper.out" 2>"$TEST_TMP/kill-wrapper.err" &
 WRAPPER_PID=$!
 cd "$_prev_pwd"
 
 # Wait until the detached worker is provably running (first heartbeat row), then
 # SIGKILL the wrapper. Fixed sleep races under parallel CPU contention.
 if ! poll_until 20 grep -q '"kind":"heartbeat"' "$LEDGER_A"; then
+  printf 'dispatch-detach diagnostic (kill wrapper stdout): %s\n' \
+    "$(cat "$TEST_TMP/kill-wrapper.out" 2>/dev/null)" >&2
+  printf 'dispatch-detach diagnostic (kill wrapper stderr): %s\n' \
+    "$(cat "$TEST_TMP/kill-wrapper.err" 2>/dev/null)" >&2
   fail "kill-survival: detached worker never heartbeated before SIGKILL (readiness timeout)"
 fi
 kill -9 "$WRAPPER_PID" 2>/dev/null || true
@@ -190,6 +196,7 @@ mk_slow_stub "$STUB_QUICK" 1
 OUT_C="$(cd "$SBX" && DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" \
   --branch feat/normal --prompt-file "$PROMPT" --agy-bin "$STUB_QUICK" \
   --ledger "$LEDGER_C" --run-id rc --stage implement 2>/dev/null)"; EXIT_C=$?
+[ "$EXIT_C" -eq 0 ] || printf 'dispatch-detach diagnostic (transparent normal): %s\n' "$OUT_C" >&2
 reap_wt "$OUT_C"
 assert_eq "0" "$EXIT_C" "transparent normal: relayed exit code is 0 (committed)"
 assert_contains "$OUT_C" '"status": "committed"' "transparent normal: relayed stdout is the committed outcome JSON"
@@ -200,6 +207,226 @@ assert_eq "committed" "$(printf '%s' "$OUT_C" | jq -r '.status' 2>/dev/null)" "t
 assert_file_exists "${LEDGER_C}.results/rc.implement.result.json" "transparent normal: durable result file also landed"
 HB_C="$(grep -c '"kind":"heartbeat"' "$LEDGER_C" 2>/dev/null)"; HB_C="${HB_C:-0}"
 assert_eq "yes" "$([ "$HB_C" -ge 1 ] && echo yes || echo no)" "transparent normal: heartbeat written during the run"
+
+# =========================================================================================
+# (h) SAME-TUPLE CONCURRENCY: durable claim precedes worktree/manifest/runner effects.
+# =========================================================================================
+COMMON_H="$(git -C "$SBX" rev-parse --path-format=absolute --git-common-dir)"
+LEDGER_H="$COMMON_H/autopilot/same-tuple-ledger.jsonl"
+MANIFEST_H="$TEST_TMP/h/manifests"
+RUNNER_CALLS_H="$TEST_TMP/h/runner-calls"
+RELEASE_H="$TEST_TMP/h/release"
+mkdir -p "$TEST_TMP/h"
+bash "$LEDGER_SH" init --ledger "$LEDGER_H" >/dev/null
+STUB_CONCURRENT="$TEST_TMP/agy-concurrent"
+cat > "$STUB_CONCURRENT" <<EOF
+#!/usr/bin/env bash
+echo call >> "$RUNNER_CALLS_H"
+while [ ! -f "$RELEASE_H" ]; do sleep 0.01; done
+echo ok > concurrent.txt
+git add concurrent.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent"
+EOF
+chmod +x "$STUB_CONCURRENT"
+(
+  cd "$SBX"
+  AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H" bash "$SCRIPT" \
+    --branch feat/concurrent --prompt-file "$PROMPT" --agy-bin "$STUB_CONCURRENT" \
+    --ledger "$LEDGER_H" --run-id same-tuple --stage implement \
+    > "$TEST_TMP/h/first.out" 2> "$TEST_TMP/h/first.err"
+) &
+FIRST_H_PID=$!
+if ! poll_until 20 grep -q '"state":"leased"' "$LEDGER_H"; then
+  fail "same-tuple: first caller never published durable preclaim"
+fi
+(
+  cd "$SBX"
+  AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H" bash "$SCRIPT" \
+    --branch feat/concurrent-second --prompt-file "$PROMPT" --agy-bin "$STUB_CONCURRENT" \
+    --ledger "$LEDGER_H" --run-id same-tuple --stage implement
+) > "$TEST_TMP/h/second.out" 2> "$TEST_TMP/h/second.err"
+SECOND_H_RC=$?
+assert_neq "0" "$SECOND_H_RC" "second same-tuple caller is rejected"
+assert_contains "$(cat "$TEST_TMP/h/second.out")" '"status": "precondition_failed"' "second caller fails at precondition rail"
+assert_contains "$(cat "$TEST_TMP/h/second.out")" "durable dispatch claim rejected" "second caller is fenced by durable tuple claim"
+touch "$RELEASE_H"
+wait "$FIRST_H_PID"
+FIRST_H_OUT="$(cat "$TEST_TMP/h/first.out")"
+reap_wt "$FIRST_H_OUT"
+assert_eq "1" "$(wc -l < "$RUNNER_CALLS_H" | tr -d ' ')" "same tuple dispatches runner exactly once"
+H_MANIFESTS="$(find "$MANIFEST_H" -maxdepth 1 -name '*.manifest.json' -type f 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq "1" "$H_MANIFESTS" "same tuple creates at most one manifest"
+H_WORKTREES="$(git -C "$SBX" worktree list --porcelain \
+  | grep -c '^branch refs/heads/feat/concurrent$' || true)"
+assert_eq "1" "$H_WORKTREES" "same tuple creates at most one worktree"
+assert_eq "no" "$(
+  git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/concurrent-second \
+    >/dev/null && echo yes || echo no
+)" "fenced same tuple creates no second branch"
+
+# =========================================================================================
+# (h2) SAME-TUPLE WITHOUT SETSID: detach was requested, so the parent preclaim still fences
+#      duplicates even though process topology falls back to the inline runner.
+# =========================================================================================
+COMMON_H2="$(git -C "$SBX" rev-parse --path-format=absolute --git-common-dir)"
+LEDGER_H2="$COMMON_H2/autopilot/same-tuple-no-setsid-ledger.jsonl"
+MANIFEST_H2="$TEST_TMP/h2/manifests"
+RUNNER_CALLS_H2="$TEST_TMP/h2/runner-calls"
+RELEASE_H2="$TEST_TMP/h2/release"
+FAKEBIN_H2="$TEST_TMP/h2/bin"
+mkdir -p "$FAKEBIN_H2" "$MANIFEST_H2"
+bash "$LEDGER_SH" init --ledger "$LEDGER_H2" >/dev/null
+cat > "$FAKEBIN_H2/setsid" <<'EOF'
+#!/usr/bin/env bash
+echo "fixture setsid without wait support"
+exit 0
+EOF
+chmod +x "$FAKEBIN_H2/setsid"
+STUB_CONCURRENT_H2="$TEST_TMP/h2/agy-concurrent"
+cat > "$STUB_CONCURRENT_H2" <<EOF
+#!/usr/bin/env bash
+echo call >> "$RUNNER_CALLS_H2"
+while [ ! -f "$RELEASE_H2" ]; do sleep 0.01; done
+echo ok > concurrent-no-setsid.txt
+git add concurrent-no-setsid.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent without setsid"
+EOF
+chmod +x "$STUB_CONCURRENT_H2"
+(
+  cd "$SBX"
+  PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
+    --branch feat/concurrent-no-setsid --prompt-file "$PROMPT" \
+    --agy-bin "$STUB_CONCURRENT_H2" \
+    --ledger "$LEDGER_H2" --run-id same-tuple-no-setsid --stage implement \
+    > "$TEST_TMP/h2/first.out" 2> "$TEST_TMP/h2/first.err"
+) &
+FIRST_H2_PID=$!
+if ! poll_until 20 grep -q '"state":"leased"' "$LEDGER_H2"; then
+  fail "same-tuple without setsid: first caller never published durable parent preclaim"
+fi
+if ! poll_until 20 test -f "$RUNNER_CALLS_H2"; then
+  fail "same-tuple without setsid: inline runner never started"
+fi
+H2_WORKTREES_DURING="$(git -C "$SBX" worktree list --porcelain \
+  | grep -c '^branch refs/heads/feat/concurrent-no-setsid$' || true)"
+assert_eq "1" "$H2_WORKTREES_DURING" \
+  "no-setsid first caller owns exactly one worktree while runner is active"
+(
+  cd "$SBX"
+  PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
+    --branch feat/concurrent-no-setsid-second --prompt-file "$PROMPT" \
+    --agy-bin "$STUB_CONCURRENT_H2" \
+    --ledger "$LEDGER_H2" --run-id same-tuple-no-setsid --stage implement
+) > "$TEST_TMP/h2/second.out" 2> "$TEST_TMP/h2/second.err"
+SECOND_H2_RC=$?
+assert_neq "0" "$SECOND_H2_RC" "second same-tuple caller is rejected without setsid"
+assert_contains "$(cat "$TEST_TMP/h2/second.out")" '"status": "precondition_failed"' \
+  "no-setsid duplicate fails at precondition rail"
+assert_contains "$(cat "$TEST_TMP/h2/second.out")" "durable dispatch claim rejected" \
+  "no-setsid duplicate is fenced by the parent-owned tuple lease"
+touch "$RELEASE_H2"
+wait "$FIRST_H2_PID"
+FIRST_H2_OUT="$(cat "$TEST_TMP/h2/first.out")"
+reap_wt "$FIRST_H2_OUT"
+assert_eq "1" "$(wc -l < "$RUNNER_CALLS_H2" | tr -d ' ')" \
+  "no-setsid same tuple dispatches inline runner exactly once"
+H2_MANIFESTS="$(find "$MANIFEST_H2" -maxdepth 1 -name '*.manifest.json' -type f 2>/dev/null \
+  | wc -l | tr -d ' ')"
+assert_eq "1" "$H2_MANIFESTS" "no-setsid same tuple creates at most one manifest"
+H2_WORKTREES_AFTER="$(git -C "$SBX" worktree list --porcelain \
+  | grep -c '^branch refs/heads/feat/concurrent-no-setsid$' || true)"
+assert_eq "0" "$H2_WORKTREES_AFTER" "no-setsid inline path reaps its sole worktree after completion"
+assert_eq "no" "$(
+  git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/concurrent-no-setsid-second \
+    >/dev/null && echo yes || echo no
+)" "no-setsid fenced tuple creates no second branch"
+
+# =========================================================================================
+# (i) OWNERSHIP-TRANSFER CAS: A preclaims, its child pauses before transfer,
+#     A dies, B acquires, then A's child must be fenced without running.
+# =========================================================================================
+LEDGER_I="$TEST_TMP/i/ledger.jsonl"
+MANIFEST_I="$TEST_TMP/i/manifests"
+FAKEBIN_I="$TEST_TMP/i/bin"
+HANDOFF_WAIT_I="$TEST_TMP/i/handoff-wait"
+HANDOFF_RELEASE_I="$TEST_TMP/i/handoff-release"
+RUNNER_CALLS_I="$TEST_TMP/i/runner-calls"
+mkdir -p "$FAKEBIN_I" "$MANIFEST_I"
+bash "$LEDGER_SH" init --ledger "$LEDGER_I" >/dev/null
+REAL_BASH_I="$(command -v bash)"
+cat > "$FAKEBIN_I/bash" <<EOF
+#!/bin/sh
+if [ "\${1:-}" = "$LEDGER_SH" ] && [ "\${2:-}" = "stage-transfer" ]; then
+  touch "$HANDOFF_WAIT_I"
+  while [ ! -f "$HANDOFF_RELEASE_I" ]; do sleep 0.01; done
+fi
+exec "$REAL_BASH_I" "\$@"
+EOF
+chmod +x "$FAKEBIN_I/bash"
+STUB_NEVER_I="$TEST_TMP/i/agy-never"
+cat > "$STUB_NEVER_I" <<EOF
+#!/usr/bin/env bash
+echo call >> "$RUNNER_CALLS_I"
+exit 0
+EOF
+chmod +x "$STUB_NEVER_I"
+(
+  cd "$SBX"
+  PATH="$FAKEBIN_I:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_I" \
+    bash "$SCRIPT" --branch feat/handoff-fail --prompt-file "$PROMPT" \
+    --agy-bin "$STUB_NEVER_I" --ledger "$LEDGER_I" \
+    --run-id handoff-fail --stage implement \
+    > "$TEST_TMP/i/parent.out" 2> "$TEST_TMP/i/parent.err"
+) &
+PARENT_I_PID=$!
+if ! poll_until 20 test -f "$HANDOFF_WAIT_I"; then
+  fail "ownership-transfer CAS: detached child never reached transfer barrier"
+fi
+
+A_PRECLAIM_I="$(bash "$LEDGER_SH" query-latest --ledger "$LEDGER_I" \
+  --run-id handoff-fail --stage implement)"
+A_PID_I="$(jq -r '.pid' <<<"$A_PRECLAIM_I")"
+A_GEN_I="$(jq -r '.generation' <<<"$A_PRECLAIM_I")"
+A_NONCE_I="$(jq -r '.nonce' <<<"$A_PRECLAIM_I")"
+kill -TERM "$A_PID_I" 2>/dev/null || true
+poll_until 20 sh -c "! kill -0 '$A_PID_I' 2>/dev/null" \
+  || fail "ownership-transfer CAS: preclaim owner A did not exit"
+
+sleep 120 &
+B_PID_I=$!
+B_ACQUIRE_I="$(bash "$LEDGER_SH" stage-acquire --ledger "$LEDGER_I" \
+  --run-id handoff-fail --stage implement --pid "$B_PID_I" \
+  --git-ref refs/heads/feat/handoff-fail --exclusive-live)"
+B_GEN_I="$(jq -r '.generation' <<<"$B_ACQUIRE_I")"
+B_NONCE_I="$(jq -r '.nonce' <<<"$B_ACQUIRE_I")"
+assert_eq "$((A_GEN_I + 1))" "$B_GEN_I" "B acquires the next tuple generation after A dies"
+assert_neq "$A_NONCE_I" "$B_NONCE_I" "B receives a distinct ownership nonce"
+
+I_MANIFEST_COUNT_BEFORE="$(find "$MANIFEST_I" -maxdepth 1 -name '*.manifest.json' -type f \
+  | wc -l | tr -d ' ')"
+assert_eq "1" "$I_MANIFEST_COUNT_BEFORE" "A creates exactly one pre-dispatch manifest"
+I_MANIFEST_FILE="$(find "$MANIFEST_I" -maxdepth 1 -name '*.manifest.json' -type f | head -1)"
+I_MANIFEST_SHA_BEFORE="$(sha256sum "$I_MANIFEST_FILE" | awk '{print $1}')"
+touch "$HANDOFF_RELEASE_I"
+wait "$PARENT_I_PID" 2>/dev/null || true
+sleep 0.1
+assert_file_absent "$RUNNER_CALLS_I" "stale child fenced by CAS never starts runner"
+LATEST_I="$(bash "$LEDGER_SH" query-latest --ledger "$LEDGER_I" \
+  --run-id handoff-fail --stage implement)"
+assert_eq "$B_GEN_I" "$(jq -r '.generation' <<<"$LATEST_I")" "stale child cannot supersede B generation"
+assert_eq "$B_NONCE_I" "$(jq -r '.nonce' <<<"$LATEST_I")" "stale child cannot supersede B nonce"
+I_MANIFEST_COUNT_AFTER="$(find "$MANIFEST_I" -maxdepth 1 -name '*.manifest.json' -type f \
+  | wc -l | tr -d ' ')"
+assert_eq "$I_MANIFEST_COUNT_BEFORE" "$I_MANIFEST_COUNT_AFTER" "stale child creates no additional manifest"
+assert_eq "$I_MANIFEST_SHA_BEFORE" "$(sha256sum "$I_MANIFEST_FILE" | awk '{print $1}')" \
+  "stale child leaves the pre-dispatch manifest byte-identical"
+kill "$B_PID_I" 2>/dev/null || true
+wait "$B_PID_I" 2>/dev/null || true
+I_WT="$(git -C "$SBX" worktree list --porcelain | awk '
+  /^worktree / { wt=substr($0,10) }
+  $0 == "branch refs/heads/feat/handoff-fail" { print wt }
+')"
+[ -n "$I_WT" ] && LEAKED_WTS+=("$I_WT")
 
 # =========================================================================================
 # (b) BYTE-IDENTICAL fallback: DISPATCH_DETACH=0 runs the legacy INLINE path
@@ -265,7 +492,11 @@ cat > "$RSTUB" <<'EOF'
 p="$(cat)"
 b="$(printf '%s\n' "$p" | grep -o '<<<AUTOPILOT-REVIEW-[0-9a-f]*>>>' | head -1)"
 e="$(printf '%s\n' "$p" | grep -o '<<<AUTOPILOT-END-[0-9a-f]*>>>' | head -1)"
-echo "$b"; echo "VERDICT: SHIP-AS-IS"; echo "FINDINGS: none"; echo "$e"
+echo "$b"
+echo "VERDICT: SHIP-AS-IS"
+echo "FINDINGS: none"
+echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=target slice was traced against the fixture; conclusion=no concrete blocking discrepancy was observed"
+echo "$e"
 EOF
 chmod +x "$RSTUB"
 
@@ -354,7 +585,8 @@ EOF
 
 ENGINE_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
 RUNTIME_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-ENGINE_EVENT="{\"schema_version\":1,\"observed_at\":\"$RUNTIME_UTC\",\"runner\":\"codex\",\"model\":\"gpt-5.3-codex-spark\",\"role\":\"implementer\",\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"reset_at\":null,\"evidence\":\"test\"}}}"
+# Exact resolver tuple: implementer_effort defaults to high; endpoint "" → null/@none.
+ENGINE_EVENT="{\"schema_version\":1,\"observed_at\":\"$RUNTIME_UTC\",\"runner\":\"codex\",\"model\":\"gpt-5.3-codex-spark\",\"role\":\"implementer\",\"effort\":\"high\",\"endpoint\":null,\"runner_version\":\"v1.0.0\",\"capability\":{\"quota\":{\"status\":\"available\",\"confidence\":\"high\",\"ttl_seconds\":3600,\"reset_at\":null,\"evidence\":\"test\"}}}"
 
 printf '%s\n' "$ENGINE_ROW" > "$TEST_TMP/strict-engine-row.json"
 printf '%s\n' "$ENGINE_EVENT" > "$TEST_TMP/strict-engine-event.json"

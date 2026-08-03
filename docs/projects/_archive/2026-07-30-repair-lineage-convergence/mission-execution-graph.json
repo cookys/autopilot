@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "repair-lineage-convergence",
+      "source_plan_ids": [
+        "plan-03aca7146505a685ff337c266f266813d9499fbd9ebbac86aca0bcfb2c64da0c"
+      ],
+      "source_rubric_ids": [
+        "R13213782624918415989975588467208430917659978275154497716759357466926891302435",
+        "R3089894101227630665983345048055202637149706894514527622038587135472459058680",
+        "R44178082306896157135252311966881065794968698524326181129708876339517080054660",
+        "R55700280741883756146066136501092571858358977409199351109957640912621023897407",
+        "R77798931504124458010936873009020769545927365213165360699691485847751666477599",
+        "R865839879212536456515252317496030779605459812725842166239578942860054188319",
+        "R90307448556156081689101737975439127236781618144698833250704262354648316512585"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "bounded-convergence",
+        "durable-lineage-accounting",
+        "provider-session-reuse",
+        "stable-branch-worktree",
+        "terminal-cleanup"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/autopilot-engine.test.sh",
+        "bash hooks/tests/dispatch-hetero.test.sh",
+        "bash hooks/tests/implementation-campaign-state.test.sh"
+      ],
+      "gate_attempt_budget": 3,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 3600,
+        "tool_calls": 300,
+        "engine_attempts": 3,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 8,
+        "output_bytes": 5000000
+      },
+      "campaign": {
+        "profile": "high",
+        "allowed_path_prefixes": [
+          "docs/plans",
+          "hooks/tests",
+          "references",
+          "scripts",
+          "skills/l6",
+          "src/engine"
+        ],
+        "max_changed_files": 8,
+        "baseline_churn": 3000,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 1500,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-07-30-repair-lineage-convergence.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "hooks/tests/autopilot-engine.test.sh",
+          "hooks/tests/dispatch-hetero.test.sh",
+          "scripts/dispatch-hetero.sh",
+          "src/engine/autopilot-engine.js"
+        ],
+        "output_paths": [
+          "hooks/tests/autopilot-engine.test.sh",
+          "hooks/tests/dispatch-hetero.test.sh",
+          "scripts/dispatch-hetero.sh",
+          "src/engine/autopilot-engine.js"
+        ]
+      }
+    }
+  ]
+}

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+# Mission harness injects root-run / reconcile receipts that must not poison unit tests.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
+  AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
 
 DIFF="$TEST_TMP/review.diff"
 printf '+const answer = 42;\n' > "$DIFF"
@@ -631,6 +635,44 @@ assert_contains "$OUT" "cannot override --runner" "AutopilotEngine rejects reser
 OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
+const promptFile = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+let dispatchCalls = 0;
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    dispatchCalls += 1;
+    throw new Error('reserved lineage override must block before dispatch');
+  },
+});
+const result = engine.implementTask({
+  promptFile,
+  branch: 'impl/reserved-lineage-flags',
+  base: 'a'.repeat(40),
+  roster: {
+    implementer_engine: 'test-implementer',
+    implementer_effort: 'high',
+    implementer_runner: 'fixture',
+  },
+  extraImplementationArgs: ['--reuse-worktree', '/tmp/forbidden'],
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
+console.log(`dispatch_calls=${dispatchCalls}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "reserved lineage override probe exits cleanly"
+assert_contains "$OUT" "status=blocked" "reserved lineage override is blocked"
+assert_contains "$OUT" "phase=prepare_implementation" \
+  "reserved lineage override blocks during argument preparation"
+assert_contains "$OUT" "cannot override --reuse-worktree" \
+  "managed extra args cannot replace the retained checkout"
+assert_contains "$OUT" "dispatch_calls=0" \
+  "reserved lineage override spends zero implementer calls"
+
+OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
 const diff = process.argv[3];
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 
@@ -786,6 +828,76 @@ NODE
 assert_eq "0" "$EXIT" "AutopilotEngine implementer parser precondition-empty-branch process exits 0"
 assert_contains "$OUT" "status=precondition_failed" "AutopilotEngine implementer parser accepts precondition_failed with empty branch"
 assert_contains "$OUT" "error=--branch is required" "AutopilotEngine implementer parser preserves precondition_failed error"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+const parsed = parseImplementationOutput(JSON.stringify({
+  status: 'acceptance_failed',
+  runner: 'codex',
+  model: 'gpt-test',
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  commit: null,
+  files_changed: 1,
+  insertions: 1,
+  deletions: 0,
+  worktree: '/tmp/contained-worktree',
+  agent_log: '/tmp/log',
+  error: 'acceptance_failed',
+  containment: 'plain',
+  contained: true,
+}));
+console.log(`status=${parsed.status}`);
+NODE
+)"
+assert_eq "0" "$?" "implementer parser accepts canonical acceptance_failed"
+assert_contains "$OUT" "status=acceptance_failed" "acceptance_failed remains a parsed attempt-consuming outcome"
+
+OUT="$(node - "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const root = process.argv[2];
+const { parseImplementationOutput } = require(path.join(root, 'src', 'runners', 'implementer'));
+const parsed = parseImplementationOutput(JSON.stringify({
+  status: 'boundary_rejected',
+  runner: 'codex',
+  model: 'gpt-test',
+  branch: 'impl-branch',
+  base: '1111111111111111111111111111111111111111',
+  commit: '2222222222222222222222222222222222222222',
+  files_changed: 1,
+  insertions: 1,
+  deletions: 0,
+  worktree: '/tmp/contained-worktree',
+  agent_log: '/tmp/log',
+  error: 'boundary_rejected: changed path violates scope',
+  containment: 'plain',
+  contained: true,
+  boundary_code: 'scope_or_budget_boundary',
+  boundary_reason: 'boundary_rejected: changed path violates scope',
+  candidate_ref: '2222222222222222222222222222222222222222',
+  possibly_effectful: true,
+  mutation_failed: false,
+  unknown_status: false,
+  dispatcher_called: true,
+  model_calls: 1,
+  mutation_attempts: 1,
+  gate_attempts: 1,
+  resources_created: 1,
+}));
+console.log(`status=${parsed.status}`);
+console.log(`boundary_code=${parsed.boundary_code}`);
+console.log(`candidate_ref=${parsed.candidate_ref}`);
+NODE
+)"
+assert_eq "0" "$?" "implementer parser accepts canonical boundary_rejected"
+assert_contains "$OUT" "status=boundary_rejected" \
+  "boundary_rejected remains a first-class parsed outcome"
+assert_contains "$OUT" "boundary_code=scope_or_budget_boundary" \
+  "boundary parser preserves the exact boundary code"
+assert_contains "$OUT" "candidate_ref=2222222222222222222222222222222222222222" \
+  "boundary parser preserves the candidate identity"
 
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
@@ -1334,7 +1446,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch,
   base,
@@ -1358,10 +1470,12 @@ const result = engine.runImplementationReviewLoop({
 
 console.log(`status=${result.status}`);
 console.log(`phase=${result.phase}`);
+console.log(`reason=${result.reason}`);
 console.log(`rounds=${result.rounds}`);
 console.log(`implementation_calls=${result.implementationChain.length}`);
 console.log(`review_calls=${result.reviewChain.length}`);
 console.log(`reconciled=${result.implementationChain[0].implementation && result.implementationChain[0].implementation.reconcile_by_ledger}`);
+console.log(`reconcile_receipt=${result.implementationChain[0].implementation && result.implementationChain[0].implementation.reconciliation_receipt && result.implementationChain[0].implementation.reconciliation_receipt.receipt_digest}`);
 console.log(`dispatch_row=${result.ledger.find((entry) => entry.unit === 'dispatch_implementation').status}`);
 NODE
 )"; EXIT=$?
@@ -1372,6 +1486,8 @@ assert_contains "$OUT" "rounds=1" "AutopilotEngine split-brain path runs one rou
 assert_contains "$OUT" "implementation_calls=1" "AutopilotEngine split-brain path does not re-dispatch implementation"
 assert_contains "$OUT" "review_calls=1" "AutopilotEngine split-brain path dispatches a single review"
 assert_contains "$OUT" "reconciled=true" "AutopilotEngine split-brain path reconciles from ledger"
+assert_contains "$OUT" "reconcile_receipt=" "AutopilotEngine binds ledger reconciliation to a receipt"
+assert_not_contains "$OUT" "reconcile_receipt=undefined" "AutopilotEngine reconciliation receipt is concrete"
 assert_contains "$OUT" "dispatch_row=committed" "AutopilotEngine split-brain path reaches committed dispatch state from ledger"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/implement-loop-prompt.txt" <<'NODE'
@@ -1487,7 +1603,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
   base: '1111111111111111111111111111111111111111',
@@ -1543,7 +1659,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
   base: 'develop',
@@ -1609,7 +1725,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
   base: '1111111111111111111111111111111111111111',
@@ -1701,7 +1817,7 @@ const baseRoster = {
 function run(extra) {
   const counters = { impl: 0, review: 0 };
   const engine = makeEngine(counters);
-  const result = engine.runImplementationReviewLoop({
+  const result = engine.runLegacyImplementationReviewLoop({
     promptFile: prompt,
     branch: 'impl-loop',
     base: '1111111111111111111111111111111111111111',
@@ -1779,7 +1895,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-loop',
   base: '1111111111111111111111111111111111111111',
@@ -1808,6 +1924,102 @@ assert_contains "$OUT" "rounds=0" "AutopilotEngine implementation loop blocks ma
 assert_contains "$OUT" "reason=implementer roster field implementer_runner is required" "AutopilotEngine implementation loop surfaces missing implementer field"
 assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine implementation loop does not dispatch with malformed roster"
 assert_contains "$OUT" "ledger=prepare_implementation_loop:blocked" "AutopilotEngine implementation loop records malformed roster as preparation block"
+
+OUT="$(node - "$REPO_ROOT" "$TEST_TMP/missing-panel-roster-loop-prompt.txt" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const prompt = process.argv[3];
+const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
+
+fs.writeFileSync(prompt, 'implementer prompt');
+let implementationCalls = 0;
+const engine = new AutopilotEngine({
+  implementationDispatcher() {
+    implementationCalls += 1;
+    throw new Error('implementation should not dispatch without sealed QC metadata');
+  },
+});
+const baseInput = {
+  promptFile: prompt,
+  branch: 'managed-missing-panel-loop',
+  base: '1111111111111111111111111111111111111111',
+};
+const baseRoster = {
+  reviewer_engine: 'test-review-model',
+  reviewer_effort: 'xhigh',
+  reviewer_runner: 'test-review-runner',
+  implementer_engine: 'test-impl-model',
+  implementer_effort: 'high',
+  implementer_runner: 'test-impl-runner',
+  loop_max_rounds: 1,
+  loop_convergence_verdict: 'SHIP-AS-IS',
+};
+const result = engine.runImplementationReviewLoop({
+  ...baseInput,
+  roster: baseRoster,
+});
+const incomplete = engine.runImplementationReviewLoop({
+  ...baseInput,
+  roster: {
+    ...baseRoster,
+    min_panel_size: 1,
+    qc_panel_seats_complete: false,
+    qc_panel_seats: [],
+  },
+});
+const undersized = engine.runImplementationReviewLoop({
+  ...baseInput,
+  roster: {
+    ...baseRoster,
+    min_panel_size: 2,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [{
+      role: 'qc',
+      runner: 'test-review-runner',
+      model: 'test-review-model',
+      effort: 'xhigh',
+      endpoint: null,
+      family: 'test-family',
+    }],
+  },
+});
+const malformed = engine.runImplementationReviewLoop({
+  ...baseInput,
+  roster: {
+    ...baseRoster,
+    min_panel_size: 1,
+    qc_panel_seats_complete: true,
+    qc_panel_seats: [{
+      role: 'qc',
+      runner: 'test-review-runner',
+      model: 'test-review-model',
+      effort: 'xhigh',
+      endpoint: null,
+    }],
+  },
+});
+console.log(`status=${result.status}`);
+console.log(`phase=${result.phase}`);
+console.log(`rounds=${result.rounds}`);
+console.log(`reason=${result.reason}`);
+console.log(`incomplete=${incomplete.status}:${incomplete.phase}:${incomplete.reason}`);
+console.log(`undersized=${undersized.status}:${undersized.phase}:${undersized.reason}`);
+console.log(`malformed=${malformed.status}:${malformed.phase}:${malformed.reason}`);
+console.log(`implementation_calls=${implementationCalls}`);
+console.log(`ledger=${result.ledger.map((entry) => `${entry.unit}:${entry.status}`).join(',')}`);
+NODE
+)"; EXIT=$?
+assert_eq "0" "$EXIT" "AutopilotEngine managed loop missing panel roster exits 0"
+assert_contains "$OUT" "status=blocked" "AutopilotEngine managed loop blocks missing panel metadata"
+assert_contains "$OUT" "phase=prepare_implementation_loop" "AutopilotEngine managed loop reports panel failure in preparation phase"
+assert_contains "$OUT" "rounds=0" "AutopilotEngine managed loop blocks missing panel metadata before round one"
+assert_contains "$OUT" "reason=managed review roster min_panel_size must be an integer >= 1" "AutopilotEngine managed loop surfaces missing sealed panel minimum"
+assert_contains "$OUT" "incomplete=blocked:prepare_implementation_loop:managed review roster requires complete exact QC seat metadata" "AutopilotEngine managed loop rejects incomplete exact QC metadata"
+assert_contains "$OUT" "undersized=blocked:prepare_implementation_loop:managed review roster exact QC seats must satisfy min_panel_size" "AutopilotEngine managed loop rejects an undersized exact QC roster"
+assert_contains "$OUT" "malformed=blocked:prepare_implementation_loop:managed review roster qc_panel_seats[0] is invalid" "AutopilotEngine managed loop rejects malformed exact QC seat metadata"
+assert_contains "$OUT" "implementation_calls=0" "AutopilotEngine managed loop does not dispatch without sealed panel metadata"
+assert_contains "$OUT" "ledger=prepare_implementation_loop:blocked" "AutopilotEngine managed loop records missing panel metadata as preparation block"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/cwd-propagation-repo" <<'NODE'
 const fs = require('fs');
@@ -1901,7 +2113,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: 'prompt.txt',
   branch: 'cwd-loop',
   base: '1111111111111111111111111111111111111111',
@@ -1980,7 +2192,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'feature/slash-branch',
   base: head,
@@ -2084,7 +2296,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'large-diff',
   base,
@@ -2183,7 +2395,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'repair-loop',
   base: '1111111111111111111111111111111111111111',
@@ -2388,7 +2600,7 @@ function runScenario(name, options) {
     input.noVerifyFirst = true;
   }
 
-  const result = engine.runImplementationReviewLoop(input);
+  const result = engine.runLegacyImplementationReviewLoop(input);
   const verifyEntries = result.ledger.filter((entry) => entry.unit === 'verify_round');
   const ratchetSelectEntries = result.ledger.filter((entry) => entry.unit === 'ratchet_select');
   const ratchetEntries = result.ledger.filter((entry) => entry.ratchet_reverted === true);
@@ -2464,7 +2676,7 @@ function runTopLevelReviewFindingsScenario() {
     };
   };
 
-  const result = engine.runImplementationReviewLoop({
+  const result = engine.runLegacyImplementationReviewLoop({
     promptFile: prompt,
     branch: 'top-level-findings-branch',
     base: '1111111111111111111111111111111111111111',
@@ -2714,7 +2926,7 @@ const engine = new AutopilotEngine({
 });
 
 const beforeWorktrees = run('git', ['worktree', 'list', '--porcelain'], { cwd: repo }).split('\n').filter((line) => line.startsWith('worktree ')).length;
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'unit-verify-regression',
   base,
@@ -2865,7 +3077,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'add-fail-branch',
   base: '1111111111111111111111111111111111111111',
@@ -3012,7 +3224,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'remove-fail-branch',
   base: '1111111111111111111111111111111111111111',
@@ -3194,7 +3406,7 @@ function runSignalScenario(name, options) {
     input.verifyCmd = 'true';
   }
 
-  const result = engine.runImplementationReviewLoop(input);
+  const result = engine.runLegacyImplementationReviewLoop(input);
   const signalEntries = result.ledger.filter((entry) => entry.unit === 'verify_first_signal');
   console.log(`${name}_status=${result.status}`);
   console.log(`${name}_unused_key=${Object.prototype.hasOwnProperty.call(result, 'verify_first_signal_unused') ? result.verify_first_signal_unused : 'absent'}`);
@@ -3264,6 +3476,10 @@ const validPayload = {
   independent_harness: 'off',
   qc_panel: ['test-reviewer'],
   qc_panel_aggregation: 'union-on-verified-critical',
+  qc_panel_seats: [],
+  qc_panel_seats_complete: false,
+  provider_readiness_receipt_ttl_seconds: 300,
+  provider_readiness_fallback_family_constraint: 'different',
   review_risk: 'low',
   required_review_families: 1,
   l1_required: false,
@@ -3584,18 +3800,18 @@ const loopArgs = {
   roster,
 };
 
-createEngine(false).runImplementationReviewLoop(loopArgs);
-createEngine(true).runImplementationReviewLoop({ ...loopArgs, noReviewSpec: true });
+createEngine(false).runLegacyImplementationReviewLoop(loopArgs);
+createEngine(true).runLegacyImplementationReviewLoop({ ...loopArgs, noReviewSpec: true });
 
 console.log(`default_has_spec=${reviewArgsDefault.includes('--spec-file')}`);
 console.log(`default_spec_value=${reviewArgsDefault[reviewArgsDefault.indexOf('--spec-file') + 1] === path.resolve('/tmp/some-prompt.md')}`);
 console.log(`no_spec_has_spec=${reviewArgsNoSpec.includes('--spec-file')}`);
 NODE
 )"; EXIT=$?
-assert_eq "0" "$EXIT" "AutopilotEngine runImplementationReviewLoop spec-file tests exit 0"
-assert_contains "$OUT" "default_has_spec=true" "runImplementationReviewLoop passes spec-file by default"
-assert_contains "$OUT" "default_spec_value=true" "runImplementationReviewLoop uses prompt file as spec file by default"
-assert_contains "$OUT" "no_spec_has_spec=false" "runImplementationReviewLoop suppresses spec-file when noReviewSpec is true"
+assert_eq "0" "$EXIT" "AutopilotEngine runLegacyImplementationReviewLoop spec-file tests exit 0"
+assert_contains "$OUT" "default_has_spec=true" "runLegacyImplementationReviewLoop passes spec-file by default"
+assert_contains "$OUT" "default_spec_value=true" "runLegacyImplementationReviewLoop uses prompt file as spec file by default"
+assert_contains "$OUT" "no_spec_has_spec=false" "runLegacyImplementationReviewLoop suppresses spec-file when noReviewSpec is true"
 
 OUT="$(node - "$REPO_ROOT" "$DIFF" <<'NODE'
 const fs = require('fs');
@@ -4255,7 +4471,7 @@ function mk(inspect, counter) {
 // REVIEW leg MUST fire (a mutation short-circuiting resume→converged without
 // review is caught by d_review_calls / d_review_chain).
 let cd = { n: 0, r: 0 };
-let d = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cd).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+let d = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cd).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`d_status=${d.status}`);
 console.log(`d_impl_calls=${cd.n}`);
 console.log(`d_review_calls=${cd.r}`);
@@ -4268,7 +4484,7 @@ console.log(`d_ledger=${d.ledger.map((e) => `${e.unit}:${e.status}`).join(',')}`
 
 // (e1) missing branch -> resume_invalid, nothing dispatched
 let e1 = { n: 0 };
-let r1 = mk({ error: null, exists: false, tipSha: null, baseAncestor: false }, e1).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+let r1 = mk({ error: null, exists: false, tipSha: null, baseAncestor: false }, e1).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`e1_status=${r1.status}`);
 console.log(`e1_phase=${r1.phase}`);
 console.log(`e1_impl_calls=${e1.n}`);
@@ -4276,21 +4492,21 @@ console.log(`e1_rounds=${r1.rounds}`);
 
 // (e2) not ahead (tip === base) -> resume_invalid
 let e2 = { n: 0 };
-let r2 = mk({ error: null, exists: true, tipSha: BASE, baseAncestor: true }, e2).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+let r2 = mk({ error: null, exists: true, tipSha: BASE, baseAncestor: true }, e2).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`e2_status=${r2.status}`);
 console.log(`e2_phase=${r2.phase}`);
 console.log(`e2_impl_calls=${e2.n}`);
 
 // (e3) base not ancestor -> resume_invalid
 let e3 = { n: 0 };
-let r3 = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: false }, e3).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
+let r3 = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: false }, e3).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster, resume: true });
 console.log(`e3_status=${r3.status}`);
 console.log(`e3_phase=${r3.phase}`);
 console.log(`e3_impl_calls=${e3.n}`);
 
 // (f) no --resume -> today's behavior: implementation IS dispatched
 let cf = { n: 0 };
-let f = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cf).runImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster });
+let f = mk({ error: null, exists: true, tipSha: TIP, baseAncestor: true }, cf).runLegacyImplementationReviewLoop({ promptFile: prompt, branch: 'feat', base: BASE, roster });
 console.log(`f_status=${f.status}`);
 console.log(`f_impl_calls=${cf.n}`);
 NODE
@@ -4446,7 +4662,7 @@ const engine = new AutopilotEngine({
   },
 });
 
-const result = engine.runImplementationReviewLoop({
+const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'impl-branch',
   base: '1111111111111111111111111111111111111111',
@@ -4470,5 +4686,167 @@ NODE
 assert_eq "0" "$EXIT" "loop on_engine_unavailable propagation process exits 0"
 assert_contains "$OUT" "loop_status=blocked" "loop blocks on engine_unavailable"
 assert_contains "$OUT" "loop_eu=wait-reset/wait-reset/rate_limited" "loop propagates the engine_unavailable directive to the final result"
+
+CLEANUP_REPO="$TEST_TMP/cleanup-repo"
+CLEANUP_WORKTREE="$TEST_TMP/cleanup-worktree"
+git init -q "$CLEANUP_REPO"
+git -C "$CLEANUP_REPO" config user.name fixture
+git -C "$CLEANUP_REPO" config user.email fixture@example.test
+printf 'base\n' >"$CLEANUP_REPO/base.txt"
+git -C "$CLEANUP_REPO" add base.txt
+git -C "$CLEANUP_REPO" commit -qm "cleanup base"
+git -C "$CLEANUP_REPO" branch retained-cleanup
+git -C "$CLEANUP_REPO" worktree add -q "$CLEANUP_WORKTREE" retained-cleanup
+printf '.autopilot-worktree\n.autopilot-worktree.lock\n' \
+  >>"$CLEANUP_REPO/.git/info/exclude"
+CLEANUP_TIP="$(git -C "$CLEANUP_REPO" rev-parse retained-cleanup)"
+CLEANUP_REASON="implementation-campaign-repair-lineage"
+CLEANUP_REASON_SHA="$(printf '%s' "$CLEANUP_REASON" | sha256sum | cut -d' ' -f1)"
+cat >"$CLEANUP_WORKTREE/.autopilot-worktree" <<EOF
+created_at=1782864000
+base_sha=$CLEANUP_TIP
+run_id=cleanup-run
+loop_id=cleanup-loop
+schema=2
+branch=retained-cleanup
+root_run_id=campaign-v1-$(printf 'a%.0s' {1..64})
+retention=lease
+retention_owner=campaign-v1-$(printf 'a%.0s' {1..64})
+retention_reason_sha256=$CLEANUP_REASON_SHA
+retention_expires_at=2000000000
+EOF
+CLEANUP_INPUT="$(node - "$REPO_ROOT" "$CLEANUP_REPO" "$CLEANUP_WORKTREE" \
+  "$CLEANUP_TIP" <<'NODE'
+const path = require('path');
+const [root, cwd, worktree, tip] = process.argv.slice(2);
+const { worktreeInstanceId } = require(
+  path.join(root, 'src', 'engine', 'repair-lineage-cleanup'),
+);
+const { repairLineageCleanupId } = require(
+  path.join(root, 'src', 'engine', 'implementation-campaign'),
+);
+const rootRunId = `campaign-v1-${'a'.repeat(64)}`;
+const record = {
+  lineage_id: rootRunId,
+  branch: 'retained-cleanup',
+  worktree,
+  expected_tip: tip,
+  cleanup_epoch: 1,
+  worktree_instance_id: worktreeInstanceId(worktree),
+  retention_owner: rootRunId,
+  retention_reason: 'implementation-campaign-repair-lineage',
+  retention_expires_at: 2000000000,
+};
+process.stdout.write(JSON.stringify({
+  cwd,
+  cleanupId: repairLineageCleanupId({
+    lineageId: record.lineage_id,
+    branch: record.branch,
+    worktree: record.worktree,
+    expectedTip: record.expected_tip,
+    cleanupEpoch: record.cleanup_epoch,
+    worktreeInstanceId: record.worktree_instance_id,
+  }),
+  record,
+  cleanupHelper: path.join(root, 'src', 'engine', 'repair-lineage-cleanup.js'),
+}));
+NODE
+)"
+mkdir -p "$CLEANUP_REPO/.git/autopilot"
+node - "$REPO_ROOT" "$CLEANUP_INPUT" \
+  "$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.jsonl" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [root, inputJson, journal] = process.argv.slice(2);
+const { canonicalDigest } = require(
+  path.join(root, 'src', 'engine', 'implementation-campaign'),
+);
+const input = JSON.parse(inputJson);
+const row = {
+  schema: 1,
+  cleanup_id: input.cleanupId,
+  action: 'intent',
+  ...input.record,
+};
+row.record_digest = canonicalDigest(row);
+fs.writeFileSync(journal, `${JSON.stringify(row)}\n`);
+NODE
+CLEANUP_REMOVE_INPUT="$(node - "$CLEANUP_INPUT" <<'NODE'
+const input = JSON.parse(process.argv[2]);
+const record = input.record;
+process.stdout.write(JSON.stringify({
+  cwd: input.cwd,
+  worktree: record.worktree,
+  expectedBranch: record.branch,
+  expectedTip: record.expected_tip,
+  expectedRootRunId: record.lineage_id,
+  expectedRetentionOwner: record.retention_owner,
+  expectedRetentionReason: record.retention_reason,
+  expectedRetentionExpiresAt: record.retention_expires_at,
+  expectedWorktreeInstanceId: record.worktree_instance_id,
+}));
+NODE
+)"
+flock -x "$CLEANUP_WORKTREE/.autopilot-worktree.lock" \
+  node "$REPO_ROOT/src/engine/repair-lineage-cleanup.js" "$CLEANUP_REMOVE_INPUT"
+PENDING_CLEANUP_STATE="$(node - "$REPO_ROOT" "$CLEANUP_INPUT" <<'NODE'
+const path = require('path');
+const [root, inputJson] = process.argv.slice(2);
+const { repairLineageCleanupState } = require(
+  path.join(root, 'src', 'engine', 'campaign-intake'),
+);
+const input = JSON.parse(inputJson);
+process.stdout.write(String(repairLineageCleanupState({
+  repo: input.cwd,
+  reference: { commit: input.record.expected_tip },
+  repairLineage: {
+    lineage_id: input.record.lineage_id,
+    branch: input.record.branch,
+    worktree: input.record.worktree,
+    cleanup_epoch: input.record.cleanup_epoch,
+    worktree_instance_id: input.record.worktree_instance_id,
+    retention_owner: input.record.retention_owner,
+    retention_reason: input.record.retention_reason,
+    retention_expires_at: input.record.retention_expires_at,
+  },
+})));
+NODE
+)"
+assert_eq "$PENDING_CLEANUP_STATE" "pending_intent" \
+  "durable intake accepts exact pending cleanup intent after removal crash"
+flock -x "$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.transaction.lock" \
+  node "$REPO_ROOT/src/engine/repair-lineage-cleanup-transaction.js" \
+  "$CLEANUP_INPUT" >"$TEST_TMP/cleanup-transaction-a.out" &
+CLEANUP_PID_A=$!
+flock -x "$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.transaction.lock" \
+  node "$REPO_ROOT/src/engine/repair-lineage-cleanup-transaction.js" \
+  "$CLEANUP_INPUT" >"$TEST_TMP/cleanup-transaction-b.out" &
+CLEANUP_PID_B=$!
+wait "$CLEANUP_PID_A"; CLEANUP_EXIT_A=$?
+wait "$CLEANUP_PID_B"; CLEANUP_EXIT_B=$?
+assert_eq "$CLEANUP_EXIT_A" "0" \
+  "first concurrent cleanup controller completes successfully"
+assert_eq "$CLEANUP_EXIT_B" "0" \
+  "second concurrent cleanup controller replays the serialized completion"
+assert_file_absent "$CLEANUP_WORKTREE" \
+  "serialized repair-lineage cleanup removes the exact clean retained worktree"
+assert_eq "$(git -C "$CLEANUP_REPO" rev-parse retained-cleanup)" "$CLEANUP_TIP" \
+  "serialized repair-lineage cleanup preserves the retained branch tip"
+assert_eq "$(wc -l <"$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.jsonl" \
+  | tr -d ' ')" "2" \
+  "crash recovery records one intent and one completion without duplicates"
+NO_INTENT_INPUT="$(node - "$CLEANUP_INPUT" <<'NODE'
+const input = JSON.parse(process.argv[2]);
+input.cleanupId = 'f'.repeat(64);
+process.stdout.write(JSON.stringify(input));
+NODE
+)"
+OUT="$(flock -x "$CLEANUP_REPO/.git/autopilot/repair-lineage-cleanup.transaction.lock" \
+  node "$REPO_ROOT/src/engine/repair-lineage-cleanup-transaction.js" \
+  "$NO_INTENT_INPUT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" \
+  "missing worktree without a prior intent cannot be retroactively recovered"
+assert_contains "$OUT" "missing retained worktree has no prior cleanup intent" \
+  "cleanup recovery requires durable ownership intent from an earlier attempt"
 
 finalize_test

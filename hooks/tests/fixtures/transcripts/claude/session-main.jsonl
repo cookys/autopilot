@@ -1,0 +1,4 @@
+{"type":"system","sessionId":"claude-main","timestamp":"2026-07-27T10:00:00.000Z","cwd":"__REPO__"}
+{"type":"user","sessionId":"claude-main","timestamp":"2026-07-27T10:00:10.000Z","cwd":"__REPO__","message":{"role":"user","content":[{"type":"text","text":"You missed this; you said ready but it is not ready. RAW_PROMPT_SENTINEL"}]}}
+{"type":"assistant","sessionId":"claude-main","timestamp":"2026-07-27T10:01:00.000Z","cwd":"__REPO__","message":{"role":"assistant","content":[{"type":"tool_use","id":"dispatch-1","name":"Bash","input":{"command":"bash scripts/dispatch-hetero.sh --runner codex --ticket-id ticket-alpha --generation 1"}}]}}
+{"type":"user","sessionId":"claude-main","timestamp":"2026-07-27T10:01:10.000Z","cwd":"__REPO__","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"dispatch-1","is_error":true,"content":"{\"exit_code\":1,\"status\":\"transport_failed\",\"body\":\"RAW_TOOL_OUTPUT_SENTINEL\"}"}]}}

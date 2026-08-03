@@ -115,8 +115,9 @@ assert_eq "0" "$EXIT2" "Test 2 node process exits 0"
 assert_contains "$OUT2" "status=committed" "Test 2 should report committed status"
 assert_not_contains "$OUT2" "phase=misplaced_writes" "Test 2 should not have misplaced_writes phase"
 
-# Test 3: resolveImplementationFromLedger uses caller-supplied round-invariant stage key
-# We set up a real git repo and real ledger file
+# Test 3: parsed precondition failures never promote terminal ledger-only evidence,
+# while the pre-existing null-result crash recovery remains available.
+# We set up a real git repo and real ledger file.
 SCRATCH_WT="$TEST_TMP/git-scratch"
 mkdir -p "$SCRATCH_WT"
 git init -q "$SCRATCH_WT"
@@ -152,19 +153,49 @@ LEDGER_PATH="$TEST_TMP/ledger.jsonl"
 RUN_LEDGER_SCRIPT="$REPO_ROOT/scripts/run-ledger.sh"
 bash "$RUN_LEDGER_SCRIPT" init --ledger "$LEDGER_PATH"
 
-ACQ_OUT=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement" --pid "$$" --git-ref "refs/heads/round1-branch" --git-sha "$ROUND1_SHA" --worktree "$SCRATCH_WT")
+# Reconciliation receipt requires a closed writer: live start_time/heartbeat at
+# acquire, then a dead holder before recovery (holder_alive=false).
+HOLDER1_PID=""
+HOLDER2_PID=""
+HOLDER3_PID=""
+cleanup_holders() {
+  if [ -n "${HOLDER1_PID}" ]; then kill "$HOLDER1_PID" 2>/dev/null || true; wait "$HOLDER1_PID" 2>/dev/null || true; fi
+  if [ -n "${HOLDER2_PID}" ]; then kill "$HOLDER2_PID" 2>/dev/null || true; wait "$HOLDER2_PID" 2>/dev/null || true; fi
+  if [ -n "${HOLDER3_PID}" ]; then kill "$HOLDER3_PID" 2>/dev/null || true; wait "$HOLDER3_PID" 2>/dev/null || true; fi
+}
+trap cleanup_holders EXIT
+
+sleep 120 &
+HOLDER1_PID=$!
+ACQ_OUT=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement" --pid "$HOLDER1_PID" --git-ref "refs/heads/round1-branch" --git-sha "$ROUND1_SHA" --worktree "$SCRATCH_WT")
 GEN=$(jq -r '.generation' <<<"$ACQ_OUT")
 NONCE=$(jq -r '.nonce' <<<"$ACQ_OUT")
-
 bash "$RUN_LEDGER_SCRIPT" stage-transition --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement" --generation "$GEN" --nonce "$NONCE" --to-state committed
+kill "$HOLDER1_PID" 2>/dev/null || true
+wait "$HOLDER1_PID" 2>/dev/null || true
+HOLDER1_PID=""
 
-ACQ_OUT2=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r2" --pid "$$" --git-ref "refs/heads/round2-branch" --git-sha "$ROUND2_SHA" --worktree "$SCRATCH_WT")
+sleep 120 &
+HOLDER2_PID=$!
+ACQ_OUT2=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r2" --pid "$HOLDER2_PID" --git-ref "refs/heads/round2-branch" --git-sha "$ROUND2_SHA" --worktree "$SCRATCH_WT")
 GEN2=$(jq -r '.generation' <<<"$ACQ_OUT2")
 NONCE2=$(jq -r '.nonce' <<<"$ACQ_OUT2")
-
 bash "$RUN_LEDGER_SCRIPT" stage-transition --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r2" --generation "$GEN2" --nonce "$NONCE2" --to-state committed
+kill "$HOLDER2_PID" 2>/dev/null || true
+wait "$HOLDER2_PID" 2>/dev/null || true
+HOLDER2_PID=""
 
-OUT3="$(node - "$REPO_ROOT" "$PROMPT_TXT" "$SCRATCH_WT" "$LEDGER_PATH" "$BASE_SHA" "$ROUND1_SHA" <<'NODE'
+sleep 120 &
+HOLDER3_PID=$!
+ACQ_OUT3=$(bash "$RUN_LEDGER_SCRIPT" stage-acquire --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r3" --pid "$HOLDER3_PID" --git-ref "refs/heads/round2-branch" --git-sha "1111111111111111111111111111111111111111" --worktree "$SCRATCH_WT")
+GEN3=$(jq -r '.generation' <<<"$ACQ_OUT3")
+NONCE3=$(jq -r '.nonce' <<<"$ACQ_OUT3")
+bash "$RUN_LEDGER_SCRIPT" stage-transition --ledger "$LEDGER_PATH" --run-id "RUNX" --stage "implement#r3" --generation "$GEN3" --nonce "$NONCE3" --to-state committed
+kill "$HOLDER3_PID" 2>/dev/null || true
+wait "$HOLDER3_PID" 2>/dev/null || true
+HOLDER3_PID=""
+
+OUT3="$(node - "$REPO_ROOT" "$PROMPT_TXT" "$SCRATCH_WT" "$LEDGER_PATH" "$BASE_SHA" "$ROUND1_SHA" "$ROUND2_SHA" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
 const promptFile = process.argv[3];
@@ -172,26 +203,28 @@ const gitDir = process.argv[4];
 const ledger = process.argv[5];
 const baseSha = process.argv[6];
 const round1Sha = process.argv[7];
+const round2Sha = process.argv[8];
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine'));
 
-const engine = new AutopilotEngine({
+const parsedPreconditionEngine = new AutopilotEngine({
   clock: () => '2026-07-01T00:00:00.000Z',
-  implementationDispatcher(args) {
-    // Mock blocked dispatcher to force ledger recovery
+  implementationDispatcher() {
     return {
       error: null,
-      status: 1,
+      status: 2,
       signal: null,
       stdout: '',
       stderr: 'boom',
       parseError: null,
-      result: null,
+      result: {
+        status: 'precondition_failed',
+        error: 'durable dispatch claim rejected: stage already committed',
+      },
     };
   },
 });
 
-// Round 1 implementTask
-const result1 = engine.implementTask({
+const parsedValidTerminal = parsedPreconditionEngine.implementTask({
   promptFile,
   branch: 'round1-branch',
   base: baseSha,
@@ -207,11 +240,37 @@ const result1 = engine.implementTask({
   },
 });
 
-console.log(`round1_status=${result1.status}`);
-console.log(`round1_commit=${result1.implementation ? result1.implementation.commit : 'null'}`);
+const parsedMissingCommit = parsedPreconditionEngine.implementTask({
+  promptFile,
+  branch: 'round2-branch',
+  base: round1Sha,
+  runId: 'RUNX',
+  implementationStage: 'implement',
+  implementationRound: 3,
+  ledger,
+  gitDir,
+  roster: {
+    implementer_engine: 'test',
+    implementer_effort: 'high',
+    implementer_runner: 'auto',
+  },
+});
 
-// Round 2 implementTask with different branch and base to simulate round 2
-const result2 = engine.implementTask({
+const crashRecoveryEngine = new AutopilotEngine({
+  clock: () => '2026-07-01T00:00:00.000Z',
+  implementationDispatcher() {
+    return {
+      error: new Error('dispatcher transport crashed before a parseable result'),
+      status: null,
+      signal: null,
+      stdout: '',
+      stderr: 'transport crash',
+      parseError: null,
+      result: null,
+    };
+  },
+});
+const crashRecovered = crashRecoveryEngine.implementTask({
   promptFile,
   branch: 'round2-branch',
   base: round1Sha,
@@ -227,24 +286,32 @@ const result2 = engine.implementTask({
   },
 });
 
-console.log(`round2_status=${result2.status}`);
-console.log(`round2_commit=${result2.implementation ? result2.implementation.commit : 'null'}`);
+console.log(`parsed_valid_status=${parsedValidTerminal.status}`);
+console.log(`parsed_valid_implementation=${parsedValidTerminal.implementation.status}`);
+console.log(`missing_status=${parsedMissingCommit.status}`);
+console.log(`missing_implementation=${parsedMissingCommit.implementation.status}`);
+console.log(`missing_commit_promoted=${parsedMissingCommit.implementation.commit || 'none'}`);
+console.log(`crash_status=${crashRecovered.status}`);
+console.log(`crash_commit=${crashRecovered.implementation
+  ? crashRecovered.implementation.commit
+  : 'null'}`);
+console.log(`expected_crash_commit=${round2Sha}`);
 NODE
 )"; EXIT3=$?
 assert_eq "0" "$EXIT3" "Test 3 node process exits 0"
-assert_contains "$OUT3" "round1_status=committed" "Round 1 recovery succeeds"
-assert_contains "$OUT3" "round1_commit=$ROUND1_SHA" "Round 1 commit is round 1 SHA"
-
-# C4 acceptance: round 2 must NOT silently re-adopt round 1's stale commit under a
-# round-invariant (runId, stage) ledger key. Neutralized pending the fix landing (see
-# fix/l6-fixpass commit history) — the foreman re-asserts the correct polarity once the
-# actual round-scoped stage-key scheme is known, per the pre-authorized inversion noted
-# in the U2 harness-authoring brief.
-ROUND2_STATUS="$(printf '%s' "$OUT3" | awk -F'=' '/^round2_status=/{print $2}' | tail -n 1)"
-ROUND2_COMMIT="$(printf '%s' "$OUT3" | grep -oE 'round2_commit=[0-9a-f]{40}' | cut -d= -f2 | tail -n 1)"
-
-assert_eq "$ROUND2_STATUS" "committed" "Round 2 should be committed after ledger recovery"
-assert_neq "$ROUND2_COMMIT" "" "Round 2 should emit a non-empty commit"
-assert_neq "$ROUND2_COMMIT" "$ROUND1_SHA" "Round 2 must resolve to a different ledger identity than round 1 (not silently re-adopt its stale commit)"
+assert_contains "$OUT3" "parsed_valid_status=blocked" \
+  "parsed precondition failure cannot promote even a valid terminal ledger row"
+assert_contains "$OUT3" "parsed_valid_implementation=precondition_failed" \
+  "parsed precondition result remains the authoritative blocked outcome"
+assert_contains "$OUT3" "missing_status=blocked" \
+  "nonexistent 1111 terminal commit is rejected"
+assert_contains "$OUT3" "missing_implementation=precondition_failed" \
+  "nonexistent terminal evidence does not replace the parsed precondition result"
+assert_contains "$OUT3" "missing_commit_promoted=none" \
+  "nonexistent 1111 SHA is never synthesized as committed"
+assert_contains "$OUT3" "crash_status=committed" \
+  "null-result dispatcher crash still uses the pre-existing recovery path"
+assert_contains "$OUT3" "crash_commit=$ROUND2_SHA" \
+  "null-result crash recovery retains exact round-scoped ledger identity"
 
 finalize_test

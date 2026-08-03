@@ -2,7 +2,7 @@
 
 **Status**: ✅ Shipped 2026-06-01 (v2.7.5)
 **Branch**: `feat/test-suite-foundation`
-**Source plan**: [`docs/plans/2026-05-14-test-suite.md`](../../plans/2026-05-14-test-suite.md) (2026-05-14, refreshed below)
+**Source plan**: [`docs/plans/2026-05-14-test-suite.md`](../../../plans/2026-05-14-test-suite.md) (2026-05-14, refreshed below)
 **Backlog entry**: "Test suite for autopilot — automated coverage for hooks / scripts" (L ~12hr)
 **Size**: L (multi-phase, full P1–P6 per user direction)
 

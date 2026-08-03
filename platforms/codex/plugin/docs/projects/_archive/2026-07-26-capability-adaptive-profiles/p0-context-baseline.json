@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-07-26",
+  "base": {
+    "branch": "develop",
+    "commit": "dd34d57656b3f3c45dbb0c8a4ff587312a3ebbc5"
+  },
+  "source_surface": {
+    "token_source": "heuristic_bytes_div_3.5",
+    "exact_token_measurement": false,
+    "estimate_can_satisfy_budget": false,
+    "files": [
+      {
+        "path": "skills/ceo-agent/SKILL.md",
+        "sha256": "f905c68269b6a029d1b800a58582376d990ad5fc812c352a5cbed534eab9e428",
+        "bytes": 32924,
+        "words": 4773,
+        "estimated_tokens": 9407,
+        "rule_candidate_occurrences": 342
+      },
+      {
+        "path": "skills/dev-flow/SKILL.md",
+        "sha256": "862a1b42e933c0796ad8d5b7cd0c95b153706b9c779773863fc4384616715e33",
+        "bytes": 33554,
+        "words": 4850,
+        "estimated_tokens": 9587,
+        "rule_candidate_occurrences": 403
+      }
+    ]
+  },
+  "rule_inventory": {
+    "status": "valid",
+    "source_manifest": "profiles/rule-source-manifest.json",
+    "sources": 2,
+    "segments": 72,
+    "rule_candidate_occurrences": 745,
+    "canonical_rules": 728,
+    "duplicate_rule_hashes": 17,
+    "alias_occurrences": 17,
+    "category_totals": {
+      "core": 101,
+      "guided": 401,
+      "autonomous": 14,
+      "assurance": 76,
+      "topology": 136,
+      "obsolete": 0
+    }
+  },
+  "hosts": [
+    {
+      "host": "codex",
+      "version": "0.145.0",
+      "evidence": {
+        "kind": "two content-free summaries of persisted session traces",
+        "command_template": "node scripts/measure-profile-context.js codex-trace --trace <local-jsonl> --component ceo-agent=skills/ceo-agent/SKILL.md --component dev-flow=skills/dev-flow/SKILL.md --repo .",
+        "traces": [
+          {
+            "trace_sha256": "9168e00e7610f2089745a6f8248b97722fd08b34b819aebe30ff82ea27668d19",
+            "cli_version": "0.145.0",
+            "integrity": "complete",
+            "malformed_lines": 0,
+            "catalog_snapshots": 2,
+            "catalog_min_bytes": 16426,
+            "catalog_max_bytes": 16431
+          },
+          {
+            "trace_sha256": "4ebbf24d1a1e17c5326d88ed4fa2b8c417798d28855456eacdcbef9bc39b6f26",
+            "cli_version": "0.144.6",
+            "integrity": "complete",
+            "malformed_lines": 0,
+            "catalog_snapshots": 6,
+            "catalog_min_bytes": 16426,
+            "catalog_max_bytes": 23219
+          }
+        ]
+      },
+      "visibility": "prompt_trace_observed",
+      "skill_catalog": {
+        "entries": 33,
+        "min_bytes": 16426,
+        "max_bytes": 23219,
+        "max_heuristic_estimated_tokens": 6634,
+        "exact_token_measurement": false,
+        "estimate_can_satisfy_budget": false,
+        "latest_content_hash": "575e12f95370a280c134ae8ee7a9afaa028cbc97f060ebe6bce5256f839ff206"
+      },
+      "developer_prompt_full_body_occurrences": {
+        "ceo-agent": 0,
+        "dev-flow": 0
+      },
+      "absence_claim_eligible": false,
+      "limitations": [
+        "Absence of an exact full-body match does not prove that no excerpt or late loader became visible.",
+        "Catalog cost is a heuristic byte estimate, not a tokenizer or harness delta, and cannot satisfy a context budget.",
+        "These traces establish positive developer-message catalog visibility only; they do not carry a terminal witness capable of proving full-session absence."
+      ]
+    },
+    {
+      "host": "grok",
+      "version": "0.2.106",
+      "evidence": {
+        "command": "grok inspect --json",
+        "raw_sha256": "8f26773fbb821ab85b19fbb4f4c2c9ad5c15f165a703fe4cfcadb54f050684fc"
+      },
+      "visibility": "discovery_only",
+      "discovered_skills": 83,
+      "autopilot_rows": 56,
+      "autopilot_unique_names": 28,
+      "autopilot_duplicate_names": 28,
+      "autopilot_description_bytes": 29658,
+      "heuristic_estimated_tokens": 8474,
+      "notes": [
+        "All 28 repo-local Autopilot skills also appeared through the installed plugin.",
+        "Four unrelated user-level skills are excluded from the Autopilot row count.",
+        "Inspect proves discovery metadata, not the model-visible prompt."
+      ]
+    },
+    {
+      "host": "opencode",
+      "version": "1.17.15",
+      "evidence": "opencode debug skill",
+      "visibility": "unverified",
+      "result": "output truncated at 65536 bytes and was not valid complete JSON",
+      "notes": [
+        "The observed output included full skill content before truncation.",
+        "No prompt-visibility or exact-token claim is made from the debug output."
+      ]
+    },
+    {
+      "host": "claude-code",
+      "version": "2.1.220",
+      "evidence": "claude plugin list",
+      "visibility": "unverified",
+      "result": "Autopilot dev plugin enabled; no fresh prompt trace collected",
+      "notes": [
+        "Native Anthropic quota was not spent for this phase.",
+        "Plugin installation does not prove catalog/body injection behavior."
+      ]
+    },
+    {
+      "host": "agy",
+      "version": "1.1.6",
+      "evidence": "agy plugin list",
+      "visibility": "unverified",
+      "result": "no imported plugins in the current user environment"
+    }
+  ],
+  "packaging_decision": {
+    "repository": "single",
+    "artifact_strategy": "generated_profile_specific_payloads_from_canonical_source",
+    "reason": "No supported host currently proves that inactive profile metadata, bodies, triggers, and loader routes remain absent for a full session. The fail-closed packaging rule therefore forbids a single combined payload.",
+    "constraints": [
+      "Guided and autonomous profiles must not become additional discoverable skill catalog entries.",
+      "Generated payloads share one canonical repository source and do not create a second product or repository.",
+      "A future single-payload optimization requires fresh full-session isolation evidence on every claimed host."
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-07-29-durable-continuation-identity.md",
+      "rubric_path": "plans/2026-07-29-durable-continuation-identity.rubric.md",
+      "plan_sha256": "790dba51cb581d8e22df22fe52c4101008eaf6411454ba0b819665b558d5f021",
+      "rubric_sha256": "867148b67c9ebf182dd988782cc8da8867d4699425ca900b0ee1e113e71a6965"
+    },
+    {
+      "plan_path": "plans/2026-07-29-qc-panel-honesty.md",
+      "rubric_path": "plans/2026-07-29-qc-panel-honesty.rubric.md",
+      "plan_sha256": "754a875ca9ffc8a55cf05b164008b4a42abd24824d3f693915c1ff89e8cd1b64",
+      "rubric_sha256": "753bf24bb7e02a001098651955fe3c6970ca6118e116f87dbb18ed992f03cbcd"
+    }
+  ]
+}

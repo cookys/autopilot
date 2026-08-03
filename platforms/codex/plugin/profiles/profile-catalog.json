@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "inventory_sha256": "b1d07933f05ad444550cbd525d949fccf3d55a24fa449b765a8487721e21b826",
+  "source_manifest_sha256": "5ba748b8e81e63b7c9278375385cdc9e84c22932ca7b31d8e7c96eb084784caa",
+  "source_map_sha256": "ede8e180aed5d4eb85d8e90a3d81afa49b79ae5a5c9c56de288f9a40fe65ea79",
+  "hook_classes_sha256": "99589c42c67df1ba75584cb2616720ef8e9011e409337b413013d8c1749b4663",
+  "rule_migration_sha256": "e71764eadb434dfee7f4d3d9b2dff4e4181473139b1c730101eae26ff3319fda",
+  "guided_compatibility_sha256": "f1483b1a0b6f087e7a0d29622044226c0c9feb3568239ed909a3d1c7da5946b1",
+  "category_totals": {
+    "core": 114,
+    "guided": 403,
+    "autonomous": 16,
+    "assurance": 80,
+    "topology": 185,
+    "obsolete": 0
+  },
+  "core": {
+    "path": "profiles/core.md",
+    "sha256": "96e782ce943648535249dee6703ae33156da7913b66b62080e09a2480e84c22e",
+    "bytes": 374
+  },
+  "profiles": {
+    "guided": {
+      "path": "profiles/guided.md",
+      "sha256": "ad6e8ad38eb920d96c9ea4d96c53a1387d9f856158f7b0a1d085fc7b5f9c8d31",
+      "bytes": 531
+    },
+    "autonomous": {
+      "path": "profiles/autonomous.md",
+      "sha256": "c82b632ed836639d0cd7f2e554c854b7ce04ded32f31970481817f6593b26cdb",
+      "bytes": 418
+    }
+  }
+}

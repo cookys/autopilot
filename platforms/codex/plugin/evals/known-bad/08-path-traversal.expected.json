@@ -1,0 +1,1 @@
+{"class":"critical","defect":"basename sanitization removed; a project name of '../../etc' now allows writes outside docs/projects/, enabling path traversal to arbitrary filesystem locations"}

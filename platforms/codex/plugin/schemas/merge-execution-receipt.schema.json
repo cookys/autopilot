@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/merge-execution-receipt.schema.json",
+  "title": "merge-execution-receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "manifest_seal",
+    "root_run_id",
+    "status",
+    "halt_reason",
+    "halt_edge",
+    "edges",
+    "receipt_digest"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "artifact_type": { "type": "string", "const": "merge_execution_receipt" },
+    "manifest_seal": {
+      "oneOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "root_run_id": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "null" }
+      ]
+    },
+    "status": { "type": "string", "enum": ["complete", "halted"] },
+    "halt_reason": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "null" }
+      ]
+    },
+    "halt_edge": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "null" }
+      ]
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edgeReceipt" }
+    },
+    "receipt_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitOid": {
+      "oneOf": [
+        { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
+        { "type": "null" }
+      ]
+    },
+    "endpointValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "expected_sha", "actual_sha", "from_edge"],
+      "properties": {
+        "ref": { "type": "string", "pattern": "^refs/" },
+        "expected_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "actual_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "from_edge": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "preservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approved_paths",
+        "protected_paths",
+        "action",
+        "restored",
+        "verification"
+      ],
+      "properties": {
+        "approved_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "protected_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "action": { "type": "string", "enum": ["none", "path_snapshot_restore"] },
+        "restored": { "type": "boolean" },
+        "verification": { "type": "string", "enum": ["exact", "failed"] }
+      }
+    },
+    "edgeReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "source_ref",
+        "target_ref",
+        "mode",
+        "status",
+        "source_validation",
+        "target_validation",
+        "before_sha",
+        "after_sha",
+        "merge_commit",
+        "conflicts",
+        "error",
+        "preservation",
+        "edge_receipt_digest"
+      ],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 1 },
+        "source_ref": { "type": "string", "pattern": "^refs/" },
+        "target_ref": { "type": "string", "pattern": "^refs/" },
+        "mode": { "type": "string", "enum": ["no-ff", "ff-only"] },
+        "status": { "type": "string", "enum": ["executed", "halted"] },
+        "source_validation": { "$ref": "#/$defs/endpointValidation" },
+        "target_validation": { "$ref": "#/$defs/endpointValidation" },
+        "before_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "after_sha": { "$ref": "#/$defs/gitOid" },
+        "merge_commit": { "$ref": "#/$defs/gitOid" },
+        "conflicts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "error": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "preservation": { "$ref": "#/$defs/preservation" },
+        "edge_receipt_digest": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

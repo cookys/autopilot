@@ -38,7 +38,10 @@ DIRS=(
   "skills"
   "bin"
   "src"
+  "profiles"
   "schemas"
+  "evals/clean"
+  "evals/known-bad"
   "hooks/_shared"
   "references"
   "scripts"
@@ -54,8 +57,19 @@ DOC_FILES=(
   "docs/plans/2026-06-04-distill-consolidate.md"
   "docs/plans/2026-06-22-ceo-fleet-autonomy.md"
   "docs/plans/2026-06-26-trust-tiered-review-policy.md"
+  "docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
   "docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md"
 )
+
+SUPPORT_FILES=(
+  "evals/capability-evidence-corpus.json"
+  "evals/owner-capability-evidence-corpus.json"
+  "evals/owner-eval-generator.js"
+  "evals/reviewer-eval-generator.js"
+)
+
+HOOK_BASELINE_SOURCE="hooks/hooks.json"
+HOOK_BASELINE_DEST="profiles/baselines/claude-hooks.json"
 
 if [ ! -d "$SRC" ]; then
   echo "error: source skills directory missing: $SRC" >&2
@@ -132,17 +146,23 @@ check_dir() {
   if [ "$rel" = "scripts" ]; then
     local args=(-qr)
     local excluded
+    local diff_status=0
     for excluded in "${SCRIPT_EXCLUDES[@]}"; do
       args+=(--exclude="$excluded")
     done
-    diff "${args[@]}" "$src" "$dst"
+    diff "${args[@]}" "$src" "$dst" || diff_status=$?
     for excluded in "${SCRIPT_EXCLUDES[@]}"; do
       if [ -e "$dst/$excluded" ]; then
         echo "drift: excluded OpenCode installer leaked into platforms/codex/plugin/scripts/$excluded"
         return 1
       fi
     done
-    return 0
+    return "$diff_status"
+  fi
+
+  if [ "$rel" = "profiles" ]; then
+    diff -qr --exclude=baselines "$src" "$dst"
+    return $?
   fi
 
   diff -qr "$src" "$dst"
@@ -166,6 +186,70 @@ check_file() {
     return 1
   fi
 }
+
+copy_mapped_file() {
+  local source_rel="$1"
+  local destination_rel="$2"
+  local src="$REPO/$source_rel"
+  local dst="$PLUGIN/$destination_rel"
+  if [ ! -f "$src" ]; then
+    echo "error: source file missing: $src" >&2
+    exit 1
+  fi
+  mkdir -p "$(dirname "$dst")"
+  cp "$src" "$dst"
+}
+
+check_mapped_file() {
+  local source_rel="$1"
+  local destination_rel="$2"
+  local src="$REPO/$source_rel"
+  local dst="$PLUGIN/$destination_rel"
+  if [ ! -f "$src" ]; then
+    echo "error: source file missing: $src" >&2
+    exit 1
+  fi
+  if [ ! -f "$dst" ]; then
+    echo "drift: missing file platforms/codex/plugin/$destination_rel"
+    return 1
+  fi
+  if ! cmp -s "$src" "$dst"; then
+    echo "drift: content differs platforms/codex/plugin/$destination_rel"
+    return 1
+  fi
+}
+
+check_exact_directory_entry() (
+  local rel="$1"
+  local expected="$2"
+  local directory="$PLUGIN/$rel"
+  local status=0
+  if [ ! -d "$directory" ]; then
+    echo "drift: missing directory platforms/codex/plugin/$rel"
+    return 1
+  fi
+  shopt -s nullglob dotglob
+  local entry
+  for entry in "$directory"/*; do
+    if [ "$(basename "$entry")" != "$expected" ]; then
+      echo "drift: extra path platforms/codex/plugin/$rel/$(basename "$entry")"
+      status=1
+    fi
+  done
+  return "$status"
+)
+
+clean_hooks_root() (
+  local hooks_root="$PLUGIN/hooks"
+  mkdir -p "$hooks_root"
+  shopt -s nullglob dotglob
+  local entry
+  for entry in "$hooks_root"/*; do
+    if [ "$(basename "$entry")" != "_shared" ]; then
+      rm -rf "$entry"
+    fi
+  done
+)
 
 is_expected_doc_file() {
   local rel="$1"
@@ -201,6 +285,12 @@ if [ "$MODE" = "check" ]; then
   for rel in "${DOC_FILES[@]}"; do
     check_file "$rel" || STATUS=1
   done
+  for rel in "${SUPPORT_FILES[@]}"; do
+    check_file "$rel" || STATUS=1
+  done
+  check_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST" || STATUS=1
+  check_exact_directory_entry "profiles/baselines" "claude-hooks.json" || STATUS=1
+  check_exact_directory_entry "hooks" "_shared" || STATUS=1
   check_doc_extras || STATUS=1
 
   if [ "$STATUS" -eq 0 ]; then
@@ -219,5 +309,10 @@ rm -rf "$PLUGIN/docs"
 for rel in "${DOC_FILES[@]}"; do
   copy_file "$rel"
 done
+for rel in "${SUPPORT_FILES[@]}"; do
+  copy_file "$rel"
+done
+copy_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST"
+clean_hooks_root
 
 echo "synced Codex plugin payload: platforms/codex/plugin"

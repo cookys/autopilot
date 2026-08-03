@@ -22,7 +22,16 @@ const ENGINE_BRIDGE_CONTRACT_V2_SCHEMA_VERSION = 2;
 const TOKEN_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const GIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-const AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS = Object.freeze(['clock', 'cwd']);
+const AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS = Object.freeze([
+  'clock',
+  'cwd',
+  'missionCampaignAdapterOptions',
+  'missionCampaignGrant',
+  'missionCampaignStore',
+  'missionPreparedReceipt',
+  'missionPreparedReceiptPath',
+  'missionStatePath',
+]);
 const TRUSTED_INTAKE_VERIFICATION_PATH = 'host_pinned_authenticated_intake';
 const P2_ACTION_AUTHORITY_DESTINATIONS = Object.freeze([
   'mintActionDecision',
@@ -52,19 +61,35 @@ const ACTION_CATALOG_REQUIREMENT_KEYS = new Set([
   'command_required',
 ]);
 const REQUIRED_CONTROL_SINK_REGISTRY = Object.freeze({
+  'campaign-intake': Object.freeze({ seam: 'campaignIntake', requires_action_catalog_binding: true }),
+  'campaign-admission-release': Object.freeze({ seam: 'campaignAdmissionReleaser', requires_action_catalog_binding: true }),
+  'campaign-event-append': Object.freeze({ seam: 'campaignEventAppender', requires_action_catalog_binding: true }),
+  'campaign-admission-complete': Object.freeze({ seam: 'campaignAdmissionCompleter', requires_action_catalog_binding: true }),
+  'campaign-composition': Object.freeze({ seam: 'campaignComposer', requires_action_catalog_binding: false }),
+  'campaign-adjudication': Object.freeze({ seam: 'campaignAdjudicator', requires_action_catalog_binding: false }),
+  'campaign-disposition': Object.freeze({ seam: 'campaignDispositionProvider', requires_action_catalog_binding: false }),
+  'campaign-scope-check': Object.freeze({ seam: 'campaignScopeChecker', requires_action_catalog_binding: false }),
+  'campaign-repair-changed-paths': Object.freeze({ seam: 'campaignRepairChangedPaths', requires_action_catalog_binding: false }),
+  'campaign-tree-resolve': Object.freeze({ seam: 'campaignTreeResolver', requires_action_catalog_binding: false }),
+  'campaign-lifecycle-inspect': Object.freeze({ seam: 'campaignLifecycleInspector', requires_action_catalog_binding: false }),
+  'campaign-post-commit-checkpoint': Object.freeze({ seam: 'campaignPostCommitCheckpoint', requires_action_catalog_binding: true }),
   'review-loop-resolution': Object.freeze({ seam: 'reviewLoopResolver', requires_action_catalog_binding: false }),
   'review-dispatch': Object.freeze({ seam: 'reviewDispatcher', requires_action_catalog_binding: true }),
+  'review-post-provider-hook': Object.freeze({ seam: 'reviewPostProviderHook', requires_action_catalog_binding: false }),
   'implementation-dispatch': Object.freeze({ seam: 'implementationDispatcher', requires_action_catalog_binding: true }),
   'diff-provenance': Object.freeze({ seam: 'diffProvider', requires_action_catalog_binding: true }),
   'repair-prompt-write': Object.freeze({ seam: 'repairPromptWriter', requires_action_catalog_binding: true }),
   'verification-execution': Object.freeze({ seam: 'verifyCommandRunner', requires_action_catalog_binding: true }),
   'verify-worktree-add': Object.freeze({ seam: 'gitWorktreeAdd', requires_action_catalog_binding: true }),
   'verify-worktree-remove': Object.freeze({ seam: 'gitWorktreeRemove', requires_action_catalog_binding: true }),
+  'repair-lineage-cleanup': Object.freeze({ seam: 'repairLineageCleanupTransaction', requires_action_catalog_binding: true }),
   'verify-worktree-cleanup': Object.freeze({ seam: 'verifyWorktreeCleanup', requires_action_catalog_binding: true }),
   'branch-force': Object.freeze({ seam: 'gitBranchForce', requires_action_catalog_binding: true }),
   'resume-inspection': Object.freeze({ seam: 'gitResumeInspect', requires_action_catalog_binding: false }),
   'diff-risk-classification': Object.freeze({ seam: 'classifyDiffRisk', requires_action_catalog_binding: false }),
   'lifecycle-observation': Object.freeze({ seam: 'lifecycleObserver', requires_action_catalog_binding: false }),
+  'mission-adapter-factory': Object.freeze({ seam: 'missionAdapterFactory', requires_action_catalog_binding: false }),
+  'mission-terminal-reconcile': Object.freeze({ seam: 'missionTerminalReconciler', requires_action_catalog_binding: true }),
 });
 
 function freezeEntries(entries) {
@@ -84,6 +109,135 @@ function freezeEntries(entries) {
 // AutopilotEngine. The focused test reads that constructor and fails when a new
 // callable seam is added without a corresponding supervised mapping.
 const AUTOPILOT_ENGINE_CONTROL_SINKS = freezeEntries([
+  {
+    id: 'campaign-intake',
+    seam: 'campaignIntake',
+    kind: 'campaign_control',
+    kernel_destinations: [
+      ...P2_ACTION_AUTHORITY_DESTINATIONS,
+      'recordEvidence',
+    ],
+    requires_action_catalog_binding: true,
+    action_catalog_requirement: {
+      operation: 'engine_campaign_intake',
+      tool_class: 'campaign_control',
+      minimum_action_class: 'external',
+      requires_mediator: true,
+    },
+  },
+  {
+    id: 'campaign-admission-release',
+    seam: 'campaignAdmissionReleaser',
+    kind: 'campaign_control',
+    kernel_destinations: [
+      ...P2_ACTION_AUTHORITY_DESTINATIONS,
+      'recordEvidence',
+    ],
+    requires_action_catalog_binding: true,
+    action_catalog_requirement: {
+      operation: 'engine_campaign_admission_release',
+      tool_class: 'campaign_control',
+      minimum_action_class: 'external',
+      requires_mediator: true,
+    },
+  },
+  {
+    id: 'campaign-event-append',
+    seam: 'campaignEventAppender',
+    kind: 'campaign_control',
+    kernel_destinations: [
+      ...P2_ACTION_AUTHORITY_DESTINATIONS,
+      'recordEvidence',
+    ],
+    requires_action_catalog_binding: true,
+    action_catalog_requirement: {
+      operation: 'engine_campaign_event_append',
+      tool_class: 'campaign_control',
+      minimum_action_class: 'external',
+      requires_mediator: true,
+    },
+  },
+  {
+    id: 'campaign-admission-complete',
+    seam: 'campaignAdmissionCompleter',
+    kind: 'campaign_control',
+    kernel_destinations: [
+      ...P2_ACTION_AUTHORITY_DESTINATIONS,
+      'recordEvidence',
+    ],
+    requires_action_catalog_binding: true,
+    action_catalog_requirement: {
+      operation: 'engine_campaign_admission_complete',
+      tool_class: 'campaign_control',
+      minimum_action_class: 'external',
+      requires_mediator: true,
+    },
+  },
+  {
+    id: 'campaign-composition',
+    seam: 'campaignComposer',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-adjudication',
+    seam: 'campaignAdjudicator',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-disposition',
+    seam: 'campaignDispositionProvider',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-scope-check',
+    seam: 'campaignScopeChecker',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-repair-changed-paths',
+    seam: 'campaignRepairChangedPaths',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-tree-resolve',
+    seam: 'campaignTreeResolver',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-lifecycle-inspect',
+    seam: 'campaignLifecycleInspector',
+    kind: 'campaign_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'campaign-post-commit-checkpoint',
+    seam: 'campaignPostCommitCheckpoint',
+    kind: 'campaign_control',
+    kernel_destinations: [
+      ...P2_ACTION_AUTHORITY_DESTINATIONS,
+      'recordEvidence',
+    ],
+    requires_action_catalog_binding: true,
+    action_catalog_requirement: {
+      operation: 'engine_campaign_post_commit_checkpoint',
+      tool_class: 'campaign_control',
+      minimum_action_class: 'irreversible',
+      requires_mediator: true,
+    },
+  },
   {
     id: 'review-loop-resolution',
     seam: 'reviewLoopResolver',
@@ -107,6 +261,13 @@ const AUTOPILOT_ENGINE_CONTROL_SINKS = freezeEntries([
       minimum_action_class: 'external',
       requires_mediator: true,
     },
+  },
+  {
+    id: 'review-post-provider-hook',
+    seam: 'reviewPostProviderHook',
+    kind: 'fault_injection',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
   },
   {
     id: 'implementation-dispatch',
@@ -197,6 +358,19 @@ const AUTOPILOT_ENGINE_CONTROL_SINKS = freezeEntries([
     },
   },
   {
+    id: 'repair-lineage-cleanup',
+    seam: 'repairLineageCleanupTransaction',
+    kind: 'worktree_mutation',
+    kernel_destinations: [...P2_ACTION_AUTHORITY_DESTINATIONS],
+    requires_action_catalog_binding: true,
+    action_catalog_requirement: {
+      operation: 'engine_repair_lineage_cleanup',
+      tool_class: 'git',
+      minimum_action_class: 'external',
+      requires_mediator: true,
+    },
+  },
+  {
     id: 'verify-worktree-cleanup',
     seam: 'verifyWorktreeCleanup',
     kind: 'filesystem_deletion',
@@ -242,6 +416,29 @@ const AUTOPILOT_ENGINE_CONTROL_SINKS = freezeEntries([
     kind: 'non_authoritative_observation',
     kernel_destinations: [],
     requires_action_catalog_binding: false,
+  },
+  {
+    id: 'mission-adapter-factory',
+    seam: 'missionAdapterFactory',
+    kind: 'mission_control',
+    kernel_destinations: [],
+    requires_action_catalog_binding: false,
+  },
+  {
+    id: 'mission-terminal-reconcile',
+    seam: 'missionTerminalReconciler',
+    kind: 'mission_control',
+    kernel_destinations: [
+      ...P2_ACTION_AUTHORITY_DESTINATIONS,
+      'recordEvidence',
+    ],
+    requires_action_catalog_binding: true,
+    action_catalog_requirement: {
+      operation: 'engine_mission_terminal_reconcile',
+      tool_class: 'mission_control',
+      minimum_action_class: 'external',
+      requires_mediator: true,
+    },
   },
 ]);
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
+enable_legacy_scorecard_test_projection
 
 json_get() { echo "$1" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const o=JSON.parse(d);const p=process.argv[1].split('.');let v=o;for(const k of p){v=v?.[k];}console.log(v===undefined?'':typeof v==='object'?JSON.stringify(v):String(v))}catch(e){console.log('')}})" "$2"; }
 
@@ -40,14 +41,16 @@ process.stdout.write('Fake deterministic author output.\n');
 EOF
 
 IMPL_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
-IMPL_EVENT='{"schema_version":1,"observed_at":"OLD","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+# Exact resolver tuples: implementer effort defaults to high / endpoint null;
+# VA config pins verification_author_effort=high / endpoint "".
+IMPL_EVENT='{"schema_version":1,"observed_at":"OLD","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
 
 VA_ROW='{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
-VA_EVENT='{"schema_version":1,"observed_at":"OLD","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+VA_EVENT='{"schema_version":1,"observed_at":"OLD","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
 
 OBSERVED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-IMPL_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
-VA_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+IMPL_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"codex","model":"gpt-5.3-codex-spark","role":"implementer","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
+VA_EVENT='{"schema_version":1,"observed_at":"'"$OBSERVED_AT"'","runner":"anthropic-compatible","model":"glm-5.2","role":"verification_author","effort":"high","endpoint":null,"runner_version":"v1.0.0","capability":{"quota":{"status":"available","confidence":"high","ttl_seconds":3600,"reset_at":null,"evidence":"test"}}}'
 printf '%s\n' "$IMPL_ROW"  > "$TEST_TMP/impl-row.json"
 printf '%s\n' "$IMPL_EVENT" > "$TEST_TMP/impl-event.json"
 printf '%s\n' "$VA_ROW"    > "$TEST_TMP/va-row.json"
@@ -239,5 +242,40 @@ assert_eq "$A7_STATUS" "authored" "A7 legacy status authored"
 assert_not_contains "$LAST_OUT" "unit_id" "A7 no unit_id"
 assert_not_contains "$LAST_OUT" "go" "A7 no go"
 assert_not_contains "$LAST_OUT" "containment" "A7 no containment"
+
+# A8: native provisional verification-author (no legacy scorecard rewrite).
+# Disk projects evidence-backed qualified → provisional; strict author must GO
+# for raw-artifact only and still spawn the author runner.
+mkdir -p "$CASE_DIR/A8"
+rm -f "$RUN_MARKER"
+A8_RUN_MARKER="$TEST_TMP/a8_run_marker"
+run_dispatch env NODE_OPTIONS="" DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$CASE_DIR/A8" \
+  RUN_MARKER_PATH="$A8_RUN_MARKER" ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" \
+  "$REPO_ROOT/scripts/dispatch-author.sh" --strict-contract --contract-file "$CONTRACT" \
+  --repo-root "$MINI_REPO" --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS"
+assert_eq "$LAST_RC" 0 "A8 provisional VA strict GO should rc=0"
+assert_file_exists "$A8_RUN_MARKER" "A8 provisional VA runner must execute"
+A8_STATUS=$(json_get "$LAST_OUT" status)
+A8_GO=$(json_get "$LAST_OUT" go)
+A8_RUNNER=$(json_get "$LAST_OUT" runner)
+A8_MODEL=$(json_get "$LAST_OUT" model)
+assert_eq "$A8_STATUS" "authored" "A8 status authored"
+assert_eq "$A8_GO" "GO" "A8 go matches"
+assert_eq "$A8_RUNNER" "anthropic-compatible" "A8 runner matches"
+assert_eq "$A8_MODEL" "glm-5.2" "A8 model matches"
+
+# A8b: provisional VA with non-raw-artifact unit remains pre-spend NO-GO.
+cat > "$TEST_TMP/va_verdict_contract.json" <<EOF
+{"schema":1,"unit_id":"c4b-va-verdict","role":"verification-author","goal":"fixture","spec":{"path":"docs/plans/spec.md","section":"Unit spec"},"base_sha":"$BASE_SHA","depends_on":["$DEP_SHA"],"scope":{"allow_paths":["oracle.out.sh"],"deny_paths":["secret/**"],"max_files":1,"max_diff_lines":900},"go":{"required_paths":["docs/plans/spec.md"],"required_engine_role":"verification-author","required_red_command":["bash","-n","docs/plans/spec.md"]},"no_go":{"on_missing_spec":"stop","on_dirty_base":"stop","on_unknown_engine":"stop","on_quota_unavailable":"stop","on_scope_violation":"stop","on_budget_exceeded":"stop","on_clarification_needed":"stop","forbidden_actions":["push","merge","network","dependency-change"]},"output":{"kind":"verdict","paths":["oracle.out.sh"]},"acceptance":[{"argv":["true"],"exit":0}],"budget":{"wall_seconds":120,"max_attempts":1,"max_context_files":4}}
+EOF
+mkdir -p "$CASE_DIR/A8b"
+rm -f "$RUN_MARKER"
+run_dispatch env NODE_OPTIONS="" DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$CASE_DIR/A8b" \
+  RUN_MARKER_PATH="$RUN_MARKER" ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" \
+  "$REPO_ROOT/scripts/dispatch-author.sh" --strict-contract \
+  --contract-file "$TEST_TMP/va_verdict_contract.json" \
+  --repo-root "$MINI_REPO" --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS"
+assert_eq "$LAST_RC" 2 "A8b non-raw-artifact provisional VA should rc=2"
+assert_file_absent "$RUN_MARKER" "A8b fake runner must not run"
 
 finalize_test

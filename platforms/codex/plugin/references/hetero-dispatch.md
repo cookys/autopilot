@@ -22,6 +22,22 @@ Not for: anything needing autopilot skills inside the executor (unverified — s
 6. **No bare multi-hour autonomous loop (gate 4).** A hetero implement/review loop that runs for hours MUST have a named depth-0 clock owner armed with the sensing watcher and the convergence brake ([`scripts/check-loop-convergence.js`](../scripts/check-loop-convergence.js) — gates 1 + 3; see [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md) § 裸跑禁令). Unwatched hours-long self-directed loops are the banned "bare run" shape.
 7. **Input must fit the engine's context window (gate 7).** Every rail runs the context-window gate before spawning a runner; an over-budget unit fails closed rather than letting the engine compact its way through. See § Context-window gate.
 
+## Runner choice and guidance profile are separate
+
+Heterogeneous dispatch chooses a runner; capability admission decides whether that exact
+model/runner/configuration/deployment may hold the requested role; the execution-profile compiler
+then chooses `guided` or `autonomous`. A strong model is not admitted merely because its name
+appears in a static routing table, and a guided profile cannot turn an unqualified model into an
+owner or reviewer. Fallback repeats admission and profile resolution for the replacement identity
+instead of inheriting the failed engine's grant.
+
+[`scripts/dispatch-local-openai.js`](../scripts/dispatch-local-openai.js) is a deliberately narrower
+adapter. It sends one bounded author/reviewer prompt with no repository tools, under a protected
+roster, deny-by-default egress, pre/post identity binding, a one-slot lease, capacity checks, and
+cancellation/recovery checks. It is not a `dispatch-hetero.sh --runner`, implementer, owner, or
+agentic harness. The generic transport contract has fake-server coverage; no live local runtime
+row or local agentic runner is claimed in this release.
+
 ## Context-window gate
 
 [`scripts/check-context-window.js`](../scripts/check-context-window.js) (+ the sourceable wrapper [`scripts/lib/context-window.sh`](../scripts/lib/context-window.sh)) answers one question before anything is spent: **does the input we are about to feed this engine fit its context window?**
@@ -112,7 +128,7 @@ Usage is derived from declared `pi-rpc` parsing only: `message_end` messages are
 `pi-rpc` is intentionally separated from the generic JSONL scanner so nested `cost` fields cannot
 pollute totals. A stalled stream gets one report-only `supervisor_stall_probe` steer injection
 (`no_event_timeout`) and remains report-only by default unless `PI_RPC_MAX_SECS` is set.
-Evidence + residuals: [`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](../docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
+Evidence + residuals: [`docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](https://github.com/cookys/autopilot/blob/develop/docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
 (`worktree` isolation, wrapper-commit, artifact verification) remain unchanged.
 
 ### Directive reachability (Phase 2 — advisory nudge channel)
@@ -148,11 +164,238 @@ A richer signal — a *live* "the model is asking a question" event from `--outp
 
 After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then merge or discard the branch.
 
+## Task status and explicit merge closeout
+
+For managed L5/L6 root runs, merge permission and task completion are different facts. Persist the
+exact task evidence bundle at
+`${AUTOPILOT_TASK_STATUS_DIR:-${TMPDIR:-/tmp}/autopilot-task-status}/<root_run_id>.json`, then
+query it without mutating refs or worktrees:
+
+```bash
+node "$autopilot_root/bin/autopilot.js" status task --root-run-id "$root_run_id"
+task_status_receipt="$(mktemp)"
+node "$autopilot_root/bin/autopilot.js" status task \
+  --root-run-id "$root_run_id" --json >"$task_status_receipt"
+node -e 'const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));if(v.can_merge!==true)process.exit(1)' \
+  "$task_status_receipt"
+```
+
+Human output starts with `DONE` only when the receipt's full `can_close` predicate is true.
+Otherwise it starts with `NOT DONE`, the first blocker, and the next action. Always read the four
+states independently:
+
+```text
+NOT DONE product_merged=true consumer_updated=true pushed=false zero_residue=false
+Blocker: pushed_false
+Next action: push the required integration ref after explicit approval
+```
+
+### Direction is data, not prose
+
+A merge intent names every direction explicitly. For example, this sequence integrates safety
+work into the product branch, then advances the consumer branch; it does not imply or permit the
+reverse edge:
+
+```json
+{
+  "edges": [
+    {
+      "sequence": 1,
+      "source_ref": "refs/heads/safety",
+      "target_ref": "refs/heads/develop",
+      "mode": "no-ff"
+    },
+    {
+      "sequence": 2,
+      "source_ref": "refs/heads/develop",
+      "source_from_edge": 1,
+      "target_ref": "refs/heads/peo",
+      "mode": "ff-only"
+    }
+  ],
+  "forbidden_reverse_edges": [
+    {
+      "source_ref": "refs/heads/peo",
+      "target_ref": "refs/heads/develop"
+    }
+  ]
+}
+```
+
+`buildMergeIntent()` resolves refs/worktrees and seals this contract.
+`preflightMergeIntent()` is strictly read-only: it inventories staged, unstaged, untracked, and
+ambiguous target paths; compares incoming paths; and returns `safe`, `overlapping`, `ambiguous`, or
+`blocked`. It never checks out, merges, stashes, resets, pushes, or deletes anything.
+
+Mutation has a separate front door. The request file must carry the exact `{manifest, seal}`,
+the caller's matching `manifest_seal`, the digest-valid preflight receipt, and exact
+`approved_preservation` paths:
+
+```bash
+node "$autopilot_root/bin/autopilot.js" merge execute \
+  --request /path/to/sealed-merge-request.json --json
+```
+
+Execution revalidates every endpoint, target symbolic ref, worktree/repository binding, dirty
+inventory, and protected bytes before each edge. It runs only the declared `no-ff` or `ff-only`
+mode and emits a content-digested execution receipt. It does not push, delete branches/worktrees,
+or drop stashes. Run task status freshly before merge, after merge, and immediately before L5/L6
+marker clear; a previously green receipt cannot authorize a later mutation boundary.
+
 ### Cleanup (caller's responsibility — both are deliberate persistence)
 
 - `agent_log` file: persists on every path (it is the only record of agent output, including on success). `rm` it after reading.
-- Kept worktrees (exit 1, or `--keep-worktree`): inspect, then `git worktree remove --force <path>`. Preserve the exact branch tip in a verified bundle before any human/depth-0 compare-delete; never use a bare `git branch -D`. If interrupted, use `git worktree list` / `git worktree prune` first, then the same preserve-first branch disposition.
+- Kept managed worktrees (exit 1, or `--keep-worktree`): inspect, then immediately use the exact root-run lifecycle below. Do not bypass its write-ahead branch inventory with a manual `git worktree remove --force`, and never use a bare `git branch -D`.
 - Interrupt trap: `scripts/dispatch-hetero.sh` installs a `TERM` trap (and an `INT` trap for the atypical parent-only-INT case) that self-reaps its worktree + branch if the run is killed mid-agy, disarming once agy returns. A **Ctrl-C** (INT to the whole process group) does NOT hit the trap — agy dies and the run routes through the normal `question_suspected` exit-1 path with the worktree **kept for inspection** (verified empirically 2026-06-22).
+
+## Managed root-run lifecycle
+
+The stable resource identity is `git-common-dir:<canonical-path>` plus the
+campaign `root_run_id`. The canonical campaign controller derives that root
+from the sealed `campaign_id` and injects it through
+`AUTOPILOT_WORKTREE_ROOT_RUN_ID` on every initial, repair, and resumed
+implementation dispatch. This resource channel is deliberately separate from
+the manifest's `AUTOPILOT_ROOT_RUN_ID`: the latter remains the current foreman
+trace root so `watch-foreman.js --root <foreman-run-id>` continues to observe
+its leaves. All schema-2 implementation descendants inherit the worktree root
+unchanged. The managed campaign adapter also normalizes dispatch depth to a
+positive decimal before spawning the leaf; zero or malformed inherited depth
+cannot disable the budget block.
+An explicitly managed dispatch admits that root durably before publishing a
+pending record or creating a branch/worktree. A direct one-shot dispatch with
+no explicit worktree root keeps the legacy cleanup path and does not create
+lifecycle authority as a side effect.
+`max_leaf_worktrees_per_root` (default `4`) limits simultaneous retained
+schema-2 leaves for that identity; repository lifecycle locking serializes
+admission, reconciliation, scan, and reap. A budget rejection is a
+pre-spend `precondition_failed`, not permission to create another root id.
+
+Once depth 0 has inspected a retained result, disposition it immediately:
+
+```bash
+: "${lifecycle_artifact_dir:?set a caller-owned durable artifact directory}"
+: "${campaign_id:?bind the admitted sealed campaign_id}"
+[[ "$campaign_id" =~ ^campaign-v1-[0-9a-f]{64}$ ]] \
+  || { printf '%s\n' 'invalid lifecycle campaign_id' >&2; exit 2; }
+root_run_id="$campaign_id"
+lifecycle_dir="$(mktemp -d "$lifecycle_artifact_dir/root-$root_run_id.XXXXXX")" \
+  || exit 2
+worktree_result="$lifecycle_dir/worktrees.json"
+branch_result="$lifecycle_dir/branches.json"
+receipt="$lifecycle_dir/residue-receipt.json"
+bash "$autopilot_root/scripts/reap-dispatch-worktrees.sh" reap \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" --yes \
+  >"$worktree_result" || exit $?
+bash "$autopilot_root/scripts/reap-dispatch-branches.sh" reap \
+  --repo "$consumer_repo" --into "$integration_target" \
+  --inventory-file "$worktree_result" --yes >"$branch_result" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" issue \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --worktree-result "$worktree_result" --branch-result "$branch_result" \
+  --out "$receipt" || exit $?
+node "$autopilot_root/scripts/lifecycle-residue-receipt.js" check \
+  --repo "$consumer_repo" --root-run-id "$root_run_id" \
+  --receipt "$receipt" || exit $?
+node -e '
+const value = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+if (value.zero_residue !== true) process.exit(1);
+' "$receipt" || { printf '%s\n' 'lifecycle residue remains' >&2; exit 1; }
+```
+
+The artifact directory belongs to depth 0, must survive leaf cleanup, and is
+recorded in the run summary for LSM consumption. Every attempt uses a unique
+mode-0700 `root-<id>.*` directory, so a failed step cannot fall through to a
+stale receipt. The validated id is prefixed with `root-` before path
+construction, so the otherwise valid ids `.` and `..` cannot traverse the
+artifact root. `check` exit 0 means the
+receipt is structurally valid and fresh; depth 0 must also read
+`zero_residue`. A fresh `false` is an exact lifecycle blocker, not a pass.
+
+The worktree controller removes only exact clean/dead owned leaves and writes
+durable branch/tip inventory before removal. Dirty, live, malformed, legacy,
+unsupported, pending, or raced states remain visible blockers. Resolve the
+reported state (for example commit/preserve dirty work or stop a live owner)
+and rerun the same exact-root sequence; never force-remove past it. If an
+exact branch is not contained, rerun the branch disposition with
+`--ack-preserved <branch@tip>` only after an explicit preservation handoff;
+never broaden a regex to make it disappear.
+
+Automatic managed success cleanup targets only the completing leaf. An explicit
+`--keep-worktree` is a bounded lease and is rejected unless
+`--retain-owner`, `--retain-reason`, and future `--retain-until` are all
+present. The schema-2 marker stores the owner, reason digest, and expiry.
+Later budget reconciliation counts that leaf but cannot remove it before depth
+0 dispositions it. Inventory
+copy publication is protected by a write-ahead intent: pre-authority copies may
+be rolled back and a post-authority trailing intent may be cleared only when
+both copies still match. Missing, malformed, or extra evidence never gains
+authority during load and still fails closed.
+Managed `INT`/`TERM` follows the same journal-before-remove rule and never
+deletes the branch in the trap. The final targeted reap is bound to the tip
+captured by the first journal step; a hook or race that advances the branch is
+preserved for explicit disposition instead of creating a second membership.
+Exact branch disposition inherits and verifies the same lifecycle lock fd for
+its controller rescan, then holds that lock through validation and destructive
+disposition, so a new managed leaf cannot enter between canonical inventory and
+branch action.
+
+Managed implementation campaigns keep one branch and one retained worktree
+across the initial mutation and every authorized repair. A repair passes the
+exact prior commit as `--base` and the exact retained checkout through
+`--reuse-worktree` plus the controller-bound `--expected-worktree-instance`
+digest; creating a successor branch is not a retry mechanism. Grok
+repairs additionally pass the first call's UUID through `--resume-session`.
+Runners without a verified resume API may start a new provider conversation in
+the same checkout, but the campaign receipt must name
+`provider_session_non_reuse_reason`. The retained checkout is removed without
+`--force` on terminal success. Dirty or unverifiable state blocks cleanup.
+
+Finding IDs and accepted invariants are carried across repair prompts. The same
+normalized finding may authorize one bounded repair; seeing it again stops at
+`awaiting_convergence_adjudication` before another runner call. Renamed finding
+sets that fail to shrink for two repair rounds stop at the same gate. Durable
+`git_candidate` references include the exact repair lineage so a new process
+after compaction can restore branch, worktree, provider session, lease, churn,
+and input-measurement identity rather than redispatching from transcript memory.
+
+Before first anchor creation, the controller admits the root into a private
+repo-level registry (`initializing` then `active`). An active registered root
+can never be reinitialized when its per-root evidence disappears. The
+controller then cross-binds a random per-root nonce plus the journal
+directory's birth-time/device/inode generation between a mode-0600 anchor under the Git
+common directory and a mode-0600 sentinel inside the private mode-0700
+branch-inventory directory. Each immutable inventory record is also mirrored
+under the separate anchor directory and compared byte-for-byte on every load.
+The monotonic authority is a canonical JSON Git blob reached through
+`refs/autopilot/lifecycle-roots/<root-key>` and advanced with `git update-ref`
+compare-and-swap. It carries the generation plus every record key/content
+digest, and permanently binds the admitted journal's
+nonce/birth-time/device/inode.
+Anchor and registry are updated afterward and may only be repaired
+forward from that ref; the sentinel keeps immutable directory identity. A kill
+after the authority CAS is recoverable, and coordinated stale snapshots of the
+ordinary anchor+registry files cannot roll the Git authority back. A copied
+sentinel cannot bless a replacement directory, an individual or mirrored pair
+cannot disappear silently, and a missing active anchor is never rebuilt from
+the sentinel. A pre-anchor journal is imported only when its directory is
+owner-private mode 0700 and every imported record is owner-owned mode 0600.
+Empty exact inventory is accepted only after these bindings and a fresh
+controller scan prove no unresolved journal branch. A same-owner adversary that
+can also rewrite the authority ref and Git object database is outside this
+local proof boundary.
+Crash-recovery claims cover process death and `SIGKILL`. Without explicit host
+and filesystem fsync guarantees, power loss may require manual recovery and
+must fail closed rather than prove zero residue.
+
+Managed successful leaves use this controller for automatic cleanup: exact
+branch/tip evidence is committed before the worktree is removed. The legacy
+direct remover remains only for unmanaged depth-zero dispatches.
+
+`LifecycleResidueReceipt` binds the current repository identity, root id,
+worktree observation, exact branch inventory, and disposition journal. It is
+freshness-checked before handoff to the lifecycle state machine, but it proves
+resource disposition only: it never computes task `can_close`, generation
+advance, merge authority, or finish authority.
 
 ## Repo-branch lifecycle
 
@@ -163,7 +406,12 @@ After exit 0: review `git diff <base>..<branch>` through quality-pipeline, then 
 * `agent/<task>-r<N>-<YYYYMMDD>` — dated unit rounds.
 * Repeated `--pattern <bash-ere>` adds an explicit local family; an empty ERE is rejected because it would match every local branch. Batch `unit-*` branches are intentionally out of scope and remain owned by `dispatch-batch.sh`.
 
-`scan` emits JSON classification without mutating the repo. `check` is the finish-flow gate: exit 0 means no unacknowledged ahead integration candidate; exit 1 means depth 0 must integrate, explicitly preserve, or discard. `--ack <branch>` records preservation against the exact current tip; malformed, missing, or moved-tip acks are pruned fail-closed.
+`scan` emits JSON classification without destructive mutation (it may create
+owned coordination lock files). `check` is the finish-flow gate: exit 0 means
+no unacknowledged ahead integration candidate; exit 1 means depth 0 must
+integrate, explicitly preserve, or discard. `--ack <branch>` records
+preservation against the exact current tip; malformed, missing, or moved-tip
+acks are pruned fail-closed.
 
 Durable acknowledgement and destructive reap currently support SHA-1 object-format repositories only (40 lowercase hexadecimal object IDs). On SHA-256 repositories `scan` remains available/read-only, but a durable `check --ack` is unavailable (non-40-hex stored acks are pruned and re-arm the gate) and `reap --yes` fails closed during tip validation before any ref deletion.
 
@@ -208,9 +456,23 @@ scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (se
   with `--usage-only`.
 - **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
   artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
-- **Trace lineage contract (telemetry only):** dispatchers inherit lineage from incoming env
+- **Trace lineage contract:** dispatchers inherit lineage from incoming env
   (`AUTOPILOT_PARENT_RUN_ID`, `AUTOPILOT_ROOT_RUN_ID`, `AUTOPILOT_DISPATCH_DEPTH`) and stamp
   each manifest with `parent_run_id` + `root_run_id` + `depth` so dispatch trees are auditable.
+  - ⚠️ **`AUTOPILOT_ROOT_RUN_ID` alone does not set the LINEAGE root.** It is read only inside
+    the has-parent branch, so without `AUTOPILOT_PARENT_RUN_ID` the dispatch becomes its own
+    lineage root. It is **not** discarded, though, and passing it alone is **supported**: the
+    continuation/rehydration resolver still honours it (`_cont_root`), which is how a run
+    re-attaches to an existing root after compaction. Do **not** add a fail-closed guard on
+    root-without-parent — tried 2026-07-31, it broke 8 assertions in
+    `codex-compaction-rehydration.test.sh`. To set the lineage root, **set both to that id**.
+  - ⚠️ **Lineage is telemetry-only ONLY off the sealed-campaign rail.** With
+    `--campaign-contract`, `root_run_id` is load-bearing: `deriveCampaignDispatchUnit`
+    requires `rootRunId === campaignContract.mission_runtime.root_run_id` and otherwise
+    rejects with `caller root_run_id disagrees with campaign mission_runtime` — an error
+    that names neither env var, so read this bullet before believing the campaign contract
+    is at fault. A Mission leaf therefore dispatches with
+    `AUTOPILOT_PARENT_RUN_ID=AUTOPILOT_ROOT_RUN_ID=<mission_runtime.root_run_id>`.
 - **HONEST BOUNDARY (observability scope):** lineage spans only layers passing through
   `dispatch-hetero.sh` / `dispatch-review.sh`; engine-internal spawns (e.g. codex `spawn_agent`,
   agy recursion) and depth-0-only tooling do not appear unless they emit one of those
@@ -246,7 +508,7 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
 | `codex` | OpenAI `gpt-*`/`*codex*` | ✅ self-commits, can run build/test mid-turn | ✅ | default; `--effort` reasoning. Auto-selected for `*gpt*`/`*codex*` models. |
 | `agy` | Google Gemini (Antigravity CLI) | ✅ can run build/test (sync foreground; auto-managed to completion, bounded by `--print-timeout` — the old "run_command 10s cap" is REFUTED on 1.0.14, see portability § 2026-07-02) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). Gotcha: no cross-call `&`/`nohup` bg jobs (each `run_command` = isolated subshell, reaps its children) — run long tasks as ONE sync command. |
 | `grok` | xAI `grok-4.5` (upstream renamed from `grok-build`, verified 2026-07-14), `grok-composer-2.5-fast` | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd) | needs `grok login`. HONORS `--cwd` (no anchor). Composer 2.5 lives in the grok CLI on the Grok Build plan. Auto-selected for `*grok*`/`*composer*`. |
-| `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3 reviewer-calibrated** (10/10 known-bad, 0 false-pass-on-critical, 3/3 clean). **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. |
+| `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3:** baseline reviewer calibration is 10/10 known-bad, 0 false-pass-on-critical, 3/3 clean, but its diff-only seat later produced false central claims in 5/6 observations. The exact `MiniMax-M3` + `cc-shim` + `minimax` tuple requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; independently verify its findings. **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. |
 | `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer/qc-panel family coverage) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |
 | `qoderclicn` | Qoder CLI CN → Alibaba `Qwen3.8-Max-Preview` (also gateways GLM-5.2 / DeepSeek-V4 / Kimi / MiniMax-M2.7) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--tools ""`) | needs Qoder CLI CN auth (`~/.qoder-cn`). HONORS `-w`/`--cwd` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; effort → `--reasoning-effort`; `--qoder-bin` test seam. Reviewer splits STDOUT/STDERR (a benign `fatal: not a git repository` on stderr from the non-git scratch cwd stays out of the parse). Auto-selected for `*qwen*`/`*qwq*`. Spike-verified 2026-07-24 (edit-only + `-w` honored, both paths e2e-passed on Qwen3.8-Max-Preview). |
 

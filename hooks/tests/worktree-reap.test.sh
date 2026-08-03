@@ -132,4 +132,107 @@ _wt_is_live "$TEST_TMP/symlink-lock-wt"
 assert_eq "$?" 2 "worktree liveness probe rejects symlink lock and preserves worktree"
 assert_eq "$(cat "$LOCK_VICTIM")" "$LOCK_BYTES" "worktree lock probe never truncates symlink victim"
 
+# --- 12. cleanliness distinguishes dirty state from status execution failure ---
+( git() { return 2; }; _wt_is_clean "$TEST_TMP/status-failure" )
+assert_eq "$?" 2 "worktree cleanliness reports status command failure distinctly"
+
+# --- 13. managed teardown hook cannot remove a leaf before exact journaling ---
+R13="$TEST_TMP/r13"; setup_repo "$R13"
+R13_COMMON="$(git -C "$R13" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$R13_COMMON/info"
+printf '%s\n' ".autopilot-worktree" ".autopilot-worktree.lock" \
+  >> "$R13_COMMON/info/exclude"
+R13_WT="$TEST_TMP/r13-wt"
+R13_ROOT="managed-hook-root"
+R13_BASE="$(git -C "$R13" rev-parse HEAD)"
+git -C "$R13" worktree add -q "$R13_WT" -b hetero/managed-hook
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/managed-hook\n'
+  printf 'base_sha=%s\n' "$R13_BASE"
+  printf 'run_id=managed-hook\n'
+  printf 'root_run_id=%s\n' "$R13_ROOT"
+  printf 'loop_id=managed-hook-loop\n'
+  printf 'schema=2\n'
+} > "$R13_WT/.autopilot-worktree"
+: > "$R13_WT/.autopilot-worktree.lock"
+printf '#!/bin/sh\ngit -C "%s" worktree remove --force "$1"\n' "$R13" \
+  > "$R13/remove-hook.sh"
+chmod +x "$R13/remove-hook.sh"
+TEARDOWN_HOOK="$R13/remove-hook.sh"
+SELF_DIR="$REPO_ROOT/scripts"
+AUTOPILOT_WORKTREE_ROOT_RUN_ID="$R13_ROOT"
+export AUTOPILOT_WORKTREE_ROOT_RUN_ID
+run_reap "$R13" reap_worktree "$R13_WT"
+assert_eq "0" "$?" "managed destructive teardown hook completes"
+assert_file_absent "$R13_WT/.git" "destructive hook removes the managed worktree"
+R13_SCAN="$(
+  "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" scan \
+    --repo "$R13" --root-run-id "$R13_ROOT"
+)"
+assert_contains "$R13_SCAN" '"branch":"hetero/managed-hook"' \
+  "managed branch is journaled before the destructive hook runs"
+TEARDOWN_HOOK=""
+AUTOPILOT_WORKTREE_ROOT_RUN_ID=""
+export AUTOPILOT_WORKTREE_ROOT_RUN_ID
+
+# --- 14. managed hook tip drift is preserved, never double-journaled ---
+R14="$TEST_TMP/r14"; setup_repo "$R14"
+R14_COMMON="$(git -C "$R14" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$R14_COMMON/info"
+printf '%s\n' ".autopilot-worktree" ".autopilot-worktree.lock" \
+  >> "$R14_COMMON/info/exclude"
+R14_WT="$TEST_TMP/r14-wt"
+R14_ROOT="managed-hook-tip-root"
+R14_BASE="$(git -C "$R14" rev-parse HEAD)"
+git -C "$R14" worktree add -q "$R14_WT" -b hetero/managed-hook-tip
+{
+  printf 'created_at=1\n'
+  printf 'branch=hetero/managed-hook-tip\n'
+  printf 'base_sha=%s\n' "$R14_BASE"
+  printf 'run_id=managed-hook-tip\n'
+  printf 'root_run_id=%s\n' "$R14_ROOT"
+  printf 'loop_id=managed-hook-tip-loop\n'
+  printf 'schema=2\n'
+} > "$R14_WT/.autopilot-worktree"
+: > "$R14_WT/.autopilot-worktree.lock"
+printf '#!/bin/sh\ngit -C "$1" commit -q --allow-empty -m hook-tip\n' \
+  > "$R14/advance-hook.sh"
+chmod +x "$R14/advance-hook.sh"
+TEARDOWN_HOOK="$R14/advance-hook.sh"
+AUTOPILOT_WORKTREE_ROOT_RUN_ID="$R14_ROOT"
+export AUTOPILOT_WORKTREE_ROOT_RUN_ID
+OUTCOME_ORPHAN=""
+run_reap "$R14" reap_worktree "$R14_WT"
+assert_file_exists "$R14_WT/.git" \
+  "managed hook tip drift preserves the worktree"
+assert_eq "$R14_WT" "$OUTCOME_ORPHAN" \
+  "managed hook tip drift is reported as retained"
+R14_SCAN="$(
+  "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" scan \
+    --repo "$R14" --root-run-id "$R14_ROOT"
+)"
+node - "$R14_SCAN" "$R14_BASE" <<'NODE'
+const value = JSON.parse(process.argv[2]);
+if (value.journal_branch_inventory.length !== 1
+    || value.journal_branch_inventory[0].tip !== process.argv[3]) process.exit(1);
+NODE
+assert_exit_code "$?" "0" \
+  "managed hook tip drift keeps only the pre-hook journal membership"
+"$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" reap \
+  --repo "$R14" --root-run-id "$R14_ROOT" --yes >/dev/null
+assert_exit_code "$?" "0" \
+  "generic retry reports preserve-first after a journaled tip conflict"
+assert_file_exists "$R14_WT/.git" \
+  "generic retry cannot remove a conflicting later branch tip"
+R14_RETRY_SCAN="$(
+  "$REPO_ROOT/scripts/reap-dispatch-worktrees.sh" scan \
+    --repo "$R14" --root-run-id "$R14_ROOT"
+)"
+assert_contains "$R14_RETRY_SCAN" '"branch":"hetero/managed-hook-tip"' \
+  "generic retry leaves the original exact journal readable"
+TEARDOWN_HOOK=""
+AUTOPILOT_WORKTREE_ROOT_RUN_ID=""
+export AUTOPILOT_WORKTREE_ROOT_RUN_ID
+
 finalize_test

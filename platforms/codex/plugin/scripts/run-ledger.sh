@@ -376,6 +376,20 @@ process_group_id() {
   printf '%s' "${value:-0}"
 }
 
+process_parent_id() {
+  local pid="$1" value=""
+  if [ -r "/proc/$pid/stat" ]; then
+    local line tail proc_state
+    IFS= read -r line < "/proc/$pid/stat" || line=""
+    tail="${line##*) }"
+    read -r proc_state value _ <<< "$tail"
+  fi
+  if ! [[ "$value" =~ ^[0-9]+$ ]]; then
+    value="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d '[:space:]' || true)"
+  fi
+  printf '%s' "${value:-0}"
+}
+
 process_group_has_live_members() {
   ps -eo pgid=,stat= 2>/dev/null | awk -v pgid="$1" '$1==pgid && $2 !~ /^Z/ { found=1 } END { exit !found }'
 }
@@ -707,7 +721,8 @@ command_stage_acquire() {
     [ -n "$ticket_id" ] || ticket_id="$inherited_ticket"
     [ -n "$lineage_id" ] || lineage_id="$inherited_lineage"
   fi
-  local line
+  local line pgid
+  pgid="$(process_group_id "$pid")"
   line="$(jq -nc \
     --arg kind "stage" \
     --arg ts "$(iso_ts)" \
@@ -718,6 +733,7 @@ command_stage_acquire() {
     --argjson gen "$next_gen" \
     --arg pid_v "$pid" \
     --arg start_v "$start_time" \
+    --arg pgid_v "$pgid" \
     --arg hb "$heartbeat_ts" \
     --arg git_ref_v "$git_ref" \
     --arg git_sha_v "$git_sha" \
@@ -727,7 +743,7 @@ command_stage_acquire() {
     --arg campaign_v "$campaign_id" \
     --arg ticket_v "$ticket_id" \
     --arg lineage_v "$lineage_id" \
-    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($hb|tonumber),git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v,reason:$reason_v,campaign_id:$campaign_v,ticket_id:$ticket_v,lineage_id:$lineage_v}')"
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),pgid:($pgid_v|tonumber),heartbeat_ts:($hb|tonumber),git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v,reason:$reason_v,campaign_id:$campaign_v,ticket_id:$ticket_v,lineage_id:$lineage_v}')"
   append_record "$ledger" "$run_id" "$line" "$timeout" "$run_fd"
 
   for fd in $resource_fds; do release_lock "$fd"; done
@@ -868,8 +884,21 @@ command_stage_transfer() {
 
   local authorization="" guarded_rows
   if [ -z "$authorization_key" ]; then
-    guarded_rows="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" '[.[]|select(.kind=="coordination" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gen and .nonce==$nonce_v)]|length')"
+    guarded_rows="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" '[.[]|select(.kind=="coordination" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gen and .nonce==$nonce_v and (.action=="transfer" or .action=="terminate" or .action=="reconcile" or .status=="quarantined" or .status=="blocked"))]|length')"
     if [ "$guarded_rows" -ne 0 ]; then release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done; error "guarded recovery requires --authorization-key"; fi
+    local old_pid old_start recipient_parent
+    old_pid="$(jq -r '.pid // 0' <<<"$latest")"; old_start="$(jq -r '.start_time // 0' <<<"$latest")"
+    observe_process_identity "$old_pid" "$old_start"
+    recipient_parent="$(process_parent_id "$pid")"
+    if [ "$STAGE_IDENTITY_STATUS" != "exact" ] || { [ "$pid" != "$old_pid" ] && [ "$recipient_parent" != "$old_pid" ]; }; then
+      release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
+      error "ordinary stage ownership transfer requires an exact live holder-to-self/child handoff"
+    fi
+    observe_process_identity "$pid" "$start_time"
+    if [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
+      release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
+      error "stage ownership transfer recipient identity is not exact/live"
+    fi
   else
   authorization="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key "$authorization_key" --arg gen "$generation" --arg nonce_v "$nonce" '
     [ .[] | select(.kind=="coordination" and .action=="transfer" and .run_id==$rid and .stage==$stg and .idempotency_key==$key and (.generation|tostring)==$gen and .nonce==$nonce_v) ]
@@ -945,17 +974,18 @@ command_stage_transfer() {
   resources="$latest_resources"; campaign_id="$latest_campaign"; ticket_id="$latest_ticket"; lineage_id="$latest_lineage"
   fi
 
-  local next_generation new_nonce heartbeat_ts line
+  local next_generation new_nonce heartbeat_ts line pgid
   next_generation=$((generation + 1))
   new_nonce="$(rand_hex)"
   heartbeat_ts="$(now_ts)"
+  pgid="$(process_group_id "$pid")"
   line="$(jq -nc \
     --arg kind "stage" --arg ts "$(iso_ts)" --arg rid "$run_id" --arg stg "$stage" \
     --arg state "leased" --arg nonce_v "$new_nonce" --argjson gen "$next_generation" \
-    --arg pid_v "$pid" --arg start_v "$start_time" --arg hb "$heartbeat_ts" \
+    --arg pid_v "$pid" --arg start_v "$start_time" --arg pgid_v "$pgid" --arg hb "$heartbeat_ts" \
     --arg git_ref_v "$git_ref" --arg git_sha_v "$git_sha" --arg wt "$worktree" --arg resources_v "$resources" \
     --arg campaign_v "$campaign_id" --arg ticket_v "$ticket_id" --arg lineage_v "$lineage_id" \
-    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($hb|tonumber),git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v,reason:"ownership_transfer",campaign_id:$campaign_v,ticket_id:$ticket_v,lineage_id:$lineage_v}')"
+    '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),pgid:($pgid_v|tonumber),heartbeat_ts:($hb|tonumber),git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v,reason:"ownership_transfer",campaign_id:$campaign_v,ticket_id:$ticket_v,lineage_id:$lineage_v}')"
   local consumed_line="" record="$line"
   if [ -n "$authorization_key" ]; then consumed_line="$(jq -nc --arg kind coordination --arg ts "$(iso_ts)" --arg rid "$run_id" --arg stg "$stage" --arg key "$authorization_key" --arg gen "$generation" --arg nonce_v "$nonce" --argjson auth "$authorization" '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,generation:($gen|tonumber),nonce:$nonce_v,action:"transfer",status:"consumed",idempotency_key:$key,payload:{authorization:"stage-transfer",authorized_at:$auth.ts}}')"; record="$(printf '%s\n%s' "$line" "$consumed_line")"; fi
   append_record "$ledger" "$run_id" "$record" "$timeout" "$run_fd"
@@ -1617,10 +1647,25 @@ terminate_exact_process() {
     TERMINATION_STATUS="lease_fenced"
     return 0
   fi
+  local latest pgid own_pgid
+  latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
+  pgid="$(jq -r '.pgid // 0' <<<"$latest")"
+  own_pgid="$(process_group_id "$$")"
+  TERMINATION_PGID="$pgid"
+  if ! [[ "$pgid" =~ ^[1-9][0-9]*$ ]] || [ "$pgid" -le 1 ]; then
+    release_lock "$run_fd"
+    TERMINATION_STATUS="group_identity_unknown"
+    return 0
+  fi
+  if [ "$pgid" = "$own_pgid" ]; then
+    release_lock "$run_fd"
+    TERMINATION_STATUS="unsafe_process_group"
+    return 0
+  fi
   observe_process_identity "$pid" "$expected_start"
   if [ "$STAGE_IDENTITY_STATUS" = "absent" ]; then
     release_lock "$run_fd"
-    TERMINATION_STATUS="already_absent"
+    process_group_has_live_members "$pgid" && TERMINATION_STATUS="group_survived" || TERMINATION_STATUS="already_absent"
     return 0
   fi
   if [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
@@ -1628,17 +1673,8 @@ terminate_exact_process() {
     TERMINATION_STATUS="$STAGE_IDENTITY_STATUS"
     return 0
   fi
-  local pgid own_pgid
-  pgid="$(process_group_id "$pid")"
-  own_pgid="$(process_group_id "$$")"
-  TERMINATION_PGID="$pgid"
   # Never let a recovery command kill its own controller process group.  A
   # dispatcher must create a separate process group (setsid) for intervention.
-  if ! [[ "$pgid" =~ ^[1-9][0-9]*$ ]] || [ "$pgid" -le 1 ] || [ "$pgid" = "$own_pgid" ]; then
-    release_lock "$run_fd"
-    TERMINATION_STATUS="unsafe_process_group"
-    return 0
-  fi
   if ! kill -TERM -- "-$pgid" 2>/dev/null; then
     :
   fi
@@ -1679,7 +1715,11 @@ terminate_exact_process() {
     fi
   else
     release_lock "$run_fd"
-    TERMINATION_STATUS="$STAGE_IDENTITY_STATUS"
+    if [ "$STAGE_IDENTITY_STATUS" = "absent" ]; then
+      process_group_has_live_members "$pgid" && TERMINATION_STATUS="group_survived" || TERMINATION_STATUS="terminated"
+    else
+      TERMINATION_STATUS="$STAGE_IDENTITY_STATUS"
+    fi
     return 0
   fi
   release_lock "$run_fd"
@@ -1765,6 +1805,8 @@ command_stage_coordinate() {
     jq -nc --argjson condition "$condition_json" '{status:"feature_disabled",rollback:"report_only",condition:$condition}'
     return 0
   }
+  [ "$wait_secs" -gt 0 ] || error "enabled intervention requires --wait-seconds > 0"
+  [ "$grace_secs" -gt 0 ] || error "enabled intervention requires --grace-seconds > 0"
   [ -n "$idempotency_key" ] || idempotency_key="coord-$(rand_hex)"
   if [ "$condition" = "unknown" ] && [ "$condition_reason" != "stale_without_bounded_inquiry" ]; then
     append_coordination_row "$ledger" "$run_id" "$stage" "${generation:-0}" "$nonce" "intervene" "unknown" "$idempotency_key" "$(jq -nc --argjson c "$condition_json" '{condition:$c,action:"observe_only"}')" "$timeout" >/dev/null
@@ -1813,7 +1855,7 @@ command_stage_coordinate() {
     return 0
   fi
 
-  if [ "$recondition" = "blocked" ]; then
+  if [ "$recondition" = "blocked" ] || [ "$recondition" = "dead" ]; then
     observe_process_identity "$pid" "$start_time"
     if [ "$STAGE_IDENTITY_STATUS" = "d_state" ]; then
       quarantine_stage_resources "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$resources" d_state "$timeout"
@@ -1821,7 +1863,7 @@ command_stage_coordinate() {
       jq -nc --arg key "$idempotency_key" --argjson condition "$reobserve_json" '{status:"quarantined",idempotency_key:$key,condition:$condition,replacement:false}'
       return 0
     fi
-    if [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
+    if [ "$recondition" = "blocked" ] && [ "$STAGE_IDENTITY_STATUS" != "exact" ]; then
       jq -nc --arg key "$idempotency_key" --argjson condition "$reobserve_json" '{status:"unknown",idempotency_key:$key,condition:$condition,action:"observe_only"}'
       return 0
     fi
@@ -1829,6 +1871,11 @@ command_stage_coordinate() {
     if [ "$TERMINATION_STATUS" = "lease_fenced" ]; then
       jq -nc --arg key "$idempotency_key" --argjson condition "$reobserve_json" '{status:"fenced",idempotency_key:$key,condition:$condition,action:"observe_only",replacement:false,reason:"lease_changed_during_intervention"}'
       return 11
+    fi
+    if [ "$TERMINATION_STATUS" = "group_identity_unknown" ]; then
+      append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" "intervene" "unknown" "$idempotency_key" "$(jq -nc --argjson c "$reobserve_json" '{condition:$c,reason:"group_identity_unknown"}')" "$timeout" >/dev/null
+      jq -nc --arg key "$idempotency_key" --argjson condition "$reobserve_json" '{status:"unknown",idempotency_key:$key,condition:$condition,action:"observe_only",replacement:false,reason:"group_identity_unknown"}'
+      return 0
     fi
     if [ "$TERMINATION_STATUS" != "terminated" ] && [ "$TERMINATION_STATUS" != "already_absent" ]; then
       quarantine_stage_resources "$ledger" "$run_id" "$stage" "$generation" "$nonce" "$resources" "$TERMINATION_STATUS" "$timeout"

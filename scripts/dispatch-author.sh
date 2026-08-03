@@ -532,7 +532,7 @@ run_strict_contract_preflight() {
   contract_role="$(extract_file_json_value "$CONTRACT_FILE" "go.required_engine_role" 2>/dev/null || true)"
   [[ -n "$contract_role" ]] || die_precondition "contract has empty required_engine_role"
   [[ "$contract_role" == "verification-author" ]] || die_precondition "contract required_engine_role is '$contract_role' (expected verification-author)"
-  jq -e '[.acceptance[]?.argv? | select(index("--validate") != null and any(.[]; test("(^|/)verify-red-green[.]sh$")))] | length > 0' "$CONTRACT_FILE" >/dev/null && CONTRACT_REQUIRES_POLARITY=1
+  jq -e '.deliberate_polarity == true' "$CONTRACT_FILE" >/dev/null && CONTRACT_REQUIRES_POLARITY=1
 
   STRICT_CONTRACT_RESULT_FIELDS=1
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"

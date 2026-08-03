@@ -1562,8 +1562,8 @@ function defaultCampaignRepairChangedPaths({ repo, base, head }) {
   };
 }
 
-function defaultRemediationChecker({ repo, previousCommit, currentCommit, previousFindings, currentFindings }) {
-  const fallback = (reason) => ({
+function remediationFallback(reason) {
+  return {
     schema_version: 1,
     artifact_type: 'review_remediation_check',
     status: 'needs_full_review',
@@ -1572,13 +1572,44 @@ function defaultRemediationChecker({ repo, previousCommit, currentCommit, previo
     gate_clear: false,
     fallback_to_full_blind_review: true,
     reason,
-  });
+  };
+}
+
+function defaultRemediationChecker({ deltaFile, resultFile }) {
+  const delta = JSON.parse(fs.readFileSync(deltaFile, 'utf8'));
+  const findings = Array.isArray(delta.finding_contracts) ? delta.finding_contracts.map((finding) => ({
+    finding_id: finding.finding_id,
+    status: 'needs_full_review',
+    evidence: 'default checker makes no independent resolution claim',
+  })) : [];
+  const result = {
+    schema_version: 1,
+    artifact_type: 'review_remediation_result',
+    authority: 'non_authoritative',
+    whole_candidate_pass: false,
+    gate_clear: false,
+    previous_commit: delta.previous_commit,
+    current_commit: delta.current_commit,
+    delta_digest: delta.delta_digest,
+    finding_contract_digest: delta.finding_contract_digest,
+    findings,
+  };
+  if (Array.isArray(delta.current_finding_contracts)) {
+    result.current_finding_contracts = delta.current_finding_contracts;
+    result.current_finding_contract_digest = delta.current_finding_contract_digest;
+  }
+  fs.writeFileSync(resultFile, `${JSON.stringify(result)}\n`, { mode: 0o600 });
+}
+
+function runRemediationCheckerBoundary(checker, {
+  repo, previousCommit, currentCommit, previousFindings, currentFindings,
+}) {
   if (!isImmutableGitSha(previousCommit) || !isImmutableGitSha(currentCommit)
       || previousCommit === currentCommit) {
-    return fallback('remediation checker requires two distinct immutable commits');
+    return remediationFallback('remediation checker requires two distinct immutable commits');
   }
   if (!Array.isArray(previousFindings) || previousFindings.length === 0) {
-    return fallback('no complete prior finding contracts available');
+    return remediationFallback('no complete prior finding contracts available');
   }
   const allowedKeys = ['claim', 'finding_id', 'severity', 'source'];
   const freezeContracts = (items, label, allowEmpty = false) => {
@@ -1600,20 +1631,16 @@ function defaultRemediationChecker({ repo, previousCommit, currentCommit, previo
   };
   const contracts = freezeContracts(previousFindings, 'prior');
   const currentContracts = freezeContracts(currentFindings, 'current', true);
-  if (!contracts) return fallback('prior review findings are not named contract objects');
-  if (!currentContracts) return fallback('current review findings are not named contract objects');
-  const frozenContracts = contracts;
-  const frozenCurrentContracts = currentContracts;
-  const currentById = new Map(frozenCurrentContracts
-    .map((item) => [item.finding_id, item]));
+  if (!contracts) return remediationFallback('prior review findings are not named contract objects');
+  if (!currentContracts) return remediationFallback('current review findings are not named contract objects');
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-remediation-check-'));
   const findingsFile = path.join(tempDir, 'findings.json');
   const deltaFile = path.join(tempDir, 'delta.json');
-  const resultFile = path.join(tempDir, 'result.json');
+  const currentFindingsFile = path.join(tempDir, 'current-findings.json');
+  const checkerDir = path.join(tempDir, 'checker');
   try {
-    fs.writeFileSync(findingsFile, `${JSON.stringify({ findings: frozenContracts })}\n`, { mode: 0o600 });
-    const currentFindingsFile = path.join(tempDir, 'current-findings.json');
-    fs.writeFileSync(currentFindingsFile, `${JSON.stringify({ findings: frozenCurrentContracts })}\n`, { mode: 0o600 });
+    fs.writeFileSync(findingsFile, `${JSON.stringify({ findings: contracts })}\n`, { mode: 0o600 });
+    fs.writeFileSync(currentFindingsFile, `${JSON.stringify({ findings: currentContracts })}\n`, { mode: 0o600 });
     const script = resolveScriptPath('scripts/diff-since-last-round.sh');
     const built = spawnSync('bash', [
       script, 'remediation', '--previous', previousCommit, '--current', currentCommit,
@@ -1622,42 +1649,44 @@ function defaultRemediationChecker({ repo, previousCommit, currentCommit, previo
     ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     const delta = fs.existsSync(deltaFile) ? parseJsonFromLastLine(fs.readFileSync(deltaFile, 'utf8')) : null;
     if (!delta || built.error || built.status !== 0 || delta.status !== 'ready') {
-      return fallback((delta && delta.reason) || 'remediation delta is not ready for named checking');
+      return remediationFallback((delta && delta.reason) || 'remediation delta is not ready for named checking');
     }
-    if (contracts.some((finding) => {
-      const current = currentById.get(finding.finding_id);
-      return !current || allowedKeys.some((key) => current[key] !== finding[key]);
-    })) return fallback('current findings do not preserve exact frozen finding identities');
-    const findings = contracts.map((finding) => ({
-        finding_id: finding.finding_id,
-        status: 'unresolved',
-        evidence: `exact frozen finding remains in the current full-diff review: ${String(finding.claim)}`,
-      }));
-    fs.writeFileSync(resultFile, `${JSON.stringify({
-      schema_version: 1,
-      artifact_type: 'review_remediation_result',
-      authority: 'non_authoritative',
-      whole_candidate_pass: false,
-      gate_clear: false,
-      previous_commit: delta.previous_commit,
-      current_commit: delta.current_commit,
-      delta_digest: delta.delta_digest,
-      finding_contract_digest: delta.finding_contract_digest,
-      current_finding_contract_digest: delta.current_finding_contract_digest,
-      current_finding_contracts: frozenCurrentContracts,
-      findings,
+    fs.mkdirSync(checkerDir, { mode: 0o700 });
+    const safeDeltaFile = path.join(checkerDir, 'delta.json');
+    const safeContractsFile = path.join(checkerDir, 'finding-contracts.json');
+    const resultFile = path.join(checkerDir, 'result.json');
+    fs.copyFileSync(deltaFile, safeDeltaFile); fs.chmodSync(safeDeltaFile, 0o600);
+    fs.writeFileSync(safeContractsFile, `${JSON.stringify({
+      prior: delta.finding_contracts,
+      current: delta.current_finding_contracts || [],
     })}\n`, { mode: 0o600 });
+    const originalCwd = process.cwd();
+    let checkerResult;
+    try {
+      process.chdir(checkerDir);
+      checkerResult = checker({
+        deltaFile: safeDeltaFile,
+        findingContractsFile: safeContractsFile,
+        resultFile,
+        cwd: checkerDir,
+      });
+    } finally {
+      process.chdir(originalCwd);
+    }
+    if (checkerResult && typeof checkerResult === 'object') {
+      fs.writeFileSync(resultFile, `${JSON.stringify(checkerResult)}\n`, { mode: 0o600 });
+    }
     const checked = spawnSync('bash', [
-      script, 'check-remediation', '--delta-file', deltaFile, '--result-file', resultFile,
+      script, 'check-remediation', '--delta-file', safeDeltaFile, '--result-file', resultFile,
       '--repo', repo,
     ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     const result = parseJsonFromLastLine(checked.stdout);
     if (!result || checked.error || checked.status !== 0) {
-      return fallback((result && result.reason) || 'named remediation checker did not produce a valid receipt');
+      return remediationFallback((result && result.reason) || 'named remediation checker did not produce a valid receipt');
     }
     return result;
   } catch (error) {
-    return fallback(error.message || String(error));
+    return remediationFallback(error.message || String(error));
   } finally {
     try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_error) { /* best effort */ }
   }
@@ -4721,7 +4750,7 @@ class AutopilotEngine {
               : 'prior full-review findings are missing or malformed',
           };
         } else try {
-          remediationCheck = this.remediationChecker({
+          remediationCheck = runRemediationCheckerBoundary(this.remediationChecker, {
             repo: loopCwd,
             previousCommit: currentBase,
             currentCommit: candidate.commit,
@@ -9307,6 +9336,7 @@ class AutopilotEngine {
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
+          blindDiscovery: true,
         },
         requireQualifiedReviewer,
       });
@@ -9328,7 +9358,7 @@ class AutopilotEngine {
               : 'prior full-review findings are missing or malformed',
           };
         } else try {
-          remediationCheck = this.remediationChecker({
+          remediationCheck = runRemediationCheckerBoundary(this.remediationChecker, {
             repo: loopCwd,
             previousCommit: nextBase,
             currentCommit: commit,
@@ -9512,6 +9542,7 @@ module.exports = {
   AUTOPILOT_ENGINE_CONTROL_SINKS,
   AutopilotEngine,
   _defaultRemediationChecker: defaultRemediationChecker,
+  _runRemediationCheckerBoundary: runRemediationCheckerBoundary,
   bindCampaignScopeReceipt,
   buildImplementationArgs,
   buildReviewArgs,

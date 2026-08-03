@@ -278,11 +278,22 @@ run_dispatch env NODE_OPTIONS="" DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$C
 assert_eq "$LAST_RC" 2 "A8b non-raw-artifact provisional VA should rc=2"
 assert_file_absent "$RUN_MARKER" "A8b fake runner must not run"
 
-# A validated strict workflow that names the shipping polarity gate cannot omit its exact receipt.
+# A trusted schema declaration, independent of acceptance argv spelling, requires exact polarity evidence.
 POLARITY_CONTRACT="$TEST_TMP/polarity-contract.json"
-jq '.unit_id="polarity-fixture" | .acceptance += [{argv:["scripts/verify-red-green.sh","--validate"],exit:0}]' "$CONTRACT" > "$POLARITY_CONTRACT"
+jq '.unit_id="polarity-fixture" | .deliberate_polarity=true | .acceptance += [{argv:["tools/equivalent-polarity-wrapper","check"],exit:0}]' "$CONTRACT" > "$POLARITY_CONTRACT"
 run_dispatch env DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$CASE_DIR/polarity" ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" "$REPO_ROOT/scripts/dispatch-author.sh" --strict-contract --contract-file "$POLARITY_CONTRACT" --repo-root "$MINI_REPO" --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS"
 assert_eq "$LAST_RC" 2 "trusted polarity workflow rejects omitted receipt"
 assert_contains "$LAST_OUT" "requires --polarity-receipt" "trusted polarity omission names required receipt"
+
+BAD_POLARITY_CONTRACT="$TEST_TMP/bad-polarity-contract.json"
+jq '.unit_id="bad-polarity-fixture" | .deliberate_polarity="yes"' "$CONTRACT" > "$BAD_POLARITY_CONTRACT"
+run_dispatch env ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$BAD_POLARITY_CONTRACT" --repo "$MINI_REPO" --json
+assert_eq "$LAST_RC" 2 "manual contract checker rejects non-boolean deliberate polarity declaration"
+assert_contains "$LAST_OUT" "deliberate_polarity" "manual checker names invalid polarity declaration"
+
+ARGV_ONLY_CONTRACT="$TEST_TMP/argv-only-polarity-contract.json"
+jq '.unit_id="argv-only-polarity" | .acceptance += [{argv:["scripts/verify-red-green.sh","--validate"],exit:0}]' "$CONTRACT" > "$ARGV_ONLY_CONTRACT"
+run_dispatch env DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$CASE_DIR/argv-only" ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" "$REPO_ROOT/scripts/dispatch-author.sh" --strict-contract --contract-file "$ARGV_ONLY_CONTRACT" --repo-root "$MINI_REPO" --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS"
+assert_eq "$LAST_RC" 0 "acceptance argv text cannot self-declare deliberate polarity"
 
 finalize_test

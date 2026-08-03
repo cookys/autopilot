@@ -93,6 +93,10 @@ err_usage() {
   exit 2
 }
 
+is_infrastructure_exit() {
+  case "$1" in 124|125|126|127|137|143) return 0 ;; *) return 1 ;; esac
+}
+
 emit_json() {
   local verdict="$1" validated="$2" base_sha="$3" head_sha="$4"
   local head_result="$5" base_result="$6" red_tests_json="$7" reason="$8"
@@ -186,7 +190,7 @@ if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)
     || receipt.artifact_type !== 'red_green_polarity_receipt'
     || receipt.verdict !== 'VALIDATED'
     || receipt.red_green_validated !== true
-    || receipt.expected_red_exit_class !== 'nonzero'
+    || receipt.expected_red_exit_class !== 'assertion_nonzero_excluding_infrastructure'
     || receipt.green_result !== 'green'
     || !Array.isArray(receipt.execution_argv)
     || receipt.execution_argv.length !== 2
@@ -217,6 +221,7 @@ try { git(['merge-base', '--is-ancestor', base, head]); }
 catch (_error) { reject('receipt commits are not in an ancestor relationship'); }
 if (receipt.base_result !== 'red' || receipt.head_result !== 'green'
     || !Number.isInteger(receipt.base_exit_code) || receipt.base_exit_code === 0
+    || [124, 125, 126, 127, 137, 143].includes(receipt.base_exit_code)
     || receipt.head_exit_code !== 0) reject('receipt does not prove a red-before/green-after transition');
 if (!Array.isArray(receipt.red_tests)
     || !Object.prototype.hasOwnProperty.call(receipt, 'assertion_artifact_path')) {
@@ -736,14 +741,14 @@ if run_verify_cmd "$WT_BASE"; then
   exit 1
 fi
 
-if [ "$LAST_VERIFY_EXIT" -eq 125 ]; then
+if is_infrastructure_exit "$LAST_VERIFY_EXIT"; then
   emit_json "INCONCLUSIVE" "false" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "$BASE_RESULT" "$RED_TESTS_JSON" "verification-command-or-artifact-execution-ambiguous"
   exit 3
 fi
 
 BASE_RESULT="red"
 BASE_EXIT_CODE="$LAST_VERIFY_EXIT"
-RECEIPT_EXTRA_JSON="$(printf '"schema_version":1,"artifact_type":"red_green_polarity_receipt","test_command_digest":"%s","verify_command_path":"%s","verify_command_bytes_sha256":"%s","verify_command_base_bytes_sha256":"%s","verify_command_head_bytes_sha256":"%s","execution_argv":["%s","<detached-worktree>"],"execution_artifacts":%s,"assertion_artifacts":%s,"assertion_artifact_path":%s,"assertion_artifact_digest":"%s","expected_red_exit_class":"nonzero","green_result":"green","base_exit_code":%s,"head_exit_code":%s' \
+RECEIPT_EXTRA_JSON="$(printf '"schema_version":1,"artifact_type":"red_green_polarity_receipt","test_command_digest":"%s","verify_command_path":"%s","verify_command_bytes_sha256":"%s","verify_command_base_bytes_sha256":"%s","verify_command_head_bytes_sha256":"%s","execution_argv":["%s","<detached-worktree>"],"execution_artifacts":%s,"assertion_artifacts":%s,"assertion_artifact_path":%s,"assertion_artifact_digest":"%s","expected_red_exit_class":"assertion_nonzero_excluding_infrastructure","green_result":"green","base_exit_code":%s,"head_exit_code":%s' \
   "$TEST_COMMAND_DIGEST" "$(json_escape "$VERIFY_CMD_IDENTITY_PATH")" "$VERIFY_CMD_CONTENT_SHA" "$VERIFY_CMD_BASE_CONTENT_SHA" "$VERIFY_CMD_HEAD_CONTENT_SHA" "$(json_escape "$VERIFY_CMD_IDENTITY_PATH")" "$RED_TESTS_JSON" "$ASSERTION_ARTIFACTS_JSON" "$ASSERTION_ARTIFACT_PATH_JSON" \
   "$ASSERTION_ARTIFACT_DIGEST" "$BASE_EXIT_CODE" "$HEAD_EXIT_CODE")"
 emit_json "VALIDATED" "true" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "$BASE_RESULT" "$RED_TESTS_JSON" ""

@@ -291,6 +291,7 @@ function validateSchema(contract, errors, repoPath = '') {
     'schema',
     'unit_id',
     'role',
+    'deliberate_polarity',
     'goal',
     'spec',
     'base_sha',
@@ -320,6 +321,10 @@ function validateSchema(contract, errors, repoPath = '') {
 
   if (!ALLOWED_ROLES.has(contract.role)) {
     errors.push('role: invalid role');
+  }
+
+  if (hasKey(contract, 'deliberate_polarity') && typeof contract.deliberate_polarity !== 'boolean') {
+    errors.push('deliberate_polarity: must be boolean');
   }
 
   if (!isNonEmptyString(contract.goal)) {

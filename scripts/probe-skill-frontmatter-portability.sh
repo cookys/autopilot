@@ -61,6 +61,9 @@ const canonical = (value) => Array.isArray(value)
   : (value && typeof value === 'object'
     ? '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}'
     : JSON.stringify(value));
+const receiptBody = value && typeof value === 'object' ? { ...value } : {};
+delete receiptBody.receipt_digest;
+if (!value || !isHex(value.receipt_digest) || sha256(canonical(receiptBody)) !== value.receipt_digest) errors.push('receipt digest invalid');
 const challengeFrom = (raw) => {
   const matches = [...String(raw || '').matchAll(/AUTOPILOT_SKILL_CHALLENGE_[0-9a-f]{32}/g)].map((m) => m[0]);
   return [...new Set(matches)].length === 1 ? matches[0] : '';
@@ -78,6 +81,17 @@ const classifyAttempt = ({ executable, executed, version, codes, text, detailsGr
 };
 const evidenceDir = value && value.cleanup && isPath(value.cleanup.retained_evidence_dir)
   ? path.resolve(value.cleanup.retained_evidence_dir) : '';
+const retainedFile = (target, label) => {
+  if (!isPath(target)) { errors.push(label + ' path missing'); return null; }
+  const resolved = path.resolve(target);
+  const relative = evidenceDir ? path.relative(evidenceDir, resolved) : '..';
+  if (!evidenceDir || relative.startsWith('..') || path.isAbsolute(relative)) { errors.push(label + ' escapes retained evidence directory'); return null; }
+  try {
+    const stat = fs.lstatSync(resolved);
+    if (!stat.isFile() || (stat.mode & 0o777) !== 0o600) throw new Error('must be a regular 0600 file');
+    return fs.readFileSync(resolved);
+  } catch (error) { errors.push(label + ' unavailable: ' + error.message); return null; }
+};
 const readEvidence = (attempt, key, label) => {
   const target = attempt[key];
   if (!isPath(target)) { errors.push(attempt.runtime + ': ' + label + ' path missing'); return null; }
@@ -97,6 +111,35 @@ if (!value || value.schema_version !== 1) errors.push('schema_version must be 1'
 if (value && value.artifact_type !== 'skill_frontmatter_portability') errors.push('artifact_type mismatch');
 if (!value || !value.observed_at || Number.isNaN(Date.parse(value.observed_at))) errors.push('observed_at missing');
 if (!value || !value.fixture || value.fixture.skill_name !== 'portability-probe') errors.push('fixture identity missing');
+const fixtureBytes = value && value.fixture ? retainedFile(value.fixture.path, 'fixture') : null;
+if (fixtureBytes) {
+  const expectedFixture = `---\nname: portability-probe\ndescription: Disposable frontmatter portability probe\ntier: core\n---\n# Portability probe\n\nWhen this skill is invoked, respond with exactly:\nthe output of: printf '%s' "$AUTOPILOT_PROBE_CHALLENGE"\nThe challenge is supplied only in the skill runtime environment. Never invent,\nrepeat, or quote a literal challenge from the invocation prompt.\n`;
+  if (fixtureBytes.toString('utf8') !== expectedFixture
+      || value.fixture.description !== 'Disposable frontmatter portability probe'
+      || value.fixture.unknown_field !== 'tier' || value.fixture.tier_value !== 'core'
+      || value.fixture.bytes !== fixtureBytes.length || value.fixture.body_sha256 !== sha256(fixtureBytes)) errors.push('retained fixture bytes or exact frontmatter/body binding mismatch');
+}
+const manifestBytes = retainedFile(value && value.execution_manifest_path, 'execution manifest');
+let manifest = [];
+if (manifestBytes) {
+  try { manifest = JSON.parse(manifestBytes.toString('utf8')); } catch (error) { errors.push('execution manifest invalid JSON: ' + error.message); }
+  if (!isHex(value.execution_manifest_sha256) || value.execution_manifest_sha256 !== sha256(manifestBytes)
+      || canonical(manifest) !== canonical(value.execution_manifest)) errors.push('execution manifest digest/content mismatch');
+}
+const expectedStepNames = ['claude_probe', 'claude_exec', 'codex_probe', 'codex_list', 'codex_add', 'codex_exec'];
+if (!Array.isArray(manifest) || manifest.length !== expectedStepNames.length) errors.push('execution manifest must contain every step');
+else manifest.forEach((step, index) => {
+  if (!step || step.order !== index + 1 || step.name !== expectedStepNames[index]
+      || step.runtime !== (index < 2 ? 'claude' : 'codex') || !Number.isInteger(step.exit_code)
+      || typeof step.executed !== 'boolean' || !Array.isArray(step.argv) || step.argv.length === 0
+      || step.argv.some((arg) => typeof arg !== 'string' || /<[^>]+>/.test(arg))
+      || !isPath(step.cwd) || (step.executed && (!isPath(step.executable) || step.argv[0] !== step.executable))) errors.push(`execution manifest step ${index + 1} is not exact`);
+  if (!Array.isArray(step.env_bindings)) errors.push(`execution manifest step ${index + 1} env missing`);
+  else for (const binding of step.env_bindings) {
+    if (!binding || typeof binding.name !== 'string' || typeof binding.secret !== 'boolean'
+        || (binding.secret ? (Object.prototype.hasOwnProperty.call(binding, 'value') || !isHex(binding.value_sha256)) : !isPath(binding.value))) errors.push(`execution manifest step ${index + 1} env binding invalid`);
+  }
+});
 if (!value || !Array.isArray(value.attempts) || value.attempts.length !== 2) errors.push('exactly two runtime attempts required');
 const attempts = value && Array.isArray(value.attempts) ? value.attempts : [];
 const names = new Set();
@@ -109,6 +152,10 @@ for (const attempt of attempts) {
   if (typeof attempt.command_sha256 !== 'string' || !isHex(attempt.command_sha256)
       || attempt.command_text !== attempt.command.join(' ')
       || attempt.command_sha256 !== sha256(canonical(attempt.command))) errors.push(attempt.runtime + ': command evidence mismatch');
+  const runtimeSteps = manifest.filter((step) => step.runtime === attempt.runtime);
+  const manifestCommand = runtimeSteps.flatMap((step, index) => index === 0 ? step.argv : ['&&', ...step.argv]);
+  if (canonical(manifestCommand) !== canonical(attempt.command)
+      || canonical(runtimeSteps.map((step) => step.exit_code)) !== canonical(attempt.probe_exit_codes)) errors.push(attempt.runtime + ': command/exit evidence does not recompute from execution manifest');
   if (typeof attempt.executable_present !== 'boolean') errors.push(attempt.runtime + ': executable_present missing');
   if (typeof attempt.execution_attempted !== 'boolean') errors.push(attempt.runtime + ': execution_attempted missing');
   if (attempt.executable_present && !attempt.execution_attempted) errors.push(attempt.runtime + ': installed runtime was not executed');
@@ -117,6 +164,7 @@ for (const attempt of attempts) {
   if (!Array.isArray(attempt.probe_exit_codes) || !attempt.probe_exit_codes.every(Number.isInteger)) errors.push(attempt.runtime + ': probe exit evidence missing');
   if (!Array.isArray(attempt.before_inventory) || !Array.isArray(attempt.after_inventory)) errors.push(attempt.runtime + ': inventories missing');
   for (const key of ['stdout_sha256', 'stderr_sha256', 'fixture_sha256', 'version_sha256', 'before_inventory_sha256', 'after_inventory_sha256', 'details_sha256', 'challenge_sha256']) if (!isHex(attempt[key])) errors.push(attempt.runtime + ': ' + key + ' invalid');
+  if (fixtureBytes && attempt.fixture_sha256 !== sha256(fixtureBytes)) errors.push(attempt.runtime + ': fixture digest is not bound to retained bytes');
   for (const key of ['stdout_excerpt', 'stderr_excerpt']) if (typeof attempt[key] !== 'string') errors.push(attempt.runtime + ': ' + key + ' missing');
   if (typeof attempt.stdout_bytes !== 'number' || typeof attempt.stderr_bytes !== 'number') errors.push(attempt.runtime + ': log byte counts missing');
   const versionRawBuffer = readEvidence(attempt, 'version_log_path', 'version evidence');
@@ -293,8 +341,22 @@ inventory() {
     node -e 'const fs=require("fs"); const rows=fs.readFileSync(0,"utf8").split(/\n/).filter(Boolean); process.stdout.write(JSON.stringify(rows));'
 }
 
+record_launch() {
+  local name="$1"; shift
+  printf '%s\0' "$@" > "$ROOT/$name.argv0"
+  local -a args=("$@")
+  local index=0 command_name
+  if [ "${args[0]:-}" = env ]; then
+    index=1
+    while [ "$index" -lt "${#args[@]}" ] && [[ "${args[$index]}" == *=* ]]; do index=$((index + 1)); done
+  fi
+  command_name="${args[$index]:-}"
+  command -v "$command_name" > "$ROOT/$name.executable" 2>/dev/null || : > "$ROOT/$name.executable"
+}
+
 run_capture() {
   local name="$1"; shift
+  record_launch "$name" "$@"
   local stdout="$ROOT/$name.stdout" stderr="$ROOT/$name.stderr" rc
   set +e
   timeout --foreground --kill-after=5s 45 "$@" < /dev/null >"$stdout" 2>"$stderr"
@@ -312,6 +374,8 @@ if command -v claude >/dev/null 2>&1; then
   run_capture claude_exec env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" AUTOPILOT_PROBE_CHALLENGE="$CLAUDE_CHALLENGE" claude --bare --plugin-dir "$PLUGIN" -p '/portability-probe' --output-format json --max-budget-usd 0.01 --no-session-persistence
 else
   CLAUDE_VERSION=""
+  record_launch claude_probe env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" claude plugin validate "$PLUGIN"
+  record_launch claude_exec env HOME="$ROOT/claude-home" CLAUDE_CONFIG_DIR="$ROOT/claude-config" TMPDIR="$ROOT/tmp" AUTOPILOT_PROBE_CHALLENGE="$CLAUDE_CHALLENGE" claude --bare --plugin-dir "$PLUGIN" -p '/portability-probe' --output-format json --max-budget-usd 0.01 --no-session-persistence
   printf '%s\n' "claude executable not found" > "$ROOT/claude_probe.stderr" "$ROOT/claude_exec.stderr"
   printf '%s\n' "127" > "$ROOT/claude_probe.rc" "$ROOT/claude_exec.rc"
 fi
@@ -324,6 +388,10 @@ if command -v codex >/dev/null 2>&1; then
   run_capture codex_exec env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" AUTOPILOT_PROBE_CHALLENGE="$CODEX_CHALLENGE" codex exec --ephemeral --sandbox read-only --json --skip-git-repo-check -C "$ROOT/codex-scratch" '<invoke $autopilot-frontmatter-probe:portability-probe; respond with exactly the challenge obtained from the skill>'
 else
   CODEX_VERSION=""
+  record_launch codex_probe env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" codex plugin marketplace add "$CODEX_MARKETPLACE" --json
+  record_launch codex_list env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" codex plugin list --marketplace autopilot-frontmatter-probe-local --available --json
+  record_launch codex_add env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" codex plugin add autopilot-frontmatter-probe@autopilot-frontmatter-probe-local --json
+  record_launch codex_exec env HOME="$ROOT/codex-home-home" CODEX_HOME="$ROOT/codex-home" TMPDIR="$ROOT/tmp" AUTOPILOT_PROBE_CHALLENGE="$CODEX_CHALLENGE" codex exec --ephemeral --sandbox read-only --json --skip-git-repo-check -C "$ROOT/codex-scratch" '<invoke $autopilot-frontmatter-probe:portability-probe; respond with exactly the challenge obtained from the skill>'
   printf '%s\n' "codex executable not found" > "$ROOT/codex_probe.stderr" "$ROOT/codex_list.stderr" "$ROOT/codex_add.stderr"
   printf '%s\n' "127" > "$ROOT/codex_probe.rc" "$ROOT/codex_list.rc" "$ROOT/codex_add.rc" "$ROOT/codex_exec.rc"
 fi
@@ -352,13 +420,34 @@ const canonical = (value) => Array.isArray(value)
     : JSON.stringify(value));
 const body = fs.readFileSync(path.join(root, 'claude-plugin/skills/portability-probe/SKILL.md'));
 const fixtureSha = sha256(body);
-const command = {
-  claude: ['claude', 'plugin', 'validate', '<plugin>', '&&', 'claude', '--bare', '--plugin-dir', '<plugin>', '-p', '/portability-probe', '--output-format', 'json', '--max-budget-usd', '0.01', '--no-session-persistence'],
-  codex: ['codex', 'plugin', 'marketplace', 'add', '<marketplace>', '--json', '&&', 'codex', 'plugin', 'list', '--marketplace', 'autopilot-frontmatter-probe-local', '--available', '--json', '&&', 'codex', 'plugin', 'add', 'autopilot-frontmatter-probe@autopilot-frontmatter-probe-local', '--json', '&&', 'codex', 'exec', '--ephemeral', '--sandbox', 'read-only', '--json', '--skip-git-repo-check', '-C', '<scratch>', '<invoke $autopilot-frontmatter-probe:portability-probe; respond with the challenge obtained from the skill>'],
-};
 const combined = (names, stream) => names.map((name) => `AUTOPILOT_STEP ${name} ${rc(name)}\n${read(`${name}.${stream}`)}`).join('');
 const claudeNames = ['claude_probe', 'claude_exec'];
 const codexNames = ['codex_probe', 'codex_list', 'codex_add', 'codex_exec'];
+const parseLaunch = (name, order, runtime) => {
+  const raw = fs.readFileSync(path.join(root, `${name}.argv0`));
+  const args = raw.toString('utf8').split('\0').filter(Boolean);
+  let index = args[0] === 'env' ? 1 : 0;
+  const envBindings = [];
+  while (index < args.length && args[index].includes('=')) {
+    const separator = args[index].indexOf('=');
+    const envName = args[index].slice(0, separator);
+    const envValue = args[index].slice(separator + 1);
+    envBindings.push(envName === 'AUTOPILOT_PROBE_CHALLENGE'
+      ? { name: envName, secret: true, value_sha256: sha256(envValue) }
+      : { name: envName, secret: false, value: envValue });
+    index += 1;
+  }
+  const executable = read(`${name}.executable`).trim() || null;
+  const commandArgs = args.slice(index + 1);
+  return { order, name, runtime, executed: Boolean(executable), executable, argv: executable ? [executable, ...commandArgs] : [args[index], ...commandArgs], env_bindings: envBindings, cwd: root, exit_code: rc(name) };
+};
+const executionManifest = [
+  parseLaunch('claude_probe', 1, 'claude'), parseLaunch('claude_exec', 2, 'claude'),
+  parseLaunch('codex_probe', 3, 'codex'), parseLaunch('codex_list', 4, 'codex'),
+  parseLaunch('codex_add', 5, 'codex'), parseLaunch('codex_exec', 6, 'codex'),
+];
+const commandsFor = (runtime) => executionManifest.filter((step) => step.runtime === runtime)
+  .flatMap((step, index) => index === 0 ? step.argv : ['&&', ...step.argv]);
 const claudeStdout = combined(claudeNames, 'stdout'); const claudeStderr = combined(claudeNames, 'stderr');
 const codexStdout = combined(codexNames, 'stdout'); const codexStderr = combined(codexNames, 'stderr');
 const claudeInstalled = Boolean(process.env.CLAUDE_VERSION);
@@ -393,6 +482,11 @@ const codexVersionOk = /^codex-cli 0\.146\.0(?:\s|$)/.test(process.env.CODEX_VER
 const codexOutcome = classifyAttempt({ executable: codexInstalled, executed: codexInstalled, version: codexVersionOk, codes: [rc('codex_probe'), rc('codex_list'), rc('codex_add'), rc('codex_exec')], text: codexStdout + '\n' + codexStderr, detailsGreen: codexDiscovery && codexSkillExact, challenge: codexChallengeSeen });
 fs.mkdirSync(retainedRoot, { recursive: true, mode: 0o700 });
 fs.chmodSync(retainedRoot, 0o700);
+const fixturePath = path.join(retainedRoot, 'fixture.SKILL.md');
+fs.writeFileSync(fixturePath, body, { mode: 0o600 }); fs.chmodSync(fixturePath, 0o600);
+const executionManifestPath = path.join(retainedRoot, 'execution-manifest.json');
+const executionManifestBytes = `${JSON.stringify(executionManifest, null, 2)}\n`;
+fs.writeFileSync(executionManifestPath, executionManifestBytes, { mode: 0o600 }); fs.chmodSync(executionManifestPath, 0o600);
 const retainLog = (runtime, stream, content) => {
   const target = path.join(retainedRoot, runtime + '.' + stream + '.log');
   fs.writeFileSync(target, content, { mode: 0o600 });
@@ -451,8 +545,8 @@ const attempt = (runtime, installed, version, outcome, before, after, stdout, st
   };
 };
 const attempts = [
-  attempt('claude', claudeInstalled, process.env.CLAUDE_VERSION, claudeOutcome, process.env.CLAUDE_BEFORE, process.env.CLAUDE_AFTER, claudeStdout, claudeStderr, command.claude, { manifest_validation: claudeValidationOk, challenge_seen: claudeChallengeSeen, version_match: claudeVersionOk }, rc('claude_exec'), process.env.CLAUDE_CHALLENGE, [rc('claude_probe'), rc('claude_exec')]),
-  attempt('codex', codexInstalled, process.env.CODEX_VERSION, codexOutcome, process.env.CODEX_BEFORE, process.env.CODEX_AFTER, codexStdout, codexStderr, command.codex, { marketplace_discovered: codexDiscovery, installed_skill_exact: codexSkillExact, installed_path: installedPath || null, runtime_invocation: true, challenge_seen: codexChallengeSeen, version_match: codexVersionOk }, rc('codex_exec'), process.env.CODEX_CHALLENGE, [rc('codex_probe'), rc('codex_list'), rc('codex_add'), rc('codex_exec')]),
+  attempt('claude', claudeInstalled, process.env.CLAUDE_VERSION, claudeOutcome, process.env.CLAUDE_BEFORE, process.env.CLAUDE_AFTER, claudeStdout, claudeStderr, commandsFor('claude'), { manifest_validation: claudeValidationOk, challenge_seen: claudeChallengeSeen, version_match: claudeVersionOk }, rc('claude_exec'), process.env.CLAUDE_CHALLENGE, [rc('claude_probe'), rc('claude_exec')]),
+  attempt('codex', codexInstalled, process.env.CODEX_VERSION, codexOutcome, process.env.CODEX_BEFORE, process.env.CODEX_AFTER, codexStdout, codexStderr, commandsFor('codex'), { marketplace_discovered: codexDiscovery, installed_skill_exact: codexSkillExact, installed_path: installedPath || null, runtime_invocation: true, challenge_seen: codexChallengeSeen, version_match: codexVersionOk }, rc('codex_exec'), process.env.CODEX_CHALLENGE, [rc('codex_probe'), rc('codex_list'), rc('codex_add'), rc('codex_exec')]),
 ];
 const classification = attempts.some((row) => row.outcome === 'fail') ? 'fail'
   : attempts.some((row) => row.outcome === 'inconclusive') ? 'inconclusive' : 'pass';
@@ -460,7 +554,10 @@ const receipt = {
   schema_version: 1,
   artifact_type: 'skill_frontmatter_portability',
   observed_at: new Date().toISOString(),
-  fixture: { skill_name: 'portability-probe', description: 'Disposable frontmatter portability probe', unknown_field: 'tier', tier_value: 'core', body_sha256: fixtureSha },
+  fixture: { skill_name: 'portability-probe', description: 'Disposable frontmatter portability probe', unknown_field: 'tier', tier_value: 'core', path: fixturePath, bytes: body.length, body_sha256: fixtureSha },
+  execution_manifest: executionManifest,
+  execution_manifest_path: executionManifestPath,
+  execution_manifest_sha256: sha256(executionManifestBytes),
   attempts,
   classification,
   policy: classification === 'pass' ? 'Dual runtime pass permits a separately reviewed tier migration.' : 'Do not change canonical skill frontmatter; retain the portability backlog entry.',
@@ -473,6 +570,8 @@ const residue = fs.existsSync(root) ? [root] : [];
 receipt.cleanup.zero_residue = residue.length === 0;
 receipt.cleanup.residue_paths = residue;
 receipt.cleanup.retained_evidence_dir = retainedRoot;
+const receiptBody = { ...receipt };
+receipt.receipt_digest = sha256(canonical(receiptBody));
 fs.writeFileSync(output, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
 console.log(JSON.stringify({ classification, receipt: output, zero_residue: receipt.cleanup.zero_residue }));
 NODE

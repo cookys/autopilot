@@ -119,6 +119,29 @@ set -e
 assert_exit_code "$EXIT" 1 "validator recomputes retained raw-log byte counts"
 assert_contains "$(cat "$TEST_TMP/log-metadata-tamper.out")" "raw log byte count mismatch" "validator explains raw-log metadata tamper"
 
+RECEIPT_DIGEST_TAMPER="$TEST_TMP/receipt-digest-tamper.json"
+node - "$ARTIFACT" "$RECEIPT_DIGEST_TAMPER" <<'NODE'
+const fs = require('fs'); const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+source.receipt_digest = '0'.repeat(64); fs.writeFileSync(process.argv[3], JSON.stringify(source));
+NODE
+set +e
+bash "$PROBE" --validate "$RECEIPT_DIGEST_TAMPER" >"$TEST_TMP/receipt-digest-tamper.out" 2>&1
+EXIT=$?
+set -e
+assert_exit_code "$EXIT" 1 "validator rejects tampered receipt digest"
+assert_contains "$(cat "$TEST_TMP/receipt-digest-tamper.out")" "receipt digest invalid" "validator explains receipt digest tamper"
+
+FIXTURE_TO_TAMPER="$(node -e 'const v=require(process.argv[1]); process.stdout.write(v.fixture.path)' "$ARTIFACT")"
+cp "$FIXTURE_TO_TAMPER" "$TEST_TMP/fixture.backup"
+printf '%s' tamper >> "$FIXTURE_TO_TAMPER"
+set +e
+bash "$PROBE" --validate "$ARTIFACT" >"$TEST_TMP/fixture-tamper.out" 2>&1
+EXIT=$?
+set -e
+assert_exit_code "$EXIT" 1 "validator rejects modified retained fixture"
+assert_contains "$(cat "$TEST_TMP/fixture-tamper.out")" "fixture" "validator explains retained fixture tamper"
+cp "$TEST_TMP/fixture.backup" "$FIXTURE_TO_TAMPER"; chmod 600 "$FIXTURE_TO_TAMPER"
+
 RAW_LOG_TO_TAMPER="$(node - "$ARTIFACT" <<'NODE'
 const fs = require('fs');
 const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));

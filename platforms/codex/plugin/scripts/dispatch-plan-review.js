@@ -853,7 +853,15 @@ function sleepMilliseconds(milliseconds) {
   }
 }
 
-function dispatchSeat(target, prompt, attempt, sequence, legacyEnv, sequenceAttempt = attempt) {
+function dispatchSeat(
+  target,
+  prompt,
+  attempt,
+  sequence,
+  legacyEnv,
+  sequenceAttempt = attempt,
+  repoRoot,
+) {
   const seam = seamEntry(sequence, target.id, sequenceAttempt, legacyEnv);
   if (seam) {
     if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS !== '1') {
@@ -904,9 +912,11 @@ function dispatchSeat(target, prompt, attempt, sequence, legacyEnv, sequenceAtte
     '--timeout', `${target.timeoutSeconds}s`,
   ];
   if (target.endpoint !== 'default') args.push('--endpoint', target.endpoint);
+  if (target.runner === 'codex') args.push('--repo-root', repoRoot);
+  const childCwd = target.runner === 'codex' ? repoRoot : tempDir;
   try {
     const run = spawnSync(DISPATCH_AUTHOR, args, {
-      cwd: tempDir,
+      cwd: childCwd,
       env: { ...process.env, DISPATCH_QUIET: '1', DISPATCH_DETACH: '0' },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -933,7 +943,7 @@ function dispatchSeat(target, prompt, attempt, sequence, legacyEnv, sequenceAtte
       model: target.model,
       operation: 'plan-review',
       argv: args,
-      cwd: tempDir,
+      cwd: childCwd,
       child: {
         status: success ? 0 : (Number.isInteger(run.status) ? run.status : 1),
         signal: run.signal || null,
@@ -977,6 +987,7 @@ function fallbackEligible(manifest, seat, fallback, selectedTargets) {
 function reviewSeat({
   manifest,
   seat,
+  repoRoot,
   planBytes,
   rubricBytes,
   rubricIds,
@@ -1052,6 +1063,7 @@ function reviewSeat({
       sequence,
       legacyEnv,
       selected.id === seat.id ? attempt : 1,
+      repoRoot,
     );
     const normalized = normalizePlanReviewPayload({
       envelope: dispatched.envelope,
@@ -1493,6 +1505,7 @@ function main() {
       const seatReview = reviewSeat({
         manifest,
         seat,
+        repoRoot: opts.repoRoot,
         planBytes,
         rubricBytes,
         rubricIds,

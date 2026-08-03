@@ -170,6 +170,133 @@ AMBIGUOUS="$FIXTURES/ambiguous.txt"
 ALL_READY="$(sequence \
   "architect=$READY" "operations=$READY" "skeptic=$READY" "product=$READY")"
 
+# The real dispatch path is intercepted in-process so this regression observes the
+# dispatch-author child contract without invoking any runner or spending model tokens.
+AUTHOR_PROBE_PRELOAD="$TEST_TMP/author-probe.cjs"
+AUTHOR_PROBE_LOG="$TEST_TMP/author-probe.log"
+AUTHOR_PROBE_RAW="$TEST_TMP/author-probe-raw.json"
+cat >"$AUTHOR_PROBE_PRELOAD" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const childProcess = require('child_process');
+const originalSpawnSync = childProcess.spawnSync;
+
+function argValue(args, flag) {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : null;
+}
+
+childProcess.spawnSync = function authorProbe(command, args, options) {
+  if (path.resolve(String(command)) !== path.resolve(process.env.PLAN_REVIEW_PROBE_AUTHOR)) {
+    return originalSpawnSync.call(this, command, args, options);
+  }
+  const prompt = argValue(args, '--prompt-file');
+  const cwd = fs.realpathSync(options.cwd);
+  fs.appendFileSync(process.env.PLAN_REVIEW_PROBE_LOG, `${JSON.stringify({
+    cwd,
+    repo_root: argValue(args, '--repo-root'),
+    runner: argValue(args, '--runner'),
+    prompt_dir: fs.realpathSync(path.dirname(prompt)),
+    prompt_dir_mode: (fs.statSync(path.dirname(prompt)).mode & 0o777).toString(8),
+    prompt_mode: (fs.statSync(prompt).mode & 0o777).toString(8),
+  })}\n`);
+  fs.copyFileSync(process.env.PLAN_REVIEW_PROBE_RESPONSE, process.env.PLAN_REVIEW_PROBE_RAW);
+  fs.chmodSync(process.env.PLAN_REVIEW_PROBE_RAW, 0o600);
+  return {
+    status: 0,
+    signal: null,
+    error: null,
+    stdout: `${JSON.stringify({
+      runner: argValue(args, '--runner'),
+      model: argValue(args, '--model'),
+      status: 'authored',
+      raw_log: process.env.PLAN_REVIEW_PROBE_RAW,
+    })}\n`,
+    stderr: '',
+  };
+};
+NODE
+
+run_author_probe() {
+  local repo="$1" ticket="$2" manifest="$3"
+  PLAN_REVIEW_PROBE_AUTHOR="$REPO_ROOT/scripts/dispatch-author.sh" \
+  PLAN_REVIEW_PROBE_LOG="$AUTHOR_PROBE_LOG" \
+  PLAN_REVIEW_PROBE_RAW="$AUTHOR_PROBE_RAW" \
+  PLAN_REVIEW_PROBE_RESPONSE="$READY" \
+  NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require=$AUTHOR_PROBE_PRELOAD" \
+    node "$SCRIPT" \
+      --repo-root "$repo" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+      --ticket "$ticket" --session-id "$ticket" --generation 1 \
+      --manifest-file "$manifest" --state-dir "$TEST_TMP/probe-state"
+}
+
+CODEX_PROBE_MANIFEST="$TEST_TMP/codex-probe-manifest.json"
+GROK_PROBE_MANIFEST="$TEST_TMP/grok-probe-manifest.json"
+node - "$MANIFEST" "$CODEX_PROBE_MANIFEST" "$GROK_PROBE_MANIFEST" <<'NODE'
+const fs = require('fs');
+const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const codex = { ...source, logical_plan_id: 'codex-cwd-probe', seats: [source.seats[0]], minimum_distinct_families: 1 };
+const grokSeat = { ...source.seats[1], id: 'grok-probe', fallbacks: [] };
+const grok = { ...source, logical_plan_id: 'grok-cwd-probe', seats: [grokSeat], minimum_distinct_families: 1 };
+fs.writeFileSync(process.argv[3], `${JSON.stringify(codex, null, 2)}\n`);
+fs.writeFileSync(process.argv[4], `${JSON.stringify(grok, null, 2)}\n`);
+NODE
+
+# Invalid repository bindings fail before the intercepted author runner starts.
+rm -f "$AUTHOR_PROBE_LOG"
+OUT="$(run_author_probe "$TEST_TMP/missing-repo" invalid-missing "$CODEX_PROBE_MANIFEST" 2>&1)"; EXIT=$?
+assert_exit_code "$EXIT" "2" "nonexistent repo binding is rejected pre-dispatch"
+assert_contains "$OUT" "--repo-root is not readable" "nonexistent repo diagnosis is explicit"
+assert_file_absent "$AUTHOR_PROBE_LOG" "nonexistent repo spends no runner attempt"
+
+NOT_A_DIRECTORY="$TEST_TMP/not-a-directory"
+printf '%s\n' 'not a directory' >"$NOT_A_DIRECTORY"
+OUT="$(run_author_probe "$NOT_A_DIRECTORY" invalid-file "$CODEX_PROBE_MANIFEST" 2>&1)"; EXIT=$?
+assert_exit_code "$EXIT" "2" "regular-file repo binding is rejected pre-dispatch"
+assert_contains "$OUT" "--repo-root must be a directory" "regular-file repo diagnosis is explicit"
+assert_file_absent "$AUTHOR_PROBE_LOG" "regular-file repo spends no runner attempt"
+
+NOT_A_GIT_REPO="$TEST_TMP/not-a-git-repo"
+mkdir -p "$NOT_A_GIT_REPO"
+OUT="$(run_author_probe "$NOT_A_GIT_REPO" invalid-git "$CODEX_PROBE_MANIFEST" 2>&1)"; EXIT=$?
+assert_exit_code "$EXIT" "2" "non-Git repo binding is rejected pre-dispatch"
+assert_contains "$OUT" "--repo-root must be a git repository" "non-Git repo diagnosis is explicit"
+assert_file_absent "$AUTHOR_PROBE_LOG" "non-Git repo spends no runner attempt"
+
+# Codex receives one canonical repository binding for both child cwd and argv,
+# while the prompt stays in its private temporary directory.
+PLAN_REPO_ALIAS="$TEST_TMP/plan-repo-alias"
+ln -s "$PLAN_REPO" "$PLAN_REPO_ALIAS"
+CANONICAL_PLAN_REPO="$(cd "$PLAN_REPO" && pwd -P)"
+OUT="$(run_author_probe "$PLAN_REPO_ALIAS" codex-probe "$CODEX_PROBE_MANIFEST")"; EXIT=$?
+assert_exit_code "$EXIT" "0" "Codex author probe executes without a real runner"
+AUTHOR_RECORD="$(tail -n 1 "$AUTHOR_PROBE_LOG")"
+assert_eq "$(json_field "$AUTHOR_RECORD" runner)" "codex" "Codex author probe selects Codex"
+assert_eq "$(json_field "$AUTHOR_RECORD" cwd)" "$CANONICAL_PLAN_REPO" \
+  "Codex author child cwd is the canonical reviewed repository"
+assert_eq "$(json_field "$AUTHOR_RECORD" repo_root)" "$CANONICAL_PLAN_REPO" \
+  "Codex author receives the same canonical --repo-root binding"
+assert_neq "$(json_field "$AUTHOR_RECORD" prompt_dir)" "$CANONICAL_PLAN_REPO" \
+  "Codex prompt stays outside the reviewed repository"
+assert_eq "$(json_field "$AUTHOR_RECORD" prompt_dir_mode)" "700" \
+  "Codex prompt directory remains private"
+assert_eq "$(json_field "$AUTHOR_RECORD" prompt_mode)" "600" \
+  "Codex prompt artifact remains private"
+
+# Non-Codex authors retain their scratch dispatch posture and receive no repo binding.
+rm -f "$AUTHOR_PROBE_LOG"
+OUT="$(run_author_probe "$PLAN_REPO_ALIAS" grok-probe "$GROK_PROBE_MANIFEST")"; EXIT=$?
+assert_exit_code "$EXIT" "0" "non-Codex author probe executes without a real runner"
+AUTHOR_RECORD="$(tail -n 1 "$AUTHOR_PROBE_LOG")"
+assert_eq "$(json_field "$AUTHOR_RECORD" runner)" "grok" "non-Codex probe selects Grok"
+assert_eq "$(json_field "$AUTHOR_RECORD" repo_root)" "null" \
+  "non-Codex author receives no repository binding"
+assert_neq "$(json_field "$AUTHOR_RECORD" cwd)" "$CANONICAL_PLAN_REPO" \
+  "non-Codex author child keeps scratch cwd"
+assert_eq "$(json_field "$AUTHOR_RECORD" cwd)" "$(json_field "$AUTHOR_RECORD" prompt_dir)" \
+  "non-Codex author child cwd remains its private prompt directory"
+
 # P1: the closed manifest schema and runtime accept 1/2/4 seats, reject five and duplicate IDs.
 node "$SCHEMA_CHECK" --schema "$REPO_ROOT/schemas/plan-review-manifest.schema.json" \
   --document "$MANIFEST" >/dev/null

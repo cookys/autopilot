@@ -7,8 +7,18 @@ Trigger-conditioned future work. Each entry must have:
 - **Source**：commit / review-round / retro that surfaced it
 
 Entries without a trigger are rejected (per `skills/quality-pipeline/references/code-review.md` backlog spec).
+`next time touching X`／`下次修改 X` is not a valid deferral trigger: it describes known debt, so
+admit it to a bounded plan immediately. Valid conditional triggers require external capability,
+observed evidence/incident thresholds, a new consumer, or an explicitly expanded threat model.
 
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
+
+## Audit snapshot（2026-08-03，`develop` @ `2879dac8`）
+
+- **48 real entries**：2 個 Board decisions、14 個已排入執行計畫的 technical gaps、32 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
+- 本輪逐條對照 code、tests、git history 後，**0 個已完整完成可刪、0 個可安全視為重複合併**。看到 partial rail 或 helper 不等於原 acceptance gap 已關閉。
+- 14 個 technical gaps 已依序收斂為 [`2026-08-03-next-touch-debt-retirement.md`](plans/2026-08-03-next-touch-debt-retirement.md) 的 D1–D8；其中 12 個來自已取消的 next-touch deferral，另 2 個是原本已觸發的 Grok calibration 與 findings identity。
+- 32 個 conditional entries 主要是四類：等待外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
 
 ---
 
@@ -20,7 +30,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ### Release-time payload branch（B）重啟條件
 - **Trigger**: CI 連續數週綠＋真實 tag/release 節奏存在（非每 push 即 shippable）＋ C-Spike 已否決 install-time 路線
-- **Context**: B 需要從零建 tag→CI→push-credential 基建；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user install 時才爆）
+- **Context**: Generic push/PR test CI 已存在，但 B 仍需新建 tag→payload publication→push-credential 的 release path；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user install 時才爆）
 - **Effort**: L
 - **Source**: health-roadmap P6 Decision Brief（2026-07-17）
 
@@ -29,7 +39,7 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 
 ```markdown
 ### <Topic title>
-- **Trigger**: <observable condition; e.g. "next time touching X" / "after sample N of behavior Y" / "performance degrades below threshold Z">
+- **Trigger**: <external or evidence condition; e.g. "after sample N of behavior Y" / "performance degrades below threshold Z">
 - **Context**: <one-line problem>
 - **Effort**: S | Fix | L (estimate)
 - **Source**: <commit SHA / review-round / retro / plan ref>
@@ -59,8 +69,9 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: `docs/projects/_archive/2026-07-08-t14-reinject/report.md` § Follow-up.
 
 ### Review-loop enum gate — behavioral per-field invalid-value proof
-- **Trigger**: A third enum-drift incident, or the next change that cannot be covered confidently by the existing schema↔shell declared-set gate plus resolver tests.
-- **Context**: The contract-schema SSOT checks declared enum parity, while generic resolver tests cover invalid→default behavior. A per-field behavioral gate would drive one invalid value through every enum field and assert its fallback; it remains deferred until recurrence justifies the bash-plumbing cost.
+- **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-change deferral; the per-field behavioral acceptance gap already exists.
+- **Context**: The contract-schema SSOT checks declared enum parity, while generic resolver tests cover invalid→default behavior. D1 will drive one invalid value through every enum field and assert its fallback instead of deferring the known behavioral coverage gap.
 - **Effort**: S–M.
 - **Source**: `docs/projects/_archive/2026-07-10-contract-schema-ssot/README.md` § Residual / BACKLOG.
 
@@ -82,26 +93,29 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: M
 - **Source**: controller-execution-discipline v2.34.1 boundary; preserved user-owned Codex hook-probe workspace
 
-### agy 遙測盲區 — transcript 無 token 欄位且 91% 被平台截斷
+### agy 遙測盲區 — transcript 無 token 欄位且 77.1% files 被平台截斷
 - **Trigger**: 要把 agy 納入任何成本／容量決策之前；或 antigravity 上游補上 usage 欄位時。
-- **Context**: `~/.gemini/antigravity-cli/brain/*/。system_generated/logs/transcript.jsonl` 的 schema 是 `{step_index, source, type, status, created_at, content, truncated_fields}` — **完全沒有 token/usage 欄位**，且 500 個 session 中 454 個（91%）帶 `truncated_fields`（平台自行截斷內容）。目前只能用 content bytes 當極粗代理指標，不可與 codex/grok/opencode 的 token 數同軸比較。**不可測 ⇒ 不可優化**：在補上遙測前，任何 agy 的成本結論都是猜測。
+- **Context**: 2026-08-03 live scan 的正確路徑是 `~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl`。agy 1.1.10 corpus 為 262 files / 8,850 rows，其中 202 files（77.1%）帶 truncation；top-level schema 已比舊紀錄多出 `thinking`、`tool_calls`、`error*`、`exit_code`，但仍是 **0 token/usage fields**。現行 scorecard importer 對這個 transcript JSONL surface 也仍無法形成可用 session telemetry。不可與 codex/grok/opencode token 同軸比較；**不可測 ⇒ 不可優化**。
 - **Effort**: S（若上游有欄位）／M（若需自建量測 harness）
 - **Source**: 2026-07-25 context-window telemetry audit recorded by `9bc10591`。
 
 ### grok implementer 摩擦調校（toolFailure 28%／零 commit 72%／effort 反效果假說）
+- **Status**: PLANNED — trigger satisfied；D8 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md). `develop` 已有 52 個 `dispatch-hetero(grok): edits` commits（原條目後新增 28 個），尚未做同任務 A/B。
 - **Trigger**: grok 真正被當成 `dispatch-hetero.sh` implementer 常態使用之後（累積 ≥30 個寫檔 session）。
-- **Context**: 2026-07-25 掃描顯示 grok 目前在 autopilot 派遣路徑上只有 71 個 session 且**全是唯讀**（review 59／author 12）；實際寫碼發生在 dispatch rail 之外的互動式 session。既有 32 個寫檔 session 的訊號：`toolFailure>0` 28.1%（平均 1.6 次）、零 commit 71.9%（對應已知的 untracked-new-files 問題）、但 `editAndRetry`／`regeneration`／`hasReverted` **全為 0**（寫出來的東西不用重寫，品質面乾淨）。另有一個**相關非因果**觀察：`reasoning_effort=high` 的 302 個 session 只有 6 個寫檔、耗時 3.4 倍、toolFail 更多，而 `(none)` 的 65 個有 24 個寫檔 — 極可能是任務難度自選偏差，**要驗證需同任務 A/B，不可逕自關掉 high**。
+- **Context**: 原本「派遣路徑全為唯讀」的樣本描述已過時；現在真正剩下的是受控校準。歷史訊號仍只有相關性：`toolFailure>0`、零 commit 與 high-effort 較慢都可能是任務難度自選偏差。下一步應用同一批任務做 effort A/B，量測 tool failure、wrapper commit、返工與品質；**不可因舊相關性直接關掉 high**。
 - **Effort**: M（需先累積母體，再跑 A/B）
 - **Source**: 2026-07-25 context-window telemetry audit recorded by `9bc10591`。
 
 ### dispatch-author codex transport：cgroup supervision tier（fd-less inter-poll escapee 殘差閉環）
-- **Trigger**: 下次動 `scripts/dispatch-author.sh` codex branch 或 `scripts/lib/dispatch-author-codex-transport.sh`；或首次出現真實 incomplete-tree 事故（result 被 orphan 汙染）。
+- **Status**: PLANNED — D3 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md)；2026-07-18 後 transport 已被多次修改（含 `1361ed01`），但 cgroup tier 尚未實作。
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；原 trigger 也已被 post-entry transport edits 滿足。
 - **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）；deadline 路徑的 `reap_tree(pgid,10,worker_pid)` 做 kill 前 worker-rooted tree walk。**已驗證涵蓋 honest-failure orphan**：deadline_setsid_orphan／orphan_deleted_fd_holder 兩個 executable 負控對現行實作 157/157 GREEN（regression 已 bank）。**殘差全屬對抗性 worker（out of threat model，v2.25.8 先例）**：(1) poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫；(2) deadline 前蓄意兩層 setsid reparent-race 搶在 pre-kill walk 前脫離 worker 樹（gpt-5.5 P3-panel F2，depth-0 以 mutation-validation 判 non-reproducible-honestly、adversarial-only）；(3) 同 uid inode-rebind／`(deleted)` fd 自替換（gpt-5.5 F3/F4、非升權，worker 本就控自身輸出）；(4) model 在 CLI chrome 前注入 fake banner（F1，需 CLI compromise）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation。
 - **Effort**: S–M。
 - **Source**: 2026-07-18 v2.32.54 P1 review round 4 + P3 terminal qc panel（gpt-5.5/opus）＋ depth-0 mutation-validated adjudication（project ledger p1 round-4 / p3 finding_adjudicated events）。
 
 ### classify-error quota 共現 gate 偏寬 — 裸 `status`/`error` 子串共現即判 quota
-- **Trigger**: 下次 passive quota-capture 出現假陽性（把非額度錯誤記成 `quota_exhausted`）；或下次動 `engine-capability-state.js` 的 classify-error。
+- **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；既有對抗 fixture 已證明 acceptance gap。
 - **Context**: v2.32.53 的 `payment required`/`balance exhausted` 共現 gate 用裸子串（`402`/`status`/`error`/`http` 任一共現即過）——opus 對抗探針實證兩個假陽性樣板可通過。要精度就把 gate 綁到數字 HTTP token（如 `\b402\b`/`status[ :=]4xx`）而非裸詞。前身兩項 run E 殘項（quota merge role 分片、`on_engine_unavailable` 接線）已於 v2.32.54 核銷。
 - **Effort**: Fix
 - **Source**: 2026-07-17 /l5 run E opus panel 🔵（殘留意見）；v2.32.54 核銷時拆出
@@ -113,7 +127,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-07-31 code/backlog audit。
 
 ### Orchestrator edit-gate hermetic baseline
-- **Trigger**: 下次修改 orchestrator edit gate，或在不同 HOME／CI host 重跑其 baseline。
+- **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-change deferral；test 繼承真實 HOME 是已知 hermeticity gap。
 - **Context**: 舊條目中的 context-budget HOME、OpenCode migration 與 eval-doc claims 均已修復；目前只剩 orchestrator edit-gate test 仍繼承真實 HOME，需建立 fresh hermetic baseline。
 - **Effort**: S。
 - **Source**: 2026-07-31 exhaustive backlog audit；targeted gate test目前 20 assertions green。
@@ -131,7 +146,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: docs/plans/2026-07-04-surface-area-reduction.md §B4；v2.31.16 收尾 deferred。
 
 ### distill/learn 邊界句進 description(+ retro「session」詞彙鄰接註記)
-- **Trigger**: 下次修改 `skills/distill/SKILL.md` 或 `skills/learn/SKILL.md` 的 description;OR 實際觀察到一次 distill↔learn(或 distill↔retro)誤路由。
+- **Status**: PLANNED — D5 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-description-change deferral；routing boundary is already absent from discovery text.
 - **Context**: v2.31.18 episodic 觸發語(「這個專案的方法論值得留」等)使 distill 的觸發面更靠近 learn 領域;「learn 記事實、distill 產程序」的邊界句目前只住在 finish-flow L-5.6 的提示裡,不在兩個 skill 自身的 description/Not-for(gap 先於本次變更存在,review 判非阻斷)。retro 的 "session analysis" 與 "distill this project/session" 詞彙鄰接、動詞相異,今日無字面碰撞。改 description = 路由面 = L 待遇。
 - **Effort**: S(但 L 待遇 review)
 - **Source**: 2026-07-05 v2.31.18 L-5.2 review(autopilot:reviewer)兩條 Suggestion。
@@ -143,14 +159,16 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-07-10 L6-r2 WS-A campaign;MiniMax R2 的「reviewer-circular 標注」警告實證。
 
 ### distill-scan 校準：friction bucket 混入非使用者文本 ＋ 複合命令儀式盲點
-- **Trigger**: next time touching `scripts/distill-scan.js`，OR 下一輪 /distill 再次觀察到同類噪音。
+- **Status**: PLANNED — D5 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；both precision and recall gaps were reproduced in the recorded corpus.
 - **Context**: 2026-07-04 首次全量掃描（761 sessions）發現兩個校準問題：(1) **friction bucket 噪音** —— 「recurring-correction candidates」樣本混入大量非使用者更正文本：`<teammate-message>` 轉發、dispatch prompt（「OUTPUT ONLY RAW JSON…」「Review this change for security…」）、session-continuation 摘要 —— `--real-only` 沒把這些注入類內容濾掉，稀釋了真實 friction 訊號；建議在抽取層排除 teammate-message 區塊/已知 dispatch-prompt 模板/continuation 標頭。(2) **複合命令儀式盲點** —— n-gram 對「單次 Bash 呼叫內的多步 pipeline」不可見：同 session 實測跑了 ≥8 次的「rewrap→encrypt→push」發布儀式完全沒出現在 trigram/bigram（每次都是一個大複合命令，tokenizer 只取首 token）；若複合命令內部的 `&&`/`;` 步驟能拆進 n-gram 流，這類儀式才可被挖掘。兩者都不影響現有計數正確性，是召回率問題。
 - **Effort**: S（friction 過濾）＋ S–M（複合命令拆解，注意別把 heredoc 內容誤拆）
 - **Source**: 2026-07-04 Fable 5 session 首次 /distill 全量掃描實測。
 
 
 ### distill identifier lint 開放給外部 skill pack 使用（單獨入口）
-- **Trigger**: 下次要**公開分享**任何手寫個人 skill pack（如 `~/projects/skills/`）之前；OR next time touching distill 的 lint 程式碼。
+- **Status**: PLANNED — D5 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；the reusable lint entry point is a known missing interface.
 - **Context**: distill 的 identifier lint（email/IPv4/`/home/<user>/`/FQDN/key-shapes ＋ `~/.autopilot/distill/identifiers.deny`）目前只在 distill 流程內部可用。手寫的個人 pack（本次的 teaching-materials 等五個 skill 走 self-use 豁免，含使用者自己的路徑/帳號）在公開分享前需要同一道 lint，但沒有獨立入口可呼叫。建議：把 lint 抽成可獨立執行的入口（`--path <dir>` 掃任意 skill 目錄），distill 內部改為呼叫同一入口 —— 一份實作兩處使用。
 - **Effort**: S
 - **Source**: 2026-07-04 Fable 5 session；`~/projects/skills/` pack 建立時的自用豁免決定。
@@ -162,22 +180,24 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: historical multi-runner incidents；2026-07-31 hygiene rewrite。
 
 ### `dispatch-review.sh` echo-hardening — derived/transformed delimiter (max-security variant)
-- **Trigger**: next time the nonce wrapped-block protocol is revisited, OR if an engine is observed echoing the whole prompt INCLUDING the nonce markers AND starting its output with the marker (defeating the prefix check).
-- **Context**: v2.31.3 chose the plain-nonce-as-prefix + reject-guard hybrid (codex's design-debate alternative: give a nonce and require the model to TRANSFORM it into the accepted delimiter, so a pure prompt-echo can't reproduce the derived marker). The transform variant is max-security but risks FALSE-NEGATIVES on weaker engines that flub the transform (a correct review lost to a parse miss) — deferred pending a per-engine transform-reliability spike. Only adopt if the spike shows the target engines compute the transform reliably.
+- **Status**: PLANNED — D4 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-protocol-change deferral；runner reliability measurement is a gate inside D4, not a reason to leave the gap unscheduled.
+- **Context**: v2.31.3 chose the plain-nonce-as-prefix + reject-guard hybrid (codex's design-debate alternative: give a nonce and require the model to TRANSFORM it into the accepted delimiter, so a pure prompt-echo can't reproduce the derived marker). D4 owns the per-engine reliability matrix and canonical derived-delimiter implementation; a runner that cannot satisfy the frozen framing contract fails closed rather than keeping a permissive parser.
 - **Effort**: Fix (spike-gated)
 - **Source**: 2026-07-03 cross-family design debate (codex gpt-5.5 vs grok), v2.31.3.
 
 
 
 ### Per-event opt-in hook multiplexer (perf) — avoid spawning gated-off opt-in hooks on every tool call
-- **Trigger**: tool-call latency telemetry shows the gated-off opt-in hooks' `node` startup is material (heavy-session cumulative), OR next time touching hook wiring perf.
-- **Context**: v2.26.2 wires all 12 opt-in hooks in `hooks.json`, so each spawns `node` (then gate-exits ~immediately) on every matching tool call for ALL users even when disabled — in line with existing default-on hooks but additive (5 PreToolUse + 4 Stop + 3 PostToolUse). The only update-stable wiring is `hooks.json` (token must resolve), so the spawn is unavoidable without a single per-event multiplexer hook that reads the manifest + config once and dispatches only the enabled opt-in hooks.
+- **Status**: PLANNED — D6 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；benchmarking stays inside D6, but the known disabled-process spawn is scheduled now.
+- **Context**: 現在共有 15 個 unique opt-in hooks、16 個 event registrations（`mcp-health` 同時註冊兩個 events）。每個 matching registration 即使 disabled 仍先 spawn `node` 再快速 gate-exit。D6 將以 single per-event multiplexer 讀 manifest/config、只派 enabled hooks，並把 before/after latency 與 process count 留作驗收證據。
 - **Effort**: L
 - **Source**: v2.26.2 design tradeoff (accepted, gpt-5.5 spec-reviewed).
 
 ### Domain-aware routing — consume the `work_domain` telemetry to route reviewer/implementer by diff domain
-- **Trigger**: ALL of these prerequisites are met (telemetry alone is NOT a trigger — the v2.25.x measurement layer ships first, on purpose): (1) `/l5` honors `reviewer_runner` via `dispatch-review.sh` so a non-`codex` (e.g. `gemini-flash`) reviewer can actually be dispatched — today `/l5` hardcodes `codex exec`; (2) a **two-pass resolve** in `resolve-review-loop.sh` (resolve once to learn the domain, then re-resolve the roster conditioned on it) without breaking the single-shot JSON contract; (3) a **pre-impl planned-scope signal** for *implementer* routing — a post-impl diff-probe can't choose the implementer before the work exists (R2); (4) **per-project per-domain calibration with n≥30** real samples (current evidence is one `llm-playground` exam, n=15 backend-cli — far too thin to crown a per-domain engine); (5) an **inner-reviewer-family field** distinct from the panel-only `cross_family_*` semantics (those gate the depth-0 qc_panel vs the implementer, NOT the inner per-round reviewer's family).
-- **Context**: 2026-06-26 dogfood found best-model is **domain-dependent** (`gemini-3.5-flash` leads Rust 54% of that exam; `opus-4.8` matches-or-leads backend-cli, autopilot's own shape) — but the evidence is thin and the routing target (`gemini` reviewer) isn't plumbed. The 5-round gpt-5.5 loop converged the whole plan to **measure-now-route-later**: ship `probe-diff-domain.sh` + the resolver's `work_domain`/`domain_source` telemetry keys + the `/l5` ledger column (done), defer ALL routing here. `qc_panel`/`cross_family_*`/`--enforce` stay untouched by domain. Plan: [`docs/plans/2026-06-26-domain-aware-roster.md`](plans/2026-06-26-domain-aware-roster.md).
+- **Trigger**: ALL remaining prerequisites are met (telemetry alone is NOT a trigger): (1) a **two-pass resolve** in `resolve-review-loop.sh` without breaking the single-shot JSON contract; (2) a **pre-impl planned-scope signal** for implementer routing; (3) **per-project per-domain calibration with n≥30** real samples; (4) an **inner-reviewer-family field** distinct from panel-only `cross_family_*` semantics.
+- **Context**: `/l5` 現已把 resolved `reviewer_runner` 傳入 `dispatch-review.sh`，所以舊 prerequisite (1) 已完成；domain probe 仍只輸出 `work_domain`/`domain_source` telemetry，沒有 domain-conditioned roster 或 two-pass routing。維持 **measure-now-route-later**；`qc_panel`/`cross_family_*`/`--enforce` 不受 domain 影響。Plan: [`docs/plans/2026-06-26-domain-aware-roster.md`](plans/2026-06-26-domain-aware-roster.md).
 - **Effort**: L (each prerequisite is its own sub-task; (1) alone is S–M).
 - **Source**: 2026-06-26 domain-telemetry ship (Phase 4); the deferred KR4 of the plan.
 
@@ -200,7 +220,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-06-23 `docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md` scope-cut + Phase L ship (`577ba8d`).
 
 ### Generated `.opencode/agent-bodies/*.body.md` relative links break one level deep
-- **Trigger**: next time `scripts/sync-agent-bodies.sh` is touched, OR an OpenCode agent reports a dangling `code-review.md` link
+- **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；the generated relative link is already known broken.
 - **Context**: 2026-06-02 link-check found `.opencode/agent-bodies/reviewer.body.md` inherits `../skills/quality-pipeline/references/code-review.md` from `agents/reviewer.md` — correct at `agents/` depth, but resolves to `.opencode/skills/...` (missing) from `.opencode/agent-bodies/`. Generated artifact; the link is informational and the body is consumed via OpenCode `{file:..}` inline, so low severity. Fix options: (a) sync script rewrites `../` → `../../` for links when generating bodies; (b) make the source links repo-root-relative; (c) accept. NOTE: the v2.7.x validate.sh link-check is scoped to `skills/` only, so this does NOT fail CI today.
 - **Effort**: S (fiddly — link-rewriting in the sync script risks other links)
 - **Source**: 2026-06-02 level-3 deep scan + validate.sh link-check enhancement
@@ -224,7 +245,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Source**: 2026-06-23 `/next` follow-up — user-requested survey of headroom + rtk; two Explore-agent technical reports + same-session spike (rtk not installed, CC 2.1.186, intent `last_tool_source:"transcript"` confirms transcript-pivot ≠ stdin, zero live PreToolUse hooks).
 
 ### `verify_strength` as the third density input — decomposed into ordered precursors
-- **Trigger**: After precursor (1) is in use and a strength-scoring instrument can be calibrated, or next time changing `resolve-review-loop.sh` density/risk inputs.
+- **Status**: PLANNED — D7 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — precursor (1) is shipped；owner decision admits scorer calibration and resolver consumption now instead of waiting for another density edit.
 - **Context**: The `t2×medium` escape cliff showed that verification quality is invisible to review routing; the remaining work is the calibrated scorer (2), then its fail-safe routing input (3).
 - **Effort**: L for precursor (2), then M for precursor (3).
 - **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
@@ -232,8 +254,8 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-07-09-verify-strength-precursors.md). Evidence: the escape cliff where `t2×medium` verification produced 100% escapes — verification QUALITY is invisible to `resolve-review-loop.sh` routing.
 
 - **✅ Precursor (1) — red-green validation instrument** — DELIVERED 2026-07-09 (v2.32.11): `scripts/verify-red-green.sh` proves a change's tests are RED at base+tests / GREEN at head (else they don't exercise the change). Isolated detached worktrees; verdict from real exit codes. This is the BACKLOG's named minimal precursor.
-- **🔜 (2) — real test-suite "verification strength" scorer** — a graded (`weak|medium|strong`) score for an ACTUAL project's suite guarding a change (NOT the pipeline-bench synthetic fixtures). Candidate signals: per-test red-green (precursor 1), mutation-survival / assertion density on the diff, changed-line coverage, oracle presence. Needs its own calibration corpus tying scores to real escape outcomes. **Depends on (1).** Effort L.
-- **🔜 (3) — `resolve-review-loop.sh` consumes `verify_strength`** — fold the (2) score into the existing risk/density machinery (weak suite ⇒ more review depth; strong ⇒ less). Must be additive (byte-identical prefix + appended keys, like `--domain`/`min_panel_size`) and fail-safe (unknown ⇒ weakest ⇒ most review). **Depends on (2)** + the trust-tiered-review policy. Effort M.
+- **📋 PLANNED D7 (2) — real test-suite "verification strength" scorer** — a graded (`weak|medium|strong`) score for an ACTUAL project's suite guarding a change (NOT the pipeline-bench synthetic fixtures). Candidate signals: per-test red-green (precursor 1), mutation-survival / assertion density on the diff, changed-line coverage, oracle presence. Needs its own calibration corpus tying scores to real escape outcomes. **Depends on (1).** Effort L.
+- **📋 PLANNED D7 (3) — `resolve-review-loop.sh` consumes `verify_strength`** — fold the (2) score into the existing risk/density machinery (weak suite ⇒ more review depth; strong ⇒ less). Must be additive (byte-identical prefix + appended keys, like `--domain`/`min_panel_size`) and fail-safe (unknown ⇒ weakest ⇒ most review). **Depends on (2)** + the trust-tiered-review policy. Effort M.
 ### M3-band fixtures（t15-t17）若供對抗性 implementer 情境重用，需 process-isolation 邊界
 - **Trigger**: 下次把 `evals/orchestration/tasks/t15-cache-invalidation`、`t16-findings-triage`、`t17-purity-invariant` 用於對抗性 implementer 情境（`/l5`、`/l6` hetero 派遣、或任何候選碼不可信的場合）。
 - **Context**: 這三個 oracle 的判分 python 與候選碼在**同一個 process** 內執行，候選模組 import 時可用 `sys._getframe()` 走訪呼叫端 frame 的 globals/locals，撈出判分器從未匯出的密鑰。opus 2026-07-09 對抗性重攻實測兩條可靠（5/5 PASS）exploit：N2（t15）——撈出真 `NONCE` 偽造 token 且從不呼叫注入的 `compute_fn`，fidelity 與 cache 軸皆假過；N2'（t17）——重同步 purity 檢查區塊的 `snapshot` 局部變數，一邊 mutate 一邊讓 `snapshot == recs` 恆真。R2 硬化（4 條 planted-file/env/stdout 攻擊）已修好且仍成立，但這條 in-process introspection 類別是**架構性**盲點，不是 R2 修復範圍。真正封死需要候選函式呼叫跑在與判分器分離的 subprocess/interpreter（process isolation），對映 `check-test-integrity.sh` L1 block-mode 在 CLAUDE.md 已記錄的同一結論（no local-only same-process mechanism 對抗同帳號候選碼是防偽的）。
@@ -248,7 +270,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 ### First local runner capability semantics（availability/load，不是 quota）
 - **Trigger**: 第一個 local runner（例如 ollama 類）接入 capability-state producer。
-- **Context**: named endpoint identity 已實作；剩餘設計只針對 local source class，需以 availability/load shape 表達，不能套用 metered quota enum。
+- **Context**: named endpoint identity 與獨立的 local-deployment availability/load observation schema 已實作；剩餘工作縮為第一個真實 local runner 的 observation→capability-state producer bridge。不得把現有 metered quota enum 套到 local source class。
 - **Effort**: S。
 - **Source**: 2026-07-14 status CLI design + 2026-07-31 code audit。
 
@@ -292,7 +314,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:7b5ad93159eca2090d4069fee65229da2c5e91b3aa5087e3fcff67a3f3c6d8c2 -->
 ### Controller helper API fail-closed hardening
-- **Status**: OPEN — retained post-merge follow-up; no active implementation worktree。
+- **Status**: CONDITIONAL — retained post-merge follow-up；trigger 尚未成立，no active implementation worktree。
 - **Trigger**: Before these helpers are reused outside the current production Engine call sites or exposed to caller-supplied state/evidence.
 - **Context**: Close the helper-level fail-open edges recorded as CED-N01, CED-N02, CED-N03, CED-N05, and CED-N06: require explicit spend projection, preserve/reject empty controller replacement, require repository authority, reject traversal internally, and make test evidence carry production-equivalent binding.
 - **Effort**: S（re-estimate under the new ticket contract）
@@ -300,7 +322,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:d1e3cafc6b25e4ccde534f237ecac97b66953f2c76b2d56df8a77993b916fd69 -->
 ### Boundary outcome and root dispatch semantics
-- **Status**: OPEN — retained post-merge follow-up; no active implementation worktree。
+- **Status**: CONDITIONAL — retained post-merge follow-up；trigger 尚未成立，no active implementation worktree。
 - **Trigger**: Before boundary receipts drive automated recovery or parallel independent graph nodes under one root are enabled.
 - **Context**: Derive or remove mutation_failed/unknown_status instead of hardcoding them, and decide whether root-wide nonterminal exclusion is intentional; if not, retain root CAS while scoping dispatch blockers to the exact graph node.
 - **Effort**: S（re-estimate under the new ticket contract）
@@ -308,7 +330,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:ecc22ecefe311bf8a185548841308087b4c6c96cf2b73b3ca14471c005ba7bc5 -->
 ### Portable byte and Work Order lifecycle hardening
-- **Status**: OPEN — retained post-merge follow-up; no active implementation worktree。
+- **Status**: CONDITIONAL — retained post-merge follow-up；trigger 尚未成立，no active implementation worktree。
 - **Trigger**: Before Mission paths may contain symlinks, generic Work Order imports are accepted, or reconciliation runs on restricted process-table platforms.
 - **Context**: Unify symlink byte hashing with Git, reject/strip disposition_receipt on non-stale records, and convert PROCESS_TABLE_UNREADABLE into an explicit fail-closed Work Order classification.
 - **Effort**: S（re-estimate under the new ticket contract）
@@ -316,7 +338,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:d1d21b3988f6e89eff3964a1e5e56f12171fd4d3cf50b23634364d087380df26 -->
 ### Durable resume and review authority binding
-- **Status**: OPEN — retained post-merge follow-up; no active implementation worktree。
+- **Status**: CONDITIONAL — retained post-merge follow-up；trigger 尚未成立，no active implementation worktree。
 - **Trigger**: Before automatic durable resume, reviewer roster rotation, seat retry, or more than one candidate per repair generation is enabled.
 - **Context**: Make all durable stop payloads pass verbatim resume validation, bind full-diff barriers to the exact candidate and review kind, and include sealed reviewer roster/seat identities in full-diff and joint-review reuse keys.
 - **Effort**: S（re-estimate under the new ticket contract）
@@ -324,7 +346,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:aed0cfc35dd07b4cabf1545ca4bdba4d0a308824eaa3b1631f3f6d9c9ce11811 -->
 ### Explicit findings identity authority
-- **Status**: OPEN — retained post-merge follow-up; no active implementation worktree。
+- **Status**: PLANNED — trigger satisfied；D2 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md). Helper 已 export，且仍以 `findingsIdentityOk = true` fail-open。
 - **Trigger**: Before classifyMissingDisposition is reused or exported to any caller that may omit identity validation.
 - **Context**: Remove the fail-open findingsIdentityOk default and require every classifyMissingDisposition call to pass an explicit identity verdict.
 - **Effort**: S（re-estimate under the new ticket contract）
@@ -332,7 +354,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:42b943b1cd29c7de6d0b621337c605400ea73e33b531b47ee7d7b2dd04ccfc9f -->
 ### Mission graph and campaign capacity boundary hardening
-- **Status**: OPEN — retained post-merge follow-up; no active implementation worktree。
+- **Status**: CONDITIONAL — retained post-merge follow-up；trigger 尚未成立，no active implementation worktree。
 - **Trigger**: Before graph hot reload/concurrent writers or caller-supplied non-default campaign capacities are supported.
 - **Context**: Read Mission graph bytes once or bind the validation read to the inspected digest, and mirror max_owned_worktrees/temp_capacity_limit/max_prompt_bytes/max_finding_recurrence schema caps in the executable validator.
 - **Effort**: S（re-estimate under the new ticket contract）
@@ -340,7 +362,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:d574960cb87250d45554901630cdff86ddfd59f5d313a40e657bf7de3f7b7be3 -->
 ### Orphan leaf liveness and resource reconstruction
-- **Status**: OPEN — retained post-merge follow-up; no active implementation worktree。
+- **Status**: CONDITIONAL — retained post-merge follow-up；trigger 尚未成立，no active implementation worktree。
 - **Trigger**: Before orphan adoption or resource inventory is used as closure/capacity authority after controller or worktree-creation crashes.
 - **Context**: Persist and re-observe leaf process identity before orphan adoption; discover orphan branches and never-registered worktrees; mechanically re-derive active inventory rows.
 - **Effort**: S（re-estimate under the new ticket contract）
@@ -348,7 +370,7 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:516726d963e606a0bf2ec621ad6962a0228863ff976a64a703be7bbd2d4a598d -->
 ### Terminal status and receipt trust boundary
-- **Status**: OPEN — retained post-merge follow-up; no active implementation worktree。
+- **Status**: CONDITIONAL — retained post-merge follow-up；trigger 尚未成立，no active implementation worktree。
 - **Trigger**: Before external/legacy terminal receipts cross a trust boundary or the threat model expands beyond confused controllers.
 - **Context**: Enforce the closed terminal_status enum at receipt validation and Work Order classification, resolve the unused attached disposition, and document integrity-hash versus producer-attestation guarantees under the confused-controller threat model.
 - **Effort**: S（re-estimate under the new ticket contract）
@@ -356,8 +378,8 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 
 <!-- autopilot-follow-up:8f70c159902a5d75d701b775ac9378f53ec4e9380a2534cab6674bf06083d475 -->
 ### Shared sealed zero-diff validator
-- **Status**: DEFERRED — P3；schema/fourth-consumer trigger not met。
-- **Trigger**: When the zero-diff schema next changes or a fourth production consumer is introduced.
+- **Status**: PLANNED — D2 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
+- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-schema-change deferral；three duplicated production validators are sufficient present debt.
 - **Context**: Move sealed zero-diff receipt validation into one deterministic shared helper consumed by shell, Engine, and runner boundaries.
 - **Effort**: S（re-estimate under the new ticket contract）
 - **Source**: depth-0-adjudication-760b

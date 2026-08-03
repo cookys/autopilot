@@ -8,13 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-08-02 | [backlog-actionable-successor](2026-08-02-backlog-actionable-successor/README.md) — 51-entry backlog normalized into one bounded `/l5` Mission: 3 deliverables / 2 batches / 11 gate attempts; 6 entries scheduled or evidence-resolved, 2 Board-only, 43 remain trigger-banked. Exact graph is frozen and implementation has not started. | v2.34.1 (no bump) | `develop` (planning packet only) |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-08-03 | [backlog-actionable-successor](_archive/2026-08-02-backlog-actionable-successor/README.md) — 51-entry intake completed as three bounded deliverables through one implementer lineage; four completed entries removed, one strict-L5 trust-root prerequisite added, 48 remain trigger/Board-gated. Whole-diff QC has zero verified blocker; local merge only, with effective-L4 authority recorded honestly. | v2.34.1 (no bump) | `fa076b3c` | [plans](../plans/2026-08-02-review-path-efficiency.md) |
 | 2026-08-02 | [codex-payload-residual-spike](_archive/2026-08-02-codex-payload-residual-spike/README.md) — 三 probe bundle 完成：installed payload PASS、Git marketplace refresh UNPROVEN、native automatic generation lifecycle FAIL，conjunctive NO-GO；七路徑 successor candidate 通過 deterministic gates 與獨立 first-pass review，已本地整合，保留 committed skill mirrors，不做 migration。 | v2.34.1 (no bump) | `ded66265` | [plan](../plans/2026-08-02-codex-payload-residual-spike.md) |
 | 2026-08-02 | [reviewer-output-token-budget](2026-08-02-reviewer-output-token-budget/README.md) — optional `--max-tokens` 以兩條 verified native mapping、五條 pre-spend rejection、strict omission/truncation 與 byte-equal Codex mirrors 完成；250＋74 assertions、260-file suite、獨立 verifier 與 depth-0 跨家族 QC 全部收斂。 | v2.34.1 (no bump) | `22175030` | [plan](../plans/2026-08-02-reviewer-output-token-budget.md) |
 | 2026-08-02 | [hook-test-harness-determinism](2026-08-02-hook-test-harness-determinism/README.md) — output-quiescence 改以 production helper 的 logical poll clock 判定，`8>4` planted control 證明非 vacuous；session-start direct Node 明確 EOF，held-open parent regression、260-file suite與三席獨立 QC 全綠。 | v2.34.1 (no bump) | (this local merge) | [plan](../plans/2026-08-02-hook-test-harness-determinism.md) |

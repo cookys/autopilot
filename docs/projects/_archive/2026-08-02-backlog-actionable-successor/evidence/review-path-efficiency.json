@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "artifact_type": "review_path_efficiency",
-  "status": "repair_generation_1_implementation_evidence_pending_authoritative_qc",
+  "status": "accepted_after_authoritative_qc",
   "observed_at": "2026-08-03T10:00:00Z",
   "implementation": {
     "base": "e287704340c2d3afd3116d4b44a1bc3edfb5bdd8",
@@ -27,10 +27,11 @@
   },
   "verification": {
     "focused": {
-      "hooks/tests/review-path-efficiency.test.sh": "pass (15 assertions)",
-      "hooks/tests/verify-red-green.test.sh": "pass (35 assertions)",
-      "hooks/tests/dispatch-review.test.sh": "pass (252 assertions)",
-      "hooks/tests/dispatch-author.test.sh": "repair fixture added; full dispatch suite is environment-sensitive and remains pending"
+      "hooks/tests/review-path-efficiency.test.sh": "pass (17 assertions)",
+      "hooks/tests/verify-red-green.test.sh": "pass (48 assertions)",
+      "hooks/tests/dispatch-review.test.sh": "pass (257 assertions)",
+      "hooks/tests/dispatch-author.test.sh": "pass (88 assertions)",
+      "hooks/tests/autopilot-engine.test.sh": "pass (469 assertions)"
     },
     "exact_commands": [
       "bash -n scripts/dispatch-review.sh scripts/dispatch-author.sh scripts/diff-since-last-round.sh scripts/verify-red-green.sh",
@@ -43,7 +44,8 @@
       "bash scripts/validate.sh",
       "AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh"
     ],
-    "authoritative_qc": "pending depth-0 whole-diff review; this receipt is implementation evidence only"
+    "authoritative_qc": "pass: final-panel-r7 plus depth-0 deterministic reconciliation; no verified unresolved Critical or Major finding",
+    "complete_suite": "261/262 in one run; sole unchanged-base retro fixture time-bomb repaired test-only and independently focused-pass at 140 assertions"
   },
   "receipt": {
     "same_lineage": true,

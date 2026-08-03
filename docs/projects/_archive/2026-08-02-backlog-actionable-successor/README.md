@@ -1,31 +1,30 @@
 # Backlog actionable successor
 
-> Status: PLANNED — exact Mission packet under independent review; no implementation effect yet  
-> Owner: depth-0 CEO + one worktree-isolated `/l5` foreman lineage  
-> Plans: [R6 coordination](../../plans/2026-08-02-foreman-depth0-coordination-r6.md),
-> [review-path efficiency](../../plans/2026-08-02-review-path-efficiency.md), and
-> [skill metadata/hygiene](../../plans/2026-08-02-skill-metadata-portability-hygiene.md)
+> Status: COMPLETE — locally merged to `develop` as `fa076b3c`; no version bump or push
+> Owner: depth-0 CEO + one worktree-isolated implementer lineage; effective `/l4` closeout
+> Plans: [R6 coordination](../../../plans/2026-08-02-foreman-depth0-coordination-r6.md),
+> [review-path efficiency](../../../plans/2026-08-02-review-path-efficiency.md), and
+> [skill metadata/hygiene](../../../plans/2026-08-02-skill-metadata-portability-hygiene.md)
 
 ## Goal
 
-Turn the current 51-entry backlog into a bounded executable successor: admit only triggered or
-evidence-resolvable work, group related items into three deliverables, preserve one foreman/implementer
-lineage across repairs, and leave Board-only or untriggered work honestly banked.
+The 51-entry intake was normalized into three bounded deliverables and completed through one
+implementer transcript/branch lineage. Four completed entries were removed, one newly exposed strict
+`/l5` trust-root prerequisite was added, and the remaining 48 entries stay honestly trigger- or
+Board-gated.
 
 ## Intake accounting
 
-| Disposition | Count | Entries |
+| Terminal disposition | Count | Entries |
 |---|---:|---|
-| Scheduled or evidence-resolved in this Mission | 6 | R6 foreman/depth-0 coordination; review-efficiency B1/B2; review-response leakage/polarity; `tier:` frontmatter portability; `CLAUDE.md` capacity trigger; OpenCode check-16 recovery re-probe/disposition |
-| Board-only | 2 | Tree calibration graduation; Fable skills absorption |
-| Trigger bank | 43 | Leaf-output compaction plus every remaining entry whose trigger, prerequisite, or evidence threshold is not met |
-| **Total real entries** | **51** | The `<Topic title>` heading in `docs/BACKLOG.md` is a template, not an entry |
+| Completed and removed | 4 | R6 coordination; review-path B1/B2; review-response leakage/polarity; `CLAUDE.md` capacity hygiene |
+| Trigger bank retained | 46 | Includes frontmatter portability after an `inconclusive` real probe, OpenCode after a negative re-probe, and the new strict `/l5` provider-readiness trust root |
+| Board-only retained | 2 | Tree calibration graduation; Fable skills absorption |
+| **Current real entries** | **48** | `51 - 4 completed + 1 newly exposed prerequisite`; the `<Topic title>` template is excluded |
 
-“Scheduled or evidence-resolved” is not a promise that all six rows will be removed. A failed or
-inconclusive real platform probe is a valid D3 terminal and keeps its backlog entry. Fresh OpenCode
-1.17.15 evidence is negative (`dev-flow` discovery 0/1/0), so check 16 remains advisory in this Mission.
-Leaf-output compaction is not admitted: the current complaint does not satisfy its concrete raw-leaf
-output trigger.
+The frontmatter probe ended truthfully as `inconclusive`, so no `tier:` migration occurred. Fresh
+OpenCode 1.17.15 evidence remained negative (`dev-flow` discovery 0/1/0), so check 16 stays advisory.
+Leaf-output compaction was not admitted because its concrete raw-leaf-output trigger was not met.
 
 ## Bounded deliverable DAG
 
@@ -80,12 +79,16 @@ allowlist is a depth-0 scope decision before writing, not an implicit expansion.
 
 ## Acceptance and closeout
 
-Each node must satisfy its frozen rubric and exact command set. After the downstream node completes,
-depth 0 runs authoritative whole-diff QC with independent reviewer seats and reconciles all 51 intake
-rows. Bound to `root_run_id === sealed campaign_id`, it persists fresh task-status receipts before merge
-(`can_merge=true`), after merge, and before marker clear (`can_close=true`); runs the canonical worktree
-then branch reapers; and freshness-checks a `LifecycleResidueReceipt` with `zero_residue=true`. Every
-attempt uses a unique caller-owned mode-0700 artifact directory outside leaf worktrees, and receipt paths
-plus digests go into `dev-info.md`. Only after local integration and those gates does depth 0 move the
-complete project/evidence directory to `_archive`, update the index, and clear the marker. There is no
-version bump, release, push, pull request, CI dispatch, or external publication in scope.
+All three node rubrics are terminal. The final blind whole-diff panel produced one clean Architect seat;
+the Ops and Skeptic seats each raised one Major that deterministic source inspection refuted. No verified
+Critical or Major remains. The one complete-suite run ended 261/262 with only the unchanged-base
+`retro-review-loop` date-window fixture failing; the same failure reproduced on immutable base, its
+test-only clock was pinned, and an independent focused rerun passed 140 assertions. Mirrors and
+`sync-all --check` pass.
+
+Strict `/l5` status authority was unavailable: the actual dispatch run was
+`l4-backlog-actionable-successor-20260803-001`, and `status task` correctly returned
+`TASK_STATUS_INPUT_UNAVAILABLE`. Closeout therefore uses the actual effective `/l4` authority instead of
+forging `can_merge`/`can_close` receipts; the missing strict-L5 CLI trust root is explicitly banked.
+Artifact paths and digests are recorded in `dev-info.md`. Product code was locally merged once with a QC
+trailer. There was no version bump, release, push, pull request, CI dispatch, or external publication.

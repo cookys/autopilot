@@ -31,6 +31,7 @@
   "verification": {
     "focused": {
       "scripts/tests/run-ledger-concurrency.test.sh": "pass (62 assertions)",
+      "final_repair_ledger_focused_set": "pass (96 assertions)",
       "hooks/tests/watch-foreman.test.sh": "pass (20 assertions)"
     },
     "exact_commands": [
@@ -44,7 +45,8 @@
       "bash scripts/validate.sh",
       "AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh"
     ],
-    "authoritative_qc": "pending depth-0 whole-diff review; this receipt is implementation evidence only"
+    "authoritative_qc": "pass: final-panel-r7 plus depth-0 deterministic reconciliation; no verified unresolved Critical or Major finding",
+    "complete_suite": "261/262 in one run; sole unchanged-base retro fixture time-bomb repaired test-only and independently focused-pass at 140 assertions"
   },
   "receipt": {
     "zero_residue": true,

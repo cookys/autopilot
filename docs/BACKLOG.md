@@ -46,12 +46,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Effort**: Board decision (then S per selected slice)。
 - **Source**: `docs/plans/2026-07-08-fable-skills-absorption.md`。
 
-### Foreman↔depth-0 coordination R6 — reliable state, ownership lease, and adaptive recovery
-- **Trigger**: The next multi-foreman `/l6` campaign, or the next incident where a quiet worker is mistaken for dead / two controllers touch the same stage / a stalled dispatch must be killed and re-dispatched.
-- **Context**: Lineage, heartbeats, status watching, and the advisory directive channel are shipped, but they still cannot reliably distinguish `{working, waiting, blocked, dead}`. Ownership is not structurally lease-gated across foreman and depth-0, and Stage 3 policy remains open: `steer` inquiry → bounded wait → kill only on verified non-response → authorized re-dispatch. Build on the existing ledger generation/nonce and directive channel; do not infer ownership from polling or silently seize an active stage.
-- **Effort**: L.
-- **Source**: `docs/plans/2026-07-08-l6-resilience-improvements.md` R6; 2026-07-08 campaign collisions; dispatch-observability Stage 3 residual.
-
 ### OpenCode `debug skill` truncation — restore portability check 16 to hard-fail
 - **Trigger**: Upstream OpenCode fixes the corpus-volume-dependent `opencode debug skill` output truncation, or a supported OpenCode release changes the plugin/serve discovery surface again.
 - **Context**: `scripts/preflight-portability.sh` check 16 is intentionally advisory while OpenCode 1.17 can omit discovered skills from `debug skill` output. Re-probe the real CLI after the upstream fix; if deterministic, restore the check to hard-fail. Do not treat the current advisory as a permanent acceptance of missing skill discovery.
@@ -87,12 +81,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: v2.34.1 ships the host-neutral checkpoint/rehydration gate and a `PostCompact`-ready adapter contract, but deliberately does not register a production Codex hook from an unaccepted local probe. Once the trigger fires, wire only the verified adapter, add a live replay proving the first effectful post-compact action is blocked until reconciliation, and update the Codex package boundary without importing Claude hook assumptions.
 - **Effort**: M
 - **Source**: controller-execution-discipline v2.34.1 boundary; preserved user-owned Codex hook-probe workspace
-
-### CLAUDE.md 逼近 40k 硬上限（目前僅餘 6 bytes）
-- **Trigger**: 下一個需要新增或擴寫 `CLAUDE.md` inventory row 的變更。
-- **Context**: 2026-08-01 實測 `CLAUDE.md` 為 39,994/40,000 bytes；inventory gate 目前仍綠，但任何正常新增都會撞上限。先把可搬的沿革／細節移到正主 reference，再新增 row。
-- **Effort**: S。
-- **Source**: 2026-07-31 backlog hygiene audit。
 
 ### agy 遙測盲區 — transcript 無 token 欄位且 91% 被平台截斷
 - **Trigger**: 要把 agy 納入任何成本／容量決策之前；或 antigravity 上游補上 usage 欄位時。
@@ -135,13 +123,6 @@ Entries without a trigger are rejected (per `skills/quality-pipeline/references/
 - **Context**: 先前 finish-flow marker blocker 已解；真正未完成的是用 session evidence 校準 deny threshold、handoff structure 與 anti-spiral policy，不能只靠靜態 token 比例。
 - **Effort**: M。
 - **Source**: context-budget follow-up audit。
-
-### B1/B2 review 路徑效率（diff-only 強制 + delta re-review）
-- **Trigger**: 下次任何 /l5 /l6 run 的 review dispatch 出現 repo 爬讀（review session token 中位數異常）或 marathon loop（>5 輪）時；或 Board 排程。
-- **Context**: 2026-07-14 研究：45% 的 codex review session 爬整個 repo（中位 698K token vs diff-only 27K，26 倍，佔全部 codex token 27%）；r23 案例每輪全量重餵 spec（160-230K 字元 × 60+ 次審查，零 delta）。對策草案：dispatch-review 各 runner 禁探索（codex --sandbox read-only 已有，加 no-tools 級收緊 + 違規 fail-closed）；round 2+ 只餵「上輪 findings + delta diff」（`diff-since-last-round.sh` 已存在，缺 reviewer-safe 輸出格式 — 現有輸出是 dispatcher-only，直接餵會洩 round-cycle meta-signal）。效益量級：codex token -27%、marathon 每輪成本降一個數量級。
-- **Effort**: L（需獨立 plan + panel review）。
-- **Source**: 2026-07-14 評估報告 §Q2；quant-codex-cookys-report。
-- **範圍修正（2026-07-14 回溯校準，calib-codex）**：「delta re-dispatch」只對 **review 側**成立（dispatch-review 每輪重餵整份 spec/diff 是 prompt 構造問題，delta 有效）；**implementer 側被資料推翻** — codex re-dispatch 起始 prompt 各輪 flat 17-20k、斜率 ≈ 0（無狀態 fresh prompt，本來就不累積），早前把 financial-order-r7 的 9.28M 歸因累積 prompt 是誤判，真實量是 session 內 agentic context 成長。implementer 側的真壓力點：預設 spark 視窗只有 121,600，44% dispatch 吃到 ≥90% — lever 是縮 dispatch scope 或把大 context 單元路由到 258k/353k 引擎（視窗相對門檻 75% warn / 90% hard），不是壓 prompt。
 
 ### skills frontmatter `tier:` 欄位（B4 step 2 — 分層進 frontmatter）
 - **Trigger**: 先在 Claude Code ＋ codex 兩平台各做一次「帶未知 frontmatter 欄位」的 plugin load dry-run 且確認解析容忍（R1-F5：未驗不得宣稱無行為影響）；兩平台紀錄在手才動工。
@@ -259,11 +240,11 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 - **Effort**: L（redesign，非修補）。
 - **Source**: opus 對抗性重攻，2026-07-09。`docs/projects/_archive/2026-07-09-m3-band-tasks/report.md` § "Residual: in-process introspection"。
 
-### Review-response leakage false reject + RED/green polarity tripwire
-- **Trigger**: 下次修改 `dispatch-author.sh`／`dispatch-review.sh`，或再次使用預授權 polarity flip 的 verification-author workflow。
-- **Context**: 保留兩個未閉環缺口：(1) 格式正確的 VERDICT/FINDINGS 不應被 prompt-leakage detector 誤拒；(2) buggy-behavior assertion 在 ship 前必須有機械 marker 證明已翻成正極性。agy author isolation 已合併到「agy reviewer/author hard isolation」。
-- **Effort**: S + S。
-- **Source**: 2026-07-08 l6-resilience deviations ledger。
+### Strict `/l5` provider-readiness CLI trust root
+- **Trigger**: Before the next strict `/l5` run uses `bin/autopilot.js engine implement-review`, or when a host-owned provider qualification/readiness authority becomes available to that CLI.
+- **Context**: The ordinary CLI path currently has no host-owned `providerReadinessAuthority` or `qualificationProvider`, so strict `/l5` fails closed with `provider_readiness_authority_missing`. Build one repo-owned fixed bootstrap that binds the exact live provider tuple, negative matrix, and observation provenance; never treat a disk receipt as authority. Until then, use an honestly labelled lower-level flow instead of forging strict-L5 task status.
+- **Effort**: L.
+- **Source**: [backlog-actionable-successor closeout](projects/_archive/2026-08-02-backlog-actionable-successor/dev-info.md), 2026-08-03 effective-L4 execution.
 
 ### First local runner capability semantics（availability/load，不是 quota）
 - **Trigger**: 第一個 local runner（例如 ollama 類）接入 capability-state producer。

@@ -57,9 +57,9 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: `docs/plans/2026-07-08-fable-skills-absorption.md`。
 
 ### Harness capability-state refresh after 2026-08 platform releases
-- **Status**: PLANNED — D1 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Status**: COMPLETE — D1 closed; D2 agy telemetry is next in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
 - **Trigger**: ADMITTED 2026-08-04 — installed Codex 0.146.0, Claude Code 2.1.220, agy 1.1.10, OpenCode 1.17.15（latest 1.18.11 亦已 isolated probe）與 Grok 0.2.118 已超過多個 committed capability baseline；Codex、agy、Grok changelog 亦新增本 repo 會消費的 hook／structured-output／usage surface。
-- **Context**: 版本或 changelog 只足以觸發重測，不能自動升級 capability。D1 會用 exact binary/version 的 live event/behavior probe 重新分類各 surface，產出帶 command/output digest 的 aggregate receipt；agy structured usage 與 Codex `PostCompact` 是 D2/D3 的必需證據，Grok hooks 必須有真實 firing receipt 才能由 warning 升級。OpenCode truncation、Codex install-generator、`tier:` metadata 等現有 negative/inconclusive 結論則保留，除非 exact probe 真正翻轉。
+- **Context**: D1 已產出 closed、content-addressed aggregate receipt：D2=2、D3=4、D4=6 個 required claims 全部 validated 且 immediate re-probe 通過；optional set 保留 OpenCode truncation、Codex install-generator、Grok `SessionEnd` usage 與 generic `tier:` 的 blocked 結論。Grok headless JSON usage 已證實，但沒有把它偷換成 host hook firing。Receipt: [`platform-capabilities.json`](projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json)。
 - **Effort**: L。
 - **Source**: 2026-08-04 code + installed CLI + CHANGELOG capability re-audit；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D1。
 
@@ -96,7 +96,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ### Codex production `PostCompact` recovery wiring
 - **Status**: PLANNED — D3 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
-- **Trigger**: ADMITTED 2026-08-04 — Codex 0.129.0 official release/PR #19905 documents `PreCompact`/`PostCompact`, `manual|auto` matchers, payload, ordering and failure semantics；installed 0.146.0 source contains the matching hook schema/runtime and plugin registration surface。D1 仍須把 exact live manual/auto firing receipt 凍結後，D3 才能接 production adapter。
+- **Trigger**: ADMITTED 2026-08-04 — Codex 0.129.0 official release/PR #19905 documents `PreCompact`/`PostCompact`, `manual|auto` matchers, payload, ordering and failure semantics；D1 已在 installed 0.146.0 上凍結 explicit `/compact` 與 threshold auto-compaction 的 live host firing claims；D3 可消費其 exact D3 claim-ID set。
 - **Context**: v2.34.1 已有 host-neutral checkpoint/rehydration gate、`postcompact-adapter` CLI 與 continuation admission，缺的是 production Codex `hooks.json`＋官方 payload translation。D3 只接這條既有 authority，並以 effectful sentinel 證明 reconciliation 前第一個 effectful action 被阻擋；不得複製 Claude payload 假設或另造 recovery path。
 - **Effort**: M
 - **Source**: controller-execution-discipline v2.34.1 boundary；Codex 0.129.0 / PR #19905 + installed 0.146.0 re-audit；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D3。

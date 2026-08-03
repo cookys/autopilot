@@ -33,6 +33,8 @@ If any target harness is `stale`, `unverified`, `warning`, `unavailable`, or bel
 |--------|-----|
 | [`scripts/measure-profile-context.js`](../../scripts/measure-profile-context.js) | Produce content-free source, rule-inventory, or persisted Codex context summaries. A byte estimate is conservative evidence only; it cannot prove an exact-token budget or another host's prompt visibility. |
 | [`scripts/probe-skill-frontmatter-portability.sh`](../../scripts/probe-skill-frontmatter-portability.sh) | Run disposable Claude Code/Codex skill-load probes and emit a version-bound pass/fail/inconclusive receipt before changing frontmatter metadata. |
+| [`scripts/probe-harness-capabilities.sh`](../../scripts/probe-harness-capabilities.sh) | Re-probe the exact platform surfaces consumed by the capability-trigger mission and delegate the closed aggregate receipt write to the canonical claim validator. |
+| [`scripts/platform-capability-claims.js`](../../scripts/platform-capability-claims.js) | Generate and immediately revalidate content-addressed capability claims plus the exact D2/D3/D4 consumer partition. Only this script emits validated claim IDs. |
 
 ## Update Rules
 
@@ -42,6 +44,8 @@ If any target harness is `stale`, `unverified`, `warning`, `unavailable`, or bel
   from native provider subscription quota and third-party provider quota.
 - Records must not contain secrets.
 - Records must not become runtime model/effort routing policy.
+- Keep execution argv separate from roster tuple metadata. In particular, agy production transport
+  selects the tiered model slug while effort stays roster metadata; a tier/effort mismatch fails closed.
 - Engine code consumes capability data; it does not infer routing from harness or model names.
 - Fresh H2 adapter evidence is not H3 dispatch/hook/gate readiness. Treat `required_level` warnings as blockers for H3+ work.
 

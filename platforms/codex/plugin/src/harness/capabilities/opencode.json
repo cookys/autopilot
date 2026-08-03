@@ -4,13 +4,13 @@
   "kind": "cli",
   "status": "warning",
   "harness_level": "H2",
-  "last_checked_at": "2026-07-14",
-  "verified_at": "2026-07-14",
-  "expires_at": "2026-07-21",
+  "last_checked_at": "2026-08-03T22:31:50.000Z",
+  "verified_at": "2026-08-03T22:31:50.000Z",
+  "expires_at": "2026-08-17T22:31:50.000Z",
   "evidence": {
-    "source": "local-isolated-server-probe-and-official-beta-docs",
-    "command": "bash hooks/tests/opencode-v2-plugin.test.sh",
-    "result": "opencode2 0.0.0-next-15493; V2 plugin setup and tool hook registration verified; intent capture path verified in isolated HOME"
+    "source": "local-version-and-isolated-debug-skill-probes",
+    "command": "opencode --version; isolated opencode debug skill probes on installed 1.17.15 and latest 1.18.11",
+    "result": "installed 1.17.15 and isolated latest 1.18.11 both truncate discovered-skill JSON near 65536 bytes; existing plugin/tool-hook verification remains valid but debug-skill completeness is unavailable"
   },
   "capabilities": {
     "repo_skills": "verified",
@@ -19,6 +19,7 @@
     "session_hooks": "unavailable",
     "intent_capture": "verified",
     "resume_hints": "unavailable",
+    "debug_skill_completeness": "unavailable",
     "blocking_gate": "unverified"
   },
   "notes": [

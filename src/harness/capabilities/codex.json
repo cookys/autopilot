@@ -4,19 +4,20 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-07-27",
-  "verified_at": "2026-07-27",
-  "expires_at": "2026-08-10",
+  "last_checked_at": "2026-08-03T22:23:16.577Z",
+  "verified_at": "2026-08-03T22:23:16.577Z",
+  "expires_at": "2026-08-17T22:23:16.577Z",
   "evidence": {
     "source": "local-execution-probe",
-    "command": "node scripts/probe-codex-enforcement.js --output docs/projects/2026-07-26-mission-convergence-portfolio/mission-p0-codex-enforcement.json",
-    "result": "codex-cli 0.145.0; an installed isolated PreToolUse hook received the real scratch tool request, returned decision:block, and prevented the harmless target file from being created"
+    "command": "isolated codex 0.146.0 TUI with installed platforms/codex/hook-probe; explicit /compact plus model_auto_compact_token_limit=1200",
+    "result": "codex-cli 0.146.0; installed warning-only hook recorded real PreCompact/PostCompact pairs for both manual and automatic compaction; D1 receipt binds the redacted host-event digest"
   },
   "capabilities": {
     "read_only_dispatch": "verified",
     "repo_skills": "verified",
     "plugin_packaging": "verified",
     "hooks": "verified",
+    "post_compact": "verified",
     "mutation_dispatch": "unverified",
     "blocking_gate": "warning"
   },

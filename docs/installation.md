@@ -44,7 +44,9 @@ opencode2
 The installer configures shared skills, installs the pinned V2 extension dependency,
 and synchronizes the generated consumer payload. OpenCode V2's plugin API is beta;
 rerun the smoke test after every upgrade. The exact verified nightly and unsupported
-capabilities are recorded in `src/harness/capabilities/opencode.json`.
+capabilities are recorded in `src/harness/capabilities/opencode.json`. Installed 1.17.15
+and an isolated 1.18.11 probe both truncated `debug skill` discovery JSON near 65,536 bytes,
+so that completeness check remains unavailable rather than being promoted from version alone.
 
 ### Codex (OpenAI)
 
@@ -70,6 +72,12 @@ Contributor shortcut:
 
 The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`, while the package payload also includes linked support files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so skill links and engine CLI commands resolve after install. Run engine commands from the target repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
 
+Codex hook development uses the separate warning-only `platforms/codex/hook-probe` package. On
+codex-cli 0.146.0, an isolated installed probe recorded real `PreCompact`/`PostCompact` pairs for
+both explicit `/compact` and automatic threshold compaction. This proves the host event substrate;
+it does not add hooks to the main skills-only package or claim that Autopilot's production recovery
+adapter has shipped.
+
 For global loose-skill availability across repos without installing the plugin package, see `platforms/codex/config.toml.example`.
 
 ### Antigravity (`agy`)
@@ -88,6 +96,10 @@ Contributor shortcut:
 ./scripts/dev-setup.sh --check --harness agy
 ./scripts/dev-setup.sh --harness agy --install       # delegates to install-antigravity.sh
 ```
+
+The D1 capability probe verified agy 1.1.10 native JSON output with separate response and numeric
+input/output/thinking/cache/total usage fields. Production transport selects the tiered model slug;
+roster effort remains metadata and is validated separately from the agy execution argv.
 
 ### Grok Build (host vs runner)
 
@@ -134,16 +146,17 @@ paths = ["/path/to/autopilot/skills"]
 
 Working **inside this clone** also surfaces skills via `.agents/skills` as project skills; that does not install autopilot for other repos.
 
-#### What is verified (2026-07-16, grok 0.2.101)
+#### What is verified (2026-08-04, grok 0.2.118)
 
 - **28 skills** discoverable as `plugin: autopilot` (`dev-flow`, `quality-pipeline`, `l3`–`l6`, …)
 - **3 methodology agents** as `autopilot:debugger`, `autopilot:planner`, `autopilot:reviewer`
 - **Hooks** file registered (`grok inspect` shows `file plugin: autopilot`)
+- **Headless JSON usage** for the exact `grok-4.5` / high-effort runner tuple
 
 #### Known limits (honest)
 
 - **Not Claude Code parity.** Slash namespaces, hook event coverage, `${CLAUDE_PLUGIN_ROOT}`-style expansion, and opt-in gates that assume Claude's settings injection may behave differently or not at all.
-- **Hooks = discovery partial.** Registration is verified; per-event firing and blocking-gate strength on the Grok host are **not** claimed. See `src/harness/capabilities/grok.json`.
+- **Hooks = discovery partial.** Registration is verified; `SessionEnd` firing with authoritative usage and blocking-gate strength on the Grok host are **not** claimed. See `src/harness/capabilities/grok.json`.
 - **Update after `git pull`.** Local installs record `source_path`. Prefer `grok plugin update` and re-check with `grok inspect`; if skills look stale, re-run `grok plugin install <path> --trust`.
 - **Uninstall:** `grok plugin uninstall autopilot` (confirm flag if prompted).
 

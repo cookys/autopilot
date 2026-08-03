@@ -98,11 +98,12 @@ Autopilot capability slice.
 
 | Surface | Responsibility |
 |---|---|
-| `schemas/platform-capability-claims.schema.json` (new), `scripts/platform-capability-claims.js` (new) | Closed receipt/claim schema plus canonicalization, claim-ID, agreement, freshness, exact-version, and revalidation validator. Only this validator can emit `validated` claim IDs. |
+| `schemas/platform-capability-claims.schema.json` (new), `scripts/platform-capability-claims.js` (new) | Closed receipt/claim/consumer-manifest schema plus canonicalization, claim-ID, agreement, freshness, exact-version, deterministic consumer binding, and revalidation CLI. Only this validator can emit `validated` claim IDs. |
 | `scripts/probe-harness-capabilities.sh` (new) | Deterministic probe driver for the exact Codex/agy/Grok/OpenCode/Claude capabilities used by this plan; supplies official-contract and fresh live observations to the claim validator without promoting changelog-only claims. |
 | `skills/harness-maintenance/SKILL.md`, `CLAUDE.md` | Register the probe in the canonical maintenance workflow and script inventory. |
 | `references/multi-agent-portability.md`, `docs/installation.md` | Publish only live-proven capability/version facts and retain explicit blocked/unverified rows. |
-| `docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json` (new) | Durable D1 receipt. D2–D4 may consume only validated claim IDs after immediate revalidation, never prose or an unvalidated receipt row. |
+| `docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json` (new) | Durable D1 receipt and owning closed `consumer_manifest`. It partitions every receipt claim ID into exact, separately enumerated D2, D3, D4 required sets or `optional_unconsumed_claim_ids`; downstream gates consume only their immediately revalidated set. |
+| `docs/plans/2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json` | Immutable depth-0 disposition for R4 generation 1. SHA-256 `d5d689be758dc93ea84b3470a01b654886ae5bbe608e347fea8cbfadbca99604`; it accepts R8 fingerprint `e9f817092f3b54635588d1c76aca049615ff918c5ef4e3c4e5f373d951c88645` and is review evidence, never an implementation edit target. |
 | `scripts/dispatch-status.js` | Parse declared agy structured envelopes into separately normalized response and usage; reject malformed or ambiguous envelopes without content sniffing. |
 | `scripts/dispatch-review.sh`, `schemas/review-result.schema.json` | Capture agy native JSON, feed only its response to verdict framing, and expose normalized usage on every review result path (`null` when unavailable). |
 | `scripts/dispatch-hetero.sh`, `schemas/runner-result.schema.json` | Capture agy native JSON for implementers and source result usage from that envelope rather than worker output. |
@@ -158,20 +159,37 @@ portability/install docs, and the stale backlog audit.
    the current binary reports the same version, and revalidation succeeds. Missing, stale,
    version-mismatched, contradicted, or digest-drifted inputs remain `blocked` and cannot yield a
    validated ID. The validator rejects unknown fields and duplicate IDs.
-3. Add one deterministic probe driver with bounded timeout, declared command, version capture, and
+3. Make the same receipt own a closed `consumer_manifest` with exactly `schema_version`, ordered
+   `consumers`, and `optional_unconsumed_claim_ids`. `consumers` contains exactly one object apiece for
+   `D2`, `D3`, and `D4`, each with only `consumer_id` and a non-empty, unique
+   `required_claim_ids` array. The validator requires canonical consumer order D2 → D3 → D4, globally
+   disjoint claim IDs across all consumer and optional sets, and an exact partition of every claim row:
+   no unbound, unknown, substituted, or duplicated claim or consumer ID is allowed. D2 owns the agy
+   structured-envelope claims, D3 owns the Codex `PostCompact` registration/payload/matcher/failure
+   claims, and D4 owns every exact provider tuple claim. Only rows explicitly listed under
+   `optional_unconsumed_claim_ids` may remain `blocked`; every ID required by D2, D3, or D4 must be
+   present, digest-valid, current, re-probed, and `validated`.
+4. Add one deterministic probe driver with bounded timeout, declared command, version capture, and
    redacted digests. Probe the exact surfaces needed here: agy structured response+usage; Codex production plugin
    `PostCompact` registration plus manual and auto firing; Grok SessionEnd/headless usage event
    firing; OpenCode `debug skill` JSON completeness on installed 1.17.15 and isolated latest 1.18.11;
    Claude Code current hook baseline. Preserve the existing negative Codex install-generator and
    inconclusive `tier:` metadata findings as blocked unless a real probe changes them.
-4. Cover every strict-L5 policy dimension in each provider claim's `target_identity`: runner, model,
+5. Cover every strict-L5 policy dimension in each provider claim's `target_identity`: runner, model,
    role, effort, endpoint (explicit `null` for default), and family. No dimension may be inferred or
    wildcarded at D4 consumption time.
-5. Emit the aggregate evidence receipt and update the portability/installation matrices with exact
-   versions and evidence links. Freeze the D2 agy envelope and D3 Codex payload/matcher/failure
-   contracts as validated claims. D2–D4 call `platform-capability-claims.js validate` immediately
-   before their gate and accept only explicitly named validated `claim_id` values; receipt presence,
-   prose, a stale prior validation, or a substituted receipt path has no authority.
+6. Generate the receipt and manifest deterministically from the probe driver's declared, ordered
+   capability-to-consumer bindings: canonicalize every claim, sort claim IDs lexically inside each
+   consumer and optional set, emit consumers in D2/D3/D4 order, and bind the canonical manifest digest
+   into the receipt digest. `platform-capability-claims.js generate` is the only writer and
+   `validate-consumers --consumer D2 --consumer D3 --consumer D4 --reprobe` validates the complete
+   required partition in D1. Each downstream gate then calls
+   `validate-consumer --consumer <gate> --emit-claim-ids --reprobe` and consumes the returned canonical
+   ID array exactly; extra, missing,
+   reordered, optional, or otherwise drifted downstream IDs fail before that gate's first effect.
+7. Emit the aggregate evidence receipt and update the portability/installation matrices with exact
+   versions and evidence links. Receipt presence, prose, a stale prior validation, a substituted
+   receipt path, or a claim from another consumer set has no authority.
 
 **Output:** a version-bound capability receipt and truthful docs with `proven`, `blocked`, or
 `unverified` per surface.
@@ -181,21 +199,24 @@ portability/install docs, and the stale backlog audit.
 ```bash
 bash scripts/probe-harness-capabilities.sh --all --output docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json
 node scripts/validate-json-schema.js --schema schemas/platform-capability-claims.schema.json --document docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json
-node scripts/platform-capability-claims.js validate --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --all-validated --reprobe
+node scripts/platform-capability-claims.js validate-consumers --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --consumer D2 --consumer D3 --consumer D4 --reprobe
 bash hooks/tests/harness-capabilities.test.sh
 bash hooks/tests/codex-hook-probe-package.test.sh
 bash scripts/preflight-portability.sh
 ```
 
 The negative matrix must reject missing official evidence, missing live evidence, stale TTL,
-version mismatch, contract/live contradiction, current-version drift, claim-ID tampering, duplicate
-claims, and unknown fields. A failed optional Grok/OpenCode/Claude row remains an honest blocked row
-and does not block D2–D4 unless it contradicts a consumed claim.
+version mismatch, contract/live contradiction, current-version drift, claim-ID tampering, unknown
+fields, a missing/blocked/substituted required ID, an optional ID smuggled into a consumer, an unknown
+or duplicate consumer or claim ID, an unpartitioned receipt row, and downstream ID drift. A failed
+optional Grok/OpenCode/Claude row remains an honest blocked row only when it is named solely in
+`optional_unconsumed_claim_ids`; it cannot block D2–D4 or be consumed by them.
 
 ### D2 internal gate — Integrate agy structured telemetry
 
-**Input:** D1's revalidated agy structured-envelope `claim_id` and existing review/runner result
-schemas. A receipt row without that validated ID is not an input.
+**Input:** the exact canonical ID array returned by D1's
+`validate-consumer --consumer D2 --emit-claim-ids --reprobe` call and the existing review/runner
+result schemas. A receipt row, optional ID, or ID absent from D1's D2 set is not an input.
 
 **Implementation:**
 
@@ -203,6 +224,8 @@ schemas. A receipt row without that validated ID is not an input.
    agy parser in `dispatch-status.js` to validate a single closed top-level envelope, emit the
    `response` separately for existing framing/status parsing, and normalize non-negative integer
    token fields into the existing usage shape. Do not sniff plain logs or trust response text.
+   Before invocation, revalidate D2 and require the consumed agy claim IDs to equal the returned
+   canonical array byte-for-byte; any downstream ID drift fails closed.
 2. Replace the agy PTY/plain capture paths in both dispatchers. A review parses only the extracted
    response; an implementer result uses only envelope-derived usage. Non-zero exit, malformed JSON,
    missing/duplicate response, invalid numeric usage, truncation, or trailing bytes fails closed and
@@ -219,6 +242,7 @@ schemas. A receipt row without that validated ID is not an input.
 **Acceptance:**
 
 ```bash
+node scripts/platform-capability-claims.js validate-consumer --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --consumer D2 --emit-claim-ids --reprobe
 bash hooks/tests/dispatch-status.test.sh
 bash hooks/tests/dispatch-review.test.sh
 bash hooks/tests/dispatch-hetero.test.sh
@@ -233,8 +257,9 @@ transcript-only imports.
 
 ### D3 internal gate — Wire the Codex production `PostCompact` adapter
 
-**Input:** D1's revalidated Codex `PostCompact` contract `claim_id` and the existing host-neutral
-`postcompact-adapter`/continuation-admission implementation.
+**Input:** the exact canonical ID array returned by D1's
+`validate-consumer --consumer D3 --emit-claim-ids --reprobe` call and the existing host-neutral
+`postcompact-adapter`/continuation-admission implementation. Optional, D2, or D4 IDs are invalid.
 
 **Implementation:**
 
@@ -243,7 +268,8 @@ transcript-only imports.
    the D1-validated official `PostCompact` event, exact `manual|auto` matcher, and relative adapter
    command. The adapter validates the official payload, resolves exact Git common-dir/root/node/
    attempt identity, and invokes `scripts/compaction-rehydrate.js postcompact-adapter`; it never copies
-   reconciliation logic.
+   reconciliation logic. Revalidate D3 first and require every implemented Codex contract ID, with no
+   additions or omissions, to equal the returned canonical array before package activation.
 2. Persist only the existing sealed reconciliation receipt. Missing/ambiguous identity, invalid
    payload, adapter non-zero, duplicate invocation, stale worktree, or reconcile failure must block
    continuation and never degrade to warning-only success.
@@ -269,6 +295,7 @@ transcript-only imports.
 **Acceptance:**
 
 ```bash
+node scripts/platform-capability-claims.js validate-consumer --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --consumer D3 --emit-claim-ids --reprobe
 bash hooks/tests/codex-compaction-rehydration.test.sh
 bash hooks/tests/codex-hook-probe-package.test.sh
 bash hooks/tests/codex-plugin-package.test.sh
@@ -282,8 +309,10 @@ negative control on the exact supported Codex version.
 
 ### D4 internal gate — Build the strict `/l5` CLI trust root
 
-**Input:** D1's revalidated exact provider claim IDs, the existing non-serializable qualification
-provider, live readiness collector, and constructor-only Engine adapter seam.
+**Input:** the exact canonical ID array returned by D1's
+`validate-consumer --consumer D4 --emit-claim-ids --reprobe` call, the existing non-serializable
+qualification provider, live readiness collector, and constructor-only Engine adapter seam. Optional,
+D2, or D3 IDs are invalid.
 
 **Implementation:**
 
@@ -291,7 +320,9 @@ provider, live readiness collector, and constructor-only Engine adapter seam.
    ordered `STRICT_L5_PROVIDER_POLICY` array whose entries contain one D1 validated `claim_id` and one
    exact six-field object: `{runner, model, role, effort, endpoint, family}`. Default endpoint is
    canonical `null`; wildcards, omitted dimensions, inferred family, unions, and fallback guesses are
-   invalid. The policy digest is SHA-256 of canonical JSON for that ordered array.
+   invalid. The policy's claim IDs must equal D1's returned D4 array as a set and in canonical order;
+   any missing, extra, optional, or substituted ID is downstream drift. The policy digest is SHA-256
+   of canonical JSON for that ordered array.
 2. Deterministically derive the invocation policy match by resolving the existing review-loop roster,
    expanding implementer, reviewer, verification-author, QC, and configured fallback seats, projecting
    each to the same six named fields, sorting by role then runner/model/effort/endpoint/family, and
@@ -319,6 +350,7 @@ provider, live readiness collector, and constructor-only Engine adapter seam.
 **Acceptance:**
 
 ```bash
+node scripts/platform-capability-claims.js validate-consumer --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --consumer D4 --emit-claim-ids --reprobe
 bash hooks/tests/provider-readiness-consumer.test.sh
 bash hooks/tests/mission-routing-campaign-bridge.test.sh
 bash hooks/tests/autopilot-cli.test.sh
@@ -424,10 +456,20 @@ downstream gate with an explicit terminal receipt; it does not silently change a
   `CONDITIONAL`, policy
   `required_seat_transport_exhausted`, `semantic_verdict:null`, `repair_authorized:false`, and
   `next_generation:null`. R3 is never reopened, reset, relabelled, or authorized for generation 2.
-- **R4 retry intent (2026-08-04):** new logical plan
-  `platform-capability-trigger-activation-2026-08-04-r4` preserves the same D1–D4 semantic content,
-  one-node graph, and budgets. It will retry through the existing controller CLI option
-  `--timeout 12m` within the unchanged 7,200-second total review wall. R4 is a new logical revision,
-  not a reset or generation 2 of R3, and remains `review-pending-r4`.
-- **Receipts:** full immutable R2/R3 details and externally recorded R4 frozen hashes live in
+- **R4 generation 1 semantic disposition (2026-08-04):** ticket
+  `platform-trigger-activation-r4-20260804`, logical plan
+  `platform-capability-trigger-activation-2026-08-04-r4`, session
+  `platform-trigger-activation-r4-g1`, and session key
+  `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`. The immutable controller
+  artifact at `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-01.json`
+  has SHA-256 `805b805d5bd4fe5d150ed079d42e0319bde3fe23a46fe3c9d3f170888d40486d`:
+  Sol returned semantic `CONDITIONAL`, Gemini returned semantic `READY`, and R8 fingerprint
+  `e9f817092f3b54635588d1c76aca049615ff918c5ef4e3c4e5f373d951c88645` is the sole blocker.
+  Depth 0 accepted it in immutable
+  [`2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json`](2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json)
+  (SHA-256 `d5d689be758dc93ea84b3470a01b654886ae5bbe608e347fea8cbfadbca99604`).
+  This repair replaces `--all-validated` with the exact D2/D3/D4 consumer manifest while preserving
+  the same R4 lineage, one-node graph, topology, reservations, gate budgets, and two-generation ceiling;
+  generation 2 remains pending and no implementation or reviewer dispatch is included here.
+- **Receipts:** full immutable R2/R3 details and externally recorded R4 review/admission identities live in
   [`2026-08-04-platform-capability-trigger-activation.review.md`](2026-08-04-platform-capability-trigger-activation.review.md).

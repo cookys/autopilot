@@ -5,17 +5,17 @@
     {
       "id": "platform-capability-trigger-activation",
       "source_plan_ids": [
-        "plan-cba907b5df38e55f89f3bb2bb8c4ad694aaa56b88eecb5c997d9e0a67bf99b95"
+        "plan-08d89358d78b7487cb9daf0b9c537bcef68045125c564c960808b565f338dea6"
       ],
       "source_rubric_ids": [
-        "R16947675289342357348511922641558731371823009659402034853578672307345832862432",
-        "R24099621531750382532975742765424623385333189376906264925047041401393994037448",
-        "R3250633338989876684746468403878885767439756763503704616274293077394073901810",
-        "R384668162623562128919176463662953004264325078795707443255874692508099108358",
-        "R44023839361070945567800868913247854731716115287448457260546162475193825969612",
-        "R85971642303591273637059653443474141143600199730599275614913609027851664235457",
-        "R87646054969832693562300433661241071647790959460484671300777321949207601390184",
-        "R93806370755771551829769193129852814911218973374306218209403203189866248744598"
+        "R20328322313993685599642475618635012002211614527719612105014708200006529418449",
+        "R2778801924325158380122437979338659780149865913886978954386571804158196031903",
+        "R28461183219730691345721800027951350017829471193498312654364266851207613432362",
+        "R43987691612174791939645811798744980605741717107375482795171799234209387994779",
+        "R73268789726067727711818830398349248142248834019779623709316292055790595771283",
+        "R75182833490390288132774739962192501697842918631996463463019937064604419353708",
+        "R98307271572454003439014884866499103507731105448029560153146982190840100786714",
+        "R98704980378620234709100170059604020105604957672900171713662960274072252499612"
       ],
       "dependencies": [],
       "acceptance_ids": [
@@ -31,18 +31,21 @@
       "verification_commands": [
         "bash scripts/probe-harness-capabilities.sh --all --output docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
         "node scripts/validate-json-schema.js --schema schemas/platform-capability-claims.schema.json --document docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
-        "node scripts/platform-capability-claims.js validate --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --all-validated --reprobe",
+        "node scripts/platform-capability-claims.js validate-consumers --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --consumer D2 --consumer D3 --consumer D4 --reprobe",
         "bash hooks/tests/harness-capabilities.test.sh",
         "bash scripts/preflight-portability.sh",
+        "node scripts/platform-capability-claims.js validate-consumer --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --consumer D2 --emit-claim-ids --reprobe",
         "bash hooks/tests/dispatch-status.test.sh",
         "bash hooks/tests/dispatch-review.test.sh",
         "bash hooks/tests/dispatch-hetero.test.sh",
         "bash hooks/tests/engine-scorecard.test.sh",
+        "node scripts/platform-capability-claims.js validate-consumer --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --consumer D3 --emit-claim-ids --reprobe",
         "bash hooks/tests/codex-compaction-rehydration.test.sh",
         "bash hooks/tests/codex-hook-probe-package.test.sh",
         "bash hooks/tests/codex-plugin-package.test.sh",
         "bash hooks/tests/controller-execution-independent.test.sh",
         "bash hooks/tests/mission-runtime-v2.test.sh",
+        "node scripts/platform-capability-claims.js validate-consumer --receipt docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json --consumer D4 --emit-claim-ids --reprobe",
         "bash hooks/tests/provider-readiness-consumer.test.sh",
         "bash hooks/tests/mission-routing-campaign-bridge.test.sh",
         "bash hooks/tests/autopilot-cli.test.sh",
@@ -85,6 +88,7 @@
         "required_paths": [
           "docs/plans/2026-08-04-platform-capability-trigger-activation.md",
           "docs/plans/2026-08-04-platform-capability-trigger-activation.rubric.md",
+          "docs/plans/2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json",
           "scripts/sync-codex-plugin-skills.sh",
           "scripts/validate.sh",
           "hooks/tests/run.sh"
@@ -95,6 +99,7 @@
           "bin/autopilot.js",
           "docs/BACKLOG.md",
           "docs/installation.md",
+          "docs/plans/2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json",
           "docs/projects/INDEX.md",
           "docs/projects/2026-08-04-platform-capability-trigger-activation/README.md",
           "docs/projects/2026-08-04-platform-capability-trigger-activation/dev-info.md",
@@ -240,5 +245,5 @@
   ],
   "calculated_depth": 1,
   "calculated_batches": 1,
-  "graph_digest": "86240bdb0a1fddb74f43e3b2d2c9fbd853b5def6d7376689223174eae5f2baf4"
+  "graph_digest": "620d8031cddd40206a8a332fc64dd4602ac12027fe5b677c089a8a88824c50de"
 }

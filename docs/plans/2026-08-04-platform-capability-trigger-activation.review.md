@@ -1,7 +1,7 @@
 # Plan-review receipts — Platform capability trigger activation
 
-> Current planning state: **R4 `review-pending-r4`**. R2 and R3 are terminal infrastructure-failure
-> receipts and are not review authority for R4.
+> Current planning state: **R4 `review-pending-r4`, generation 2 pending**. R2 and R3 are terminal
+> infrastructure-failure receipts and are not review authority for R4.
 
 ## R2 terminal infrastructure-failure receipt
 
@@ -69,25 +69,48 @@ R3's frozen semantic repair remains the executable content inherited by R4:
 - R7 names canonical non-generated hook sources under `platforms/codex/hooks`, exact generated plugin
   mappings, deletion/regeneration proof, and manual-edit inverse drift tests.
 
-## R4 frozen retry identity
+## R4 generation 1 disposition and frozen generation 2 repair
 
 - Logical plan: `platform-capability-trigger-activation-2026-08-04-r4`
-- Status: `review-pending-r4`
-- Frozen plan SHA-256: `cba907b5df38e55f89f3bb2bb8c4ad694aaa56b88eecb5c997d9e0a67bf99b95`
+- Status: `review-pending-r4` (generation 2 pending)
+- Ticket: `platform-trigger-activation-r4-20260804`
+- Generation 1 session: `platform-trigger-activation-r4-g1`
+- Generation 1 session key: `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`
+- Generation 1 controller artifact:
+  `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-01.json`
+- Generation 1 artifact SHA-256: `805b805d5bd4fe5d150ed079d42e0319bde3fe23a46fe3c9d3f170888d40486d`
+- Frozen generation 2 plan SHA-256: `08d89358d78b7487cb9daf0b9c537bcef68045125c564c960808b565f338dea6`
 - Frozen rubric SHA-256: `b0643fae8891911809af07890c45290821a47c251d657ae094fc8e1690905d1b`
 - Frozen manifest SHA-256: `c20e292f08a70cf3cd082848af14e42936301880a68a84c0112d6a32d26ae109`
+- Immutable generation 1 disposition:
+  [`2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json`](2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json)
+- Disposition SHA-256: `d5d689be758dc93ea84b3470a01b654886ae5bbe608e347fea8cbfadbca99604`
+- Accepted R8 fingerprint: `e9f817092f3b54635588d1c76aca049615ff918c5ef4e3c4e5f373d951c88645`
 
-R4 changes identity and receipt metadata only. It will retry the same frozen semantic content through
-the supported controller CLI option `--timeout 12m`, within the existing 7,200-second total wall. It
-is a new logical revision, not an R3 reset or generation 2. No R4 reviewer was dispatched while
-preparing this planning/admission commit; structural Mission admission is not a semantic verdict.
+| Seat | Attempt | Transport / parser | Semantic result |
+|---|---:|---|---|
+| `codex/gpt-5.6-sol@max` architecture | 1 | Success / strict | `CONDITIONAL`; one blocking R8 finding. |
+| `agy/gemini-3.6-flash-high@high` operations-skeptic | 1 | Success / extracted | `READY`; no findings. |
+
+Depth 0 accepted the R8 finding as the generation 1 blocker. The accepted disposition preserves the
+finding fingerprint and rationale byte-for-byte. The authorized repair removes `--all-validated` and
+makes D1's receipt own a closed manifest that partitions every claim ID into exact D2, D3, D4 required
+sets or an explicitly unconsumed optional set. D1 revalidates all required IDs; D2–D4 each revalidate
+and consume only their own canonical set. Missing, blocked, substituted, smuggled optional, unknown,
+duplicate, and downstream-drifted identifiers all fail closed. No other D1–D4 semantics changed.
+
+This is generation 2 in the existing R4 lineage, not a new logical plan or an R3 reopening. The
+one-node topology, reservation totals, gate-attempt budget, and two-repair-generation ceiling are
+unchanged. The frozen rubric and review manifest remain byte-identical. This planning/admission commit
+does not implement production code or dispatch a generation 2 reviewer; structural Mission admission
+is not a semantic verdict.
 
 The R4 source manifest has file SHA-256
-`e414348fff4ff9a1f41fb29f2fc23eed945180d7eff7a71dcc78c7dc705ee9ef`; the graph has canonical
-digest `86240bdb0a1fddb74f43e3b2d2c9fbd853b5def6d7376689223174eae5f2baf4` and file SHA-256
-`eb0fab4996c4126fcdc59f8b0617ee95d6ac1dd0bc6111a0e14bfdd2ed1f71cf`. Exact legacy B/C
+`8e32ccb537716db94c3666df44bb7f3f35bf6ac7ab28b6f253f97012c10cd0cb`; the graph has canonical
+digest `620d8031cddd40206a8a332fc64dd4602ac12027fe5b677c089a8a88824c50de` and file SHA-256
+`5c00821f808b101abe8aa972aef7573627a7528875f9561ab64a313bc448e59c`. Exact legacy B/C
 terminal reconciliation produced disposition digest
-`9e2396bf173507f38ef720b219a98d0561f4a8940e6faeaca6c30161fc199c8f` with zero synthesized work
+`7759a9abebcc9324789dad4be2681ac7ce0659ebce1e4911e957b12b3842dc32` with zero synthesized work
 orders, zero mutated receipts, and no history rewrite. L4 admission returned structural `READY` with
-sources digest `37ed470aedff3c78991d46f1af24b95a88bde691bc364e5a32c1f9fec2da5623`
-and admission digest `e42f89c8401a6eb3082c9fc3852a580d3a8e00e9340eeb7d0b982337730be5cc`.
+sources digest `407992e65fd8b1917ab010d664dde76b5927f23497f7e774dff65d3277826e8f`
+and admission digest `506113260d7a8c8e62b162b6fd05bd747d08bfd3b5343f8dafa1a3e7acf4e912`.

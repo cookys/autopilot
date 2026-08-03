@@ -161,10 +161,20 @@ identity still owns the lease after SIGTERM grace.  D-state, identity changes,
 unkillable processes, held resources, or pending side effects quarantine the
 resource and prohibit replacement.
 
-After process/result reconciliation, a committed Git/result truth is adopted
-under the old lease.  Otherwise `stage-acquire --allow-reopen` is called with an
-expected generation and nonce, authorizing at most one same-lineage replacement.
-Late children remain fenced by the generation/nonce transition rail; the
-`coordination` receipt records inquiry, reconciliation, replacement count, and
-idempotency key.  With the gate off, the existing watcher and directive channel
-remain report-only/advisory and never seize a lease.
+After process/result reconciliation, only a successful identity-bound
+reconciliation may be adopted under the old lease: result truth, Git truth,
+side-effect/resource reconciliation, and owner absence must all agree.  A
+live owner, pending side effect, held resource, invalid result, or incomplete
+reconciliation is fail-closed as `blocked`/`quarantined`; it never authorizes a
+coordinator-owned replacement.  The depth-0 coordinator does not call
+`stage-acquire --allow-reopen` and cannot lease itself as a short-lived
+successor.
+
+A real same-lineage replacement worker must explicitly perform
+`stage-transfer` with the exact prior generation and nonce (plus its exact
+PID/start-time identity) under the run lock.  The transfer advances the
+generation, creates a fresh nonce, preserves the Git/worktree/resource and
+campaign/ticket/lineage metadata, and fences late events or transitions from
+the old worker.  The `coordination` receipt records inquiry, reconciliation,
+and idempotency evidence; with the gate off, the existing watcher and
+directive channel remain report-only/advisory and never seize a lease.

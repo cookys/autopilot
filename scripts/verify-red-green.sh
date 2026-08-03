@@ -55,6 +55,11 @@ RECEIPT_OUT=""
 declare -a TEST_GLOBS=()
 declare -a ASSERTION_ARTIFACT_PATHS=()
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd -P)/$(basename "${BASH_SOURCE[0]:-$0}")"
+VERIFY_CMD_REPO_REL=""
+VERIFY_CMD_CONTENT_SHA=""
+VERIFY_CMD_BASE_CONTENT_SHA=""
+VERIFY_CMD_HEAD_CONTENT_SHA=""
+VERIFY_CMD_BYTES_DIGEST=""
 
 usage() {
   sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
@@ -184,6 +189,10 @@ if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)
     || receipt.assertion_artifacts.length === 0
     || typeof receipt.test_command_digest !== 'string'
     || !/^[0-9a-f]{64}$/.test(receipt.test_command_digest)
+    || typeof receipt.verify_command_path !== 'string'
+    || !/^[0-9a-f]{64}$/.test(receipt.verify_command_bytes_sha256 || '')
+    || !/^[0-9a-f]{64}$/.test(receipt.verify_command_base_bytes_sha256 || '')
+    || !/^[0-9a-f]{64}$/.test(receipt.verify_command_head_bytes_sha256 || '')
     || typeof receipt.assertion_artifact_digest !== 'string'
     || !/^[0-9a-f]{64}$/.test(receipt.assertion_artifact_digest)
     || typeof receipt.receipt_digest !== 'string') {
@@ -228,12 +237,22 @@ if (verifyCmd) {
   const resolved = path.isAbsolute(verifyCmd) ? verifyCmd : path.resolve(process.cwd(), verifyCmd);
   const repoPrefix = path.resolve(repo) + path.sep;
   const relative = resolved.startsWith(repoPrefix) ? resolved.slice(repoPrefix.length).split(path.sep).join('/') : null;
-  const contentSha = relative ? blobSha(head, relative) : (() => {
+  const headContentSha = relative ? blobSha(head, relative) : (() => {
     try { return crypto.createHash('sha256').update(fs.readFileSync(resolved)).digest('hex'); }
     catch (_error) { return null; }
   })();
-  if (!contentSha) reject('verification command artifact is unavailable');
-  if (digest({ path: relative || resolved, content_sha256: contentSha }) !== receipt.test_command_digest) {
+  const baseContentSha = relative
+    ? (receipt.red_tests.includes(relative) ? headContentSha : blobSha(base, relative))
+    : headContentSha;
+  const commandPath = relative || resolved;
+  if (!headContentSha || !baseContentSha || commandPath !== receipt.verify_command_path
+      || headContentSha !== receipt.verify_command_head_bytes_sha256
+      || baseContentSha !== receipt.verify_command_base_bytes_sha256
+      || headContentSha !== baseContentSha
+      || receipt.verify_command_bytes_sha256 !== headContentSha) {
+    reject('verification command bytes are stale, changed, or cross-candidate');
+  }
+  if (digest({ path: commandPath, base_content_sha256: baseContentSha, head_content_sha256: headContentSha, content_sha256: headContentSha }) !== receipt.test_command_digest) {
     reject('receipt is bound to a different verification command');
   }
 }
@@ -305,6 +324,8 @@ const same = (left, right) => canonical(left) === canonical(right);
 const fields = [
   'verdict', 'red_green_validated', 'base_sha', 'head_sha', 'head_result',
   'base_result', 'red_tests', 'test_command_digest', 'assertion_artifact_path',
+  'verify_command_path', 'verify_command_bytes_sha256',
+  'verify_command_base_bytes_sha256', 'verify_command_head_bytes_sha256',
   'assertion_artifacts', 'assertion_artifact_digest', 'expected_red_exit_class',
   'green_result', 'base_exit_code', 'head_exit_code', 'receipt_digest',
 ];
@@ -511,6 +532,15 @@ sha256_file() {
   sha256sum "$1" | awk '{print $1}'
 }
 
+verify_cmd_path_for_worktree() {
+  local wt="$1"
+  if [[ -n "$VERIFY_CMD_REPO_REL" ]]; then
+    printf '%s/%s' "$wt" "$VERIFY_CMD_REPO_REL"
+  else
+    printf '%s' "$VERIFY_CMD"
+  fi
+}
+
 canonical_digest() {
   node - "$1" <<'NODE'
 "use strict";
@@ -528,12 +558,7 @@ NODE
 VERIFY_CMD_IDENTITY_PATH="$VERIFY_CMD"
 if [[ -n "$VERIFY_CMD_REPO_REL" ]]; then
   VERIFY_CMD_IDENTITY_PATH="$VERIFY_CMD_REPO_REL"
-  VERIFY_CMD_CONTENT_SHA="$(sha256_git_blob "$HEAD_SHA" "$VERIFY_CMD_REPO_REL")"
-else
-  VERIFY_CMD_CONTENT_SHA="$(sha256_file "$VERIFY_CMD")"
 fi
-TEST_COMMAND_DIGEST="$(canonical_digest "$(printf '{"path":"%s","content_sha256":"%s"}' \
-  "$(json_escape "$VERIFY_CMD_IDENTITY_PATH")" "$VERIFY_CMD_CONTENT_SHA")")"
 ASSERTION_ARTIFACTS_JSON="["
 ASSERTION_ARTIFACT_PATH=""
 _artifact_first=1
@@ -573,8 +598,15 @@ run_verify_cmd() {
   local wt="$1"
   local verify_cmd="$VERIFY_CMD"
   local ec=0
+  local cmd_path cmd_sha cmd_after
   if [[ -n "$VERIFY_CMD_REPO_REL" ]]; then
     verify_cmd="$wt/$VERIFY_CMD_REPO_REL"
+  fi
+  cmd_path="$(verify_cmd_path_for_worktree "$wt")"
+  if [[ ! -f "$cmd_path" ]] || ! cmd_sha="$(sha256_file "$cmd_path" 2>/dev/null)" \
+      || [[ "$cmd_sha" != "$VERIFY_CMD_CONTENT_SHA" ]]; then
+    LAST_VERIFY_EXIT=125
+    return 125
   fi
   set +e
   (
@@ -582,6 +614,14 @@ run_verify_cmd() {
     "$verify_cmd" "$wt"
   )
   ec=$?
+  if [[ -f "$cmd_path" ]]; then
+    cmd_after="$(sha256_file "$cmd_path" 2>/dev/null || true)"
+  else
+    cmd_after=""
+  fi
+  if [[ "$cmd_after" != "$VERIFY_CMD_CONTENT_SHA" ]]; then
+    ec=125
+  fi
   LAST_VERIFY_EXIT="$ec"
   set -e
   return "$ec"
@@ -605,6 +645,15 @@ if [[ -n "$VERIFY_CMD_REPO_REL" && ! -x "$WT_HEAD/$VERIFY_CMD_REPO_REL" ]]; then
   emit_json "INCONCLUSIVE" "false" "$BASE_SHA" "$HEAD_SHA" "skipped" "skipped" "[]" "head-verify-cmd-missing-or-not-executable"
   exit 3
 fi
+
+# Pin HEAD command bytes before the first detached observation.  The base hash
+# is added below after its assertion patch is applied.
+VERIFY_CMD_HEAD_CONTENT_SHA="$(sha256_file "$(verify_cmd_path_for_worktree "$WT_HEAD")" 2>/dev/null || true)"
+if [[ ! "$VERIFY_CMD_HEAD_CONTENT_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+  emit_json "INCONCLUSIVE" "false" "$BASE_SHA" "$HEAD_SHA" "skipped" "skipped" "[]" "verification-command-bytes-unavailable"
+  exit 3
+fi
+VERIFY_CMD_CONTENT_SHA="$VERIFY_CMD_HEAD_CONTENT_SHA"
 
 if run_verify_cmd "$WT_HEAD"; then
   HEAD_RESULT="green"
@@ -639,6 +688,25 @@ if [[ -n "$VERIFY_CMD_REPO_REL" && ! -x "$WT_BASE/$VERIFY_CMD_REPO_REL" ]]; then
   exit 3
 fi
 
+# Pin the exact bytes that both detached observations will execute.  For a
+# repo-owned command this is measured after the assertion patch is applied to
+# the base worktree, so a command changed as part of the assertion is still the
+# same executable in both observations.  Any remaining byte mismatch is
+# infrastructure ambiguity, not red evidence.
+VERIFY_CMD_BASE_CONTENT_SHA="$(sha256_file "$(verify_cmd_path_for_worktree "$WT_BASE")" 2>/dev/null || true)"
+if [[ ! "$VERIFY_CMD_BASE_CONTENT_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+  emit_json "INCONCLUSIVE" "false" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "skipped" "$RED_TESTS_JSON" "verification-command-bytes-unavailable"
+  exit 3
+fi
+if [[ "$VERIFY_CMD_HEAD_CONTENT_SHA" != "$VERIFY_CMD_BASE_CONTENT_SHA" ]]; then
+  emit_json "INCONCLUSIVE" "false" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "skipped" "$RED_TESTS_JSON" "verification-command-bytes-mismatch"
+  exit 3
+fi
+VERIFY_CMD_CONTENT_SHA="$VERIFY_CMD_HEAD_CONTENT_SHA"
+VERIFY_CMD_BYTES_DIGEST="$(canonical_digest "$(printf '{"path":"%s","base_content_sha256":"%s","head_content_sha256":"%s","content_sha256":"%s"}' \
+  "$(json_escape "$VERIFY_CMD_IDENTITY_PATH")" "$VERIFY_CMD_BASE_CONTENT_SHA" "$VERIFY_CMD_HEAD_CONTENT_SHA" "$VERIFY_CMD_CONTENT_SHA")")"
+TEST_COMMAND_DIGEST="$VERIFY_CMD_BYTES_DIGEST"
+
 if run_verify_cmd "$WT_BASE"; then
   BASE_RESULT="green"
   BASE_EXIT_CODE="$LAST_VERIFY_EXIT"
@@ -648,8 +716,8 @@ fi
 
 BASE_RESULT="red"
 BASE_EXIT_CODE="$LAST_VERIFY_EXIT"
-RECEIPT_EXTRA_JSON="$(printf '"schema_version":1,"artifact_type":"red_green_polarity_receipt","test_command_digest":"%s","assertion_artifacts":%s,"assertion_artifact_path":%s,"assertion_artifact_digest":"%s","expected_red_exit_class":"nonzero","green_result":"green","base_exit_code":%s,"head_exit_code":%s' \
-  "$TEST_COMMAND_DIGEST" "$ASSERTION_ARTIFACTS_JSON" "$ASSERTION_ARTIFACT_PATH_JSON" \
+RECEIPT_EXTRA_JSON="$(printf '"schema_version":1,"artifact_type":"red_green_polarity_receipt","test_command_digest":"%s","verify_command_path":"%s","verify_command_bytes_sha256":"%s","verify_command_base_bytes_sha256":"%s","verify_command_head_bytes_sha256":"%s","assertion_artifacts":%s,"assertion_artifact_path":%s,"assertion_artifact_digest":"%s","expected_red_exit_class":"nonzero","green_result":"green","base_exit_code":%s,"head_exit_code":%s' \
+  "$TEST_COMMAND_DIGEST" "$(json_escape "$VERIFY_CMD_IDENTITY_PATH")" "$VERIFY_CMD_CONTENT_SHA" "$VERIFY_CMD_BASE_CONTENT_SHA" "$VERIFY_CMD_HEAD_CONTENT_SHA" "$ASSERTION_ARTIFACTS_JSON" "$ASSERTION_ARTIFACT_PATH_JSON" \
   "$ASSERTION_ARTIFACT_DIGEST" "$BASE_EXIT_CODE" "$HEAD_EXIT_CODE")"
 emit_json "VALIDATED" "true" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "$BASE_RESULT" "$RED_TESTS_JSON" ""
 exit 0

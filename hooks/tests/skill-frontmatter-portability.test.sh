@@ -12,6 +12,15 @@ HELP="$(bash "$PROBE" --help 2>&1)"
 assert_contains "$HELP" "--check" "probe documents check mode"
 assert_contains "$HELP" "--validate" "probe documents receipt validation"
 
+# Keep the qualified real-runtime acceptance probe outside the deterministic
+# umbrella/version-bump suite. Operators opt in only when both installed
+# runtimes, pinned versions, and authentication are available.
+if [ "${AUTOPILOT_QUALIFIED_PORTABILITY_PROBE:-0}" != "1" ]; then
+  echo "qualified real-runtime portability probe skipped (set AUTOPILOT_QUALIFIED_PORTABILITY_PROBE=1 to run --check)"
+  finalize_test
+  exit 0
+fi
+
 set +e
 OUT="$(TMPDIR="$HOOK_TMPDIR" HOME="$HOOK_HOME" bash "$PROBE" --check --output "$ARTIFACT" 2>&1)"
 EXIT=$?

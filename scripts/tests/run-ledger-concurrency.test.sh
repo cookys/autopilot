@@ -5,7 +5,15 @@ SCRIPT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT="$SCRIPT_ROOT/scripts/run-ledger.sh"
 TEST_TMP="$(mktemp -d -t "run-ledger-concurrency-test-XXXXXX")"
 
-trap 'rm -rf "$TEST_TMP"' EXIT
+cleanup_r6_workers() {
+  for worker_pid in "${R6_PID:-}" "${R6_REPLACEMENT_PID:-}" "${R6_ACK_PID:-}"; do
+    if [[ "$worker_pid" =~ ^[1-9][0-9]*$ ]]; then
+      kill "$worker_pid" 2>/dev/null || true
+      wait "$worker_pid" 2>/dev/null || true
+    fi
+  done
+}
+trap 'cleanup_r6_workers; rm -rf "$TEST_TMP"' EXIT
 
 PASS_COUNT=0
 FAILS=()
@@ -365,7 +373,7 @@ assert_json_eq "$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id 
 # A stale explicit wait is not an indefinite waiting verdict: without a fresh
 # exact heartbeat it falls back to the bounded inquiry/unknown rail.
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-stale-wait --stage work --pid "$$" --heartbeat-ts 1
-run_cmd stage-event --ledger "$R6_LEDGER" --run-id r6-stale-wait --stage work --condition waiting --reason child-boundary
+run_cmd stage-event --ledger "$R6_LEDGER" --run-id r6-stale-wait --stage work --condition waiting --reason child-boundary --progress-ts 1
 STALE_WAIT_CONDITION="$(bash "$SCRIPT" stage-condition --ledger "$R6_LEDGER" --run-id r6-stale-wait --stage work --stale-seconds 1)"
 assert_json_eq "$STALE_WAIT_CONDITION" '.condition' "unknown" "stale explicit wait requires fresh heartbeat"
 assert_json_eq "$STALE_WAIT_CONDITION" '.reason' "stale_without_bounded_inquiry" "stale explicit wait names bounded inquiry fallback"
@@ -382,7 +390,9 @@ OFF_COORD="$(bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-o
 assert_json_eq "$OFF_COORD" '.status' "feature_disabled" "adaptive recovery is disabled by default"
 assert_eq "$(jq -s --arg rid r6-off '[.[]|select(.kind=="directive" and .run_id==$rid)]|length' "$R6_LEDGER")" "0" "feature-off emits no directive"
 
-# A quiet worker is killed only after inquiry and exactly one replacement is authorized.
+# A quiet worker is killed only after inquiry, but incomplete reconciliation never
+# authorizes a coordinator-owned replacement. A real replacement must explicitly
+# claim the exact old tuple through stage-transfer.
 cat > "$TEST_TMP/r6-quiet-worker.sh" <<'R6WORKER'
 #!/usr/bin/env bash
 while :; do sleep 1; done
@@ -392,17 +402,28 @@ setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
 R6_PID=$!
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --pid "$R6_PID" --heartbeat-ts 1 --campaign-id campaign-r6 --ticket-id ticket-r6 --lineage-id lineage-r6
 BLOCKED_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --grace-seconds 0 --idempotency-key r6-replace-key)"
-assert_json_eq "$BLOCKED_COORD" '.status' "replaced" "quiet nonresponsive worker is replaced after inquiry"
-assert_eq "$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|map(.generation)|unique|length' "$R6_LEDGER")" "2" "one replacement generation only"
-assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="coordination" and .run_id==$rid and .status=="replacement_authorized")]|length' "$R6_LEDGER")" "1" "replacement receipt is durable exactly once"
-assert_eq "$(jq -sr --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="replacement")][0].campaign_id' "$R6_LEDGER")" "campaign-r6" "replacement preserves campaign lineage"
+R6_COORD_STATUS="$(jq -r '.status' <<<"$BLOCKED_COORD")"
+case "$R6_COORD_STATUS" in
+  blocked|quarantined) PASS_COUNT=$((PASS_COUNT + 1)) ;;
+  *) FAILS+=("quiet nonresponsive worker requires explicit reconciliation before replacement: unexpected status $R6_COORD_STATUS") ;;
+esac
+assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="coordination" and .run_id==$rid and .status=="replacement_authorized")]|length' "$R6_LEDGER")" "0" "incomplete reconciliation emits no replacement receipt"
+assert_eq "$(jq -s --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="replacement")]|length' "$R6_LEDGER")" "0" "coordinator never leases a short-lived replacement"
 OLD_GEN="$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].generation' "$R6_LEDGER")"
-OLD_NONCE="$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].nonce' "$R6_LEDGER")"
+OLD_NONCE="$(jq -sr --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|sort_by(.generation)|.[0].nonce' "$R6_LEDGER")"
+setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &
+R6_REPLACEMENT_PID=$!
+TRANSFERRED="$(bash "$SCRIPT" stage-transfer --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$OLD_GEN" --nonce "$OLD_NONCE" --pid "$R6_REPLACEMENT_PID" --git-ref refs/heads/r6 --worktree "$TEST_TMP" --timeout 5)"
+assert_json_eq "$TRANSFERRED" '.generation' "2" "real replacement worker advances the exact tuple explicitly"
+assert_eq "$(jq -s --arg rid r6-blocked --arg stg work '[.[]|select(.kind=="stage" and .run_id==$rid and .stage==$stg)]|map(.generation)|unique|length' "$R6_LEDGER")" "2" "one explicit replacement generation only"
+assert_eq "$(jq -sr --arg rid r6-blocked '[.[]|select(.kind=="stage" and .run_id==$rid and .reason=="ownership_transfer")][0].campaign_id' "$R6_LEDGER")" "campaign-r6" "explicit handoff preserves campaign lineage"
 run_cmd stage-transition --ledger "$R6_LEDGER" --run-id r6-blocked --stage work --generation "$OLD_GEN" --nonce "$OLD_NONCE" --to-state committed
 assert_cmd_rc 11 "late old-generation result is fenced after replacement"
 assert_json_eq "$CMD_OUT" '.state' "stale_ignored" "late result records stale_ignored"
 if ! kill "$R6_PID" 2>/dev/null; then :; fi
 if ! wait "$R6_PID" 2>/dev/null; then :; fi
+if ! kill "$R6_REPLACEMENT_PID" 2>/dev/null; then :; fi
+if ! wait "$R6_REPLACEMENT_PID" 2>/dev/null; then :; fi
 
 # An acknowledgement before the bounded deadline prevents kill/re-dispatch.
 setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &

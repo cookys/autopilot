@@ -874,12 +874,24 @@ fi
 prompt_framing_leakage() {
   awk '
     BEGIN { found = 0 }
-    /^<<<AUTOPILOT-(REVIEW|END)-[0-9a-f]{32}>>>$/ { found = 1; next }
-    /^diff --git [^[:space:]]+ [^[:space:]]+$/ { found = 1; next }
-    /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ { found = 1; next }
-    /^Diff under review:[[:space:]]*$/ { found = 1; next }
-    /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ { found = 1; next }
-    /^<one finding per line>[[:space:]]*$/ { found = 1; next }
+    {
+      # Models sometimes structurally echo the framing inside a Markdown quote
+      # or an indented code block. Normalize only those structural prefixes and
+      # retain the exact-line checks; ordinary lexical use of the vocabulary is
+      # still permitted as a legitimate finding.
+      line = $0
+      sub(/^[[:space:]]*>[[:space:]]?/, "", line)
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ /^<<<AUTOPILOT-(REVIEW|END)-[0-9a-f]{32}>>>$/ \
+          || line ~ /^diff --git [^[:space:]]+ [^[:space:]]+$/ \
+          || line ~ /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ \
+          || line ~ /^Diff under review:[[:space:]]*$/ \
+          || line ~ /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ \
+          || line ~ /^<one finding per line>[[:space:]]*$/) {
+        found = 1
+      }
+      next
+    }
     { next }
     END { exit(found ? 0 : 1) }' "$BLOCK_FILE"
 }

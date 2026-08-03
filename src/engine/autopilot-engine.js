@@ -1586,30 +1586,52 @@ function defaultRemediationChecker({ repo, previousCommit, currentCommit, previo
     return fallback('no complete prior finding contracts available');
   }
   const allowedKeys = ['claim', 'finding_id', 'severity', 'source'];
-  const contracts = previousFindings.map((item) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-    if (Object.keys(item).sort().join(',') !== allowedKeys.join(',')) return null;
-    return {
-      finding_id: item.finding_id,
-      claim: item.claim,
-      severity: item.severity,
-      source: item.source,
-    };
-  });
-  if (contracts.some((item) => !item)) return fallback('prior review findings are not named contract objects');
-  const currentById = new Map((Array.isArray(currentFindings) ? currentFindings : [])
-    .filter((item) => item && typeof item === 'object' && typeof item.finding_id === 'string')
+  const freezeContracts = (items, label, allowEmpty = false) => {
+    if (!Array.isArray(items) || (!allowEmpty && items.length === 0)) return null;
+    const seen = new Set();
+    const out = items.map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)
+          || Object.keys(item).sort().join(',') !== allowedKeys.join(',')
+          || seen.has(item.finding_id)) return null;
+      seen.add(item.finding_id);
+      return Object.freeze({
+        finding_id: item.finding_id,
+        claim: item.claim,
+        severity: item.severity,
+        source: item.source,
+      });
+    });
+    return out.some((item) => !item) ? null : Object.freeze(out);
+  };
+  const contracts = freezeContracts(previousFindings, 'prior');
+  const currentContracts = freezeContracts(currentFindings, 'current', true);
+  if (!contracts) return fallback('prior review findings are not named contract objects');
+  if (!currentContracts) return fallback('current review findings are not named contract objects');
+  /*
+   * Do not let a mutable dispatch-review string leak into the named checker:
+   * callers must hand us frozen, normalized finding contracts for both sides.
+   */
+  // Keep the validated, detached contract objects frozen all the way through
+  // the non-authoritative checker.  Re-spreading here would silently re-open
+  // mutation after validation and let a later normalization pass alter the
+  // named-checker input.
+  const frozenContracts = contracts;
+  const frozenCurrentContracts = currentContracts;
+  const currentById = new Map(frozenCurrentContracts
     .map((item) => [item.finding_id, item]));
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-remediation-check-'));
   const findingsFile = path.join(tempDir, 'findings.json');
   const deltaFile = path.join(tempDir, 'delta.json');
   const resultFile = path.join(tempDir, 'result.json');
   try {
-    fs.writeFileSync(findingsFile, `${JSON.stringify({ findings: contracts })}\n`, { mode: 0o600 });
+    fs.writeFileSync(findingsFile, `${JSON.stringify({ findings: frozenContracts })}\n`, { mode: 0o600 });
+    const currentFindingsFile = path.join(tempDir, 'current-findings.json');
+    fs.writeFileSync(currentFindingsFile, `${JSON.stringify({ findings: frozenCurrentContracts })}\n`, { mode: 0o600 });
     const script = resolveScriptPath('scripts/diff-since-last-round.sh');
     const built = spawnSync('bash', [
       script, 'remediation', '--previous', previousCommit, '--current', currentCommit,
-      '--findings-file', findingsFile, '--repo', repo, '--out', deltaFile,
+      '--findings-file', findingsFile, '--current-findings-file', currentFindingsFile,
+      '--repo', repo, '--out', deltaFile,
     ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     const delta = fs.existsSync(deltaFile) ? parseJsonFromLastLine(fs.readFileSync(deltaFile, 'utf8')) : null;
     if (!delta || built.error || built.status !== 0 || delta.status !== 'ready') {
@@ -1635,6 +1657,8 @@ function defaultRemediationChecker({ repo, previousCommit, currentCommit, previo
       current_commit: delta.current_commit,
       delta_digest: delta.delta_digest,
       finding_contract_digest: delta.finding_contract_digest,
+      current_finding_contract_digest: delta.current_finding_contract_digest,
+      current_finding_contracts: frozenCurrentContracts,
       findings,
     })}\n`, { mode: 0o600 });
     const checked = spawnSync('bash', [
@@ -2259,9 +2283,25 @@ function namedReviewFindings(review) {
     findings = review.findings;
   }
   if (typeof findings === 'string') {
-    try { findings = JSON.parse(findings); } catch (_error) { return null; }
+    const normalized = normalizeProductReviewFindings(findings);
+    if (normalized.status !== 'normalized') return null;
+    findings = normalized.findings;
   }
-  return Array.isArray(findings) ? findings : null;
+  if (!Array.isArray(findings)) return null;
+  // Freeze a detached copy before the named checker sees ordinary dispatch
+  // output; later review normalization cannot mutate the checker contract.
+  try {
+    const detached = JSON.parse(JSON.stringify(findings));
+    const freezeDeep = (value) => {
+      if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+      Object.freeze(value);
+      for (const child of Object.values(value)) freezeDeep(child);
+      return value;
+    };
+    return freezeDeep(detached);
+  } catch (_error) {
+    return null;
+  }
 }
 
 function verificationRank(verifyPass) {

@@ -145,9 +145,9 @@ function pathSafe(value) {
   return typeof value === 'string' && value.length > 0 && !path.posix.isAbsolute(value)
     && !value.split('/').includes('..') && value !== '.';
 }
-function extractFindings(value) {
+function extractFindings(value, allowEmpty = false) {
   const findings = Array.isArray(value) ? value : value.findings;
-  if (!Array.isArray(findings) || findings.length === 0) {
+  if (!Array.isArray(findings) || (!allowEmpty && findings.length === 0)) {
     throw new Error('findings-file must contain a non-empty findings array');
   }
   const allowed = new Set(['finding_id', 'claim', 'severity', 'source']);
@@ -230,6 +230,9 @@ try {
     assertAncestry(previous, current);
     if (!opts['findings-file'] && !opts.findings) throw new Error('--findings-file is required');
     const findings = extractFindings(readJson(opts['findings-file'] || opts.findings, 'findings-file', true));
+    const currentFindings = opts['current-findings-file']
+      ? extractFindings(readJson(opts['current-findings-file'], 'current-findings-file', true), true)
+      : null;
     const allPaths = changedPaths(previous, current);
     const changedSet = new Set(allPaths);
     const delta = expectedDelta(previous, current, findings, allPaths);
@@ -255,6 +258,10 @@ try {
         ? `findings cannot be bound to changed paths: ${unbound.join(', ')}`
         : (allPaths.length === 0 ? 'current commit has no changed paths' : null),
     };
+    if (currentFindings) {
+      body.current_finding_contracts = currentFindings;
+      body.current_finding_contract_digest = sha256(canonical(currentFindings));
+    }
     body.delta_digest = sha256(canonical(body));
     writeOutput(body);
     if (body.status !== 'ready') process.exitCode = 1;
@@ -280,7 +287,11 @@ try {
       'finding_contracts', 'gate_clear', 'prior_findings_included', 'previous_commit',
       'repository_crawl', 'review_role', 'schema_version', 'status',
       'whole_candidate_pass',
-    ].sort();
+    ];
+    const hasCurrentContracts = Object.prototype.hasOwnProperty.call(delta, 'current_finding_contracts')
+      || Object.prototype.hasOwnProperty.call(delta, 'current_finding_contract_digest');
+    if (hasCurrentContracts) deltaKeys.push('current_finding_contract_digest', 'current_finding_contracts');
+    deltaKeys.sort();
     if (Object.keys(delta).sort().join('\0') !== deltaKeys.join('\0')) {
       throw new Error('delta artifact has an unsupported contract shape');
     }
@@ -297,6 +308,13 @@ try {
     const expected = new Map(contracts.map((item) => [item.finding_id, item]));
     if (delta.finding_contract_digest !== sha256(canonical(contracts))) {
       throw new Error('delta finding contract binding is invalid');
+    }
+    let currentContracts = null;
+    if (hasCurrentContracts) {
+      currentContracts = extractFindings(delta.current_finding_contracts, true);
+      if (delta.current_finding_contract_digest !== sha256(canonical(currentContracts))) {
+        throw new Error('delta current finding contract binding is invalid');
+      }
     }
     const allPaths = changedPaths(previous, current);
     if (!Array.isArray(delta.changed_paths) || canonical(delta.changed_paths) !== canonical(allPaths)) {
@@ -317,7 +335,9 @@ try {
     const resultKeys = [
       'artifact_type', 'authority', 'current_commit', 'delta_digest', 'finding_contract_digest',
       'findings', 'gate_clear', 'previous_commit', 'schema_version', 'whole_candidate_pass',
-    ].sort();
+    ];
+    if (hasCurrentContracts) resultKeys.push('current_finding_contract_digest', 'current_finding_contracts');
+    resultKeys.sort();
     const resultContent = { ...result };
     delete resultContent.whole_candidate_pass;
     if (Object.keys(result).sort().join('\0') !== resultKeys.join('\0')
@@ -330,6 +350,12 @@ try {
         || result.current_commit !== current || result.delta_digest !== deltaDigest
         || result.finding_contract_digest !== delta.finding_contract_digest) {
       throw new Error('checker result is stale or bound to a different candidate/delta');
+    }
+    if (hasCurrentContracts
+        && (!Array.isArray(result.current_finding_contracts)
+          || canonical(result.current_finding_contracts) !== canonical(currentContracts)
+          || result.current_finding_contract_digest !== delta.current_finding_contract_digest)) {
+      throw new Error('checker result current finding contracts are stale or misbound');
     }
     const items = result.findings;
     if (!Array.isArray(items) || items.length !== expected.size) {

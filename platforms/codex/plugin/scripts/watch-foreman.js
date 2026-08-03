@@ -122,8 +122,19 @@ function stageCondition(record, event, nowMs, quietSecs) {
   if (!alive || state.startsWith('Z')) {
     return record.resources ? { condition: 'unknown', reason: 'owner_absent_resource_holder' } : { condition: 'dead', reason: 'owner_absent' };
   }
-  const age = Math.max(0, Math.round((nowMs - heartbeat * 1000) / 1000));
-  if (event && event.generation === record.generation && event.nonce === record.nonce) {
+  const eventGeneration = Number(event?.generation);
+  const eventPid = Number(event?.pid);
+  const eventStart = Number(event?.start_time);
+  const eventProgress = Number(event?.progress_ts);
+  const eventIdentity = event && Number.isInteger(eventGeneration) && eventGeneration > 0
+    && eventGeneration === generation
+    && event.nonce === record.nonce
+    && Number.isInteger(eventPid) && eventPid === pid
+    && Number.isInteger(eventStart) && eventStart === expectedStart
+    && Number.isInteger(eventProgress) && eventProgress > 0;
+  const freshness = eventIdentity ? Math.max(heartbeat, eventProgress) : heartbeat;
+  const age = Math.max(0, Math.round((nowMs - freshness * 1000) / 1000));
+  if (eventIdentity) {
     if (event.condition === 'blocked') return { condition: 'blocked', reason: event.reason || 'explicit_blocked_event' };
     // A waiting event is authoritative only while the exact owner continues
     // to publish a fresh heartbeat; a stale wait enters bounded inquiry.
@@ -157,6 +168,15 @@ function stageKey(runId, stage) {
   return JSON.stringify([runId || '', stage || '']);
 }
 
+function completeWorkerEvent(event) {
+  return event && Number.isInteger(Number(event.generation)) && Number(event.generation) > 0
+    && typeof event.nonce === 'string' && event.nonce.length > 0
+    && Number.isInteger(Number(event.pid)) && Number(event.pid) > 0
+    && Number.isInteger(Number(event.start_time)) && Number(event.start_time) > 0
+    && Number.isInteger(Number(event.progress_ts)) && Number(event.progress_ts) > 0
+    && ['working', 'waiting', 'blocked'].includes(event.condition);
+}
+
 function tickLedger(args, nowMs) {
   let stat;
   try { stat = fs.statSync(args.ledger); } catch (_e) {
@@ -178,10 +198,25 @@ function tickLedger(args, nowMs) {
       if (ms && (!state.lastLedgerEventMs || ms > state.lastLedgerEventMs)) state.lastLedgerEventMs = ms;
       if (rec.kind === 'stage' && rec.stage) {
         state.stageRecords.set(stageKey(rec.run_id, rec.stage), rec);
+      } else if (rec.kind === 'heartbeat' && rec.stage) {
+        const identity = stageKey(rec.run_id, rec.stage);
+        const lease = state.stageRecords.get(identity);
+        if (lease && Number(rec.generation) === Number(lease.generation)
+            && rec.nonce === lease.nonce
+            && Number(rec.pid) === Number(lease.pid)
+            && Number(rec.start_time) === Number(lease.start_time)
+            && Number.isFinite(Number(rec.heartbeat_ts))) {
+          state.stageRecords.set(identity, { ...lease, heartbeat_ts: rec.heartbeat_ts });
+        }
       } else if ((rec.kind === 'worker_event' || rec.kind === 'worker_signal') && rec.stage) {
         const identity = stageKey(rec.run_id, rec.stage);
-        state.workerEvents.set(identity, rec);
         const lease = state.stageRecords.get(identity);
+        // Malformed, stale, or incomplete events are observations only; they
+        // must not shadow the latest complete event for the current lease.
+        const matchesLease = !lease || (Number(rec.generation) === Number(lease.generation)
+          && rec.nonce === lease.nonce && Number(rec.pid) === Number(lease.pid)
+          && Number(rec.start_time) === Number(lease.start_time));
+        if (completeWorkerEvent(rec) && matchesLease) state.workerEvents.set(identity, rec);
         if (lease) {
           const c = stageCondition(lease, rec, nowMs, args.quietSecs);
           const cKey = `${c.condition}:${lease.generation}:${c.reason}`;
@@ -206,6 +241,19 @@ function tickLedger(args, nowMs) {
         state.conditionState.set(identity, cKey);
         emit(`CONDITION run=${rec.run_id || '?'} ${rec.stage} ${c.condition} gen=${rec.generation} reason=${c.reason}`);
       }
+    }
+  }
+  // Freshness is a wall-clock property, not an append-only event. Recompute
+  // every tracked lease on every observation tick so a quiet stage transitions
+  // fresh -> stale even when no new ledger bytes arrive, and a heartbeat/progress
+  // refresh transitions it back without requiring a stage record rewrite.
+  for (const [identity, lease] of state.stageRecords.entries()) {
+    const event = state.workerEvents.get(identity);
+    const c = stageCondition(lease, event, nowMs, args.quietSecs);
+    const cKey = `${c.condition}:${lease.generation}:${c.reason}`;
+    if (state.conditionState.get(identity) !== cKey) {
+      state.conditionState.set(identity, cKey);
+      emit(`CONDITION run=${lease.run_id || '?'} ${lease.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}`);
     }
   }
   // Use file mtime as the freshest liveness signal (covers heartbeat rewrites too).
@@ -278,20 +326,27 @@ function tickLeaves(args, nowMs) {
 function snapshot(args) {
   // --once: current view, then exit — the non-Monitor / non-CC fallback.
   state.watchStartMs = 0; // include historic leaves in a snapshot
-  tickLedger(args, Date.now());
-  tickLeaves(args, Date.now());
+  const nowMs = observationNow();
+  tickLedger(args, nowMs);
+  tickLeaves(args, nowMs);
   const stages = Array.from(state.stageState.entries()).map(([s, v]) => `${s}=${v}`).join(' ') || '(none)';
   const live = Array.from(state.leaves.entries()).filter(([, v]) => !v.ended).map(([k]) => k).join(' ') || '(none)';
   emit(`SNAPSHOT stages: ${stages} | live leaves: ${live}`);
 }
 
+function observationNow() {
+  const raw = process.env.AUTOPILOT_WATCH_NOW_MS;
+  const override = raw === undefined || raw === '' ? NaN : Number(raw);
+  return Number.isFinite(override) && override >= 0 ? override : Date.now();
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  state.watchStartMs = Date.now();
+  state.watchStartMs = observationNow();
   if (args.once) { snapshot(args); return; }
-  const startMs = Date.now();
+  const startMs = observationNow();
   const tick = () => {
-    const nowMs = Date.now();
+    const nowMs = observationNow();
     tickLedger(args, nowMs);
     tickLeaves(args, nowMs);
     if (args.maxSecs > 0 && (nowMs - startMs) / 1000 >= args.maxSecs) process.exit(0);

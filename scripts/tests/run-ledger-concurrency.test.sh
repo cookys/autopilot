@@ -390,6 +390,13 @@ OFF_COORD="$(bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-o
 assert_json_eq "$OFF_COORD" '.status' "feature_disabled" "adaptive recovery is disabled by default"
 assert_eq "$(jq -s --arg rid r6-off '[.[]|select(.kind=="directive" and .run_id==$rid)]|length' "$R6_LEDGER")" "0" "feature-off emits no directive"
 
+# Legacy argv remains valid outside the guarded recovery lineage; omission inside one fails closed.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-ordinary --stage work --pid "$$"; ORD_GEN="$(jq -r .generation <<<"$CMD_OUT")"; ORD_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-ordinary --stage work --generation "$ORD_GEN" --nonce "$ORD_NONCE" --pid "$$"; assert_cmd_rc 0 "ordinary prior-argv transfer remains compatible"
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-guarded --stage work --pid "$$"; GUARD_GEN="$(jq -r .generation <<<"$CMD_OUT")"; GUARD_NONCE="$(jq -r .nonce <<<"$CMD_OUT")"
+jq -nc --arg gen "$GUARD_GEN" --arg nonce "$GUARD_NONCE" '{kind:"coordination",run_id:"r6-guarded",stage:"work",generation:($gen|tonumber),nonce:$nonce,action:"intervene",status:"reserved",idempotency_key:"guard"}' >> "$R6_LEDGER"
+run_cmd stage-transfer --ledger "$R6_LEDGER" --run-id r6-guarded --stage work --generation "$GUARD_GEN" --nonce "$GUARD_NONCE" --pid "$$"; assert_cmd_rc 1 "guarded recovery cannot omit authorization"
+
 # A quiet worker is killed only after inquiry, but incomplete reconciliation never
 # authorizes a coordinator-owned replacement. A real replacement must explicitly
 # claim the exact old tuple through stage-transfer.
@@ -442,6 +449,13 @@ run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-idem --stage work --pid 
 jq -nc --argjson l "$IDEM_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:"",ticket_id:"",lineage_id:"",git_ref:"",git_sha:"",worktree:"",status:"no_effect",effects:[]}' > "$TEST_TMP/r6-idem-result.json"
 IDEM_PIDS=(); for i in 1 2; do AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-idem --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --idempotency-key r6-idem-key --authorize-transfer --result-json "$TEST_TMP/r6-idem-result.json" >"$TEST_TMP/idem-$i.out" 2>&1 & IDEM_PIDS+=("$!"); done; for p in "${IDEM_PIDS[@]}"; do wait "$p" || true; done
 assert_eq "$(jq -s --arg rid r6-idem '[.[]|select(.kind=="coordination" and .run_id==$rid and .action=="transfer" and .status=="authorized")]|length' "$R6_LEDGER")" 1 "same-key concurrent authorization is at-most one"
+run_cmd stage-event --ledger "$R6_LEDGER" --run-id r6-idem --stage work --condition waiting --reason lock-check; assert_cmd_rc 0 "idempotency reservation releases its run lock"
+
+# Different caller keys still share one authorization slot for the exact lease tuple.
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-multikey --stage work --pid 999999 --start-time 1 --heartbeat-ts 1; MULTI_LEASE="$CMD_OUT"
+jq -nc --argjson l "$MULTI_LEASE" '{run_id:$l.run_id,stage:$l.stage,generation:$l.generation,nonce:$l.nonce,campaign_id:"",ticket_id:"",lineage_id:"",git_ref:"",git_sha:"",worktree:"",status:"no_effect",effects:[]}' > "$TEST_TMP/r6-multikey-result.json"
+MULTI_PIDS=(); for key in a b; do AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-multikey --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --idempotency-key "multi-$key" --authorize-transfer --result-json "$TEST_TMP/r6-multikey-result.json" >/dev/null 2>&1 & MULTI_PIDS+=("$!"); done; for p in "${MULTI_PIDS[@]}"; do wait "$p" || true; done
+assert_eq "$(jq -s --arg rid r6-multikey '[.[]|select(.kind=="coordination" and .run_id==$rid and .action=="transfer" and .status=="authorized")]|length' "$R6_LEDGER")" 1 "different keys cannot double-authorize one tuple"
 
 # Even a forged-looking authorization cannot seize a live owner.
 run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-live-owner --stage work --pid "$R6_REPLACEMENT_PID" --campaign-id campaign-r6 --ticket-id ticket-r6 --lineage-id lineage-r6
@@ -464,6 +478,14 @@ if ! kill "$R6_PID" 2>/dev/null; then :; fi
 if ! wait "$R6_PID" 2>/dev/null; then :; fi
 if ! kill "$R6_REPLACEMENT_PID" 2>/dev/null; then :; fi
 if ! wait "$R6_REPLACEMENT_PID" 2>/dev/null; then :; fi
+
+# A captured group is not terminated merely because its leader exits on TERM.
+printf '%s\n' '#!/usr/bin/env bash' 'trap "exit 0" TERM' '(trap "" TERM; while :; do sleep 1; done) &' 'while :; do sleep 1; done' > "$TEST_TMP/r6-lingering-group.sh"; chmod +x "$TEST_TMP/r6-lingering-group.sh"
+setsid "$TEST_TMP/r6-lingering-group.sh" >/dev/null 2>&1 & R6_LINGER_PGID=$!
+run_cmd stage-acquire --ledger "$R6_LEDGER" --run-id r6-lingering --stage work --pid "$R6_LINGER_PGID" --heartbeat-ts 1
+LINGER_COORD="$(AUTOPILOT_ADAPTIVE_INTERVENTION=1 bash "$SCRIPT" stage-coordinate --ledger "$R6_LEDGER" --run-id r6-lingering --stage work --action intervene --stale-seconds 1 --wait-seconds 0 --grace-seconds 2 --idempotency-key linger)"
+assert_json_eq "$LINGER_COORD" '.status' quarantined "leader exit with captured group survivor quarantines"; assert_json_eq "$LINGER_COORD" '.termination' group_survived "captured group survivor forbids replacement"
+kill -KILL -- "-$R6_LINGER_PGID" 2>/dev/null || true; wait "$R6_LINGER_PGID" 2>/dev/null || true
 
 # An acknowledgement before the bounded deadline prevents kill/re-dispatch.
 setsid "$TEST_TMP/r6-quiet-worker.sh" >/dev/null 2>&1 &

@@ -278,4 +278,11 @@ run_dispatch env NODE_OPTIONS="" DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$C
 assert_eq "$LAST_RC" 2 "A8b non-raw-artifact provisional VA should rc=2"
 assert_file_absent "$RUN_MARKER" "A8b fake runner must not run"
 
+# A validated strict workflow that names the shipping polarity gate cannot omit its exact receipt.
+POLARITY_CONTRACT="$TEST_TMP/polarity-contract.json"
+jq '.unit_id="polarity-fixture" | .acceptance += [{argv:["scripts/verify-red-green.sh","--validate"],exit:0}]' "$CONTRACT" > "$POLARITY_CONTRACT"
+run_dispatch env DISPATCH_QUIET=1 AUTOPILOT_SESSION_MODE_DIR="$CASE_DIR/polarity" ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$STORE" "$REPO_ROOT/scripts/dispatch-author.sh" --strict-contract --contract-file "$POLARITY_CONTRACT" --repo-root "$MINI_REPO" --prompt-file "$PROMPT_FILE" --bin "$FAKE_JS"
+assert_eq "$LAST_RC" 2 "trusted polarity workflow rejects omitted receipt"
+assert_contains "$LAST_OUT" "requires --polarity-receipt" "trusted polarity omission names required receipt"
+
 finalize_test

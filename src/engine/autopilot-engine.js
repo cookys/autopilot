@@ -1562,11 +1562,6 @@ function defaultCampaignRepairChangedPaths({ repo, base, head }) {
   };
 }
 
-// Named remediation is an efficiency hint only.  The authoritative reviewer
-// still receives the complete candidate diff on every generation; this helper
-// merely binds a post-finding status report to exact Git commits and finding
-// contracts through diff-since-last-round.sh.  Any tool, contract, or ancestry
-// ambiguity returns needs_full_review and never clears a gate.
 function defaultRemediationChecker({ repo, previousCommit, currentCommit, previousFindings, currentFindings }) {
   const fallback = (reason) => ({
     schema_version: 1,
@@ -1607,14 +1602,6 @@ function defaultRemediationChecker({ repo, previousCommit, currentCommit, previo
   const currentContracts = freezeContracts(currentFindings, 'current', true);
   if (!contracts) return fallback('prior review findings are not named contract objects');
   if (!currentContracts) return fallback('current review findings are not named contract objects');
-  /*
-   * Do not let a mutable dispatch-review string leak into the named checker:
-   * callers must hand us frozen, normalized finding contracts for both sides.
-   */
-  // Keep the validated, detached contract objects frozen all the way through
-  // the non-authoritative checker.  Re-spreading here would silently re-open
-  // mutation after validation and let a later normalization pass alter the
-  // named-checker input.
   const frozenContracts = contracts;
   const frozenCurrentContracts = currentContracts;
   const currentById = new Map(frozenCurrentContracts
@@ -1637,16 +1624,15 @@ function defaultRemediationChecker({ repo, previousCommit, currentCommit, previo
     if (!delta || built.error || built.status !== 0 || delta.status !== 'ready') {
       return fallback((delta && delta.reason) || 'remediation delta is not ready for named checking');
     }
-    const findings = contracts.map((finding) => {
+    if (contracts.some((finding) => {
       const current = currentById.get(finding.finding_id);
-      return {
+      return !current || allowedKeys.some((key) => current[key] !== finding[key]);
+    })) return fallback('current findings do not preserve exact frozen finding identities');
+    const findings = contracts.map((finding) => ({
         finding_id: finding.finding_id,
-        status: current ? 'unresolved' : 'resolved',
-        evidence: current
-          ? `finding remains in the current full-diff review: ${String(current.claim || finding.claim)}`
-          : 'finding id is absent from the current full-diff review',
-      };
-    });
+        status: 'unresolved',
+        evidence: `exact frozen finding remains in the current full-diff review: ${String(finding.claim)}`,
+      }));
     fs.writeFileSync(resultFile, `${JSON.stringify({
       schema_version: 1,
       artifact_type: 'review_remediation_result',
@@ -9525,6 +9511,7 @@ class AutopilotEngine {
 module.exports = {
   AUTOPILOT_ENGINE_CONTROL_SINKS,
   AutopilotEngine,
+  _defaultRemediationChecker: defaultRemediationChecker,
   bindCampaignScopeReceipt,
   buildImplementationArgs,
   buildReviewArgs,

@@ -122,6 +122,7 @@ RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPO
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
 POLARITY_RECEIPT=""; REQUIRE_POLARITY_RECEIPT=0; POLARITY_RECEIPT_DIGEST=""
+CONTRACT_REQUIRES_POLARITY=0
 POLARITY_BASE_SHA=""; POLARITY_HEAD_SHA=""; POLARITY_VERIFY_CMD=""
 declare -a POLARITY_ASSERTION_ARTIFACTS=()
 RUNNER_SUPPLIED=0; MODEL_SUPPLIED=0; EFFORT_SUPPLIED=0; ENDPOINT_SUPPLIED=0
@@ -531,6 +532,7 @@ run_strict_contract_preflight() {
   contract_role="$(extract_file_json_value "$CONTRACT_FILE" "go.required_engine_role" 2>/dev/null || true)"
   [[ -n "$contract_role" ]] || die_precondition "contract has empty required_engine_role"
   [[ "$contract_role" == "verification-author" ]] || die_precondition "contract required_engine_role is '$contract_role' (expected verification-author)"
+  jq -e '[.acceptance[]?.argv? | select(index("--validate") != null and any(.[]; test("(^|/)verify-red-green[.]sh$")))] | length > 0' "$CONTRACT_FILE" >/dev/null && CONTRACT_REQUIRES_POLARITY=1
 
   STRICT_CONTRACT_RESULT_FIELDS=1
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
@@ -724,6 +726,7 @@ if [ -z "$REPO_ROOT" ]; then
   fi
 fi
 
+if [ "$CONTRACT_REQUIRES_POLARITY" -eq 1 ]; then REQUIRE_POLARITY_RECEIPT=1; fi
 if [ "$REQUIRE_POLARITY_RECEIPT" -eq 1 ] || [ -n "$POLARITY_RECEIPT" ]; then
   validate_polarity_receipt
 fi

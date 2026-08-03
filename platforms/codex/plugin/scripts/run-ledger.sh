@@ -376,6 +376,10 @@ process_group_id() {
   printf '%s' "${value:-0}"
 }
 
+process_group_has_live_members() {
+  ps -eo pgid=,stat= 2>/dev/null | awk -v pgid="$1" '$1==pgid && $2 !~ /^Z/ { found=1 } END { exit !found }'
+}
+
 # Set global STAGE_IDENTITY_STATUS / STAGE_IDENTITY_START / STAGE_IDENTITY_STATE.
 # Values are exact, absent, d_state, or unknown.  expected_start must be a
 # positive, previously recorded start-time; zero/malformed evidence is unknown.
@@ -834,24 +838,24 @@ command_stage_transfer() {
   [ -n "$stage" ] || error "--stage is required"
   [ -n "$generation" ] || error "--generation is required"
   [ -n "$nonce" ] || error "--nonce is required"
-  [ -n "$authorization_key" ] || error "--authorization-key is required"
   [ -n "$pid" ] || pid=$$
   [ -n "$start_time" ] || start_time="$(get_process_start_time "$pid")"
   [[ "$generation" =~ ^[1-9][0-9]*$ ]] || error "--generation must be a positive integer"
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || error "--pid must be a positive integer"
-  [[ "$start_time" =~ ^[1-9][0-9]*$ ]] || error "--start-time must be a positive process start time"
+  [ -z "$authorization_key" ] || [[ "$start_time" =~ ^[1-9][0-9]*$ ]] || error "--start-time must be a positive process start time"
 
   local pre_latest pre_resources run_fds="" run_fd latest latest_state latest_generation latest_nonce
   pre_latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
   [ -n "$pre_latest" ] || error "stage ownership transfer compare-and-swap failed"
   pre_resources="$(jq -r '.resources // ""' <<<"$pre_latest")"
+  [ -n "$authorization_key" ] || pre_resources=""
   with_resource_locks "$ledger" "$pre_resources" "$timeout" run_fds || error "resource lock unavailable"
   with_run_lock "$ledger" "$run_id" "$timeout" run_fd || error "run-lock unavailable"
   latest="$(latest_stage_record "$ledger" "$run_id" "$stage")"
   latest_state="$(jq -r '.state // empty' <<<"$latest")"
   latest_generation="$(jq -r '.generation // 0' <<<"$latest")"
   latest_nonce="$(jq -r '.nonce // empty' <<<"$latest")"
-  if [ "$(jq -r '.resources // ""' <<<"$latest")" != "$pre_resources" ]; then
+  if [ -n "$authorization_key" ] && [ "$(jq -r '.resources // ""' <<<"$latest")" != "$pre_resources" ]; then
     release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done
     error "stage resources changed during ownership transfer"
   fi
@@ -862,7 +866,11 @@ command_stage_transfer() {
     error "stage ownership transfer compare-and-swap failed"
   fi
 
-  local authorization
+  local authorization="" guarded_rows
+  if [ -z "$authorization_key" ]; then
+    guarded_rows="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" '[.[]|select(.kind=="coordination" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gen and .nonce==$nonce_v)]|length')"
+    if [ "$guarded_rows" -ne 0 ]; then release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done; error "guarded recovery requires --authorization-key"; fi
+  else
   authorization="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key "$authorization_key" --arg gen "$generation" --arg nonce_v "$nonce" '
     [ .[] | select(.kind=="coordination" and .action=="transfer" and .run_id==$rid and .stage==$stg and .idempotency_key==$key and (.generation|tostring)==$gen and .nonce==$nonce_v) ]
     | if length==0 then {} else .[-1] end')"
@@ -935,6 +943,7 @@ command_stage_transfer() {
   fi
   git_ref="$latest_git_ref"; git_sha="$latest_git_sha"; worktree="$latest_worktree"
   resources="$latest_resources"; campaign_id="$latest_campaign"; ticket_id="$latest_ticket"; lineage_id="$latest_lineage"
+  fi
 
   local next_generation new_nonce heartbeat_ts line
   next_generation=$((generation + 1))
@@ -947,9 +956,9 @@ command_stage_transfer() {
     --arg git_ref_v "$git_ref" --arg git_sha_v "$git_sha" --arg wt "$worktree" --arg resources_v "$resources" \
     --arg campaign_v "$campaign_id" --arg ticket_v "$ticket_id" --arg lineage_v "$lineage_id" \
     '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,state:$state,generation:$gen,nonce:$nonce_v,pid:($pid_v|tonumber),start_time:($start_v|tonumber),heartbeat_ts:($hb|tonumber),git_ref:$git_ref_v,git_sha:$git_sha_v,worktree:$wt,resources:$resources_v,reason:"ownership_transfer",campaign_id:$campaign_v,ticket_id:$ticket_v,lineage_id:$lineage_v}')"
-  local consumed_line
-  consumed_line="$(jq -nc --arg kind coordination --arg ts "$(iso_ts)" --arg rid "$run_id" --arg stg "$stage" --arg key "$authorization_key" --arg gen "$generation" --arg nonce_v "$nonce" --argjson auth "$authorization" '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,generation:($gen|tonumber),nonce:$nonce_v,action:"transfer",status:"consumed",idempotency_key:$key,payload:{authorization:"stage-transfer",authorized_at:$auth.ts}}')"
-  append_record "$ledger" "$run_id" "$(printf '%s\n%s' "$line" "$consumed_line")" "$timeout" "$run_fd"
+  local consumed_line="" record="$line"
+  if [ -n "$authorization_key" ]; then consumed_line="$(jq -nc --arg kind coordination --arg ts "$(iso_ts)" --arg rid "$run_id" --arg stg "$stage" --arg key "$authorization_key" --arg gen "$generation" --arg nonce_v "$nonce" --argjson auth "$authorization" '{kind:$kind,ts:$ts,run_id:$rid,stage:$stg,generation:($gen|tonumber),nonce:$nonce_v,action:"transfer",status:"consumed",idempotency_key:$key,payload:{authorization:"stage-transfer",authorized_at:$auth.ts}}')"; record="$(printf '%s\n%s' "$line" "$consumed_line")"; fi
+  append_record "$ledger" "$run_id" "$record" "$timeout" "$run_fd"
   for fd in $run_fds; do release_lock "$fd"; done
   echo "$line"
 }
@@ -1447,14 +1456,14 @@ append_coordination_row() {
 }
 
 coordinate_idempotency_guard() {
-  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" key="$6" timeout="$7" run_fd="" row reserved=0; COORD_GUARD_STATUS="new"
+  local ledger="$1" run_id="$2" stage="$3" generation="$4" nonce="$5" key="$6" timeout="$7" run_fd="" row; COORD_GUARD_STATUS="new"
   with_run_lock "$ledger" "$run_id" "$timeout" run_fd || return 1
   row="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key "$key" '[.[]|select(.kind=="coordination" and .run_id==$rid and .stage==$stg and .idempotency_key==$key)]|if length==0 then empty else .[-1] end')"
-  if [ -z "$row" ]; then append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" intervene reserved "$key" '{"reservation":"same-lease-idempotency"}' "$timeout" "$run_fd" >/dev/null; reserved=1
+  if [ -z "$row" ]; then append_coordination_row "$ledger" "$run_id" "$stage" "$generation" "$nonce" intervene reserved "$key" '{"reservation":"same-lease-idempotency"}' "$timeout" "$run_fd" >/dev/null
   elif [ "$(jq -r '.generation|tostring' <<<"$row")" != "$generation" ] || [ "$(jq -r '.nonce // ""' <<<"$row")" != "$nonce" ]; then COORD_GUARD_STATUS="conflict"
   elif [ "$(jq -r '.action // ""' <<<"$row")" = transfer ] && [[ "$(jq -r '.status // ""' <<<"$row")" =~ ^(authorized|consumed)$ ]]; then COORD_GUARD_STATUS="terminal"
   else COORD_GUARD_STATUS="reserved"; fi
-  [ "$reserved" -eq 1 ] || release_lock "$run_fd"
+  release_lock "$run_fd"
 }
 
 safe_no_effect_result() {
@@ -1490,8 +1499,8 @@ authorize_stage_transfer() {
     error "transfer authorization tuple is stale"
   fi
   local terminal_auth
-  terminal_auth="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg key "$idempotency_key" --arg gen "$generation" --arg nonce_v "$nonce" '[.[]|select(.kind=="coordination" and .action=="transfer" and .run_id==$rid and .stage==$stg and .idempotency_key==$key and (.generation|tostring)==$gen and .nonce==$nonce_v and (.status=="authorized" or .status=="consumed"))]|if length==0 then empty else .[-1] end')"
-  if [ -n "$terminal_auth" ]; then release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done; printf '%s\n' "$terminal_auth"; return 0; fi
+  terminal_auth="$(ledger_jq_slurp "$ledger" --arg rid "$run_id" --arg stg "$stage" --arg gen "$generation" --arg nonce_v "$nonce" '[.[]|select(.kind=="coordination" and .action=="transfer" and .run_id==$rid and .stage==$stg and (.generation|tostring)==$gen and .nonce==$nonce_v and (.status=="authorized" or .status=="consumed"))]|if length==0 then empty else .[-1] end')"
+  if [ -n "$terminal_auth" ]; then release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done; [ "$(jq -r '.idempotency_key' <<<"$terminal_auth")" = "$idempotency_key" ] || error "transfer authorization tuple already reserved"; printf '%s\n' "$terminal_auth"; return 0; fi
   proof_digest="$(bound_no_effect_result "$result_path" "$latest")" || {
     release_lock "$run_fd"; for fd in $run_fds; do release_lock "$fd"; done; error "transfer authorization requires a bound deterministic no-effect result"
   }
@@ -1650,7 +1659,7 @@ terminate_exact_process() {
     fi
     release_lock "$check_fd"
     observe_process_identity "$pid" "$expected_start"
-    [ "$STAGE_IDENTITY_STATUS" = "absent" ] && { TERMINATION_STATUS="terminated"; return 0; }
+    [ "$STAGE_IDENTITY_STATUS" = "absent" ] && { process_group_has_live_members "$pgid" && TERMINATION_STATUS="group_survived" || TERMINATION_STATUS="terminated"; return 0; }
     [ "$STAGE_IDENTITY_STATUS" = "d_state" ] && { TERMINATION_STATUS="d_state"; return 0; }
     [ "$STAGE_IDENTITY_STATUS" != "exact" ] && { TERMINATION_STATUS="identity_changed"; return 0; }
   done
@@ -1689,13 +1698,13 @@ terminate_exact_process() {
     fi
     release_lock "$check_fd"
     observe_process_identity "$pid" "$expected_start"
-    [ "$STAGE_IDENTITY_STATUS" = "absent" ] && { TERMINATION_STATUS="terminated"; return 0; }
+    [ "$STAGE_IDENTITY_STATUS" = "absent" ] && { process_group_has_live_members "$pgid" && TERMINATION_STATUS="group_survived" || TERMINATION_STATUS="terminated"; return 0; }
     [ "$STAGE_IDENTITY_STATUS" = "d_state" ] && { TERMINATION_STATUS="d_state"; return 0; }
     [ "$STAGE_IDENTITY_STATUS" != "exact" ] && { TERMINATION_STATUS="identity_changed"; return 0; }
   done
   observe_process_identity "$pid" "$expected_start"
   if [ "$STAGE_IDENTITY_STATUS" = "absent" ]; then
-    TERMINATION_STATUS="terminated"
+    process_group_has_live_members "$pgid" && TERMINATION_STATUS="group_survived" || TERMINATION_STATUS="terminated"
   elif [ "$STAGE_IDENTITY_STATUS" = "d_state" ]; then
     TERMINATION_STATUS="d_state"
   else

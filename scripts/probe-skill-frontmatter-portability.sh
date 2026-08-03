@@ -66,6 +66,16 @@ const challengeFrom = (raw) => {
   return [...new Set(matches)].length === 1 ? matches[0] : '';
 };
 const expectedVersion = (runtime) => runtime === 'claude' ? /^2\.1\.220(?:\s|$)/ : /^codex-cli 0\.146\.0(?:\s|$)/;
+const classifyAttempt = ({ executable, executed, version, codes, text, detailsGreen, challenge }) => {
+  if (!executable || !executed || !version) return 'inconclusive';
+  const steps = [...String(text).matchAll(/AUTOPILOT_STEP \S+ (-?\d+)\n([\s\S]*?)(?=AUTOPILOT_STEP \S+ -?\d+\n|$)/g)];
+  if (steps.length && (steps.length !== codes.length * 2 || steps.some((m, i) => Number(m[1]) !== codes[i % codes.length]))) return 'inconclusive';
+  const failed = (steps.length ? steps.filter((m) => Number(m[1]) !== 0).map((m) => m[2]) : [text]).join('\n');
+  const infra = /\b(?:not logged in|log in required|run \/login|authentication (?:failed|required)|unauthorized|invalid (?:api )?key|timed? out|timeout|network|transport|ECONN[A-Z]+|ENETUNREACH|EAI_AGAIN|rate limit|quota)\b/i.test(failed) || codes.some((code) => [124, 137, 143].includes(code));
+  const rejected = /(?:unknown|unrecognized|unsupported|additional)[^\n]{0,40}\b(?:field|property|key)s?\b[^\n]{0,80}\btier\b|\btier\b[^\n]{0,80}\b(?:not allowed|unknown|unrecognized|unsupported)\b/i.test(failed);
+  if (codes.every((code) => code === 0) && detailsGreen && challenge) return 'pass';
+  return !infra && rejected && codes.some((code) => code !== 0) ? 'fail' : 'inconclusive';
+};
 const evidenceDir = value && value.cleanup && isPath(value.cleanup.retained_evidence_dir)
   ? path.resolve(value.cleanup.retained_evidence_dir) : '';
 const readEvidence = (attempt, key, label) => {
@@ -136,7 +146,7 @@ for (const attempt of attempts) {
   }
   const stdoutForChallenge = readEvidence(attempt, 'stdout_log_path', 'stdout log');
   const challenge = stdoutForChallenge ? challengeFrom(stdoutForChallenge.toString('utf8')) : '';
-  if (attempt.outcome !== 'inconclusive'
+  if (attempt.outcome === 'pass'
       && (!Number.isInteger(attempt.challenge_bytes) || attempt.challenge_bytes <= 0
       || !isHex(attempt.challenge_sha256) || !challenge
       || sha256(challenge) !== attempt.challenge_sha256
@@ -144,16 +154,13 @@ for (const attempt of attempts) {
       || attempt.challenge_seen !== true || attempt.details?.challenge_seen !== true)) {
     errors.push(attempt.runtime + ': per-attempt skill challenge evidence is missing or invalid');
   }
-  const noAuth = /not logged in|run \/login|authentication|auth required/i.test(
-    `${stdoutForChallenge ? stdoutForChallenge.toString('utf8') : ''}\n${(() => { const b = readEvidence(attempt, 'stderr_log_path', 'stderr log'); return b ? b.toString('utf8') : ''; })()}`,
-  );
+  const stderrForClassification = readEvidence(attempt, 'stderr_log_path', 'stderr log');
+  const evidenceText = `${stdoutForChallenge ? stdoutForChallenge.toString('utf8') : ''}\n${stderrForClassification ? stderrForClassification.toString('utf8') : ''}`;
   const versionOk = typeof attempt.version === 'string' && expectedVersion(attempt.runtime).test(attempt.version_raw || '');
-  const probeGreen = attempt.probe_exit_codes.every((code) => code === 0);
   const detailsGreen = attempt.runtime === 'claude'
     ? attempt.details && attempt.details.manifest_validation === true
     : attempt.details && attempt.details.marketplace_discovered === true && attempt.details.installed_skill_exact === true;
-  const recomputedOutcome = !attempt.executable_present || !versionOk || noAuth ? 'inconclusive'
-    : (!probeGreen || attempt.exit_code !== 0 || !detailsGreen || !attempt.challenge_seen ? 'fail' : 'pass');
+  const recomputedOutcome = classifyAttempt({ executable: attempt.executable_present, executed: attempt.execution_attempted, version: versionOk, codes: attempt.probe_exit_codes, text: evidenceText, detailsGreen, challenge: attempt.challenge_seen && Boolean(challenge) });
   if (attempt.outcome !== recomputedOutcome) errors.push(attempt.runtime + ': outcome does not match retained evidence');
   for (const key of ['stdout_log_path', 'stderr_log_path']) {
     if (!isPath(attempt[key])) { errors.push(attempt.runtime + ': ' + key + ' missing'); continue; }
@@ -349,22 +356,31 @@ const command = {
   claude: ['claude', 'plugin', 'validate', '<plugin>', '&&', 'claude', '--bare', '--plugin-dir', '<plugin>', '-p', '/portability-probe', '--output-format', 'json', '--max-budget-usd', '0.01', '--no-session-persistence'],
   codex: ['codex', 'plugin', 'marketplace', 'add', '<marketplace>', '--json', '&&', 'codex', 'plugin', 'list', '--marketplace', 'autopilot-frontmatter-probe-local', '--available', '--json', '&&', 'codex', 'plugin', 'add', 'autopilot-frontmatter-probe@autopilot-frontmatter-probe-local', '--json', '&&', 'codex', 'exec', '--ephemeral', '--sandbox', 'read-only', '--json', '--skip-git-repo-check', '-C', '<scratch>', '<invoke $autopilot-frontmatter-probe:portability-probe; respond with the challenge obtained from the skill>'],
 };
-const claudeStdout = read('claude_probe.stdout') + read('claude_exec.stdout');
-const claudeStderr = read('claude_probe.stderr') + read('claude_exec.stderr');
-const codexStdout = read('codex_probe.stdout') + read('codex_list.stdout') + read('codex_add.stdout') + read('codex_exec.stdout');
-const codexStderr = read('codex_probe.stderr') + read('codex_list.stderr') + read('codex_add.stderr') + read('codex_exec.stderr');
+const combined = (names, stream) => names.map((name) => `AUTOPILOT_STEP ${name} ${rc(name)}\n${read(`${name}.${stream}`)}`).join('');
+const claudeNames = ['claude_probe', 'claude_exec'];
+const codexNames = ['codex_probe', 'codex_list', 'codex_add', 'codex_exec'];
+const claudeStdout = combined(claudeNames, 'stdout'); const claudeStderr = combined(claudeNames, 'stderr');
+const codexStdout = combined(codexNames, 'stdout'); const codexStderr = combined(codexNames, 'stderr');
 const claudeInstalled = Boolean(process.env.CLAUDE_VERSION);
 const codexInstalled = Boolean(process.env.CODEX_VERSION);
-const claudeNoAuth = /not logged in|run \/login|authentication|auth/i.test(claudeStdout + '\n' + claudeStderr);
 const claudeValidationOk = rc('claude_probe') === 0;
 const challengeToken = (raw) => {
   const matches = [...String(raw || '').matchAll(/AUTOPILOT_SKILL_CHALLENGE_[0-9a-f]{32}/g)].map((m) => m[0]);
   return [...new Set(matches)].length === 1 ? matches[0] : '';
 };
+const classifyAttempt = ({ executable, executed, version, codes, text, detailsGreen, challenge }) => {
+  if (!executable || !executed || !version) return 'inconclusive';
+  const steps = [...String(text).matchAll(/AUTOPILOT_STEP \S+ (-?\d+)\n([\s\S]*?)(?=AUTOPILOT_STEP \S+ -?\d+\n|$)/g)];
+  if (steps.length && (steps.length !== codes.length * 2 || steps.some((m, i) => Number(m[1]) !== codes[i % codes.length]))) return 'inconclusive';
+  const failed = (steps.length ? steps.filter((m) => Number(m[1]) !== 0).map((m) => m[2]) : [text]).join('\n');
+  const infra = /\b(?:not logged in|log in required|run \/login|authentication (?:failed|required)|unauthorized|invalid (?:api )?key|timed? out|timeout|network|transport|ECONN[A-Z]+|ENETUNREACH|EAI_AGAIN|rate limit|quota)\b/i.test(failed) || codes.some((code) => [124, 137, 143].includes(code));
+  const rejected = /(?:unknown|unrecognized|unsupported|additional)[^\n]{0,40}\b(?:field|property|key)s?\b[^\n]{0,80}\btier\b|\btier\b[^\n]{0,80}\b(?:not allowed|unknown|unrecognized|unsupported)\b/i.test(failed);
+  if (codes.every((code) => code === 0) && detailsGreen && challenge) return 'pass';
+  return !infra && rejected && codes.some((code) => code !== 0) ? 'fail' : 'inconclusive';
+};
 const claudeChallengeSeen = challengeToken(claudeStdout) === process.env.CLAUDE_CHALLENGE;
 const claudeVersionOk = /^2\.1\.220(?:\s|$)/.test(process.env.CLAUDE_VERSION.trim());
-const claudeOutcome = !claudeInstalled || !claudeVersionOk || claudeNoAuth ? 'inconclusive'
-  : (!claudeValidationOk || rc('claude_exec') !== 0 || !claudeChallengeSeen ? 'fail' : 'pass');
+const claudeOutcome = classifyAttempt({ executable: claudeInstalled, executed: claudeInstalled, version: claudeVersionOk, codes: [rc('claude_probe'), rc('claude_exec')], text: claudeStdout + '\n' + claudeStderr, detailsGreen: claudeValidationOk, challenge: claudeChallengeSeen });
 const list = parsed(read('codex_list.stdout'));
 const added = parsed(read('codex_add.stdout'));
 const installedPath = added && typeof added.installedPath === 'string' ? added.installedPath : '';
@@ -374,9 +390,7 @@ const codexDiscovery = JSON.stringify(list || '').includes('autopilot-frontmatte
 const codexSkillExact = installedBody.length > 0 && installedBody.equals(body);
 const codexChallengeSeen = challengeToken(codexStdout) === process.env.CODEX_CHALLENGE;
 const codexVersionOk = /^codex-cli 0\.146\.0(?:\s|$)/.test(process.env.CODEX_VERSION.trim());
-const codexNoAuth = /not logged in|authentication|auth required/i.test(codexStdout + '\n' + codexStderr);
-const codexOutcome = !codexInstalled || !codexVersionOk || codexNoAuth ? 'inconclusive'
-  : (rc('codex_probe') !== 0 || rc('codex_list') !== 0 || rc('codex_add') !== 0 || rc('codex_exec') !== 0 || !codexDiscovery || !codexSkillExact || !codexChallengeSeen ? 'fail' : 'pass');
+const codexOutcome = classifyAttempt({ executable: codexInstalled, executed: codexInstalled, version: codexVersionOk, codes: [rc('codex_probe'), rc('codex_list'), rc('codex_add'), rc('codex_exec')], text: codexStdout + '\n' + codexStderr, detailsGreen: codexDiscovery && codexSkillExact, challenge: codexChallengeSeen });
 fs.mkdirSync(retainedRoot, { recursive: true, mode: 0o700 });
 fs.chmodSync(retainedRoot, 0o700);
 const retainLog = (runtime, stream, content) => {

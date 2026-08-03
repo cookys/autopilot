@@ -91,4 +91,12 @@ assert_eq "$?" "1" "needs_full_review delta cannot be accepted by checker"
 "$SCRIPT" remediation --previous "$HEAD" --current "$BASE" --findings-file "$FINDINGS" --repo "$REPO" >/dev/null 2>&1
 assert_eq "$?" "1" "reversed ancestry fails closed"
 
+OUT="$(node - "$REPO_ROOT" "$REPO" "$BASE" "$HEAD" <<'NODE'
+const { _defaultRemediationChecker: check } = require(`${process.argv[2]}/src/engine/autopilot-engine`);
+const finding = { finding_id: 'F1', claim: 'src/value.js:1 changed value is wrong', severity: '🟠', source: 'panel review' };
+for (const currentFindings of [[{ ...finding, finding_id: 'F2' }], [{ ...finding, claim: 'reused id, different contract' }]]) console.log(check({ repo: process.argv[3], previousCommit: process.argv[4], currentCommit: process.argv[5], previousFindings: [finding], currentFindings }).status);
+NODE
+)"
+assert_eq "$OUT" $'needs_full_review\nneeds_full_review' "renumbered or reused finding IDs require full blind review"
+
 finalize_test

@@ -12,6 +12,15 @@ HELP="$(bash "$PROBE" --help 2>&1)"
 assert_contains "$HELP" "--check" "probe documents check mode"
 assert_contains "$HELP" "--validate" "probe documents receipt validation"
 
+CLASSIFY="$(node - "$PROBE" <<'NODE'
+const fs = require('fs'); const source = fs.readFileSync(process.argv[2], 'utf8');
+const bodies = [...source.matchAll(/const classifyAttempt = (\([\s\S]*?\n};)/g)].map((m) => m[1]);
+const classify = eval(bodies[0]); const base = { executable:true, executed:true, version:true, detailsGreen:false, challenge:false };
+console.log(`copies=${bodies.length}:${new Set(bodies).size} reject=${classify({...base,codes:[1],text:'AUTOPILOT_STEP schema 1\nunsupported frontmatter field tierAUTOPILOT_STEP schema 1\n'})} infra=${classify({...base,codes:[1],text:'AUTOPILOT_STEP load 1\nauthentication required: network timeoutAUTOPILOT_STEP load 1\n'})}`);
+NODE
+)"
+assert_contains "$CLASSIFY" "copies=2:1 reject=fail infra=inconclusive" "producer and validator share truthful stage classifier"
+
 # Keep the qualified real-runtime acceptance probe outside the deterministic
 # umbrella/version-bump suite. Operators opt in only when both installed
 # runtimes, pinned versions, and authentication are available.

@@ -1,7 +1,7 @@
 # Plan-review receipts — Platform capability trigger activation
 
-> Current planning state: **R4 `review-pending-r4`, generation 2 pending**. R2 and R3 are terminal
-> infrastructure-failure receipts and are not review authority for R4.
+> Current planning state: **R4 terminal semantic `READY`; implementation authorized, not started**.
+> R2 and R3 remain terminal infrastructure-failure receipts and are not review authority for R4.
 
 ## R2 terminal infrastructure-failure receipt
 
@@ -69,10 +69,10 @@ R3's frozen semantic repair remains the executable content inherited by R4:
 - R7 names canonical non-generated hook sources under `platforms/codex/hooks`, exact generated plugin
   mappings, deletion/regeneration proof, and manual-edit inverse drift tests.
 
-## R4 generation 1 disposition and frozen generation 2 repair
+## R4 generation 1 disposition and terminal generation 2 READY
 
 - Logical plan: `platform-capability-trigger-activation-2026-08-04-r4`
-- Status: `review-pending-r4` (generation 2 pending)
+- Status: terminal semantic `READY`; implementation authorized, not started
 - Ticket: `platform-trigger-activation-r4-20260804`
 - Generation 1 session: `platform-trigger-activation-r4-g1`
 - Generation 1 session key: `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`
@@ -86,6 +86,15 @@ R3's frozen semantic repair remains the executable content inherited by R4:
   [`2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json`](2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json)
 - Disposition SHA-256: `d5d689be758dc93ea84b3470a01b654886ae5bbe608e347fea8cbfadbca99604`
 - Accepted R8 fingerprint: `e9f817092f3b54635588d1c76aca049615ff918c5ef4e3c4e5f373d951c88645`
+- Generation 2 session: `platform-trigger-activation-r4-g2`
+- Generation 2 session key: `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`
+- Generation 2 controller artifact:
+  `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
+- Generation 2 artifact SHA-256: `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`
+- Generation 2 result: terminal `READY`, semantic `READY`, policy `generation_2_terminal`,
+  `findings:[]`, `next_generation:null`
+
+Generation 1 seats:
 
 | Seat | Attempt | Transport / parser | Semantic result |
 |---|---:|---|---|
@@ -99,11 +108,19 @@ sets or an explicitly unconsumed optional set. D1 revalidates all required IDs; 
 and consume only their own canonical set. Missing, blocked, substituted, smuggled optional, unknown,
 duplicate, and downstream-drifted identifiers all fail closed. No other D1–D4 semantics changed.
 
-This is generation 2 in the existing R4 lineage, not a new logical plan or an R3 reopening. The
-one-node topology, reservation totals, gate-attempt budget, and two-repair-generation ceiling are
-unchanged. The frozen rubric and review manifest remain byte-identical. This planning/admission commit
-does not implement production code or dispatch a generation 2 reviewer; structural Mission admission
-is not a semantic verdict.
+Generation 2 seats:
+
+| Seat | Attempt | Transport / parser | Semantic result |
+|---|---:|---|---|
+| `codex/gpt-5.6-sol@max` architecture | 1 | Success / strict | `READY`; no findings. |
+| `agy/gemini-3.6-flash-high@high` operations-skeptic | 1 | Success / extracted | `READY`; no findings. |
+
+Generation 2 completed in the existing R4 lineage, not as a new logical plan or an R3 reopening. Both
+required independent seats returned `READY` with empty findings against the exact frozen plan, rubric,
+and manifest bytes. The controller result is terminal under `generation_2_terminal`; there is no next
+generation. This receipt authorizes implementation of the reviewed D1–D4 plan, but implementation has
+not started. The one-node topology, reservation totals, gate-attempt budget, and two-generation ceiling
+remain unchanged, and this docs-only receipt commit performs no implementation or model dispatch.
 
 The R4 source manifest has file SHA-256
 `8e32ccb537716db94c3666df44bb7f3f35bf6ac7ab28b6f253f97012c10cd0cb`; the graph has canonical

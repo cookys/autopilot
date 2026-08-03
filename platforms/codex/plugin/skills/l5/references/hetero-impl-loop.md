@@ -78,6 +78,17 @@ so they are one rule, not five; a healthy run surfaces nothing.
 Rationale and evidence: `docs/plans/2026-07-25-roster-field-report.md` §1c — a plain path, not a
 link: `docs/` is outside the Codex plugin payload, so a relative link here escapes it (`codex-plugin-package` test).
 
+## Stage-3 coordination boundary
+
+`watch-foreman.js` remains a report-only sensor. If a depth-0 controller is
+explicitly authorized to use adaptive recovery, it must call the ledger
+`stage-coordinate` rail with the exact generation/nonce and preserve the fixed
+inquiry → bounded wait → identity re-observation → bounded termination →
+reconciliation → one same-lineage replacement order. The gate is off by default;
+unreadable identity, D-state, held resources, or stale quietness without an
+inquiry is `unknown` and cannot be acted on. See the canonical Stage-3 contract
+in [`references/orchestrator-state-machine.md`](../../../references/orchestrator-state-machine.md).
+
 ## Verify-first wiring rule
 
 When `resolve-review-loop.sh` emits `verify_first: true`, the foreman MUST pass

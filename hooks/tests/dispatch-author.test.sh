@@ -9,6 +9,7 @@ export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session_isolation"
 mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-author.sh"
+GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=main -c commit.gpgsign=false"
 PROMPT="$TEST_TMP/prompt.txt"
 printf '%s' "Write a verification plan for the change and include exactly three bullet items." > "$PROMPT"
 
@@ -138,6 +139,72 @@ OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --model gpt-5.5 --prompt-file "$PROMPT" 2>&1)"
 assert_eq "2" "$EXIT" "missing --runner exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing --runner => precondition_failed"
 assert_contains "$OUT" "--runner is required" "missing --runner message"
+
+# --- 4.1. Deliberately buggy verification-author dispatches require an exact
+#       polarity receipt before any runner is spawned.
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" \
+  --bin "$STUB_COD" --require-polarity-receipt 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "required polarity receipt without path exits 2"
+assert_contains "$OUT" "requires --polarity-receipt" "missing polarity receipt path is named"
+POLARITY_BAD="$TEST_TMP/bad-polarity.json"
+printf '%s\n' '{}' > "$POLARITY_BAD"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" \
+  --bin "$STUB_COD" --polarity-receipt "$POLARITY_BAD" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "malformed polarity receipt exits 2"
+assert_contains "$OUT" "shipping validation requires --polarity-base-sha" "polarity shipping path requires controller-known candidate identity"
+
+# --- 4.2: shipping polarity validates against independently observed commits ---
+POL_REPO="$TEST_TMP/polarity-repo"
+$GIT init "$POL_REPO" >/dev/null 2>&1
+printf '%s\n' 'echo 3' > "$POL_REPO/calc.sh"
+printf '%s\n' '#!/usr/bin/env bash' '[ "$(bash calc.sh)" = "5" ]' > "$POL_REPO/calc.test.sh"
+chmod +x "$POL_REPO/calc.test.sh"
+$GIT -C "$POL_REPO" add calc.sh calc.test.sh >/dev/null 2>&1
+$GIT -C "$POL_REPO" commit -m base >/dev/null 2>&1
+POL_BASE="$($GIT -C "$POL_REPO" rev-parse HEAD)"
+printf '%s\n' 'echo 5' > "$POL_REPO/calc.sh"
+printf '%s\n' '#!/usr/bin/env bash' '[ "$(bash calc.sh)" = "5" ] # head artifact' > "$POL_REPO/calc.test.sh"
+chmod +x "$POL_REPO/calc.test.sh"
+$GIT -C "$POL_REPO" add -A >/dev/null 2>&1
+$GIT -C "$POL_REPO" commit -m head >/dev/null 2>&1
+POL_HEAD="$($GIT -C "$POL_REPO" rev-parse HEAD)"
+POL_VERIFY="$POL_REPO/calc.test.sh"
+POL_RECEIPT="$TEST_TMP/polarity-valid.json"
+"$REPO_ROOT/scripts/verify-red-green.sh" --base "$POL_BASE" --head "$POL_HEAD" \
+  --verify-cmd "$POL_VERIFY" --repo "$POL_REPO" --assertion-artifact calc.test.sh --receipt-out "$POL_RECEIPT" >/dev/null
+# The Grok-shaped transport owns a live stdin under its timeout wrapper.  Keep
+# this polarity acceptance fixture independent of stdin so a valid receipt
+# cannot be mistaken for a transport hang.
+STUB_GROK="$TEST_TMP/runner-grok"
+cat > "$STUB_GROK" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "grok polarity fixture"
+EOF
+chmod +x "$STUB_GROK"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model gpt-test --prompt-file "$PROMPT" \
+  --bin "$STUB_GROK" --require-polarity-receipt --polarity-receipt "$POL_RECEIPT" \
+  --repo-root "$POL_REPO" --polarity-base-sha "$POL_BASE" --polarity-head-sha "$POL_HEAD" \
+  --polarity-verify-cmd "$POL_VERIFY" --polarity-assertion-artifact calc.test.sh 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "independently observed polarity receipt permits dispatch"
+assert_contains "$OUT" '"polarity_receipt_digest": "' "dispatch result carries polarity receipt digest"
+assert_not_contains "$OUT" '\\"' "polarity receipt digest serialization has no literal quote escapes"
+POL_FORGED="$TEST_TMP/polarity-forged.json"
+node - "$POL_RECEIPT" "$POL_FORGED" <<'NODE'
+const fs = require('fs');
+const crypto = require('crypto');
+const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+source.base_exit_code = 0;
+const canonical = (value) => Array.isArray(value) ? '[' + value.map(canonical).join(',') + ']' : (value && typeof value === 'object' ? '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}' : JSON.stringify(value));
+const body = { ...source }; delete body.receipt_digest;
+source.receipt_digest = crypto.createHash('sha256').update(canonical(body)).digest('hex');
+fs.writeFileSync(process.argv[3], JSON.stringify(source));
+NODE
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner grok --model gpt-test --prompt-file "$PROMPT" \
+  --bin "$STUB_GROK" --require-polarity-receipt --polarity-receipt "$POL_FORGED" \
+  --repo-root "$POL_REPO" --polarity-base-sha "$POL_BASE" --polarity-head-sha "$POL_HEAD" \
+  --polarity-verify-cmd "$POL_VERIFY" --polarity-assertion-artifact calc.test.sh 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "forged self-digested polarity receipt is rejected"
+assert_contains "$OUT" "red-before/green-after" "forged polarity rejection names observed transition"
 
 # --- 5. precondition: missing binary ---
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$TEST_TMP/no-bin" 2>&1)"; EXIT=$?

@@ -2,6 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawnSync } = require('child_process');
 const { bufferToString } = require('../lib/common');
 const { createRunnerTransportEnvelope } = require('../transport/runner-envelope');
@@ -144,15 +145,39 @@ function dispatchReview(args, options = {}) {
       signal: null,
     };
   }
+  let launchArgs = args;
+  let launchCwd = options.cwd || REPO_ROOT;
+  let blindCwd = null;
   try {
-    return spawnSync(scriptPath, args, {
-      cwd: options.cwd || REPO_ROOT,
-      env: options.env || process.env,
+    if (options.blindDiscovery === true) {
+      blindCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-blind-'));
+      fs.chmodSync(blindCwd, 0o700);
+      launchArgs = [...args];
+      for (const flag of ['--diff-file', '--spec-file']) {
+        const index = launchArgs.indexOf(flag);
+        if (index < 0 || typeof launchArgs[index + 1] !== 'string') continue;
+        const source = launchArgs[index + 1];
+        const target = path.join(blindCwd, flag.slice(2, -5).replace(/-/g, '.') + '.input');
+        fs.copyFileSync(source, target);
+        fs.chmodSync(target, 0o600);
+        launchArgs[index + 1] = target;
+      }
+      launchCwd = blindCwd;
+    }
+    const child = spawnSync(scriptPath, launchArgs, {
+      cwd: launchCwd,
+      env: options.blindDiscovery === true
+        ? { ...(options.env || process.env), AUTOPILOT_BLIND_DISCOVERY: '1' }
+        : (options.env || process.env),
       shell: false,
       stdio: options.stdio || 'inherit',
     });
+    child.autopilotLaunchCwd = launchCwd;
+    return child;
   } catch (error) {
     return { error, status: null, signal: null };
+  } finally {
+    if (blindCwd) fs.rmSync(blindCwd, { recursive: true, force: true });
   }
 }
 
@@ -172,7 +197,7 @@ function dispatchReviewJson(args, options = {}) {
     model: argValue('--model') || 'unknown',
     operation: 'review',
     argv: args,
-    cwd: options.cwd || REPO_ROOT,
+    cwd: child.autopilotLaunchCwd || options.cwd || REPO_ROOT,
     child: { ...child, stdout, stderr },
     outcomeHints: options.transportOutcomeHints,
     privateRawReference: options.privateRawReference,

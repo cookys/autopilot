@@ -1562,6 +1562,131 @@ function defaultCampaignRepairChangedPaths({ repo, base, head }) {
   };
 }
 
+function remediationFallback(reason) {
+  return {
+    schema_version: 1,
+    artifact_type: 'review_remediation_check',
+    status: 'needs_full_review',
+    authority: 'non_authoritative',
+    whole_candidate_pass: false,
+    gate_clear: false,
+    fallback_to_full_blind_review: true,
+    reason,
+  };
+}
+
+function defaultRemediationChecker({ deltaFile, resultFile }) {
+  const delta = JSON.parse(fs.readFileSync(deltaFile, 'utf8'));
+  const findings = Array.isArray(delta.finding_contracts) ? delta.finding_contracts.map((finding) => ({
+    finding_id: finding.finding_id,
+    status: 'needs_full_review',
+    evidence: 'default checker makes no independent resolution claim',
+  })) : [];
+  const result = {
+    schema_version: 1,
+    artifact_type: 'review_remediation_result',
+    authority: 'non_authoritative',
+    whole_candidate_pass: false,
+    gate_clear: false,
+    previous_commit: delta.previous_commit,
+    current_commit: delta.current_commit,
+    delta_digest: delta.delta_digest,
+    finding_contract_digest: delta.finding_contract_digest,
+    findings,
+  };
+  fs.writeFileSync(resultFile, `${JSON.stringify(result)}\n`, { mode: 0o600 });
+}
+
+function runRemediationCheckerBoundary(checker, {
+  repo, previousCommit, currentCommit, previousFindings, currentFindings,
+}) {
+  if (!isImmutableGitSha(previousCommit) || !isImmutableGitSha(currentCommit)
+      || previousCommit === currentCommit) {
+    return remediationFallback('remediation checker requires two distinct immutable commits');
+  }
+  if (!Array.isArray(previousFindings) || previousFindings.length === 0) {
+    return remediationFallback('no complete prior finding contracts available');
+  }
+  const allowedKeys = ['claim', 'finding_id', 'severity', 'source'];
+  const freezeContracts = (items, label, allowEmpty = false) => {
+    if (!Array.isArray(items) || (!allowEmpty && items.length === 0)) return null;
+    const seen = new Set();
+    const out = items.map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)
+          || Object.keys(item).sort().join(',') !== allowedKeys.join(',')
+          || seen.has(item.finding_id)) return null;
+      seen.add(item.finding_id);
+      return Object.freeze({
+        finding_id: item.finding_id,
+        claim: item.claim,
+        severity: item.severity,
+        source: item.source,
+      });
+    });
+    return out.some((item) => !item) ? null : Object.freeze(out);
+  };
+  const contracts = freezeContracts(previousFindings, 'prior');
+  const currentContracts = freezeContracts(currentFindings, 'current', true);
+  if (!contracts) return remediationFallback('prior review findings are not named contract objects');
+  if (!currentContracts) return remediationFallback('current review findings are not named contract objects');
+  const currentById = new Map(currentContracts.map((item) => [item.finding_id, item]));
+  if (contracts.some((finding) => {
+    const current = currentById.get(finding.finding_id);
+    return !current || allowedKeys.some((key) => current[key] !== finding[key]);
+  })) return remediationFallback('current review does not preserve exact frozen prior finding identities');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-remediation-check-'));
+  const findingsFile = path.join(tempDir, 'findings.json');
+  const deltaFile = path.join(tempDir, 'delta.json');
+  const checkerDir = path.join(tempDir, 'checker');
+  try {
+    fs.writeFileSync(findingsFile, `${JSON.stringify({ findings: contracts })}\n`, { mode: 0o600 });
+    const script = resolveScriptPath('scripts/diff-since-last-round.sh');
+    const built = spawnSync('bash', [
+      script, 'remediation', '--previous', previousCommit, '--current', currentCommit,
+      '--findings-file', findingsFile, '--repo', repo, '--out', deltaFile,
+    ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const delta = fs.existsSync(deltaFile) ? parseJsonFromLastLine(fs.readFileSync(deltaFile, 'utf8')) : null;
+    if (!delta || built.error || built.status !== 0 || delta.status !== 'ready') {
+      return remediationFallback((delta && delta.reason) || 'remediation delta is not ready for named checking');
+    }
+    fs.mkdirSync(checkerDir, { mode: 0o700 });
+    const safeDeltaFile = path.join(checkerDir, 'delta.json');
+    const safeContractsFile = path.join(checkerDir, 'finding-contracts.json');
+    const resultFile = path.join(checkerDir, 'result.json');
+    fs.copyFileSync(deltaFile, safeDeltaFile); fs.chmodSync(safeDeltaFile, 0o600);
+    fs.writeFileSync(safeContractsFile, `${JSON.stringify({ prior: delta.finding_contracts })}\n`, { mode: 0o600 });
+    const originalCwd = process.cwd();
+    let checkerResult;
+    try {
+      process.chdir(checkerDir);
+      checkerResult = checker({
+        deltaFile: safeDeltaFile,
+        findingContractsFile: safeContractsFile,
+        resultFile,
+        cwd: checkerDir,
+      });
+    } finally {
+      process.chdir(originalCwd);
+    }
+    if (checkerResult && typeof checkerResult === 'object') {
+      fs.writeFileSync(resultFile, `${JSON.stringify(checkerResult)}\n`, { mode: 0o600 });
+    }
+    const checked = spawnSync('bash', [
+      script, 'check-remediation', '--delta-file', safeDeltaFile, '--result-file', resultFile,
+      '--repo', repo,
+    ], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const result = parseJsonFromLastLine(checked.stdout);
+    if (!result || checked.error || checked.status !== 0) {
+      return remediationFallback((result && result.reason) || 'named remediation checker did not produce a valid receipt');
+    }
+    return result;
+  } catch (error) {
+    return remediationFallback(error.message || String(error));
+  } finally {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_error) { /* best effort */ }
+  }
+}
+
 function checkCampaignScope({ session, repo, head }) {
   if (!session
       || repairScopeContractDigest(session.contract) !== session.seal_digest) {
@@ -2160,6 +2285,35 @@ function collectFindings(review) {
   return [];
 }
 
+function namedReviewFindings(review) {
+  let findings = null;
+  if (review && review.review && Object.prototype.hasOwnProperty.call(review.review, 'findings')) {
+    findings = review.review.findings;
+  } else if (review && Object.prototype.hasOwnProperty.call(review, 'findings')) {
+    findings = review.findings;
+  }
+  if (typeof findings === 'string') {
+    const normalized = normalizeProductReviewFindings(findings);
+    if (normalized.status !== 'normalized') return null;
+    findings = normalized.findings;
+  }
+  if (!Array.isArray(findings)) return null;
+  // Freeze a detached copy before the named checker sees ordinary dispatch
+  // output; later review normalization cannot mutate the checker contract.
+  try {
+    const detached = JSON.parse(JSON.stringify(findings));
+    const freezeDeep = (value) => {
+      if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+      Object.freeze(value);
+      for (const child of Object.values(value)) freezeDeep(child);
+      return value;
+    };
+    return freezeDeep(detached);
+  } catch (_error) {
+    return null;
+  }
+}
+
 function verificationRank(verifyPass) {
   return verifyPass === true ? 1 : 0;
 }
@@ -2244,6 +2398,7 @@ class AutopilotEngine {
     this.implementationDispatcher = options.implementationDispatcher || dispatchImplementJson;
     this.diffProvider = options.diffProvider || defaultDiffProvider;
     this.repairPromptWriter = options.repairPromptWriter || defaultRepairPromptWriter;
+    this.remediationChecker = options.remediationChecker || defaultRemediationChecker;
     this.verifyCommandRunner = options.verifyCommandRunner || defaultVerifyCommandRunner;
     this.gitWorktreeAdd = options.gitWorktreeAdd || defaultGitWorktreeAdd;
     this.gitWorktreeRemove = options.gitWorktreeRemove || defaultGitWorktreeRemove;
@@ -4442,6 +4597,9 @@ class AutopilotEngine {
         },
         diff_file: path.resolve(diffFile),
         spec_file: path.resolve(specFile),
+        blind_discovery: true,
+        prior_findings_included: false,
+        full_diff_required: true,
       };
     };
 
@@ -4523,7 +4681,8 @@ class AutopilotEngine {
           reason: 'campaign wall budget exhausted before review',
         };
       }
-      const reviewed = this.reviewDiff({
+      const previousReviewForRemediation = repairGeneration > 0 ? latestReview : null;
+      let reviewed = this.reviewDiff({
         diffFile,
         specFile: promptFile,
         roster: reviewRoster,
@@ -4552,6 +4711,7 @@ class AutopilotEngine {
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
+          blindDiscovery: true,
         },
         requireQualifiedReviewer: scope === 'final' ? true : requireQualifiedReviewer,
         pinReviewerTuple,
@@ -4565,6 +4725,60 @@ class AutopilotEngine {
           reviewed: false,
           reason: reviewed.reason || `review status ${reviewed.status}`,
           raw: reviewed,
+        };
+      }
+      if (repairGeneration > 0 && previousReviewForRemediation) {
+        const priorFindings = namedReviewFindings(previousReviewForRemediation);
+        const currentFindings = namedReviewFindings(reviewed);
+        let remediationCheck;
+        if (!priorFindings || !currentFindings) {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: !currentFindings
+              ? 'current full-review findings are missing or malformed'
+              : 'prior full-review findings are missing or malformed',
+          };
+        } else try {
+          remediationCheck = runRemediationCheckerBoundary(this.remediationChecker, {
+            repo: loopCwd,
+            previousCommit: currentBase,
+            currentCommit: candidate.commit,
+            previousFindings: priorFindings,
+            currentFindings,
+            repairGeneration,
+          });
+        } catch (error) {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: error.message || String(error),
+          };
+        }
+        reviewed = {
+          ...reviewed,
+          remediation_check: remediationCheck && typeof remediationCheck === 'object'
+            ? remediationCheck
+            : {
+              schema_version: 1,
+              artifact_type: 'review_remediation_check',
+              status: 'needs_full_review',
+              authority: 'non_authoritative',
+              whole_candidate_pass: false,
+              gate_clear: false,
+              fallback_to_full_blind_review: true,
+              reason: 'remediation checker returned no receipt',
+            },
         };
       }
       let findings = reviewed.review && typeof reviewed.review.findings === 'string'
@@ -4631,6 +4845,9 @@ class AutopilotEngine {
         findings,
         review_digest: reviewDigest,
         review_input_mode: 'full_diff_generation',
+        blind_discovery: true,
+        prior_findings_included: false,
+        full_diff_required: true,
         raw: reviewed,
       };
     };
@@ -9081,6 +9298,7 @@ class AutopilotEngine {
         });
       }
 
+      const previousReviewForRemediation = round > 1 ? review : null;
       review = this.reviewDiff({
         diffFile,
         specFile: input.noReviewSpec !== true ? promptFile : undefined,
@@ -9113,9 +9331,64 @@ class AutopilotEngine {
         reviewOptions: {
           ...(input.reviewOptions || {}),
           cwd: loopCwd,
+          blindDiscovery: true,
         },
         requireQualifiedReviewer,
       });
+      if (round > 1 && previousReviewForRemediation) {
+        const priorFindings = namedReviewFindings(previousReviewForRemediation);
+        const currentFindings = namedReviewFindings(review);
+        let remediationCheck;
+        if (!priorFindings || !currentFindings) {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: !currentFindings
+              ? 'current full-review findings are missing or malformed'
+              : 'prior full-review findings are missing or malformed',
+          };
+        } else try {
+          remediationCheck = runRemediationCheckerBoundary(this.remediationChecker, {
+            repo: loopCwd,
+            previousCommit: nextBase,
+            currentCommit: commit,
+            previousFindings: priorFindings,
+            currentFindings,
+            repairGeneration: round - 1,
+          });
+        } catch (error) {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: error.message || String(error),
+          };
+        }
+        if (!remediationCheck || typeof remediationCheck !== 'object') {
+          remediationCheck = {
+            schema_version: 1,
+            artifact_type: 'review_remediation_check',
+            status: 'needs_full_review',
+            authority: 'non_authoritative',
+            whole_candidate_pass: false,
+            gate_clear: false,
+            fallback_to_full_blind_review: true,
+            reason: 'remediation checker returned no receipt',
+          };
+        }
+        // Keep this receipt outside the reviewer authority digest. It is a
+        // dispatcher-side annotation and can never make a full review pass.
+        review = { ...review, remediation_check: remediationCheck };
+      }
       ledger.push(...review.ledger);
       reviewChain.push(review);
       if (lifecycleObservation) lifecycleObservation.observeReviewResult(review, round);
@@ -9263,6 +9536,8 @@ class AutopilotEngine {
 module.exports = {
   AUTOPILOT_ENGINE_CONTROL_SINKS,
   AutopilotEngine,
+  _defaultRemediationChecker: defaultRemediationChecker,
+  _runRemediationCheckerBoundary: runRemediationCheckerBoundary,
   bindCampaignScopeReceipt,
   buildImplementationArgs,
   buildReviewArgs,

@@ -143,6 +143,12 @@ case "$MODE" in
     echo "line after fake diff"
     echo "$END"
     ;;
+  lexical)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: this valid finding discusses prompt, diff, marker, Diff under review:, diff --git, @@ -1 +1 @@, and <one finding per line> as vocabulary"
+    echo "$END"
+    ;;
   trailing)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
@@ -399,6 +405,12 @@ OUT="$(STUB_MODE=leak "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIF
 assert_eq "1" "$EXIT" "leak content exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "leakage content → no_verdict"
 
+# 4g1. Natural-language findings may mention detector vocabulary without being
+#     rejected; only structurally echoed framing is leakage.
+OUT="$(STUB_MODE=lexical "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "lexical detector vocabulary exits 0"
+assert_contains "$OUT" '"status": "reviewed"' "lexical detector vocabulary remains reviewed"
+
 # 4g. Content after END is rejected (trailing non-blank payload).
 OUT="$(STUB_MODE=trailing "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "trailing content after END exit 1 (fail-closed)"
@@ -454,6 +466,24 @@ OUT="$(STUB_MODE=ship_no_end "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-P
 assert_eq "1" "$EXIT" "qoderclicn capped partial wrapped block is no_verdict"
 assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn capped partial SHIP never passes"
 assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn partial SHIP is not accepted"
+
+# 5c. Blind review requires no-tools containment and hides the caller escape sentinel.
+OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "blind codex review requires a no-tools profile"
+assert_contains "$OUT" 'enforceable no-tools runner profile' "blind precondition explains containment"
+BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
+BLIND_SCRIPT="$TEST_TMP/blind-probe"
+printf '#!/usr/bin/env bash\nif [ -e escape-sentinel ]; then printf '\''%s\\n'\'' '\''{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null}'\''; else exit 1; fi\n' > "$BLIND_SCRIPT"; chmod +x "$BLIND_SCRIPT"
+OUT="$(BLIND_SOURCE="$BLIND_SOURCE" BLIND_SCRIPT="$BLIND_SCRIPT" REPO_ROOT="$REPO_ROOT" node - <<'NODE'
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const source = process.env.BLIND_SOURCE;
+const result = dispatchReviewJson(['--runner', 'fixture', '--model', 'fixture', '--diff-file', `${source}/diff`, '--spec-file', `${source}/spec`], { cwd: source, scriptPath: process.env.BLIND_SCRIPT, blindDiscovery: true });
+console.log(JSON.stringify({ status: result.result && result.result.status, launch_cwd: result.transportEnvelope.cwd }));
+NODE
+  )"; EXIT=$?
+assert_eq "0" "$EXIT" "blind adapter probe returns transport result"
+assert_contains "$OUT" '"status":null' "blind adapter rejects caller escape sentinel"
+assert_not_contains "$OUT" '"status":"reviewed"' "blind adapter never accepts crawl verdict"
 
 # 6. anthropic-compatible: transport precondition failures collapse to no_verdict, exit 1 (no network)
 OUT="$(env -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_COMPATIBLE_AUTH_TOKEN -u MINIMAX_API_KEY \

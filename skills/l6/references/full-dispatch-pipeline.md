@@ -24,6 +24,13 @@ orchestration.
 runs the mechanical checks, judges convergence-by-verification, and holds merge
 authority. A dispatched green or reviewer pass is not authoritative by itself.
 
+Stage-3 recovery uses the same feature-gated ledger rail as `/l5`; verification
+authoring never gains scheduling or kill authority. `watch-foreman.js` stays
+report-only, and any adaptive intervention must retain the ordered inquiry,
+bounded wait, exact identity re-observation, bounded termination, reconciliation,
+and one-generation same-lineage replacement contract. Unknown or D-state
+evidence fails closed.
+
 ## Capability-state surface rule
 
 Identical to `/l5` — canonical text in

@@ -158,6 +158,12 @@ die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precond
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
+if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
+  case "$RUNNER" in
+    qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
+    *) die_precondition "blind review requires an enforceable no-tools runner profile (got: $RUNNER)" ;;
+  esac
+fi
 [[ -z "$MAX_TOKENS_PARSE_ERROR" ]] || die_precondition "$MAX_TOKENS_PARSE_ERROR"
 if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
   [[ "$MAX_TOKENS" =~ ^[1-9][0-9]*$ ]] \
@@ -871,10 +877,32 @@ if [ "$BLOCK_BYTES" -gt 16384 ]; then
   emit_no_verdict "response wrapped block exceeded the fail-closed size cap"
 fi
 
-if grep -q 'diff --git' "$BLOCK_FILE" \
-  || grep -q '^@@ ' "$BLOCK_FILE" \
-  || grep -q 'Diff under review:' "$BLOCK_FILE" \
-  || grep -q '<one finding per line' "$BLOCK_FILE"; then
+prompt_framing_leakage() {
+  awk '
+    BEGIN { found = 0 }
+    {
+      # Models sometimes structurally echo the framing inside a Markdown quote
+      # or an indented code block. Normalize only those structural prefixes and
+      # retain the exact-line checks; ordinary lexical use of the vocabulary is
+      # still permitted as a legitimate finding.
+      line = $0
+      sub(/^[[:space:]]*>[[:space:]]?/, "", line)
+      sub(/^[[:space:]]+/, "", line)
+      if (line ~ /^<<<AUTOPILOT-(REVIEW|END)-[0-9a-f]{32}>>>$/ \
+          || line ~ /^diff --git [^[:space:]]+ [^[:space:]]+$/ \
+          || line ~ /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ \
+          || line ~ /^Diff under review:[[:space:]]*$/ \
+          || line ~ /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ \
+          || line ~ /^<one finding per line>[[:space:]]*$/) {
+        found = 1
+      }
+      next
+    }
+    { next }
+    END { exit(found ? 0 : 1) }' "$BLOCK_FILE"
+}
+
+if prompt_framing_leakage; then
   emit_no_verdict "response wrapped block contained prompt-text leakage"
 fi
 

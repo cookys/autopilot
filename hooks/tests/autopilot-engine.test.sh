@@ -2337,6 +2337,7 @@ fs.writeFileSync(prompt, 'original implementation prompt');
 let implementationCalls = 0;
 let secondPromptText = '';
 let reviewCalls = 0;
+const reviewLaunches = [];
 
 const engine = new AutopilotEngine({
   implementationDispatcher(args) {
@@ -2367,8 +2368,9 @@ const engine = new AutopilotEngine({
       },
     };
   },
-  reviewDispatcher() {
+  reviewDispatcher(_args, options) {
     reviewCalls += 1;
+    reviewLaunches.push({ cwd: options && options.cwd, blind: options && options.blindDiscovery });
     return {
       error: null,
       status: 0,
@@ -2399,6 +2401,8 @@ const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'repair-loop',
   base: '1111111111111111111111111111111111111111',
+  cwd: path.dirname(prompt),
+  reviewOptions: { cwd: '/tmp/not-the-loop-cwd', blindDiscovery: false },
   maxRounds: 2,
   roster: {
     reviewer_engine: 'test-review-model',
@@ -2416,6 +2420,7 @@ console.log(`status=${result.status}`);
 console.log(`implementation_calls=${implementationCalls}`);
 console.log(`repair_prompt_has_findings=${secondPromptText.includes('line 12 still calls the shell directly')}`);
 console.log(`repair_prompt_has_original=${secondPromptText.includes('original implementation prompt')}`);
+console.log(`review_launches_bound=${reviewLaunches.length === 2 && reviewLaunches.every((launch) => launch.cwd === path.dirname(prompt) && launch.blind === true)}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "AutopilotEngine default repair prompt carries review findings"
@@ -2423,6 +2428,7 @@ assert_contains "$OUT" "status=converged" "AutopilotEngine default repair prompt
 assert_contains "$OUT" "implementation_calls=2" "AutopilotEngine default repair prompt triggers second implementation"
 assert_contains "$OUT" "repair_prompt_has_findings=true" "AutopilotEngine default repair prompt includes reviewer findings"
 assert_contains "$OUT" "repair_prompt_has_original=true" "AutopilotEngine default repair prompt preserves original task"
+assert_contains "$OUT" "review_launches_bound=true" "legacy repair and final convergence launches override caller cwd/blind negatives with loop-bound blind discovery"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verification-loop" <<'NODE'
 const fs = require('fs');

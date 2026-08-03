@@ -32,6 +32,7 @@ If any target harness is `stale`, `unverified`, `warning`, `unavailable`, or bel
 | Script | Use |
 |--------|-----|
 | [`scripts/measure-profile-context.js`](../../scripts/measure-profile-context.js) | Produce content-free source, rule-inventory, or persisted Codex context summaries. A byte estimate is conservative evidence only; it cannot prove an exact-token budget or another host's prompt visibility. |
+| [`scripts/probe-skill-frontmatter-portability.sh`](../../scripts/probe-skill-frontmatter-portability.sh) | Run disposable Claude Code/Codex skill-load probes and emit a version-bound pass/fail/inconclusive receipt before changing frontmatter metadata. |
 
 ## Update Rules
 

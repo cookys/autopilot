@@ -1,7 +1,7 @@
 # Plan-review receipts — Platform capability trigger activation
 
-> Current planning state: **R3 `review-pending-r3`**. R2 is a terminal infrastructure-failure
-> receipt and is not review authority for R3.
+> Current planning state: **R4 `review-pending-r4`**. R2 and R3 are terminal infrastructure-failure
+> receipts and are not review authority for R4.
 
 ## R2 terminal infrastructure-failure receipt
 
@@ -32,15 +32,34 @@ controller correctly declined to promote a one-family semantic result after the 
 exhausted. This receipt represents infrastructure failure, not an accepted blocker set or formal
 semantic verdict. It is never reopened, relabelled, or used to authorize generation 2.
 
-## R3 frozen author repair
+## R3 terminal required-seat timeout receipt
 
 - Logical plan: `platform-capability-trigger-activation-2026-08-04-r3`
-- Status: `review-pending-r3`
+- Ticket: `platform-trigger-activation-r3-20260804`
+- Session: `platform-trigger-activation-r3-g1`
+- Session key: `600fa0d7e15caa3cc8c738fdd62e429da596742c2824f8f07ddb09dab7877bc9`
 - Frozen plan SHA-256: `6bd4bf5c3857928e3d0c806d0e5f535211bc7202b8540bb20130b68bfaa631de`
 - Frozen rubric SHA-256: `c5e0228093da7f0cb39fea4e7e132ac8aeb246b49dcfabe21798e9daac34df51`
 - Frozen manifest SHA-256: `a3368b3db19ef1a88849d72faa3198c2ba5519c2fe9ba17e95bafc94a392b10b`
+- Controller artifact:
+  `/home/cookys/.autopilot/plan-review/600fa0d7e15caa3cc8c738fdd62e429da596742c2824f8f07ddb09dab7877bc9/generation-01.json`
+- Artifact SHA-256: `eb32cabf963f0296c0d877d8a961e9e10df3b016192e539be020ea73da1cc08b`
 
-R3 closes the three R2 advisory defects in the executable plan contract:
+The controller artifact is terminal `CONDITIONAL` with policy
+`required_seat_transport_exhausted`, `semantic_verdict:null`, `repair_authorized:false`, and
+`next_generation:null`.
+
+| Seat | Attempt | Execution boundary | Result |
+|---|---:|---|---|
+| `codex/gpt-5.6-sol@max` architecture | 1 | Correct canonical worktree, read-only; controller default five-minute seat timeout | Exit 3; zero stdout and last-message; raw stderr contained only prompt/runtime chrome; no private raw reference; no semantic output. |
+| `codex/gpt-5.6-sol@max` architecture | 2 | Correct canonical worktree, read-only; controller default five-minute seat timeout | Exit 3; zero stdout and last-message; raw stderr contained only prompt/runtime chrome; no private raw reference; no semantic output. |
+| `agy/gemini-3.6-flash-high@high` operations-skeptic | 1 | Transport and purpose-bound parser succeeded | Semantic `READY`, `findings:[]`. |
+
+This is required-seat seat-timeout infrastructure failure, never plan semantics. The controller
+correctly did not promote the surviving single-family result. R3 is never reopened, reset, relabelled,
+or authorized for generation 2.
+
+R3's frozen semantic repair remains the executable content inherited by R4:
 
 - R2 requires a closed per-capability claim/receipt schema with both official-contract and fresh
   version-matched live evidence, agreement/freshness/revalidation, validated claim-ID-only downstream
@@ -50,18 +69,25 @@ R3 closes the three R2 advisory defects in the executable plan contract:
 - R7 names canonical non-generated hook sources under `platforms/codex/hooks`, exact generated plugin
   mappings, deletion/regeneration proof, and manual-edit inverse drift tests.
 
-No R3 reviewer was dispatched while preparing this planning/admission commit. Deterministic Mission
-graph admission, if READY, proves only structural planning eligibility; it does not change the R3
-semantic status or authorize implementation before the required review workflow.
+## R4 frozen retry identity
 
-The frozen source manifest has file SHA-256
-`5f158347ae39dbfac499923a19e50526aa98346d6fb9f32328e2475dc85f2af3`; its source coverage is
-`plan-6bd4bf5c3857928e3d0c806d0e5f535211bc7202b8540bb20130b68bfaa631de` plus the eight
-content-bound rubric IDs in the execution graph. The graph has canonical digest
-`73b959d5f3b95e07773c5ab9e9926b9eae6f6154c681493d1e5285fe6cbbf2c3` and file SHA-256
-`16c002a34599f4a13d0440fd6d502b27cb5d1c89b7d16c1d207a03dda3857a2a`. Exact legacy B/C
+- Logical plan: `platform-capability-trigger-activation-2026-08-04-r4`
+- Status: `review-pending-r4`
+- Frozen plan SHA-256: `cba907b5df38e55f89f3bb2bb8c4ad694aaa56b88eecb5c997d9e0a67bf99b95`
+- Frozen rubric SHA-256: `b0643fae8891911809af07890c45290821a47c251d657ae094fc8e1690905d1b`
+- Frozen manifest SHA-256: `c20e292f08a70cf3cd082848af14e42936301880a68a84c0112d6a32d26ae109`
+
+R4 changes identity and receipt metadata only. It will retry the same frozen semantic content through
+the supported controller CLI option `--timeout 12m`, within the existing 7,200-second total wall. It
+is a new logical revision, not an R3 reset or generation 2. No R4 reviewer was dispatched while
+preparing this planning/admission commit; structural Mission admission is not a semantic verdict.
+
+The R4 source manifest has file SHA-256
+`e414348fff4ff9a1f41fb29f2fc23eed945180d7eff7a71dcc78c7dc705ee9ef`; the graph has canonical
+digest `86240bdb0a1fddb74f43e3b2d2c9fbd853b5def6d7376689223174eae5f2baf4` and file SHA-256
+`eb0fab4996c4126fcdc59f8b0617ee95d6ac1dd0bc6111a0e14bfdd2ed1f71cf`. Exact legacy B/C
 terminal reconciliation produced disposition digest
-`31e39651b8dd88ca8766c55459fefe5df665a455d7faae7b4fff0203683f5391` with zero synthesized work
-orders, zero mutated receipts, and no history rewrite. L4 admission then returned structural `READY`
-with sources digest `ab216df4159ed17c52c37e5301dedbb4998d98bc4d42f9ed172dbb517be14af1`
-and admission digest `0e7961032fd692a3ce9b718ecf0006b658a25c8c18df27f90d5a86f325ccc835`.
+`9e2396bf173507f38ef720b219a98d0561f4a8940e6faeaca6c30161fc199c8f` with zero synthesized work
+orders, zero mutated receipts, and no history rewrite. L4 admission returned structural `READY` with
+sources digest `37ed470aedff3c78991d46f1af24b95a88bde691bc364e5a32c1f9fec2da5623`
+and admission digest `e42f89c8401a6eb3082c9fc3852a580d3a8e00e9340eeb7d0b982337730be5cc`.

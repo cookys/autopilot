@@ -1,10 +1,10 @@
 ---
-status: review-pending-r3
+status: review-pending-r4
 date: 2026-08-04
 size: H
 entry_level: l5
 project: platform-capability-trigger-activation
-logical_plan_id: platform-capability-trigger-activation-2026-08-04-r3
+logical_plan_id: platform-capability-trigger-activation-2026-08-04-r4
 ---
 
 # Plan — Platform capability trigger activation and strict-L5 bootstrap
@@ -409,12 +409,25 @@ downstream gate with an explicit terminal receipt; it does not silently change a
   succeeded with semantic `READY` and no findings. The valid single-family result was not promoted.
   R2 is an infrastructure-failure receipt and is never reopened, relabelled, or authorized for
   generation 2.
-- **R3 author repair (2026-08-04):** new logical plan
-  `platform-capability-trigger-activation-2026-08-04-r3` closes the three advisory gaps: R2 now has a
-  closed dual-evidence claim/receipt contract and mandatory validated claim-ID consumption; R5 names
-  the canonical six-dimensional code policy and its deterministic roster derivation; R7 names the
-  canonical Codex hook sources, exact generated mappings, and inverse drift tests. The Mission is one
-  deliverable with D1–D4 as ordered internal gates. R3 remains `review-pending-r3`; deterministic
-  graph admission is planning authority only and is not a semantic review verdict.
-- **Receipts:** full immutable R2 details and externally recorded R3 frozen hashes live in
+- **R3 terminal receipt (2026-08-04):** logical plan
+  `platform-capability-trigger-activation-2026-08-04-r3`, ticket
+  `platform-trigger-activation-r3-20260804`, session `platform-trigger-activation-r3-g1`, session key
+  `600fa0d7e15caa3cc8c738fdd62e429da596742c2824f8f07ddb09dab7877bc9`. Frozen hashes were plan
+  `6bd4bf5c3857928e3d0c806d0e5f535211bc7202b8540bb20130b68bfaa631de`, rubric
+  `c5e0228093da7f0cb39fea4e7e132ac8aeb246b49dcfabe21798e9daac34df51`, and manifest
+  `a3368b3db19ef1a88849d72faa3198c2ba5519c2fe9ba17e95bafc94a392b10b`. The controller artifact is
+  `/home/cookys/.autopilot/plan-review/600fa0d7e15caa3cc8c738fdd62e429da596742c2824f8f07ddb09dab7877bc9/generation-01.json`.
+  Both required Codex attempts ran from the canonical worktree in read-only mode and reached the
+  controller's default five-minute seat timeout: exit 3, zero stdout/last-message, raw stderr only
+  prompt/runtime chrome, and no private raw reference. Gemini parsed semantic `READY` with empty
+  findings. The terminal controller result is required-seat timeout infrastructure-only
+  `CONDITIONAL`, policy
+  `required_seat_transport_exhausted`, `semantic_verdict:null`, `repair_authorized:false`, and
+  `next_generation:null`. R3 is never reopened, reset, relabelled, or authorized for generation 2.
+- **R4 retry intent (2026-08-04):** new logical plan
+  `platform-capability-trigger-activation-2026-08-04-r4` preserves the same D1–D4 semantic content,
+  one-node graph, and budgets. It will retry through the existing controller CLI option
+  `--timeout 12m` within the unchanged 7,200-second total review wall. R4 is a new logical revision,
+  not a reset or generation 2 of R3, and remains `review-pending-r4`.
+- **Receipts:** full immutable R2/R3 details and externally recorded R4 frozen hashes live in
   [`2026-08-04-platform-capability-trigger-activation.review.md`](2026-08-04-platform-capability-trigger-activation.review.md).

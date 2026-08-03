@@ -1,6 +1,6 @@
 # Platform capability trigger activation
 
-> **Status:** planning / `review-pending-r3`
+> **Status:** planning / `review-pending-r4`
 > **Branch:** `feat/platform-capability-trigger-activation`
 > **Plan:** [platform capability trigger activation](../../plans/2026-08-04-platform-capability-trigger-activation.md)
 
@@ -26,7 +26,7 @@ Every promoted platform fact must first pass the closed dual-evidence claim cont
 
 | Deliverable | Status | Internal gates | Exit condition |
 |---|---|---|---|
-| Platform capability trigger activation | `planning / review-pending-r3` | D1 capability claims → D2 agy telemetry → D3 Codex PostCompact → D4 strict-L5 bootstrap | Cumulative verification/review and docs finish gate pass on the frozen range |
+| Platform capability trigger activation | `planning / review-pending-r4` | D1 capability claims → D2 agy telemetry → D3 Codex PostCompact → D4 strict-L5 bootstrap | Cumulative verification/review and docs finish gate pass on the frozen range |
 
 The tracker has one deliverable. D1–D4 are ordered internal gates, not independently claimable phases;
 tests, reviews, repairs, and doc sync remain inside this row and its existing budgets.

@@ -1,6 +1,6 @@
 # Rubric — Platform capability trigger activation and strict-L5 bootstrap
 
-Logical plan: `platform-capability-trigger-activation-2026-08-04-r3`
+Logical plan: `platform-capability-trigger-activation-2026-08-04-r4`
 
 Review the plan as an executable implementation contract. A blocker must identify a concrete defect
 that prevents the next implementation slice or immediate integrity, cite the affected rubric ID and

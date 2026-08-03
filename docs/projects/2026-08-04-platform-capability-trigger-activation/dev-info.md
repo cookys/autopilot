@@ -1,7 +1,7 @@
 # Development info
 
-- Project status: `planning / review-pending-r3`
-- Logical plan: `platform-capability-trigger-activation-2026-08-04-r3`
+- Project status: `planning / review-pending-r4`
+- Logical plan: `platform-capability-trigger-activation-2026-08-04-r4`
 - Working branch: `feat/platform-capability-trigger-activation`
 - Frozen implementation base: `7047717b2df5354da134043692e31ad067a98bfa`
 - Pull request: none; this planning revision does not push or open a PR

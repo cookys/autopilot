@@ -200,6 +200,7 @@ childProcess.spawnSync = function authorProbe(command, args, options) {
     prompt_dir: fs.realpathSync(path.dirname(prompt)),
     prompt_dir_mode: (fs.statSync(path.dirname(prompt)).mode & 0o777).toString(8),
     prompt_mode: (fs.statSync(prompt).mode & 0o777).toString(8),
+    prompt_text: fs.readFileSync(prompt, 'utf8'),
   })}\n`);
   fs.copyFileSync(process.env.PLAN_REVIEW_PROBE_RESPONSE, process.env.PLAN_REVIEW_PROBE_RAW);
   fs.chmodSync(process.env.PLAN_REVIEW_PROBE_RAW, 0o600);
@@ -283,6 +284,22 @@ assert_eq "$(json_field "$AUTHOR_RECORD" prompt_dir_mode)" "700" \
   "Codex prompt directory remains private"
 assert_eq "$(json_field "$AUTHOR_RECORD" prompt_mode)" "600" \
   "Codex prompt artifact remains private"
+AUTHOR_PROMPT="$(json_field "$AUTHOR_RECORD" prompt_text)"
+assert_contains "$AUTHOR_PROMPT" \
+  'Allowed verdict values (exact strings): "READY", "CONDITIONAL", "STOP".' \
+  "plan-review prompt enumerates the exact verdict vocabulary"
+assert_contains "$AUTHOR_PROMPT" \
+  'Allowed class values (exact strings): "decision-now", "implementation-spike", "future".' \
+  "plan-review prompt enumerates the exact class vocabulary"
+assert_contains "$AUTHOR_PROMPT" \
+  'Allowed severity values (exact strings): "blocking", "non-blocking".' \
+  "plan-review prompt enumerates the exact severity vocabulary"
+assert_contains "$AUTHOR_PROMPT" \
+  'A finding is a blocker candidate if and only if all of these hold: rubric_id is one of the frozen rubric IDs above; class is "decision-now"; severity is "blocking"; blocks_next_slice_or_immediate_integrity is true; cannot_defer_to_spike is true.' \
+  "plan-review prompt states the complete blocker predicate"
+assert_contains "$AUTHOR_PROMPT" \
+  'READY is valid only when findings is empty; if any finding exists, use CONDITIONAL or STOP.' \
+  "plan-review prompt states the READY relationship"
 
 # Non-Codex authors retain their scratch dispatch posture and receive no repo binding.
 rm -f "$AUTHOR_PROBE_LOG"

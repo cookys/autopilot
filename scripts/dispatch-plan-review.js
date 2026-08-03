@@ -814,6 +814,11 @@ Do not schedule another review generation. The controller owns attempts and term
 Return one JSON object with only verdict and findings. Each finding uses:
 rubric_id, class, severity, affected_surface, claim, evidence, evidence_reference,
 repair, blocks_next_slice_or_immediate_integrity, cannot_defer_to_spike.
+Allowed verdict values (exact strings): "READY", "CONDITIONAL", "STOP".
+Allowed class values (exact strings): "decision-now", "implementation-spike", "future".
+Allowed severity values (exact strings): "blocking", "non-blocking".
+A finding is a blocker candidate if and only if all of these hold: rubric_id is one of the frozen rubric IDs above; class is "decision-now"; severity is "blocking"; blocks_next_slice_or_immediate_integrity is true; cannot_defer_to_spike is true.
+READY is valid only when findings is empty; if any finding exists, use CONDITIONAL or STOP.
 
 <FROZEN_RUBRIC_${nonce}>
 ${rubricBytes.toString('utf8')}

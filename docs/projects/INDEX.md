@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-04 | [platform-capability-trigger-activation](2026-08-04-platform-capability-trigger-activation/README.md) — planning / `review-pending-r3`; one Mission deliverable with D1 dual-evidence claims, D2 agy structured telemetry, D3 canonical-to-generated Codex PostCompact wiring, and D4 exact six-dimensional strict-L5 bootstrap as ordered internal gates. | planning | `feat/platform-capability-trigger-activation` |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)

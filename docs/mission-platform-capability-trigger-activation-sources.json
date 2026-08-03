@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-04-platform-capability-trigger-activation.md",
+      "rubric_path": "plans/2026-08-04-platform-capability-trigger-activation.rubric.md",
+      "plan_sha256": "6bd4bf5c3857928e3d0c806d0e5f535211bc7202b8540bb20130b68bfaa631de",
+      "rubric_sha256": "c5e0228093da7f0cb39fea4e7e132ac8aeb246b49dcfabe21798e9daac34df51"
+    }
+  ]
+}

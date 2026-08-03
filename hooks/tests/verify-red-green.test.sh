@@ -54,13 +54,27 @@ json_field() { echo "$1" | grep -o "\"$2\": *\"[^\"]*\"" | head -1 | cut -d'"' -
 #    test applied on base => RED (3 != 5); head => GREEN.
 test_validated() {
     local repo="$TEST_TMP/repo_validated" vc="$TEST_TMP/verify_validated.sh"
+    local receipt="$TEST_TMP/receipt_validated.json"
     local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
     local base head; base=${shas%% *}; head=${shas##* }
     create_verify_cmd "$vc"
-    local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$vc" --repo "$repo" 2>&1); local ec=$?
+    local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$vc" --repo "$repo" --receipt-out "$receipt" 2>&1); local ec=$?
     assert_eq "$ec" "0" "VALIDATED exits 0"
     assert_eq "$(json_field "$out" verdict)" "VALIDATED" "VALIDATED verdict"
     assert_contains "$out" '"red_green_validated": true' "VALIDATED sets red_green_validated true"
+    assert_file_exists "$receipt" "VALIDATED writes a polarity receipt"
+    assert_contains "$(cat "$receipt")" '"artifact_type": "red_green_polarity_receipt"' "receipt has polarity artifact type"
+    assert_contains "$(cat "$receipt")" '"expected_red_exit_class": "nonzero"' "receipt binds expected red exit class"
+    local validated; validated=$("$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$vc" 2>&1); ec=$?
+    assert_eq "$ec" "0" "matching polarity receipt validates"
+    assert_contains "$validated" '"status":"validated"' "matching polarity receipt returns validated status"
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --base "$head" >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "1" "cross-base polarity receipt is rejected"
+    local other_vc="$TEST_TMP/verify_validated_other.sh"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$other_vc"
+    chmod +x "$other_vc"
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$other_vc" >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "1" "cross-command polarity receipt is rejected"
 }
 
 # 1b. VALIDATED with test at a NESTED path (tests/unit_test.sh) — regression guard:

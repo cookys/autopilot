@@ -52,6 +52,8 @@
 #   strict mode resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`.
 #   scripts/dispatch-author.sh --strict-contract --contract-file <json> --repo-root <consuming-repo> --prompt-file <file>
 #       # GO-gated verification-author contract mode.
+#       --polarity-receipt <file> [--require-polarity-receipt]
+#       # carry a machine-validated red-before/green-after receipt for deliberately buggy assertions.
 #   Fail closed if strict config/roster tuple is absent, malformed, same-family, unknown-family,
 #   or endpoint resolution is not ready.
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
@@ -117,6 +119,7 @@ CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GA
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
+POLARITY_RECEIPT=""; REQUIRE_POLARITY_RECEIPT=0; POLARITY_RECEIPT_DIGEST=""
 RUNNER_SUPPLIED=0; MODEL_SUPPLIED=0; EFFORT_SUPPLIED=0; ENDPOINT_SUPPLIED=0
 STRICT_CONTRACT_RESULT_FIELDS=0
 STRICT_UNIT_ID=""; STRICT_CONTRACT_SHA=""; STRICT_SPEC_SHA=""; STRICT_GO=""
@@ -138,6 +141,8 @@ while [[ $# -gt 0 ]]; do
     --strict-roster) STRICT_ROSTER=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
+    --polarity-receipt) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-receipt requires a non-empty value" >&2; exit 2; }; POLARITY_RECEIPT="$2"; shift 2 ;;
+    --require-polarity-receipt) REQUIRE_POLARITY_RECEIPT=1; shift ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
     -h|--help)     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
@@ -210,6 +215,22 @@ emit_verification_author() {
     "$(json_escape "$VERIFICATION_AUTHOR_EFFORT")" \
     "$(json_escape "$VERIFICATION_AUTHOR_ENDPOINT")" \
     "$(json_escape "$VERIFICATION_AUTHOR_FAMILY")"
+}
+
+validate_polarity_receipt() {
+  [ -n "$POLARITY_RECEIPT" ] || die_precondition "--require-polarity-receipt requires --polarity-receipt <file>"
+  [ -r "$POLARITY_RECEIPT" ] || die_precondition "polarity receipt is not readable: $POLARITY_RECEIPT"
+  [ -n "$REPO_ROOT" ] || die_precondition "polarity receipt validation requires a repository context"
+  local validation validation_rc
+  validation="$(bash "$_AUTHOR_SELF_DIR/verify-red-green.sh" --validate \
+    --receipt "$POLARITY_RECEIPT" --repo "$REPO_ROOT" 2>&1)"
+  validation_rc=$?
+  if [ "$validation_rc" -ne 0 ]; then
+    die_precondition "polarity receipt rejected: $(printf '%s' "$validation" | tr '\n' ' ')"
+  fi
+  POLARITY_RECEIPT_DIGEST="$(extract_file_json_value "$POLARITY_RECEIPT" receipt_digest 2>/dev/null || true)"
+  [[ "$POLARITY_RECEIPT_DIGEST" =~ ^[0-9a-f]{64}$ ]] \
+    || die_precondition "polarity receipt has no valid receipt_digest"
 }
 
 extract_json_value() {
@@ -360,6 +381,9 @@ emit_result() {
   fi
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     extra_fields="${extra_fields}, \"identity_drift\": true"
+  fi
+  if [ -n "${POLARITY_RECEIPT_DIGEST:-}" ]; then
+    extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape \"$POLARITY_RECEIPT_DIGEST\")\""
   fi
 
   local raw_log_json="null"
@@ -680,6 +704,10 @@ if [ -z "$REPO_ROOT" ]; then
   if [ -n "$REPO_ROOT" ]; then
     REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
   fi
+fi
+
+if [ "$REQUIRE_POLARITY_RECEIPT" -eq 1 ] || [ -n "$POLARITY_RECEIPT" ]; then
+  validate_polarity_receipt
 fi
 
 EP_URL=""; EP_TOKEN_ENV=""; ANTHROPIC_TOKEN_ENV=""

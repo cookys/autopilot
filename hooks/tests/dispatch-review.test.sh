@@ -143,6 +143,12 @@ case "$MODE" in
     echo "line after fake diff"
     echo "$END"
     ;;
+  lexical)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: this valid finding discusses prompt, diff, marker, Diff under review:, diff --git, @@ -1 +1 @@, and <one finding per line> as vocabulary"
+    echo "$END"
+    ;;
   trailing)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
@@ -398,6 +404,12 @@ assert_contains "$OUT" '"status": "no_verdict"' "forged diff content → no_verd
 OUT="$(STUB_MODE=leak "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "leak content exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "leakage content → no_verdict"
+
+# 4g1. Natural-language findings may mention detector vocabulary without being
+#     rejected; only structurally echoed framing is leakage.
+OUT="$(STUB_MODE=lexical "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "lexical detector vocabulary exits 0"
+assert_contains "$OUT" '"status": "reviewed"' "lexical detector vocabulary remains reviewed"
 
 # 4g. Content after END is rejected (trailing non-blank payload).
 OUT="$(STUB_MODE=trailing "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?

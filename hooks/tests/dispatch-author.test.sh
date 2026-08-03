@@ -139,6 +139,19 @@ assert_eq "2" "$EXIT" "missing --runner exits 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing --runner => precondition_failed"
 assert_contains "$OUT" "--runner is required" "missing --runner message"
 
+# --- 4.1. Deliberately buggy verification-author dispatches require an exact
+#       polarity receipt before any runner is spawned.
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" \
+  --bin "$STUB_COD" --require-polarity-receipt 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "required polarity receipt without path exits 2"
+assert_contains "$OUT" "requires --polarity-receipt" "missing polarity receipt path is named"
+POLARITY_BAD="$TEST_TMP/bad-polarity.json"
+printf '%s\n' '{}' > "$POLARITY_BAD"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" \
+  --bin "$STUB_COD" --polarity-receipt "$POLARITY_BAD" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "malformed polarity receipt exits 2"
+assert_contains "$OUT" "polarity receipt rejected" "malformed polarity receipt is fail-closed"
+
 # --- 5. precondition: missing binary ---
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$TEST_TMP/no-bin" 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing runner binary exits 2"

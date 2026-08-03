@@ -4442,6 +4442,9 @@ class AutopilotEngine {
         },
         diff_file: path.resolve(diffFile),
         spec_file: path.resolve(specFile),
+        blind_discovery: true,
+        prior_findings_included: false,
+        full_diff_required: true,
       };
     };
 
@@ -4631,6 +4634,9 @@ class AutopilotEngine {
         findings,
         review_digest: reviewDigest,
         review_input_mode: 'full_diff_generation',
+        blind_discovery: true,
+        prior_findings_included: false,
+        full_diff_required: true,
         raw: reviewed,
       };
     };

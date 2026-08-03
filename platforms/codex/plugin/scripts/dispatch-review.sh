@@ -871,10 +871,20 @@ if [ "$BLOCK_BYTES" -gt 16384 ]; then
   emit_no_verdict "response wrapped block exceeded the fail-closed size cap"
 fi
 
-if grep -q 'diff --git' "$BLOCK_FILE" \
-  || grep -q '^@@ ' "$BLOCK_FILE" \
-  || grep -q 'Diff under review:' "$BLOCK_FILE" \
-  || grep -q '<one finding per line' "$BLOCK_FILE"; then
+prompt_framing_leakage() {
+  awk '
+    BEGIN { found = 0 }
+    /^<<<AUTOPILOT-(REVIEW|END)-[0-9a-f]{32}>>>$/ { found = 1; next }
+    /^diff --git [^[:space:]]+ [^[:space:]]+$/ { found = 1; next }
+    /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ { found = 1; next }
+    /^Diff under review:[[:space:]]*$/ { found = 1; next }
+    /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ { found = 1; next }
+    /^<one finding per line>[[:space:]]*$/ { found = 1; next }
+    { next }
+    END { exit(found ? 0 : 1) }' "$BLOCK_FILE"
+}
+
+if prompt_framing_leakage; then
   emit_no_verdict "response wrapped block contained prompt-text leakage"
 fi
 

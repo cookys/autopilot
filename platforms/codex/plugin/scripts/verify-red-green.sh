@@ -5,9 +5,11 @@
 #
 # Usage:
 #   scripts/verify-red-green.sh --range <base>..<head> --verify-cmd <script-path> \
-#       [--test-glob <git-pathspec-glob>]... [--repo <dir>]
+#       [--test-glob <git-pathspec-glob>]... [--repo <dir>] [--receipt-out <file>]
 #   scripts/verify-red-green.sh --base <ref> --head <ref> --verify-cmd <script-path> \
-#       [--test-glob <glob>]... [--repo <dir>]
+#       [--test-glob <glob>]... [--repo <dir>] [--receipt-out <file>]
+#   scripts/verify-red-green.sh --validate --receipt <file> [--repo <dir>] \
+#       [--base <full-sha> --head <full-sha> --verify-cmd <script-path>]
 #
 #   --verify-cmd may be a relative path; it is validated against the CALLER's
 #   cwd at startup. A repo-owned executable is then resolved to the same relative
@@ -15,7 +17,9 @@
 #
 # Output: JSON on stdout:
 #   { verdict, red_green_validated, base_sha, head_sha, head_result, base_result,
-#     red_tests, reason }
+#     red_tests, test_command_digest, assertion_artifact_path,
+#     assertion_artifact_digest, expected_red_exit_class, green_result,
+#     receipt_digest, reason }
 #   verdict = VALIDATED | NOT_RED_ON_BASE | NOT_GREEN_ON_HEAD | INCONCLUSIVE
 #
 # Exit codes:
@@ -45,6 +49,9 @@ BASE_REF=""
 HEAD_REF=""
 VERIFY_CMD=""
 REPO=""
+VALIDATE_ONLY=0
+RECEIPT_FILE=""
+RECEIPT_OUT=""
 declare -a TEST_GLOBS=()
 
 usage() {
@@ -81,6 +88,33 @@ err_usage() {
 emit_json() {
   local verdict="$1" validated="$2" base_sha="$3" head_sha="$4"
   local head_result="$5" base_result="$6" red_tests_json="$7" reason="$8"
+  if [[ -n "${RECEIPT_EXTRA_JSON:-}" ]]; then
+    local body receipt_json
+    body="$(printf '{"verdict":"%s","red_green_validated":%s,"base_sha":"%s","head_sha":"%s","head_result":"%s","base_result":"%s","red_tests":%s,"reason":"%s",%s}' \
+      "$(json_escape "$verdict")" "$validated" "$(json_escape "$base_sha")" \
+      "$(json_escape "$head_sha")" "$(json_escape "$head_result")" \
+      "$(json_escape "$base_result")" "$red_tests_json" "$(json_escape "$reason")" \
+      "$RECEIPT_EXTRA_JSON")"
+    receipt_json="$(node - "$body" <<'NODE'
+"use strict";
+const crypto = require('crypto');
+const value = JSON.parse(process.argv[2]);
+const canonical = (item) => Array.isArray(item)
+  ? '[' + item.map(canonical).join(',') + ']'
+  : (item && typeof item === 'object'
+    ? '{' + Object.keys(item).sort().map((key) => JSON.stringify(key) + ':' + canonical(item[key])).join(',') + '}'
+    : JSON.stringify(item));
+value.receipt_digest = crypto.createHash('sha256').update(canonical(value)).digest('hex');
+process.stdout.write(JSON.stringify(value, null, 2));
+NODE
+    )"
+    printf '%s\n' "$receipt_json"
+    if [[ -n "${RECEIPT_OUT:-}" ]]; then
+      (umask 077; printf '%s\n' "$receipt_json" > "$RECEIPT_OUT")
+      chmod 600 "$RECEIPT_OUT"
+    fi
+    return 0
+  fi
   printf '{\n'
   printf '  "verdict": "%s",\n' "$verdict"
   printf '  "red_green_validated": %s,\n' "$validated"
@@ -91,6 +125,123 @@ emit_json() {
   printf '  "red_tests": %s,\n' "$red_tests_json"
   printf '  "reason": "%s"\n' "$(json_escape "$reason")"
   printf '}\n'
+}
+
+# Validate a previously emitted polarity receipt without rerunning the candidate.
+# This is deliberately separate from the producer path: a stale/cross-candidate
+# receipt must be rejected before a verification-author workflow can treat it as evidence.
+validate_receipt() {
+  local receipt_file="$1" repo="$2" base_ref="$3" head_ref="$4" verify_cmd="$5"
+  node - "$receipt_file" "$repo" "$base_ref" "$head_ref" "$verify_cmd" <<'NODE'
+"use strict";
+const fs = require('fs');
+const crypto = require('crypto');
+const child = require('child_process');
+const path = require('path');
+const [receiptFile, repo, expectedBase, expectedHead, verifyCmd] = process.argv.slice(2);
+const canonical = (value) => Array.isArray(value)
+  ? '[' + value.map(canonical).join(',') + ']'
+  : (value && typeof value === 'object'
+    ? '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}'
+    : JSON.stringify(value));
+const digest = (value) => crypto.createHash('sha256').update(canonical(value)).digest('hex');
+const git = (args, encoding = 'utf8') => child.execFileSync(
+  'git', ['-C', repo, ...args], { encoding, maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] },
+);
+const reject = (reason) => {
+  process.stdout.write(JSON.stringify({ valid: false, status: 'rejected', reason }) + '\n');
+  process.exit(1);
+};
+const fullCommit = (value, label) => {
+  if (!/^[0-9a-f]{40,64}$/.test(String(value || ''))) reject(label + ' is not a full immutable SHA');
+  try {
+    if (git(['rev-parse', '--verify', value + '^{commit}']).trim() !== value) {
+      reject(label + ' does not resolve to the exact receipt commit');
+    }
+  } catch (_error) { reject(label + ' is absent from the repository'); }
+  return value;
+};
+const blobSha = (head, relativePath) => {
+  try {
+    return crypto.createHash('sha256').update(git(['show', head + ':' + relativePath], 'buffer')).digest('hex');
+  } catch (_error) { return null; }
+};
+let receipt;
+try { receipt = JSON.parse(fs.readFileSync(receiptFile, 'utf8')); }
+catch (error) { reject('receipt is not valid JSON: ' + error.message); }
+if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)
+    || receipt.schema_version !== 1
+    || receipt.artifact_type !== 'red_green_polarity_receipt'
+    || receipt.verdict !== 'VALIDATED'
+    || receipt.red_green_validated !== true
+    || receipt.expected_red_exit_class !== 'nonzero'
+    || receipt.green_result !== 'green'
+    || !Array.isArray(receipt.assertion_artifacts)
+    || receipt.assertion_artifacts.length === 0
+    || typeof receipt.test_command_digest !== 'string'
+    || !/^[0-9a-f]{64}$/.test(receipt.test_command_digest)
+    || typeof receipt.assertion_artifact_digest !== 'string'
+    || !/^[0-9a-f]{64}$/.test(receipt.assertion_artifact_digest)
+    || typeof receipt.receipt_digest !== 'string') {
+  reject('receipt has an invalid red/green polarity shape');
+}
+const receiptBody = { ...receipt };
+delete receiptBody.receipt_digest;
+if (!/^[0-9a-f]{64}$/.test(receipt.receipt_digest)
+    || digest(receiptBody) !== receipt.receipt_digest) reject('receipt digest is invalid');
+const base = fullCommit(receipt.base_sha, 'receipt base_sha');
+const head = fullCommit(receipt.head_sha, 'receipt head_sha');
+if (expectedBase && fullCommit(expectedBase, 'expected base') !== base) reject('receipt is bound to a different base candidate');
+if (expectedHead && fullCommit(expectedHead, 'expected head') !== head) reject('receipt is bound to a different head candidate');
+try { git(['merge-base', '--is-ancestor', base, head]); }
+catch (_error) { reject('receipt commits are not in an ancestor relationship'); }
+if (receipt.base_result !== 'red' || receipt.head_result !== 'green'
+    || !Number.isInteger(receipt.base_exit_code) || receipt.base_exit_code === 0
+    || receipt.head_exit_code !== 0) reject('receipt does not prove a red-before/green-after transition');
+if (!Array.isArray(receipt.red_tests)
+    || !Object.prototype.hasOwnProperty.call(receipt, 'assertion_artifact_path')) {
+  reject('receipt is missing red test and assertion artifact path fields');
+}
+const actualArtifacts = receipt.assertion_artifacts.map((item) => item && item.path).sort();
+if (actualArtifacts.some((item) => typeof item !== 'string' || item.length === 0
+    || path.posix.isAbsolute(item) || item.split('/').includes('..'))
+    || receipt.red_tests.slice().sort().join('\0') !== actualArtifacts.join('\0')) {
+  reject('receipt assertion artifact paths are malformed or inconsistent');
+}
+for (const item of receipt.assertion_artifacts) {
+  if (!/^[0-9a-f]{64}$/.test(item.sha256 || '') || blobSha(head, item.path) !== item.sha256) {
+    reject('assertion artifact is stale or bound to a different candidate: ' + item.path);
+  }
+}
+if (digest(receipt.assertion_artifacts) !== receipt.assertion_artifact_digest) reject('assertion artifact digest is invalid');
+if (receipt.assertion_artifacts.length === 1
+    ? receipt.assertion_artifact_path !== receipt.assertion_artifacts[0].path
+    : receipt.assertion_artifact_path !== null) {
+  reject('receipt assertion_artifact_path is inconsistent with assertion_artifacts');
+}
+if (verifyCmd) {
+  const resolved = path.isAbsolute(verifyCmd) ? verifyCmd : path.resolve(process.cwd(), verifyCmd);
+  const repoPrefix = path.resolve(repo) + path.sep;
+  const relative = resolved.startsWith(repoPrefix) ? resolved.slice(repoPrefix.length).split(path.sep).join('/') : null;
+  const contentSha = relative ? blobSha(head, relative) : (() => {
+    try { return crypto.createHash('sha256').update(fs.readFileSync(resolved)).digest('hex'); }
+    catch (_error) { return null; }
+  })();
+  if (!contentSha) reject('verification command artifact is unavailable');
+  if (digest({ path: relative || resolved, content_sha256: contentSha }) !== receipt.test_command_digest) {
+    reject('receipt is bound to a different verification command');
+  }
+}
+process.stdout.write(JSON.stringify({
+  valid: true,
+  status: 'validated',
+  receipt_digest: receipt.receipt_digest,
+  base_sha: base,
+  head_sha: head,
+  assertion_artifact_digest: receipt.assertion_artifact_digest,
+  test_command_digest: receipt.test_command_digest,
+}) + '\n');
+NODE
 }
 
 # Parse CLI
@@ -130,15 +281,33 @@ while [[ $# -gt 0 ]]; do
       REPO="$2"
       shift 2
       ;;
+    --validate)
+      VALIDATE_ONLY=1
+      shift
+      ;;
+    --receipt)
+      [[ $# -ge 2 ]] || err_usage "missing value for --receipt"
+      RECEIPT_FILE="$2"
+      shift 2
+      ;;
+    --receipt-out|--out)
+      [[ $# -ge 2 ]] || err_usage "missing value for --receipt-out"
+      RECEIPT_OUT="$2"
+      shift 2
+      ;;
     *)
       err_usage "unknown argument: $1"
       ;;
   esac
 done
 
-[[ -n "$VERIFY_CMD" ]] || err_usage "missing required --verify-cmd"
+if [[ "$VALIDATE_ONLY" -eq 0 ]]; then
+  [[ -n "$VERIFY_CMD" ]] || err_usage "missing required --verify-cmd"
+else
+  [[ -n "$RECEIPT_FILE" ]] || err_usage "--validate requires --receipt <file>"
+fi
 
-if [[ -z "$RANGE" && ( -z "$BASE_REF" || -z "$HEAD_REF" ) ]]; then
+if [[ "$VALIDATE_ONLY" -eq 0 && -z "$RANGE" && ( -z "$BASE_REF" || -z "$HEAD_REF" ) ]]; then
   err_usage "missing required --range <base>..<head> or --base and --head"
 fi
 
@@ -151,6 +320,11 @@ if ! git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 REPO="$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" || err_usage "not a git repository: $REPO"
 REPO="$(cd "$REPO" && pwd -P)" || err_usage "repository path unresolvable: $REPO"
+
+if [[ "$VALIDATE_ONLY" -eq 1 ]]; then
+  validate_receipt "$RECEIPT_FILE" "$REPO" "$BASE_REF" "$HEAD_REF" "$VERIFY_CMD"
+  exit $?
+fi
 
 if [[ -n "$RANGE" ]]; then
   if [[ "$RANGE" != *".."* ]]; then
@@ -224,6 +398,60 @@ fi
 
 mapfile -t TEST_FILE_ARRAY <<< "$TEST_FILES"
 
+sha256_git_blob() {
+  local commit="$1" path="$2"
+  git -C "$REPO" show "$commit:$path" | sha256sum | awk '{print $1}'
+}
+
+sha256_file() {
+  sha256sum "$1" | awk '{print $1}'
+}
+
+canonical_digest() {
+  node - "$1" <<'NODE'
+"use strict";
+const crypto = require('crypto');
+const value = JSON.parse(process.argv[2]);
+const canonical = (item) => Array.isArray(item)
+  ? '[' + item.map(canonical).join(',') + ']'
+  : (item && typeof item === 'object'
+    ? '{' + Object.keys(item).sort().map((key) => JSON.stringify(key) + ':' + canonical(item[key])).join(',') + '}'
+    : JSON.stringify(item));
+process.stdout.write(crypto.createHash('sha256').update(canonical(value)).digest('hex'));
+NODE
+}
+
+VERIFY_CMD_IDENTITY_PATH="$VERIFY_CMD"
+if [[ -n "$VERIFY_CMD_REPO_REL" ]]; then
+  VERIFY_CMD_IDENTITY_PATH="$VERIFY_CMD_REPO_REL"
+  VERIFY_CMD_CONTENT_SHA="$(sha256_git_blob "$HEAD_SHA" "$VERIFY_CMD_REPO_REL")"
+else
+  VERIFY_CMD_CONTENT_SHA="$(sha256_file "$VERIFY_CMD")"
+fi
+TEST_COMMAND_DIGEST="$(canonical_digest "$(printf '{"path":"%s","content_sha256":"%s"}' \
+  "$(json_escape "$VERIFY_CMD_IDENTITY_PATH")" "$VERIFY_CMD_CONTENT_SHA")")"
+ASSERTION_ARTIFACTS_JSON="["
+ASSERTION_ARTIFACT_PATH=""
+_artifact_first=1
+for _test_file in "${TEST_FILE_ARRAY[@]}"; do
+  _artifact_sha="$(sha256_git_blob "$HEAD_SHA" "$_test_file")"
+  if [[ "$_artifact_first" -eq 0 ]]; then
+    ASSERTION_ARTIFACTS_JSON+=","
+  fi
+  ASSERTION_ARTIFACTS_JSON+="{\"path\":\"$(json_escape "$_test_file")\",\"sha256\":\"$_artifact_sha\"}"
+  _artifact_first=0
+done
+ASSERTION_ARTIFACTS_JSON+="]"
+if [[ "${#TEST_FILE_ARRAY[@]}" -eq 1 ]]; then
+  ASSERTION_ARTIFACT_PATH="${TEST_FILE_ARRAY[0]}"
+fi
+if [[ -z "$ASSERTION_ARTIFACT_PATH" ]]; then
+  ASSERTION_ARTIFACT_PATH_JSON="null"
+else
+  ASSERTION_ARTIFACT_PATH_JSON="\"$(json_escape "$ASSERTION_ARTIFACT_PATH")\""
+fi
+ASSERTION_ARTIFACT_DIGEST="$(canonical_digest "$ASSERTION_ARTIFACTS_JSON")"
+
 WT_TMP="$(mktemp -d -t verify-red-green-XXXXXX)"
 WT_HEAD="$WT_TMP/head"
 WT_BASE="$WT_TMP/base"
@@ -250,14 +478,18 @@ run_verify_cmd() {
     "$verify_cmd" "$wt"
   )
   ec=$?
+  LAST_VERIFY_EXIT="$ec"
   set -e
   return "$ec"
 }
 
 HEAD_RESULT="skipped"
 BASE_RESULT="skipped"
+HEAD_EXIT_CODE=0
+BASE_EXIT_CODE=0
 RED_TESTS_JSON="[]"
 REASON=""
+RECEIPT_EXTRA_JSON=""
 
 # HEAD check: green at head with full change present.
 if ! git -C "$REPO" worktree add --detach "$WT_HEAD" "$HEAD_SHA" >/dev/null 2>&1; then
@@ -272,8 +504,10 @@ fi
 
 if run_verify_cmd "$WT_HEAD"; then
   HEAD_RESULT="green"
+  HEAD_EXIT_CODE="$LAST_VERIFY_EXIT"
 else
   HEAD_RESULT="red"
+  HEAD_EXIT_CODE="$LAST_VERIFY_EXIT"
   emit_json "NOT_GREEN_ON_HEAD" "false" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "skipped" "[]" ""
   exit 1
 fi
@@ -303,10 +537,15 @@ fi
 
 if run_verify_cmd "$WT_BASE"; then
   BASE_RESULT="green"
+  BASE_EXIT_CODE="$LAST_VERIFY_EXIT"
   emit_json "NOT_RED_ON_BASE" "false" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "$BASE_RESULT" "$RED_TESTS_JSON" ""
   exit 1
 fi
 
 BASE_RESULT="red"
+BASE_EXIT_CODE="$LAST_VERIFY_EXIT"
+RECEIPT_EXTRA_JSON="$(printf '"schema_version":1,"artifact_type":"red_green_polarity_receipt","test_command_digest":"%s","assertion_artifacts":%s,"assertion_artifact_path":%s,"assertion_artifact_digest":"%s","expected_red_exit_class":"nonzero","green_result":"green","base_exit_code":%s,"head_exit_code":%s' \
+  "$TEST_COMMAND_DIGEST" "$ASSERTION_ARTIFACTS_JSON" "$ASSERTION_ARTIFACT_PATH_JSON" \
+  "$ASSERTION_ARTIFACT_DIGEST" "$BASE_EXIT_CODE" "$HEAD_EXIT_CODE")"
 emit_json "VALIDATED" "true" "$BASE_SHA" "$HEAD_SHA" "$HEAD_RESULT" "$BASE_RESULT" "$RED_TESTS_JSON" ""
 exit 0

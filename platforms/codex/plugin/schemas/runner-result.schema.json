@@ -42,7 +42,7 @@
     },
     "usage": {
       "type": ["object", "null"],
-      "description": "Token usage parsed from the harness event stream by dispatch-status.js (--usage-only) — never worker self-report. Null when the runner's log format carries no usage signal. Closed shape: the object is constructed by the parser with these keys only (additionalProperties:false documents that construction).",
+      "description": "Token usage admitted only from harness-owned parsers, never worker self-report: agy usage comes from the private native envelope parsed by dispatch-status.js --agy-envelope, while other supported runner logs use dispatch-status.js --usage-only. Null when neither path yields a valid usage signal, including absent or malformed data. Closed shape: the object is constructed by the parser with these keys only (additionalProperties:false documents that construction).",
       "additionalProperties": false,
       "required": ["total_tokens", "input_tokens", "output_tokens", "cache_read_tokens", "source"],
       "properties": {

@@ -87,7 +87,7 @@ EOF
 chmod +x "$STUB_FAIL_COMMIT"
 
 FOREIGN_D2_RECEIPT="$TEST_TMP/foreign-d2-receipt.json"
-node - "$REPO_ROOT/docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json" "$FOREIGN_D2_RECEIPT" <<'NODE'
+node - "$REPO_ROOT/docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json" "$FOREIGN_D2_RECEIPT" <<'NODE'
 const crypto = require('crypto');
 const fs = require('fs');
 const [source, destination] = process.argv.slice(2);

@@ -268,7 +268,7 @@ else
   echo "SKIP [codex-slash-entry] set AUTOPILOT_CODEX_SLASH_PROBE=1 for live probe"
 fi
 
-D1_RECEIPT="$REPO_ROOT/docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json"
+D1_RECEIPT="$REPO_ROOT/docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json"
 assert_file_exists "$D1_RECEIPT" "D1 durable platform capability receipt exists"
 D1_OUT="$(node - "$D1_RECEIPT" <<'NODE'
 const fs = require('fs');

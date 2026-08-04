@@ -1,24 +1,27 @@
 # Development info
 
-- Project status: D1–D4 depth-0 verified; independent reviewer READY; v2.34.2 release-ready with
-  merge, push, publish, archive, and branch cleanup still pending
+- Project status: ✅ Shipped in v2.34.2; merged to `develop` as `ef72be66`; archive record being
+  completed, with push pending at archive record time and no tag or publish claimed
 - Logical plan: `platform-capability-trigger-activation-2026-08-04-r4`
-- Working branch: `feat/platform-capability-trigger-activation`
+- Source branch: `feat/platform-capability-trigger-activation` (merged; retained at archive record time)
 - Frozen implementation base: `7047717b2df5354da134043692e31ad067a98bfa`
 - Final implementation candidate: `12875e95721867eadf058f94cddf0bfb2390d58f`
 - Independently reviewed range:
   `7047717b2df5354da134043692e31ad067a98bfa..12875e95721867eadf058f94cddf0bfb2390d58f`
 - Independent review receipt: `READY`; four-level severity review returned zero findings
 - Authoritative depth-0 suite receipt: **263/263 test files GREEN**
-- Pull request: none; this planning revision does not push or open a PR
+- Merge commit: `ef72be66022afee2f6cf5a549e368678940c13f5`
+- Push state: **pending at archive record time**
+- Tag/publish state: not performed or claimed by this archive record
+- Pull request: none opened by this closeout
 - Mission shape: one deliverable with ordered internal gates D1 → D2 → D3 → D4
-- Plan: [`docs/plans/2026-08-04-platform-capability-trigger-activation.md`](../../plans/2026-08-04-platform-capability-trigger-activation.md)
+- Plan: [`docs/plans/2026-08-04-platform-capability-trigger-activation.md`](../../../plans/2026-08-04-platform-capability-trigger-activation.md)
 - Plan review generation 1: ticket `platform-trigger-activation-r4-20260804`, session
   `platform-trigger-activation-r4-g1`, key
   `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`; Sol `CONDITIONAL`, Gemini
   `READY`, accepted R8 fingerprint
   `e9f817092f3b54635588d1c76aca049615ff918c5ef4e3c4e5f373d951c88645`; immutable
-  [disposition](../../plans/2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json)
+  [disposition](../../../plans/2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json)
 - Plan review generation 2: same ticket and R4 lineage, session
   `platform-trigger-activation-r4-g2`, key
   `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`; Sol `READY`, Gemini
@@ -35,5 +38,5 @@
   `AUTOPILOT_LEVEL=l5 engine implement-review` consumes a fresh branded in-process bundle before
   workflow dispatch and records claim/policy/roster/observation provenance in its campaign control.
 - Implementation state: D1 capability receipt, D2 agy telemetry, D3 Codex production
-  `PostCompact` recovery, and D4 strict-L5 readiness bootstrap are verified and release-ready;
-  v2.34.2 pre-merge metadata is prepared without claiming merge, push, publish, or archive
+  `PostCompact` recovery, and D4 strict-L5 readiness bootstrap are verified and merged in v2.34.2;
+  this post-merge commit completes the archive record without claiming push, tag, or publish

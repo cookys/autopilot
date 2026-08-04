@@ -1,8 +1,8 @@
 # Platform capability trigger activation
 
-> **Status:** D1–D4 depth-0 verified / reviewer READY / v2.34.2 release-ready; merge pending
-> **Branch:** `feat/platform-capability-trigger-activation`
-> **Plan:** [platform capability trigger activation](../../plans/2026-08-04-platform-capability-trigger-activation.md)
+> **Status:** ✅ Shipped in v2.34.2 — merged to `develop` as `ef72be66`; archive record being completed
+> **Source branch:** `feat/platform-capability-trigger-activation` (merged; retained at archive record time)
+> **Plan:** [platform capability trigger activation](../../../plans/2026-08-04-platform-capability-trigger-activation.md)
 
 ## Objective
 
@@ -26,7 +26,7 @@ Every promoted platform fact must first pass the closed dual-evidence claim cont
 
 | Deliverable | Status | Internal gates | Exit condition |
 |---|---|---|---|
-| Platform capability trigger activation | release-ready; merge pending | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact ✓ → D4 strict-L5 bootstrap ✓ → depth-0 suite/review ✓ | Merge the verified candidate, then archive with the real merge SHA |
+| Platform capability trigger activation | shipped in v2.34.2; merged as `ef72be66`; archive record being completed | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact ✓ → D4 strict-L5 bootstrap ✓ → depth-0 suite/review ✓ | Archive record committed with the verified merge receipt; push, tag, and publish remain outside this record |
 
 The tracker has one deliverable. D1–D4 are ordered internal gates, not independently claimable phases;
 tests, reviews, repairs, and doc sync remain inside this row and its existing budgets.
@@ -38,22 +38,24 @@ tests, reviews, repairs, and doc sync remain inside this row and its existing bu
   `7047717b2df5354da134043692e31ad067a98bfa..12875e95721867eadf058f94cddf0bfb2390d58f`.
 - Independent reviewer: `READY`; the four-level severity review returned zero findings.
 - Authoritative depth-0 suite: **263/263 test files GREEN**.
-- Release state: v2.34.2 metadata is ready for the pre-merge release gates. Merge, push, publish,
-  project archive, and branch cleanup are not claimed and remain depth-0 finish-flow effects.
+- Merge commit: `ef72be66022afee2f6cf5a549e368678940c13f5` on `develop`.
+- Archive state: being completed by the post-merge closeout commit containing this record.
+- Push state: **pending at archive record time**.
+- Tag/publish state: not performed or claimed by this archive record.
 
 R4 generation 1 used ticket `platform-trigger-activation-r4-20260804`, session
 `platform-trigger-activation-r4-g1`, and key
 `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`. Sol returned
 `CONDITIONAL`, Gemini returned `READY`, and depth 0 accepted the sole R8 claim-consumption blocker
 (`e9f817092f3b54635588d1c76aca049615ff918c5ef4e3c4e5f373d951c88645`) in the immutable
-[`r4-g1 disposition`](../../plans/2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json).
+[`r4-g1 disposition`](../../../plans/2026-08-04-platform-capability-trigger-activation.r4-g1-disposition.json).
 The exact D2/D3/D4 consumer-manifest repair stayed in the same R4 lineage. Generation 2 session
 `platform-trigger-activation-r4-g2` produced terminal semantic `READY` under
 `generation_2_terminal`: both Sol and Gemini returned `READY`, findings were empty, and
 `next_generation` is `null`. The immutable artifact is
 `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
 (SHA-256 `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`).
-Implementation is authorized. D1 emitted the closed [platform capability receipt](evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 now consumes its exact two-claim set before every agy provider invocation, captures the native JSON envelope privately, preserves only the response framing in worker-visible logs, and admits only validated usage into result/scorecard telemetry.
+Implementation is merged. D1 emitted the closed [platform capability receipt](evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 now consumes its exact two-claim set before every agy provider invocation, captures the native JSON envelope privately, preserves only the response framing in worker-visible logs, and admits only validated usage into result/scorecard telemetry.
 
 D3 now ships one Codex-native production `PostCompact` registration (`manual|auto`) from canonical
 sources outside the generated package. The adapter translates the official payload into the existing
@@ -88,4 +90,4 @@ not committed; its redacted digests remain bound by the receipt.
 
 This project does not restore OpenCode's truncated `debug skill` hard gate, promote inconclusive generic
 `tier:` metadata, create Codex install-time payload generation, reconstruct historical agy usage, enable
-generic GitHub Actions, open a PR, push, tag, publish, or release.
+generic GitHub Actions, open a PR, push, tag, or publish.

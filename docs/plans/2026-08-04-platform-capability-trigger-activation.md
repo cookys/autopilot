@@ -1,5 +1,5 @@
 ---
-status: review-pending-r4
+status: "✅ Shipped in v2.34.2 — merged as ef72be66"
 date: 2026-08-04
 size: H
 entry_level: l5

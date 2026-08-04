@@ -8,13 +8,13 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-08-04 | [platform-capability-trigger-activation](2026-08-04-platform-capability-trigger-activation/README.md) — D1 closed claims, D2 agy usage, D3 Codex `PostCompact`, and D4 strict-L5 bootstrap are complete at candidate `12875e95`; the depth-0 suite is 263/263 GREEN and the independent four-level review is READY with zero findings. Release metadata is prepared; merge and archive remain pending. | v2.34.2 | `feat/platform-capability-trigger-activation` |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)
 
 | Date | Project | Version | Merge | Plan |
 |------|---------|---------|-------|------|
+| 2026-08-04 | [platform-capability-trigger-activation](_archive/2026-08-04-platform-capability-trigger-activation/README.md) — D1 closed claims, D2 authoritative agy usage, D3 Codex `PostCompact`, and D4 strict-L5 bootstrap shipped with 263/263 test files GREEN and an independent reviewer READY verdict with zero findings. | v2.34.2 | `ef72be66` | [plan](../plans/2026-08-04-platform-capability-trigger-activation.md) |
 | 2026-08-03 | [backlog-actionable-successor](_archive/2026-08-02-backlog-actionable-successor/README.md) — 51-entry intake completed as three bounded deliverables through one implementer lineage; four completed entries removed, one strict-L5 trust-root prerequisite added, 48 remain trigger/Board-gated. Whole-diff QC has zero verified blocker; local merge only, with effective-L4 authority recorded honestly. | v2.34.1 (no bump) | `fa076b3c` | [plans](../plans/2026-08-02-review-path-efficiency.md) |
 | 2026-08-02 | [codex-payload-residual-spike](_archive/2026-08-02-codex-payload-residual-spike/README.md) — 三 probe bundle 完成：installed payload PASS、Git marketplace refresh UNPROVEN、native automatic generation lifecycle FAIL，conjunctive NO-GO；七路徑 successor candidate 通過 deterministic gates 與獨立 first-pass review，已本地整合，保留 committed skill mirrors，不做 migration。 | v2.34.1 (no bump) | `ded66265` | [plan](../plans/2026-08-02-codex-payload-residual-spike.md) |
 | 2026-08-02 | [reviewer-output-token-budget](2026-08-02-reviewer-output-token-budget/README.md) — optional `--max-tokens` 以兩條 verified native mapping、五條 pre-spend rejection、strict omission/truncation 與 byte-equal Codex mirrors 完成；250＋74 assertions、260-file suite、獨立 verifier 與 depth-0 跨家族 QC 全部收斂。 | v2.34.1 (no bump) | `22175030` | [plan](../plans/2026-08-02-reviewer-output-token-budget.md) |

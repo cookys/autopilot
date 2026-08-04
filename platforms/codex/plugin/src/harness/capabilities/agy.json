@@ -9,7 +9,7 @@
   "expires_at": "2026-08-17T22:31:50.000Z",
   "evidence": {
     "source": "local-probe",
-    "command": "bash scripts/probe-harness-capabilities.sh --all --output docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
+    "command": "bash scripts/probe-harness-capabilities.sh --all --output docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
     "result": "agy 1.1.10; exact production transport returned a native JSON response plus numeric input/output/thinking/cache/total usage; effort remains tuple metadata and is not passed as an agy execution argument"
   },
   "capabilities": {

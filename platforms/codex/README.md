@@ -62,7 +62,7 @@ compaction, its adapter resolves the exact Git root/common-dir and active work
 order, then invokes the existing `postcompact-adapter` authority. Continuation
 is blocked when payload identity or reconciliation fails.
 
-The committed [production live receipt](../../docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/codex-postcompact-production-live-receipt.json)
+The committed [production live receipt](../../docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/codex-postcompact-production-live-receipt.json)
 was captured on codex-cli 0.146.0. It proves manual and threshold-12000 automatic
 reconciliation before effect, plus a broken-adapter control with hook failure,
 no reconciliation receipt, and no effect sentinel. This is the only production

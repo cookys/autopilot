@@ -163,7 +163,7 @@ D2_AGY_USAGE_CLAIM="cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f103717
 D2_AGY_EXPECTED_IDS="[\"$D2_AGY_RESPONSE_CLAIM\",\"$D2_AGY_USAGE_CLAIM\"]"
 validate_d2_agy_claims() {
   local receipt validator observed rc=0
-  receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$_REVIEW_SELF_DIR/../docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
+  receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$_REVIEW_SELF_DIR/../docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
   validator="$_REVIEW_SELF_DIR/platform-capability-claims.js"
   [ -r "$receipt" ] && [ -r "$validator" ] && command -v node >/dev/null 2>&1 \
     || die_precondition "D2 capability claim validation failed"

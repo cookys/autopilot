@@ -119,3 +119,23 @@ The dispatcher prompt now explicitly requires RFC 8259 escaping and a strict JSO
 the canonical and Codex mirror entrypoints (`67745f0b`); `bash hooks/tests/dispatch-plan-review.test.sh`
 passes 238 assertions and `bash hooks/tests/contract-parity.test.sh` passes 36 assertions. The plan
 remains unmerged and unpushed pending a future semantic review with a valid required-seat response.
+
+## Continuation roster — GLM-5.2 + agy/Gemini 3.6 Flash
+
+Because the prior MiniMax session was terminal infrastructure failure, the owner-authorized
+continuation changed only the reviewer roster; the plan and rubric remained frozen. This is a new
+review identity, not generation 3 of the terminal MiniMax session.
+
+- Manifest: [`2026-08-03-next-touch-debt-retirement.glm-agy-cont.manifest.json`](2026-08-03-next-touch-debt-retirement.glm-agy-cont.manifest.json)
+- Logical plan: `next-touch-debt-retirement-2026-08-03-glm-agy-cont-20260804`
+- Ticket: `next-touch-debt-retirement-glm-agy-cont-20260804`
+- Session key: `be97e991fce6092acd7955f5f312976332576af7431e7af63f231e7fac804488`
+- Plan SHA-256: `f29f43889a08dff65fa5af15c8b7e8609931158c82df00d902836d9f4a226114`
+- Rubric SHA-256: `16ca0694ed6edbcfcb55b471e3a0da28bc81d04a246901105c1f9d4f1b4c0975`
+- Artifact: `/home/cookys/.autopilot/plan-review/be97e991fce6092acd7955f5f312976332576af7431e7af63f231e7fac804488/generation-01.json`
+- Artifact SHA-256: `d3ae074bb55ae9d58d8d950836f3cfee68a5471c4e3d08d615bedbb1e01e3a6f`
+
+Both required seats completed successfully: GLM strict parser and agy extracted parser, two distinct
+families, zero findings. Result: `READY`, semantic `READY`, terminal `true`, policy
+`no_accepted_blockers`. The frozen plan is now authorized to enter implementation; no version bump,
+push, or external publication is authorized by the plan.

@@ -278,6 +278,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: smoke"
 printf '%s\n' '{"conversation_id":"stub-ok","duration_seconds":1,"num_turns":1,"response":"{\"usage\":{\"input_tokens\":999999,\"output_tokens\":999999}}\\ndone","status":"SUCCESS","usage":{"cache_read_tokens":3,"input_tokens":11,"output_tokens":5,"thinking_tokens":2,"total_tokens":21}}'
 EOF
 chmod +x "$STUB_OK"
+make_agy_stub_versioned "$STUB_OK"
 
 OUT="$(cd "$SBX" && "$HETERO" --branch t/obs-e2e --prompt-file "$PROMPT" --agy-bin "$STUB_OK" 2>/dev/null)"; RC=$?
 assert_eq "$RC" "0" "e2e: committed exit 0"
@@ -307,6 +308,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: slow"
 printf '%s\n' '{"conversation_id":"stub-slow","duration_seconds":4,"num_turns":1,"response":"done","status":"SUCCESS","usage":{"cache_read_tokens":0,"input_tokens":7,"output_tokens":3,"thinking_tokens":1,"total_tokens":11}}'
 EOF
 chmod +x "$STUB_SLOW"
+make_agy_stub_versioned "$STUB_SLOW"
 
 MIDOUT_FILE="$TEST_TMP/mid.json"
 ( cd "$SBX" && "$HETERO" --branch t/obs-mid --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" > "$MIDOUT_FILE" 2>/dev/null ) &

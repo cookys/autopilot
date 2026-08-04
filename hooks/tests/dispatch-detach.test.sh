@@ -69,6 +69,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: detached commit"
 "$AGY_FIXTURE_HELPER"
 EOF
   chmod +x "$1"
+  make_agy_stub_versioned "$1"
 }
 
 # =========================================================================================
@@ -179,6 +180,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: packed prompt detached"
 "$AGY_FIXTURE_HELPER"
 EOF
 chmod +x "$STUB_PACK_TERM"
+make_agy_stub_versioned "$STUB_PACK_TERM"
 
 LEDGER_PACK="$TEST_TMP/g/ledger.jsonl"
 mkdir -p "$TEST_TMP/g"
@@ -257,6 +259,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent"
 "$AGY_FIXTURE_HELPER"
 EOF
 chmod +x "$STUB_CONCURRENT"
+make_agy_stub_versioned "$STUB_CONCURRENT"
 (
   cd "$SBX"
   AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H" bash "$SCRIPT" \
@@ -322,6 +325,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent without sets
 "$AGY_FIXTURE_HELPER"
 EOF
 chmod +x "$STUB_CONCURRENT_H2"
+make_agy_stub_versioned "$STUB_CONCURRENT_H2"
 (
   cd "$SBX"
   PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
@@ -400,6 +404,7 @@ echo call >> "$RUNNER_CALLS_I"
 exit 0
 EOF
 chmod +x "$STUB_NEVER_I"
+make_agy_stub_versioned "$STUB_NEVER_I"
 (
   cd "$SBX"
   PATH="$FAKEBIN_I:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_I" \
@@ -470,6 +475,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: inline"
 "$AGY_FIXTURE_HELPER"
 EOF
 chmod +x "$STUB_OK"
+make_agy_stub_versioned "$STUB_OK"
 
 normalize() { # strip run-volatile fields (commit sha / worktree / agent_log / branch /
   # observability run_id + wall_secs — Stage 1 additive fields, volatile per run) → stable text

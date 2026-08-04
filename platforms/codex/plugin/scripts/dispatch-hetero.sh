@@ -1695,7 +1695,7 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
   observed="$(node "$validator" validate-consumer --receipt "$receipt" --consumer D2 \
     --claim-id "$D2_AGY_RESPONSE_CLAIM" --claim-id "$D2_AGY_USAGE_CLAIM" \
-    --emit-claim-ids --reprobe 2>/dev/null)" || rc=$?
+    --emit-claim-ids --reprobe --reprobe-binary "$AGY_BIN" 2>/dev/null)" || rc=$?
   [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
     || die_precondition "D2 capability claim validation failed"
 }
@@ -1784,6 +1784,7 @@ set_runner_flags
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
    && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   validate_d2_agy_claims
 fi
 
@@ -1804,7 +1805,6 @@ normalize_agy_model() {
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
    && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
-  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   MODEL="$(normalize_agy_model "$MODEL")"
 fi
 

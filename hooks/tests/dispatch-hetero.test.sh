@@ -63,16 +63,19 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: smoke"
 "$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_OK"
+make_agy_stub_versioned "$STUB_OK"
 
 # --- stub agy (c): clean exit, no commit → no_op ---
 STUB_NOOP="$TEST_TMP/agy-noop"
 printf '#!/usr/bin/env bash\n"$AGY_FIXTURE_HELPER" "did nothing"\nexit 0\n' > "$STUB_NOOP"
 chmod +x "$STUB_NOOP"
+make_agy_stub_versioned "$STUB_NOOP"
 
 # --- stub agy (d): non-zero exit (proxy for timeout/stall), no commit → question_suspected ---
 STUB_QUESTION="$TEST_TMP/agy-question"
 printf '#!/usr/bin/env bash\necho "Which file should I edit?"\nexit 124\n' > "$STUB_QUESTION"
 chmod +x "$STUB_QUESTION"
+make_agy_stub_versioned "$STUB_QUESTION"
 
 # --- stub agy (b): commits cleanly then exits non-zero → failure (NOT success) ---
 STUB_FAIL_COMMIT="$TEST_TMP/agy-fail-commit"
@@ -85,6 +88,7 @@ echo "post-commit error" >&2
 exit 3
 EOF
 chmod +x "$STUB_FAIL_COMMIT"
+make_agy_stub_versioned "$STUB_FAIL_COMMIT"
 
 FOREIGN_D2_RECEIPT="$TEST_TMP/foreign-d2-receipt.json"
 node - "$REPO_ROOT/docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json" "$FOREIGN_D2_RECEIPT" <<'NODE'
@@ -114,6 +118,7 @@ touch "$FOREIGN_D2_MARKER"
 exit 99
 EOF
 chmod +x "$STUB_FOREIGN_D2"
+make_agy_stub_versioned "$STUB_FOREIGN_D2"
 
 # --- stub codex: leaves edits uncommitted; wrapper-commit must still fire on dirty worktree.
 # Emulates a FLAG-SUPPORTING codex: answers `exec --help`/`--version` (so dispatch-hetero's
@@ -315,6 +320,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: bad envelope"
 printf '%s' '{"response":'
 EOF
 chmod +x "$STUB_BAD_ENVELOPE"
+make_agy_stub_versioned "$STUB_BAD_ENVELOPE"
 OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
   --branch feat/bad-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_BAD_ENVELOPE" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "malformed agy envelope with a commit fails closed"
@@ -333,6 +339,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: nonzero envelope"
 exit 77
 EOF
 chmod +x "$STUB_NONZERO_ENVELOPE"
+make_agy_stub_versioned "$STUB_NONZERO_ENVELOPE"
 OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
   --branch feat/nonzero-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_NONZERO_ENVELOPE" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "nonzero agy exit after valid-looking envelope fails closed"
@@ -365,6 +372,7 @@ touch "$DUP_RUNNER_MARK"
 exit 99
 EOF
 chmod +x "$DUP_STUB"
+make_agy_stub_versioned "$DUP_STUB"
 bash "$REPO_ROOT/scripts/run-ledger.sh" init --ledger "$DUP_LEDGER" >/dev/null
 DUP_LEDGER_LINES_BEFORE="$(wc -l < "$DUP_LEDGER" | tr -d ' ')"
 DUP_WORKTREES_BEFORE="$(
@@ -405,6 +413,7 @@ echo leftover > unstaged.txt
 "$AGY_FIXTURE_HELPER" "dirty fixture"
 EOF
 chmod +x "$STUB_DIRTY"
+make_agy_stub_versioned "$STUB_DIRTY"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/dirty --prompt-file "$PROMPT" --agy-bin "$STUB_DIRTY" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "dirty path exit code"
 assert_contains "$OUT" '"status": "dirty"' "dirty status"
@@ -730,6 +739,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: anchor"
 EOF
 sed -i "s#__ANCHOR_OUT__#$ANCHOR_OUT#g" "$STUB_ANCHOR"
 chmod +x "$STUB_ANCHOR"
+make_agy_stub_versioned "$STUB_ANCHOR"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/anchor --prompt-file "$PROMPT" --agy-bin "$STUB_ANCHOR" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "anchor stub committed → exit 0"
 assert_contains "$OUT" '"status": "committed"' "anchor flow committed"
@@ -745,6 +755,7 @@ echo "ERROR: OpenAI billing quota exceeded" >&2
 exit 123
 EOF
 chmod +x "$STUB_QUOTA_FAIL"
+make_agy_stub_versioned "$STUB_QUOTA_FAIL"
 
 # Override store to a test directory
 CAP_TEST_DIR="$TEST_TMP/cap-store-hetero"
@@ -782,6 +793,7 @@ echo "API error (status 402 Payment Required): Grok Build usage balance exhauste
 exit 1
 EOF
 chmod +x "$STUB_GROK_402"
+make_agy_stub_versioned "$STUB_GROK_402"
 OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --branch feat/grok-402 --prompt-file "$PROMPT" --agy-bin "$STUB_GROK_402" --model "gpt-5.5" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "grok 402 fixture exit code is 1"
 assert_contains "$OUT" '"status": "engine_unavailable"' "grok 402 fixture status is engine_unavailable"
@@ -818,6 +830,7 @@ git -c user.email=t@t -c user.name=t commit -q -m "test: capture-prompt"
 exit 0
 EOF
 chmod +x "$STUB_CAPTURE_PROMPT"
+make_agy_stub_versioned "$STUB_CAPTURE_PROMPT"
 
 rm -f "$TEST_TMP/captured_prompt.txt"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/skill-prompt --prompt-file "$PROMPT" --agy-bin "$STUB_CAPTURE_PROMPT" --skill-mode prompt --skill autopilot:dev-flow 2>&1)"; EXIT=$?
@@ -1383,7 +1396,7 @@ assert.ok(heteroSrc.includes('zero_diff_receipt'));
 // is heavy; instead run dispatch-hetero with a no-op stub + sealed contract when
 // the script supports --contract.
 const stubNoop = path.join(tmp, 'stub-noop.sh');
-fs.writeFileSync(stubNoop, '#!/usr/bin/env bash\n"$AGY_FIXTURE_HELPER" "strict no-op fixture"\nexit 0\n');
+fs.writeFileSync(stubNoop, '#!/usr/bin/env bash\n[ "${1:-}" != "--version" ] || { printf "1.1.10\\n"; exit 0; }\n"$AGY_FIXTURE_HELPER" "strict no-op fixture"\nexit 0\n');
 fs.chmodSync(stubNoop, 0o755);
 const sealDuringRun = path.join(tmp, 'seal-zero-diff-during-run.js');
 fs.writeFileSync(sealDuringRun, `#!/usr/bin/env node
@@ -1429,12 +1442,14 @@ fs.writeFileSync(contractPath, JSON.stringify(contract, null, 2) + '\\n');
 fs.chmodSync(sealDuringRun, 0o755);
 const stubEqualityBranch = path.join(tmp, 'stub-equality-branch.sh');
 fs.writeFileSync(stubEqualityBranch, `#!/usr/bin/env bash
+[ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
 node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
 "$AGY_FIXTURE_HELPER" "equality fixture"
 `);
 fs.chmodSync(stubEqualityBranch, 0o755);
 const stubPostcheckEmptyDiff = path.join(tmp, 'stub-postcheck-empty-diff.sh');
 fs.writeFileSync(stubPostcheckEmptyDiff, `#!/usr/bin/env bash
+[ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
 node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
 git -c user.email=t@t -c user.name=t commit --allow-empty -q -m empty
 "$AGY_FIXTURE_HELPER" "empty diff fixture"
@@ -1445,6 +1460,7 @@ const stubSealed = path.join(tmp, 'stub-sealed-must-not-run.sh');
 fs.writeFileSync(
   stubSealed,
   `#!/usr/bin/env bash
+[ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
 touch ${JSON.stringify(sealedRunnerSentinel)}
 exit 99
 `,
@@ -1454,6 +1470,7 @@ fs.chmodSync(stubSealed, 0o755);
 // Effectful: stub changes a scope-allowed but unsealed file → output boundary.
 const stubWrong = path.join(tmp, 'stub-wrong.sh');
 fs.writeFileSync(stubWrong, `#!/usr/bin/env bash
+[ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
 echo other > src/other.js
 git add src/other.js
 git -c user.email=t@t -c user.name=t commit -q -m other
@@ -1464,6 +1481,7 @@ fs.chmodSync(stubWrong, 0o755);
 // Effectful correct: changes required path.
 const stubOk = path.join(tmp, 'stub-ok.sh');
 fs.writeFileSync(stubOk, `#!/usr/bin/env bash
+[ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
 echo v2 > src/target.js
 git add src/target.js
 git -c user.email=t@t -c user.name=t commit -q -m target

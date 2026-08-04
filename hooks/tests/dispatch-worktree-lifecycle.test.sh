@@ -47,6 +47,7 @@ git -c user.email=wlb@test -c user.name=wlb commit -q -m "test: retained leaf"
 "$AGY_FIXTURE_HELPER"
 STUB
 chmod +x "$STUB_AGY"
+make_agy_stub_versioned "$STUB_AGY"
 
 STUB_BARRIER="$TEST_TMP/agy-barrier"
 cat > "$STUB_BARRIER" <<'STUB'
@@ -65,6 +66,7 @@ git -c user.email=wlb@test -c user.name=wlb commit -q -m "test: concurrent retai
 "$AGY_FIXTURE_HELPER"
 STUB
 chmod +x "$STUB_BARRIER"
+make_agy_stub_versioned "$STUB_BARRIER"
 
 init_repo() {
   local repo="$1" common

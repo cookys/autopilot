@@ -1301,6 +1301,7 @@ fs.writeFileSync(promptPath, 'this runner must never execute\n');
 const runnerSentinel = path.join(authorityDir, 'runner-called');
 const runnerStub = path.join(authorityDir, 'runner-stub.sh');
 fs.writeFileSync(runnerStub, `#!/usr/bin/env bash
+[ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
 touch "${runnerSentinel}"
 exit 99
 `);

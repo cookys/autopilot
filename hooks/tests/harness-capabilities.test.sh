@@ -606,6 +606,30 @@ EXIT=$?
 assert_exit_code "$EXIT" 0 "single consumer emits validated IDs"
 assert_contains "$OUT" "cap-v1-" "single consumer emits content-addressed claim ID"
 
+SELECTED_VERSION_BIN="$TEST_TMP/selected-version"
+printf '#!/usr/bin/env bash\nprintf "selected v%s\\n"\n' "$NODE_VERSION" > "$SELECTED_VERSION_BIN"
+chmod +x "$SELECTED_VERSION_BIN"
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --emit-claim-ids --reprobe --reprobe-binary "$SELECTED_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 0 "single consumer revalidates the selected portable binary"
+assert_contains "$OUT" "cap-v1-" "selected portable binary preserves receipt claim IDs"
+
+SELECTED_WRONG_VERSION_BIN="$TEST_TMP/selected-wrong-version"
+printf '#!/usr/bin/env bash\nprintf "selected 0.0.1\\n"\n' > "$SELECTED_WRONG_VERSION_BIN"
+chmod +x "$SELECTED_WRONG_VERSION_BIN"
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --reprobe --reprobe-binary "$SELECTED_WRONG_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 1 "selected binary version drift fails closed"
+assert_contains "$OUT" "current_version_drift:0.0.1" "selected binary drift reports its observed version"
+
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --reprobe-binary "$SELECTED_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 1 "selected binary override requires immediate revalidation"
+assert_contains "$OUT" "--reprobe-binary requires --reprobe" "selected binary cannot bypass revalidation"
+
 CLAIMS_MUTATOR="$TEST_TMP/mutate-capability-receipt.js"
 cat > "$CLAIMS_MUTATOR" <<'NODE'
 const crypto = require('crypto');

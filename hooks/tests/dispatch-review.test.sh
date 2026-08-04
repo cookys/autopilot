@@ -262,6 +262,7 @@ RESPONSE="$response" USAGE_INPUT="${usage_input:-101}" node -e '
 [ "${AGY_ENVELOPE_MODE:-valid}" != nonzero_valid ] || exit 77
 EOF
 chmod +x "$STUB_AGY_JSON"
+make_agy_stub_versioned "$STUB_AGY_JSON"
 export AGY_TEXT_STUB="$STUB_MARKER"
 STUB_QODERCN_MARKER="$TEST_TMP/qoderclicn-marker"
 cat > "$STUB_QODERCN_MARKER" <<'EOF'

@@ -169,7 +169,7 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
   observed="$(node "$validator" validate-consumer --receipt "$receipt" --consumer D2 \
     --claim-id "$D2_AGY_RESPONSE_CLAIM" --claim-id "$D2_AGY_USAGE_CLAIM" \
-    --emit-claim-ids --reprobe 2>/dev/null)" || rc=$?
+    --emit-claim-ids --reprobe --reprobe-binary "$AGY_BIN" 2>/dev/null)" || rc=$?
   [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
     || die_precondition "D2 capability claim validation failed"
 }

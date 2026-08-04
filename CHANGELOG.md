@@ -24,17 +24,21 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## v2.34.3 — Portable agy capability revalidation
+## v2.34.3 — Portable platform capability revalidation
 
-**Headline**: Runtime D2 validation now probes the agy binary selected by each dispatcher instead
-of the release author's absolute path, so CI and other installations can validate the same receipt
-without weakening its version, freshness, or claim-ID checks.
+**Headline**: Runtime D2 and D3 validators now probe the agy or Codex binary selected by the
+current consumer instead of the release author's absolute path. The Codex `PostCompact` hook also
+resolves the capability receipt from its archived package location, so CI and other installations
+can validate the same receipt without weakening its version, freshness, or claim-ID checks.
 
 ### Fixed
 - `dispatch-review.sh` and `dispatch-hetero.sh` pass their selected `AGY_BIN` into immediate
   capability revalidation while the receipt retains its immutable probe provenance.
 - `platform-capability-claims.js` accepts `--reprobe-binary` only for `validate-consumer` with
   `--reprobe`; generate and other command grammars reject it before reading or writing receipts.
+- The Codex `PostCompact` hook reads the archived D3 receipt and re-probes the PATH-resolved
+  `codex` command, or the explicit `AUTOPILOT_CODEX_BIN` selection, before every reconciliation.
+  Missing and version-mismatched selections still fail closed.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`.

@@ -1147,6 +1147,24 @@ if (runtime) {
     'post-compact.js',
   );
   const productionPluginRoot = path.join(root, 'platforms', 'codex', 'plugin');
+  const codexFixtureDir = path.join(temp, 'codex-version-fixture-bin');
+  const codexVersionFixture = path.join(codexFixtureDir, 'codex');
+  const codexVersionDriftFixture = path.join(codexFixtureDir, 'codex-version-drift');
+  fs.mkdirSync(codexFixtureDir, { recursive: true });
+  fs.writeFileSync(codexVersionFixture, [
+    '#!/usr/bin/env node',
+    "if (process.argv.length !== 3 || process.argv[2] !== '--version') process.exit(64);",
+    "process.stdout.write('codex-cli 0.146.0\\n');",
+    '',
+  ].join('\n'));
+  fs.writeFileSync(codexVersionDriftFixture, [
+    '#!/usr/bin/env node',
+    "if (process.argv.length !== 3 || process.argv[2] !== '--version') process.exit(64);",
+    "process.stdout.write('codex-cli 0.0.0\\n');",
+    '',
+  ].join('\n'));
+  fs.chmodSync(codexVersionFixture, 0o755);
+  fs.chmodSync(codexVersionDriftFixture, 0o755);
   const runProductionHook = (payload, extraEnv = {}) => spawnSync(
     process.execPath,
     [productionHook],
@@ -1154,7 +1172,12 @@ if (runtime) {
       cwd: controllerRecoveryWt,
       encoding: 'utf8',
       input: typeof payload === 'string' ? payload : JSON.stringify(payload),
-      env: { ...process.env, PLUGIN_ROOT: productionPluginRoot, ...extraEnv },
+      env: {
+        ...process.env,
+        PATH: `${codexFixtureDir}${path.delimiter}${process.env.PATH || ''}`,
+        PLUGIN_ROOT: productionPluginRoot,
+        ...extraEnv,
+      },
     },
   );
   const manualPayload = {
@@ -1237,6 +1260,13 @@ if (runtime) {
     claimDrift.status === 2
     && /d3_claim_validation_failed/.test(claimDrift.stderr));
   fs.unlinkSync(driftReceiptPath);
+  const codexVersionDrift = runProductionHook(
+    { ...manualPayload, turn_id: 'codex-version-drift-turn' },
+    { AUTOPILOT_CODEX_BIN: codexVersionDriftFixture },
+  );
+  check('codex-production-postcompact-selected-codex-version-drift-blocks',
+    codexVersionDrift.status === 2
+    && /d3_claim_validation_failed/.test(codexVersionDrift.stderr));
   const receiptBytes = fs.readFileSync(productionReceiptPath);
   fs.appendFileSync(productionReceiptPath, '\ncorrupt prior receipt\n');
   const corruptPriorReceipt = runProductionHook({

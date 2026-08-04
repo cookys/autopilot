@@ -75,12 +75,14 @@ function topLevelObjectKeys(text) {
 
 function validateClaims(pluginRoot) {
   const validator = path.join(pluginRoot, 'scripts', 'platform-capability-claims.js');
+  const codexBinary = process.env.AUTOPILOT_CODEX_BIN ?? 'codex';
   const receipt = process.env.AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT
     ? path.resolve(process.env.AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT)
     : path.join(
       pluginRoot,
       'docs',
       'projects',
+      '_archive',
       '2026-08-04-platform-capability-trigger-activation',
       'evidence',
       'platform-capabilities.json',
@@ -92,6 +94,7 @@ function validateClaims(pluginRoot) {
     '--consumer', 'D3',
     '--emit-claim-ids',
     '--reprobe',
+    '--reprobe-binary', codexBinary,
   ], { encoding: 'utf8', cwd: pluginRoot });
   if (validation.status !== 0) {
     block('d3_claim_validation_failed', 'exact D3 capability claims did not revalidate');

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "platform-capability-trigger-activation-2026-08-04-r4",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "e9f817092f3b54635588d1c76aca049615ff918c5ef4e3c4e5f373d951c88645",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified against D1 and frozen R8: optional blocked probe rows conflict with --all-validated because no exact downstream-consumed claim set is declared. The next slice requires a closed required-claim manifest or equivalent exact required claim-ID arguments, while only explicitly unconsumed rows may remain blocked."
+    }
+  ]
+}

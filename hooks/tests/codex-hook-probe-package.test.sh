@@ -6,7 +6,8 @@ PROBE_PLUGIN="$PROBE_ROOT/plugin"
 PROBE_MARKETPLACE="$PROBE_ROOT/.agents/plugins/marketplace.json"
 MAIN_CODEX_PLUGIN="$REPO_ROOT/platforms/codex/plugin"
 
-assert_file_absent "$MAIN_CODEX_PLUGIN/hooks/hooks.json" "Main Codex skills package still has no default hooks file"
+assert_file_exists "$MAIN_CODEX_PLUGIN/hooks/hooks.json" "Main Codex package exposes the production PostCompact manifest"
+assert_file_exists "$MAIN_CODEX_PLUGIN/hooks/post-compact.js" "Main Codex package exposes the production PostCompact adapter"
 assert_file_exists "$PROBE_PLUGIN/.codex-plugin/plugin.json" "Codex hook probe manifest exists"
 assert_file_exists "$PROBE_PLUGIN/hooks/hooks.json" "Codex hook probe hooks manifest exists"
 assert_file_exists "$PROBE_PLUGIN/hooks/probe.js" "Codex hook probe script exists"
@@ -266,5 +267,35 @@ if [ "${AUTOPILOT_CODEX_SLASH_PROBE:-0}" = "1" ]; then
 else
   echo "SKIP [codex-slash-entry] set AUTOPILOT_CODEX_SLASH_PROBE=1 for live probe"
 fi
+
+D1_RECEIPT="$REPO_ROOT/docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json"
+assert_file_exists "$D1_RECEIPT" "D1 durable platform capability receipt exists"
+D1_OUT="$(node - "$D1_RECEIPT" <<'NODE'
+const fs = require('fs');
+const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const d3 = value.consumer_manifest.consumers.find((consumer) => consumer.consumer_id === 'D3');
+const claims = d3.required_claim_ids.map((id) => value.claims.find((claim) => claim.claim_id === id));
+console.log(`d3_count=${claims.length}`);
+console.log(`d3_all_validated=${claims.every((claim) => claim && claim.status === 'validated')}`);
+console.log(`d3_capabilities=${claims.map((claim) => claim.capability_id).sort().join(',')}`);
+console.log(`d3_version=${claims.every((claim) => claim.target_identity.cli_version === '0.146.0')}`);
+console.log(`d3_host_digest=${claims.every((claim) => claim.live_evidence.probe_output_sha256 === '89d76cd6d7dc8d815761d547e3325e9dcd6858a29d259093ef27a22cbb1fbd23')}`);
+NODE
+)"
+assert_contains "$D1_OUT" "d3_count=4" "D3 owns exactly four PostCompact claims"
+assert_contains "$D1_OUT" "d3_all_validated=true" "D3 PostCompact claims are all validated"
+assert_contains "$D1_OUT" "d3_capabilities=codex-postcompact-failure-boundary,codex-postcompact-matcher,codex-postcompact-payload,codex-postcompact-registration" "D3 capability set is exact"
+assert_contains "$D1_OUT" "d3_version=true" "D3 claims bind installed codex-cli 0.146.0"
+assert_contains "$D1_OUT" "d3_host_digest=true" "D3 claims bind the manual+auto host-probe digest"
+
+assert_file_exists "$MAIN_CODEX_PLUGIN/schemas/platform-capability-claims.schema.json" "Codex mirror carries capability claim schema"
+assert_file_exists "$MAIN_CODEX_PLUGIN/scripts/platform-capability-claims.js" "Codex mirror carries capability claim validator"
+assert_file_exists "$MAIN_CODEX_PLUGIN/scripts/probe-harness-capabilities.sh" "Codex mirror carries deterministic harness probe"
+cmp -s "$REPO_ROOT/schemas/platform-capability-claims.schema.json" "$MAIN_CODEX_PLUGIN/schemas/platform-capability-claims.schema.json"
+assert_exit_code "$?" 0 "Codex capability schema mirror is byte-equal"
+cmp -s "$REPO_ROOT/scripts/platform-capability-claims.js" "$MAIN_CODEX_PLUGIN/scripts/platform-capability-claims.js"
+assert_exit_code "$?" 0 "Codex capability validator mirror is byte-equal"
+cmp -s "$REPO_ROOT/scripts/probe-harness-capabilities.sh" "$MAIN_CODEX_PLUGIN/scripts/probe-harness-capabilities.sh"
+assert_exit_code "$?" 0 "Codex harness probe mirror is byte-equal"
 
 finalize_test

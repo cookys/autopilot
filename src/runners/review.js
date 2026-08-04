@@ -18,6 +18,7 @@ const REVIEW_RESULT_FIELDS = [
   'no_finding_proof',
   'raw_log',
   'error',
+  'usage',
 ];
 const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
 const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
@@ -48,6 +49,33 @@ function isValidNoFindingProof(value) {
     const normalized = part.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
     return !NO_FINDING_TAUTOLOGIES.has(normalized);
   });
+}
+
+function validateUsage(value) {
+  if (value === null) return;
+  const fields = [
+    'total_tokens',
+    'input_tokens',
+    'output_tokens',
+    'cache_read_tokens',
+    'source',
+  ];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('review output JSON field usage must be null or an object');
+  }
+  const keys = Object.keys(value).sort();
+  if (JSON.stringify(keys) !== JSON.stringify([...fields].sort())) {
+    throw new Error('review output JSON field usage has invalid closed shape');
+  }
+  for (const field of fields.slice(0, 4)) {
+    if (value[field] !== null
+        && (!Number.isSafeInteger(value[field]) || value[field] < 0)) {
+      throw new Error(`review output JSON field usage.${field} must be null or a nonnegative safe integer`);
+    }
+  }
+  if (typeof value.source !== 'string' || value.source.length === 0) {
+    throw new Error('review output JSON field usage.source must be a non-empty string');
+  }
 }
 
 function validateReviewResult(value) {
@@ -100,6 +128,7 @@ function validateReviewResult(value) {
   if (value.error !== null && (typeof value.error !== 'string' || value.error.length === 0)) {
     throw new Error('review output JSON field error must be null or non-empty string');
   }
+  validateUsage(value.usage);
   return value;
 }
 

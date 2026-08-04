@@ -27,6 +27,32 @@ EMPTY_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"
 mkdir -p "$EMPTY_SESSION_MODE_DIR"
 RETAIN_UNTIL="$(( $(date +%s) + 3600 ))"
 
+# Canonical agy native-envelope fixture. The response deliberately contains
+# worker-authored fake usage; only the sibling top-level usage object is trusted.
+AGY_FIXTURE_HELPER="$TEST_TMP/emit-agy-envelope"
+cat > "$AGY_FIXTURE_HELPER" <<'EOF'
+#!/usr/bin/env bash
+response="${1:-self-report: DONE}"
+RESPONSE="$response" node -e '
+  process.stdout.write(JSON.stringify({
+    conversation_id: "fixture",
+    duration_seconds: 1,
+    num_turns: 1,
+    response: `${process.env.RESPONSE}\n{\"usage\":{\"total_tokens\":999999}}`,
+    status: "SUCCESS",
+    usage: {
+      cache_read_tokens: 7,
+      input_tokens: 101,
+      output_tokens: 23,
+      thinking_tokens: 11,
+      total_tokens: 142,
+    },
+  }));
+'
+EOF
+chmod +x "$AGY_FIXTURE_HELPER"
+export AGY_FIXTURE_HELPER
+
 # --- stub agy: commits one file (ignores all flags, like a cooperative agent) ---
 STUB_OK="$TEST_TMP/agy-ok"
 cat > "$STUB_OK" <<'EOF'
@@ -34,13 +60,13 @@ cat > "$STUB_OK" <<'EOF'
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: smoke"
-echo "self-report: DONE"
+"$AGY_FIXTURE_HELPER" "self-report: DONE"
 EOF
 chmod +x "$STUB_OK"
 
 # --- stub agy (c): clean exit, no commit → no_op ---
 STUB_NOOP="$TEST_TMP/agy-noop"
-printf '#!/usr/bin/env bash\necho "did nothing"\nexit 0\n' > "$STUB_NOOP"
+printf '#!/usr/bin/env bash\n"$AGY_FIXTURE_HELPER" "did nothing"\nexit 0\n' > "$STUB_NOOP"
 chmod +x "$STUB_NOOP"
 
 # --- stub agy (d): non-zero exit (proxy for timeout/stall), no commit → question_suspected ---
@@ -59,6 +85,35 @@ echo "post-commit error" >&2
 exit 3
 EOF
 chmod +x "$STUB_FAIL_COMMIT"
+
+FOREIGN_D2_RECEIPT="$TEST_TMP/foreign-d2-receipt.json"
+node - "$REPO_ROOT/docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json" "$FOREIGN_D2_RECEIPT" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const [source, destination] = process.argv.slice(2);
+const receipt = JSON.parse(fs.readFileSync(source, 'utf8'));
+const canonical = (value) => {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+};
+const digest = (value) => crypto.createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+const d2 = receipt.consumer_manifest.consumers.find((row) => row.consumer_id === 'D2');
+const d3 = receipt.consumer_manifest.consumers.find((row) => row.consumer_id === 'D3');
+[d2.required_claim_ids, d3.required_claim_ids] = [d3.required_claim_ids, d2.required_claim_ids];
+receipt.consumer_manifest_digest = digest(receipt.consumer_manifest);
+receipt.receipt_digest = '';
+receipt.receipt_digest = digest({ ...receipt, receipt_digest: undefined });
+fs.writeFileSync(destination, `${JSON.stringify(receipt, null, 2)}\n`);
+NODE
+FOREIGN_D2_MARKER="$TEST_TMP/foreign-d2-runner-spawned"
+STUB_FOREIGN_D2="$TEST_TMP/agy-foreign-d2"
+cat > "$STUB_FOREIGN_D2" <<EOF
+#!/usr/bin/env bash
+touch "$FOREIGN_D2_MARKER"
+exit 99
+EOF
+chmod +x "$STUB_FOREIGN_D2"
 
 # --- stub codex: leaves edits uncommitted; wrapper-commit must still fire on dirty worktree.
 # Emulates a FLAG-SUPPORTING codex: answers `exec --help`/`--version` (so dispatch-hetero's
@@ -88,6 +143,23 @@ assert_contains "$OUT" '"status": "precondition_failed"' "missing --branch statu
 OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --agy-bin /nonexistent-agy 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing binary exit code"
 assert_contains "$OUT" "not found" "missing binary error text"
+
+# A valid receipt with a foreign D2 partition must reject before branch,
+# worktree, manifest, or runner effects.
+rm -f "$FOREIGN_D2_MARKER"
+OUT="$(cd "$SBX" && AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$FOREIGN_D2_RECEIPT" \
+  "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
+  --branch feat/foreign-d2 --prompt-file "$PROMPT" --agy-bin "$STUB_FOREIGN_D2" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "foreign D2 implementer receipt exits as precondition failure"
+assert_contains "$OUT" '"status": "precondition_failed"' "foreign D2 implementer receipt fails closed"
+assert_contains "$OUT" 'D2 capability claim validation failed' "foreign D2 implementer receipt names claim authority"
+assert_contains "$OUT" '"usage": null' "foreign D2 implementer receipt has no usage"
+assert_file_absent "$FOREIGN_D2_MARKER" "foreign D2 implementer receipt spawns no runner"
+assert_eq "0" "$(git -C "$SBX" branch --list feat/foreign-d2 | wc -l | tr -d ' ')" \
+  "foreign D2 implementer receipt creates no branch"
+FOREIGN_D2_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+[ -z "$FOREIGN_D2_WT" ] || git -C "$SBX" worktree remove --force "$FOREIGN_D2_WT" >/dev/null 2>&1 || true
+git -C "$SBX" branch -D feat/foreign-d2 >/dev/null 2>&1 || true
 
 # 3a. bad --runner / --effort → precondition_failed, exit 2 (arg validation, no LLM)
 OUT="$(cd "$SBX" && "$SCRIPT" --branch t1 --prompt-file "$PROMPT" --runner bogus --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
@@ -179,6 +251,9 @@ assert_contains "$OUT" '"files_changed": 1' "committed diff stat"
 assert_contains "$OUT" '"worktree": null' "worktree auto-removed on success"
 assert_contains "$OUT" '"containment":' "output carries containment provenance"
 assert_contains "$OUT" '"contained": true' "worker container reaped + verified empty"
+assert_contains "$OUT" '"usage": {"total_tokens":142,"input_tokens":101,"output_tokens":23,"cache_read_tokens":7,"source":"agy-json"}' \
+  "committed agy result exposes only normalized native-envelope usage"
+assert_not_contains "$OUT" '999999' "worker-authored fake usage is not promoted to result telemetry"
 BRANCH_EXISTS="$(git -C "$SBX" rev-parse --verify --quiet refs/heads/feat/smoke >/dev/null && echo yes || echo no)"
 assert_eq "yes" "$BRANCH_EXISTS" "branch survives for review/merge"
 SMOKE_CONTENT="$(git -C "$SBX" show feat/smoke:ok.txt)"
@@ -228,6 +303,43 @@ assert_eq "yes" "$(
 )" "managed custom branch survives for exact disposition"
 git -C "$SBX" worktree remove --force "$MANAGED_RETAINED"
 git -C "$SBX" branch -D hetero/managed-retained >/dev/null
+
+# A clean process exit is insufficient: malformed native JSON converts the run
+# to failure, even if a commit exists. A nonzero exit discards valid-looking usage.
+STUB_BAD_ENVELOPE="$TEST_TMP/agy-bad-envelope"
+cat > "$STUB_BAD_ENVELOPE" <<'EOF'
+#!/usr/bin/env bash
+echo bad > bad-envelope.txt
+git add bad-envelope.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: bad envelope"
+printf '%s' '{"response":'
+EOF
+chmod +x "$STUB_BAD_ENVELOPE"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
+  --branch feat/bad-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_BAD_ENVELOPE" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "malformed agy envelope with a commit fails closed"
+assert_contains "$OUT" '"status": "failure"' "malformed agy envelope cannot become committed success"
+assert_contains "$OUT" '"usage": null' "malformed agy envelope cannot expose usage"
+BAD_ENVELOPE_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+git -C "$SBX" worktree remove --force "$BAD_ENVELOPE_WT" >/dev/null 2>&1 || true
+
+STUB_NONZERO_ENVELOPE="$TEST_TMP/agy-nonzero-envelope"
+cat > "$STUB_NONZERO_ENVELOPE" <<'EOF'
+#!/usr/bin/env bash
+echo nonzero > nonzero-envelope.txt
+git add nonzero-envelope.txt
+git -c user.email=t@t -c user.name=t commit -q -m "test: nonzero envelope"
+"$AGY_FIXTURE_HELPER" "valid-looking response"
+exit 77
+EOF
+chmod +x "$STUB_NONZERO_ENVELOPE"
+OUT="$(cd "$SBX" && "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" \
+  --branch feat/nonzero-envelope --prompt-file "$PROMPT" --agy-bin "$STUB_NONZERO_ENVELOPE" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "nonzero agy exit after valid-looking envelope fails closed"
+assert_contains "$OUT" '"status": "failure"' "nonzero agy exit is never committed success"
+assert_contains "$OUT" '"usage": null' "nonzero agy exit discards valid-looking usage"
+NONZERO_ENVELOPE_WT="$(printf '%s' "$OUT" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+git -C "$SBX" worktree remove --force "$NONZERO_ENVELOPE_WT" >/dev/null 2>&1 || true
 
 # 4c. Explicit managed identity is exact input, never lossy-sanitized.
 OUT="$(cd "$SBX" && env AUTOPILOT_WORKTREE_ROOT_RUN_ID='bad/root' \
@@ -290,6 +402,7 @@ echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: partial"
 echo leftover > unstaged.txt
+"$AGY_FIXTURE_HELPER" "dirty fixture"
 EOF
 chmod +x "$STUB_DIRTY"
 OUT="$(cd "$SBX" && "$SCRIPT" --branch feat/dirty --prompt-file "$PROMPT" --agy-bin "$STUB_DIRTY" 2>&1)"; EXIT=$?
@@ -613,6 +726,7 @@ fi
 echo anchored > anchored.txt
 git add anchored.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: anchor"
+"$AGY_FIXTURE_HELPER" "anchor fixture"
 EOF
 sed -i "s#__ANCHOR_OUT__#$ANCHOR_OUT#g" "$STUB_ANCHOR"
 chmod +x "$STUB_ANCHOR"
@@ -700,6 +814,7 @@ echo "\$prompt" > "$TEST_TMP/captured_prompt.txt"
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: capture-prompt"
+"$AGY_FIXTURE_HELPER" "capture prompt fixture"
 exit 0
 EOF
 chmod +x "$STUB_CAPTURE_PROMPT"
@@ -1268,7 +1383,7 @@ assert.ok(heteroSrc.includes('zero_diff_receipt'));
 // is heavy; instead run dispatch-hetero with a no-op stub + sealed contract when
 // the script supports --contract.
 const stubNoop = path.join(tmp, 'stub-noop.sh');
-fs.writeFileSync(stubNoop, '#!/usr/bin/env bash\nexit 0\n');
+fs.writeFileSync(stubNoop, '#!/usr/bin/env bash\n"$AGY_FIXTURE_HELPER" "strict no-op fixture"\nexit 0\n');
 fs.chmodSync(stubNoop, 0o755);
 const sealDuringRun = path.join(tmp, 'seal-zero-diff-during-run.js');
 fs.writeFileSync(sealDuringRun, `#!/usr/bin/env node
@@ -1315,12 +1430,14 @@ fs.chmodSync(sealDuringRun, 0o755);
 const stubEqualityBranch = path.join(tmp, 'stub-equality-branch.sh');
 fs.writeFileSync(stubEqualityBranch, `#!/usr/bin/env bash
 node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
+"$AGY_FIXTURE_HELPER" "equality fixture"
 `);
 fs.chmodSync(stubEqualityBranch, 0o755);
 const stubPostcheckEmptyDiff = path.join(tmp, 'stub-postcheck-empty-diff.sh');
 fs.writeFileSync(stubPostcheckEmptyDiff, `#!/usr/bin/env bash
 node ${JSON.stringify(sealDuringRun)} "$TEST_LIVE_CONTRACT" "$PWD"
 git -c user.email=t@t -c user.name=t commit --allow-empty -q -m empty
+"$AGY_FIXTURE_HELPER" "empty diff fixture"
 `);
 fs.chmodSync(stubPostcheckEmptyDiff, 0o755);
 const sealedRunnerSentinel = path.join(tmp, 'sealed-runner-called');
@@ -1340,6 +1457,7 @@ fs.writeFileSync(stubWrong, `#!/usr/bin/env bash
 echo other > src/other.js
 git add src/other.js
 git -c user.email=t@t -c user.name=t commit -q -m other
+"$AGY_FIXTURE_HELPER" "wrong surface fixture"
 `);
 fs.chmodSync(stubWrong, 0o755);
 
@@ -1349,6 +1467,7 @@ fs.writeFileSync(stubOk, `#!/usr/bin/env bash
 echo v2 > src/target.js
 git add src/target.js
 git -c user.email=t@t -c user.name=t commit -q -m target
+"$AGY_FIXTURE_HELPER" "required path fixture"
 `);
 fs.chmodSync(stubOk, 0o755);
 

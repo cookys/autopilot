@@ -7,9 +7,9 @@
 #
 # Why a script: the agy/Gemini read path has two non-obvious rails that MUST NOT be
 # skipped — (1) the diff goes in the PROMPT as text (agy -p ignores cwd; asking it to
-# read the worktree re-triggers the scratch-project hunt), and (2) agy -p drops stdout
-# under a non-TTY pipe (#76/#408), so its output is captured through a `script -qec`
-# pseudo-TTY. EMPTY / unparseable capture is treated FAIL-CLOSED (status:no_verdict) —
+# read the worktree re-triggers the scratch-project hunt), and (2) the native JSON
+# envelope is captured privately, validated once, and only its response is framed.
+# EMPTY / unparseable capture is treated FAIL-CLOSED (status:no_verdict) —
 # an empty agy reply must NEVER be read as SHIP-AS-IS.
 #
 # VERIFIER ISOLATION (structural, MUST NOT regress): the reviewer prompt is assembled from
@@ -78,7 +78,8 @@
 # OUTPUT: one JSON object on stdout:
 #   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...",
-#     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "..." }
+#     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "...",
+#     "usage": { ... }|null }
 #
 # EXIT: 0 = reviewed (a verdict was parsed) ; 1 = no_verdict (FAIL-CLOSED — caller must
 #   NOT treat as pass) ; 2 = precondition_failed.
@@ -112,6 +113,7 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$_REVIEW_SELF_DIR/lib/json-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/json-emit.sh" || true
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""
+REVIEW_USAGE_JSON="null"
 MAX_TOKENS=""; MAX_TOKENS_SUPPLIED=0; MAX_TOKENS_PARSE_ERROR=""
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 # R1 detach coords (all OPTIONAL; absent ⇒ byte-identical inline behavior). When supplied AND
@@ -154,7 +156,23 @@ done
 # a parsing caller reads as a transport failure rather than a precondition failure.
 # Falls back to raw interpolation only if json-emit.sh could not be sourced.
 _rv_esc() { if declare -F json_escape >/dev/null 2>&1; then json_escape "$(printf '%s' "${1:-}" | tr '\n' ' ')"; else printf '%s' "${1:-}"; fi; }
-die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s" }\n' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")"; exit 2; }
+die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": null, "error": "%s", "usage": null }\n' "$(_rv_esc "$RUNNER")" "$(_rv_esc "$MODEL")" "$(_rv_esc "$1")"; exit 2; }
+
+D2_AGY_RESPONSE_CLAIM="cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4"
+D2_AGY_USAGE_CLAIM="cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f10371776f30006b3e"
+D2_AGY_EXPECTED_IDS="[\"$D2_AGY_RESPONSE_CLAIM\",\"$D2_AGY_USAGE_CLAIM\"]"
+validate_d2_agy_claims() {
+  local receipt validator observed rc=0
+  receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$_REVIEW_SELF_DIR/../docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
+  validator="$_REVIEW_SELF_DIR/platform-capability-claims.js"
+  [ -r "$receipt" ] && [ -r "$validator" ] && command -v node >/dev/null 2>&1 \
+    || die_precondition "D2 capability claim validation failed"
+  observed="$(node "$validator" validate-consumer --receipt "$receipt" --consumer D2 \
+    --claim-id "$D2_AGY_RESPONSE_CLAIM" --claim-id "$D2_AGY_USAGE_CLAIM" \
+    --emit-claim-ids --reprobe 2>/dev/null)" || rc=$?
+  [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
+    || die_precondition "D2 capability claim validation failed"
+}
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
 case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
@@ -314,8 +332,8 @@ passive_capture() {
 emit_no_verdict() {
   local reason="$1"
   passive_capture "no_verdict"
-  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s" }\n' \
-    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")"
+  printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "%s", "usage": %s }\n' \
+    "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$(json_escape "$reason")" "$REVIEW_USAGE_JSON"
   exit 1
 }
 
@@ -338,6 +356,10 @@ CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 QODER_CWD=""  # set only on the qoderclicn path; same trap-reap rationale
 QODER_OUT=""  # qoder reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 QODER_ERR=""  # qoder reviewer stderr capture (chrome); reaped on EXIT
+AGY_CWD=""
+AGY_OUT=""
+AGY_ERR=""
+AGY_PARSED=""
 cleanup() {
   # $? at trap entry = the script's exit code — its authoritative status contract
   # (0 reviewed / 1 no_verdict / 2 precondition_failed; anything else = killed/aborted).
@@ -352,6 +374,10 @@ cleanup() {
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD"
   [ -n "$QODER_OUT" ] && rm -f "$QODER_OUT"
   [ -n "$QODER_ERR" ] && rm -f "$QODER_ERR"
+  [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD"
+  [ -n "$AGY_OUT" ] && rm -f "$AGY_OUT"
+  [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
+  [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
   # Observability: stamp ended_at + final_status (from the exit code, the one source
   # every emit path already honors) so dispatch-status.js reports phase:"exited" with
   # the outcome on every exit path. declare -F guard: the trap is armed a few lines
@@ -596,7 +622,7 @@ if [[ "$RUNNER" = "codex" ]]; then
     printf '\n[dispatch-review: codex exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$CODEX_RC" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "codex exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "codex exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CODEX_RC"
     exit 1
   fi
@@ -609,8 +635,8 @@ elif [[ "$RUNNER" = "grok" ]]; then
   # review prompt needs no tools and does not hang without it), --disable-web-search (no
   # external calls on an untrusted diff). --output-format plain so the VERDICT/FINDINGS
   # come out as line-start plain text the parser matches (json wraps them in a "text"
-  # field with literal \n → parser miss). grok delivers stdout under a pipe (unlike agy),
-  # so a direct redirect captures it — no script -qec needed. (Spike 2026-06-29.)
+  # field with literal \n → parser miss). A direct redirect captures grok stdout.
+  # (Spike 2026-06-29.)
   GROK_CWD="$(mktemp -d -t dispatch-review-grokcwd-XXXXXX)"
   # ENFORCED timeout (grok has no --print-timeout like agy): an auth prompt, model/tool
   # approval prompt, network stall, or a prompt-injected tool attempt could otherwise hang
@@ -636,7 +662,7 @@ elif [[ "$RUNNER" = "grok" ]]; then
     printf '\n[dispatch-review: grok exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$GROK_RC" "$([ "$GROK_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "grok exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "grok exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$GROK_RC"
     exit 1
   fi
@@ -650,8 +676,8 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   # diff); --no-session-persistence; enforced `timeout` (qoder has no --print-timeout) as the
   # ultimate hang backstop; FAIL-CLOSED before the shared parser on any non-zero exit.
   # Prompt via STDIN (qoder -p reads stdin — Spike-verified 2026-07-24), NOT a positional argv
-  # arg: a large diff as one arg can hit ARG_MAX → avoidable no_verdict. qoder delivers stdout
-  # under a pipe (unlike agy), so a direct redirect captures it — no script -qec pseudo-TTY.
+  # arg: a large diff as one arg can hit ARG_MAX → avoidable no_verdict. A direct redirect
+  # captures qoder stdout.
   # Default output is plain text so VERDICT/FINDINGS land line-start for the parser. Headless
   # -p has no TTY → a denied tool auto-denies (never an interactive hang); --tools "" plus
   # --dangerously-skip-permissions keep it tool-free and non-interactive.
@@ -683,7 +709,7 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
     printf '\n[dispatch-review: qoder exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$QODER_RC" "$([ "$QODER_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "qoder exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "qoder exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$QODER_RC"
     exit 1
   fi
@@ -735,7 +761,7 @@ elif [[ "$RUNNER" = "cc-shim" ]]; then
     printf '\n[dispatch-review: cc-shim (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CCSHIM_RC" "$([ "$CCSHIM_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "cc-shim exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CCSHIM_RC"
     exit 1
   fi
@@ -763,7 +789,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     printf '\n[dispatch-review: claude-native (claude) exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
       "$CNATIVE_RC" "$([ "$CNATIVE_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "claude-native exited non-zero (rc=%s) — fail-closed, partial output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "claude-native exited non-zero (rc=%s) — fail-closed, partial output not parsed", "usage": null }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$CNATIVE_RC"
     exit 1
   fi
@@ -787,7 +813,7 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
     printf '\n[dispatch-review: anthropic-compatible transport exited non-zero (rc=%s) — partial output NOT parsed]\n' \
       "$ANTHROPIC_RC" >> "$RAW_LOG"
     passive_capture "no_verdict"
-    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "anthropic-compatible transport exited non-zero (rc=%s) — fail-closed, raw output not parsed" }\n' \
+    printf '{ "runner": "%s", "model": "%s", "status": "no_verdict", "verdict": null, "findings": "", "no_finding_proof": null, "raw_log": "%s", "error": "anthropic-compatible transport exited non-zero (rc=%s) — fail-closed, raw output not parsed", "usage": null }\n' \
       "$RUNNER" "$(json_escape "$MODEL")" "$(json_escape "$RAW_LOG")" "$ANTHROPIC_RC"
     exit 1
   fi
@@ -796,6 +822,7 @@ else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy reviewer requires bwrap filesystem/process isolation"
+  validate_d2_agy_claims
   case "$MODEL" in
     gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
       AGY_MODELS="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
@@ -805,31 +832,53 @@ else
       MODEL="$(printf '%s\n' "$AGY_MODELS" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${AGY_TIER}$" | sort -Vr | head -n 1)"
       [ -n "$MODEL" ] || die_precondition "agy alias has no current canonical model" ;;
   esac
-  # agy -p drops stdout under a non-TTY pipe (#76/#408) → capture through a pseudo-TTY.
-  RUN_SH="$(mktemp -t dispatch-review-agy-XXXXXX)"
+  # Capture the native JSON envelope privately. It is never the verdict parser's
+  # input and never becomes raw_log: dispatch-status validates it once, then the
+  # derived response and usage become separate typed channels.
   AGY_CWD="$(mktemp -d -t dispatch-review-agycwd-XXXXXX)"  # scratch cwd, NEVER the repo
-  AGY_APP_BINDS=""
+  AGY_OUT="$(mktemp -t dispatch-review-agy-out-XXXXXX)"
+  AGY_ERR="$(mktemp -t dispatch-review-agy-err-XXXXXX)"
+  AGY_PARSED="$(mktemp -t dispatch-review-agy-parsed-XXXXXX)"
+  AGY_BWRAP_ARGS=(--ro-bind / / --dev /dev --proc /proc)
   for AGY_APP_SUBDIR in log crashes; do
     AGY_APP_TARGET="${HOME:-}/.gemini/antigravity-cli/$AGY_APP_SUBDIR"
     if [ -d "$AGY_APP_TARGET" ]; then
       mkdir -p "$AGY_CWD/$AGY_APP_SUBDIR"
-      printf -v AGY_APP_BINDS '%s --bind %q %q' \
-        "$AGY_APP_BINDS" "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET"
+      AGY_BWRAP_ARGS+=(--bind "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET")
     fi
   done
-  {
-    printf '#!/usr/bin/env bash\n'
-    printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc%s --bind %q %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_APP_BINDS" "$AGY_CWD" "$AGY_CWD" "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
-  } > "$RUN_SH"
-  chmod +x "$RUN_SH"
-  script -qec "$RUN_SH" "$RAW_LOG" >/dev/null 2>&1 || true
-  rm -rf "$RUN_SH" "$AGY_CWD"
-  # strip carriage returns the pseudo-TTY inserts
-  tr -d '\r' < "$RAW_LOG" > "$RAW_LOG.clean" && mv "$RAW_LOG.clean" "$RAW_LOG"
-  # strip script(1) wrapper lines so the parser sees the wrapped model block only
-  sed -e '/^Script started on /d' -e '/^Script done on /d' < "$RAW_LOG" > "$RAW_LOG.clean" && mv "$RAW_LOG.clean" "$RAW_LOG"
+  bwrap "${AGY_BWRAP_ARGS[@]}" --bind "$AGY_CWD" "$AGY_CWD" \
+    --unshare-pid --die-with-parent --chdir "$AGY_CWD" \
+    "$AGY_BIN" -p "$(cat "$PROMPT_FILE")" --model "$MODEL" \
+    --dangerously-skip-permissions --output-format json --print-timeout "$TIMEOUT" \
+    > "$AGY_OUT" 2> "$AGY_ERR"
+  AGY_RC=$?
+  rm -rf "$AGY_CWD"; AGY_CWD=""
+  if [ "$AGY_RC" -ne 0 ]; then
+    cat "$AGY_ERR" >> "$RAW_LOG"
+    printf '\n[dispatch-review: agy exited non-zero (rc=%s) — native envelope and partial response NOT parsed]\n' \
+      "$AGY_RC" >> "$RAW_LOG"
+    REVIEW_USAGE_JSON="null"
+    emit_no_verdict "agy exited non-zero (rc=$AGY_RC) — fail-closed, native envelope not parsed"
+  fi
+  if ! node "$_REVIEW_SELF_DIR/dispatch-status.js" --log "$AGY_OUT" --agy-envelope \
+      > "$AGY_PARSED" 2>/dev/null; then
+    cat "$AGY_ERR" >> "$RAW_LOG"
+    printf '\n[dispatch-review: agy native JSON envelope invalid — response and usage NOT parsed]\n' \
+      >> "$RAW_LOG"
+    REVIEW_USAGE_JSON="null"
+    emit_no_verdict "agy native JSON envelope invalid — fail-closed"
+  fi
+  node - "$AGY_PARSED" "$RAW_LOG" <<'NODE'
+const fs = require('fs');
+const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+fs.writeFileSync(process.argv[3], parsed.response);
+NODE
+  REVIEW_USAGE_JSON="$(node -e '
+    const fs = require("fs");
+    process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).usage));
+  ' "$AGY_PARSED")"
+  PARSE_INPUT="$RAW_LOG"
 fi
 
 
@@ -983,8 +1032,8 @@ else
   fi
 fi
 
-printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null }\n' \
+printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s }\n' \
   "$RUNNER" "$(json_escape "$MODEL")" "$VERDICT" "$(json_escape "${FINDINGS:-none}")" \
   "$([ -n "$NO_FINDING_PROOF" ] && printf '"%s"' "$(json_escape "$NO_FINDING_PROOF")" || printf 'null')" \
-  "$(json_escape "$RAW_LOG")"
+  "$(json_escape "$RAW_LOG")" "$REVIEW_USAGE_JSON"
 exit 0

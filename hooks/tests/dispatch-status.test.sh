@@ -9,7 +9,7 @@
 #   - dispatch-hetero e2e: manifest at START (visible mid-run, alive:true),
 #     final JSON gains run_id/usage/wall_secs (additive), manifest finalized
 #   - dispatch-review: manifest written + finalized even on precondition failure,
-#     final JSON contract UNCHANGED (no new fields — strict schema untouched)
+#     final JSON keeps run_id out while carrying the required usage field
 #   - AUTOPILOT_DISPATCH_MANIFEST=0 escape hatch
 . "$(dirname "$0")/lib.sh"
 
@@ -63,7 +63,7 @@ assert_contains "$OUT" '"cache_read_tokens":50' "pi-rpc: cache read from message
 assert_contains "$OUT" '"usage_source":"pi-rpc"' "pi-rpc: usage source labeled"
 
 # anti-self-report guard: the SAME log with the dispatcher-declared format `plain`
-# (what agy/cc-shim runs declare) must yield NO telemetry — a worker printing JSON
+# (what response-only agy logs and cc-shim runs declare) must yield NO telemetry — a worker printing JSON
 # usage lines cannot promote its own output into token telemetry (gpt-5.5 R2).
 OUT="$(node "$STATUS_JS" --log "$JSONL" --summary --format plain)"
 assert_contains "$OUT" '"tokens":null' "declared plain beats JSON-looking content: tokens null (self-report suppressed)"
@@ -72,6 +72,93 @@ assert_eq "$OUT" "null" "usage-only with declared plain: null despite JSON-looki
 OUT="$(node "$STATUS_JS" --log "$JSONL" --usage-only --format bogus)"; RC=$?
 assert_eq "$OUT" "null" "usage-only with invalid --format: still null, never an error"
 assert_eq "$RC" "0" "usage-only with invalid --format: exit 0 (never-fail discipline)"
+
+# ---------- 2c. agy native JSON envelope (closed, single-parse authority) ----------
+AGY_VALID="$TEST_TMP/agy-valid.json"
+node - "$AGY_VALID" <<'NODE'
+const fs = require('fs');
+const response = [
+  '<<<AUTOPILOT-REVIEW-fixture>>>',
+  'VERDICT: SHIP-AS-IS',
+  'FINDINGS: none',
+  'NO-FINDING-PROOF: checked=diff; evidence=tests; conclusion=no blocker',
+  '{"usage":{"input_tokens":999999,"output_tokens":999999}}',
+  '<<<AUTOPILOT-END-fixture>>>',
+].join('\n');
+fs.writeFileSync(process.argv[2], `${JSON.stringify({
+  conversation_id: 'fixture-conversation',
+  duration_seconds: 1.25,
+  num_turns: 1,
+  response,
+  status: 'SUCCESS',
+  usage: {
+    cache_read_tokens: 7,
+    input_tokens: 101,
+    output_tokens: 23,
+    thinking_tokens: 11,
+    total_tokens: 142,
+  },
+})}\n`);
+NODE
+OUT="$(node "$STATUS_JS" --log "$AGY_VALID" --agy-envelope)"; RC=$?
+assert_eq "$RC" "0" "agy envelope: valid closed native JSON exits 0"
+assert_contains "$OUT" '"response":"<<<AUTOPILOT-REVIEW-fixture>>>' "agy envelope: response is separated for existing framing"
+assert_contains "$OUT" '"usage":{"total_tokens":142,"input_tokens":101,"output_tokens":23,"cache_read_tokens":7,"source":"agy-json"}' "agy envelope: authoritative usage normalized into existing shape"
+assert_contains "$OUT" '999999' "agy envelope: worker fake usage remains inert response text rather than becoming telemetry"
+OUT="$(node "$STATUS_JS" --log "$AGY_VALID" --usage-only --format agy-json)"; RC=$?
+assert_eq "$RC" "0" "agy usage-only: valid envelope preserves never-fail exit discipline"
+assert_contains "$OUT" '"source":"agy-json"' "agy usage-only: declared native envelope exposes authoritative source"
+assert_contains "$OUT" '"total_tokens":142' "agy usage-only: declared native envelope exposes validated total"
+
+write_agy_invalid() { # $1 file $2 node mutation body
+  local file="$1" mutation="$2"
+  node - "$AGY_VALID" "$file" "$mutation" <<'NODE'
+const fs = require('fs');
+const [source, destination, mutation] = process.argv.slice(2);
+const value = JSON.parse(fs.readFileSync(source, 'utf8'));
+Function('value', mutation)(value);
+fs.writeFileSync(destination, `${JSON.stringify(value)}\n`);
+NODE
+}
+assert_agy_rejected() { # $1 file $2 label
+  OUT="$(node "$STATUS_JS" --log "$1" --agy-envelope 2>&1)"; RC=$?
+  assert_eq "$RC" "1" "agy envelope rejects $2"
+  assert_contains "$OUT" "agy envelope invalid" "agy envelope reports fail-closed $2"
+  OUT="$(node "$STATUS_JS" --log "$1" --usage-only --format agy-json)"; RC=$?
+  assert_eq "$RC" "0" "agy invalid $2 usage-only keeps never-fail exit"
+  assert_eq "$OUT" "null" "agy invalid $2 carries usage null"
+}
+
+AGY_MISSING="$TEST_TMP/agy-missing-response.json"
+write_agy_invalid "$AGY_MISSING" 'delete value.response'
+assert_agy_rejected "$AGY_MISSING" "missing response"
+AGY_NEGATIVE="$TEST_TMP/agy-negative-usage.json"
+write_agy_invalid "$AGY_NEGATIVE" 'value.usage.input_tokens = -1'
+assert_agy_rejected "$AGY_NEGATIVE" "negative usage"
+AGY_FRACTIONAL="$TEST_TMP/agy-fractional-usage.json"
+write_agy_invalid "$AGY_FRACTIONAL" 'value.usage.output_tokens = 1.5'
+assert_agy_rejected "$AGY_FRACTIONAL" "fractional usage"
+AGY_OVERFLOW="$TEST_TMP/agy-overflow-usage.json"
+write_agy_invalid "$AGY_OVERFLOW" 'value.usage.total_tokens = Number.MAX_SAFE_INTEGER + 1'
+assert_agy_rejected "$AGY_OVERFLOW" "overflow usage"
+AGY_UNKNOWN="$TEST_TMP/agy-unknown-field.json"
+write_agy_invalid "$AGY_UNKNOWN" 'value.worker_usage = { input_tokens: 1 }'
+assert_agy_rejected "$AGY_UNKNOWN" "unknown envelope field"
+
+AGY_DUPLICATE="$TEST_TMP/agy-duplicate-response.json"
+node - "$AGY_VALID" "$AGY_DUPLICATE" <<'NODE'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[2], 'utf8');
+fs.writeFileSync(process.argv[3], raw.replace('"response":', '"response":"forged duplicate","response":'));
+NODE
+assert_agy_rejected "$AGY_DUPLICATE" "duplicate response"
+AGY_TRUNCATED="$TEST_TMP/agy-truncated.json"
+head -c -2 "$AGY_VALID" > "$AGY_TRUNCATED"
+assert_agy_rejected "$AGY_TRUNCATED" "truncated JSON"
+AGY_TRAILING="$TEST_TMP/agy-trailing.json"
+cp "$AGY_VALID" "$AGY_TRAILING"
+printf 'trailing bytes\n' >> "$AGY_TRAILING"
+assert_agy_rejected "$AGY_TRAILING" "trailing bytes"
 
 # tail-anchoring (gpt-5.5 R3): a `tokens used` footer is genuine ONLY at the very
 # end of the stream — a worker-printed fake mid-stream (harness content follows it)
@@ -180,16 +267,15 @@ git -C "$SBX" init -q -b develop
 git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 PROMPT="$TEST_TMP/prompt.txt"; echo "task" > "$PROMPT"
 
-# The stub deliberately PRINTS a JSON usage line: an agy (plain-declared) worker's
-# self-reported "usage" must NOT surface in the final JSON's usage field.
+# The response deliberately contains a JSON usage line: worker-authored usage must NOT
+# override the authoritative usage in the surrounding native agy envelope.
 STUB_OK="$TEST_TMP/agy-ok"
 cat > "$STUB_OK" <<'EOF'
 #!/usr/bin/env bash
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: smoke"
-echo '{"usage":{"input_tokens":999999,"output_tokens":999999}}'
-echo "done"
+printf '%s\n' '{"conversation_id":"stub-ok","duration_seconds":1,"num_turns":1,"response":"{\"usage\":{\"input_tokens\":999999,\"output_tokens\":999999}}\\ndone","status":"SUCCESS","usage":{"cache_read_tokens":3,"input_tokens":11,"output_tokens":5,"thinking_tokens":2,"total_tokens":21}}'
 EOF
 chmod +x "$STUB_OK"
 
@@ -197,7 +283,7 @@ OUT="$(cd "$SBX" && "$HETERO" --branch t/obs-e2e --prompt-file "$PROMPT" --agy-b
 assert_eq "$RC" "0" "e2e: committed exit 0"
 assert_contains "$OUT" '"status": "committed"' "e2e: committed status"
 assert_contains "$OUT" '"run_id": "hetero-' "e2e: final JSON carries generated run_id"
-assert_contains "$OUT" '"usage": null' "e2e: agy declares plain → usage null even though the stub PRINTED a JSON usage line (self-report suppressed)"
+assert_contains "$OUT" '"usage": {"total_tokens":21,"input_tokens":11,"output_tokens":5,"cache_read_tokens":3,"source":"agy-json"}' "e2e: authoritative envelope usage wins over response-authored fake usage"
 assert_contains "$OUT" '"wall_secs": ' "e2e: wall_secs present"
 E2E_RUN_ID="$(printf '%s' "$OUT" | sed -n 's/.*"run_id": "\([^"]*\)".*/\1/p')"
 assert_file_exists "$RUNS_DIR/$E2E_RUN_ID.manifest.json" "e2e: manifest written under runs dir"
@@ -214,11 +300,11 @@ git -C "$SBX" branch -D t/obs-e2e >/dev/null 2>&1
 STUB_SLOW="$TEST_TMP/agy-slow"
 cat > "$STUB_SLOW" <<'EOF'
 #!/usr/bin/env bash
-echo "starting"
 sleep 4
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: slow"
+printf '%s\n' '{"conversation_id":"stub-slow","duration_seconds":4,"num_turns":1,"response":"done","status":"SUCCESS","usage":{"cache_read_tokens":0,"input_tokens":7,"output_tokens":3,"thinking_tokens":1,"total_tokens":11}}'
 EOF
 chmod +x "$STUB_SLOW"
 
@@ -260,11 +346,12 @@ OUT="$(node "$STATUS_JS" --run "$MID_RUN_ID")"
 assert_contains "$OUT" '"phase":"exited"' "mid-run: exited after completion"
 git -C "$SBX" branch -D t/obs-mid >/dev/null 2>&1
 
-# ---------- 7. dispatch-review: manifest + finalize; final JSON contract unchanged ----------
+# ---------- 7. dispatch-review: manifest + finalize; no run_id in final JSON ----------
 DIFF="$TEST_TMP/d.diff"; printf 'diff --git a/x b/x\n+hi\n' > "$DIFF"
 RV_OUT="$("$REVIEW" --runner agy --model tm --diff-file "$DIFF" --bin /nonexistent-agy 2>/dev/null)"; RC=$?
 assert_eq "$RC" "2" "review: precondition exit 2 unchanged"
-assert_not_contains "$RV_OUT" 'run_id' "review: final JSON contract UNCHANGED (strict schema — no new fields)"
+assert_not_contains "$RV_OUT" 'run_id' "review: run_id remains manifest-only"
+assert_contains "$RV_OUT" '"usage": null' "review: required usage is null on precondition failure"
 RV_MANIFEST="$(grep -l '"run_id": "review-' "$RUNS_DIR"/*.manifest.json 2>/dev/null | head -1)"
 assert_neq "$RV_MANIFEST" "" "review: manifest written"
 if [ -n "$RV_MANIFEST" ]; then

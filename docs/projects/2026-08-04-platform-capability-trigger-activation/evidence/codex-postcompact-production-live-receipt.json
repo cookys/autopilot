@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "artifact_type": "codex_postcompact_production_live_receipt",
+  "observed_at": "2026-08-04T02:32:41.337Z",
+  "codex_version": "0.146.0",
+  "driver_sha256": "41bc2658d91ca8416387ea1174df34bd4a9cd879e63324d8b3fe3028dba6c94c",
+  "manual": {
+    "trigger": "manual",
+    "invocation_digest": "a00ebb05a72901e76447120c5917e2eac33f48a86ec2fbd7ac22ea2abd7e43ca",
+    "reconcile_receipt_digest": "f6e5ee08a1404cbbd0734daa03b76a9ad3f4ff9bc62febb73be49a8c66fab2fe",
+    "sentinel_sha256": "3412823c515869a9ce51951276fc718c69800bad1f2bb8e9a9bc94f25086cbe4",
+    "terminal_sha256": "a40a9f140a70422b56ff150ac281a1957c6cb369bd9b51597c01d80733ac09bd"
+  },
+  "auto": {
+    "trigger": "auto",
+    "invocation_digest": "e68569362796bc736b4b412269603c0f88f40992cac3be7eb58c69ba55bbc961",
+    "reconcile_receipt_digest": "e6697f36e80a26ee637154c39b9fc8cb4540fb0593c2b7177da566ca3536601a",
+    "sentinel_sha256": "02d902d960bc7e731773c57755913e08f5539a4ce85ded1badf651292d5b5bdf",
+    "terminal_sha256": "bcbb72971474e476d454c8268e47551f401a9b20c0b00f2b8887b140395e3351",
+    "threshold": 12000,
+    "initial_prompt_sha256": "2d799c1721cd48464a465ccf9d03663bd1602aa8ca66d80b042afbe4159ab3ef",
+    "continuation_prompt_sha256": "fb37708aff2058a09d74267566423a25f8fc17a68b929c43e339978edae852c8"
+  },
+  "broken_adapter": {
+    "hook_failed": true,
+    "reconcile_receipt_exists": false,
+    "sentinel_exists": false,
+    "terminal_sha256": "6dd116bdc36da4f11803aac5d4dc0919708267f1c4fd22a6d27cfd1cd212c120"
+  },
+  "events_sha256": "9abe235a6b935f00f81ebbf7519120e1f1ed93c884e5e1afaf537698dd77c6ef",
+  "digest": "96e7859cef39132aa3c80aa4e55ea0672c07d8838c4238994cbb0f3f25be762a"
+}

@@ -44,14 +44,16 @@ opencode2
 The installer configures shared skills, installs the pinned V2 extension dependency,
 and synchronizes the generated consumer payload. OpenCode V2's plugin API is beta;
 rerun the smoke test after every upgrade. The exact verified nightly and unsupported
-capabilities are recorded in `src/harness/capabilities/opencode.json`.
+capabilities are recorded in `src/harness/capabilities/opencode.json`. Installed 1.17.15
+and an isolated 1.18.11 probe both truncated `debug skill` discovery JSON near 65,536 bytes,
+so that completeness check remains unavailable rather than being promoted from version alone.
 
 ### Codex (OpenAI)
 
 Two Codex paths are supported:
 
 - **Per-repo skills**: same `.agents/skills/` symlink as OpenCode. Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed when you run Codex inside this repo.
-- **Local Codex plugin package**: `platforms/codex/plugin/` is a Codex package whose manifest exposes only skills, with bundled support payload and a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
+- **Local Codex plugin package**: `platforms/codex/plugin/` exposes the generated skills/support payload plus one production Codex-native `PostCompact` recovery hook, with a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
 
 ```bash
 ./scripts/setup-symlinks.sh
@@ -68,7 +70,30 @@ Contributor shortcut:
 ./scripts/dev-setup.sh --harness codex --install
 ```
 
-The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`, while the package payload also includes linked support files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so skill links and engine CLI commands resolve after install. Run engine commands from the target repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
+The Codex package does **not** load the Claude Code hook bundle, apps, or MCP servers. Its manifest
+declares `skills: "./skills/"` and `hooks: "./hooks/hooks.json"`; that hook manifest contains exactly
+one `PostCompact` registration with matcher `manual|auto`. The Codex adapter translates the official
+payload into Autopilot's existing fail-closed reconciliation authority and blocks continuation when
+identity or reconciliation fails. This is an exact Codex-native recovery boundary, not a claim that
+Claude hook events or defaults transfer to Codex. The generated payload also includes linked support
+files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so
+skill links and engine CLI commands resolve after install. Run engine commands from the target
+repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
+
+For an ordinary strict-L5 invocation, set `AUTOPILOT_LEVEL=l5` and use the managed
+`engine implement-review` command. The CLI resolves the target repository's exact implementer,
+reviewer, verification-author, QC, and configured fallback roster, requires byte-equal coverage by
+the compiled six-claim provider policy, then builds fresh in-process qualification and live-probe
+closures. Readiness is consumed before workflow dispatch and its policy, claim, roster, and
+observation digests are recorded in campaign control. There is intentionally no flag, environment
+receipt, work-order field, or serialized callback that can replace those closures. L3/L4 and the
+temporary legacy rail remain explicitly non-strict and never emit strict-L5 readiness provenance.
+
+Codex hook maintenance still uses the separate warning-only `platforms/codex/hook-probe` package.
+On codex-cli 0.146.0, the probe recorded real `PreCompact`/`PostCompact` pairs for explicit
+`/compact` and threshold compaction. The default package's production receipt then proved manual and
+threshold-auto reconciliation-before-effect plus the broken-adapter failure boundary. The probe
+remains disposable telemetry; it is not the production hook.
 
 For global loose-skill availability across repos without installing the plugin package, see `platforms/codex/config.toml.example`.
 
@@ -88,6 +113,10 @@ Contributor shortcut:
 ./scripts/dev-setup.sh --check --harness agy
 ./scripts/dev-setup.sh --harness agy --install       # delegates to install-antigravity.sh
 ```
+
+The D1 capability probe verified agy 1.1.10 native JSON output with separate response and numeric
+input/output/thinking/cache/total usage fields. Production transport selects the tiered model slug;
+roster effort remains metadata and is validated separately from the agy execution argv.
 
 ### Grok Build (host vs runner)
 
@@ -134,16 +163,17 @@ paths = ["/path/to/autopilot/skills"]
 
 Working **inside this clone** also surfaces skills via `.agents/skills` as project skills; that does not install autopilot for other repos.
 
-#### What is verified (2026-07-16, grok 0.2.101)
+#### What is verified (2026-08-04, grok 0.2.118)
 
 - **28 skills** discoverable as `plugin: autopilot` (`dev-flow`, `quality-pipeline`, `l3`–`l6`, …)
 - **3 methodology agents** as `autopilot:debugger`, `autopilot:planner`, `autopilot:reviewer`
 - **Hooks** file registered (`grok inspect` shows `file plugin: autopilot`)
+- **Headless JSON usage** for the exact `grok-4.5` / high-effort runner tuple
 
 #### Known limits (honest)
 
 - **Not Claude Code parity.** Slash namespaces, hook event coverage, `${CLAUDE_PLUGIN_ROOT}`-style expansion, and opt-in gates that assume Claude's settings injection may behave differently or not at all.
-- **Hooks = discovery partial.** Registration is verified; per-event firing and blocking-gate strength on the Grok host are **not** claimed. See `src/harness/capabilities/grok.json`.
+- **Hooks = discovery partial.** Registration is verified; `SessionEnd` firing with authoritative usage and blocking-gate strength on the Grok host are **not** claimed. See `src/harness/capabilities/grok.json`.
 - **Update after `git pull`.** Local installs record `source_path`. Prefer `grok plugin update` and re-check with `grok inspect`; if skills look stale, re-run `grok plugin install <path> --trust`.
 - **Uninstall:** `grok plugin uninstall autopilot` (confirm flag if prompted).
 

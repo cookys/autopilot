@@ -871,6 +871,27 @@ function addRecognizedUsage(accumulator, value) {
   if (cost !== null) { accumulator.cost += cost; accumulator.costSeen = true; }
 }
 
+function agyDispatchUsage(root) {
+  if (!root || root.runner !== 'agy'
+      || !['reviewed', 'committed'].includes(root.status)
+      || !safeEngineName('agy', root.model)) return null;
+  const usage = transcriptObject(root.usage);
+  const keys = usage ? Object.keys(usage).sort() : [];
+  const expected = [
+    'cache_read_tokens',
+    'input_tokens',
+    'output_tokens',
+    'source',
+    'total_tokens',
+  ];
+  if (JSON.stringify(keys) !== JSON.stringify(expected)
+      || usage.source !== 'agy-json') return null;
+  for (const key of expected.filter((field) => field !== 'source')) {
+    if (!Number.isSafeInteger(usage[key]) || usage[key] < 0) return null;
+  }
+  return usage;
+}
+
 function inspectCodexTranscript(parsed) {
   const result = {
     engine: 'unknown',
@@ -922,6 +943,7 @@ function inspectRootTranscript(provider, parsed) {
     toolFailure: false,
     truncated: false,
     usage: emptyUsageAccumulator(),
+    evidenceClass: 'transcript',
   };
   if (!root) return result;
   result.engine = safeEngineName(
@@ -942,7 +964,15 @@ function inspectRootTranscript(provider, parsed) {
       });
     }
   } else if (provider === 'agy') {
-    result.hasOutput = nonEmptyContent(root.output_text);
+    const dispatchUsage = agyDispatchUsage(root);
+    if (dispatchUsage) {
+      result.completion = true;
+      result.hasOutput = true;
+      result.evidenceClass = 'dispatch-result';
+      addRecognizedUsage(result.usage, dispatchUsage);
+    } else {
+      result.hasOutput = nonEmptyContent(root.output_text);
+    }
   }
   if (provider !== 'agy') {
     addRecognizedUsage(result.usage, root.usage);
@@ -974,11 +1004,12 @@ function inspectTranscript(provider, parsed, file, rootHasCalibrationComponent) 
     provider,
     engine: inspected.engine,
     cohort,
+    evidenceClass: inspected.evidenceClass || 'transcript',
     completed: inspected.completion,
     zeroOutput: !inspected.hasOutput,
     toolFailure: inspected.toolFailure,
     truncated: inspected.truncated,
-    tokens: provider === 'agy' ? null : {
+    tokens: provider === 'agy' && inspected.evidenceClass !== 'dispatch-result' ? null : {
       input: usage.inputSeen ? usage.input : null,
       output: usage.outputSeen ? usage.output : null,
       total: usage.totalSeen ? usage.total : null,
@@ -994,7 +1025,7 @@ function rate(count, total) {
 function aggregateTranscriptSessions(sessions) {
   const grouped = new Map();
   for (const session of sessions) {
-    const key = `${session.provider}\0${session.engine}\0${session.cohort}`;
+    const key = `${session.provider}\0${session.engine}\0${session.cohort}\0${session.evidenceClass}`;
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key).push(session);
   }
@@ -1005,8 +1036,9 @@ function aggregateTranscriptSessions(sessions) {
       const tokenRows = rows.filter((row) => row.tokens
         && Object.values(row.tokens).some((value) => value !== null));
       const costRows = rows.filter((row) => row.costUsd !== null);
-      const tokens = first.provider === 'agy'
-        ? { availability: 'unavailable', reason: 'agy_schema_not_exposed' }
+      const historicalAgy = first.provider === 'agy' && first.evidenceClass === 'transcript';
+      const tokens = historicalAgy
+        ? { availability: 'unavailable', reason: 'transcript_schema_not_exposed' }
         : tokenRows.length === 0
           ? { availability: 'unavailable', reason: 'source_metric_absent' }
           : {
@@ -1019,8 +1051,8 @@ function aggregateTranscriptSessions(sessions) {
             total_tokens: tokenRows.some((row) => row.tokens.total !== null)
               ? tokenRows.reduce((sum, row) => sum + (row.tokens.total || 0), 0) : null,
           };
-      const cost = first.provider === 'agy'
-        ? { availability: 'unavailable', reason: 'agy_schema_not_exposed' }
+      const cost = historicalAgy
+        ? { availability: 'unavailable', reason: 'transcript_schema_not_exposed' }
         : costRows.length === 0
           ? { availability: 'unavailable', reason: 'source_metric_absent' }
           : {
@@ -1032,6 +1064,7 @@ function aggregateTranscriptSessions(sessions) {
         provider: first.provider,
         engine: first.engine,
         cohort: first.cohort,
+        evidence_class: first.evidenceClass,
         sample_size: rows.length,
         completion_rate: rate(rows.filter((row) => row.completed).length, rows.length),
         zero_output_rate: rate(rows.filter((row) => row.zeroOutput).length, rows.length),

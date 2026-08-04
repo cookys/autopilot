@@ -618,4 +618,287 @@ assert_contains "$ADAPTER_OUT" "adapter_secret_redaction=true" \
 assert_contains "$ADAPTER_OUT" "adapter_outcomes_distinct=true" \
   "live adapter keeps auth and quota outcomes distinct"
 
+# D4 strict /l5 trust root: exact frozen policy, canonical roster projection,
+# fresh host-owned closures, and the complete pre-dispatch negative matrix.
+STRICT_BOOTSTRAP_OUT="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const root = process.argv[2];
+const {
+  STRICT_L5_CLAIM_IDS,
+  STRICT_L5_PROVIDER_POLICY,
+  STRICT_L5_PROVIDER_POLICY_DIGEST,
+  consumeStrictL5ProviderReadiness,
+  createStrictL5ProviderBootstrap,
+  deriveStrictL5InvocationPolicy,
+  validateStrictL5ProviderPolicy,
+} = require(path.join(root, 'src', 'readiness', 'provider-bootstrap'));
+const {
+  buildSelectedRoster,
+} = require(path.join(root, 'src', 'readiness', 'status'));
+const {
+  qualifyExactRoleNow,
+} = require(path.join(root, 'src', 'readiness', 'qualification-provider'));
+const {
+  canonicalDigest,
+  createProviderReadinessReceipt,
+} = require(path.join(root, 'src', 'readiness', 'receipt'));
+const {
+  resolveReviewLoopJson,
+} = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
+
+const NOW = '2026-08-04T08:00:00.000Z';
+const clone = (value) => JSON.parse(JSON.stringify(value));
+const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
+  cwd: root,
+  env: process.env,
+});
+assert.strictEqual(resolvedResult.status, 0);
+assert.strictEqual(resolvedResult.error, null);
+const resolved = resolvedResult.result;
+
+const readyObservation = (tuple, axis, now, ttl) => ({
+  schema_version: 1,
+  artifact_type: 'provider_axis_observation',
+  tuple,
+  axis,
+  status: 'ready',
+  observed_at: now,
+  ttl_seconds: ttl,
+  evidence_class: axis === 'qualification'
+    ? 'host-injected-exact-role'
+    : (axis === 'transport' ? 'safe-surface' : 'live-probe'),
+  reason: null,
+});
+const readyCollector = (options) => {
+  const ttl = options.resolvedRoster.provider_readiness_receipt_ttl_seconds;
+  const roster = buildSelectedRoster(options.resolvedRoster, options.now, ttl);
+  for (const seat of roster) {
+    for (const candidate of [seat, ...seat.fallbacks]) {
+      const qualification = qualifyExactRoleNow(
+        options.qualificationProvider,
+        candidate.tuple,
+        options.now,
+        ttl,
+      );
+      assert(qualification, `fixture tuple must be host-qualified: ${candidate.tuple.model}`);
+      candidate.observations = {
+        transport: readyObservation(candidate.tuple, 'transport', options.now, ttl),
+        live: readyObservation(candidate.tuple, 'live', options.now, ttl),
+        qualification,
+      };
+    }
+  }
+  const policy = {
+    receipt_ttl_seconds: ttl,
+    fallback_family_constraint:
+      options.resolvedRoster.provider_readiness_fallback_family_constraint,
+  };
+  return {
+    receipt: createProviderReadinessReceipt({ roster, policy, now: options.now }),
+    roster,
+    policy,
+  };
+};
+
+assert(Object.isFrozen(STRICT_L5_PROVIDER_POLICY));
+assert(STRICT_L5_PROVIDER_POLICY.every((entry) => (
+  Object.isFrozen(entry) && Object.isFrozen(entry.tuple)
+)));
+assert.deepStrictEqual(
+  STRICT_L5_PROVIDER_POLICY.map((entry) => entry.claim_id),
+  STRICT_L5_CLAIM_IDS,
+);
+assert.strictEqual(canonicalDigest(STRICT_L5_PROVIDER_POLICY), STRICT_L5_PROVIDER_POLICY_DIGEST);
+assert.deepStrictEqual(
+  Object.keys(STRICT_L5_PROVIDER_POLICY[0].tuple),
+  ['runner', 'model', 'role', 'effort', 'endpoint', 'family'],
+);
+assert(STRICT_L5_PROVIDER_POLICY.every((entry) => entry.tuple.endpoint === null
+  || entry.tuple.endpoint === 'minimax'));
+
+const projected = deriveStrictL5InvocationPolicy(resolved);
+assert.deepStrictEqual(
+  projected.invocation_policy.map((entry) => entry.tuple.role),
+  ['implementer', 'qc', 'qc', 'qc', 'reviewer', 'verification_author'],
+);
+assert.strictEqual(projected.invocation_policy.length, 6);
+assert.strictEqual(projected.policy_digest, STRICT_L5_PROVIDER_POLICY_DIGEST);
+
+const bootstrap = createStrictL5ProviderBootstrap({ cwd: root }, {
+  resolvedRoster: clone(resolved),
+  collectReadiness: readyCollector,
+  now: () => NOW,
+});
+const bundle = bootstrap.providerReadinessAuthority({ roster: bootstrap.roster });
+const consumed = consumeStrictL5ProviderReadiness(
+  bootstrap.providerReadinessAuthority,
+  bundle,
+  { roster: bootstrap.roster, now: NOW },
+);
+assert.strictEqual(consumed.status, 'ready');
+assert.strictEqual(consumed.strict_level, 'l5');
+assert.strictEqual(consumed.policy_digest, STRICT_L5_PROVIDER_POLICY_DIGEST);
+assert.deepStrictEqual(consumed.claim_ids, STRICT_L5_CLAIM_IDS);
+assert.strictEqual(consumed.selections.length, 6);
+assert.strictEqual(bundle.observation_digest, bundle.receipt.observation_digest);
+
+let dispatcherCalls = 0;
+const rejectsBeforeDispatch = (callback, code) => {
+  const before = dispatcherCalls;
+  assert.throws(callback, (error) => error && error.code === code);
+  assert.strictEqual(dispatcherCalls, before);
+};
+
+const wrongFields = [
+  ['runner', 'agy'],
+  ['model', 'wrong-model'],
+  ['role', 'reviewer'],
+  ['effort', 'low'],
+  ['endpoint', 'wrong_endpoint'],
+  ['family', 'wrong-family'],
+];
+for (const [field, value] of wrongFields) {
+  const candidate = clone(STRICT_L5_PROVIDER_POLICY);
+  candidate[3].tuple[field] = value;
+  rejectsBeforeDispatch(
+    () => validateStrictL5ProviderPolicy(candidate),
+    'strict_l5_provider_policy_digest_drift',
+  );
+}
+const omitted = clone(STRICT_L5_PROVIDER_POLICY);
+delete omitted[0].tuple.family;
+rejectsBeforeDispatch(
+  () => validateStrictL5ProviderPolicy(omitted),
+  'strict_l5_provider_policy_invalid',
+);
+const substituted = clone(STRICT_L5_PROVIDER_POLICY);
+substituted[0].claim_id = STRICT_L5_CLAIM_IDS[1];
+rejectsBeforeDispatch(
+  () => validateStrictL5ProviderPolicy(substituted),
+  'strict_l5_provider_claim_substitution',
+);
+rejectsBeforeDispatch(
+  () => validateStrictL5ProviderPolicy(STRICT_L5_PROVIDER_POLICY, '0'.repeat(64)),
+  'strict_l5_provider_policy_digest_drift',
+);
+rejectsBeforeDispatch(
+  () => validateStrictL5ProviderPolicy([...clone(STRICT_L5_PROVIDER_POLICY)].reverse()),
+  'strict_l5_provider_claim_substitution',
+);
+
+const unknownTuple = clone(resolved);
+unknownTuple.reviewer_engine = 'unknown-reviewer-model';
+rejectsBeforeDispatch(
+  () => deriveStrictL5InvocationPolicy(unknownTuple),
+  'strict_l5_provider_unknown_tuple',
+);
+const duplicateTuple = clone(resolved);
+duplicateTuple.qc_panel_seats[1] = clone(duplicateTuple.qc_panel_seats[0]);
+rejectsBeforeDispatch(
+  () => deriveStrictL5InvocationPolicy(duplicateTuple),
+  'strict_l5_provider_tuple_duplicate',
+);
+const fallbackFamily = clone(resolved);
+fallbackFamily.fallback_ladder = [{
+  engine: 'MiniMax-M3-fallback',
+  runner: 'cc-shim',
+  model: 'MiniMax-M3-fallback',
+  effort: 'high',
+  endpoint: 'minimax',
+  family: 'minimax',
+}];
+rejectsBeforeDispatch(
+  () => deriveStrictL5InvocationPolicy(fallbackFamily),
+  'strict_l5_provider_fallback_family_violation',
+);
+const incomplete = clone(resolved);
+delete incomplete.reviewer_family;
+rejectsBeforeDispatch(
+  () => deriveStrictL5InvocationPolicy(incomplete),
+  'strict_l5_provider_tuple_unresolved',
+);
+const rosterDrift = clone(bootstrap.roster);
+rosterDrift.qc_panel_seats[0].model = 'drifted-qc';
+rejectsBeforeDispatch(
+  () => bootstrap.providerReadinessAuthority({ roster: rosterDrift }),
+  'strict_l5_provider_unknown_tuple',
+);
+rejectsBeforeDispatch(
+  () => consumeStrictL5ProviderReadiness(
+    bootstrap.providerReadinessAuthority,
+    clone(bundle),
+    { roster: bootstrap.roster, now: NOW },
+  ),
+  'strict_l5_provider_serialized_replay',
+);
+
+const failedProbe = createStrictL5ProviderBootstrap({ cwd: root }, {
+  resolvedRoster: clone(resolved),
+  collectReadiness: () => { throw new Error('fixture provider probe failure'); },
+  now: () => NOW,
+});
+rejectsBeforeDispatch(
+  () => failedProbe.providerReadinessAuthority({ roster: failedProbe.roster }),
+  'strict_l5_provider_probe_failed',
+);
+
+const staleResolved = clone(resolved);
+staleResolved.provider_readiness_receipt_ttl_seconds = 1;
+const stale = createStrictL5ProviderBootstrap({ cwd: root }, {
+  resolvedRoster: staleResolved,
+  collectReadiness: readyCollector,
+  now: () => NOW,
+});
+const staleBundle = stale.providerReadinessAuthority({ roster: stale.roster });
+rejectsBeforeDispatch(
+  () => consumeStrictL5ProviderReadiness(
+    stale.providerReadinessAuthority,
+    staleBundle,
+    { roster: stale.roster, now: '2026-08-04T08:00:01.000Z' },
+  ),
+  'provider_readiness_receipt_expired',
+);
+
+const missingQualification = createStrictL5ProviderBootstrap({ cwd: root }, {
+  resolvedRoster: clone(resolved),
+  collectReadiness: (options) => {
+    const collected = readyCollector(options);
+    delete collected.roster[0].observations.qualification;
+    collected.receipt = createProviderReadinessReceipt({
+      roster: collected.roster,
+      policy: collected.policy,
+      now: options.now,
+    });
+    return collected;
+  },
+  now: () => NOW,
+});
+const missingQualificationBundle = missingQualification.providerReadinessAuthority({
+  roster: missingQualification.roster,
+});
+rejectsBeforeDispatch(
+  () => consumeStrictL5ProviderReadiness(
+    missingQualification.providerReadinessAuthority,
+    missingQualificationBundle,
+    { roster: missingQualification.roster, now: NOW },
+  ),
+  'strict_l5_provider_not_ready',
+);
+
+assert.strictEqual(dispatcherCalls, 0);
+console.log('strict_policy_exact=true');
+console.log('strict_positive_ready=true');
+console.log('strict_negative_matrix_zero_dispatch=true');
+NODE
+)"
+assert_exit_code "$?" "0" "strict /l5 provider policy bootstrap is available"
+assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_policy_exact=true" \
+  "strict /l5 policy is the exact frozen six-claim contract"
+assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_positive_ready=true" \
+  "strict /l5 accepts a fresh host-owned exact-roster readiness bundle"
+assert_contains "$STRICT_BOOTSTRAP_OUT" "strict_negative_matrix_zero_dispatch=true" \
+  "strict /l5 negative matrix rejects before workflow dispatch"
+
 finalize_test

@@ -4,19 +4,20 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-07-01",
-  "verified_at": "2026-07-01",
-  "expires_at": "2026-07-15",
+  "last_checked_at": "2026-08-03T22:31:50.000Z",
+  "verified_at": "2026-08-03T22:31:50.000Z",
+  "expires_at": "2026-08-17T22:31:50.000Z",
   "evidence": {
     "source": "local-probe",
-    "command": "agy --version && agy models && headless smoke",
-    "result": "agy 1.0.14; headless smoke returned AUTOPILOT_AGY_SMOKE_OK"
+    "command": "bash scripts/probe-harness-capabilities.sh --all --output docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
+    "result": "agy 1.1.10; exact production transport returned a native JSON response plus numeric input/output/thinking/cache/total usage; effort remains tuple metadata and is not passed as an agy execution argument"
   },
   "capabilities": {
     "read_only_dispatch": "verified",
     "skill_import": "verified",
     "agent_import": "verified",
     "hooks": "unverified",
+    "structured_output": "verified",
     "mutation_dispatch": "unverified",
     "blocking_gate": "unverified"
   },

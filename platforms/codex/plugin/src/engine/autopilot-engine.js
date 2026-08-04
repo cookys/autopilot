@@ -15,6 +15,10 @@ const { resolveReviewLoopJson } = require('./resolve-review-loop');
 const { dispatchReviewJson } = require('../runners/review');
 const { dispatchImplementJson } = require('../runners/implementer');
 const { createEngineLifecycleObservationSession } = require('./engine-lifecycle-observation');
+const {
+  consumeStrictL5ProviderReadiness,
+  isStrictL5ProviderReadinessAuthority,
+} = require('../readiness/provider-bootstrap');
 const { AUTOPILOT_ENGINE_CONTROL_SINKS } = require('./supervised-engine-bridge-contract');
 const {
   appendCampaignEvent,
@@ -8103,6 +8107,7 @@ class AutopilotEngine {
       : null;
     let campaignMaxRounds = null;
     let campaignDispatchIdentity = null;
+    let strictL5ProviderReadiness = null;
     const verifyState = {
       verifyCmdProvided,
       verifyFirstSignalUnused: false,
@@ -8112,7 +8117,12 @@ class AutopilotEngine {
       bestCommit: null,
     };
     const finish = (result) => {
-      const controlled = campaignControl ? { ...result, campaign_control: campaignControl } : result;
+      const withStrictReadiness = strictL5ProviderReadiness
+        ? { ...result, strict_l5_provider_readiness: strictL5ProviderReadiness }
+        : result;
+      const controlled = campaignControl
+        ? { ...withStrictReadiness, campaign_control: campaignControl }
+        : withStrictReadiness;
       const output = resultWithVerificationFields(controlled, verifyState);
       return lifecycleObservation ? lifecycleObservation.finalize(output) : output;
     };
@@ -8291,6 +8301,44 @@ class AutopilotEngine {
       });
     }
 
+    if (isStrictL5ProviderReadinessAuthority(this.providerReadinessAuthority)) {
+      const startedAt = this.now();
+      try {
+        const bundle = this.providerReadinessAuthority({ roster });
+        strictL5ProviderReadiness = consumeStrictL5ProviderReadiness(
+          this.providerReadinessAuthority,
+          bundle,
+          { roster, now: this.now() },
+        );
+        ledger.push(this.ledgerEntry('strict_l5_provider_readiness', 'ready', startedAt, {
+          policy_digest: strictL5ProviderReadiness.policy_digest,
+          roster_digest: strictL5ProviderReadiness.roster_digest,
+          observation_digest: strictL5ProviderReadiness.observation_digest,
+          claim_ids: strictL5ProviderReadiness.claim_ids,
+        }));
+      } catch (error) {
+        ledger.push(this.ledgerEntry('strict_l5_provider_readiness', 'blocked', startedAt, {
+          rejection_code: error.code || 'strict_l5_provider_readiness_invalid',
+        }));
+        return finish({
+          status: 'blocked',
+          phase: 'provider_readiness',
+          reason: error.message || String(error),
+          rounds: 0,
+          verdict: null,
+          roster,
+          resolveResult,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          dispatcher_called: false,
+          model_calls: 0,
+          ledger,
+        });
+      }
+    }
+
     const requireQualifiedReviewer = input.requireQualifiedReviewer === true;
     let maxRounds = roster.loop_max_rounds;
     if (Object.prototype.hasOwnProperty.call(input, 'maxRounds')
@@ -8344,7 +8392,12 @@ class AutopilotEngine {
       });
     }
 
-    if (requireQualifiedReviewer && !reviewerQualificationViable(roster)) {
+    // A consumed strict-L5 host qualification supersedes the legacy disk
+    // scorecard projection. Non-strict flows retain the existing fail-closed
+    // reviewer_qualified/fallback-ladder preflight unchanged.
+    if (requireQualifiedReviewer
+        && !strictL5ProviderReadiness
+        && !reviewerQualificationViable(roster)) {
       const startedAt = this.now();
       ledger.push(
         this.ledgerEntry('reviewer_qualification', 'blocked', startedAt, {
@@ -8551,6 +8604,9 @@ class AutopilotEngine {
         };
       }
       campaignControl = intake;
+      if (strictL5ProviderReadiness) {
+        campaignControl.strict_l5_provider_readiness = strictL5ProviderReadiness;
+      }
       ledger.push(this.ledgerEntry(
         'campaign_intake',
         intake.status === 'admitted' ? 'admitted' : 'blocked',

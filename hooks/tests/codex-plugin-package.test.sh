@@ -152,10 +152,24 @@ for (const rel of [
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
+  'docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json',
   'docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
   'docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md',
 ]) {
   compareFile(rel);
+}
+for (const [sourceRel, destinationRel] of [
+  ['platforms/codex/hooks/hooks.json', 'hooks/hooks.json'],
+  ['platforms/codex/hooks/post-compact.js', 'hooks/post-compact.js'],
+]) {
+  const sourcePath = path.join(root, sourceRel);
+  const copyPath = path.join(pluginDir, destinationRel);
+  if (!fs.existsSync(sourcePath)) failures.push(`missing canonical ${sourceRel}`);
+  if (!fs.existsSync(copyPath)) failures.push(`missing ${destinationRel}`);
+  if (fs.existsSync(sourcePath) && fs.existsSync(copyPath)
+      && !fs.readFileSync(sourcePath).equals(fs.readFileSync(copyPath))) {
+    failures.push(`content ${destinationRel}`);
+  }
 }
 const hookSource = path.join(root, 'hooks', 'hooks.json');
 const hookBaseline = path.join(pluginDir, 'profiles', 'baselines', 'claude-hooks.json');
@@ -164,8 +178,10 @@ if (!fs.existsSync(hookBaseline)) {
 } else if (!fs.readFileSync(hookSource).equals(fs.readFileSync(hookBaseline))) {
   failures.push('content profiles/baselines/claude-hooks.json');
 }
-if (fs.existsSync(path.join(pluginDir, 'hooks', 'hooks.json'))) {
-  failures.push('forbidden hooks/hooks.json');
+const hookEntries = fs.existsSync(path.join(pluginDir, 'hooks'))
+  ? fs.readdirSync(path.join(pluginDir, 'hooks')).sort() : [];
+if (JSON.stringify(hookEntries) !== JSON.stringify(['_shared', 'hooks.json', 'post-compact.js'])) {
+  failures.push(`hooks entries ${hookEntries.join(',')}`);
 }
 
 if (failures.length > 0) {
@@ -272,8 +288,10 @@ assert_eq "$EXIT" "0" "Codex payload docs trigger manifest mirror check"
 assert_eq "$MANIFEST_TRIGGER_OUT" "manifest_codex_doc_triggers_in_sync" "Codex payload doc triggers cover generator docs (sync-manifest.json)"
 
 SYNC_SANDBOX="$TEST_TMP/codex-sync-sandbox"
-mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin"
+mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin"
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"
+printf '%s\n' '{"description":"production PostCompact recovery hook","hooks":"./hooks/hooks.json","interface":{"longDescription":"production PostCompact recovery hook"}}' \
+  > "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin/plugin.json"
 for rel in skills bin src profiles schemas evals/clean evals/known-bad hooks/_shared references scripts project-config-template; do
   mkdir -p "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
   printf 'payload %s\n' "$rel" > "$SYNC_SANDBOX/$rel/payload.txt"
@@ -300,6 +318,7 @@ for rel in \
   docs/plans/2026-06-04-distill-consolidate.md \
   docs/plans/2026-06-22-ceo-fleet-autonomy.md \
   docs/plans/2026-06-26-trust-tiered-review-policy.md \
+  docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json \
   docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
   docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md
 do
@@ -308,14 +327,56 @@ do
   cp "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
 done
 printf '{"hooks":{}}\n' > "$SYNC_SANDBOX/hooks/hooks.json"
+mkdir -p "$SYNC_SANDBOX/platforms/codex/hooks"
+printf '{"hooks":{"PostCompact":[]}}\n' > "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json"
+printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js"
 mkdir -p "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines"
 cp "$SYNC_SANDBOX/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/claude-hooks.json"
-rm -f "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
+cp "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
+cp "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
 
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 in sandbox"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check sandbox clean report"
+
+rm "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects missing generated hook files"
+assert_contains "$OUT" "hooks/hooks.json" "sync-codex-plugin-skills --check names missing generated hook manifest"
+assert_contains "$OUT" "hooks/post-compact.js" "sync-codex-plugin-skills --check names missing generated hook adapter"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"; echo $?)" "0" \
+  "sync-codex-plugin-skills regenerates the hook manifest byte-for-byte"
+assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"; echo $?)" "0" \
+  "sync-codex-plugin-skills regenerates the hook adapter byte-for-byte"
+
+printf '\nmanifest drift\n' >> "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects generated hook manifest drift"
+assert_contains "$OUT" "hooks/hooks.json" "sync-codex-plugin-skills --check names drifted generated hook manifest"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+printf '\nadapter drift\n' >> "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects generated hook adapter drift"
+assert_contains "$OUT" "hooks/post-compact.js" "sync-codex-plugin-skills --check names drifted generated hook adapter"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+
+printf '\ncanonical manifest change\n' >> "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"; echo $?)" "0" \
+  "canonical hook manifest changes regenerate the package mirror"
+printf '\ncanonical adapter change\n' >> "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"; echo $?)" "0" \
+  "canonical hook adapter changes regenerate the package mirror"
 
 printf 'stale baseline\n' \
   > "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/stale.json"
@@ -427,6 +488,7 @@ const path = require('path');
 
 const [root, pluginDir, marketplacePath, marketplaceRoot] = process.argv.slice(2);
 const manifest = JSON.parse(fs.readFileSync(path.join(pluginDir, '.codex-plugin', 'plugin.json'), 'utf8'));
+const productionHooks = JSON.parse(fs.readFileSync(path.join(pluginDir, 'hooks', 'hooks.json'), 'utf8'));
 const marketplace = JSON.parse(fs.readFileSync(marketplacePath, 'utf8'));
 const canonical = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8'));
 
@@ -437,9 +499,19 @@ function print(key, value) {
 print('manifest_name', manifest.name);
 print('manifest_version_matches', manifest.version === canonical.version);
 print('manifest_description_mentions_support', /support CLI\/scripts/.test(manifest.description));
-print('manifest_description_skills_only_package', /package is skills-only/.test(manifest.description));
+print('manifest_description_production_postcompact', /production PostCompact recovery hook/.test(manifest.description));
 print('manifest_long_description_mentions_payload', /package payload bundles support CLI/.test(manifest.interface && manifest.interface.longDescription || ''));
 print('skills_path', manifest.skills);
+print('hooks_path', manifest.hooks);
+const postCompactGroup = productionHooks.hooks?.PostCompact?.[0];
+const postCompactHook = postCompactGroup?.hooks?.[0];
+print('production_postcompact_exact',
+  productionHooks.hooks?.PostCompact?.length === 1
+  && Object.keys(productionHooks.hooks).length === 1
+  && postCompactGroup?.matcher === 'manual|auto'
+  && postCompactGroup?.hooks?.length === 1
+  && postCompactHook?.type === 'command'
+  && postCompactHook?.command === 'node "${PLUGIN_ROOT}/hooks/post-compact.js"');
 print('has_hooks_field', Object.prototype.hasOwnProperty.call(manifest, 'hooks'));
 print('has_apps_field', Object.prototype.hasOwnProperty.call(manifest, 'apps'));
 print('has_mcp_field', Object.prototype.hasOwnProperty.call(manifest, 'mcpServers'));
@@ -478,10 +550,12 @@ assert_eq "$EXIT" "0" "Codex plugin JSON inspection exits 0"
 assert_contains "$OUT" "manifest_name=autopilot" "Codex plugin manifest uses autopilot name"
 assert_contains "$OUT" "manifest_version_matches=true" "Codex plugin version follows canonical manifest"
 assert_contains "$OUT" "manifest_description_mentions_support=true" "Codex plugin manifest describes bundled support payload"
-assert_contains "$OUT" "manifest_description_skills_only_package=false" "Codex plugin manifest does not call the whole package skills-only"
+assert_contains "$OUT" "manifest_description_production_postcompact=true" "Codex plugin manifest describes production PostCompact recovery"
 assert_contains "$OUT" "manifest_long_description_mentions_payload=true" "Codex plugin long description explains support payload"
 assert_contains "$OUT" "skills_path=./skills/" "Codex plugin skills path is relative"
-assert_contains "$OUT" "has_hooks_field=false" "Codex plugin does not declare hooks"
+assert_contains "$OUT" "hooks_path=./hooks/hooks.json" "Codex plugin hooks path is relative"
+assert_contains "$OUT" "production_postcompact_exact=true" "Codex production manifest declares one exact manual|auto PostCompact adapter"
+assert_contains "$OUT" "has_hooks_field=true" "Codex plugin declares production hooks"
 assert_contains "$OUT" "has_apps_field=false" "Codex plugin does not declare apps"
 assert_contains "$OUT" "has_mcp_field=false" "Codex plugin does not declare MCP servers"
 assert_contains "$OUT" "interface_category=Developer Tools" "Codex plugin interface category is present"

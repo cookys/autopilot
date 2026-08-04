@@ -5,7 +5,7 @@
 # platforms/codex/plugin/skills must be a real directory. The copied skills also
 # reference repo-level support files through relative paths, so this script copies
 # the supporting references/scripts/templates/docs needed by the skill text while
-# still keeping the Codex manifest itself skills-only.
+# keeping the Codex manifest and production PostCompact hook payload generated.
 #
 # Usage:
 #   scripts/sync-codex-plugin-skills.sh          # rebuild committed mirror
@@ -57,6 +57,7 @@ DOC_FILES=(
   "docs/plans/2026-06-04-distill-consolidate.md"
   "docs/plans/2026-06-22-ceo-fleet-autonomy.md"
   "docs/plans/2026-06-26-trust-tiered-review-policy.md"
+  "docs/projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json"
   "docs/projects/_archive/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
   "docs/projects/_archive/2026-06-26-test-integrity-l1/design-spec.md"
 )
@@ -70,6 +71,11 @@ SUPPORT_FILES=(
 
 HOOK_BASELINE_SOURCE="hooks/hooks.json"
 HOOK_BASELINE_DEST="profiles/baselines/claude-hooks.json"
+CODEX_HOOK_MANIFEST_SOURCE="platforms/codex/hooks/hooks.json"
+CODEX_HOOK_MANIFEST_DEST="hooks/hooks.json"
+CODEX_POSTCOMPACT_SOURCE="platforms/codex/hooks/post-compact.js"
+CODEX_POSTCOMPACT_DEST="hooks/post-compact.js"
+PLUGIN_MANIFEST="$PLUGIN/.codex-plugin/plugin.json"
 
 if [ ! -d "$SRC" ]; then
   echo "error: source skills directory missing: $SRC" >&2
@@ -219,9 +225,9 @@ check_mapped_file() {
   fi
 }
 
-check_exact_directory_entry() (
+check_exact_directory_entries() (
   local rel="$1"
-  local expected="$2"
+  shift
   local directory="$PLUGIN/$rel"
   local status=0
   if [ ! -d "$directory" ]; then
@@ -231,13 +237,64 @@ check_exact_directory_entry() (
   shopt -s nullglob dotglob
   local entry
   for entry in "$directory"/*; do
-    if [ "$(basename "$entry")" != "$expected" ]; then
+    local basename
+    local expected
+    local found=0
+    basename="$(basename "$entry")"
+    for expected in "$@"; do
+      if [ "$basename" = "$expected" ]; then
+        found=1
+        break
+      fi
+    done
+    if [ "$found" -ne 1 ]; then
       echo "drift: extra path platforms/codex/plugin/$rel/$(basename "$entry")"
       status=1
     fi
   done
   return "$status"
 )
+
+check_plugin_manifest() {
+  node - "$PLUGIN_MANIFEST" <<'NODE'
+const fs = require('fs');
+const manifestPath = process.argv[2];
+let manifest;
+try {
+  manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+} catch (error) {
+  console.log(`drift: invalid platforms/codex/plugin/.codex-plugin/plugin.json: ${error.message}`);
+  process.exit(1);
+}
+const failures = [];
+if (manifest.hooks !== './hooks/hooks.json') failures.push('hooks must equal ./hooks/hooks.json');
+if (!/production PostCompact recovery hook/.test(manifest.description || '')) {
+  failures.push('description must declare the production PostCompact recovery hook');
+}
+if (!/production PostCompact recovery hook/.test(manifest.interface?.longDescription || '')) {
+  failures.push('interface.longDescription must declare the production PostCompact recovery hook');
+}
+if (failures.length > 0) {
+  for (const failure of failures) console.log(`drift: plugin manifest ${failure}`);
+  process.exit(1);
+}
+NODE
+}
+
+sync_plugin_manifest() {
+  node - "$PLUGIN_MANIFEST" <<'NODE'
+const fs = require('fs');
+const manifestPath = process.argv[2];
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+manifest.description = 'Autopilot methodology skills for Codex with bundled support CLI/scripts and a production PostCompact recovery hook.';
+manifest.hooks = './hooks/hooks.json';
+if (!manifest.interface || typeof manifest.interface !== 'object' || Array.isArray(manifest.interface)) {
+  throw new Error('Codex plugin interface must be an object');
+}
+manifest.interface.longDescription = 'Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The package payload bundles support CLI, scripts, references, templates, shared helpers, and a production PostCompact recovery hook that invokes the existing fail-closed reconciliation authority.';
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+NODE
+}
 
 clean_hooks_root() (
   local hooks_root="$PLUGIN/hooks"
@@ -289,8 +346,11 @@ if [ "$MODE" = "check" ]; then
     check_file "$rel" || STATUS=1
   done
   check_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST" || STATUS=1
-  check_exact_directory_entry "profiles/baselines" "claude-hooks.json" || STATUS=1
-  check_exact_directory_entry "hooks" "_shared" || STATUS=1
+  check_mapped_file "$CODEX_HOOK_MANIFEST_SOURCE" "$CODEX_HOOK_MANIFEST_DEST" || STATUS=1
+  check_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST" || STATUS=1
+  check_exact_directory_entries "profiles/baselines" "claude-hooks.json" || STATUS=1
+  check_exact_directory_entries "hooks" "_shared" "hooks.json" "post-compact.js" || STATUS=1
+  check_plugin_manifest || STATUS=1
   check_doc_extras || STATUS=1
 
   if [ "$STATUS" -eq 0 ]; then
@@ -314,5 +374,8 @@ for rel in "${SUPPORT_FILES[@]}"; do
 done
 copy_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST"
 clean_hooks_root
+copy_mapped_file "$CODEX_HOOK_MANIFEST_SOURCE" "$CODEX_HOOK_MANIFEST_DEST"
+copy_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST"
+sync_plugin_manifest
 
 echo "synced Codex plugin payload: platforms/codex/plugin"

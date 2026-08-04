@@ -467,13 +467,15 @@ scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (se
   worker self-report. The stream format is **dispatcher-declared** (manifest `log_format` /
   `--format`, derived from the invocation flags the dispatcher itself chose), never content-
   sniffed — a worker printing JSON usage lines into a plain-text log cannot promote its own
-  output into telemetry. Formats carrying no signal (agy pseudo-TTY, cc-shim plain text) yield
-  honest `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
-- **Final JSON**: `dispatch-hetero.sh` output gains ADDITIVE `run_id` / `usage` / `wall_secs`
-  (usage via `dispatch-status.js --usage-only`, embedded fail-safe — any parse failure ⇒ `null`).
-  `dispatch-review.sh`'s final JSON is deliberately UNCHANGED (strict `additionalProperties:false`
-  schema, v2.32.19 SSOT) — correlate a review run via its `raw_log` path and derive usage post-hoc
-  with `--usage-only`.
+  output into telemetry. Production agy dispatches capture `--output-format json` into a private
+  envelope, validate its closed response/usage schema, and copy only the response into the framed
+  worker log; malformed, duplicate-key, trailing, invalid-number, or nonzero-exit envelopes yield
+  `usage:null`. Formats carrying no signal (including cc-shim plain text) likewise yield honest
+  `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
+- **Final JSON**: `dispatch-hetero.sh` emits `run_id` / `usage` / `wall_secs`; agy usage comes only
+  from the validated private envelope, while other runners retain their declared-format parser.
+  `dispatch-review.sh` now also emits required `usage` (`null` for runners without an admitted
+  signal or any failed agy envelope; closed agy usage with `source:"agy-json"` on success).
 - **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
   artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
 - **Trace lineage contract:** dispatchers inherit lineage from incoming env

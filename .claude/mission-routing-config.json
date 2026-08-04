@@ -1,5 +1,5 @@
 {
   "schema_version": 1,
-  "graph_path": "docs/mission-plan-review-codex-trusted-cwd-fix-execution-graph.json",
-  "sources_path": "docs/mission-plan-review-codex-trusted-cwd-fix-sources.json"
+  "graph_path": "docs/mission-platform-capability-trigger-activation-execution-graph.json",
+  "sources_path": "docs/mission-platform-capability-trigger-activation-sources.json"
 }

@@ -1,7 +1,7 @@
 {
   "name": "autopilot",
-  "version": "2.34.1",
-  "description": "Autopilot methodology skills for Codex with bundled support CLI/scripts. The manifest exposes skills only and does not load Claude Code hooks.",
+  "version": "2.34.2",
+  "description": "Autopilot methodology skills for Codex with bundled support CLI/scripts and a production PostCompact recovery hook.",
   "author": {
     "name": "TWGS Team"
   },
@@ -19,7 +19,7 @@
   "interface": {
     "displayName": "Autopilot",
     "shortDescription": "Lifecycle and review-loop skills for Codex",
-    "longDescription": "Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The manifest declares only skills while the package payload bundles support CLI, scripts, references, templates, and shared helpers needed by those skills; it does not load Claude Code hook manifests.",
+    "longDescription": "Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The package payload bundles support CLI, scripts, references, templates, shared helpers, and a production PostCompact recovery hook that invokes the existing fail-closed reconciliation authority.",
     "developerName": "TWGS Team",
     "category": "Developer Tools",
     "capabilities": [
@@ -34,5 +34,6 @@
     ],
     "brandColor": "#0F766E",
     "screenshots": []
-  }
+  },
+  "hooks": "./hooks/hooks.json"
 }

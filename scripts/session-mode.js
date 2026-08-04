@@ -103,10 +103,9 @@ function normalizeSessionId(raw) {
   return String(raw || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
 }
 
-// Codex supplies the host thread identity to every shell command. The portable
-// explicit binding remains first for managed/controller callers; an ordinary
-// Codex lifecycle entry does not set it and therefore binds to CODEX_THREAD_ID.
-// Other controllers retain the historical fallback chain; cwd remains last.
+// The portable explicit binding remains first for managed/controller callers.
+// A host may provide CODEX_THREAD_ID, but the Codex lifecycle shell bridge is
+// not assumed or claimed; cwd remains the final fallback for an unbound caller.
 function getSessionId() {
   const raw = process.env.AUTOPILOT_SESSION_ID
     || process.env.CLAUDE_CODE_SESSION_ID

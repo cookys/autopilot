@@ -5,7 +5,8 @@
 # platforms/codex/plugin/skills must be a real directory. The copied skills also
 # reference repo-level support files through relative paths, so this script copies
 # the supporting references/scripts/templates/docs needed by the skill text while
-# keeping the Codex manifest and production PreToolUse/PostCompact hook payload generated.
+# keeping the Codex manifest and production PostCompact hook payload generated. The retained
+# pre-effect.js source/mirror is an unregistered, non-production probe helper only.
 #
 # Usage:
 #   scripts/sync-codex-plugin-skills.sh          # rebuild committed mirror
@@ -402,11 +403,13 @@ try {
 }
 const failures = [];
 if (manifest.hooks !== './hooks/hooks.json') failures.push('hooks must equal ./hooks/hooks.json');
-if (!/production PreToolUse lifecycle gate and PostCompact recovery hook/.test(manifest.description || '')) {
-  failures.push('description must declare the production PreToolUse lifecycle gate and PostCompact recovery hook');
+if (!/one production PostCompact recovery hook/.test(manifest.description || '')
+    || /production PreToolUse/.test(manifest.description || '')) {
+  failures.push('description must declare only the one production PostCompact recovery hook');
 }
-if (!/production PreToolUse lifecycle gate and PostCompact recovery hook/.test(manifest.interface?.longDescription || '')) {
-  failures.push('interface.longDescription must declare the production PreToolUse lifecycle gate and PostCompact recovery hook');
+if (!/one production PostCompact recovery hook/.test(manifest.interface?.longDescription || '')
+    || /production PreToolUse/.test(manifest.interface?.longDescription || '')) {
+  failures.push('interface.longDescription must declare only the one production PostCompact recovery hook');
 }
 if (failures.length > 0) {
   for (const failure of failures) console.log(`drift: plugin manifest ${failure}`);
@@ -420,12 +423,12 @@ sync_plugin_manifest() {
 const fs = require('fs');
 const manifestPath = process.argv[2];
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-manifest.description = 'Autopilot methodology skills for Codex with bundled support CLI/scripts and a production PreToolUse lifecycle gate and PostCompact recovery hook.';
+manifest.description = 'Autopilot methodology skills for Codex with bundled support CLI/scripts and one production PostCompact recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped (D4=NOT_READY/NO_SHIP).';
 manifest.hooks = './hooks/hooks.json';
 if (!manifest.interface || typeof manifest.interface !== 'object' || Array.isArray(manifest.interface)) {
   throw new Error('Codex plugin interface must be an object');
 }
-manifest.interface.longDescription = 'Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The package payload bundles support CLI, scripts, references, templates, shared helpers, and a production PreToolUse lifecycle gate and PostCompact recovery hook. PreToolUse uses the live-proven structured denial contract; PostCompact invokes the existing fail-closed reconciliation authority.';
+manifest.interface.longDescription = 'Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The package payload bundles support CLI, scripts, references, templates, shared helpers, and one production PostCompact recovery hook. No Codex-thread-bound direct-mutation enforcement is shipped (D4=NOT_READY/NO_SHIP); the retained pre-effect.js file is an unregistered, non-production probe helper. PostCompact invokes the existing fail-closed reconciliation authority.';
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE
 }

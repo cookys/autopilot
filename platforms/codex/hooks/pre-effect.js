@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
-// Codex-native PreToolUse adapter. Codex 0.146.0 live evidence proves that a
-// structured stdout decision blocks the current tool call. It also proves that
-// a command adapter which exits nonzero can fail open; this wrapper therefore
-// converts every validation/error path it can observe into the same structured
-// denial. A host/process failure before stdout remains a documented limitation.
+// UNREGISTERED / NON-PRODUCTION PROBE ADAPTER.
+// Codex 0.146.0 live evidence proved that a structured PreToolUse stdout decision can block a
+// request-bound shell mutation, but the lifecycle/session bridge was not qualified. This file is
+// retained only for future probe work and D1 evidence; platforms/codex/hooks/hooks.json does not
+// register it, so the installed package does not load it as a production enforcement boundary.
+// A command adapter that exits nonzero can fail open; this probe preserves that observed limitation.
 
 const fs = require('fs');
 const crypto = require('crypto');

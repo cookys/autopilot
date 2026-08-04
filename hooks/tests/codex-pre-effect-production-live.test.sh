@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -u
+# Historical D1/D4 probe only. The production Codex package registers PostCompact
+# exclusively; this opt-in command does not prove a production PreToolUse boundary.
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 

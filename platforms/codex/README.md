@@ -11,14 +11,16 @@ This directory contains the Codex packaging surface for Autopilot.
   `plugin/hooks/_shared` are generated support payload for skill links and
   engine CLI commands. `plugin/hooks/hooks.json`, `plugin/hooks/pre-effect.js`,
   `plugin/hooks/post-compact.js`, and the shared edit-gate core are generated
-  byte-for-byte from their canonical sources.
+  byte-for-byte from their canonical sources. The retained `pre-effect.js` is
+  an unregistered, non-production probe helper.
 - `.agents/plugins/marketplace.json` is a repo-local marketplace for development.
 
-The package manifest exposes skills plus two Codex-native production boundaries:
-`PreToolUse` with matcher `.*` and `PostCompact` with matcher `manual|auto`. It
-does not declare the Claude Code hook bundle, apps, or MCP servers. Each wrapper
-translates the official Codex payload into an existing Autopilot decision core;
-this is not a claim of Claude hook parity.
+The package manifest exposes skills plus one Codex-native production boundary:
+`PostCompact` with matcher `manual|auto`. It does not ship Codex-thread-bound
+direct-mutation enforcement; the retained `pre-effect.js` is unregistered and
+non-production. It does not declare the Claude Code hook bundle, apps, or MCP
+servers. Each wrapper translates the official Codex payload into an existing
+Autopilot decision core; this is not a claim of Claude hook parity.
 
 The generated `dev-flow`, `ceo-agent`, `l3`, `l4`, `l5`, `l6`, and `finish-flow`
 copies place a Codex-native override immediately after YAML frontmatter. It maps
@@ -28,31 +30,32 @@ Mission/Engine path before the unchanged canonical body. It also states that
 unavailable and must not be imitated with ad-hoc tickets, inline managed work,
 or replacement lineages.
 
-## Pre-effect enforcement status
+## Pre-effect probe status
 
-Codex 0.146.0 proved that a structured `PreToolUse` stdout decision blocks a
-request-bound shell mutation. The package now registers that exact `.*` event,
-payload identity, and structured-denial contract. Without a valid marker it
-returns `DEV_FLOW_ENTRY_REQUIRED`; `/l3` preserves inline work; `/l4`–`/l6`
-allow the fixed managed Engine entry but block depth-0 effect-capable tools.
+Codex 0.146.0 proved that a structured `PreToolUse` stdout decision can block a
+request-bound shell mutation in a probe. That result is retained as D1
+capability evidence only: the production package does not register `PreToolUse`
+and does not ship Codex-thread-bound direct-mutation enforcement. The retained
+adapter returns `DEV_FLOW_ENTRY_REQUIRED` without a valid marker, preserves
+`/l3` inline work, and recognizes the fixed managed Engine route in its probe
+path; these are not production hook guarantees.
 
-The same evidence also proves a separate host limitation: when the adapter
+The same evidence also proves a separate host limitation: when the probe adapter
 process exited 17 before emitting structured stdout, Codex executed the mutation
-and exited 0. The production claim therefore does **not** include fail-closed
+and exited 0. No production direct-mutation claim is made, including fail-closed
 adapter crash/nonzero behavior. Shell/exec is classified as effect-capable as a
-whole; the adapter does not guess arbitrary command mutation semantics. The sanitized
+whole; the probe adapter does not guess arbitrary command mutation semantics. The sanitized
 [receipt](../../docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json)
 records the installed adapter hash, no-admission denial, attempted L3/L5/managed-entry sequence,
-and fail-open broken control. D4 remains `NOT_READY`: the two lifecycle entry commands ran, but no
+and fail-open broken control. D4 remains `NOT_READY/NO_SHIP`: the two lifecycle entry commands ran, but no
 payload-session marker was visible to their following effect calls, so the L3 allow, L5 direct-deny
 classification, and managed Engine entry did not qualify. The sole existing campaign is also sealed
 to the pre-amendment Mission graph; creating replacement authority was outside the repair.
 
 Markers are keyed to the Codex hook payload's session identity and also store that identity in the
-marker body. Renaming or copying a marker cannot admit a different host session. The fixed lifecycle
-entry is designed to derive the binding from `CODEX_THREAD_ID`; it does not trust an unrelated
-marker discovered elsewhere in the repository. The final installed control did not observe that
-binding across the shell boundary, so this is a required contract rather than a READY host claim.
+marker body. Renaming or copying a marker cannot admit a different host session. The final probe
+did not observe a qualified payload-session bridge across the shell boundary, so no
+Codex-thread-bound production direct-mutation claim is made.
 
 Managed Engine entry is independently fail-closed. Before provider readiness,
 roster probing, resource creation, or dispatch, it requires the existing
@@ -105,9 +108,9 @@ is blocked when payload identity or reconciliation fails.
 The committed [production live receipt](../../docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/codex-postcompact-production-live-receipt.json)
 was captured on codex-cli 0.146.0. It proves manual and threshold-12000 automatic
 reconciliation before effect, plus a broken-adapter control with hook failure,
-no reconciliation receipt, and no effect sentinel. This remains the package's
-production recovery hook; `PreToolUse` is the separate lifecycle admission
-boundary described above.
+no reconciliation receipt, and no effect sentinel. This is the package's sole
+production Codex hook. The retained `pre-effect.js` source is a non-production
+probe helper and is not registered by the installed manifest.
 
 Codex requires non-managed plugin hooks to be reviewed and trusted before they
 run. Review the package hook declaration during installation.

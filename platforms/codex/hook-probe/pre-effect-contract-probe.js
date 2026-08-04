@@ -633,6 +633,10 @@ function runProduction() {
       codex_version: String(version.stdout || version.stderr || '').trim(),
       capability_evidence: capabilityEvidence,
       production_contract: {
+        qualification: 'UNREGISTERED_PROBE_ONLY',
+        production_hook_registered: false,
+        production_registered_events: ['PostCompact'],
+        direct_mutation_enforcement: 'NOT_SHIPPED',
         event: 'PreToolUse',
         matcher: '.*',
         denial: { decision: 'block', reason_code: 'DEV_FLOW_ENTRY_REQUIRED' },
@@ -713,9 +717,13 @@ function runProduction() {
       verdict: ready ? 'READY' : 'NOT_READY',
       d1_verdict: capabilityReady(capabilityEvidence) ? 'READY' : 'BLOCKED',
       d4_verdict: ready ? 'READY' : 'NOT_READY',
+      ship_status: 'NO_SHIP',
+      production_pretooluse_registered: false,
+      production_registered_events: ['PostCompact'],
+      direct_mutation_enforcement: 'NOT_SHIPPED',
       hook_controls_verdict: hookControlsReady ? 'READY' : 'BLOCKED',
-      terminal_blocker: terminalBlocker,
-      known_limitation: 'On Codex 0.146.0, a PreToolUse command adapter that exits nonzero before emitting a structured denial fails open; this production gate does not claim adapter-failure fail-closed semantics.',
+      terminal_blocker: terminalBlocker || 'PreToolUse remains an unregistered probe; no production direct-mutation enforcement is shipped',
+      known_limitation: 'On Codex 0.146.0, a PreToolUse probe adapter that exits nonzero before emitting a structured denial fails open; this probe does not claim adapter-failure fail-closed semantics.',
     };
     const receipt = { ...receiptBody, receipt_sha256: sha256(Buffer.from(JSON.stringify(receiptBody))) };
     writeJson(output, receipt);

@@ -324,7 +324,7 @@ assert_eq "$MANIFEST_TRIGGER_OUT" "manifest_codex_doc_triggers_in_sync" "Codex p
 SYNC_SANDBOX="$TEST_TMP/codex-sync-sandbox"
 mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin"
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"
-printf '%s\n' '{"description":"production PreToolUse lifecycle gate and PostCompact recovery hook","hooks":"./hooks/hooks.json","interface":{"longDescription":"production PreToolUse lifecycle gate and PostCompact recovery hook"}}' \
+printf '%s\n' '{"description":"one production PostCompact recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped","hooks":"./hooks/hooks.json","interface":{"longDescription":"one production PostCompact recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped"}}' \
   > "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin/plugin.json"
 for rel in skills bin src profiles schemas evals/clean evals/known-bad hooks/_shared references scripts project-config-template; do
   mkdir -p "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
@@ -568,23 +568,18 @@ function print(key, value) {
 print('manifest_name', manifest.name);
 print('manifest_version_matches', manifest.version === canonical.version);
 print('manifest_description_mentions_support', /support CLI\/scripts/.test(manifest.description));
-print('manifest_description_production_hooks', /production PreToolUse lifecycle gate and PostCompact recovery hook/.test(manifest.description));
+print('manifest_description_production_hooks', /one production PostCompact recovery hook/.test(manifest.description) && !/production PreToolUse/.test(manifest.description));
 print('manifest_long_description_mentions_payload', /package payload bundles support CLI/.test(manifest.interface && manifest.interface.longDescription || ''));
 print('skills_path', manifest.skills);
 print('hooks_path', manifest.hooks);
 const postCompactGroup = productionHooks.hooks?.PostCompact?.[0];
 const postCompactHook = postCompactGroup?.hooks?.[0];
-const preToolGroup = productionHooks.hooks?.PreToolUse?.[0];
-const preToolHook = preToolGroup?.hooks?.[0];
-print('production_pretooluse_exact',
-  productionHooks.hooks?.PreToolUse?.length === 1
-  && preToolGroup?.matcher === '.*'
-  && preToolGroup?.hooks?.length === 1
-  && preToolHook?.type === 'command'
-  && preToolHook?.command === 'node "${PLUGIN_ROOT}/hooks/pre-effect.js"');
+print('production_pretooluse_absent',
+  !Object.prototype.hasOwnProperty.call(productionHooks.hooks || {}, 'PreToolUse')
+  && Object.keys(productionHooks.hooks || {}).length === 1);
 print('production_postcompact_exact',
   productionHooks.hooks?.PostCompact?.length === 1
-  && Object.keys(productionHooks.hooks).length === 2
+  && Object.keys(productionHooks.hooks).length === 1
   && postCompactGroup?.matcher === 'manual|auto'
   && postCompactGroup?.hooks?.length === 1
   && postCompactHook?.type === 'command'
@@ -627,11 +622,11 @@ assert_eq "$EXIT" "0" "Codex plugin JSON inspection exits 0"
 assert_contains "$OUT" "manifest_name=autopilot" "Codex plugin manifest uses autopilot name"
 assert_contains "$OUT" "manifest_version_matches=true" "Codex plugin version follows canonical manifest"
 assert_contains "$OUT" "manifest_description_mentions_support=true" "Codex plugin manifest describes bundled support payload"
-assert_contains "$OUT" "manifest_description_production_hooks=true" "Codex plugin manifest describes both production hook boundaries"
+assert_contains "$OUT" "manifest_description_production_hooks=true" "Codex plugin manifest describes the sole production hook and no direct-mutation boundary"
 assert_contains "$OUT" "manifest_long_description_mentions_payload=true" "Codex plugin long description explains support payload"
 assert_contains "$OUT" "skills_path=./skills/" "Codex plugin skills path is relative"
 assert_contains "$OUT" "hooks_path=./hooks/hooks.json" "Codex plugin hooks path is relative"
-assert_contains "$OUT" "production_pretooluse_exact=true" "Codex production manifest declares one exact .* PreToolUse adapter"
+assert_contains "$OUT" "production_pretooluse_absent=true" "Codex production manifest leaves the PreToolUse probe unregistered"
 assert_contains "$OUT" "production_postcompact_exact=true" "Codex production manifest declares one exact manual|auto PostCompact adapter"
 assert_contains "$OUT" "has_hooks_field=true" "Codex plugin declares production hooks"
 assert_contains "$OUT" "has_apps_field=false" "Codex plugin does not declare apps"

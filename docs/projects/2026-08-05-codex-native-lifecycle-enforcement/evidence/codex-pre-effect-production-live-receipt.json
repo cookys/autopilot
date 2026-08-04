@@ -65,6 +65,12 @@
     "receipt_sha256": "df0a546e66dd60bc6f85451e6568ecf12ecea3b512e49730403bd0d6ecd7d19a"
   },
   "production_contract": {
+    "qualification": "UNREGISTERED_PROBE_ONLY",
+    "production_hook_registered": false,
+    "production_registered_events": [
+      "PostCompact"
+    ],
+    "direct_mutation_enforcement": "NOT_SHIPPED",
     "event": "PreToolUse",
     "matcher": ".*",
     "denial": {
@@ -137,8 +143,14 @@
   "verdict": "NOT_READY",
   "d1_verdict": "READY",
   "d4_verdict": "NOT_READY",
+  "ship_status": "NO_SHIP",
+  "production_pretooluse_registered": false,
+  "production_registered_events": [
+    "PostCompact"
+  ],
+  "direct_mutation_enforcement": "NOT_SHIPPED",
   "hook_controls_verdict": "BLOCKED",
-  "terminal_blocker": "installed-package lifecycle controls did not reproduce exactly",
-  "known_limitation": "On Codex 0.146.0, a PreToolUse command adapter that exits nonzero before emitting a structured denial fails open; this production gate does not claim adapter-failure fail-closed semantics.",
-  "receipt_sha256": "1dd8398cf17f0dfd9a662fb562752d8ff58233b1a788410f4a11bfad2c228143"
+  "terminal_blocker": "Codex-thread-bound PreToolUse lifecycle enforcement was not qualified; the structured result remains D1 probe evidence only",
+  "known_limitation": "On Codex 0.146.0, a PreToolUse probe adapter that exits nonzero before emitting a structured denial fails open; this probe does not claim adapter-failure fail-closed semantics.",
+  "receipt_sha256": "253b73d603a414ee7b76a44a50a954750e1d74a8155c05044d33ec6122f250f5"
 }

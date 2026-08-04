@@ -14,15 +14,17 @@ description: >
 This section overrides any later host-specific lifecycle or dispatch spelling in the canonical skill
 body. Resolve `<plugin-root>` as the installed Autopilot plugin directory that contains this skill.
 
-Before any write, branch, worktree, runner, provider, or model effect, enter through:
+When using the packaged managed CLI, enter through the existing explicit marker command:
 
 ```text
 node "<plugin-root>/scripts/session-mode.js" set --level <l3|l4|l5|l6> --entry-level <requested-level> --repo-root <git-root>
 ```
 
-Codex supplies `CODEX_THREAD_ID` to that shell process. `session-mode.js` records the normalized host
-thread ID in both the marker filename and `session_id`; do not replace it with a caller-chosen stable
-ID. A marker from another Codex thread is not reusable.
+The production Codex package currently registers only its `PostCompact` recovery hook. It does not
+ship a Codex-thread-bound `PreToolUse` direct-mutation gate, and this shell command must not be
+described as receiving or exporting a `CODEX_THREAD_ID` binding. The marker is an explicit
+CLI/Engine admission artifact; it is not a production hook admission proof. A marker from another
+explicitly bound session is not reusable when the managed CLI validates it.
 
 Continue only when the emitted marker contains `mission_routing.status: "READY"`, `admitted: true`, and
 `would_block: false`. Managed implementation then follows the existing Mission admission, sealed

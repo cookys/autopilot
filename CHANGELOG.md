@@ -33,9 +33,9 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - One strict managed-admission validator shared by the CLI, Engine, and campaign dispatcher. It binds
   TTL, effective level, Git common-dir, host payload session identity, and digest-sealed Mission
   policy/graph/source authority before provider readiness or any managed effect.
-- A production Codex `PreToolUse` `.*` adapter using the live-proven structured stdout denial contract.
-  It reuses the shared edit-gate decision core, preserves `/l3`, blocks effect-capable depth-0 work in
-  `/l4`–`/l6`, and keeps fixed lifecycle/managed-Engine entry commands available.
+- D1 Codex `PreToolUse` structured-denial evidence is retained in the sanitized probe receipt. The
+  adapter source remains unregistered and non-production; the installed package ships no
+  Codex-thread-bound direct-mutation enforcement.
 
 ### Changed
 - Managed admission failures now use `DEV_FLOW_ADMISSION_REQUIRED_OR_STALE` with zero dispatcher,
@@ -51,12 +51,11 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   graph node.
 
 ### Boundary
-- Installed Codex 0.146.0 controls reproduce no-admission structured denial and exit-17 fail-open
-  behavior with the exact shipped adapter hash. The final lifecycle sequence admitted its two fixed
-  entry commands but did not expose a payload-session marker to the following L3/L5 effect calls;
-  L3 allow, L5 direct-deny classification, and managed Engine admission therefore did not qualify.
-  D4 is NOT_READY, with zero dispatcher calls and no replacement campaign/work-order authority.
-  The existing `PostCompact` adapter remains unchanged as the separate recovery boundary.
+- The installed Codex package registers only the existing `PostCompact` recovery hook. The structured
+  `PreToolUse` result and exit-17 fail-open control remain D1 probe evidence, not a production hook.
+  The final lifecycle sequence did not qualify a payload-session bridge, so D4 remains
+  `NOT_READY/NO_SHIP` for Codex-thread-bound direct-mutation enforcement, with zero dispatcher calls
+  and no replacement campaign/work-order authority.
 
 ## v2.34.4 — Clean-checkout CI fixture portability
 

@@ -1,0 +1,60 @@
+# Plan-review receipts — Next-touch debt retirement
+
+> Current planning state: **not passed; terminal infrastructure `CONDITIONAL`; implementation is not authorized**.
+> Generation 1 found nine accepted blockers and authorized one same-lineage repair. Generation 2
+> reached the two-generation ceiling without a required-seat semantic verdict because transport/parser
+> evidence was exhausted. This is not a semantic `READY` or `STOP` result.
+
+## Frozen review identity
+
+- Logical plan: `next-touch-debt-retirement-2026-08-03`
+- Ticket: `next-touch-debt-retirement-20260804`
+- Session: `next-touch-debt-retirement-g1`
+- Session key: `6066dba471bcff2f3437281cec78dd31a12e9848481cf83260ccc337758bebf0`
+- Frozen rubric SHA-256: `16ca0694ed6edbcfcb55b471e3a0da28bc81d04a246901105c1f9d4f1b4c0975`
+- Frozen manifest SHA-256: `793e1409e468f617a7ba02fe2ead4d0e55f3543d4d6da4187a5138b38a05e416`
+- Generation 1 plan SHA-256: `491741e5b645b028df5a20236cd74ed3d482934c1b9e6857310cf20deef74e64`
+- Generation 2 repaired plan SHA-256: `d0ce5cd63976293837ab264024a4634c48c08d90e1cccfd52847af4fab7df02b`
+- Repair growth: `19,700 / 15,915 = 1.237826x` (below the frozen `1.25x` warning rail)
+
+## Generation 1 — semantic conditional; repair authorized
+
+- Controller artifact:
+  `/home/cookys/.autopilot/plan-review/6066dba471bcff2f3437281cec78dd31a12e9848481cf83260ccc337758bebf0/generation-01.json`
+- Artifact SHA-256: `f4e8a90207fdc7103dd43f39e9ad0c594eed2e49cd3ad5f9d4a4753532c3619b`
+- Result: `CONDITIONAL`, semantic `CONDITIONAL`, non-terminal, policy `depth_0_adjudication_required`.
+- Architecture (`codex/gpt-5.6-sol@max`) returned `STOP` with nine blocker findings; operations-skeptic
+  (`agy/gemini-3.6-flash-high@high`) returned `READY` with no findings after one parser-invalid
+  attempt. Depth 0 accepted all nine exact finding fingerprints in the immutable disposition:
+  [`2026-08-03-next-touch-debt-retirement.g1-disposition.json`](2026-08-03-next-touch-debt-retirement.g1-disposition.json).
+- Disposition SHA-256: `081ee551d40f99dbb68f8765d77a4aaab25950b1eb839248eb9cb85f03dd5d1b`.
+
+The same implementer lineage repaired the plan once. The frozen rubric and manifest were not changed;
+no implementation, full suite, push, or backlog mutation was performed.
+
+## Generation 2 — terminal transport exhaustion
+
+- Controller artifact:
+  `/home/cookys/.autopilot/plan-review/6066dba471bcff2f3437281cec78dd31a12e9848481cf83260ccc337758bebf0/generation-02.json`
+- Artifact SHA-256: `683aaf10187e87853055aca0c6e84e697ef80c54dfb241e5b49a1b6c81252245`
+- Result: `CONDITIONAL`, semantic verdict `null`, terminal, policy
+  `required_seat_transport_exhausted`; `repair_authorized:false`; no generation 3 is permitted.
+
+| Seat | Attempt | Transport | Parser / semantic |
+|---|---:|---|---|
+| `codex/gpt-5.6-sol@max` architecture | 1 | exit 3, raw-binding mismatch; no semantic output | not attempted / unavailable |
+| `codex/gpt-5.6-sol@max` architecture | 2 | exit 3, raw-binding mismatch; no semantic output | not attempted / unavailable |
+| `agy/gemini-3.6-flash-high@high` operations-skeptic | 1 | transport success | invalid / unavailable |
+| `agy/gemini-3.6-flash-high@high` operations-skeptic | 2 | transport success | invalid / unavailable |
+
+The controller correctly refused to promote a one-family or parser-invalid result. Raw child logs were
+read before classification; the Codex attempts contained no purpose-bound response, while the agy logs
+contained CLI/runtime output around an otherwise visible JSON response and failed the strict parser.
+This receipt is infrastructure failure, not a new semantic blocker set, and cannot authorize execution.
+
+## Scope and disposition
+
+The reviewed plan remains one cumulative D1–D8 graph covering exactly 14 admitted technical backlog
+entries. The two Board decisions and 29 conditional entries remain out of scope. The temporary review
+branch preserves the repaired plan and immutable review evidence; it is not merged or pushed while the
+required semantic review is absent.

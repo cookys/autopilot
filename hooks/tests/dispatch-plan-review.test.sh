@@ -295,6 +295,21 @@ assert_contains "$AUTHOR_PROMPT" \
   'Allowed severity values (exact strings): "blocking", "non-blocking".' \
   "plan-review prompt enumerates the exact severity vocabulary"
 assert_contains "$AUTHOR_PROMPT" \
+  'Every finding must contain all ten keys (never omit a key and never use null)' \
+  "plan-review prompt forbids omitted or null finding fields"
+assert_contains "$AUTHOR_PROMPT" \
+  'first eight keys' \
+  "plan-review prompt enumerates finding string fields"
+assert_contains "$AUTHOR_PROMPT" \
+  'must be non-empty JSON strings' \
+  "plan-review prompt requires non-empty finding strings"
+assert_contains "$AUTHOR_PROMPT" \
+  'last two keys must be JSON booleans' \
+  "plan-review prompt binds finding boolean fields"
+assert_contains "$AUTHOR_PROMPT" \
+  'Never use null for evidence or repair.' \
+  "plan-review prompt gives MiniMax an explicit non-null repair rule"
+assert_contains "$AUTHOR_PROMPT" \
   'A finding is a blocker candidate if and only if all of these hold: rubric_id is one of the frozen rubric IDs above; class is "decision-now"; severity is "blocking"; blocks_next_slice_or_immediate_integrity is true; cannot_defer_to_spike is true.' \
   "plan-review prompt states the complete blocker predicate"
 assert_contains "$AUTHOR_PROMPT" \

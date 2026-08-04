@@ -811,9 +811,13 @@ function buildPrompt(seat, planBytes, rubricBytes, rubricIds) {
 Review only against frozen rubric IDs: ${[...rubricIds].join(', ')}.
 Do not schedule another review generation. The controller owns attempts and termination.
 
-Return one JSON object with only verdict and findings. Each finding uses:
+Return one JSON object with only verdict and findings; do not emit Markdown or any prose outside
+that object. Every finding must contain all ten keys (never omit a key and never use null):
 rubric_id, class, severity, affected_surface, claim, evidence, evidence_reference,
-repair, blocks_next_slice_or_immediate_integrity, cannot_defer_to_spike.
+repair, blocks_next_slice_or_immediate_integrity, cannot_defer_to_spike. The first eight keys
+must be non-empty JSON strings and the last two keys must be JSON booleans. This remains true for
+non-blocking findings; give them concrete evidence and a non-empty repair string such as
+"No current change; follow-up only." Never use null for evidence or repair.
 Allowed verdict values (exact strings): "READY", "CONDITIONAL", "STOP".
 Allowed class values (exact strings): "decision-now", "implementation-spike", "future".
 Allowed severity values (exact strings): "blocking", "non-blocking".

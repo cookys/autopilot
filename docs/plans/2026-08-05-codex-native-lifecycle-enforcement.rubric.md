@@ -12,16 +12,15 @@
   Mission-mismatched markers before provider probes, branches, worktrees, dispatch, or model spend,
   with explicit all-zero effect counters and no compatibility bypass.
 - R5: Production Codex pre-effect wiring is conditional on real installed-binary proof of the exact
-  event/matcher/payload/structured-denial contract. The observed exit-17 adapter fail-open behavior is
-  documented as a host limitation and is not required to block; unsupported shell mutation inference,
-  PostToolUse rollback, and unproven hook parity remain rejected.
+  event/matcher/payload/denial contract; unsupported shell parsing, PostToolUse rollback, and unproven
+  hook parity are rejected rather than described as enforcement.
 - R6: The policy preserves `/l3` inline work, blocks Codex depth-0 mutation in `/l4`–`/l6`, admits the
   canonical external managed implementer, and adds no operational burden or behavior change to
   Claude/OpenCode/Antigravity/Grok/Kimi.
-- R7: Deterministic and live tests include allow, structured deny, malformed/stale/mismatch, and
-  deliberately broken controls. Structured deny must preserve its sentinel; the broken adapter must
-  reproduce and record Codex 0.146.0 fail-open without becoming a blocker. Verdicts use Git/effect/model
-  counters and sealed receipts rather than transcript prose or `grep FAIL` heuristics.
+- R7: Deterministic and live tests include allow, deny, malformed/stale/mismatch, and deliberately broken
+  controls; verdicts use Git/effect/model counters and sealed receipts rather than transcript prose or
+  `grep FAIL` heuristics.
 - R8: The execution graph is capped at four deliverables with dependencies, acceptance commands,
   resource reservations, and gate-attempt budgets; tests, reviews, repairs, evidence, doc sync, and
   release checks stay inside those deliverables and review scope is change-only.
+

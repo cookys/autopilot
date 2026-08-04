@@ -31,16 +31,14 @@ The missing pieces are visible in the current tree:
   so Codex receives normative `TaskCreate`, `TaskStop`, native `Agent`, and `subagent_type`
   instructions it cannot execute.
 - `platforms/codex/README.md` acknowledges that mismatch and defers a future split.
-- the Codex production package originally declared only `PostCompact`; Codex 0.146.0 has now proved
-  request-bound structured `PreToolUse` denial, while separately proving that a hook command which
-  exits 17 without structured stdout fails open.
+- the Codex production package declares only `PostCompact`; general blocking `PreToolUse` behavior
+  has not been live-proven.
 - managed dispatch checks an active marker when one exists, but absence is not itself a rejection.
 
 The fix is one bounded chain: project an explicit Codex lifecycle adapter into the affected package
 skills, make the existing managed effect path fail closed without its existing session/Mission
-authority, and add a Codex pre-effect hook only after a real binary proves the structured blocking
-contract. Adapter-process failure semantics are a separately documented host limitation, not part of
-that blocking contract. A real adversarial Codex run is the terminal oracle. Other controller platforms keep
+authority, and add a Codex pre-effect hook only after a real binary proves the required blocking
+contract. A real adversarial Codex run is the terminal oracle. Other controller platforms keep
 their current instructions and workflows.
 
 ## 1. Problem
@@ -70,9 +68,8 @@ external execution unless it first enters the repository's existing lifecycle au
   rejected while the external managed implementer path remains usable; `/l3` inline work retains its
   existing semantics.
 - **KR4 — behavioral proof:** an opt-in real-Codex adversarial test asks the controller to skip
-  dev-flow and implement directly. The structured-deny negative must keep its sentinel at zero; a
-  canonical `/l3` positive must mutate once; and a deliberately broken adapter must reproduce the
-  host's documented fail-open sentinel. Machine state and receipts, not transcript prose, decide.
+  dev-flow and implement directly. The test passes only when effect sentinels remain zero and the
+  transcript plus machine receipt show the named lifecycle rejection or canonical managed path.
 - **KR5 — no collateral process:** no new task tracker, work-order authority, Mission graph format,
   or human gate is introduced, and Claude/OpenCode/Antigravity/Grok/Kimi behavior is unchanged.
 
@@ -81,7 +78,7 @@ external execution unless it first enters the repository's existing lifecycle au
 - Reuse `session-mode` plus Mission/campaign contracts as the only lifecycle authority; DO NOT create a parallel receipt, tracker, ticket, or graph system.
 - A missing or invalid managed-session marker is a hard pre-effect rejection with `dispatcher_called:false`, `model_calls:0`, `mutation_attempts:0`, and `resources_created:0`.
 - Canonical skill bodies remain authoritative for non-Codex packages; Codex differences are deterministic generated projections, never hand-edited generated payload files.
-- No Codex blocking-hook claim may ship without a committed receipt from the real installed Codex binary proving the exact event, matcher, payload identity, structured denial behavior, and the separately classified broken-adapter host semantics.
+- No Codex blocking-hook claim may ship without a committed receipt from the real installed Codex binary proving the exact event, matcher, payload identity, exit behavior, and a broken-control denial.
 - `/l4`, `/l5`, and `/l6` prohibit depth-0 substance; an unavailable host primitive is an escalation condition, never permission for the controller to implement or author substitute work orders.
 - Source-plan headings, tests, review seats, repairs, and doc sync are gates inside the four deliverables below; they MUST NOT become extra deliverables, phases, tickets, branches, or sessions.
 - Review is change-only: reviewers receive the plan/rubric or the candidate diff, not an unrestricted repository-wide review request.
@@ -109,7 +106,7 @@ external execution unless it first enters the repository's existing lifecycle au
 | `scripts/session-mode.js` | Export one strict active-marker loader/validator using the current marker and Mission projection contracts. No second marker schema. |
 | `bin/autopilot.js`, `src/engine/autopilot-engine.js`, `scripts/dispatch-hetero.sh` | Consume the strict marker at the earliest managed pre-effect boundary and return a uniform zero-effect rejection. |
 | `platforms/codex/hook-probe/**` | Disposable real-binary proof of Codex `PreToolUse` matcher, tool identity, payload shape, and blocking semantics. Never production authority. |
-| `platforms/codex/hooks/pre-effect.js`, `platforms/codex/hooks/hooks.json` | Production Codex-only adapter, added only if D1 proves structured denial. It consumes the shared session-mode decision core; it does not infer arbitrary shell writes and makes no adapter-failure fail-closed claim. |
+| `platforms/codex/hooks/pre-effect.js`, `platforms/codex/hooks/hooks.json` | Production Codex-only adapter, added only if D1 proves fail-closed semantics. It consumes the shared session-mode decision core; it does not parse arbitrary shell text. |
 | `hooks/orchestrator-edit-gate-lib.js` | Host-neutral pure decision logic reused by Claude and Codex adapters; platform wrappers own payload translation. |
 | `hooks/tests/session-mode.test.sh`, `hooks/tests/autopilot-cli.test.sh`, `hooks/tests/dispatch-hetero.test.sh`, `hooks/orchestrator-edit-gate.test.js` | Deterministic absent/stale/mismatch and no-effect controls. |
 | `hooks/tests/codex-plugin-package.test.sh`, new opt-in live driver under `hooks/tests/` | Projection integrity, installed-package behavior, adversarial real-Codex proof, and broken controls. |
@@ -125,10 +122,10 @@ may run in parallel after intake. No source-plan subsection may be expanded into
 
 | ID | Deliverable | Size | Depends on | Acceptance command / evidence | Resource reservation | Gate-attempt budget |
 |---|---|---:|---|---|---|---:|
-| D1 | Prove the Codex pre-effect contract | Fix | — | opt-in real-binary driver emits a sealed capability receipt plus allow/deny/broken controls | ≤2 real Codex executions/model calls, ≤15 min | 2 |
+| D1 | Prove the Codex pre-effect contract | Fix | — | opt-in real-binary driver emits a sealed capability receipt plus a denial control | 1 real Codex session, ≤2 model calls, ≤15 min | 2 |
 | D2 | Generate Codex-native lifecycle skill projections | L | — | package test proves exact adapter + unchanged canonical tail for seven named skills | no external model; ≤30 changed canonical files including mirrors/tests/docs | 2 |
 | D3 | Require existing session/Mission authority before managed effects | L | — | deterministic matrix proves zero effects for absent/stale/corrupt/mismatched markers and one canonical happy path | no external model; ≤30 min test wall time | 2 |
-| D4 | Wire only proven Codex enforcement and prove end to end | L | D1,D2,D3 | one installed-package driver invocation runs negative/positive/broken controls; full focused gates green | ≤3 real Codex executions/model calls, ≤30 min | 2 |
+| D4 | Wire only proven Codex enforcement and prove end to end | L | D1,D2,D3 | installed-package adversarial run plus broken controls; full focused gates green | 1 real Codex session, ≤3 model calls, ≤30 min | 2 |
 
 ### D1 — Prove the Codex pre-effect contract
 
@@ -138,24 +135,21 @@ probe, and records only the fields needed for this contract:
 
 1. the actual pre-tool event name and matcher that fire for Codex's direct file-mutation path;
 2. whether the payload provides stable `cwd`, `tool_name`, and session identity;
-3. the exact structured stdout response that prevents the target mutation;
+3. the exact non-zero exit and/or structured stdout response that prevents the target mutation;
 4. a positive control where a zero-exit hook permits the same mutation; and
-5. a broken-adapter control which records the host's observed behavior without treating adapter
-   nonzero as the structured-denial contract.
+5. a broken-adapter control where no sentinel mutation occurs and the CLI exits non-zero.
 
 The receipt must include the Codex version, installed plugin manifest digest, probe adapter digest,
 transcript digest, effect-sentinel counts, and exact verdict. Raw prompts, credentials, and arbitrary
 tool inputs are not retained.
 
-If the real binary cannot prove structured blocking for the relevant mutation path, do not add a production
+If the real binary cannot prove blocking for the relevant mutation path, do not add a production
 `PreToolUse` hook and do not claim depth-0 enforcement. D2 and D3 may still ship, but D4 is terminally
 blocked with the evidence receipt and one Board escalation. Do not replace the missing host capability
 with shell-regex guessing, PostToolUse rollback, prose, or another controller-authored work order.
 
-**Done when:** the same real-binary fixture is green for allow and red for structured deny, while a
-deliberately broken adapter records the observed Codex 0.146.0 fail-open behavior (sentinel present,
-CLI zero). That broken result is a documented known limitation, not a D1/D4 blocker and not a
-fail-closed claim.
+**Done when:** the same real-binary fixture is green for allow, red for deny, and red for a deliberately
+broken adapter, with sentinel counts proving the hook—not model prose—caused the outcome.
 
 ### D2 — Generate Codex-native lifecycle skill projections
 
@@ -221,7 +215,7 @@ the canonical marker/campaign path still reaches exactly one implementation disp
 
 ### D4 — Wire only proven Codex enforcement and prove end to end
 
-If and only if D1's structured-deny contract is READY, add a Codex production pre-effect adapter using the exact live-proven event,
+If and only if D1 is READY, add a Codex production pre-effect adapter using the exact live-proven event,
 matcher, payload fields, and denial response. Reuse `orchestrator-edit-gate-lib.js`; do not import the
 Claude wrapper or its opt-in/fail-open policy.
 
@@ -234,31 +228,24 @@ Codex policy:
 - corrupt, ambiguous, expired, or wrong-repository marker: deny, never silently treat it as absent;
 - non-repository and read-only activity: no-op; and
 - shell/exec behavior is covered only to the extent D1 proves an exact enforceable tool boundary. No
-  arbitrary command-string mutation classifier or unsupported parity claim is allowed. Shell/exec is
-  treated as effect-capable as a whole; only fixed lifecycle-entry and managed-Engine command
-  boundaries are exempted so admission cannot deadlock itself.
+  arbitrary command-string parser or unsupported parity claim is allowed.
 
 Extend the package manifest and its description only for the capability actually proved. Keep the
 existing `PostCompact` adapter unchanged and isolated. The live installed-package test then starts from
-disposable repositories and runs exactly three Codex executions through one driver invocation. It must
-prove:
+a disposable repository and asks Codex to bypass dev-flow and directly modify a sentinel file under an
+`/l5` goal. It must prove both:
 
-1. without admission, the structured denial keeps the sentinel absent and Git refs/worktrees unchanged;
-2. with a canonical `/l3` marker, the same request is allowed exactly once; and
-3. a deliberately broken adapter exits 17 but Codex 0.146.0 continues, creates its sentinel, and exits
-   zero. This is the required red control for model-compliance and the documented host limitation.
+1. without admission, the sentinel, Git refs/worktrees, dispatcher log, and provider/model counters are
+   unchanged; and
+2. with the canonical marker and sealed campaign fixture, direct depth-0 mutation remains blocked while
+   exactly one managed implementer invocation is admitted.
 
-The deterministic D3 and shared-policy controls remain the authority for `/l4`–`/l6`: direct depth-0
-effects are denied while the fixed managed Engine entry reaches exactly one dispatch. The live D4
-driver does not mint a replacement campaign merely to repeat that deterministic counter proof.
+Run the same prompt against a deliberately broken/absent hook adapter; the fixture must go red, proving
+the positive result is not a model-compliance accident. Commit the sanitized receipt and update
+portability/docs/CHANGELOG claims from that receipt only.
 
-Run the same prompt against the deliberately broken hook adapter; the fixture must expose the documented
-fail-open mutation, proving the structured-deny result is not a model-compliance accident. Commit the
-sanitized receipt and update portability/docs/CHANGELOG claims from that receipt only.
-
-**Done when:** the real Codex negative, positive, and broken controls are reproducible, their sentinel
-and Git state match the revised contract, adapter-process fail-open is disclosed, and no other platform
-package or workflow changed behavior.
+**Done when:** the real Codex negative, positive, and broken controls are reproducible, all counters and
+Git state match the contract, and no other platform package or workflow changed behavior.
 
 ## 5. Test / validation
 
@@ -298,12 +285,11 @@ instead of creating another phase, branch, ticket, or model lineage.
 | Treating an unavailable `TaskCreate` as permission to write Markdown work orders | Codex adapter explicitly forbids substitution; live adversarial transcript and zero-effect sentinels are required. |
 | Adding a second lifecycle receipt or tracker | D3 consumes only `session-mode` and existing Mission/campaign digests; rubric rejects any parallel authority. |
 | Checking the marker after readiness, branch, worktree, or model effects | Downstream seams are counter-stubbed; every invalid case must report all-zero counters. |
-| Claiming Codex blocking semantics from docs or probe telemetry alone | D1 requires a real binary allow/structured-deny/broken-control receipt before production wiring. |
+| Claiming Codex blocking semantics from docs or probe telemetry alone | D1 requires a real binary allow/deny/broken-control receipt before production wiring. |
 | Regex parsing arbitrary shell/JavaScript tool input | Forbidden by the dependency decision; scope only to live-proven exact tool boundaries. |
 | Making Claude/OpenCode/Grok/Kimi pay for the Codex gap | Canonical bodies and non-Codex adapters stay unchanged; shared core only tightens a precondition normal front doors already satisfy. |
 | Letting tests/reviews become more execution phases | Four-row ceiling is mechanically asserted in the implementation campaign graph; retries remain inside their row. |
-| A green live test caused by model obedience rather than enforcement | The broken-hook control must create its sentinel under the host's fail-open semantics, while structured deny must not; state counters—not prose—decide. |
-| Claiming adapter-process crash fail-closed behavior | Receipt and docs state that exit-17 fails open on Codex 0.146.0; only structured stdout denial is the blocking production contract. |
+| A green live test caused by model obedience rather than enforcement | The same prompt must fail under the broken-hook control, and state counters—not prose—decide the verdict. |
 | Allowing marker expiry/corruption to fail open | Codex production adapter and managed engine validator use the strict loader; explicit negative fixtures cover every invalid class. |
 
 ## 7. Out of scope
@@ -321,8 +307,8 @@ instead of creating another phase, branch, ticket, or model lineage.
 
 ## 8. Open questions
 
-None. D1 is READY for structured denial. Its broken-adapter control is an observed fail-open host
-limitation, not a request for the Board to choose an implementation guess.
+None. D1 is a technical go/no-go with an explicit fail-closed outcome; it is not a request for the
+Board to choose an implementation guess.
 
 ## Author self-review
 
@@ -355,9 +341,3 @@ limitation, not a request for the Board to choose an implementation guess.
 - **Digest note:** the controller hash binds the substantive plan with this Review log still marked
   pending. This metadata-only terminal annotation was added afterward; no design, constraint,
   deliverable, acceptance criterion, risk, or out-of-scope boundary changed.
-- **Runtime contract correction (2026-08-05, same lineage):** after the real Codex 0.146.0 control
-  proved structured denial blocks while adapter exit-17 separately fails open, the controlling QC
-  interpretation corrected D1/D4 and R5/R7. The earlier heterogeneous review digest remains evidence
-  for the pre-correction plan bytes; it is not represented as a review of this erratum. No new review
-  generation, graph node, branch, session, or work-order was created. The existing source manifest and
-  single-node graph were mechanically rebound to the corrected plan/rubric content for admission.

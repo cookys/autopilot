@@ -1,7 +1,7 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "artifact_type": "codex_pre_effect_production_receipt",
-  "observed_at": "2026-08-04T18:44:25.173Z",
+  "observed_at": "2026-08-04T20:16:00.487Z",
   "codex_version": "codex-cli 0.146.0",
   "capability_evidence": {
     "schema_version": 1,
@@ -72,46 +72,73 @@
       "reason_code": "DEV_FLOW_ENTRY_REQUIRED"
     },
     "installed_plugin_manifest_sha256": "d066184ef41a00168cf89ee54365740284f519eb69bcd0a36d27192bb7fac008",
-    "production_adapter_sha256": "a0b4a364f5351ad0dbb342fb220354dfc4633f8ac53ab6de277a6f091b194e07"
-  },
-  "post_live_repair": {
-    "live_tested_adapter_sha256": "a0b4a364f5351ad0dbb342fb220354dfc4633f8ac53ab6de277a6f091b194e07",
-    "final_adapter_sha256": "3274a72ee905095335e212b0bb8491e7bc6c1c8e314a3a087264a10483fd0f3a",
-    "reason": "Run read-only and exact lifecycle-entry early returns before marker/Mission validation so a stale projection cannot deadlock its own repair path.",
-    "live_control_paths_changed": false,
-    "deterministic_control": "node --test hooks/orchestrator-edit-gate.test.js (30/30)",
-    "live_rerun": false,
-    "live_rerun_reason": "The controlling request reserved exactly one D4 installed-Codex negative/positive/broken run; the repair does not change those three exercised branches."
+    "installed_hook_manifest_sha256": "e0dbd4e957d042b854e31183a1a8997f396f412458815997f638e9856feffb8a",
+    "production_adapter_sha256": "cfce1b2fd93a7a7dfcb1a0e3e2e4da901e61e33a8bc64767042c7645efaf0af2",
+    "generated_adapter_sha256": "cfce1b2fd93a7a7dfcb1a0e3e2e4da901e61e33a8bc64767042c7645efaf0af2",
+    "installed_adapter_matches_generated_payload": true
   },
   "controls": {
     "negative_no_admission": {
-      "hook_invocations": 1,
+      "hook_invocations": 3,
       "cli_exit_status": 0,
       "sentinel_count": 0,
       "git_state_unchanged": true,
-      "transcript_sha256": "ea3871e1484c53b2173bbb403d0347ac3ae542e1c42f0bfbe98aaccc51ca54f3"
+      "transcript_sha256": "00b468ba85adab1693408bcfdd80e986b030f29c06afb5e188f4db053eb57936"
     },
     "positive_canonical_l3": {
-      "marker_set_exit_status": 0,
-      "hook_invocations": 1,
+      "lifecycle_entry_hook_invocations": 1,
+      "hook_invocations": 0,
       "cli_exit_status": 0,
-      "sentinel_count": 1,
-      "git_refs_and_worktrees_unchanged": true,
-      "transcript_sha256": "1a428194d7243dac5f314c2b2afb1e1491560758c487e982cc20662fff44ca29"
+      "sentinel_count": 0,
+      "session_bound_to_hook_payload": false,
+      "transcript_sha256": "8b54a54b02222c7b12a6e8e74ca372ee75415a671691a09618a9323ab2f5c71c"
+    },
+    "l5_direct_denial": {
+      "lifecycle_entry_hook_invocations": 1,
+      "hook_invocations": 0,
+      "sentinel_count": 0,
+      "reason_code": "DEPTH_ZERO_MUTATION_FORBIDDEN",
+      "session_bound_to_same_hook_payload": false
+    },
+    "managed_engine_entry": {
+      "hook_invocations": 0,
+      "expected_command_sha256": "3a74e05c0149fc6ed0d1e775b7bdb7712c8adc64237972f240d591ffc6e2a4a7",
+      "observed_exact_command_hash": false,
+      "existing_campaign_reused": true,
+      "campaign_contract_sha256": "0d1f494b6052b08de86d451492956f94b5fa842b2d99550f9269c885a4f1ccd5",
+      "campaign_seal_sha256": "2c975d070e7d483289bbc4f4615944fbe700440732167ef7d13364bef6daf5e2",
+      "dispatcher_called_true_count": 0,
+      "dispatcher_called_false_count": 0,
+      "exactly_one_managed_dispatcher_path": false,
+      "child_isolation_assertion": {
+        "actual_runner_test_exit_status": 0,
+        "assertion_count": 213,
+        "controller_config_plugins_and_thread_absent": true,
+        "dispatch_script_sha256": "f8cf15f598bb13014a597f1328a39b2322b0336487d88ac0d4fe88a392738266",
+        "test_transcript_sha256": "8f48b9a8e2c38b46e56e197ae857742dfbf28d2da0a12a13cfea10205cd4dcab"
+      },
+      "new_campaign_or_work_order_created": false,
+      "git_state_unchanged": true
     },
     "broken_adapter": {
       "adapter_exit_status": 17,
       "cli_exit_status": 0,
       "sentinel_count": 1,
-      "git_refs_and_worktrees_unchanged": true,
+      "git_refs_and_worktrees_unchanged": false,
       "observed_semantics": "FAIL_OPEN",
-      "transcript_sha256": "e7016698d8c1583d397674269944d4753ca45f2af6890d85f8053e349d145d7f"
+      "transcript_sha256": "efdfb07e3a3f2910f1bba9242b89c36ff165b215544eca4897a0c90d0afd824c"
     }
   },
   "model_calls": 3,
-  "verdict": "READY",
+  "model_call_budget": {
+    "installed_codex_sessions": 3,
+    "managed_dispatcher_calls": 0
+  },
+  "verdict": "NOT_READY",
   "d1_verdict": "READY",
-  "d4_verdict": "READY",
+  "d4_verdict": "NOT_READY",
+  "hook_controls_verdict": "BLOCKED",
+  "terminal_blocker": "installed-package lifecycle controls did not reproduce exactly",
   "known_limitation": "On Codex 0.146.0, a PreToolUse command adapter that exits nonzero before emitting a structured denial fails open; this production gate does not claim adapter-failure fail-closed semantics.",
-  "receipt_sha256": "6303d8d1278d38447cea4216d6f5fa5a9c56ad10c591b35f1bc2c4c4bcd1d123"
+  "receipt_sha256": "1dd8398cf17f0dfd9a662fb562752d8ff58233b1a788410f4a11bfad2c228143"
 }

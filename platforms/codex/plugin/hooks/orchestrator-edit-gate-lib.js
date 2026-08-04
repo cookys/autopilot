@@ -28,6 +28,41 @@ const CODEX_REASON_CODES = Object.freeze({
   depthZeroMutation: 'DEPTH_ZERO_MUTATION_FORBIDDEN',
 });
 
+/**
+ * Classify `git rev-parse --show-toplevel` without collapsing an execution
+ * failure into the legitimate "not a repository" result. Adapters may allow
+ * only the latter; missing git, timeouts, signals, and unexpected statuses are
+ * fail-safe gate conditions.
+ */
+function classifyCodexGitProbe(result) {
+  if (!result || typeof result !== 'object') {
+    return { status: 'error', reason: 'git probe produced no result' };
+  }
+  if (result.error) {
+    const code = result.error.code || result.error.message || 'spawn_error';
+    return { status: 'error', reason: `git probe failed (${code})` };
+  }
+  if (result.signal || result.status === null) {
+    return {
+      status: 'error',
+      reason: `git probe did not complete (${result.signal || 'unknown status'})`,
+    };
+  }
+  const stdout = String(result.stdout || '').trim();
+  if (result.status === 0 && stdout) {
+    return { status: 'repository', root: stdout, reason: null };
+  }
+  const stderr = String(result.stderr || '');
+  if (result.status === 128 && /not a git repository/iu.test(stderr)) {
+    return { status: 'not_repository', root: null, reason: null };
+  }
+  return {
+    status: 'error',
+    root: null,
+    reason: `git probe exited unexpectedly (status ${result.status})`,
+  };
+}
+
 function isAllowlisted(relPath) {
   const p = String(relPath).replace(/\\/g, '/').replace(/^\.\//, '');
   return ALLOWLIST_PREFIXES.some((pre) => p.startsWith(pre));
@@ -108,6 +143,7 @@ function decideCodexPreEffect(f) {
 module.exports = {
   decide,
   decideCodexPreEffect,
+  classifyCodexGitProbe,
   isAllowlisted,
   ALLOWLIST_PREFIXES,
   GATED_LEVELS,

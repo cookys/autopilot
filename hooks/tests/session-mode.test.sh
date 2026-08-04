@@ -218,6 +218,7 @@ const {
   validateManagedDevFlowAdmission,
 } = require(path.join(root, 'scripts', 'session-mode.js'));
 const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+process.env.CLAUDE_CODE_SESSION_ID = marker.session_id;
 const admission = marker.mission_routing.admission;
 const campaign = {
   repo_identity: markerRepoIdentity(managedWorktree),
@@ -273,12 +274,13 @@ const stableMarker = path.join(path.dirname(markerPath), 'codex-stable-session.j
 fs.copyFileSync(markerPath, stableMarker);
 process.env.AUTOPILOT_SESSION_ID = 'codex-stable-session';
 process.chdir(managedWorktree);
-const portablePositive = validateManagedDevFlowAdmission({
+const copiedSessionMarker = validateManagedDevFlowAdmission({
   repoRoot: managedWorktree,
   effectiveLevel: 'l5',
   campaignContract: campaign,
 });
-assert.strictEqual(portablePositive.valid, true);
+assert.strictEqual(copiedSessionMarker.valid, false);
+assert.match(copiedSessionMarker.reason, /session mismatch/);
 process.stdout.write('managed_admission_matrix_ready');
 NODE
 ); RC=$?

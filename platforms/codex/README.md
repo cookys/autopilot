@@ -42,13 +42,28 @@ and exited 0. The production claim therefore does **not** include fail-closed
 adapter crash/nonzero behavior. Shell/exec is classified as effect-capable as a
 whole; the adapter does not guess arbitrary command mutation semantics. The sanitized
 [receipt](../../docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json)
-records both the READY structured-denial contract and the fail-open broken control.
+records the installed adapter hash, no-admission denial, attempted L3/L5/managed-entry sequence,
+and fail-open broken control. D4 remains `NOT_READY`: the two lifecycle entry commands ran, but no
+payload-session marker was visible to their following effect calls, so the L3 allow, L5 direct-deny
+classification, and managed Engine entry did not qualify. The sole existing campaign is also sealed
+to the pre-amendment Mission graph; creating replacement authority was outside the repair.
+
+Markers are keyed to the Codex hook payload's session identity and also store that identity in the
+marker body. Renaming or copying a marker cannot admit a different host session. The fixed lifecycle
+entry is designed to derive the binding from `CODEX_THREAD_ID`; it does not trust an unrelated
+marker discovered elsewhere in the repository. The final installed control did not observe that
+binding across the shell boundary, so this is a required contract rather than a READY host claim.
 
 Managed Engine entry is independently fail-closed. Before provider readiness,
 roster probing, resource creation, or dispatch, it requires the existing
 session marker to match TTL, effective level, Git common-dir, and the sealed
 Mission policy/graph/source admission. This does not broaden the package's hook
 capability claim.
+
+When that managed path selects a Codex implementer, the dispatcher creates a mode-0700 temporary
+`CODEX_HOME`, copies only `auth.json` at mode 0600, unsets the controller's `CODEX_THREAD_ID`, and
+invokes `codex exec --ignore-user-config`. Controller config, plugins, and session state therefore
+cannot cause the production hook to intercept its own managed child.
 
 ## Subagent model routing (`spawn_agent`) — opt-in
 

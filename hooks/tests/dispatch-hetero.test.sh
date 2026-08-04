@@ -130,6 +130,18 @@ case "$*" in
   *"exec --help"*) printf -- '--dangerously-bypass-approvals-and-sandbox\n--dangerously-bypass-hook-trust\n'; exit 0 ;;
   *"--version"*)   echo "codex-cli 9.9.9 (test stub)"; exit 0 ;;
 esac
+if [ -n "${CODEX_ISOLATION_LOG:-}" ]; then
+  {
+    [ -n "${CODEX_HOME:-}" ]
+    [ "${CODEX_HOME:-}" != "${CONTROLLER_CODEX_HOME:-}" ]
+    [ -f "$CODEX_HOME/auth.json" ]
+    [ ! -e "$CODEX_HOME/config.toml" ]
+    [ ! -e "$CODEX_HOME/plugins" ]
+    [ -z "${CODEX_THREAD_ID:-}" ]
+    case "$*" in *"--ignore-user-config"*) ;; *) exit 90 ;; esac
+  } || exit 91
+  printf 'isolated\n' >> "$CODEX_ISOLATION_LOG"
+fi
 touch codex_uncommitted.txt
 EOF
 chmod +x "$STUB_CODEX_UNCOMMITTED"
@@ -631,15 +643,24 @@ git -C "$SBX" branch -D feat/grok-reuse >/dev/null 2>&1 || true
 
 # 5f. codex wrapper-commit path (legacy bug): codex may leave edits uncommitted while
 # HEAD unchanged; wrapper-commit must still run and produce committed outcome.
+CODEX_CONTROLLER_HOME="$TEST_TMP/controller-codex-home"
+CODEX_ISOLATION_LOG="$TEST_TMP/codex-isolation.log"
+mkdir -p "$CODEX_CONTROLLER_HOME/plugins"
+printf '{}\n' > "$CODEX_CONTROLLER_HOME/auth.json"
+printf 'model = "controller-only"\n' > "$CODEX_CONTROLLER_HOME/config.toml"
 OUT="$( (
   cd "$SBX"
-  PATH="$TEST_TMP:$PATH" "$SCRIPT" --branch feat/codex-no-commit --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
+  CODEX_HOME="$CODEX_CONTROLLER_HOME" CONTROLLER_CODEX_HOME="$CODEX_CONTROLLER_HOME" \
+    CODEX_ISOLATION_LOG="$CODEX_ISOLATION_LOG" CODEX_THREAD_ID=controller-thread \
+    PATH="$TEST_TMP:$PATH" "$SCRIPT" --branch feat/codex-no-commit --prompt-file "$PROMPT" --runner codex --model gpt-5.3-codex-spark
 ) 2>&1 )"; EXIT=$?
 assert_eq "0" "$EXIT" "codex wrapper-commit exit code"
 assert_contains "$OUT" '"status": "committed"' "codex wrapper-commit status"
 assert_contains "$OUT" '"files_changed": 1' "codex wrapper-commit diff stat"
 assert_contains "$OUT" '"runner": "codex"' "codex wrapper-commit runner reported"
 assert_eq "dispatch-hetero(codex): edits on feat/codex-no-commit" "$(git -C "$SBX" log -1 --pretty=%s feat/codex-no-commit)" "codex wrapper-commit message"
+assert_eq "1" "$(wc -l < "$CODEX_ISOLATION_LOG" | tr -d ' ')" \
+  "managed Codex implementer runs exactly once through an isolated child CODEX_HOME"
 
 # 5g. wrapper-commit identity fallback covers author-only environments too.
 # `git commit` needs both author and committer identity; an author env alone is

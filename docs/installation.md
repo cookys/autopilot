@@ -72,13 +72,21 @@ Contributor shortcut:
 
 The Codex package does **not** load the Claude Code hook bundle, apps, or MCP servers. Its manifest
 declares `skills: "./skills/"` and `hooks: "./hooks/hooks.json"`; that hook manifest contains exactly
-one `PostCompact` registration with matcher `manual|auto`. The Codex adapter translates the official
-payload into Autopilot's existing fail-closed reconciliation authority and blocks continuation when
+two Codex-native registrations: `PreToolUse` with matcher `.*` for the structured lifecycle gate and
+`PostCompact` with matcher `manual|auto` for recovery. The Codex adapters translate the official
+payload into Autopilot's existing fail-closed reconciliation authority and block continuation when
 identity or reconciliation fails. This is an exact Codex-native recovery boundary, not a claim that
 Claude hook events or defaults transfer to Codex. The generated payload also includes linked support
 files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so
 skill links and engine CLI commands resolve after install. Run engine commands from the target
 repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
+
+The lifecycle marker validator requires the Codex hook payload session in both its filename and
+body; copying a marker to another session does not admit it. The final Codex 0.146.0 installed
+control did not make the canonical shell-run marker visible under that payload session, so the
+PreToolUse lifecycle package remains `NOT_READY`. Managed Codex implementers independently use a
+temporary credentials-only `CODEX_HOME` with the parent thread identity removed, so controller
+plugin/config/session state is not inherited by the child.
 
 For an ordinary strict-L5 invocation, set `AUTOPILOT_LEVEL=l5` and use the managed
 `engine implement-review` command. The CLI resolves the target repository's exact implementer,

@@ -115,6 +115,7 @@ AGY_BIN="agy"
 GROK_BIN="grok"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
                      # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
+MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
 KEEP=0
 RETENTION_OWNER=""
@@ -2757,6 +2758,7 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 # legacy minimal remover + branch deletion remains only for unmanaged one-shots.
 abort_dispatch() {
   reap_container
+  cleanup_managed_codex_home
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
@@ -2792,6 +2794,37 @@ trap abort_dispatch INT TERM
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
 # subshell cwd surviving the container boundary).
+prepare_managed_codex_home() {
+  local controller_home="${CODEX_HOME:-$HOME/.codex}"
+  MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
+    || die_precondition "cannot allocate isolated managed Codex home"
+  chmod 700 "$MANAGED_CODEX_HOME" \
+    || die_precondition "cannot protect isolated managed Codex home"
+  # Codex documents that --ignore-user-config still reads authentication from
+  # CODEX_HOME. Copy only that credential file: plugin/config/session state is
+  # deliberately excluded so the controller's PreToolUse hook cannot intercept
+  # the managed implementer.
+  if [ -r "$controller_home/auth.json" ]; then
+    cp "$controller_home/auth.json" "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot stage managed Codex authentication"
+    chmod 600 "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot protect managed Codex authentication"
+  fi
+}
+
+cleanup_managed_codex_home() {
+  [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
+  case "$MANAGED_CODEX_HOME" in
+    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*)
+      rm -rf -- "$MANAGED_CODEX_HOME"
+      ;;
+    *)
+      echo "WARNING: refusing to remove unexpected managed Codex home: $MANAGED_CODEX_HOME" >&2
+      ;;
+  esac
+  MANAGED_CODEX_HOME=""
+}
+
 run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + CONTAINMENT
   if [ "${IN_DETACHED_CHILD:-0}" -eq 1 ]; then
     # In the detached child we already ARE the surviving `setsid` session (created at launch),
@@ -2828,10 +2861,13 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
 # the SAME engine invocation with ZERO behavioral difference.
 run_agent() {
 if [ "$IS_CODEX" -eq 1 ]; then
-  run_worker bash -c 'cd "$1" && exec "$5" exec --model "$2" \
+  prepare_managed_codex_home
+  run_worker bash -c 'cd "$1" && exec env -u CODEX_THREAD_ID CODEX_HOME="$6" \
+      "$5" exec --ignore-user-config --model "$2" \
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
-      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN"
+      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN" "$MANAGED_CODEX_HOME"
+  cleanup_managed_codex_home
 elif [ "$IS_CCSHIM" -eq 1 ]; then
   # cc-shim: the Claude Code CLI (`claude -p`) driving an arbitrary Anthropic-compatible
   # endpoint via ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN from the env. The MODEL (e.g.
@@ -3838,7 +3874,7 @@ dispatch_detached_run() {
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
@@ -3857,7 +3893,7 @@ dispatch_detached_run() {
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

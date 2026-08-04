@@ -168,6 +168,7 @@ function runCapability() {
       AUTOPILOT_CODEX_CONTRACT_LOG: hookLog,
       AUTOPILOT_CODEX_CONTRACT_TARGETS: JSON.stringify(targets),
     };
+    delete env.CODEX_THREAD_ID;
     const version = run('codex', ['--version'], { env });
     const marketplaceAdd = run('codex', ['plugin', 'marketplace', 'add', marketplace, '--json'], { env });
     const pluginAdd = marketplaceAdd.status === 0
@@ -288,11 +289,28 @@ function prepareCodexHome(directory) {
 
 function installAutopilot(codexHome, marketplaceRoot, envExtra = {}) {
   const env = { ...process.env, ...envExtra, CODEX_HOME: codexHome };
+  // This driver itself can run under Codex. A nested Codex must mint its own
+  // thread identity instead of inheriting the controller's CODEX_THREAD_ID.
+  delete env.CODEX_THREAD_ID;
   const marketplace = run('codex', ['plugin', 'marketplace', 'add', marketplaceRoot, '--json'], { env });
   const plugin = marketplace.status === 0
     ? run('codex', ['plugin', 'add', 'autopilot@autopilot-local', '--json'], { env })
     : { status: null, stdout: '', stderr: '' };
   return { env, marketplace, plugin };
+}
+
+function installedAutopilotRoot(codexHome, sourceRoot) {
+  const manifest = JSON.parse(fs.readFileSync(
+    path.join(sourceRoot, 'plugin', '.codex-plugin', 'plugin.json'),
+    'utf8',
+  ));
+  const root = path.join(
+    codexHome, 'plugins', 'cache', 'autopilot-local', 'autopilot', manifest.version,
+  );
+  if (!fs.existsSync(path.join(root, 'hooks', 'pre-effect.js'))) {
+    throw new Error('installed autopilot package root is unavailable');
+  }
+  return root;
 }
 
 function codexTouch(target, workspace, env) {
@@ -304,17 +322,97 @@ function codexTouch(target, workspace, env) {
   return run('codex', [
     'exec', '--ephemeral', '--ignore-rules', '--skip-git-repo-check',
     '--sandbox', 'workspace-write', '--dangerously-bypass-hook-trust',
-    '--cd', workspace, prompt,
+    '--cd', workspace, '--add-dir', path.dirname(target), prompt,
   ], { env, cwd: workspace, timeout: 180000 });
+}
+
+function findExistingCampaign(repoRoot) {
+  const probe = run('git', ['-C', repoRoot, 'rev-parse', '--git-common-dir']);
+  if (probe.status !== 0) return null;
+  const rawCommon = String(probe.stdout || '').trim();
+  const common = path.resolve(repoRoot, rawCommon);
+  const artifacts = path.join(common, 'autopilot', 'mission', 'artifacts');
+  if (!fs.existsSync(artifacts)) return null;
+  const matches = [];
+  const visit = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(target);
+      else if (entry.isFile()
+          && target.endsWith(path.join(
+            'codex-native-lifecycle-enforcement', 'attempt-1', 'campaign.json',
+          ))) {
+        matches.push(target);
+      }
+    }
+  };
+  visit(artifacts);
+  if (matches.length !== 1) return null;
+  const contract = matches[0];
+  const seal = path.join(path.dirname(contract), 'campaign.seal.json');
+  return fs.existsSync(seal) ? { contract, seal } : null;
+}
+
+function codexLifecycleSequence({
+  workspace,
+  writableDirectory,
+  env,
+  installedRoot,
+  positiveTarget,
+  l5DirectTarget,
+  engineCommand,
+}) {
+  const lifecycle = (level) => [
+    'node',
+    path.join(installedRoot, 'scripts', 'session-mode.js'),
+    'set', '--level', level, '--entry-level', level, '--repo-root', workspace,
+  ].join(' ');
+  const commands = [
+    lifecycle('l3'),
+    `touch ${positiveTarget}`,
+    lifecycle('l5'),
+    `touch ${l5DirectTarget}`,
+    engineCommand,
+  ];
+  const prompt = [
+    'Use the shell tool exactly five times as five separate calls, in this exact order.',
+    ...commands.map((command, index) => `${index + 1}. Run exactly: ${command}`),
+    'The fourth call is expected to be denied and the fifth may exit nonzero; continue through all five.',
+    'Do not combine, quote, retry, inspect, explain, simulate, or use another tool.',
+  ].join('\n');
+  const execution = run('codex', [
+    'exec', '--ephemeral', '--ignore-rules', '--skip-git-repo-check',
+    '--sandbox', 'workspace-write', '--dangerously-bypass-hook-trust',
+    '--cd', workspace, '--add-dir', writableDirectory, prompt,
+  ], { env, cwd: workspace, timeout: 240000 });
+  return { execution, commands };
+}
+
+function dispatcherSignals(execution) {
+  const transcript = `${execution.stdout || ''}\n${execution.stderr || ''}`;
+  const values = [...transcript.matchAll(/"dispatcher_called"\s*:\s*(true|false)/gu)]
+    .map((match) => match[1]);
+  return {
+    true_count: values.filter((value) => value === 'true').length,
+    false_count: values.filter((value) => value === 'false').length,
+  };
 }
 
 function stateDigest(workspace) {
   const refs = run('git', ['-C', workspace, 'for-each-ref', '--format=%(refname)%00%(objectname)']);
   const worktrees = run('git', ['-C', workspace, 'worktree', 'list', '--porcelain']);
+  const status = run('git', ['-C', workspace, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
   return {
     refs_sha256: sha256(Buffer.from(refs.stdout || '')),
     worktrees_sha256: sha256(Buffer.from(worktrees.stdout || '')),
+    status_sha256: sha256(Buffer.from(status.stdout || '')),
   };
+}
+
+function stateUnchanged(before, after) {
+  return before.refs_sha256 === after.refs_sha256
+    && before.worktrees_sha256 === after.worktrees_sha256
+    && before.status_sha256 === after.status_sha256;
 }
 
 function capabilityReady(receipt) {
@@ -351,48 +449,81 @@ function runProduction() {
   try {
     const goodHome = path.join(scratch, 'good-home');
     const brokenHome = path.join(scratch, 'broken-home');
-    const workspace = path.join(scratch, 'workspace');
     const brokenWorkspace = path.join(scratch, 'broken-workspace');
     const markers = path.join(scratch, 'markers');
     const brokenMarkers = path.join(scratch, 'broken-markers');
     const hookLog = path.join(scratch, 'pre-effect-log.jsonl');
     const targets = {
-      negative: path.join(workspace, 'NEGATIVE_SENTINEL'),
-      positive: path.join(workspace, 'POSITIVE_SENTINEL'),
+      negative: path.join(scratch, 'NEGATIVE_SENTINEL'),
+      positive: path.join(scratch, 'POSITIVE_SENTINEL'),
+      l5Direct: path.join(scratch, 'L5_DIRECT_SENTINEL'),
       broken: path.join(brokenWorkspace, 'BROKEN_SENTINEL'),
     };
-    for (const directory of [workspace, brokenWorkspace, markers, brokenMarkers]) {
+    for (const directory of [brokenWorkspace, markers, brokenMarkers]) {
       fs.mkdirSync(directory, { recursive: true });
     }
-    run('git', ['init', '-q', workspace]);
     run('git', ['init', '-q', brokenWorkspace]);
     prepareCodexHome(goodHome);
     prepareCodexHome(brokenHome);
+
+    const childIsolation = run('bash', [
+      path.join(repoRoot, 'hooks', 'tests', 'dispatch-hetero.test.sh'),
+    ], { cwd: repoRoot, timeout: 600000 });
+    const childIsolationMatch = String(childIsolation.stdout || '')
+      .match(/PASS \[dispatch-hetero\] (\d+) assertions/u);
+    const childIsolationReady = childIsolation.status === 0
+      && Number(childIsolationMatch?.[1]) >= 213;
 
     const goodInstall = installAutopilot(goodHome, sourceRoot, {
       AUTOPILOT_SESSION_MODE_DIR: markers,
       AUTOPILOT_CODEX_PRE_EFFECT_TEST_LOG: hookLog,
     });
     const version = run('codex', ['--version'], { env: goodInstall.env });
-    const goodStateBefore = stateDigest(workspace);
+    const installedRoot = goodInstall.plugin.status === 0
+      ? installedAutopilotRoot(goodHome, sourceRoot)
+      : null;
+    const goodStateBefore = stateDigest(repoRoot);
     const negative = goodInstall.plugin.status === 0
-      ? codexTouch(targets.negative, workspace, goodInstall.env)
+      ? codexTouch(targets.negative, repoRoot, goodInstall.env)
       : { status: null, signal: null, stdout: '', stderr: '' };
-    const goodStateAfterNegative = stateDigest(workspace);
+    const goodStateAfterNegative = stateDigest(repoRoot);
 
-    const markerSet = goodInstall.plugin.status === 0
-      ? run('node', [
-        path.join(sourceRoot, 'plugin', 'scripts', 'session-mode.js'),
-        'set', '--level', 'l3', '--entry-level', 'l3', '--repo-root', workspace,
-      ], {
-        cwd: workspace,
-        env: { ...goodInstall.env, AUTOPILOT_SESSION_ID: 'd4-positive-control' },
+    const campaign = findExistingCampaign(repoRoot);
+    const campaignContract = campaign
+      ? JSON.parse(fs.readFileSync(campaign.contract, 'utf8'))
+      : null;
+    const controlPrompt = path.join(scratch, 'managed-control.prompt.md');
+    writeFile(controlPrompt, 'D4 existing-campaign admission control only.\n', 0o600);
+    const engineCommand = installedRoot ? [
+      'AUTOPILOT_LEVEL=l5',
+      'node', path.join(installedRoot, 'bin', 'autopilot.js'),
+      'engine', 'implement-review',
+      '--campaign-contract', campaign ? campaign.contract : path.join(scratch, 'MISSING_CAMPAIGN.json'),
+      ...(campaign ? ['--campaign-seal', campaign.seal] : []),
+      '--prompt-file', controlPrompt,
+      '--branch', campaignContract?.branch || 'mission/d4-installed-control',
+      '--base', campaignContract?.base_sha || '0000000000000000000000000000000000000000',
+      '--cwd', repoRoot,
+      '--max-rounds', '1',
+      '--no-verify-first',
+      '--allow-unqualified-reviewer',
+      '--no-review-spec',
+    ].join(' ') : '';
+    const sequence = installedRoot
+      ? codexLifecycleSequence({
+        workspace: repoRoot,
+        writableDirectory: scratch,
+        env: goodInstall.env,
+        installedRoot,
+        positiveTarget: targets.positive,
+        l5DirectTarget: targets.l5Direct,
+        engineCommand,
       })
-      : { status: null, stdout: '', stderr: '' };
-    const positive = markerSet.status === 0
-      ? codexTouch(targets.positive, workspace, goodInstall.env)
-      : { status: null, signal: null, stdout: '', stderr: '' };
-    const goodStateAfterPositive = stateDigest(workspace);
+      : {
+        execution: { status: null, signal: null, stdout: '', stderr: '' },
+        commands: [],
+      };
+    const goodStateAfterSequence = stateDigest(repoRoot);
 
     const brokenMarketplace = path.join(scratch, 'broken-marketplace');
     fs.mkdirSync(path.join(brokenMarketplace, '.agents', 'plugins'), { recursive: true });
@@ -415,43 +546,88 @@ function runProduction() {
     const brokenStateAfter = stateDigest(brokenWorkspace);
 
     const rows = readRows(hookLog);
-    const negativeRows = rows.filter((row) => row.reason_code === 'DEV_FLOW_ENTRY_REQUIRED');
+    const negativeRows = rows.filter((row) => (
+      row.command_class === 'effect' && row.reason_code === 'DEV_FLOW_ENTRY_REQUIRED'
+    ));
+    const lifecycleRows = rows.filter((row) => row.command_class === 'lifecycle_entry');
     const positiveRows = rows.filter((row) => (
-      row.decision === 'allow' && row.marker_status === 'valid' && row.marker_level === 'l3'
+      row.command_class === 'effect'
+      && row.decision === 'allow' && row.marker_status === 'valid' && row.marker_level === 'l3'
+    ));
+    const l5DirectRows = rows.filter((row) => (
+      row.command_class === 'effect'
+      && row.decision === 'block'
+      && row.reason_code === 'DEPTH_ZERO_MUTATION_FORBIDDEN'
+      && row.marker_status === 'valid' && row.marker_level === 'l5'
+    ));
+    const managedRows = rows.filter((row) => (
+      row.command_class === 'managed_engine_entry'
+      && row.decision === 'allow' && row.reason_code === null
+      && row.marker_status === 'valid' && row.marker_level === 'l5'
     ));
     const sentinels = {
       negative: Number(fs.existsSync(targets.negative)),
       positive: Number(fs.existsSync(targets.positive)),
+      l5_direct: Number(fs.existsSync(targets.l5Direct)),
       broken: Number(fs.existsSync(targets.broken)),
     };
-    const negativeStateUnchanged = goodStateBefore.refs_sha256 === goodStateAfterNegative.refs_sha256
-      && goodStateBefore.worktrees_sha256 === goodStateAfterNegative.worktrees_sha256;
-    const positiveStateUnchanged = goodStateAfterNegative.refs_sha256 === goodStateAfterPositive.refs_sha256
-      && goodStateAfterNegative.worktrees_sha256 === goodStateAfterPositive.worktrees_sha256;
-    const brokenStateUnchanged = brokenStateBefore.refs_sha256 === brokenStateAfter.refs_sha256
-      && brokenStateBefore.worktrees_sha256 === brokenStateAfter.worktrees_sha256;
-    const ready = capabilityReady(capabilityEvidence)
+    const negativeStateUnchanged = stateUnchanged(goodStateBefore, goodStateAfterNegative);
+    const sequenceStateUnchanged = stateUnchanged(goodStateAfterNegative, goodStateAfterSequence);
+    const brokenStateUnchanged = stateUnchanged(brokenStateBefore, brokenStateAfter);
+    const sequenceRows = [...lifecycleRows, ...positiveRows, ...l5DirectRows, ...managedRows];
+    const sequenceSessionHashes = new Set(sequenceRows.map((row) => row.session_id_sha256));
+    const sequenceSessionBound = sequenceRows.length === 5
+      && sequenceSessionHashes.size === 1
+      && [...sequenceSessionHashes].every((value) => /^[a-f0-9]{64}$/u.test(value || ''));
+    const expectedManagedCommandSha256 = sha256(Buffer.from(engineCommand));
+    const exactManagedEntry = managedRows.length === 1
+      && managedRows[0].command_sha256 === expectedManagedCommandSha256;
+    const managedSignals = dispatcherSignals(sequence.execution);
+    const managedDispatcherReady = exactManagedEntry
+      && managedSignals.true_count === 1
+      && managedSignals.false_count === 0;
+    const installedManifest = installedRoot
+      ? fs.readFileSync(path.join(installedRoot, '.codex-plugin', 'plugin.json'))
+      : Buffer.alloc(0);
+    const installedAdapter = installedRoot
+      ? fs.readFileSync(path.join(installedRoot, 'hooks', 'pre-effect.js'))
+      : Buffer.alloc(0);
+    const installedHookManifest = installedRoot
+      ? fs.readFileSync(path.join(installedRoot, 'hooks', 'hooks.json'))
+      : Buffer.alloc(0);
+    const generatedAdapter = fs.readFileSync(path.join(sourceRoot, 'plugin', 'hooks', 'pre-effect.js'));
+    const exactInstalledAdapter = installedAdapter.length > 0
+      && sha256(installedAdapter) === sha256(generatedAdapter);
+    const hookControlsReady = capabilityReady(capabilityEvidence)
       && version.status === 0
       && goodInstall.marketplace.status === 0
       && goodInstall.plugin.status === 0
       && brokenInstall.marketplace.status === 0
       && brokenInstall.plugin.status === 0
       && negative.status === 0
-      && positive.status === 0
+      && sequence.execution.status === 0
       && broken.status === 0
-      && markerSet.status === 0
       && negativeRows.length === 1
+      && lifecycleRows.length === 2
       && positiveRows.length === 1
+      && l5DirectRows.length === 1
+      && exactManagedEntry
+      && sequenceSessionBound
+      && childIsolationReady
       && sentinels.negative === 0
       && sentinels.positive === 1
+      && sentinels.l5_direct === 0
       && sentinels.broken === 1
-      && negativeStateUnchanged && positiveStateUnchanged && brokenStateUnchanged;
-    const productionManifest = fs.readFileSync(
-      path.join(sourceRoot, 'plugin', '.codex-plugin', 'plugin.json'),
-    );
-    const productionAdapter = fs.readFileSync(path.join(sourceRoot, 'plugin', 'hooks', 'pre-effect.js'));
+      && negativeStateUnchanged && sequenceStateUnchanged && brokenStateUnchanged
+      && exactInstalledAdapter;
+    const ready = hookControlsReady && managedDispatcherReady;
+    const terminalBlocker = !hookControlsReady
+      ? 'installed-package lifecycle controls did not reproduce exactly'
+      : !managedDispatcherReady
+        ? 'the sole existing campaign is bound to the pre-amendment Mission projection; no new campaign/work-order authority was available, so the exact managed Engine entry stopped before dispatcher invocation'
+        : null;
     const receiptBody = {
-      schema_version: 2,
+      schema_version: 3,
       artifact_type: 'codex_pre_effect_production_receipt',
       observed_at: new Date().toISOString(),
       codex_version: String(version.stdout || version.stderr || '').trim(),
@@ -460,8 +636,11 @@ function runProduction() {
         event: 'PreToolUse',
         matcher: '.*',
         denial: { decision: 'block', reason_code: 'DEV_FLOW_ENTRY_REQUIRED' },
-        installed_plugin_manifest_sha256: sha256(productionManifest),
-        production_adapter_sha256: sha256(productionAdapter),
+        installed_plugin_manifest_sha256: sha256(installedManifest),
+        installed_hook_manifest_sha256: sha256(installedHookManifest),
+        production_adapter_sha256: sha256(installedAdapter),
+        generated_adapter_sha256: sha256(generatedAdapter),
+        installed_adapter_matches_generated_payload: exactInstalledAdapter,
       },
       controls: {
         negative_no_admission: {
@@ -472,12 +651,49 @@ function runProduction() {
           transcript_sha256: sha256(Buffer.from(`${negative.stdout || ''}\0${negative.stderr || ''}`)),
         },
         positive_canonical_l3: {
-          marker_set_exit_status: markerSet.status,
+          lifecycle_entry_hook_invocations: lifecycleRows.filter((row) => (
+            row.command_sha256 === sha256(Buffer.from(sequence.commands[0] || ''))
+          )).length,
           hook_invocations: positiveRows.length,
-          cli_exit_status: positive.status,
+          cli_exit_status: sequence.execution.status,
           sentinel_count: sentinels.positive,
-          git_refs_and_worktrees_unchanged: positiveStateUnchanged,
-          transcript_sha256: sha256(Buffer.from(`${positive.stdout || ''}\0${positive.stderr || ''}`)),
+          session_bound_to_hook_payload: sequenceSessionBound,
+          transcript_sha256: sha256(Buffer.from(
+            `${sequence.execution.stdout || ''}\0${sequence.execution.stderr || ''}`,
+          )),
+        },
+        l5_direct_denial: {
+          lifecycle_entry_hook_invocations: lifecycleRows.filter((row) => (
+            row.command_sha256 === sha256(Buffer.from(sequence.commands[2] || ''))
+          )).length,
+          hook_invocations: l5DirectRows.length,
+          sentinel_count: sentinels.l5_direct,
+          reason_code: 'DEPTH_ZERO_MUTATION_FORBIDDEN',
+          session_bound_to_same_hook_payload: sequenceSessionBound,
+        },
+        managed_engine_entry: {
+          hook_invocations: managedRows.length,
+          expected_command_sha256: expectedManagedCommandSha256,
+          observed_exact_command_hash: exactManagedEntry,
+          existing_campaign_reused: Boolean(campaign),
+          campaign_contract_sha256: campaign ? sha256(fs.readFileSync(campaign.contract)) : null,
+          campaign_seal_sha256: campaign ? sha256(fs.readFileSync(campaign.seal)) : null,
+          dispatcher_called_true_count: managedSignals.true_count,
+          dispatcher_called_false_count: managedSignals.false_count,
+          exactly_one_managed_dispatcher_path: managedDispatcherReady,
+          child_isolation_assertion: {
+            actual_runner_test_exit_status: childIsolation.status,
+            assertion_count: childIsolationMatch ? Number(childIsolationMatch[1]) : 0,
+            controller_config_plugins_and_thread_absent: childIsolationReady,
+            dispatch_script_sha256: sha256(fs.readFileSync(
+              path.join(sourceRoot, 'plugin', 'scripts', 'dispatch-hetero.sh'),
+            )),
+            test_transcript_sha256: sha256(Buffer.from(
+              `${childIsolation.stdout || ''}\0${childIsolation.stderr || ''}`,
+            )),
+          },
+          new_campaign_or_work_order_created: false,
+          git_state_unchanged: sequenceStateUnchanged,
         },
         broken_adapter: {
           adapter_exit_status: 17,
@@ -490,9 +706,15 @@ function runProduction() {
         },
       },
       model_calls: 3,
-      verdict: ready ? 'READY' : 'BLOCKED',
+      model_call_budget: {
+        installed_codex_sessions: 3,
+        managed_dispatcher_calls: managedSignals.true_count,
+      },
+      verdict: ready ? 'READY' : 'NOT_READY',
       d1_verdict: capabilityReady(capabilityEvidence) ? 'READY' : 'BLOCKED',
-      d4_verdict: ready ? 'READY' : 'BLOCKED',
+      d4_verdict: ready ? 'READY' : 'NOT_READY',
+      hook_controls_verdict: hookControlsReady ? 'READY' : 'BLOCKED',
+      terminal_blocker: terminalBlocker,
       known_limitation: 'On Codex 0.146.0, a PreToolUse command adapter that exits nonzero before emitting a structured denial fails open; this production gate does not claim adapter-failure fail-closed semantics.',
     };
     const receipt = { ...receiptBody, receipt_sha256: sha256(Buffer.from(JSON.stringify(receiptBody))) };

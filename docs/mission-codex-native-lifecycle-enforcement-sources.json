@@ -4,8 +4,14 @@
     {
       "plan_path": "plans/2026-08-05-codex-native-lifecycle-enforcement.md",
       "rubric_path": "plans/2026-08-05-codex-native-lifecycle-enforcement.rubric.md",
-      "plan_sha256": "4ab42a416b3c54a80c1222a70b41df85e66725633974e3fc4a195fd76392be27",
-      "rubric_sha256": "bd88c019621b0f6f3cd0508ed4c06bba91e722bd9853bdb2e8cd5a328ead4d1a"
+      "plan_sha256": "ad07704815222d6f887e64b92f80f59b3598ca0cde54e132f5852e67baf71fa7",
+      "rubric_sha256": "6646017a022999ab7babff7d2c16341c9c7d70893f6cb34bfab93ce04ab2a236"
+    },
+    {
+      "plan_path": "plans/2026-08-05-codex-native-lifecycle-enforcement-amendment.md",
+      "rubric_path": "plans/2026-08-05-codex-native-lifecycle-enforcement-amendment.rubric.md",
+      "plan_sha256": "d5562feae8b63ce97b804fab9511cea3f52e1895637e75b523cfc533c75a914b",
+      "rubric_sha256": "ff32d728b4f9a716fa4151398e282e0f5da50b1da61303915bbaf8530bbe2745"
     }
   ]
 }

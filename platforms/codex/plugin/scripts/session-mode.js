@@ -5,7 +5,7 @@
  * Written by depth-0 at /l3 /l4 /l5 /l6 entry; read by the orchestrator-edit-gate
  * and context-budget hooks. One marker file per session id:
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
- *   { level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
+ *   { session_id, level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
  *     mission_routing? }
  *
  * Design notes (see docs/plans/2026-07-14-context-budget-orchestrator-gate.md):
@@ -99,14 +99,21 @@ function markerDir() {
     || path.join(os.homedir(), '.autopilot', 'session-mode');
 }
 
-// AUTOPILOT_SESSION_ID is the portable controller-to-managed-child binding.
-// Claude retains its historical fallback chain; cwd remains the legacy fallback.
+function normalizeSessionId(raw) {
+  return String(raw || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+}
+
+// Codex supplies the host thread identity to every shell command. The portable
+// explicit binding remains first for managed/controller callers; an ordinary
+// Codex lifecycle entry does not set it and therefore binds to CODEX_THREAD_ID.
+// Other controllers retain the historical fallback chain; cwd remains last.
 function getSessionId() {
   const raw = process.env.AUTOPILOT_SESSION_ID
     || process.env.CLAUDE_CODE_SESSION_ID
     || process.env.CLAUDE_SESSION_ID
+    || process.env.CODEX_THREAD_ID
     || process.cwd();
-  return raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+  return normalizeSessionId(raw);
 }
 
 function markerPath() {
@@ -292,8 +299,14 @@ function validateManagedDevFlowAdmission({
   }
   if (!marker || typeof marker !== 'object' || Array.isArray(marker)
       || !LEVELS.has(marker.level)
+      || typeof marker.session_id !== 'string'
+      || !marker.session_id
+      || normalizeSessionId(marker.session_id) !== marker.session_id
       || typeof marker.repo_root !== 'string' || !path.isAbsolute(marker.repo_root)) {
     return reject('session marker malformed: identity fields are invalid');
+  }
+  if (marker.session_id !== getSessionId()) {
+    return reject('session marker session mismatch');
   }
   const startedAt = Date.parse(marker.started_at);
   const expiresAt = Date.parse(marker.expires_at);
@@ -389,6 +402,7 @@ function cmdSet(args) {
   // Surface ordinary zero-spend no-op adoption on the marker for consumers.
   const now = Date.now();
   const marker = {
+    session_id: getSessionId(),
     level,
     repo_root: repoRoot,
     started_at: new Date(now).toISOString(),
@@ -587,6 +601,7 @@ module.exports = {
   devFlowAdmissionRejection,
   readMarker,
   getSessionId,
+  normalizeSessionId,
   markerPath,
   markerRepoIdentity,
   validateManagedDevFlowAdmission,

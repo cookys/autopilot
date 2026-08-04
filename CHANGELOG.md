@@ -31,8 +31,8 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   entry to packaged `session-mode`, maps managed work to the sealed Mission/Engine route, and forbids
   imitating unavailable Claude task/agent primitives. Canonical tails remain byte-exact.
 - One strict managed-admission validator shared by the CLI, Engine, and campaign dispatcher. It binds
-  TTL, effective level, Git common-dir, and digest-sealed Mission policy/graph/source authority before
-  provider readiness or any managed effect.
+  TTL, effective level, Git common-dir, host payload session identity, and digest-sealed Mission
+  policy/graph/source authority before provider readiness or any managed effect.
 - A production Codex `PreToolUse` `.*` adapter using the live-proven structured stdout denial contract.
   It reuses the shared edit-gate decision core, preserves `/l3`, blocks effect-capable depth-0 work in
   `/l4`–`/l6`, and keeps fixed lifecycle/managed-Engine entry commands available.
@@ -41,13 +41,22 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - Managed admission failures now use `DEV_FLOW_ADMISSION_REQUIRED_OR_STALE` with zero dispatcher,
   model, mutation, and resource counters for absent, expired, malformed, repository-mismatched,
   level-mismatched, and Mission-mismatched markers.
+- Codex managed children now receive a temporary credentials-only `CODEX_HOME`, no inherited
+  `CODEX_THREAD_ID`, and `--ignore-user-config`; controller config, plugins, and session state stay
+  outside the child boundary.
+- Git spawn failures, timeouts, signals, and unexpected exits now deny effect-capable Codex tools,
+  while only a genuine Git non-repository result remains a safe no-op.
+- The frozen implementation plan and rubric were restored byte-for-byte. User-directed corrections
+  live in a separately hashed, separately reviewable amendment and rubric attached to the same D4
+  graph node.
 
 ### Boundary
-- Installed Codex 0.146.0 negative/positive controls prove structured `PreToolUse` denial blocks the
-  target while a canonical `/l3` marker allows it. The exit-17 broken control separately remains
-  fail-open: the mutation occurs and the CLI exits zero. D1/D4 are READY for structured denial, but
-  adapter-process failure is explicitly outside the fail-closed claim. The existing `PostCompact`
-  adapter remains unchanged as the separate recovery boundary.
+- Installed Codex 0.146.0 controls reproduce no-admission structured denial and exit-17 fail-open
+  behavior with the exact shipped adapter hash. The final lifecycle sequence admitted its two fixed
+  entry commands but did not expose a payload-session marker to the following L3/L5 effect calls;
+  L3 allow, L5 direct-deny classification, and managed Engine admission therefore did not qualify.
+  D4 is NOT_READY, with zero dispatcher calls and no replacement campaign/work-order authority.
+  The existing `PostCompact` adapter remains unchanged as the separate recovery boundary.
 
 ## v2.34.4 — Clean-checkout CI fixture portability
 

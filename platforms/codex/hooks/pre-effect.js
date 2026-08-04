@@ -8,12 +8,12 @@
 // denial. A host/process failure before stdout remains a documented limitation.
 
 const fs = require('fs');
+const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
 const MAX_PAYLOAD_BYTES = 1024 * 1024;
-const MAX_MARKER_FILES = 128;
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const EFFECT_CAPABLE_TOOLS = new Set([
   'bash',
@@ -58,12 +58,16 @@ function quoteVariants(value) {
   return [...variants];
 }
 
-function stripSafeSessionAssignment(command) {
-  return command.replace(/^AUTOPILOT_SESSION_ID=[A-Za-z0-9_-]{1,64}\s+/u, '');
+function stripBoundSessionAssignment(command, payloadSessionId, sessionMode) {
+  const match = command.match(/^AUTOPILOT_SESSION_ID=([A-Za-z0-9_-]{1,64})\s+/u);
+  if (!match) return command;
+  if (match[1] !== sessionMode.normalizeSessionId(payloadSessionId)) return null;
+  return command.slice(match[0].length);
 }
 
-function isLifecycleEntry(command, root, repoRoot) {
-  let rest = stripSafeSessionAssignment(command);
+function isLifecycleEntry(command, root, repoRoot, payloadSessionId, sessionMode) {
+  const rest = stripBoundSessionAssignment(command, payloadSessionId, sessionMode);
+  if (rest === null) return false;
   if (/[\n\r;&|<>`$]/u.test(rest)) return false;
   const scripts = quoteVariants(path.join(root, 'scripts', 'session-mode.js'));
   const repos = quoteVariants(repoRoot);
@@ -83,11 +87,9 @@ function isLifecycleEntry(command, root, repoRoot) {
   return false;
 }
 
-function isManagedEngineEntry(command, root) {
-  let rest = command;
-  const session = rest.match(/^AUTOPILOT_SESSION_ID=([A-Za-z0-9_-]{1,64})\s+/u);
-  if (!session) return false;
-  rest = rest.slice(session[0].length);
+function isManagedEngineEntry(command, root, payloadSessionId, sessionMode) {
+  let rest = stripBoundSessionAssignment(command, payloadSessionId, sessionMode);
+  if (rest === null) return false;
   const level = rest.match(/^AUTOPILOT_LEVEL=(l4|l5|l6)\s+/u);
   if (!level) return false;
   rest = rest.slice(level[0].length);
@@ -99,14 +101,16 @@ function isManagedEngineEntry(command, root) {
   ));
 }
 
-function gitRoot(cwd) {
+function gitRoot(cwd, classify) {
   const result = spawnSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
+    stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 5000,
   });
-  return result.status === 0 && result.stdout.trim()
-    ? path.resolve(result.stdout.trim()) : null;
+  const classified = classify(result);
+  return classified.status === 'repository'
+    ? { ...classified, root: path.resolve(classified.root) }
+    : classified;
 }
 
 function markerDirectory() {
@@ -137,11 +141,19 @@ function readCurrentMissionProjection(root, sessionMode) {
   };
 }
 
-function validateMarker(marker, repoRoot, sessionMode, now) {
+function validateMarker(marker, repoRoot, payloadSessionId, sessionMode, now) {
+  const sessionKey = sessionMode.normalizeSessionId(payloadSessionId);
   if (!marker || typeof marker !== 'object' || Array.isArray(marker)
       || !LEVELS.has(marker.level)
+      || marker.session_id !== sessionKey
       || typeof marker.repo_root !== 'string' || !path.isAbsolute(marker.repo_root)) {
-    return { valid: false, status: 'malformed', reason: 'session marker identity is malformed' };
+    return {
+      valid: false,
+      status: marker && marker.session_id !== sessionKey ? 'wrong_session' : 'malformed',
+      reason: marker && marker.session_id !== sessionKey
+        ? 'session marker host-session mismatch'
+        : 'session marker identity is malformed',
+    };
   }
   const repoIdentity = sessionMode.markerRepoIdentity(repoRoot);
   const markerIdentity = sessionMode.markerRepoIdentity(marker.repo_root);
@@ -181,51 +193,34 @@ function validateMarker(marker, repoRoot, sessionMode, now) {
   return { valid: true, status: 'valid', reason: null, marker };
 }
 
-function findMarker(repoRoot, sessionMode) {
+function findMarker(repoRoot, payloadSessionId, sessionMode) {
   const directory = markerDirectory();
-  let entries;
+  const sessionKey = sessionMode.normalizeSessionId(payloadSessionId);
+  if (!sessionKey) {
+    return { status: 'wrong_session', reason: 'host session identity is invalid', marker: null };
+  }
+  const markerFile = path.join(directory, `${sessionKey}.json`);
+  let stat;
   try {
-    entries = fs.readdirSync(directory, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.json'));
+    stat = fs.lstatSync(markerFile);
   } catch (error) {
     if (error.code === 'ENOENT') {
       return { status: 'absent', reason: 'session marker absent', marker: null };
     }
     return { status: 'malformed', reason: `session marker directory unreadable: ${error.message}`, marker: null };
   }
-  if (entries.length > MAX_MARKER_FILES) {
-    return { status: 'ambiguous', reason: 'session marker namespace exceeds the bounded scan', marker: null };
+  if (!stat.isFile()) {
+    return { status: 'malformed', reason: 'session marker is not a regular file', marker: null };
   }
-  const matching = [];
-  let malformed = null;
-  const targetIdentity = sessionMode.markerRepoIdentity(repoRoot);
-  for (const entry of entries) {
-    let marker;
-    try {
-      marker = JSON.parse(fs.readFileSync(path.join(directory, entry.name), 'utf8'));
-    } catch (error) {
-      malformed = `session marker malformed: ${error.message}`;
-      continue;
-    }
-    if (!marker || typeof marker.repo_root !== 'string') {
-      malformed = 'session marker identity is malformed';
-      continue;
-    }
-    if (sessionMode.markerRepoIdentity(marker.repo_root) === targetIdentity) matching.push(marker);
+  let marker;
+  try {
+    marker = JSON.parse(fs.readFileSync(markerFile, 'utf8'));
+  } catch (error) {
+    return { status: 'malformed', reason: `session marker malformed: ${error.message}`, marker: null };
   }
-  if (matching.length > 1) {
-    return { status: 'ambiguous', reason: 'multiple session markers match this Git common-dir', marker: null };
-  }
-  if (matching.length === 0) {
-    return {
-      status: malformed ? 'malformed' : 'absent',
-      reason: malformed || 'session marker absent or belongs to another repository',
-      marker: null,
-    };
-  }
-  const result = validateMarker(matching[0], repoRoot, sessionMode, Date.now());
+  const result = validateMarker(marker, repoRoot, payloadSessionId, sessionMode, Date.now());
   return result.valid
-    ? { status: 'valid', reason: null, marker: matching[0] }
+    ? { status: 'valid', reason: null, marker }
     : { status: result.status, reason: result.reason, marker: null };
 }
 
@@ -248,39 +243,63 @@ function emitBlock(reason) {
     if (!payload || payload.hook_event_name !== 'PreToolUse'
         || typeof payload.cwd !== 'string' || !path.isAbsolute(payload.cwd)
         || typeof payload.tool_name !== 'string'
-        || typeof payload.session_id !== 'string' || payload.session_id.length === 0
+        || typeof payload.session_id !== 'string'
+        || !/^[A-Za-z0-9_-]{1,64}$/u.test(payload.session_id)
         || !payload.tool_input || typeof payload.tool_input !== 'object'
         || Array.isArray(payload.tool_input)) {
       throw new Error('PreToolUse payload identity is invalid');
     }
-    const repoRoot = gitRoot(payload.cwd);
     const toolName = normalizedToolName(payload.tool_name);
-    logRow = { ...logRow, tool_name: toolName || 'invalid' };
-    if (!repoRoot) {
-      logRow = { ...logRow, decision: 'allow', reason_code: null, marker_status: 'not_applicable' };
-      appendTestLog(logRow);
-      return;
-    }
-    const { root, decision, sessionMode } = support();
-    const command = commandFrom(payload);
+    logRow = {
+      ...logRow,
+      tool_name: toolName || 'invalid',
+      session_id_sha256: crypto.createHash('sha256').update(payload.session_id).digest('hex'),
+    };
     const effectCapable = EFFECT_CAPABLE_TOOLS.has(toolName);
     if (!effectCapable) {
       logRow = { ...logRow, decision: 'allow', reason_code: null, marker_status: 'not_applicable' };
       appendTestLog(logRow);
       return;
     }
-    const lifecycleEntry = isLifecycleEntry(command, root, repoRoot);
-    if (lifecycleEntry) {
-      logRow = { ...logRow, decision: 'allow', reason_code: null, marker_status: 'lifecycle_entry' };
+    const { root, decision, sessionMode } = support();
+    const repo = gitRoot(payload.cwd, decision.classifyCodexGitProbe);
+    if (repo.status === 'not_repository') {
+      logRow = { ...logRow, decision: 'allow', reason_code: null, marker_status: 'not_applicable' };
       appendTestLog(logRow);
       return;
     }
-    const marker = findMarker(repoRoot, sessionMode);
+    if (repo.status !== 'repository') {
+      throw new Error(repo.reason || 'Git repository identity is unavailable');
+    }
+    const repoRoot = repo.root;
+    const command = commandFrom(payload);
+    logRow = {
+      ...logRow,
+      command_sha256: crypto.createHash('sha256').update(command).digest('hex'),
+    };
+    const lifecycleEntry = isLifecycleEntry(
+      command, root, repoRoot, payload.session_id, sessionMode,
+    );
+    if (lifecycleEntry) {
+      logRow = {
+        ...logRow,
+        decision: 'allow',
+        reason_code: null,
+        marker_status: 'lifecycle_entry',
+        command_class: 'lifecycle_entry',
+      };
+      appendTestLog(logRow);
+      return;
+    }
+    const marker = findMarker(repoRoot, payload.session_id, sessionMode);
+    const managedEngineEntry = isManagedEngineEntry(
+      command, root, payload.session_id, sessionMode,
+    );
     const policy = decision.decideCodexPreEffect({
       inRepository: true,
       effectCapable,
       lifecycleEntry: false,
-      managedEngineEntry: isManagedEngineEntry(command, root),
+      managedEngineEntry,
       markerStatus: marker.status,
       markerReason: marker.reason,
       markerLevel: marker.marker && marker.marker.level,
@@ -291,6 +310,7 @@ function emitBlock(reason) {
       reason_code: policy.reasonCode,
       marker_status: marker.status,
       marker_level: marker.marker ? marker.marker.level : null,
+      command_class: managedEngineEntry ? 'managed_engine_entry' : 'effect',
     };
     appendTestLog(logRow);
     if (policy.action === 'gate') emitBlock(policy.reason);

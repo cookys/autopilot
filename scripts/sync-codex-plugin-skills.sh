@@ -5,7 +5,7 @@
 # platforms/codex/plugin/skills must be a real directory. The copied skills also
 # reference repo-level support files through relative paths, so this script copies
 # the supporting references/scripts/templates/docs needed by the skill text while
-# keeping the Codex manifest and production PostCompact hook payload generated.
+# keeping the Codex manifest and production PreToolUse/PostCompact hook payload generated.
 #
 # Usage:
 #   scripts/sync-codex-plugin-skills.sh          # rebuild committed mirror
@@ -86,8 +86,12 @@ HOOK_BASELINE_SOURCE="hooks/hooks.json"
 HOOK_BASELINE_DEST="profiles/baselines/claude-hooks.json"
 CODEX_HOOK_MANIFEST_SOURCE="platforms/codex/hooks/hooks.json"
 CODEX_HOOK_MANIFEST_DEST="hooks/hooks.json"
+CODEX_PREEFFECT_SOURCE="platforms/codex/hooks/pre-effect.js"
+CODEX_PREEFFECT_DEST="hooks/pre-effect.js"
 CODEX_POSTCOMPACT_SOURCE="platforms/codex/hooks/post-compact.js"
 CODEX_POSTCOMPACT_DEST="hooks/post-compact.js"
+CODEX_EDIT_GATE_LIB_SOURCE="hooks/orchestrator-edit-gate-lib.js"
+CODEX_EDIT_GATE_LIB_DEST="hooks/orchestrator-edit-gate-lib.js"
 PLUGIN_MANIFEST="$PLUGIN/.codex-plugin/plugin.json"
 
 if [ ! -d "$SRC" ]; then
@@ -398,11 +402,11 @@ try {
 }
 const failures = [];
 if (manifest.hooks !== './hooks/hooks.json') failures.push('hooks must equal ./hooks/hooks.json');
-if (!/production PostCompact recovery hook/.test(manifest.description || '')) {
-  failures.push('description must declare the production PostCompact recovery hook');
+if (!/production PreToolUse lifecycle gate and PostCompact recovery hook/.test(manifest.description || '')) {
+  failures.push('description must declare the production PreToolUse lifecycle gate and PostCompact recovery hook');
 }
-if (!/production PostCompact recovery hook/.test(manifest.interface?.longDescription || '')) {
-  failures.push('interface.longDescription must declare the production PostCompact recovery hook');
+if (!/production PreToolUse lifecycle gate and PostCompact recovery hook/.test(manifest.interface?.longDescription || '')) {
+  failures.push('interface.longDescription must declare the production PreToolUse lifecycle gate and PostCompact recovery hook');
 }
 if (failures.length > 0) {
   for (const failure of failures) console.log(`drift: plugin manifest ${failure}`);
@@ -416,12 +420,12 @@ sync_plugin_manifest() {
 const fs = require('fs');
 const manifestPath = process.argv[2];
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-manifest.description = 'Autopilot methodology skills for Codex with bundled support CLI/scripts and a production PostCompact recovery hook.';
+manifest.description = 'Autopilot methodology skills for Codex with bundled support CLI/scripts and a production PreToolUse lifecycle gate and PostCompact recovery hook.';
 manifest.hooks = './hooks/hooks.json';
 if (!manifest.interface || typeof manifest.interface !== 'object' || Array.isArray(manifest.interface)) {
   throw new Error('Codex plugin interface must be an object');
 }
-manifest.interface.longDescription = 'Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The package payload bundles support CLI, scripts, references, templates, shared helpers, and a production PostCompact recovery hook that invokes the existing fail-closed reconciliation authority.';
+manifest.interface.longDescription = 'Autopilot brings its portable lifecycle, planning, verification, review, and cross-harness maintenance skills into Codex. The package payload bundles support CLI, scripts, references, templates, shared helpers, and a production PreToolUse lifecycle gate and PostCompact recovery hook. PreToolUse uses the live-proven structured denial contract; PostCompact invokes the existing fail-closed reconciliation authority.';
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 NODE
 }
@@ -479,11 +483,14 @@ if [ "$MODE" = "check" ]; then
   done
   check_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST" || STATUS=1
   check_mapped_file "$CODEX_HOOK_MANIFEST_SOURCE" "$CODEX_HOOK_MANIFEST_DEST" || STATUS=1
+  check_mapped_file "$CODEX_PREEFFECT_SOURCE" "$CODEX_PREEFFECT_DEST" || STATUS=1
   check_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST" || STATUS=1
+  check_mapped_file "$CODEX_EDIT_GATE_LIB_SOURCE" "$CODEX_EDIT_GATE_LIB_DEST" || STATUS=1
   check_mapped_file "platforms/codex/skill-adapters/lifecycle.md" \
     "$LIFECYCLE_ADAPTER_DEST" || STATUS=1
   check_exact_directory_entries "profiles/baselines" "claude-hooks.json" || STATUS=1
-  check_exact_directory_entries "hooks" "_shared" "hooks.json" "post-compact.js" || STATUS=1
+  check_exact_directory_entries "hooks" "_shared" "hooks.json" "orchestrator-edit-gate-lib.js" \
+    "post-compact.js" "pre-effect.js" || STATUS=1
   check_plugin_manifest || STATUS=1
   check_doc_extras || STATUS=1
 
@@ -511,7 +518,9 @@ done
 copy_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST"
 clean_hooks_root
 copy_mapped_file "$CODEX_HOOK_MANIFEST_SOURCE" "$CODEX_HOOK_MANIFEST_DEST"
+copy_mapped_file "$CODEX_PREEFFECT_SOURCE" "$CODEX_PREEFFECT_DEST"
 copy_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST"
+copy_mapped_file "$CODEX_EDIT_GATE_LIB_SOURCE" "$CODEX_EDIT_GATE_LIB_DEST"
 copy_mapped_file "platforms/codex/skill-adapters/lifecycle.md" "$LIFECYCLE_ADAPTER_DEST"
 sync_plugin_manifest
 

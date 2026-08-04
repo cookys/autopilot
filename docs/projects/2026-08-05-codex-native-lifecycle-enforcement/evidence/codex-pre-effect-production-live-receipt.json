@@ -1,48 +1,117 @@
 {
-  "schema_version": 1,
-  "artifact_type": "codex_pre_effect_contract_receipt",
-  "observed_at": "2026-08-04T16:59:12.145Z",
+  "schema_version": 2,
+  "artifact_type": "codex_pre_effect_production_receipt",
+  "observed_at": "2026-08-04T18:44:25.173Z",
   "codex_version": "codex-cli 0.146.0",
-  "installed_plugin_manifest_sha256": "df8d9d4d6b7720e7181e0519dd958f15117cb5ac4c65a7e72e31a341a891307f",
-  "probe_adapter_sha256": "3aa0241d5e6b7a254a8cdc83bf4e538dcc668865e53057378ec47c1aefe9130e",
-  "hook_manifest_sha256": "bb0a8c8c677df56fde002d9fa93881f3b32bfbacd1eac63de6ad89f2f8d90971",
-  "transcript_sha256": "7ac125268f8e0dee7bcbd5e6514570ae7bc75ac61a6f70a896ec07d8c2470911",
-  "payload_contract": {
+  "capability_evidence": {
+    "schema_version": 1,
+    "artifact_type": "codex_pre_effect_contract_receipt",
+    "observed_at": "2026-08-04T16:59:12.145Z",
+    "codex_version": "codex-cli 0.146.0",
+    "installed_plugin_manifest_sha256": "df8d9d4d6b7720e7181e0519dd958f15117cb5ac4c65a7e72e31a341a891307f",
+    "probe_adapter_sha256": "3aa0241d5e6b7a254a8cdc83bf4e538dcc668865e53057378ec47c1aefe9130e",
+    "hook_manifest_sha256": "bb0a8c8c677df56fde002d9fa93881f3b32bfbacd1eac63de6ad89f2f8d90971",
+    "transcript_sha256": "7ac125268f8e0dee7bcbd5e6514570ae7bc75ac61a6f70a896ec07d8c2470911",
+    "payload_contract": {
+      "event": "PreToolUse",
+      "matcher": ".*",
+      "cwd_stable": true,
+      "tool_name_stable": true,
+      "session_identity_stable": true
+    },
+    "denial_contract": {
+      "structured_stdout": {
+        "decision": "block",
+        "reason": "AUTOPILOT_PRE_EFFECT_DENY_CONTROL"
+      },
+      "broken_adapter_exit_status": 17,
+      "cli_exit_nonzero": false
+    },
+    "effect_sentinel_counts": {
+      "allow": 1,
+      "deny": 0,
+      "broken": 1
+    },
+    "hook_action_counts": {
+      "allow": 1,
+      "deny": 1,
+      "broken": 1
+    },
+    "installer": {
+      "marketplace_exit_status": 0,
+      "plugin_exit_status": 0
+    },
+    "execution": {
+      "exit_status": 0,
+      "signal": null
+    },
+    "verdict": "READY",
+    "structured_deny_verdict": "READY",
+    "production_pretooluse_allowed": true,
+    "d4_verdict": "PENDING_PRODUCTION_PROOF",
+    "broken_adapter_semantics": "DOCUMENTED_FAIL_OPEN",
+    "known_limitations": [
+      "Codex 0.146.0 continues the tool call when a PreToolUse command adapter exits 17 without a structured denial.",
+      "Production enforcement does not claim fail-closed behavior when the adapter process cannot emit structured stdout."
+    ],
+    "terminal_blocker": null,
+    "superseded_qc_classification": {
+      "verdict": "BLOCKED",
+      "production_pretooluse_allowed": false,
+      "d4_verdict": "BLOCKED",
+      "terminal_blocker": "broken PreToolUse command failed open: mutation occurred and Codex exited zero",
+      "receipt_sha256": "e5f134a7902c1ddd90f331e3fe6be2e59eca1c063246bf1dc8e670582678c1ee"
+    },
+    "receipt_sha256": "df0a546e66dd60bc6f85451e6568ecf12ecea3b512e49730403bd0d6ecd7d19a"
+  },
+  "production_contract": {
     "event": "PreToolUse",
     "matcher": ".*",
-    "cwd_stable": true,
-    "tool_name_stable": true,
-    "session_identity_stable": true
-  },
-  "denial_contract": {
-    "structured_stdout": {
+    "denial": {
       "decision": "block",
-      "reason": "AUTOPILOT_PRE_EFFECT_DENY_CONTROL"
+      "reason_code": "DEV_FLOW_ENTRY_REQUIRED"
     },
-    "broken_adapter_exit_status": 17,
-    "cli_exit_nonzero": false
+    "installed_plugin_manifest_sha256": "d066184ef41a00168cf89ee54365740284f519eb69bcd0a36d27192bb7fac008",
+    "production_adapter_sha256": "a0b4a364f5351ad0dbb342fb220354dfc4633f8ac53ab6de277a6f091b194e07"
   },
-  "effect_sentinel_counts": {
-    "allow": 1,
-    "deny": 0,
-    "broken": 1
+  "post_live_repair": {
+    "live_tested_adapter_sha256": "a0b4a364f5351ad0dbb342fb220354dfc4633f8ac53ab6de277a6f091b194e07",
+    "final_adapter_sha256": "3274a72ee905095335e212b0bb8491e7bc6c1c8e314a3a087264a10483fd0f3a",
+    "reason": "Run read-only and exact lifecycle-entry early returns before marker/Mission validation so a stale projection cannot deadlock its own repair path.",
+    "live_control_paths_changed": false,
+    "deterministic_control": "node --test hooks/orchestrator-edit-gate.test.js (30/30)",
+    "live_rerun": false,
+    "live_rerun_reason": "The controlling request reserved exactly one D4 installed-Codex negative/positive/broken run; the repair does not change those three exercised branches."
   },
-  "hook_action_counts": {
-    "allow": 1,
-    "deny": 1,
-    "broken": 1
+  "controls": {
+    "negative_no_admission": {
+      "hook_invocations": 1,
+      "cli_exit_status": 0,
+      "sentinel_count": 0,
+      "git_state_unchanged": true,
+      "transcript_sha256": "ea3871e1484c53b2173bbb403d0347ac3ae542e1c42f0bfbe98aaccc51ca54f3"
+    },
+    "positive_canonical_l3": {
+      "marker_set_exit_status": 0,
+      "hook_invocations": 1,
+      "cli_exit_status": 0,
+      "sentinel_count": 1,
+      "git_refs_and_worktrees_unchanged": true,
+      "transcript_sha256": "1a428194d7243dac5f314c2b2afb1e1491560758c487e982cc20662fff44ca29"
+    },
+    "broken_adapter": {
+      "adapter_exit_status": 17,
+      "cli_exit_status": 0,
+      "sentinel_count": 1,
+      "git_refs_and_worktrees_unchanged": true,
+      "observed_semantics": "FAIL_OPEN",
+      "transcript_sha256": "e7016698d8c1583d397674269944d4753ca45f2af6890d85f8053e349d145d7f"
+    }
   },
-  "installer": {
-    "marketplace_exit_status": 0,
-    "plugin_exit_status": 0
-  },
-  "execution": {
-    "exit_status": 0,
-    "signal": null
-  },
-  "verdict": "BLOCKED",
-  "production_pretooluse_allowed": false,
-  "d4_verdict": "BLOCKED",
-  "terminal_blocker": "broken PreToolUse command failed open: mutation occurred and Codex exited zero",
-  "receipt_sha256": "e5f134a7902c1ddd90f331e3fe6be2e59eca1c063246bf1dc8e670582678c1ee"
+  "model_calls": 3,
+  "verdict": "READY",
+  "d1_verdict": "READY",
+  "d4_verdict": "READY",
+  "known_limitation": "On Codex 0.146.0, a PreToolUse command adapter that exits nonzero before emitting a structured denial fails open; this production gate does not claim adapter-failure fail-closed semantics.",
+  "receipt_sha256": "6303d8d1278d38447cea4216d6f5fa5a9c56ad10c591b35f1bc2c4c4bcd1d123"
 }

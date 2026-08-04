@@ -33,6 +33,9 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - One strict managed-admission validator shared by the CLI, Engine, and campaign dispatcher. It binds
   TTL, effective level, Git common-dir, and digest-sealed Mission policy/graph/source authority before
   provider readiness or any managed effect.
+- A production Codex `PreToolUse` `.*` adapter using the live-proven structured stdout denial contract.
+  It reuses the shared edit-gate decision core, preserves `/l3`, blocks effect-capable depth-0 work in
+  `/l4`–`/l6`, and keeps fixed lifecycle/managed-Engine entry commands available.
 
 ### Changed
 - Managed admission failures now use `DEV_FLOW_ADMISSION_REQUIRED_OR_STALE` with zero dispatcher,
@@ -40,10 +43,11 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   level-mismatched, and Mission-mismatched markers.
 
 ### Boundary
-- A two-call installed Codex 0.146.0 probe proved structured `PreToolUse` denial but also proved an
-  exit-17 adapter failure is fail-open: the mutation occurred and the CLI exited zero. Production
-  `PreToolUse` wiring was therefore rejected, D4 is terminally blocked, and the existing
-  `PostCompact` adapter remains the package's only production hook.
+- Installed Codex 0.146.0 negative/positive controls prove structured `PreToolUse` denial blocks the
+  target while a canonical `/l3` marker allows it. The exit-17 broken control separately remains
+  fail-open: the mutation occurs and the CLI exits zero. D1/D4 are READY for structured denial, but
+  adapter-process failure is explicitly outside the fail-closed claim. The existing `PostCompact`
+  adapter remains unchanged as the separate recovery boundary.
 
 ## v2.34.4 — Clean-checkout CI fixture portability
 

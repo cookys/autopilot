@@ -189,7 +189,9 @@ for (const rel of [
 }
 for (const [sourceRel, destinationRel] of [
   ['platforms/codex/hooks/hooks.json', 'hooks/hooks.json'],
+  ['platforms/codex/hooks/pre-effect.js', 'hooks/pre-effect.js'],
   ['platforms/codex/hooks/post-compact.js', 'hooks/post-compact.js'],
+  ['hooks/orchestrator-edit-gate-lib.js', 'hooks/orchestrator-edit-gate-lib.js'],
   ['platforms/codex/skill-adapters/lifecycle.md', 'skill-adapters/lifecycle.md'],
 ]) {
   const sourcePath = path.join(root, sourceRel);
@@ -210,7 +212,9 @@ if (!fs.existsSync(hookBaseline)) {
 }
 const hookEntries = fs.existsSync(path.join(pluginDir, 'hooks'))
   ? fs.readdirSync(path.join(pluginDir, 'hooks')).sort() : [];
-if (JSON.stringify(hookEntries) !== JSON.stringify(['_shared', 'hooks.json', 'post-compact.js'])) {
+if (JSON.stringify(hookEntries) !== JSON.stringify([
+  '_shared', 'hooks.json', 'orchestrator-edit-gate-lib.js', 'post-compact.js', 'pre-effect.js',
+])) {
   failures.push(`hooks entries ${hookEntries.join(',')}`);
 }
 
@@ -320,7 +324,7 @@ assert_eq "$MANIFEST_TRIGGER_OUT" "manifest_codex_doc_triggers_in_sync" "Codex p
 SYNC_SANDBOX="$TEST_TMP/codex-sync-sandbox"
 mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin"
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"
-printf '%s\n' '{"description":"production PostCompact recovery hook","hooks":"./hooks/hooks.json","interface":{"longDescription":"production PostCompact recovery hook"}}' \
+printf '%s\n' '{"description":"production PreToolUse lifecycle gate and PostCompact recovery hook","hooks":"./hooks/hooks.json","interface":{"longDescription":"production PreToolUse lifecycle gate and PostCompact recovery hook"}}' \
   > "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin/plugin.json"
 for rel in skills bin src profiles schemas evals/clean evals/known-bad hooks/_shared references scripts project-config-template; do
   mkdir -p "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
@@ -367,14 +371,20 @@ done
 printf '{"hooks":{}}\n' > "$SYNC_SANDBOX/hooks/hooks.json"
 mkdir -p "$SYNC_SANDBOX/platforms/codex/hooks"
 printf '{"hooks":{"PostCompact":[]}}\n' > "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json"
+printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js"
+printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js"
 mkdir -p "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines"
 cp "$SYNC_SANDBOX/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/claude-hooks.json"
 cp "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
+cp "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js"
 cp "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
+cp "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js"
 bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
@@ -382,18 +392,28 @@ assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 in sandbox"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check sandbox clean report"
 
 rm "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json" \
-  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects missing generated hook files"
 assert_contains "$OUT" "hooks/hooks.json" "sync-codex-plugin-skills --check names missing generated hook manifest"
+assert_contains "$OUT" "hooks/pre-effect.js" "sync-codex-plugin-skills --check names missing generated pre-effect adapter"
 assert_contains "$OUT" "hooks/post-compact.js" "sync-codex-plugin-skills --check names missing generated hook adapter"
+assert_contains "$OUT" "hooks/orchestrator-edit-gate-lib.js" "sync-codex-plugin-skills --check names missing shared edit-gate core"
 bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"; echo $?)" "0" \
   "sync-codex-plugin-skills regenerates the hook manifest byte-for-byte"
+assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js"; echo $?)" "0" \
+  "sync-codex-plugin-skills regenerates the pre-effect adapter byte-for-byte"
 assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"; echo $?)" "0" \
   "sync-codex-plugin-skills regenerates the hook adapter byte-for-byte"
+assert_eq "$(cmp -s "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js"; echo $?)" "0" \
+  "sync-codex-plugin-skills regenerates the shared edit-gate core byte-for-byte"
 
 printf '\nmanifest drift\n' >> "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
@@ -404,6 +424,11 @@ printf '\nadapter drift\n' >> "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-c
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects generated hook adapter drift"
 assert_contains "$OUT" "hooks/post-compact.js" "sync-codex-plugin-skills --check names drifted generated hook adapter"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+printf '\npre-effect drift\n' >> "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects generated pre-effect adapter drift"
+assert_contains "$OUT" "hooks/pre-effect.js" "sync-codex-plugin-skills --check names drifted pre-effect adapter"
 bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 
 printf '\ncanonical manifest change\n' >> "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json"
@@ -416,6 +441,11 @@ bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"; echo $?)" "0" \
   "canonical hook adapter changes regenerate the package mirror"
+printf '\ncanonical pre-effect change\n' >> "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js"; echo $?)" "0" \
+  "canonical pre-effect changes regenerate the package mirror"
 
 printf 'stale baseline\n' \
   > "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/stale.json"
@@ -538,15 +568,23 @@ function print(key, value) {
 print('manifest_name', manifest.name);
 print('manifest_version_matches', manifest.version === canonical.version);
 print('manifest_description_mentions_support', /support CLI\/scripts/.test(manifest.description));
-print('manifest_description_production_postcompact', /production PostCompact recovery hook/.test(manifest.description));
+print('manifest_description_production_hooks', /production PreToolUse lifecycle gate and PostCompact recovery hook/.test(manifest.description));
 print('manifest_long_description_mentions_payload', /package payload bundles support CLI/.test(manifest.interface && manifest.interface.longDescription || ''));
 print('skills_path', manifest.skills);
 print('hooks_path', manifest.hooks);
 const postCompactGroup = productionHooks.hooks?.PostCompact?.[0];
 const postCompactHook = postCompactGroup?.hooks?.[0];
+const preToolGroup = productionHooks.hooks?.PreToolUse?.[0];
+const preToolHook = preToolGroup?.hooks?.[0];
+print('production_pretooluse_exact',
+  productionHooks.hooks?.PreToolUse?.length === 1
+  && preToolGroup?.matcher === '.*'
+  && preToolGroup?.hooks?.length === 1
+  && preToolHook?.type === 'command'
+  && preToolHook?.command === 'node "${PLUGIN_ROOT}/hooks/pre-effect.js"');
 print('production_postcompact_exact',
   productionHooks.hooks?.PostCompact?.length === 1
-  && Object.keys(productionHooks.hooks).length === 1
+  && Object.keys(productionHooks.hooks).length === 2
   && postCompactGroup?.matcher === 'manual|auto'
   && postCompactGroup?.hooks?.length === 1
   && postCompactHook?.type === 'command'
@@ -589,10 +627,11 @@ assert_eq "$EXIT" "0" "Codex plugin JSON inspection exits 0"
 assert_contains "$OUT" "manifest_name=autopilot" "Codex plugin manifest uses autopilot name"
 assert_contains "$OUT" "manifest_version_matches=true" "Codex plugin version follows canonical manifest"
 assert_contains "$OUT" "manifest_description_mentions_support=true" "Codex plugin manifest describes bundled support payload"
-assert_contains "$OUT" "manifest_description_production_postcompact=true" "Codex plugin manifest describes production PostCompact recovery"
+assert_contains "$OUT" "manifest_description_production_hooks=true" "Codex plugin manifest describes both production hook boundaries"
 assert_contains "$OUT" "manifest_long_description_mentions_payload=true" "Codex plugin long description explains support payload"
 assert_contains "$OUT" "skills_path=./skills/" "Codex plugin skills path is relative"
 assert_contains "$OUT" "hooks_path=./hooks/hooks.json" "Codex plugin hooks path is relative"
+assert_contains "$OUT" "production_pretooluse_exact=true" "Codex production manifest declares one exact .* PreToolUse adapter"
 assert_contains "$OUT" "production_postcompact_exact=true" "Codex production manifest declares one exact manual|auto PostCompact adapter"
 assert_contains "$OUT" "has_hooks_field=true" "Codex plugin declares production hooks"
 assert_contains "$OUT" "has_apps_field=false" "Codex plugin does not declare apps"

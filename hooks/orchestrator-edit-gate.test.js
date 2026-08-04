@@ -23,7 +23,9 @@ const { spawnSync } = require('child_process');
 
 const LIB = path.join(__dirname, 'orchestrator-edit-gate-lib.js');
 const HOOK = path.join(__dirname, 'orchestrator-edit-gate.js');
-const { decide, isAllowlisted } = require(LIB);
+const CODEX_PLUGIN_ROOT = path.join(__dirname, '..', 'platforms', 'codex', 'plugin');
+const CODEX_HOOK = path.join(CODEX_PLUGIN_ROOT, 'hooks', 'pre-effect.js');
+const { decide, decideCodexPreEffect, isAllowlisted } = require(LIB);
 
 // ---- pure lib ----
 
@@ -67,6 +69,170 @@ test('isAllowlisted: tracking/config/plans paths pass, product paths fail', () =
   assert.strictEqual(isAllowlisted('docs/README.md'), false);
   // GPT-OSS finding: a handoff-named file in product territory is NOT allowlisted
   assert.strictEqual(isAllowlisted('src/handoff.md'), false);
+});
+
+test('decideCodexPreEffect: no marker blocks effect-capable repository tools', () => {
+  const d = decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: false,
+    managedEngineEntry: false,
+    markerStatus: 'absent',
+    markerReason: 'session marker absent',
+    markerLevel: null,
+  });
+  assert.strictEqual(d.action, 'gate');
+  assert.strictEqual(d.reasonCode, 'DEV_FLOW_ENTRY_REQUIRED');
+});
+
+test('decideCodexPreEffect: non-repository and read-only activity are no-ops', () => {
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: false, effectCapable: true,
+  }).action, 'allow');
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: true, effectCapable: false,
+  }).action, 'allow');
+});
+
+test('decideCodexPreEffect: fixed lifecycle entry remains available without a marker', () => {
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: true,
+    managedEngineEntry: false,
+    markerStatus: 'absent',
+    markerLevel: null,
+  }).action, 'allow');
+});
+
+test('decideCodexPreEffect: l3 preserves inline effects', () => {
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: false,
+    managedEngineEntry: false,
+    markerStatus: 'valid',
+    markerLevel: 'l3',
+  }).action, 'allow');
+});
+
+test('decideCodexPreEffect: managed levels block depth-0 but admit fixed Engine entry', () => {
+  const direct = decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: false,
+    managedEngineEntry: false,
+    markerStatus: 'valid',
+    markerLevel: 'l5',
+  });
+  assert.strictEqual(direct.action, 'gate');
+  assert.strictEqual(direct.reasonCode, 'DEPTH_ZERO_MUTATION_FORBIDDEN');
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: false,
+    managedEngineEntry: true,
+    markerStatus: 'valid',
+    markerLevel: 'l5',
+  }).action, 'allow');
+});
+
+function setupCodexGate() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-oeg-'));
+  const repo = path.join(base, 'repo');
+  const markers = path.join(base, 'markers');
+  fs.mkdirSync(repo, { recursive: true });
+  assert.strictEqual(spawnSync('git', ['init', '-q', repo]).status, 0);
+  return {
+    base,
+    repo,
+    markers,
+    env: {
+      ...process.env,
+      PLUGIN_ROOT: CODEX_PLUGIN_ROOT,
+      AUTOPILOT_SESSION_MODE_DIR: markers,
+      AUTOPILOT_SESSION_ID: 'codex-gate-test',
+    },
+  };
+}
+
+function codexPayload(cwd, command, toolName = 'shell') {
+  return {
+    hook_event_name: 'PreToolUse',
+    cwd,
+    session_id: 'codex-live-session',
+    tool_name: toolName,
+    tool_input: command === null ? { path: cwd } : { command },
+  };
+}
+
+function runCodexHook(value, env) {
+  return spawnSync('node', [CODEX_HOOK], {
+    input: JSON.stringify(value), encoding: 'utf8', env,
+  });
+}
+
+function setCodexMarker(env, repo, level) {
+  const result = spawnSync('node', [path.join(CODEX_PLUGIN_ROOT, 'scripts', 'session-mode.js'),
+    'set', '--level', level, '--entry-level', level, '--repo-root', repo], {
+    env, cwd: repo, encoding: 'utf8',
+  });
+  assert.strictEqual(result.status, 0, result.stderr);
+}
+
+test('Codex wrapper: no marker returns the live-proven structured denial', () => {
+  const { repo, env } = setupCodexGate();
+  const result = runCodexHook(codexPayload(repo, 'touch denied'), env);
+  assert.strictEqual(result.status, 0);
+  assert.deepStrictEqual(JSON.parse(result.stdout), {
+    decision: 'block',
+    reason: 'DEV_FLOW_ENTRY_REQUIRED: session marker absent',
+  });
+});
+
+test('Codex wrapper: fixed session-mode entry is available before a marker exists', () => {
+  const { repo, markers, env } = setupCodexGate();
+  fs.mkdirSync(markers, { recursive: true });
+  fs.writeFileSync(path.join(markers, 'stale-corrupt.json'), '{{{');
+  const script = path.join(CODEX_PLUGIN_ROOT, 'scripts', 'session-mode.js');
+  const command = `AUTOPILOT_SESSION_ID=codex-gate-test node "${script}" set `
+    + `--level l5 --entry-level l5 --repo-root "${repo}"`;
+  const result = runCodexHook(codexPayload(repo, command), env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, '');
+});
+
+test('Codex wrapper: l3 allows inline shell while l5 blocks depth-0 shell', () => {
+  const l3 = setupCodexGate();
+  setCodexMarker(l3.env, l3.repo, 'l3');
+  assert.strictEqual(runCodexHook(codexPayload(l3.repo, 'touch inline'), l3.env).stdout, '');
+
+  const l5 = setupCodexGate();
+  setCodexMarker(l5.env, l5.repo, 'l5');
+  const blocked = runCodexHook(codexPayload(l5.repo, 'touch depth-zero'), l5.env);
+  assert.strictEqual(blocked.status, 0);
+  assert.strictEqual(JSON.parse(blocked.stdout).decision, 'block');
+  assert.match(JSON.parse(blocked.stdout).reason, /DEPTH_ZERO_MUTATION_FORBIDDEN/u);
+});
+
+test('Codex wrapper: l5 admits only the fixed managed Engine entry', () => {
+  const { repo, env } = setupCodexGate();
+  setCodexMarker(env, repo, 'l5');
+  const script = path.join(CODEX_PLUGIN_ROOT, 'bin', 'autopilot.js');
+  const command = `AUTOPILOT_SESSION_ID=codex-gate-test AUTOPILOT_LEVEL=l5 node "${script}" `
+    + 'engine implement-review --campaign-contract campaign.json';
+  const result = runCodexHook(codexPayload(repo, command), env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, '');
+});
+
+test('Codex wrapper: corrupt marker denies; read-only and non-repository calls no-op', () => {
+  const { base, repo, markers, env } = setupCodexGate();
+  fs.mkdirSync(markers, { recursive: true });
+  fs.writeFileSync(path.join(markers, 'broken.json'), '{{{');
+  assert.strictEqual(JSON.parse(runCodexHook(codexPayload(repo, 'touch nope'), env).stdout).decision, 'block');
+  assert.strictEqual(runCodexHook(codexPayload(repo, null, 'read_file'), env).stdout, '');
+  assert.strictEqual(runCodexHook(codexPayload(base, 'touch scratch'), env).stdout, '');
 });
 
 // ---- wrapper black-box ----

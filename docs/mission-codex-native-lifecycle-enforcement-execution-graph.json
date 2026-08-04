@@ -5,17 +5,17 @@
     {
       "id": "codex-native-lifecycle-enforcement",
       "source_plan_ids": [
-        "plan-ad07704815222d6f887e64b92f80f59b3598ca0cde54e132f5852e67baf71fa7"
+        "plan-4ab42a416b3c54a80c1222a70b41df85e66725633974e3fc4a195fd76392be27"
       ],
       "source_rubric_ids": [
-        "R13549730690159142682444250047521803365956770928118912085995997473661757757511",
-        "R24857488489589507042042761347330966915470891070615898407962812825232804752239",
-        "R3273437281502678302080356599038866656729168729028851670518590460832235109132",
-        "R39668857816755307923958919969489729645534807939308098828893496128886903350625",
-        "R46075879754097980631410700297685832520994852559446554394760333281038115114283",
-        "R81010901349994743006160814335223008272161383970777533603982519299042492524263",
-        "R83762629330683381506062063567454885032097389225008723833616849869377206449359",
-        "R90959408771089643794972720523277038427666898611853813050487513028551646649150"
+        "R106321944484556094255507709957004391565646560970134022935635288554402526180033",
+        "R106824044018798884718332764208012973339995307062510381779820917846954917939438",
+        "R109231727812417790357093477763909035231252713809803974339596475630400137676117",
+        "R112620374694540300471314187902209739574203919861641895102438331732787100183470",
+        "R55437805920416055104491907651962061577650398639679321208176472115539408004152",
+        "R5700412931343203810625671778057445275860886765243085995281694545254713559817",
+        "R93767502558260095624772200800857548944319726558677206669212947719416924413170",
+        "R99218756440816434055503527344970222342925814192273442556366376618404688182544"
       ],
       "dependencies": [],
       "acceptance_ids": [
@@ -52,7 +52,9 @@
       "campaign": {
         "profile": "high",
         "allowed_path_prefixes": [
+          "AGENTS.md",
           "CHANGELOG.md",
+          "README.md",
           "bin",
           "docs",
           "hooks",
@@ -66,6 +68,8 @@
           "section": "4. Bounded deliverable DAG"
         },
         "required_paths": [
+          "AGENTS.md",
+          "README.md",
           "docs/plans/2026-08-05-codex-native-lifecycle-enforcement.md",
           "docs/plans/2026-08-05-codex-native-lifecycle-enforcement.rubric.md",
           "scripts/sync-codex-plugin-skills.sh",
@@ -83,14 +87,18 @@
           "hooks/tests/dispatch-hetero.test.sh",
           "hooks/tests/codex-plugin-package.test.sh",
           "platforms/codex/README.md",
+          "docs/installation.md",
           "references/multi-agent-portability.md",
           "CHANGELOG.md"
         ],
         "output_paths": [
+          "AGENTS.md",
           "CHANGELOG.md",
+          "README.md",
           "bin/autopilot.js",
           "docs/projects/2026-08-05-codex-native-lifecycle-enforcement/README.md",
           "docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json",
+          "docs/installation.md",
           "hooks/orchestrator-edit-gate-lib.js",
           "hooks/orchestrator-edit-gate.test.js",
           "hooks/tests/autopilot-cli.test.sh",
@@ -106,6 +114,7 @@
           "platforms/codex/plugin/.codex-plugin/plugin.json",
           "platforms/codex/plugin/bin/autopilot.js",
           "platforms/codex/plugin/hooks/hooks.json",
+          "platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js",
           "platforms/codex/plugin/hooks/pre-effect.js",
           "platforms/codex/plugin/scripts/dispatch-hetero.sh",
           "platforms/codex/plugin/scripts/session-mode.js",
@@ -130,6 +139,7 @@
           "docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json",
           "hooks/tests/codex-pre-effect-production-live.test.sh",
           "platforms/codex/hooks/pre-effect.js",
+          "platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js",
           "platforms/codex/plugin/hooks/pre-effect.js",
           "platforms/codex/skill-adapters/lifecycle.md"
         ],

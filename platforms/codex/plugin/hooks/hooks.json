@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/pre-effect.js\""
+          }
+        ]
+      }
+    ],
     "PostCompact": [
       {
         "matcher": "manual|auto",

@@ -14,4 +14,6 @@ command -v codex >/dev/null 2>&1 || {
 }
 
 OUTPUT="${AUTOPILOT_CODEX_PRE_EFFECT_RECEIPT:-$REPO_ROOT/docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json}"
-node "$REPO_ROOT/platforms/codex/hook-probe/pre-effect-contract-probe.js" --output "$OUTPUT"
+CAPABILITY_RECEIPT="$REPO_ROOT/docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json"
+node "$REPO_ROOT/platforms/codex/hook-probe/pre-effect-contract-probe.js" \
+  --production --capability-receipt "$CAPABILITY_RECEIPT" --output "$OUTPUT"

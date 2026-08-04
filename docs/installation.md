@@ -53,7 +53,7 @@ so that completeness check remains unavailable rather than being promoted from v
 Two Codex paths are supported:
 
 - **Per-repo skills**: same `.agents/skills/` symlink as OpenCode. Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed when you run Codex inside this repo.
-- **Local Codex plugin package**: `platforms/codex/plugin/` exposes the generated skills/support payload plus one production Codex-native `PostCompact` recovery hook, with a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
+- **Local Codex plugin package**: `platforms/codex/plugin/` exposes the generated skills/support payload plus production Codex-native `PreToolUse` structured-denial and `PostCompact` recovery hooks, with a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`. PreToolUse command-adapter failure remains fail-open on the qualified Codex host; see `platforms/codex/README.md`.
 
 ```bash
 ./scripts/setup-symlinks.sh

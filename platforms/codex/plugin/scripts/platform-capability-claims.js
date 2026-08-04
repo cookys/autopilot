@@ -465,6 +465,9 @@ function validateCommand(options, single) {
 function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
+    if (options.reprobeBinary !== null && options.command !== 'validate-consumer') {
+      throw new ClaimsError('--reprobe-binary is valid only with validate-consumer');
+    }
     if (options.command === 'help') {
       process.stdout.write(`${usage()}\n`);
       return;

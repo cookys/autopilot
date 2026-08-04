@@ -818,6 +818,10 @@ repair, blocks_next_slice_or_immediate_integrity, cannot_defer_to_spike. The fir
 must be non-empty JSON strings and the last two keys must be JSON booleans. This remains true for
 non-blocking findings; give them concrete evidence and a non-empty repair string such as
 "No current change; follow-up only." Never use null for evidence or repair.
+Every string value must be valid RFC 8259 JSON: JSON-escape embedded double quotes, backslashes,
+newlines, tabs, and other control characters; never copy raw shell quoting into a string. Before
+returning, ensure a strict JSON parse would succeed; if a command example needs quoting, paraphrase
+it or use single quotes inside the JSON string.
 Allowed verdict values (exact strings): "READY", "CONDITIONAL", "STOP".
 Allowed class values (exact strings): "decision-now", "implementation-spike", "future".
 Allowed severity values (exact strings): "blocking", "non-blocking".

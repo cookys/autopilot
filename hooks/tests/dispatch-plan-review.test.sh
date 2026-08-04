@@ -310,6 +310,15 @@ assert_contains "$AUTHOR_PROMPT" \
   'Never use null for evidence or repair.' \
   "plan-review prompt gives MiniMax an explicit non-null repair rule"
 assert_contains "$AUTHOR_PROMPT" \
+  'Every string value must be valid RFC 8259 JSON' \
+  "plan-review prompt requires RFC 8259 string encoding"
+assert_contains "$AUTHOR_PROMPT" \
+  'ensure a strict JSON parse would succeed' \
+  "plan-review prompt requires a strict JSON parse check"
+assert_contains "$AUTHOR_PROMPT" \
+  'never copy raw shell quoting into a string' \
+  "plan-review prompt forbids unescaped shell quotes"
+assert_contains "$AUTHOR_PROMPT" \
   'A finding is a blocker candidate if and only if all of these hold: rubric_id is one of the frozen rubric IDs above; class is "decision-now"; severity is "blocking"; blocks_next_slice_or_immediate_integrity is true; cannot_defer_to_spike is true.' \
   "plan-review prompt states the complete blocker predicate"
 assert_contains "$AUTHOR_PROMPT" \

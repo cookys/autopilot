@@ -1,6 +1,6 @@
 # Platform capability trigger activation
 
-> **Status:** D1–D4 implementation complete / authoritative D4 verification reserved for depth 0
+> **Status:** D1–D4 depth-0 verified / reviewer READY / v2.34.2 release-ready; merge pending
 > **Branch:** `feat/platform-capability-trigger-activation`
 > **Plan:** [platform capability trigger activation](../../plans/2026-08-04-platform-capability-trigger-activation.md)
 
@@ -26,10 +26,20 @@ Every promoted platform fact must first pass the closed dual-evidence claim cont
 
 | Deliverable | Status | Internal gates | Exit condition |
 |---|---|---|---|
-| Platform capability trigger activation | implementation complete; authoritative verification pending | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact ✓ → D4 strict-L5 bootstrap ✓ | Depth-0 independent verification passes the cumulative frozen range |
+| Platform capability trigger activation | release-ready; merge pending | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact ✓ → D4 strict-L5 bootstrap ✓ → depth-0 suite/review ✓ | Merge the verified candidate, then archive with the real merge SHA |
 
 The tracker has one deliverable. D1–D4 are ordered internal gates, not independently claimable phases;
 tests, reviews, repairs, and doc sync remain inside this row and its existing budgets.
+
+## Final verification receipt
+
+- Final implementation candidate: `12875e95721867eadf058f94cddf0bfb2390d58f`.
+- Exact independently reviewed range:
+  `7047717b2df5354da134043692e31ad067a98bfa..12875e95721867eadf058f94cddf0bfb2390d58f`.
+- Independent reviewer: `READY`; the four-level severity review returned zero findings.
+- Authoritative depth-0 suite: **263/263 test files GREEN**.
+- Release state: v2.34.2 metadata is ready for the pre-merge release gates. Merge, push, publish,
+  project archive, and branch cleanup are not claimed and remain depth-0 finish-flow effects.
 
 R4 generation 1 used ticket `platform-trigger-activation-r4-20260804`, session
 `platform-trigger-activation-r4-g1`, and key

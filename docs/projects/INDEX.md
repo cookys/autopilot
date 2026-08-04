@@ -8,7 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
-| 2026-08-04 | [platform-capability-trigger-activation](2026-08-04-platform-capability-trigger-activation/README.md) — R4 generation 2 terminal semantic `READY`; both Sol and Gemini returned `READY` with empty findings against the frozen D2/D3/D4 consumer-manifest repair. Implementation is authorized but not started inside the same one-node Mission. | implementation-authorized | `feat/platform-capability-trigger-activation` |
+| 2026-08-04 | [platform-capability-trigger-activation](2026-08-04-platform-capability-trigger-activation/README.md) — D1 closed claims, D2 agy usage, D3 Codex `PostCompact`, and D4 strict-L5 bootstrap are complete at candidate `12875e95`; the depth-0 suite is 263/263 GREEN and the independent four-level review is READY with zero findings. Release metadata is prepared; merge and archive remain pending. | v2.34.2 | `feat/platform-capability-trigger-activation` |
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
 
 ## 已完成 (Completed)

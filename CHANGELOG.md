@@ -24,7 +24,7 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased — Platform capability activation: telemetry, recovery, and strict L5 readiness
+## v2.34.2 — Platform capability activation: telemetry, recovery, and strict L5 readiness
 
 **Headline**: agy review and implementation dispatches now expose only authoritative structured
 usage, while the default Codex package registers one production `PostCompact` recovery hook that
@@ -32,6 +32,9 @@ reconciles manual and automatic compaction before continuation or effect. Ordina
 runs now require a fresh host-owned exact-roster readiness decision before workflow dispatch.
 
 ### Added
+- A closed, content-addressed platform-capability receipt that binds official contracts to fresh,
+  version-matched live evidence, partitions exact D2/D3/D4 required claim IDs, and immediately
+  re-probes each consumed set while retaining optional blocked findings without promotion.
 - Closed, required `usage` contracts for review and runner results, with safe nonnegative token
   counts and explicit `source:"agy-json"` attribution for authoritative agy samples.
 - Scorecard evidence classes that keep new dispatch-result usage separate from historical agy
@@ -75,12 +78,38 @@ runs now require a fresh host-owned exact-roster readiness decision before workf
   environment variables, work orders, disk receipts, and serialized callback material cannot
   replace the strict-L5 trust root; this does not relabel L3/L4 or legacy flows as strict L5.
 
+### Migration
+- This release deliberately adopts the current closed contracts without backward-compatibility
+  aliases. agy usage is authoritative only when it comes from the native closed response/usage
+  envelope; legacy plain output and worker-authored telemetry are not promoted into usage data.
+- Strict-L5 readiness requires the exact six-field
+  `{runner,model,role,effort,endpoint,family}` policy and fresh host-owned closures. Five-field
+  tuples, inferred `reviewer_family`, coarse or serialized evidence, and compatibility parsers are
+  rejected rather than translated. Historical agy transcripts remain unchanged and explicitly
+  unavailable for token accounting.
+
+### Verification
+- Final implementation candidate `12875e95721867eadf058f94cddf0bfb2390d58f` passed the full
+  depth-0 suite: **263/263 test files GREEN**. An independent four-level severity review of
+  `7047717b2df5354da134043692e31ad067a98bfa..12875e95721867eadf058f94cddf0bfb2390d58f`
+  returned **READY with zero findings**.
+- The automated release closeout does not claim a fresh authenticated slash-command run or other
+  privileged/manual probes. Codex and agy live claims are limited to the committed, version-matched
+  receipts described above; release preflight uses its documented slash-probe skip when credentials
+  are unavailable.
+
 ### Rollback
-- Revert the D2 telemetry commit to restore the prior plain-output transport and result schemas;
+- Maintainer: `git revert <merge-sha>`. Revert the D2 telemetry commit to restore the prior
+  plain-output transport and result schemas;
   no stored historical transcript data is rewritten. Revert the D3 activation commit to remove the
   Codex production hook declaration and generated adapter while retaining the warning-only probe.
   Revert the D4 bootstrap commit to restore the prior fail-closed
   `provider_readiness_authority_missing` behavior for ordinary strict-L5 CLI runs.
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.1`.
+
+prose-justification: v2.34.2 adds no skill/reference prose; the measured +11% is cumulative growth
+since the still-tracked v2.32.58 baseline while the production engine surface expanded, and this
+release metadata records the closed capability, migration, verification, and rollback contracts.
 
 ## v2.34.1 — Controller execution discipline
 

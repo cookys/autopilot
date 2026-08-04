@@ -58,3 +58,33 @@ The reviewed plan remains one cumulative D1–D8 graph covering exactly 14 admit
 entries. The two Board decisions and 29 conditional entries remain out of scope. The temporary review
 branch preserves the repaired plan and immutable review evidence; it is not merged or pushed while the
 required semantic review is absent.
+
+## Reviewer-roster transport rerun — GLM-5.2 + MiniMax-M3
+
+This explicit owner-requested roster change uses a new ticket/session and logical review identity;
+it does not reopen or relabel the terminal Codex/agy session and does not count as generation 3 of
+that session. The plan and rubric bytes are unchanged.
+
+- Manifest:
+  [`2026-08-03-next-touch-debt-retirement.glm-minimax.manifest.json`](2026-08-03-next-touch-debt-retirement.glm-minimax.manifest.json)
+- Logical plan: `next-touch-debt-retirement-2026-08-03-glm-minimax-rerun-20260804`
+- Ticket: `next-touch-debt-retirement-glm-minimax-20260804`
+- Session: `next-touch-debt-retirement-glm-minimax-g1`
+- Session key: `1fbdf9c247cf1133b70629fac480659dcd094d370d89afb3b6132c1bc1c0ae41`
+- Manifest SHA-256: `9e1e4db992c369182e440755914252b7096e482447515faa9b51ae0e3084692a`
+- Controller artifact:
+  `/home/cookys/.autopilot/plan-review/1fbdf9c247cf1133b70629fac480659dcd094d370d89afb3b6132c1bc1c0ae41/generation-01.json`
+- Artifact SHA-256: `9083ff23de59af3857ca47a936c26a062708f09d8b5d25bd45c88222d609adec`
+- Result: terminal `CONDITIONAL`, semantic verdict `null`, policy
+  `required_seat_transport_exhausted`; no generation 2 is authorized for this session.
+
+| Seat | Attempt | Transport / parser | Semantic evidence |
+|---|---:|---|---|
+| `anthropic-compatible/glm-5.2@high` architecture (`glm`) | 1 | success / extracted | `READY`, empty findings |
+| `anthropic-compatible/MiniMax-M3@high` operations-skeptic (`minimax`) | 1 | success / invalid | unavailable; finding 3 had `repair:null` |
+| `anthropic-compatible/MiniMax-M3@high` operations-skeptic (`minimax`) | 2 | success / invalid | unavailable; finding 8 had invalid `evidence` |
+
+The raw GLM response was a fenced JSON `READY`; the two MiniMax responses were read before
+classification and failed the strict purpose-bound schema for the reasons above. The controller
+therefore correctly refused to promote the single-family GLM result or treat MiniMax's malformed
+findings as semantic review. No code, backlog, implementation, or push was performed.

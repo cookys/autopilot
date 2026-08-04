@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "2.34.3",
+  "version": "2.34.4",
   "description": "Autopilot methodology skills for Codex with bundled support CLI/scripts and a production PostCompact recovery hook.",
   "author": {
     "name": "TWGS Team"

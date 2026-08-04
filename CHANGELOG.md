@@ -24,6 +24,36 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.4 — Clean-checkout CI fixture portability
+
+**Headline**: The release checks now exercise dev-setup and historical Mission reconciliation
+reliably on clean CI hosts. Their fixtures preserve the selected Node runtime without restoring
+optional harness CLIs and reconstruct exact legacy terminal authority inside an isolated Git
+common-dir instead of consuming a developer checkout's gitignored Mission state.
+
+### Fixed
+- `dev-setup.test.sh` exposes a node-only runtime shim to harness-free PATH cases, so setup-node
+  installations outside `/usr/bin` can run the Codex package sync check without making optional
+  Claude, Codex, OpenCode, or agy commands visible through the original PATH.
+- `mission-backlog-convergence.test.sh` creates a hermetic Git/Mission fixture with the frozen B/C
+  graph, content-addressed terminal receipts, and history anchor. It proves missing disposition
+  fails closed, reconciliation writes once, replay writes zero times, and no authority or history
+  is synthesized while exercising the ordinary production selector.
+
+### Boundary
+- These are test-fixture portability repairs only. Production dev-setup, Mission authority
+  selection, reconciliation, and fail-closed behavior are unchanged.
+- The bounded repair reran the two affected files in both the working tree and a fresh clone plus
+  directly related Mission and Codex package checks; it did not claim another 263-file full-suite
+  run.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.3`.
+
+prose-justification: v2.34.4 adds only hotfix release metadata; the measured +11% remains
+cumulative growth since the still-tracked v2.32.58 baseline.
+
 ## v2.34.3 — Portable platform capability revalidation
 
 **Headline**: Runtime D2 and D3 validators now probe the agy or Codex binary selected by the

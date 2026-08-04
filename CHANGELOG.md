@@ -24,6 +24,39 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## Unreleased — Codex lifecycle admission and fail-closed promotion boundary
+
+### Added
+- Generated Codex-native prefixes for exactly seven lifecycle/front-door skills. The prefix maps
+  entry to packaged `session-mode`, maps managed work to the sealed Mission/Engine route, and forbids
+  imitating unavailable Claude task/agent primitives. Canonical tails remain byte-exact.
+- One strict managed-admission validator shared by the CLI, Engine, and campaign dispatcher. It binds
+  TTL, effective level, Git common-dir, host payload session identity, and digest-sealed Mission
+  policy/graph/source authority before provider readiness or any managed effect.
+- D1 Codex `PreToolUse` structured-denial evidence is retained in the sanitized probe receipt. The
+  adapter source remains unregistered and non-production; the installed package ships no
+  Codex-thread-bound direct-mutation enforcement.
+
+### Changed
+- Managed admission failures now use `DEV_FLOW_ADMISSION_REQUIRED_OR_STALE` with zero dispatcher,
+  model, mutation, and resource counters for absent, expired, malformed, repository-mismatched,
+  level-mismatched, and Mission-mismatched markers.
+- Codex managed children now receive a temporary credentials-only `CODEX_HOME`, no inherited
+  `CODEX_THREAD_ID`, and `--ignore-user-config`; controller config, plugins, and session state stay
+  outside the child boundary.
+- Git spawn failures, timeouts, signals, and unexpected exits now deny effect-capable Codex tools,
+  while only a genuine Git non-repository result remains a safe no-op.
+- The frozen implementation plan and rubric were restored byte-for-byte. User-directed corrections
+  live in a separately hashed, separately reviewable amendment and rubric attached to the same D4
+  graph node.
+
+### Boundary
+- The installed Codex package registers only the existing `PostCompact` recovery hook. The structured
+  `PreToolUse` result and exit-17 fail-open control remain D1 probe evidence, not a production hook.
+  The final lifecycle sequence did not qualify a payload-session bridge, so D4 remains
+  `NOT_READY/NO_SHIP` for Codex-thread-bound direct-mutation enforcement, with zero dispatcher calls
+  and no replacement campaign/work-order authority.
+
 ## v2.34.4 — Clean-checkout CI fixture portability
 
 **Headline**: The release checks now exercise dev-setup and historical Mission reconciliation

@@ -18,6 +18,10 @@ const {
   compileCampaignDispositionProvider,
   loadCampaignDispositionAuthority,
 } = require('../src/engine');
+const {
+  devFlowAdmissionRejection,
+  validateManagedDevFlowAdmission,
+} = require('../scripts/session-mode');
 
 function printHelp() {
   process.stdout.write(`Usage:
@@ -362,6 +366,17 @@ if (args[0] === 'engine') {
           },
         })}\n`);
         process.exit(1);
+      }
+      if (!parsed.legacyUnmanaged) {
+        const admission = validateManagedDevFlowAdmission({
+          repoRoot: parsed.cwd || process.cwd(),
+          effectiveLevel: level,
+          campaignContract: parsed.campaignContract,
+        });
+        if (!admission.valid) {
+          process.stdout.write(`${JSON.stringify(devFlowAdmissionRejection(admission.reason))}\n`);
+          process.exit(1);
+        }
       }
       let strictL5Bootstrap = null;
       if (level === 'l5') {

@@ -12,7 +12,11 @@ const {
   readProfileBundle,
 } = require('../src/engine/profile-payload');
 const { canonicalJson, sha256 } = require('../src/engine/owner-kernel/canonical');
-const { extractRuleCandidates, validateRuleInventory } = require('./measure-profile-context');
+const {
+  canonicalizeProjectedSkillSource,
+  extractRuleCandidates,
+  validateRuleInventory,
+} = require('./measure-profile-context');
 const { preflightJsonSource } = require('./validate-json-schema');
 
 const EXIT_SUCCESS = 0;
@@ -159,7 +163,11 @@ function buildRuleMigration(repoRoot) {
   );
   const occurrences = [];
   for (const sourceEntry of inventory.sources) {
-    const source = readUtf8(path.join(repoRoot, sourceEntry.path), sourceEntry.path);
+    const source = canonicalizeProjectedSkillSource(
+      readUtf8(path.join(repoRoot, sourceEntry.path), sourceEntry.path),
+      repoRoot,
+      sourceEntry.path,
+    );
     for (const unit of extractRuleCandidates(source)) {
       const segment = sourceEntry.segments.find(
         (candidate) => unit.line >= candidate.start_line && unit.line <= candidate.end_line,
@@ -360,7 +368,11 @@ function validateGuidedCompatibility(repoRoot, inventory) {
   }
   const currentCounts = new Map();
   for (const entry of inventory.sources) {
-    const source = readUtf8(path.join(repoRoot, entry.path), entry.path);
+    const source = canonicalizeProjectedSkillSource(
+      readUtf8(path.join(repoRoot, entry.path), entry.path),
+      repoRoot,
+      entry.path,
+    );
     for (const unit of extractRuleCandidates(source)) {
       currentCounts.set(unit.content_hash, (currentCounts.get(unit.content_hash) || 0) + 1);
     }

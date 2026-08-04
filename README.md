@@ -95,7 +95,7 @@ Autopilot is Claude Code-first, but not Claude Code-only. Pick the entry point t
 | If you are... | Start with | What you get |
 |---|---|---|
 | **Claude Code user** | The two-command install above | The complete path: skills, methodology agents, hooks, `/l3`-`/l6`, and plugin-managed defaults |
-| **Codex user** | `.agents/skills/` in this repo, or the local package under `platforms/codex/plugin` | Autopilot skills, bundled support payload, and one production Codex-native `PostCompact` recovery hook; no Claude hook parity claim |
+| **Codex user** | `.agents/skills/` in this repo, or the local package under `platforms/codex/plugin` | Autopilot skills, bundled support payload, and the one production `PostCompact` recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped (`D4=NOT_READY/NO-SHIP`) |
 | **OpenCode user** | `.agents/skills/` plus `.opencode/opencode.json` | Shared skills and methodology agent bodies, with an OpenCode-specific in-process plugin wrapper |
 | **Antigravity (`agy`) user** | `scripts/install-antigravity.sh` | Guarded import as a Claude Code-source plugin; no loose skills-dir scan |
 | **Contributor** | `./scripts/dev-setup.sh --check` | A read-only readiness dashboard for Claude/Codex/OpenCode/agy; mutating non-Claude setup requires `--harness <name> --install` |

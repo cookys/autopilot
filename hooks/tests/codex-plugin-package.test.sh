@@ -9,12 +9,18 @@ assert_file_exists "$PLUGIN_DIR/.codex-plugin/plugin.json" "Codex plugin manifes
 assert_file_exists "$MARKETPLACE" "Codex local marketplace exists"
 assert_file_exists "$PLUGIN_DIR/skills" "Codex plugin generated skills copy exists"
 
-DIFF_OUT="$(node - "$REPO_ROOT/skills" "$PLUGIN_DIR/skills" <<'NODE'
+DIFF_OUT="$(node - "$REPO_ROOT/skills" "$PLUGIN_DIR/skills" \
+  "$REPO_ROOT/platforms/codex/skill-adapters/lifecycle.md" <<'NODE'
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 
-const [sourceRoot, copyRoot] = process.argv.slice(2);
+const [sourceRoot, copyRoot, adapterPath] = process.argv.slice(2);
 const failures = [];
+const projected = new Set(['dev-flow', 'ceo-agent', 'l3', 'l4', 'l5', 'l6', 'finish-flow']);
+const marker = 'AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1';
+const adapter = fs.readFileSync(adapterPath, 'utf8');
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 function listFiles(root, dir = '') {
   const absolute = path.join(root, dir);
@@ -46,21 +52,44 @@ for (const file of copyFiles) {
 }
 for (const file of sourceFiles) {
   if (!copySet.has(file)) continue;
-  const source = fs.readFileSync(path.join(sourceRoot, file));
-  const copy = fs.readFileSync(path.join(copyRoot, file));
-  if (!source.equals(copy)) failures.push(`content ${file}`);
+  const source = fs.readFileSync(path.join(sourceRoot, file), 'utf8');
+  const copy = fs.readFileSync(path.join(copyRoot, file), 'utf8');
+  const skill = file.split(path.sep)[0];
+  if (projected.has(skill) && file === path.join(skill, 'SKILL.md')) {
+    const close = source.indexOf('\n---\n', 4);
+    if (!source.startsWith('---\n') || close === -1) {
+      failures.push(`frontmatter ${file}`);
+      continue;
+    }
+    const split = close + '\n---\n'.length;
+    const expected = `${source.slice(0, split)}\n${adapter}${source.slice(split)}`;
+    if (copy !== expected) failures.push(`projection ${file}`);
+    if ((copy.match(new RegExp(marker, 'gu')) || []).length !== 1) {
+      failures.push(`marker ${file}`);
+    }
+    const adapterStart = copy.indexOf(`<!-- ${marker} -->`);
+    const tailStart = adapterStart + adapter.length;
+    if (sha256(copy.slice(adapterStart, tailStart)) !== sha256(adapter)) {
+      failures.push(`adapter digest ${file}`);
+    }
+    if (sha256(copy.slice(tailStart)) !== sha256(source.slice(split))) {
+      failures.push(`canonical tail digest ${file}`);
+    }
+  } else if (copy !== source) {
+    failures.push(`content ${file}`);
+  }
 }
 
 if (failures.length > 0) {
   console.log(failures.join('\n'));
   process.exit(1);
 }
-console.log('skills_copy_in_sync');
+console.log('skills_projection_in_sync');
 NODE
 )"
 EXIT=$?
 assert_eq "$EXIT" "0" "Codex plugin generated skills copy drift check exits 0"
-assert_eq "$DIFF_OUT" "skills_copy_in_sync" "Codex plugin generated skills copy has no file drift"
+assert_eq "$DIFF_OUT" "skills_projection_in_sync" "Codex plugin lifecycle projections preserve exact adapter and canonical tails"
 
 SUPPORT_DIFF_OUT="$(node - "$REPO_ROOT" "$PLUGIN_DIR" <<'NODE'
 const fs = require('fs');
@@ -160,7 +189,10 @@ for (const rel of [
 }
 for (const [sourceRel, destinationRel] of [
   ['platforms/codex/hooks/hooks.json', 'hooks/hooks.json'],
+  ['platforms/codex/hooks/pre-effect.js', 'hooks/pre-effect.js'],
   ['platforms/codex/hooks/post-compact.js', 'hooks/post-compact.js'],
+  ['hooks/orchestrator-edit-gate-lib.js', 'hooks/orchestrator-edit-gate-lib.js'],
+  ['platforms/codex/skill-adapters/lifecycle.md', 'skill-adapters/lifecycle.md'],
 ]) {
   const sourcePath = path.join(root, sourceRel);
   const copyPath = path.join(pluginDir, destinationRel);
@@ -180,7 +212,9 @@ if (!fs.existsSync(hookBaseline)) {
 }
 const hookEntries = fs.existsSync(path.join(pluginDir, 'hooks'))
   ? fs.readdirSync(path.join(pluginDir, 'hooks')).sort() : [];
-if (JSON.stringify(hookEntries) !== JSON.stringify(['_shared', 'hooks.json', 'post-compact.js'])) {
+if (JSON.stringify(hookEntries) !== JSON.stringify([
+  '_shared', 'hooks.json', 'orchestrator-edit-gate-lib.js', 'post-compact.js', 'pre-effect.js',
+])) {
   failures.push(`hooks entries ${hookEntries.join(',')}`);
 }
 
@@ -290,7 +324,7 @@ assert_eq "$MANIFEST_TRIGGER_OUT" "manifest_codex_doc_triggers_in_sync" "Codex p
 SYNC_SANDBOX="$TEST_TMP/codex-sync-sandbox"
 mkdir -p "$SYNC_SANDBOX/scripts" "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin"
 cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh"
-printf '%s\n' '{"description":"production PostCompact recovery hook","hooks":"./hooks/hooks.json","interface":{"longDescription":"production PostCompact recovery hook"}}' \
+printf '%s\n' '{"description":"one production PostCompact recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped","hooks":"./hooks/hooks.json","interface":{"longDescription":"one production PostCompact recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped"}}' \
   > "$SYNC_SANDBOX/platforms/codex/plugin/.codex-plugin/plugin.json"
 for rel in skills bin src profiles schemas evals/clean evals/known-bad hooks/_shared references scripts project-config-template; do
   mkdir -p "$SYNC_SANDBOX/$rel" "$SYNC_SANDBOX/platforms/codex/plugin/$rel"
@@ -310,9 +344,17 @@ cp "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json" \
 printf "'use strict';\n" > "$SYNC_SANDBOX/evals/owner-eval-generator.js"
 cp "$SYNC_SANDBOX/evals/owner-eval-generator.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-eval-generator.js"
-mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example"
+mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example" \
+  "$SYNC_SANDBOX/platforms/codex/skill-adapters"
 printf -- '---\nname: example\ndescription: sandbox skill\n---\n# Example\n' > "$SYNC_SANDBOX/skills/example/SKILL.md"
 cp "$SYNC_SANDBOX/skills/example/SKILL.md" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example/SKILL.md"
+cp "$REPO_ROOT/platforms/codex/skill-adapters/lifecycle.md" \
+  "$SYNC_SANDBOX/platforms/codex/skill-adapters/lifecycle.md"
+for skill in dev-flow ceo-agent l3 l4 l5 l6 finish-flow; do
+  mkdir -p "$SYNC_SANDBOX/skills/$skill"
+  printf -- '---\nname: %s\ndescription: sandbox projected skill\n---\n# %s\n' \
+    "$skill" "$skill" > "$SYNC_SANDBOX/skills/$skill/SKILL.md"
+done
 cp "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/platforms/codex/plugin/scripts/sync-codex-plugin-skills.sh"
 for rel in \
   docs/plans/2026-06-04-distill-consolidate.md \
@@ -329,32 +371,49 @@ done
 printf '{"hooks":{}}\n' > "$SYNC_SANDBOX/hooks/hooks.json"
 mkdir -p "$SYNC_SANDBOX/platforms/codex/hooks"
 printf '{"hooks":{"PostCompact":[]}}\n' > "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json"
+printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js"
 printf "'use strict';\n" > "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js"
+printf "'use strict';\n" > "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js"
 mkdir -p "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines"
 cp "$SYNC_SANDBOX/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/claude-hooks.json"
 cp "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
+cp "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js"
 cp "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
+cp "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 in sandbox"
 assert_contains "$OUT" "Codex plugin payload in sync" "sync-codex-plugin-skills --check sandbox clean report"
 
 rm "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json" \
-  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects missing generated hook files"
 assert_contains "$OUT" "hooks/hooks.json" "sync-codex-plugin-skills --check names missing generated hook manifest"
+assert_contains "$OUT" "hooks/pre-effect.js" "sync-codex-plugin-skills --check names missing generated pre-effect adapter"
 assert_contains "$OUT" "hooks/post-compact.js" "sync-codex-plugin-skills --check names missing generated hook adapter"
+assert_contains "$OUT" "hooks/orchestrator-edit-gate-lib.js" "sync-codex-plugin-skills --check names missing shared edit-gate core"
 bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"; echo $?)" "0" \
   "sync-codex-plugin-skills regenerates the hook manifest byte-for-byte"
+assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js"; echo $?)" "0" \
+  "sync-codex-plugin-skills regenerates the pre-effect adapter byte-for-byte"
 assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"; echo $?)" "0" \
   "sync-codex-plugin-skills regenerates the hook adapter byte-for-byte"
+assert_eq "$(cmp -s "$SYNC_SANDBOX/hooks/orchestrator-edit-gate-lib.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/orchestrator-edit-gate-lib.js"; echo $?)" "0" \
+  "sync-codex-plugin-skills regenerates the shared edit-gate core byte-for-byte"
 
 printf '\nmanifest drift\n' >> "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
@@ -365,6 +424,11 @@ printf '\nadapter drift\n' >> "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-c
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects generated hook adapter drift"
 assert_contains "$OUT" "hooks/post-compact.js" "sync-codex-plugin-skills --check names drifted generated hook adapter"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+printf '\npre-effect drift\n' >> "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js"
+OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
+assert_eq "$EXIT" "1" "sync-codex-plugin-skills --check rejects generated pre-effect adapter drift"
+assert_contains "$OUT" "hooks/pre-effect.js" "sync-codex-plugin-skills --check names drifted pre-effect adapter"
 bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 
 printf '\ncanonical manifest change\n' >> "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json"
@@ -377,6 +441,11 @@ bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"; echo $?)" "0" \
   "canonical hook adapter changes regenerate the package mirror"
+printf '\ncanonical pre-effect change\n' >> "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
+assert_eq "$(cmp -s "$SYNC_SANDBOX/platforms/codex/hooks/pre-effect.js" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/hooks/pre-effect.js"; echo $?)" "0" \
+  "canonical pre-effect changes regenerate the package mirror"
 
 printf 'stale baseline\n' \
   > "$SYNC_SANDBOX/platforms/codex/plugin/profiles/baselines/stale.json"
@@ -491,6 +560,9 @@ const manifest = JSON.parse(fs.readFileSync(path.join(pluginDir, '.codex-plugin'
 const productionHooks = JSON.parse(fs.readFileSync(path.join(pluginDir, 'hooks', 'hooks.json'), 'utf8'));
 const marketplace = JSON.parse(fs.readFileSync(marketplacePath, 'utf8'));
 const canonical = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8'));
+const { resolveProductionVerdict } = require(path.join(
+  root, 'platforms', 'codex', 'hook-probe', 'pre-effect-contract-probe.js',
+));
 
 function print(key, value) {
   console.log(`${key}=${value}`);
@@ -499,12 +571,15 @@ function print(key, value) {
 print('manifest_name', manifest.name);
 print('manifest_version_matches', manifest.version === canonical.version);
 print('manifest_description_mentions_support', /support CLI\/scripts/.test(manifest.description));
-print('manifest_description_production_postcompact', /production PostCompact recovery hook/.test(manifest.description));
+print('manifest_description_production_hooks', /one production PostCompact recovery hook/.test(manifest.description) && !/production PreToolUse/.test(manifest.description));
 print('manifest_long_description_mentions_payload', /package payload bundles support CLI/.test(manifest.interface && manifest.interface.longDescription || ''));
 print('skills_path', manifest.skills);
 print('hooks_path', manifest.hooks);
 const postCompactGroup = productionHooks.hooks?.PostCompact?.[0];
 const postCompactHook = postCompactGroup?.hooks?.[0];
+print('production_pretooluse_absent',
+  !Object.prototype.hasOwnProperty.call(productionHooks.hooks || {}, 'PreToolUse')
+  && Object.keys(productionHooks.hooks || {}).length === 1);
 print('production_postcompact_exact',
   productionHooks.hooks?.PostCompact?.length === 1
   && Object.keys(productionHooks.hooks).length === 1
@@ -512,6 +587,16 @@ print('production_postcompact_exact',
   && postCompactGroup?.hooks?.length === 1
   && postCompactHook?.type === 'command'
   && postCompactHook?.command === 'node "${PLUGIN_ROOT}/hooks/post-compact.js"');
+const forcedProbeNoShip = resolveProductionVerdict({
+  productionHookRegistered: false,
+  hookControlsReady: true,
+  managedDispatcherReady: true,
+});
+print('probe_driver_forces_no_ship',
+  forcedProbeNoShip.verdict === 'NOT_READY'
+  && forcedProbeNoShip.d4_verdict === 'NOT_READY'
+  && forcedProbeNoShip.ship_status === 'NO_SHIP'
+  && forcedProbeNoShip.direct_mutation_enforcement === 'NOT_SHIPPED');
 print('has_hooks_field', Object.prototype.hasOwnProperty.call(manifest, 'hooks'));
 print('has_apps_field', Object.prototype.hasOwnProperty.call(manifest, 'apps'));
 print('has_mcp_field', Object.prototype.hasOwnProperty.call(manifest, 'mcpServers'));
@@ -550,11 +635,13 @@ assert_eq "$EXIT" "0" "Codex plugin JSON inspection exits 0"
 assert_contains "$OUT" "manifest_name=autopilot" "Codex plugin manifest uses autopilot name"
 assert_contains "$OUT" "manifest_version_matches=true" "Codex plugin version follows canonical manifest"
 assert_contains "$OUT" "manifest_description_mentions_support=true" "Codex plugin manifest describes bundled support payload"
-assert_contains "$OUT" "manifest_description_production_postcompact=true" "Codex plugin manifest describes production PostCompact recovery"
+assert_contains "$OUT" "manifest_description_production_hooks=true" "Codex plugin manifest describes the sole production hook and no direct-mutation boundary"
 assert_contains "$OUT" "manifest_long_description_mentions_payload=true" "Codex plugin long description explains support payload"
 assert_contains "$OUT" "skills_path=./skills/" "Codex plugin skills path is relative"
 assert_contains "$OUT" "hooks_path=./hooks/hooks.json" "Codex plugin hooks path is relative"
+assert_contains "$OUT" "production_pretooluse_absent=true" "Codex production manifest leaves the PreToolUse probe unregistered"
 assert_contains "$OUT" "production_postcompact_exact=true" "Codex production manifest declares one exact manual|auto PostCompact adapter"
+assert_contains "$OUT" "probe_driver_forces_no_ship=true" "Codex probe driver cannot promote an unregistered hook to D4 READY"
 assert_contains "$OUT" "has_hooks_field=true" "Codex plugin declares production hooks"
 assert_contains "$OUT" "has_apps_field=false" "Codex plugin does not declare apps"
 assert_contains "$OUT" "has_mcp_field=false" "Codex plugin does not declare MCP servers"

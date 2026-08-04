@@ -53,7 +53,7 @@ so that completeness check remains unavailable rather than being promoted from v
 Two Codex paths are supported:
 
 - **Per-repo skills**: same `.agents/skills/` symlink as OpenCode. Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed when you run Codex inside this repo.
-- **Local Codex plugin package**: `platforms/codex/plugin/` exposes the generated skills/support payload plus one production Codex-native `PostCompact` recovery hook, with a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
+- **Local Codex plugin package**: `platforms/codex/plugin/` exposes the generated skills/support payload plus the one production Codex-native `PostCompact` recovery hook, with a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`. No Codex-thread-bound direct-mutation enforcement is shipped; D4 is `NOT_READY/NO-SHIP`. The retained pre-effect adapter is an unregistered probe helper only.
 
 ```bash
 ./scripts/setup-symlinks.sh
@@ -71,14 +71,23 @@ Contributor shortcut:
 ```
 
 The Codex package does **not** load the Claude Code hook bundle, apps, or MCP servers. Its manifest
-declares `skills: "./skills/"` and `hooks: "./hooks/hooks.json"`; that hook manifest contains exactly
-one `PostCompact` registration with matcher `manual|auto`. The Codex adapter translates the official
-payload into Autopilot's existing fail-closed reconciliation authority and blocks continuation when
-identity or reconciliation fails. This is an exact Codex-native recovery boundary, not a claim that
-Claude hook events or defaults transfer to Codex. The generated payload also includes linked support
+declares `skills: "./skills/"` and `hooks: "./hooks/hooks.json"`; that hook manifest contains
+exactly one production Codex-native registration: `PostCompact` with matcher `manual|auto` for
+recovery. The Codex adapter translates the official payload into Autopilot's existing fail-closed
+reconciliation authority and blocks continuation when identity or reconciliation fails. This is an
+exact Codex-native recovery boundary, not a claim that Claude hook events or defaults transfer to
+Codex. No Codex-thread-bound direct-mutation enforcement is currently registered; the unregistered
+pre-effect source/mirror is non-production probe material only. The generated payload also includes linked support
 files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so
 skill links and engine CLI commands resolve after install. Run engine commands from the target
 repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
+
+The lifecycle marker validator can reject copied or mismatched explicit session markers, but it is
+not a production PreToolUse admission boundary. The final Codex 0.146.0 installed control did not
+make the canonical shell-run marker visible under the hook payload session, so direct-mutation
+enforcement remains `NOT_READY/NO-SHIP`. Managed Codex implementers independently use a temporary
+credentials-only `CODEX_HOME` with the parent thread identity removed, so controller plugin/config/
+session state is not inherited by the child.
 
 For an ordinary strict-L5 invocation, set `AUTOPILOT_LEVEL=l5` and use the managed
 `engine implement-review` command. The CLI resolves the target repository's exact implementer,

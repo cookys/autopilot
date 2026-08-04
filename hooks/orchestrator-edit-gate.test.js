@@ -23,7 +23,14 @@ const { spawnSync } = require('child_process');
 
 const LIB = path.join(__dirname, 'orchestrator-edit-gate-lib.js');
 const HOOK = path.join(__dirname, 'orchestrator-edit-gate.js');
-const { decide, isAllowlisted } = require(LIB);
+const CODEX_PLUGIN_ROOT = path.join(__dirname, '..', 'platforms', 'codex', 'plugin');
+const CODEX_HOOK = path.join(CODEX_PLUGIN_ROOT, 'hooks', 'pre-effect.js');
+const {
+  decide,
+  decideCodexPreEffect,
+  classifyCodexGitProbe,
+  isAllowlisted,
+} = require(LIB);
 
 // ---- pure lib ----
 
@@ -67,6 +74,257 @@ test('isAllowlisted: tracking/config/plans paths pass, product paths fail', () =
   assert.strictEqual(isAllowlisted('docs/README.md'), false);
   // GPT-OSS finding: a handoff-named file in product territory is NOT allowlisted
   assert.strictEqual(isAllowlisted('src/handoff.md'), false);
+});
+
+test('decideCodexPreEffect: no marker blocks effect-capable repository tools', () => {
+  const d = decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: false,
+    managedEngineEntry: false,
+    markerStatus: 'absent',
+    markerReason: 'session marker absent',
+    markerLevel: null,
+  });
+  assert.strictEqual(d.action, 'gate');
+  assert.strictEqual(d.reasonCode, 'DEV_FLOW_ENTRY_REQUIRED');
+});
+
+test('decideCodexPreEffect: non-repository and read-only activity are no-ops', () => {
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: false, effectCapable: true,
+  }).action, 'allow');
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: true, effectCapable: false,
+  }).action, 'allow');
+});
+
+test('decideCodexPreEffect: fixed lifecycle entry remains available without a marker', () => {
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: true,
+    managedEngineEntry: false,
+    markerStatus: 'absent',
+    markerLevel: null,
+  }).action, 'allow');
+});
+
+test('decideCodexPreEffect: l3 preserves inline effects', () => {
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: false,
+    managedEngineEntry: false,
+    markerStatus: 'valid',
+    markerLevel: 'l3',
+  }).action, 'allow');
+});
+
+test('decideCodexPreEffect: managed levels block depth-0 but admit fixed Engine entry', () => {
+  const direct = decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: false,
+    managedEngineEntry: false,
+    markerStatus: 'valid',
+    markerLevel: 'l5',
+  });
+  assert.strictEqual(direct.action, 'gate');
+  assert.strictEqual(direct.reasonCode, 'DEPTH_ZERO_MUTATION_FORBIDDEN');
+  assert.strictEqual(decideCodexPreEffect({
+    inRepository: true,
+    effectCapable: true,
+    lifecycleEntry: false,
+    managedEngineEntry: true,
+    markerStatus: 'valid',
+    markerLevel: 'l5',
+  }).action, 'allow');
+});
+
+test('classifyCodexGitProbe: only the real non-repository result is a no-op', () => {
+  assert.deepStrictEqual(classifyCodexGitProbe({
+    status: 128,
+    stdout: '',
+    stderr: 'fatal: not a git repository (or any of the parent directories): .git',
+    error: null,
+    signal: null,
+  }), { status: 'not_repository', root: null, reason: null });
+  assert.strictEqual(classifyCodexGitProbe({
+    status: null,
+    stdout: '',
+    stderr: '',
+    error: Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' }),
+    signal: null,
+  }).status, 'error');
+  assert.strictEqual(classifyCodexGitProbe({
+    status: null,
+    stdout: '',
+    stderr: '',
+    error: Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }),
+    signal: 'SIGTERM',
+  }).status, 'error');
+});
+
+function setupCodexGate() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-oeg-'));
+  const repo = path.join(base, 'repo');
+  const markers = path.join(base, 'markers');
+  fs.mkdirSync(repo, { recursive: true });
+  assert.strictEqual(spawnSync('git', ['init', '-q', repo]).status, 0);
+  return {
+    base,
+    repo,
+    markers,
+    env: {
+      ...process.env,
+      PLUGIN_ROOT: CODEX_PLUGIN_ROOT,
+      AUTOPILOT_SESSION_MODE_DIR: markers,
+      AUTOPILOT_SESSION_ID: 'codex-live-session',
+      CODEX_THREAD_ID: 'codex-live-session',
+    },
+  };
+}
+
+function codexPayload(cwd, command, toolName = 'shell') {
+  return {
+    hook_event_name: 'PreToolUse',
+    cwd,
+    session_id: 'codex-live-session',
+    tool_name: toolName,
+    tool_input: command === null ? { path: cwd } : { command },
+  };
+}
+
+function runCodexHook(value, env) {
+  return spawnSync(process.execPath, [CODEX_HOOK], {
+    input: JSON.stringify(value), encoding: 'utf8', env,
+  });
+}
+
+function setCodexMarker(env, repo, level) {
+  const result = spawnSync('node', [path.join(CODEX_PLUGIN_ROOT, 'scripts', 'session-mode.js'),
+    'set', '--level', level, '--entry-level', level, '--repo-root', repo], {
+    env, cwd: repo, encoding: 'utf8',
+  });
+  assert.strictEqual(result.status, 0, result.stderr);
+}
+
+test('Codex wrapper: no marker returns the live-proven structured denial', () => {
+  const { repo, env } = setupCodexGate();
+  const result = runCodexHook(codexPayload(repo, 'touch denied'), env);
+  assert.strictEqual(result.status, 0);
+  assert.deepStrictEqual(JSON.parse(result.stdout), {
+    decision: 'block',
+    reason: 'DEV_FLOW_ENTRY_REQUIRED: session marker absent',
+  });
+});
+
+test('Codex wrapper: fixed session-mode entry is available before a marker exists', () => {
+  const { repo, markers, env } = setupCodexGate();
+  const hookLog = path.join(markers, 'hook-log.jsonl');
+  env.AUTOPILOT_CODEX_PRE_EFFECT_TEST_LOG = hookLog;
+  fs.mkdirSync(markers, { recursive: true });
+  fs.writeFileSync(path.join(markers, 'stale-corrupt.json'), '{{{');
+  const script = path.join(CODEX_PLUGIN_ROOT, 'scripts', 'session-mode.js');
+  const command = `AUTOPILOT_SESSION_ID=codex-live-session node "${script}" set `
+    + `--level l5 --entry-level l5 --repo-root "${repo}"`;
+  const result = runCodexHook(codexPayload(repo, command), env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, '');
+  const row = JSON.parse(fs.readFileSync(hookLog, 'utf8'));
+  assert.strictEqual(row.command_class, 'lifecycle_entry');
+  assert.match(row.session_id_sha256, /^[a-f0-9]{64}$/u);
+});
+
+test('Codex wrapper: l3 allows inline shell while l5 blocks depth-0 shell', () => {
+  const l3 = setupCodexGate();
+  setCodexMarker(l3.env, l3.repo, 'l3');
+  assert.strictEqual(runCodexHook(codexPayload(l3.repo, 'touch inline'), l3.env).stdout, '');
+
+  const l5 = setupCodexGate();
+  setCodexMarker(l5.env, l5.repo, 'l5');
+  const blocked = runCodexHook(codexPayload(l5.repo, 'touch depth-zero'), l5.env);
+  assert.strictEqual(blocked.status, 0);
+  assert.strictEqual(JSON.parse(blocked.stdout).decision, 'block');
+  assert.match(JSON.parse(blocked.stdout).reason, /DEPTH_ZERO_MUTATION_FORBIDDEN/u);
+});
+
+test('Codex wrapper: l5 admits only the fixed managed Engine entry', () => {
+  const { base, repo, env } = setupCodexGate();
+  const hookLog = path.join(base, 'hook-log.jsonl');
+  env.AUTOPILOT_CODEX_PRE_EFFECT_TEST_LOG = hookLog;
+  setCodexMarker(env, repo, 'l5');
+  const script = path.join(CODEX_PLUGIN_ROOT, 'bin', 'autopilot.js');
+  const command = `AUTOPILOT_SESSION_ID=codex-live-session AUTOPILOT_LEVEL=l5 node "${script}" `
+    + 'engine implement-review --campaign-contract campaign.json';
+  const result = runCodexHook(codexPayload(repo, command), env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.stdout, '');
+  const row = JSON.parse(fs.readFileSync(hookLog, 'utf8'));
+  assert.strictEqual(row.command_class, 'managed_engine_entry');
+  assert.match(row.session_id_sha256, /^[a-f0-9]{64}$/u);
+});
+
+test('Codex wrapper: corrupt marker denies; read-only and non-repository calls no-op', () => {
+  const { base, repo, markers, env } = setupCodexGate();
+  fs.mkdirSync(markers, { recursive: true });
+  fs.writeFileSync(path.join(markers, 'codex-live-session.json'), '{{{');
+  assert.strictEqual(JSON.parse(runCodexHook(codexPayload(repo, 'touch nope'), env).stdout).decision, 'block');
+  assert.strictEqual(runCodexHook(codexPayload(repo, null, 'read_file'), env).stdout, '');
+  assert.strictEqual(runCodexHook(codexPayload(base, 'touch scratch'), env).stdout, '');
+});
+
+test('Codex wrapper: a marker cannot be reused by another host session', () => {
+  const { repo, markers, env } = setupCodexGate();
+  setCodexMarker(env, repo, 'l3');
+  const original = path.join(markers, 'codex-live-session.json');
+  const copied = path.join(markers, 'another-codex-session.json');
+  fs.copyFileSync(original, copied);
+  const mismatched = codexPayload(repo, 'touch denied');
+  mismatched.session_id = 'another-codex-session';
+  const result = runCodexHook(mismatched, env);
+  assert.strictEqual(JSON.parse(result.stdout).decision, 'block');
+  assert.match(JSON.parse(result.stdout).reason, /host-session mismatch/u);
+});
+
+test('Codex wrapper: host session IDs that would normalize ambiguously are denied', () => {
+  const { repo, env } = setupCodexGate();
+  const ambiguous = codexPayload(repo, 'touch denied');
+  ambiguous.session_id = 'codex/session';
+  const result = runCodexHook(ambiguous, env);
+  assert.strictEqual(JSON.parse(result.stdout).decision, 'block');
+  assert.match(JSON.parse(result.stdout).reason, /payload identity is invalid/u);
+});
+
+test('Codex wrapper: git spawn failures block effect-capable tools but read-only remains a no-op', () => {
+  const { base, repo, env } = setupCodexGate();
+  const emptyPath = path.join(base, 'empty-path');
+  fs.mkdirSync(emptyPath);
+  const missingGitEnv = { ...env, PATH: emptyPath };
+  const blocked = runCodexHook(codexPayload(repo, 'touch denied'), missingGitEnv);
+  assert.strictEqual(JSON.parse(blocked.stdout).decision, 'block');
+  assert.match(JSON.parse(blocked.stdout).reason, /git probe failed \(ENOENT\)/u);
+  assert.strictEqual(
+    runCodexHook(codexPayload(repo, null, 'read_file'), missingGitEnv).stdout,
+    '',
+  );
+});
+
+test('Codex wrapper: a timed-out Git probe returns structured denial', () => {
+  const { base, repo, env } = setupCodexGate();
+  const slowPath = path.join(base, 'slow-path');
+  const slowGit = path.join(slowPath, 'git');
+  fs.mkdirSync(slowPath);
+  fs.writeFileSync(slowGit, '#!/bin/sh\n/bin/sleep 30\n');
+  fs.chmodSync(slowGit, 0o700);
+  const result = runCodexHook(codexPayload(repo, 'touch denied'), {
+    ...env,
+    PATH: slowPath,
+  });
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(JSON.parse(result.stdout).decision, 'block');
+  assert.match(JSON.parse(result.stdout).reason, /git probe failed \(ETIMEDOUT\)/u);
 });
 
 // ---- wrapper black-box ----

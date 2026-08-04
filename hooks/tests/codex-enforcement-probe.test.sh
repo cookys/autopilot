@@ -46,7 +46,7 @@ assert_contains "$OUT" "request_action=shell_touch_exact" \
 assert_contains "$OUT" "target_created=false" "Blocked tool produced no filesystem effect"
 assert_contains "$OUT" "blocking_gate=warning" \
   "Capability stays below H4 despite the block-capable primitive"
-assert_contains "$OUT" "capability_checked=2026-07-27" "Capability record is fresh"
+assert_contains "$OUT" "capability_checked=2026-08-04T02:32:41.337Z" "Capability record is fresh"
 
 PROBE_SOURCE="$(cat "$PROBE")"
 assert_not_contains "$PROBE_SOURCE" "'--ignore-user-config'" \

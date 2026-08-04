@@ -12,13 +12,39 @@ ROOT_RUN_ID="wlb-root-p0"
 PROMPT="$TEST_TMP/prompt.txt"
 printf '%s\n' "create the fixture artifact" > "$PROMPT"
 
+# Canonical strict agy envelope used by production dispatch parsing. Fake agents
+# must exercise the same response/usage boundary as the live runner.
+AGY_FIXTURE_HELPER="$TEST_TMP/emit-agy-envelope"
+cat > "$AGY_FIXTURE_HELPER" <<'EOF'
+#!/usr/bin/env bash
+response="${1:-self-report: DONE}"
+RESPONSE="$response" node -e '
+  process.stdout.write(JSON.stringify({
+    conversation_id: "fixture",
+    duration_seconds: 1,
+    num_turns: 1,
+    response: process.env.RESPONSE,
+    status: "SUCCESS",
+    usage: {
+      cache_read_tokens: 0,
+      input_tokens: 1,
+      output_tokens: 1,
+      thinking_tokens: 0,
+      total_tokens: 2,
+    },
+  }));
+'
+EOF
+chmod +x "$AGY_FIXTURE_HELPER"
+export AGY_FIXTURE_HELPER
+
 STUB_AGY="$TEST_TMP/agy-commit"
 cat > "$STUB_AGY" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "fixture" > wlb-leaf.txt
 git add wlb-leaf.txt
 git -c user.email=wlb@test -c user.name=wlb commit -q -m "test: retained leaf"
-printf '%s\n' "self-report: DONE"
+"$AGY_FIXTURE_HELPER"
 STUB
 chmod +x "$STUB_AGY"
 
@@ -36,7 +62,7 @@ done
 printf '%s\n' "fixture" > wlb-leaf.txt
 git add wlb-leaf.txt
 git -c user.email=wlb@test -c user.name=wlb commit -q -m "test: concurrent retained leaf"
-printf '%s\n' "self-report: DONE"
+"$AGY_FIXTURE_HELPER"
 STUB
 chmod +x "$STUB_BARRIER"
 

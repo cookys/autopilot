@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
-OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T00:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d)"
+OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T03:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d)"
 EXIT=$?
 assert_eq "0" "$EXIT" "harness report exits 0"
 
@@ -35,7 +35,7 @@ assert_contains "$PARSED" "codex_level=H2" "harness report preserves harness lev
 assert_contains "$PARSED" "required_level=H3" "harness report defaults readiness to H3"
 assert_contains "$PARSED" "copilot_reasons_unique=true" "harness report emits unique readiness reasons"
 
-OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T00:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d --format warning)"
+OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T03:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d --format warning)"
 EXIT=$?
 assert_eq "0" "$EXIT" "harness warning report exits 0"
 assert_contains "$OUT" "AUTOPILOT_HARNESS_ATTENTION count=7" "warning report includes stale or H3-unready records"

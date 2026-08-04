@@ -1,6 +1,6 @@
 # Platform capability trigger activation
 
-> **Status:** D1 capability claims + D2 agy telemetry complete / D3 Codex PostCompact next
+> **Status:** D1 capability claims + D2 agy telemetry + D3 Codex PostCompact complete / D4 locked
 > **Branch:** `feat/platform-capability-trigger-activation`
 > **Plan:** [platform capability trigger activation](../../plans/2026-08-04-platform-capability-trigger-activation.md)
 
@@ -26,7 +26,7 @@ Every promoted platform fact must first pass the closed dual-evidence claim cont
 
 | Deliverable | Status | Internal gates | Exit condition |
 |---|---|---|---|
-| Platform capability trigger activation | in progress; D1–D2 complete, D3 next | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact next → D4 strict-L5 bootstrap | Cumulative implementation, verification, and docs finish gate pass on the frozen range |
+| Platform capability trigger activation | in progress; D1–D3 complete, D4 locked | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact ✓ → D4 strict-L5 bootstrap locked | Cumulative implementation, verification, and docs finish gate pass on the frozen range |
 
 The tracker has one deliverable. D1–D4 are ordered internal gates, not independently claimable phases;
 tests, reviews, repairs, and doc sync remain inside this row and its existing budgets.
@@ -43,7 +43,26 @@ The exact D2/D3/D4 consumer-manifest repair stayed in the same R4 lineage. Gener
 `next_generation` is `null`. The immutable artifact is
 `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
 (SHA-256 `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`).
-Implementation is authorized. D1 emitted the closed [platform capability receipt](evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 now consumes its exact two-claim set before every agy provider invocation, captures the native JSON envelope privately, preserves only the response framing in worker-visible logs, and admits only validated usage into result/scorecard telemetry. D3 is the next internal gate.
+Implementation is authorized. D1 emitted the closed [platform capability receipt](evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 now consumes its exact two-claim set before every agy provider invocation, captures the native JSON envelope privately, preserves only the response framing in worker-visible logs, and admits only validated usage into result/scorecard telemetry.
+
+D3 now ships one Codex-native production `PostCompact` registration (`manual|auto`) from canonical
+sources outside the generated package. The adapter translates the official payload into the existing
+fail-closed reconciliation authority; it does not copy recovery logic or claim Claude hook parity.
+The generated package mirrors the canonical manifest and adapter byte-for-byte.
+
+## D3 production evidence
+
+The exact [Codex production live receipt](evidence/codex-postcompact-production-live-receipt.json)
+is a byte-for-byte copy of
+`/tmp/autopilot-d3-live-E8PkHl/depth0-production-live-final12/live-receipt.json`.
+Its file SHA-256 is `789a0cfb1975adafbfd162ce28ee1dee943999bfba805077c9857597c212a461`,
+its sealed internal digest is
+`96e7859cef39132aa3c80aa4e55ea0672c07d8838c4238994cbb0f3f25be762a`, and the
+live driver SHA-256 is `41bc2658d91ca8416387ea1174df34bd4a9cd879e63324d8b3fe3028dba6c94c`.
+On Codex 0.146.0 it proves manual reconciliation before effect, threshold-12000 automatic
+reconciliation before the continuation/effect, and the negative boundary where a broken adapter
+fails the hook with no reconciliation receipt and no sentinel. Raw terminal content is intentionally
+not committed; its redacted digests remain bound by the receipt.
 
 ## Scope boundaries
 

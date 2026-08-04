@@ -302,6 +302,8 @@ function cmdPostcompactAdapter(flags) {
     workOrder: controllerWo,
     controller: controllerWo && controllerWo.controller,
     probeEvidenceAccepted: flags['probe-evidence-accepted'] === true,
+    hookInvocationDigest: flags['hook-invocation-digest'] || null,
+    hookTrigger: flags['hook-trigger'] || null,
     resourceInventory: reconstructed.inventory || [],
     inventoryDigest: reconstructed.digest || sha256Json(reconstructed.inventory || []),
   };

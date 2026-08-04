@@ -53,7 +53,7 @@ so that completeness check remains unavailable rather than being promoted from v
 Two Codex paths are supported:
 
 - **Per-repo skills**: same `.agents/skills/` symlink as OpenCode. Codex's skill scanner walks up from cwd to find `<repo>/.agents/skills/`. No further setup needed when you run Codex inside this repo.
-- **Local Codex plugin package**: `platforms/codex/plugin/` is a Codex package whose manifest exposes only skills, with bundled support payload and a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
+- **Local Codex plugin package**: `platforms/codex/plugin/` exposes the generated skills/support payload plus one production Codex-native `PostCompact` recovery hook, with a repo-local marketplace at `platforms/codex/.agents/plugins/marketplace.json`.
 
 ```bash
 ./scripts/setup-symlinks.sh
@@ -70,13 +70,21 @@ Contributor shortcut:
 ./scripts/dev-setup.sh --harness codex --install
 ```
 
-The Codex package intentionally does **not** load Claude Code hooks, apps, or MCP servers. Its manifest exposes only `skills: "./skills/"`, while the package payload also includes linked support files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so skill links and engine CLI commands resolve after install. Run engine commands from the target repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
+The Codex package does **not** load the Claude Code hook bundle, apps, or MCP servers. Its manifest
+declares `skills: "./skills/"` and `hooks: "./hooks/hooks.json"`; that hook manifest contains exactly
+one `PostCompact` registration with matcher `manual|auto`. The Codex adapter translates the official
+payload into Autopilot's existing fail-closed reconciliation authority and blocks continuation when
+identity or reconciliation fails. This is an exact Codex-native recovery boundary, not a claim that
+Claude hook events or defaults transfer to Codex. The generated payload also includes linked support
+files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and `hooks/_shared`) so
+skill links and engine CLI commands resolve after install. Run engine commands from the target
+repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
 
-Codex hook development uses the separate warning-only `platforms/codex/hook-probe` package. On
-codex-cli 0.146.0, an isolated installed probe recorded real `PreCompact`/`PostCompact` pairs for
-both explicit `/compact` and automatic threshold compaction. This proves the host event substrate;
-it does not add hooks to the main skills-only package or claim that Autopilot's production recovery
-adapter has shipped.
+Codex hook maintenance still uses the separate warning-only `platforms/codex/hook-probe` package.
+On codex-cli 0.146.0, the probe recorded real `PreCompact`/`PostCompact` pairs for explicit
+`/compact` and threshold compaction. The default package's production receipt then proved manual and
+threshold-auto reconciliation-before-effect plus the broken-adapter failure boundary. The probe
+remains disposable telemetry; it is not the production hook.
 
 For global loose-skill availability across repos without installing the plugin package, see `platforms/codex/config.toml.example`.
 

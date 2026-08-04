@@ -16,7 +16,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ## Audit snapshot（2026-08-04，`develop` @ `33cfd513`）
 
 - **49 real entries**：2 個 Board decisions、18 個已排入執行計畫的 technical gaps、29 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
-- 本輪逐條對照 code、tests、installed CLI、live probes 與 upstream CHANGELOG/release evidence 後，**0 個已完整完成可刪、0 個可安全視為重複合併**。Codex `PostCompact`、agy structured usage 與 strict `/l5` CLI trust-root 三個舊 conditional trigger已成立；agy production integration 已於 D2 完成，D3／D4 仍列 PLANNED，不誤刪為 done。
+- 本輪逐條對照 code、tests、installed CLI、live probes 與 upstream CHANGELOG/release evidence 後，Codex `PostCompact`、agy structured usage 與 strict `/l5` CLI trust-root 三個舊 conditional trigger已成立；agy production integration 已於 D2 完成，Codex production recovery 已於 D3 完成，D4 仍鎖定等待 depth-0 授權。
 - 14 個既有 technical gaps 仍依序收斂於 [`2026-08-03-next-touch-debt-retirement.md`](plans/2026-08-03-next-touch-debt-retirement.md) 的 D1–D8；本輪新增／轉列的 4 項收斂於 [`2026-08-04-platform-capability-trigger-activation.md`](plans/2026-08-04-platform-capability-trigger-activation.md) 的 D1–D4。
 - 29 個 conditional entries 主要是四類：等待仍未出現的外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
 
@@ -57,7 +57,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: `docs/plans/2026-07-08-fable-skills-absorption.md`。
 
 ### Harness capability-state refresh after 2026-08 platform releases
-- **Status**: COMPLETE — D1 and D2 closed; D3 is next in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Status**: COMPLETE through D3; D4 remains locked in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
 - **Trigger**: ADMITTED 2026-08-04 — installed Codex 0.146.0, Claude Code 2.1.220, agy 1.1.10, OpenCode 1.17.15（latest 1.18.11 亦已 isolated probe）與 Grok 0.2.118 已超過多個 committed capability baseline；Codex、agy、Grok changelog 亦新增本 repo 會消費的 hook／structured-output／usage surface。
 - **Context**: D1 已產出 closed、content-addressed aggregate receipt：D2=2、D3=4、D4=6 個 required claims 全部 validated 且 immediate re-probe 通過；optional set 保留 OpenCode truncation、Codex install-generator、Grok `SessionEnd` usage 與 generic `tier:` 的 blocked 結論。Grok headless JSON usage 已證實，但沒有把它偷換成 host hook firing。Receipt: [`platform-capabilities.json`](projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json)。
 - **Effort**: L。
@@ -95,9 +95,9 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 
 ### Codex production `PostCompact` recovery wiring
-- **Status**: PLANNED — D3 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Status**: COMPLETE — D3 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
 - **Trigger**: ADMITTED 2026-08-04 — Codex 0.129.0 official release/PR #19905 documents `PreCompact`/`PostCompact`, `manual|auto` matchers, payload, ordering and failure semantics；D1 已在 installed 0.146.0 上凍結 explicit `/compact` 與 threshold auto-compaction 的 live host firing claims；D3 可消費其 exact D3 claim-ID set。
-- **Context**: v2.34.1 已有 host-neutral checkpoint/rehydration gate、`postcompact-adapter` CLI 與 continuation admission，缺的是 production Codex `hooks.json`＋官方 payload translation。D3 只接這條既有 authority，並以 effectful sentinel 證明 reconciliation 前第一個 effectful action 被阻擋；不得複製 Claude payload 假設或另造 recovery path。
+- **Context**: D3 已加入 canonical `platforms/codex/hooks/{hooks.json,post-compact.js}`、generated package mirrors 與 official payload translation，並只接既有 fail-closed reconciliation authority。Codex 0.146.0 production receipt 已證明 manual 與 threshold-12000 auto reconciliation-before-effect；broken-adapter control 為 hook failure、無 reconciliation receipt、無 sentinel。Receipt: [`codex-postcompact-production-live-receipt.json`](projects/2026-08-04-platform-capability-trigger-activation/evidence/codex-postcompact-production-live-receipt.json)。
 - **Effort**: M
 - **Source**: controller-execution-discipline v2.34.1 boundary；Codex 0.129.0 / PR #19905 + installed 0.146.0 re-audit；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D3。
 

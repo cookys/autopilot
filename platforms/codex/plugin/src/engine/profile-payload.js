@@ -283,7 +283,15 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
   }
 
   const liveHookManifest = path.join(repoRoot, 'hooks', 'hooks.json');
-  const hookManifestPath = fs.existsSync(liveHookManifest)
+  const codexPluginManifest = path.join(repoRoot, '.codex-plugin', 'plugin.json');
+  const isCodexPluginPayload = fs.existsSync(codexPluginManifest)
+    && readJsonInside(repoRoot, '.codex-plugin/plugin.json', 'Codex plugin manifest').hooks
+      === './hooks/hooks.json';
+  // The Codex package now has its own production PostCompact manifest. Profile
+  // policy still classifies the canonical Claude hook inventory preserved in
+  // the immutable package baseline; never reinterpret the Codex event as that
+  // inventory merely because both platforms use hooks/hooks.json.
+  const hookManifestPath = fs.existsSync(liveHookManifest) && !isCodexPluginPayload
     ? 'hooks/hooks.json'
     : 'profiles/baselines/claude-hooks.json';
   const hookManifest = readJsonInside(repoRoot, hookManifestPath, 'hook manifest');

@@ -12,8 +12,9 @@
 # Autopilot's .agents/skills/ symlink (auto-created by scripts/setup-symlinks.sh)
 # is sufficient for per-repo Codex usage — no config.toml change required.
 #
-# Autopilot also ships a skills-only Codex plugin package under
-# platforms/codex/plugin with a repo-local marketplace under platforms/codex/.
+# Autopilot also ships a Codex plugin package with skills plus one production
+# PostCompact recovery hook under platforms/codex/plugin, with a repo-local
+# marketplace under platforms/codex/. This does not imply Claude hook parity.
 # Install it with:
 #
 #   ./scripts/sync-codex-plugin-skills.sh

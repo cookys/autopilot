@@ -47,6 +47,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/lib/grok-effort.sh`](scripts/lib/grok-effort.sh) + [`scripts/lib/prune-tmp-residue.sh`](scripts/lib/prune-tmp-residue.sh) + [`scripts/test-grok-effort.sh`](scripts/test-grok-effort.sh) | Dispatch effort normalization, residue cleanup, and its focused test. |
 | [`scripts/dispatch-status.js`](scripts/dispatch-status.js) | Report-only mid-run phase/liveness/usage/stall JSON and retention reap. Recipe: hetero-dispatch § Mid-run observability. |
 | [`scripts/compaction-rehydrate.js`](scripts/compaction-rehydrate.js) | Fail-closed Work Order reconciliation and continuation admission after compaction or session resume. |
+| [`scripts/probe-codex-postcompact-production.js`](scripts/probe-codex-postcompact-production.js) | Bounded installed-package Codex `PostCompact` live receipt driver for manual, threshold-auto, and broken-adapter recovery boundaries. |
 | [`scripts/run-ledger.sh`](scripts/run-ledger.sh) | Durable per-run ledger, stage state machine, and directive queue; contract in its header. |
 | [`scripts/watch-foreman.js`](scripts/watch-foreman.js) | Report-only depth-0 sensing over ledger and dispatch manifests for /l4–/l6. |
 | [`scripts/lib/json-emit.sh`](scripts/lib/json-emit.sh) | Sourceable JSON helpers — the ONE canonical `json_escape` (RFC 8259-correct) + `json_array_from_lines`; replaces the old divergent per-script copies. Tests: [`hooks/tests/json-emit.test.sh`](hooks/tests/json-emit.test.sh). |

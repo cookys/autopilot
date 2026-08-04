@@ -4,13 +4,13 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-08-03T22:23:16.577Z",
-  "verified_at": "2026-08-03T22:23:16.577Z",
-  "expires_at": "2026-08-17T22:23:16.577Z",
+  "last_checked_at": "2026-08-04T02:32:41.337Z",
+  "verified_at": "2026-08-04T02:32:41.337Z",
+  "expires_at": "2026-08-18T02:32:41.337Z",
   "evidence": {
     "source": "local-execution-probe",
-    "command": "isolated codex 0.146.0 TUI with installed platforms/codex/hook-probe; explicit /compact plus model_auto_compact_token_limit=1200",
-    "result": "codex-cli 0.146.0; installed warning-only hook recorded real PreCompact/PostCompact pairs for both manual and automatic compaction; D1 receipt binds the redacted host-event digest"
+    "command": "isolated codex 0.146.0 TUI with installed default Autopilot package; manual /compact, model_auto_compact_token_limit=12000 two-turn rollover, and broken-adapter negative control",
+    "result": "production PostCompact receipt 96e7859cef39132aa3c80aa4e55ea0672c07d8838c4238994cbb0f3f25be762a proves manual and automatic reconciliation-before-effect; broken adapter fails with no reconciliation receipt or sentinel"
   },
   "capabilities": {
     "read_only_dispatch": "verified",
@@ -18,14 +18,15 @@
     "plugin_packaging": "verified",
     "hooks": "verified",
     "post_compact": "verified",
+    "post_compact_recovery": "verified",
     "mutation_dispatch": "unverified",
     "blocking_gate": "warning"
   },
   "notes": [
-    "Default Autopilot Codex package remains skills-only.",
+    "Default Autopilot Codex package exposes skills plus one production PostCompact manual|auto recovery hook.",
     "The execution artifact records blocking semantics only. P2 must still bind Mission identity and control sequence before shipping an enforcement adapter.",
     "The harmless PreToolUse fixture is block-capable, but H4 gate promotion still requires the governance eval, independent verification, and rollback evidence.",
-    "The main Codex package remains skills-only until P2; the isolated hook probe does not change package defaults.",
+    "Production support is limited to the live-proven Codex PostCompact boundary; no Claude hook parity, apps, or MCP servers are claimed.",
     "Do not put real model or effort routing policy in engine code."
   ],
   "mission_enforcement_probe_digest": "76e97b27b3b3bbe9260d7baea631367f6965db36e5216aa57757a423ab300b79"

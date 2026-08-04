@@ -24,32 +24,47 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased — Authoritative agy structured telemetry
+## Unreleased — Platform capability activation: agy telemetry + Codex recovery
 
-**Headline**: agy review and implementation dispatches now consume a freshly revalidated D2
-capability receipt, keep the provider's native JSON envelope private, preserve the existing
-response framing, and expose only strictly validated usage telemetry.
+**Headline**: agy review and implementation dispatches now expose only authoritative structured
+usage, while the default Codex package registers one production `PostCompact` recovery hook that
+reconciles manual and automatic compaction before continuation or effect.
 
 ### Added
 - Closed, required `usage` contracts for review and runner results, with safe nonnegative token
   counts and explicit `source:"agy-json"` attribution for authoritative agy samples.
 - Scorecard evidence classes that keep new dispatch-result usage separate from historical agy
   transcripts, whose token data remains unavailable as `transcript_schema_not_exposed`.
+- Canonical Codex `PostCompact` manifest and adapter sources outside the generated package, plus a
+  byte-identical production live receipt proving manual, threshold-12000 auto, and broken-adapter
+  failure behavior on codex-cli 0.146.0.
 
 ### Changed
 - `dispatch-review.sh` and `dispatch-hetero.sh` validate the exact D2 claim-ID set immediately
   before every agy invocation and capture `--output-format json` into private temporary files.
 - Only the validated response reaches worker-visible logs and the existing nonce/commit framing;
   usage flows separately into result JSON and scorecard aggregation.
+- The Codex package manifest now declares `./hooks/hooks.json`. Package sync mirrors exactly one
+  `manual|auto` adapter from canonical sources and rejects missing, extra, or drifted hook payload.
+- The production adapter translates the official Codex payload into the existing fail-closed
+  reconciliation authority; it does not copy recovery logic.
 
 ### Fixed
 - Malformed, truncated, duplicate-key, extra-key, invalid-number, trailing-data, and nonzero-exit
   agy envelopes now fail closed without admitting response or usage; worker-authored fake usage
   cannot promote itself into telemetry.
+- Missing or ambiguous Codex identity, stale controller authority, invalid payload, duplicate
+  invocation, and adapter failure block post-compaction continuation. A broken-adapter live control
+  produced neither reconciliation receipt nor effect sentinel.
+
+### Boundary
+- The Codex package ships one Codex-native production `PostCompact` boundary only. It does not load
+  the Claude Code hook bundle and does not claim parity for other hook events, apps, or MCP servers.
 
 ### Rollback
 - Revert the D2 telemetry commit to restore the prior plain-output transport and result schemas;
-  no stored historical transcript data is rewritten by this change.
+  no stored historical transcript data is rewritten. Revert the D3 activation commit to remove the
+  Codex production hook declaration and generated adapter while retaining the warning-only probe.
 
 ## v2.34.1 — Controller execution discipline
 

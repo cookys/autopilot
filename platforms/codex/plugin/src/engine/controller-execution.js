@@ -2593,6 +2593,8 @@ function runPostCompactAdapter(input = {}) {
     attempt = isObj(workOrder) ? workOrder.attempt : null,
     workOrderId = isObj(workOrder) ? workOrder.work_order_id : null,
     probeEvidenceAccepted = false,
+    hookInvocationDigest = null,
+    hookTrigger = null,
   } = input;
   if (typeof reconcileFn !== 'function') {
     return {
@@ -2685,6 +2687,8 @@ function runPostCompactAdapter(input = {}) {
       graph_node: graphNode,
       attempt,
       work_order_id: workOrderId,
+      hook_invocation_digest: hookInvocationDigest,
+      hook_trigger: hookTrigger,
     });
   } catch (error) {
     return {
@@ -2796,6 +2800,8 @@ function runPostCompactAdapter(input = {}) {
     production_hook_wired: false,
     probe_evidence_accepted: probeEvidenceAccepted === true,
     hook_probe_files_touched: false,
+    hook_invocation_digest: hookInvocationDigest,
+    hook_trigger: hookTrigger,
     authority_sources_checked: authorityClaims,
     issued_at: nowIso(),
   };

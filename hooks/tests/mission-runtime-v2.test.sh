@@ -1135,6 +1135,136 @@ if (runtime) {
       'canonical_mission_state_claim',
     ));
 
+  // Production Codex boundary: official payload -> exact controller identity ->
+  // the existing host-neutral adapter. The hook itself writes no parallel state;
+  // only reconcilePostCompact's sealed receipt is durable.
+  const productionHook = path.join(
+    root,
+    'platforms',
+    'codex',
+    'plugin',
+    'hooks',
+    'post-compact.js',
+  );
+  const productionPluginRoot = path.join(root, 'platforms', 'codex', 'plugin');
+  const runProductionHook = (payload, extraEnv = {}) => spawnSync(
+    process.execPath,
+    [productionHook],
+    {
+      cwd: controllerRecoveryWt,
+      encoding: 'utf8',
+      input: typeof payload === 'string' ? payload : JSON.stringify(payload),
+      env: { ...process.env, PLUGIN_ROOT: productionPluginRoot, ...extraEnv },
+    },
+  );
+  const manualPayload = {
+    session_id: 'mission-runtime-session',
+    transcript_path: null,
+    cwd: controllerRecoveryWt,
+    hook_event_name: 'PostCompact',
+    model: 'gpt-5.6-sol',
+    turn_id: 'mission-runtime-manual-turn',
+    trigger: 'manual',
+  };
+  const productionManual = runProductionHook(manualPayload);
+  if (productionManual.status !== 0) {
+    console.error(`production PostCompact manual stderr: ${productionManual.stderr}`);
+  }
+  check('codex-production-postcompact-manual-ready',
+    productionManual.status === 0
+    && productionManual.stdout === '');
+  const productionReceiptPath = workOrder.reconcileReceiptPath(
+    common,
+    controllerRootRunId,
+  );
+  const productionReceipt = workOrder.readJsonIfPresent(productionReceiptPath);
+  check('codex-production-postcompact-persists-only-sealed-reconcile-receipt',
+    productionReceipt
+    && productionReceipt.artifact_type === workOrder.RECONCILE_ARTIFACT
+    && productionReceipt.hook_trigger === 'manual'
+    && /^[0-9a-f]{64}$/.test(productionReceipt.hook_invocation_digest)
+    && workOrder.validateReconcileReceipt(productionReceipt, {
+      root_run_id: controllerRootRunId,
+      commonDir: common,
+    }).ok === true
+    && !JSON.stringify(productionReceipt).includes(manualPayload.session_id)
+    && !JSON.stringify(productionReceipt).includes(manualPayload.turn_id));
+  const productionDuplicate = runProductionHook(manualPayload);
+  if (productionDuplicate.status !== 2) {
+    console.error(`production PostCompact duplicate stderr: ${productionDuplicate.stderr}`);
+  }
+  check('codex-production-postcompact-duplicate-blocks',
+    productionDuplicate.status === 2
+    && /reconcile_failed/.test(productionDuplicate.stderr));
+  const productionAuto = runProductionHook({
+    ...manualPayload,
+    turn_id: 'mission-runtime-auto-turn',
+    trigger: 'auto',
+  });
+  if (productionAuto.status !== 0) {
+    console.error(`production PostCompact auto stderr: ${productionAuto.stderr}`);
+  }
+  check('codex-production-postcompact-auto-ready',
+    productionAuto.status === 0
+    && workOrder.readJsonIfPresent(productionReceiptPath).hook_trigger === 'auto');
+  const invalidPayload = runProductionHook({ ...manualPayload, unsupported: true });
+  check('codex-production-postcompact-invalid-payload-blocks',
+    invalidPayload.status === 2
+    && /invalid_payload/.test(invalidPayload.stderr));
+  const identitylessRepo = path.join(temp, 'postcompact-no-identity');
+  fs.mkdirSync(identitylessRepo, { recursive: true });
+  execFileSync('git', ['-C', identitylessRepo, 'init', '-q']);
+  execFileSync('git', ['-C', identitylessRepo, 'config', 'user.email', 'test@example.com']);
+  execFileSync('git', ['-C', identitylessRepo, 'config', 'user.name', 'Test']);
+  fs.writeFileSync(path.join(identitylessRepo, 'README.md'), 'identityless\n');
+  execFileSync('git', ['-C', identitylessRepo, 'add', 'README.md']);
+  execFileSync('git', ['-C', identitylessRepo, 'commit', '-qm', 'identityless']);
+  const identityMissing = runProductionHook({
+    ...manualPayload,
+    cwd: identitylessRepo,
+    turn_id: 'identity-missing-turn',
+  });
+  check('codex-production-postcompact-missing-identity-blocks',
+    identityMissing.status === 2
+    && /controller_identity_missing/.test(identityMissing.stderr));
+  const driftReceiptPath = path.join(controllerRecoveryWt, '.invalid-d3-claims.json');
+  fs.writeFileSync(driftReceiptPath, '{}\n');
+  const claimDrift = runProductionHook(
+    { ...manualPayload, turn_id: 'claim-drift-turn' },
+    { AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT: driftReceiptPath },
+  );
+  check('codex-production-postcompact-claim-drift-blocks',
+    claimDrift.status === 2
+    && /d3_claim_validation_failed/.test(claimDrift.stderr));
+  fs.unlinkSync(driftReceiptPath);
+  const receiptBytes = fs.readFileSync(productionReceiptPath);
+  fs.appendFileSync(productionReceiptPath, '\ncorrupt prior receipt\n');
+  const corruptPriorReceipt = runProductionHook({
+    ...manualPayload,
+    turn_id: 'corrupt-prior-receipt-turn',
+  });
+  check('codex-production-postcompact-corrupt-prior-receipt-blocks',
+    corruptPriorReceipt.status === 2
+    && /reconcile_failed/.test(corruptPriorReceipt.stderr));
+  fs.writeFileSync(productionReceiptPath, receiptBytes);
+  const checkpointPath = exactControllerRecord.work_order.paths.checkpoint;
+  const checkpointBytes = fs.readFileSync(checkpointPath);
+  fs.appendFileSync(checkpointPath, '\ncorrupt adapter authority\n');
+  const brokenSentinel = path.join(controllerRecoveryWt, '.postcompact-broken-sentinel');
+  const brokenAdapter = runProductionHook({
+    ...manualPayload,
+    turn_id: 'broken-adapter-turn',
+  });
+  if (brokenAdapter.status !== 2) {
+    console.error(`production PostCompact broken stderr: ${brokenAdapter.stderr}`);
+  }
+  if (brokenAdapter.status === 0) fs.writeFileSync(brokenSentinel, 'forbidden\n');
+  check('codex-production-postcompact-broken-adapter-blocks-sentinel',
+    brokenAdapter.status === 2
+    && /reconcile_failed/.test(brokenAdapter.stderr)
+    && !fs.existsSync(brokenSentinel));
+  fs.writeFileSync(checkpointPath, checkpointBytes);
+
   // Real managed composition path: constructor-owned Mission store + default
   // releaseCampaignAdmission. Adapters are built exactly once at intake and
   // the same object is threaded into release (never rebuilt).

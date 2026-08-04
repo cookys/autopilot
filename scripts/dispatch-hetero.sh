@@ -1218,6 +1218,7 @@ try {
   process.stdout.write(error.message || String(error));
   process.exit(3);
 }
+
 NODE
     )"
     bridge_rc=$?
@@ -1242,6 +1243,41 @@ NODE
         ;;
     esac
   done
+}
+
+check_managed_dev_flow_admission() {
+  local consumed_repo admission_out admission_rc
+  [ "$CAMPAIGN_PROJECTION_BOUND" -eq 1 ] || return 0
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] || return 0
+  consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$consumed_repo" ] \
+    || die_dev_flow_admission "session marker repository mismatch: no Git repository"
+  admission_out="$(
+    node - "$SELF_DIR/session-mode.js" "$consumed_repo" \
+      "${AUTOPILOT_LEVEL:-}" "$CAMPAIGN_CONTRACT_FILE" <<'NODE' 2>&1
+'use strict';
+const [sessionModePath, repoRoot, effectiveLevel, campaignContract] = process.argv.slice(2);
+try {
+  const { validateManagedDevFlowAdmission } = require(sessionModePath);
+  const result = validateManagedDevFlowAdmission({
+    repoRoot,
+    effectiveLevel: String(effectiveLevel || '').toLowerCase(),
+    campaignContract,
+  });
+  if (!result.valid) {
+    process.stdout.write(result.reason);
+    process.exit(3);
+  }
+  process.stdout.write('READY');
+} catch (error) {
+  process.stdout.write(error.message || String(error));
+  process.exit(3);
+}
+NODE
+  )"
+  admission_rc=$?
+  [ "$admission_rc" -eq 0 ] && [ "$admission_out" = "READY" ] \
+    || die_dev_flow_admission "${admission_out:-session marker admission validation failed}"
 }
 
 check_mission_enforcement_gate() {
@@ -1293,6 +1329,12 @@ die_precondition() {
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
+  exit 2
+}
+
+die_dev_flow_admission() {
+  printf '{ "status": "blocked", "phase": "dev_flow_admission", "rejection_code": "DEV_FLOW_ADMISSION_REQUIRED_OR_STALE", "reason": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "resources_created": 0 }\n' \
+    "$(_flat_json_escape "$1")"
   exit 2
 }
 
@@ -1773,6 +1815,7 @@ if [ "$CAMPAIGN_PROJECTION_BOUND" -ne 1 ]; then
 else
   # Sealed strict projection is present: still bind active L5/L6 (and L3
   # fallback) markers to the campaign's policy/graph digests before spend.
+  check_managed_dev_flow_admission
   check_marker_campaign_admission_bridge
 fi
 emit_sealed_zero_diff_if_authorized

@@ -35,7 +35,6 @@ case "${1:-}" in
 esac
 
 DIRS=(
-  "skills"
   "bin"
   "src"
   "profiles"
@@ -47,6 +46,20 @@ DIRS=(
   "scripts"
   "project-config-template"
 )
+
+PROJECTED_SKILLS=(
+  "dev-flow"
+  "ceo-agent"
+  "l3"
+  "l4"
+  "l5"
+  "l6"
+  "finish-flow"
+)
+
+LIFECYCLE_ADAPTER="$REPO/platforms/codex/skill-adapters/lifecycle.md"
+LIFECYCLE_ADAPTER_MARKER="AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1"
+LIFECYCLE_ADAPTER_DEST="skill-adapters/lifecycle.md"
 
 SCRIPT_EXCLUDES=(
   "install-opencode.sh"
@@ -86,6 +99,123 @@ if ! find "$SRC" -mindepth 1 -maxdepth 1 -type d | grep -q .; then
   echo "error: source skills directory is empty: $SRC" >&2
   exit 1
 fi
+
+validate_projection_inputs() {
+  [ -f "$LIFECYCLE_ADAPTER" ] || {
+    echo "error: Codex lifecycle adapter missing: $LIFECYCLE_ADAPTER" >&2
+    exit 1
+  }
+  local marker_count
+  marker_count="$(grep -c "$LIFECYCLE_ADAPTER_MARKER" "$LIFECYCLE_ADAPTER" || true)"
+  [ "$marker_count" -eq 1 ] || {
+    echo "error: Codex lifecycle adapter marker must occur exactly once" >&2
+    exit 1
+  }
+  local skill source
+  for skill in "${PROJECTED_SKILLS[@]}"; do
+    source="$SRC/$skill/SKILL.md"
+    [ -f "$source" ] || {
+      echo "error: projected source skill missing: skills/$skill/SKILL.md" >&2
+      exit 1
+    }
+    if grep -q "$LIFECYCLE_ADAPTER_MARKER" "$source"; then
+      echo "error: projected source skill contains Codex adapter marker: skills/$skill/SKILL.md" >&2
+      exit 1
+    fi
+  done
+}
+
+render_projected_skill() {
+  local source="$1"
+  local destination="$2"
+  node - "$source" "$LIFECYCLE_ADAPTER" "$destination" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [sourcePath, adapterPath, destinationPath] = process.argv.slice(2);
+const source = fs.readFileSync(sourcePath, 'utf8');
+const adapter = fs.readFileSync(adapterPath, 'utf8');
+if (!source.startsWith('---\n')) throw new Error(`source frontmatter missing: ${sourcePath}`);
+const close = source.indexOf('\n---\n', 4);
+if (close === -1) throw new Error(`source frontmatter unterminated: ${sourcePath}`);
+const split = close + '\n---\n'.length;
+const output = `${source.slice(0, split)}\n${adapter}${source.slice(split)}`;
+fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+fs.writeFileSync(destinationPath, output);
+NODE
+}
+
+is_projected_skill() {
+  local candidate="$1"
+  local skill
+  for skill in "${PROJECTED_SKILLS[@]}"; do
+    [ "$candidate" = "$skill" ] && return 0
+  done
+  return 1
+}
+
+sync_skills() {
+  local destination="$PLUGIN/skills"
+  rm -rf "$destination"
+  mkdir -p "$destination"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -aL --delete "$SRC/" "$destination/"
+  else
+    (cd "$SRC" && tar -chf - .) | (cd "$destination" && tar -xf -)
+  fi
+  local skill
+  for skill in "${PROJECTED_SKILLS[@]}"; do
+    render_projected_skill "$SRC/$skill/SKILL.md" "$destination/$skill/SKILL.md"
+  done
+}
+
+check_skills() {
+  node - "$SRC" "$PLUGIN/skills" "$LIFECYCLE_ADAPTER" \
+    "$LIFECYCLE_ADAPTER_MARKER" "${PROJECTED_SKILLS[@]}" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [sourceRoot, copyRoot, adapterPath, marker, ...projected] = process.argv.slice(2);
+const projectedSet = new Set(projected);
+const failures = [];
+const list = (root, relative = '') => fs.readdirSync(path.join(root, relative), { withFileTypes: true })
+  .flatMap((entry) => {
+    const rel = path.join(relative, entry.name);
+    return entry.isDirectory() ? list(root, rel) : [rel];
+  }).sort();
+if (!fs.existsSync(copyRoot)) {
+  console.log('drift: missing directory platforms/codex/plugin/skills');
+  process.exit(1);
+}
+const sourceFiles = list(sourceRoot);
+const copyFiles = list(copyRoot);
+if (JSON.stringify(sourceFiles) !== JSON.stringify(copyFiles)) failures.push('skill file set differs');
+const adapter = fs.readFileSync(adapterPath, 'utf8');
+for (const relative of sourceFiles) {
+  const source = fs.readFileSync(path.join(sourceRoot, relative), 'utf8');
+  const destination = path.join(copyRoot, relative);
+  if (!fs.existsSync(destination)) continue;
+  const copy = fs.readFileSync(destination, 'utf8');
+  const skill = relative.split(path.sep)[0];
+  if (projectedSet.has(skill) && relative === path.join(skill, 'SKILL.md')) {
+    const close = source.indexOf('\n---\n', 4);
+    if (!source.startsWith('---\n') || close === -1) {
+      failures.push(`invalid source frontmatter skills/${relative}`);
+      continue;
+    }
+    const split = close + '\n---\n'.length;
+    const expected = `${source.slice(0, split)}\n${adapter}${source.slice(split)}`;
+    if (copy !== expected) failures.push(`projected content skills/${relative}`);
+    if ((copy.match(new RegExp(marker, 'gu')) || []).length !== 1) {
+      failures.push(`adapter marker count skills/${relative}`);
+    }
+    if (!copy.endsWith(source.slice(split))) failures.push(`canonical tail drift skills/${relative}`);
+  } else if (copy !== source) {
+    failures.push(`content skills/${relative}`);
+  }
+}
+for (const failure of failures) console.log(`drift: ${failure}`);
+process.exit(failures.length > 0 ? 1 : 0);
+NODE
+}
 
 sync_dir() {
   local rel="$1"
@@ -336,6 +466,8 @@ check_doc_extras() {
 
 if [ "$MODE" = "check" ]; then
   STATUS=0
+  validate_projection_inputs
+  check_skills || STATUS=1
   for rel in "${DIRS[@]}"; do
     check_dir "$rel" || STATUS=1
   done
@@ -348,6 +480,8 @@ if [ "$MODE" = "check" ]; then
   check_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST" || STATUS=1
   check_mapped_file "$CODEX_HOOK_MANIFEST_SOURCE" "$CODEX_HOOK_MANIFEST_DEST" || STATUS=1
   check_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST" || STATUS=1
+  check_mapped_file "platforms/codex/skill-adapters/lifecycle.md" \
+    "$LIFECYCLE_ADAPTER_DEST" || STATUS=1
   check_exact_directory_entries "profiles/baselines" "claude-hooks.json" || STATUS=1
   check_exact_directory_entries "hooks" "_shared" "hooks.json" "post-compact.js" || STATUS=1
   check_plugin_manifest || STATUS=1
@@ -361,6 +495,8 @@ if [ "$MODE" = "check" ]; then
   exit "$STATUS"
 fi
 
+validate_projection_inputs
+sync_skills
 for rel in "${DIRS[@]}"; do
   sync_dir "$rel"
 done
@@ -376,6 +512,7 @@ copy_mapped_file "$HOOK_BASELINE_SOURCE" "$HOOK_BASELINE_DEST"
 clean_hooks_root
 copy_mapped_file "$CODEX_HOOK_MANIFEST_SOURCE" "$CODEX_HOOK_MANIFEST_DEST"
 copy_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST"
+copy_mapped_file "platforms/codex/skill-adapters/lifecycle.md" "$LIFECYCLE_ADAPTER_DEST"
 sync_plugin_manifest
 
 echo "synced Codex plugin payload: platforms/codex/plugin"

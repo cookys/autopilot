@@ -91,6 +91,10 @@ const {
 } = require('./campaign-dispatch-projection');
 const { admitMissionRouting } = require('../../scripts/mission-routing-admission');
 const {
+  devFlowAdmissionRejection,
+  validateManagedDevFlowAdmission,
+} = require('../../scripts/session-mode');
+const {
   admitContinuation,
   loadMatchingRunsFromManifestDir,
   workOrder,
@@ -8213,6 +8217,31 @@ class AutopilotEngine {
         });
       }
       loopCwd = path.resolve(input.cwd);
+    }
+    if (campaignRequested) {
+      const admission = validateManagedDevFlowAdmission({
+        repoRoot: loopCwd,
+        effectiveLevel: String(process.env.AUTOPILOT_LEVEL || '').toLowerCase(),
+        campaignContract: input.campaignContract,
+      });
+      if (!admission.valid) {
+        const startedAt = this.now();
+        ledger.push(this.ledgerEntry('dev_flow_admission', 'blocked', startedAt, {
+          rejection_code: 'DEV_FLOW_ADMISSION_REQUIRED_OR_STALE',
+        }));
+        return finish({
+          ...devFlowAdmissionRejection(admission.reason),
+          rounds: 0,
+          verdict: null,
+          roster: null,
+          resolveResult: null,
+          implementation: null,
+          review: null,
+          implementationChain: [],
+          reviewChain: [],
+          ledger,
+        });
+      }
     }
     if (verifyCmdProvided && (typeof verifyCmd !== 'string' || verifyCmd.length === 0)) {
       const startedAt = this.now();

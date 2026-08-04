@@ -199,6 +199,94 @@ else
   fail "enforce marker written"
 fi
 
+# 13. Strict managed admission distinguishes every invalid marker class while
+# preserving one all-zero rejection contract. A linked worktree is the positive
+# control: it shares Git common-dir identity with the controller marker and must
+# not self-lock the canonical managed path.
+MANAGED_WORKTREE="$TMP/managed-worktree"
+git -C "$REPO_ROOT" worktree add -q --detach "$MANAGED_WORKTREE" HEAD
+D3_OUT=$(node - "$REPO_ROOT" "$ENFORCE_MARKER" "$MANAGED_WORKTREE" "$SHADOW_REPO" "$TMP" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const [root, markerPath, managedWorktree, foreignRepo, tmp] = process.argv.slice(2);
+const {
+  DEV_FLOW_ADMISSION_REJECTION_CODE,
+  devFlowAdmissionRejection,
+  markerRepoIdentity,
+  validateManagedDevFlowAdmission,
+} = require(path.join(root, 'scripts', 'session-mode.js'));
+const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+const admission = marker.mission_routing.admission;
+const campaign = {
+  repo_identity: markerRepoIdentity(managedWorktree),
+  mission_runtime: {
+    mission_policy_digest: admission.mission_policy_digest,
+    mission_graph_digest: admission.mission_graph_digest,
+  },
+};
+const write = (name, value) => {
+  const file = path.join(tmp, `${name}.json`);
+  fs.writeFileSync(file, typeof value === 'string' ? value : `${JSON.stringify(value)}\n`);
+  return file;
+};
+const cases = [
+  ['absent', path.join(tmp, 'absent.json'), 'l5', campaign, /absent/],
+  ['expired', write('expired', { ...marker, expires_at: '2000-01-01T00:00:00.000Z' }), 'l5', campaign, /expired/],
+  ['malformed', write('malformed', 'not-json\n'), 'l5', campaign, /malformed/],
+  ['repository', write('repository', { ...marker, repo_root: foreignRepo }), 'l5', campaign, /repository mismatch/],
+  ['level', markerPath, 'l4', campaign, /level mismatch/],
+  ['mission', markerPath, 'l5', {
+    ...campaign,
+    mission_runtime: { ...campaign.mission_runtime, mission_policy_digest: '0'.repeat(64) },
+  }, /Mission projection mismatch/],
+];
+for (const [name, file, level, boundCampaign, reason] of cases) {
+  const result = validateManagedDevFlowAdmission({
+    repoRoot: managedWorktree,
+    effectiveLevel: level,
+    campaignContract: boundCampaign,
+    markerFile: file,
+  });
+  assert.strictEqual(result.valid, false, name);
+  const rejection = devFlowAdmissionRejection(result.reason);
+  assert.strictEqual(rejection.status, 'blocked', name);
+  assert.strictEqual(rejection.phase, 'dev_flow_admission', name);
+  assert.strictEqual(rejection.rejection_code, DEV_FLOW_ADMISSION_REJECTION_CODE, name);
+  assert.strictEqual(rejection.dispatcher_called, false, name);
+  assert.strictEqual(rejection.model_calls, 0, name);
+  assert.strictEqual(rejection.mutation_attempts, 0, name);
+  assert.strictEqual(rejection.resources_created, 0, name);
+  assert.match(rejection.reason, reason, name);
+}
+const positive = validateManagedDevFlowAdmission({
+  repoRoot: managedWorktree,
+  effectiveLevel: 'l5',
+  campaignContract: campaign,
+  markerFile: markerPath,
+});
+assert.strictEqual(positive.valid, true);
+assert.strictEqual(positive.repo_identity, markerRepoIdentity(root));
+assert.match(positive.sources_digest, /^[a-f0-9]{64}$/u);
+const stableMarker = path.join(path.dirname(markerPath), 'codex-stable-session.json');
+fs.copyFileSync(markerPath, stableMarker);
+process.env.AUTOPILOT_SESSION_ID = 'codex-stable-session';
+process.chdir(managedWorktree);
+const portablePositive = validateManagedDevFlowAdmission({
+  repoRoot: managedWorktree,
+  effectiveLevel: 'l5',
+  campaignContract: campaign,
+});
+assert.strictEqual(portablePositive.valid, true);
+process.stdout.write('managed_admission_matrix_ready');
+NODE
+); RC=$?
+check "managed admission matrix exits 0" 0 "$RC"
+[ "$D3_OUT" = "managed_admission_matrix_ready" ] \
+  && ok "managed admission matrix rejects six invalid classes and admits linked worktree" \
+  || fail "managed admission matrix output ($D3_OUT)"
+
 echo "---"
 echo "pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

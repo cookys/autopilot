@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "artifact_type": "codex_pre_effect_contract_receipt",
+  "observed_at": "2026-08-04T16:59:12.145Z",
+  "codex_version": "codex-cli 0.146.0",
+  "installed_plugin_manifest_sha256": "df8d9d4d6b7720e7181e0519dd958f15117cb5ac4c65a7e72e31a341a891307f",
+  "probe_adapter_sha256": "3aa0241d5e6b7a254a8cdc83bf4e538dcc668865e53057378ec47c1aefe9130e",
+  "hook_manifest_sha256": "bb0a8c8c677df56fde002d9fa93881f3b32bfbacd1eac63de6ad89f2f8d90971",
+  "transcript_sha256": "7ac125268f8e0dee7bcbd5e6514570ae7bc75ac61a6f70a896ec07d8c2470911",
+  "payload_contract": {
+    "event": "PreToolUse",
+    "matcher": ".*",
+    "cwd_stable": true,
+    "tool_name_stable": true,
+    "session_identity_stable": true
+  },
+  "denial_contract": {
+    "structured_stdout": {
+      "decision": "block",
+      "reason": "AUTOPILOT_PRE_EFFECT_DENY_CONTROL"
+    },
+    "broken_adapter_exit_status": 17,
+    "cli_exit_nonzero": false
+  },
+  "effect_sentinel_counts": {
+    "allow": 1,
+    "deny": 0,
+    "broken": 1
+  },
+  "hook_action_counts": {
+    "allow": 1,
+    "deny": 1,
+    "broken": 1
+  },
+  "installer": {
+    "marketplace_exit_status": 0,
+    "plugin_exit_status": 0
+  },
+  "execution": {
+    "exit_status": 0,
+    "signal": null
+  },
+  "verdict": "BLOCKED",
+  "production_pretooluse_allowed": false,
+  "d4_verdict": "BLOCKED",
+  "terminal_blocker": "broken PreToolUse command failed open: mutation occurred and Codex exited zero",
+  "receipt_sha256": "e5f134a7902c1ddd90f331e3fe6be2e59eca1c063246bf1dc8e670582678c1ee"
+}

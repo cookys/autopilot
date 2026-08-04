@@ -24,6 +24,27 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## Unreleased — Codex lifecycle admission and fail-closed promotion boundary
+
+### Added
+- Generated Codex-native prefixes for exactly seven lifecycle/front-door skills. The prefix maps
+  entry to packaged `session-mode`, maps managed work to the sealed Mission/Engine route, and forbids
+  imitating unavailable Claude task/agent primitives. Canonical tails remain byte-exact.
+- One strict managed-admission validator shared by the CLI, Engine, and campaign dispatcher. It binds
+  TTL, effective level, Git common-dir, and digest-sealed Mission policy/graph/source authority before
+  provider readiness or any managed effect.
+
+### Changed
+- Managed admission failures now use `DEV_FLOW_ADMISSION_REQUIRED_OR_STALE` with zero dispatcher,
+  model, mutation, and resource counters for absent, expired, malformed, repository-mismatched,
+  level-mismatched, and Mission-mismatched markers.
+
+### Boundary
+- A two-call installed Codex 0.146.0 probe proved structured `PreToolUse` denial but also proved an
+  exit-17 adapter failure is fail-open: the mutation occurred and the CLI exited zero. Production
+  `PreToolUse` wiring was therefore rejected, D4 is terminally blocked, and the existing
+  `PostCompact` adapter remains the package's only production hook.
+
 ## v2.34.4 — Clean-checkout CI fixture portability
 
 **Headline**: The release checks now exercise dev-setup and historical Mission reconciliation

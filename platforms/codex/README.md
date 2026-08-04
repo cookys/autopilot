@@ -3,7 +3,9 @@
 This directory contains the Codex packaging surface for Autopilot.
 
 - `plugin/` is the Codex plugin root.
-- `plugin/skills` is a generated copy of the repository's canonical `skills/`.
+- `plugin/skills` is a generated projection of the repository's canonical `skills/`.
+  Seven lifecycle/front-door skills receive the normative Codex adapter from
+  `skill-adapters/lifecycle.md`; every other file remains byte-identical.
 - `plugin/bin`, `plugin/src`, `plugin/references`, `plugin/scripts`,
   `plugin/project-config-template`, selected `plugin/docs` files, and
   `plugin/hooks/_shared` are generated support payload for skill links and
@@ -17,13 +19,29 @@ Claude Code hook bundle, apps, or MCP servers. The hook translates the official
 Codex payload into Autopilot's existing fail-closed reconciliation authority;
 it is not a claim of Claude hook parity.
 
-Some canonical skill bodies still describe Claude Code-only orchestration
-surfaces such as `TaskCreate`, native `Agent` dispatch, `TaskStop`, and
-`subagent_type`. Codex can read those bodies as methodology guidance, and the
-packaged support CLI/scripts work where they are host-neutral, but those
-Claude-only tool calls are not provided by the Codex package. Treat them as
-platform-specific instructions until a future harness-neutral skill-body split
-lands.
+The generated `dev-flow`, `ceo-agent`, `l3`, `l4`, `l5`, `l6`, and `finish-flow`
+copies place a Codex-native override immediately after YAML frontmatter. It maps
+entry to the packaged `session-mode.js` and managed execution to the sealed
+Mission/Engine path before the unchanged canonical body. It also states that
+`TaskCreate`, `TaskUpdate`, `TaskStop`, native `Agent`, and `subagent_type` are
+unavailable and must not be imitated with ad-hoc tickets, inline managed work,
+or replacement lineages.
+
+## Pre-effect enforcement status
+
+Codex 0.146.0 proved that a structured `PreToolUse` stdout decision can block a
+request-bound shell mutation. It also proved the required broken-adapter control
+fails open: when the adapter exited 17, Codex executed the mutation and exited
+0. Therefore the package does **not** register a production `PreToolUse` hook or
+claim fail-closed direct-mutation enforcement. The sanitized
+[receipt](../../docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json)
+records that terminal boundary.
+
+Managed Engine entry is independently fail-closed. Before provider readiness,
+roster probing, resource creation, or dispatch, it requires the existing
+session marker to match TTL, effective level, Git common-dir, and the sealed
+Mission policy/graph/source admission. This does not broaden the package's hook
+capability claim.
 
 ## Subagent model routing (`spawn_agent`) — opt-in
 

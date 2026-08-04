@@ -9,12 +9,18 @@ assert_file_exists "$PLUGIN_DIR/.codex-plugin/plugin.json" "Codex plugin manifes
 assert_file_exists "$MARKETPLACE" "Codex local marketplace exists"
 assert_file_exists "$PLUGIN_DIR/skills" "Codex plugin generated skills copy exists"
 
-DIFF_OUT="$(node - "$REPO_ROOT/skills" "$PLUGIN_DIR/skills" <<'NODE'
+DIFF_OUT="$(node - "$REPO_ROOT/skills" "$PLUGIN_DIR/skills" \
+  "$REPO_ROOT/platforms/codex/skill-adapters/lifecycle.md" <<'NODE'
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 
-const [sourceRoot, copyRoot] = process.argv.slice(2);
+const [sourceRoot, copyRoot, adapterPath] = process.argv.slice(2);
 const failures = [];
+const projected = new Set(['dev-flow', 'ceo-agent', 'l3', 'l4', 'l5', 'l6', 'finish-flow']);
+const marker = 'AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1';
+const adapter = fs.readFileSync(adapterPath, 'utf8');
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 function listFiles(root, dir = '') {
   const absolute = path.join(root, dir);
@@ -46,21 +52,44 @@ for (const file of copyFiles) {
 }
 for (const file of sourceFiles) {
   if (!copySet.has(file)) continue;
-  const source = fs.readFileSync(path.join(sourceRoot, file));
-  const copy = fs.readFileSync(path.join(copyRoot, file));
-  if (!source.equals(copy)) failures.push(`content ${file}`);
+  const source = fs.readFileSync(path.join(sourceRoot, file), 'utf8');
+  const copy = fs.readFileSync(path.join(copyRoot, file), 'utf8');
+  const skill = file.split(path.sep)[0];
+  if (projected.has(skill) && file === path.join(skill, 'SKILL.md')) {
+    const close = source.indexOf('\n---\n', 4);
+    if (!source.startsWith('---\n') || close === -1) {
+      failures.push(`frontmatter ${file}`);
+      continue;
+    }
+    const split = close + '\n---\n'.length;
+    const expected = `${source.slice(0, split)}\n${adapter}${source.slice(split)}`;
+    if (copy !== expected) failures.push(`projection ${file}`);
+    if ((copy.match(new RegExp(marker, 'gu')) || []).length !== 1) {
+      failures.push(`marker ${file}`);
+    }
+    const adapterStart = copy.indexOf(`<!-- ${marker} -->`);
+    const tailStart = adapterStart + adapter.length;
+    if (sha256(copy.slice(adapterStart, tailStart)) !== sha256(adapter)) {
+      failures.push(`adapter digest ${file}`);
+    }
+    if (sha256(copy.slice(tailStart)) !== sha256(source.slice(split))) {
+      failures.push(`canonical tail digest ${file}`);
+    }
+  } else if (copy !== source) {
+    failures.push(`content ${file}`);
+  }
 }
 
 if (failures.length > 0) {
   console.log(failures.join('\n'));
   process.exit(1);
 }
-console.log('skills_copy_in_sync');
+console.log('skills_projection_in_sync');
 NODE
 )"
 EXIT=$?
 assert_eq "$EXIT" "0" "Codex plugin generated skills copy drift check exits 0"
-assert_eq "$DIFF_OUT" "skills_copy_in_sync" "Codex plugin generated skills copy has no file drift"
+assert_eq "$DIFF_OUT" "skills_projection_in_sync" "Codex plugin lifecycle projections preserve exact adapter and canonical tails"
 
 SUPPORT_DIFF_OUT="$(node - "$REPO_ROOT" "$PLUGIN_DIR" <<'NODE'
 const fs = require('fs');
@@ -161,6 +190,7 @@ for (const rel of [
 for (const [sourceRel, destinationRel] of [
   ['platforms/codex/hooks/hooks.json', 'hooks/hooks.json'],
   ['platforms/codex/hooks/post-compact.js', 'hooks/post-compact.js'],
+  ['platforms/codex/skill-adapters/lifecycle.md', 'skill-adapters/lifecycle.md'],
 ]) {
   const sourcePath = path.join(root, sourceRel);
   const copyPath = path.join(pluginDir, destinationRel);
@@ -310,9 +340,17 @@ cp "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json" \
 printf "'use strict';\n" > "$SYNC_SANDBOX/evals/owner-eval-generator.js"
 cp "$SYNC_SANDBOX/evals/owner-eval-generator.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-eval-generator.js"
-mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example"
+mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example" \
+  "$SYNC_SANDBOX/platforms/codex/skill-adapters"
 printf -- '---\nname: example\ndescription: sandbox skill\n---\n# Example\n' > "$SYNC_SANDBOX/skills/example/SKILL.md"
 cp "$SYNC_SANDBOX/skills/example/SKILL.md" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example/SKILL.md"
+cp "$REPO_ROOT/platforms/codex/skill-adapters/lifecycle.md" \
+  "$SYNC_SANDBOX/platforms/codex/skill-adapters/lifecycle.md"
+for skill in dev-flow ceo-agent l3 l4 l5 l6 finish-flow; do
+  mkdir -p "$SYNC_SANDBOX/skills/$skill"
+  printf -- '---\nname: %s\ndescription: sandbox projected skill\n---\n# %s\n' \
+    "$skill" "$skill" > "$SYNC_SANDBOX/skills/$skill/SKILL.md"
+done
 cp "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/platforms/codex/plugin/scripts/sync-codex-plugin-skills.sh"
 for rel in \
   docs/plans/2026-06-04-distill-consolidate.md \
@@ -337,6 +375,7 @@ cp "$SYNC_SANDBOX/platforms/codex/hooks/hooks.json" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/hooks.json"
 cp "$SYNC_SANDBOX/platforms/codex/hooks/post-compact.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/hooks/post-compact.js"
+bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" >/dev/null
 
 OUT="$(bash "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "sync-codex-plugin-skills --check exits 0 in sandbox"

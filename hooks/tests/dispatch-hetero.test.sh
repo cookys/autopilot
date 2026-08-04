@@ -1175,6 +1175,25 @@ const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
 fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
 fs.mkdirSync(path.join(repo, 'specs', 'feat'), { recursive: true });
 fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+const missionGraphRelative = 'docs/mission-codex-native-lifecycle-enforcement-execution-graph.json';
+const missionSourcesRelative = 'docs/mission-codex-native-lifecycle-enforcement-sources.json';
+const missionGraph = JSON.parse(fs.readFileSync(path.join(root, missionGraphRelative), 'utf8'));
+const missionNode = missionGraph.nodes[0];
+const authorityPaths = new Set([
+  '.claude/owner-kernel-governance.json',
+  '.claude/mission-routing-config.json',
+  missionGraphRelative,
+  missionSourcesRelative,
+  ...missionNode.campaign.required_paths,
+  ...missionNode.campaign.output_paths,
+]);
+for (const relative of authorityPaths) {
+  const source = path.join(root, relative);
+  if (!fs.existsSync(source)) continue;
+  const destination = path.join(repo, relative);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.copyFileSync(source, destination);
+}
 fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
   '- implementer_engine: gpt-5.5',
   '- implementer_effort: high',
@@ -1254,11 +1273,38 @@ execFileSync('git', [
   '-c', 'user.name=t',
   'commit', '-qm', 'seed required surface',
 ]);
+const sessionModeDir = path.join(tmp, 'req-session-mode');
+const sessionId = 'dispatch-hetero-d3';
+const sessionSet = spawnSync(process.execPath, [
+  path.join(root, 'scripts', 'session-mode.js'),
+  'set', '--level', 'l5', '--entry-level', 'l5', '--repo-root', repo,
+], {
+  cwd: repo,
+  encoding: 'utf8',
+  env: {
+    ...process.env,
+    AUTOPILOT_SESSION_MODE_DIR: sessionModeDir,
+    CLAUDE_CODE_SESSION_ID: sessionId,
+  },
+});
+assert.strictEqual(sessionSet.status, 0, sessionSet.stderr || sessionSet.stdout);
+const managedMarker = JSON.parse(fs.readFileSync(path.join(sessionModeDir, `${sessionId}.json`), 'utf8'));
+const managedAdmission = managedMarker.mission_routing.admission;
+fs.rmSync(path.join(repo, '.claude', 'owner-kernel-governance.json'));
+fs.rmSync(path.join(repo, '.claude', 'mission-routing-config.json'));
+execFileSync('git', ['-C', repo, 'add', '-A']);
+execFileSync('git', [
+  '-C', repo,
+  '-c', 'user.email=t@t',
+  '-c', 'user.name=t',
+  'commit', '-qm', 'seal managed admission fixture',
+]);
 const base2 = execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const campaignId = `campaign-v1-${'a'.repeat(64)}`;
 const rootRunId = 'root-req-1';
 const branch = 'feat/req-change';
 const campaignContract = {
+  repo_identity: managedAdmission.repo_identity,
   ticket: 'T-req',
   branch,
   base_sha: base2,
@@ -1274,8 +1320,8 @@ const campaignContract = {
     schema_version: 1,
     root_run_id: rootRunId,
     mission_lineage_id: 'lineage-v1',
-    mission_policy_digest: 'b'.repeat(64),
-    mission_graph_digest: 'd'.repeat(64),
+    mission_policy_digest: managedAdmission.mission_policy_digest,
+    mission_graph_digest: managedAdmission.mission_graph_digest,
     graph_node_id: 'n1',
     graph_node_digest: 'e'.repeat(64),
   },
@@ -1733,6 +1779,9 @@ function runCampaignPostcheckDispatch() {
       AUTOPILOT_PARENT_RUN_ID: 'test-foreman-zero-diff',
       AUTOPILOT_ROOT_RUN_ID: engineRootRunId,
       AUTOPILOT_DISPATCH_DEPTH: '1',
+      AUTOPILOT_SESSION_MODE_DIR: sessionModeDir,
+      CLAUDE_CODE_SESSION_ID: sessionId,
+      AUTOPILOT_LEVEL: 'l5',
       TEST_LIVE_CONTRACT: livePath,
       PATH: process.env.PATH,
     },

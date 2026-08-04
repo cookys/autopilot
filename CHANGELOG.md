@@ -28,17 +28,19 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 
 **Headline**: The release checks now exercise dev-setup and historical Mission reconciliation
 reliably on clean CI hosts. Their fixtures preserve the selected Node runtime without restoring
-optional harness CLIs and reconstruct exact legacy terminal authority inside an isolated Git
-common-dir instead of consuming a developer checkout's gitignored Mission state.
+optional harness CLIs and reconstruct the committed legacy graph, historical lineage, and exact
+terminal receipts inside an isolated Git common-dir instead of consuming a developer checkout's
+gitignored Mission state.
 
 ### Fixed
 - `dev-setup.test.sh` exposes a node-only runtime shim to harness-free PATH cases, so setup-node
   installations outside `/usr/bin` can run the Codex package sync check without making optional
   Claude, Codex, OpenCode, or agy commands visible through the original PATH.
-- `mission-backlog-convergence.test.sh` creates a hermetic Git/Mission fixture with the frozen B/C
-  graph, content-addressed terminal receipts, and history anchor. It proves missing disposition
-  fails closed, reconciliation writes once, replay writes zero times, and no authority or history
-  is synthesized while exercising the ordinary production selector.
+- `mission-backlog-convergence.test.sh` creates a hermetic Git/Mission fixture from the committed
+  frozen B/C graph, its historical lineage, content-addressed terminal receipts, and history
+  anchor. It proves missing disposition fails closed, reconciliation writes once, replay writes
+  zero times, and no authority or history is synthesized while exercising the ordinary production
+  selector.
 
 ### Boundary
 - These are test-fixture portability repairs only. Production dev-setup, Mission authority

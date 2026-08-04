@@ -101,6 +101,12 @@ const { execFileSync } = require('child_process');
 const [root, repo] = process.argv.slice(2);
 const mission = require(path.join(root, 'src', 'engine', 'mission-convergence'));
 const { LEGACY } = require(path.join(root, 'scripts', 'mission-terminal-reconcile'));
+const executionGraph = JSON.parse(fs.readFileSync(
+  path.join(root, 'docs', 'mission-backlog-bc-execution-graph.json'),
+  'utf8',
+));
+assert.strictEqual(executionGraph.graph_digest, LEGACY.graph_digest);
+const legacyLineage = `lineage-v1-${LEGACY.adoption_key}`;
 const common = fs.realpathSync(execFileSync('git', [
   '-C', repo, 'rev-parse', '--path-format=absolute', '--git-common-dir',
 ], { encoding: 'utf8' }).trim());
@@ -122,12 +128,12 @@ const state = JSON.parse(JSON.stringify(mission.createMissionState({
   artifact_type: 'mission_convergence_contract',
   contract_id: `mission-v1-${mission.sha256('legacy-terminal-fixture-contract')}`,
   repo_identity: repoIdentity,
-  mission_lineage_id: `lineage-v1-${mission.sha256('legacy-terminal-fixture-lineage')}`,
+  mission_lineage_id: legacyLineage,
   task_authority_id: taskAuthorityId,
   policy_hash: policyHash,
   mission_policy_digest: missionPolicyDigest,
-  mission_graph_digest: LEGACY.graph_digest,
-  execution_graph: { nodes: LEGACY.terminals.map(({ graph_node_id }) => ({ id: graph_node_id })) },
+  mission_graph_digest: executionGraph.graph_digest,
+  execution_graph: executionGraph,
   enforcement_mode: 'enforce',
   state: 'DRAFT',
   closure_ratio: 1,
@@ -175,6 +181,7 @@ state.graph_progress = Object.fromEntries(LEGACY.terminals.map((terminal) => [
   },
 ]));
 mission.validateMissionState(state);
+assert.strictEqual(state.execution_graph.graph_digest, state.mission_graph_digest);
 
 const usage = {
   per_axis: [
@@ -253,6 +260,7 @@ for (const receipt of receipts) {
   const body = { ...receipt };
   delete body.receipt_digest;
   assert.strictEqual(mission.sha256(mission.canonicalJson(body)), receipt.receipt_digest);
+  assert.strictEqual(receipt.mission_lineage_id, state.mission_lineage_id);
 }
 
 const registry = {

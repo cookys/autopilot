@@ -24,11 +24,12 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased — Platform capability activation: agy telemetry + Codex recovery
+## Unreleased — Platform capability activation: telemetry, recovery, and strict L5 readiness
 
 **Headline**: agy review and implementation dispatches now expose only authoritative structured
 usage, while the default Codex package registers one production `PostCompact` recovery hook that
-reconciles manual and automatic compaction before continuation or effect.
+reconciles manual and automatic compaction before continuation or effect. Ordinary strict-L5 Engine
+runs now require a fresh host-owned exact-roster readiness decision before workflow dispatch.
 
 ### Added
 - Closed, required `usage` contracts for review and runner results, with safe nonnegative token
@@ -38,6 +39,9 @@ reconciles manual and automatic compaction before continuation or effect.
 - Canonical Codex `PostCompact` manifest and adapter sources outside the generated package, plus a
   byte-identical production live receipt proving manual, threshold-12000 auto, and broken-adapter
   failure behavior on codex-cli 0.146.0.
+- A frozen six-claim strict-L5 provider policy with exact
+  `{runner,model,role,effort,endpoint,family}` tuples, canonical policy/roster digests, and a branded
+  in-process bootstrap that owns qualification and live-probe closures.
 
 ### Changed
 - `dispatch-review.sh` and `dispatch-hetero.sh` validate the exact D2 claim-ID set immediately
@@ -48,6 +52,10 @@ reconciles manual and automatic compaction before continuation or effect.
   `manual|auto` adapter from canonical sources and rejects missing, extra, or drifted hook payload.
 - The production adapter translates the official Codex payload into the existing fail-closed
   reconciliation authority; it does not copy recovery logic.
+- `AUTOPILOT_LEVEL=l5 engine implement-review` resolves and freezes its invocation roster once,
+  injects the process-local readiness authorities through the Engine constructor, consumes them
+  before workflow dispatch, and records claim, policy, roster, and observation provenance in the
+  campaign control. Lower-level paths retain their explicit non-strict behavior.
 
 ### Fixed
 - Malformed, truncated, duplicate-key, extra-key, invalid-number, trailing-data, and nonzero-exit
@@ -56,15 +64,23 @@ reconciles manual and automatic compaction before continuation or effect.
 - Missing or ambiguous Codex identity, stale controller authority, invalid payload, duplicate
   invocation, and adapter failure block post-compaction continuation. A broken-adapter live control
   produced neither reconciliation receipt nor effect sentinel.
+- Missing qualification, stale TTL, wrong tuple dimensions, fallback-family violations,
+  serialized replay, live-probe failure, claim substitution, policy-digest drift, unknown or
+  duplicate tuples, and roster drift now reject strict L5 before workflow dispatcher/model spend.
 
 ### Boundary
 - The Codex package ships one Codex-native production `PostCompact` boundary only. It does not load
   the Claude Code hook bundle and does not claim parity for other hook events, apps, or MCP servers.
+- Provider policy and closure authority are compiled code and process-local state. CLI flags,
+  environment variables, work orders, disk receipts, and serialized callback material cannot
+  replace the strict-L5 trust root; this does not relabel L3/L4 or legacy flows as strict L5.
 
 ### Rollback
 - Revert the D2 telemetry commit to restore the prior plain-output transport and result schemas;
   no stored historical transcript data is rewritten. Revert the D3 activation commit to remove the
   Codex production hook declaration and generated adapter while retaining the warning-only probe.
+  Revert the D4 bootstrap commit to restore the prior fail-closed
+  `provider_readiness_authority_missing` behavior for ordinary strict-L5 CLI runs.
 
 ## v2.34.1 — Controller execution discipline
 

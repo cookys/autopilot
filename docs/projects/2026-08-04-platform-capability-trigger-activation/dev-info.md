@@ -1,6 +1,6 @@
 # Development info
 
-- Project status: D1–D3 complete; D4 remains locked for depth-0 authorization
+- Project status: D1–D4 implementation complete; authoritative D4 verification remains depth-0 owned
 - Logical plan: `platform-capability-trigger-activation-2026-08-04-r4`
 - Working branch: `feat/platform-capability-trigger-activation`
 - Frozen implementation base: `7047717b2df5354da134043692e31ad067a98bfa`
@@ -24,5 +24,10 @@
   `789a0cfb1975adafbfd162ce28ee1dee943999bfba805077c9857597c212a461`, internal digest
   `96e7859cef39132aa3c80aa4e55ea0672c07d8838c4238994cbb0f3f25be762a`, driver SHA-256
   `41bc2658d91ca8416387ea1174df34bd4a9cd879e63324d8b3fe3028dba6c94c`
-- Implementation state: D1 capability receipt, D2 agy telemetry, and D3 Codex production
-  `PostCompact` recovery complete; D4 strict-L5 readiness bootstrap not started in this scope
+- D4 strict-L5 trust root: canonical source `src/readiness/provider-bootstrap.js`; exact six-claim
+  policy digest `856551c093f382114166404c4c0288da667da5ff4075da30021a7c8a9fea547c`; ordinary
+  `AUTOPILOT_LEVEL=l5 engine implement-review` consumes a fresh branded in-process bundle before
+  workflow dispatch and records claim/policy/roster/observation provenance in its campaign control.
+- Implementation state: D1 capability receipt, D2 agy telemetry, D3 Codex production
+  `PostCompact` recovery, and D4 strict-L5 readiness bootstrap complete; independent review,
+  versioning, merge, push, and release remain out of this implementer scope

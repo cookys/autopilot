@@ -80,6 +80,15 @@ files (`bin/`, `src/`, `scripts/`, `references/`, templates, selected docs, and 
 skill links and engine CLI commands resolve after install. Run engine commands from the target
 repository, or pass `--cwd /path/to/repo` to `engine implement-review`.
 
+For an ordinary strict-L5 invocation, set `AUTOPILOT_LEVEL=l5` and use the managed
+`engine implement-review` command. The CLI resolves the target repository's exact implementer,
+reviewer, verification-author, QC, and configured fallback roster, requires byte-equal coverage by
+the compiled six-claim provider policy, then builds fresh in-process qualification and live-probe
+closures. Readiness is consumed before workflow dispatch and its policy, claim, roster, and
+observation digests are recorded in campaign control. There is intentionally no flag, environment
+receipt, work-order field, or serialized callback that can replace those closures. L3/L4 and the
+temporary legacy rail remain explicitly non-strict and never emit strict-L5 readiness provenance.
+
 Codex hook maintenance still uses the separate warning-only `platforms/codex/hook-probe` package.
 On codex-cli 0.146.0, the probe recorded real `PreCompact`/`PostCompact` pairs for explicit
 `/compact` and threshold compaction. The default package's production receipt then proved manual and

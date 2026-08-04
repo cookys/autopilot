@@ -139,6 +139,11 @@ The course-sized idea is simple: teach the agent the collaboration discipline on
 | **`/l5`** | `/l4`, but the **implementer is a different engine** (agy / Gemini) | cost-arbitrage, or a decorrelated second engine doing the mechanical coding |
 | **`/l6`** | `/l5`, plus **verification authoring is delegated** to a different engine | when you want implementation and verification labor offloaded, while depth 0 keeps merge authority |
 
+Ordinary strict `/l5` Engine execution is fail-closed: before workflow dispatch, the CLI must match
+the exact implementer/reviewer/verification-author/QC roster to Autopilot's frozen provider policy
+and consume fresh host-owned qualification plus live-readiness evidence. Lower-level and legacy
+flows remain explicitly non-strict.
+
 ```
 /l3 fix the flaky reconnect test, you decide     # inline
 /l4 ship the WebSocket reconnect system          # offload to a background foreman

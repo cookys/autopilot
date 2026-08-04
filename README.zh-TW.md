@@ -139,6 +139,11 @@ Autopilot 是 Claude Code-first，但不是 Claude Code-only。依照你實際�
 | **`/l5`** | 同 `/l4`，但**實作交給不同引擎**（agy / Gemini） | 成本套利，或讓一個去相關化的第二引擎做機械式實作 |
 | **`/l6`** | 同 `/l5`，再把**驗證撰寫**交給不同引擎 | 想把實作與驗證撰寫都外包，但 depth 0 仍保留合併權限 |
 
+普通 strict `/l5` Engine 執行採 fail-closed：workflow dispatch 前，CLI 必須把 exact
+implementer／reviewer／verification-author／QC roster 對上 Autopilot 凍結的 provider policy，
+並消費 fresh、host-owned qualification 與 live-readiness evidence。Lower-level 與 legacy flow
+維持明確 non-strict，不會冒稱 strict L5。
+
 ```
 /l3 fix the flaky reconnect test, you decide     # inline
 /l4 ship the WebSocket reconnect system          # offload 給背景 foreman

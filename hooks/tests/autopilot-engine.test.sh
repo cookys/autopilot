@@ -3503,6 +3503,7 @@ const validPayload = {
   skill_mode_effective: 'selective',
   capability_warnings: ['warning 1'],
   reviewer_endpoint: '',
+  reviewer_family: 'unknown',
   implementer_endpoint: '',
   verification_author_present: false,
   verification_author_engine: '',

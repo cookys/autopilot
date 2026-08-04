@@ -16,7 +16,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ## Audit snapshot（2026-08-04，`develop` @ `33cfd513`）
 
 - **49 real entries**：2 個 Board decisions、18 個已排入執行計畫的 technical gaps、29 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
-- 本輪逐條對照 code、tests、installed CLI、live probes 與 upstream CHANGELOG/release evidence 後，Codex `PostCompact`、agy structured usage 與 strict `/l5` CLI trust-root 三個舊 conditional trigger已成立；agy production integration 已於 D2 完成，Codex production recovery 已於 D3 完成，D4 仍鎖定等待 depth-0 授權。
+- 本輪逐條對照 code、tests、installed CLI、live probes 與 upstream CHANGELOG/release evidence 後，Codex `PostCompact`、agy structured usage 與 strict `/l5` CLI trust-root 三個舊 conditional trigger已成立；agy production integration 已於 D2 完成，Codex production recovery 已於 D3 完成，strict `/l5` trust root 已於 D4 完成實作，authoritative verification 仍由 depth 0 執行。
 - 14 個既有 technical gaps 仍依序收斂於 [`2026-08-03-next-touch-debt-retirement.md`](plans/2026-08-03-next-touch-debt-retirement.md) 的 D1–D8；本輪新增／轉列的 4 項收斂於 [`2026-08-04-platform-capability-trigger-activation.md`](plans/2026-08-04-platform-capability-trigger-activation.md) 的 D1–D4。
 - 29 個 conditional entries 主要是四類：等待仍未出現的外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
 
@@ -57,7 +57,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: `docs/plans/2026-07-08-fable-skills-absorption.md`。
 
 ### Harness capability-state refresh after 2026-08 platform releases
-- **Status**: COMPLETE through D3; D4 remains locked in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Status**: COMPLETE through D4 implementation; authoritative verification remains depth-0 owned in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
 - **Trigger**: ADMITTED 2026-08-04 — installed Codex 0.146.0, Claude Code 2.1.220, agy 1.1.10, OpenCode 1.17.15（latest 1.18.11 亦已 isolated probe）與 Grok 0.2.118 已超過多個 committed capability baseline；Codex、agy、Grok changelog 亦新增本 repo 會消費的 hook／structured-output／usage surface。
 - **Context**: D1 已產出 closed、content-addressed aggregate receipt：D2=2、D3=4、D4=6 個 required claims 全部 validated 且 immediate re-probe 通過；optional set 保留 OpenCode truncation、Codex install-generator、Grok `SessionEnd` usage 與 generic `tier:` 的 blocked 結論。Grok headless JSON usage 已證實，但沒有把它偷換成 host hook firing。Receipt: [`platform-capabilities.json`](projects/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json)。
 - **Effort**: L。
@@ -272,9 +272,9 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 - **Source**: opus 對抗性重攻，2026-07-09。`docs/projects/_archive/2026-07-09-m3-band-tasks/report.md` § "Residual: in-process introspection"。
 
 ### Strict `/l5` provider-readiness CLI trust root
-- **Status**: PLANNED — D4 in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md).
+- **Status**: COMPLETE — D4 implementation in [`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md); independent verification remains depth-0 owned.
 - **Trigger**: ADMITTED 2026-08-04 — code audit proves this is no longer waiting on an external authority surface：`AutopilotEngine` and campaign intake already accept constructor-owned `providerReadinessAuthority`／`qualificationProvider`, while the ordinary `bin/autopilot.js engine implement-review` constructor path simply does not inject them and deterministically emits `provider_readiness_authority_missing`。
-- **Context**: D4 will build one repo-owned fixed bootstrap binding the exact live provider tuple, negative matrix, freshness and observation provenance, then inject it only through the constructor before spend。Serialized/disk receipts remain evidence rather than authority；missing/stale/mismatched/replayed evidence and provider-probe failure must produce zero dispatcher calls。Until D4 ships, lower-level execution must stay honestly labelled and cannot claim strict L5。
+- **Context**: D4 建立 canonical `src/readiness/provider-bootstrap.js`，凍結 exact six-claim／six-field policy（digest `856551c093f382114166404c4c0288da667da5ff4075da30021a7c8a9fea547c`），把當次 implementer／reviewer／verification-author／QC／configured fallback roster canonical-sort 後要求 byte-equal coverage。普通 `AUTOPILOT_LEVEL=l5 engine implement-review` 只由 host 建立 process-local qualification／live-probe closures，經既有 constructor seam 注入並在 workflow dispatch 前消費；Mission control 記錄 policy／claim／roster／observation provenance。Serialized/disk/caller evidence 仍不是 authority；missing／stale／wrong six fields／fallback-family／claim／digest／unknown／duplicate／extra／order／roster／probe failures 全部 fail closed，CLI 負控為 `dispatcher_called:false`、`model_calls:0`。Lower-level flow 保持 non-strict 且不冒稱 L5。
 - **Effort**: L.
 - **Source**: [backlog-actionable-successor closeout](projects/_archive/2026-08-02-backlog-actionable-successor/dev-info.md), 2026-08-03 effective-L4 execution；2026-08-04 CLI/Engine composition re-audit；[`platform-capability-trigger-activation`](plans/2026-08-04-platform-capability-trigger-activation.md) D4。
 

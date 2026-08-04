@@ -131,3 +131,10 @@ drift gate used by pre-commit and `preflight-portability.sh`.
 Run packaged engine commands from the target repository, or pass
 `--cwd /path/to/repo` to `engine implement-review` so implementation worktrees
 and review diffs use the intended project.
+
+When `AUTOPILOT_LEVEL=l5` selects the ordinary managed Engine path, the installed payload uses the
+same canonical strict-L5 bootstrap as the source tree. It freezes the exact six-claim provider
+policy, matches the target repository's complete invocation roster, and consumes fresh process-local
+qualification/live-readiness closures before workflow dispatch. No Codex setting or serialized
+receipt replaces that host-owned authority, and this Engine behavior does not broaden the package's
+single-hook portability claim.

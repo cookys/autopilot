@@ -176,7 +176,7 @@ function buildSelectedRoster(
     {
       seat_id: 'reviewer',
       required: true,
-      family: familyOf(resolved.reviewer_engine),
+      family: resolved.reviewer_family || familyOf(resolved.reviewer_engine),
       tuple: providerTuple(
         'reviewer',
         resolved.reviewer_runner,
@@ -384,24 +384,31 @@ function probeCandidate(candidate, now, ttlSeconds, options) {
   if (result.live_observation) candidate.observations.live = result.live_observation;
 }
 
-function collectProviderReadiness(options = {}) {
+function collectProviderReadinessBundle(options = {}) {
   const cwd = options.cwd || process.cwd();
   const now = options.now || new Date().toISOString();
   const env = options.env || process.env;
   const probe = options.probe === true;
-  const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
-    cwd,
-    env,
-  });
-  if (resolvedResult.error
-      || resolvedResult.status !== 0
-      || resolvedResult.parseError
-      || !resolvedResult.result) {
-    const error = new Error('provider readiness roster resolution failed');
+  let resolved = options.resolvedRoster;
+  if (resolved === undefined) {
+    const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
+      cwd,
+      env,
+    });
+    if (resolvedResult.error
+        || resolvedResult.status !== 0
+        || resolvedResult.parseError
+        || !resolvedResult.result) {
+      const error = new Error('provider readiness roster resolution failed');
+      error.code = 'provider_readiness_roster_unavailable';
+      throw error;
+    }
+    resolved = resolvedResult.result;
+  } else if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) {
+    const error = new Error('provider readiness host roster is invalid');
     error.code = 'provider_readiness_roster_unavailable';
     throw error;
   }
-  const resolved = resolvedResult.result;
   const ttlSeconds = Number.isSafeInteger(resolved.provider_readiness_receipt_ttl_seconds)
     ? resolved.provider_readiness_receipt_ttl_seconds
     : DEFAULT_RECEIPT_TTL_SECONDS;
@@ -471,16 +478,22 @@ function collectProviderReadiness(options = {}) {
     }
   }
 
-  return createProviderReadinessReceipt({
+  const receipt = createProviderReadinessReceipt({
     roster,
     policy,
     now,
   });
+  return { receipt, roster, policy };
+}
+
+function collectProviderReadiness(options = {}) {
+  return collectProviderReadinessBundle(options).receipt;
 }
 
 module.exports = {
   buildSelectedRoster,
   collectProviderReadiness,
+  collectProviderReadinessBundle,
   familyOf,
   resolveConfiguredRunner,
 };

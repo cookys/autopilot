@@ -1,6 +1,6 @@
 # Platform capability trigger activation
 
-> **Status:** D1 capability claims + D2 agy telemetry + D3 Codex PostCompact complete / D4 locked
+> **Status:** D1–D4 implementation complete / authoritative D4 verification reserved for depth 0
 > **Branch:** `feat/platform-capability-trigger-activation`
 > **Plan:** [platform capability trigger activation](../../plans/2026-08-04-platform-capability-trigger-activation.md)
 
@@ -26,7 +26,7 @@ Every promoted platform fact must first pass the closed dual-evidence claim cont
 
 | Deliverable | Status | Internal gates | Exit condition |
 |---|---|---|---|
-| Platform capability trigger activation | in progress; D1–D3 complete, D4 locked | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact ✓ → D4 strict-L5 bootstrap locked | Cumulative implementation, verification, and docs finish gate pass on the frozen range |
+| Platform capability trigger activation | implementation complete; authoritative verification pending | D1 capability claims ✓ → D2 agy telemetry ✓ → D3 Codex PostCompact ✓ → D4 strict-L5 bootstrap ✓ | Depth-0 independent verification passes the cumulative frozen range |
 
 The tracker has one deliverable. D1–D4 are ordered internal gates, not independently claimable phases;
 tests, reviews, repairs, and doc sync remain inside this row and its existing budgets.
@@ -49,6 +49,16 @@ D3 now ships one Codex-native production `PostCompact` registration (`manual|aut
 sources outside the generated package. The adapter translates the official payload into the existing
 fail-closed reconciliation authority; it does not copy recovery logic or claim Claude hook parity.
 The generated package mirrors the canonical manifest and adapter byte-for-byte.
+
+D4 now compiles ordinary `AUTOPILOT_LEVEL=l5 engine implement-review` through the frozen
+six-claim provider policy in `src/readiness/provider-bootstrap.js`. Its canonical policy digest is
+`856551c093f382114166404c4c0288da667da5ff4075da30021a7c8a9fea547c`; the invocation roster is
+projected to exact `{runner,model,role,effort,endpoint,family}` tuples, canonically sorted, and
+required to have byte-equal policy coverage. The CLI constructs fresh in-process qualification and
+live-probe closures, injects them only through the Engine constructor, and consumes readiness before
+workflow dispatch. Missing, stale, mismatched, duplicate, unresolved, extra, reordered, wrong-family,
+claim-substituted, digest-drifted, serialized, or probe-failed evidence rejects with zero workflow
+dispatcher calls. Lower levels retain their explicit non-strict behavior and are never labelled L5.
 
 ## D3 production evidence
 

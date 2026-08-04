@@ -10,6 +10,9 @@ const { runStatusCli } = require('../src/status/cli');
 const { runCampaignCli } = require('../src/campaign/cli');
 const { runMergeCli } = require('../src/merge/cli');
 const {
+  createStrictL5ProviderBootstrap,
+} = require('../src/readiness/provider-bootstrap');
+const {
   AutopilotEngine,
   compileCampaignDispositionPolicy,
   compileCampaignDispositionProvider,
@@ -47,6 +50,8 @@ Commands:
                     Non-empty review findings require a separately supplied
                     depth-0 disposition authority; reviewer output cannot
                     self-authorize.
+                    AUTOPILOT_LEVEL=l5 additionally requires the compiled,
+                    host-owned exact-roster provider-readiness trust root.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.
@@ -358,6 +363,24 @@ if (args[0] === 'engine') {
         })}\n`);
         process.exit(1);
       }
+      let strictL5Bootstrap = null;
+      if (level === 'l5') {
+        try {
+          strictL5Bootstrap = createStrictL5ProviderBootstrap({
+            cwd: parsed.cwd || process.cwd(),
+          });
+        } catch (error) {
+          process.stdout.write(`${JSON.stringify({
+            status: 'blocked',
+            phase: 'provider_readiness',
+            reason: error.message || String(error),
+            rejection_code: error.code || 'strict_l5_provider_bootstrap_invalid',
+            dispatcher_called: false,
+            model_calls: 0,
+          })}\n`);
+          process.exit(1);
+        }
+      }
       let campaignDispositionProvider = null;
       try {
         if (parsed.campaignDispositionAuthority) {
@@ -385,6 +408,10 @@ if (args[0] === 'engine') {
       const engineOptions = {
         cwd: parsed.cwd || process.cwd(),
         campaignDispositionProvider,
+        ...(strictL5Bootstrap ? {
+          providerReadinessAuthority: strictL5Bootstrap.providerReadinessAuthority,
+          qualificationProvider: strictL5Bootstrap.qualificationProvider,
+        } : {}),
       };
       if (parsed.missionPrepared) {
         engineOptions.missionPreparedReceiptPath = path.resolve(
@@ -393,7 +420,9 @@ if (args[0] === 'engine') {
         );
       }
       const result = new AutopilotEngine(engineOptions)
-        .runImplementationReviewLoop(parsed);
+        .runImplementationReviewLoop(strictL5Bootstrap
+          ? { ...parsed, roster: strictL5Bootstrap.roster }
+          : parsed);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

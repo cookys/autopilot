@@ -398,6 +398,25 @@ function dispatcherSignals(execution) {
   };
 }
 
+function resolveProductionVerdict({
+  productionHookRegistered,
+  hookControlsReady,
+  managedDispatcherReady,
+}) {
+  const controlsReady = Boolean(hookControlsReady && managedDispatcherReady);
+  const qualified = Boolean(productionHookRegistered && controlsReady);
+  return {
+    controls_ready: controlsReady,
+    qualified,
+    verdict: qualified ? 'READY' : 'NOT_READY',
+    d4_verdict: qualified ? 'READY' : 'NOT_READY',
+    ship_status: qualified ? 'READY' : 'NO_SHIP',
+    direct_mutation_enforcement: !productionHookRegistered
+      ? 'NOT_SHIPPED'
+      : qualified ? 'QUALIFIED' : 'NOT_READY',
+  };
+}
+
 function stateDigest(workspace) {
   const refs = run('git', ['-C', workspace, 'for-each-ref', '--format=%(refname)%00%(objectname)']);
   const worktrees = run('git', ['-C', workspace, 'worktree', 'list', '--porcelain']);
@@ -589,13 +608,20 @@ function runProduction() {
     const installedManifest = installedRoot
       ? fs.readFileSync(path.join(installedRoot, '.codex-plugin', 'plugin.json'))
       : Buffer.alloc(0);
+    const sourceHookManifest = fs.readFileSync(path.join(sourceRoot, 'hooks', 'hooks.json'));
+    const generatedHookManifest = fs.readFileSync(path.join(sourceRoot, 'plugin', 'hooks', 'hooks.json'));
+    const sourceAdapter = fs.readFileSync(path.join(sourceRoot, 'hooks', 'pre-effect.js'));
     const installedAdapter = installedRoot
       ? fs.readFileSync(path.join(installedRoot, 'hooks', 'pre-effect.js'))
       : Buffer.alloc(0);
-    const installedHookManifest = installedRoot
-      ? fs.readFileSync(path.join(installedRoot, 'hooks', 'hooks.json'))
-      : Buffer.alloc(0);
     const generatedAdapter = fs.readFileSync(path.join(sourceRoot, 'plugin', 'hooks', 'pre-effect.js'));
+    const generatedHookManifestData = JSON.parse(generatedHookManifest.toString('utf8'));
+    const productionRegisteredEvents = Object.keys(generatedHookManifestData.hooks || {});
+    const productionHookRegistered = Array.isArray(generatedHookManifestData.hooks?.PreToolUse)
+      && generatedHookManifestData.hooks.PreToolUse.length > 0;
+    const probeHookManifestSourceMatchesGenerated = sha256(sourceHookManifest)
+      === sha256(generatedHookManifest);
+    const probeAdapterSourceMatchesGenerated = sha256(sourceAdapter) === sha256(generatedAdapter);
     const exactInstalledAdapter = installedAdapter.length > 0
       && sha256(installedAdapter) === sha256(generatedAdapter);
     const hookControlsReady = capabilityReady(capabilityEvidence)
@@ -620,7 +646,11 @@ function runProduction() {
       && sentinels.broken === 1
       && negativeStateUnchanged && sequenceStateUnchanged && brokenStateUnchanged
       && exactInstalledAdapter;
-    const ready = hookControlsReady && managedDispatcherReady;
+    const productionVerdict = resolveProductionVerdict({
+      productionHookRegistered,
+      hookControlsReady,
+      managedDispatcherReady,
+    });
     const terminalBlocker = !hookControlsReady
       ? 'installed-package lifecycle controls did not reproduce exactly'
       : !managedDispatcherReady
@@ -634,17 +664,20 @@ function runProduction() {
       capability_evidence: capabilityEvidence,
       production_contract: {
         qualification: 'UNREGISTERED_PROBE_ONLY',
-        production_hook_registered: false,
-        production_registered_events: ['PostCompact'],
-        direct_mutation_enforcement: 'NOT_SHIPPED',
+        production_hook_registered: productionHookRegistered,
+        production_registered_events: productionRegisteredEvents,
+        direct_mutation_enforcement: productionVerdict.direct_mutation_enforcement,
+        evidence_scope: 'D1_PRETOOLUSE_CAPABILITY_PROBE',
         event: 'PreToolUse',
         matcher: '.*',
         denial: { decision: 'block', reason_code: 'DEV_FLOW_ENTRY_REQUIRED' },
-        installed_plugin_manifest_sha256: sha256(installedManifest),
-        installed_hook_manifest_sha256: sha256(installedHookManifest),
-        production_adapter_sha256: sha256(installedAdapter),
-        generated_adapter_sha256: sha256(generatedAdapter),
-        installed_adapter_matches_generated_payload: exactInstalledAdapter,
+        probe_plugin_manifest_sha256: sha256(installedManifest),
+        probe_hook_manifest_source_sha256: sha256(sourceHookManifest),
+        probe_hook_manifest_generated_sha256: sha256(generatedHookManifest),
+        probe_adapter_source_sha256: sha256(sourceAdapter),
+        probe_adapter_generated_sha256: sha256(generatedAdapter),
+        probe_hook_manifest_source_matches_generated_payload: probeHookManifestSourceMatchesGenerated,
+        probe_adapter_source_matches_generated_payload: probeAdapterSourceMatchesGenerated,
       },
       controls: {
         negative_no_admission: {
@@ -714,13 +747,13 @@ function runProduction() {
         installed_codex_sessions: 3,
         managed_dispatcher_calls: managedSignals.true_count,
       },
-      verdict: ready ? 'READY' : 'NOT_READY',
+      verdict: productionVerdict.verdict,
       d1_verdict: capabilityReady(capabilityEvidence) ? 'READY' : 'BLOCKED',
-      d4_verdict: ready ? 'READY' : 'NOT_READY',
-      ship_status: 'NO_SHIP',
-      production_pretooluse_registered: false,
-      production_registered_events: ['PostCompact'],
-      direct_mutation_enforcement: 'NOT_SHIPPED',
+      d4_verdict: productionVerdict.d4_verdict,
+      ship_status: productionVerdict.ship_status,
+      production_pretooluse_registered: productionHookRegistered,
+      production_registered_events: productionRegisteredEvents,
+      direct_mutation_enforcement: productionVerdict.direct_mutation_enforcement,
       hook_controls_verdict: hookControlsReady ? 'READY' : 'BLOCKED',
       terminal_blocker: terminalBlocker || 'PreToolUse remains an unregistered probe; no production direct-mutation enforcement is shipped',
       known_limitation: 'On Codex 0.146.0, a PreToolUse probe adapter that exits nonzero before emitting a structured denial fails open; this probe does not claim adapter-failure fail-closed semantics.',
@@ -728,7 +761,7 @@ function runProduction() {
     const receipt = { ...receiptBody, receipt_sha256: sha256(Buffer.from(JSON.stringify(receiptBody))) };
     writeJson(output, receipt);
     process.stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
-    if (!ready) process.exitCode = 1;
+    if (!productionVerdict.qualified) process.exitCode = 1;
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
@@ -740,9 +773,13 @@ function main() {
   else runCapability();
 }
 
-try {
-  main();
-} catch (error) {
-  process.stderr.write(`pre-effect-contract-probe: ${error.message || String(error)}\n`);
-  process.exitCode = 1;
+if (require.main === module) {
+  try {
+    main();
+  } catch (error) {
+    process.stderr.write(`pre-effect-contract-probe: ${error.message || String(error)}\n`);
+    process.exitCode = 1;
+  }
 }
+
+module.exports = { resolveProductionVerdict };

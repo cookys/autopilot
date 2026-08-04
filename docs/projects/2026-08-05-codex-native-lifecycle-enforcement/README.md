@@ -19,8 +19,8 @@ The D1 reservation was respected: the first real call proved request-bound struc
 second one-shot session exercised allow, deny, and broken controls. No third D1 call was made. The
 sanitized receipt is [codex-pre-effect-production-live-receipt.json](evidence/codex-pre-effect-production-live-receipt.json).
 The single final D4 package probe uses three Codex sessions: no-admission, a combined
-L3/L5/managed-Engine sequence, and the broken-adapter control. Its receipt hashes the installed
-adapter and the generated package adapter separately and requires byte equality. The run admitted
+L3/L5/managed-Engine sequence, and the broken-adapter control. Its receipt hashes the unregistered
+probe source/generated adapter and current manifests separately and requires byte equality. The run admitted
 one L3 and one L5 lifecycle command, but the next effect calls saw no valid payload-session marker;
 the receipt therefore records L3 sentinel 0, no qualifying L5-direct or managed-entry invocation,
 and no dispatcher call. The sole existing campaign also remains sealed to the pre-amendment graph.
@@ -64,5 +64,5 @@ node or lineage.
 - `node --test hooks/orchestrator-edit-gate.test.js` — 35 passed.
 - `AUTOPILOT_LIVE_CODEX=1 bash hooks/tests/codex-pre-effect-production-live.test.sh` (historical
   D1/D4 probe; no rerun in this repair) — no-admission/L3/L5/managed-entry/broken controls; the
-  receipt records exact installed/generated adapter equality, broken-adapter `FAIL_OPEN`, failed
+  receipt records exact probe source/generated adapter and manifest equality, broken-adapter `FAIL_OPEN`, failed
   lifecycle-to-payload session binding, zero managed dispatcher calls, and D4 `NOT_READY/NO_SHIP`.

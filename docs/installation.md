@@ -71,7 +71,7 @@ Contributor shortcut:
 ```
 
 The Codex package does **not** load the Claude Code hook bundle, apps, or MCP servers. Its manifest
-declares `skills: "./skills/"` and `hooks: "./hooks/hooks.json"`; that hook manifest contains exactly
+declares `skills: "./skills/"` and `hooks: "./hooks/hooks.json"`; that hook manifest contains
 exactly one production Codex-native registration: `PostCompact` with matcher `manual|auto` for
 recovery. The Codex adapter translates the official payload into Autopilot's existing fail-closed
 reconciliation authority and blocks continuation when identity or reconciliation fails. This is an

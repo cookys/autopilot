@@ -560,6 +560,9 @@ const manifest = JSON.parse(fs.readFileSync(path.join(pluginDir, '.codex-plugin'
 const productionHooks = JSON.parse(fs.readFileSync(path.join(pluginDir, 'hooks', 'hooks.json'), 'utf8'));
 const marketplace = JSON.parse(fs.readFileSync(marketplacePath, 'utf8'));
 const canonical = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8'));
+const { resolveProductionVerdict } = require(path.join(
+  root, 'platforms', 'codex', 'hook-probe', 'pre-effect-contract-probe.js',
+));
 
 function print(key, value) {
   console.log(`${key}=${value}`);
@@ -584,6 +587,16 @@ print('production_postcompact_exact',
   && postCompactGroup?.hooks?.length === 1
   && postCompactHook?.type === 'command'
   && postCompactHook?.command === 'node "${PLUGIN_ROOT}/hooks/post-compact.js"');
+const forcedProbeNoShip = resolveProductionVerdict({
+  productionHookRegistered: false,
+  hookControlsReady: true,
+  managedDispatcherReady: true,
+});
+print('probe_driver_forces_no_ship',
+  forcedProbeNoShip.verdict === 'NOT_READY'
+  && forcedProbeNoShip.d4_verdict === 'NOT_READY'
+  && forcedProbeNoShip.ship_status === 'NO_SHIP'
+  && forcedProbeNoShip.direct_mutation_enforcement === 'NOT_SHIPPED');
 print('has_hooks_field', Object.prototype.hasOwnProperty.call(manifest, 'hooks'));
 print('has_apps_field', Object.prototype.hasOwnProperty.call(manifest, 'apps'));
 print('has_mcp_field', Object.prototype.hasOwnProperty.call(manifest, 'mcpServers'));
@@ -628,6 +641,7 @@ assert_contains "$OUT" "skills_path=./skills/" "Codex plugin skills path is rela
 assert_contains "$OUT" "hooks_path=./hooks/hooks.json" "Codex plugin hooks path is relative"
 assert_contains "$OUT" "production_pretooluse_absent=true" "Codex production manifest leaves the PreToolUse probe unregistered"
 assert_contains "$OUT" "production_postcompact_exact=true" "Codex production manifest declares one exact manual|auto PostCompact adapter"
+assert_contains "$OUT" "probe_driver_forces_no_ship=true" "Codex probe driver cannot promote an unregistered hook to D4 READY"
 assert_contains "$OUT" "has_hooks_field=true" "Codex plugin declares production hooks"
 assert_contains "$OUT" "has_apps_field=false" "Codex plugin does not declare apps"
 assert_contains "$OUT" "has_mcp_field=false" "Codex plugin does not declare MCP servers"

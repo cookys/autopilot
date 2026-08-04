@@ -66,6 +66,7 @@
   },
   "production_contract": {
     "qualification": "UNREGISTERED_PROBE_ONLY",
+    "evidence_scope": "D1_PRETOOLUSE_CAPABILITY_PROBE",
     "production_hook_registered": false,
     "production_registered_events": [
       "PostCompact"
@@ -77,11 +78,13 @@
       "decision": "block",
       "reason_code": "DEV_FLOW_ENTRY_REQUIRED"
     },
-    "installed_plugin_manifest_sha256": "d066184ef41a00168cf89ee54365740284f519eb69bcd0a36d27192bb7fac008",
-    "installed_hook_manifest_sha256": "e0dbd4e957d042b854e31183a1a8997f396f412458815997f638e9856feffb8a",
-    "production_adapter_sha256": "cfce1b2fd93a7a7dfcb1a0e3e2e4da901e61e33a8bc64767042c7645efaf0af2",
-    "generated_adapter_sha256": "cfce1b2fd93a7a7dfcb1a0e3e2e4da901e61e33a8bc64767042c7645efaf0af2",
-    "installed_adapter_matches_generated_payload": true
+    "probe_plugin_manifest_sha256": "9ac21e3bcecfa54e4d0a8906d3ff3b2b6ca7ae790b255a56de199c1261559457",
+    "probe_hook_manifest_source_sha256": "6f9da9485027ec5c55844ca3c2ebcaa5b774bf913c5da3fd360b3ba1357fcee9",
+    "probe_hook_manifest_generated_sha256": "6f9da9485027ec5c55844ca3c2ebcaa5b774bf913c5da3fd360b3ba1357fcee9",
+    "probe_adapter_source_sha256": "de052330fef2acc53ab6f071c754f08715b62793dee7d001cda8fdc5b30d6450",
+    "probe_adapter_generated_sha256": "de052330fef2acc53ab6f071c754f08715b62793dee7d001cda8fdc5b30d6450",
+    "probe_hook_manifest_source_matches_generated_payload": true,
+    "probe_adapter_source_matches_generated_payload": true
   },
   "controls": {
     "negative_no_admission": {
@@ -152,5 +155,5 @@
   "hook_controls_verdict": "BLOCKED",
   "terminal_blocker": "Codex-thread-bound PreToolUse lifecycle enforcement was not qualified; the structured result remains D1 probe evidence only",
   "known_limitation": "On Codex 0.146.0, a PreToolUse probe adapter that exits nonzero before emitting a structured denial fails open; this probe does not claim adapter-failure fail-closed semantics.",
-  "receipt_sha256": "253b73d603a414ee7b76a44a50a954750e1d74a8155c05044d33ec6122f250f5"
+  "receipt_sha256": "e359b40c299f4cec368a684c0fbfaefe98d590055026f6a62ce7dc687d6e21f7"
 }

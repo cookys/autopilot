@@ -18,7 +18,7 @@ function usage() {
     'Usage:',
     '  platform-capability-claims.js generate --input FILE --output FILE',
     '  platform-capability-claims.js validate-consumers --receipt FILE --consumer D2 --consumer D3 --consumer D4 [--reprobe]',
-    '  platform-capability-claims.js validate-consumer --receipt FILE --consumer D2 [--claim-id ID ...] [--emit-claim-ids] [--reprobe]',
+    '  platform-capability-claims.js validate-consumer --receipt FILE --consumer D2 [--claim-id ID ...] [--emit-claim-ids] [--reprobe [--reprobe-binary COMMAND]]',
   ].join('\n');
 }
 
@@ -153,14 +153,18 @@ function revalidationCommandDigest(target) {
   return sha256(canonicalJson({ argv: [target.binary_realpath, '--version'] }));
 }
 
-function currentVersionResult(target) {
-  try {
-    const resolved = fs.realpathSync(target.binary_realpath);
-    if (resolved !== target.binary_realpath) return `binary_realpath_drift:${resolved}`;
-  } catch (error) {
-    return `binary_unavailable:${error.code || 'unknown'}`;
+function currentVersionResult(target, reprobeBinary = null) {
+  let binary = reprobeBinary;
+  if (binary === null) {
+    try {
+      const resolved = fs.realpathSync(target.binary_realpath);
+      if (resolved !== target.binary_realpath) return `binary_realpath_drift:${resolved}`;
+    } catch (error) {
+      return `binary_unavailable:${error.code || 'unknown'}`;
+    }
+    binary = target.binary_realpath;
   }
-  const run = childProcess.spawnSync(target.binary_realpath, ['--version'], {
+  const run = childProcess.spawnSync(binary, ['--version'], {
     encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024,
   });
   if (run.error) return `version_probe_error:${run.error.code || run.error.message}`;
@@ -173,7 +177,7 @@ function expiration(live) {
   return new Date(Date.parse(live.observed_at) + live.ttl_seconds * 1000).toISOString();
 }
 
-function coreEvidenceReasons(source, nowMs, { reprobe = true } = {}) {
+function coreEvidenceReasons(source, nowMs, { reprobe = true, reprobeBinary = null } = {}) {
   const reasons = [];
   const target = source.target_identity;
   const official = source.official_contract;
@@ -182,7 +186,7 @@ function coreEvidenceReasons(source, nowMs, { reprobe = true } = {}) {
   if (source.agreement !== true || official.assertion !== live.result) reasons.push('contract_live_contradiction');
   if (Date.parse(expiration(live)) <= nowMs) reasons.push('stale_live_evidence');
   if (reprobe) {
-    const result = currentVersionResult(target);
+    const result = currentVersionResult(target, reprobeBinary);
     if (result !== 'passed') reasons.push(result);
   }
   return reasons;
@@ -397,17 +401,20 @@ function validateReceipt(receipt) {
 function parseArgs(argv) {
   if (argv.length === 0 || ['-h', '--help'].includes(argv[0])) return { command: 'help' };
   const command = argv[0];
-  const options = { consumers: [], claimIds: [], reprobe: false, emitClaimIds: false };
+  const options = {
+    consumers: [], claimIds: [], reprobe: false, reprobeBinary: null, emitClaimIds: false,
+  };
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--reprobe') options.reprobe = true;
     else if (arg === '--emit-claim-ids') options.emitClaimIds = true;
-    else if (['--input', '--output', '--receipt', '--consumer', '--claim-id'].includes(arg)) {
+    else if (['--input', '--output', '--receipt', '--consumer', '--claim-id', '--reprobe-binary'].includes(arg)) {
       const value = argv[index + 1];
       if (!value || value.startsWith('--')) throw new ClaimsError(`${arg} requires a value`);
       index += 1;
       if (arg === '--consumer') options.consumers.push(value);
       else if (arg === '--claim-id') options.claimIds.push(value);
+      else if (arg === '--reprobe-binary') options.reprobeBinary = value;
       else options[arg.slice(2)] = value;
     } else throw new ClaimsError(`unknown argument: ${arg}`);
   }
@@ -420,6 +427,12 @@ function validateCommand(options, single) {
   if (single && options.consumers.length !== 1) throw new ClaimsError('validate-consumer accepts exactly one --consumer');
   if (!single && options.emitClaimIds) throw new ClaimsError('--emit-claim-ids is valid only with validate-consumer');
   if (!single && options.claimIds.length) throw new ClaimsError('--claim-id is valid only with validate-consumer');
+  if (options.reprobeBinary !== null && !options.reprobe) {
+    throw new ClaimsError('--reprobe-binary requires --reprobe');
+  }
+  if (!single && options.reprobeBinary !== null) {
+    throw new ClaimsError('--reprobe-binary is valid only with validate-consumer');
+  }
   if (new Set(options.consumers).size !== options.consumers.length) throw new ClaimsError('duplicate consumer argument');
   for (const consumer of options.consumers) if (!CONSUMER_ORDER.includes(consumer)) throw new ClaimsError(`unknown consumer: ${consumer}`);
   const receipt = readJson(options.receipt, 'receipt');
@@ -433,7 +446,10 @@ function validateCommand(options, single) {
     if (options.reprobe) {
       for (const id of expected) {
         const claim = receipt.claims.find((candidate) => candidate.claim_id === id);
-        const reasons = coreEvidenceReasons(claim, Date.now(), { reprobe: true });
+        const reasons = coreEvidenceReasons(claim, Date.now(), {
+          reprobe: true,
+          reprobeBinary: options.reprobeBinary,
+        });
         if (reasons.length) throw new ClaimsError(`reprobe failed for ${id}: ${reasons.join(',')}`);
       }
     }
@@ -449,6 +465,9 @@ function validateCommand(options, single) {
 function main() {
   try {
     const options = parseArgs(process.argv.slice(2));
+    if (options.reprobeBinary !== null && options.command !== 'validate-consumer') {
+      throw new ClaimsError('--reprobe-binary is valid only with validate-consumer');
+    }
     if (options.command === 'help') {
       process.stdout.write(`${usage()}\n`);
       return;

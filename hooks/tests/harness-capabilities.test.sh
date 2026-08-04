@@ -596,6 +596,22 @@ OUT="$(node "$CLAIMS_SCRIPT" generate --input "$CLAIMS_INPUT" --output "$CLAIMS_
 EXIT=$?
 assert_exit_code "$EXIT" 0 "capability claim generator accepts dual-evidence input"
 
+GENERATE_REPROBE_CASE=0
+for GENERATE_REPROBE_ARGS in \
+  "--reprobe-binary $NODE_REALPATH" \
+  "--reprobe --reprobe-binary $NODE_REALPATH"; do
+  GENERATE_REPROBE_CASE=$((GENERATE_REPROBE_CASE + 1))
+  GENERATE_REPROBE_OUTPUT="$TEST_TMP/generate-with-reprobe-$GENERATE_REPROBE_CASE.json"
+  OUT="$(node "$CLAIMS_SCRIPT" generate --input "$CLAIMS_INPUT" --output "$GENERATE_REPROBE_OUTPUT" \
+    $GENERATE_REPROBE_ARGS 2>&1)"
+  EXIT=$?
+  assert_exit_code "$EXIT" 1 "generate rejects consumer-only arguments: $GENERATE_REPROBE_ARGS"
+  assert_contains "$OUT" "--reprobe-binary is valid only with validate-consumer" \
+    "generate reports its closed command grammar: $GENERATE_REPROBE_ARGS"
+  assert_file_absent "$GENERATE_REPROBE_OUTPUT" \
+    "invalid generate grammar creates no receipt: $GENERATE_REPROBE_ARGS"
+done
+
 OUT="$(node "$CLAIMS_SCRIPT" validate-consumers --receipt "$CLAIMS_RECEIPT" --consumer D2 --consumer D3 --consumer D4 --reprobe 2>&1)"
 EXIT=$?
 assert_exit_code "$EXIT" 0 "capability claims validate complete required partition"
@@ -605,6 +621,30 @@ OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --con
 EXIT=$?
 assert_exit_code "$EXIT" 0 "single consumer emits validated IDs"
 assert_contains "$OUT" "cap-v1-" "single consumer emits content-addressed claim ID"
+
+SELECTED_VERSION_BIN="$TEST_TMP/selected-version"
+printf '#!/usr/bin/env bash\nprintf "selected v%s\\n"\n' "$NODE_VERSION" > "$SELECTED_VERSION_BIN"
+chmod +x "$SELECTED_VERSION_BIN"
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --emit-claim-ids --reprobe --reprobe-binary "$SELECTED_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 0 "single consumer revalidates the selected portable binary"
+assert_contains "$OUT" "cap-v1-" "selected portable binary preserves receipt claim IDs"
+
+SELECTED_WRONG_VERSION_BIN="$TEST_TMP/selected-wrong-version"
+printf '#!/usr/bin/env bash\nprintf "selected 0.0.1\\n"\n' > "$SELECTED_WRONG_VERSION_BIN"
+chmod +x "$SELECTED_WRONG_VERSION_BIN"
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --reprobe --reprobe-binary "$SELECTED_WRONG_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 1 "selected binary version drift fails closed"
+assert_contains "$OUT" "current_version_drift:0.0.1" "selected binary drift reports its observed version"
+
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --reprobe-binary "$SELECTED_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 1 "selected binary override requires immediate revalidation"
+assert_contains "$OUT" "--reprobe-binary requires --reprobe" "selected binary cannot bypass revalidation"
 
 CLAIMS_MUTATOR="$TEST_TMP/mutate-capability-receipt.js"
 cat > "$CLAIMS_MUTATOR" <<'NODE'

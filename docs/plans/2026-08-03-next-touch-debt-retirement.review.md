@@ -88,3 +88,34 @@ The raw GLM response was a fenced JSON `READY`; the two MiniMax responses were r
 classification and failed the strict purpose-bound schema for the reasons above. The controller
 therefore correctly refused to promote the single-family GLM result or treat MiniMax's malformed
 findings as semantic review. No code, backlog, implementation, or push was performed.
+
+## Prompt-contract repair rerun — GLM-5.2 + MiniMax-M3
+
+The owner requested a bounded repair of the MiniMax transport contract. The same implementer transcript
+repaired the plan in `19bdd7f36b46ce1ccd0c4f98235ca123c4d842bf`; the frozen plan grew from 15,915 to
+19,634 bytes (`1.233679x`, below the `1.25x` rail). Depth 0 rejected the two GLM arithmetic findings
+and accepted six MiniMax/operations blockers in:
+[`2026-08-03-next-touch-debt-retirement.glm-minimax-promptfix.g1-disposition.json`](2026-08-03-next-touch-debt-retirement.glm-minimax-promptfix.g1-disposition.json).
+
+- Manifest: [`2026-08-03-next-touch-debt-retirement.glm-minimax-promptfix.manifest.json`](2026-08-03-next-touch-debt-retirement.glm-minimax-promptfix.manifest.json)
+- Logical plan: `next-touch-debt-retirement-2026-08-03-glm-minimax-promptfix-20260804`
+- Ticket: `next-touch-debt-retirement-glm-minimax-promptfix-20260804`
+- Session key: `535cdf05e90650db9d6a1e3a9ff347b3597910122c2a90a29cd8c71d2d0e1dc3`
+- Generation 1 artifact: `/home/cookys/.autopilot/plan-review/535cdf05e90650db9d6a1e3a9ff347b3597910122c2a90a29cd8c71d2d0e1dc3/generation-01.json`
+- Generation 1 result: `CONDITIONAL`, semantic `CONDITIONAL`, depth-0 repair authorized.
+
+Generation 2 reached the hard two-generation ceiling. GLM parsed one `CONDITIONAL` response, but
+MiniMax's two successful transports emitted invalid JSON: both copied shell examples with unescaped
+inner double quotes (for example `--ledger "$MISSION_LEDGER"`) into string values. Strict parsing
+therefore failed at byte positions 8,123 and 12,261. This is a model-output/schema-encoding failure,
+not quota, authentication, or transport failure.
+
+- Generation 2 artifact: `/home/cookys/.autopilot/plan-review/535cdf05e90650db9d6a1e3a9ff347b3597910122c2a90a29cd8c71d2d0e1dc3/generation-02.json`
+- Generation 2 artifact SHA-256: `6bc835a22ea936083f1785e12c8b1ceb9c8368f5a373716b6fa3c6063261eed2`
+- Result: terminal `CONDITIONAL`, semantic verdict `null`, policy `required_seat_transport_exhausted`;
+  no generation 3 and no implementation authorization.
+
+The dispatcher prompt now explicitly requires RFC 8259 escaping and a strict JSON parse check in both
+the canonical and Codex mirror entrypoints (`67745f0b`); `bash hooks/tests/dispatch-plan-review.test.sh`
+passes 238 assertions and `bash hooks/tests/contract-parity.test.sh` passes 36 assertions. The plan
+remains unmerged and unpushed pending a future semantic review with a valid required-seat response.

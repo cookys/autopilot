@@ -2,9 +2,9 @@
   "schema_version": 1,
   "runtime": "v24.16.0",
   "base_ref": "f6805529bdca4cca76f334d8c82c8f2bf141aaf8",
-  "candidate_ref": "3c7d6268",
+  "candidate_ref": "1e7e5b69",
   "base_sha": "f6805529bdca4cca76f334d8c82c8f2bf141aaf8",
-  "candidate_sha": "3c7d6268d4735e9f5899e98fca6acf32b343a139",
+  "candidate_sha": "1e7e5b69a87dfa02c848daf2f2edd6d6540a3e47",
   "fixtures_path": "hooks/tests/fixtures/hook-multiplexer-benchmark.json",
   "fixtures_sha256": "29a29f709f870b92c0513a27eef7290711efdf37cbc17f4975e9b37597b8c8fc",
   "warmups": 10,
@@ -18,10 +18,10 @@
       "expected_child_count": 0,
       "baseline": {
         "samples": 50,
-        "median_ms": 92.023297,
-        "p95_ms": 113.465842,
-        "mad_ms": 7.667205999999993,
-        "mad_median_ratio": 0.08331809715533223,
+        "median_ms": 97.971806,
+        "p95_ms": 115.955644,
+        "mad_ms": 7.245391999999995,
+        "mad_median_ratio": 0.07395384749771781,
         "observed_child_count": 0,
         "expected_child_count": 0,
         "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150",
@@ -31,10 +31,10 @@
       },
       "candidate": {
         "samples": 50,
-        "median_ms": 43.043318,
-        "p95_ms": 55.166188,
-        "mad_ms": 5.942369999999997,
-        "mad_median_ratio": 0.13805557461903836,
+        "median_ms": 50.612178,
+        "p95_ms": 58.901755,
+        "mad_ms": 4.997954,
+        "mad_median_ratio": 0.09875002810588393,
         "observed_child_count": 0,
         "expected_child_count": 0,
         "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150",
@@ -42,9 +42,256 @@
         "process_count_consistent": true,
         "nonzero_statuses": 0
       },
+      "sampling": {
+        "strategy": "alternating-paired",
+        "warmups": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ],
+        "repetitions": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ]
+      },
       "ratios": {
-        "median": 0.46774370624864703,
-        "p95": 0.48619202949201223
+        "median": 0.5165994184081898,
+        "p95": 0.5079679864483353
       }
     },
     {
@@ -55,11 +302,11 @@
       "expected_child_count": 1,
       "baseline": {
         "samples": 50,
-        "median_ms": 91.489042,
-        "p95_ms": 107.851027,
-        "mad_ms": 6.316915999999992,
-        "mad_median_ratio": 0.06904560220446938,
-        "observed_child_count": 1,
+        "median_ms": 94.85371,
+        "p95_ms": 114.433249,
+        "mad_ms": 7.502367000000007,
+        "mad_median_ratio": 0.07909408076921827,
+        "observed_child_count": 0,
         "expected_child_count": 1,
         "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150",
         "processes_started": 2,
@@ -68,10 +315,10 @@
       },
       "candidate": {
         "samples": 50,
-        "median_ms": 95.590819,
-        "p95_ms": 111.129556,
-        "mad_ms": 5.00814299999999,
-        "mad_median_ratio": 0.0523914644982798,
+        "median_ms": 94.808905,
+        "p95_ms": 110.520467,
+        "mad_ms": 6.545797000000007,
+        "mad_median_ratio": 0.06904200612801095,
         "observed_child_count": 1,
         "expected_child_count": 1,
         "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150",
@@ -79,9 +326,256 @@
         "process_count_consistent": true,
         "nonzero_statuses": 0
       },
+      "sampling": {
+        "strategy": "alternating-paired",
+        "warmups": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ],
+        "repetitions": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ]
+      },
       "ratios": {
-        "median": 1.0448335331787604,
-        "p95": 1.0303986813217827
+        "median": 0.999527641037973,
+        "p95": 0.9658072978422556
       }
     },
     {
@@ -92,10 +586,10 @@
       "expected_child_count": 0,
       "baseline": {
         "samples": 50,
-        "median_ms": 177.690564,
-        "p95_ms": 209.430614,
-        "mad_ms": 16.09044499999999,
-        "mad_median_ratio": 0.09055317647593256,
+        "median_ms": 193.015844,
+        "p95_ms": 223.644052,
+        "mad_ms": 11.936277999999987,
+        "mad_median_ratio": 0.061840923276743995,
         "observed_child_count": 0,
         "expected_child_count": 0,
         "payload_sha256": "5022f8f4daacd244d7c2ae39d6f5f640d38f1ddb1561fcae9c12aff4168b8216",
@@ -105,10 +599,10 @@
       },
       "candidate": {
         "samples": 50,
-        "median_ms": 49.734879,
-        "p95_ms": 57.601329,
-        "mad_ms": 2.740347,
-        "mad_median_ratio": 0.05509909856219817,
+        "median_ms": 45.616959,
+        "p95_ms": 55.873898,
+        "mad_ms": 4.535834000000001,
+        "mad_median_ratio": 0.0994330639181801,
         "observed_child_count": 0,
         "expected_child_count": 0,
         "payload_sha256": "5022f8f4daacd244d7c2ae39d6f5f640d38f1ddb1561fcae9c12aff4168b8216",
@@ -116,9 +610,256 @@
         "process_count_consistent": true,
         "nonzero_statuses": 0
       },
+      "sampling": {
+        "strategy": "alternating-paired",
+        "warmups": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ],
+        "repetitions": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ]
+      },
       "ratios": {
-        "median": 0.27989600505742107,
-        "p95": 0.2750377697885181
+        "median": 0.23633789876855915,
+        "p95": 0.24983404432325346
       }
     },
     {
@@ -129,11 +870,11 @@
       "expected_child_count": 2,
       "baseline": {
         "samples": 50,
-        "median_ms": 184.386412,
-        "p95_ms": 221.676165,
-        "mad_ms": 14.287221000000017,
-        "mad_median_ratio": 0.07748521620996679,
-        "observed_child_count": 2,
+        "median_ms": 197.297259,
+        "p95_ms": 227.399267,
+        "mad_ms": 11.151470999999987,
+        "mad_median_ratio": 0.056521165354861756,
+        "observed_child_count": 0,
         "expected_child_count": 2,
         "payload_sha256": "5022f8f4daacd244d7c2ae39d6f5f640d38f1ddb1561fcae9c12aff4168b8216",
         "processes_started": 4,
@@ -142,10 +883,10 @@
       },
       "candidate": {
         "samples": 50,
-        "median_ms": 146.948481,
-        "p95_ms": 168.588117,
-        "mad_ms": 10.93069699999998,
-        "mad_median_ratio": 0.07438455250177088,
+        "median_ms": 151.482999,
+        "p95_ms": 181.089735,
+        "mad_ms": 11.485641000000015,
+        "mad_median_ratio": 0.07582132038460643,
         "observed_child_count": 2,
         "expected_child_count": 2,
         "payload_sha256": "5022f8f4daacd244d7c2ae39d6f5f640d38f1ddb1561fcae9c12aff4168b8216",
@@ -153,11 +894,258 @@
         "process_count_consistent": true,
         "nonzero_statuses": 0
       },
+      "sampling": {
+        "strategy": "alternating-paired",
+        "warmups": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ],
+        "repetitions": [
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ],
+          [
+            "baseline",
+            "candidate"
+          ],
+          [
+            "candidate",
+            "baseline"
+          ]
+        ]
+      },
       "ratios": {
-        "median": 0.7969593822347385,
-        "p95": 0.7605153084455427
+        "median": 0.767790691912248,
+        "p95": 0.7963514455831556
       }
     }
   ],
-  "generated_at": "2026-08-05T18:11:30.797Z"
+  "generated_at": "2026-08-05T18:31:49.848Z"
 }

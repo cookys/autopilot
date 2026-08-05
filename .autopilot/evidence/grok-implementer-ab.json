@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "mode": "live",
+  "base_ref": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "candidate_ref": "746f22338cfc7078acade53b143fea2d389dedd8",
+  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "candidate_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
   "seed": 20260803,
   "seed_digest": "580a7a03b4d0e606d374329109f29d80de6774d72ca05dd077ae3c884e5d1239",
   "tasks_digest": "bc136556a2cbb7445e7317df71fc5f3b3a9850f68241984aeb6a2e3aa12685c5",
@@ -9,6 +13,10 @@
     "model": "Grok-4.5",
     "family": "xai"
   },
+  "runner": "grok",
+  "model": "grok-4.5",
+  "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+  "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
   "arms": {
     "A": {
       "effort": "medium"
@@ -19,6 +27,7 @@
   },
   "pairs": 30,
   "provider_sessions": 60,
+  "session_attempts_started": 60,
   "exclusions": [],
   "retries_per_arm": {
     "A": 0,
@@ -36,6 +45,7 @@
     "mean": 0
   },
   "decision": "no-change",
+  "open_reasons": [],
   "material_effect_pp": 10,
   "quality_non_inferiority_pp": 5,
   "bootstrap_resamples": 10000,
@@ -46,15 +56,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "720023df50b87a2267d2a75346b096c2fb3a5c64",
+          "commit": "0ead5141f3e2783efb63b474ad6bf8677ea876d0",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..0ead5141f3e2783efb63b474ad6bf8677ea876d0"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "0ead5141f3e2783efb63b474ad6bf8677ea876d0",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "0ead5141f3e2783efb63b474ad6bf8677ea876d0",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "f947b1e8-8d64-4b62-a105-a73b74c53821",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19618,
-          "run_id": "hetero-1785921019-3187019-3ed4",
+          "wall_ms": 19689,
+          "run_id": "hetero-1785955820-2091781-ecca",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -62,15 +97,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "80d230f0bea54470b3ad176e54efb1471ce8fd17",
+          "commit": "31901ebf335ff71d406ff50372bf1581de01e2c3",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..31901ebf335ff71d406ff50372bf1581de01e2c3"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "31901ebf335ff71d406ff50372bf1581de01e2c3",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "31901ebf335ff71d406ff50372bf1581de01e2c3",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "972dfb18-13d8-40c1-8870-d91f2998646a",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 56170,
-          "run_id": "hetero-1785921039-3187987-5191",
+          "wall_ms": 16211,
+          "run_id": "hetero-1785955839-2092712-7df5",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -88,15 +148,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "e52d58b96d4493b6c12864880bac73a763a289cf",
+          "commit": "88940d396c8460f3ff5c98020080cd9cbcf0d3e4",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..88940d396c8460f3ff5c98020080cd9cbcf0d3e4"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "88940d396c8460f3ff5c98020080cd9cbcf0d3e4",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "88940d396c8460f3ff5c98020080cd9cbcf0d3e4",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "d7bf6144-9273-4bcc-92ed-330e3887d828",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 22300,
-          "run_id": "hetero-1785921095-3189464-fac2",
+          "wall_ms": 20345,
+          "run_id": "hetero-1785955856-2093614-5724",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -104,15 +189,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "bfc8b03c763b7b5da91258dbe7521a4ac889c37a",
+          "commit": "d6c7b80c8e033e8cbf4e4385414f61567e319e71",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..d6c7b80c8e033e8cbf4e4385414f61567e319e71"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "d6c7b80c8e033e8cbf4e4385414f61567e319e71",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "d6c7b80c8e033e8cbf4e4385414f61567e319e71",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "6a2cefc1-abaf-4c53-ba92-92b5f6c7323c",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19055,
-          "run_id": "hetero-1785921117-3190467-ba24",
+          "wall_ms": 20297,
+          "run_id": "hetero-1785955876-2094591-7031",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -130,15 +240,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "379da8eade98dfcd925ae3251c38288d2fc91912",
+          "commit": "291892a6a004ba5ee565d39017fe054bbe618414",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..291892a6a004ba5ee565d39017fe054bbe618414"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "291892a6a004ba5ee565d39017fe054bbe618414",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "291892a6a004ba5ee565d39017fe054bbe618414",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "53ea30aa-6c76-4566-a3a6-d4bc9110dad9",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 50273,
-          "run_id": "hetero-1785921136-3191418-6524",
+          "wall_ms": 19055,
+          "run_id": "hetero-1785955896-2095578-aaca",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -146,15 +281,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "2a394deb8a515a51d348ca8aa98a4627b4e2423a",
+          "commit": "524136ce8c620079c287dd05c99bd7d0ce9a0550",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..524136ce8c620079c287dd05c99bd7d0ce9a0550"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "524136ce8c620079c287dd05c99bd7d0ce9a0550",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "524136ce8c620079c287dd05c99bd7d0ce9a0550",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "a98ad96a-9703-4b3a-a6e8-6504a50de36d",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 23345,
-          "run_id": "hetero-1785921186-3192740-648d",
+          "wall_ms": 21537,
+          "run_id": "hetero-1785955915-2096608-bc7a",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -172,15 +332,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "0493909bfa8470b04055b6fa88317303c4f2e123",
+          "commit": "d2002fc8b5f8465e6b73a0a02d7a67607f21ee9c",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..d2002fc8b5f8465e6b73a0a02d7a67607f21ee9c"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "d2002fc8b5f8465e6b73a0a02d7a67607f21ee9c",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "d2002fc8b5f8465e6b73a0a02d7a67607f21ee9c",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "ece480ed-cbad-4c61-98cf-4a2a9e17ab08",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20214,
-          "run_id": "hetero-1785921210-3193793-6dda",
+          "wall_ms": 18084,
+          "run_id": "hetero-1785955937-2097625-120b",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -188,15 +373,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "ea15ea7d8d771022164dbc69679a8a7134efe871",
+          "commit": "d132cad4f4de24c11be3937425c1ea8c021e9072",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..d132cad4f4de24c11be3937425c1ea8c021e9072"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "d132cad4f4de24c11be3937425c1ea8c021e9072",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "d132cad4f4de24c11be3937425c1ea8c021e9072",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "ea4f207d-16d9-48da-a460-557b96f58e24",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20610,
-          "run_id": "hetero-1785921230-3194752-246b",
+          "wall_ms": 22993,
+          "run_id": "hetero-1785955955-2098558-10b4",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -214,15 +424,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "a9ae23543e636a9998ea12cc366cb0a0e6370bdc",
+          "commit": "ed8a2c3b869a1830d4485b26c5fdb9123315137d",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..ed8a2c3b869a1830d4485b26c5fdb9123315137d"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "ed8a2c3b869a1830d4485b26c5fdb9123315137d",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "ed8a2c3b869a1830d4485b26c5fdb9123315137d",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "f31a14f1-4525-4e4c-94fa-b5a9ec32ee35",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 21064,
-          "run_id": "hetero-1785921251-3195711-baac",
+          "wall_ms": 21431,
+          "run_id": "hetero-1785955978-2099585-3508",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -230,15 +465,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "24a63a68ecf132382193954038acb743eadbc8f0",
+          "commit": "13911d66103cec41e691f0b06026ab091d015d7c",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..13911d66103cec41e691f0b06026ab091d015d7c"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "13911d66103cec41e691f0b06026ab091d015d7c",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "13911d66103cec41e691f0b06026ab091d015d7c",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "d05a18c9-8080-4e04-93ec-a26af2d579df",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 30379,
-          "run_id": "hetero-1785921272-3196646-7e0f",
+          "wall_ms": 33266,
+          "run_id": "hetero-1785955999-2100588-594b",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -256,15 +516,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "9bc3cc41927069849de80db1f351268d15e0c787",
+          "commit": "8cd12c794c2ddf6a47e5196612fc02958316a03e",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..8cd12c794c2ddf6a47e5196612fc02958316a03e"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "8cd12c794c2ddf6a47e5196612fc02958316a03e",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "8cd12c794c2ddf6a47e5196612fc02958316a03e",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "4f24a200-734f-47b4-8291-90523e4f9f9e",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19181,
-          "run_id": "hetero-1785921302-3197762-7543",
+          "wall_ms": 19717,
+          "run_id": "hetero-1785956033-2101734-9cbd",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -272,15 +557,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "f544b4eca53396496717c923534f4c3b2a7507fe",
+          "commit": "9ed148b937094c3dbaf2ff41041279cc578681b8",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..9ed148b937094c3dbaf2ff41041279cc578681b8"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "9ed148b937094c3dbaf2ff41041279cc578681b8",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "9ed148b937094c3dbaf2ff41041279cc578681b8",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "5fc63894-9c38-4dcd-a6f1-5c8b7c3c0f31",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20843,
-          "run_id": "hetero-1785921321-3198713-6a9a",
+          "wall_ms": 17759,
+          "run_id": "hetero-1785956052-2102696-19c8",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -298,15 +608,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "38d3e78ed447dd32c45f19cfd35beda129c2754c",
+          "commit": "c8c2a194997381ae011c0662ae16a7635a0ac0e2",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..c8c2a194997381ae011c0662ae16a7635a0ac0e2"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "c8c2a194997381ae011c0662ae16a7635a0ac0e2",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "c8c2a194997381ae011c0662ae16a7635a0ac0e2",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "23a0dd24-b9e8-4eee-bada-90b0b7929f34",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19924,
-          "run_id": "hetero-1785921342-3199640-5f72",
+          "wall_ms": 17239,
+          "run_id": "hetero-1785956070-2103598-7dda",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -314,15 +649,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "fd70c272766bc897eeee125af1cfc62a8c2f3cd8",
+          "commit": "08f719f61bfb6333d331f9fac9c53c1341551a3d",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..08f719f61bfb6333d331f9fac9c53c1341551a3d"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "08f719f61bfb6333d331f9fac9c53c1341551a3d",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "08f719f61bfb6333d331f9fac9c53c1341551a3d",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "e4529333-d062-4eb8-9868-50df90c4f63c",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20016,
-          "run_id": "hetero-1785921362-3200548-837a",
+          "wall_ms": 17386,
+          "run_id": "hetero-1785956088-2104501-3d79",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -340,15 +700,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "523429d58e7d65f07f3d4a2332ec7a35528b480e",
+          "commit": "2aaddb9c1dfcc033ce31459243e53e27fda61684",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..2aaddb9c1dfcc033ce31459243e53e27fda61684"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "2aaddb9c1dfcc033ce31459243e53e27fda61684",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "2aaddb9c1dfcc033ce31459243e53e27fda61684",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "e05d2170-eb77-4845-8bcb-fec594dfb489",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 21837,
-          "run_id": "hetero-1785921382-3201512-adb5",
+          "wall_ms": 22165,
+          "run_id": "hetero-1785956105-2105544-60f8",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -356,15 +741,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "2c4b1f57ebbac7cc51d13a53976bc9d975741f5d",
+          "commit": "edbb8d30baddd20ae5bcc11745b66f34853f7a7f",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..edbb8d30baddd20ae5bcc11745b66f34853f7a7f"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "edbb8d30baddd20ae5bcc11745b66f34853f7a7f",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "edbb8d30baddd20ae5bcc11745b66f34853f7a7f",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "69b67c67-3365-4844-a558-635afb6ca1af",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 24291,
-          "run_id": "hetero-1785921404-3202508-3606",
+          "wall_ms": 19141,
+          "run_id": "hetero-1785956127-2106607-a401",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -382,15 +792,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "9817db8f7447a9740a847cd29dfc2ba9c74780b5",
+          "commit": "c08b7cd87059f67de748230755aa894defc507c2",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..c08b7cd87059f67de748230755aa894defc507c2"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "c08b7cd87059f67de748230755aa894defc507c2",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "c08b7cd87059f67de748230755aa894defc507c2",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "54742182-9414-4be3-a8f7-1c24dbbddd7a",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 46397,
-          "run_id": "hetero-1785921428-3203529-8e59",
+          "wall_ms": 18166,
+          "run_id": "hetero-1785956146-2107687-4ce0",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -398,15 +833,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "9a10b7a38fdb64d2e94c167bd4970be424606eda",
+          "commit": "e1524794e9ef408f3430a9e158bfd16e3c8a1272",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..e1524794e9ef408f3430a9e158bfd16e3c8a1272"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "e1524794e9ef408f3430a9e158bfd16e3c8a1272",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "e1524794e9ef408f3430a9e158bfd16e3c8a1272",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "079a6162-cbd7-418f-ad39-c12ac548b987",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20853,
-          "run_id": "hetero-1785921475-3204743-c266",
+          "wall_ms": 20503,
+          "run_id": "hetero-1785956164-2108823-4fd0",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -424,15 +884,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "ab0852244bdbd3cc73cde7c663fa5a4737cbdeee",
+          "commit": "135fe15333e480e41ceffb327c53bcfaa7163275",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..135fe15333e480e41ceffb327c53bcfaa7163275"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "135fe15333e480e41ceffb327c53bcfaa7163275",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "135fe15333e480e41ceffb327c53bcfaa7163275",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "17f70424-9a55-44b3-8534-fd97de00b427",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 18253,
-          "run_id": "hetero-1785921495-3205712-4a0a",
+          "wall_ms": 24271,
+          "run_id": "hetero-1785956185-2110478-9681",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -440,15 +925,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "ccb5876dc8769f5416445da02cb675bc146d5cdf",
+          "commit": "1d5f459e382670e6d42149ea3c8eb2ea0fc9bddd",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..1d5f459e382670e6d42149ea3c8eb2ea0fc9bddd"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "1d5f459e382670e6d42149ea3c8eb2ea0fc9bddd",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "1d5f459e382670e6d42149ea3c8eb2ea0fc9bddd",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "634d9cf8-6802-4743-90fd-916d41d701b2",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19652,
-          "run_id": "hetero-1785921514-3206589-f742",
+          "wall_ms": 18802,
+          "run_id": "hetero-1785956209-2111692-16d1",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -466,15 +976,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "130937d3a293c135752de62389318f111d410a7c",
+          "commit": "919671d6b5bd1992b741d71768489efd48c6f52d",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..919671d6b5bd1992b741d71768489efd48c6f52d"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "919671d6b5bd1992b741d71768489efd48c6f52d",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "919671d6b5bd1992b741d71768489efd48c6f52d",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "d49f50dd-9a4b-45e1-9c87-71d37d34dcab",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 31085,
-          "run_id": "hetero-1785921533-3207525-c9bb",
+          "wall_ms": 17391,
+          "run_id": "hetero-1785956228-2112747-36c6",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -482,15 +1017,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "fd2770015f033b1dd2d79781b60625f881bb29ba",
+          "commit": "5c71c774bd98e387b524cc0fcd6c856f740e346d",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..5c71c774bd98e387b524cc0fcd6c856f740e346d"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "5c71c774bd98e387b524cc0fcd6c856f740e346d",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "5c71c774bd98e387b524cc0fcd6c856f740e346d",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "397eeb40-8cfe-4470-98b9-04f930704144",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 23063,
-          "run_id": "hetero-1785921565-3208618-053f",
+          "wall_ms": 18140,
+          "run_id": "hetero-1785956246-2113999-d8c3",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -508,15 +1068,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "fd1cf9a9de88f53ec86bdb5c62b39d6d77cc180d",
+          "commit": "b9be86617b690bef5211995ddab621139b185aa9",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..b9be86617b690bef5211995ddab621139b185aa9"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "b9be86617b690bef5211995ddab621139b185aa9",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "b9be86617b690bef5211995ddab621139b185aa9",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "3216ab75-abf1-4b82-b29a-7a1ebbc90127",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 21391,
-          "run_id": "hetero-1785921587-3209583-1cef",
+          "wall_ms": 21020,
+          "run_id": "hetero-1785956264-2115114-c93d",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -524,15 +1109,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "4cd020154db385678fdaa2530864f0d61cd58be5",
+          "commit": "1de7b313a638aacd402a7779a179fe42753554c8",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..1de7b313a638aacd402a7779a179fe42753554c8"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "1de7b313a638aacd402a7779a179fe42753554c8",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "1de7b313a638aacd402a7779a179fe42753554c8",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "b40bc53b-4edc-4bd8-8a22-9b02492d08fd",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 18691,
-          "run_id": "hetero-1785921609-3210530-13ae",
+          "wall_ms": 20316,
+          "run_id": "hetero-1785956285-2116080-9761",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -550,15 +1160,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "e56d282b64dc720ed28579b23f51a77c564e5455",
+          "commit": "63d3621308c39c655dc40fa5891d101aad0bcd97",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..63d3621308c39c655dc40fa5891d101aad0bcd97"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "63d3621308c39c655dc40fa5891d101aad0bcd97",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "63d3621308c39c655dc40fa5891d101aad0bcd97",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "5328b24f-f25d-4b44-bdd3-badedb691285",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19061,
-          "run_id": "hetero-1785921627-3211442-7261",
+          "wall_ms": 20079,
+          "run_id": "hetero-1785956305-2117116-3d35",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -566,15 +1201,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "a46d84c835b2d12ee7e55569ce4168980ec5a682",
+          "commit": "db1f3f9960e7f93816c9e9bc7ccc99352719f1f2",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..db1f3f9960e7f93816c9e9bc7ccc99352719f1f2"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "db1f3f9960e7f93816c9e9bc7ccc99352719f1f2",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "db1f3f9960e7f93816c9e9bc7ccc99352719f1f2",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "21d2a5a5-7333-4d9d-83af-41dc94472534",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 17375,
-          "run_id": "hetero-1785921647-3212350-5914",
+          "wall_ms": 18721,
+          "run_id": "hetero-1785956325-2118052-27d0",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -592,15 +1252,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "f488ecbcbb696dcf71142e98000114f369f86f55",
+          "commit": "0f71ed34e7649e17bd8738a23f1b42e38d5a454f",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..0f71ed34e7649e17bd8738a23f1b42e38d5a454f"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "0f71ed34e7649e17bd8738a23f1b42e38d5a454f",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "0f71ed34e7649e17bd8738a23f1b42e38d5a454f",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "de1e7a23-cb95-4a89-a3c0-8b9df03a0c79",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 25366,
-          "run_id": "hetero-1785921664-3213261-4abf",
+          "wall_ms": 19733,
+          "run_id": "hetero-1785956344-2119035-c572",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -608,15 +1293,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "da865feb124b96f13a1c7d99c2c2a29aa4d4601c",
+          "commit": "9d3e62e7b648848a7b3499b0e134ee4b9e37603e",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..9d3e62e7b648848a7b3499b0e134ee4b9e37603e"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "9d3e62e7b648848a7b3499b0e134ee4b9e37603e",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "9d3e62e7b648848a7b3499b0e134ee4b9e37603e",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "b98d0273-b510-4509-80f7-e1b54b79a460",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 24074,
-          "run_id": "hetero-1785921689-3214237-a5f3",
+          "wall_ms": 15735,
+          "run_id": "hetero-1785956364-2119987-2b77",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -634,15 +1344,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "eb026efe08ecf5d0fc064da1a43d5889e4392e2c",
+          "commit": "829fc27264d2f65eebef506fd1abf474f12fe9be",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..829fc27264d2f65eebef506fd1abf474f12fe9be"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "829fc27264d2f65eebef506fd1abf474f12fe9be",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "829fc27264d2f65eebef506fd1abf474f12fe9be",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "6184d34f-3b9e-4db8-aa08-0255e9e74b2f",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 23215,
-          "run_id": "hetero-1785921714-3215233-9252",
+          "wall_ms": 19622,
+          "run_id": "hetero-1785956379-2120913-ae58",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -650,15 +1385,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "e3f51923388a62537915da5b56d72d26e523d46f",
+          "commit": "986f21dd9ec1ed4a6bd7cb0316e5ffeac046db29",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..986f21dd9ec1ed4a6bd7cb0316e5ffeac046db29"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "986f21dd9ec1ed4a6bd7cb0316e5ffeac046db29",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "986f21dd9ec1ed4a6bd7cb0316e5ffeac046db29",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "a6578750-e848-44ee-95bb-409178a49138",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19291,
-          "run_id": "hetero-1785921737-3216330-36aa",
+          "wall_ms": 19801,
+          "run_id": "hetero-1785956399-2121866-2abb",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -676,15 +1436,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "d0265ac1d524e9a487b83dc86cb59522e597ca67",
+          "commit": "ea27da17b7d94dc4b221c21042483f3290e1c4e4",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..ea27da17b7d94dc4b221c21042483f3290e1c4e4"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "ea27da17b7d94dc4b221c21042483f3290e1c4e4",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "ea27da17b7d94dc4b221c21042483f3290e1c4e4",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "3205c98f-5418-4bc8-8038-3866c7202289",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19067,
-          "run_id": "hetero-1785921756-3217312-4ecd",
+          "wall_ms": 21518,
+          "run_id": "hetero-1785956419-2122902-f2c3",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -692,15 +1477,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "0c508ee4083b497d42176276298a716530783ae7",
+          "commit": "62e19c63389e74779c99fd5a1ad78d0c4d1d3331",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..62e19c63389e74779c99fd5a1ad78d0c4d1d3331"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "62e19c63389e74779c99fd5a1ad78d0c4d1d3331",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "62e19c63389e74779c99fd5a1ad78d0c4d1d3331",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "e98fc5fb-3018-4215-861b-1e5b732d05b4",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 18413,
-          "run_id": "hetero-1785921775-3218326-3aed",
+          "wall_ms": 18685,
+          "run_id": "hetero-1785956440-2123890-b983",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -718,15 +1528,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "0d9f118fb1b51064877088b698df51470e575073",
+          "commit": "7c40968dc6eb5dfdeb65afd3463bf10c9755790f",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..7c40968dc6eb5dfdeb65afd3463bf10c9755790f"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "7c40968dc6eb5dfdeb65afd3463bf10c9755790f",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "7c40968dc6eb5dfdeb65afd3463bf10c9755790f",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "ccf0f6d6-3521-4cd6-b8b3-915963727d62",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 23699,
-          "run_id": "hetero-1785921794-3219278-4824",
+          "wall_ms": 16925,
+          "run_id": "hetero-1785956459-2124833-9cc5",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -734,15 +1569,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "9b506be1052612d6ca074d3fbf66f49d3d90fede",
+          "commit": "25d0b08d645a0e5496444c4b147b63d7c4d4282e",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..25d0b08d645a0e5496444c4b147b63d7c4d4282e"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "25d0b08d645a0e5496444c4b147b63d7c4d4282e",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "25d0b08d645a0e5496444c4b147b63d7c4d4282e",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "31cbc9d5-232d-43a1-a3f9-6d773f2b6f71",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 31383,
-          "run_id": "hetero-1785921817-3220293-b7e4",
+          "wall_ms": 18798,
+          "run_id": "hetero-1785956476-2125704-6150",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -760,15 +1620,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "aea2905360db0aedf83e9cc1eada47af68c7f545",
+          "commit": "ce6108a00c6a5db4f4507f1d21b2a87adb5e331e",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..ce6108a00c6a5db4f4507f1d21b2a87adb5e331e"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "ce6108a00c6a5db4f4507f1d21b2a87adb5e331e",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "ce6108a00c6a5db4f4507f1d21b2a87adb5e331e",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "61f2d3ab-e7df-4bfb-82eb-651d49fe2572",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20529,
-          "run_id": "hetero-1785921848-3221404-0d4e",
+          "wall_ms": 16804,
+          "run_id": "hetero-1785956495-2126682-aafa",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -776,15 +1661,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "dabb1b6daa188d0a6c33f366d906f02b245fc712",
+          "commit": "1eab1f2029e2c5c584c90eef3ed14fc53293b52d",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..1eab1f2029e2c5c584c90eef3ed14fc53293b52d"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "1eab1f2029e2c5c584c90eef3ed14fc53293b52d",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "1eab1f2029e2c5c584c90eef3ed14fc53293b52d",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "c618c9c9-a27e-4c84-9066-2a4ac9f37186",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 27926,
-          "run_id": "hetero-1785921869-3222333-4b06",
+          "wall_ms": 20303,
+          "run_id": "hetero-1785956512-2127574-cae7",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -802,15 +1712,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "4f146b6fdfb00821025e24fcba67c18d2d57c474",
+          "commit": "25eac84174329dbb4b0543db3b55b8720e4f1c47",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..25eac84174329dbb4b0543db3b55b8720e4f1c47"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "25eac84174329dbb4b0543db3b55b8720e4f1c47",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "25eac84174329dbb4b0543db3b55b8720e4f1c47",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "61c37763-bbe1-48a3-a487-58c46af87a60",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 30013,
-          "run_id": "hetero-1785921897-3223382-3aee",
+          "wall_ms": 20324,
+          "run_id": "hetero-1785956532-2128570-e95a",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -818,15 +1753,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "acdf9c5fadae3fd8269531a771e3361ecfc8c5fd",
+          "commit": "f9a1af21f37023da6d615eadec64a184f1d8a425",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..f9a1af21f37023da6d615eadec64a184f1d8a425"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "f9a1af21f37023da6d615eadec64a184f1d8a425",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "f9a1af21f37023da6d615eadec64a184f1d8a425",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "c5bc706c-34b0-44fe-addb-400033f2f87b",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20044,
-          "run_id": "hetero-1785921927-3224497-c09c",
+          "wall_ms": 20389,
+          "run_id": "hetero-1785956552-2129554-b808",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -844,15 +1804,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "cb108edac70aa35f2a2ab2d9ff3bdebff7fae5bc",
+          "commit": "590d3cbc514571863167f96ed5dc83ebd3683a7b",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..590d3cbc514571863167f96ed5dc83ebd3683a7b"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "590d3cbc514571863167f96ed5dc83ebd3683a7b",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "590d3cbc514571863167f96ed5dc83ebd3683a7b",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "4ab5f650-3196-49ec-9c6a-6257084d1dea",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 31155,
-          "run_id": "hetero-1785921947-3225425-cd94",
+          "wall_ms": 20493,
+          "run_id": "hetero-1785956573-2130550-5ae2",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -860,15 +1845,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "09d37f29f690f644fb58dd797cb68e97b231e37c",
+          "commit": "5ba60994293393525200a9e77bb352efa1b15239",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..5ba60994293393525200a9e77bb352efa1b15239"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "5ba60994293393525200a9e77bb352efa1b15239",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "5ba60994293393525200a9e77bb352efa1b15239",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "761f08dd-8557-4893-92ae-e5a530b45a9b",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 24453,
-          "run_id": "hetero-1785921978-3226476-8de4",
+          "wall_ms": 21058,
+          "run_id": "hetero-1785956593-2131580-24e6",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -886,15 +1896,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "12e5314a12171ca8a6a2979963dc1faba17b5170",
+          "commit": "74237b2099253b7a5a9480b5e685cc480755d8dd",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..74237b2099253b7a5a9480b5e685cc480755d8dd"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "74237b2099253b7a5a9480b5e685cc480755d8dd",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "74237b2099253b7a5a9480b5e685cc480755d8dd",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "2dd75e1b-2b4a-4a26-ad8d-fa136cd8e288",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 37982,
-          "run_id": "hetero-1785922003-3227451-6e53",
+          "wall_ms": 21807,
+          "run_id": "hetero-1785956614-2132539-8270",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -902,15 +1937,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "06ffb459ca73fdfcf05e1c5de6c638b9ab99d282",
+          "commit": "771a0ca0ae2f1b760ff8fe12ac583fb6152590f0",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..771a0ca0ae2f1b760ff8fe12ac583fb6152590f0"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "771a0ca0ae2f1b760ff8fe12ac583fb6152590f0",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "771a0ca0ae2f1b760ff8fe12ac583fb6152590f0",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "612dd813-6afc-409e-b3f6-66b81918eb89",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 48817,
-          "run_id": "hetero-1785922041-3228618-c8fe",
+          "wall_ms": 15989,
+          "run_id": "hetero-1785956636-2133615-0637",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -928,15 +1988,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "023c4be0064286716ad73929aafc3929aa2b6697",
+          "commit": "bc92a7f7cbf6bb84a9b9e19270cc449a8c6123d2",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..bc92a7f7cbf6bb84a9b9e19270cc449a8c6123d2"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "bc92a7f7cbf6bb84a9b9e19270cc449a8c6123d2",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "bc92a7f7cbf6bb84a9b9e19270cc449a8c6123d2",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "53f01b5d-49ab-4286-bb38-5cd7ea3a6bad",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 36664,
-          "run_id": "hetero-1785922090-3230067-e228",
+          "wall_ms": 18393,
+          "run_id": "hetero-1785956652-2134490-552d",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -944,15 +2029,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "f91952e92c33d2ef2a6a78530302fcd69729ebad",
+          "commit": "1db5e6921230fef5ee2d3ad322371ab99dd07497",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..1db5e6921230fef5ee2d3ad322371ab99dd07497"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "1db5e6921230fef5ee2d3ad322371ab99dd07497",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "1db5e6921230fef5ee2d3ad322371ab99dd07497",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "b178be86-19b6-4792-8815-0e5cd6a1a896",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 18914,
-          "run_id": "hetero-1785922126-3231202-f58f",
+          "wall_ms": 17945,
+          "run_id": "hetero-1785956671-2135502-d180",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -970,15 +2080,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "af05585d23dac835f61d2e7db5ccf7cfad258424",
+          "commit": "b00219c8e724d5522853ed5b6ec82ed4017862dc",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..b00219c8e724d5522853ed5b6ec82ed4017862dc"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "b00219c8e724d5522853ed5b6ec82ed4017862dc",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "b00219c8e724d5522853ed5b6ec82ed4017862dc",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "8f9dc0c6-bd74-43bd-8e69-f1a71300cb63",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 25584,
-          "run_id": "hetero-1785922145-3232135-e813",
+          "wall_ms": 18922,
+          "run_id": "hetero-1785956689-2136418-ec41",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -986,15 +2121,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "dca373df0148d4a61ab894a38ca0c5d351835e65",
+          "commit": "0f3b982bb83a4e0c784e57ff540818a2e7daf1cf",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..0f3b982bb83a4e0c784e57ff540818a2e7daf1cf"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "0f3b982bb83a4e0c784e57ff540818a2e7daf1cf",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "0f3b982bb83a4e0c784e57ff540818a2e7daf1cf",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "8cda48fd-e0a0-43f9-8bbe-c0163a228f97",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19202,
-          "run_id": "hetero-1785922171-3233147-350b",
+          "wall_ms": 21547,
+          "run_id": "hetero-1785956707-2137453-a782",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1012,15 +2172,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "c393ed4635166cf5e72d89095eb314548ca4b004",
+          "commit": "640d654320027508853e048b8c904c6ebf58907f",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..640d654320027508853e048b8c904c6ebf58907f"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "640d654320027508853e048b8c904c6ebf58907f",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "640d654320027508853e048b8c904c6ebf58907f",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "e209b544-2118-45d8-93ff-1a461edcda0d",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 22044,
-          "run_id": "hetero-1785922190-3234072-0201",
+          "wall_ms": 19559,
+          "run_id": "hetero-1785956729-2138469-e16f",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1028,15 +2213,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "54655ae6b08abab70e2d14daccf6cee0fbe6f08d",
+          "commit": "a358fe118b167e565afe2b133210c5571a64da03",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..a358fe118b167e565afe2b133210c5571a64da03"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "a358fe118b167e565afe2b133210c5571a64da03",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "a358fe118b167e565afe2b133210c5571a64da03",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "ae940e52-cd86-48f3-8efb-daeb89963174",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 50139,
-          "run_id": "hetero-1785922212-3235051-72ae",
+          "wall_ms": 15831,
+          "run_id": "hetero-1785956749-2139415-cdb5",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1054,15 +2264,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "325e2dfcdde474df0ebe50d10a44c74ccfacf916",
+          "commit": "f7fe249a7895de2d8d7b683e0e89b6c68f94f882",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..f7fe249a7895de2d8d7b683e0e89b6c68f94f882"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "f7fe249a7895de2d8d7b683e0e89b6c68f94f882",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "f7fe249a7895de2d8d7b683e0e89b6c68f94f882",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "e50c281a-f923-4b4f-b762-e00309aa1542",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 22806,
-          "run_id": "hetero-1785922262-3236433-179a",
+          "wall_ms": 18200,
+          "run_id": "hetero-1785956765-2140314-dd10",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1070,15 +2305,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "2ff747a99e1fcf1b442ee82ea6cc67938bdc1813",
+          "commit": "40e2f8e71c87fdb3a159014eb4544bbc767b1237",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..40e2f8e71c87fdb3a159014eb4544bbc767b1237"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "40e2f8e71c87fdb3a159014eb4544bbc767b1237",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "40e2f8e71c87fdb3a159014eb4544bbc767b1237",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "baafd108-ada5-4036-9bc8-2709cce91cbb",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 21804,
-          "run_id": "hetero-1785922285-3237376-f79b",
+          "wall_ms": 17848,
+          "run_id": "hetero-1785956783-2141232-ea56",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1096,15 +2356,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "8319d37dc5819222f55735f37d33ebf30f852ae5",
+          "commit": "7895344ec3ac7aa53326a72f5ce803ad1618830c",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..7895344ec3ac7aa53326a72f5ce803ad1618830c"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "7895344ec3ac7aa53326a72f5ce803ad1618830c",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "7895344ec3ac7aa53326a72f5ce803ad1618830c",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "ce0682c9-2442-4648-bfff-02fed0f618ba",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20896,
-          "run_id": "hetero-1785922307-3238373-ad30",
+          "wall_ms": 20356,
+          "run_id": "hetero-1785956801-2142262-9feb",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1112,15 +2397,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "3513d35efcad3637b5a2cf765f5e4064a082125f",
+          "commit": "341726d8e93771ca461fa937dda616691d077806",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..341726d8e93771ca461fa937dda616691d077806"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "341726d8e93771ca461fa937dda616691d077806",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "341726d8e93771ca461fa937dda616691d077806",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "c739f6fe-42c7-445c-9d3a-953b038449ef",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 22382,
-          "run_id": "hetero-1785922328-3239317-6aa4",
+          "wall_ms": 18786,
+          "run_id": "hetero-1785956821-2143216-642e",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1138,15 +2448,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "130b58b9c5bcee8776e5dfbeac9e643717dcf362",
+          "commit": "f8ac771f5d66403079013085f43a6483819526d0",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..f8ac771f5d66403079013085f43a6483819526d0"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "f8ac771f5d66403079013085f43a6483819526d0",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "f8ac771f5d66403079013085f43a6483819526d0",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "5389f3bd-7dfd-43a3-9f3f-f4b44c93408b",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19480,
-          "run_id": "hetero-1785922350-3240264-fa50",
+          "wall_ms": 16971,
+          "run_id": "hetero-1785956840-2144241-c3e2",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1154,15 +2489,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "a4e396f0e2d610567a3b750ff213f208c90efcc1",
+          "commit": "0778664c0e9b4251b46a890b836677281b471fb4",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..0778664c0e9b4251b46a890b836677281b471fb4"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "0778664c0e9b4251b46a890b836677281b471fb4",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "0778664c0e9b4251b46a890b836677281b471fb4",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "5a76d5d0-9997-4556-b0ab-e75fe3090e0b",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 21692,
-          "run_id": "hetero-1785922369-3241200-d3b2",
+          "wall_ms": 18410,
+          "run_id": "hetero-1785956857-2145113-bc1f",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1180,15 +2540,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "a07f5e3d82b5ff545ef3a0852e610be1545449f9",
+          "commit": "96cc58ba992ef764e8268dfdd47f827a236f5c47",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..96cc58ba992ef764e8268dfdd47f827a236f5c47"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "96cc58ba992ef764e8268dfdd47f827a236f5c47",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "96cc58ba992ef764e8268dfdd47f827a236f5c47",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "f52bcd60-7584-460f-9d52-4b40a9d4a646",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 23055,
-          "run_id": "hetero-1785922391-3242145-7450",
+          "wall_ms": 18108,
+          "run_id": "hetero-1785956875-2146209-6172",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1196,15 +2581,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "ebde2f67630f458e9dd4d9aee5b313bba54aceee",
+          "commit": "2abc10cfd2ea20dbe6d435145d5ee6d0f6fc4149",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..2abc10cfd2ea20dbe6d435145d5ee6d0f6fc4149"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "2abc10cfd2ea20dbe6d435145d5ee6d0f6fc4149",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "2abc10cfd2ea20dbe6d435145d5ee6d0f6fc4149",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "cf6d34f1-8179-4cff-9fbd-81680a019598",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 20536,
-          "run_id": "hetero-1785922414-3243139-4781",
+          "wall_ms": 18917,
+          "run_id": "hetero-1785956893-2147144-ad8d",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1222,15 +2632,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "a1c21a534a2b8df2483b08994a4316421cbdd11a",
+          "commit": "dffe0948baa455e527595b7f1b82dd779d34fe3e",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..dffe0948baa455e527595b7f1b82dd779d34fe3e"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "dffe0948baa455e527595b7f1b82dd779d34fe3e",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "dffe0948baa455e527595b7f1b82dd779d34fe3e",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "a0683be9-2d7a-475f-9812-cedb152fdfc2",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 32341,
-          "run_id": "hetero-1785922435-3244040-fc48",
+          "wall_ms": 18620,
+          "run_id": "hetero-1785956912-2148267-5dca",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1238,15 +2673,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "16066eba0e918c2b01e59024372816c297b16999",
+          "commit": "f1dee646657b1c265a22cb86566f1726b23568cc",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..f1dee646657b1c265a22cb86566f1726b23568cc"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "f1dee646657b1c265a22cb86566f1726b23568cc",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "f1dee646657b1c265a22cb86566f1726b23568cc",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "7722052d-c093-48bb-bb72-735e9096affd",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 26808,
-          "run_id": "hetero-1785922467-3245202-e681",
+          "wall_ms": 20680,
+          "run_id": "hetero-1785956931-2149385-7bce",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1264,15 +2724,40 @@
         "B": {
           "effort": "high",
           "status": "committed",
-          "commit": "9e3baf50daaa27ac106e55cc24db3e410770ca0a",
+          "commit": "6fa8078248662db5e9ef063450091ca7db360ec6",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..6fa8078248662db5e9ef063450091ca7db360ec6"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "6fa8078248662db5e9ef063450091ca7db360ec6",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "6fa8078248662db5e9ef063450091ca7db360ec6",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "89831946-b1ff-4726-8266-849f6097e618",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 19980,
-          "run_id": "hetero-1785922494-3246283-5f71",
+          "wall_ms": 19293,
+          "run_id": "hetero-1785956952-2150439-f857",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1280,15 +2765,40 @@
         "A": {
           "effort": "medium",
           "status": "committed",
-          "commit": "98f2302b9a5b8b5c52177fa796e047ea9efc1505",
+          "commit": "91b2e78348a6d24e5232d9adc559751d6282872c",
           "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
+          "acceptance_ok": true,
+          "acceptance_results": [
+            {
+              "command": "git diff --check",
+              "bound_command": [
+                "git",
+                "diff",
+                "--check",
+                "746f22338cfc7078acade53b143fea2d389dedd8..91b2e78348a6d24e5232d9adc559751d6282872c"
+              ],
+              "base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+              "commit_sha": "91b2e78348a6d24e5232d9adc559751d6282872c",
+              "exit": 0
+            }
+          ],
+          "acceptance_error": null,
+          "acceptance_bound": true,
+          "acceptance_base_sha": "746f22338cfc7078acade53b143fea2d389dedd8",
+          "acceptance_commit_sha": "91b2e78348a6d24e5232d9adc559751d6282872c",
+          "provenance_ok": true,
+          "runner": "grok",
+          "model": "grok-4.5",
+          "provider_session_id": "ec6c9141-a66c-46b2-98fb-de7006d74a4a",
+          "runner_version": "grok 0.2.118 (1e1687c1cf) [stable]",
+          "provider_version": "grok 0.2.118 (1e1687c1cf) [stable]",
           "retries": 0,
-          "wall_ms": 18071,
-          "run_id": "hetero-1785922514-3247233-ece3",
+          "wall_ms": 18222,
+          "run_id": "hetero-1785956971-2152641-efeb",
           "model_calls": 1,
           "raw_status": "committed",
           "error": null
@@ -1302,8 +2812,6 @@
     }
   ],
   "runner_path": "scripts/dispatch-hetero.sh",
-  "quality_definition": "mechanical_independent: committed && 0<files<=max_files && !error",
-  "generated_at": "2026-08-05T09:35:32.033Z",
-  "candidate_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
-  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede"
+  "quality_definition": "mechanical_independent: committed && 0<files<=max_files && !error && provenance_ok && acceptance_ok",
+  "generated_at": "2026-08-05T19:09:49.393Z"
 }

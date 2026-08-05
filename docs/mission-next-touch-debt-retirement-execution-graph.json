@@ -2,7 +2,7 @@
   "artifact_type": "mission_execution_graph",
   "calculated_batches": 1,
   "calculated_depth": 1,
-  "graph_digest": "4280da59f962167dd7fd5186b34bf97df3927d6e78e54ad1e7fec6eb042ff58b",
+  "graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
   "nodes": [
     {
       "acceptance_ids": [
@@ -13,8 +13,10 @@
       ],
       "campaign": {
         "allowed_path_prefixes": [
+          ".autopilot/evidence",
           ".claude",
           ".opencode",
+          "CLAUDE.md",
           "docs",
           "evals",
           "hooks",
@@ -24,6 +26,8 @@
           "src"
         ],
         "authorized_creates": [
+          ".autopilot/evidence/grok-implementer-ab.json",
+          ".autopilot/evidence/hook-multiplexer-benchmark.json",
           ".opencode/plugins/autopilot.ts",
           "docs/projects/2026-08-03-next-touch-debt-retirement/README.md",
           "docs/projects/2026-08-03-next-touch-debt-retirement/evidence/authorization.json",
@@ -61,8 +65,11 @@
         "max_repair_generations": 2,
         "max_wall_seconds": 3600,
         "output_paths": [
+          ".autopilot/evidence/grok-implementer-ab.json",
+          ".autopilot/evidence/hook-multiplexer-benchmark.json",
           ".claude/review-loop-config.md",
           ".opencode/plugins/autopilot.ts",
+          "CLAUDE.md",
           "docs/BACKLOG.md",
           "docs/plans/2026-08-03-next-touch-debt-retirement.md",
           "docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md",
@@ -164,7 +171,10 @@
         ],
         "profile": "high",
         "required_paths": [
+          ".autopilot/evidence/grok-implementer-ab.json",
+          ".autopilot/evidence/hook-multiplexer-benchmark.json",
           ".claude/review-loop-config.md",
+          "CLAUDE.md",
           "docs/BACKLOG.md",
           "docs/plans/2026-08-03-next-touch-debt-retirement.md",
           "docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md",

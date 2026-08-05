@@ -3971,7 +3971,7 @@ write_manifest "$$"
 if [ "$STRICT_CONTRACT" -eq 1 ]; then
   preflight_err="$(node -e '
 const fs = require("fs");
-const cp = require("child_process");
+const path = require("path");
 let contract;
 try {
   contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -3980,12 +3980,31 @@ try {
   process.exit(0);   // schema problems are the checker s job, not this pre-flight s
 }
 const acceptance = Array.isArray(contract.acceptance) ? contract.acceptance : [];
+const cwd = process.argv[2] || process.cwd();
+function executableStatus(command) {
+  const candidates = command.includes(path.sep)
+    ? [path.isAbsolute(command) ? command : path.resolve(cwd, command)]
+    : (process.env.PATH || "").split(path.delimiter).filter(Boolean)
+      .map((dir) => path.join(dir, command));
+  let sawPermissionError = false;
+  for (const candidate of candidates) {
+    try {
+      const stat = fs.statSync(candidate);
+      if (!stat.isFile()) continue;
+      if ((stat.mode & 0o111) !== 0) return null;
+      sawPermissionError = true;
+    } catch (err) {
+      if (err && err.code === "EACCES") sawPermissionError = true;
+    }
+  }
+  return sawPermissionError ? "EACCES" : "ENOENT";
+}
 for (let i = 0; i < acceptance.length; i++) {
   const argv = Array.isArray(acceptance[i] && acceptance[i].argv) ? acceptance[i].argv : [];
   if (!argv.length) continue;
-  const r = cp.spawnSync(argv[0], argv.slice(1), { cwd: process.argv[2], stdio: "ignore" });
-  if (r.error && (r.error.code === "ENOENT" || r.error.code === "EACCES")) {
-    process.stdout.write("acceptance command #" + (i + 1) + " is not executable (" + r.error.code + "): " + argv[0]);
+  const errorCode = executableStatus(argv[0]);
+  if (errorCode) {
+    process.stdout.write("acceptance command #" + (i + 1) + " is not executable (" + errorCode + "): " + argv[0]);
     process.exit(0);
   }
 }

@@ -22,6 +22,10 @@ esac
 echo done > done.txt
 git add done.txt
 git -c user.email=t@t -c user.name=t commit -q -m "stub work"
+if [ -n "${PREFLIGHT_SENTINEL:-}" ] && [ -e "$PREFLIGHT_SENTINEL" ]; then
+  echo PREFLIGHT_RAN > "$RUN_MARKER_PATH"
+  exit 73
+fi
 echo "RAN_MARKER" > "$RUN_MARKER_PATH"
 exit 0
 EOF_STUB
@@ -327,5 +331,29 @@ rm -f "$RUN_MARKER_PATH"
 out=$(run_dispatch "r9b" --strict-contract --contract-file "$VALID_CONTRACT")
 json=$(get_last_json "$out")
 assert_not_contains "$json" "precondition_failed"
+
+echo "--- R9c: strict pre-flight checks executability without running acceptance ---"
+SIDE_EFFECT_ACCEPTANCE="$TEST_TMP/acceptance-side-effect"
+SIDE_EFFECT_CONTRACT="$TEST_TMP/side-effect-acceptance.json"
+cat > "$SIDE_EFFECT_ACCEPTANCE" <<'EOF_SIDE_EFFECT'
+#!/usr/bin/env bash
+touch "$PREFLIGHT_SENTINEL"
+exit 0
+EOF_SIDE_EFFECT
+chmod +x "$SIDE_EFFECT_ACCEPTANCE"
+SIDE_EFFECT_ACCEPTANCE="$SIDE_EFFECT_ACCEPTANCE" \
+node - "$VALID_CONTRACT" "$SIDE_EFFECT_CONTRACT" <<'NODE_SIDE_EFFECT'
+const fs = require('fs');
+const source = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+source.acceptance = [{ argv: [process.env.SIDE_EFFECT_ACCEPTANCE], exit: 0 }];
+fs.writeFileSync(process.argv[3], JSON.stringify(source, null, 2));
+NODE_SIDE_EFFECT
+rm -f "$RUN_MARKER_PATH" "$TEST_TMP/preflight-sentinel"
+out=$(PREFLIGHT_SENTINEL="$TEST_TMP/preflight-sentinel" run_dispatch "r9c" --strict-contract --contract-file "$SIDE_EFFECT_CONTRACT")
+json=$(get_last_json "$out")
+assert_not_contains "$json" "precondition_failed"
+assert_contains "$json" '"status": "committed"'
+assert_file_exists "$TEST_TMP/preflight-sentinel"
+assert_not_contains "$(cat "$RUN_MARKER_PATH")" "PREFLIGHT_RAN"
 
 finalize_test

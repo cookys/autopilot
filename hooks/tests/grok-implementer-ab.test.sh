@@ -307,6 +307,35 @@ node - "$FABRICATED" <<'NODE'
 const fs = require('fs');
 const [target] = process.argv.slice(2);
 const report = JSON.parse(fs.readFileSync(target, 'utf8'));
+report.pair_results[0].arms.A.acceptance_results[0].bound_command[3] = 'wrong..range';
+fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);
+NODE
+set +e
+BOUND_OUT="$(node "$REPO_ROOT/scripts/validate-grok-implementer-ab.js" \
+  --report "$FABRICATED" 2>&1)"
+BOUND_RC=$?
+assert_neq "0" "$BOUND_RC" "validator rejects an unrelated acceptance range"
+assert_contains "$BOUND_OUT" "acceptance commands did not pass" \
+  "validator names the wrong acceptance range"
+node - "$FABRICATED" <<'NODE'
+const fs = require('fs');
+const [target] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(target, 'utf8'));
+const arm = report.pair_results[0].arms.A;
+arm.acceptance_results[0].bound_command = ['git', 'diff', '--check', `${arm.acceptance_base_sha}..${arm.acceptance_commit_sha}`, '--extra'];
+fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);
+NODE
+set +e
+EXTRA_ARG_OUT="$(node "$REPO_ROOT/scripts/validate-grok-implementer-ab.js" \
+  --report "$FABRICATED" 2>&1)"
+EXTRA_ARG_RC=$?
+assert_neq "0" "$EXTRA_ARG_RC" "validator rejects extra acceptance argv"
+assert_contains "$EXTRA_ARG_OUT" "acceptance commands did not pass" \
+  "validator names extra acceptance argv"
+node - "$FABRICATED" <<'NODE'
+const fs = require('fs');
+const [target] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(target, 'utf8'));
 report.pair_results[30].task_id = 't30';
 report.pair_results[31].task_id = 't60';
 fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);

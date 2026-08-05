@@ -185,9 +185,11 @@ for (const p of report.pair_results || []) {
           || result.base_sha !== arm.acceptance_base_sha
           || result.commit_sha !== arm.acceptance_commit_sha
           || !Array.isArray(result.bound_command)
+          || result.bound_command.length !== 4
           || result.bound_command[0] !== 'git'
           || result.bound_command[1] !== 'diff'
           || result.bound_command[2] !== '--check'
+          || result.bound_command[3] !== `${arm.acceptance_base_sha}..${arm.acceptance_commit_sha}`
         ))) {
       errors.push(`pair ${p.task_id} arm ${armName}: acceptance commands did not pass`);
     }

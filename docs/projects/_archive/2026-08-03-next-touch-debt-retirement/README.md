@@ -16,7 +16,7 @@
 | D5 | A09–A11 | distill/learn/retro boundary text; friction injection filters + compound-command n-grams; `--path` identifier lint |
 | D6 | A12 | Per-event opt-in multiplexer; inventory-aware; benchmark fixtures |
 | D7 | A13 | verification-strength scorer + resolver density consumption |
-| D8 | A14 | Grok effort A/B harness (offline-synthetic default) + validators |
+| D8 | A14 | Grok effort A/B live via dispatch-hetero (30→60 pairs, frozen seed/tasks) + validators |
 
 ## Acceptance ledger
 

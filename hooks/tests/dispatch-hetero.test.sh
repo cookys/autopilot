@@ -1242,6 +1242,24 @@ const authorityPaths = new Set([
   ...missionNode.campaign.required_paths,
   ...missionNode.campaign.output_paths,
 ]);
+// Host worktrees under an active Mission rewrite mission-routing-config.json to
+// that Mission's graph/sources. Copy those paths too so session-mode set L5 can
+// admit against a complete fixture (otherwise hermetic matrix dies ENOENT on the
+// host graph_path while only the hardcoded codex-native graph was seeded).
+const hostRoutingPath = path.join(root, '.claude', 'mission-routing-config.json');
+if (fs.existsSync(hostRoutingPath)) {
+  try {
+    const hostRouting = JSON.parse(fs.readFileSync(hostRoutingPath, 'utf8'));
+    if (typeof hostRouting.graph_path === 'string' && hostRouting.graph_path) {
+      authorityPaths.add(hostRouting.graph_path);
+    }
+    if (typeof hostRouting.sources_path === 'string' && hostRouting.sources_path) {
+      authorityPaths.add(hostRouting.sources_path);
+    }
+  } catch (_err) {
+    // Missing/invalid host routing is non-fatal; admission will fail closed later.
+  }
+}
 for (const relative of authorityPaths) {
   const source = path.join(root, relative);
   if (!fs.existsSync(source)) continue;
@@ -1249,6 +1267,20 @@ for (const relative of authorityPaths) {
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.copyFileSync(source, destination);
 }
+// Pin routing to the fixture graph/sources this matrix fully seeds. Host
+// Mission worktrees rewrite mission-routing-config.json to a different graph
+// whose transitive plan/source files are not in authorityPaths; leaving that
+// config in place makes session-mode set L5 fail closed (ENOENT) and collapses
+// the entire required_change/sealed-noop matrix.
+fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
+fs.writeFileSync(
+  path.join(repo, '.claude', 'mission-routing-config.json'),
+  `${JSON.stringify({
+    schema_version: 1,
+    graph_path: missionGraphRelative,
+    sources_path: missionSourcesRelative,
+  }, null, 2)}\n`,
+);
 fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
   '- implementer_engine: gpt-5.5',
   '- implementer_effort: high',

@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "runtime": "v24.16.0",
-  "base_sha": "f6805529",
-  "candidate_sha": "HEAD",
+  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "candidate_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
   "fixtures_path": "hooks/tests/fixtures/hook-multiplexer-benchmark.json",
-  "warmups": 2,
-  "repetitions": 5,
+  "warmups": 10,
+  "repetitions": 50,
   "results": [
     {
       "id": "cold-disabled",
@@ -14,11 +14,11 @@
       "enabled": false,
       "expected_child_count": 0,
       "observed_child_count": 0,
-      "median_ms": 50.910753,
-      "p95_ms": 54.979552,
-      "mad_ms": 2.998753999999998,
-      "mad_median_ratio": 0.05890217337779306,
-      "samples": 5
+      "median_ms": 39.170049,
+      "p95_ms": 57.134143,
+      "mad_ms": 4.714855,
+      "mad_median_ratio": 0.12036888184643323,
+      "samples": 50
     },
     {
       "id": "cold-enabled",
@@ -27,11 +27,11 @@
       "enabled": true,
       "expected_child_count": 1,
       "observed_child_count": 1,
-      "median_ms": 86.632083,
-      "p95_ms": 91.486451,
-      "mad_ms": 3.0588169999999906,
-      "mad_median_ratio": 0.03530813174606445,
-      "samples": 5
+      "median_ms": 96.842265,
+      "p95_ms": 112.436969,
+      "mad_ms": 8.185025999999993,
+      "mad_median_ratio": 0.08451915080672673,
+      "samples": 50
     },
     {
       "id": "heavy-disabled",
@@ -40,11 +40,11 @@
       "enabled": false,
       "expected_child_count": 0,
       "observed_child_count": 0,
-      "median_ms": 39.291621,
-      "p95_ms": 49.312685,
-      "mad_ms": 3.372618000000003,
-      "mad_median_ratio": 0.08583555257239203,
-      "samples": 5
+      "median_ms": 44.647469,
+      "p95_ms": 55.529743,
+      "mad_ms": 5.990895999999999,
+      "mad_median_ratio": 0.13418220862642852,
+      "samples": 50
     },
     {
       "id": "heavy-enabled",
@@ -53,12 +53,12 @@
       "enabled": true,
       "expected_child_count": 2,
       "observed_child_count": 2,
-      "median_ms": 81.037122,
-      "p95_ms": 109.15998,
-      "mad_ms": 3.1359329999999943,
-      "mad_median_ratio": 0.03869748730711333,
-      "samples": 5
+      "median_ms": 90.236751,
+      "p95_ms": 109.531591,
+      "mad_ms": 8.450437000000008,
+      "mad_median_ratio": 0.09364739871895442,
+      "samples": 50
     }
   ],
-  "generated_at": "2026-08-05T05:35:12.389Z"
+  "generated_at": "2026-08-05T09:36:29.001Z"
 }

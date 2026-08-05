@@ -199,6 +199,10 @@ codex_transport_merge_pidsets() {
 # run's private capture paths (stdout, stderr, sidecar). Emits matching pids
 # (one per line), excluding the dispatcher itself. Permission errors on
 # /proc/<pid>/fd/* are ignored. CODEX-branch only.
+#
+# Also matches the Linux "path (deleted)" readlink form so a holder that
+# unlinked the capture path while keeping the fd open is still detected
+# (orphan_deleted_fd_holder contract).
 codex_transport_scan_fd_holders() {
   local stdout_path="$1"
   local stderr_path="$2"
@@ -219,12 +223,14 @@ codex_transport_scan_fd_holders() {
       # readlink fails with EACCES/ENOENT for some entries; ignore those.
       target="$(readlink "$fd_path" 2>/dev/null || true)"
       [ -n "$target" ] || continue
-      if [ "$target" = "$stdout_path" ] \
-        || [ "$target" = "$stderr_path" ] \
-        || [ "$target" = "$sidecar_path" ]; then
-        printf '%s\n' "$pid"
-        break
-      fi
+      case "$target" in
+        "$stdout_path"|"${stdout_path} (deleted)"|\
+        "$stderr_path"|"${stderr_path} (deleted)"|\
+        "$sidecar_path"|"${sidecar_path} (deleted)")
+          printf '%s\n' "$pid"
+          break
+          ;;
+      esac
     done
   done | sort -u
 }

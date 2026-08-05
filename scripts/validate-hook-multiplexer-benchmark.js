@@ -31,8 +31,16 @@ const errors = [];
 
 if (report.schema_version !== 1) errors.push('schema_version must be 1');
 if (!report.base_sha || !report.candidate_sha) errors.push('base/candidate SHAs required');
+// Plan D6 gate: warmups=10, repetitions=50 (exact).
+if (report.warmups !== 10) errors.push(`warmups must be 10 (got ${report.warmups})`);
+if (report.repetitions !== 50) errors.push(`repetitions must be 50 (got ${report.repetitions})`);
 if (!Array.isArray(report.results) || report.results.length !== 4) {
   errors.push('results must cover 4 fixtures');
+}
+for (const r of report.results || []) {
+  if (r.samples !== 50) {
+    errors.push(`${r.id}: samples must be 50 (got ${r.samples})`);
+  }
 }
 
 for (const r of report.results || []) {

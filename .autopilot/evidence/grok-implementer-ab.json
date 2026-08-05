@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "mode": "offline-synthetic",
+  "mode": "live",
   "seed": 20260803,
   "seed_digest": "580a7a03b4d0e606d374329109f29d80de6774d72ca05dd077ae3c884e5d1239",
   "tasks_digest": "bc136556a2cbb7445e7317df71fc5f3b3a9850f68241984aeb6a2e3aa12685c5",
@@ -26,16 +26,16 @@
   },
   "max_provider_sessions": 120,
   "endpoint_pp": {
-    "low": -36.666666666666664,
-    "high": 13.333333333333334,
-    "mean": -13.374333333332718
+    "low": 0,
+    "high": 0,
+    "mean": 0
   },
   "quality_pp": {
-    "low": -6.666666666666667,
-    "high": 40,
-    "mean": 16.68433333333326
+    "low": 0,
+    "high": 0,
+    "mean": 0
   },
-  "decision": "indeterminate",
+  "decision": "no-change",
   "material_effect_pp": 10,
   "quality_non_inferiority_pp": 5,
   "bootstrap_resamples": 10000,
@@ -45,751 +45,1265 @@
       "arms": {
         "A": {
           "effort": "medium",
+          "status": "committed",
+          "commit": "720023df50b87a2267d2a75346b096c2fb3a5c64",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 19618,
+          "run_id": "hetero-1785921019-3187019-3ed4",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "80d230f0bea54470b3ad176e54efb1471ce8fd17",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 56170,
+          "run_id": "hetero-1785921039-3187987-5191",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t02",
       "arms": {
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "e52d58b96d4493b6c12864880bac73a763a289cf",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 22300,
+          "run_id": "hetero-1785921095-3189464-fac2",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "bfc8b03c763b7b5da91258dbe7521a4ac889c37a",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 19055,
+          "run_id": "hetero-1785921117-3190467-ba24",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t03",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "379da8eade98dfcd925ae3251c38288d2fc91912",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 50273,
+          "run_id": "hetero-1785921136-3191418-6524",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "2a394deb8a515a51d348ca8aa98a4627b4e2423a",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 23345,
+          "run_id": "hetero-1785921186-3192740-648d",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t04",
       "arms": {
         "B": {
           "effort": "high",
-          "wrapper_commit": true,
-          "toolFailure": 0,
-          "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
-        },
-        "A": {
-          "effort": "medium",
+          "status": "committed",
+          "commit": "0493909bfa8470b04055b6fa88317303c4f2e123",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 20214,
+          "run_id": "hetero-1785921210-3193793-6dda",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "A": {
+          "effort": "medium",
+          "status": "committed",
+          "commit": "ea15ea7d8d771022164dbc69679a8a7134efe871",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 20610,
+          "run_id": "hetero-1785921230-3194752-246b",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t05",
       "arms": {
         "A": {
           "effort": "medium",
+          "status": "committed",
+          "commit": "a9ae23543e636a9998ea12cc366cb0a0e6370bdc",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 21064,
+          "run_id": "hetero-1785921251-3195711-baac",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "24a63a68ecf132382193954038acb743eadbc8f0",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 30379,
+          "run_id": "hetero-1785921272-3196646-7e0f",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t06",
       "arms": {
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "9bc3cc41927069849de80db1f351268d15e0c787",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 19181,
+          "run_id": "hetero-1785921302-3197762-7543",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
+          "status": "committed",
+          "commit": "f544b4eca53396496717c923534f4c3b2a7507fe",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 20843,
+          "run_id": "hetero-1785921321-3198713-6a9a",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t07",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": true,
-          "retries": 0
-        },
-        "B": {
-          "effort": "high",
+          "status": "committed",
+          "commit": "38d3e78ed447dd32c45f19cfd35beda129c2754c",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 19924,
+          "run_id": "hetero-1785921342-3199640-5f72",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "B": {
+          "effort": "high",
+          "status": "committed",
+          "commit": "fd70c272766bc897eeee125af1cfc62a8c2f3cd8",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 20016,
+          "run_id": "hetero-1785921362-3200548-837a",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t08",
       "arms": {
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": true,
-          "retries": 0
-        },
-        "A": {
-          "effort": "medium",
+          "status": "committed",
+          "commit": "523429d58e7d65f07f3d4a2332ec7a35528b480e",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 21837,
+          "run_id": "hetero-1785921382-3201512-adb5",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "A": {
+          "effort": "medium",
+          "status": "committed",
+          "commit": "2c4b1f57ebbac7cc51d13a53976bc9d975741f5d",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 24291,
+          "run_id": "hetero-1785921404-3202508-3606",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t09",
       "arms": {
         "A": {
           "effort": "medium",
+          "status": "committed",
+          "commit": "9817db8f7447a9740a847cd29dfc2ba9c74780b5",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 46397,
+          "run_id": "hetero-1785921428-3203529-8e59",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "9a10b7a38fdb64d2e94c167bd4970be424606eda",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 20853,
+          "run_id": "hetero-1785921475-3204743-c266",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t10",
       "arms": {
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "ab0852244bdbd3cc73cde7c663fa5a4737cbdeee",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 18253,
+          "run_id": "hetero-1785921495-3205712-4a0a",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "ccb5876dc8769f5416445da02cb675bc146d5cdf",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 19652,
+          "run_id": "hetero-1785921514-3206589-f742",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t11",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": true,
-          "retries": 0
-        },
-        "B": {
-          "effort": "high",
+          "status": "committed",
+          "commit": "130937d3a293c135752de62389318f111d410a7c",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 31085,
+          "run_id": "hetero-1785921533-3207525-c9bb",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "B": {
+          "effort": "high",
+          "status": "committed",
+          "commit": "fd2770015f033b1dd2d79781b60625f881bb29ba",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 23063,
+          "run_id": "hetero-1785921565-3208618-053f",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t12",
       "arms": {
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "fd1cf9a9de88f53ec86bdb5c62b39d6d77cc180d",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 21391,
+          "run_id": "hetero-1785921587-3209583-1cef",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
+          "status": "committed",
+          "commit": "4cd020154db385678fdaa2530864f0d61cd58be5",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 18691,
+          "run_id": "hetero-1785921609-3210530-13ae",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t13",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": true,
-          "retries": 0
-        },
-        "B": {
-          "effort": "high",
+          "status": "committed",
+          "commit": "e56d282b64dc720ed28579b23f51a77c564e5455",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 19061,
+          "run_id": "hetero-1785921627-3211442-7261",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "B": {
+          "effort": "high",
+          "status": "committed",
+          "commit": "a46d84c835b2d12ee7e55569ce4168980ec5a682",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 17375,
+          "run_id": "hetero-1785921647-3212350-5914",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t14",
       "arms": {
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "f488ecbcbb696dcf71142e98000114f369f86f55",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 25366,
+          "run_id": "hetero-1785921664-3213261-4abf",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "da865feb124b96f13a1c7d99c2c2a29aa4d4601c",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 24074,
+          "run_id": "hetero-1785921689-3214237-a5f3",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t15",
       "arms": {
         "A": {
           "effort": "medium",
+          "status": "committed",
+          "commit": "eb026efe08ecf5d0fc064da1a43d5889e4392e2c",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 23215,
+          "run_id": "hetero-1785921714-3215233-9252",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": false,
-          "retries": 0
+          "status": "committed",
+          "commit": "e3f51923388a62537915da5b56d72d26e523d46f",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 19291,
+          "run_id": "hetero-1785921737-3216330-36aa",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t16",
       "arms": {
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "d0265ac1d524e9a487b83dc86cb59522e597ca67",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 19067,
+          "run_id": "hetero-1785921756-3217312-4ecd",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "0c508ee4083b497d42176276298a716530783ae7",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 18413,
+          "run_id": "hetero-1785921775-3218326-3aed",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t17",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": true,
-          "toolFailure": 0,
-          "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
-        },
-        "B": {
-          "effort": "high",
+          "status": "committed",
+          "commit": "0d9f118fb1b51064877088b698df51470e575073",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 23699,
+          "run_id": "hetero-1785921794-3219278-4824",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "B": {
+          "effort": "high",
+          "status": "committed",
+          "commit": "9b506be1052612d6ca074d3fbf66f49d3d90fede",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 31383,
+          "run_id": "hetero-1785921817-3220293-b7e4",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t18",
       "arms": {
         "B": {
           "effort": "high",
-          "wrapper_commit": true,
-          "toolFailure": 0,
-          "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
-        },
-        "A": {
-          "effort": "medium",
+          "status": "committed",
+          "commit": "aea2905360db0aedf83e9cc1eada47af68c7f545",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 20529,
+          "run_id": "hetero-1785921848-3221404-0d4e",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "A": {
+          "effort": "medium",
+          "status": "committed",
+          "commit": "dabb1b6daa188d0a6c33f366d906f02b245fc712",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 27926,
+          "run_id": "hetero-1785921869-3222333-4b06",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t19",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": true,
-          "retries": 0
-        },
-        "B": {
-          "effort": "high",
+          "status": "committed",
+          "commit": "4f146b6fdfb00821025e24fcba67c18d2d57c474",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 30013,
+          "run_id": "hetero-1785921897-3223382-3aee",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "B": {
+          "effort": "high",
+          "status": "committed",
+          "commit": "acdf9c5fadae3fd8269531a771e3361ecfc8c5fd",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 20044,
+          "run_id": "hetero-1785921927-3224497-c09c",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t20",
       "arms": {
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "cb108edac70aa35f2a2ab2d9ff3bdebff7fae5bc",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 31155,
+          "run_id": "hetero-1785921947-3225425-cd94",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "09d37f29f690f644fb58dd797cb68e97b231e37c",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 24453,
+          "run_id": "hetero-1785921978-3226476-8de4",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t21",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": true,
-          "retries": 0
-        },
-        "B": {
-          "effort": "high",
+          "status": "committed",
+          "commit": "12e5314a12171ca8a6a2979963dc1faba17b5170",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 37982,
+          "run_id": "hetero-1785922003-3227451-6e53",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "B": {
+          "effort": "high",
+          "status": "committed",
+          "commit": "06ffb459ca73fdfcf05e1c5de6c638b9ab99d282",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 48817,
+          "run_id": "hetero-1785922041-3228618-c8fe",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t22",
       "arms": {
         "B": {
           "effort": "high",
-          "wrapper_commit": true,
-          "toolFailure": 0,
-          "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
-        },
-        "A": {
-          "effort": "medium",
+          "status": "committed",
+          "commit": "023c4be0064286716ad73929aafc3929aa2b6697",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 36664,
+          "run_id": "hetero-1785922090-3230067-e228",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "A": {
+          "effort": "medium",
+          "status": "committed",
+          "commit": "f91952e92c33d2ef2a6a78530302fcd69729ebad",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 18914,
+          "run_id": "hetero-1785922126-3231202-f58f",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t23",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "af05585d23dac835f61d2e7db5ccf7cfad258424",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 25584,
+          "run_id": "hetero-1785922145-3232135-e813",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "dca373df0148d4a61ab894a38ca0c5d351835e65",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 19202,
+          "run_id": "hetero-1785922171-3233147-350b",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t24",
       "arms": {
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": true,
-          "retries": 0
-        },
-        "A": {
-          "effort": "medium",
+          "status": "committed",
+          "commit": "c393ed4635166cf5e72d89095eb314548ca4b004",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 22044,
+          "run_id": "hetero-1785922190-3234072-0201",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "A": {
+          "effort": "medium",
+          "status": "committed",
+          "commit": "54655ae6b08abab70e2d14daccf6cee0fbe6f08d",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 50139,
+          "run_id": "hetero-1785922212-3235051-72ae",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t25",
       "arms": {
         "A": {
           "effort": "medium",
+          "status": "committed",
+          "commit": "325e2dfcdde474df0ebe50d10a44c74ccfacf916",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 22806,
+          "run_id": "hetero-1785922262-3236433-179a",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "2ff747a99e1fcf1b442ee82ea6cc67938bdc1813",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 21804,
+          "run_id": "hetero-1785922285-3237376-f79b",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t26",
       "arms": {
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "8319d37dc5819222f55735f37d33ebf30f852ae5",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 20896,
+          "run_id": "hetero-1785922307-3238373-ad30",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": false,
-          "retries": 0
+          "status": "committed",
+          "commit": "3513d35efcad3637b5a2cf765f5e4064a082125f",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 22382,
+          "run_id": "hetero-1785922328-3239317-6aa4",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t27",
       "arms": {
         "A": {
           "effort": "medium",
+          "status": "committed",
+          "commit": "130b58b9c5bcee8776e5dfbeac9e643717dcf362",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 19480,
+          "run_id": "hetero-1785922350-3240264-fa50",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
+          "status": "committed",
+          "commit": "a4e396f0e2d610567a3b750ff213f208c90efcc1",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 21692,
+          "run_id": "hetero-1785922369-3241200-d3b2",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t28",
       "arms": {
         "B": {
           "effort": "high",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": true,
-          "retries": 0
-        },
-        "A": {
-          "effort": "medium",
+          "status": "committed",
+          "commit": "a07f5e3d82b5ff545ef3a0852e610be1545449f9",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 23055,
+          "run_id": "hetero-1785922391-3242145-7450",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "A": {
+          "effort": "medium",
+          "status": "committed",
+          "commit": "ebde2f67630f458e9dd4d9aee5b313bba54aceee",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 20536,
+          "run_id": "hetero-1785922414-3243139-4781",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t29",
       "arms": {
         "A": {
           "effort": "medium",
-          "wrapper_commit": true,
-          "toolFailure": 0,
-          "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
-        },
-        "B": {
-          "effort": "high",
+          "status": "committed",
+          "commit": "a1c21a534a2b8df2483b08994a4316421cbdd11a",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
           "quality_accepted": true,
-          "retries": 0
+          "retries": 0,
+          "wall_ms": 32341,
+          "run_id": "hetero-1785922435-3244040-fc48",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
+        },
+        "B": {
+          "effort": "high",
+          "status": "committed",
+          "commit": "16066eba0e918c2b01e59024372816c297b16999",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 26808,
+          "run_id": "hetero-1785922467-3245202-e681",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "A",
         "B"
-      ]
+      ],
+      "sessions": 2
     },
     {
       "task_id": "t30",
       "arms": {
         "B": {
           "effort": "high",
+          "status": "committed",
+          "commit": "9e3baf50daaa27ac106e55cc24db3e410770ca0a",
+          "files_changed": 1,
           "wrapper_commit": true,
           "toolFailure": 0,
           "usable_session": true,
-          "quality_accepted": false,
-          "retries": 0
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 19980,
+          "run_id": "hetero-1785922494-3246283-5f71",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         },
         "A": {
           "effort": "medium",
-          "wrapper_commit": false,
-          "toolFailure": 1,
-          "usable_session": false,
-          "quality_accepted": false,
-          "retries": 0
+          "status": "committed",
+          "commit": "98f2302b9a5b8b5c52177fa796e047ea9efc1505",
+          "files_changed": 1,
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0,
+          "wall_ms": 18071,
+          "run_id": "hetero-1785922514-3247233-ece3",
+          "model_calls": 1,
+          "raw_status": "committed",
+          "error": null
         }
       },
       "order": [
         "B",
         "A"
-      ]
+      ],
+      "sessions": 2
     }
   ],
-  "generated_at": "2026-08-05T05:35:10.442Z"
+  "runner_path": "scripts/dispatch-hetero.sh",
+  "quality_definition": "mechanical_independent: committed && 0<files<=max_files && !error",
+  "generated_at": "2026-08-05T09:35:32.033Z",
+  "candidate_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede",
+  "base_sha": "1f9c53f4f070b152950a4115660026c4bb4fbede"
 }

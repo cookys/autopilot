@@ -336,7 +336,10 @@ function main(argv) {
       contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
       receipt = contract && contract.output && contract.output.zero_diff_receipt;
       if (!receipt) {
-        process.stdout.write('absent');
+        // Canonical soft-no-op token for dispatch-hetero equality branch
+        // (must match the `missing_sealed_receipt` exclusion there — not a
+        // fail-closed forged/stale/foreign rejection).
+        process.stdout.write('missing_sealed_receipt');
         process.exit(3);
       }
     } else {

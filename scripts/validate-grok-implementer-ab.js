@@ -32,9 +32,17 @@ const tasksDoc = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
 const errors = [];
 
 if (report.schema_version !== 1) errors.push('schema_version must be 1');
+// Plan D8 gate: live runner only (offline-synthetic is not acceptance).
+if (report.mode !== 'live') {
+  errors.push(`mode must be live (got ${report.mode}); offline-synthetic is not an acceptance path`);
+}
 if (report.seed !== seed.seed) errors.push('seed mismatch vs frozen seed.json');
 if (report.pairs !== seed.initial_pairs && report.pairs !== seed.max_pairs) {
   errors.push(`pairs ${report.pairs} not in {${seed.initial_pairs}, ${seed.max_pairs}}`);
+}
+// Indeterminate at 30 pairs is not terminal — must extend to max_pairs (60).
+if (report.decision === 'indeterminate' && report.pairs === seed.initial_pairs) {
+  errors.push('indeterminate at initial_pairs is not terminal; extension to max_pairs required');
 }
 if (report.provider_sessions > seed.max_provider_sessions) {
   errors.push(`provider_sessions ${report.provider_sessions} > max ${seed.max_provider_sessions}`);

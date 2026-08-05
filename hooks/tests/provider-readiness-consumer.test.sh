@@ -716,7 +716,8 @@ assert.deepStrictEqual(
   ['runner', 'model', 'role', 'effort', 'endpoint', 'family'],
 );
 assert(STRICT_L5_PROVIDER_POLICY.every((entry) => entry.tuple.endpoint === null
-  || entry.tuple.endpoint === 'minimax'));
+  || entry.tuple.endpoint === 'minimax'
+  || entry.tuple.endpoint === 'glm'));
 
 const projected = deriveStrictL5InvocationPolicy(resolved);
 assert.deepStrictEqual(

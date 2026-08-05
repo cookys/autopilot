@@ -753,6 +753,10 @@ function prepareMissionRuntimeInternal(input, options) {
     const registry = loadRegistry(repoInfo);
     const unresolvedEntries = Object.values(registry.missions)
       .filter((entry) => entry.enforcement_mode === 'enforce')
+      // A stale Mission for another frozen graph is historical residue, not a
+      // reason to block an unrelated graph admission. Same-graph unresolved
+      // state remains a hard global CAS fence.
+      .filter((entry) => entry.mission_graph_digest === graphDigest)
       .filter((entry) => stateIsUnresolved(runtimePaths(repoInfo, entry.adoption_key).state));
     const existing = registry.missions[adoptionKey] || null;
     if (!existing && policy.enforcement_mode === 'enforce' && unresolvedEntries.length > 0) {
@@ -858,6 +862,153 @@ function prepareMissionRuntimeForTest(input = {}, dependencies) {
   return prepareMissionRuntimeInternal(input, {
     dependencies: normalizeDependencies(dependencies),
     testOnlySkipAuthorityNormalization: true,
+  });
+}
+
+// A terminal Mission cannot be granted again in place.  A successor is the
+// only legal continuation: it gets a distinct registry identity while
+// retaining the predecessor's lineage, authority, policy, graph, and durable
+// usage.  This keeps an aborted/pre-spend campaign from silently reopening
+// capacity when the caller resumes the same work.
+function successorAdoptionKey(predecessorAdoptionKey, predecessorStateHash, generation) {
+  requireString(predecessorAdoptionKey, 'predecessor adoption key', SHA256);
+  requireString(predecessorStateHash, 'predecessor state hash', SHA256);
+  if (!Number.isSafeInteger(generation) || generation < 1) {
+    fail('MISSION_SUCCESSOR_INVALID', 'successor generation must be a positive integer');
+  }
+  return mission.sha256(mission.canonicalJson({
+    schema_version: 1,
+    artifact_type: 'mission_successor_identity',
+    predecessor_adoption_key: predecessorAdoptionKey,
+    predecessor_state_hash: predecessorStateHash,
+    generation,
+  }));
+}
+
+function prepareMissionRuntimeSuccessor(input = {}) {
+  if (Object.prototype.hasOwnProperty.call(input, 'dependencies')) {
+    fail(
+      'MISSION_RUNTIME_DEPENDENCY_INJECTION_REJECTED',
+      'production Mission successor preparation does not accept injected dependencies',
+    );
+  }
+  const repoInfo = canonicalRepository(input.repo || process.cwd());
+  const predecessorReceipt = requireObject(
+    input.predecessorReceipt,
+    'predecessor Mission prepare receipt',
+  );
+  const predecessor = validatePreparedReceipt(predecessorReceipt, repoInfo);
+  const predecessorState = predecessor.state;
+  if (!predecessorState.terminal || !mission.TERMINAL_STATES.has(predecessorState.state)) {
+    fail(
+      'MISSION_SUCCESSOR_SOURCE_UNRESOLVED',
+      'successor source must be a terminal Mission state',
+    );
+  }
+  if (predecessorState.state === 'ABORTED'
+      && !mission.evaluateCanonicalAbortedTerminal(predecessorState).ok) {
+    fail(
+      'MISSION_SUCCESSOR_SOURCE_INVALID',
+      'ABORTED successor source is not canonically finalized',
+    );
+  }
+  if (predecessorState.successor_inherits_durable_consumed !== true) {
+    fail(
+      'MISSION_SUCCESSOR_INHERIT_DISABLED',
+      'successor source does not permit durable usage inheritance',
+    );
+  }
+  const generation = input.generation;
+  if (!Number.isSafeInteger(generation) || generation < 1) {
+    fail('MISSION_SUCCESSOR_INVALID', 'successor generation must be a positive integer');
+  }
+  const predecessorStateHash = mission.stateHash(predecessorState);
+  const adoptionKey = successorAdoptionKey(
+    predecessor.value.adoption_key,
+    predecessorStateHash,
+    generation,
+  );
+  const paths = runtimePaths(repoInfo, adoptionKey);
+  const baseSha = git(repoInfo.repo, ['rev-parse', 'HEAD']);
+  validateGraphSpecsAtBase(repoInfo.repo, predecessorState.execution_graph, baseSha);
+  const contract = canonicalClone(predecessorState.config);
+  contract.contract_id = `mission-v1-${mission.sha256(mission.canonicalJson({
+    schema_version: 1,
+    artifact_type: 'mission_successor_contract',
+    predecessor_state_hash: predecessorStateHash,
+    successor_adoption_key: adoptionKey,
+    generation,
+  }))}`;
+  contract.state = 'DRAFT';
+  const successorState = mission.createMissionState(contract, { inheritFrom: predecessorState });
+  const preparedAt = input.preparedAt || new Date().toISOString();
+  if (typeof preparedAt !== 'string' || !Number.isFinite(Date.parse(preparedAt))) {
+    fail('MISSION_RUNTIME_INVALID', 'preparedAt must be a valid timestamp');
+  }
+  return withExclusiveLock(paths.registry_lock, () => {
+    const registry = loadRegistry(repoInfo);
+    const unresolvedEntries = Object.values(registry.missions)
+      .filter((entry) => entry.enforcement_mode === 'enforce')
+      .filter((entry) => entry.mission_graph_digest === predecessorState.mission_graph_digest)
+      .filter((entry) => stateIsUnresolved(runtimePaths(repoInfo, entry.adoption_key).state));
+    const existing = registry.missions[adoptionKey] || null;
+    if (!existing && unresolvedEntries.length > 0) {
+      fail(
+        'UNRESOLVED_MISSION_EXISTS',
+        'an unresolved Mission already exists for this canonical repository',
+      );
+    }
+    let state = successorState;
+    let entry;
+    let adopted = false;
+    if (existing) {
+      if (existing.mission_lineage_id !== predecessorState.mission_lineage_id
+          || existing.task_authority_id !== predecessorState.task_authority_id
+          || existing.policy_hash !== predecessorState.policy_hash
+          || existing.mission_policy_digest !== predecessorState.mission_policy_digest
+          || existing.mission_graph_digest !== predecessorState.mission_graph_digest) {
+        fail('MISSION_SUCCESSOR_BINDING_MISMATCH', 'successor registry binding differs');
+      }
+      state = readJson(paths.state, 'registered successor Mission state');
+      mission.validateMissionState(state);
+      if (mission.stateHash(state) !== mission.stateHash(successorState)) {
+        fail('MISSION_SUCCESSOR_BINDING_MISMATCH', 'successor state differs from deterministic replay');
+      }
+      entry = existing;
+      adopted = true;
+    } else {
+      atomicWriteJson(paths.state, successorState);
+      entry = {
+        schema_version: RUNTIME_SCHEMA_VERSION,
+        adoption_key: adoptionKey,
+        repo_identity: repoInfo.repo_identity,
+        mission_lineage_id: successorState.mission_lineage_id,
+        task_authority_id: successorState.task_authority_id,
+        policy_hash: successorState.policy_hash,
+        intent_hash: predecessor.entry.intent_hash,
+        initial_required_acceptance_hashes: successorState.initial_required_acceptance_hashes,
+        mission_policy_digest: successorState.mission_policy_digest,
+        mission_graph_digest: successorState.mission_graph_digest,
+        enforcement_mode: successorState.enforcement_mode,
+        prepared_state_hash: mission.stateHash(successorState),
+        state_ref: path.relative(paths.root, paths.state),
+      };
+      registry.missions[adoptionKey] = entry;
+      atomicWriteJson(paths.registry, registry);
+    }
+    const body = prepareReceiptBody(entry, state, adopted, preparedAt);
+    return {
+      receipt: {
+        ...body,
+        receipt_digest: mission.sha256(mission.canonicalJson(body)),
+      },
+      state,
+      adopted,
+      predecessor_adoption_key: predecessor.value.adoption_key,
+      successor_generation: generation,
+      registry_path: paths.registry,
+      state_path: paths.state,
+    };
   });
 }
 
@@ -1115,6 +1266,31 @@ function campaignDraftFor({ state, node, adoptionKey, attempt, repoInfo, baseSha
   }
   const acceptanceIds = [...node.acceptance_ids];
   const rubricIds = [...node.source_rubric_ids];
+  const strictDispatch = {
+    schema_version: 1,
+    spec: {
+      path: spec.path,
+      section: spec.section,
+    },
+    required_paths: [...campaign.required_paths],
+    output_paths: [...campaign.output_paths],
+    allowed_path_prefixes: [...campaign.allowed_path_prefixes],
+    budget: {
+      max_changed_files: campaign.max_changed_files,
+      max_wall_seconds: campaign.max_wall_seconds,
+      max_output_bytes: node.reservation.output_bytes,
+      max_tool_calls: node.reservation.tool_calls,
+      max_engine_attempts: node.reservation.engine_attempts,
+    },
+    verification_commands: [...node.verification_commands],
+  };
+  if (Array.isArray(campaign.authorized_creates) && campaign.authorized_creates.length > 0) {
+    strictDispatch.authorized_creates = [...campaign.authorized_creates];
+  }
+  if (Array.isArray(campaign.version_mirror_paths) && campaign.version_mirror_paths.length > 0) {
+    strictDispatch.version_mirror_paths = [...campaign.version_mirror_paths];
+    strictDispatch.version_mirror_generator = campaign.version_mirror_generator;
+  }
   return {
     schema_version: 1,
     ticket: ticketFor(adoptionKey, node.id, attempt),
@@ -1142,24 +1318,7 @@ function campaignDraftFor({ state, node, adoptionKey, attempt, repoInfo, baseSha
       graph_node_id: node.id,
       graph_node_digest: graphNodeDigest,
     },
-    strict_dispatch: {
-      schema_version: 1,
-      spec: {
-        path: spec.path,
-        section: spec.section,
-      },
-      required_paths: [...campaign.required_paths],
-      output_paths: [...campaign.output_paths],
-      allowed_path_prefixes: [...campaign.allowed_path_prefixes],
-      budget: {
-        max_changed_files: campaign.max_changed_files,
-        max_wall_seconds: campaign.max_wall_seconds,
-        max_output_bytes: node.reservation.output_bytes,
-        max_tool_calls: node.reservation.tool_calls,
-        max_engine_attempts: node.reservation.engine_attempts,
-      },
-      verification_commands: [...node.verification_commands],
-    },
+    strict_dispatch: strictDispatch,
   };
 }
 
@@ -1496,9 +1655,11 @@ module.exports = {
   openPreparedMissionStateStore,
   prepareMissionRuntime,
   prepareMissionRuntimeForTest,
+  prepareMissionRuntimeSuccessor,
   reconcileMissionCampaignTerminal,
   recoverPendingTerminals,
   requiredAcceptanceHashes,
+  successorAdoptionKey,
   validateGraphSpecsAtBase,
   validatePreparedReceipt,
 };

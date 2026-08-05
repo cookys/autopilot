@@ -100,19 +100,55 @@ if (!Number.isSafeInteger(report.provider_sessions)
     || report.provider_sessions !== report.session_attempts_started) {
   errors.push('provider session count must equal the mechanically reserved attempt count');
 }
-if (!Array.isArray(report.exclusions)) errors.push('exclusions must be array');
-// Silent drops forbidden: every non-extension initial task must appear once.
-const expectedIds = (tasksDoc.tasks || [])
-  .filter((t) => !t.extension)
+const seedDigest = crypto.createHash('sha256').update(fs.readFileSync(seedPath)).digest('hex');
+const tasksDigest = crypto.createHash('sha256').update(fs.readFileSync(tasksPath)).digest('hex');
+if (!/^[0-9a-f]{64}$/.test(String(report.seed_digest || ''))
+    || report.seed_digest !== seedDigest) {
+  errors.push('seed_digest is required and must match frozen seed.json');
+}
+if (!/^[0-9a-f]{64}$/.test(String(report.tasks_digest || ''))
+    || report.tasks_digest !== tasksDigest) {
+  errors.push('tasks_digest is required and must match frozen tasks.json');
+}
+
+if (!Array.isArray(report.exclusions)) {
+  errors.push('exclusions must be array');
+} else {
+  const allowedExclusionReasons = new Set([
+    'invalid_task', 'task_schema_invalid', 'task_missing_prompt', 'task_missing_acceptance',
+    'task_duplicate_id', 'task_not_eligible', 'runner_unavailable', 'dispatch_unavailable',
+  ]);
+  for (const exclusion of report.exclusions) {
+    if (!exclusion || typeof exclusion !== 'object'
+        || typeof exclusion.task_id !== 'string'
+        || exclusion.phase !== 'pre-run'
+        || !allowedExclusionReasons.has(exclusion.reason)
+        || exclusion.schema_valid !== true) {
+      errors.push('exclusions must contain only schema-valid pre-run invalid-task/infra reasons');
+      break;
+    }
+  }
+}
+
+// Silent drops, substitutions, duplicates, and post-hoc extension reshuffles
+// are forbidden: the frozen corpus order is part of the crossover contract.
+const expectedInitialIds = (tasksDoc.tasks || [])
+  .filter((task) => !task.extension)
   .slice(0, seed.initial_pairs)
-  .map((t) => t.id)
-  .sort();
-const gotIds = (report.pair_results || []).map((p) => p.task_id).sort();
-if (JSON.stringify(expectedIds) !== JSON.stringify(gotIds.slice(0, expectedIds.length))
-    && report.pairs === seed.initial_pairs) {
-  // For initial-30 runs, exact task set required.
-  const missing = expectedIds.filter((id) => !gotIds.includes(id));
-  if (missing.length) errors.push(`missing tasks (no silent drop): ${missing.join(',')}`);
+  .map((task) => task.id);
+const expectedExtensionIds = (tasksDoc.tasks || [])
+  .filter((task) => task.extension === true)
+  .slice(0, Math.max(0, seed.max_pairs - seed.initial_pairs))
+  .map((task) => task.id);
+const expectedIds = report.pairs === seed.max_pairs
+  ? expectedInitialIds.concat(expectedExtensionIds) : expectedInitialIds;
+const gotIds = Array.isArray(report.pair_results)
+  ? report.pair_results.map((pair) => pair && pair.task_id) : [];
+if (gotIds.length !== report.pairs || JSON.stringify(gotIds) !== JSON.stringify(expectedIds)) {
+  errors.push('pair task IDs must exactly match the frozen initial/extension sequence');
+}
+if (new Set(gotIds).size !== gotIds.length) {
+  errors.push('pair task IDs must be unique (no duplicate or imputed task)');
 }
 for (const p of report.pair_results || []) {
   if (!p.arms || !p.arms.A || !p.arms.B) {
@@ -137,25 +173,28 @@ for (const p of report.pair_results || []) {
       errors.push(`pair ${p.task_id} arm ${armName}: dispatch provenance is missing or mismatched`);
     }
     if (arm.acceptance_ok !== true
+        || arm.acceptance_bound !== true
+        || !/^[0-9a-f]{40,64}$/.test(String(arm.acceptance_base_sha || ''))
+        || !/^[0-9a-f]{40,64}$/.test(String(arm.acceptance_commit_sha || ''))
+        || arm.acceptance_base_sha !== report.candidate_sha
+        || arm.acceptance_commit_sha !== arm.commit
         || !Array.isArray(arm.acceptance_results)
         || arm.acceptance_results.length === 0
-        || arm.acceptance_results.some((result) => result.exit !== 0)) {
+        || arm.acceptance_results.some((result) => (
+          result.exit !== 0
+          || result.base_sha !== arm.acceptance_base_sha
+          || result.commit_sha !== arm.acceptance_commit_sha
+          || !Array.isArray(result.bound_command)
+          || result.bound_command[0] !== 'git'
+          || result.bound_command[1] !== 'diff'
+          || result.bound_command[2] !== '--check'
+        ))) {
       errors.push(`pair ${p.task_id} arm ${armName}: acceptance commands did not pass`);
     }
   }
 }
 const decisions = new Set(['tune-medium', 'tune-high', 'no-change', 'indeterminate']);
 if (!decisions.has(report.decision)) errors.push(`invalid decision: ${report.decision}`);
-
-// Digests must match frozen files when present.
-const seedDigest = crypto.createHash('sha256').update(fs.readFileSync(seedPath)).digest('hex');
-const tasksDigest = crypto.createHash('sha256').update(fs.readFileSync(tasksPath)).digest('hex');
-if (report.seed_digest && report.seed_digest !== seedDigest) {
-  errors.push('seed_digest does not match frozen seed.json');
-}
-if (report.tasks_digest && report.tasks_digest !== tasksDigest) {
-  errors.push('tasks_digest does not match frozen tasks.json');
-}
 
 if (errors.length) {
   process.stderr.write(`validate-grok-implementer-ab: FAIL\n${errors.map((e) => `  - ${e}`).join('\n')}\n`);

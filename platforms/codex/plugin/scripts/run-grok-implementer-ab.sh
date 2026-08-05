@@ -161,53 +161,57 @@ function parseOutcome(stdout) {
   }
 }
 
-function runAcceptance(task, commit) {
+function runAcceptance(task, commit, taskBase) {
   const commands = Array.isArray(task.acceptance) ? task.acceptance : [];
-  if (commands.length === 0 || typeof commit !== 'string' || commit.length === 0) {
-    return { ok: false, results: [], error: 'acceptance_or_commit_missing' };
+  if (commands.length === 0 || typeof commit !== 'string' || commit.length === 0
+      || typeof taskBase !== 'string' || taskBase.length === 0) {
+    return {
+      ok: false, results: [], error: 'acceptance_or_commit_missing',
+      base_sha: taskBase || null, commit_sha: commit || null, bound: false,
+    };
   }
-  const acceptanceRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'grok-ab-acceptance-'));
+  const resolve = (ref) => {
+    const resolved = spawnSync('git', ['-C', scratch, 'rev-parse', '--verify', `${ref}^{commit}`], {
+      env: process.env, encoding: 'utf8', maxBuffer: 1024 * 1024,
+    });
+    return resolved.status === 0 ? String(resolved.stdout || '').trim() : null;
+  };
+  const baseSha = resolve(taskBase);
+  const commitSha = resolve(commit);
+  if (!baseSha || !commitSha || baseSha === commitSha) {
+    return {
+      ok: false, results: [], error: 'acceptance_ref_unresolved_or_unchanged',
+      base_sha: baseSha, commit_sha: commitSha, bound: false,
+    };
+  }
   const results = [];
-  try {
-    const clone = spawnSync('git', ['clone', '--local', scratch, acceptanceRoot], {
-      env: process.env,
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024,
+  for (const command of commands) {
+    if (typeof command !== 'string' || command.trim() !== command || command.length === 0) {
+      results.push({ command, bound_command: null, base_sha: baseSha, commit_sha: commitSha, exit: null });
+      return { ok: false, results, error: 'acceptance_command_invalid', base_sha: baseSha, commit_sha: commitSha, bound: false };
+    }
+    // The frozen D8 tasks declare this command. Bind it to the actual patch;
+    // checking a clean clone of the commit would inspect no changes at all.
+    if (command !== 'git diff --check') {
+      results.push({ command, bound_command: null, base_sha: baseSha, commit_sha: commitSha, exit: null });
+      return { ok: false, results, error: 'acceptance_command_unsupported', base_sha: baseSha, commit_sha: commitSha, bound: false };
+    }
+    const boundCommand = ['git', 'diff', '--check', `${baseSha}..${commitSha}`];
+    const check = spawnSync(boundCommand[0], boundCommand.slice(1), {
+      cwd: scratch, env: process.env, encoding: 'utf8', maxBuffer: 1024 * 1024,
     });
-    if (clone.status !== 0) {
-      return { ok: false, results, error: 'acceptance_clone_failed' };
-    }
-    const checkout = spawnSync('git', ['-C', acceptanceRoot, 'checkout', '-q', commit], {
-      env: process.env,
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024,
+    results.push({
+      command, bound_command: boundCommand, base_sha: baseSha, commit_sha: commitSha,
+      exit: check.status,
     });
-    if (checkout.status !== 0) {
-      return { ok: false, results, error: 'acceptance_checkout_failed' };
+    if (check.status !== 0) {
+      return { ok: false, results, error: 'acceptance_failed', base_sha: baseSha, commit_sha: commitSha, bound: true };
     }
-    for (const command of commands) {
-      if (typeof command !== 'string' || command.trim() !== command || command.length === 0) {
-        results.push({ command, exit: null });
-        return { ok: false, results, error: 'acceptance_command_invalid' };
-      }
-      const check = spawnSync('bash', ['-lc', command], {
-        cwd: acceptanceRoot,
-        env: process.env,
-        encoding: 'utf8',
-        maxBuffer: 1024 * 1024,
-      });
-      results.push({ command, exit: check.status });
-      if (check.status !== 0) {
-        return { ok: false, results, error: 'acceptance_failed' };
-      }
-    }
-    return { ok: true, results, error: null };
-  } finally {
-    fs.rmSync(acceptanceRoot, { recursive: true, force: true });
   }
+  return { ok: true, results, error: null, base_sha: baseSha, commit_sha: commitSha, bound: true };
 }
 
-function runArm(task, arm, attempt) {
+function runArm(task, arm, attempt, taskBase) {
   const effort = seed.arms[arm].effort;
   // Absolute path: dispatch-hetero runs with cwd=scratch and must read the prompt
   // from a path visible in both trees.
@@ -266,10 +270,13 @@ function runArm(task, arm, attempt) {
     && observedModel === expectedModel
     && providerSessionId !== null
     && resolvedRunnerVersion !== null;
-  const acceptance = committed ? runAcceptance(task, outcome.commit) : {
+  const acceptance = committed ? runAcceptance(task, outcome.commit, taskBase) : {
     ok: false,
     results: [],
     error: 'commit_missing',
+    base_sha: taskBase,
+    commit_sha: outcome.commit || null,
+    bound: false,
   };
   const toolFailure = (outcome.model_calls > 0 && !committed)
     || status === 'runner_failed'
@@ -298,6 +305,9 @@ function runArm(task, arm, attempt) {
     acceptance_ok: acceptance.ok,
     acceptance_results: acceptance.results,
     acceptance_error: acceptance.error,
+    acceptance_bound: acceptance.bound === true,
+    acceptance_base_sha: acceptance.base_sha,
+    acceptance_commit_sha: acceptance.commit_sha,
     provenance_ok: provenanceOk,
     runner: observedRunner,
     model: observedModel,
@@ -325,6 +335,10 @@ function runPair(task, pairIndex, retriesA, retriesB) {
   const order = armOrder(pairIndex);
   const arms = {};
   const pairStart = sessionBudget.used;
+  const baseProbe = spawnSync('git', ['-C', scratch, 'rev-parse', '--verify', 'HEAD^{commit}'], {
+    encoding: 'utf8', maxBuffer: 1024 * 1024,
+  });
+  const taskBase = baseProbe.status === 0 ? String(baseProbe.stdout || '').trim() : null;
   for (const arm of order) {
     let attempt = 0;
     let result = null;
@@ -344,7 +358,7 @@ function runPair(task, pairIndex, retriesA, retriesB) {
         };
         break;
       }
-      result = runArm(task, arm, attempt);
+      result = runArm(task, arm, attempt, taskBase);
       if (result.usable_session) break;
       // Infra-style failures may retry; count against per-arm retry budget.
       if (retries.count >= maxRetries) {

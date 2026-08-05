@@ -82,6 +82,16 @@ if (results.length !== fixtureById.size) {
 }
 const seen = new Set();
 
+function expectedOrders(count) {
+  return Array.from({ length: count }, (_, index) => (
+    index % 2 === 0 ? ['baseline', 'candidate'] : ['candidate', 'baseline']
+  ));
+}
+
+function sameOrders(actual, expected) {
+  return JSON.stringify(actual) === JSON.stringify(expected);
+}
+
 function validateSummary(fixture, summary, side, result) {
   if (!summary || typeof summary !== 'object') {
     errors.push(`${result.id}: ${side} summary missing`);
@@ -94,8 +104,14 @@ function validateSummary(fixture, summary, side, result) {
   if (summary.payload_sha256 !== fixture.payload_sha256) {
     errors.push(`${result.id}: ${side} payload hash does not match fixture`);
   }
-  if (summary.observed_child_count !== fixture.expected_child_count) {
-    errors.push(`${result.id}: ${side} child count ${summary.observed_child_count} != ${fixture.expected_child_count}`);
+  if (side === 'candidate' && summary.observed_child_count !== fixture.expected_child_count) {
+    errors.push(`${result.id}: ${side} observed child count ${summary.observed_child_count} != ${fixture.expected_child_count}`);
+  }
+  if (!Number.isSafeInteger(summary.processes_started) || summary.processes_started < 1) {
+    errors.push(`${result.id}: ${side} processes_started must be a positive integer`);
+  }
+  if (summary.process_count_consistent !== true) {
+    errors.push(`${result.id}: ${side} process count varied across samples`);
   }
   for (const metric of ['median_ms', 'p95_ms', 'mad_ms', 'mad_median_ratio']) {
     if (typeof summary[metric] !== 'number' || !Number.isFinite(summary[metric]) || summary[metric] < 0) {
@@ -131,6 +147,16 @@ for (const result of results) {
   }
   validateSummary(fixture, result.baseline, 'baseline', result);
   validateSummary(fixture, result.candidate, 'candidate', result);
+  if (!result.sampling || result.sampling.strategy !== 'alternating-paired') {
+    errors.push(`${result.id}: sampling strategy must be alternating-paired`);
+  } else {
+    if (!sameOrders(result.sampling.warmups, expectedOrders(10))) {
+      errors.push(`${result.id}: warm-up order must alternate baseline/candidate pairs`);
+    }
+    if (!sameOrders(result.sampling.repetitions, expectedOrders(50))) {
+      errors.push(`${result.id}: repetition order must alternate baseline/candidate pairs`);
+    }
+  }
 
   const baseline = result.baseline;
   const candidate = result.candidate;

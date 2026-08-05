@@ -44,6 +44,7 @@ if (!Number.isSafeInteger(warmups) || warmups < 0
 
 const repo = path.resolve(__dirname, '..');
 const fixturesPath = path.resolve(fixturesArg);
+let traceSequence = 0;
 
 function runGit(args) {
   return spawnSync('git', args, {
@@ -134,40 +135,70 @@ function runFixture(fixture, checkout, home) {
     CLAUDE_PLUGIN_ROOT: checkout,
     HOME: home,
   };
-  // The isolated HOME has no user config. Explicitly set every fixture stem
+  // The isolated HOME has no user config. Explicitly zero every manifest stem
   // so enabled/disabled semantics cannot be inherited from the caller.
+  const manifest = JSON.parse(fs.readFileSync(path.join(checkout, 'hooks', 'opt-in-manifest.json'), 'utf8'));
+  for (const stem of (manifest.opt_in || [])) {
+    const key = `AUTOPILOT_HOOK_${stem.replace(/-/g, '_').toUpperCase()}`;
+    env[key] = '0';
+  }
   for (const stem of (fixture.enabled_hook_ids || [])) {
     const key = `AUTOPILOT_HOOK_${stem.replace(/-/g, '_').toUpperCase()}`;
     env[key] = fixture.enabled === true ? '1' : '0';
   }
   const commands = registrations(checkout, fixture, payload);
+  const traceFile = path.join(os.tmpdir(), `hook-mux-trace-${process.pid}-${traceSequence++}.json`);
+  const traceModule = path.join(os.tmpdir(), `hook-mux-trace-${process.pid}-${traceSequence++}.cjs`);
+  fs.writeFileSync(traceModule, [
+    "'use strict';",
+    "const fs = require('fs');",
+    "const path = require('path');",
+    "const childProcess = require('child_process');",
+    "if (process.argv.some((arg) => /opt-in-multiplexer\\.js$/.test(String(arg)))) {",
+    "  let count = 0;",
+    "  const original = childProcess.spawnSync;",
+    "  childProcess.spawnSync = function tracedSpawnSync(command, args, options) {",
+    "    if (Array.isArray(args)) count += 1;",
+    "    return original.call(this, command, args, options);",
+    "  };",
+    "  process.on('exit', () => { try { fs.writeFileSync(process.env.AUTOPILOT_HOOK_BENCHMARK_TRACE_FILE, JSON.stringify({ count })); } catch (_) {} });",
+    "}",
+  ].join('\n'));
+  env.AUTOPILOT_HOOK_BENCHMARK_TRACE_FILE = traceFile;
+  const priorNodeOptions = env.NODE_OPTIONS ? `${env.NODE_OPTIONS} ` : '';
+  env.NODE_OPTIONS = `${priorNodeOptions}--require=${traceModule}`;
   const started = process.hrtime.bigint();
   const statuses = [];
-  let enabledChildren = 0;
-  for (const command of commands) {
-    const child = spawnSync(
-      process.execPath,
-      [path.join(checkout, 'hooks', command.scriptName), ...command.args],
-      { input: payload, env, encoding: 'utf8', timeout: 5000, maxBuffer: 16 * 1024 * 1024 },
-    );
-    if (child.error) throw new Error(`${fixture.id}: hook failed: ${child.error.message}`);
-    statuses.push(typeof child.status === 'number' ? child.status : 1);
-    // For the candidate multiplexer, the fixture's enabled IDs are the
-    // handlers it should select. Direct-registration baselines retain their
-    // own process count but have the same selected-handler expectation.
-    if (fixture.enabled === true && command.scriptName !== 'opt-in-multiplexer.js') {
-      enabledChildren += 1;
+  try {
+    for (const command of commands) {
+      const child = spawnSync(
+        process.execPath,
+        [path.join(checkout, 'hooks', command.scriptName), ...command.args],
+        { input: payload, env, encoding: 'utf8', timeout: 5000, maxBuffer: 16 * 1024 * 1024 },
+      );
+      if (child.error) throw new Error(`${fixture.id}: hook failed: ${child.error.message}`);
+      statuses.push(typeof child.status === 'number' ? child.status : 1);
     }
+  } finally {
+    // Direct registrations do not contain nested multiplexer children. The
+    // candidate's trace is the authoritative count of children it spawned.
+    const trace = fs.existsSync(traceFile)
+      ? JSON.parse(fs.readFileSync(traceFile, 'utf8')) : { count: 0 };
+    fs.rmSync(traceFile, { force: true });
+    fs.rmSync(traceModule, { force: true });
+    const elapsed = Number(process.hrtime.bigint() - started) / 1e6;
+    runFixture.lastTrace = { elapsed, trace, statuses, commands };
   }
-  const elapsed = Number(process.hrtime.bigint() - started) / 1e6;
+  const { elapsed, trace } = runFixture.lastTrace;
+  delete runFixture.lastTrace;
   return {
     ms: elapsed,
     status: statuses.every((status) => status === 0) ? 0 : (statuses.find((status) => status !== 0) || 1),
     processes_started: commands.length,
-    // The fixture's closed event table defines exactly which handlers should
-    // be selected. This is checked by the validator for candidate reports.
-    children: fixture.enabled === true ? (fixture.enabled_hook_ids || []).length : 0,
-    direct_enabled_children: enabledChildren,
+    // Direct registrations have no nested multiplexer children; the candidate
+    // trace records actual child hook spawns (including zero when disabled).
+    children: commands.some((command) => command.scriptName === 'opt-in-multiplexer.js')
+      ? trace.count : 0,
     payload_sha256: actualPayloadSha,
   };
 }
@@ -191,13 +222,46 @@ function summarize(fixture, samples) {
   };
 }
 
-function benchmarkFixture(fixture, checkout, home) {
-  for (let i = 0; i < warmups; i += 1) runFixture(fixture, checkout, home);
-  const samples = [];
-  for (let i = 0; i < repetitions; i += 1) {
-    samples.push(runFixture(fixture, checkout, home));
+function benchmarkFixture(fixture, checkouts, homes) {
+  // Warm both trees and then collect paired samples. Alternating which tree
+  // runs first prevents a blocked base-then-candidate sequence from turning
+  // host load, thermal state, or background work into a false ratio.
+  const warmupOrders = [];
+  for (let i = 0; i < warmups; i += 1) {
+    const order = i % 2 === 0 ? ['baseline', 'candidate'] : ['candidate', 'baseline'];
+    warmupOrders.push(order);
+    runFixture(fixture, order[0] === 'baseline' ? checkouts.base : checkouts.candidate,
+      order[0] === 'baseline' ? homes.base : homes.candidate);
+    runFixture(fixture, order[1] === 'baseline' ? checkouts.base : checkouts.candidate,
+      order[1] === 'baseline' ? homes.base : homes.candidate);
   }
-  return summarize(fixture, samples);
+  const baselineSamples = [];
+  const candidateSamples = [];
+  const repetitionOrders = [];
+  for (let i = 0; i < repetitions; i += 1) {
+    const order = i % 2 === 0 ? ['baseline', 'candidate'] : ['candidate', 'baseline'];
+    repetitionOrders.push(order);
+    const first = runFixture(fixture, order[0] === 'baseline' ? checkouts.base : checkouts.candidate,
+      order[0] === 'baseline' ? homes.base : homes.candidate);
+    const second = runFixture(fixture, order[1] === 'baseline' ? checkouts.base : checkouts.candidate,
+      order[1] === 'baseline' ? homes.base : homes.candidate);
+    if (order[0] === 'baseline') {
+      baselineSamples.push(first);
+      candidateSamples.push(second);
+    } else {
+      candidateSamples.push(first);
+      baselineSamples.push(second);
+    }
+  }
+  return {
+    baseline: summarize(fixture, baselineSamples),
+    candidate: summarize(fixture, candidateSamples),
+    sampling: {
+      strategy: 'alternating-paired',
+      warmups: warmupOrders,
+      repetitions: repetitionOrders,
+    },
+  };
 }
 
 const baseSha = resolveCommit(baseRef, 'base');
@@ -237,8 +301,13 @@ try {
   const baseHome = fs.mkdtempSync(path.join(scratchRoot, 'home-base-'));
   const candidateHome = fs.mkdtempSync(path.join(scratchRoot, 'home-candidate-'));
   const results = fixtures.fixtures.map((fixture) => {
-    const baseline = benchmarkFixture(fixture, baseCheckout, baseHome);
-    const candidateResult = benchmarkFixture(fixture, candidateCheckout, candidateHome);
+    const paired = benchmarkFixture(
+      fixture,
+      { base: baseCheckout, candidate: candidateCheckout },
+      { base: baseHome, candidate: candidateHome },
+    );
+    const baseline = paired.baseline;
+    const candidateResult = paired.candidate;
     return {
       id: fixture.id,
       event: fixture.event,
@@ -247,6 +316,7 @@ try {
       expected_child_count: fixture.expected_child_count,
       baseline,
       candidate: candidateResult,
+      sampling: paired.sampling,
       ratios: {
         median: baseline.median_ms > 0
           ? candidateResult.median_ms / baseline.median_ms : null,

@@ -41,9 +41,13 @@ runner='grok'
 provider="provider-$n"
 mode="${GROK_AB_TEST_MODE:-failure}"
 case "$mode" in
-  success|bad-acceptance)
+  success|bad-acceptance|bad-whitespace)
     mkdir -p docs
-    printf 'fixture %s\n' "$n" > "docs/grok-ab-$n.md"
+    if [ "$mode" = bad-whitespace ]; then
+      printf 'fixture %s  \n' "$n" > "docs/grok-ab-$n.md"
+    else
+      printf 'fixture %s\n' "$n" > "docs/grok-ab-$n.md"
+    fi
     git add "docs/grok-ab-$n.md"
     git -c user.email=grok-ab-test@example.invalid \
       -c user.name='Grok AB Test' commit -qm "fixture attempt $n"
@@ -173,6 +177,23 @@ assert_eq "false" "$(jq -r '.pair_results[0].arms.A.acceptance_ok' "$REPORT_ACCE
 assert_eq "false" "$(jq -r '.pair_results[0].arms.A.quality_accepted' "$REPORT_ACCEPT" 2>/dev/null)" \
   "failing acceptance cannot be quality accepted"
 
+# A real committed trailing-whitespace patch must fail the bound acceptance.
+# A clean checkout of the produced commit would make plain `git diff --check`
+# pass; the runner must check the task-base..commit patch instead.
+SEED_WS="$TEST_TMP/seed-whitespace.json"; TASKS_WS="$TEST_TMP/tasks-whitespace.json"
+REPORT_WS="$TEST_TMP/whitespace.json"
+make_seed "$SEED_WS" 1 1 2 0
+make_tasks "$TASKS_WS" 1 pass
+printf '0\n' > "$COUNTER"
+run_case whitespace "$SEED_WS" "$TASKS_WS" bad-whitespace
+assert_eq "1" "$(cat "$TEST_TMP/whitespace.rc")" "bound whitespace acceptance leaves run open"
+assert_eq "false" "$(jq -r '.pair_results[0].arms.A.acceptance_ok' "$REPORT_WS" 2>/dev/null)" \
+  "bound acceptance rejects committed trailing whitespace"
+assert_eq "true" "$(jq -r '.pair_results[0].arms.A.acceptance_bound' "$REPORT_WS" 2>/dev/null)" \
+  "acceptance records a task-base..commit binding"
+assert_contains "$(jq -c '.pair_results[0].arms.A.acceptance_results[0].bound_command' "$REPORT_WS" 2>/dev/null)" \
+  "git" "acceptance records the bound Git command"
+
 # Missing/fabricated dispatch provenance is rejected even when the wrapper commits.
 SEED_PROV="$TEST_TMP/seed-prov.json"; TASKS_PROV="$TEST_TMP/tasks-prov.json"
 REPORT_PROV="$TEST_TMP/prov.json"
@@ -203,5 +224,99 @@ assert_eq "0" "$(cat "$TEST_TMP/ok.rc")" "valid provenance and acceptance close 
 VALIDATE_OK_OUT="$(node "$REPO_ROOT/scripts/validate-grok-implementer-ab.js" \
   --report "$REPORT_OK" --seed "$SEED_OK" --tasks "$TASKS_OK" 2>&1)"
 assert_contains "$VALIDATE_OK_OUT" "ok decision=no-change" "validator accepts valid terminal report"
+
+# Frozen digests are mandatory, not optional report decoration.
+node - "$REPORT_OK" <<'NODE'
+const fs = require('fs');
+const [target] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(target, 'utf8'));
+delete report.seed_digest;
+fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);
+NODE
+set +e
+DIGEST_OUT="$(node "$REPO_ROOT/scripts/validate-grok-implementer-ab.js" \
+  --report "$REPORT_OK" --seed "$SEED_OK" --tasks "$TASKS_OK" 2>&1)"
+DIGEST_RC=$?
+assert_neq "0" "$DIGEST_RC" "validator rejects missing frozen digest"
+assert_contains "$DIGEST_OUT" "seed_digest is required" "validator names the required seed digest"
+
+# Exclusions are pre-run schema records only; post-hoc/arbitrary reasons fail.
+node - "$REPORT_OK" <<'NODE'
+const fs = require('fs');
+const [target] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(target, 'utf8'));
+report.seed_digest = require('crypto').createHash('sha256')
+  .update(fs.readFileSync(process.argv[3] || 'evals/grok-implementer-ab/seed.json')).digest('hex');
+report.exclusions = [{ task_id: 't01', reason: 'post_hoc', phase: 'runtime', schema_valid: true }];
+fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);
+NODE
+set +e
+EXCLUSION_OUT="$(node "$REPO_ROOT/scripts/validate-grok-implementer-ab.js" \
+  --report "$REPORT_OK" --seed "$SEED_OK" --tasks "$TASKS_OK" 2>&1)"
+EXCLUSION_RC=$?
+assert_neq "0" "$EXCLUSION_RC" "validator rejects arbitrary exclusions"
+assert_contains "$EXCLUSION_OUT" "pre-run invalid-task/infra reasons" \
+  "validator names the exclusion schema"
+
+# Build a structurally valid 60-pair report, then mutate the extension order;
+# this exercises the frozen initial+extension sequence without live providers.
+FABRICATED="$TEST_TMP/fabricated-60.json"
+node - "$FABRICATED" "$REPO_ROOT" "$BASE_SHA" "$CANDIDATE_SHA" <<'NODE'
+const fs = require('fs');
+const crypto = require('crypto');
+const [target, repo, baseSha, candidateSha] = process.argv.slice(2);
+const seedPath = `${repo}/evals/grok-implementer-ab/seed.json`;
+const tasksPath = `${repo}/evals/grok-implementer-ab/tasks.json`;
+const seed = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+const tasks = JSON.parse(fs.readFileSync(tasksPath, 'utf8')).tasks;
+const ids = tasks.filter((task) => !task.extension).slice(0, seed.initial_pairs)
+  .concat(tasks.filter((task) => task.extension === true).slice(0, seed.max_pairs - seed.initial_pairs))
+  .map((task) => task.id);
+const commitSha = baseSha;
+const arm = (index, side) => ({
+  effort: side === 'A' ? 'medium' : 'high', status: 'committed', commit: commitSha,
+  files_changed: 1, wrapper_commit: true, toolFailure: 0, usable_session: true,
+  quality_accepted: true, acceptance_ok: true, acceptance_bound: true,
+  acceptance_base_sha: candidateSha, acceptance_commit_sha: commitSha,
+  acceptance_results: [{ command: 'git diff --check', bound_command: ['git', 'diff', '--check', `${candidateSha}..${commitSha}`], base_sha: candidateSha, commit_sha: commitSha, exit: 0 }],
+  acceptance_error: null, provenance_ok: true, runner: 'grok', model: 'grok-4.5',
+  provider_session_id: `fabricated-${index}-${side}`, runner_version: 'grok-test',
+  provider_version: 'grok-test', retries: 0, retry_exhausted: false,
+});
+const pairs = ids.map((id, index) => ({ task_id: id, arms: { A: arm(index, 'A'), B: arm(index, 'B') }, order: ['A', 'B'], sessions: 2 }));
+const report = {
+  schema_version: 1, mode: 'live', base_ref: baseSha, candidate_ref: candidateSha,
+  base_sha: baseSha, candidate_sha: candidateSha, seed: seed.seed,
+  seed_digest: crypto.createHash('sha256').update(fs.readFileSync(seedPath)).digest('hex'),
+  tasks_digest: crypto.createHash('sha256').update(fs.readFileSync(tasksPath)).digest('hex'),
+  actor: seed.actor, runner: 'grok', model: 'grok-4.5', runner_version: 'grok-test', provider_version: 'grok-test',
+  arms: seed.arms, pairs: 60, provider_sessions: 120, session_attempts_started: 120,
+  exclusions: [], retries_per_arm: { A: 0, B: 0 }, max_provider_sessions: 120,
+  endpoint_pp: { low: 0, high: 0, mean: 0 }, quality_pp: { low: 0, high: 0, mean: 0 },
+  decision: 'no-change', open_reasons: [], material_effect_pp: 10, quality_non_inferiority_pp: 5,
+  bootstrap_resamples: 64, pair_results: pairs,
+};
+fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);
+NODE
+set +e
+SIXTY_VALID_OUT="$(node "$REPO_ROOT/scripts/validate-grok-implementer-ab.js" \
+  --report "$FABRICATED" 2>&1)"
+SIXTY_VALID_RC=$?
+assert_eq "0" "$SIXTY_VALID_RC" "validator accepts exact frozen 60-pair sequence"
+node - "$FABRICATED" <<'NODE'
+const fs = require('fs');
+const [target] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(target, 'utf8'));
+report.pair_results[30].task_id = 't30';
+report.pair_results[31].task_id = 't60';
+fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);
+NODE
+set +e
+SEQUENCE_OUT="$(node "$REPO_ROOT/scripts/validate-grok-implementer-ab.js" \
+  --report "$FABRICATED" 2>&1)"
+SEQUENCE_RC=$?
+assert_neq "0" "$SEQUENCE_RC" "validator rejects duplicate or reordered extension tasks"
+assert_contains "$SEQUENCE_OUT" "frozen initial/extension sequence" \
+  "validator names the frozen task sequence"
 
 finalize_test

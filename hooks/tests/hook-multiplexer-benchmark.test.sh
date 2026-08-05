@@ -30,8 +30,10 @@ assert_contains "$(cat "$TEST_TMP/same.out")" "distinct commits" \
 
 # A low-cost real run proves the driver uses detached base/candidate trees and
 # records process-count and payload identity for every fixture.
+AUTOPILOT_HOOK_BRANCH_PROTECTION=1 AUTOPILOT_HOOK_CONTEXT_BUDGET=1 \
+AUTOPILOT_HOOK_ACCUMULATOR=1 \
 node "$DRIVER" --base "$BASE_SHA" --candidate HEAD --fixtures "$FIXTURES" \
-  --warmups 0 --repetitions 1 --report "$TEST_TMP/driver.json" \
+  --warmups 0 --repetitions 2 --report "$TEST_TMP/driver.json" \
   >"$TEST_TMP/driver.out" 2>&1
 DRIVER_REAL_RC=$?
 assert_eq "0" "$DRIVER_REAL_RC" "driver benchmarks resolved base and candidate trees"
@@ -41,6 +43,18 @@ assert_neq "$BASE_SHA" "$(jq -r '.candidate_sha' "$TEST_TMP/driver.json" 2>/dev/
   "driver records a distinct candidate SHA"
 assert_eq "4" "$(jq '.results|length' "$TEST_TMP/driver.json" 2>/dev/null)" \
   "driver emits all four fixtures"
+assert_eq "alternating-paired" "$(jq -r '.results[0].sampling.strategy' "$TEST_TMP/driver.json" 2>/dev/null)" \
+  "driver records paired alternating sampling"
+assert_eq "[\"baseline\",\"candidate\"]" \
+  "$(jq -c '.results[0].sampling.repetitions[0]' "$TEST_TMP/driver.json" 2>/dev/null)" \
+  "first pair runs baseline then candidate"
+assert_eq "[\"candidate\",\"baseline\"]" \
+  "$(jq -c '.results[0].sampling.repetitions[1]' "$TEST_TMP/driver.json" 2>/dev/null)" \
+  "second pair runs candidate then baseline"
+assert_eq "0" "$(jq -r '.results[0].candidate.observed_child_count' "$TEST_TMP/driver.json" 2>/dev/null)" \
+  "hostile inherited opt-ins cannot enable a disabled cold fixture"
+assert_eq "0" "$(jq -r '.results[2].candidate.observed_child_count' "$TEST_TMP/driver.json" 2>/dev/null)" \
+  "hostile inherited opt-ins cannot enable a disabled heavy fixture"
 assert_neq "0" "$(jq -r '.results[0].baseline.processes_started' "$TEST_TMP/driver.json" 2>/dev/null)" \
   "baseline runs registered opt-in commands"
 assert_eq "1" "$(jq -r '.results[0].candidate.processes_started' "$TEST_TMP/driver.json" 2>/dev/null)" \
@@ -78,6 +92,15 @@ const rows = fixtures.fixtures.map((fixture) => {
     expected_child_count: fixture.expected_child_count,
     baseline: summary(baselineMs, fixture.enabled ? 2 : 2),
     candidate: summary(candidateMs, 1),
+    sampling: {
+      strategy: 'alternating-paired',
+      warmups: Array.from({ length: 10 }, (_, i) => (
+        i % 2 === 0 ? ['baseline', 'candidate'] : ['candidate', 'baseline']
+      )),
+      repetitions: Array.from({ length: 50 }, (_, i) => (
+        i % 2 === 0 ? ['baseline', 'candidate'] : ['candidate', 'baseline']
+      )),
+    },
     ratios: { median: candidateMs / baselineMs, p95: candidateMs / baselineMs },
   };
 });
@@ -161,5 +184,18 @@ MAD_OUT="$(node "$VALIDATOR" "$TEST_TMP/valid.json" 2>&1)"
 MAD_RC=$?
 assert_neq "0" "$MAD_RC" "validator rejects MAD/median above the exact 10% limit"
 assert_contains "$MAD_OUT" "exceeds 0.1" "validator names the exact MAD threshold"
+
+node - "$TEST_TMP/valid.json" <<'NODE'
+const fs = require('fs');
+const [target] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(target, 'utf8'));
+report.results[0].candidate.observed_child_count = 99;
+fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);
+NODE
+set +e
+COUNT_OUT="$(node "$VALIDATOR" "$TEST_TMP/valid.json" 2>&1)"
+COUNT_RC=$?
+assert_neq "0" "$COUNT_RC" "validator rejects a fabricated observed child count"
+assert_contains "$COUNT_OUT" "observed child count" "validator names the observed-count mismatch"
 
 finalize_test

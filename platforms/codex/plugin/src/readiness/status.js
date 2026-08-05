@@ -17,6 +17,9 @@ const {
 const {
   dispatchAuthorLiveProbe,
 } = require('./live-probe');
+const {
+  qualifyExactRoleNow,
+} = require('./qualification-provider');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CAPABILITY_STATE = path.join(REPO_ROOT, 'scripts', 'engine-capability-state.js');
@@ -173,7 +176,7 @@ function buildSelectedRoster(
     {
       seat_id: 'reviewer',
       required: true,
-      family: familyOf(resolved.reviewer_engine),
+      family: resolved.reviewer_family || familyOf(resolved.reviewer_engine),
       tuple: providerTuple(
         'reviewer',
         resolved.reviewer_runner,
@@ -339,14 +342,24 @@ function capabilityObservation(boundTuple, now, options = {}) {
   };
 }
 
-function addQualificationObservations(seats, resolved, now, ttlSeconds) {
-  const reviewer = seats.find((seat) => seat.seat_id === 'reviewer');
-  if (reviewer && resolved.reviewer_qualified === true) {
-    reviewer.observations.qualification = qualificationObservation(
-      reviewer.tuple,
-      now,
-      ttlSeconds,
-    );
+function addQualificationObservations(seats, provider, now, ttlSeconds) {
+  for (const seat of seats) {
+    delete seat.observations.qualification;
+    for (const fallback of seat.fallbacks || []) delete fallback.observations.qualification;
+  }
+  if (!provider) return;
+  for (const seat of seats) {
+    const observation = qualifyExactRoleNow(provider, seat.tuple, now, ttlSeconds);
+    if (observation) seat.observations.qualification = observation;
+    for (const fallback of seat.fallbacks || []) {
+      const fallbackObservation = qualifyExactRoleNow(
+        provider,
+        fallback.tuple,
+        now,
+        ttlSeconds,
+      );
+      if (fallbackObservation) fallback.observations.qualification = fallbackObservation;
+    }
   }
 }
 
@@ -371,24 +384,31 @@ function probeCandidate(candidate, now, ttlSeconds, options) {
   if (result.live_observation) candidate.observations.live = result.live_observation;
 }
 
-function collectProviderReadiness(options = {}) {
+function collectProviderReadinessBundle(options = {}) {
   const cwd = options.cwd || process.cwd();
   const now = options.now || new Date().toISOString();
   const env = options.env || process.env;
   const probe = options.probe === true;
-  const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
-    cwd,
-    env,
-  });
-  if (resolvedResult.error
-      || resolvedResult.status !== 0
-      || resolvedResult.parseError
-      || !resolvedResult.result) {
-    const error = new Error('provider readiness roster resolution failed');
+  let resolved = options.resolvedRoster;
+  if (resolved === undefined) {
+    const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
+      cwd,
+      env,
+    });
+    if (resolvedResult.error
+        || resolvedResult.status !== 0
+        || resolvedResult.parseError
+        || !resolvedResult.result) {
+      const error = new Error('provider readiness roster resolution failed');
+      error.code = 'provider_readiness_roster_unavailable';
+      throw error;
+    }
+    resolved = resolvedResult.result;
+  } else if (!resolved || typeof resolved !== 'object' || Array.isArray(resolved)) {
+    const error = new Error('provider readiness host roster is invalid');
     error.code = 'provider_readiness_roster_unavailable';
     throw error;
   }
-  const resolved = resolvedResult.result;
   const ttlSeconds = Number.isSafeInteger(resolved.provider_readiness_receipt_ttl_seconds)
     ? resolved.provider_readiness_receipt_ttl_seconds
     : DEFAULT_RECEIPT_TTL_SECONDS;
@@ -398,7 +418,14 @@ function collectProviderReadiness(options = {}) {
       resolved.provider_readiness_fallback_family_constraint || 'different',
   };
   const roster = buildSelectedRoster(resolved, now, ttlSeconds);
-  addQualificationObservations(roster, resolved, now, ttlSeconds);
+  // Disk scorecards and transport probes are telemetry only. Qualification is
+  // admitted exclusively through a live, non-serializable host provider.
+  addQualificationObservations(
+    roster,
+    options.qualificationProvider,
+    now,
+    ttlSeconds,
+  );
 
   for (const seat of roster) {
     if (seat.tuple.runner === 'unresolved') continue;
@@ -451,16 +478,22 @@ function collectProviderReadiness(options = {}) {
     }
   }
 
-  return createProviderReadinessReceipt({
+  const receipt = createProviderReadinessReceipt({
     roster,
     policy,
     now,
   });
+  return { receipt, roster, policy };
+}
+
+function collectProviderReadiness(options = {}) {
+  return collectProviderReadinessBundle(options).receipt;
 }
 
 module.exports = {
   buildSelectedRoster,
   collectProviderReadiness,
+  collectProviderReadinessBundle,
   familyOf,
   resolveConfiguredRunner,
 };

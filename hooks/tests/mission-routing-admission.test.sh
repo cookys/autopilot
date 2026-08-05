@@ -7,6 +7,10 @@ TEST_NAME="mission-routing-admission"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
+SOURCE_ROOT="$REPO_ROOT"
+git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
+git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
+REPO_ROOT="$TEST_TMP/hermetic-repo"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 const assert = require('assert/strict');
@@ -1297,6 +1301,7 @@ fs.writeFileSync(promptPath, 'this runner must never execute\n');
 const runnerSentinel = path.join(authorityDir, 'runner-called');
 const runnerStub = path.join(authorityDir, 'runner-stub.sh');
 fs.writeFileSync(runnerStub, `#!/usr/bin/env bash
+[ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
 touch "${runnerSentinel}"
 exit 99
 `);

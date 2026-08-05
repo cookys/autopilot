@@ -5,7 +5,7 @@
  * Written by depth-0 at /l3 /l4 /l5 /l6 entry; read by the orchestrator-edit-gate
  * and context-budget hooks. One marker file per session id:
  *   ${AUTOPILOT_SESSION_MODE_DIR:-~/.autopilot/session-mode}/<session-id>.json
- *   { level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
+ *   { session_id, level, repo_root, started_at, expires_at, entry_level?, fallback_reason?,
  *     mission_routing? }
  *
  * Design notes (see docs/plans/2026-07-14-context-budget-orchestrator-gate.md):
@@ -37,6 +37,8 @@ const { admitMissionRouting } = require('./mission-routing-admission');
 
 const LEVELS = new Set(['l3', 'l4', 'l5', 'l6']);
 const DEFAULT_TTL_HOURS = 24;
+const SHA256 = /^[a-f0-9]{64}$/u;
+const DEV_FLOW_ADMISSION_REJECTION_CODE = 'DEV_FLOW_ADMISSION_REQUIRED_OR_STALE';
 const ROUTING_KEYS = Object.freeze([
   'status',
   'admitted',
@@ -97,11 +99,20 @@ function markerDir() {
     || path.join(os.homedir(), '.autopilot', 'session-mode');
 }
 
-// Same fallback chain as hooks/suggest-compact.js — hook-side and CLI-side must
-// derive the SAME id or the marker is invisible to the gate.
+function normalizeSessionId(raw) {
+  return String(raw || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+}
+
+// The portable explicit binding remains first for managed/controller callers.
+// A host may provide CODEX_THREAD_ID, but the Codex lifecycle shell bridge is
+// not assumed or claimed; cwd remains the final fallback for an unbound caller.
 function getSessionId() {
-  const raw = process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || process.cwd();
-  return raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+  const raw = process.env.AUTOPILOT_SESSION_ID
+    || process.env.CLAUDE_CODE_SESSION_ID
+    || process.env.CLAUDE_SESSION_ID
+    || process.env.CODEX_THREAD_ID
+    || process.cwd();
+  return normalizeSessionId(raw);
 }
 
 function markerPath() {
@@ -219,6 +230,123 @@ function verifyMissionRoutingProjection(marker, expected) {
   };
 }
 
+function devFlowAdmissionRejection(reason) {
+  return {
+    status: 'blocked',
+    phase: 'dev_flow_admission',
+    rejection_code: DEV_FLOW_ADMISSION_REJECTION_CODE,
+    reason,
+    dispatcher_called: false,
+    model_calls: 0,
+    mutation_attempts: 0,
+    resources_created: 0,
+  };
+}
+
+function readCampaignAuthority(campaignContract, repoRoot) {
+  let contract = campaignContract;
+  if (typeof campaignContract === 'string') {
+    const absolute = path.isAbsolute(campaignContract)
+      ? campaignContract : path.resolve(repoRoot, campaignContract);
+    try {
+      contract = JSON.parse(fs.readFileSync(absolute, 'utf8'));
+    } catch (error) {
+      return { error: `sealed campaign is unreadable: ${error.message}` };
+    }
+  }
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) {
+    return { error: 'sealed campaign is malformed' };
+  }
+  const runtime = contract.mission_runtime || contract.campaign_projection;
+  const repoIdentity = contract.repo_identity
+    || (contract.campaign_projection && contract.campaign_projection.repo_identity);
+  if (!runtime || typeof runtime !== 'object' || Array.isArray(runtime)
+      || typeof repoIdentity !== 'string'
+      || !SHA256.test(runtime.mission_policy_digest || '')
+      || !SHA256.test(runtime.mission_graph_digest || '')) {
+    return { error: 'sealed campaign Mission projection is malformed' };
+  }
+  return {
+    repo_identity: repoIdentity,
+    mission_policy_digest: runtime.mission_policy_digest,
+    mission_graph_digest: runtime.mission_graph_digest,
+  };
+}
+
+function validateManagedDevFlowAdmission({
+  repoRoot,
+  effectiveLevel,
+  campaignContract,
+  markerFile = markerPath(),
+  now = Date.now(),
+} = {}) {
+  const reject = (reason) => ({ valid: false, reason });
+  let stat;
+  try {
+    stat = fs.lstatSync(markerFile);
+  } catch (error) {
+    return reject(error.code === 'ENOENT'
+      ? 'session marker absent'
+      : `session marker malformed: ${error.message}`);
+  }
+  if (!stat.isFile()) return reject('session marker malformed: marker is not a regular file');
+  let marker;
+  try {
+    marker = JSON.parse(fs.readFileSync(markerFile, 'utf8'));
+  } catch (error) {
+    return reject(`session marker malformed: ${error.message}`);
+  }
+  if (!marker || typeof marker !== 'object' || Array.isArray(marker)
+      || !LEVELS.has(marker.level)
+      || typeof marker.session_id !== 'string'
+      || !marker.session_id
+      || normalizeSessionId(marker.session_id) !== marker.session_id
+      || typeof marker.repo_root !== 'string' || !path.isAbsolute(marker.repo_root)) {
+    return reject('session marker malformed: identity fields are invalid');
+  }
+  if (marker.session_id !== getSessionId()) {
+    return reject('session marker session mismatch');
+  }
+  const startedAt = Date.parse(marker.started_at);
+  const expiresAt = Date.parse(marker.expires_at);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(expiresAt) || startedAt > now) {
+    return reject('session marker malformed: timestamps are invalid');
+  }
+  if (expiresAt <= now) return reject('session marker expired');
+  if (!LEVELS.has(effectiveLevel) || marker.level !== effectiveLevel) {
+    return reject(`session marker level mismatch: marker=${marker.level} effective=${effectiveLevel || 'absent'}`);
+  }
+  const currentRepoIdentity = markerRepoIdentity(path.resolve(repoRoot || process.cwd()));
+  const markerIdentity = markerRepoIdentity(marker.repo_root);
+  if (!currentRepoIdentity || !markerIdentity || markerIdentity !== currentRepoIdentity) {
+    return reject('session marker repository mismatch');
+  }
+  const campaign = readCampaignAuthority(campaignContract, path.resolve(repoRoot || process.cwd()));
+  if (campaign.error) {
+    return reject(`session marker Mission projection mismatch: ${campaign.error}`);
+  }
+  if (campaign.repo_identity !== currentRepoIdentity) {
+    return reject('session marker repository mismatch: sealed campaign identity differs');
+  }
+  const projection = verifyMissionRoutingProjection(marker, campaign);
+  if (!projection.valid) {
+    return reject(`session marker Mission projection mismatch: ${projection.reason}`);
+  }
+  const sourcesDigest = marker.mission_routing.admission.sources_digest;
+  if (!SHA256.test(sourcesDigest || '')) {
+    return reject('session marker Mission projection mismatch: sources_digest is invalid');
+  }
+  return {
+    valid: true,
+    marker_level: marker.level,
+    repo_identity: currentRepoIdentity,
+    mission_policy_digest: campaign.mission_policy_digest,
+    mission_graph_digest: campaign.mission_graph_digest,
+    sources_digest: sourcesDigest,
+    admission_digest: projection.admission_digest,
+  };
+}
+
 function gitToplevel() {
   try {
     return execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -273,6 +401,7 @@ function cmdSet(args) {
   // Surface ordinary zero-spend no-op adoption on the marker for consumers.
   const now = Date.now();
   const marker = {
+    session_id: getSessionId(),
     level,
     repo_root: repoRoot,
     started_at: new Date(now).toISOString(),
@@ -367,6 +496,7 @@ function validateCloseReceipt(file, rootRunId, marker = readMarker()) {
   ];
   const evidenceKeys = [
     'mission', 'campaigns', 'lifecycle', 'integration', 'merge_preflight', 'merge_execution',
+    'merge_provenance',
   ];
   if (required.some((key) => !Object.prototype.hasOwnProperty.call(value, key))
       || !Array.isArray(value.accepted_blockers)
@@ -466,9 +596,14 @@ function main() {
 
 if (require.main === module) process.exit(main());
 module.exports = {
+  DEV_FLOW_ADMISSION_REJECTION_CODE,
+  devFlowAdmissionRejection,
   readMarker,
   getSessionId,
+  normalizeSessionId,
   markerPath,
+  markerRepoIdentity,
+  validateManagedDevFlowAdmission,
   validateCloseReceipt,
   verifyMissionRoutingProjection,
   LEVELS,

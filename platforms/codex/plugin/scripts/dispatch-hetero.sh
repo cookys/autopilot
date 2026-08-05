@@ -115,6 +115,7 @@ AGY_BIN="agy"
 GROK_BIN="grok"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
                      # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
+MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
 KEEP=0
 RETENTION_OWNER=""
@@ -172,6 +173,10 @@ PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for the detach declare -p
+AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
+AGY_STDERR=""         # private native stderr, copied to agent_log only on failure
+AGY_PARSED=""         # validated derived {response,usage}; native envelope parsed once
+AGY_USAGE_JSON="null"
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
 CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
 IDENTITY_DRIFT=0      # 1 iff worker mutated consuming-repo user.name/email via shared .git/config
@@ -418,6 +423,9 @@ cleanup() {
   [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
   [ -n "${CAMPAIGN_CONTRACT_SNAPSHOT:-}" ] && rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
+  [ -n "${AGY_ENVELOPE:-}" ] && rm -f "$AGY_ENVELOPE"
+  [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR"
+  [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
   # Parent that transferred claim to detached child must not mark WO failed on its EXIT.
   if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ] && [ "${_CONT_WO_PARENT_TRANSFERRED:-0}" != "1" ]; then
@@ -688,16 +696,23 @@ emit() { # status commit files ins del worktree error
   if [ "${AGENT_EXIT:-1}" -eq 0 ] && [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] \
      && [ -r "$SELF_DIR/dispatch-status.js" ] && command -v node >/dev/null 2>&1; then
     # Format is DECLARED by runner (this script knows its own invocation flags: codex =
-    # chrome text, grok = --output-format json, agy/cc-shim = plain) — never content-
+    # chrome text, grok = --output-format json, agy = response-only plain log with a
+    # separately validated native envelope, cc-shim = plain) — never content-
     # sniffed, so a worker printing JSON/fake-chrome cannot self-report telemetry.
     # AGENT_EXIT==0 gate: on a clean exit the harness footer always owns the log tail,
     # so the parser's tail-anchored token read cannot be spoofed; on an abnormal exit
     # the tail is worker-controlled → usage stays null (honest, not fabricated).
-    local log_format="plain"
-    [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
-    [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
-    [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
-    usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
+    if [ "${IS_CODEX:-0}" -eq 0 ] && [ "${IS_GROK:-0}" -eq 0 ] \
+       && [ "${IS_CCSHIM:-0}" -eq 0 ] && [ "${IS_PI:-0}" -eq 0 ] \
+       && [ "${IS_QODER:-0}" -eq 0 ]; then
+      usage_json="${AGY_USAGE_JSON:-null}"
+    else
+      local log_format="plain"
+      [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
+      [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
+      [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
+      usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
+    fi
     case "$usage_json" in
       '{'*'}') ;;   # single-line JSON object — accepted
       *) usage_json="null" ;;
@@ -1204,6 +1219,7 @@ try {
   process.stdout.write(error.message || String(error));
   process.exit(3);
 }
+
 NODE
     )"
     bridge_rc=$?
@@ -1228,6 +1244,41 @@ NODE
         ;;
     esac
   done
+}
+
+check_managed_dev_flow_admission() {
+  local consumed_repo admission_out admission_rc
+  [ "$CAMPAIGN_PROJECTION_BOUND" -eq 1 ] || return 0
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] || return 0
+  consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$consumed_repo" ] \
+    || die_dev_flow_admission "session marker repository mismatch: no Git repository"
+  admission_out="$(
+    node - "$SELF_DIR/session-mode.js" "$consumed_repo" \
+      "${AUTOPILOT_LEVEL:-}" "$CAMPAIGN_CONTRACT_FILE" <<'NODE' 2>&1
+'use strict';
+const [sessionModePath, repoRoot, effectiveLevel, campaignContract] = process.argv.slice(2);
+try {
+  const { validateManagedDevFlowAdmission } = require(sessionModePath);
+  const result = validateManagedDevFlowAdmission({
+    repoRoot,
+    effectiveLevel: String(effectiveLevel || '').toLowerCase(),
+    campaignContract,
+  });
+  if (!result.valid) {
+    process.stdout.write(result.reason);
+    process.exit(3);
+  }
+  process.stdout.write('READY');
+} catch (error) {
+  process.stdout.write(error.message || String(error));
+  process.exit(3);
+}
+NODE
+  )"
+  admission_rc=$?
+  [ "$admission_rc" -eq 0 ] && [ "$admission_out" = "READY" ] \
+    || die_dev_flow_admission "${admission_out:-session marker admission validation failed}"
 }
 
 check_mission_enforcement_gate() {
@@ -1276,9 +1327,15 @@ die_precondition() {
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
+  exit 2
+}
+
+die_dev_flow_admission() {
+  printf '{ "status": "blocked", "phase": "dev_flow_admission", "rejection_code": "DEV_FLOW_ADMISSION_REQUIRED_OR_STALE", "reason": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "resources_created": 0 }\n' \
+    "$(_flat_json_escape "$1")"
   exit 2
 }
 
@@ -1433,7 +1490,7 @@ die_resource_budget() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
     "$count" "$limit" "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" \
@@ -1460,7 +1517,9 @@ write_manifest() {
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
-  # grok --output-format json / agy+cc-shim plain). dispatch-status.js trusts this
+  # grok --output-format json / agy response-only plain log with a separate private
+  # native envelope / cc-shim plain).
+  # dispatch-status.js trusts this
   # over content sniffing so worker output can never self-report telemetry.
   local log_format="plain"
   [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
@@ -1668,6 +1727,22 @@ set_runner_flags() {
   esac
 }
 
+D2_AGY_RESPONSE_CLAIM="cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4"
+D2_AGY_USAGE_CLAIM="cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f10371776f30006b3e"
+D2_AGY_EXPECTED_IDS="[\"$D2_AGY_RESPONSE_CLAIM\",\"$D2_AGY_USAGE_CLAIM\"]"
+validate_d2_agy_claims() {
+  local receipt validator observed rc=0
+  receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$SELF_DIR/../docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
+  validator="$SELF_DIR/platform-capability-claims.js"
+  [ -r "$receipt" ] && [ -r "$validator" ] && command -v node >/dev/null 2>&1 \
+    || die_precondition "D2 capability claim validation failed"
+  observed="$(node "$validator" validate-consumer --receipt "$receipt" --consumer D2 \
+    --claim-id "$D2_AGY_RESPONSE_CLAIM" --claim-id "$D2_AGY_USAGE_CLAIM" \
+    --emit-claim-ids --reprobe --reprobe-binary "$AGY_BIN" 2>/dev/null)" || rc=$?
+  [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
+    || die_precondition "D2 capability claim validation failed"
+}
+
 case "$EFFORT" in
   low|medium|high|xhigh|max) ;;
   *) die_precondition "--effort must be one of low|medium|high|xhigh|max (got: $EFFORT)" ;;
@@ -1741,6 +1816,7 @@ if [ "$CAMPAIGN_PROJECTION_BOUND" -ne 1 ]; then
 else
   # Sealed strict projection is present: still bind active L5/L6 (and L3
   # fallback) markers to the campaign's policy/graph digests before spend.
+  check_managed_dev_flow_admission
   check_marker_campaign_admission_bridge
 fi
 emit_sealed_zero_diff_if_authorized
@@ -1749,6 +1825,32 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
     "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
 fi
 set_runner_flags
+
+if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  validate_d2_agy_claims
+fi
+
+normalize_agy_model() {
+  local requested="$1" tier="high" models resolved
+  case "$EFFORT" in low) tier=low ;; medium) tier=medium ;; esac
+  case "$requested" in
+    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      models="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
+        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
+      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
+      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
+      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
+      printf '%s' "$resolved" ;;
+    *) printf '%s' "$requested" ;;
+  esac
+}
+
+if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+  MODEL="$(normalize_agy_model "$MODEL")"
+fi
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then
   for skill in "${SKILLS[@]}"; do
@@ -2656,9 +2758,13 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 # legacy minimal remover + branch deletion remains only for unmanaged one-shots.
 abort_dispatch() {
   reap_container
+  cleanup_managed_codex_home
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
+  [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
+  [ -n "$AGY_STDERR" ] && rm -f "$AGY_STDERR"
+  [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ]; then
     local abort_tip
@@ -2688,6 +2794,37 @@ trap abort_dispatch INT TERM
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
 # subshell cwd surviving the container boundary).
+prepare_managed_codex_home() {
+  local controller_home="${CODEX_HOME:-$HOME/.codex}"
+  MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
+    || die_precondition "cannot allocate isolated managed Codex home"
+  chmod 700 "$MANAGED_CODEX_HOME" \
+    || die_precondition "cannot protect isolated managed Codex home"
+  # Codex documents that --ignore-user-config still reads authentication from
+  # CODEX_HOME. Copy only that credential file: plugin/config/session state is
+  # deliberately excluded so the controller's PreToolUse hook cannot intercept
+  # the managed implementer.
+  if [ -r "$controller_home/auth.json" ]; then
+    cp "$controller_home/auth.json" "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot stage managed Codex authentication"
+    chmod 600 "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot protect managed Codex authentication"
+  fi
+}
+
+cleanup_managed_codex_home() {
+  [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
+  case "$MANAGED_CODEX_HOME" in
+    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*)
+      rm -rf -- "$MANAGED_CODEX_HOME"
+      ;;
+    *)
+      echo "WARNING: refusing to remove unexpected managed Codex home: $MANAGED_CODEX_HOME" >&2
+      ;;
+  esac
+  MANAGED_CODEX_HOME=""
+}
+
 run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + CONTAINMENT
   if [ "${IN_DETACHED_CHILD:-0}" -eq 1 ]; then
     # In the detached child we already ARE the surviving `setsid` session (created at launch),
@@ -2724,10 +2861,13 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
 # the SAME engine invocation with ZERO behavioral difference.
 run_agent() {
 if [ "$IS_CODEX" -eq 1 ]; then
-  run_worker bash -c 'cd "$1" && exec "$5" exec --model "$2" \
+  prepare_managed_codex_home
+  run_worker bash -c 'cd "$1" && exec env -u CODEX_THREAD_ID CODEX_HOME="$6" \
+      "$5" exec --ignore-user-config --model "$2" \
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
-      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN"
+      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN" "$MANAGED_CODEX_HOME"
+  cleanup_managed_codex_home
 elif [ "$IS_CCSHIM" -eq 1 ]; then
   # cc-shim: the Claude Code CLI (`claude -p`) driving an arbitrary Anthropic-compatible
   # endpoint via ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN from the env. The MODEL (e.g.
@@ -2852,8 +2992,39 @@ run build/test or to commit.
 ===
 
 "
-  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" --dangerously-skip-permissions --print-timeout "$5"' \
-      _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT"
+  AGY_ENVELOPE="$(mktemp -t dispatch-hetero-agy-envelope-XXXXXX)"
+  AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
+  AGY_PARSED="$(mktemp -t dispatch-hetero-agy-parsed-XXXXXX)"
+  AGY_USAGE_JSON="null"
+  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" \
+      --dangerously-skip-permissions --output-format json --print-timeout "$5" \
+      >"$6" 2>"$7"' \
+      _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT" \
+      "$AGY_ENVELOPE" "$AGY_STDERR"
+  if [ "$AGENT_EXIT" -ne 0 ]; then
+    cat "$AGY_STDERR" >> "$LOG"
+    printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \
+      "$AGENT_EXIT" >> "$LOG"
+    return 0
+  fi
+  if ! node "$SELF_DIR/dispatch-status.js" --log "$AGY_ENVELOPE" --agy-envelope \
+      > "$AGY_PARSED" 2>/dev/null; then
+    cat "$AGY_STDERR" >> "$LOG"
+    printf '\n[dispatch-hetero: agy native JSON envelope invalid — response and usage NOT parsed]\n' \
+      >> "$LOG"
+    AGENT_EXIT=65
+    AGY_USAGE_JSON="null"
+    return 0
+  fi
+  node - "$AGY_PARSED" "$LOG" <<'NODE'
+const fs = require('fs');
+const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+fs.writeFileSync(process.argv[3], parsed.response);
+NODE
+  AGY_USAGE_JSON="$(node -e '
+    const fs = require("fs");
+    process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).usage));
+  ' "$AGY_PARSED")"
 fi
 }
 
@@ -3688,6 +3859,9 @@ detached_main() {
   rm -f "$child_prompt" 2>/dev/null || true
   [ -n "$packed_prompt_for_child" ] && rm -f "$packed_prompt_for_child" 2>/dev/null || true
   [ -n "$campaign_prompt_for_child" ] && rm -f "$campaign_prompt_for_child" 2>/dev/null || true
+  [ -n "${AGY_ENVELOPE:-}" ] && rm -f "$AGY_ENVELOPE" 2>/dev/null || true
+  [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR" 2>/dev/null || true
+  [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED" 2>/dev/null || true
   exit "$OUTCOME_EXIT"
 }
 
@@ -3700,8 +3874,9 @@ dispatch_detached_run() {
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE \
+      AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_PROJECTION_BOUND \
@@ -3718,7 +3893,7 @@ dispatch_detached_run() {
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \

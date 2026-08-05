@@ -1980,9 +1980,12 @@ function updateWorkOrderLifecycle(commonDir, ref, patch = {}, options = {}) { co
     bumpGeneration: options.bumpGeneration != null? options.bumpGeneration
       : mutatesIdentity, bindArtifacts: options.bindArtifacts === true, preserveOwner,
     transferOwner: options.transferOwner === true, updateLifecycle: !preserveOwner || options.transferOwner === true,});}
-function reconcileReceiptCanonical(receipt) { return { schema_version: receipt.schema_version, artifact_type: receipt.artifact_type,
+function reconcileReceiptCanonical(receipt) { const body = { schema_version: receipt.schema_version, artifact_type: receipt.artifact_type,
     issued_at: receipt.issued_at, fresh_until: receipt.fresh_until, git_common_dir: receipt.git_common_dir,
-    root_run_id: receipt.root_run_id, classifications: receipt.classifications, identity: receipt.identity, authority: receipt.authority,};}
+    root_run_id: receipt.root_run_id, classifications: receipt.classifications, identity: receipt.identity, authority: receipt.authority,};
+  if (isStr(receipt.hook_invocation_digest)) body.hook_invocation_digest = receipt.hook_invocation_digest;
+  if (isStr(receipt.hook_trigger)) body.hook_trigger = receipt.hook_trigger;
+  return body;}
 const reconcileReceiptDigest = (r) => sha256Json(reconcileReceiptCanonical(r));
 function mergeIdentityField(identity, src, keys) { if (!isObj(src)) return;
   for (const key of keys) { if (isStr(src[key])) identity[key] = src[key];}}
@@ -2043,6 +2046,55 @@ function reconcilePostCompact(input = {}) { const commonDir = input.commonDir ||
         };
       }
       const match = matches[0];
+      const hookInvocationDigest = input.hook_invocation_digest || null;
+      const hookTrigger = input.hook_trigger || null;
+      if ((hookInvocationDigest !== null && !/^[0-9a-f]{64}$/.test(hookInvocationDigest))
+          || (hookInvocationDigest !== null && hookTrigger !== 'manual' && hookTrigger !== 'auto')
+          || (hookInvocationDigest === null && hookTrigger !== null)) {
+        return {
+          status: 'reject',
+          reason_code: 'postcompact_hook_identity_invalid',
+          reason: 'PostCompact hook identity must be a sha256 digest plus manual|auto trigger',
+          classifications: [],
+          duplicate_dispatch: 0,
+        };
+      }
+      const outPath = input.receiptPath || reconcileReceiptPath(commonDir, rootRunId);
+      const priorReceiptLoaded = readJsonStrict(outPath);
+      if (!priorReceiptLoaded.ok) {
+        return {
+          status: 'reject',
+          reason_code: 'postcompact_prior_receipt_invalid',
+          reason: priorReceiptLoaded.reason || 'existing PostCompact reconciliation receipt is unreadable',
+          classifications: [],
+          duplicate_dispatch: 0,
+        };
+      }
+      const priorReceipt = priorReceiptLoaded.value;
+      if (priorReceipt && hookInvocationDigest !== null) {
+        if (priorReceipt.schema_version !== RECONCILE_SCHEMA
+            || priorReceipt.artifact_type !== RECONCILE_ARTIFACT
+            || priorReceipt.root_run_id !== rootRunId
+            || priorReceipt.git_common_dir !== commonDir
+            || priorReceipt.digest !== reconcileReceiptDigest(priorReceipt)) {
+          return {
+            status: 'reject',
+            reason_code: 'postcompact_prior_receipt_invalid',
+            reason: 'existing PostCompact reconciliation receipt failed integrity validation',
+            classifications: [],
+            duplicate_dispatch: 0,
+          };
+        }
+        if (priorReceipt.hook_invocation_digest === hookInvocationDigest) {
+          return {
+            status: 'reject',
+            reason_code: 'postcompact_duplicate_invocation',
+            reason: 'the exact PostCompact session/turn/trigger invocation was already reconciled',
+            classifications: [],
+            duplicate_dispatch: 0,
+          };
+        }
+      }
       const observed = validateControllerRecoveryAuthority(match.work_order, {
         rootRunId,
         graphNode,
@@ -2088,7 +2140,12 @@ function reconcilePostCompact(input = {}) { const commonDir = input.commonDir ||
         identity,
         authority,
       };
+      if (hookInvocationDigest !== null) {
+        receipt.hook_invocation_digest = hookInvocationDigest;
+        receipt.hook_trigger = hookTrigger;
+      }
       receipt.digest = reconcileReceiptDigest(receipt);
+      writeAtomicJson(outPath, receipt);
       return {
         status: observed.ok ? 'reconciled' : 'reject',
         reason_code: observed.ok ? null : observed.reason_code,
@@ -2097,7 +2154,7 @@ function reconcilePostCompact(input = {}) { const commonDir = input.commonDir ||
         classifications: [classification],
         identity,
         receipt,
-        receipt_path: null,
+        receipt_path: outPath,
         authority_sources_checked: authority,
         recovery_observation: observed.observation || null,
         duplicate_dispatch: 0,

@@ -1,0 +1,17 @@
+{
+  "runner": "agy",
+  "model": "Gemini 3.6 Flash (High)",
+  "status": "reviewed",
+  "verdict": "FIX-THEN-SHIP",
+  "findings": "fixture finding",
+  "no_finding_proof": null,
+  "raw_log": "/tmp/dispatch-review-fixture",
+  "error": null,
+  "usage": {
+    "total_tokens": 142,
+    "input_tokens": 101,
+    "output_tokens": 23,
+    "cache_read_tokens": 7,
+    "source": "agy-json"
+  }
+}

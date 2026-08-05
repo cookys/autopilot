@@ -1,0 +1,831 @@
+{
+  "schema_version": 1,
+  "artifact_type": "platform-capability-claims",
+  "generated_at": "2026-08-03T22:45:43.770Z",
+  "validator_version": "1.0.0",
+  "claims": [
+    {
+      "claim_id": "cap-v1-0c8b408171b437a92152333b3a79a888fc14090807be55e91676d64ad15f4cef",
+      "capability_id": "codex-install-time-generator",
+      "target_identity": {
+        "runner": "codex",
+        "model": null,
+        "role": "optional_probe",
+        "effort": null,
+        "endpoint": null,
+        "family": "openai",
+        "binary_realpath": "/home/cookys/.codex/packages/standalone/releases/0.146.0-x86_64-unknown-linux-musl/bin/codex",
+        "cli_version": "0.146.0"
+      },
+      "official_contract": {
+        "locator": "local-cli://codex/0.146.0",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "e0e9bf467f5eaa19c0d1f3d4db6f10844cdb080d30ddfdcbb384a16cb54171e5",
+        "assertion": "Codex exposes a fail-loud install and upgrade payload generator lifecycle"
+      },
+      "live_evidence": {
+        "cli_version": "0.146.0",
+        "probe_command_sha256": "f90923c77b09e9ecfc8605753531a792d52d37c606d180d2541f47a60a76e8b3",
+        "probe_output_sha256": "e0e9bf467f5eaa19c0d1f3d4db6f10844cdb080d30ddfdcbb384a16cb54171e5",
+        "behavior_class": "blocked-negative-finding",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "blocked: no supported install-time generator lifecycle was observed",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": false,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "c1620bb07a68cc93cc404a785800b840e91657b451365f60d965d74d5e2934bb",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "contract_live_contradiction"
+      },
+      "status": "blocked"
+    },
+    {
+      "claim_id": "cap-v1-22e96639504e14d8a36e29a8e3d5747807a4ec7cc99f454d6898fe2680790575",
+      "capability_id": "provider-transport-verification-author-agy-gemini-3-5-flash-high",
+      "target_identity": {
+        "runner": "agy",
+        "model": "Gemini 3.5 Flash (High)",
+        "role": "verification_author",
+        "effort": "high",
+        "endpoint": null,
+        "family": "google",
+        "binary_realpath": "/home/cookys/.local/bin/agy",
+        "cli_version": "1.1.10"
+      },
+      "official_contract": {
+        "locator": "repo:.claude/review-loop-config.md#review-roster",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "4467825f9d6240923c0494eda5ab7d7a101bfe5a6c3ec3a73b0ca660a2dfcb32",
+        "assertion": "exact provider transport tuple verification-author-agy-gemini-3-5-flash-high is declared and its installed CLI exposes the required model/effort transport surface"
+      },
+      "live_evidence": {
+        "cli_version": "1.1.10",
+        "probe_command_sha256": "c587ff19f873e695f67c86e3f2f9b042bbd4ebcbbe0091d24f2ba4af27dce0be",
+        "probe_output_sha256": "c64e4bf74262cebba7d161d29e1632682f64f844c6ca1a718c77a1fa4e8f8343",
+        "behavior_class": "installed-transport-surface",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "exact provider transport tuple verification-author-agy-gemini-3-5-flash-high is declared and its installed CLI exposes the required model/effort transport surface",
+        "transport_binding": {
+          "execution_model": "gemini-3.5-flash-high",
+          "execution_effort_argument": null,
+          "normalized_model": "gemini-3.5-flash-high",
+          "normalized_effort": "high"
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "e36804d0e7d169e211ca2200335be031041b8734a9a932ce87b5dc0d5b552612",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4",
+      "capability_id": "agy-structured-envelope-response",
+      "target_identity": {
+        "runner": "agy",
+        "model": "Gemini 3.6 Flash (High)",
+        "role": "telemetry",
+        "effort": "high",
+        "endpoint": null,
+        "family": "google",
+        "binary_realpath": "/home/cookys/.local/bin/agy",
+        "cli_version": "1.1.10"
+      },
+      "official_contract": {
+        "locator": "agy://cli-help/1.1.10#output-format-json",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "c64e4bf74262cebba7d161d29e1632682f64f844c6ca1a718c77a1fa4e8f8343",
+        "assertion": "agy native JSON envelope exposes a separately typed response string"
+      },
+      "live_evidence": {
+        "cli_version": "1.1.10",
+        "probe_command_sha256": "65e9c427fc9c4c208a9cf96fb0df92248e131bf186390acb1246ea8f06be0652",
+        "probe_output_sha256": "118afc24231512ada8393ee7136adbdda50cfa6e6275f4895d8e8db044d7a42d",
+        "behavior_class": "structured-envelope-response",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "agy native JSON envelope exposes a separately typed response string",
+        "transport_binding": {
+          "execution_model": "gemini-3.6-flash-high",
+          "execution_effort_argument": null,
+          "normalized_model": "gemini-3.6-flash-high",
+          "normalized_effort": "high"
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "e36804d0e7d169e211ca2200335be031041b8734a9a932ce87b5dc0d5b552612",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-38b04eae997766eae0b1c4e329eeee219a130bb4a0fec48cdc8ba30d5973520c",
+      "capability_id": "opencode-debug-skill-installed-completeness",
+      "target_identity": {
+        "runner": "opencode",
+        "model": null,
+        "role": "optional_probe",
+        "effort": null,
+        "endpoint": null,
+        "family": "sst",
+        "binary_realpath": "/home/cookys/.opencode/bin/opencode",
+        "cli_version": "1.17.15"
+      },
+      "official_contract": {
+        "locator": "local-cli://opencode/1.17.15",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "b594ad32674bf8008017157833ab87316170523ed23dbd10c37ae9931d2ba178",
+        "assertion": "OpenCode debug skill returns complete discovered-skill JSON"
+      },
+      "live_evidence": {
+        "cli_version": "1.17.15",
+        "probe_command_sha256": "1d59c05e4c1ca1d2dd083a857f521d90aebdd4dbddd3e8888308d771171a08a5",
+        "probe_output_sha256": "b594ad32674bf8008017157833ab87316170523ed23dbd10c37ae9931d2ba178",
+        "behavior_class": "blocked-negative-finding",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "blocked: installed debug skill output truncates near 65536 bytes",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": false,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "6a6280d42c1177a028bf20a8970389eeebaaf59ab618e43e457008165828c657",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "contract_live_contradiction"
+      },
+      "status": "blocked"
+    },
+    {
+      "claim_id": "cap-v1-3dec12f7c410d396af31af2392f11b3ec815543477269f6da1168604281d0693",
+      "capability_id": "provider-transport-qc-claude-native-opus-high",
+      "target_identity": {
+        "runner": "claude-native",
+        "model": "claude-opus",
+        "role": "qc",
+        "effort": "high",
+        "endpoint": null,
+        "family": "anthropic",
+        "binary_realpath": "/home/cookys/.local/share/claude/versions/2.1.220",
+        "cli_version": "2.1.220"
+      },
+      "official_contract": {
+        "locator": "repo:.claude/review-loop-config.md#review-roster",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "4467825f9d6240923c0494eda5ab7d7a101bfe5a6c3ec3a73b0ca660a2dfcb32",
+        "assertion": "exact provider transport tuple qc-claude-native-opus-high is declared and its installed CLI exposes the required model/effort transport surface"
+      },
+      "live_evidence": {
+        "cli_version": "2.1.220",
+        "probe_command_sha256": "12464ef6c8b26bc3a0962c28cf959bff4f979deded61b78f8b8c6489327edcae",
+        "probe_output_sha256": "fcd5b45507c7c602d54d85a300eab288a8a3c6770c6def696ca19a3100725de4",
+        "behavior_class": "installed-transport-surface",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "exact provider transport tuple qc-claude-native-opus-high is declared and its installed CLI exposes the required model/effort transport surface",
+        "transport_binding": {
+          "execution_model": "opus",
+          "execution_effort_argument": "high",
+          "normalized_model": "claude-opus",
+          "normalized_effort": "high"
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "5362604672027e074adbf254a01d5310394b0babef8529e13f1596e4c56f89db",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-430668690653dfaa807c370070e20db0cae56634bdbeb1af14ffadef7a72c992",
+      "capability_id": "codex-postcompact-failure-boundary",
+      "target_identity": {
+        "runner": "codex",
+        "model": null,
+        "role": "compaction_hook",
+        "effort": null,
+        "endpoint": null,
+        "family": "openai",
+        "binary_realpath": "/home/cookys/.codex/packages/standalone/releases/0.146.0-x86_64-unknown-linux-musl/bin/codex",
+        "cli_version": "0.146.0"
+      },
+      "official_contract": {
+        "locator": "https://learn.chatgpt.com/docs/hooks.md#postcompact",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "458ed508d0f3dbb1a3106a906951827bad7af1d2f7dc1f50000e11dc7150d1aa",
+        "assertion": "Codex PostCompact zero-exit command permits compaction to complete without blocking"
+      },
+      "live_evidence": {
+        "cli_version": "0.146.0",
+        "probe_command_sha256": "67ae1d44ee28909d7e6f2f2b42aad7b16371004bdbb49029a509ba0f155f96c6",
+        "probe_output_sha256": "89d76cd6d7dc8d815761d547e3325e9dcd6858a29d259093ef27a22cbb1fbd23",
+        "behavior_class": "host-nonblocking-boundary",
+        "observed_at": "2026-08-03T22:23:16.577Z",
+        "ttl_seconds": 1209600,
+        "result": "Codex PostCompact zero-exit command permits compaction to complete without blocking",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:23:16.577Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "c1620bb07a68cc93cc404a785800b840e91657b451365f60d965d74d5e2934bb",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-441c3e019522b5db5a860dedf0184371bdf4f26fc4a41003b841aa78e8bc271b",
+      "capability_id": "provider-transport-qc-codex-gpt-5-5-xhigh",
+      "target_identity": {
+        "runner": "codex",
+        "model": "gpt-5.5",
+        "role": "qc",
+        "effort": "xhigh",
+        "endpoint": null,
+        "family": "openai",
+        "binary_realpath": "/home/cookys/.codex/packages/standalone/releases/0.146.0-x86_64-unknown-linux-musl/bin/codex",
+        "cli_version": "0.146.0"
+      },
+      "official_contract": {
+        "locator": "repo:.claude/review-loop-config.md#review-roster",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "4467825f9d6240923c0494eda5ab7d7a101bfe5a6c3ec3a73b0ca660a2dfcb32",
+        "assertion": "exact provider transport tuple qc-codex-gpt-5-5-xhigh is declared and its installed CLI exposes the required model/effort transport surface"
+      },
+      "live_evidence": {
+        "cli_version": "0.146.0",
+        "probe_command_sha256": "4cf93dc52f7253cb3b9bbccca88b9920b6a660360dff60b94123cc8e6ffe350f",
+        "probe_output_sha256": "e0e9bf467f5eaa19c0d1f3d4db6f10844cdb080d30ddfdcbb384a16cb54171e5",
+        "behavior_class": "installed-transport-surface",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "exact provider transport tuple qc-codex-gpt-5-5-xhigh is declared and its installed CLI exposes the required model/effort transport surface",
+        "transport_binding": {
+          "execution_model": "gpt-5.5",
+          "execution_effort_argument": "xhigh",
+          "normalized_model": "gpt-5.5",
+          "normalized_effort": "xhigh"
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "c1620bb07a68cc93cc404a785800b840e91657b451365f60d965d74d5e2934bb",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-9a47acdde2782ec994dab242cd49e89fd91e07119b192ffc79bfacfe380fe1d3",
+      "capability_id": "codex-postcompact-registration",
+      "target_identity": {
+        "runner": "codex",
+        "model": null,
+        "role": "compaction_hook",
+        "effort": null,
+        "endpoint": null,
+        "family": "openai",
+        "binary_realpath": "/home/cookys/.codex/packages/standalone/releases/0.146.0-x86_64-unknown-linux-musl/bin/codex",
+        "cli_version": "0.146.0"
+      },
+      "official_contract": {
+        "locator": "https://learn.chatgpt.com/docs/hooks.md#postcompact",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "458ed508d0f3dbb1a3106a906951827bad7af1d2f7dc1f50000e11dc7150d1aa",
+        "assertion": "Codex plugin loader registers and invokes PostCompact command hooks"
+      },
+      "live_evidence": {
+        "cli_version": "0.146.0",
+        "probe_command_sha256": "e1f3c44e9215cbadb67a306a26323bad7d684d32ddb510830e59267621b52605",
+        "probe_output_sha256": "89d76cd6d7dc8d815761d547e3325e9dcd6858a29d259093ef27a22cbb1fbd23",
+        "behavior_class": "host-registration",
+        "observed_at": "2026-08-03T22:23:16.577Z",
+        "ttl_seconds": 1209600,
+        "result": "Codex plugin loader registers and invokes PostCompact command hooks",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:23:16.577Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "c1620bb07a68cc93cc404a785800b840e91657b451365f60d965d74d5e2934bb",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-a1c91e7003c74984b6cd71aa1cd70cbc9f1990a7fbe4ac2926973926652673b6",
+      "capability_id": "provider-transport-implementer-grok-grok-4-5-high",
+      "target_identity": {
+        "runner": "grok",
+        "model": "grok-4.5",
+        "role": "implementer",
+        "effort": "high",
+        "endpoint": null,
+        "family": "xai",
+        "binary_realpath": "/home/cookys/.grok/downloads/grok-0.2.118-linux-x86_64",
+        "cli_version": "0.2.118"
+      },
+      "official_contract": {
+        "locator": "repo:.claude/review-loop-config.md#review-roster",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "4467825f9d6240923c0494eda5ab7d7a101bfe5a6c3ec3a73b0ca660a2dfcb32",
+        "assertion": "exact provider transport tuple implementer-grok-grok-4-5-high is declared and its installed CLI exposes the required model/effort transport surface"
+      },
+      "live_evidence": {
+        "cli_version": "0.2.118",
+        "probe_command_sha256": "548e6fbd22baef542db401961d3769ce1107aa25db50b3553f9d623f7b75b974",
+        "probe_output_sha256": "02793f6c7a4afe481ffa7fdcd09dc7405476f104355c67bdd54b1ebd95bb2500",
+        "behavior_class": "installed-transport-surface",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "exact provider transport tuple implementer-grok-grok-4-5-high is declared and its installed CLI exposes the required model/effort transport surface",
+        "transport_binding": {
+          "execution_model": "grok-4.5",
+          "execution_effort_argument": "high",
+          "normalized_model": "grok-4.5",
+          "normalized_effort": "high"
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "fbe46e5e38eba0698c0c3c74e504b47dc4e6de54ccdafa71f6cb561ce7269ad1",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-a4011f749a1c57dcdf54e6526d8c307ea02114344f0ddce96a258e3f8b94b1ab",
+      "capability_id": "provider-transport-qc-agy-gemini-3-6-flash-high",
+      "target_identity": {
+        "runner": "agy",
+        "model": "Gemini 3.6 Flash (High)",
+        "role": "qc",
+        "effort": "high",
+        "endpoint": null,
+        "family": "google",
+        "binary_realpath": "/home/cookys/.local/bin/agy",
+        "cli_version": "1.1.10"
+      },
+      "official_contract": {
+        "locator": "repo:.claude/review-loop-config.md#review-roster",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "4467825f9d6240923c0494eda5ab7d7a101bfe5a6c3ec3a73b0ca660a2dfcb32",
+        "assertion": "exact provider transport tuple qc-agy-gemini-3-6-flash-high is declared and its installed CLI exposes the required model/effort transport surface"
+      },
+      "live_evidence": {
+        "cli_version": "1.1.10",
+        "probe_command_sha256": "e68604d50803347aa9df33124636c91dcf30fb8c01f446532b6e15fcb1ff72e3",
+        "probe_output_sha256": "c64e4bf74262cebba7d161d29e1632682f64f844c6ca1a718c77a1fa4e8f8343",
+        "behavior_class": "installed-transport-surface",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "exact provider transport tuple qc-agy-gemini-3-6-flash-high is declared and its installed CLI exposes the required model/effort transport surface",
+        "transport_binding": {
+          "execution_model": "gemini-3.6-flash-high",
+          "execution_effort_argument": null,
+          "normalized_model": "gemini-3.6-flash-high",
+          "normalized_effort": "high"
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "e36804d0e7d169e211ca2200335be031041b8734a9a932ce87b5dc0d5b552612",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-be30ff9211e8a9a3f49df86171b4e4aa4cd9137655d7e45f16327d3bfec40237",
+      "capability_id": "provider-transport-reviewer-cc-shim-minimax-m3-high-minimax",
+      "target_identity": {
+        "runner": "cc-shim",
+        "model": "MiniMax-M3",
+        "role": "reviewer",
+        "effort": "high",
+        "endpoint": "minimax",
+        "family": "minimax",
+        "binary_realpath": "/home/cookys/.local/share/claude/versions/2.1.220",
+        "cli_version": "2.1.220"
+      },
+      "official_contract": {
+        "locator": "repo:.claude/review-loop-config.md#review-roster",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "4467825f9d6240923c0494eda5ab7d7a101bfe5a6c3ec3a73b0ca660a2dfcb32",
+        "assertion": "exact provider transport tuple reviewer-cc-shim-minimax-m3-high-minimax is declared and its installed CLI exposes the required model/effort transport surface"
+      },
+      "live_evidence": {
+        "cli_version": "2.1.220",
+        "probe_command_sha256": "53bba285b527547dfe027db6212af66a0d0cebc65adef14be0a9cadd652c9e03",
+        "probe_output_sha256": "fcd5b45507c7c602d54d85a300eab288a8a3c6770c6def696ca19a3100725de4",
+        "behavior_class": "installed-transport-surface",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "exact provider transport tuple reviewer-cc-shim-minimax-m3-high-minimax is declared and its installed CLI exposes the required model/effort transport surface",
+        "transport_binding": {
+          "execution_model": "MiniMax-M3",
+          "execution_effort_argument": "high",
+          "normalized_model": "MiniMax-M3",
+          "normalized_effort": "high"
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "5362604672027e074adbf254a01d5310394b0babef8529e13f1596e4c56f89db",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f10371776f30006b3e",
+      "capability_id": "agy-structured-envelope-usage",
+      "target_identity": {
+        "runner": "agy",
+        "model": "Gemini 3.6 Flash (High)",
+        "role": "telemetry",
+        "effort": "high",
+        "endpoint": null,
+        "family": "google",
+        "binary_realpath": "/home/cookys/.local/bin/agy",
+        "cli_version": "1.1.10"
+      },
+      "official_contract": {
+        "locator": "agy://cli-help/1.1.10#output-format-json",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "c64e4bf74262cebba7d161d29e1632682f64f844c6ca1a718c77a1fa4e8f8343",
+        "assertion": "agy native JSON envelope exposes numeric input/output/thinking/cache/total usage"
+      },
+      "live_evidence": {
+        "cli_version": "1.1.10",
+        "probe_command_sha256": "65e9c427fc9c4c208a9cf96fb0df92248e131bf186390acb1246ea8f06be0652",
+        "probe_output_sha256": "118afc24231512ada8393ee7136adbdda50cfa6e6275f4895d8e8db044d7a42d",
+        "behavior_class": "structured-envelope-usage",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "agy native JSON envelope exposes numeric input/output/thinking/cache/total usage",
+        "transport_binding": {
+          "execution_model": "gemini-3.6-flash-high",
+          "execution_effort_argument": null,
+          "normalized_model": "gemini-3.6-flash-high",
+          "normalized_effort": "high"
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "e36804d0e7d169e211ca2200335be031041b8734a9a932ce87b5dc0d5b552612",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-d3e62ae25145b3cf351fa2e5d05f4113deb5d6939647073ac240892e4470c261",
+      "capability_id": "grok-sessionend-usage-event",
+      "target_identity": {
+        "runner": "grok",
+        "model": null,
+        "role": "optional_probe",
+        "effort": null,
+        "endpoint": null,
+        "family": "xai",
+        "binary_realpath": "/home/cookys/.grok/downloads/grok-0.2.118-linux-x86_64",
+        "cli_version": "0.2.118"
+      },
+      "official_contract": {
+        "locator": "local-cli://grok/0.2.118",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "02793f6c7a4afe481ffa7fdcd09dc7405476f104355c67bdd54b1ebd95bb2500",
+        "assertion": "Grok fires a SessionEnd hook containing authoritative headless usage"
+      },
+      "live_evidence": {
+        "cli_version": "0.2.118",
+        "probe_command_sha256": "eb49a7ad83cdf0e53c028de0010c245a7e85a85531762cd9adf6efd888b6b5d0",
+        "probe_output_sha256": "02793f6c7a4afe481ffa7fdcd09dc7405476f104355c67bdd54b1ebd95bb2500",
+        "behavior_class": "blocked-negative-finding",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "blocked: headless JSON usage is proven but SessionEnd host firing remains unverified",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": false,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "fbe46e5e38eba0698c0c3c74e504b47dc4e6de54ccdafa71f6cb561ce7269ad1",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "contract_live_contradiction"
+      },
+      "status": "blocked"
+    },
+    {
+      "claim_id": "cap-v1-e233a7b8d7199c54bdba47a486bd22e8c31929d508068123a0de9751412caf08",
+      "capability_id": "claude-current-hook-baseline",
+      "target_identity": {
+        "runner": "claude-native",
+        "model": null,
+        "role": "optional_probe",
+        "effort": null,
+        "endpoint": null,
+        "family": "anthropic",
+        "binary_realpath": "/home/cookys/.local/share/claude/versions/2.1.220",
+        "cli_version": "2.1.220"
+      },
+      "official_contract": {
+        "locator": "repo:hooks/hooks.json",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "533c54470c1cad307a23b9709897b52b40014680fe646ab3d3ee88ea3587aad0",
+        "assertion": "Claude Code current hook baseline is version-captured and digest-bound"
+      },
+      "live_evidence": {
+        "cli_version": "2.1.220",
+        "probe_command_sha256": "1fdea576184c1ef51499db3072d1e29f6ee656c844d05c2a32c0daf7cde96a39",
+        "probe_output_sha256": "533c54470c1cad307a23b9709897b52b40014680fe646ab3d3ee88ea3587aad0",
+        "behavior_class": "hook-baseline-digest",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "Claude Code current hook baseline is version-captured and digest-bound",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "5362604672027e074adbf254a01d5310394b0babef8529e13f1596e4c56f89db",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-e29582334b4a6d781ab7afd726cc5e9e182ac557ef35df3cba9dd193c8215913",
+      "capability_id": "codex-postcompact-payload",
+      "target_identity": {
+        "runner": "codex",
+        "model": null,
+        "role": "compaction_hook",
+        "effort": null,
+        "endpoint": null,
+        "family": "openai",
+        "binary_realpath": "/home/cookys/.codex/packages/standalone/releases/0.146.0-x86_64-unknown-linux-musl/bin/codex",
+        "cli_version": "0.146.0"
+      },
+      "official_contract": {
+        "locator": "https://learn.chatgpt.com/docs/hooks.md#postcompact",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "458ed508d0f3dbb1a3106a906951827bad7af1d2f7dc1f50000e11dc7150d1aa",
+        "assertion": "Codex PostCompact payload exposes the documented event and turn identity fields"
+      },
+      "live_evidence": {
+        "cli_version": "0.146.0",
+        "probe_command_sha256": "359bde45ac59ae46e93e01422c860e4e95000acef82b904b5604367952b59936",
+        "probe_output_sha256": "89d76cd6d7dc8d815761d547e3325e9dcd6858a29d259093ef27a22cbb1fbd23",
+        "behavior_class": "host-payload-shape",
+        "observed_at": "2026-08-03T22:23:16.577Z",
+        "ttl_seconds": 1209600,
+        "result": "Codex PostCompact payload exposes the documented event and turn identity fields",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:23:16.577Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "c1620bb07a68cc93cc404a785800b840e91657b451365f60d965d74d5e2934bb",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-fc256b975399387ae0c903f2700c449dc90ea8949d9c669bab9523c28683931e",
+      "capability_id": "codex-postcompact-matcher",
+      "target_identity": {
+        "runner": "codex",
+        "model": null,
+        "role": "compaction_hook",
+        "effort": null,
+        "endpoint": null,
+        "family": "openai",
+        "binary_realpath": "/home/cookys/.codex/packages/standalone/releases/0.146.0-x86_64-unknown-linux-musl/bin/codex",
+        "cli_version": "0.146.0"
+      },
+      "official_contract": {
+        "locator": "https://learn.chatgpt.com/docs/hooks.md#postcompact",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "458ed508d0f3dbb1a3106a906951827bad7af1d2f7dc1f50000e11dc7150d1aa",
+        "assertion": "Codex PostCompact matcher manual|auto fires for explicit and threshold compaction"
+      },
+      "live_evidence": {
+        "cli_version": "0.146.0",
+        "probe_command_sha256": "06173cc3e357cb69c920b75a4a1e615ecc7006a6fe36f6dfa9461fa739abb17e",
+        "probe_output_sha256": "89d76cd6d7dc8d815761d547e3325e9dcd6858a29d259093ef27a22cbb1fbd23",
+        "behavior_class": "host-manual-auto",
+        "observed_at": "2026-08-03T22:23:16.577Z",
+        "ttl_seconds": 1209600,
+        "result": "Codex PostCompact matcher manual|auto fires for explicit and threshold compaction",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": true,
+      "freshness": {
+        "expires_at": "2026-08-17T22:23:16.577Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "c1620bb07a68cc93cc404a785800b840e91657b451365f60d965d74d5e2934bb",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "passed"
+      },
+      "status": "validated"
+    },
+    {
+      "claim_id": "cap-v1-fe278aecc229d028586684a783a916ec85c8f0375a895cc0ee6f2cb4b5e56129",
+      "capability_id": "generic-tier-frontmatter-portability",
+      "target_identity": {
+        "runner": "codex",
+        "model": null,
+        "role": "optional_probe",
+        "effort": null,
+        "endpoint": null,
+        "family": "openai",
+        "binary_realpath": "/home/cookys/.codex/packages/standalone/releases/0.146.0-x86_64-unknown-linux-musl/bin/codex",
+        "cli_version": "0.146.0"
+      },
+      "official_contract": {
+        "locator": "local-cli://codex/0.146.0",
+        "retrieved_at": "2026-08-03T22:45:43.000Z",
+        "document_sha256": "e0e9bf467f5eaa19c0d1f3d4db6f10844cdb080d30ddfdcbb384a16cb54171e5",
+        "assertion": "Generic tier frontmatter is a portable cross-harness contract"
+      },
+      "live_evidence": {
+        "cli_version": "0.146.0",
+        "probe_command_sha256": "f90923c77b09e9ecfc8605753531a792d52d37c606d180d2541f47a60a76e8b3",
+        "probe_output_sha256": "e0e9bf467f5eaa19c0d1f3d4db6f10844cdb080d30ddfdcbb384a16cb54171e5",
+        "behavior_class": "blocked-negative-finding",
+        "observed_at": "2026-08-03T22:45:43.000Z",
+        "ttl_seconds": 1209600,
+        "result": "blocked: generic tier frontmatter remains inconclusive",
+        "transport_binding": {
+          "execution_model": null,
+          "execution_effort_argument": null,
+          "normalized_model": null,
+          "normalized_effort": null
+        }
+      },
+      "agreement": false,
+      "freshness": {
+        "expires_at": "2026-08-17T22:45:43.000Z"
+      },
+      "revalidation": {
+        "validator_version": "1.0.0",
+        "command_sha256": "c1620bb07a68cc93cc404a785800b840e91657b451365f60d965d74d5e2934bb",
+        "validated_at": "2026-08-03T22:45:43.770Z",
+        "result": "contract_live_contradiction"
+      },
+      "status": "blocked"
+    }
+  ],
+  "consumer_manifest": {
+    "schema_version": 1,
+    "consumers": [
+      {
+        "consumer_id": "D2",
+        "required_claim_ids": [
+          "cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4",
+          "cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f10371776f30006b3e"
+        ]
+      },
+      {
+        "consumer_id": "D3",
+        "required_claim_ids": [
+          "cap-v1-430668690653dfaa807c370070e20db0cae56634bdbeb1af14ffadef7a72c992",
+          "cap-v1-9a47acdde2782ec994dab242cd49e89fd91e07119b192ffc79bfacfe380fe1d3",
+          "cap-v1-e29582334b4a6d781ab7afd726cc5e9e182ac557ef35df3cba9dd193c8215913",
+          "cap-v1-fc256b975399387ae0c903f2700c449dc90ea8949d9c669bab9523c28683931e"
+        ]
+      },
+      {
+        "consumer_id": "D4",
+        "required_claim_ids": [
+          "cap-v1-22e96639504e14d8a36e29a8e3d5747807a4ec7cc99f454d6898fe2680790575",
+          "cap-v1-3dec12f7c410d396af31af2392f11b3ec815543477269f6da1168604281d0693",
+          "cap-v1-441c3e019522b5db5a860dedf0184371bdf4f26fc4a41003b841aa78e8bc271b",
+          "cap-v1-a1c91e7003c74984b6cd71aa1cd70cbc9f1990a7fbe4ac2926973926652673b6",
+          "cap-v1-a4011f749a1c57dcdf54e6526d8c307ea02114344f0ddce96a258e3f8b94b1ab",
+          "cap-v1-be30ff9211e8a9a3f49df86171b4e4aa4cd9137655d7e45f16327d3bfec40237"
+        ]
+      }
+    ],
+    "optional_unconsumed_claim_ids": [
+      "cap-v1-0c8b408171b437a92152333b3a79a888fc14090807be55e91676d64ad15f4cef",
+      "cap-v1-38b04eae997766eae0b1c4e329eeee219a130bb4a0fec48cdc8ba30d5973520c",
+      "cap-v1-d3e62ae25145b3cf351fa2e5d05f4113deb5d6939647073ac240892e4470c261",
+      "cap-v1-e233a7b8d7199c54bdba47a486bd22e8c31929d508068123a0de9751412caf08",
+      "cap-v1-fe278aecc229d028586684a783a916ec85c8f0375a895cc0ee6f2cb4b5e56129"
+    ]
+  },
+  "consumer_manifest_digest": "212c286f114ab68036bf39929cc5cff853a710425a1453a9e4d119c275302e8c",
+  "receipt_digest": "13621dcea519f444fb0221e35658437c95a01eaffc067c7dcc6c40a9512fa332"
+}

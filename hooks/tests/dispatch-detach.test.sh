@@ -25,6 +25,32 @@ git -C "$SBX" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 PROMPT="$TEST_TMP/prompt.txt"
 echo "create ok.txt" > "$PROMPT"
 
+# Canonical strict agy envelope used by production dispatch parsing. Fake agents
+# must exercise the same response/usage boundary as the live runner.
+AGY_FIXTURE_HELPER="$TEST_TMP/emit-agy-envelope"
+cat > "$AGY_FIXTURE_HELPER" <<'EOF'
+#!/usr/bin/env bash
+response="${1:-self-report: DONE}"
+RESPONSE="$response" node -e '
+  process.stdout.write(JSON.stringify({
+    conversation_id: "fixture",
+    duration_seconds: 1,
+    num_turns: 1,
+    response: process.env.RESPONSE,
+    status: "SUCCESS",
+    usage: {
+      cache_read_tokens: 0,
+      input_tokens: 1,
+      output_tokens: 1,
+      thinking_tokens: 0,
+      total_tokens: 2,
+    },
+  }));
+'
+EOF
+chmod +x "$AGY_FIXTURE_HELPER"
+export AGY_FIXTURE_HELPER
+
 # track worktrees KEEP=1 leaves behind so we can reap them at the end (no /tmp leak)
 LEAKED_WTS=()
 reap_wt() { # <json>  → extract "worktree" and remove it
@@ -40,8 +66,10 @@ sleep $2
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: detached commit"
+"$AGY_FIXTURE_HELPER"
 EOF
   chmod +x "$1"
+  make_agy_stub_versioned "$1"
 }
 
 # =========================================================================================
@@ -149,8 +177,10 @@ sleep 5
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: packed prompt detached"
+"$AGY_FIXTURE_HELPER"
 EOF
 chmod +x "$STUB_PACK_TERM"
+make_agy_stub_versioned "$STUB_PACK_TERM"
 
 LEDGER_PACK="$TEST_TMP/g/ledger.jsonl"
 mkdir -p "$TEST_TMP/g"
@@ -226,8 +256,10 @@ while [ ! -f "$RELEASE_H" ]; do sleep 0.01; done
 echo ok > concurrent.txt
 git add concurrent.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent"
+"$AGY_FIXTURE_HELPER"
 EOF
 chmod +x "$STUB_CONCURRENT"
+make_agy_stub_versioned "$STUB_CONCURRENT"
 (
   cd "$SBX"
   AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H" bash "$SCRIPT" \
@@ -290,8 +322,10 @@ while [ ! -f "$RELEASE_H2" ]; do sleep 0.01; done
 echo ok > concurrent-no-setsid.txt
 git add concurrent-no-setsid.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: concurrent without setsid"
+"$AGY_FIXTURE_HELPER"
 EOF
 chmod +x "$STUB_CONCURRENT_H2"
+make_agy_stub_versioned "$STUB_CONCURRENT_H2"
 (
   cd "$SBX"
   PATH="$FAKEBIN_H2:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_H2" bash "$SCRIPT" \
@@ -370,6 +404,7 @@ echo call >> "$RUNNER_CALLS_I"
 exit 0
 EOF
 chmod +x "$STUB_NEVER_I"
+make_agy_stub_versioned "$STUB_NEVER_I"
 (
   cd "$SBX"
   PATH="$FAKEBIN_I:$PATH" AUTOPILOT_DISPATCH_RUNS_DIR="$MANIFEST_I" \
@@ -437,8 +472,10 @@ cat > "$STUB_OK" <<'EOF'
 echo ok > ok.txt
 git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: inline"
+"$AGY_FIXTURE_HELPER"
 EOF
 chmod +x "$STUB_OK"
+make_agy_stub_versioned "$STUB_OK"
 
 normalize() { # strip run-volatile fields (commit sha / worktree / agent_log / branch /
   # observability run_id + wall_secs — Stage 1 additive fields, volatile per run) → stable text

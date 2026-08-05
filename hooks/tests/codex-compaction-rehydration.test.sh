@@ -132,9 +132,16 @@ assert_eq "$(jq -r .action <<<"$ADMIT2")" "attach_active" "second action still a
 PROMPT="$TEST_TMP/prompt.md"; echo 'implement phase 16' > "$PROMPT"
 STUB_RUNNER="$TEST_TMP/agy-must-not-run"
 cat > "$STUB_RUNNER" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "models" ]; then
+  printf '%s\n' 'Gemini 3.5 Flash (High)'
+  exit 0
+fi
 echo STUB_RAN >> "$(dirname "$0")/runner-calls"; exit 99
 EOF
-chmod +x "$STUB_RUNNER"; : > "$TEST_TMP/runner-calls"
+chmod +x "$STUB_RUNNER"
+make_agy_stub_versioned "$STUB_RUNNER"
+: > "$TEST_TMP/runner-calls"
 BEFORE_BRANCHES="$(git -C "$SBX" for-each-ref --format='%(refname)' refs/heads | sort | tr '\n' ' ')"
 BEFORE_WTS="$(git -C "$SBX" worktree list --porcelain | wc -l | tr -d ' ')"
 BEFORE_MANIFESTS="$(find "$MANIFEST_DIR" -maxdepth 1 -name '*.manifest.json' -type f | wc -l | tr -d ' ')"

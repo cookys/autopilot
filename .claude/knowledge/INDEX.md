@@ -8,6 +8,7 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-08-02 | arch | Mission freeze 前先把 canonical outputs 經所有 deterministic generator 展開，mirrors 一起進 output/change/reservation/verification；若執行中才發現遺漏，舊 lease 誠實 terminalize，再用 additive successor 沿用同一 lineage | [architecture.md](architecture.md) |
 | 2026-07-31 | arch | Persistent implementer transcript 只保證上下文連續，不會自動產生 ICC/WLB/LSM lifecycle evidence；L5/L6 fallback 必須在第一次 effect 前接上 canonical adapter，事後不得偽造 `can_close` receipt | [architecture.md](architecture.md) |
 | 2026-07-29 | debug | CLI `--help` 只證明 option 存在，不證明可組合：Kimi 0.28.0 的 non-interactive `--prompt` 與 interactive `--plan` 互斥；hermetic fixture 若照抄錯誤 argv 也會假綠，需 live smoke | [debug-patterns.md](debug-patterns.md) |
 | 2026-07-27 | arch | Absence 不等於 zero：先用 repo registry admission 記住資源曾存在，再以 Git-ref CAS authority 防 ordinary-file rollback、anchor/registry forward-repair 防 torn write；先凍結 attack matrix、穩定 diff 後才跑昂貴外審 | [architecture.md](architecture.md) |

@@ -77,6 +77,24 @@ fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
 NODE
 }
 
+# Promote an executable test double to the minimum agy CLI contract used by
+# production dispatch: an exact version probe plus transparent delegation for
+# every other invocation. Call this only after the fixture body is complete.
+make_agy_stub_versioned() {
+  local stub="$1"
+  local implementation="${stub}.agy-implementation"
+  mv "$stub" "$implementation"
+  cat > "$stub" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf '1.1.10\n'
+  exit 0
+fi
+exec "${0}.agy-implementation" "$@"
+STUB
+  chmod +x "$stub"
+}
+
 cleanup_test_tmp() { rm -rf "$TEST_TMP"; }
 trap cleanup_test_tmp EXIT
 

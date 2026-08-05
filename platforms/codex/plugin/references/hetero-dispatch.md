@@ -85,6 +85,26 @@ echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","
 
 [`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
+## Reviewer output-token budget
+
+`dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through
+200000 tokens. This is an output-token budget only: it does not limit input context, prompt bytes,
+visible characters, wall time, tool turns, reasoning effort, or monetary spend. The flag is mapped
+only where the installed runner exposes a verified enforceable surface:
+
+| Reviewer runner | Mapping when `--max-tokens <n>` is supplied |
+|-----------------|-----------------------------------------------|
+| `anthropic-compatible` | Direct adapter `--max-tokens <n>` (Anthropic API `max_tokens`) |
+| `qoderclicn` | Qoder CLI `--max-output-tokens <n>` |
+| `codex`, `agy`, `grok`, `cc-shim`, `claude-native` | Unsupported: exit 2 with `status=precondition_failed` before runner resolution or spawn |
+
+The value must be an unpadded positive base-10 integer in the inclusive range; missing, zero,
+negative, fractional, non-numeric, or over-range values fail before spend. Omitting the flag adds no
+runner argument, synthesizes no wrapper default, and adds no result field, so each transport keeps
+its existing default and the review JSON schema is unchanged. Truncation never authorizes a review:
+Anthropic `stop_reason=max_tokens` and a Qoder exit-0 response missing the complete wrapped block
+both remain `no_verdict`; a partial `SHIP-AS-IS` is not parsed.
+
 ## Script
 
 ```bash
@@ -447,13 +467,15 @@ scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (se
   worker self-report. The stream format is **dispatcher-declared** (manifest `log_format` /
   `--format`, derived from the invocation flags the dispatcher itself chose), never content-
   sniffed — a worker printing JSON usage lines into a plain-text log cannot promote its own
-  output into telemetry. Formats carrying no signal (agy pseudo-TTY, cc-shim plain text) yield
-  honest `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
-- **Final JSON**: `dispatch-hetero.sh` output gains ADDITIVE `run_id` / `usage` / `wall_secs`
-  (usage via `dispatch-status.js --usage-only`, embedded fail-safe — any parse failure ⇒ `null`).
-  `dispatch-review.sh`'s final JSON is deliberately UNCHANGED (strict `additionalProperties:false`
-  schema, v2.32.19 SSOT) — correlate a review run via its `raw_log` path and derive usage post-hoc
-  with `--usage-only`.
+  output into telemetry. Production agy dispatches capture `--output-format json` into a private
+  envelope, validate its closed response/usage schema, and copy only the response into the framed
+  worker log; malformed, duplicate-key, trailing, invalid-number, or nonzero-exit envelopes yield
+  `usage:null`. Formats carrying no signal (including cc-shim plain text) likewise yield honest
+  `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
+- **Final JSON**: `dispatch-hetero.sh` emits `run_id` / `usage` / `wall_secs`; agy usage comes only
+  from the validated private envelope, while other runners retain their declared-format parser.
+  `dispatch-review.sh` now also emits required `usage` (`null` for runners without an admitted
+  signal or any failed agy envelope; closed agy usage with `source:"agy-json"` on success).
 - **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
   artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
 - **Trace lineage contract:** dispatchers inherit lineage from incoming env

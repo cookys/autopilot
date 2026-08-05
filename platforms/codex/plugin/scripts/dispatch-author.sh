@@ -52,6 +52,10 @@
 #   strict mode resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`.
 #   scripts/dispatch-author.sh --strict-contract --contract-file <json> --repo-root <consuming-repo> --prompt-file <file>
 #       # GO-gated verification-author contract mode.
+#       --polarity-receipt <file> [--require-polarity-receipt]
+#       --polarity-base-sha <full-sha> --polarity-head-sha <full-sha>
+#       --polarity-verify-cmd <path> [--polarity-assertion-artifact <path>]...
+#       # carry a machine-validated red-before/green-after receipt for deliberately buggy assertions.
 #   Fail closed if strict config/roster tuple is absent, malformed, same-family, unknown-family,
 #   or endpoint resolution is not ready.
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
@@ -117,6 +121,10 @@ CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GA
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
+POLARITY_RECEIPT=""; REQUIRE_POLARITY_RECEIPT=0; POLARITY_RECEIPT_DIGEST=""
+CONTRACT_REQUIRES_POLARITY=0
+POLARITY_BASE_SHA=""; POLARITY_HEAD_SHA=""; POLARITY_VERIFY_CMD=""
+declare -a POLARITY_ASSERTION_ARTIFACTS=()
 RUNNER_SUPPLIED=0; MODEL_SUPPLIED=0; EFFORT_SUPPLIED=0; ENDPOINT_SUPPLIED=0
 STRICT_CONTRACT_RESULT_FIELDS=0
 STRICT_UNIT_ID=""; STRICT_CONTRACT_SHA=""; STRICT_SPEC_SHA=""; STRICT_GO=""
@@ -138,6 +146,12 @@ while [[ $# -gt 0 ]]; do
     --strict-roster) STRICT_ROSTER=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
+    --polarity-receipt) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-receipt requires a non-empty value" >&2; exit 2; }; POLARITY_RECEIPT="$2"; shift 2 ;;
+    --require-polarity-receipt) REQUIRE_POLARITY_RECEIPT=1; shift ;;
+    --polarity-base-sha|--polarity-base) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "$1 requires a non-empty value" >&2; exit 2; }; POLARITY_BASE_SHA="$2"; shift 2 ;;
+    --polarity-head-sha|--polarity-head) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "$1 requires a non-empty value" >&2; exit 2; }; POLARITY_HEAD_SHA="$2"; shift 2 ;;
+    --polarity-verify-cmd) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-verify-cmd requires a non-empty value" >&2; exit 2; }; POLARITY_VERIFY_CMD="$2"; shift 2 ;;
+    --polarity-assertion-artifact) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-assertion-artifact requires a non-empty value" >&2; exit 2; }; POLARITY_ASSERTION_ARTIFACTS+=("$2"); shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
     -h|--help)     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
@@ -210,6 +224,32 @@ emit_verification_author() {
     "$(json_escape "$VERIFICATION_AUTHOR_EFFORT")" \
     "$(json_escape "$VERIFICATION_AUTHOR_ENDPOINT")" \
     "$(json_escape "$VERIFICATION_AUTHOR_FAMILY")"
+}
+
+validate_polarity_receipt() {
+  [ -n "$POLARITY_RECEIPT" ] || die_precondition "--require-polarity-receipt requires --polarity-receipt <file>"
+  [ -r "$POLARITY_RECEIPT" ] || die_precondition "polarity receipt is not readable: $POLARITY_RECEIPT"
+  [ -n "$REPO_ROOT" ] || die_precondition "polarity receipt validation requires a repository context"
+  [ -n "$POLARITY_BASE_SHA" ] || die_precondition "polarity receipt shipping validation requires --polarity-base-sha"
+  [ -n "$POLARITY_HEAD_SHA" ] || die_precondition "polarity receipt shipping validation requires --polarity-head-sha"
+  [ -n "$POLARITY_VERIFY_CMD" ] || die_precondition "polarity receipt shipping validation requires --polarity-verify-cmd"
+  local artifact_args=()
+  local artifact
+  for artifact in "${POLARITY_ASSERTION_ARTIFACTS[@]}"; do
+    artifact_args+=(--assertion-artifact "$artifact")
+  done
+  local validation validation_rc
+  validation="$(bash "$_AUTHOR_SELF_DIR/verify-red-green.sh" --validate \
+    --receipt "$POLARITY_RECEIPT" --repo "$REPO_ROOT" \
+    --base "$POLARITY_BASE_SHA" --head "$POLARITY_HEAD_SHA" \
+    --verify-cmd "$POLARITY_VERIFY_CMD" "${artifact_args[@]}" 2>&1)"
+  validation_rc=$?
+  if [ "$validation_rc" -ne 0 ]; then
+    die_precondition "polarity receipt rejected: $(printf '%s' "$validation" | tr '\n' ' ')"
+  fi
+  POLARITY_RECEIPT_DIGEST="$(extract_file_json_value "$POLARITY_RECEIPT" receipt_digest 2>/dev/null || true)"
+  [[ "$POLARITY_RECEIPT_DIGEST" =~ ^[0-9a-f]{64}$ ]] \
+    || die_precondition "polarity receipt has no valid receipt_digest"
 }
 
 extract_json_value() {
@@ -361,6 +401,9 @@ emit_result() {
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     extra_fields="${extra_fields}, \"identity_drift\": true"
   fi
+  if [ -n "${POLARITY_RECEIPT_DIGEST:-}" ]; then
+    extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape "$POLARITY_RECEIPT_DIGEST")\""
+  fi
 
   local raw_log_json="null"
   if [[ "$raw_log" != "null" ]]; then
@@ -489,6 +532,7 @@ run_strict_contract_preflight() {
   contract_role="$(extract_file_json_value "$CONTRACT_FILE" "go.required_engine_role" 2>/dev/null || true)"
   [[ -n "$contract_role" ]] || die_precondition "contract has empty required_engine_role"
   [[ "$contract_role" == "verification-author" ]] || die_precondition "contract required_engine_role is '$contract_role' (expected verification-author)"
+  jq -e '.deliberate_polarity == true' "$CONTRACT_FILE" >/dev/null && CONTRACT_REQUIRES_POLARITY=1
 
   STRICT_CONTRACT_RESULT_FIELDS=1
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
@@ -640,6 +684,29 @@ case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qode
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
+normalize_agy_model() {
+  local requested="$1" agy_bin="$2" tier="high" models resolved
+  case "$EFFORT" in low) tier="low" ;; medium) tier="medium" ;; esac
+  case "$requested" in
+    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      models="$(timeout 20 "$agy_bin" models 2>/dev/null)" \
+        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
+      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
+      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
+      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
+      printf '%s' "$resolved" ;;
+    *) printf '%s' "$requested" ;;
+  esac
+}
+
+if [ "$RUNNER" = "agy" ]; then
+  AGY_BIN="${BIN:-agy}"
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  MODEL="$(normalize_agy_model "$MODEL" "$AGY_BIN")"
+  command -v bwrap >/dev/null 2>&1 \
+    || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
+fi
+
 if [[ -n "${AUTOPILOT_SETTLE_MS:-}" && ! "$AUTOPILOT_SETTLE_MS" =~ ^[0-9]+$ ]]; then
   die_precondition "AUTOPILOT_SETTLE_MS must be an integer millisecond value (got: $AUTOPILOT_SETTLE_MS)"
 fi
@@ -648,6 +715,21 @@ fi
 # INLINE inside a kill-surviving setsid session and relay its durable result. Byte-identical
 # inline behavior when no coords / DISPATCH_DETACH=0. NEVER returns when it engages.
 dispatch_detach_supervise "$0" "$LEDGER" "$RUN_ID" "$STAGE" "$_AUTHOR_SELF_DIR" -- "${ORIG_ARGS[@]}"
+
+# The explicit non-strict path historically left REPO_ROOT empty and therefore
+# skipped identity containment. Resolve it mechanically from the caller's Git
+# context; scratch/non-repository callers remain read-only and uncontained.
+if [ -z "$REPO_ROOT" ]; then
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$REPO_ROOT" ]; then
+    REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
+  fi
+fi
+
+if [ "$CONTRACT_REQUIRES_POLARITY" -eq 1 ]; then REQUIRE_POLARITY_RECEIPT=1; fi
+if [ "$REQUIRE_POLARITY_RECEIPT" -eq 1 ] || [ -n "$POLARITY_RECEIPT" ]; then
+  validate_polarity_receipt
+fi
 
 EP_URL=""; EP_TOKEN_ENV=""; ANTHROPIC_TOKEN_ENV=""
 if [[ -n "$ENDPOINT" ]]; then
@@ -881,8 +963,7 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   RUNNER_EXIT=$?
   set -e
 else
-  AGY_BIN="${BIN:-agy}"
-  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  AGY_BIN="${AGY_BIN:-${BIN:-agy}}"
   # agy -p ignores cwd and drops raw stdout under a non-TTY pipe (#76/#408),
   # so capture through pseudo-TTY and strip CR to preserve exactness.
   RUN_SH="$(mktemp -t dispatch-author-agy-XXXXXX)"
@@ -890,8 +971,8 @@ else
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
+    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$AGY_CWD" "$AGY_CWD" "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   set +e

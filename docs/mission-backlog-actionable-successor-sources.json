@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-02-foreman-depth0-coordination-r6.md",
+      "rubric_path": "plans/2026-08-02-foreman-depth0-coordination-r6.rubric.md",
+      "plan_sha256": "007fb605846e5ff398e2bbd99c7d52c55237925bd9b8d2aab0e0644be57c15ca",
+      "rubric_sha256": "4c71b2d3ed0b5feaf76a8d8ae7d4e18df5e771efda415daafb40b44e3a79b70b"
+    },
+    {
+      "plan_path": "plans/2026-08-02-review-path-efficiency.md",
+      "rubric_path": "plans/2026-08-02-review-path-efficiency.rubric.md",
+      "plan_sha256": "0af2eb9c489c8620c031cc0ac777a83212227bb8f55ab76ed7a0566f3f62e593",
+      "rubric_sha256": "9fd59ee7427d99a112dcc34af613b86d62e041f272ba743bd3513fe14daa1c57"
+    },
+    {
+      "plan_path": "plans/2026-08-02-skill-metadata-portability-hygiene.md",
+      "rubric_path": "plans/2026-08-02-skill-metadata-portability-hygiene.rubric.md",
+      "plan_sha256": "ba99a98a612b08a23309827a9350dd6a88e2ccb7a19931d4164913055c9793dc",
+      "rubric_sha256": "54103a6826a6e231d4572e5775702cf1064f874d76727801a344e4cf550d58a3"
+    }
+  ]
+}

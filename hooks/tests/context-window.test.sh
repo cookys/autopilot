@@ -11,6 +11,11 @@
 # oversized payload reaching a small-window engine silently.
 . "$(dirname "$0")/lib.sh"
 
+SOURCE_ROOT="$REPO_ROOT"
+git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
+git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
+REPO_ROOT="$TEST_TMP/hermetic-repo"
+
 GATE="$REPO_ROOT/scripts/check-context-window.js"
 LIB="$REPO_ROOT/scripts/lib/context-window.sh"
 
@@ -228,7 +233,7 @@ assert_eq "$(git -C "$REPO_ROOT" branch --list 'test/context-window-selftest' | 
 # --- resolver: reports over-budget seats without inventing fields -------------
 RESOLVED="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 2000000 2> /dev/null)"
 FIELD_COUNT="$(printf '%s' "$RESOLVED" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(Object.keys(JSON.parse(s)).length))}catch{process.stdout.write("ERR")}})')"
-assert_eq "$FIELD_COUNT" "61" "resolver contract includes bounded plan-review and provider-readiness fields while window checks reuse capability_warnings"
+assert_eq "$FIELD_COUNT" "62" "resolver contract includes reviewer-family, bounded plan-review, and provider-readiness fields while window checks reuse capability_warnings"
 assert_contains "$RESOLVED" "cannot hold the intended input" "resolver reports an over-budget seat"
 
 # A model id containing spaces must not be split into phantom seats.

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
+SOURCE_ROOT="$REPO_ROOT"
+git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
+git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
+REPO_ROOT="$TEST_TMP/hermetic-repo"
+cd "$REPO_ROOT"
+
 STATUS_OUT="$TEST_TMP/status-human.out"
 node - "$REPO_ROOT" >"$STATUS_OUT" <<'NODE'
 const path = require('path');
@@ -77,6 +83,7 @@ const body = {
     integration: { status: 'valid' },
     merge_preflight: { status: 'valid' },
     merge_execution: { status: 'valid', execution_status: 'complete' },
+    merge_provenance: { status: 'valid' },
   },
   can_merge: true,
   can_close: true,

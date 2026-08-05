@@ -2593,6 +2593,8 @@ function runPostCompactAdapter(input = {}) {
     attempt = isObj(workOrder) ? workOrder.attempt : null,
     workOrderId = isObj(workOrder) ? workOrder.work_order_id : null,
     probeEvidenceAccepted = false,
+    hookInvocationDigest = null,
+    hookTrigger = null,
   } = input;
   if (typeof reconcileFn !== 'function') {
     return {
@@ -2685,6 +2687,8 @@ function runPostCompactAdapter(input = {}) {
       graph_node: graphNode,
       attempt,
       work_order_id: workOrderId,
+      hook_invocation_digest: hookInvocationDigest,
+      hook_trigger: hookTrigger,
     });
   } catch (error) {
     return {
@@ -2796,6 +2800,8 @@ function runPostCompactAdapter(input = {}) {
     production_hook_wired: false,
     probe_evidence_accepted: probeEvidenceAccepted === true,
     hook_probe_files_touched: false,
+    hook_invocation_digest: hookInvocationDigest,
+    hook_trigger: hookTrigger,
     authority_sources_checked: authorityClaims,
     issued_at: nowIso(),
   };
@@ -3146,6 +3152,95 @@ function admitExecutableMissionDelta({
     required_paths: required,
     output_paths: outputs,
     narrow_required_ok: true,
+  };
+}
+
+/**
+ * E1 merge provenance backstop.
+ *
+ * Product commits are admissible only when every changed product path is
+ * covered by a dispatch manifest that is itself present, byte-for-byte, in an
+ * integrity-valid controller Work Order.  Depth zero may coordinate, review,
+ * and merge; it may not author product bytes.  Commit subjects and trailers
+ * are deliberately ignored because prose is not authority.
+ */
+function validateDispatchMergeProvenance({
+  repoRoot,
+  rootRunId,
+  workOrderId,
+  baseSha,
+  headSha,
+  productPathPrefixes = ['src', 'scripts', 'hooks'],
+} = {}) {
+  const problems = [];
+  let workOrder = null;
+  let durable = [];
+  try {
+    const { execFileSync } = require('child_process');
+    const { listWorkOrders, resolveGitCommonDir, workOrderDigest } = require('./work-order');
+    const root = fs.realpathSync(execFileSync('git', ['-C', repoRoot, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim());
+    const common = resolveGitCommonDir(root);
+    const matches = listWorkOrders(common, rootRunId).filter((entry) => entry.work_order
+      && !entry.error && entry.work_order.work_order_id === workOrderId);
+    if (matches.length !== 1) throw new Error('exact controller Work Order is absent or ambiguous');
+    workOrder = matches[0].work_order;
+    if (workOrder.role !== 'controller' || !isObj(workOrder.controller)
+        || workOrder.base_sha !== baseSha
+        || !isCanonicalSha256(workOrder.digest) || workOrderDigest(workOrder) !== workOrder.digest
+        || workOrder.controller.controller_digest !== controllerStateDigest(workOrder.controller)) {
+      problems.push({ code: 'PROVENANCE_WORK_ORDER_INVALID' });
+    } else {
+      const manifestPath = workOrder.paths && workOrder.paths.manifest;
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (manifest.root_run_id !== rootRunId || manifest.work_order_id !== workOrderId
+          || manifest.controller_digest !== workOrder.controller.controller_digest
+          || !Array.isArray(manifest.entries)
+          || sha256Json(manifest.entries) !== sha256Json(workOrder.controller.dispatch_records || [])) {
+        problems.push({ code: 'PROVENANCE_MANIFEST_FOREIGN' });
+      } else {
+        durable = manifest.entries;
+      }
+      execFileSync('git', ['-C', root, 'merge-base', '--is-ancestor', baseSha, headSha], { stdio: 'ignore' });
+      const commitIds = execFileSync('git', ['-C', root, 'rev-list', '--reverse', `${baseSha}..${headSha}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+      const commits = commitIds.map((commitSha) => ({
+        commit_sha: commitSha,
+        changed_paths: execFileSync('git', ['-C', root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', commitSha], { encoding: 'utf8' }).trim().split('\n').filter(Boolean),
+      }));
+      const prefixes = [...new Set(productPathPrefixes.filter(isStr))];
+      if (prefixes.length === 0) problems.push({ code: 'PROVENANCE_PRODUCT_SCOPE_EMPTY' });
+      const isProductPath = (p) => prefixes.some((prefix) => p === prefix || p.startsWith(`${prefix}/`));
+      const manifestsByCommit = new Map();
+      for (const record of durable) {
+        const commit = record.accepted_commit || record.commit_sha || record.commit;
+        if (isCanonicalGitObjectId(commit)
+            && record.root_run_id === rootRunId
+            && record.work_order_id === workOrderId) manifestsByCommit.set(commit, record);
+      }
+      for (const commit of commits) {
+        const paths = commit.changed_paths.filter(isProductPath);
+        if (paths.length === 0) continue;
+        const manifest = manifestsByCommit.get(commit.commit_sha);
+        if (!manifest) {
+          problems.push({ code: 'PROVENANCE_MANIFEST_MISSING', commit: commit.commit_sha, paths });
+          continue;
+        }
+        if (manifest.dispatch_depth === 0) {
+          problems.push({ code: 'PROVENANCE_DEPTH0_PRODUCT_EDIT', commit: commit.commit_sha, paths });
+          continue;
+        }
+        const declared = new Set(Array.isArray(manifest.changed_paths) ? manifest.changed_paths : []);
+        const uncovered = paths.filter((p) => !declared.has(p));
+        if (uncovered.length > 0) problems.push({ code: 'PROVENANCE_PATH_UNBOUND', commit: commit.commit_sha, paths: uncovered });
+      }
+    }
+  } catch (_error) {
+    problems.push({ code: 'PROVENANCE_WORK_ORDER_INVALID' });
+  }
+  return {
+    ok: problems.length === 0,
+    admitted: problems.length === 0,
+    problems,
+    provenance_source: 'immutable_git_and_controller_work_order_manifest',
   };
 }
 
@@ -3927,6 +4022,8 @@ module.exports = {
   admitControllerEffects,
   runPostCompactAdapter,
   admitExecutableMissionDelta,
+  validateDispatchMergeProvenance,
+  validateMergeProvenance: validateDispatchMergeProvenance,
   buildHistoricalOutputsAtCommit,
   buildNoOpReceipt,
   rebuildTranscriptAudit,

@@ -67,6 +67,8 @@ assert_contains "$OUT" "--require-qualified-reviewer" "autopilot help documents 
 assert_contains "$OUT" "--allow-unqualified-reviewer" "autopilot help documents reviewer qualification escape hatch"
 assert_contains "$OUT" "--campaign-contract" "autopilot help documents the mandatory campaign contract"
 assert_contains "$OUT" "--legacy-unmanaged" "autopilot help documents the temporary compatibility rail"
+assert_contains "$OUT" "host-owned exact-roster provider-readiness trust root" \
+  "autopilot help documents strict L5 provider readiness"
 
 printf 'implementer loop prompt\n' > "$TEST_TMP/engine-impl-review-prompt.txt"
 BASE_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
@@ -132,7 +134,160 @@ for level in l5 l6; do
     "${level^^} rejection retains the dated removal deadline"
   assert_eq "$BEFORE_LEGACY_LEDGER" "$AFTER_LEGACY_LEDGER" \
     "${level^^} legacy rejection occurs before any durable runner spend"
+  assert_not_contains "$OUT" '"strict_l5_provider_readiness"' \
+    "${level^^} legacy rejection is never labelled strict L5 readiness"
 done
+
+# Canonical D3 entry fixture: session-mode writes the authoritative marker for
+# a hermetic linked repository, and the campaign projection is derived from
+# that exact admission rather than caller-minted digests.
+D3_REPO="$TEST_TMP/d3-repo"
+git clone -q --no-local "$REPO_ROOT" "$D3_REPO"
+D3_MARKER_DIR="$TEST_TMP/d3-markers"
+D3_SESSION_ID="autopilot-cli-d3"
+AUTOPILOT_SESSION_MODE_DIR="$D3_MARKER_DIR" CLAUDE_CODE_SESSION_ID="$D3_SESSION_ID" \
+  node "$REPO_ROOT/scripts/session-mode.js" set --level l5 --entry-level l5 \
+  --repo-root "$D3_REPO" >/dev/null
+D3_MARKER="$D3_MARKER_DIR/$D3_SESSION_ID.json"
+D3_CAMPAIGN="$TEST_TMP/d3-campaign.json"
+node - "$REPO_ROOT" "$D3_REPO" "$D3_MARKER" "$D3_CAMPAIGN" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [root, repo, markerPath, campaignPath] = process.argv.slice(2);
+const { markerRepoIdentity } = require(path.join(root, 'scripts', 'session-mode.js'));
+const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+const admission = marker.mission_routing.admission;
+fs.writeFileSync(campaignPath, `${JSON.stringify({
+  schema_version: 1,
+  repo_identity: markerRepoIdentity(repo),
+  mission_runtime: {
+    mission_policy_digest: admission.mission_policy_digest,
+    mission_graph_digest: admission.mission_graph_digest,
+  },
+}, null, 2)}\n`);
+NODE
+
+OUT="$(AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/d3-empty-markers" \
+  CLAUDE_CODE_SESSION_ID="$D3_SESSION_ID" AUTOPILOT_LEVEL=l5 \
+  node "$CLI" engine implement-review \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" --cwd "$D3_REPO" \
+    --campaign-contract "$D3_CAMPAIGN" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "managed CLI rejects absent dev-flow admission before readiness"
+assert_contains "$OUT" '"phase":"dev_flow_admission"' \
+  "managed CLI uses the uniform dev-flow admission phase"
+assert_contains "$OUT" '"rejection_code":"DEV_FLOW_ADMISSION_REQUIRED_OR_STALE"' \
+  "managed CLI uses the uniform dev-flow admission rejection code"
+for field in '"dispatcher_called":false' '"model_calls":0' \
+  '"mutation_attempts":0' '"resources_created":0'; do
+  assert_contains "$OUT" "$field" "absent marker rejection preserves zero effect counter $field"
+done
+assert_contains "$OUT" "session marker absent" "absent marker rejection distinguishes its reason"
+
+# Command-level strict-L5 positive fixture. The preload replaces only the
+# process-internal live probe collector with deterministic host observations;
+# production exposes no CLI flag, environment receipt, or serialized callback
+# that can replace either authority closure.
+STRICT_L5_PRELOAD="$TEST_TMP/strict-l5-live-fixture.cjs"
+cat > "$STRICT_L5_PRELOAD" <<'NODE'
+'use strict';
+const path = require('path');
+const root = process.env.STRICT_L5_TEST_REPO_ROOT;
+const modulePath = path.join(root, 'src', 'readiness', 'provider-bootstrap.js');
+const providerBootstrap = require(modulePath);
+const originalCreate = providerBootstrap.createStrictL5ProviderBootstrap;
+const { buildSelectedRoster } = require(path.join(root, 'src', 'readiness', 'status'));
+const { qualifyExactRoleNow } = require(path.join(root, 'src', 'readiness', 'qualification-provider'));
+const { createProviderReadinessReceipt } = require(path.join(root, 'src', 'readiness', 'receipt'));
+const observation = (tuple, axis, now, ttl) => ({
+  schema_version: 1,
+  artifact_type: 'provider_axis_observation',
+  tuple,
+  axis,
+  status: 'ready',
+  observed_at: now,
+  ttl_seconds: ttl,
+  evidence_class: axis === 'qualification'
+    ? 'host-injected-exact-role'
+    : (axis === 'transport' ? 'safe-surface' : 'live-probe'),
+  reason: null,
+});
+providerBootstrap.createStrictL5ProviderBootstrap = (options) => originalCreate(options, {
+  now: () => new Date().toISOString(),
+  collectReadiness: (input) => {
+    const ttl = input.resolvedRoster.provider_readiness_receipt_ttl_seconds;
+    const roster = buildSelectedRoster(input.resolvedRoster, input.now, ttl);
+    for (const seat of roster) {
+      for (const candidate of [seat, ...seat.fallbacks]) {
+        const qualification = qualifyExactRoleNow(
+          input.qualificationProvider,
+          candidate.tuple,
+          input.now,
+          ttl,
+        );
+        candidate.observations = {
+          transport: observation(candidate.tuple, 'transport', input.now, ttl),
+          live: observation(candidate.tuple, 'live', input.now, ttl),
+          qualification,
+        };
+      }
+    }
+    const policy = {
+      receipt_ttl_seconds: ttl,
+      fallback_family_constraint:
+        input.resolvedRoster.provider_readiness_fallback_family_constraint,
+    };
+    return {
+      receipt: createProviderReadinessReceipt({ roster, policy, now: input.now }),
+      roster,
+      policy,
+    };
+  },
+});
+NODE
+
+OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
+  NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+  AUTOPILOT_SESSION_MODE_DIR="$D3_MARKER_DIR" CLAUDE_CODE_SESSION_ID="$D3_SESSION_ID" \
+  AUTOPILOT_LEVEL=l5 \
+  node "$CLI" engine implement-review \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" --cwd "$D3_REPO" \
+    --campaign-contract "$D3_CAMPAIGN" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "strict L5 executable fixture reaches the engine after fresh readiness"
+assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
+  "strict L5 executable fixture consumes a fresh host-owned readiness bundle"
+assert_contains "$OUT" '"policy_digest":"856551c093f382114166404c4c0288da667da5ff4075da30021a7c8a9fea547c"' \
+  "strict L5 executable fixture records the frozen policy digest"
+assert_contains "$OUT" '"cap-v1-22e96639504e14d8a36e29a8e3d5747807a4ec7cc99f454d6898fe2680790575"' \
+  "strict L5 executable fixture records canonical claim provenance"
+
+STRICT_DRIFT_CFG="$TEST_TMP/strict-l5-drift-review-loop.md"
+sed 's/reviewer_engine: MiniMax-M3/reviewer_engine: unknown-reviewer-model/' \
+  "$REPO_ROOT/.claude/review-loop-config.md" > "$STRICT_DRIFT_CFG"
+OUT="$(AUTOPILOT_LEVEL=l5 REVIEW_LOOP_CONFIG_OVERRIDE="$STRICT_DRIFT_CFG" \
+  AUTOPILOT_SESSION_MODE_DIR="$D3_MARKER_DIR" CLAUDE_CODE_SESSION_ID="$D3_SESSION_ID" \
+  node "$CLI" engine implement-review \
+    --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+    --branch loop-branch --base "$BASE_SHA" --cwd "$D3_REPO" \
+    --campaign-contract "$D3_CAMPAIGN" 2>&1)"
+EXIT=$?
+assert_eq "1" "$EXIT" "strict L5 CLI rejects roster drift"
+assert_contains "$OUT" '"rejection_code":"strict_l5_provider_unknown_tuple"' \
+  "strict L5 CLI reports the exact roster-drift rejection"
+assert_contains "$OUT" '"dispatcher_called":false' \
+  "strict L5 CLI roster rejection occurs before dispatcher invocation"
+assert_contains "$OUT" '"model_calls":0' \
+  "strict L5 CLI roster rejection spends zero model calls"
+
+OUT="$(AUTOPILOT_LEVEL=l4 node "$CLI" engine implement-review \
+  --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
+  --branch loop-branch --base "$BASE_SHA" --allow-unqualified-reviewer \
+  --campaign-contract "$TEST_TMP/no-such-campaign.json" 2>&1)"
+assert_not_contains "$OUT" '"strict_l5_provider_readiness"' \
+  "lower-level managed flow is explicit and never labelled strict L5"
 
 OUT="$(node "$CLI" --help 2>&1)"; EXIT=$?
 assert_contains "$OUT" "--resume" "autopilot help documents the --resume flag"

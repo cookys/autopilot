@@ -9,6 +9,10 @@
     "schema": { "type": "integer", "const": 1 },
     "unit_id": { "type": "string", "minLength": 1 },
     "role": { "type": "string", "enum": ["implementer", "verification-author", "reviewer", "explorer", "verifier", "planner"] },
+    "deliberate_polarity": {
+      "description": "Trusted declaration that this dispatch unit ships a deliberate red-before/green-after verification artifact.",
+      "type": "boolean"
+    },
     "goal": { "type": "string", "minLength": 1 },
     "spec": {
       "type": "object",

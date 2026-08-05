@@ -3,24 +3,70 @@
 This directory contains the Codex packaging surface for Autopilot.
 
 - `plugin/` is the Codex plugin root.
-- `plugin/skills` is a generated copy of the repository's canonical `skills/`.
+- `plugin/skills` is a generated projection of the repository's canonical `skills/`.
+  Seven lifecycle/front-door skills receive the normative Codex adapter from
+  `skill-adapters/lifecycle.md`; every other file remains byte-identical.
 - `plugin/bin`, `plugin/src`, `plugin/references`, `plugin/scripts`,
   `plugin/project-config-template`, selected `plugin/docs` files, and
   `plugin/hooks/_shared` are generated support payload for skill links and
-  engine CLI commands.
+  engine CLI commands. `plugin/hooks/hooks.json`, `plugin/hooks/pre-effect.js`,
+  `plugin/hooks/post-compact.js`, and the shared edit-gate core are generated
+  byte-for-byte from their canonical sources. The retained `pre-effect.js` is
+  an unregistered, non-production probe helper.
 - `.agents/plugins/marketplace.json` is a repo-local marketplace for development.
 
-The package manifest intentionally exposes only skills. It does not declare
-Claude Code hooks, apps, or MCP servers; the extra payload exists so referenced
-support files resolve after installation.
+The package manifest exposes skills plus one Codex-native production boundary:
+`PostCompact` with matcher `manual|auto`. It does not ship Codex-thread-bound
+direct-mutation enforcement; the retained `pre-effect.js` is unregistered and
+non-production. It does not declare the Claude Code hook bundle, apps, or MCP
+servers. Each wrapper translates the official Codex payload into an existing
+Autopilot decision core; this is not a claim of Claude hook parity.
 
-Some canonical skill bodies still describe Claude Code-only orchestration
-surfaces such as `TaskCreate`, native `Agent` dispatch, `TaskStop`, and
-`subagent_type`. Codex can read those bodies as methodology guidance, and the
-packaged support CLI/scripts work where they are host-neutral, but those
-Claude-only tool calls are not provided by the Codex package. Treat them as
-platform-specific instructions until a future harness-neutral skill-body split
-lands.
+The generated `dev-flow`, `ceo-agent`, `l3`, `l4`, `l5`, `l6`, and `finish-flow`
+copies place a Codex-native override immediately after YAML frontmatter. It maps
+entry to the packaged `session-mode.js` and managed execution to the sealed
+Mission/Engine path before the unchanged canonical body. It also states that
+`TaskCreate`, `TaskUpdate`, `TaskStop`, native `Agent`, and `subagent_type` are
+unavailable and must not be imitated with ad-hoc tickets, inline managed work,
+or replacement lineages.
+
+## Pre-effect probe status
+
+Codex 0.146.0 proved that a structured `PreToolUse` stdout decision can block a
+request-bound shell mutation in a probe. That result is retained as D1
+capability evidence only: the production package does not register `PreToolUse`
+and does not ship Codex-thread-bound direct-mutation enforcement. The retained
+adapter returns `DEV_FLOW_ENTRY_REQUIRED` without a valid marker, preserves
+`/l3` inline work, and recognizes the fixed managed Engine route in its probe
+path; these are not production hook guarantees.
+
+The same evidence also proves a separate host limitation: when the probe adapter
+process exited 17 before emitting structured stdout, Codex executed the mutation
+and exited 0. No production direct-mutation claim is made, including fail-closed
+adapter crash/nonzero behavior. Shell/exec is classified as effect-capable as a
+whole; the probe adapter does not guess arbitrary command mutation semantics. The sanitized
+[receipt](../../docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json)
+records the current probe source/generated adapter and manifest hashes, no-admission denial,
+attempted L3/L5/managed-entry sequence, and fail-open broken control. D4 remains `NOT_READY/NO_SHIP`: the two lifecycle entry commands ran, but no
+payload-session marker was visible to their following effect calls, so the L3 allow, L5 direct-deny
+classification, and managed Engine entry did not qualify. The sole existing campaign is also sealed
+to the pre-amendment Mission graph; creating replacement authority was outside the repair.
+
+Markers are keyed to the Codex hook payload's session identity and also store that identity in the
+marker body. Renaming or copying a marker cannot admit a different host session. The final probe
+did not observe a qualified payload-session bridge across the shell boundary, so no
+Codex-thread-bound production direct-mutation claim is made.
+
+Managed Engine entry is independently fail-closed. Before provider readiness,
+roster probing, resource creation, or dispatch, it requires the existing
+session marker to match TTL, effective level, Git common-dir, and the sealed
+Mission policy/graph/source admission. This does not broaden the package's hook
+capability claim.
+
+When that managed path selects a Codex implementer, the dispatcher creates a mode-0700 temporary
+`CODEX_HOME`, copies only `auth.json` at mode 0600, unsets the controller's `CODEX_THREAD_ID`, and
+invokes `codex exec --ignore-user-config`. Controller config, plugins, and session state therefore
+cannot cause the production hook to intercept its own managed child.
 
 ## Subagent model routing (`spawn_agent`) — opt-in
 
@@ -51,6 +97,24 @@ release; the failure mode is loud (spawn returns 400), so "use until it breaks"
 is safe. Without the opt-in, treat subagent spawns as same-model-as-parent and
 budget accordingly.
 
+## Production `PostCompact` recovery
+
+The installed `autopilot@autopilot-local` package registers
+`./hooks/hooks.json`. On manual `/compact` and threshold-driven automatic
+compaction, its adapter resolves the exact Git root/common-dir and active work
+order, then invokes the existing `postcompact-adapter` authority. Continuation
+is blocked when payload identity or reconciliation fails.
+
+The committed [production live receipt](../../docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/codex-postcompact-production-live-receipt.json)
+was captured on codex-cli 0.146.0. It proves manual and threshold-12000 automatic
+reconciliation before effect, plus a broken-adapter control with hook failure,
+no reconciliation receipt, and no effect sentinel. This is the package's sole
+production Codex hook. The retained `pre-effect.js` source is a non-production
+probe helper and is not registered by the installed manifest.
+
+Codex requires non-managed plugin hooks to be reviewed and trusted before they
+run. Review the package hook declaration during installation.
+
 ## Hook probe package
 
 `hook-probe/` is a separate Codex plugin marketplace used only for adapter
@@ -77,9 +141,8 @@ HOME="$tmp_home" CODEX_HOME="$tmp_home/.codex" codex plugin marketplace add ./pl
 HOME="$tmp_home" CODEX_HOME="$tmp_home/.codex" codex plugin add autopilot-hook-probe@autopilot-hook-probe-local
 ```
 
-Codex requires non-managed plugin hooks to be reviewed and trusted before they
-run. Use the probe output as evidence before moving any Autopilot hook from
-warning-only telemetry to behavior that influences a tool call or ship decision.
+Use the probe only for shape/cwd/env/failure maintenance evidence. It remains
+warning-only and does not replace or configure either production adapter.
 
 ## Local install smoke
 
@@ -111,3 +174,10 @@ drift gate used by pre-commit and `preflight-portability.sh`.
 Run packaged engine commands from the target repository, or pass
 `--cwd /path/to/repo` to `engine implement-review` so implementation worktrees
 and review diffs use the intended project.
+
+When `AUTOPILOT_LEVEL=l5` selects the ordinary managed Engine path, the installed payload uses the
+same canonical strict-L5 bootstrap as the source tree. It freezes the exact six-claim provider
+policy, matches the target repository's complete invocation roster, and consumes fresh process-local
+qualification/live-readiness closures before workflow dispatch. No Codex setting or serialized
+receipt replaces that host-owned authority, and this Engine behavior does not broaden the package's
+single-hook portability claim.

@@ -16,8 +16,10 @@ node "$WF" >/dev/null 2>&1; assert_eq "2" "$?" "--ledger required exit 2"
 node "$WF" --ledger x --bogus >/dev/null 2>&1; assert_eq "2" "$?" "unknown arg exit 2"
 
 # --- 2. real ledger records (produced by run-ledger.sh, never hand-forged) -----
-bash "$RL" stage-acquire --ledger "$LEDGER" --run-id wfrun --stage implement >/dev/null 2>&1
+bash "$RL" stage-acquire --ledger "$LEDGER" --run-id wfrun --stage implement --pid "$$" >/dev/null 2>&1
+bash "$RL" stage-acquire --ledger "$LEDGER" --run-id wfrun2 --stage implement --pid "$$" >/dev/null 2>&1
 bash "$RL" stage-transition --ledger "$LEDGER" --run-id wfrun --stage implement --to committed >/dev/null 2>&1 || true
+bash "$RL" stage-event --ledger "$LEDGER" --run-id wfrun --stage implement --condition waiting --reason child-boundary >/dev/null 2>&1
 
 # leaf manifests: one live (fresh log), one ended, one live with an OLD quiet log
 mk_manifest() { # id role ended log
@@ -34,6 +36,8 @@ mk_manifest leaf-quiet implementer null "$W/quiet.log"
 # --- 3. --once snapshot sees stages + live leaves --------------------------------
 OUT="$(node "$WF" --ledger "$LEDGER" --runs-dir "$W/runs" --quiet-secs 600 --once 2>&1)"
 assert_contains "$OUT" "STAGE run=wfrun implement" "snapshot emits stage event"
+assert_contains "$OUT" "STAGE run=wfrun2 implement" "stage tracking is keyed by run_id plus stage"
+assert_contains "$OUT" "CONDITION run=wfrun implement waiting" "snapshot emits typed waiting condition"
 assert_contains "$OUT" "LEAF_START leaf-live" "snapshot emits live leaf"
 assert_contains "$OUT" "LEAF_END leaf-done reviewed" "snapshot emits ended leaf with status"
 assert_contains "$OUT" "LEAF_STALL leaf-quiet" "snapshot flags quiet live leaf (report-only)"

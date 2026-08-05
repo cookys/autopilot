@@ -31,6 +31,9 @@ const AUTOPILOT_ENGINE_RUNTIME_CONTEXT_OPTION_KEYS = Object.freeze([
   'missionPreparedReceipt',
   'missionPreparedReceiptPath',
   'missionStatePath',
+  'providerReadinessAuthority',
+  'qualificationProvider',
+  'remediationChecker',
 ]);
 const TRUSTED_INTAKE_VERIFICATION_PATH = 'host_pinned_authenticated_intake';
 const P2_ACTION_AUTHORITY_DESTINATIONS = Object.freeze([

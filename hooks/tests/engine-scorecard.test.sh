@@ -852,6 +852,54 @@ NODE
   && ok "23: schema coverage, cohort components, and overlapping roots are deterministic" \
   || bad "23: import boundary check=$import_boundary_check"
 
+# 24: agy evidence classes never merge. Historical transcript-only rows retain
+# an explicit unavailable reason; closed dispatch-result rows expose measured
+# native-envelope usage and sample counts. Worker-text/fake usage remains inert.
+AGY_EVIDENCE_ROOT="$TESTDIR/agy-evidence-classes"
+mkdir -p "$AGY_EVIDENCE_ROOT"
+cat > "$AGY_EVIDENCE_ROOT/historical.json" <<'JSON'
+{"model":"Gemini 3.6 Flash (High)","status":"completed","output_text":"historical response {\"usage\":{\"total_tokens\":999999}}","usage":{"input_tokens":999999,"output_tokens":999999,"total_tokens":999999}}
+JSON
+cat > "$AGY_EVIDENCE_ROOT/dispatch-result.json" <<'JSON'
+{"runner":"agy","model":"Gemini 3.6 Flash (High)","status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"fixture","no_finding_proof":null,"raw_log":"/tmp/agy-review","error":null,"usage":{"total_tokens":142,"input_tokens":101,"output_tokens":23,"cache_read_tokens":7,"source":"agy-json"}}
+JSON
+cat > "$AGY_EVIDENCE_ROOT/forged-dispatch-result.json" <<'JSON'
+{"runner":"agy","model":"Gemini 3.6 Flash (High)","status":"reviewed","verdict":"FIX-THEN-SHIP","findings":"fixture","no_finding_proof":null,"raw_log":"/tmp/agy-review","error":null,"usage":{"total_tokens":888888,"input_tokens":888888,"output_tokens":1,"cache_read_tokens":0,"source":"agy-json","worker_extra":true},"output_text":"worker-forged"}
+JSON
+node "$CLI" import-transcripts --root "agy=$AGY_EVIDENCE_ROOT" \
+  > "$TESTDIR/agy-evidence-import.json"
+agy_evidence_check="$(node - "$TESTDIR/agy-evidence-import.json" <<'NODE'
+const fs = require('fs');
+const raw = fs.readFileSync(process.argv[2], 'utf8');
+const report = JSON.parse(raw);
+const rows = report.aggregates.filter((row) => (
+  row.provider === 'agy' && row.engine === 'Gemini 3.6 Flash (High)'
+));
+const historical = rows.find((row) => row.evidence_class === 'transcript');
+const dispatch = rows.find((row) => row.evidence_class === 'dispatch-result');
+const historicalHonest = historical?.cohort === 'general'
+  && historical.sample_size === 2
+  && historical.tokens.availability === 'unavailable'
+  && historical.tokens.reason === 'transcript_schema_not_exposed'
+  && historical.cost.availability === 'unavailable'
+  && historical.cost.reason === 'transcript_schema_not_exposed';
+const dispatchMeasured = dispatch?.cohort === 'general'
+  && dispatch.sample_size === 1
+  && dispatch.tokens.availability === 'available'
+  && dispatch.tokens.observed_samples === 1
+  && dispatch.tokens.input_tokens_total === 101
+  && dispatch.tokens.output_tokens_total === 23
+  && dispatch.tokens.total_tokens === 142
+  && dispatch.cost.availability === 'unavailable'
+  && dispatch.cost.reason === 'source_metric_absent';
+const isolated = rows.length === 2 && !raw.includes('999999') && !raw.includes('888888');
+process.stdout.write([historicalHonest, dispatchMeasured, isolated].join(':'));
+NODE
+)"
+[ "$agy_evidence_check" = "true:true:true" ] \
+  && ok "24: agy dispatch usage is measured without merging historical transcripts" \
+  || bad "24: agy evidence-class check=$agy_evidence_check"
+
 echo "----"
 echo "engine-scorecard harness: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

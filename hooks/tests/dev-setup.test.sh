@@ -60,14 +60,18 @@ assert_eq "$BACKUPS" "1" "legacy setup creates registry backup before write"
 CHECK_HOME="$TEST_TMP/check-home"
 mkdir -p "$CHECK_HOME"
 mkdir -p "$TEST_TMP/no-cli-bin"
+NODE_RUNTIME_BIN="$TEST_TMP/node-runtime-bin"
+mkdir -p "$NODE_RUNTIME_BIN"
+ln -s "$(command -v node)" "$NODE_RUNTIME_BIN/node"
+CHECK_PATH="$TEST_TMP/no-cli-bin:$NODE_RUNTIME_BIN:/usr/bin:/bin"
 BEFORE_COUNT="$(count_home_entries "$CHECK_HOME")"
-OUT="$(HOME="$CHECK_HOME" PATH="$TEST_TMP/no-cli-bin:/usr/bin:/bin" bash "$SCRIPT" --check --harness claude 2>&1)"; EXIT=$?
+OUT="$(HOME="$CHECK_HOME" PATH="$CHECK_PATH" bash "$SCRIPT" --check --harness claude 2>&1)"; EXIT=$?
 AFTER_COUNT="$(count_home_entries "$CHECK_HOME")"
 assert_eq "$EXIT" "0" "claude check without install exits 0 on missing user config"
 assert_contains "$OUT" "WARN claude" "claude check reports missing user config as warning"
 assert_eq "$AFTER_COUNT" "$BEFORE_COUNT" "claude check does not write HOME"
 
-OUT="$(HOME="$CHECK_HOME" PATH="$TEST_TMP/no-cli-bin:/usr/bin:/bin" bash "$SCRIPT" --check 2>&1)"; EXIT=$?
+OUT="$(HOME="$CHECK_HOME" PATH="$CHECK_PATH" bash "$SCRIPT" --check 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "--check without harness exits 0"
 assert_contains "$OUT" "WARN claude" "--check without harness includes Claude"
 assert_contains "$OUT" "codex" "--check without harness includes Codex"
@@ -77,7 +81,7 @@ assert_contains "$OUT" "agy" "--check without harness includes agy"
 AGY_HOME="$TEST_TMP/agy-home"
 mkdir -p "$AGY_HOME/.gemini/config/plugins"
 ln -s "$REPO_ROOT" "$AGY_HOME/.gemini/config/plugins/autopilot"
-OUT="$(HOME="$AGY_HOME" PATH="$TEST_TMP/no-cli-bin:/usr/bin:/bin" bash "$SCRIPT" --check --harness agy 2>&1)"; EXIT=$?
+OUT="$(HOME="$AGY_HOME" PATH="$CHECK_PATH" bash "$SCRIPT" --check --harness agy 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "1" "agy check fails on symlink hazard"
 assert_contains "$OUT" "FAIL agy" "agy check marks symlink hazard as fail"
 
@@ -100,7 +104,7 @@ case "$1" in
 esac
 SH
 chmod +x "$STUB_BIN/codex"
-CODEX_STUB_MARKER="$TEST_TMP/codex-stub-marker" OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$TEST_TMP/codex-stub-marker" bash "$SCRIPT" --harness codex 2>&1)"; EXIT=$?
+CODEX_STUB_MARKER="$TEST_TMP/codex-stub-marker" OUT="$(HOME="$CHECK_HOME" PATH="$STUB_BIN:$NODE_RUNTIME_BIN:/usr/bin:/bin" CODEX_STUB_MARKER="$TEST_TMP/codex-stub-marker" bash "$SCRIPT" --harness codex 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "codex harness without --install is check-only"
 assert_contains "$OUT" "strict read-only mode" "codex check skips active CLI probes"
 assert_file_absent "$TEST_TMP/codex-stub-marker" "codex check does not call codex plugin subcommands"

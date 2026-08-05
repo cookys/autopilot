@@ -811,9 +811,22 @@ function buildPrompt(seat, planBytes, rubricBytes, rubricIds) {
 Review only against frozen rubric IDs: ${[...rubricIds].join(', ')}.
 Do not schedule another review generation. The controller owns attempts and termination.
 
-Return one JSON object with only verdict and findings. Each finding uses:
+Return one JSON object with only verdict and findings; do not emit Markdown or any prose outside
+that object. Every finding must contain all ten keys (never omit a key and never use null):
 rubric_id, class, severity, affected_surface, claim, evidence, evidence_reference,
-repair, blocks_next_slice_or_immediate_integrity, cannot_defer_to_spike.
+repair, blocks_next_slice_or_immediate_integrity, cannot_defer_to_spike. The first eight keys
+must be non-empty JSON strings and the last two keys must be JSON booleans. This remains true for
+non-blocking findings; give them concrete evidence and a non-empty repair string such as
+"No current change; follow-up only." Never use null for evidence or repair.
+Every string value must be valid RFC 8259 JSON: JSON-escape embedded double quotes, backslashes,
+newlines, tabs, and other control characters; never copy raw shell quoting into a string. Before
+returning, ensure a strict JSON parse would succeed; if a command example needs quoting, paraphrase
+it or use single quotes inside the JSON string.
+Allowed verdict values (exact strings): "READY", "CONDITIONAL", "STOP".
+Allowed class values (exact strings): "decision-now", "implementation-spike", "future".
+Allowed severity values (exact strings): "blocking", "non-blocking".
+A finding is a blocker candidate if and only if all of these hold: rubric_id is one of the frozen rubric IDs above; class is "decision-now"; severity is "blocking"; blocks_next_slice_or_immediate_integrity is true; cannot_defer_to_spike is true.
+READY is valid only when findings is empty; if any finding exists, use CONDITIONAL or STOP.
 
 <FROZEN_RUBRIC_${nonce}>
 ${rubricBytes.toString('utf8')}
@@ -853,7 +866,15 @@ function sleepMilliseconds(milliseconds) {
   }
 }
 
-function dispatchSeat(target, prompt, attempt, sequence, legacyEnv, sequenceAttempt = attempt) {
+function dispatchSeat(
+  target,
+  prompt,
+  attempt,
+  sequence,
+  legacyEnv,
+  sequenceAttempt = attempt,
+  repoRoot,
+) {
   const seam = seamEntry(sequence, target.id, sequenceAttempt, legacyEnv);
   if (seam) {
     if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS !== '1') {
@@ -904,9 +925,11 @@ function dispatchSeat(target, prompt, attempt, sequence, legacyEnv, sequenceAtte
     '--timeout', `${target.timeoutSeconds}s`,
   ];
   if (target.endpoint !== 'default') args.push('--endpoint', target.endpoint);
+  if (target.runner === 'codex') args.push('--repo-root', repoRoot);
+  const childCwd = target.runner === 'codex' ? repoRoot : tempDir;
   try {
     const run = spawnSync(DISPATCH_AUTHOR, args, {
-      cwd: tempDir,
+      cwd: childCwd,
       env: { ...process.env, DISPATCH_QUIET: '1', DISPATCH_DETACH: '0' },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -933,7 +956,7 @@ function dispatchSeat(target, prompt, attempt, sequence, legacyEnv, sequenceAtte
       model: target.model,
       operation: 'plan-review',
       argv: args,
-      cwd: tempDir,
+      cwd: childCwd,
       child: {
         status: success ? 0 : (Number.isInteger(run.status) ? run.status : 1),
         signal: run.signal || null,
@@ -977,6 +1000,7 @@ function fallbackEligible(manifest, seat, fallback, selectedTargets) {
 function reviewSeat({
   manifest,
   seat,
+  repoRoot,
   planBytes,
   rubricBytes,
   rubricIds,
@@ -1052,6 +1076,7 @@ function reviewSeat({
       sequence,
       legacyEnv,
       selected.id === seat.id ? attempt : 1,
+      repoRoot,
     );
     const normalized = normalizePlanReviewPayload({
       envelope: dispatched.envelope,
@@ -1493,6 +1518,7 @@ function main() {
       const seatReview = reviewSeat({
         manifest,
         seat,
+        repoRoot: opts.repoRoot,
         planBytes,
         rubricBytes,
         rubricIds,

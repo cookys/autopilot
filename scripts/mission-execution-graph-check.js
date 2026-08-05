@@ -141,8 +141,10 @@ function loadSourceCoverageManifest(manifestPath) {
     for (const line of rubricBytes.toString('utf8').split(/\r?\n/)) {
       const heading = line.match(/^#{2,6}\s+(R[0-9]+)(?:\s|$)/);
       const bullet = line.match(/^\s*-\s+(R[0-9]+)\s*:/);
+      const plain = line.match(/^\s*(R[0-9]+)\s*:/);
       if (heading) rubricTokens.push(heading[1]);
       if (bullet) rubricTokens.push(bullet[1]);
+      if (plain) rubricTokens.push(plain[1]);
     }
     if (rubricTokens.length === 0) throw new Error(`source manifest.sources[${index}] has no rubric IDs`);
     if (new Set(rubricTokens).size !== rubricTokens.length) {

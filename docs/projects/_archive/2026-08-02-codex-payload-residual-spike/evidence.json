@@ -1,0 +1,274 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-08-02T09:08:51Z",
+  "environment": {
+    "codex_version": "codex-cli 0.146.0",
+    "installed_plugin_id": "autopilot@autopilot-local",
+    "installed_plugin_version": "2.34.1",
+    "installed_payload_root": "<CODEX_HOME>/plugins/cache/autopilot-local/autopilot/2.34.1",
+    "marketplace_source_type": "local",
+    "scratch_git_repo": true,
+    "scratch_repo_local_skills": false
+  },
+  "probe_resources": {
+    "marketplace_name": "payload-residual-20260802-0854z",
+    "plugin_name": "residual-fixture-20260802-0854z",
+    "plugin_id": "residual-fixture-20260802-0854z@payload-residual-20260802-0854z",
+    "temp_root": "/tmp/codex-payload-residual-l4-20260802-0854z",
+    "cache_root": "<CODEX_HOME>/plugins/cache/payload-residual-20260802-0854z"
+  },
+  "prerequisites": {
+    "installed_payload_e2e": {
+      "verdict": "pass",
+      "sanitized_command": "codex exec --ephemeral --sandbox read-only --json -C <scratch-repo> '<invoke $autopilot:audit; read linked routing-tiebreaks.md; compare source.txt and target.txt>'",
+      "exit_code": 0,
+      "operations": [
+        {
+          "id": "installed_plugin_preflight",
+          "sanitized_command": "codex plugin list --json",
+          "exit_code": 0,
+          "observed": {
+            "plugin_id": "autopilot@autopilot-local",
+            "version": "2.34.1",
+            "installed": true,
+            "enabled": true,
+            "source_type": "local"
+          }
+        },
+        {
+          "id": "logged_in_exec_confirmation",
+          "sanitized_command": "codex exec --ephemeral --sandbox read-only --json -C <scratch-repo> '<invoke $autopilot:audit; read linked support reference; compare planted files>'",
+          "exit_code": 0,
+          "observed": {
+            "event_format": "JSONL",
+            "final_markers": [
+              "CASE_CHANGE_BETA",
+              "TARGET_ADDS_DELTA"
+            ]
+          }
+        },
+        {
+          "id": "installed_audit_skill_read",
+          "source_event": "item.completed.command_execution",
+          "sanitized_path": "<CODEX_HOME>/plugins/cache/autopilot-local/autopilot/2.34.1/skills/audit/SKILL.md",
+          "status": "completed",
+          "exit_code": 0
+        },
+        {
+          "id": "installed_support_reference_read",
+          "source_event": "item.completed.command_execution",
+          "sanitized_path": "<CODEX_HOME>/plugins/cache/autopilot-local/autopilot/2.34.1/references/routing-tiebreaks.md",
+          "status": "completed",
+          "exit_code": 0
+        }
+      ],
+      "oracles": {
+        "expected_differences": [
+          "source line 2 beta becomes target BETA",
+          "target line 4 adds delta"
+        ],
+        "observed_difference_markers": [
+          "CASE_CHANGE_BETA",
+          "TARGET_ADDS_DELTA"
+        ],
+        "scratch_before": {
+          "status_porcelain_lines": 0,
+          "tree_sha": "205de3295f0a7577477fa0838ea740800f331065",
+          "repo_local_skills_present": false
+        },
+        "scratch_after": {
+          "status_porcelain_lines": 0,
+          "tree_sha": "205de3295f0a7577477fa0838ea740800f331065",
+          "repo_local_skills_present": false
+        },
+        "tree_unchanged": true
+      },
+      "observations": [
+        "JSON tool events read <CODEX_HOME>/plugins/cache/autopilot-local/autopilot/2.34.1/skills/audit/SKILL.md.",
+        "JSON tool events read the linked <CODEX_HOME>/plugins/cache/autopilot-local/autopilot/2.34.1/references/routing-tiebreaks.md before the verdict.",
+        "The final result reported the planted line-2 beta-to-BETA case change and target-only line-4 delta addition.",
+        "The scratch repository had no .agents/skills directory; status stayed clean and its tree hash stayed 205de3295f0a7577477fa0838ea740800f331065."
+      ]
+    },
+    "marketplace_semantics": {
+      "verdict": "unproven",
+      "sanitized_command": "codex plugin marketplace add <local-fixture> --json; codex plugin add <fixture>@<marketplace> --json; mutate A-to-B; codex plugin list --marketplace <marketplace> --available --json; codex plugin marketplace upgrade <marketplace> --json; codex exec --ephemeral --sandbox read-only --json -C <scratch-repo> '<read installed generation marker>'",
+      "exit_code": 1,
+      "operations": [
+        {
+          "id": "fixture_precondition",
+          "sanitized_command": "codex plugin marketplace list --json; codex plugin list --available --json",
+          "exit_code": 0,
+          "observed": {
+            "matching_marketplaces": 0,
+            "matching_plugins": 0
+          }
+        },
+        {
+          "id": "marketplace_add_generation_a",
+          "sanitized_command": "codex plugin marketplace add <local-fixture> --json",
+          "exit_code": 0,
+          "observed": {
+            "marketplace_name": "payload-residual-20260802-0854z",
+            "source_type": "local"
+          }
+        },
+        {
+          "id": "plugin_list_generation_a",
+          "sanitized_command": "codex plugin list --marketplace payload-residual-20260802-0854z --available --json",
+          "exit_code": 0,
+          "observed": {
+            "plugin_name": "residual-fixture-20260802-0854z",
+            "available_version": "0.1.0",
+            "installed": false
+          }
+        },
+        {
+          "id": "plugin_add_generation_a",
+          "sanitized_command": "codex plugin add residual-fixture-20260802-0854z@payload-residual-20260802-0854z --json",
+          "exit_code": 0,
+          "observed": {
+            "installed_version": "0.1.0",
+            "lifecycle_marker_present": false
+          }
+        },
+        {
+          "id": "fixture_mutation_a_to_b",
+          "sanitized_command": "<apply-patch generation A 0.1.0 to generation B 0.2.0>",
+          "exit_code": 0,
+          "observed": {
+            "source_version": "0.2.0",
+            "source_marker": "PAYLOAD_GENERATION_B"
+          }
+        },
+        {
+          "id": "plugin_list_after_source_mutation",
+          "sanitized_command": "codex plugin list --marketplace payload-residual-20260802-0854z --available --json",
+          "exit_code": 0,
+          "observed": {
+            "installed_version": "0.1.0",
+            "source_version": "0.2.0"
+          }
+        },
+        {
+          "id": "local_marketplace_upgrade",
+          "sanitized_command": "codex plugin marketplace upgrade payload-residual-20260802-0854z --json",
+          "exit_code": 1,
+          "observed": {
+            "error_class": "not_configured_as_git_marketplace",
+            "lifecycle_marker_present": false
+          }
+        },
+        {
+          "id": "loader_after_source_mutation",
+          "sanitized_command": "codex exec --ephemeral --sandbox read-only --json -C <scratch-repo> '<invoke fixture generation-marker skill>'",
+          "exit_code": 0,
+          "observed": {
+            "skill_path": "<CODEX_HOME>/plugins/cache/payload-residual-20260802-0854z/residual-fixture-20260802-0854z/0.1.0/skills/generation-marker/SKILL.md",
+            "marker": "PAYLOAD_GENERATION_A",
+            "lifecycle_marker_present": false
+          }
+        }
+      ],
+      "observations": [
+        "Generation A installed at version 0.1.0 from a uniquely named local marketplace.",
+        "After the local source changed to generation B version 0.2.0, plugin list still reported installed version 0.1.0.",
+        "A fresh loader run read the cached 0.1.0 skill and returned PAYLOAD_GENERATION_A, not generation B.",
+        "Exact marketplace upgrade for the local fixture exited 1 because the marketplace was not configured as Git.",
+        "CLI help defines marketplace upgrade as Git snapshot refresh; no external Git marketplace was published, so its refresh behavior was not inferred from the local probe."
+      ]
+    },
+    "native_install_time_hook": {
+      "verdict": "fail",
+      "sanitized_command": "codex plugin --help; codex plugin marketplace upgrade --help; codex plugin add <fixture>@<marketplace> --json; inspect structural keys of installed curated .codex-plugin/plugin.json corpus",
+      "exit_code": 0,
+      "operations": [
+        {
+          "id": "plugin_command_surface",
+          "sanitized_command": "codex plugin --help; codex plugin marketplace upgrade --help; codex features list",
+          "exit_code": 0,
+          "observed": {
+            "upgrade_contract": "refresh configured Git marketplace snapshots",
+            "plugin_hooks_feature": "removed"
+          }
+        },
+        {
+          "id": "accepted_manifest_negative_control",
+          "sanitized_command": "codex plugin add residual-fixture-20260802-0854z@payload-residual-20260802-0854z --json",
+          "exit_code": 0,
+          "observed": {
+            "cached_manifest_keys": [
+              "description",
+              "interface",
+              "lifecycle",
+              "name",
+              "scripts",
+              "skills",
+              "version"
+            ],
+            "generator_declared_exit_code": 17,
+            "lifecycle_marker_present_after_add": false
+          }
+        },
+        {
+          "id": "curated_manifest_corpus",
+          "sanitized_command": "inspect structural keys of <CODEX_HOME>/plugins/cache/openai-curated-remote/*/*/.codex-plugin/plugin.json",
+          "exit_code": 0,
+          "observed": {
+            "manifest_count": 4,
+            "manifests_with_scripts_or_lifecycle": 0
+          }
+        }
+      ],
+      "observations": [
+        "The disposable manifest included scripts.postinstall, scripts.postupgrade, lifecycle.install, and lifecycle.upgrade entries targeting a marker script that exits 17.",
+        "Plugin add accepted and cached the fields but exited 0; the marker was absent, proving the generator was not invoked on install.",
+        "The applicable local marketplace upgrade path rejected the source as non-Git and did not invoke the generator.",
+        "Four installed curated plugin manifests contained neither scripts nor lifecycle fields.",
+        "No native automatic pre-discovery generation point with fail-loud install and applicable upgrade behavior was demonstrated."
+      ]
+    }
+  },
+  "final_decision": "NO-GO",
+  "committed_mirrors_preserved": true,
+  "generated_documentation_mirror_updated": true,
+  "cleanup": {
+    "plugin": true,
+    "marketplace": true,
+    "temp_repo": true,
+    "processes": true,
+    "zero_residue": true,
+    "checks": {
+      "plugin": {
+        "resource": "residual-fixture-20260802-0854z@payload-residual-20260802-0854z",
+        "remove_command": "codex plugin remove residual-fixture-20260802-0854z@payload-residual-20260802-0854z --json",
+        "remove_exit_code": 0,
+        "postcheck_command": "codex plugin list --available --json",
+        "postcheck_exit_code": 0,
+        "matching_entries_after": 0,
+        "cache_root_absent_after": true
+      },
+      "marketplace": {
+        "resource": "payload-residual-20260802-0854z",
+        "remove_command": "codex plugin marketplace remove payload-residual-20260802-0854z --json",
+        "remove_exit_code": 0,
+        "postcheck_command": "codex plugin marketplace list --json",
+        "postcheck_exit_code": 0,
+        "matching_entries_after": 0
+      },
+      "temp_repo": {
+        "resource": "/tmp/codex-payload-residual-l4-20260802-0854z",
+        "predelete_realpath_validated": true,
+        "removal_command": "find /tmp/codex-payload-residual-l4-20260802-0854z -depth -delete",
+        "removal_exit_code": 0,
+        "path_absent_after": true
+      },
+      "processes": {
+        "resource_match": "codex process argv containing codex-payload-residual-l4-20260802-0854z",
+        "postcheck_command": "ps -eo comm,args | <exact owned-process filter>",
+        "postcheck_exit_code": 0,
+        "matching_processes_after": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "next-touch-debt-retirement-2026-08-03",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "39f938f65520505682d95e17b0605a91642896ef12634ec273c8087aa31e97b4",
+      "disposition": "accepted_blocker",
+      "rationale": "D3 names a live trusted-cwd caller-boundary repair without explicitly binding it to the named backlog entry; the frozen plan must make that identity and scope relationship explicit before implementation."
+    },
+    {
+      "fingerprint": "e615b81cb8dcba6e0ecd84748ea3e6762226c00d7b66e79251332f8a583c0910",
+      "disposition": "accepted_blocker",
+      "rationale": "The plan currently places doc-sync and backlog removal after integration; the reviewed cumulative candidate must own those mutations before its final freeze."
+    },
+    {
+      "fingerprint": "6969d92a60f236438fd9bcae0a2aa287e2c3eeb40164ea01c7d6280850c0fa3c",
+      "disposition": "accepted_blocker",
+      "rationale": "D6's stated performance acceptance lacks an executable benchmark contract and validator, so it cannot be mechanically closed as written."
+    },
+    {
+      "fingerprint": "c37a5dc9d1e7b948895f8b662fe4c76644573168023a3c410d5169441e7e50f9",
+      "disposition": "accepted_blocker",
+      "rationale": "The final authority wording does not bind verifier/reviewer identity and every repaired candidate to exact base and candidate SHAs; this is an immediate integrity gap."
+    },
+    {
+      "fingerprint": "d3ce397116ccadee99cd7f996a4e32cce137c34fa85e466be34d38c55b1ee3d1",
+      "disposition": "accepted_blocker",
+      "rationale": "The integrated review ledger and fail-closed transport/generation accounting are not explicit enough to prevent a hidden retry or generation escape."
+    },
+    {
+      "fingerprint": "da0eb0ad95378435bd9e36428dbbfd46302de36ea14975136f36fe24f1036548",
+      "disposition": "accepted_blocker",
+      "rationale": "D1-D7, D4 live trials, final seats, repairs, and D8 retries lack exact pre-spend reservations and a bound terminal evidence receipt."
+    },
+    {
+      "fingerprint": "bd4cf885ff69d4917a617d2017a49603b43cb929e3b9b9cfa8d6b0486d5438fc",
+      "disposition": "accepted_blocker",
+      "rationale": "The plan's 32 conditional-entry count is stale against the current canonical backlog count of 29 and must be reconciled before review can authorize execution."
+    },
+    {
+      "fingerprint": "74c0567f14edc1bb96799c89ab1731399568d5ac6f15d8be4f592a65ccc4b6f2",
+      "disposition": "accepted_blocker",
+      "rationale": "The listed completion commands do not mechanically prove authorization, exact backlog removal, review provenance, integration ancestry, or archival terminal state."
+    },
+    {
+      "fingerprint": "76e084b1471ea31fab617acf7ff6af054541a37780eac663cc2bc8b4153fc843",
+      "disposition": "accepted_blocker",
+      "rationale": "D7 and D8 leave decision thresholds and experiment policy choices open while declaring no open questions; those rules must be frozen before admission."
+    }
+  ]
+}

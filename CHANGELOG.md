@@ -24,6 +24,181 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## Unreleased — Codex lifecycle admission and fail-closed promotion boundary
+
+### Added
+- Generated Codex-native prefixes for exactly seven lifecycle/front-door skills. The prefix maps
+  entry to packaged `session-mode`, maps managed work to the sealed Mission/Engine route, and forbids
+  imitating unavailable Claude task/agent primitives. Canonical tails remain byte-exact.
+- One strict managed-admission validator shared by the CLI, Engine, and campaign dispatcher. It binds
+  TTL, effective level, Git common-dir, host payload session identity, and digest-sealed Mission
+  policy/graph/source authority before provider readiness or any managed effect.
+- D1 Codex `PreToolUse` structured-denial evidence is retained in the sanitized probe receipt. The
+  adapter source remains unregistered and non-production; the installed package ships no
+  Codex-thread-bound direct-mutation enforcement.
+
+### Changed
+- Managed admission failures now use `DEV_FLOW_ADMISSION_REQUIRED_OR_STALE` with zero dispatcher,
+  model, mutation, and resource counters for absent, expired, malformed, repository-mismatched,
+  level-mismatched, and Mission-mismatched markers.
+- Codex managed children now receive a temporary credentials-only `CODEX_HOME`, no inherited
+  `CODEX_THREAD_ID`, and `--ignore-user-config`; controller config, plugins, and session state stay
+  outside the child boundary.
+- Git spawn failures, timeouts, signals, and unexpected exits now deny effect-capable Codex tools,
+  while only a genuine Git non-repository result remains a safe no-op.
+- The frozen implementation plan and rubric were restored byte-for-byte. User-directed corrections
+  live in a separately hashed, separately reviewable amendment and rubric attached to the same D4
+  graph node.
+
+### Boundary
+- The installed Codex package registers only the existing `PostCompact` recovery hook. The structured
+  `PreToolUse` result and exit-17 fail-open control remain D1 probe evidence, not a production hook.
+  The final lifecycle sequence did not qualify a payload-session bridge, so D4 remains
+  `NOT_READY/NO_SHIP` for Codex-thread-bound direct-mutation enforcement, with zero dispatcher calls
+  and no replacement campaign/work-order authority.
+
+## v2.34.4 — Clean-checkout CI fixture portability
+
+**Headline**: The release checks now exercise dev-setup and historical Mission reconciliation
+reliably on clean CI hosts. Their fixtures preserve the selected Node runtime without restoring
+optional harness CLIs and reconstruct the committed legacy graph, historical lineage, and exact
+terminal receipts inside an isolated Git common-dir instead of consuming a developer checkout's
+gitignored Mission state.
+
+### Fixed
+- `dev-setup.test.sh` exposes a node-only runtime shim to harness-free PATH cases, so setup-node
+  installations outside `/usr/bin` can run the Codex package sync check without making optional
+  Claude, Codex, OpenCode, or agy commands visible through the original PATH.
+- `mission-backlog-convergence.test.sh` creates a hermetic Git/Mission fixture from the committed
+  frozen B/C graph, its historical lineage, content-addressed terminal receipts, and history
+  anchor. It proves missing disposition fails closed, reconciliation writes once, replay writes
+  zero times, and no authority or history is synthesized while exercising the ordinary production
+  selector.
+
+### Boundary
+- These are test-fixture portability repairs only. Production dev-setup, Mission authority
+  selection, reconciliation, and fail-closed behavior are unchanged.
+- The bounded repair reran the two affected files in both the working tree and a fresh clone plus
+  directly related Mission and Codex package checks; it did not claim another 263-file full-suite
+  run.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.3`.
+
+prose-justification: v2.34.4 adds only hotfix release metadata; the measured +11% remains
+cumulative growth since the still-tracked v2.32.58 baseline.
+
+## v2.34.3 — Portable platform capability revalidation
+
+**Headline**: Runtime D2 and D3 validators now probe the agy or Codex binary selected by the
+current consumer instead of the release author's absolute path. The Codex `PostCompact` hook also
+resolves the capability receipt from its archived package location, so CI and other installations
+can validate the same receipt without weakening its version, freshness, or claim-ID checks.
+
+### Fixed
+- `dispatch-review.sh` and `dispatch-hetero.sh` pass their selected `AGY_BIN` into immediate
+  capability revalidation while the receipt retains its immutable probe provenance.
+- `platform-capability-claims.js` accepts `--reprobe-binary` only for `validate-consumer` with
+  `--reprobe`; generate and other command grammars reject it before reading or writing receipts.
+- The Codex `PostCompact` hook reads the archived D3 receipt and re-probes the PATH-resolved
+  `codex` command, or the explicit `AUTOPILOT_CODEX_BIN` selection, before every reconciliation.
+  Missing and version-mismatched selections still fail closed.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.2`.
+
+prose-justification: v2.34.3 adds only hotfix release metadata; the measured +11% remains
+cumulative growth since the still-tracked v2.32.58 baseline.
+
+## v2.34.2 — Platform capability activation: telemetry, recovery, and strict L5 readiness
+
+**Headline**: agy review and implementation dispatches now expose only authoritative structured
+usage, while the default Codex package registers one production `PostCompact` recovery hook that
+reconciles manual and automatic compaction before continuation or effect. Ordinary strict-L5 Engine
+runs now require a fresh host-owned exact-roster readiness decision before workflow dispatch.
+
+### Added
+- A closed, content-addressed platform-capability receipt that binds official contracts to fresh,
+  version-matched live evidence, partitions exact D2/D3/D4 required claim IDs, and immediately
+  re-probes each consumed set while retaining optional blocked findings without promotion.
+- Closed, required `usage` contracts for review and runner results, with safe nonnegative token
+  counts and explicit `source:"agy-json"` attribution for authoritative agy samples.
+- Scorecard evidence classes that keep new dispatch-result usage separate from historical agy
+  transcripts, whose token data remains unavailable as `transcript_schema_not_exposed`.
+- Canonical Codex `PostCompact` manifest and adapter sources outside the generated package, plus a
+  byte-identical production live receipt proving manual, threshold-12000 auto, and broken-adapter
+  failure behavior on codex-cli 0.146.0.
+- A frozen six-claim strict-L5 provider policy with exact
+  `{runner,model,role,effort,endpoint,family}` tuples, canonical policy/roster digests, and a branded
+  in-process bootstrap that owns qualification and live-probe closures.
+
+### Changed
+- `dispatch-review.sh` and `dispatch-hetero.sh` validate the exact D2 claim-ID set immediately
+  before every agy invocation and capture `--output-format json` into private temporary files.
+- Only the validated response reaches worker-visible logs and the existing nonce/commit framing;
+  usage flows separately into result JSON and scorecard aggregation.
+- The Codex package manifest now declares `./hooks/hooks.json`. Package sync mirrors exactly one
+  `manual|auto` adapter from canonical sources and rejects missing, extra, or drifted hook payload.
+- The production adapter translates the official Codex payload into the existing fail-closed
+  reconciliation authority; it does not copy recovery logic.
+- `AUTOPILOT_LEVEL=l5 engine implement-review` resolves and freezes its invocation roster once,
+  injects the process-local readiness authorities through the Engine constructor, consumes them
+  before workflow dispatch, and records claim, policy, roster, and observation provenance in the
+  campaign control. Lower-level paths retain their explicit non-strict behavior.
+
+### Fixed
+- Malformed, truncated, duplicate-key, extra-key, invalid-number, trailing-data, and nonzero-exit
+  agy envelopes now fail closed without admitting response or usage; worker-authored fake usage
+  cannot promote itself into telemetry.
+- Missing or ambiguous Codex identity, stale controller authority, invalid payload, duplicate
+  invocation, and adapter failure block post-compaction continuation. A broken-adapter live control
+  produced neither reconciliation receipt nor effect sentinel.
+- Missing qualification, stale TTL, wrong tuple dimensions, fallback-family violations,
+  serialized replay, live-probe failure, claim substitution, policy-digest drift, unknown or
+  duplicate tuples, and roster drift now reject strict L5 before workflow dispatcher/model spend.
+
+### Boundary
+- The Codex package ships one Codex-native production `PostCompact` boundary only. It does not load
+  the Claude Code hook bundle and does not claim parity for other hook events, apps, or MCP servers.
+- Provider policy and closure authority are compiled code and process-local state. CLI flags,
+  environment variables, work orders, disk receipts, and serialized callback material cannot
+  replace the strict-L5 trust root; this does not relabel L3/L4 or legacy flows as strict L5.
+
+### Migration
+- This release deliberately adopts the current closed contracts without backward-compatibility
+  aliases. agy usage is authoritative only when it comes from the native closed response/usage
+  envelope; legacy plain output and worker-authored telemetry are not promoted into usage data.
+- Strict-L5 readiness requires the exact six-field
+  `{runner,model,role,effort,endpoint,family}` policy and fresh host-owned closures. Five-field
+  tuples, inferred `reviewer_family`, coarse or serialized evidence, and compatibility parsers are
+  rejected rather than translated. Historical agy transcripts remain unchanged and explicitly
+  unavailable for token accounting.
+
+### Verification
+- Final implementation candidate `12875e95721867eadf058f94cddf0bfb2390d58f` passed the full
+  depth-0 suite: **263/263 test files GREEN**. An independent four-level severity review of
+  `7047717b2df5354da134043692e31ad067a98bfa..12875e95721867eadf058f94cddf0bfb2390d58f`
+  returned **READY with zero findings**.
+- The automated release closeout does not claim a fresh authenticated slash-command run or other
+  privileged/manual probes. Codex and agy live claims are limited to the committed, version-matched
+  receipts described above; release preflight uses its documented slash-probe skip when credentials
+  are unavailable.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. Revert the D2 telemetry commit to restore the prior
+  plain-output transport and result schemas;
+  no stored historical transcript data is rewritten. Revert the D3 activation commit to remove the
+  Codex production hook declaration and generated adapter while retaining the warning-only probe.
+  Revert the D4 bootstrap commit to restore the prior fail-closed
+  `provider_readiness_authority_missing` behavior for ordinary strict-L5 CLI runs.
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.1`.
+
+prose-justification: v2.34.2 adds no skill/reference prose; the measured +11% is cumulative growth
+since the still-tracked v2.32.58 baseline while the production engine surface expanded, and this
+release metadata records the closed capability, migration, verification, and rollback contracts.
+
 ## v2.34.1 — Controller execution discipline
 
 **Headline**: Autopilot now treats a long-running deliverable as one durable work order: it freezes
@@ -32,6 +207,11 @@ compaction, accounts for resource debt, and reports bounded progress without tur
 review findings into new phases.
 
 ### Added
+- `dispatch-review.sh --max-tokens <n>` now enforces an optional 1..200000 reviewer response-token
+  budget on the two verified rails (`anthropic-compatible` → adapter `--max-tokens`, `qoderclicn`
+  → `--max-output-tokens`) and rejects Codex, agy, Grok, cc-shim, and Claude-native before spend;
+  omission preserves existing runner defaults and the result JSON shape, while truncated output
+  remains fail-closed.
 - A controller-execution state machine and schemas for durable work-order identity, exact gate
   ownership, immutable phase denominators, multi-axis repair budgets, progress receipts, retained
   resource debt, and high-water admission.

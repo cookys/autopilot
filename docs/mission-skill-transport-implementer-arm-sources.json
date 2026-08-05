@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-02-skill-transport-implementer-arm.md",
+      "rubric_path": "plans/2026-08-02-skill-transport-implementer-arm.rubric.md",
+      "plan_sha256": "35e93fc2439edbf90bfc561eb6f24e7557b0e66ba9997666634be7ec5cea8b45",
+      "rubric_sha256": "0e19a8979ace9b64f1f91261b1aa2fe585003eebc5a8090156f23ecdd18555f0"
+    }
+  ]
+}

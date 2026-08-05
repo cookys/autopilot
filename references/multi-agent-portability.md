@@ -2,7 +2,7 @@
 
 How autopilot's skills, agents, and hooks map onto the various coding-agent platforms that share overlapping conventions. **Every claim below has a source URL, an empirical-verification note, or is explicitly marked as unverified.** Past lesson (cuts both ways): a previous version of this doc fabricated env vars and CLI subcommands; the *correction* of that version then over-corrected — it labelled `agy plugin validate` and the root-`plugin.json` requirement as "fabricated," but installing real `agy` 1.0.1 (2026-05-29) showed both are genuine. Assert only what you've run or cited.
 
-Last verified: 2026-07-02 (Codex local plugin packaging against `codex-cli 0.142.5`; Codex plugin-bundled hook docs checked 2026-07-02; P0 spikes: CC task persistence on `claude` 2.1.175 + agy judge mode on `agy` 1.0.7; agy headless dispatch empirical against `agy` 1.0.5; agy `run_command` duration + bg-job reaping against `agy` 1.0.14 (2026-07-02, see § Update below); earlier Antigravity facts against 1.0.1; OpenCode against 1.15.10).
+Last verified: 2026-08-05 (Codex 0.146.0 structured `PreToolUse` denial was retained as D1 probe evidence only; the production package registers only the existing `PostCompact` manual+auto boundary and does not ship Codex-thread-bound direct-mutation enforcement; agy native response+usage JSON on 1.1.10; Grok headless JSON usage on 0.2.118; OpenCode truncation on installed 1.17.15 and isolated 1.18.11; Claude Code driver/hook baseline on 2.1.220; earlier package and portability probes retained below).
 
 ---
 
@@ -13,11 +13,11 @@ Last verified: 2026-07-02 (Codex local plugin packaging against `codex-cli 0.142
 | Plugin manifest | `.claude-plugin/plugin.json` ([docs](https://code.claude.com/docs/en/plugins-reference)) | `opencode.json` ([docs](https://opencode.ai/docs/config/)) | `.codex-plugin/plugin.json` inside a plugin package; repo-local marketplaces use `.agents/plugins/marketplace.json`. Verified empirically with `codex plugin marketplace add ./platforms/codex` on codex-cli 0.142.5. `~/.codex/config.toml` remains the per-user config surface. | **root `plugin.json`** for `agy plugin validate`; `.claude-plugin/plugin.json` for `agy plugin install` (detects `source: claude-code`). Verified empirically agy 1.0.1 — agy natively imports Claude Code plugins, no `gemini-extension.json` needed. |
 | Skill format | `SKILL.md` with YAML frontmatter (`name`, `description`) | same SKILL.md format ([docs](https://opencode.ai/docs/skills/)) | same SKILL.md format ([docs](https://developers.openai.com/codex/skills)) | same SKILL.md format ([docs](https://antigravity.google/docs/skills)) |
 | Skill discovery paths | `<plugin>/skills/`, `.claude/skills/` | `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`, `~/.config/opencode/skills/`, `~/.claude/skills/` ([docs](https://opencode.ai/docs/skills/)) | `<repo>/.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills/`, bundled ([docs](https://developers.openai.com/codex/skills)); installed Codex plugins can also declare `skills: "./skills/"` in `.codex-plugin/plugin.json` (verified 2026-07-01). | imported via `agy plugin install <repo>` (registry, not a scan path). `agy plugin validate <repo>` reads `skills/` by convention. The codelabs `~/.gemini/antigravity/skills/` path is NOT the plugin mechanism — superseded by empirical agy 1.0.1 testing. |
-| Plugin code | bash/JS hooks invoked by Claude Code via `hooks.json` | in-process TypeScript module exporting hooks ([docs](https://opencode.ai/docs/plugins/)) | Codex plugins can bundle lifecycle hooks, but Autopilot's default Codex package remains skills-only. A separate `platforms/codex/hook-probe/` package is warning-only telemetry for probing payload/cwd/env/failure semantics before any blocking hook ships. | imports Claude Code plugins directly (`source: claude-code`); reuses `hooks/hooks.json` + `skills/` + `agents/` |
+| Plugin code | bash/JS hooks invoked by Claude Code via `hooks.json` | in-process TypeScript module exporting hooks ([docs](https://opencode.ai/docs/plugins/)) | Autopilot's Codex package exposes generated lifecycle skill projections plus the existing production `PostCompact` (`manual|auto`) command hook. The structured `PreToolUse` denial is retained as D1 probe evidence only; no Codex-thread-bound direct-mutation enforcement is shipped. Canonical sources live under `platforms/codex/`; generated package mirrors are byte-gated. The separate `hook-probe/` and unregistered `pre-effect.js` remain non-production evidence tooling. This does not imply Claude hook parity. | imports Claude Code plugins directly (`source: claude-code`); reuses `hooks/hooks.json` + `skills/` + `agents/` |
 | Plugin env vars | `CLAUDE_PLUGIN_ROOT` (in hook commands; [issue #27145](https://github.com/anthropics/claude-code/issues/27145)) | none injected; plugins receive `{ project, client, $, directory, worktree }` as context argument ([docs](https://opencode.ai/docs/plugins/)) | `CODEX_HOME` (defaults to `~/.codex/`); plugin hooks receive `PLUGIN_ROOT` / `PLUGIN_DATA` plus `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` compatibility vars per Codex docs; **no** `CODEX_PLUGIN_ROOT` | unverified — `agy plugin validate/install` don't reveal runtime hook env injection (would need to observe a hook process spawned by agy) |
-| Plugin CLI | n/a (loaded at install) | n/a (auto-discovered) | `codex plugin {marketplace,add,list,remove}` — verified codex-cli 0.142.5. Local install flow: `codex plugin marketplace add ./platforms/codex`, then `codex plugin add autopilot@autopilot-local`. | `agy plugin {validate,install,uninstall,list,enable,disable,import,link}` — verified agy 1.0.1. `validate <path>` + `install <path>` both exit `[ok]` on this repo. |
-| Hook event names | `SessionStart / PreCompact / PreToolUse / PostToolUse / Stop` ([docs](https://code.claude.com/docs/en/hooks)) | `session.created / session.compacted / tool.execute.before / tool.execute.after / …` ([docs](https://opencode.ai/docs/plugins/)) | `SessionStart / PreToolUse / PermissionRequest / PostToolUse / PreCompact / PostCompact / UserPromptSubmit / SubagentStart / SubagentStop / Stop` documented; plugin hooks require trust review before running. | imports Claude Code `hooks.json`; runtime event-firing behavior unverified |
-| **Capability tier** | **full-plugin** (skills + agents + hooks load natively) | **full-plugin** (skills via `.agents/skills/`, agent bodies via `{file:..}`, plugin hooks in-process) | **adapter-tier** for skills + warning-only hook probes; no Autopilot blocking hook/gate until probe artifacts verify payload/cwd/env/failure semantics. | **instruction-tier** (skills do NOT load in `-p`; methodology must travel inside the prompt — see § agy spike; interactive-mode untested) |
+| Plugin CLI | n/a (loaded at install) | n/a (auto-discovered) | `codex plugin {marketplace,add,list,remove}` — verified through codex-cli 0.146.0. `marketplace upgrade` refreshes configured **Git** snapshots and rejects a local marketplace name. Local install flow: `codex plugin marketplace add ./platforms/codex`, then `codex plugin add autopilot@autopilot-local`. | `agy plugin {validate,install,uninstall,list,enable,disable,import,link}` — verified agy 1.0.1. `validate <path>` + `install <path>` both exit `[ok]` on this repo. |
+| Hook event names | `SessionStart / PreCompact / PreToolUse / PostToolUse / Stop` ([docs](https://code.claude.com/docs/en/hooks)) | `session.created / session.compacted / tool.execute.before / tool.execute.after / …` ([docs](https://opencode.ai/docs/plugins/)) | `SessionStart / PreToolUse / PermissionRequest / PostToolUse / PreCompact / PostCompact / UserPromptSubmit / SubagentStart / SubagentStop / Stop` documented; installed production package retains `PostCompact` for both `manual` and `auto`. The `PreToolUse` structured denial is probe evidence only; plugin hooks require trust review before running. | imports Claude Code `hooks.json`; runtime event-firing behavior unverified |
+| **Capability tier** | **full-plugin** (skills + agents + hooks load natively) | **full-plugin** (skills via `.agents/skills/`, agent bodies via `{file:..}`, plugin hooks in-process) | **adapter-tier** for seven generated lifecycle projections plus the production `PostCompact` recovery boundary. D1 `PreToolUse` denial is an unregistered probe; no Codex-thread-bound direct-mutation enforcement is shipped. Managed Engine admission, other Claude hooks, apps, MCP servers, and general hook parity are not claimed. | **instruction-tier** (skills do NOT load in `-p`; methodology must travel inside the prompt — see § agy spike; interactive-mode untested) |
 
 ### Things explicitly NOT verified
 
@@ -76,52 +76,58 @@ A three-probe spike (`agy -p --dangerously-skip-permissions`, Gemini 3.5 Flash (
 - **Recipe to make agy run+verify build/test/E2E**: one synchronous foreground command (no `&` / `nohup` / cross-call poll) + `--print-timeout` above the expected duration + still verify-by-artifact (self-report remains untrustworthy — Invariant 2 / the 1.0.5 "claimed success without printing the commit hash" observation stands).
 - **Honest bound (not yet proven)**: only `sleep` (IO-idle) was tested, not a real CPU-bound `cargo test` with heavy stdout. The mechanism (auto-managed-task + wait) should generalise but the multi-minute real-build case is unverified. The earlier "agy only made cosmetic edits on multi-minute tasks" was most likely an older-version cap (the 1.0.5 spike era) or the model electing to background-and-abandon — not a hard 10s limit on 1.0.14.
 
-### Verified by Spike (codex-cli 0.144.0 + gpt-5.6-sol, 2026-07-13; re-verified UNCHANGED on 0.144.3 same day): `spawn_agent` subagent MODEL routing
+### Codex native child lifecycle — verified current host (codex-cli 0.146.0, 2026-08-02)
 
-Matters to any user running autopilot **on a Codex host**: skills that say "dispatch a
-subagent with model X" (role routing per `resolve-dispatch.sh`) cannot express the model
-through codex's native `spawn_agent` under default config. autopilot's own dispatch scripts
-(`codex exec -m <model>`) are UNAFFECTED — this is about codex-as-host interactive sessions.
-Four facts, all artifact-verified (child rollout JSONL under `~/.codex/sessions/…`, matched
-via `thread_spawn.parent_thread_id` — never the parent's self-report):
+The default `collaboration.spawn_agent` schema now exposes five fields:
+`task_name`, `message`, `fork_turns`, `model`, and `reasoning_effort`. A child can therefore
+receive an explicit model/effort when the caller uses a bounded history fork; a full-history
+fork inherits the parent and does not accept overrides. The old 0.144 “three fields unless a
+two-line opt-in rewrites the namespace” guidance is retired. This is current-host evidence,
+not a promise for every older Codex installation; the committed probe rechecks the schema.
 
-1. **Default schema is 3 fields** (`task_name`/`message`/`fork_turns`) — no `model`. On
-   MultiAgentV2 models (gpt-5.6-sol) the trimmed schema is **server-reserved**: flipping only
-   `hide_spawn_agent_metadata=false` gets every turn rejected with
-   `Function 'collaboration.spawn_agent' is reserved for use by this model and must match the
-   configured schema` (HTTP 400). Client side, `codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
-   `hide_spawn_agent_metadata_options()` removes `agent_type`/`model`/`reasoning_effort`/`service_tier`.
-2. **The official custom-agent TOML path routes but does NOT switch the model** (0.144.0):
-   `~/.codex/agents/<name>.toml` with `model = "gpt-5.4-mini"`, spawned via
-   `task_name=<name>` → spawn accepted, profile matched, but the child rollout shows
-   `"model":"gpt-5.6-sol"` — **it inherited the parent's model; the TOML `model` was ignored**
-   (the openai/codex#26868 defect class is still live). Also: agent names must match
-   `[a-z0-9_]` — hyphens are rejected by the tool router.
-3. **Working opt-in escape (two lines, BOTH required)** in the user's `~/.codex/config.toml`:
-   ```toml
-   [features.multi_agent_v2]
-   hide_spawn_agent_metadata = false
-   tool_namespace = "agents"
-   ```
-   Renaming the namespace off the reserved `collaboration.*` restores the full 7-field schema,
-   and a `model="gpt-5.4-mini"` child verifiably runs as gpt-5.4-mini (rollout artifact).
-   Spawn-target coverage (0.144.3, sol parent, all rollout-artifact-verified): `gpt-5.6-terra`,
-   `gpt-5.6-luna`, `gpt-5.3-codex-spark`, `gpt-5.4-mini` all run as the requested model —
-   including luna (a MultiAgentV1-flagged model), so V1/V2 flags don't gate spawn TARGETS.
-   Untested as children: `gpt-5.5`, `gpt-5.4`, `codex-auto-review` (same mechanism expected,
-   not verified).
-   Caveats: undocumented upstream, may be closed by a future codex release; failure mode is
-   loud (spawn → 400). This is a **user-owned opt-in** — autopilot must never auto-edit
-   `~/.codex/config.toml`. Recipe + guidance: `platforms/codex/README.md` § Subagent model routing.
-4. **Re-verification probe** (one short `codex exec`): ask the model to print the exact JSON
-   parameter schema of its spawn_agent tool; 3 fields = still locked, 7 fields = open.
-   Upstream watch: openai/codex #31814 / #31097 / #26868 (BACKLOG'd).
+Rerun the schema, observed-child-identity, and terminal-disposition probe with:
+`AUTOPILOT_CODEX_NATIVE_CHILD_PROBE=1 bash hooks/tests/codex-enforcement-probe.test.sh`.
+
+Lifecycle remains a separate boundary. Native children are visible through Codex collaboration
+list/wait/interrupt operations, but they are not shell workers: they have no process-group or
+cgroup identity and are not covered by autopilot's shell reapers. Before terminal status, a
+Codex controller must list its native children, wait for completed results, interrupt survivors,
+and record a terminal disposition for every child. Merge-back and worktree GC still use the
+ordinary Git/controller rails. If the host cannot list or interrupt native children, native
+spawn is unsupported for unattended `/l4`–`/l6`; route through autopilot's dispatch scripts.
+
+### Codex installed payload and generation lifecycle — residual probe (0.146.0, 2026-08-02)
+
+One logged-in `codex exec --ephemeral --sandbox read-only --json` run from a disposable clean Git
+repo with no `.agents/skills/` proved the installed Autopilot package end to end. Transcript tool
+events read both the cached `skills/audit/SKILL.md` and its linked cached
+`references/routing-tiebreaks.md`; the final audit identified the planted `beta` → `BETA` case
+change and target-only `delta` line. The command exited zero and the scratch tree hash and clean
+status were unchanged. This is installed-path evidence, not model self-report.
+
+Marketplace observations must stay split by source type. A uniquely named local marketplace was
+installed at generation A (0.1.0), then its source manifests and skill were changed to generation B
+(0.2.0). Without reinstalling, `plugin list` remained at installed 0.1.0 and a fresh loader run read
+the cached generation-A skill. Exact `codex plugin marketplace upgrade <local-name> --json` exited
+1 because that name was not configured as Git. The help contract says the command refreshes Git
+marketplace snapshots, but no external Git fixture was published in this bounded probe; therefore
+Git snapshot refresh semantics remain **unproven**, and local behavior must not be generalized.
+
+No native pre-discovery install/upgrade generation lifecycle was proven. The disposable plugin
+manifest carried `scripts.postinstall`, `scripts.postupgrade`, `lifecycle.install`, and
+`lifecycle.upgrade`, all targeting an exit-17 marker script. Codex accepted and cached those fields,
+but plugin add exited zero and never invoked the script; the local marketplace upgrade was
+inapplicable. The four installed curated plugin manifests inspected contained neither `scripts` nor
+`lifecycle`. Unknown accepted fields and ordinary runtime hooks are not an install-time lifecycle
+contract. Result: **NO-GO** for retiring committed payload mirrors; keep the mirrors and sync/drift
+gates until Codex exposes an automatic, fail-loud generator point on both install and applicable Git
+upgrade/refetch paths (or an officially supported equivalent proven by executable evidence).
 
 ---
 
 ## 2. Key Insight: `.agents/skills/` is the cross-platform intersection
 
-OpenCode and Codex workspace skill discovery both scan `.agents/skills/`. autopilot exploits this by making `.agents/skills/` a symlink to `../skills/` (added in Phase 4 of the v2.7.3 plan). Result: one source-of-truth directory (`skills/`) feeds both platforms without copy duplication. Codex also has a skills-only plugin package at `platforms/codex/plugin`; because Codex plugin install does not copy through a symlinked skill directory, `platforms/codex/plugin/skills` is a generated real directory refreshed from the same source-of-truth by `scripts/sync-codex-plugin-skills.sh`, along with the support files that the skill text links to. **Antigravity does NOT scan a loose skills dir** — it imports the whole repo as a plugin via `agy plugin install <repo>` (see §1 table and the per-platform breakdown below); it reaches the same `skills/` source-of-truth by a different mechanism, not through `.agents/skills/`.
+OpenCode and Codex workspace skill discovery both scan `.agents/skills/`. autopilot exploits this by making `.agents/skills/` a symlink to `../skills/` (added in Phase 4 of the v2.7.3 plan). Result: one source-of-truth directory (`skills/`) feeds both platforms without copy duplication. Codex also has a plugin package at `platforms/codex/plugin`; because Codex plugin install does not copy through a symlinked skill directory, `platforms/codex/plugin/skills` is a generated real directory refreshed from the same source-of-truth by `scripts/sync-codex-plugin-skills.sh`, along with linked support files and the byte-mirrored production `PostCompact` hook. The retained `pre-effect.js` mirror is an unregistered probe helper, not a production boundary. **Antigravity does NOT scan a loose skills dir** — it imports the whole repo as a plugin via `agy plugin install <repo>` (see §1 table and the per-platform breakdown below); it reaches the same `skills/` source-of-truth by a different mechanism, not through `.agents/skills/`.
 
 Note plural: `.agents/` (not `.agent/`). Earlier docs got this wrong.
 
@@ -146,7 +152,7 @@ description: |
 Body markdown — instructions consumed as agent context.
 ```
 
-Per-platform extensions exist (e.g. Claude Code accepts a `tools:` allowlist; OpenCode accepts `compatibility:` for explicit platform tagging) but unknown fields are tolerated by each parser. **Cross-platform skills should keep frontmatter minimal**: `name` + `description` only.
+Per-platform extensions exist (e.g. Claude Code accepts a `tools:` allowlist; OpenCode accepts `compatibility:` for explicit platform tagging), but unknown-field tolerance is **not established across platforms**. A 2026-08-03 installed Claude Code + Codex plugin-load probe with a disposable `tier:` field ended `inconclusive` because the isolated execution legs could not prove that the loaded skill ran. **Cross-platform skills should therefore keep frontmatter minimal**: `name` + `description` only, unless each target platform has executable acceptance evidence for the added field.
 
 > **`distill` is Claude-Code-function-specific** (v2.9.0). Its SKILL.md text is portable, but its function depends on Claude-Code-only mechanisms — reading `~/.claude/projects/*/*.jsonl` transcripts and writing the `autopilot-distill-skills@skills-dir` plugin pack + personal `~/.claude/skills/`. On other agents it has no transcript source / pack mechanism and is a no-op. This is intentional: autopilot stays multi-agent-portable, but `distill` deepens Claude Code specifically. Keep its `allowed-tools` (a CC extension) — it's a CC-only skill by design.
 
@@ -174,7 +180,8 @@ The pragmatic split:
 - **Claude Code hooks**: `hooks/*.{sh,js}` + `hooks/hooks.json` manifest. Use only `CLAUDE_PLUGIN_ROOT`; if absent, fail-quiet (return `unknown`, exit 0).
 - **OpenCode hook surface**: `.opencode/plugins/autopilot.ts` (in-process TS). Use the context argument's `project` / `directory` / `worktree` for paths; do not read env vars.
 - **Codex thin-shell behavior (verified 2026-07-05, codex-cli 0.142.2, gpt-5.5)**: after `codex plugin marketplace add ./platforms/codex` + `codex plugin add autopilot@autopilot-local`, all five thin-shelled entries (l3/l4/l5/l6/think-tank-dialectic, v2.31.16 payload) surface as `autopilot:<name>` skills loaded from the plugin cache, and a wiring probe on `autopilot:l5` showed codex following the shell's MUST-READ links — artifact evidence: `cat` exec events on `skills/l5/references/hetero-impl-loop.md` + `skills/ceo-agent/references/level-front-door.md` in the transcript (relative links resolve inside the cache copy). Caveat observed: with many plugins enabled codex warns it shortens skill descriptions to fit a "2% skills context budget" — description-based routing may degrade on crowded installs. CC-side natural-behavior evidence (no-hint goals → spontaneous Reads) lives in `hooks/tests/slash-entry-natural-probe.test.sh`.
-- **Codex**: skills-only package implemented under `platforms/codex/plugin`; hooks are intentionally not declared there. `platforms/codex/hook-probe/` is a separate warning-only package for collecting shape-only payload/cwd/env/failure evidence before any hook behavior is mapped; it omits raw payloads, path values, identifiers, payload key names, and tool input/output values. The skill-sharing benefit comes from either `.agents/skills/` or the Codex plugin manifest's `skills: "./skills/"`.
+- **Codex production boundary (verified 2026-08-05, codex-cli 0.146.0)**: `platforms/codex/plugin` declares generated lifecycle skill projections plus the existing `PostCompact` matcher `manual|auto`. The structured `PreToolUse` denial and its exit-17 fail-open control are retained as D1 probe evidence only; `platforms/codex/hooks/pre-effect.js` is unregistered and non-production. The production package therefore ships no Codex-thread-bound direct-mutation enforcement; D4 remains `NOT_READY/NO_SHIP`. PostCompact retains its existing fail-closed reconciliation contract. The [sanitized receipt](../docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json) records the probe evidence and no-ship verdict. `platforms/codex/hook-probe/` remains warning-only/shape-only; its one-shot driver is evidence tooling, not another production authority.
+- **Strict-L5 provider boundary (implemented 2026-08-04)**: the shared CLI/Engine payload compiles one frozen six-claim policy and exact `{runner,model,role,effort,endpoint,family}` roster projection. Only ordinary `AUTOPILOT_LEVEL=l5 engine implement-review` receives the branded, process-local qualification and live-probe closures; they are consumed before workflow dispatch and cannot be replaced by a platform environment variable, work order, disk receipt, or serialized callback. This is an Autopilot Engine trust boundary, not a claim that every host has equivalent hook or model-routing semantics; lower levels remain explicitly non-strict.
 - **Antigravity**: `agy plugin install <repo>` registers `skills` + `agents` + `hooks` components from the Claude Code plugin. Whether agy *fires* the imported hooks at runtime (and with what env) is unverified — install only confirms registration, not execution. Install via `scripts/install-antigravity.sh` (validate → install → list).
 
 ---

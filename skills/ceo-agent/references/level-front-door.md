@@ -193,6 +193,24 @@ REACTING too fast, not from seeing too little):
    boundary; one-shot batch runners = only the NEXT round's dispatch. The
    read-only `watch-foreman.js` NEVER gains a directive-send surface.
 
+#### Stage-3 recovery (R6, feature-gated)
+
+The normal `/l4`/`/l5`/`/l6` posture remains report-only. A depth-0 controller
+may opt into the ledger recovery rail only with
+`AUTOPILOT_ADAPTIVE_INTERVENTION=1` (or an explicit `stage-coordinate --enable`)
+and an exact run/stage lease. The rail is ordered: send one lease-bound inquiry,
+wait the bounded acknowledgement deadline, re-observe PID/start-time/process
+state/heartbeat/resource holders, terminate only the same exact alive
+non-responsive process group (SIGKILL only after SIGTERM grace), then reconcile
+Git/result/side-effect truth before adopting or authorizing one generation-
+advanced same-lineage replacement.
+
+`unknown` is fail-closed: unreadable or mismatched identity, D-state, held
+resources, or stale quietness without an inquiry cannot signal, seize, or
+replace. An acknowledged inquiry prevents intervention. The watcher itself is
+still observation-only; the `coordination` receipt makes retries idempotent and
+fences late generations.
+
 HONEST BOUNDARY (SCOPE): dispatcher lineages only include runs emitted by
 `dispatch-hetero.sh`/`dispatch-review.sh`. Engine-native internal subprocesses
 (`spawn_agent`, agy recursion) and CC-native foremen are not observed as child

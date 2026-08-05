@@ -137,6 +137,7 @@ function validateReviewLoopConfig(value) {
   }
   for (const field of [
     'reviewer_endpoint',
+    'reviewer_family',
     'implementer_endpoint',
     'verification_author_engine',
     'verification_author_runner',

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
-OUT="$(AUTOPILOT_HARNESS_NOW=2026-07-20T00:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d)"
+OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T03:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d)"
 EXIT=$?
 assert_eq "0" "$EXIT" "harness report exits 0"
 
@@ -23,7 +23,7 @@ console.log(`copilot_reasons_unique=${new Set(copilot.readiness_reasons).size ==
 NODE
 )"
 assert_contains "$PARSED" "total=7" "harness report loads default records"
-assert_contains "$PARSED" "stale=6" "harness report marks old records stale" # expectations track src/harness/capabilities/*.json — update when records refresh
+assert_contains "$PARSED" "stale=4" "harness report marks old records stale" # expectations track src/harness/capabilities/*.json — update when records refresh
 assert_contains "$PARSED" "verified=4" "harness report counts verified records"
 assert_contains "$PARSED" "warning=2" "harness report counts warning records"
 assert_contains "$PARSED" "unverified=1" "harness report counts unverified records"
@@ -35,7 +35,7 @@ assert_contains "$PARSED" "codex_level=H2" "harness report preserves harness lev
 assert_contains "$PARSED" "required_level=H3" "harness report defaults readiness to H3"
 assert_contains "$PARSED" "copilot_reasons_unique=true" "harness report emits unique readiness reasons"
 
-OUT="$(AUTOPILOT_HARNESS_NOW=2026-07-02T00:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d --format warning)"
+OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T03:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d --format warning)"
 EXIT=$?
 assert_eq "0" "$EXIT" "harness warning report exits 0"
 assert_contains "$OUT" "AUTOPILOT_HARNESS_ATTENTION count=7" "warning report includes stale or H3-unready records"
@@ -549,5 +549,248 @@ SKILL_BODY="$(cat "$SKILL")"
 assert_contains "$SKILL_BODY" "node bin/autopilot.js harness report --stale-after 14d" "skill points to harness report"
 assert_contains "$SKILL_BODY" "driver availability" "skill separates driver availability from provider quota"
 assert_contains "$SKILL_BODY" "below the required harness level" "skill blocks below-level implementation from memory"
+
+CLAIMS_SCRIPT="$REPO_ROOT/scripts/platform-capability-claims.js"
+CLAIMS_INPUT="$TEST_TMP/platform-capability-probe-input.json"
+CLAIMS_RECEIPT="$TEST_TMP/platform-capabilities.json"
+NODE_REALPATH="$(realpath "$(command -v node)")"
+NODE_VERSION="$(node --version | sed 's/^v//')"
+node - "$CLAIMS_INPUT" "$NODE_REALPATH" "$NODE_VERSION" <<'NODE'
+const fs = require('fs');
+const [file, binaryRealpath, cliVersion] = process.argv.slice(2);
+const observedAt = new Date().toISOString();
+const claims = ['D2', 'D3', 'D4', null].map((consumerId, index) => ({
+  capability_id: `test-${consumerId ? consumerId.toLowerCase() : 'optional'}-capability`,
+  consumer_id: consumerId,
+  target_identity: {
+    runner: 'node', model: null, role: 'test', effort: null, endpoint: null,
+    family: 'nodejs', binary_realpath: binaryRealpath, cli_version: cliVersion,
+  },
+  official_contract: {
+    locator: 'https://nodejs.org/api/cli.html#-v---version',
+    retrieved_at: observedAt,
+    document_sha256: String(index + 1).repeat(64),
+    assertion: `test ${consumerId || 'optional'} capability is supported`,
+  },
+  live_evidence: {
+    cli_version: cliVersion,
+    probe_command_sha256: String(index + 4).repeat(64),
+    probe_output_sha256: String.fromCharCode(97 + index).repeat(64),
+    behavior_class: 'version-report',
+    observed_at: observedAt,
+    ttl_seconds: 3600,
+    result: `test ${consumerId || 'optional'} capability is supported`,
+    transport_binding: {
+      execution_model: null,
+      execution_effort_argument: null,
+      normalized_model: null,
+      normalized_effort: null,
+    },
+  },
+  agreement: true,
+}));
+fs.writeFileSync(file, `${JSON.stringify({ schema_version: 1, claims }, null, 2)}\n`);
+NODE
+
+OUT="$(node "$CLAIMS_SCRIPT" generate --input "$CLAIMS_INPUT" --output "$CLAIMS_RECEIPT" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 0 "capability claim generator accepts dual-evidence input"
+
+GENERATE_REPROBE_CASE=0
+for GENERATE_REPROBE_ARGS in \
+  "--reprobe-binary $NODE_REALPATH" \
+  "--reprobe --reprobe-binary $NODE_REALPATH"; do
+  GENERATE_REPROBE_CASE=$((GENERATE_REPROBE_CASE + 1))
+  GENERATE_REPROBE_OUTPUT="$TEST_TMP/generate-with-reprobe-$GENERATE_REPROBE_CASE.json"
+  OUT="$(node "$CLAIMS_SCRIPT" generate --input "$CLAIMS_INPUT" --output "$GENERATE_REPROBE_OUTPUT" \
+    $GENERATE_REPROBE_ARGS 2>&1)"
+  EXIT=$?
+  assert_exit_code "$EXIT" 1 "generate rejects consumer-only arguments: $GENERATE_REPROBE_ARGS"
+  assert_contains "$OUT" "--reprobe-binary is valid only with validate-consumer" \
+    "generate reports its closed command grammar: $GENERATE_REPROBE_ARGS"
+  assert_file_absent "$GENERATE_REPROBE_OUTPUT" \
+    "invalid generate grammar creates no receipt: $GENERATE_REPROBE_ARGS"
+done
+
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumers --receipt "$CLAIMS_RECEIPT" --consumer D2 --consumer D3 --consumer D4 --reprobe 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 0 "capability claims validate complete required partition"
+assert_contains "$OUT" "validated consumers D2,D3,D4" "complete consumer validation is explicit"
+
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 --emit-claim-ids --reprobe 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 0 "single consumer emits validated IDs"
+assert_contains "$OUT" "cap-v1-" "single consumer emits content-addressed claim ID"
+
+SELECTED_VERSION_BIN="$TEST_TMP/selected-version"
+printf '#!/usr/bin/env bash\nprintf "selected v%s\\n"\n' "$NODE_VERSION" > "$SELECTED_VERSION_BIN"
+chmod +x "$SELECTED_VERSION_BIN"
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --emit-claim-ids --reprobe --reprobe-binary "$SELECTED_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 0 "single consumer revalidates the selected portable binary"
+assert_contains "$OUT" "cap-v1-" "selected portable binary preserves receipt claim IDs"
+
+SELECTED_WRONG_VERSION_BIN="$TEST_TMP/selected-wrong-version"
+printf '#!/usr/bin/env bash\nprintf "selected 0.0.1\\n"\n' > "$SELECTED_WRONG_VERSION_BIN"
+chmod +x "$SELECTED_WRONG_VERSION_BIN"
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --reprobe --reprobe-binary "$SELECTED_WRONG_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 1 "selected binary version drift fails closed"
+assert_contains "$OUT" "current_version_drift:0.0.1" "selected binary drift reports its observed version"
+
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --reprobe-binary "$SELECTED_VERSION_BIN" 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 1 "selected binary override requires immediate revalidation"
+assert_contains "$OUT" "--reprobe-binary requires --reprobe" "selected binary cannot bypass revalidation"
+
+CLAIMS_MUTATOR="$TEST_TMP/mutate-capability-receipt.js"
+cat > "$CLAIMS_MUTATOR" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const [source, destination, action] = process.argv.slice(2);
+const value = JSON.parse(fs.readFileSync(source, 'utf8'));
+function canonical(input) {
+  if (Array.isArray(input)) return input.map(canonical);
+  if (!input || typeof input !== 'object') return input;
+  return Object.fromEntries(Object.keys(input).sort().map((key) => [key, canonical(input[key])]));
+}
+function digest(input) {
+  return crypto.createHash('sha256').update(JSON.stringify(canonical(input))).digest('hex');
+}
+const firstRequiredId = value.consumer_manifest.consumers[0].required_claim_ids[0];
+const firstRequired = value.claims.find((claim) => claim.claim_id === firstRequiredId);
+const optionalId = value.consumer_manifest.optional_unconsumed_claim_ids[0];
+switch (action) {
+  case 'unknown-field': value.unexpected = true; break;
+  case 'claim-id-tamper': {
+    const replacement = `cap-v1-${'0'.repeat(64)}`;
+    firstRequired.claim_id = replacement;
+    value.consumer_manifest.consumers[0].required_claim_ids[0] = replacement;
+    value.consumer_manifest.consumers[0].required_claim_ids.sort();
+    break;
+  }
+  case 'blocked-required': firstRequired.status = 'blocked'; break;
+  case 'substituted-required': value.consumer_manifest.consumers[0].required_claim_ids[0] = `cap-v1-${'f'.repeat(64)}`; break;
+  case 'optional-smuggle': value.consumer_manifest.consumers[0].required_claim_ids.push(optionalId); value.consumer_manifest.consumers[0].required_claim_ids.sort(); break;
+  case 'unknown-consumer': value.consumer_manifest.consumers[0].consumer_id = 'D9'; break;
+  case 'duplicate-consumer': value.consumer_manifest.consumers[1].consumer_id = 'D2'; break;
+  case 'duplicate-claim': value.claims.push(JSON.parse(JSON.stringify(value.claims[0]))); value.claims.sort((a, b) => a.claim_id.localeCompare(b.claim_id)); break;
+  case 'unpartitioned': value.consumer_manifest.optional_unconsumed_claim_ids = []; break;
+  case 'manifest-digest-drift': value.consumer_manifest_digest = '0'.repeat(64); break;
+  default: throw new Error(`unknown action: ${action}`);
+}
+if (action !== 'manifest-digest-drift') {
+  value.consumer_manifest_digest = digest(value.consumer_manifest);
+}
+const receiptBody = { ...value };
+delete receiptBody.receipt_digest;
+value.receipt_digest = digest(receiptBody);
+fs.writeFileSync(destination, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+
+assert_receipt_rejected() {
+  local action="$1"
+  local expected="$2"
+  local mutated="$TEST_TMP/receipt-$action.json"
+  node "$CLAIMS_MUTATOR" "$CLAIMS_RECEIPT" "$mutated" "$action"
+  OUT="$(node "$CLAIMS_SCRIPT" validate-consumers --receipt "$mutated" --consumer D2 --consumer D3 --consumer D4 2>&1)"
+  EXIT=$?
+  assert_exit_code "$EXIT" 1 "capability receipt rejects $action"
+  assert_contains "$OUT" "$expected" "$action reports a specific fail-closed reason"
+}
+
+assert_receipt_rejected unknown-field "unknown field"
+assert_receipt_rejected claim-id-tamper "claim-ID tampering"
+assert_receipt_rejected blocked-required "is not validated"
+assert_receipt_rejected substituted-required "unknown or substituted claim ID"
+assert_receipt_rejected optional-smuggle "optional claim smuggled"
+assert_receipt_rejected unknown-consumer "unknown consumer"
+assert_receipt_rejected duplicate-consumer "duplicate consumer"
+assert_receipt_rejected duplicate-claim "duplicate claim ID"
+assert_receipt_rejected unpartitioned "unpartitioned receipt claim row"
+assert_receipt_rejected manifest-digest-drift "consumer manifest digest drift"
+
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 --claim-id "cap-v1-$(printf 'f%.0s' {1..64})" --reprobe 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 1 "downstream consumer rejects substituted claim ID"
+assert_contains "$OUT" "downstream claim-ID drift" "downstream drift fails before consumption"
+
+CLAIMS_INPUT_MUTATOR="$TEST_TMP/mutate-capability-input.js"
+cat > "$CLAIMS_INPUT_MUTATOR" <<'NODE'
+const fs = require('fs');
+const [source, destination, action, fakeBinary] = process.argv.slice(2);
+const value = JSON.parse(fs.readFileSync(source, 'utf8'));
+switch (action) {
+  case 'missing-official': delete value.claims[0].official_contract; break;
+  case 'missing-live': delete value.claims[0].live_evidence; break;
+  case 'stale': value.claims[0].live_evidence.observed_at = '2020-01-01T00:00:00.000Z'; break;
+  case 'version-mismatch': value.claims[0].live_evidence.cli_version = '0.0.0'; break;
+  case 'contradiction': value.claims[0].agreement = false; value.claims[0].live_evidence.result = 'contradicted'; break;
+  case 'agy-tier-effort-mismatch':
+    value.claims[0].target_identity.runner = 'agy';
+    value.claims[0].target_identity.model = 'Gemini 3.6 Flash (High)';
+    value.claims[0].target_identity.effort = 'high';
+    value.claims[0].target_identity.family = 'google';
+    value.claims[0].live_evidence.transport_binding.execution_model = 'gemini-3.6-flash-medium';
+    value.claims[0].live_evidence.transport_binding.normalized_model = 'gemini-3.6-flash-medium';
+    value.claims[0].live_evidence.transport_binding.normalized_effort = 'high';
+    break;
+  case 'agy-direct-effort-argument':
+    value.claims[0].target_identity.runner = 'agy';
+    value.claims[0].target_identity.model = 'Gemini 3.6 Flash (High)';
+    value.claims[0].target_identity.effort = 'high';
+    value.claims[0].target_identity.family = 'google';
+    value.claims[0].live_evidence.transport_binding.execution_model = 'gemini-3.6-flash-high';
+    value.claims[0].live_evidence.transport_binding.execution_effort_argument = 'high';
+    value.claims[0].live_evidence.transport_binding.normalized_model = 'gemini-3.6-flash-high';
+    value.claims[0].live_evidence.transport_binding.normalized_effort = 'high';
+    break;
+  case 'fake-binary':
+    for (const claim of value.claims) {
+      claim.target_identity.binary_realpath = fakeBinary;
+      claim.target_identity.cli_version = '1.2.3';
+      claim.live_evidence.cli_version = '1.2.3';
+    }
+    break;
+  default: throw new Error(`unknown action: ${action}`);
+}
+fs.writeFileSync(destination, `${JSON.stringify(value, null, 2)}\n`);
+NODE
+
+assert_input_rejected() {
+  local action="$1"
+  local expected="$2"
+  local input="$TEST_TMP/input-$action.json"
+  node "$CLAIMS_INPUT_MUTATOR" "$CLAIMS_INPUT" "$input" "$action" ""
+  OUT="$(node "$CLAIMS_SCRIPT" generate --input "$input" --output "$TEST_TMP/output-$action.json" 2>&1)"
+  EXIT=$?
+  assert_exit_code "$EXIT" 1 "claim generation rejects $action evidence"
+  assert_contains "$OUT" "$expected" "$action evidence reports fail-closed reason"
+}
+
+assert_input_rejected missing-official "missing field: official_contract"
+assert_input_rejected missing-live "missing field: live_evidence"
+assert_input_rejected stale "required claim"
+assert_input_rejected version-mismatch "required claim"
+assert_input_rejected contradiction "required claim"
+assert_input_rejected agy-tier-effort-mismatch "mismatched agy model-tier/effort metadata"
+assert_input_rejected agy-direct-effort-argument "execution_effort_argument must be null for agy production transport"
+
+FAKE_VERSION_BIN="$TEST_TMP/fake-version"
+printf '#!/usr/bin/env bash\nprintf "fake 1.2.3\\n"\n' > "$FAKE_VERSION_BIN"
+chmod +x "$FAKE_VERSION_BIN"
+FAKE_INPUT="$TEST_TMP/fake-input.json"
+FAKE_RECEIPT="$TEST_TMP/fake-receipt.json"
+node "$CLAIMS_INPUT_MUTATOR" "$CLAIMS_INPUT" "$FAKE_INPUT" fake-binary "$FAKE_VERSION_BIN"
+node "$CLAIMS_SCRIPT" generate --input "$FAKE_INPUT" --output "$FAKE_RECEIPT" >/dev/null
+printf '#!/usr/bin/env bash\nprintf "fake 1.2.4\\n"\n' > "$FAKE_VERSION_BIN"
+chmod +x "$FAKE_VERSION_BIN"
+OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$FAKE_RECEIPT" --consumer D2 --reprobe 2>&1)"
+EXIT=$?
+assert_exit_code "$EXIT" 1 "current binary version drift rejects a previously valid claim"
+assert_contains "$OUT" "current_version_drift:1.2.4" "current version drift reports observed replacement version"
 
 finalize_test

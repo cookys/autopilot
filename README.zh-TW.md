@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.34.1-E8A838?style=flat-square" alt="v2.34.1">
+  <img src="https://img.shields.io/badge/version-2.34.4-E8A838?style=flat-square" alt="v2.34.4">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-25-6B8E6B?style=flat-square" alt="25 Hooks">
@@ -95,7 +95,7 @@ Autopilot 是 Claude Code-first，但不是 Claude Code-only。依照你實際�
 | 如果你是... | 從這裡開始 | 你會得到什麼 |
 |---|---|---|
 | **Claude Code 使用者** | 上面的兩行安裝指令 | 最完整路徑：skills、方法論 agents、hooks、`/l3`-`/l6`、plugin 管理的預設值 |
-| **Codex 使用者** | 本 repo 的 `.agents/skills/`，或 `platforms/codex/plugin` 的 local package | Autopilot skills，加上讓連結到 scripts/references 可運作的 bundled support payload；不宣稱 Claude hook parity |
+| **Codex 使用者** | 本 repo 的 `.agents/skills/`，或 `platforms/codex/plugin` 的 local package | Autopilot skills、bundled support payload，以及一條 production Codex-native `PostCompact` recovery hook；不宣稱 Claude hook parity |
 | **OpenCode 使用者** | `.agents/skills/` 加 `.opencode/opencode.json` | 共用 skills、方法論 agent bodies，以及 OpenCode 專用的 in-process plugin wrapper |
 | **Antigravity（`agy`）使用者** | `scripts/install-antigravity.sh` | 受 guard 保護的 Claude Code-source plugin 匯入；不是 loose skills-dir scan |
 | **Contributor** | `./scripts/dev-setup.sh --check` | Claude/Codex/OpenCode/agy 的 read-only readiness dashboard；非 Claude 的 mutating setup 必須明確加 `--harness <name> --install` |
@@ -138,6 +138,11 @@ Autopilot 是 Claude Code-first，但不是 Claude Code-only。依照你實際�
 | **`/l4`** | 一個背景、worktree 隔離的 **foreman** | 想把長時間自主跑的工作 offload — 你的 context 保持乾淨，權威品質判定握在 depth 0 |
 | **`/l5`** | 同 `/l4`，但**實作交給不同引擎**（agy / Gemini） | 成本套利，或讓一個去相關化的第二引擎做機械式實作 |
 | **`/l6`** | 同 `/l5`，再把**驗證撰寫**交給不同引擎 | 想把實作與驗證撰寫都外包，但 depth 0 仍保留合併權限 |
+
+普通 strict `/l5` Engine 執行採 fail-closed：workflow dispatch 前，CLI 必須把 exact
+implementer／reviewer／verification-author／QC roster 對上 Autopilot 凍結的 provider policy，
+並消費 fresh、host-owned qualification 與 live-readiness evidence。Lower-level 與 legacy flow
+維持明確 non-strict，不會冒稱 strict L5。
 
 ```
 /l3 fix the flaky reconnect test, you decide     # inline
@@ -195,7 +200,7 @@ local runtime 或 agentic local runner。
 | Harness | 如何開始 | 目前支援 | 已知限制 |
 |---|---|---|---|
 | **Claude Code** | `/plugin marketplace add cookys/autopilot` 後 `/plugin install autopilot@autopilot` | 完整 plugin 路徑：28 個 skills、3 個方法論 agents、25 個 hooks | 主要 host；Claude-specific hooks 與 slash 行為不會自動轉移到其他 harness |
-| **Codex** | `.agents/skills/`，或加入 `platforms/codex` marketplace 後 `codex plugin add autopilot@autopilot-local` | Skills-only package、generated support payload、repo-local marketplace | 預設 Codex package 刻意不載入 Claude hooks、apps 或 MCP servers。經 `spawn_agent` 的 subagent model 路由需 user 自行 opt-in — 見 `platforms/codex/README.md` § Subagent model routing |
+| **Codex** | `.agents/skills/`，或加入 `platforms/codex` marketplace 後 `codex plugin add autopilot@autopilot-local` | Skills、generated support payload，以及一條 production `PostCompact` recovery hook（`manual\|auto`） | 這是 Codex-native recovery boundary，不代表 Claude hook parity；不載入 Claude hook bundle、apps 或 MCP servers。經 `spawn_agent` 的 subagent model 路由需 user 自行 opt-in — 見 `platforms/codex/README.md` |
 | **OpenCode** | 在這個 repo 使用 `.agents/skills/`；agents 走 `.opencode/opencode.json` | 共用 skills、方法論 agent bodies、OpenCode plugin wrapper | Optional TypeScript deps 只在編輯 wrapper 時需要；hook parity 屬平台特定問題 |
 | **Antigravity（`agy`）** | `./scripts/install-antigravity.sh` | 受 guard 保護的 `agy plugin validate` / install / list 流程，採 export-then-install | Runtime hook firing 仍未驗證；install 不代表 hook behavior parity |
 

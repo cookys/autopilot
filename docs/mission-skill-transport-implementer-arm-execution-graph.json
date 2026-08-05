@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "skill-transport-implementer-arm",
+      "source_plan_ids": [
+        "plan-35e93fc2439edbf90bfc561eb6f24e7557b0e66ba9997666634be7ec5cea8b45"
+      ],
+      "source_rubric_ids": [
+        "R12661891804628041537866519323444488922524843990913302526859760457840467656089",
+        "R86803208262936572858236959535626216904091249710587477506316565453403566582511",
+        "R52056196301426117810415107531567909741902291306640835980509631820864338074371",
+        "R29153455118200031301011088750798424291636562361688821375107617542586268014194",
+        "R34913324116011617481714090424054495722706493858882069515567241777022773409928",
+        "R24355550270964939962265048370270196554534813551142308708170477142832240175346",
+        "R80828333121533567742120374882613947165085849309221204025915979385098916367543",
+        "R114066916632041899374186955610848842979468354772257840728793509143353023339734",
+        "R1858067431064785714359330872203520017304331422760846569437056571844055785108",
+        "R87397067747125422180834985123526235508902042285103194886954275621441432863533"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "frozen-inputs",
+        "base-red-qualified",
+        "paired-arm-isolation",
+        "engine-reviewer-constant",
+        "deterministic-resume",
+        "fail-closed-cells",
+        "independent-outcome",
+        "exact-decision-report",
+        "live-and-regression-green",
+        "honest-lifecycle-closure"
+      ],
+      "verification_commands": [
+        "bash evals/skill-transport/test/implementer-matrix-mechanics.test.sh",
+        "node evals/skill-transport/implementer-report.js --in evals/skill-transport/results/implementer-matrix.jsonl --json",
+        "bash evals/skill-transport/assert-instruments.sh",
+        "bash evals/skill-transport/test/matrix-mechanics.test.sh",
+        "bash hooks/tests/run.sh",
+        "bash scripts/sync-all.sh --check"
+      ],
+      "gate_attempt_budget": 4,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 14400,
+        "tool_calls": 900,
+        "engine_attempts": 3,
+        "external_wait_seconds": 10800,
+        "canonical_changed_files": 15,
+        "output_bytes": 10000000
+      },
+      "campaign": {
+        "profile": "high",
+        "allowed_path_prefixes": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-07-15-skill-transport-payoff-ab.md",
+          "docs/plans/2026-08-02-skill-transport-implementer-arm.md",
+          "docs/plans/2026-08-02-skill-transport-implementer-arm.rubric.md",
+          "docs/projects/2026-08-02-skill-transport-implementer-arm",
+          "docs/projects/INDEX.md",
+          "evals/orchestration/tasks",
+          "evals/skill-transport",
+          "hooks/tests",
+          "scripts"
+        ],
+        "max_changed_files": 15,
+        "baseline_churn": 2500,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 1250,
+        "max_repair_generations": 3,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-08-02-skill-transport-implementer-arm.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-07-15-skill-transport-payoff-ab.md",
+          "docs/plans/2026-08-02-skill-transport-implementer-arm.md",
+          "docs/plans/2026-08-02-skill-transport-implementer-arm.rubric.md",
+          "docs/projects/2026-08-02-skill-transport-implementer-arm/README.md",
+          "docs/projects/2026-08-02-skill-transport-implementer-arm/dev-info.md",
+          "docs/projects/INDEX.md",
+          "evals/orchestration/tasks/t1-fix-with-decoy/oracle.sh",
+          "evals/orchestration/tasks/t1-fix-with-decoy/task.md",
+          "evals/orchestration/tasks/t3-vacuous-test/oracle.sh",
+          "evals/orchestration/tasks/t3-vacuous-test/task.md",
+          "evals/orchestration/tasks/t4-config-layer/oracle.sh",
+          "evals/orchestration/tasks/t4-config-layer/task.md",
+          "evals/orchestration/tasks/t7-config-rename/oracle.sh",
+          "evals/orchestration/tasks/t7-config-rename/task.md",
+          "evals/orchestration/tasks/t8-log-redaction/oracle.sh",
+          "evals/orchestration/tasks/t8-log-redaction/task.md",
+          "evals/orchestration/tasks/t11-boundary-fix/oracle.sh",
+          "evals/orchestration/tasks/t11-boundary-fix/task.md",
+          "evals/orchestration/tasks/t13-log-parser/oracle.sh",
+          "evals/orchestration/tasks/t13-log-parser/task.md",
+          "evals/orchestration/tasks/t15-cache-invalidation/oracle.sh",
+          "evals/orchestration/tasks/t15-cache-invalidation/task.md",
+          "evals/skill-transport/assert-instruments.sh",
+          "evals/skill-transport/packs/implementer-pack.md",
+          "evals/skill-transport/test/matrix-mechanics.test.sh",
+          "hooks/tests/run.sh",
+          "scripts/dispatch-hetero.sh",
+          "scripts/dispatch-review.sh",
+          "scripts/engine-scorecard.js",
+          "scripts/sync-all.sh"
+        ],
+        "output_paths": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-07-15-skill-transport-payoff-ab.md",
+          "docs/projects/2026-08-02-skill-transport-implementer-arm/README.md",
+          "docs/projects/2026-08-02-skill-transport-implementer-arm/dev-info.md",
+          "docs/projects/INDEX.md",
+          "evals/skill-transport/README.md",
+          "evals/skill-transport/implementer-report.js",
+          "evals/skill-transport/implementer-tasks.json",
+          "evals/skill-transport/results/implementer-matrix.jsonl",
+          "evals/skill-transport/results/implementer-matrix.seed",
+          "evals/skill-transport/results/implementer-report.json",
+          "evals/skill-transport/results/implementer-report.txt",
+          "evals/skill-transport/run-implementer-matrix.sh",
+          "evals/skill-transport/test/implementer-matrix-mechanics.test.sh",
+          "evals/skill-transport/test/stub-implementer-dispatch.sh"
+        ],
+        "required_change_paths": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-07-15-skill-transport-payoff-ab.md",
+          "docs/projects/2026-08-02-skill-transport-implementer-arm/README.md",
+          "docs/projects/2026-08-02-skill-transport-implementer-arm/dev-info.md",
+          "docs/projects/INDEX.md",
+          "evals/skill-transport/README.md",
+          "evals/skill-transport/implementer-report.js",
+          "evals/skill-transport/implementer-tasks.json",
+          "evals/skill-transport/results/implementer-matrix.jsonl",
+          "evals/skill-transport/results/implementer-matrix.seed",
+          "evals/skill-transport/results/implementer-report.json",
+          "evals/skill-transport/results/implementer-report.txt",
+          "evals/skill-transport/run-implementer-matrix.sh",
+          "evals/skill-transport/test/implementer-matrix-mechanics.test.sh",
+          "evals/skill-transport/test/stub-implementer-dispatch.sh"
+        ],
+        "authorized_creates": [
+          "evals/skill-transport/README.md",
+          "evals/skill-transport/implementer-report.js",
+          "evals/skill-transport/implementer-tasks.json",
+          "evals/skill-transport/results/implementer-matrix.jsonl",
+          "evals/skill-transport/results/implementer-matrix.seed",
+          "evals/skill-transport/results/implementer-report.json",
+          "evals/skill-transport/results/implementer-report.txt",
+          "evals/skill-transport/run-implementer-matrix.sh",
+          "evals/skill-transport/test/implementer-matrix-mechanics.test.sh",
+          "evals/skill-transport/test/stub-implementer-dispatch.sh"
+        ]
+      }
+    }
+  ],
+  "calculated_depth": 1,
+  "calculated_batches": 1,
+  "graph_digest": "a0ba07e8a04a40f6eee489647ab2a95b4191f6d54f9b0f5d5232ac2748a9da83"
+}

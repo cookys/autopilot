@@ -7,7 +7,7 @@
       "event": "PreToolUse",
       "mode": "cold",
       "enabled": false,
-      "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150",
       "enabled_hook_ids": [],
       "expected_child_count": 0
     },
@@ -16,7 +16,7 @@
       "event": "PreToolUse",
       "mode": "cold",
       "enabled": true,
-      "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150",
       "enabled_hook_ids": ["branch-protection"],
       "expected_child_count": 1
     },
@@ -25,7 +25,7 @@
       "event": "PostToolUse",
       "mode": "heavy",
       "enabled": false,
-      "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "payload_sha256": "5022f8f4daacd244d7c2ae39d6f5f640d38f1ddb1561fcae9c12aff4168b8216",
       "enabled_hook_ids": [],
       "expected_child_count": 0
     },
@@ -34,7 +34,7 @@
       "event": "PostToolUse",
       "mode": "heavy",
       "enabled": true,
-      "payload_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "payload_sha256": "5022f8f4daacd244d7c2ae39d6f5f640d38f1ddb1561fcae9c12aff4168b8216",
       "enabled_hook_ids": ["context-budget", "accumulator"],
       "expected_child_count": 2
     }

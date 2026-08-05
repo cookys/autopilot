@@ -23,6 +23,8 @@ REPORT=""
 SEED_FILE="$REPO/evals/grok-implementer-ab/seed.json"
 TIMEOUT="${AUTOPILOT_GROK_AB_TIMEOUT:-3m}"
 SCRATCH_ROOT="${AUTOPILOT_GROK_AB_SCRATCH:-/tmp/autopilot-grok-ab-$$}"
+BASE_REF="${AUTOPILOT_GROK_AB_BASE_SHA:-HEAD^}"
+CANDIDATE_REF="${AUTOPILOT_GROK_AB_CANDIDATE_SHA:-HEAD}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,6 +32,8 @@ while [[ $# -gt 0 ]]; do
     --report) REPORT="$2"; shift 2 ;;
     --seed) SEED_FILE="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
+    --base-sha) BASE_REF="$2"; shift 2 ;;
+    --candidate-sha) CANDIDATE_REF="$2"; shift 2 ;;
     -h|--help)
       sed -n '2,20p' "$0"
       exit 0
@@ -43,6 +47,13 @@ done
 [[ -r "$SEED_FILE" ]] || { echo "seed not readable: $SEED_FILE" >&2; exit 2; }
 command -v grok >/dev/null 2>&1 || { echo "grok binary required for live A/B" >&2; exit 2; }
 
+BASE_SHA="$(git -C "$REPO" rev-parse --verify "${BASE_REF}^{commit}" 2>/dev/null)" \
+  || { echo "base ref does not resolve: $BASE_REF" >&2; exit 2; }
+CANDIDATE_SHA="$(git -C "$REPO" rev-parse --verify "${CANDIDATE_REF}^{commit}" 2>/dev/null)" \
+  || { echo "candidate ref does not resolve: $CANDIDATE_REF" >&2; exit 2; }
+[ "$BASE_SHA" != "$CANDIDATE_SHA" ] \
+  || { echo "base and candidate refs must resolve to distinct commits" >&2; exit 2; }
+
 mkdir -p "$(dirname "$REPORT")" "$SCRATCH_ROOT"
 cleanup() {
   rm -rf -- "$SCRATCH_ROOT" 2>/dev/null || true
@@ -52,7 +63,7 @@ trap cleanup EXIT
 # Prepare scratch clone of current HEAD (mission enforce off).
 SCRATCH="$SCRATCH_ROOT/repo"
 git clone --local "$REPO" "$SCRATCH" >/dev/null 2>&1
-git -C "$SCRATCH" checkout -q "$(git -C "$REPO" rev-parse HEAD)"
+git -C "$SCRATCH" checkout -q "$CANDIDATE_SHA"
 # Remove mission enforce so free-form calibration sessions can run.
 rm -f "$SCRATCH/.claude/owner-kernel-governance.json" 2>/dev/null || true
 # Clear session markers that would force sealed projection.
@@ -63,14 +74,26 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
 export AUTOPILOT_LIVE_GROK_AB=1
 export DISPATCH_QUIET=1
 
-node - "$REPO" "$TASKS" "$SEED_FILE" "$REPORT" "$SCRATCH" "$TIMEOUT" <<'NODE'
+node - "$REPO" "$TASKS" "$SEED_FILE" "$REPORT" "$SCRATCH" "$TIMEOUT" \
+  "$BASE_REF" "$CANDIDATE_REF" "$BASE_SHA" "$CANDIDATE_SHA" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
-const [repo, tasksPath, seedPath, reportPath, scratch, timeout] = process.argv.slice(2);
+const [
+  repo,
+  tasksPath,
+  seedPath,
+  reportPath,
+  scratch,
+  timeout,
+  baseRef,
+  candidateRef,
+  baseSha,
+  candidateSha,
+] = process.argv.slice(2);
 const tasksDoc = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
 const seed = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
 const allTasks = tasksDoc.tasks || [];
@@ -79,12 +102,27 @@ const extension = allTasks.filter((t) => t.extension === true);
 const initialPairs = seed.initial_pairs || 30;
 const maxPairs = seed.max_pairs || 60;
 const maxSessions = seed.max_provider_sessions || 120;
-const maxRetries = seed.max_retries_per_arm || 6;
+const maxRetries = Number.isInteger(seed.max_retries_per_arm)
+  ? seed.max_retries_per_arm : 6;
 const model = seed.actor.model || 'grok-4.5';
 // CLI model id is lowercase with hyphen
 const modelCli = String(model).toLowerCase().replace(/\s+/g, '-');
 const runner = seed.actor.runner || 'grok';
 const hetero = path.join(repo, 'scripts', 'dispatch-hetero.sh');
+const dispatchBin = process.env.AUTOPILOT_GROK_AB_DISPATCH_BIN || hetero;
+
+function runnerVersion() {
+  const probe = spawnSync(runner, ['--version'], {
+    env: process.env,
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
+  });
+  if (probe.error || probe.status !== 0) return null;
+  const output = String(probe.stdout || probe.stderr || '').trim();
+  return output.split(/\r?\n/)[0].trim() || null;
+}
+
+const resolvedRunnerVersion = runnerVersion();
 
 if (primary.length < initialPairs) {
   process.stderr.write(`insufficient non-extension tasks: ${primary.length}\n`);
@@ -123,6 +161,52 @@ function parseOutcome(stdout) {
   }
 }
 
+function runAcceptance(task, commit) {
+  const commands = Array.isArray(task.acceptance) ? task.acceptance : [];
+  if (commands.length === 0 || typeof commit !== 'string' || commit.length === 0) {
+    return { ok: false, results: [], error: 'acceptance_or_commit_missing' };
+  }
+  const acceptanceRoot = fs.mkdtempSync(path.join(require('os').tmpdir(), 'grok-ab-acceptance-'));
+  const results = [];
+  try {
+    const clone = spawnSync('git', ['clone', '--local', scratch, acceptanceRoot], {
+      env: process.env,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    if (clone.status !== 0) {
+      return { ok: false, results, error: 'acceptance_clone_failed' };
+    }
+    const checkout = spawnSync('git', ['-C', acceptanceRoot, 'checkout', '-q', commit], {
+      env: process.env,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    });
+    if (checkout.status !== 0) {
+      return { ok: false, results, error: 'acceptance_checkout_failed' };
+    }
+    for (const command of commands) {
+      if (typeof command !== 'string' || command.trim() !== command || command.length === 0) {
+        results.push({ command, exit: null });
+        return { ok: false, results, error: 'acceptance_command_invalid' };
+      }
+      const check = spawnSync('bash', ['-lc', command], {
+        cwd: acceptanceRoot,
+        env: process.env,
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024,
+      });
+      results.push({ command, exit: check.status });
+      if (check.status !== 0) {
+        return { ok: false, results, error: 'acceptance_failed' };
+      }
+    }
+    return { ok: true, results, error: null };
+  } finally {
+    fs.rmSync(acceptanceRoot, { recursive: true, force: true });
+  }
+}
+
 function runArm(task, arm, attempt) {
   const effort = seed.arms[arm].effort;
   // Absolute path: dispatch-hetero runs with cwd=scratch and must read the prompt
@@ -153,7 +237,7 @@ function runArm(task, arm, attempt) {
 
   const started = Date.now();
   const run = spawnSync('bash', [
-    hetero,
+    dispatchBin,
     '--branch', branch,
     '--prompt-file', promptPath,
     '--runner', runner,
@@ -172,16 +256,34 @@ function runArm(task, arm, attempt) {
   const outcome = parseOutcome(run.stdout);
   const status = outcome.status || 'runner_failed';
   const committed = status === 'committed' && Boolean(outcome.commit);
+  const expectedModel = modelCli.toLowerCase();
+  const observedModel = typeof outcome.model === 'string' ? outcome.model.toLowerCase() : null;
+  const observedRunner = typeof outcome.runner === 'string' ? outcome.runner.toLowerCase() : null;
+  const providerSessionId = typeof outcome.provider_session_id === 'string'
+    && outcome.provider_session_id.length > 0
+    ? outcome.provider_session_id : null;
+  const provenanceOk = observedRunner === runner.toLowerCase()
+    && observedModel === expectedModel
+    && providerSessionId !== null
+    && resolvedRunnerVersion !== null;
+  const acceptance = committed ? runAcceptance(task, outcome.commit) : {
+    ok: false,
+    results: [],
+    error: 'commit_missing',
+  };
   const toolFailure = (outcome.model_calls > 0 && !committed)
     || status === 'runner_failed'
     || status === 'failure'
-    || (typeof outcome.error === 'string' && outcome.error.length > 0 && !committed)
+    || (typeof outcome.error === 'string' && outcome.error.length > 0)
+    || !provenanceOk
+    || !acceptance.ok
     ? 1 : 0;
   // Independent mechanical acceptance (not implementer self-report):
   // committed + files_changed within max_files + no error.
   const files = Number(outcome.files_changed || 0);
   const maxFiles = task.max_files || 2;
-  const qualityAccepted = committed && files > 0 && files <= maxFiles && !outcome.error;
+  const qualityAccepted = committed && files > 0 && files <= maxFiles
+    && !outcome.error && provenanceOk && acceptance.ok;
   const usable = committed && toolFailure === 0;
 
   return {
@@ -193,25 +295,42 @@ function runArm(task, arm, attempt) {
     toolFailure,
     usable_session: usable,
     quality_accepted: qualityAccepted,
+    acceptance_ok: acceptance.ok,
+    acceptance_results: acceptance.results,
+    acceptance_error: acceptance.error,
+    provenance_ok: provenanceOk,
+    runner: observedRunner,
+    model: observedModel,
+    provider_session_id: providerSessionId,
+    runner_version: resolvedRunnerVersion,
+    provider_version: resolvedRunnerVersion,
     retries: attempt,
     wall_ms: wallMs,
     run_id: outcome.run_id || null,
     model_calls: outcome.model_calls || 0,
     raw_status: status,
-    error: outcome.error || null,
+    error: outcome.error || acceptance.error || (!provenanceOk ? 'provenance_invalid' : null),
   };
+}
+
+const sessionBudget = { used: 0 };
+
+function reserveSession() {
+  if (sessionBudget.used >= maxSessions) return false;
+  sessionBudget.used += 1;
+  return true;
 }
 
 function runPair(task, pairIndex, retriesA, retriesB) {
   const order = armOrder(pairIndex);
   const arms = {};
-  let sessions = 0;
+  const pairStart = sessionBudget.used;
   for (const arm of order) {
     let attempt = 0;
     let result = null;
-    const budget = arm === 'A' ? maxRetries - retriesA.count : maxRetries - retriesB.count;
-    while (attempt <= Math.max(0, budget)) {
-      if (sessions >= maxSessions) {
+    const retries = arm === 'A' ? retriesA : retriesB;
+    while (true) {
+      if (!reserveSession()) {
         result = {
           effort: seed.arms[arm].effort,
           wrapper_commit: false,
@@ -221,21 +340,28 @@ function runPair(task, pairIndex, retriesA, retriesB) {
           retries: attempt,
           error: 'session_budget_exhausted',
           missing: true,
+          retry_exhausted: false,
         };
         break;
       }
       result = runArm(task, arm, attempt);
-      sessions += 1;
-      if (result.usable_session || result.status === 'committed') break;
+      if (result.usable_session) break;
       // Infra-style failures may retry; count against per-arm retry budget.
-      if (arm === 'A') retriesA.count += 1;
-      else retriesB.count += 1;
+      if (retries.count >= maxRetries) {
+        result.retry_exhausted = true;
+        break;
+      }
+      retries.count += 1;
       attempt += 1;
-      if (attempt > maxRetries) break;
     }
     arms[arm] = result;
   }
-  return { task_id: task.id, arms, order, sessions };
+  return {
+    task_id: task.id,
+    arms,
+    order,
+    sessions: sessionBudget.used - pairStart,
+  };
 }
 
 function bootstrapCI(diffs, seedVal, B) {
@@ -254,6 +380,25 @@ function bootstrapCI(diffs, seedVal, B) {
     high: means[Math.floor(0.975 * means.length)],
     mean: means.reduce((a, b) => a + b, 0) / means.length,
   };
+}
+
+function openArmReasons(pairs) {
+  const reasons = [];
+  for (const pair of pairs) {
+    for (const arm of ['A', 'B']) {
+      const result = pair.arms && pair.arms[arm];
+      if (!result) {
+        reasons.push(`${pair.task_id}:${arm}:missing_arm`);
+      } else if (result.missing) {
+        reasons.push(`${pair.task_id}:${arm}:session_budget_exhausted`);
+      } else if (result.retry_exhausted) {
+        reasons.push(`${pair.task_id}:${arm}:retry_cap_exhausted`);
+      } else if (result.usable_session !== true) {
+        reasons.push(`${pair.task_id}:${arm}:unusable_session`);
+      }
+    }
+  }
+  return [...new Set(reasons)];
 }
 
 function decide(pairs) {
@@ -278,7 +423,9 @@ function decide(pairs) {
   else if (endpoint.low >= -material && endpoint.high <= material && quality.low >= -qMargin) {
     decision = 'no-change';
   }
-  return { decision, endpoint, quality, material, qMargin, B };
+  const openReasons = openArmReasons(pairs);
+  if (openReasons.length > 0) decision = 'indeterminate';
+  return { decision, endpoint, quality, material, qMargin, B, openReasons };
 }
 
 const retriesA = { count: 0 };
@@ -290,13 +437,13 @@ const exclusions = [];
 // Phase 1: initial 30 pairs
 const phase1 = primary.slice(0, initialPairs);
 for (let i = 0; i < phase1.length; i += 1) {
-  if (sessions >= maxSessions) {
+  if (sessionBudget.used >= maxSessions) {
     exclusions.push({ task_id: phase1[i].id, reason: 'session_budget_exhausted' });
     break;
   }
   process.stderr.write(`A/B pair ${i + 1}/${phase1.length} task=${phase1[i].id}\n`);
   const p = runPair(phase1[i], i, retriesA, retriesB);
-  sessions += p.sessions;
+  sessions = sessionBudget.used;
   // Missing arms never imputed
   if (!p.arms.A || !p.arms.B || p.arms.A.missing || p.arms.B.missing) {
     exclusions.push({
@@ -313,7 +460,15 @@ for (let i = 0; i < phase1.length; i += 1) {
   }
 }
 
-let { decision, endpoint, quality, material, qMargin, B } = decide(pairs);
+let {
+  decision,
+  endpoint,
+  quality,
+  material,
+  qMargin,
+  B,
+  openReasons,
+} = decide(pairs);
 
 // Phase 2: one extension to max_pairs if still indeterminate
 if (decision === 'indeterminate' && pairs.length === initialPairs && sessions < maxSessions) {
@@ -325,38 +480,48 @@ if (decision === 'indeterminate' && pairs.length === initialPairs && sessions < 
   const need = maxPairs - pairs.length;
   const extraTasks = extPool.slice(0, need);
   for (let i = 0; i < extraTasks.length; i += 1) {
-    if (sessions >= maxSessions) break;
+    if (sessionBudget.used >= maxSessions) break;
     const pairIndex = pairs.length;
     process.stderr.write(`A/B extension pair ${pairIndex + 1}/${maxPairs} task=${extraTasks[i].id}\n`);
     const p = runPair(extraTasks[i], pairIndex, retriesA, retriesB);
-    sessions += p.sessions;
+    sessions = sessionBudget.used;
     pairs.push(p);
   }
-  ({ decision, endpoint, quality, material, qMargin, B } = decide(pairs));
+  ({ decision, endpoint, quality, material, qMargin, B, openReasons } = decide(pairs));
 }
 
 const report = {
   schema_version: 1,
   mode: 'live',
+  base_ref: baseRef,
+  candidate_ref: candidateRef,
+  base_sha: baseSha,
+  candidate_sha: candidateSha,
   seed: seed.seed,
   seed_digest: crypto.createHash('sha256').update(fs.readFileSync(seedPath)).digest('hex'),
   tasks_digest: crypto.createHash('sha256').update(fs.readFileSync(tasksPath)).digest('hex'),
   actor: seed.actor,
+  runner,
+  model: modelCli,
+  runner_version: resolvedRunnerVersion,
+  provider_version: resolvedRunnerVersion,
   arms: seed.arms,
   pairs: pairs.length,
-  provider_sessions: sessions,
+  provider_sessions: sessionBudget.used,
+  session_attempts_started: sessionBudget.used,
   exclusions,
   retries_per_arm: { A: retriesA.count, B: retriesB.count },
   max_provider_sessions: maxSessions,
   endpoint_pp: endpoint,
   quality_pp: quality,
   decision,
+  open_reasons: openReasons,
   material_effect_pp: material,
   quality_non_inferiority_pp: qMargin,
   bootstrap_resamples: B,
   pair_results: pairs,
   runner_path: 'scripts/dispatch-hetero.sh',
-  quality_definition: 'mechanical_independent: committed && 0<files<=max_files && !error',
+  quality_definition: 'mechanical_independent: committed && 0<files<=max_files && !error && provenance_ok && acceptance_ok',
   generated_at: new Date().toISOString(),
 };
 
@@ -364,8 +529,8 @@ fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 process.stdout.write(
   `wrote ${reportPath} mode=live decision=${decision} pairs=${pairs.length} sessions=${sessions}\n`,
 );
-if (decision === 'indeterminate' && pairs.length < maxPairs) {
-  process.stderr.write('WARNING: still indeterminate without full max_pairs coverage\n');
+if (decision === 'indeterminate') {
+  process.stderr.write('ESCALATION: indeterminate result remains open; no calibration decision\n');
   process.exit(1);
 }
 NODE

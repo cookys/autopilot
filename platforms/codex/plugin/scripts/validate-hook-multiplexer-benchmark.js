@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
-/**
- * Validate a D6 hook-multiplexer benchmark report against schema + thresholds.
- * Usage: node scripts/validate-hook-multiplexer-benchmark.js <report.json>
- */
+/** Validate a D6 base-vs-candidate hook-multiplexer benchmark report. */
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
+const crypto = require('crypto');
 
 const reportPath = process.argv[2];
 if (!reportPath) {
@@ -15,55 +14,168 @@ if (!reportPath) {
   process.exit(2);
 }
 
+const repo = path.resolve(__dirname, '..');
+// Authorization sealed the D6 performance comparison against the last
+// pre-multiplexer tree. A report against any later continuation base is not a
+// valid performance admission even if its two refs are otherwise distinct.
+const D6_BASE_SHA = 'f6805529bdca4cca76f334d8c82c8f2bf141aaf8';
 const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-const fixturesPath = path.resolve(
-  path.dirname(reportPath),
-  report.fixtures_path || 'hooks/tests/fixtures/hook-multiplexer-benchmark.json',
-);
-// Prefer repo-relative fixtures path when report stores relative path
-const repoFixtures = path.resolve(__dirname, '..', 'hooks/tests/fixtures/hook-multiplexer-benchmark.json');
-const fixtures = JSON.parse(fs.readFileSync(
-  fs.existsSync(repoFixtures) ? repoFixtures : fixturesPath,
-  'utf8',
-));
-const thr = fixtures.thresholds || {};
+const canonicalFixturesPath = path.join(repo, 'hooks', 'tests', 'fixtures', 'hook-multiplexer-benchmark.json');
+const fixturesText = fs.readFileSync(canonicalFixturesPath, 'utf8');
+const fixtures = JSON.parse(fixturesText);
+const fixtureById = new Map((fixtures.fixtures || []).map((fixture) => [fixture.id, fixture]));
 const errors = [];
 
+function resolveCommit(ref, label) {
+  if (typeof ref !== 'string' || ref.length === 0) {
+    errors.push(`${label}_ref is required`);
+    return null;
+  }
+  const result = spawnSync('git', ['-C', repo, 'rev-parse', '--verify', `${ref}^{commit}`], {
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    errors.push(`${label}_ref does not resolve: ${ref}`);
+    return null;
+  }
+  return String(result.stdout || '').trim();
+}
+
 if (report.schema_version !== 1) errors.push('schema_version must be 1');
-if (!report.base_sha || !report.candidate_sha) errors.push('base/candidate SHAs required');
-// Plan D6 gate: warmups=10, repetitions=50 (exact).
+const baseSha = typeof report.base_sha === 'string' ? report.base_sha.toLowerCase() : '';
+const candidateSha = typeof report.candidate_sha === 'string' ? report.candidate_sha.toLowerCase() : '';
+if (!/^[0-9a-f]{40,64}$/.test(baseSha)) errors.push('base_sha must be a full Git SHA');
+if (!/^[0-9a-f]{40,64}$/.test(candidateSha)) errors.push('candidate_sha must be a full Git SHA');
+if (baseSha && baseSha !== D6_BASE_SHA) {
+  errors.push(`base_sha must equal the authorized D6 baseline ${D6_BASE_SHA}`);
+}
+if (baseSha && candidateSha && baseSha === candidateSha) {
+  errors.push('base_sha and candidate_sha must be distinct');
+}
+const resolvedBase = resolveCommit(report.base_ref, 'base');
+const resolvedCandidate = resolveCommit(report.candidate_ref, 'candidate');
+if (resolvedBase && baseSha && resolvedBase !== baseSha) {
+  errors.push(`base_sha does not match Git truth for base_ref (${baseSha} != ${resolvedBase})`);
+}
+if (resolvedCandidate && candidateSha && resolvedCandidate !== candidateSha) {
+  errors.push(`candidate_sha does not match Git truth for candidate_ref (${candidateSha} != ${resolvedCandidate})`);
+}
+if (resolvedBase && resolvedCandidate && resolvedBase === resolvedCandidate) {
+  errors.push('base_ref and candidate_ref resolve to the same commit');
+}
+
+const expectedFixturesSha = crypto.createHash('sha256').update(fixturesText).digest('hex');
+if (report.fixtures_sha256 !== expectedFixturesSha) {
+  errors.push('fixtures_sha256 does not match the committed fixture file');
+}
+if (typeof report.fixtures_path !== 'string'
+  || path.normalize(report.fixtures_path) !== 'hooks/tests/fixtures/hook-multiplexer-benchmark.json') {
+  errors.push('fixtures_path must identify the committed benchmark fixture');
+}
 if (report.warmups !== 10) errors.push(`warmups must be 10 (got ${report.warmups})`);
 if (report.repetitions !== 50) errors.push(`repetitions must be 50 (got ${report.repetitions})`);
-if (!Array.isArray(report.results) || report.results.length !== 4) {
-  errors.push('results must cover 4 fixtures');
+
+const results = Array.isArray(report.results) ? report.results : [];
+if (results.length !== fixtureById.size) {
+  errors.push(`results must cover exactly ${fixtureById.size} fixtures`);
 }
-for (const r of report.results || []) {
-  if (r.samples !== 50) {
-    errors.push(`${r.id}: samples must be 50 (got ${r.samples})`);
+const seen = new Set();
+
+function validateSummary(fixture, summary, side, result) {
+  if (!summary || typeof summary !== 'object') {
+    errors.push(`${result.id}: ${side} summary missing`);
+    return;
+  }
+  if (summary.samples !== 50) errors.push(`${result.id}: ${side} samples must be 50 (got ${summary.samples})`);
+  if (summary.nonzero_statuses !== 0) {
+    errors.push(`${result.id}: ${side} has non-zero multiplexer exits (${summary.nonzero_statuses})`);
+  }
+  if (summary.payload_sha256 !== fixture.payload_sha256) {
+    errors.push(`${result.id}: ${side} payload hash does not match fixture`);
+  }
+  if (summary.observed_child_count !== fixture.expected_child_count) {
+    errors.push(`${result.id}: ${side} child count ${summary.observed_child_count} != ${fixture.expected_child_count}`);
+  }
+  for (const metric of ['median_ms', 'p95_ms', 'mad_ms', 'mad_median_ratio']) {
+    if (typeof summary[metric] !== 'number' || !Number.isFinite(summary[metric]) || summary[metric] < 0) {
+      errors.push(`${result.id}: ${side}.${metric} must be a finite non-negative number`);
+    }
+  }
+  const madLimit = fixtures.thresholds && fixtures.thresholds.mad_median_max;
+  if (typeof madLimit === 'number' && summary.mad_median_ratio > 0.5) {
+    errors.push(`${result.id}: ${side} MAD/median too high (${summary.mad_median_ratio})`);
   }
 }
 
-for (const r of report.results || []) {
-  if (r.enabled === false) {
-    if (r.observed_child_count !== 0) {
-      errors.push(`${r.id}: disabled must spawn 0 children`);
+for (const result of results) {
+  if (!result || typeof result !== 'object') {
+    errors.push('each result must be an object');
+    continue;
+  }
+  if (seen.has(result.id)) errors.push(`duplicate result id: ${result.id}`);
+  seen.add(result.id);
+  const fixture = fixtureById.get(result.id);
+  if (!fixture) {
+    errors.push(`unknown fixture result: ${result.id}`);
+    continue;
+  }
+  if (result.event !== fixture.event || result.mode !== fixture.mode
+    || result.enabled !== (fixture.enabled === true)) {
+    errors.push(`${result.id}: fixture identity does not match committed fixture`);
+  }
+  if (result.expected_child_count !== fixture.expected_child_count) {
+    errors.push(`${result.id}: expected_child_count does not match fixture`);
+  }
+  validateSummary(fixture, result.baseline, 'baseline', result);
+  validateSummary(fixture, result.candidate, 'candidate', result);
+
+  const baseline = result.baseline;
+  const candidate = result.candidate;
+  const ratios = result.ratios;
+  if (!ratios || typeof ratios !== 'object') {
+    errors.push(`${result.id}: ratios missing`);
+    continue;
+  }
+  for (const metric of ['median', 'p95']) {
+    const denominator = baseline && baseline[`${metric}_ms`];
+    const expected = denominator > 0 ? candidate[`${metric}_ms`] / denominator : null;
+    if (expected === null) {
+      if (ratios[metric] !== null) errors.push(`${result.id}: ${metric} ratio must be null when base is zero`);
+    } else if (typeof ratios[metric] !== 'number'
+      || Math.abs(ratios[metric] - expected) > Math.max(1e-9, expected * 1e-6)) {
+      errors.push(`${result.id}: ${metric} ratio is not derived from base/candidate metrics`);
     }
   }
-  if (typeof r.mad_median_ratio === 'number' && r.mad_median_ratio > (thr.mad_median_max || 0.1) + 1e-9) {
-    // Soft: synthetic runs may be noisy on shared CI; only hard-fail extreme variance.
-    if (r.mad_median_ratio > 0.5) errors.push(`${r.id}: MAD/median too high (${r.mad_median_ratio})`);
+
+  if (fixture.mode === 'cold' && candidate.p95_ms > (fixtures.thresholds.candidate_p95_cold_ms_max || 250)) {
+    errors.push(`${result.id}: candidate cold p95 excessive (${candidate.p95_ms}ms)`);
   }
-  if (r.mode === 'cold' && r.p95_ms > (thr.candidate_p95_cold_ms_max || 250) * 4) {
-    errors.push(`${r.id}: cold p95 excessive (${r.p95_ms}ms)`);
+  if (fixture.mode === 'heavy' && candidate.p95_ms > (fixtures.thresholds.candidate_p95_heavy_ms_max || 1000)) {
+    errors.push(`${result.id}: candidate heavy p95 excessive (${candidate.p95_ms}ms)`);
   }
-  if (r.mode === 'heavy' && r.p95_ms > (thr.candidate_p95_heavy_ms_max || 1000) * 4) {
-    errors.push(`${r.id}: heavy p95 excessive (${r.p95_ms}ms)`);
+  const ratioLimit = fixture.enabled === true
+    ? fixtures.thresholds.candidate_enabled_median_p95_ratio_max
+    : fixtures.thresholds.candidate_disabled_median_p95_ratio_max;
+  if (typeof ratioLimit !== 'number') {
+    errors.push(`${result.id}: missing candidate ratio threshold`);
+  } else {
+    for (const metric of ['median', 'p95']) {
+      if (typeof ratios[metric] === 'number' && ratios[metric] > ratioLimit + 1e-9) {
+        errors.push(`${result.id}: candidate ${metric} ratio ${ratios[metric]} exceeds ${ratioLimit}`);
+      }
+    }
   }
+}
+
+for (const fixture of fixtureById.values()) {
+  if (!seen.has(fixture.id)) errors.push(`missing result for fixture: ${fixture.id}`);
 }
 
 if (errors.length) {
-  process.stderr.write(`validate-hook-multiplexer-benchmark: FAIL\n${errors.map((e) => `  - ${e}`).join('\n')}\n`);
+  process.stderr.write(
+    `validate-hook-multiplexer-benchmark: FAIL\n${errors.map((error) => `  - ${error}`).join('\n')}\n`,
+  );
   process.exit(1);
 }
 process.stdout.write('validate-hook-multiplexer-benchmark: ok\n');
-process.exit(0);

@@ -1968,10 +1968,16 @@ if [ -z "$_cont_root" ] && { [ -n "${AUTOPILOT_MISSION_ROOT_RUN_ID:-}" ] \
 fi
 if [ -n "$_cont_common" ] && [ -n "$_cont_root" ]; then
   # Exact-root enumerate under fail-closed semantics — never `|| echo 0` on errors.
+  # The managed engine owns a controller Work Order under the campaign root.
+  # That record is controller authority, not an implementer continuation claim;
+  # counting it here makes the child runner demand a reconcile receipt for the
+  # very dispatch that created the controller (and blocks before model spend).
+  # Keep this in lockstep with the engine-side continuation admission filter.
   _cont_has_wo="$(node -e '
 const wo=require(process.argv[1]);
 try {
-  const n=wo.listNonterminalWorkOrders(process.argv[2], process.argv[3]);
+  const n=wo.listNonterminalWorkOrders(process.argv[2], process.argv[3])
+    .filter((entry) => !(entry && entry.work_order && entry.work_order.role === "controller"));
   process.stdout.write(n.length>0?"1":"0");
 } catch (e) {
   process.stderr.write(String(e && e.message || e));

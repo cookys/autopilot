@@ -321,6 +321,40 @@ assert_eq "yes" "$(
 git -C "$SBX" worktree remove --force "$MANAGED_RETAINED"
 git -C "$SBX" branch -D hetero/managed-retained >/dev/null
 
+# A managed campaign owns a controller Work Order under the same root that the
+# child runner uses for its lifecycle.  That controller record is not an
+# implementer continuation and must not force a reconcile receipt before the
+# first runner effect (regression for the campaign root admission bug).
+CONTROLLER_FILTER_ROOT="controller-filter-root"
+node - "$SBX" "$CONTROLLER_FILTER_ROOT" "$REPO_ROOT" <<'NODE'
+const path = require('path');
+const [repo, root, source] = process.argv.slice(2);
+const workOrder = require(path.join(source, 'src/engine/work-order'));
+const commonDir = workOrder.resolveGitCommonDir(repo);
+const owner = workOrder.captureProcessIdentity(process.pid);
+const record = workOrder.buildWorkOrder({
+  root_run_id: root,
+  graph_node: 'controller',
+  attempt: 1,
+  role: 'controller',
+  owner,
+  next_action: 'dispatch',
+});
+workOrder.writeAtomicJson(
+  workOrder.workOrderPath(commonDir, root, 'controller', 1),
+  record,
+);
+NODE
+OUT="$(cd "$SBX" && DISPATCH_DETACH=0 \
+  AUTOPILOT_PARENT_RUN_ID=controller-parent \
+  AUTOPILOT_ROOT_RUN_ID="$CONTROLLER_FILTER_ROOT" \
+  AUTOPILOT_WORKTREE_ROOT_RUN_ID="$CONTROLLER_FILTER_ROOT" \
+  "$SCRIPT" --branch hetero/controller-filter --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_OK" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "controller Work Order does not block child runner admission"
+assert_contains "$OUT" '"status": "committed"' \
+  "controller Work Order is excluded from implementer continuation scan"
+
 # A clean process exit is insufficient: malformed native JSON converts the run
 # to failure, even if a commit exists. A nonzero exit discards valid-looking usage.
 STUB_BAD_ENVELOPE="$TEST_TMP/agy-bad-envelope"

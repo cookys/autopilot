@@ -138,4 +138,28 @@ RATIO_RC=$?
 assert_neq "0" "$RATIO_RC" "validator rejects a disabled-handler ratio above 75%"
 assert_contains "$RATIO_OUT" "exceeds 0.75" "validator names the disabled ratio threshold"
 
+# Restore the ratio fixture and violate the exact 10% MAD/median requirement.
+node - "$TEST_TMP/valid.json" "$BASE_SHA" "$CANDIDATE_SHA" <<'NODE'
+const fs = require('fs');
+const [target, baseSha, candidateSha] = process.argv.slice(2);
+const report = JSON.parse(fs.readFileSync(target, 'utf8'));
+report.base_ref = baseSha;
+report.base_sha = baseSha;
+report.candidate_ref = candidateSha;
+report.candidate_sha = candidateSha;
+const cold = report.results[0];
+cold.candidate.median_ms = 50;
+cold.candidate.p95_ms = 50;
+cold.ratios.median = 0.5;
+cold.ratios.p95 = 0.5;
+report.results[1].baseline.mad_median_ratio = 0.11;
+report.results[1].candidate.mad_median_ratio = 0.11;
+fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`);
+NODE
+set +e
+MAD_OUT="$(node "$VALIDATOR" "$TEST_TMP/valid.json" 2>&1)"
+MAD_RC=$?
+assert_neq "0" "$MAD_RC" "validator rejects MAD/median above the exact 10% limit"
+assert_contains "$MAD_OUT" "exceeds 0.1" "validator names the exact MAD threshold"
+
 finalize_test

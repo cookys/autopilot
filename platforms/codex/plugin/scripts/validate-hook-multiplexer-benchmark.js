@@ -103,8 +103,10 @@ function validateSummary(fixture, summary, side, result) {
     }
   }
   const madLimit = fixtures.thresholds && fixtures.thresholds.mad_median_max;
-  if (typeof madLimit === 'number' && summary.mad_median_ratio > 0.5) {
-    errors.push(`${result.id}: ${side} MAD/median too high (${summary.mad_median_ratio})`);
+  if (typeof madLimit !== 'number') {
+    errors.push(`${result.id}: fixture is missing mad_median_max`);
+  } else if (summary.mad_median_ratio > madLimit + 1e-9) {
+    errors.push(`${result.id}: ${side} MAD/median ${summary.mad_median_ratio} exceeds ${madLimit}`);
   }
 }
 

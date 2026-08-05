@@ -259,9 +259,9 @@ EXIT=$?
 assert_eq "1" "$EXIT" "strict L5 executable fixture reaches the engine after fresh readiness"
 assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
   "strict L5 executable fixture consumes a fresh host-owned readiness bundle"
-assert_contains "$OUT" '"policy_digest":"856551c093f382114166404c4c0288da667da5ff4075da30021a7c8a9fea547c"' \
+assert_contains "$OUT" '"policy_digest":"33fb92e095c9ad5735754d50e5483086204c11a40494c28a4cf63a855d718a58"' \
   "strict L5 executable fixture records the frozen policy digest"
-assert_contains "$OUT" '"cap-v1-22e96639504e14d8a36e29a8e3d5747807a4ec7cc99f454d6898fe2680790575"' \
+assert_contains "$OUT" '"cap-v1-2cddccba68504249195990b87d1f9a10678a17d470129395266738ee3c1696da"' \
   "strict L5 executable fixture records canonical claim provenance"
 
 STRICT_DRIFT_CFG="$TEST_TMP/strict-l5-drift-review-loop.md"

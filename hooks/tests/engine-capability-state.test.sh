@@ -123,6 +123,12 @@ c_unknown=$(node "$CLI" classify-error --string "some random successful or gener
 c_grok402=$(node "$CLI" classify-error --string "API error (status 402 Payment Required): Grok Build usage balance exhausted")
 c_benign_payment=$(node "$CLI" classify-error --string "the payment required field on the checkout form")
 c_benign_balance=$(node "$CLI" classify-error --string "balance exhausted is a phrase used in docs")
+# Adversarial false-positives: bare status/error co-occurrence without numeric HTTP shape
+c_fp_status=$(node "$CLI" classify-error --string "payment required status update for the checkout form")
+c_fp_error=$(node "$CLI" classify-error --string "error: the payment required field is missing")
+c_fp_http=$(node "$CLI" classify-error --string "see the http docs about payment required")
+c_status_colon=$(node "$CLI" classify-error --string "status: 402 payment required for this workspace")
+c_error_402=$(node "$CLI" classify-error --string "error 402: balance exhausted on provider")
 
 [ "$c_quota" = "quota_exhausted" ] && \
 [ "$c_rate" = "rate_limited" ] && \
@@ -132,8 +138,13 @@ c_benign_balance=$(node "$CLI" classify-error --string "balance exhausted is a p
 [ "$c_unknown" = "unknown" ] && \
 [ "$c_grok402" = "quota_exhausted" ] && \
 [ "$c_benign_payment" = "unknown" ] && \
-[ "$c_benign_balance" = "unknown" ] && ok "8: classify-error categories map correctly" || \
-bad "8: quota=$c_quota rate=$c_rate overload=$c_overload auth=$c_auth net=$c_net unknown=$c_unknown grok402=$c_grok402 benign_payment=$c_benign_payment benign_balance=$c_benign_balance"
+[ "$c_benign_balance" = "unknown" ] && \
+[ "$c_fp_status" = "unknown" ] && \
+[ "$c_fp_error" = "unknown" ] && \
+[ "$c_fp_http" = "unknown" ] && \
+[ "$c_status_colon" = "quota_exhausted" ] && \
+[ "$c_error_402" = "quota_exhausted" ] && ok "8: classify-error categories map correctly" || \
+bad "8: quota=$c_quota rate=$c_rate overload=$c_overload auth=$c_auth net=$c_net unknown=$c_unknown grok402=$c_grok402 benign_payment=$c_benign_payment benign_balance=$c_benign_balance fp_status=$c_fp_status fp_error=$c_fp_error fp_http=$c_fp_http status_colon=$c_status_colon error_402=$c_error_402"
 
 # 9. (P6 F4) merged `current` exposes per-field native_observed_at — the native event's OWN
 #    time, NOT the aggregate observed_at (which follows the latest event of any field). A fresh

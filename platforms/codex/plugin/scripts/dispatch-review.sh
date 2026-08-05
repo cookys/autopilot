@@ -513,22 +513,27 @@ while :; do
     die_precondition "failed to generate a non-colliding review nonce (4 attempts)"
   fi
 done
-BEGIN="<<<AUTOPILOT-REVIEW-${NONCE}>>>"
-END="<<<AUTOPILOT-END-${NONCE}>>>"
+# D4 A08 — derived/transformed delimiter (max-security variant).
+# Accepted markers are SHA256("autopilot-review-v1:" || nonce)[0:32], NOT the raw
+# nonce. A pure echo of the NONCE line cannot produce a valid marker. The derived
+# markers are published so models need not hash at runtime; the parser is
+# non-permissive and rejects raw-nonce markers, wrong/duplicate/truncated frames.
+DERIVED="$(printf 'autopilot-review-v1:%s' "$NONCE" | sha256sum | awk '{print substr($1,1,32)}')"
+BEGIN="<<<AUTOPILOT-REVIEW-${DERIVED}>>>"
+END="<<<AUTOPILOT-END-${DERIVED}>>>"
 {
-  cat <<'EOF'
+  cat <<EOF
 You are a code reviewer. Review ONLY the diff for correctness, security, completeness. Do NOT edit/create files or projects, or run commands. Output ONLY a wrapped block (no other text/fences), beginning with:
-EOF
-  printf '%s\n' "$BEGIN"
-  cat <<'EOF'
+${BEGIN}
 VERDICT: SHIP-AS-IS or FIX-THEN-SHIP
 FINDINGS: one finding per line, or the single word none
 NO-FINDING-PROOF: checked=<acceptance surfaces inspected>; evidence=<specific observations or test evidence>; conclusion=<why no MUST-FIX remains>
 
 and ending with:
-EOF
-  printf '%s\n' "$END"
-  cat <<'EOF'
+${END}
+
+Framing nonce (do NOT use this raw value as a marker; markers above are derived):
+NONCE=${NONCE}
 
 Do NOT echo the diff or instructions. Your VERY FIRST output character MUST be the start of the opening marker line above — write NOTHING before it (no preamble, no acknowledgement, no "Here is my review", no reasoning). Output ONLY the wrapped block: nothing before the opening marker, nothing after the closing marker. Any text outside the block makes your review INVALID and it is discarded.
 

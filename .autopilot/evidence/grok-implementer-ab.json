@@ -1,0 +1,795 @@
+{
+  "schema_version": 1,
+  "mode": "offline-synthetic",
+  "seed": 20260803,
+  "seed_digest": "580a7a03b4d0e606d374329109f29d80de6774d72ca05dd077ae3c884e5d1239",
+  "tasks_digest": "bc136556a2cbb7445e7317df71fc5f3b3a9850f68241984aeb6a2e3aa12685c5",
+  "actor": {
+    "runner": "grok",
+    "model": "Grok-4.5",
+    "family": "xai"
+  },
+  "arms": {
+    "A": {
+      "effort": "medium"
+    },
+    "B": {
+      "effort": "high"
+    }
+  },
+  "pairs": 30,
+  "provider_sessions": 60,
+  "exclusions": [],
+  "retries_per_arm": {
+    "A": 0,
+    "B": 0
+  },
+  "max_provider_sessions": 120,
+  "endpoint_pp": {
+    "low": -36.666666666666664,
+    "high": 13.333333333333334,
+    "mean": -13.374333333332718
+  },
+  "quality_pp": {
+    "low": -6.666666666666667,
+    "high": 40,
+    "mean": 16.68433333333326
+  },
+  "decision": "indeterminate",
+  "material_effect_pp": 10,
+  "quality_non_inferiority_pp": 5,
+  "bootstrap_resamples": 10000,
+  "pair_results": [
+    {
+      "task_id": "t01",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t02",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t03",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t04",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t05",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t06",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t07",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t08",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t09",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t10",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t11",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t12",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t13",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t14",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t15",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": false,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t16",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t17",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t18",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t19",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t20",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t21",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t22",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t23",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t24",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t25",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t26",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": false,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t27",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t28",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": true,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "task_id": "t29",
+      "arms": {
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        },
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": true,
+          "retries": 0
+        }
+      },
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "task_id": "t30",
+      "arms": {
+        "B": {
+          "effort": "high",
+          "wrapper_commit": true,
+          "toolFailure": 0,
+          "usable_session": true,
+          "quality_accepted": false,
+          "retries": 0
+        },
+        "A": {
+          "effort": "medium",
+          "wrapper_commit": false,
+          "toolFailure": 1,
+          "usable_session": false,
+          "quality_accepted": false,
+          "retries": 0
+        }
+      },
+      "order": [
+        "B",
+        "A"
+      ]
+    }
+  ],
+  "generated_at": "2026-08-05T05:35:10.442Z"
+}

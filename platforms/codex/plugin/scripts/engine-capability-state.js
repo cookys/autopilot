@@ -1077,11 +1077,15 @@ function classifyErrorContent(content) {
   ) {
     return 'quota_exhausted';
   }
-  // payment/balance phrases need an error/status co-occurrence so benign prose
-  // ("the payment required field on the checkout form") is not misclassified
-  const hasErrCtx = text.includes('402') || text.includes('status')
-    || text.includes('error') || text.includes('http');
-  if ((text.includes('balance exhausted') || text.includes('payment required')) && hasErrCtx) {
+  // payment/balance phrases need a numeric HTTP-error shape so bare prose
+  // ("the payment required field on the checkout form", "payment required status
+  // update") is not misclassified. Require \b402\b or status[ :=]4xx / error 4xx —
+  // bare "status"/"error"/"http" substrings alone are too wide (A01 D1).
+  const hasNumericHttpQuotaCtx = /\b402\b/.test(text)
+    || /\bstatus\s*[:=]\s*4\d\d\b/i.test(text)
+    || /\berror\s*[:(]?\s*4\d\d\b/i.test(text)
+    || /\bhttp(?:\s+status)?\s*[:=]?\s*4\d\d\b/i.test(text);
+  if ((text.includes('balance exhausted') || text.includes('payment required')) && hasNumericHttpQuotaCtx) {
     return 'quota_exhausted';
   }
 

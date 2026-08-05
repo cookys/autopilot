@@ -324,6 +324,15 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.strictEqual(dispRes2.status, 'hard_fail');
   assert.strictEqual(dispRes2.phase, 'adjudication');
   assert.strictEqual(dispRes2.resumable, false);
+
+  // Negative (D2 A05): missing findingsIdentityOk is fail-closed, never default-true
+  const dispRes3 = ctrl.classifyMissingDisposition({
+    findings,
+    dispositionAuthority: null,
+  });
+  assert.strictEqual(dispRes3.status, 'hard_fail');
+  assert.strictEqual(dispRes3.code, 'FINDING_IDENTITY_REQUIRED');
+  assert.strictEqual(dispRes3.resumable, false);
 }
 
 // Group 4: Repair budgets & axes

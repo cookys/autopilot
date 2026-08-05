@@ -1,5 +1,5 @@
 ---
-status: planned
+status: implemented
 date: 2026-08-03
 size: L
 entry_level: l5

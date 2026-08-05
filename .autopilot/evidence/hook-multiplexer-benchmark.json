@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "runtime": "v24.16.0",
+  "base_sha": "f6805529",
+  "candidate_sha": "HEAD",
+  "fixtures_path": "hooks/tests/fixtures/hook-multiplexer-benchmark.json",
+  "warmups": 2,
+  "repetitions": 5,
+  "results": [
+    {
+      "id": "cold-disabled",
+      "event": "PreToolUse",
+      "mode": "cold",
+      "enabled": false,
+      "expected_child_count": 0,
+      "observed_child_count": 0,
+      "median_ms": 50.910753,
+      "p95_ms": 54.979552,
+      "mad_ms": 2.998753999999998,
+      "mad_median_ratio": 0.05890217337779306,
+      "samples": 5
+    },
+    {
+      "id": "cold-enabled",
+      "event": "PreToolUse",
+      "mode": "cold",
+      "enabled": true,
+      "expected_child_count": 1,
+      "observed_child_count": 1,
+      "median_ms": 86.632083,
+      "p95_ms": 91.486451,
+      "mad_ms": 3.0588169999999906,
+      "mad_median_ratio": 0.03530813174606445,
+      "samples": 5
+    },
+    {
+      "id": "heavy-disabled",
+      "event": "PostToolUse",
+      "mode": "heavy",
+      "enabled": false,
+      "expected_child_count": 0,
+      "observed_child_count": 0,
+      "median_ms": 39.291621,
+      "p95_ms": 49.312685,
+      "mad_ms": 3.372618000000003,
+      "mad_median_ratio": 0.08583555257239203,
+      "samples": 5
+    },
+    {
+      "id": "heavy-enabled",
+      "event": "PostToolUse",
+      "mode": "heavy",
+      "enabled": true,
+      "expected_child_count": 2,
+      "observed_child_count": 2,
+      "median_ms": 81.037122,
+      "p95_ms": 109.15998,
+      "mad_ms": 3.1359329999999943,
+      "mad_median_ratio": 0.03869748730711333,
+      "samples": 5
+    }
+  ],
+  "generated_at": "2026-08-05T05:35:12.389Z"
+}

@@ -9,7 +9,7 @@
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
 | 2026-07-20 | [owner-kernel-governance](2026-07-20-owner-kernel-governance/README.md) — 將 flow-selected autonomy 收斂為 persistent qualified Owner Kernel；P3.7 installed U5/U6 已完成單一可逆 broker effect、單一 Engine implementation sink、full-manifest 原子 acceptance、8/15 corpus 與 disposable Linux live gate，P4 exact-role qualification 也已完成。Release checker 仍誠實 HOLD：production KR8/KR10 與 14 日 alias telemetry 尚未成立。 | v2.32.59 | `develop` |
-| 2026-08-04 | [next-touch-debt-retirement](2026-08-03-next-touch-debt-retirement/README.md) — 14 個已核准 technical entries，D1–D8 收斂為單一 cumulative L5 execution node；目前進入同一 implementer lineage 的整包實作。 | pending | `feat/next-touch-debt-retirement-20260804` |
+| 2026-08-05 | [next-touch-debt-retirement](_archive/2026-08-03-next-touch-debt-retirement/README.md) — A01–A14 retired via D1–D8 on mission branch; archive pending harness integrate. | archived | `mission/7e8e6806aee8/next-touch-debt-retirement-a5` |
 
 ## 已完成 (Completed)
 

@@ -1351,126 +1351,22 @@ emit_sealed_zero_diff_if_authorized() {
   [ -n "${CONTRACT_FILE:-}" ] && [ -r "$CONTRACT_FILE" ] || return 0
   [ -z "${STRICT_NOOP_RECEIPT_PATH:-}" ] \
     || die_precondition "ambient STRICT_NOOP_RECEIPT_PATH is not authority; seal zero_diff_receipt into the dispatch unit"
-  local repo base_sha result rc
+  local repo base_sha result rc validator
   repo="${CONSUMING_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null)}"
   [ -n "$repo" ] || die_precondition "sealed zero-diff admission requires repository root"
   base_sha="$(git -C "$repo" rev-parse "${BASE}^{commit}" 2>/dev/null)" \
     || die_precondition "sealed zero-diff admission cannot resolve immutable base"
+  # Single production sealed zero-diff validator (D2 A06) — shared with
+  # dispatch-contract.js and campaign-dispatch-projection.js.
+  validator="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/engine/sealed-zero-diff-validator.js"
   if result="$(
-    node - "$CONTRACT_FILE" "$repo" "$base_sha" \
-      "${MISSION_NOOP_RECEIPT_DIGEST:-}" "${MISSION_NOOP_GRAPH_NODE:-}" <<'NODE'
-'use strict';
-const crypto = require('crypto');
-const fs = require('fs');
-const { execFileSync } = require('child_process');
-const [
-  contractPath,
-  repo,
-  baseSha,
-  missionNoopReceiptDigest,
-  missionNoopGraphNode,
-] = process.argv.slice(2);
-const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
-const sha256Json = (value) => sha256(Buffer.from(JSON.stringify(value), 'utf8'));
-const fail = (code, exit = 2) => {
-  process.stdout.write(code);
-  process.exit(exit);
-};
-try {
-  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
-  if (!receipt || typeof receipt !== 'object') fail('absent', 3);
-  const expectedKeys = [
-    'schema_version',
-    'artifact_type',
-    'base_sha',
-    'acceptance_digest',
-    'campaign_contract_digest',
-    'strict_dispatch_digest',
-    'campaign_id',
-    'mission_lineage_id',
-    'mission_policy_digest',
-    'mission_graph_digest',
-    'graph_node_id',
-    'mission_noop_receipt_digest',
-    'source_work_order_id',
-    'source_work_order_digest',
-    'path_byte_digests',
-    'candidate_zero_change',
-    'digest',
-  ].sort();
-  if (receipt.schema_version !== 1
-      || !new Set([
-        'campaign_zero_diff_receipt',
-        'controller_zero_diff_receipt',
-      ]).has(receipt.artifact_type)
-      || receipt.candidate_zero_change !== true
-      || JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
-      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
-      || typeof receipt.source_work_order_id !== 'string'
-      || receipt.source_work_order_id.length === 0) {
-    fail('bad_shape');
-  }
-  const body = { ...receipt };
-  delete body.digest;
-  if (sha256Json(body) !== receipt.digest) fail('forged');
-  if (receipt.base_sha !== baseSha) fail('stale_base');
-  const projection = contract.campaign_projection || {};
-  for (const [receiptKey, projectionKey, code] of [
-    ['campaign_id', 'campaign_id', 'foreign_campaign'],
-    ['campaign_contract_digest', 'campaign_contract_sha256', 'foreign_contract'],
-    ['strict_dispatch_digest', 'strict_dispatch_sha256', 'foreign_strict'],
-    ['mission_lineage_id', 'mission_lineage_id', 'foreign_lineage'],
-    ['mission_policy_digest', 'mission_policy_digest', 'foreign_policy'],
-    ['mission_graph_digest', 'mission_graph_digest', 'foreign_graph'],
-    ['graph_node_id', 'graph_node_id', 'foreign_node'],
-  ]) {
-    if (receipt[receiptKey] !== projection[projectionKey]) {
-      fail(code);
-    }
-  }
-  if (missionNoopReceiptDigest
-      && receipt.mission_noop_receipt_digest !== missionNoopReceiptDigest) {
-    fail('foreign_mission_noop');
-  }
-  if (missionNoopGraphNode && receipt.graph_node_id !== missionNoopGraphNode) {
-    fail('foreign_marker_node');
-  }
-  const acceptance = Array.isArray(contract.acceptance)
-    ? contract.acceptance.map((entry) => ({ argv: entry.argv, exit: entry.exit }))
-    : [];
-  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')
-      || sha256Json(acceptance) !== receipt.acceptance_digest) {
-    fail('acceptance_mismatch');
-  }
-  const required = Array.isArray(contract.output.required_change_paths)
-    ? contract.output.required_change_paths : [];
-  const outputs = Array.isArray(contract.output.paths) ? contract.output.paths : [];
-  const relevant = [...new Set([...required, ...outputs])].sort();
-  const digests = receipt.path_byte_digests;
-  if (!digests || typeof digests !== 'object'
-      || JSON.stringify(Object.keys(digests).sort()) !== JSON.stringify(relevant)) {
-    fail('path_set_mismatch');
-  }
-  for (const relativePath of relevant) {
-    let bytes;
-    try {
-      bytes = execFileSync('git', [
-        '-C', repo, 'show', `${baseSha}:${relativePath}`,
-      ], { encoding: null, stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (_error) {
-      fail('path_missing');
-    }
-    if (sha256(bytes) !== digests[relativePath]) fail('byte_digest_mismatch');
-  }
-  process.stdout.write(receipt.digest);
-} catch (error) {
-  fail(error && error.message ? String(error.message).slice(0, 80) : 'verify_threw');
-}
-NODE
+    node "$validator" validate \
+      --contract "$CONTRACT_FILE" \
+      --repo "$repo" \
+      --base "$base_sha" \
+      --verify-bytes \
+      ${MISSION_NOOP_RECEIPT_DIGEST:+--mission-noop-digest "$MISSION_NOOP_RECEIPT_DIGEST"} \
+      ${MISSION_NOOP_GRAPH_NODE:+--mission-noop-node "$MISSION_NOOP_GRAPH_NODE"}
   )"; then
     printf '{ "status": "no_op", "runner": "sealed-zero-diff-admission", "model": null, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": null, "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": "%s", "skill_mode_effective": "off", "skills_injected": [], "retention_lease": null }\n' \
       "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$result"
@@ -3308,123 +3204,15 @@ run_strict_boundary_postcheck() {
         STRICT_POSTCHECK_ERROR="boundary_rejected: ambient STRICT_NOOP_RECEIPT_PATH is not authority; seal zero_diff_receipt into the dispatch unit"
         return 1
       fi
-      local __noop_verify
-      # shellcheck disable=SC2016
+      local __noop_verify __noop_validator
+      __noop_validator="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/engine/sealed-zero-diff-validator.js"
       __noop_verify="$(
-        WORKTREE_CWD="$WT" \
-        node - "$CONTRACT_FILE" "$BASE_SHA" <<'NODE' 2>/dev/null || true
-'use strict';
-const fs = require('fs');
-const crypto = require('crypto');
-const path = require('path');
-const { execFileSync } = require('child_process');
-const [contractPath, baseSha] = process.argv.slice(2);
-const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
-const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
-const fail = (code) => { process.stdout.write(code); process.exit(2); };
-try {
-  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
-  if (!receipt || typeof receipt !== 'object') fail('missing_sealed_receipt');
-  const expectedKeys = [
-    'schema_version',
-    'artifact_type',
-    'base_sha',
-    'acceptance_digest',
-    'campaign_contract_digest',
-    'strict_dispatch_digest',
-    'campaign_id',
-    'mission_lineage_id',
-    'mission_policy_digest',
-    'mission_graph_digest',
-    'graph_node_id',
-    'mission_noop_receipt_digest',
-    'source_work_order_id',
-    'source_work_order_digest',
-    'path_byte_digests',
-    'candidate_zero_change',
-    'digest',
-  ].sort();
-  if (receipt.schema_version !== 1) fail('bad_schema');
-  if (receipt.artifact_type !== 'campaign_zero_diff_receipt'
-      && receipt.artifact_type !== 'controller_zero_diff_receipt') {
-    fail('bad_artifact');
-  }
-  if (receipt.candidate_zero_change !== true) fail('not_zero_change');
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
-      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
-      || typeof receipt.source_work_order_id !== 'string'
-      || receipt.source_work_order_id.length === 0) {
-    fail('bad_digest');
-  }
-  const body = { ...receipt };
-  delete body.digest;
-  if (sha256Json(body) !== receipt.digest) fail('forged');
-  if (!/^[0-9a-f]{40}$/.test(receipt.base_sha || '')) fail('stale_base');
-  if (baseSha && receipt.base_sha !== baseSha) fail('stale_base');
-  // Bind campaign projection identity when present on the sealed unit.
-  const proj = contract.campaign_projection || {};
-  if (proj.campaign_id && receipt.campaign_id !== proj.campaign_id) {
-    fail('foreign_campaign');
-  }
-  if (proj.campaign_contract_sha256
-      && receipt.campaign_contract_digest !== proj.campaign_contract_sha256) {
-    fail('foreign_contract');
-  }
-  if (proj.strict_dispatch_sha256
-      && receipt.strict_dispatch_digest !== proj.strict_dispatch_sha256) {
-    fail('foreign_strict');
-  }
-  if (proj.mission_lineage_id
-      && receipt.mission_lineage_id !== proj.mission_lineage_id) {
-    fail('foreign_lineage');
-  }
-  if (proj.mission_policy_digest
-      && receipt.mission_policy_digest !== proj.mission_policy_digest) {
-    fail('foreign_policy');
-  }
-  if (proj.mission_graph_digest
-      && receipt.mission_graph_digest !== proj.mission_graph_digest) {
-    fail('foreign_graph');
-  }
-  if (proj.graph_node_id && receipt.graph_node_id !== proj.graph_node_id) {
-    fail('foreign_node');
-  }
-  // Recompute live path byte digests from the worktree and compare.
-  const digests = receipt.path_byte_digests;
-  if (!digests || typeof digests !== 'object') fail('missing_path_digests');
-  const cwd = process.env.WORKTREE_CWD || process.cwd();
-  const required = Array.isArray(contract.output.required_change_paths)
-    ? contract.output.required_change_paths : [];
-  const outputs = Array.isArray(contract.output.paths) ? contract.output.paths : [];
-  const relevant = [...new Set([...required, ...outputs])].sort();
-  const receiptKeys = Object.keys(digests).sort();
-  if (JSON.stringify(receiptKeys) !== JSON.stringify(relevant)) fail('path_set_mismatch');
-  for (const rel of relevant) {
-    const abs = path.join(cwd, rel);
-    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) fail('path_missing');
-    const live = sha256(fs.readFileSync(abs));
-    if (live !== digests[rel]) fail('byte_digest_mismatch');
-  }
-  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')) {
-    fail('acceptance_missing');
-  }
-  if (Array.isArray(contract.acceptance)) {
-    const accBody = contract.acceptance.map((a) => ({ argv: a.argv, exit: a.exit }));
-    const recomputed = sha256Json(accBody);
-    if (recomputed !== receipt.acceptance_digest) fail('acceptance_mismatch');
-  }
-  process.stdout.write('ok');
-  process.exit(0);
-} catch (e) {
-  process.stdout.write('unreadable');
-  process.exit(2);
-}
-NODE
-)"
+        node "$__noop_validator" validate \
+          --contract "$CONTRACT_FILE" \
+          --base "$BASE_SHA" \
+          --worktree "$WT" \
+          --print-ok 2>/dev/null || true
+      )"
       if [ "$__noop_verify" != "ok" ]; then
         STRICT_POSTCHECK_STATUS="boundary_rejected"
         STRICT_POSTCHECK_ERROR="boundary_rejected: no-op receipt failed verification (${__noop_verify:-missing})"
@@ -3608,122 +3396,14 @@ classify_outcome() {
         OUTCOME_EXIT=1
         __eq_noop_status="rejected"
       elif [ "$STRICT_CONTRACT" -eq 1 ] && [ -n "${CONTRACT_FILE:-}" ] && [ -r "${CONTRACT_FILE:-}" ]; then
-        local __eq_noop_verify
+        local __eq_noop_verify __eq_noop_validator
+        __eq_noop_validator="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/engine/sealed-zero-diff-validator.js"
         __eq_noop_verify="$(
-          WORKTREE_CWD="$WT" \
-          node - "$CONTRACT_FILE" "$BASE_SHA" <<'NODE' 2>/dev/null || true
-'use strict';
-const fs = require('fs');
-const crypto = require('crypto');
-const path = require('path');
-const [contractPath, baseSha] = process.argv.slice(2);
-const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
-const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
-const fail = (code) => { process.stdout.write(code); process.exit(2); };
-try {
-  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
-  if (!receipt || typeof receipt !== 'object') fail('missing_sealed_receipt');
-  const expectedKeys = [
-    'schema_version',
-    'artifact_type',
-    'base_sha',
-    'acceptance_digest',
-    'campaign_contract_digest',
-    'strict_dispatch_digest',
-    'campaign_id',
-    'mission_lineage_id',
-    'mission_policy_digest',
-    'mission_graph_digest',
-    'graph_node_id',
-    'mission_noop_receipt_digest',
-    'source_work_order_id',
-    'source_work_order_digest',
-    'path_byte_digests',
-    'candidate_zero_change',
-    'digest',
-  ].sort();
-  if (receipt.schema_version !== 1) fail('bad_schema');
-  if (receipt.artifact_type !== 'campaign_zero_diff_receipt'
-      && receipt.artifact_type !== 'controller_zero_diff_receipt') {
-    fail('bad_artifact');
-  }
-  if (receipt.candidate_zero_change !== true) fail('not_zero_change');
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
-      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
-      || typeof receipt.source_work_order_id !== 'string'
-      || receipt.source_work_order_id.length === 0) {
-    fail('bad_digest');
-  }
-  const body = { ...receipt };
-  delete body.digest;
-  if (sha256Json(body) !== receipt.digest) fail('forged');
-  if (!/^[0-9a-f]{40}$/.test(receipt.base_sha || '')) fail('stale_base');
-  if (baseSha && receipt.base_sha !== baseSha) fail('stale_base');
-  const projection = contract.campaign_projection || {};
-  if (projection.campaign_id && receipt.campaign_id !== projection.campaign_id) {
-    fail('foreign_campaign');
-  }
-  if (projection.campaign_contract_sha256
-      && receipt.campaign_contract_digest !== projection.campaign_contract_sha256) {
-    fail('foreign_contract');
-  }
-  if (projection.strict_dispatch_sha256
-      && receipt.strict_dispatch_digest !== projection.strict_dispatch_sha256) {
-    fail('foreign_strict');
-  }
-  if (projection.mission_lineage_id
-      && receipt.mission_lineage_id !== projection.mission_lineage_id) {
-    fail('foreign_lineage');
-  }
-  if (projection.mission_policy_digest
-      && receipt.mission_policy_digest !== projection.mission_policy_digest) {
-    fail('foreign_policy');
-  }
-  if (projection.mission_graph_digest
-      && receipt.mission_graph_digest !== projection.mission_graph_digest) {
-    fail('foreign_graph');
-  }
-  if (projection.graph_node_id && receipt.graph_node_id !== projection.graph_node_id) {
-    fail('foreign_node');
-  }
-  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')) {
-    fail('acceptance_missing');
-  }
-  const digests = receipt.path_byte_digests;
-  if (!digests || typeof digests !== 'object') fail('missing_path_digests');
-  const cwd = process.env.WORKTREE_CWD || process.cwd();
-  const required = Array.isArray(contract.output && contract.output.required_change_paths)
-    ? contract.output.required_change_paths : [];
-  const outputs = Array.isArray(contract.output && contract.output.paths)
-    ? contract.output.paths : [];
-  const relevant = [...new Set([...required, ...outputs])].sort();
-  const receiptKeys = Object.keys(digests).sort();
-  if (JSON.stringify(receiptKeys) !== JSON.stringify(relevant)) fail('path_set_mismatch');
-  for (const rel of relevant) {
-    const abs = path.join(cwd, rel);
-    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) fail('path_missing');
-    const live = sha256(fs.readFileSync(abs));
-    if (live !== digests[rel]) fail('byte_digest_mismatch');
-  }
-  if (Array.isArray(contract.acceptance)) {
-    const acceptance = contract.acceptance.map((entry) => ({
-      argv: entry.argv,
-      exit: entry.exit,
-    }));
-    if (sha256Json(acceptance) !== receipt.acceptance_digest) {
-      fail('acceptance_mismatch');
-    }
-  }
-  process.stdout.write('ok');
-  process.exit(0);
-} catch (error) {
-  fail(error && error.message ? String(error.message).slice(0, 80) : 'verify_threw');
-}
-NODE
+          node "$__eq_noop_validator" validate \
+            --contract "$CONTRACT_FILE" \
+            --base "$BASE_SHA" \
+            --worktree "$WT" \
+            --print-ok 2>/dev/null || true
         )" || __eq_noop_verify="verify_failed"
         if [ "$__eq_noop_verify" = "ok" ]; then
           __eq_noop_status="sealed_zero_diff"

@@ -857,9 +857,12 @@ if [[ "$RUNNER" = "codex" ]]; then
   RAW_LOG="$CODEX_STDOUT"
   CODEX_TRANSPORT=1
   set +e
+  # 9th arg: trusted cwd for repository-trust preflight (D3). Prefer explicit
+  # --repo-root; empty keeps ambient cwd (legacy callers / non-repo authoring).
   codex_transport_run \
     "$CODEX_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" \
-    "$CODEX_STDOUT" "$CODEX_STDERR" "$CODEX_SIDECAR" "$TIMEOUT"
+    "$CODEX_STDOUT" "$CODEX_STDERR" "$CODEX_SIDECAR" "$TIMEOUT" \
+    "${REPO_ROOT:-}"
   set -e
 elif [[ "$RUNNER" = "grok" ]]; then
   GROK_BIN="${BIN:-grok}"

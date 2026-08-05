@@ -1,8 +1,8 @@
 # Next-touch debt retirement
 
-- Status: **archived** (D1–D8 complete; awaiting harness integrate) (D1–D8 cumulative on mission branch); independent verifier/reviewer + develop integration owned by harness gates.
-- Frozen plan: [2026-08-03-next-touch-debt-retirement.md](../../plans/2026-08-03-next-touch-debt-retirement.md)
-- Frozen rubric: [rubric](../../plans/2026-08-03-next-touch-debt-retirement.rubric.md)
+- Status: **archived** (D1–D8 complete; terminal gate owns the sealed develop integration).
+- Frozen plan: [2026-08-03-next-touch-debt-retirement.md](../../../plans/2026-08-03-next-touch-debt-retirement.md)
+- Frozen rubric: [rubric](../../../plans/2026-08-03-next-touch-debt-retirement.rubric.md)
 - Authorization: [evidence/authorization.json](evidence/authorization.json)
 
 ## Scope completed
@@ -26,10 +26,10 @@
 | D1–D8 implementation | **done** (this candidate) |
 | exact A01–A14 removal | **done** in `docs/BACKLOG.md` |
 | authorization receipt | present under `evidence/` |
-| independent verifier + reviewer | pending harness |
-| develop integration | pending harness G8b |
+| independent verifier + reviewer | terminal receipt gate |
+| develop integration | sealed ff-only terminal gate |
 
 ## Archive
 
-On terminal acceptance this project moves to
-`docs/projects/_archive/2026-08-03-next-touch-debt-retirement/`.
+The project and its authorization receipt are retained in this archive. The terminal gate
+persists only authority-store merge evidence and never mutates archived documentation.

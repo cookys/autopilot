@@ -67,7 +67,12 @@ read them.
 - `prune-tmp-residue.sh` owns no test-fixture residue (the largest byte source)
 - `finish-flow` / `session-mode.js` close: require zero owned worktrees and zero unattributed refs
 - Mission adoption retirement in `src/mission/runtime.js` (the upstream root cause)
-- `CLAUDE.md` sits at exactly 40000/40000 bytes; the inventory table needs structural relief
+## CLAUDE.md structural relief (done)
+
+The inventory table was 78% of a file the harness loads in full every session, and adding one row
+put it at exactly 40000/40000. Descriptions moved to `references/scripts-inventory.md`; CLAUDE.md
+keeps a grouped name list, so a session still learns what exists without loading 30 KB to do it.
+40000 → 13803 bytes, all 146 scripts still named.
 
 ## Evidence
 

@@ -98,7 +98,7 @@ refuses to delete any ref if that anchoring fails.
   not keep objects reachable inside the repo.
 - **`CLAUDE.md` restructured**: the scripts inventory was 78% of a file the harness loads in full
   every session, and one added row put it at exactly 40000/40000. Descriptions moved verbatim to
-  `references/scripts-inventory.md`; CLAUDE.md keeps a grouped name list, so a session still learns
+  `docs/scripts-inventory.md`; CLAUDE.md keeps a grouped name list, so a session still learns
   what exists without loading 30 KB to do it. 40000 → ~14000 bytes, all 146 scripts still named,
   and `check-claude-md-inventory.js` is unchanged (it asserts naming, not table shape).
 
@@ -108,14 +108,10 @@ refuses to delete any ref if that anchoring fails.
 - Anchors are never expired mechanically. Retiring one is an evidence-bound decision belonging to
   Mission disposition.
 - Commits already destroyed before an anchor existed cannot be recovered by this.
-- **Known, pre-existing, not introduced here**: the mirrored `platforms/codex/plugin/references/`
-  copies carry repo-root-relative links that do not resolve inside the package layout — 9 of 36
-  such links across the pre-existing mirrored references, and the relocated inventory inherits the
-  same pattern. `doc-drift-gate.js` excludes `platforms/codex/plugin`, so this has never been
-  checked. Fixing it means choosing a strategy (exclude these files from the payload, rewrite links
-  at sync time, or extend the gate to the mirror) and applying it to all of them, which is its own
-  change rather than a rider on this one.
-- `scripts/mission-terminal-reconcile.js` gains header findings only, no behavior change.
+- The relocated inventory lives in `docs/`, not `references/`: the latter is skill-support material
+  that ships in the Codex payload, and this is repo-development material. Pre-existing mirrored
+  references still carry 9 unresolvable repo-root-relative links out of 36, because
+  `doc-drift-gate.js` excludes `platforms/codex/plugin`. That is untouched here and remains open.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`.

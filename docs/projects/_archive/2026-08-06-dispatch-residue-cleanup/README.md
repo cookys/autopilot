@@ -67,17 +67,24 @@ read them.
 - `prune-tmp-residue.sh` owns no test-fixture residue (the largest byte source)
 - `finish-flow` / `session-mode.js` close: require zero owned worktrees and zero unattributed refs
 - Mission adoption retirement in `src/mission/runtime.js` (the upstream root cause)
+
 ## CLAUDE.md structural relief (done)
 
 The inventory table was 78% of a file the harness loads in full every session, and adding one row
-put it at exactly 40000/40000. Descriptions moved to `references/scripts-inventory.md`; CLAUDE.md
+put it at exactly 40000/40000. Descriptions moved to `docs/scripts-inventory.md`; CLAUDE.md
 keeps a grouped name list, so a session still learns what exists without loading 30 KB to do it.
-40000 → 13803 bytes, all 146 scripts still named.
+40000 → ~14000 bytes, all 146 scripts still named.
+
+It landed in `docs/` rather than `references/` because `references/` is skill-support material that
+ships in the Codex payload, and this is repo-development material — `CLAUDE.md` itself is not
+packaged either. Review round six caught the misplacement via its symptom: repo-root-relative links
+that do not resolve inside the package layout.
 
 ## Evidence
 
 - Bundles: `~/.local/state/autopilot/archives/autopilot/2026-08-06-g8b/` (7 refs / 4 unique OIDs,
   restore-verified into a disposable bare repo) and `.../2026-07-27-reap-bundles/` (19 bundles
   rescued from `/tmp`, each `bundle verify` clean, checksums matched)
-- `hooks/tests/pin-evidence-anchors.test.sh` — 10 assertions
+- `hooks/tests/pin-evidence-anchors.test.sh` — 25 assertions, two of them negative-controlled
+- Six independent review rounds (codex/gpt-5.6-sol, effort=max); every round found a real defect
 - `hooks/tests/reap-dispatch-branches.test.sh` — 135 assertions, unchanged by the integration

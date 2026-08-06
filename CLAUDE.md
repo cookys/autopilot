@@ -13,7 +13,7 @@ Standalone lifecycle orchestration plugin: 28 skills, 3 methodology agents, 25 h
 
 `scripts/` ships deterministic tooling that the skills reference instead of asking the LLM to do mechanical work each run. **Before hand-coding any mechanical step, check whether a script already covers it.**
 
-What each one does — purpose, when to call it, pointer to its contract — lives in [`references/scripts-inventory.md`](references/scripts-inventory.md). That file is the canonical index; the grouped names below exist so a session knows what to go looking for without loading 30 KB of descriptions at every startup. Every script also answers `<script> --help`, and JSON emitters have stable schemas with exit codes documented in their own header.
+What each one does — purpose, when to call it, pointer to its contract — lives in [`docs/scripts-inventory.md`](docs/scripts-inventory.md). That file is the canonical index; the grouped names below exist so a session knows what to go looking for without loading 30 KB of descriptions at every startup. Every script also answers `<script> --help`, and JSON emitters have stable schemas with exit codes documented in their own header.
 
 A caution learned the hard way (2026-08-06): several of these were fully built, tested and documented, yet doing nothing — an age threshold left at `0`, a hook never installed, a scanner keyed on an id the residue did not carry. **A script existing is not evidence it is running.** When one is supposed to be protecting something, check that it actually fires.
 
@@ -49,7 +49,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 If you replace an LLM-judgment step with a script, **wire it in**:
 1. The reference doc (`skills/quality-pipeline/references/*.md` or equivalent) — describe what the script does and when to call it.
 2. The relevant `SKILL.md` — add a row to its "Available Scripts" table (if it has one) or reference inline.
-3. [`references/scripts-inventory.md`](references/scripts-inventory.md) — one row: what it does, when to call it, pointer to its contract.
+3. [`docs/scripts-inventory.md`](docs/scripts-inventory.md) — one row: what it does, when to call it, pointer to its contract.
 4. The grouped name list above — add the basename to whichever group it belongs to. `check-claude-md-inventory.js` enforces that every shipped script is named here, and that list is what a session actually reads at startup.
 
 Without all four, the script is dead code: future sessions won't discover it. And discovery is not the whole job — a script that is wired in but switched off (see the caution in the inventory section) is dead code that looks alive.

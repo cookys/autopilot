@@ -79,23 +79,59 @@ function fail(message) {
   process.exit(2);
 }
 
-function git(root, args, { allowFail = false } = {}) {
+// Every git call here feeds a decision that authorizes deleting refs, so a failed
+// probe must never be indistinguishable from a negative answer. `git` is fatal on
+// any non-zero exit; `gitProbe` returns the exit code and stderr so a caller can
+// tell "git says no" from "git could not answer".
+function git(root, args) {
   try {
     return execFileSync('git', ['-C', root, ...args], {
       encoding: 'utf8',
       maxBuffer: 256 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
   } catch (error) {
-    if (allowFail) return null;
-    throw error;
+    const stderr = (error.stderr || '').toString().trim();
+    fail(`git ${args.join(' ')} failed${stderr ? `: ${stderr}` : ''}`);
+    return null; // unreachable; fail() exits
   }
+}
+
+function gitProbe(root, args) {
+  try {
+    const out = execFileSync('git', ['-C', root, ...args], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { ok: true, code: 0, out: out.trim(), stderr: '' };
+  } catch (error) {
+    return {
+      ok: false,
+      code: typeof error.status === 'number' ? error.status : null,
+      out: (error.stdout || '').toString().trim(),
+      stderr: (error.stderr || '').toString().trim(),
+    };
+  }
+}
+
+// `cat-file -t` exits non-zero both for "no such object" and for a broken object
+// store. Only the former means "not a commit"; the latter must stop the run
+// rather than quietly exclude a SHA we were asked to protect.
+const ABSENT_OBJECT = /not a valid object name|could not get object info|bad file/i;
+
+function objectType(root, sha) {
+  const probe = gitProbe(root, ['cat-file', '-t', sha]);
+  if (probe.ok) return probe.out;
+  if (ABSENT_OBJECT.test(probe.stderr)) return null; // genuinely absent
+  fail(`cannot determine object type for ${sha}: ${probe.stderr || `git exited ${probe.code}`}`);
+  return null; // unreachable
 }
 
 // Collect every regular file under dir. Any unreadable subtree or an exhausted
 // budget aborts: a partial scan that reported success would authorize a deletion
 // against evidence it never looked at.
-function collectFiles(dir, out) {
+function collectFiles(dir, out, seen) {
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -107,8 +143,20 @@ function collectFiles(dir, out) {
       fail(`receipt traversal budget (${FILE_BUDGET} files) exhausted at ${dir}; refusing a partial scan`);
     }
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) collectFiles(full, out);
-    else if (entry.isFile()) out.push(full);
+    if (entry.isDirectory()) { collectFiles(full, out, seen); continue; }
+    if (entry.isFile()) { out.push(full); continue; }
+    // Anything else — symlink, socket, fifo, unstatable — is resolved explicitly
+    // rather than skipped. A symlinked receipt subtree that silently vanished from
+    // the scan would let `apply` report success over evidence it never read.
+    let st;
+    try { st = fs.statSync(full); }
+    catch (error) { fail(`cannot stat receipt entry ${full}: ${error.message}`); }
+    const key = `${st.dev}:${st.ino}`;
+    if (seen.has(key)) continue; // symlink loop or repeated target
+    seen.add(key);
+    if (st.isDirectory()) collectFiles(full, out, seen);
+    else if (st.isFile()) out.push(full);
+    else fail(`unsupported receipt entry ${full} (not a file or directory); refusing a partial scan`);
   }
 }
 
@@ -132,17 +180,23 @@ function main(argv) {
     else usage();
   }
 
-  let root;
-  let commonDir;
-  try {
-    root = git(repoRoot, ['rev-parse', '--show-toplevel']);
-    commonDir = git(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-  } catch (error) {
-    fail(`not a git repository: ${error.message}`);
+  const topProbe = gitProbe(repoRoot, ['rev-parse', '--show-toplevel']);
+  if (!topProbe.ok) {
+    fail(`not a git repository (${repoRoot}): ${topProbe.stderr || `git exited ${topProbe.code}`}`);
   }
+  const root = topProbe.out;
+  const commonDir = git(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
 
+  // Only a genuine ENOENT means "this repo has no mission state". A permission or
+  // I/O error must not collapse into the same no-op success.
   const receiptRoot = path.join(commonDir, 'autopilot');
-  if (!fs.existsSync(receiptRoot)) {
+  let receiptRootMissing = false;
+  try { fs.statSync(receiptRoot); }
+  catch (error) {
+    if (error.code === 'ENOENT') receiptRootMissing = true;
+    else fail(`cannot stat ${receiptRoot}: ${error.message}`);
+  }
+  if (receiptRootMissing) {
     process.stdout.write(`${JSON.stringify({
       mode, receipt_root: receiptRoot, scanned_files: 0, candidates: 0,
       excluded_refs: excludeRefs, unreachable: [], pinned: [], repaired: [], anchors_total: 0,
@@ -151,7 +205,7 @@ function main(argv) {
   }
 
   const files = [];
-  collectFiles(receiptRoot, files);
+  collectFiles(receiptRoot, files, new Set());
 
   // Every 40-hex token in the receipt tree is a *candidate*; most are content
   // digests, not commits. `cat-file -t` decides, so we never guess from context.
@@ -173,7 +227,7 @@ function main(argv) {
   // ref that made them look safe.
   const anchorTargets = new Map();
   const mismatched = [];
-  const anchorRefs = git(root, ['for-each-ref', '--format=%(refname) %(objectname)', ANCHOR_PREFIX], { allowFail: true });
+  const anchorRefs = git(root, ['for-each-ref', '--format=%(refname) %(objectname)', ANCHOR_PREFIX]);
   if (anchorRefs) {
     for (const line of anchorRefs.split('\n')) {
       if (!line) continue;
@@ -191,13 +245,13 @@ function main(argv) {
   for (const ref of doomedRefs) revListArgs.push(`--exclude=${ref}`);
   revListArgs.push('--all');
   const reachable = new Set();
-  const revList = git(root, revListArgs, { allowFail: true });
+  const revList = git(root, revListArgs);
   if (revList) for (const line of revList.split('\n')) if (line) reachable.add(line);
 
   const unreachable = [];
   let candidates = 0;
   for (const sha of tokens) {
-    const type = git(root, ['cat-file', '-t', sha], { allowFail: true });
+    const type = objectType(root, sha);
     if (type !== 'commit') continue; // digests and absent objects are not our business
     candidates += 1;
     if (reachable.has(sha)) continue;
@@ -208,17 +262,33 @@ function main(argv) {
 
   const pinned = [];
   const repaired = [];
-  if (mode === 'apply') {
-    // Repair name/OID mismatches first: leaving one in place keeps a lie in a
-    // namespace whose whole value is that it cannot lie.
-    for (const bad of mismatched) {
-      try { git(root, ['update-ref', '-d', bad.ref]); repaired.push(bad.ref); }
-      catch (error) { fail(`cannot remove mismatched anchor ${bad.ref}: ${error.message}`); }
+  if (mode === 'apply' && (unreachable.length || mismatched.length)) {
+    // ONE transaction, creates ordered before deletes. A mismatched anchor may be
+    // the last ref holding a receipt-referenced commit up (it points at that
+    // commit's descendant), so deleting it in a separate call that is followed by
+    // a failed create would expose the evidence — the preservation step itself
+    // becoming the loss. `update-ref --stdin` applies all or none.
+    // `update` rather than `create`: a mismatched anchor is often named for the
+    // very SHA being pinned (that is how it masked it), and git refuses two
+    // updates to one ref in a transaction. `update` corrects an existing ref and
+    // creates a missing one, so the delete list covers only anchors that are not
+    // being rewritten.
+    const rewritten = new Set(unreachable);
+    const stdin = [
+      ...unreachable.map((sha) => `update ${ANCHOR_PREFIX}${sha} ${sha}`),
+      ...mismatched.filter((bad) => !rewritten.has(bad.named)).map((bad) => `delete ${bad.ref}`),
+      '',
+    ].join('\n');
+    try {
+      execFileSync('git', ['-C', root, 'update-ref', '--stdin'], {
+        input: stdin, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      const stderr = (error.stderr || '').toString().trim();
+      fail(`anchor transaction failed (nothing applied)${stderr ? `: ${stderr}` : ''}`);
     }
-    for (const sha of unreachable) {
-      try { git(root, ['update-ref', `${ANCHOR_PREFIX}${sha}`, sha]); pinned.push(sha); }
-      catch (error) { fail(`cannot pin ${sha}: ${error.message}`); }
-    }
+    pinned.push(...unreachable);
+    repaired.push(...mismatched.map((bad) => bad.ref));
   }
 
   const result = {

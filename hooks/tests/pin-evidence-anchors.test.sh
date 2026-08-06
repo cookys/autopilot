@@ -187,6 +187,30 @@ else
   ok "unreadable-subtree case skipped (running as root)"
 fi
 
+# ---- a symlinked receipt subtree must be traversed, not silently skipped. A
+# skipped subtree would let apply report success over receipts it never read, and
+# the caller deletes refs on that exit code.
+REPO6="$TESTDIR/symlinked"
+git init -q "$REPO6"
+git -C "$REPO6" config user.email t@t; git -C "$REPO6" config user.name t
+printf 'a\n' > "$REPO6/f"; git -C "$REPO6" add f; git -C "$REPO6" commit -qm base
+git -C "$REPO6" checkout -q -b gone
+printf 'b\n' > "$REPO6/f"; git -C "$REPO6" commit -qam orphan
+HID="$(git -C "$REPO6" rev-parse HEAD)"
+git -C "$REPO6" checkout -q master 2>/dev/null || git -C "$REPO6" checkout -q main
+git -C "$REPO6" branch -qD gone
+COMMON6="$(git -C "$REPO6" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON6/autopilot" "$TESTDIR/elsewhere"
+printf '{"tip":"%s"}\n' "$HID" > "$TESTDIR/elsewhere/r.json"
+if ln -s "$TESTDIR/elsewhere" "$COMMON6/autopilot/linked" 2>/dev/null; then
+  OUT7="$(node "$SCRIPT" scan --repo-root "$REPO6" --json)"
+  printf '%s' "$OUT7" | grep -q "$HID" \
+    && ok "receipts behind a symlinked subtree are read" \
+    || bad "symlinked receipt subtree silently skipped: $OUT7"
+else
+  ok "symlink case skipped (symlinks unavailable)"
+fi
+
 # ---- a mismatched anchor pointing at a DESCENDANT of the SHA it is named for.
 # That ref really does make the named SHA reachable, so counting it while
 # computing reachability marks the SHA safe, skips anchoring it, and then apply

@@ -108,6 +108,13 @@ refuses to delete any ref if that anchoring fails.
 - Anchors are never expired mechanically. Retiring one is an evidence-bound decision belonging to
   Mission disposition.
 - Commits already destroyed before an anchor existed cannot be recovered by this.
+- **Known, pre-existing, not introduced here**: the mirrored `platforms/codex/plugin/references/`
+  copies carry repo-root-relative links that do not resolve inside the package layout — 9 of 36
+  such links across the pre-existing mirrored references, and the relocated inventory inherits the
+  same pattern. `doc-drift-gate.js` excludes `platforms/codex/plugin`, so this has never been
+  checked. Fixing it means choosing a strategy (exclude these files from the payload, rewrite links
+  at sync time, or extend the gate to the mirror) and applying it to all of them, which is its own
+  change rather than a rider on this one.
 - `scripts/mission-terminal-reconcile.js` gains header findings only, no behavior change.
 
 ### Rollback

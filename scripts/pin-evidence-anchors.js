@@ -54,7 +54,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const ANCHOR_PREFIX = 'refs/autopilot/evidence-anchors/';
 const SHA40 = /\b[0-9a-f]{40}\b/g;
@@ -123,17 +123,42 @@ function gitProbe(root, args) {
   }
 }
 
-// `cat-file -t` exits non-zero both for "no such object" and for a broken object
-// store. Only the former means "not a commit"; the latter must stop the run
-// rather than quietly exclude a SHA we were asked to protect.
-const ABSENT_OBJECT = /not a valid object name|could not get object info|bad file/i;
-
+// `cat-file -t` reports BOTH a missing object and a corrupt/unreadable one by
+// exiting non-zero with the same "could not get object info" text, so the stderr
+// string cannot distinguish them — and guessing wrong means silently dropping a
+// SHA we were asked to protect, then deleting its last ref.
+//
+// `--batch-check` separates the two structurally: a missing object is a normal
+// `<sha> missing` line on STDOUT with exit 0, while a genuine I/O or corruption
+// error is a non-zero exit. Only the former is an absent object.
 function objectType(root, sha) {
-  const probe = gitProbe(root, ['cat-file', '-t', sha]);
-  if (probe.ok) return probe.out;
-  if (ABSENT_OBJECT.test(probe.stderr)) return null; // genuinely absent
-  fail(`cannot determine object type for ${sha}: ${probe.stderr || `git exited ${probe.code}`}`);
-  return null; // unreachable
+  const run = spawnSync('git', ['-C', root, 'cat-file', '--batch-check'], {
+    input: `${sha}\n`,
+    encoding: 'utf8',
+    env: NO_LAZY_FETCH_ENV,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (run.error) fail(`cannot run git cat-file for ${sha}: ${run.error.message}`);
+  if (run.status !== 0) {
+    fail(`cannot determine object type for ${sha}: ${(run.stderr || '').trim() || `git exited ${run.status}`}`);
+  }
+  const out = (run.stdout || '').trim();
+  const stderr = (run.stderr || '').trim();
+  const fields = out.split(/\s+/);
+
+  // A CORRUPT object also reports `<sha> missing` on stdout with exit 0 — the
+  // difference is that git writes an inflate/unpack error to stderr first.
+  // Treating that as "absent" would drop a SHA we were asked to protect and let
+  // the reaper delete its last ref, so any stderr alongside a missing result is
+  // a corrupt or unreadable store, not an absence.
+  if (fields[1] === 'missing' || fields[1] === 'ambiguous') {
+    if (stderr) {
+      fail(`object ${sha} is unreadable rather than absent (${stderr.split('\n')[0]}); refusing to proceed`);
+    }
+    return null;
+  }
+  if (!fields[1]) fail(`unparseable cat-file --batch-check output for ${sha}: ${JSON.stringify(out)}`);
+  return fields[1];
 }
 
 // Collect every regular file under dir. Any unreadable subtree or an exhausted

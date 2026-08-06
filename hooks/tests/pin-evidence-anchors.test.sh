@@ -282,5 +282,48 @@ else
   ok "dangling-root case skipped (symlinks unavailable)"
 fi
 
+# ---- a CORRUPT object must not be read as an absent one. git reports both as
+# `<sha> missing` on stdout with exit 0; only a corrupt store also writes an
+# inflate error to stderr. Mistaking corruption for absence silently drops a SHA
+# from the protection set and then lets the reaper delete its last ref.
+REPO9="$TESTDIR/corrupt-object"
+git init -q "$REPO9"
+git -C "$REPO9" config user.email t@t; git -C "$REPO9" config user.name t
+printf 'a\n' > "$REPO9/f"; git -C "$REPO9" add f; git -C "$REPO9" commit -qm base
+git -C "$REPO9" checkout -q -b gone
+printf 'b\n' > "$REPO9/f"; git -C "$REPO9" commit -qam x
+ROT="$(git -C "$REPO9" rev-parse HEAD)"
+git -C "$REPO9" checkout -q master 2>/dev/null || git -C "$REPO9" checkout -q main
+git -C "$REPO9" branch -qD gone
+COMMON9="$(git -C "$REPO9" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON9/autopilot"
+printf '{"tip":"%s"}\n' "$ROT" > "$COMMON9/autopilot/r.json"
+LOOSE="$COMMON9/objects/${ROT:0:2}/${ROT:2}"
+if [ -f "$LOOSE" ]; then
+  chmod u+w "$LOOSE"; printf 'garbage' > "$LOOSE"
+  if node "$SCRIPT" scan --repo-root "$REPO9" --json >/dev/null 2>&1; then
+    bad "corrupt object silently treated as absent"
+  else
+    ok "corrupt object fails closed rather than reading as absent"
+  fi
+else
+  ok "corrupt-object case skipped (object was packed)"
+fi
+
+# ---- a genuinely absent SHA is NOT an error: it is simply not a commit we can
+# protect, and must not block the reaper.
+REPO10="$TESTDIR/absent-sha"
+git init -q "$REPO10"
+git -C "$REPO10" config user.email t@t; git -C "$REPO10" config user.name t
+printf 'a\n' > "$REPO10/f"; git -C "$REPO10" add f; git -C "$REPO10" commit -qm base
+COMMON10="$(git -C "$REPO10" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON10/autopilot"
+printf '{"gone":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}\n' > "$COMMON10/autopilot/r.json"
+if node "$SCRIPT" scan --repo-root "$REPO10" --json >/dev/null 2>&1; then
+  ok "a genuinely absent SHA does not block the run"
+else
+  bad "absent SHA wrongly treated as corruption"
+fi
+
 printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

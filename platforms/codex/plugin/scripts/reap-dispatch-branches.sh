@@ -1156,6 +1156,25 @@ restore_deleted_ref() {
   [ "$current" = "$expected" ]
 }
 
+# Anchor receipt-referenced commits before any ref disappears.
+#
+# Preserve-first already bundled these branches, but a bundle is an OFFLINE file:
+# it does not keep the objects reachable inside this repo. Mission receipts under
+# $GIT_COMMON_DIR/autopilot/ bind their evidence to commit SHAs, and git cannot see
+# those references — they are JSON, not refs. So deleting the last ref to such a
+# commit starts a gc countdown on the evidence itself. That is not theoretical:
+# four receipt-anchored commits in this repo were already destroyed that way
+# (receipts present, objects absent) before this namespace existed.
+#
+# Fail-closed on purpose. Preserve-first is non-waivable here, and a pin that
+# silently did not happen is exactly the failure mode this guards against — the
+# loss only becomes visible at the next gc, long after the reap looked successful.
+if [ -f "$self_dir/pin-evidence-anchors.js" ]; then
+  if ! node "$self_dir/pin-evidence-anchors.js" apply --repo-root "$repo" >/dev/null; then
+    die_env "cannot anchor receipt-referenced commits; refusing to delete branch refs"
+  fi
+fi
+
 for name in "${eligible[@]}"; do
   expected_tip="${tip[$name]}"
   if ! validate_delete_proof "$name" "$expected_tip"; then

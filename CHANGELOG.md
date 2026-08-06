@@ -68,9 +68,22 @@ refuses to delete any ref if that anchoring fails.
 ### Added
 - `scripts/pin-evidence-anchors.js` — `scan` (read-only) reports receipt-referenced commits that
   no ref reaches; `apply` pins them at `refs/autopilot/evidence-anchors/<sha>`, idempotently. Ref
-  names always equal the object they point at, so the namespace is self-verifying. Reachability is
-  one `rev-list --all` set membership test, and `cat-file -t` decides what is a commit, so content
-  digests that merely look like SHAs are never mistaken for one.
+  names always equal the object they point at, and an anchor whose name and target disagree is
+  treated as covering nothing (and repaired), because trusting the name alone would let a
+  mismatched ref mask an unprotected commit. `cat-file -t` decides what is a commit, so content
+  digests that merely look like SHAs are never mistaken for one. Mismatched anchors are identified
+  BEFORE reachability is computed and excluded from it, since `apply` removes them: one named for a
+  SHA but pointing at that SHA's descendant genuinely keeps it reachable, and counting it would skip
+  anchoring the SHA immediately before deleting the ref holding it up. An unreadable receipt directory or
+  an exhausted traversal budget is an error, never a quietly shorter scan — a caller deletes refs
+  on the strength of the exit code, so "I could not read everything" must not look like "there was
+  nothing to protect".
+- `--exclude-ref` computes reachability against the refs that will SURVIVE. This is the whole point
+  at a pre-delete call site: a commit held solely by the branch about to be reaped still looks
+  reachable while that branch exists, so without the exclusion it is skipped and orphaned
+  milliseconds later — reproducing the exact failure the anchor exists to prevent. Independent
+  review caught this before release; the regression is now pinned by a test that anchors, deletes,
+  and asserts the commit survived.
 - `hooks/tests/pin-evidence-anchors.test.sh` — proves scan is genuinely read-only, an unreachable
   receipt-referenced commit is found while a reachable one is not, apply is idempotent, anchor ref
   names match their OIDs, fake 40-hex digests are ignored, a repo with no Mission state is a clean
@@ -78,9 +91,16 @@ refuses to delete any ref if that anchoring fails.
 
 ### Changed
 - `scripts/reap-dispatch-branches.sh` anchors receipt-referenced commits after bundling and before
-  the exact-tip CAS deletions. Fail-closed: if anchoring cannot complete, no ref is deleted.
-  Preserve-first already bundled the branch, but a bundle is an offline file and does not keep
-  objects reachable inside the repo.
+  the exact-tip CAS deletions, naming every eligible ref via `--exclude-ref` so reachability is
+  judged against what will survive. Fail-closed on anchoring failure **and on the anchor script
+  being absent**: preserve-first is non-waivable, and a silently skipped anchor step is the failure
+  mode itself. Preserve-first already bundled the branch, but a bundle is an offline file and does
+  not keep objects reachable inside the repo.
+- **`CLAUDE.md` restructured**: the scripts inventory was 78% of a file the harness loads in full
+  every session, and one added row put it at exactly 40000/40000. Descriptions moved verbatim to
+  `docs/scripts-inventory.md`; CLAUDE.md keeps a grouped name list, so a session still learns
+  what exists without loading 30 KB to do it. 40000 → ~14000 bytes, all 146 scripts still named,
+  and `check-claude-md-inventory.js` is unchanged (it asserts naming, not table shape).
 
 ### Boundary
 - The anchor namespace is additive and covers commits only. `refs/autopilot/lifecycle-roots/`
@@ -88,7 +108,10 @@ refuses to delete any ref if that anchoring fails.
 - Anchors are never expired mechanically. Retiring one is an evidence-bound decision belonging to
   Mission disposition.
 - Commits already destroyed before an anchor existed cannot be recovered by this.
-- `scripts/mission-terminal-reconcile.js` gains header findings only, no behavior change.
+- The relocated inventory lives in `docs/`, not `references/`: the latter is skill-support material
+  that ships in the Codex payload, and this is repo-development material. Pre-existing mirrored
+  references still carry 9 unresolvable repo-root-relative links out of 36, because
+  `doc-drift-gate.js` excludes `platforms/codex/plugin`. That is untouched here and remains open.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`.

@@ -1166,13 +1166,23 @@ restore_deleted_ref() {
 # four receipt-anchored commits in this repo were already destroyed that way
 # (receipts present, objects absent) before this namespace existed.
 #
-# Fail-closed on purpose. Preserve-first is non-waivable here, and a pin that
-# silently did not happen is exactly the failure mode this guards against — the
-# loss only becomes visible at the next gc, long after the reap looked successful.
-if [ -f "$self_dir/pin-evidence-anchors.js" ]; then
-  if ! node "$self_dir/pin-evidence-anchors.js" apply --repo-root "$repo" >/dev/null; then
-    die_env "cannot anchor receipt-referenced commits; refusing to delete branch refs"
-  fi
+# Reachability MUST be computed against the refs that will survive. A commit held
+# solely by a branch we are about to delete still looks reachable right now, so
+# without naming those refs the anchor step would skip exactly the commits it
+# exists to protect and orphan them milliseconds later.
+#
+# Fail-closed on purpose, including when the anchor script is missing. Preserve-
+# first is non-waivable here, and a pin that silently did not happen is exactly
+# the failure mode this guards against — the loss only becomes visible at the next
+# gc, long after the reap reported success.
+anchor_script="$self_dir/pin-evidence-anchors.js"
+[ -f "$anchor_script" ] || die_env "pin-evidence-anchors.js is missing; refusing to delete branch refs"
+anchor_args=(apply --repo-root "$repo")
+for name in "${eligible[@]}"; do
+  anchor_args+=(--exclude-ref "refs/heads/$name")
+done
+if ! node "$anchor_script" "${anchor_args[@]}" >/dev/null; then
+  die_env "cannot anchor receipt-referenced commits; refusing to delete branch refs"
 fi
 
 for name in "${eligible[@]}"; do

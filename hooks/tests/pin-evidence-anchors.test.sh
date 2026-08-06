@@ -105,5 +105,225 @@ else
   ok "missing repo fails closed"
 fi
 
+# ---- THE pre-delete case: a receipt SHA reachable ONLY through the branch being
+# reaped. Without --exclude-ref it looks reachable and is skipped, then orphaned
+# by the very deletion that follows. This is the failure the reaper integration
+# exists to prevent, so it is tested at the seam the reaper actually uses.
+REPO2="$TESTDIR/predelete"
+git init -q "$REPO2"
+git -C "$REPO2" config user.email t@t; git -C "$REPO2" config user.name t
+printf 'a\n' > "$REPO2/f"; git -C "$REPO2" add f; git -C "$REPO2" commit -qm base
+git -C "$REPO2" checkout -q -b doomed
+printf 'b\n' > "$REPO2/f"; git -C "$REPO2" commit -qam doomed
+HELD="$(git -C "$REPO2" rev-parse HEAD)"
+DEFAULT2="$(git -C "$REPO2" symbolic-ref --short HEAD 2>/dev/null || echo master)"
+git -C "$REPO2" checkout -q "$(git -C "$REPO2" rev-parse --abbrev-ref HEAD)" 2>/dev/null
+git -C "$REPO2" checkout -q master 2>/dev/null || git -C "$REPO2" checkout -q main
+COMMON2="$(git -C "$REPO2" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON2/autopilot/mission"
+printf '{"candidate_sha":"%s"}\n' "$HELD" > "$COMMON2/autopilot/mission/r.json"
+
+OUT3="$(node "$SCRIPT" scan --repo-root "$REPO2" --json)"
+[ "$(printf '%s' "$OUT3" | jfield unreachable)" = "0" ] \
+  && ok "without --exclude-ref the branch-held commit looks reachable (baseline)" \
+  || bad "baseline wrong: $OUT3"
+
+OUT4="$(node "$SCRIPT" scan --repo-root "$REPO2" --exclude-ref refs/heads/doomed --json)"
+[ "$(printf '%s' "$OUT4" | jfield unreachable)" = "1" ] \
+  && ok "--exclude-ref exposes the commit the pending deletion would orphan" \
+  || bad "pre-delete case NOT detected — the reaper integration would be a no-op: $OUT4"
+
+node "$SCRIPT" apply --repo-root "$REPO2" --exclude-ref refs/heads/doomed >/dev/null
+git -C "$REPO2" branch -qD doomed
+git -C "$REPO2" for-each-ref --contains "$HELD" --format='%(refname)' | grep -q evidence-anchors \
+  && ok "commit survives the deletion it was anchored against" \
+  || bad "commit orphaned despite anchoring — the exact regression under test"
+
+# ---- a name/OID mismatched anchor must not mask an unprotected commit
+REPO3="$TESTDIR/mismatch"
+git init -q "$REPO3"
+git -C "$REPO3" config user.email t@t; git -C "$REPO3" config user.name t
+printf 'a\n' > "$REPO3/f"; git -C "$REPO3" add f; git -C "$REPO3" commit -qm base
+git -C "$REPO3" checkout -q -b tmp
+printf 'b\n' > "$REPO3/f"; git -C "$REPO3" commit -qam orphan
+ORPH3="$(git -C "$REPO3" rev-parse HEAD)"
+BASE3="$(git -C "$REPO3" rev-parse HEAD~1)"
+git -C "$REPO3" checkout -q master 2>/dev/null || git -C "$REPO3" checkout -q main
+git -C "$REPO3" branch -qD tmp
+COMMON3="$(git -C "$REPO3" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON3/autopilot"
+printf '{"tip":"%s"}\n' "$ORPH3" > "$COMMON3/autopilot/r.json"
+# a ref NAMED for the orphan but POINTING at base — the lie the contract forbids
+git -C "$REPO3" update-ref "refs/autopilot/evidence-anchors/$ORPH3" "$BASE3"
+
+OUT5="$(node "$SCRIPT" scan --repo-root "$REPO3" --json)"
+printf '%s' "$OUT5" | grep -q "$ORPH3" \
+  && ok "mismatched anchor does not mask the unprotected commit" \
+  || bad "mismatched anchor wrongly counted as protection: $OUT5"
+
+node "$SCRIPT" apply --repo-root "$REPO3" >/dev/null
+MM="$(git -C "$REPO3" for-each-ref refs/autopilot/evidence-anchors \
+  --format='%(refname:strip=3) %(objectname)' | awk '$1 != $2' | wc -l)"
+[ "$MM" = "0" ] && ok "apply repairs the mismatch (namespace cannot lie)" \
+  || bad "mismatch survived apply"
+
+# ---- an unreadable receipt subtree must fail closed, never scan partially
+if command -v chmod >/dev/null && [ "$(id -u)" != "0" ]; then
+  REPO4="$TESTDIR/unreadable"
+  git init -q "$REPO4"
+  git -C "$REPO4" config user.email t@t; git -C "$REPO4" config user.name t
+  printf 'a\n' > "$REPO4/f"; git -C "$REPO4" add f; git -C "$REPO4" commit -qm base
+  COMMON4="$(git -C "$REPO4" rev-parse --path-format=absolute --git-common-dir)"
+  mkdir -p "$COMMON4/autopilot/locked"
+  printf '{}\n' > "$COMMON4/autopilot/locked/r.json"
+  chmod 000 "$COMMON4/autopilot/locked"
+  if node "$SCRIPT" scan --repo-root "$REPO4" --json >/dev/null 2>&1; then
+    bad "unreadable receipt subtree silently produced a partial scan"
+  else
+    ok "unreadable receipt subtree fails closed"
+  fi
+  chmod 755 "$COMMON4/autopilot/locked"
+else
+  ok "unreadable-subtree case skipped (running as root)"
+fi
+
+# ---- a symlinked receipt subtree must be traversed, not silently skipped. A
+# skipped subtree would let apply report success over receipts it never read, and
+# the caller deletes refs on that exit code.
+REPO6="$TESTDIR/symlinked"
+git init -q "$REPO6"
+git -C "$REPO6" config user.email t@t; git -C "$REPO6" config user.name t
+printf 'a\n' > "$REPO6/f"; git -C "$REPO6" add f; git -C "$REPO6" commit -qm base
+git -C "$REPO6" checkout -q -b gone
+printf 'b\n' > "$REPO6/f"; git -C "$REPO6" commit -qam orphan
+HID="$(git -C "$REPO6" rev-parse HEAD)"
+git -C "$REPO6" checkout -q master 2>/dev/null || git -C "$REPO6" checkout -q main
+git -C "$REPO6" branch -qD gone
+COMMON6="$(git -C "$REPO6" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON6/autopilot" "$TESTDIR/elsewhere"
+printf '{"tip":"%s"}\n' "$HID" > "$TESTDIR/elsewhere/r.json"
+if ln -s "$TESTDIR/elsewhere" "$COMMON6/autopilot/linked" 2>/dev/null; then
+  OUT7="$(node "$SCRIPT" scan --repo-root "$REPO6" --json)"
+  printf '%s' "$OUT7" | grep -q "$HID" \
+    && ok "receipts behind a symlinked subtree are read" \
+    || bad "symlinked receipt subtree silently skipped: $OUT7"
+else
+  ok "symlink case skipped (symlinks unavailable)"
+fi
+
+# ---- a mismatched anchor pointing at a DESCENDANT of the SHA it is named for.
+# That ref really does make the named SHA reachable, so counting it while
+# computing reachability marks the SHA safe, skips anchoring it, and then apply
+# deletes that very ref — orphaning it. Reachability must exclude anchors that are
+# about to be removed.
+REPO5="$TESTDIR/mismatch-descendant"
+git init -q "$REPO5"
+git -C "$REPO5" config user.email t@t; git -C "$REPO5" config user.name t
+printf 'a\n' > "$REPO5/f"; git -C "$REPO5" add f; git -C "$REPO5" commit -qm base
+git -C "$REPO5" checkout -q -b side
+printf 'b\n' > "$REPO5/f"; git -C "$REPO5" commit -qam A
+SHA_A="$(git -C "$REPO5" rev-parse HEAD)"
+printf 'c\n' > "$REPO5/f"; git -C "$REPO5" commit -qam B
+SHA_B="$(git -C "$REPO5" rev-parse HEAD)"
+git -C "$REPO5" checkout -q master 2>/dev/null || git -C "$REPO5" checkout -q main
+git -C "$REPO5" branch -qD side
+COMMON5="$(git -C "$REPO5" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON5/autopilot"
+printf '{"candidate_sha":"%s"}\n' "$SHA_A" > "$COMMON5/autopilot/r.json"
+# named for A, pointing at its descendant B — so A IS reachable through this ref
+git -C "$REPO5" update-ref "refs/autopilot/evidence-anchors/$SHA_A" "$SHA_B"
+
+OUT6="$(node "$SCRIPT" scan --repo-root "$REPO5" --json)"
+printf '%s' "$OUT6" | grep -q "$SHA_A" \
+  && ok "SHA kept alive only by a doomed mismatched anchor is reported" \
+  || bad "mismatched-anchor reachability masked the SHA: $OUT6"
+
+node "$SCRIPT" apply --repo-root "$REPO5" >/dev/null
+git -C "$REPO5" for-each-ref --contains "$SHA_A" --format='%(refname)' | grep -q evidence-anchors \
+  && ok "it survives apply removing the mismatched ref" \
+  || bad "orphaned by the repair that was supposed to protect it"
+MM5="$(git -C "$REPO5" for-each-ref refs/autopilot/evidence-anchors \
+  --format='%(refname:strip=3) %(objectname)' | awk '$1 != $2' | wc -l)"
+[ "$MM5" = "0" ] && ok "no mismatched anchor left behind" || bad "mismatch survived"
+
+# ---- a symbolic anchor must stop the run. update-ref dereferences by default, so
+# repairing one would rewrite the BRANCH it points at instead of the anchor.
+REPO7="$TESTDIR/symbolic"
+git init -q "$REPO7"
+git -C "$REPO7" config user.email t@t; git -C "$REPO7" config user.name t
+printf 'a\n' > "$REPO7/f"; git -C "$REPO7" add f; git -C "$REPO7" commit -qm base
+DEFREF="$(git -C "$REPO7" symbolic-ref HEAD)"
+COMMON7="$(git -C "$REPO7" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON7/autopilot"
+printf '{"tip":"%s"}\n' "$(git -C "$REPO7" rev-parse HEAD)" > "$COMMON7/autopilot/r.json"
+git -C "$REPO7" symbolic-ref "refs/autopilot/evidence-anchors/sym" "$DEFREF"
+if node "$SCRIPT" apply --repo-root "$REPO7" >/dev/null 2>&1; then
+  bad "symbolic anchor did not stop the run"
+else
+  ok "symbolic anchor fails closed"
+fi
+git -C "$REPO7" rev-parse --verify "$DEFREF" >/dev/null 2>&1 \
+  && ok "the branch a symbolic anchor pointed at was left intact" \
+  || bad "the symref target branch was destroyed"
+
+# ---- a dangling receipt root must fail, not read as "no mission state"
+REPO8="$TESTDIR/dangling"
+git init -q "$REPO8"
+git -C "$REPO8" config user.email t@t; git -C "$REPO8" config user.name t
+printf 'a\n' > "$REPO8/f"; git -C "$REPO8" add f; git -C "$REPO8" commit -qm base
+COMMON8="$(git -C "$REPO8" rev-parse --path-format=absolute --git-common-dir)"
+if ln -s "$TESTDIR/does-not-exist" "$COMMON8/autopilot" 2>/dev/null; then
+  if node "$SCRIPT" scan --repo-root "$REPO8" --json >/dev/null 2>&1; then
+    bad "dangling receipt root read as a clean repo with no mission state"
+  else
+    ok "dangling receipt root fails closed"
+  fi
+else
+  ok "dangling-root case skipped (symlinks unavailable)"
+fi
+
+# ---- a CORRUPT object must not be read as an absent one. git reports both as
+# `<sha> missing` on stdout with exit 0; only a corrupt store also writes an
+# inflate error to stderr. Mistaking corruption for absence silently drops a SHA
+# from the protection set and then lets the reaper delete its last ref.
+REPO9="$TESTDIR/corrupt-object"
+git init -q "$REPO9"
+git -C "$REPO9" config user.email t@t; git -C "$REPO9" config user.name t
+printf 'a\n' > "$REPO9/f"; git -C "$REPO9" add f; git -C "$REPO9" commit -qm base
+git -C "$REPO9" checkout -q -b gone
+printf 'b\n' > "$REPO9/f"; git -C "$REPO9" commit -qam x
+ROT="$(git -C "$REPO9" rev-parse HEAD)"
+git -C "$REPO9" checkout -q master 2>/dev/null || git -C "$REPO9" checkout -q main
+git -C "$REPO9" branch -qD gone
+COMMON9="$(git -C "$REPO9" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON9/autopilot"
+printf '{"tip":"%s"}\n' "$ROT" > "$COMMON9/autopilot/r.json"
+LOOSE="$COMMON9/objects/${ROT:0:2}/${ROT:2}"
+if [ -f "$LOOSE" ]; then
+  chmod u+w "$LOOSE"; printf 'garbage' > "$LOOSE"
+  if node "$SCRIPT" scan --repo-root "$REPO9" --json >/dev/null 2>&1; then
+    bad "corrupt object silently treated as absent"
+  else
+    ok "corrupt object fails closed rather than reading as absent"
+  fi
+else
+  ok "corrupt-object case skipped (object was packed)"
+fi
+
+# ---- a genuinely absent SHA is NOT an error: it is simply not a commit we can
+# protect, and must not block the reaper.
+REPO10="$TESTDIR/absent-sha"
+git init -q "$REPO10"
+git -C "$REPO10" config user.email t@t; git -C "$REPO10" config user.name t
+printf 'a\n' > "$REPO10/f"; git -C "$REPO10" add f; git -C "$REPO10" commit -qm base
+COMMON10="$(git -C "$REPO10" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON10/autopilot"
+printf '{"gone":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}\n' > "$COMMON10/autopilot/r.json"
+if node "$SCRIPT" scan --repo-root "$REPO10" --json >/dev/null 2>&1; then
+  ok "a genuinely absent SHA does not block the run"
+else
+  bad "absent SHA wrongly treated as corruption"
+fi
+
 printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -71,7 +71,10 @@ refuses to delete any ref if that anchoring fails.
   names always equal the object they point at, and an anchor whose name and target disagree is
   treated as covering nothing (and repaired), because trusting the name alone would let a
   mismatched ref mask an unprotected commit. `cat-file -t` decides what is a commit, so content
-  digests that merely look like SHAs are never mistaken for one. An unreadable receipt directory or
+  digests that merely look like SHAs are never mistaken for one. Mismatched anchors are identified
+  BEFORE reachability is computed and excluded from it, since `apply` removes them: one named for a
+  SHA but pointing at that SHA's descendant genuinely keeps it reachable, and counting it would skip
+  anchoring the SHA immediately before deleting the ref holding it up. An unreadable receipt directory or
   an exhausted traversal budget is an error, never a quietly shorter scan — a caller deletes refs
   on the strength of the exit code, so "I could not read everything" must not look like "there was
   nothing to protect".

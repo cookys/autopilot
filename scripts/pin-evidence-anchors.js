@@ -164,17 +164,13 @@ function main(argv) {
     if (found) for (const sha of found) tokens.add(sha);
   }
 
-  // Reachability against the SURVIVING refs. One rev-list beats a
-  // `for-each-ref --contains` per candidate: the set is the same for all of them.
-  const revListArgs = ['rev-list'];
-  for (const ref of excludeRefs) revListArgs.push(`--exclude=${ref}`);
-  revListArgs.push('--all');
-  const reachable = new Set();
-  const revList = git(root, revListArgs, { allowFail: true });
-  if (revList) for (const line of revList.split('\n')) if (line) reachable.add(line);
-
   // Anchors are trusted only when name and target agree. A ref named for SHA A
   // pointing at SHA B would otherwise make A look protected while it is not.
+  // This must be resolved BEFORE reachability, not after: `apply` deletes every
+  // mismatched ref, so counting one as a live ref while computing reachability
+  // would mark its target's ancestors reachable — including a SHA the mismatched
+  // ref is named for — and skip anchoring them, right before removing the very
+  // ref that made them look safe.
   const anchorTargets = new Map();
   const mismatched = [];
   const anchorRefs = git(root, ['for-each-ref', '--format=%(refname) %(objectname)', ANCHOR_PREFIX], { allowFail: true });
@@ -187,6 +183,16 @@ function main(argv) {
       else mismatched.push({ ref, named, oid });
     }
   }
+
+  // Reachability against the refs that SURVIVE this run: neither the caller's
+  // pending deletions nor the mismatched anchors we are about to remove.
+  const doomedRefs = [...excludeRefs, ...mismatched.map((m) => m.ref)];
+  const revListArgs = ['rev-list'];
+  for (const ref of doomedRefs) revListArgs.push(`--exclude=${ref}`);
+  revListArgs.push('--all');
+  const reachable = new Set();
+  const revList = git(root, revListArgs, { allowFail: true });
+  if (revList) for (const line of revList.split('\n')) if (line) reachable.add(line);
 
   const unreachable = [];
   let candidates = 0;

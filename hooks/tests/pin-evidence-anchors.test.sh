@@ -187,5 +187,40 @@ else
   ok "unreadable-subtree case skipped (running as root)"
 fi
 
+# ---- a mismatched anchor pointing at a DESCENDANT of the SHA it is named for.
+# That ref really does make the named SHA reachable, so counting it while
+# computing reachability marks the SHA safe, skips anchoring it, and then apply
+# deletes that very ref — orphaning it. Reachability must exclude anchors that are
+# about to be removed.
+REPO5="$TESTDIR/mismatch-descendant"
+git init -q "$REPO5"
+git -C "$REPO5" config user.email t@t; git -C "$REPO5" config user.name t
+printf 'a\n' > "$REPO5/f"; git -C "$REPO5" add f; git -C "$REPO5" commit -qm base
+git -C "$REPO5" checkout -q -b side
+printf 'b\n' > "$REPO5/f"; git -C "$REPO5" commit -qam A
+SHA_A="$(git -C "$REPO5" rev-parse HEAD)"
+printf 'c\n' > "$REPO5/f"; git -C "$REPO5" commit -qam B
+SHA_B="$(git -C "$REPO5" rev-parse HEAD)"
+git -C "$REPO5" checkout -q master 2>/dev/null || git -C "$REPO5" checkout -q main
+git -C "$REPO5" branch -qD side
+COMMON5="$(git -C "$REPO5" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON5/autopilot"
+printf '{"candidate_sha":"%s"}\n' "$SHA_A" > "$COMMON5/autopilot/r.json"
+# named for A, pointing at its descendant B — so A IS reachable through this ref
+git -C "$REPO5" update-ref "refs/autopilot/evidence-anchors/$SHA_A" "$SHA_B"
+
+OUT6="$(node "$SCRIPT" scan --repo-root "$REPO5" --json)"
+printf '%s' "$OUT6" | grep -q "$SHA_A" \
+  && ok "SHA kept alive only by a doomed mismatched anchor is reported" \
+  || bad "mismatched-anchor reachability masked the SHA: $OUT6"
+
+node "$SCRIPT" apply --repo-root "$REPO5" >/dev/null
+git -C "$REPO5" for-each-ref --contains "$SHA_A" --format='%(refname)' | grep -q evidence-anchors \
+  && ok "it survives apply removing the mismatched ref" \
+  || bad "orphaned by the repair that was supposed to protect it"
+MM5="$(git -C "$REPO5" for-each-ref refs/autopilot/evidence-anchors \
+  --format='%(refname:strip=3) %(objectname)' | awk '$1 != $2' | wc -l)"
+[ "$MM5" = "0" ] && ok "no mismatched anchor left behind" || bad "mismatch survived"
+
 printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -60,6 +60,12 @@ const ANCHOR_PREFIX = 'refs/autopilot/evidence-anchors/';
 const SHA40 = /\b[0-9a-f]{40}\b/g;
 const FILE_BUDGET = 200000;
 
+// In a partial clone, `rev-list` and `cat-file` will silently contact the promisor
+// remote and WRITE the fetched objects into the repo — which would make `scan`, a
+// documented read-only operation, mutate the repository. Disable lazy fetching so
+// an object that is not present locally is reported as absent instead.
+const NO_LAZY_FETCH_ENV = { ...process.env, GIT_NO_LAZY_FETCH: '1' };
+
 function usage(stream = process.stderr, code = 2) {
   stream.write([
     'Usage:',
@@ -89,6 +95,7 @@ function git(root, args) {
       encoding: 'utf8',
       maxBuffer: 256 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: NO_LAZY_FETCH_ENV,
     }).trim();
   } catch (error) {
     const stderr = (error.stderr || '').toString().trim();
@@ -103,6 +110,7 @@ function gitProbe(root, args) {
       encoding: 'utf8',
       maxBuffer: 256 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: NO_LAZY_FETCH_ENV,
     });
     return { ok: true, code: 0, out: out.trim(), stderr: '' };
   } catch (error) {
@@ -190,9 +198,16 @@ function main(argv) {
   // Only a genuine ENOENT means "this repo has no mission state". A permission or
   // I/O error must not collapse into the same no-op success.
   const receiptRoot = path.join(commonDir, 'autopilot');
+  // lstat first: a DANGLING symlink at the receipt root makes statSync report
+  // ENOENT, which would read as "this repo has no mission state" and authorize a
+  // deletion without ever traversing an unavailable receipt tree. lstat sees the
+  // link itself, so genuine absence and a broken link are distinguishable.
   let receiptRootMissing = false;
-  try { fs.statSync(receiptRoot); }
-  catch (error) {
+  try {
+    fs.lstatSync(receiptRoot);
+    try { fs.statSync(receiptRoot); }
+    catch (error) { fail(`receipt root ${receiptRoot} exists but does not resolve: ${error.message}`); }
+  } catch (error) {
     if (error.code === 'ENOENT') receiptRootMissing = true;
     else fail(`cannot stat ${receiptRoot}: ${error.message}`);
   }
@@ -227,15 +242,26 @@ function main(argv) {
   // ref that made them look safe.
   const anchorTargets = new Map();
   const mismatched = [];
-  const anchorRefs = git(root, ['for-each-ref', '--format=%(refname) %(objectname)', ANCHOR_PREFIX]);
+  const symbolic = [];
+  const anchorRefs = git(root, ['for-each-ref', '--format=%(refname) %(objectname) %(symref)', ANCHOR_PREFIX]);
   if (anchorRefs) {
     for (const line of anchorRefs.split('\n')) {
       if (!line) continue;
-      const [ref, oid] = line.split(' ');
+      const [ref, oid, symref] = line.split(' ');
       const named = ref.slice(ANCHOR_PREFIX.length);
+      // A symbolic anchor is not something this tool ever creates. Left alone it
+      // would protect a SHA through whatever branch it points at — including a
+      // branch queued for deletion — and any repair would follow the symref and
+      // rewrite that BRANCH instead of the anchor. Refuse rather than guess.
+      if (symref) { symbolic.push({ ref, symref }); continue; }
       if (named === oid) anchorTargets.set(named, oid);
       else mismatched.push({ ref, named, oid });
     }
+  }
+  if (symbolic.length) {
+    fail(`symbolic anchor ref(s) present, refusing to act: ${
+      symbolic.map((s) => `${s.ref} -> ${s.symref}`).join(', ')
+    }. Remove them with \`git symbolic-ref --delete\` after confirming what they were for.`);
   }
 
   // Reachability against the refs that SURVIVE this run: neither the caller's
@@ -280,7 +306,7 @@ function main(argv) {
       '',
     ].join('\n');
     try {
-      execFileSync('git', ['-C', root, 'update-ref', '--stdin'], {
+      execFileSync('git', ['-C', root, 'update-ref', '--no-deref', '--stdin'], {
         input: stdin, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
       });
     } catch (error) {

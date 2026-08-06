@@ -246,5 +246,41 @@ MM5="$(git -C "$REPO5" for-each-ref refs/autopilot/evidence-anchors \
   --format='%(refname:strip=3) %(objectname)' | awk '$1 != $2' | wc -l)"
 [ "$MM5" = "0" ] && ok "no mismatched anchor left behind" || bad "mismatch survived"
 
+# ---- a symbolic anchor must stop the run. update-ref dereferences by default, so
+# repairing one would rewrite the BRANCH it points at instead of the anchor.
+REPO7="$TESTDIR/symbolic"
+git init -q "$REPO7"
+git -C "$REPO7" config user.email t@t; git -C "$REPO7" config user.name t
+printf 'a\n' > "$REPO7/f"; git -C "$REPO7" add f; git -C "$REPO7" commit -qm base
+DEFREF="$(git -C "$REPO7" symbolic-ref HEAD)"
+COMMON7="$(git -C "$REPO7" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON7/autopilot"
+printf '{"tip":"%s"}\n' "$(git -C "$REPO7" rev-parse HEAD)" > "$COMMON7/autopilot/r.json"
+git -C "$REPO7" symbolic-ref "refs/autopilot/evidence-anchors/sym" "$DEFREF"
+if node "$SCRIPT" apply --repo-root "$REPO7" >/dev/null 2>&1; then
+  bad "symbolic anchor did not stop the run"
+else
+  ok "symbolic anchor fails closed"
+fi
+git -C "$REPO7" rev-parse --verify "$DEFREF" >/dev/null 2>&1 \
+  && ok "the branch a symbolic anchor pointed at was left intact" \
+  || bad "the symref target branch was destroyed"
+
+# ---- a dangling receipt root must fail, not read as "no mission state"
+REPO8="$TESTDIR/dangling"
+git init -q "$REPO8"
+git -C "$REPO8" config user.email t@t; git -C "$REPO8" config user.name t
+printf 'a\n' > "$REPO8/f"; git -C "$REPO8" add f; git -C "$REPO8" commit -qm base
+COMMON8="$(git -C "$REPO8" rev-parse --path-format=absolute --git-common-dir)"
+if ln -s "$TESTDIR/does-not-exist" "$COMMON8/autopilot" 2>/dev/null; then
+  if node "$SCRIPT" scan --repo-root "$REPO8" --json >/dev/null 2>&1; then
+    bad "dangling receipt root read as a clean repo with no mission state"
+  else
+    ok "dangling receipt root fails closed"
+  fi
+else
+  ok "dangling-root case skipped (symlinks unavailable)"
+fi
+
 printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

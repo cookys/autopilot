@@ -57,6 +57,48 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   `NOT_READY/NO_SHIP` for Codex-thread-bound direct-mutation enforcement, with zero dispatcher calls
   and no replacement campaign/work-order authority.
 
+## v2.34.5 — Evidence anchors survive branch reaping
+
+**Headline**: Mission receipts bind their evidence to commit SHAs, but a receipt is JSON — Git
+cannot see that reference. When the only ref holding such a commit was a dispatch branch, reaping
+that branch started a `gc` countdown on the evidence itself, and the loss stayed invisible until
+someone tried to resolve the SHA. Reaping now anchors every receipt-referenced commit first, and
+refuses to delete any ref if that anchoring fails.
+
+### Added
+- `scripts/pin-evidence-anchors.js` — `scan` (read-only) reports receipt-referenced commits that
+  no ref reaches; `apply` pins them at `refs/autopilot/evidence-anchors/<sha>`, idempotently. Ref
+  names always equal the object they point at, so the namespace is self-verifying. Reachability is
+  one `rev-list --all` set membership test, and `cat-file -t` decides what is a commit, so content
+  digests that merely look like SHAs are never mistaken for one.
+- `hooks/tests/pin-evidence-anchors.test.sh` — proves scan is genuinely read-only, an unreachable
+  receipt-referenced commit is found while a reachable one is not, apply is idempotent, anchor ref
+  names match their OIDs, fake 40-hex digests are ignored, a repo with no Mission state is a clean
+  no-op, and a missing repo fails closed.
+
+### Changed
+- `scripts/reap-dispatch-branches.sh` anchors receipt-referenced commits after bundling and before
+  the exact-tip CAS deletions. Fail-closed: if anchoring cannot complete, no ref is deleted.
+  Preserve-first already bundled the branch, but a bundle is an offline file and does not keep
+  objects reachable inside the repo.
+
+### Boundary
+- The anchor namespace is additive and covers commits only. `refs/autopilot/lifecycle-roots/`
+  points at blobs and never kept a commit alive; the two are complements, not duplicates.
+- Anchors are never expired mechanically. Retiring one is an evidence-bound decision belonging to
+  Mission disposition.
+- Commits already destroyed before an anchor existed cannot be recovered by this.
+- `scripts/mission-terminal-reconcile.js` gains header findings only, no behavior change.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.4`.
+- Anchors already written are inert refs; drop them with
+  `git for-each-ref --format='%(refname)' refs/autopilot/evidence-anchors | xargs -r -n1 git update-ref -d`.
+
+prose-justification: v2.34.5 adds one engine script plus its oracle; the prose added is the
+CHANGELOG entry and a script header recording a measured fail-closed boundary, not guidance.
+
 ## v2.34.4 — Clean-checkout CI fixture portability
 
 **Headline**: The release checks now exercise dev-setup and historical Mission reconciliation

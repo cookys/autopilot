@@ -118,12 +118,16 @@ const strictBody = {
   develop_sha: '4'.repeat(40), candidate_ref: 'refs/heads/candidate', source_worktree: repoInfo.repo,
   allowed_path_prefixes: [], integration_state: 'reviewed_archived', merge_receipt: null,
   d8_publication_rebind_receipt: 'd8-rebind.json',
+  g8b_integration_authorization: { path: 'g8b.json', receipt_digest: '0'.repeat(64) },
   min_panel_size: 3,
 };
 strictBody.receipt_digest = validation.canonicalDigest(strictBody);
 const strictPath = path.join(scratch, 'terminal.json');
 fs.writeFileSync(strictPath, JSON.stringify(strictBody));
-if (validation.loadTerminalBundle(strictPath, repoInfo).bundle.integration_state !== 'reviewed_archived') {
+const loadedStrict = validation.loadTerminalBundle(strictPath, repoInfo);
+if (loadedStrict.bundle.integration_state !== 'reviewed_archived'
+    || !loadedStrict.bundle.g8b_integration_authorization
+    || loadedStrict.bundle.g8b_integration_authorization.path !== 'g8b.json') {
   throw new Error('reviewed_archived integration state was not accepted');
 }
 const symlink = path.join(scratch, 'authority-escape');
@@ -135,6 +139,888 @@ if (!symlinkRejected) throw new Error('authority symlink escape was accepted');
 fs.rmSync(scratch, { recursive: true, force: true });
 NODE
 assert_exit_code "$?" "0" "terminal receipt containment, sealed digest, and integration state checks"
+
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const root = process.argv[2];
+const validation = require(path.join(root, 'scripts/next-touch-validation'));
+const runtime = require(path.join(root, 'src/mission/runtime'));
+const repoInfo = runtime.canonicalRepository(root);
+const source = validation.sourceDigests(root);
+const historical = validation.loadRepoAndAuthority({
+  repo: root,
+  authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+}).authorization;
+const common = repoInfo.common;
+const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'g8b-validation-'));
+const bundlePath = path.join(directory, 'terminal.json');
+const g8bPath = path.join(directory, 'g8b.json');
+const develop = execFileSync('git', ['-C', root, 'rev-parse', 'refs/heads/develop'], { encoding: 'utf8' }).trim();
+const archiveAuth = JSON.parse(fs.readFileSync(
+  path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  'utf8',
+));
+const roster = {
+  implementer: 'grok/Grok-4.5/high/xai',
+  verifier: 'agy/Gemini 3.5 Flash (High)/high/google',
+  reviewer: 'claude-native/claude-opus/high/anthropic',
+};
+const makeBody = (overrides = {}) => ({
+  schema_version: 1,
+  artifact_type: 'g8b_integration_authorization',
+  authority_mode: 'fresh_non_successor',
+  repo_identity: repoInfo.repo_identity,
+  ticket: 'mission-g8b-fresh-authority',
+  project: 'next-touch-debt-retirement',
+  graph_node_id: 'next-touch-debt-retirement',
+  authorized_branch: 'mission/g8b-fresh-authority',
+  candidate_ref: 'refs/heads/mission/g8b-fresh-authority',
+  mission_lineage_id: 'lineage-v1-' + '1'.repeat(64),
+  adoption_key: '1'.repeat(64),
+  task_authority_id: '2'.repeat(64),
+  mission_policy_digest: '3'.repeat(64),
+  mission_graph_digest: '4'.repeat(64),
+  policy_hash: '5'.repeat(64),
+  source_plan_path: 'docs/plans/2026-08-03-next-touch-debt-retirement.md',
+  source_rubric_path: 'docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md',
+  source_plan_sha256: source.planSha,
+  source_rubric_sha256: source.rubricSha,
+  admission_base_sha: validation.ADMISSION_BASE_SHA,
+  mission_claim_base_sha: validation.REVIEW_BASE_SHA,
+  review_base_sha: validation.REVIEW_BASE_SHA,
+  product_candidate_sha: validation.G8B_PRODUCT_CANDIDATE_SHA,
+  product_candidate_tree_sha: validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+  integration_candidate_sha: validation.G8B_PRODUCT_CANDIDATE_SHA,
+  integration_candidate_tree_sha: validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+  integration_candidate_ref: 'refs/heads/mission/g8b-fresh-authority',
+  develop_ref: 'refs/heads/develop',
+  develop_sha: develop,
+  d8_evaluated_sha: validation.D8_EVALUATED_SHA,
+  d8_publication_sha: validation.D8_PUBLICATION_SHA,
+  d8_report_path: '.autopilot/evidence/grok-implementer-ab.json',
+  d8_report_sha256: '804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b',
+  archive_plan_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md',
+  archive_rubric_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md',
+  historical_archive_authorization_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json',
+  historical_archive_authorization_sha256: '3266fb2c98133e788e23eec3e261a902c40529e0363ece2b12e01c9e31a338ba',
+  historical_archive_authorization_digest: validation.canonicalDigest(archiveAuth),
+  task_authority_ref: { path: 'task-authority.json', task_authority_id: '2'.repeat(64) },
+  prepared_receipt_ref: { path: 'prepared.json', receipt_digest: '6'.repeat(64) },
+  mission_state_ref: { path: 'state.json', state_hash: '7'.repeat(64) },
+  mission_terminal_receipt_ref: { path: 'mission-terminal.json', receipt_digest: '8'.repeat(64) },
+  campaign_terminal_receipt_ref: { path: 'campaign-terminal.json', receipt_digest: '9'.repeat(64) },
+  icc_terminal_receipt_ref: { path: 'icc-terminal.json', receipt_digest: 'a'.repeat(64) },
+  mission_terminal_receipt_digest: '8'.repeat(64),
+  campaign_terminal_receipt_digest: '9'.repeat(64),
+  icc_terminal_receipt_digest: 'a'.repeat(64),
+  claim_id: 'claim-v1-' + 'b'.repeat(64),
+  claim_binding_digest: 'c'.repeat(64),
+  mission_campaign_id: 'campaign-v2-' + 'd'.repeat(64),
+  campaign_id: 'campaign-v1-' + 'e'.repeat(64),
+  roster,
+  ...overrides,
+});
+function writeBody(body) {
+  const sealed = { ...body, receipt_digest: validation.canonicalDigest(body) };
+  fs.writeFileSync(g8bPath, JSON.stringify(sealed));
+  return sealed;
+}
+function run(body, options = {}) {
+  const sealed = writeBody(body);
+  const bundle = {
+    g8b_integration_authorization: { path: 'g8b.json', receipt_digest: sealed.receipt_digest },
+    candidate_sha: sealed.integration_candidate_sha,
+    candidate_tree_sha: sealed.integration_candidate_tree_sha,
+    candidate_ref: sealed.integration_candidate_ref,
+    develop_sha: sealed.develop_sha,
+    mission_lineage_id: sealed.mission_lineage_id,
+    campaign_id: sealed.campaign_id,
+    prepared_receipt: sealed.prepared_receipt_ref,
+    mission_state: sealed.mission_state_ref,
+    mission_terminal_receipt: sealed.mission_terminal_receipt_ref,
+    campaign_terminal_receipt: sealed.campaign_terminal_receipt_ref,
+    icc_terminal_receipt: sealed.icc_terminal_receipt_ref,
+    ...(options.bundle || {}),
+  };
+  let error = null;
+  try {
+    validation.validateG8bIntegrationAuthorization(
+      bundle,
+      { path: bundlePath, bundle },
+      repoInfo,
+      source,
+    { candidate: sealed.integration_candidate_sha, authorization: options.authorization, prepared: options.prepared },
+      historical,
+    );
+  } catch (caught) { error = caught; }
+  return error;
+}
+let missing = null;
+try {
+  validation.validateG8bIntegrationAuthorization(
+    {}, { path: bundlePath, bundle: {} }, repoInfo, source,
+    { candidate: validation.G8B_PRODUCT_CANDIDATE_SHA }, historical,
+  );
+} catch (error) { missing = error; }
+if (!missing || missing.code !== 'G8B_AUTHORITY_MISSING') throw new Error('missing fresh G8b authority was accepted');
+let tampered = null;
+fs.writeFileSync(g8bPath, '{}');
+try {
+  validation.validateG8bIntegrationAuthorization(
+    { g8b_integration_authorization: { path: 'g8b.json', receipt_digest: '0'.repeat(64) } },
+    { path: bundlePath, bundle: {} }, repoInfo, source,
+    { candidate: validation.G8B_PRODUCT_CANDIDATE_SHA }, historical,
+  );
+} catch (error) { tampered = error; }
+if (!tampered || tampered.code !== 'G8B_RECEIPT_BINDING_MISMATCH') throw new Error('tampered fresh G8b receipt was accepted');
+const blocked = run(makeBody({
+  mission_lineage_id: 'lineage-v1-7d89f8d57856fb7f31c7ee0f97b25aba28faccabdd7b89303c4804359c08da51',
+}));
+if (!blocked || blocked.code !== 'G8B_AUTHORITY_INVALID') throw new Error('blocked 7d89 lineage was accepted');
+const blockedTicket = run(makeBody({ ticket: 'mission-7e8e6806aee8-next-touch-debt-retirement-a5' }));
+if (!blockedTicket || blockedTicket.code !== 'G8B_AUTHORITY_INVALID') throw new Error('blocked successor ticket was accepted');
+const successor = run(makeBody({ adoption_key: '7e8e6806aee84794b0283f27a1f0b04c47919338d97229242ced28ad891258ee' }));
+if (!successor || successor.code !== 'G8B_AUTHORITY_INVALID') throw new Error('successor adoption key was accepted');
+const blockedBranch = run(makeBody({
+  authorized_branch: 'mission/7e8e6806aee8/next-touch-debt-retirement-a5',
+  candidate_ref: 'refs/heads/mission/7e8e6806aee8/next-touch-debt-retirement-a5',
+  integration_candidate_ref: 'refs/heads/mission/7e8e6806aee8/next-touch-debt-retirement-a5',
+}));
+if (!blockedBranch || blockedBranch.code !== 'G8B_AUTHORITY_INVALID') throw new Error('blocked successor branch was accepted');
+const branch = run(makeBody({ authorized_branch: 'mission/g8b-other' }));
+if (!branch || branch.code !== 'G8B_CANDIDATE_BINDING_MISMATCH') throw new Error('cross-branch G8b receipt was accepted');
+const candidate = run(makeBody({ product_candidate_sha: validation.REVIEW_BASE_SHA }));
+if (!candidate || candidate.code !== 'G8B_BINDING_MISMATCH') throw new Error('cross-product G8b receipt was accepted');
+const tree = run(makeBody({ product_candidate_tree_sha: 'f'.repeat(40) }));
+if (!tree || tree.code !== 'G8B_BINDING_MISMATCH') throw new Error('cross-tree G8b receipt was accepted');
+const missingMissionClaimBaseBody = makeBody();
+delete missingMissionClaimBaseBody.mission_claim_base_sha;
+const missingMissionClaimBase = run(missingMissionClaimBaseBody);
+if (!missingMissionClaimBase || missingMissionClaimBase.code !== 'G8B_SCHEMA_INVALID') {
+  throw new Error('missing Mission claim base was accepted');
+}
+const tamperedMissionClaimBase = run(makeBody({ mission_claim_base_sha: validation.ADMISSION_BASE_SHA }));
+if (!tamperedMissionClaimBase || tamperedMissionClaimBase.code !== 'G8B_BINDING_MISMATCH') {
+  throw new Error('tampered Mission claim base was accepted');
+}
+const plan = run(makeBody({ source_plan_sha256: 'f'.repeat(64) }));
+if (!plan || plan.code !== 'G8B_BINDING_MISMATCH') throw new Error('cross-plan G8b receipt was accepted');
+const d8 = run(makeBody({ d8_report_sha256: 'f'.repeat(64) }));
+if (!d8 || d8.code !== 'G8B_BINDING_MISMATCH') throw new Error('cross-D8 G8b receipt was accepted');
+const cliBypass = run(makeBody(), { authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') });
+if (!cliBypass || cliBypass.code !== 'G8B_CLI_BYPASS_REJECTED') throw new Error('CLI authority bypass was accepted');
+fs.rmSync(directory, { recursive: true, force: true });
+console.log('G8b authority missing/tamper/lineage/cross-binding/CLI negatives passed');
+NODE
+assert_exit_code "$?" "0" "fresh G8b authority is bundle-bound and rejects stale/cross-bound authority"
+
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const root = process.argv[2];
+const validation = require(path.join(root, 'scripts/next-touch-validation'));
+const runtime = require(path.join(root, 'src/mission/runtime'));
+const mission = require(path.join(root, 'src/engine/mission-convergence'));
+const composition = require(path.join(root, 'src/engine/campaign-composition'));
+const source = validation.sourceDigests(root);
+const historical = validation.loadRepoAndAuthority({
+  repo: root,
+  authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+}).authorization;
+const rootInfo = runtime.canonicalRepository(root);
+const authorityEnvelopePath = path.join(
+  rootInfo.common, 'autopilot/mission/next-touch-debt-retirement/task-authority.envelope.json',
+);
+const hash = (value) => crypto.createHash('sha256').update(
+  typeof value === 'string' ? value : mission.canonicalJson(value),
+).digest('hex');
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'g8b-runtime-positive-'));
+const repo = path.join(temp, 'repo');
+const git = (args, options = {}) => execFileSync('git', ['-C', repo, ...args], {
+  encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options,
+}).trim();
+try {
+  execFileSync('git', ['clone', '-q', '--no-local', root, repo]);
+  git(['config', 'user.email', 'g8b-fixture@example.invalid']);
+  git(['config', 'user.name', 'G8b Runtime Fixture']);
+  git(['update-ref', 'refs/heads/develop', validation.G8B_DEVELOP_PREMERGE_SHA]);
+  git(['checkout', '-q', '-B', 'fixture-base', validation.REVIEW_BASE_SHA]);
+  const repoInfo = runtime.canonicalRepository(repo);
+
+  const taskAuthority = JSON.parse(fs.readFileSync(authorityEnvelopePath, 'utf8'));
+  const lineage = `lineage-v1-${'f'.repeat(64)}`;
+  const graph = {
+    schema_version: 1,
+    artifact_type: 'mission_execution_graph',
+    nodes: [{
+      id: 'next-touch-debt-retirement',
+      source_plan_ids: ['G8B'],
+      source_rubric_ids: ['G8B-R1'],
+      dependencies: [],
+      acceptance_ids: ['g8b-runtime-positive'],
+      verification_commands: ['node -e "process.exit(0)"'],
+      gate_attempt_budget: 1,
+      reservation: {
+        campaigns: 1, wall_seconds: 100, tool_calls: 2, engine_attempts: 1,
+        external_wait_seconds: 0, canonical_changed_files: 1, output_bytes: 1024,
+      },
+      campaign: {
+        profile: 'poc',
+        allowed_path_prefixes: ['docs/'],
+        spec: {
+          path: 'docs/BACKLOG.md',
+          section: 'Mission authority store 與 cross-harness enforcement hardening',
+        },
+        required_paths: ['docs/BACKLOG.md'],
+        output_paths: ['docs/BACKLOG.md'],
+        max_changed_files: 1,
+        baseline_churn: 10,
+        max_growth_ratio: 1.5,
+        max_extra_churn: 5,
+        max_repair_generations: 0,
+        max_wall_seconds: 100,
+      },
+    }],
+  };
+  const graphDigest = hash(graph);
+  taskAuthority.task_id = 'g8b-runtime-positive';
+  taskAuthority.mission_lineage_id = lineage;
+  taskAuthority.mission_graph_digest = graphDigest;
+  const taskAuthorityBody = { ...taskAuthority };
+  delete taskAuthorityBody.task_authority_id;
+  taskAuthority.task_authority_id = validation.canonicalDigest(taskAuthorityBody);
+  const policy = {
+    schema_version: 1,
+    enforcement_mode: 'enforce',
+    max_campaigns: 2,
+    max_wall_seconds: 1000,
+    max_tool_calls: 20,
+    max_engine_attempts: 8,
+    max_external_wait_seconds: 100,
+    max_canonical_changed_files: 4,
+    max_output_bytes: 4096,
+    max_stagnant_campaigns: 2,
+    max_deliverables: 1,
+    max_parallel: 1,
+    max_batches: 1,
+    max_graph_depth: 1,
+    max_gate_attempts: 2,
+    closure_ratio: 0.75,
+    grant_expiry_seconds: 3600,
+  };
+  const policyDigest = taskAuthority.mission_policy_digest;
+  const adoptionKey = lineage.slice('lineage-v1-'.length);
+  const dependencies = {
+    resolveMissionPolicy: () => ({ policy, policy_digest: policyDigest }),
+    freezeMissionExecutionGraph: () => ({ graph, graph_digest: graphDigest }),
+    deriveMissionAdoptionKey: () => adoptionKey,
+    deriveMissionLineageId: () => lineage,
+  };
+  process.env.AUTOPILOT_TEST_ALLOW_MISSION_RUNTIME_SEAMS = '1';
+  const prepared = runtime.prepareMissionRuntimeForTest({
+    repo,
+    taskAuthority,
+    executionGraph: graph,
+    authoritativeGovernance: { mission_convergence: policy },
+    preparedAt: '2026-08-06T00:00:00.000Z',
+  }, dependencies);
+  const grant = runtime.grantMissionCampaign({
+    repo,
+    preparedReceipt: prepared.receipt,
+    nodeId: 'next-touch-debt-retirement',
+    now: '2026-08-06T00:01:00.000Z',
+  });
+  const store = runtime.openPreparedMissionStateStore({ repo, preparedReceipt: prepared.receipt });
+  const claimed = store.load();
+  const claim = claimed.claims[grant.claim_id];
+  const campaignId = `campaign-v1-${'c'.repeat(64)}`;
+  const terminal = runtime.reconcileMissionCampaignTerminal({
+    store,
+    grantRef: claim.binding_digest,
+    claimId: claim.claim_id,
+    iccCampaignId: campaignId,
+    rawCampaignContractDigest: hash('g8b-raw-campaign'),
+    outcome: 'ready',
+    possiblyEffectful: true,
+    observedAt: '2026-08-06T00:02:00.000Z',
+  });
+  if (terminal.status !== 'applied') throw new Error(`fresh campaign terminal failed: ${terminal.reason || terminal.status}`);
+  const state = store.load();
+  if (state.state !== 'COMPLETE' || !state.terminal) throw new Error('fresh Mission did not reach COMPLETE');
+  const residueBody = { lifecycle_residue: [] };
+  const residue = { ...residueBody, residue_digest: mission.sha256(mission.canonicalJson(residueBody)) };
+  const missionTerminal = mission.buildMissionTerminalReceipt(state, residue);
+  const panelSeat = (index, runner, model, family) => {
+    const body = {
+      schema_version: 1,
+      artifact_type: 'implementation_campaign_final_panel_seat',
+      seat_index: index,
+      runner,
+      model,
+      effort: 'high',
+      endpoint: null,
+      family,
+      status: 'reviewed',
+      verdict: 'a'.repeat(64),
+      review_digest: 'b'.repeat(64),
+      reason: null,
+    };
+    return { ...body, receipt_digest: validation.canonicalDigest(body) };
+  };
+  const seats = [
+    panelSeat(1, 'grok', 'Grok-4.5', 'xai'),
+    panelSeat(2, 'agy', 'Gemini 3.5 Flash (High)', 'google'),
+    panelSeat(3, 'claude-native', 'claude-opus', 'anthropic'),
+  ];
+  let iccBody = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_terminal',
+    status: 'ready',
+    candidate_tree_sha: validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+    verification_receipt_digest: 'd'.repeat(64),
+    repair_generations: 0,
+    sealed_min_panel_size: 3,
+    final_panel_count: 3,
+    final_panel_seat_receipts: seats,
+    follow_up: [],
+    rejected_findings: [],
+    unresolved_final_findings: [],
+    lifecycle_receipt_ref: {
+      path: 'lifecycle.json', root_run_id: campaignId, receipt_digest: 'e'.repeat(64),
+    },
+    trace: [],
+  };
+  let iccTerminal = { ...iccBody, receipt_digest: validation.canonicalDigest(iccBody) };
+  const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'g8b-positive-'));
+  const paths = {
+    taskAuthority: path.join(directory, 'task-authority.json'),
+    prepared: path.join(directory, 'prepared.json'),
+    state: prepared.state_path,
+    missionTerminal: path.join(directory, 'mission-terminal.json'),
+    campaignTerminal: path.join(directory, 'campaign-terminal.json'),
+    iccTerminal: path.join(directory, 'icc-terminal.json'),
+    bundle: path.join(directory, 'terminal.json'),
+    g8b: path.join(directory, 'g8b.json'),
+  };
+  fs.writeFileSync(paths.taskAuthority, JSON.stringify(taskAuthority));
+  fs.writeFileSync(paths.prepared, JSON.stringify(prepared.receipt));
+  fs.writeFileSync(paths.missionTerminal, JSON.stringify(missionTerminal));
+  fs.writeFileSync(paths.campaignTerminal, JSON.stringify(terminal.receipt));
+  fs.writeFileSync(paths.iccTerminal, JSON.stringify(iccTerminal));
+  const tree = git(['rev-parse', `${validation.G8B_PRODUCT_CANDIDATE_SHA}^{tree}`]);
+  const index = path.join(temp, 'fixture-index');
+  const indexEnv = { ...process.env, GIT_INDEX_FILE: index };
+  execFileSync('git', ['-C', repo, 'read-tree', `${validation.G8B_PRODUCT_CANDIDATE_SHA}^{tree}`], { env: indexEnv });
+  for (const relative of [
+    'scripts/dispatch-hetero.sh',
+    'platforms/codex/plugin/scripts/dispatch-hetero.sh',
+    'scripts/dispatch-review.sh',
+    'platforms/codex/plugin/scripts/dispatch-review.sh',
+    'hooks/tests/dispatch-detached-campaign-authority.test.sh',
+  ]) {
+    const entry = execFileSync('git', [
+      '-C', root, 'ls-tree', '38046a7170afafc35aec5986a8dd285e33e31c80', '--', relative,
+    ], { encoding: 'utf8' }).trim();
+    const [mode, , blob] = entry.split(/\s+/u);
+    const gateFile = path.join(temp, relative.replaceAll('/', '-'));
+    fs.mkdirSync(path.dirname(gateFile), { recursive: true });
+    fs.writeFileSync(gateFile, execFileSync('git', ['-C', root, 'cat-file', 'blob', blob]));
+    const cloneBlob = execFileSync('git', ['-C', repo, 'hash-object', '-w', gateFile], { encoding: 'utf8' }).trim();
+    if (cloneBlob !== blob) throw new Error(`merge-result blob changed while importing ${relative}`);
+    execFileSync('git', ['-C', repo, 'update-index', '--add', '--cacheinfo', `${mode},${cloneBlob},${relative}`], { env: indexEnv });
+  }
+  const validatorBytes = fs.readFileSync(path.join(root, 'scripts/next-touch-validation.js'));
+  const mirrorBytes = fs.readFileSync(path.join(root, 'platforms/codex/plugin/scripts/next-touch-validation.js'));
+  if (!validatorBytes.equals(mirrorBytes)) throw new Error('fresh validator mirror bytes diverged before integration');
+  for (const [relative, mode, bytes] of [
+    ['scripts/next-touch-validation.js', '100644', validatorBytes],
+    ['platforms/codex/plugin/scripts/next-touch-validation.js', '100644', mirrorBytes],
+    ['hooks/tests/next-touch-validation.test.sh', '100755', fs.readFileSync(path.join(root, 'hooks/tests/next-touch-validation.test.sh'))],
+  ]) {
+    const file = path.join(temp, relative.replaceAll('/', '-'));
+    fs.writeFileSync(file, bytes);
+    const blob = execFileSync('git', ['-C', repo, 'hash-object', '-w', file], { encoding: 'utf8' }).trim();
+    execFileSync('git', ['-C', repo, 'update-index', '--add', '--cacheinfo', `${mode},${blob},${relative}`], { env: indexEnv });
+  }
+  const integrationTree = execFileSync('git', ['-C', repo, 'write-tree'], { env: indexEnv, encoding: 'utf8' }).trim();
+  const integration = execFileSync('git', [
+    '-C', repo, 'commit-tree', integrationTree,
+    '-p', validation.G8B_PRODUCT_CANDIDATE_SHA, '-p', validation.G8B_DEVELOP_PREMERGE_SHA,
+  ], { input: 'g8b runtime integration\n', encoding: 'utf8' }).trim();
+  fs.rmSync(index, { force: true });
+  const branch = grant.branch;
+  git(['update-ref', `refs/heads/${branch}`, integration]);
+  git(['checkout', '-q', branch]);
+  const integrationTreeTruth = git(['rev-parse', `${integration}^{tree}`]);
+  if (integrationTreeTruth !== integrationTree || tree !== validation.G8B_PRODUCT_CANDIDATE_TREE_SHA) {
+    throw new Error('fresh integration tree was not sealed to product/develop gate merge');
+  }
+  iccBody = { ...iccBody, candidate_tree_sha: integrationTree };
+  iccTerminal = { ...iccBody, receipt_digest: validation.canonicalDigest(iccBody) };
+  fs.writeFileSync(paths.iccTerminal, JSON.stringify(iccTerminal));
+  const ref = (file, receiptDigest) => ({ path: path.basename(file), receipt_digest: receiptDigest });
+  const g8bBody = {
+    schema_version: 1,
+    artifact_type: 'g8b_integration_authorization',
+    authority_mode: 'fresh_non_successor',
+    repo_identity: repoInfo.repo_identity,
+    ticket: grant.branch.replaceAll('/', '-'),
+    project: 'next-touch-debt-retirement',
+    graph_node_id: 'next-touch-debt-retirement',
+    authorized_branch: branch,
+    candidate_ref: `refs/heads/${branch}`,
+    mission_lineage_id: lineage,
+    adoption_key: adoptionKey,
+    task_authority_id: taskAuthority.task_authority_id,
+    mission_policy_digest: taskAuthority.mission_policy_digest,
+    mission_graph_digest: graphDigest,
+    policy_hash: taskAuthority.policy_hash,
+    source_plan_path: validation.PLAN_PATH || 'docs/plans/2026-08-03-next-touch-debt-retirement.md',
+    source_rubric_path: validation.RUBRIC_PATH || 'docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md',
+    source_plan_sha256: source.planSha,
+    source_rubric_sha256: source.rubricSha,
+    admission_base_sha: validation.ADMISSION_BASE_SHA,
+    mission_claim_base_sha: validation.REVIEW_BASE_SHA,
+    review_base_sha: validation.REVIEW_BASE_SHA,
+    product_candidate_sha: validation.G8B_PRODUCT_CANDIDATE_SHA,
+    product_candidate_tree_sha: validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+    integration_candidate_sha: integration,
+    integration_candidate_tree_sha: integrationTree,
+    integration_candidate_ref: `refs/heads/${branch}`,
+    develop_ref: 'refs/heads/develop',
+    develop_sha: validation.G8B_DEVELOP_PREMERGE_SHA,
+    d8_evaluated_sha: validation.D8_EVALUATED_SHA,
+    d8_publication_sha: validation.D8_PUBLICATION_SHA,
+    d8_report_path: '.autopilot/evidence/grok-implementer-ab.json',
+    d8_report_sha256: '804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b',
+    archive_plan_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md',
+    archive_rubric_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md',
+    historical_archive_authorization_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json',
+    historical_archive_authorization_sha256: '3266fb2c98133e788e23eec3e261a902c40529e0363ece2b12e01c9e31a338ba',
+    historical_archive_authorization_digest: validation.canonicalDigest(historical),
+    task_authority_ref: { path: path.basename(paths.taskAuthority), task_authority_id: taskAuthority.task_authority_id },
+    prepared_receipt_ref: ref(paths.prepared, prepared.receipt.receipt_digest),
+    mission_state_ref: { path: paths.state, state_hash: mission.stateHash(state) },
+    mission_terminal_receipt_ref: ref(paths.missionTerminal, missionTerminal.receipt_digest),
+    campaign_terminal_receipt_ref: ref(paths.campaignTerminal, terminal.receipt.receipt_digest),
+    icc_terminal_receipt_ref: ref(paths.iccTerminal, iccTerminal.receipt_digest),
+    mission_terminal_receipt_digest: missionTerminal.receipt_digest,
+    campaign_terminal_receipt_digest: terminal.receipt.receipt_digest,
+    icc_terminal_receipt_digest: iccTerminal.receipt_digest,
+    claim_id: claim.claim_id,
+    claim_binding_digest: claim.binding_digest,
+    mission_campaign_id: claim.campaign_id,
+    campaign_id: campaignId,
+    roster: {
+      implementer: 'grok/Grok-4.5/high/xai',
+      verifier: 'agy/Gemini 3.5 Flash (High)/high/google',
+      reviewer: 'claude-native/claude-opus/high/anthropic',
+    },
+  };
+  const g8bSealed = { ...g8bBody, receipt_digest: validation.canonicalDigest(g8bBody) };
+  fs.writeFileSync(paths.g8b, JSON.stringify(g8bSealed));
+  const bundle = {
+    g8b_integration_authorization: { path: path.basename(paths.g8b), receipt_digest: g8bSealed.receipt_digest },
+    prepared_receipt: g8bSealed.prepared_receipt_ref,
+    mission_state: g8bSealed.mission_state_ref,
+    mission_terminal_receipt: g8bSealed.mission_terminal_receipt_ref,
+    campaign_terminal_receipt: g8bSealed.campaign_terminal_receipt_ref,
+    icc_terminal_receipt: g8bSealed.icc_terminal_receipt_ref,
+    mission_lineage_id: lineage,
+    candidate_sha: integration,
+    candidate_tree_sha: integrationTree,
+    candidate_ref: `refs/heads/${branch}`,
+    develop_sha: validation.G8B_DEVELOP_PREMERGE_SHA,
+    campaign_id: campaignId,
+  };
+  const checked = validation.validateG8bIntegrationAuthorization(
+    bundle,
+    { path: paths.bundle, bundle },
+    repoInfo,
+    source,
+    { candidate: integration },
+    historical,
+  );
+  if (!checked || checked.integrationCandidate !== integration
+      || checked.state.state !== 'COMPLETE' || checked.claim.claim_id !== claim.claim_id) {
+    throw new Error('fresh G8b runtime-positive result was incomplete');
+  }
+  const freshStateBundle = {
+    prepared_receipt: g8bSealed.prepared_receipt_ref,
+    mission_state: g8bSealed.mission_state_ref,
+  };
+  const freshStateChecked = validation.validatePreparedAndMissionState(
+    freshStateBundle,
+    { path: paths.bundle },
+    repoInfo,
+    checked.authorization,
+    {},
+  );
+  if (freshStateChecked.state.state !== 'COMPLETE'
+      || freshStateChecked.stateRef.value.state !== 'COMPLETE') {
+    throw new Error('fresh G8b state reference did not pass generic Mission state validation');
+  }
+  let wrongStateHash = null;
+  try {
+    validation.validatePreparedAndMissionState(
+      {
+        ...freshStateBundle,
+        mission_state: { path: paths.state, state_hash: '0'.repeat(64) },
+      },
+      { path: paths.bundle },
+      repoInfo,
+      checked.authorization,
+      {},
+    );
+  } catch (error) { wrongStateHash = error; }
+  if (!wrongStateHash || wrongStateHash.code !== 'G8B_MISSION_STATE_BINDING_MISMATCH') {
+    throw new Error(`wrong fresh state hash was accepted: ${wrongStateHash && wrongStateHash.code}`);
+  }
+  let mixedStateRef = null;
+  try {
+    validation.validatePreparedAndMissionState(
+      {
+        ...freshStateBundle,
+        mission_state: {
+          path: paths.state,
+          state_hash: g8bSealed.mission_state_ref.state_hash,
+          receipt_digest: '0'.repeat(64),
+        },
+      },
+      { path: paths.bundle },
+      repoInfo,
+      checked.authorization,
+      {},
+    );
+  } catch (error) { mixedStateRef = error; }
+  if (!mixedStateRef || mixedStateRef.code !== 'AUTHORITY_INVALID') {
+    throw new Error(`mixed Mission state schema was accepted: ${mixedStateRef && mixedStateRef.code}`);
+  }
+  const validBundle = () => ({
+    g8b_integration_authorization: { path: path.basename(paths.g8b), receipt_digest: '' },
+    prepared_receipt: g8bSealed.prepared_receipt_ref,
+    mission_state: g8bSealed.mission_state_ref,
+    mission_terminal_receipt: g8bSealed.mission_terminal_receipt_ref,
+    campaign_terminal_receipt: g8bSealed.campaign_terminal_receipt_ref,
+    icc_terminal_receipt: g8bSealed.icc_terminal_receipt_ref,
+    mission_lineage_id: lineage,
+    candidate_sha: integration,
+    candidate_tree_sha: integrationTree,
+    candidate_ref: `refs/heads/${branch}`,
+    develop_sha: validation.G8B_DEVELOP_PREMERGE_SHA,
+    campaign_id: campaignId,
+  });
+  const expectG8b = (label, code, bodyOverrides = {}, bundleOverrides = {}, candidateArg = integration) => {
+    const body = { ...g8bBody, ...bodyOverrides };
+    const sealed = { ...body, receipt_digest: validation.canonicalDigest(body) };
+    fs.writeFileSync(paths.g8b, JSON.stringify(sealed));
+    const bundleForCase = {
+      ...validBundle(),
+      ...bundleOverrides,
+      g8b_integration_authorization: { path: path.basename(paths.g8b), receipt_digest: sealed.receipt_digest },
+      candidate_sha: bundleOverrides.candidate_sha || body.integration_candidate_sha,
+      candidate_tree_sha: bundleOverrides.candidate_tree_sha || body.integration_candidate_tree_sha,
+      candidate_ref: bundleOverrides.candidate_ref || body.integration_candidate_ref,
+      develop_sha: bundleOverrides.develop_sha || body.develop_sha,
+      campaign_id: bundleOverrides.campaign_id || body.campaign_id,
+    };
+    let caught = null;
+    try {
+      validation.validateG8bIntegrationAuthorization(
+        bundleForCase,
+        { path: paths.bundle, bundle: bundleForCase },
+        repoInfo,
+        source,
+        { candidate: candidateArg },
+        historical,
+      );
+    } catch (error) { caught = error; }
+    if (!caught || caught.code !== code) {
+      throw new Error(`${label}: expected ${code}, got ${caught && caught.code}`);
+    }
+  };
+  const tamperedIndex = path.join(temp, 'fixture-tampered-index');
+  const tamperedEnv = { ...process.env, GIT_INDEX_FILE: tamperedIndex };
+  execFileSync('git', ['-C', repo, 'read-tree', integrationTree], { env: tamperedEnv });
+  const tamperedDispatch = path.join(temp, 'dispatch-hetero-tampered.sh');
+  const dispatchBytes = execFileSync('git', [
+    '-C', repo, 'show', `${integration}:scripts/dispatch-hetero.sh`,
+  ], { encoding: 'utf8' });
+  fs.writeFileSync(tamperedDispatch, `${dispatchBytes}\n# preserved tokens but altered blob\n`);
+  const tamperedBlob = execFileSync('git', [
+    '-C', repo, 'hash-object', '-w', tamperedDispatch,
+  ], { encoding: 'utf8' }).trim();
+  execFileSync('git', [
+    '-C', repo, 'update-index', '--add', '--cacheinfo', `100755,${tamperedBlob},scripts/dispatch-hetero.sh`,
+  ], { env: tamperedEnv });
+  const tamperedTree = execFileSync('git', ['-C', repo, 'write-tree'], {
+    env: tamperedEnv, encoding: 'utf8',
+  }).trim();
+  const tamperedIntegration = execFileSync('git', [
+    '-C', repo, 'commit-tree', tamperedTree,
+    '-p', validation.G8B_PRODUCT_CANDIDATE_SHA, '-p', validation.G8B_DEVELOP_PREMERGE_SHA,
+  ], { input: 'tampered detached gate blob\n', encoding: 'utf8' }).trim();
+  const tamperedBranch = `${branch}-tampered`;
+  git(['update-ref', `refs/heads/${tamperedBranch}`, tamperedIntegration]);
+  expectG8b('tampered detached gate blob', 'G8B_INTEGRATION_GATE_INVALID', {
+    authorized_branch: tamperedBranch,
+    candidate_ref: `refs/heads/${tamperedBranch}`,
+    integration_candidate_ref: `refs/heads/${tamperedBranch}`,
+    integration_candidate_sha: tamperedIntegration,
+    integration_candidate_tree_sha: tamperedTree,
+  }, {
+    candidate_sha: tamperedIntegration,
+    candidate_tree_sha: tamperedTree,
+    candidate_ref: `refs/heads/${tamperedBranch}`,
+  }, tamperedIntegration);
+  fs.rmSync(tamperedIndex, { force: true });
+  const mirrorTamperedIndex = path.join(temp, 'fixture-mirror-tampered-index');
+  const mirrorTamperedEnv = { ...process.env, GIT_INDEX_FILE: mirrorTamperedIndex };
+  execFileSync('git', ['-C', repo, 'read-tree', integrationTree], { env: mirrorTamperedEnv });
+  const mirrorTamperedFile = path.join(temp, 'next-touch-validation-mirror-tampered.js');
+  const mirrorBytesForTamper = execFileSync('git', [
+    '-C', repo, 'show', `${integration}:platforms/codex/plugin/scripts/next-touch-validation.js`,
+  ], { encoding: 'utf8' });
+  fs.writeFileSync(mirrorTamperedFile, `${mirrorBytesForTamper}\n// mirror tamper\n`);
+  const mirrorTamperedBlob = execFileSync('git', [
+    '-C', repo, 'hash-object', '-w', mirrorTamperedFile,
+  ], { encoding: 'utf8' }).trim();
+  execFileSync('git', [
+    '-C', repo, 'update-index', '--add', '--cacheinfo',
+    `100644,${mirrorTamperedBlob},platforms/codex/plugin/scripts/next-touch-validation.js`,
+  ], { env: mirrorTamperedEnv });
+  const mirrorTamperedTree = execFileSync('git', ['-C', repo, 'write-tree'], {
+    env: mirrorTamperedEnv, encoding: 'utf8',
+  }).trim();
+  const mirrorTamperedIntegration = execFileSync('git', [
+    '-C', repo, 'commit-tree', mirrorTamperedTree,
+    '-p', validation.G8B_PRODUCT_CANDIDATE_SHA, '-p', validation.G8B_DEVELOP_PREMERGE_SHA,
+  ], { input: 'tampered validator mirror\n', encoding: 'utf8' }).trim();
+  const mirrorTamperedBranch = `${branch}-mirror-tampered`;
+  git(['update-ref', `refs/heads/${mirrorTamperedBranch}`, mirrorTamperedIntegration]);
+  expectG8b('tampered validator mirror', 'G8B_INTEGRATION_PARITY_INVALID', {
+    authorized_branch: mirrorTamperedBranch,
+    candidate_ref: `refs/heads/${mirrorTamperedBranch}`,
+    integration_candidate_ref: `refs/heads/${mirrorTamperedBranch}`,
+    integration_candidate_sha: mirrorTamperedIntegration,
+    integration_candidate_tree_sha: mirrorTamperedTree,
+  }, {
+    candidate_sha: mirrorTamperedIntegration,
+    candidate_tree_sha: mirrorTamperedTree,
+    candidate_ref: `refs/heads/${mirrorTamperedBranch}`,
+  }, mirrorTamperedIntegration);
+  fs.rmSync(mirrorTamperedIndex, { force: true });
+  const syntheticTreeMerge = execFileSync('git', [
+    '-C', repo, 'commit-tree', validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+    '-p', validation.G8B_PRODUCT_CANDIDATE_SHA, '-p', validation.G8B_DEVELOP_PREMERGE_SHA,
+  ], { input: 'synthetic b3 tree\n', encoding: 'utf8' }).trim();
+  const syntheticBranch = `${branch}-synthetic`;
+  git(['update-ref', `refs/heads/${syntheticBranch}`, syntheticTreeMerge]);
+  expectG8b('synthetic product-tree merge', 'G8B_INTEGRATION_SCOPE_INVALID', {
+    authorized_branch: syntheticBranch,
+    candidate_ref: `refs/heads/${syntheticBranch}`,
+    integration_candidate_ref: `refs/heads/${syntheticBranch}`,
+    integration_candidate_sha: syntheticTreeMerge,
+    integration_candidate_tree_sha: validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+  }, {
+    candidate_sha: syntheticTreeMerge,
+    candidate_tree_sha: validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+    candidate_ref: `refs/heads/${syntheticBranch}`,
+  }, syntheticTreeMerge);
+  expectG8b('cross integration tree', 'G8B_CANDIDATE_BINDING_MISMATCH', {
+    integration_candidate_tree_sha: validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+  });
+  expectG8b('cross integration ref', 'G8B_CANDIDATE_BINDING_MISMATCH', {
+    candidate_ref: 'refs/heads/develop',
+    integration_candidate_ref: 'refs/heads/develop',
+  });
+  expectG8b('cross develop sha', 'G8B_BINDING_MISMATCH', { develop_sha: validation.ADMISSION_BASE_SHA });
+  expectG8b('cross develop ref', 'G8B_BINDING_MISMATCH', { develop_ref: 'refs/heads/fixture-base' });
+  const productOnly = execFileSync('git', [
+    '-C', repo, 'commit-tree', integrationTree,
+    '-p', validation.G8B_DEVELOP_PREMERGE_SHA,
+  ], { input: 'develop-only integration\n', encoding: 'utf8' }).trim();
+  git(['update-ref', `refs/heads/${branch}-product-only`, productOnly]);
+  expectG8b('cross product ancestry', 'G8B_PRODUCT_ANCESTRY_INVALID', {
+    authorized_branch: `${branch}-product-only`,
+    candidate_ref: `refs/heads/${branch}-product-only`,
+    integration_candidate_ref: `refs/heads/${branch}-product-only`,
+    integration_candidate_sha: productOnly,
+    integration_candidate_tree_sha: integrationTree,
+  }, {
+    candidate_sha: productOnly,
+    candidate_tree_sha: integrationTree,
+    candidate_ref: `refs/heads/${branch}-product-only`,
+  }, productOnly);
+  const developOnly = execFileSync('git', [
+    '-C', repo, 'commit-tree', integrationTree,
+    '-p', validation.G8B_PRODUCT_CANDIDATE_SHA,
+  ], { input: 'product-only integration\n', encoding: 'utf8' }).trim();
+  git(['update-ref', `refs/heads/${branch}-develop-only`, developOnly]);
+  expectG8b('cross develop ancestry', 'G8B_DEVELOP_ANCESTRY_INVALID', {
+    authorized_branch: `${branch}-develop-only`,
+    candidate_ref: `refs/heads/${branch}-develop-only`,
+    integration_candidate_ref: `refs/heads/${branch}-develop-only`,
+    integration_candidate_sha: developOnly,
+    integration_candidate_tree_sha: integrationTree,
+  }, {
+    candidate_sha: developOnly,
+    candidate_tree_sha: integrationTree,
+    candidate_ref: `refs/heads/${branch}-develop-only`,
+  }, developOnly);
+  expectG8b('terminal candidate cross-bind', 'G8B_TERMINAL_BINDING_MISMATCH', {}, {
+    candidate_sha: validation.G8B_PRODUCT_CANDIDATE_SHA,
+  });
+  expectG8b('terminal tree cross-bind', 'G8B_TERMINAL_BINDING_MISMATCH', {}, {
+    candidate_tree_sha: validation.G8B_PRODUCT_CANDIDATE_TREE_SHA,
+  });
+  expectG8b('terminal ref cross-bind', 'G8B_TERMINAL_BINDING_MISMATCH', {}, {
+    candidate_ref: 'refs/heads/develop',
+  });
+  expectG8b('terminal digest cross-bind', 'G8B_TERMINAL_BINDING_MISMATCH', {
+    mission_terminal_receipt_digest: 'f'.repeat(64),
+  });
+  expectG8b('terminal campaign cross-bind', 'G8B_TERMINAL_BINDING_MISMATCH', {
+    campaign_id: `campaign-v1-${'f'.repeat(64)}`,
+  });
+
+  // Exercise the real integration transition with the fresh G8b candidate.
+  // The generic executor creates the authentic sealed merge receipt; the
+  // G8b validator then has to accept the integrated state and the executor
+  // must replay it as an idempotent no-op.
+  const integrationTarget = path.join(temp, 'g8b-integration-target');
+  git(['worktree', 'add', '-q', integrationTarget, 'develop']);
+  const integrationBundlePath = path.join(directory, 'integration-terminal.json');
+  const integrationBundle = {
+    candidate_ref: `refs/heads/${branch}`,
+    source_worktree: repo,
+    develop_sha: validation.G8B_DEVELOP_PREMERGE_SHA,
+    allowed_path_prefixes: [],
+    campaign_id: campaignId,
+    integration_state: 'reviewed_archived',
+    merge_receipt: null,
+  };
+  runtime.atomicWriteJson(integrationBundlePath, integrationBundle);
+  const integrationFrozen = { candidate: integration, candidateTree: integrationTree };
+  const integrationArgs = { integrate_worktree: integrationTarget };
+  const integrationPreflight = validation.validateIntegrationPreconditions(
+    integrationBundle,
+    integrationArgs,
+    repoInfo,
+    integrationFrozen,
+  );
+  const firstIntegration = validation.executeAuthorizedIntegration({
+    bundle: integrationBundle,
+    bundlePath: integrationBundlePath,
+    repoInfo,
+    frozen: integrationFrozen,
+    args: integrationArgs,
+    preconditions: integrationPreflight,
+  });
+  if (firstIntegration.status !== 'integrated'
+      || git(['rev-parse', 'refs/heads/develop']) !== integration) {
+    throw new Error('fresh G8b integration did not advance develop exactly once');
+  }
+  const integratedBundle = {
+    ...bundle,
+    source_worktree: repo,
+    allowed_path_prefixes: [],
+    integration_state: 'integrated',
+    merge_receipt: {
+      path: firstIntegration.receipt_path,
+      receipt_digest: firstIntegration.receipt.receipt_digest,
+    },
+  };
+  fs.writeFileSync(paths.g8b, JSON.stringify(g8bSealed));
+  const integratedChecked = validation.validateG8bIntegrationAuthorization(
+    integratedBundle,
+    { path: paths.bundle, bundle: integratedBundle },
+    repoInfo,
+    source,
+    { candidate: integration },
+    historical,
+  );
+  if (!integratedChecked || integratedChecked.integrationCandidate !== integration) {
+    throw new Error('integrated G8b authorization did not validate the authentic merge receipt');
+  }
+  const beforeReplayHead = git(['rev-parse', 'HEAD']);
+  const replay = validation.executeAuthorizedIntegration({
+    bundle: integratedBundle,
+    bundlePath: paths.bundle,
+    repoInfo,
+    frozen: integrationFrozen,
+    args: integrationArgs,
+  });
+  if (replay.status !== 'already_integrated'
+      || git(['rev-parse', 'HEAD']) !== beforeReplayHead
+      || execFileSync('git', ['-C', integrationTarget, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() !== integration) {
+    throw new Error('integrated G8b rerun was not an idempotent no-op');
+  }
+  git(['update-ref', 'refs/heads/develop', validation.G8B_DEVELOP_PREMERGE_SHA]);
+  let developDrift = null;
+  try {
+    validation.validateG8bIntegrationAuthorization(
+      integratedBundle,
+      { path: paths.bundle, bundle: integratedBundle },
+      repoInfo,
+      source,
+      { candidate: integration },
+      historical,
+    );
+  } catch (error) { developDrift = error; }
+  if (!developDrift || developDrift.code !== 'G8B_INTEGRATED_BINDING_INVALID') {
+    throw new Error(`integrated develop drift was accepted: ${developDrift && developDrift.code}`);
+  }
+  git(['update-ref', 'refs/heads/develop', integration]);
+  const authenticReceipt = JSON.parse(fs.readFileSync(firstIntegration.receipt_path, 'utf8'));
+  const wrongTargetReceiptBody = {
+    ...authenticReceipt,
+    edges: authenticReceipt.edges.map((edge) => ({ ...edge, target_ref: 'refs/heads/not-develop' })),
+  };
+  delete wrongTargetReceiptBody.receipt_digest;
+  const wrongTargetReceipt = {
+    ...wrongTargetReceiptBody,
+    receipt_digest: validation.canonicalDigest(wrongTargetReceiptBody),
+  };
+  const wrongTargetReceiptPath = path.join(directory, 'g8b-wrong-target-merge.json');
+  fs.writeFileSync(wrongTargetReceiptPath, JSON.stringify(wrongTargetReceipt));
+  const wrongTargetBundle = {
+    ...integratedBundle,
+    merge_receipt: {
+      path: wrongTargetReceiptPath,
+      receipt_digest: wrongTargetReceipt.receipt_digest,
+    },
+  };
+  let wrongTarget = null;
+  try {
+    validation.validateG8bIntegrationAuthorization(
+      wrongTargetBundle,
+      { path: paths.bundle, bundle: wrongTargetBundle },
+      repoInfo,
+      source,
+      { candidate: integration },
+      historical,
+    );
+  } catch (error) { wrongTarget = error; }
+  if (!wrongTarget || wrongTarget.code !== 'G8B_INTEGRATED_BINDING_INVALID') {
+    throw new Error(`integrated wrong target was accepted: ${wrongTarget && wrongTarget.code}`);
+  }
+  console.log('G8b integrated rerun, authentic receipt binding, and drift/target guards passed');
+  fs.writeFileSync(paths.g8b, JSON.stringify(g8bSealed));
+  fs.rmSync(directory, { recursive: true, force: true });
+  console.log('G8b fresh runtime-positive and integration binding negatives passed');
+} finally {
+  fs.rmSync(temp, { recursive: true, force: true });
+}
+NODE
+assert_exit_code "$?" "0" "fresh G8b validator accepts normalized Mission/ICC runtime integration"
 
 node - "$REPO_ROOT" <<'NODE'
 'use strict';
@@ -418,6 +1304,26 @@ try {
   rejected = new Set(['MISSION_NOT_READY', 'MISSION_STATE_DIGEST_MISMATCH']).has(error.code);
 }
 if (!rejected) throw new Error('non-terminal Mission state was accepted as terminal evidence');
+const legacyDigestBundle = {
+  ...bundle,
+  mission_state: {
+    path: bundle.mission_state,
+    receipt_digest: '0'.repeat(64),
+  },
+};
+let legacyDigestError = null;
+try {
+  validation.validatePreparedAndMissionState(
+    legacyDigestBundle,
+    { path: path.join(missionRoot, 'terminal.json') },
+    repoInfo,
+    auth,
+    {},
+  );
+} catch (error) { legacyDigestError = error; }
+if (!legacyDigestError || legacyDigestError.code !== 'RECEIPT_REF_DIGEST_INVALID') {
+  throw new Error(`legacy Mission state receipt-digest ref did not use legacy resolver: ${legacyDigestError && legacyDigestError.code}`);
+}
 NODE
 assert_exit_code "$?" "0" "canonical prepared/state terminal binding rejects non-ready state"
 
@@ -455,6 +1361,202 @@ catch (error) { escaped = error.code === 'AUTHORITY_PATH_ESCAPE'; }
 if (!escaped) throw new Error('ICC ledger path escaped authority store');
 NODE
 assert_exit_code "$?" "0" "ICC follow-up and ledger path reject"
+
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const validation = require(path.join(root, 'scripts/next-touch-validation'));
+const runtime = require(path.join(root, 'src/mission/runtime'));
+const campaignCli = require(path.join(root, 'src/campaign/cli'));
+const repoInfo = runtime.canonicalRepository(root);
+const ledgerPath = path.join(repoInfo.common, 'autopilot/implementation-campaign.jsonl');
+const ledgerLines = fs.readFileSync(ledgerPath, 'utf8').trim().split('\n');
+if (ledgerLines.length < 2) throw new Error('ICC ledger fixture is not multi-line JSONL');
+const rows = campaignCli.loadRows(ledgerPath);
+let terminal = null;
+for (const campaignId of [...new Set(rows.map((row) => row && row.run_id).filter(Boolean))]) {
+  try {
+    const projection = campaignCli.projectCampaign(rows, campaignId);
+    if (projection.state.phase === 'TERMINAL_READY') {
+      terminal = { campaignId, projection };
+      break;
+    }
+  } catch (_error) {
+    // Ignore unrelated or intentionally incomplete campaigns in the shared ledger.
+  }
+}
+if (!terminal) throw new Error('ICC ledger fixture has no terminal-ready campaign');
+const { campaignId, projection } = terminal;
+const bundlePath = path.join(repoInfo.common, 'autopilot', 'next-touch-ledger-test-bundle.json');
+const iccTerminal = { lifecycle_receipt_ref: projection.lifecycle_receipt_ref };
+const frozen = {
+  candidate: projection.candidate_reference.commit,
+  candidateTree: projection.candidate_reference.tree_sha,
+  review: projection.candidate_reference.base,
+};
+const validateLedger = (ledgerRef) => validation.validateIccLedger(
+  { ledger_path: ledgerRef, campaign_id: campaignId },
+  { path: bundlePath },
+  repoInfo,
+  iccTerminal,
+  frozen,
+);
+const checked = validateLedger(ledgerPath);
+if (checked.campaignId !== campaignId
+    || checked.ledgerRef.file !== ledgerPath
+    || checked.projection.state.phase !== 'TERMINAL_READY') {
+  throw new Error('multi-line ICC JSONL ledger did not pass path-only validation');
+}
+let escaped = null;
+try {
+  validateLedger('/tmp/next-touch-ledger-forbidden');
+} catch (error) { escaped = error; }
+if (!escaped || escaped.code !== 'AUTHORITY_PATH_ESCAPE') {
+  throw new Error(`ICC ledger path escape was accepted: ${escaped && escaped.code}`);
+}
+let extraSchema = null;
+try {
+  validateLedger({ path: ledgerPath, receipt_digest: '0'.repeat(64) });
+} catch (error) { extraSchema = error; }
+if (!extraSchema || extraSchema.code !== 'AUTHORITY_INVALID') {
+  throw new Error(`ICC ledger extra schema was accepted: ${extraSchema && extraSchema.code}`);
+}
+let missing = null;
+try {
+  validateLedger(path.join(repoInfo.common, 'autopilot', 'missing-ledger.jsonl'));
+} catch (error) { missing = error; }
+if (!missing || missing.code !== 'ICC_AUTHORITY_MISSING') {
+  throw new Error(`missing ICC ledger was accepted: ${missing && missing.code}`);
+}
+NODE
+assert_exit_code "$?" "0" "ICC JSONL ledger resolver accepts multiline ledger and rejects invalid refs"
+
+node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const root = process.argv[2];
+const validation = require(path.join(root, 'scripts/next-touch-validation'));
+const runtime = require(path.join(root, 'src/mission/runtime'));
+const repoInfo = runtime.canonicalRepository(root);
+const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'next-touch-verifier-'));
+try {
+  const campaignId = 'campaign-v1-' + 'c'.repeat(64);
+  const candidate = 'd'.repeat(40);
+  const candidateTree = 'a'.repeat(40);
+  const lineage = 'lineage-v1-' + 'f'.repeat(64);
+  const request = {
+    tree_sha: candidateTree,
+    argv_hash: validation.canonicalDigest(['/bin/sh', '-c', 'true']),
+    env_fingerprint: 'e'.repeat(64),
+  };
+  request.request_digest = validation.canonicalDigest(request);
+  const receiptBody = {
+    schema_version: 1,
+    artifact_type: 'implementation_campaign_verification',
+    campaign_id: campaignId,
+    tree_sha: request.tree_sha,
+    argv_hash: request.argv_hash,
+    env_fingerprint: request.env_fingerprint,
+    request_digest: request.request_digest,
+    verdict: 'GREEN',
+    exit_status: 0,
+    writer_lease_closed: true,
+    detached_checkout: true,
+    runner_argv_attested: true,
+    writer_fence_digest: 'f'.repeat(64),
+    checkout_attestation_digest: '1'.repeat(64),
+    stdout_digest: '2'.repeat(64),
+    stderr_digest: '3'.repeat(64),
+    started_at: '2026-08-06T00:00:00.000Z',
+    ended_at: '2026-08-06T00:00:01.000Z',
+  };
+  const receipt = {
+    ...receiptBody,
+    receipt_digest: validation.canonicalDigest(receiptBody),
+  };
+  const checkedReceipt = validation.validateVerificationReceipt(receipt, candidateTree, campaignId);
+  if (checkedReceipt.receipt_digest !== receipt.receipt_digest) {
+    throw new Error('canonical GREEN verifier receipt lost its authenticated digest');
+  }
+  const receiptPath = path.join(directory, 'verification.json');
+  fs.writeFileSync(receiptPath, JSON.stringify(receipt));
+  const attestationBody = {
+    schema_version: 1,
+    artifact_type: 'next_touch_verifier_attestation',
+    repo_identity: repoInfo.repo_identity,
+    mission_lineage_id: lineage,
+    campaign_id: campaignId,
+    base_sha: validation.REVIEW_BASE_SHA,
+    candidate_sha: candidate,
+    candidate_tree_sha: candidateTree,
+    roster_tuple: 'agy/Gemini 3.5 Flash (High)/high/google',
+    actor_id: 'verifier',
+    session_id: 'verifier-session',
+    runner_version: 'test',
+    provider_version: 'test',
+    command: 'true',
+    command_argv: ['true'],
+    command_digest: validation.canonicalDigest({ command: 'true', argv: ['true'] }),
+    result_digest: validation.canonicalDigest({
+      receipt_digest: receipt.receipt_digest,
+      verdict: receipt.verdict,
+      exit_status: receipt.exit_status,
+      stdout_digest: receipt.stdout_digest,
+      stderr_digest: receipt.stderr_digest,
+    }),
+    receipt_ref: { path: receiptPath, receipt_digest: receipt.receipt_digest },
+  };
+  const attestation = {
+    ...attestationBody,
+    receipt_digest: validation.canonicalDigest(attestationBody),
+  };
+  const checkedAttestation = validation.validateVerifierAttestation(
+    attestation,
+    candidate,
+    candidateTree,
+    campaignId,
+    repoInfo,
+    { mission_lineage_id: lineage },
+    { review: validation.REVIEW_BASE_SHA },
+    { path: path.join(directory, 'bundle.json') },
+  );
+  if (checkedAttestation.receipt_digest !== receipt.receipt_digest) {
+    throw new Error('verifier attestation did not bind the canonical GREEN receipt digest');
+  }
+  const expectReceiptFailure = (value, code, label) => {
+    let caught = null;
+    try { validation.validateVerificationReceipt(value, candidateTree, campaignId); }
+    catch (error) { caught = error; }
+    if (!caught || caught.code !== code) {
+      throw new Error(`${label}: expected ${code}, got ${caught && caught.code}`);
+    }
+  };
+  expectReceiptFailure(
+    { ...receipt, receipt_digest: '0'.repeat(64) },
+    'RECEIPT_DIGEST_INVALID',
+    'tampered verifier receipt digest',
+  );
+  const badVerdictBody = { ...receipt };
+  delete badVerdictBody.receipt_digest;
+  expectReceiptFailure(
+    { ...badVerdictBody, verdict: 'RED', receipt_digest: validation.canonicalDigest({ ...badVerdictBody, verdict: 'RED' }) },
+    'VERIFIER_RECEIPT_INVALID',
+    'tampered verifier verdict',
+  );
+  const badRequestBody = { ...receipt };
+  expectReceiptFailure(
+    { ...badRequestBody, request_digest: '4'.repeat(64) },
+    'RECEIPT_DIGEST_INVALID',
+    'tampered verifier request',
+  );
+} finally {
+  fs.rmSync(directory, { recursive: true, force: true });
+}
+NODE
+assert_exit_code "$?" "0" "canonical GREEN verifier receipt preserves digest and rejects tampering"
 
 node - "$REPO_ROOT" <<'NODE'
 'use strict';

@@ -18,6 +18,7 @@ const verification = require('../src/engine/campaign-verification');
 const composition = require('../src/engine/campaign-composition');
 const mergeIntent = require('../src/status/merge-intent');
 const mergeExecutor = require('../src/merge/cli');
+const { normalizeTaskAuthorityEnvelope } = require('../src/engine/owner-kernel/task-authority');
 
 const ADMISSION_BASE_SHA = 'f6805529bdca4cca76f334d8c82c8f2bf141aaf8';
 const REVIEW_BASE_SHA = '1f9c53f4f070b152950a4115660026c4bb4fbede';
@@ -25,6 +26,68 @@ const D8_EVALUATED_SHA = '746f22338cfc7078acade53b143fea2d389dedd8';
 const D8_PUBLICATION_SHA = 'c43370dd3df0918007fa35afe48f407124298617';
 const D8_REPORT_PATH = '.autopilot/evidence/grok-implementer-ab.json';
 const D6_REPORT_PATH = '.autopilot/evidence/hook-multiplexer-benchmark.json';
+const G8B_PRODUCT_CANDIDATE_SHA = 'b3dd078ae259843c1708eac69755a98b8fa20d5d';
+const G8B_PRODUCT_CANDIDATE_TREE_SHA = 'a8aaa64d8f086141fd4814fc54bc745b3420c489';
+const G8B_DEVELOP_PREMERGE_SHA = '6dfd93f409128f53bccd39cac1d2d66eb9f339d6';
+const G8B_INTEGRATION_ALLOWED_PATHS = Object.freeze([
+  'scripts/next-touch-validation.js',
+  'platforms/codex/plugin/scripts/next-touch-validation.js',
+  'hooks/tests/next-touch-validation.test.sh',
+  'scripts/dispatch-hetero.sh',
+  'platforms/codex/plugin/scripts/dispatch-hetero.sh',
+  'scripts/dispatch-review.sh',
+  'platforms/codex/plugin/scripts/dispatch-review.sh',
+  'hooks/tests/dispatch-detached-campaign-authority.test.sh',
+]);
+const G8B_INTEGRATION_GATE_BLOBS = Object.freeze({
+  'hooks/tests/dispatch-detached-campaign-authority.test.sh': '100755 blob cd60b9187a3424f3eb231ef9fc59ffcc817c95f4',
+  'scripts/dispatch-hetero.sh': '100755 blob 922b0dc26f51f9850e2f9c67fe10ec976a916d1c',
+  'platforms/codex/plugin/scripts/dispatch-hetero.sh': '100755 blob 922b0dc26f51f9850e2f9c67fe10ec976a916d1c',
+  'scripts/dispatch-review.sh': '100755 blob 38085c6719f87520a0e8491d87b215f266c88476',
+  'platforms/codex/plugin/scripts/dispatch-review.sh': '100755 blob 38085c6719f87520a0e8491d87b215f266c88476',
+});
+const G8B_ARCHIVE_AUTH_SHA256 = '3266fb2c98133e788e23eec3e261a902c40529e0363ece2b12e01c9e31a338ba';
+const G8B_ARCHIVE_PLAN_SHA256 = 'd61fa9da8d6e490b7712cd27248732ac4d9bfd46ad3be8d29c8b2a285f736f2b';
+const G8B_ARCHIVE_RUBRIC_SHA256 = '16ca0694ed6edbcfcb55b471e3a0da28bc81d04a246901105c1f9d4f1b4c0975';
+const G8B_BLOCKED_LINEAGES = Object.freeze(new Set([
+  'lineage-v1-7d89f8d57856fb7f31c7ee0f97b25aba28faccabdd7b89303c4804359c08da51',
+  'lineage-v1-1393a4fbd793d91d7056e0e603b3055e6ec6b3622fb61339289834a99e0e6391',
+]));
+const G8B_BLOCKED_ADOPTION_KEYS = Object.freeze(new Set([
+  '7d89f8d57856fb7f31c7ee0f97b25aba28faccabdd7b89303c4804359c08da51',
+  '7e8e6806aee84794b0283f27a1f0b04c47919338d97229242ced28ad891258ee',
+  '1393a4fbd793d91d7056e0e603b3055e6ec6b3622fb61339289834a99e0e6391',
+]));
+const G8B_BLOCKED_TASK_AUTHORITY_IDS = Object.freeze(new Set([
+  '445cf90ec42db3f4f626936884aa2957f1023d1da378c18ec60ce5d315d787f9',
+  '40de57c4c243f27c470ec798bca4e745c9c6f1fb5a68cc948adea425bbcd0f2a',
+]));
+const G8B_BLOCKED_BRANCHES = Object.freeze(new Set([
+  'mission/7d89f8d57856/next-touch-debt-retirement-a4',
+  'mission/7e8e6806aee8/next-touch-debt-retirement-a5',
+]));
+const G8B_BLOCKED_TICKET_PATTERNS = Object.freeze([
+  /^mission-7d89f8d57856(?:-|$)/u,
+  /^mission-7e8e6806aee8(?:-|$)/u,
+  /^mission-1393a4fbd793(?:-|$)/u,
+]);
+const G8B_INTEGRATION_AUTH_KEYS = Object.freeze([
+  'schema_version', 'artifact_type', 'authority_mode', 'repo_identity', 'ticket', 'project',
+  'graph_node_id', 'authorized_branch', 'candidate_ref', 'mission_lineage_id', 'adoption_key',
+  'task_authority_id', 'mission_policy_digest', 'mission_graph_digest', 'policy_hash',
+  'source_plan_path', 'source_rubric_path', 'source_plan_sha256', 'source_rubric_sha256',
+  'admission_base_sha', 'mission_claim_base_sha', 'review_base_sha',
+  'product_candidate_sha', 'product_candidate_tree_sha',
+  'integration_candidate_sha', 'integration_candidate_tree_sha', 'integration_candidate_ref',
+  'develop_ref', 'develop_sha', 'd8_evaluated_sha', 'd8_publication_sha', 'd8_report_path',
+  'd8_report_sha256', 'archive_plan_path', 'archive_rubric_path',
+  'historical_archive_authorization_path', 'historical_archive_authorization_sha256',
+  'historical_archive_authorization_digest', 'task_authority_ref', 'prepared_receipt_ref',
+  'mission_state_ref', 'mission_terminal_receipt_ref', 'campaign_terminal_receipt_ref',
+  'icc_terminal_receipt_ref', 'mission_terminal_receipt_digest',
+  'campaign_terminal_receipt_digest', 'icc_terminal_receipt_digest', 'claim_id',
+  'claim_binding_digest', 'mission_campaign_id', 'campaign_id', 'roster', 'receipt_digest',
+]);
 const FROZEN_EVIDENCE_SHA256 = Object.freeze({
   [D8_REPORT_PATH]: '804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b',
   [D6_REPORT_PATH]: '2dda66ea4e3347d940eb1d156baa592c5854ce7be063af633937357802ad093d',
@@ -58,7 +121,7 @@ const TERMINAL_BUNDLE_KEYS = Object.freeze([
   'campaign_terminal_receipt', 'icc_terminal_receipt', 'verification_receipts', 'review_receipts',
   'final_panel_receipt', 'ledger_path', 'campaign_id', 'develop_sha', 'candidate_ref',
   'source_worktree', 'allowed_path_prefixes', 'min_panel_size', 'integration_state',
-  'merge_receipt', 'd8_publication_rebind_receipt',
+  'merge_receipt', 'd8_publication_rebind_receipt', 'g8b_integration_authorization',
 ]);
 const TERMINAL_BUNDLE_REQUIRED_KEYS = Object.freeze([
   'schema_version', 'artifact_type', 'repo_identity', 'mission_lineage_id',
@@ -68,7 +131,8 @@ const TERMINAL_BUNDLE_REQUIRED_KEYS = Object.freeze([
   'campaign_terminal_receipt', 'verification_receipts', 'review_receipts',
   'final_panel_receipt', 'ledger_path', 'campaign_id', 'icc_terminal_receipt',
   'develop_sha', 'candidate_ref', 'source_worktree', 'allowed_path_prefixes',
-  'integration_state', 'merge_receipt', 'd8_publication_rebind_receipt', 'min_panel_size',
+  'integration_state', 'merge_receipt', 'd8_publication_rebind_receipt',
+  'g8b_integration_authorization', 'min_panel_size',
 ]);
 const SHA256 = /^[0-9a-f]{64}$/u;
 const GIT_OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
@@ -741,7 +805,7 @@ function runCandidateEvidenceGates(repo, candidate, bundle, candidateTree) {
   requireCleanIntegrationWorktree(source, 'candidate evidence worktree');
 }
 
-function validateTerminalIdentity(args, repoInfo, authorization, source, loaded) {
+function validateTerminalIdentity(args, repoInfo, authorization, source, loaded, productCandidateOverride = null) {
   const { bundle } = loaded;
   if (bundle.repo_identity !== repoInfo.repo_identity
       || bundle.mission_lineage_id !== authorization.mission_lineage_id) {
@@ -768,6 +832,7 @@ function validateTerminalIdentity(args, repoInfo, authorization, source, loaded)
   }
   const candidate = gitObject(repoInfo.repo, candidateArg);
   if (candidate !== candidateArg) fail('CANDIDATE_BINDING_INVALID', 'candidate SHA is not Git truth');
+  const productCandidate = productCandidateOverride || candidate;
   const candidateTree = gitText(repoInfo.repo, [`rev-parse`, `${candidate}^{tree}`]);
   if (!GIT_OID.test(bundle.candidate_tree_sha || '') || bundle.candidate_tree_sha !== candidateTree) {
     fail('CANDIDATE_TREE_MISMATCH', 'terminal bundle candidate tree does not match Git');
@@ -785,11 +850,11 @@ function validateTerminalIdentity(args, repoInfo, authorization, source, loaded)
   }
   assertAncestor(repoInfo.repo, admission, candidate, 'ADMISSION_BASE_ANCESTRY_INVALID');
   assertAncestor(repoInfo.repo, review, candidate, 'REVIEW_BASE_ANCESTRY_INVALID');
-  const d8 = validateD8Publication(repoInfo.repo, candidate);
+  const d8 = validateD8Publication(repoInfo.repo, productCandidate);
   if (d8.report_sha256 !== FROZEN_EVIDENCE_SHA256[D8_REPORT_PATH]) {
     fail('D8_REPORT_INVALID', 'frozen D8 publication report digest is not the admitted evidence');
   }
-  assertFrozenEvidenceBlob(repoInfo.repo, candidate, D8_REPORT_PATH, 'D8 report');
+  assertFrozenEvidenceBlob(repoInfo.repo, productCandidate, D8_REPORT_PATH, 'D8 report');
   for (const [relative, label] of [
     [D6_REPORT_PATH, 'D6 report'],
     ['scripts/validate-hook-multiplexer-benchmark.js', 'D6 validator'],
@@ -797,7 +862,7 @@ function validateTerminalIdentity(args, repoInfo, authorization, source, loaded)
     ['scripts/validate-grok-implementer-ab.js', 'D8 validator'],
     ['evals/grok-implementer-ab/seed.json', 'D8 seed'],
     ['evals/grok-implementer-ab/tasks.json', 'D8 tasks'],
-  ]) assertFrozenEvidenceBlob(repoInfo.repo, candidate, relative, label);
+  ]) assertFrozenEvidenceBlob(repoInfo.repo, productCandidate, relative, label);
   runCandidateEvidenceGates(repoInfo.repo, candidate, bundle, candidateTree);
   return { bundle, candidate, candidateTree, admission, review, d8 };
 }
@@ -827,9 +892,425 @@ function resolveAuthorityRef(value, label, repoInfo, bundlePath) {
   return { file, value: loaded, expectedDigest };
 }
 
+function resolveIccLedgerRef(value, repoInfo, bundlePath) {
+  if (typeof value !== 'string' || value.length === 0) {
+    fail('AUTHORITY_INVALID', 'ICC campaign ledger must be a path');
+  }
+  const file = assertAuthorityPath(
+    path.isAbsolute(value) ? value : path.resolve(path.dirname(bundlePath), value),
+    repoInfo,
+    'ICC campaign ledger',
+  );
+  if (!fs.existsSync(file)) fail('ICC_AUTHORITY_MISSING', `ICC campaign ledger is missing: ${file}`);
+  let stat;
+  try { stat = fs.statSync(file); } catch (error) {
+    fail('ICC_AUTHORITY_INVALID', `ICC campaign ledger cannot be inspected: ${error.message}`);
+  }
+  if (!stat.isFile()) fail('ICC_AUTHORITY_INVALID', 'ICC campaign ledger must be a regular file');
+  return { file };
+}
+
+function resolveG8bSealedRef(value, label, repoInfo, bundlePath) {
+  assertExactKeys(value, ['path', 'receipt_digest'], `${label} reference`);
+  assertDigest(value.receipt_digest, `${label} reference receipt_digest`);
+  const file = assertAuthorityPath(
+    path.isAbsolute(value.path)
+      ? value.path
+      : path.resolve(path.dirname(bundlePath), value.path),
+    repoInfo,
+    label,
+  );
+  if (!fs.existsSync(file)) fail('G8B_AUTHORITY_MISSING', `${label} is missing: ${file}`);
+  const loaded = readJson(file, label);
+  if (loaded.receipt_digest !== value.receipt_digest) {
+    fail('G8B_RECEIPT_BINDING_MISMATCH', `${label} reference digest does not match the receipt`);
+  }
+  validateSealedDigest(loaded, label);
+  return { file, value: loaded };
+}
+
+function resolveG8bTaskAuthorityRef(value, repoInfo, bundlePath) {
+  assertExactKeys(value, ['path', 'task_authority_id'], 'fresh TaskAuthority reference');
+  if (!SHA256.test(value.task_authority_id || '')) {
+    fail('G8B_TASK_AUTHORITY_INVALID', 'fresh TaskAuthority reference id is invalid');
+  }
+  const file = assertAuthorityPath(
+    path.isAbsolute(value.path)
+      ? value.path
+      : path.resolve(path.dirname(bundlePath), value.path),
+    repoInfo,
+    'fresh TaskAuthority',
+  );
+  if (!fs.existsSync(file)) fail('G8B_AUTHORITY_MISSING', `fresh TaskAuthority is missing: ${file}`);
+  const valueOnDisk = readJson(file, 'fresh TaskAuthority');
+  let envelope;
+  try { envelope = normalizeTaskAuthorityEnvelope(valueOnDisk); }
+  catch (error) {
+    fail('G8B_TASK_AUTHORITY_INVALID', error.message || String(error));
+  }
+  if (envelope.task_authority_id !== value.task_authority_id) {
+    fail('G8B_TASK_AUTHORITY_BINDING_MISMATCH', 'fresh TaskAuthority id differs from its sealed reference');
+  }
+  return { file, value: envelope };
+}
+
+function resolveG8bStateRef(value, repoInfo, bundlePath) {
+  assertExactKeys(value, ['path', 'state_hash'], 'fresh Mission state reference');
+  assertDigest(value.state_hash, 'fresh Mission state reference state_hash');
+  const file = assertAuthorityPath(
+    path.isAbsolute(value.path)
+      ? value.path
+      : path.resolve(path.dirname(bundlePath), value.path),
+    repoInfo,
+    'fresh Mission state',
+  );
+  if (!fs.existsSync(file)) fail('G8B_AUTHORITY_MISSING', `fresh Mission state is missing: ${file}`);
+  const state = readJson(file, 'fresh Mission state');
+  try { mission.validateMissionState(state); }
+  catch (error) { fail('G8B_MISSION_STATE_INVALID', error.message || String(error)); }
+  if (mission.stateHash(state) !== value.state_hash) {
+    fail('G8B_MISSION_STATE_BINDING_MISMATCH', 'fresh Mission state hash differs from its sealed reference');
+  }
+  return { file, value: state };
+}
+
+function resolveMissionStateRef(value, repoInfo, bundlePath) {
+  // A state_hash-bearing reference is the fresh G8b schema and must not fall
+  // back to the legacy receipt-digest resolver when mixed or extra keys are
+  // present. Legacy strings and exact {path,receipt_digest} references retain
+  // their existing resolver and failure semantics.
+  if (value && typeof value === 'object' && !Array.isArray(value)
+      && Object.prototype.hasOwnProperty.call(value, 'state_hash')) {
+    return resolveG8bStateRef(value, repoInfo, bundlePath);
+  }
+  return resolveAuthorityRef(value, 'Mission state', repoInfo, bundlePath);
+}
+
+function g8bRefEqual(left, right) {
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+function g8bFreshAuthorizationView(value) {
+  return {
+    schema_version: 1,
+    ticket: value.ticket,
+    project: value.project,
+    base_sha: value.mission_claim_base_sha,
+    branch: value.authorized_branch,
+    mission_lineage_id: value.mission_lineage_id,
+    mission_policy_digest: value.mission_policy_digest,
+    mission_graph_digest: value.mission_graph_digest,
+    graph_node_id: value.graph_node_id,
+    roster: value.roster,
+    admitted_headings: Array.from({ length: 14 }, (_, index) => `A${String(index + 1).padStart(2, '0')}`),
+    deliverables: ['D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'],
+    status: 'fresh_non_successor',
+  };
+}
+
+function validateG8bIntegrationAuthorization(bundle, loaded, repoInfo, source, args, historicalAuthorization) {
+  if (!bundle.g8b_integration_authorization
+      || typeof bundle.g8b_integration_authorization !== 'object'
+      || Array.isArray(bundle.g8b_integration_authorization)) {
+    fail('G8B_AUTHORITY_MISSING', 'fresh G8b integration authorization is required');
+  }
+  if (args.authorization || args.prepared) {
+    fail('G8B_CLI_BYPASS_REJECTED', 'fresh G8b authority must be selected by the sealed terminal bundle');
+  }
+  const ref = resolveG8bSealedRef(
+    bundle.g8b_integration_authorization,
+    'fresh G8b integration authorization',
+    repoInfo,
+    loaded.path,
+  );
+  try {
+    assertExactKeys(ref.value, G8B_INTEGRATION_AUTH_KEYS, 'fresh G8b integration authorization');
+  } catch (error) {
+    fail('G8B_SCHEMA_INVALID', error.message || String(error));
+  }
+  const value = validateSealedDigest(ref.value, 'fresh G8b integration authorization');
+  if (value.schema_version !== 1
+      || value.artifact_type !== 'g8b_integration_authorization'
+      || value.authority_mode !== 'fresh_non_successor'
+      || value.repo_identity !== repoInfo.repo_identity
+      || value.project !== 'next-touch-debt-retirement'
+      || value.graph_node_id !== 'next-touch-debt-retirement'
+      || !/^mission-[A-Za-z0-9._/-]+$/u.test(value.ticket || '')
+      || G8B_BLOCKED_TICKET_PATTERNS.some((pattern) => pattern.test(value.ticket || ''))
+      || !LINEAGE.test(value.mission_lineage_id || '')
+      || !SHA256.test(value.adoption_key || '')
+      || !SHA256.test(value.task_authority_id || '')
+      || !SHA256.test(value.mission_policy_digest || '')
+      || !SHA256.test(value.mission_graph_digest || '')
+      || !SHA256.test(value.policy_hash || '')
+      || JSON.stringify(value.roster) !== JSON.stringify(EXPECTED_ROSTER)
+      || !/^mission\/[A-Za-z0-9._/-]+$/u.test(value.authorized_branch || '')
+      || !HEAD_REF.test(value.candidate_ref || '')
+      || !GIT_OID.test(value.product_candidate_sha || '')
+      || !GIT_OID.test(value.product_candidate_tree_sha || '')
+      || !GIT_OID.test(value.integration_candidate_sha || '')
+      || !GIT_OID.test(value.integration_candidate_tree_sha || '')
+      || !HEAD_REF.test(value.integration_candidate_ref || '')
+      || G8B_BLOCKED_LINEAGES.has(value.mission_lineage_id)
+      || G8B_BLOCKED_ADOPTION_KEYS.has(value.adoption_key)
+      || G8B_BLOCKED_TASK_AUTHORITY_IDS.has(value.task_authority_id)
+      || G8B_BLOCKED_BRANCHES.has(value.authorized_branch)) {
+    fail('G8B_AUTHORITY_INVALID', 'fresh G8b authority identity or mode is invalid');
+  }
+  if (value.candidate_ref !== `refs/heads/${value.authorized_branch}`) {
+    fail('G8B_CANDIDATE_BINDING_MISMATCH', 'fresh G8b branch and candidate ref differ');
+  }
+  if (value.source_plan_path !== PLAN_PATH
+      || value.source_rubric_path !== RUBRIC_PATH
+      || value.archive_plan_path !== `${ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.md`
+      || value.archive_rubric_path !== `${ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.rubric.md`
+      || value.historical_archive_authorization_path !== ARCHIVE_AUTHORIZATION_PATH
+      || value.d8_report_path !== D8_REPORT_PATH
+      || value.admission_base_sha !== ADMISSION_BASE_SHA
+      || value.mission_claim_base_sha !== REVIEW_BASE_SHA
+      || value.review_base_sha !== REVIEW_BASE_SHA
+      || !GIT_OID.test(value.mission_claim_base_sha || '')
+      || value.d8_evaluated_sha !== D8_EVALUATED_SHA
+      || value.d8_publication_sha !== D8_PUBLICATION_SHA
+      || value.develop_ref !== 'refs/heads/develop'
+      || value.develop_sha !== G8B_DEVELOP_PREMERGE_SHA
+      || !GIT_OID.test(value.develop_sha || '')
+      || !SHA256.test(value.source_plan_sha256 || '')
+      || !SHA256.test(value.source_rubric_sha256 || '')
+      || value.source_plan_sha256 !== source.planSha
+      || value.source_rubric_sha256 !== source.rubricSha
+      || value.source_plan_sha256 !== G8B_ARCHIVE_PLAN_SHA256
+      || value.source_rubric_sha256 !== G8B_ARCHIVE_RUBRIC_SHA256
+      || value.product_candidate_sha !== G8B_PRODUCT_CANDIDATE_SHA
+      || value.product_candidate_tree_sha !== G8B_PRODUCT_CANDIDATE_TREE_SHA
+      || value.integration_candidate_ref !== value.candidate_ref
+      || value.integration_candidate_ref !== `refs/heads/${value.authorized_branch}`
+      || value.integration_candidate_sha !== args.candidate
+      || !SHA256.test(value.d8_report_sha256 || '')
+      || value.d8_report_sha256 !== FROZEN_EVIDENCE_SHA256[D8_REPORT_PATH]
+      || !SHA256.test(value.historical_archive_authorization_sha256 || '')
+      || value.historical_archive_authorization_sha256 !== G8B_ARCHIVE_AUTH_SHA256
+      || !SHA256.test(value.historical_archive_authorization_digest || '')) {
+    fail('G8B_BINDING_MISMATCH', 'fresh G8b authority does not bind the frozen product/source/D8 inputs');
+  }
+  if (!GIT_OID.test(args.candidate || '')) {
+    fail('G8B_CANDIDATE_BINDING_MISMATCH', 'fresh G8b integration candidate must be an immutable Git commit');
+  }
+  const productCandidate = gitObject(repoInfo.repo, value.product_candidate_sha);
+  const productCandidateTree = gitText(repoInfo.repo, ['rev-parse', `${productCandidate}^{tree}`]);
+  if (productCandidate !== G8B_PRODUCT_CANDIDATE_SHA
+      || productCandidateTree !== G8B_PRODUCT_CANDIDATE_TREE_SHA) {
+    fail('G8B_PRODUCT_BINDING_MISMATCH', 'fresh G8b product candidate is not the exact reviewed b3 tree');
+  }
+  const integrationCandidate = gitObject(repoInfo.repo, args.candidate);
+  const integrationCandidateTree = gitText(repoInfo.repo, ['rev-parse', `${integrationCandidate}^{tree}`]);
+  if (integrationCandidate !== value.integration_candidate_sha
+      || integrationCandidateTree !== value.integration_candidate_tree_sha
+      || gitObject(repoInfo.repo, value.integration_candidate_ref) !== integrationCandidate
+      || gitObject(repoInfo.repo, value.candidate_ref) !== integrationCandidate) {
+    fail('G8B_CANDIDATE_BINDING_MISMATCH', 'fresh G8b integration candidate/ref/tree does not match CLI and Git truth');
+  }
+  assertAncestor(repoInfo.repo, productCandidate, integrationCandidate, 'G8B_PRODUCT_ANCESTRY_INVALID');
+  assertAncestor(repoInfo.repo, value.develop_sha, integrationCandidate, 'G8B_DEVELOP_ANCESTRY_INVALID');
+  const integrationChanged = gitText(repoInfo.repo, [
+    'diff', '--name-only', `${productCandidate}..${integrationCandidate}`,
+  ]).split('\n').filter(Boolean);
+  const allowedIntegrationPaths = new Set(G8B_INTEGRATION_ALLOWED_PATHS);
+  if (integrationChanged.length !== G8B_INTEGRATION_ALLOWED_PATHS.length
+      || JSON.stringify([...integrationChanged].sort())
+        !== JSON.stringify([...G8B_INTEGRATION_ALLOWED_PATHS].sort())) {
+    fail('G8B_INTEGRATION_SCOPE_INVALID', 'integration candidate delta must contain exactly the reviewed develop gate and validator paths');
+  }
+  if (integrationChanged.some((relative) => !allowedIntegrationPaths.has(relative))) {
+    fail('G8B_INTEGRATION_SCOPE_INVALID', 'integration candidate changes paths outside the reviewed develop gate/validator allowlist');
+  }
+  const coreEntry = gitText(repoInfo.repo, [
+    'ls-tree', integrationCandidate, '--', 'scripts/next-touch-validation.js',
+  ]);
+  const mirrorEntry = gitText(repoInfo.repo, [
+    'ls-tree', integrationCandidate, '--', 'platforms/codex/plugin/scripts/next-touch-validation.js',
+  ]);
+  const testEntry = gitText(repoInfo.repo, [
+    'ls-tree', integrationCandidate, '--', 'hooks/tests/next-touch-validation.test.sh',
+  ]);
+  const parseBlobEntry = (entry, expectedPath) => {
+    const match = /^(\d+) blob ([0-9a-f]+)\t(.+)$/u.exec(entry);
+    return match && match[3] === expectedPath ? { mode: match[1], blob: match[2] } : null;
+  };
+  const core = parseBlobEntry(coreEntry, 'scripts/next-touch-validation.js');
+  const mirror = parseBlobEntry(mirrorEntry, 'platforms/codex/plugin/scripts/next-touch-validation.js');
+  const test = parseBlobEntry(testEntry, 'hooks/tests/next-touch-validation.test.sh');
+  if (!core || !mirror || !test || core.mode !== '100644' || mirror.mode !== '100644'
+      || test.mode !== '100755' || core.blob !== mirror.blob) {
+    fail('G8B_INTEGRATION_PARITY_INVALID', 'integration candidate validator mirrors/test mode or blob parity is invalid');
+  }
+  const integrationParents = gitText(repoInfo.repo, ['rev-list', '--parents', '-n', '1', integrationCandidate])
+    .split(/\s+/u).filter(Boolean);
+  const productParent = integrationParents.slice(1).some((parent) => (
+    parent !== value.develop_sha
+      && git(repoInfo.repo, ['merge-base', '--is-ancestor', productCandidate, parent], true).status === 0
+  ));
+  if (integrationParents.length < 3
+      || !integrationParents.includes(value.develop_sha)
+      || !productParent) {
+    fail('G8B_INTEGRATION_MERGE_INVALID', 'integration candidate must retain both product and develop parents');
+  }
+  for (const [relative, expectedEntry] of Object.entries(G8B_INTEGRATION_GATE_BLOBS)) {
+    const entry = gitText(repoInfo.repo, ['ls-tree', integrationCandidate, '--', relative]);
+    if (entry !== `${expectedEntry}\t${relative}`) {
+      fail('G8B_INTEGRATION_GATE_INVALID', `integration candidate lost exact detached-authority gate blob ${relative}`);
+    }
+  }
+  if (bundle.integration_state === 'integrated') {
+    let integratedReceipt;
+    try {
+      integratedReceipt = strictMergeReceiptRef(bundle, loaded.path, repoInfo).receipt;
+    } catch (error) {
+      fail('G8B_INTEGRATED_BINDING_INVALID', error.message || String(error));
+    }
+    const edge = integratedReceipt.edges && integratedReceipt.edges.length === 1
+      ? integratedReceipt.edges[0] : null;
+    if (!edge || edge.status !== 'executed' || edge.mode !== 'ff-only'
+        || edge.source_ref !== value.integration_candidate_ref
+        || edge.target_ref !== 'refs/heads/develop'
+        || edge.before_sha !== value.develop_sha
+        || edge.after_sha !== value.integration_candidate_sha
+        || gitObject(repoInfo.repo, value.develop_ref) !== value.integration_candidate_sha) {
+      fail('G8B_INTEGRATED_BINDING_INVALID', 'integrated bundle does not bind the complete merge receipt and current develop target');
+    }
+  } else if (gitObject(repoInfo.repo, value.develop_ref) !== value.develop_sha) {
+    fail('G8B_DEVELOP_BINDING_MISMATCH', 'fresh G8b develop pre-merge tip is not Git truth');
+  }
+  if (sha256(readGitFile(repoInfo.repo, productCandidate, value.d8_report_path)) !== value.d8_report_sha256) {
+    fail('G8B_D8_BINDING_MISMATCH', 'fresh G8b authority does not bind the exact D8 publication report');
+  }
+  const productPlan = readGitFile(repoInfo.repo, productCandidate, PLAN_PATH);
+  const productRubric = readGitFile(repoInfo.repo, productCandidate, RUBRIC_PATH);
+  const archivePlan = readGitFile(repoInfo.repo, productCandidate, value.archive_plan_path);
+  const archiveRubric = readGitFile(repoInfo.repo, productCandidate, value.archive_rubric_path);
+  const archiveAuthText = readGitFile(repoInfo.repo, productCandidate, value.historical_archive_authorization_path);
+  if (sha256(productPlan) !== source.planSha
+      || sha256(productRubric) !== source.rubricSha
+      || sha256(archivePlan) !== G8B_ARCHIVE_PLAN_SHA256
+      || sha256(archiveRubric) !== G8B_ARCHIVE_RUBRIC_SHA256
+      || archivePlan !== productPlan
+      || archiveRubric !== productRubric
+      || sha256(archiveAuthText) !== value.historical_archive_authorization_sha256) {
+    fail('G8B_ARCHIVE_BINDING_MISMATCH', 'fresh G8b authority does not bind exact b3 plan/rubric/archive bytes');
+  }
+  let candidateArchiveAuth;
+  try { candidateArchiveAuth = JSON.parse(archiveAuthText); }
+  catch (error) { fail('G8B_ARCHIVE_BINDING_MISMATCH', `candidate archive authorization is not JSON: ${error.message}`); }
+  if (canonicalJson(candidateArchiveAuth) !== canonicalJson(historicalAuthorization)
+      || canonicalDigest(candidateArchiveAuth) !== value.historical_archive_authorization_digest) {
+    fail('G8B_ARCHIVE_BINDING_MISMATCH', 'fresh G8b authority does not bind historical archive authorization bytes');
+  }
+  const taskAuthorityRef = resolveG8bTaskAuthorityRef(value.task_authority_ref, repoInfo, loaded.path);
+  const taskAuthority = taskAuthorityRef.value;
+  if (taskAuthority.task_authority_id !== value.task_authority_id
+      || taskAuthority.mission_lineage_id !== value.mission_lineage_id
+      || taskAuthority.mission_policy_digest !== value.mission_policy_digest
+      || taskAuthority.mission_graph_digest !== value.mission_graph_digest
+      || taskAuthority.policy_hash !== value.policy_hash) {
+    fail('G8B_TASK_AUTHORITY_BINDING_MISMATCH', 'fresh TaskAuthority is not bound to the fresh Mission identity');
+  }
+  const preparedRef = resolveG8bSealedRef(value.prepared_receipt_ref, 'fresh Mission prepared receipt', repoInfo, loaded.path);
+  let prepared;
+  try { prepared = runtime.validatePreparedReceipt(preparedRef.value, repoInfo); }
+  catch (error) { fail('G8B_PREPARED_INVALID', error.message || String(error)); }
+  const expectedAdoption = value.mission_lineage_id.slice('lineage-v1-'.length);
+  if (prepared.value.adopted !== false
+      || prepared.value.adoption_key !== expectedAdoption
+      || prepared.value.adoption_key !== value.adoption_key
+      || prepared.value.mission_lineage_id !== value.mission_lineage_id
+      || prepared.value.task_authority_id !== value.task_authority_id
+      || prepared.value.mission_policy_digest !== value.mission_policy_digest
+      || prepared.value.mission_graph_digest !== value.mission_graph_digest
+      || Object.prototype.hasOwnProperty.call(prepared.value, 'predecessor_adoption_key')
+      || Object.prototype.hasOwnProperty.call(prepared.value, 'successor_generation')) {
+    fail('G8B_PREPARED_BINDING_MISMATCH', 'fresh Mission prepared receipt is inherited, adopted, or misbound');
+  }
+  const stateRef = resolveG8bStateRef(value.mission_state_ref, repoInfo, loaded.path);
+  if (path.resolve(stateRef.file) !== path.resolve(prepared.paths.state)
+      || canonicalJson(stateRef.value) !== canonicalJson(prepared.state)
+      || stateRef.value.mission_lineage_id !== value.mission_lineage_id
+      || stateRef.value.task_authority_id !== value.task_authority_id
+      || stateRef.value.mission_policy_digest !== value.mission_policy_digest
+      || stateRef.value.mission_graph_digest !== value.mission_graph_digest
+      || stateRef.value.policy_hash !== value.policy_hash) {
+    fail('G8B_MISSION_STATE_BINDING_MISMATCH', 'fresh Mission state does not bind prepared authority');
+  }
+  const claim = stateRef.value.claims && stateRef.value.claims[value.claim_id];
+  if (!claim
+      || claim.mission_lineage_id !== value.mission_lineage_id
+      || claim.task_authority_id !== value.task_authority_id
+      || claim.graph_node_id !== value.graph_node_id
+      || claim.campaign_id !== value.mission_campaign_id
+      || claim.binding_digest !== value.claim_binding_digest
+      || claim.base_sha !== value.mission_claim_base_sha) {
+    fail('G8B_MISSION_CLAIM_BINDING_MISMATCH', 'fresh Mission claim does not bind graph, authority, base, and campaign');
+  }
+  if (!/^campaign-v[12]-[0-9a-f]{64}$/u.test(value.mission_campaign_id || '')
+      || !/^campaign-v1-[0-9a-f]{64}$/u.test(value.campaign_id || '')) {
+    fail('G8B_CAMPAIGN_BINDING_MISMATCH', 'fresh Mission/ICC campaign identifiers are invalid');
+  }
+  const missionTerminalRef = resolveG8bSealedRef(value.mission_terminal_receipt_ref, 'fresh Mission terminal receipt', repoInfo, loaded.path);
+  const campaignTerminalRef = resolveG8bSealedRef(value.campaign_terminal_receipt_ref, 'fresh campaign terminal receipt', repoInfo, loaded.path);
+  const iccTerminalRef = resolveG8bSealedRef(value.icc_terminal_receipt_ref, 'fresh ICC terminal receipt', repoInfo, loaded.path);
+  if (value.mission_terminal_receipt_digest !== missionTerminalRef.value.receipt_digest
+      || value.campaign_terminal_receipt_digest !== campaignTerminalRef.value.receipt_digest
+      || value.icc_terminal_receipt_digest !== iccTerminalRef.value.receipt_digest
+      || !g8bRefEqual(bundle.prepared_receipt, value.prepared_receipt_ref)
+      || !g8bRefEqual(bundle.mission_state, value.mission_state_ref)
+      || !g8bRefEqual(bundle.mission_terminal_receipt, value.mission_terminal_receipt_ref)
+      || !g8bRefEqual(bundle.campaign_terminal_receipt, value.campaign_terminal_receipt_ref)
+      || !g8bRefEqual(bundle.icc_terminal_receipt, value.icc_terminal_receipt_ref)
+      || bundle.mission_lineage_id !== value.mission_lineage_id
+      || bundle.candidate_sha !== value.integration_candidate_sha
+      || bundle.candidate_tree_sha !== value.integration_candidate_tree_sha
+      || bundle.candidate_ref !== value.integration_candidate_ref
+      || bundle.develop_sha !== value.develop_sha
+      || bundle.campaign_id !== value.campaign_id) {
+    fail('G8B_TERMINAL_BINDING_MISMATCH', 'terminal bundle is not bound to fresh G8b authority');
+  }
+  const missionTerminal = validateMissionTerminalReceipt(
+    missionTerminalRef.value, stateRef.value, g8bFreshAuthorizationView(value),
+  );
+  const campaignTerminal = validateCampaignRuntimeTerminalReceipt(
+    campaignTerminalRef.value, stateRef.value, g8bFreshAuthorizationView(value),
+  );
+  const iccTerminal = validateImplementationTerminalReceipt(iccTerminalRef.value, value.integration_candidate_tree_sha);
+  if (missionTerminalRef.value.receipt_digest !== value.mission_terminal_receipt_digest
+      || campaignTerminalRef.value.receipt_digest !== value.campaign_terminal_receipt_digest
+      || iccTerminalRef.value.receipt_digest !== value.icc_terminal_receipt_digest
+      || campaignTerminal.claim_id !== value.claim_id
+      || campaignTerminal.campaign_id !== value.mission_campaign_id
+      || campaignTerminal.icc_campaign_id !== value.campaign_id) {
+    fail('G8B_TERMINAL_BINDING_MISMATCH', 'fresh Mission/campaign/ICC terminal digests are cross-bound');
+  }
+  return {
+    body: ref.value,
+    path: ref.file,
+    authorization: g8bFreshAuthorizationView(value),
+    historicalAuthorization: historicalAuthorization,
+    prepared,
+    state: stateRef.value,
+    claim,
+    missionTerminal,
+    campaignTerminal,
+    iccTerminal,
+    productCandidate,
+    productCandidateTree,
+    candidate: integrationCandidate,
+    candidateTree: integrationCandidateTree,
+    integrationCandidate,
+    integrationCandidateTree,
+  };
+}
+
 function validatePreparedAndMissionState(bundle, loaded, repoInfo, authorization, frozen) {
   const preparedRef = resolveAuthorityRef(bundle.prepared_receipt, 'prepared receipt', repoInfo, loaded.path);
-  const stateRef = resolveAuthorityRef(bundle.mission_state, 'Mission state', repoInfo, loaded.path);
+  const stateRef = resolveMissionStateRef(bundle.mission_state, repoInfo, loaded.path);
   let prepared;
   try {
     prepared = runtime.validatePreparedReceipt(preparedRef.value, repoInfo);
@@ -937,7 +1418,7 @@ function validateCampaignRuntimeTerminalReceipt(receipt, state, authorization) {
 }
 
 function validateIccLedger(bundle, loaded, repoInfo, iccTerminal, frozen) {
-  const ledgerRef = resolveAuthorityRef(bundle.ledger_path, 'ICC campaign ledger', repoInfo, loaded.path);
+  const ledgerRef = resolveIccLedgerRef(bundle.ledger_path, repoInfo, loaded.path);
   let rows;
   try { rows = campaignCli.loadRows(ledgerRef.file); } catch (error) {
     fail('ICC_AUTHORITY_INVALID', error.message);
@@ -1399,6 +1880,7 @@ function actorKey(attestation) {
 function validateVerificationReceipt(receipt, candidateTree, campaignId) {
   assertExactKeys(receipt, VERIFICATION_RECEIPT_KEYS, 'verification receipt');
   const body = validateSealedDigest(receipt, 'verification receipt');
+  const sealedReceipt = { ...body, receipt_digest: receipt.receipt_digest };
   const request = {
     tree_sha: body.tree_sha,
     argv_hash: body.argv_hash,
@@ -1411,10 +1893,10 @@ function validateVerificationReceipt(receipt, candidateTree, campaignId) {
       || body.verdict !== 'GREEN' || body.exit_status !== 0
       || body.writer_lease_closed !== true || body.detached_checkout !== true
       || body.runner_argv_attested !== true
-      || !verification.reusableGreenReceipt(body, request)) {
+      || !verification.reusableGreenReceipt(sealedReceipt, request)) {
     fail('VERIFIER_RECEIPT_INVALID', 'canonical verification receipt is not GREEN for candidate');
   }
-  return body;
+  return sealedReceipt;
 }
 
 function validateVerifierAttestation(attestation, candidate, candidateTree, campaignId, repoInfo, authorization, frozen, loaded) {
@@ -1550,7 +2032,7 @@ function candidateFileExists(repo, ref, relative) {
   return git(repo, ['cat-file', '-e', `${ref}:${relative}`], true).status === 0;
 }
 
-function validateArchiveState(repo, candidate, source, authorization) {
+function validateArchiveState(repo, candidate, source, authorization, historicalAuthorization = authorization) {
   const archivePlanPath = `${ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.md`;
   const archiveRubricPath = `${ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.rubric.md`;
   const archiveAuthPath = `${ARCHIVE_DIR}/evidence/authorization.json`;
@@ -1571,7 +2053,7 @@ function validateArchiveState(repo, candidate, source, authorization) {
     fail('ARCHIVE_DIGEST_MISMATCH', 'archive plan/rubric bytes do not equal the frozen source');
   }
   const archiveAuth = JSON.parse(readGitFile(repo, candidate, archiveAuthPath));
-  if (canonicalJson(archiveAuth) !== canonicalJson(authorization)) {
+  if (canonicalJson(archiveAuth) !== canonicalJson(historicalAuthorization)) {
     fail('ARCHIVE_AUTHORITY_MISMATCH', 'archived authorization does not equal the admitted authorization');
   }
   const readme = readGitFile(repo, candidate, archiveReadmePath);
@@ -1590,14 +2072,50 @@ function validateArchiveState(repo, candidate, source, authorization) {
 }
 
 function validateTerminal(args = {}) {
-  const identity = loadRepoAndAuthority(args, { allowArchived: true });
-  const source = sourceDigests(identity.repoInfo.repo);
-  const loaded = loadTerminalBundle(args.receipt, identity.repoInfo);
-  const frozen = validateTerminalIdentity(args, identity.repoInfo, identity.authorization, source, loaded);
+  const repo = path.resolve(args.repo || process.cwd());
+  let repoInfo;
+  try { repoInfo = runtime.canonicalRepository(repo); }
+  catch (error) { fail(error.code || 'REPO_INVALID', error.message); }
+  const loaded = loadTerminalBundle(args.receipt, repoInfo);
+  const source = sourceDigests(repoInfo.repo);
+  let identity;
+  let g8b = null;
+  if (loaded.bundle.g8b_integration_authorization !== undefined) {
+    const historical = loadRepoAndAuthority({
+      repo: repoInfo.repo,
+      authorization: path.join(repoInfo.repo, ARCHIVE_AUTHORIZATION_PATH),
+    }, { allowArchived: true });
+    g8b = validateG8bIntegrationAuthorization(
+      loaded.bundle,
+      loaded,
+      repoInfo,
+      source,
+      args,
+      historical.authorization,
+    );
+    identity = {
+      repoInfo,
+      authorization: g8b.authorization,
+      authorizationPath: g8b.path,
+      authorization_source: 'fresh_g8b',
+      historicalAuthorization: historical.authorization,
+    };
+  } else {
+    identity = loadRepoAndAuthority(args, { allowArchived: true });
+  }
+  const frozen = validateTerminalIdentity(
+    args,
+    identity.repoInfo,
+    identity.authorization,
+    source,
+    loaded,
+    g8b ? g8b.productCandidate : null,
+  );
+  const productCandidate = g8b ? g8b.productCandidate : frozen.candidate;
   validateHeadingSet(
     identity.repoInfo.repo,
     frozen.admission,
-    frozen.candidate,
+    productCandidate,
     args.assert_removed_ledger,
     source,
   );
@@ -1608,7 +2126,13 @@ function validateTerminal(args = {}) {
     identity.authorization,
     frozen,
   );
-  validateArchiveState(identity.repoInfo.repo, frozen.candidate, source, identity.authorization);
+  validateArchiveState(
+    identity.repoInfo.repo,
+    productCandidate,
+    source,
+    identity.authorization,
+    identity.historicalAuthorization || identity.authorization,
+  );
   const missionTerminalRef = resolveAuthorityRef(
     loaded.bundle.mission_terminal_receipt,
     'Mission terminal receipt',
@@ -1722,6 +2246,9 @@ module.exports = {
   canonicalDigest,
   D8_EVALUATED_SHA,
   D8_PUBLICATION_SHA,
+  G8B_DEVELOP_PREMERGE_SHA,
+  G8B_PRODUCT_CANDIDATE_SHA,
+  G8B_PRODUCT_CANDIDATE_TREE_SHA,
   NextTouchValidationError,
   REVIEW_BASE_SHA,
   assertAuthorityPath,
@@ -1743,6 +2270,7 @@ module.exports = {
   validateVerifierAttestation,
   validatePreparedAndMissionState,
   validateTerminalIdentity,
+  validateG8bIntegrationAuthorization,
   validateSealedDigest,
   validateMissionReservation,
   validateReservation,

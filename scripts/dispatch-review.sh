@@ -30,7 +30,7 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
@@ -76,7 +76,7 @@
 #   ANTHROPIC_API_KEY.
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...",
 #     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "...",
 #     "usage": { ... }|null }
@@ -174,8 +174,8 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
 }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, or kimi (got: $RUNNER)" ;; esac
 if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
   case "$RUNNER" in
     qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
@@ -356,6 +356,10 @@ CNATIVE_CWD="" # set only on the claude-native path; same trap-reap rationale
 QODER_CWD=""  # set only on the qoderclicn path; same trap-reap rationale
 QODER_OUT=""  # qoder reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 QODER_ERR=""  # qoder reviewer stderr capture (chrome); reaped on EXIT
+KIMI_CWD=""   # set only on the kimi path; same trap-reap rationale
+KIMI_OUT=""   # kimi reviewer stdout; reaped on EXIT after parser
+KIMI_ERR=""   # kimi stderr chrome
+KIMI_CLEAN="" # normalized kimi stdout; reaped on EXIT if interrupted
 AGY_CWD=""
 AGY_OUT=""
 AGY_ERR=""
@@ -374,6 +378,10 @@ cleanup() {
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD"
   [ -n "$QODER_OUT" ] && rm -f "$QODER_OUT"
   [ -n "$QODER_ERR" ] && rm -f "$QODER_ERR"
+  [ -n "$KIMI_CWD" ] && rm -rf "$KIMI_CWD"
+  [ -n "$KIMI_OUT" ] && rm -f "$KIMI_OUT"
+  [ -n "$KIMI_ERR" ] && rm -f "$KIMI_ERR"
+  [ -n "$KIMI_CLEAN" ] && rm -f "$KIMI_CLEAN"
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD"
   [ -n "$AGY_OUT" ] && rm -f "$AGY_OUT"
   [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
@@ -719,6 +727,73 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
     exit 1
   fi
   PARSE_INPUT="$QODER_OUT"
+elif [[ "$RUNNER" = "kimi" ]]; then
+  # Kimi Code CLI (Moonshot) — Revival review seat for kimi-code/k3 (user 2026-07-28).
+  # Binary: `kimi` from PATH (typical: ~/.kimi-code/bin/kimi). Model alias e.g. kimi-code/k3.
+  # READ-ONLY posture (best-effort): scratch cwd; prompt via -p from PROMPT_FILE; no --auto/--plan
+  # (those cannot combine with -p). Enforced timeout; FAIL-CLOSED before parser on non-zero.
+  # Split streams: stdout = parse target; stderr = chrome (session resume tips etc.).
+  # Prefer explicit --bin, else PATH, else well-known install path (kimi often not on bare PATH).
+  if [[ -n "${BIN:-}" ]]; then
+    KIMI_BIN="$BIN"
+  elif command -v kimi >/dev/null 2>&1; then
+    KIMI_BIN="$(command -v kimi)"
+  elif [[ -x "$HOME/.kimi-code/bin/kimi" ]]; then
+    KIMI_BIN="$HOME/.kimi-code/bin/kimi"
+  else
+    die_precondition "kimi binary not found (install Kimi Code CLI; default model kimi-code/k3)"
+  fi
+  case "$KIMI_BIN" in
+    /*) ;;
+    *)  # only resolve relative *paths* (./kimi), never bare name "kimi" → $PWD/kimi
+        if [[ -f "$KIMI_BIN" || -f "./$KIMI_BIN" ]]; then
+          KIMI_BIN="$(cd "$(dirname "$KIMI_BIN")" 2>/dev/null && pwd)/$(basename "$KIMI_BIN")" || true
+        else
+          die_precondition "kimi --bin must be absolute or on PATH (got: $KIMI_BIN)"
+        fi
+        case "$KIMI_BIN" in /*) ;; *) die_precondition "could not resolve kimi --bin to absolute path: ${BIN:-kimi}" ;; esac ;;
+  esac
+  [[ -x "$KIMI_BIN" ]] || die_precondition "kimi binary not executable: $KIMI_BIN"
+  KIMI_OUT="$(mktemp -t dispatch-review-kimi-out-XXXXXX)"
+  KIMI_ERR="$(mktemp -t dispatch-review-kimi-err-XXXXXX)"
+  KIMI_CWD="$(mktemp -d -t dispatch-review-kimicwd-XXXXXX)"
+  # -p requires the prompt as an argument (no --prompt-file). Large diffs: cat into -p;
+  # ARG_MAX risk accepted with context-window gate upstream.
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p "$(cat "$3")" -m "$4" --output-format text' \
+      _ "$KIMI_CWD" "$KIMI_BIN" "$PROMPT_FILE" "$MODEL" > "$KIMI_OUT" 2> "$KIMI_ERR"
+  KIMI_RC=$?
+  wait_output_quiescent "$KIMI_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  rm -rf "$KIMI_CWD"; KIMI_CWD=""
+  cat "$KIMI_OUT" > "$RAW_LOG"
+  printf '\n--- kimi stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+  cat "$KIMI_ERR" >> "$RAW_LOG"
+  if [ "$KIMI_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: kimi exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$KIMI_RC" "$([ "$KIMI_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    emit_no_verdict "kimi exited non-zero (rc=$KIMI_RC) — fail-closed, partial output not parsed"
+  fi
+  # kimi-code often prefixes a thinking bullet ("• ") before the nonce block; extract
+  # the first AUTOPILOT-REVIEW…END span so the shared parser sees a clean start.
+  if ! awk 'NR==1 && $0 ~ /^<<<AUTOPILOT-REVIEW-/' "$KIMI_OUT" | grep -q .; then
+    KIMI_CLEAN="$(mktemp -t dispatch-review-kimi-clean-XXXXXX)"
+    awk '
+      /<<<AUTOPILOT-REVIEW-/ {
+        sub(/^[^<]*/, "")
+        printing = 1
+      }
+      printing {
+        sub(/^[[:space:]•*]+/, "")
+        print
+      }
+      /<<<AUTOPILOT-END-/ { exit }
+    ' "$KIMI_OUT" > "$KIMI_CLEAN"
+    if grep -q '<<<AUTOPILOT-REVIEW-' "$KIMI_CLEAN" && grep -q '<<<AUTOPILOT-END-' "$KIMI_CLEAN"; then
+      cat "$KIMI_CLEAN" > "$KIMI_OUT"
+    fi
+    rm -f "$KIMI_CLEAN"
+    KIMI_CLEAN=""
+  fi
+  PARSE_INPUT="$KIMI_OUT"
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"

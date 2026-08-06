@@ -1,6 +1,42 @@
 #!/usr/bin/env node
 'use strict';
 
+// mission-terminal-reconcile — retire the exact legacy B/C Mission terminals so a
+// later graph can seal cleanly. Deliberately hardcoded to ONE graph (`LEGACY`):
+// exact validation, immutable disposition, no generic registry surgery.
+//
+// If you are here to generalize it into a disposition table, read this first —
+// measured 2026-08-06 against the second real case, the archived next-touch graph
+// `c1c6f577…`, which had accumulated SIX same-graph adoptions (a1×3, a2, aborted,
+// final) from retries. Two layers block re-admission of such a graph:
+//
+//   1. AMBIGUITY — five adoptions carry a valid `outcome: ready` terminal for the
+//      same node, so mission-routing-admission.js fails MISSION_EVIDENCE_AMBIGUOUS
+//      (it refuses to guess which history is authoritative). Selecting one is
+//      already expressible: the loader honours an explicit terminal receipt and
+//      skips non-matching candidates.
+//   2. MISSING WORK ORDER — and this is the one that makes generalization more
+//      than a constant swap. Once a canonical terminal is selected, admission
+//      REQUIRES that terminal's exact controller Work Order, because treating a
+//      missing WO as a first run would replay an effectful node. For the canonical
+//      final adoption `fcca6ea6…` the terminal receipt names campaign
+//      `campaign-v1-97a4ceae…`, and no Work Order for it exists under
+//      `.git/autopilot/work-orders/`. Synthesizing one is not an option — that WO
+//      requirement IS the replay protection.
+//
+// So a generic rollover must additionally express "this route is closed and
+// retired, so its WO requirement no longer applies" — a change to a fail-closed
+// safety gate, needing its own design and test coverage. It is not urgent: a
+// DIFFERENT graph digest is filtered out at the lineage/policy/graph checks in the
+// admission loader, so a new mission seals and proceeds as a first run. Only
+// re-admitting an already-completed graph is blocked, and the next-touch project
+// is archived under docs/projects/_archive/2026-08-03-next-touch-debt-retirement/.
+//
+// The durable fix is upstream in src/mission/runtime.js: it fences a same-graph
+// adoption only while the prior mission is UNRESOLVED, so every retry after a
+// COMPLETE mints another permanent "current ready" terminal. Retiring superseded
+// adoptions at close would stop the ambiguity from accruing in the first place.
+
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');

@@ -105,5 +105,87 @@ else
   ok "missing repo fails closed"
 fi
 
+# ---- THE pre-delete case: a receipt SHA reachable ONLY through the branch being
+# reaped. Without --exclude-ref it looks reachable and is skipped, then orphaned
+# by the very deletion that follows. This is the failure the reaper integration
+# exists to prevent, so it is tested at the seam the reaper actually uses.
+REPO2="$TESTDIR/predelete"
+git init -q "$REPO2"
+git -C "$REPO2" config user.email t@t; git -C "$REPO2" config user.name t
+printf 'a\n' > "$REPO2/f"; git -C "$REPO2" add f; git -C "$REPO2" commit -qm base
+git -C "$REPO2" checkout -q -b doomed
+printf 'b\n' > "$REPO2/f"; git -C "$REPO2" commit -qam doomed
+HELD="$(git -C "$REPO2" rev-parse HEAD)"
+DEFAULT2="$(git -C "$REPO2" symbolic-ref --short HEAD 2>/dev/null || echo master)"
+git -C "$REPO2" checkout -q "$(git -C "$REPO2" rev-parse --abbrev-ref HEAD)" 2>/dev/null
+git -C "$REPO2" checkout -q master 2>/dev/null || git -C "$REPO2" checkout -q main
+COMMON2="$(git -C "$REPO2" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON2/autopilot/mission"
+printf '{"candidate_sha":"%s"}\n' "$HELD" > "$COMMON2/autopilot/mission/r.json"
+
+OUT3="$(node "$SCRIPT" scan --repo-root "$REPO2" --json)"
+[ "$(printf '%s' "$OUT3" | jfield unreachable)" = "0" ] \
+  && ok "without --exclude-ref the branch-held commit looks reachable (baseline)" \
+  || bad "baseline wrong: $OUT3"
+
+OUT4="$(node "$SCRIPT" scan --repo-root "$REPO2" --exclude-ref refs/heads/doomed --json)"
+[ "$(printf '%s' "$OUT4" | jfield unreachable)" = "1" ] \
+  && ok "--exclude-ref exposes the commit the pending deletion would orphan" \
+  || bad "pre-delete case NOT detected — the reaper integration would be a no-op: $OUT4"
+
+node "$SCRIPT" apply --repo-root "$REPO2" --exclude-ref refs/heads/doomed >/dev/null
+git -C "$REPO2" branch -qD doomed
+git -C "$REPO2" for-each-ref --contains "$HELD" --format='%(refname)' | grep -q evidence-anchors \
+  && ok "commit survives the deletion it was anchored against" \
+  || bad "commit orphaned despite anchoring — the exact regression under test"
+
+# ---- a name/OID mismatched anchor must not mask an unprotected commit
+REPO3="$TESTDIR/mismatch"
+git init -q "$REPO3"
+git -C "$REPO3" config user.email t@t; git -C "$REPO3" config user.name t
+printf 'a\n' > "$REPO3/f"; git -C "$REPO3" add f; git -C "$REPO3" commit -qm base
+git -C "$REPO3" checkout -q -b tmp
+printf 'b\n' > "$REPO3/f"; git -C "$REPO3" commit -qam orphan
+ORPH3="$(git -C "$REPO3" rev-parse HEAD)"
+BASE3="$(git -C "$REPO3" rev-parse HEAD~1)"
+git -C "$REPO3" checkout -q master 2>/dev/null || git -C "$REPO3" checkout -q main
+git -C "$REPO3" branch -qD tmp
+COMMON3="$(git -C "$REPO3" rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON3/autopilot"
+printf '{"tip":"%s"}\n' "$ORPH3" > "$COMMON3/autopilot/r.json"
+# a ref NAMED for the orphan but POINTING at base — the lie the contract forbids
+git -C "$REPO3" update-ref "refs/autopilot/evidence-anchors/$ORPH3" "$BASE3"
+
+OUT5="$(node "$SCRIPT" scan --repo-root "$REPO3" --json)"
+printf '%s' "$OUT5" | grep -q "$ORPH3" \
+  && ok "mismatched anchor does not mask the unprotected commit" \
+  || bad "mismatched anchor wrongly counted as protection: $OUT5"
+
+node "$SCRIPT" apply --repo-root "$REPO3" >/dev/null
+MM="$(git -C "$REPO3" for-each-ref refs/autopilot/evidence-anchors \
+  --format='%(refname:strip=3) %(objectname)' | awk '$1 != $2' | wc -l)"
+[ "$MM" = "0" ] && ok "apply repairs the mismatch (namespace cannot lie)" \
+  || bad "mismatch survived apply"
+
+# ---- an unreadable receipt subtree must fail closed, never scan partially
+if command -v chmod >/dev/null && [ "$(id -u)" != "0" ]; then
+  REPO4="$TESTDIR/unreadable"
+  git init -q "$REPO4"
+  git -C "$REPO4" config user.email t@t; git -C "$REPO4" config user.name t
+  printf 'a\n' > "$REPO4/f"; git -C "$REPO4" add f; git -C "$REPO4" commit -qm base
+  COMMON4="$(git -C "$REPO4" rev-parse --path-format=absolute --git-common-dir)"
+  mkdir -p "$COMMON4/autopilot/locked"
+  printf '{}\n' > "$COMMON4/autopilot/locked/r.json"
+  chmod 000 "$COMMON4/autopilot/locked"
+  if node "$SCRIPT" scan --repo-root "$REPO4" --json >/dev/null 2>&1; then
+    bad "unreadable receipt subtree silently produced a partial scan"
+  else
+    ok "unreadable receipt subtree fails closed"
+  fi
+  chmod 755 "$COMMON4/autopilot/locked"
+else
+  ok "unreadable-subtree case skipped (running as root)"
+fi
+
 printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -34,7 +34,14 @@
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
-#       [--timeout 5m]          # agy --print-timeout (default 5m)
+#       [--timeout 5m]          # WALL-CLOCK CAP FOR EVERY RUNNER, not just agy (default 5m).
+#                               #   agy: passed as --print-timeout
+#                               #   codex / grok / qoder: enforced via an external `timeout`
+#                               # Exceeding it is a NON-ZERO EXIT, which is fail-closed to
+#                               # status:no_verdict — the review is lost, not merely slow. A
+#                               # large diff at a high effort routinely needs more than 5m
+#                               # (a ~166 KB diff at codex effort=max hit rc=124 on 2026-08-07),
+#                               # so raise this before blaming the model for a silent review.
 #       [--max-tokens <n>]      # response-token cap (1..200000): anthropic-compatible/qoderclicn only
 #       [--bin <path>]          # override the runner binary (test seam)
 #       [--checklists <c1,c2>]  # optional adversarial checklist

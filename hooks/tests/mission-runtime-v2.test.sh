@@ -28,6 +28,22 @@ const {
 
 const lines = [];
 const check = (id, value) => lines.push(`${id}\t${value ? 'PASS' : 'FAIL'}`);
+// Results are only written at the end, so an exception anywhere below used to
+// discard every invariant already proved — one broken fixture reported as a
+// suite-wide blackout, which says nothing about where the damage starts.
+// Flush what is known, then name the crash as its own failed invariant.
+let oracleFlushed = false;
+function flushOracle() {
+  if (oracleFlushed) return;
+  oracleFlushed = true;
+  for (const line of lines) console.log(line);
+}
+process.on('uncaughtException', (error) => {
+  lines.push('oracle-ran-to-completion\tFAIL');
+  flushOracle();
+  console.error(error && error.stack ? error.stack : String(error));
+  process.exit(1);
+});
 const sha = (value) => crypto.createHash('sha256').update(
   typeof value === 'string' ? value : mission.canonicalJson(value),
 ).digest('hex');
@@ -208,6 +224,65 @@ const commonRaw = execFileSync('git', ['-C', repo, 'rev-parse', '--git-common-di
 }).trim();
 const common = fs.realpathSync(path.isAbsolute(commonRaw) ? commonRaw : path.join(repo, commonRaw));
 const repoIdentity = `git-common-dir:${common}`;
+
+// Every managed campaign loop passes through dev-flow admission, which wants a
+// sealed session marker whose Mission projection matches the contract in hand
+// and a live level to compare that marker against. Production supplies both;
+// without them the Engine blocks before it mints a controller Work Order.
+const sessionModeDir = path.join(temp, 'session-mode');
+fs.mkdirSync(sessionModeDir, { recursive: true });
+const MISSION_SESSION_ID = 'mission-runtime-v2-sess';
+process.env.AUTOPILOT_SESSION_MODE_DIR = sessionModeDir;
+process.env.CLAUDE_CODE_SESSION_ID = MISSION_SESSION_ID;
+process.env.AUTOPILOT_LEVEL = 'l6';
+const { canonicalDigest: markerDigest } = require(path.join(
+  root, 'src', 'engine', 'campaign-verification',
+));
+function sealSessionMarker(contractPath) {
+  const authority = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+  const admissionBody = {
+    schema_version: 1,
+    artifact_type: 'mission_routing_admission',
+    authority_status: 'enforce',
+    repo_identity: authority.repo_identity,
+    mission_policy_digest: authority.mission_runtime.mission_policy_digest,
+    mission_graph_digest: authority.mission_runtime.mission_graph_digest,
+    sources_digest: 'a'.repeat(64),
+    deliverable_count: 2,
+    source_authoring_unit_count: 2,
+    critical_path: 2,
+    batch_count: 2,
+    reservation_totals: {
+      campaigns: 2,
+      wall_seconds: 200,
+      tool_calls: 6,
+      engine_attempts: 4,
+      external_wait_seconds: 0,
+      canonical_changed_files: 4,
+      output_bytes: 2048,
+    },
+  };
+  fs.writeFileSync(
+    path.join(sessionModeDir, `${MISSION_SESSION_ID}.json`),
+    `${JSON.stringify({
+      level: 'l6',
+      session_id: MISSION_SESSION_ID,
+      repo_root: repo,
+      started_at: '2026-07-28T00:00:00.000Z',
+      expires_at: '2099-01-01T00:00:00.000Z',
+      entry_level: 'l6',
+      fallback_reason: 'none',
+      mission_routing: {
+        status: 'READY',
+        admitted: true,
+        would_block: false,
+        prior_marker_status: 'absent',
+        admission: { ...admissionBody, admission_digest: markerDigest(admissionBody) },
+      },
+    }, null, 2)}\n`,
+  );
+}
+
 const runtimeRoot = path.join(common, 'autopilot', 'mission');
 const registryPath = path.join(runtimeRoot, 'registry.json');
 const registryLock = path.join(runtimeRoot, 'registry.lock');
@@ -885,6 +960,7 @@ if (runtime) {
       },
     },
   };
+  sealSessionMarker(granted.payload.contract_path);
 
   const intentOnlyAppender = (input, events) => {
     if (events) events.push(input.eventType);
@@ -2205,7 +2281,8 @@ fs.writeFileSync(outputPath, JSON.stringify(result));
 }
 
 const failed = lines.filter((line) => line.endsWith('\tFAIL'));
-for (const line of lines) console.log(line);
+lines.push('oracle-ran-to-completion\tPASS');
+flushOracle();
 if (failed.length > 0) {
   process.stderr.write(`mission-runtime-v2 failures:\n${failed.join('\n')}\n`);
   process.exitCode = 1;
@@ -2270,7 +2347,8 @@ for id in \
   terminal-acceptance-projection-is-exact terminal-requires-utc-observed-at \
   first-zero-delta-terminal-increments-stagnation second-zero-delta-terminal-blocks-mission \
   terminal-race-first-writer-wins terminal-race-recovers-journal-before-cas \
-  next-grant-rejects-after-stagnation
+  next-grant-rejects-after-stagnation \
+  oracle-ran-to-completion
 do
   assert_contains "$OUT" "$id	PASS" "Mission runtime v2 invariant $id"
 done

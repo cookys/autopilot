@@ -57,6 +57,39 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   `NOT_READY/NO_SHIP` for Codex-thread-bound direct-mutation enforcement, with zero dispatcher calls
   and no replacement campaign/work-order authority.
 
+## v2.34.7 — cc-shim no longer loses a completed verdict to CLI chrome
+
+**Headline**: cc-shim drives non-Anthropic models through an Anthropic-compatible endpoint, so the
+model name is unknown to Claude Code by construction. The CLI prepended a context-window notice to
+stdout ahead of an intact, correctly-framed verdict, and the parser — which requires the wrapped
+block to be the first non-blank line — discarded the finished review as `no_verdict`.
+
+### Fixed
+- `scripts/dispatch-review.sh` sets `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1` in the
+  cc-shim launch env. Observed 2026-08-08 with MiniMax-M3: a real `VERDICT: SHIP-AS-IS` inside an
+  intact nonce block, reported as if the reviewer had said nothing.
+- `--help` no longer documents `--timeout` as agy-only — **shipped separately in commit `42947676`,
+  before this version was cut, and recorded here because it had no version entry of its own**. The
+  same `$TIMEOUT` caps every transport (agy via `--print-timeout`; codex/grok/qoder via an external
+  `timeout`), exceeding it is a non-zero exit that is fail-closed to `no_verdict`, and a large diff
+  at high effort exceeds the 5m default routinely. It is NOT in this version's diff; `git revert` of
+  this merge does not undo it.
+
+### Boundary
+- **The parser was deliberately NOT relaxed.** Allowing the wrapped block to appear anywhere in the
+  response would reopen the prompt-echo hole: the prompt necessarily contains both framing markers,
+  so a runner replaying it reproduces them, and position is what separates an echo from an answer.
+  An attempt to relax it failed exactly that pinned case; the suppression fixes the cause instead.
+- Only the cc-shim path is changed. Other transports that prepend chrome would still lose a verdict
+  the same way — the `docs/BACKLOG.md` entry stays open for that, now with a reproduced instance.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. The suppression is one env assignment; removing it restores
+  the previous behaviour (and turns `hooks/tests/dispatch-review.test.sh` red, by design).
+
+prose-justification: v2.34.7 is a one-line engine fix plus its regression assertion; the prose is
+the CHANGELOG entry and the comment recording why relaxing the parser was rejected.
+
 ## v2.34.6 — Mission terminal rollover
 
 **Headline**: A retry chain left five COMPLETE adoptions of one Mission graph, all looking

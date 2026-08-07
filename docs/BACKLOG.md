@@ -108,6 +108,11 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Context**: 為仍支援的 runner 建 exact residual fixtures；保留 process truth，但將已驗證的 verdict bytes 與 transport failure 分欄，禁止把 no-verdict 誤報成 review pass。
 - **Effort**: M。
 - **Source**: historical multi-runner incidents；2026-07-31 hygiene rewrite。
+- **2026-08-08 reproduced**: cc-shim/MiniMax-M3 returned a complete `VERDICT: SHIP-AS-IS` inside an
+  intact nonce block, discarded as `no_verdict` because Claude Code prepended an unknown-model
+  context-window notice to stdout. Fixed at source for cc-shim in v2.34.7 by suppressing that
+  notice; the general problem stands — any transport that prepends chrome still loses the verdict,
+  and relaxing the parser is NOT the fix (it reopens the prompt-echo hole the suite pins).
 
 ### Domain-aware routing — consume the `work_domain` telemetry to route reviewer/implementer by diff domain
 - **Trigger**: ALL remaining prerequisites are met (telemetry alone is NOT a trigger): (1) a **two-pass resolve** in `resolve-review-loop.sh` without breaking the single-shot JSON contract; (2) a **pre-impl planned-scope signal** for implementer routing; (3) **per-project per-domain calibration with n≥30** real samples; (4) an **inner-reviewer-family field** distinct from panel-only `cross_family_*` semantics.

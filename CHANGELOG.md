@@ -57,6 +57,55 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   `NOT_READY/NO_SHIP` for Codex-thread-bound direct-mutation enforcement, with zero dispatcher calls
   and no replacement campaign/work-order authority.
 
+## v2.34.6 — Mission terminal rollover
+
+**Headline**: A retry chain left five COMPLETE adoptions of one Mission graph, all looking
+authoritative, and admission correctly refused to guess between them — which blocked every new
+Mission in the repository, not just a re-admission of the finished one. `rollover` names the
+integrated adoption, retires the superseded ones, and proves the claim rather than trusting it.
+
+### Added
+- `mission-terminal-reconcile.js rollover --graph-digest <sha256> --canonical-adoption <key>` —
+  records which same-graph adoption was integrated and disposes of the rest. It refuses unless the
+  named adoption is COMPLETE, each of its ready terminals resolves to exactly one journal receipt
+  whose recomputed digest matches, its evidence says `integrated` with `zero_residue` and no
+  retained branches, and — the load-bearing check — its `observed_head` is an **ancestor of HEAD**.
+  Emits one content-addressed artifact asserting zero Work Order synthesis, zero receipt mutation,
+  zero history rewrite. Idempotent, and refuses to silently replace a recorded disposition.
+- `hooks/tests/mission-terminal-rollover.test.sh` — 9 assertions covering both refusal and
+  acceptance, negative-controlled on the ancestry check.
+
+### Changed
+- `mission-routing-admission.js` consumes a validated rollover: superseded adoptions stop competing
+  for the same graph node, and the controller Work Order requirement is waived **for that exact
+  terminal only**. That waiver is sound because the WO exists to stop a missing one being read as
+  "first run" and replaying an effectful node, and a node whose output is provably already in
+  shipped history cannot be replayed — a stronger guarantee than the WO, not a weaker one. A
+  rollover failing any validation (digest, repo identity, graph binding, the three no-fabrication
+  assertions) is IGNORED rather than trusted, so tampering restores the original fail-closed
+  ambiguity instead of buying admission.
+
+### Boundary
+- Rollover does not decide which attempt "won" by chronology or preference. The caller names a
+  candidate and the evidence either supports it or the run is refused.
+- It retires only COMPLETE same-graph adoptions. Non-COMPLETE ones (e.g. ABORTED) are recorded as
+  retained and left alone.
+- The upstream cause is untouched: `src/mission/runtime.js` fences a same-graph adoption only while
+  the prior Mission is UNRESOLVED, so retries after a COMPLETE still accrue terminals. Rollover
+  cleans up after the fact; retiring at close would prevent the accrual.
+- `hooks/tests/mission-routing-admission.test.sh`, `mission-routing-campaign-bridge.test.sh` and
+  `mission-runtime-v2.test.sh` are RED on develop independently of this change
+  (`scripts/verify-preexisting.sh`: head=fail, base=fail, verdict PRE_EXISTING). Untouched here and
+  still open.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- The recorded rollover is a single file: `rm $GIT_COMMON_DIR/autopilot/mission/terminal-rollovers.json`
+  restores the previous fail-closed ambiguity. No Mission state, receipt, or history is modified.
+
+prose-justification: v2.34.6 adds one engine subcommand plus its oracle; the prose is the CHANGELOG
+entry and a header recording why the Work Order waiver is sound, not guidance.
+
 ## v2.34.5 — Evidence anchors survive branch reaping
 
 **Headline**: Mission receipts bind their evidence to commit SHAs, but a receipt is JSON — Git

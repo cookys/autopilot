@@ -102,6 +102,31 @@ refuses to delete any ref if that anchoring fails.
   what exists without loading 30 KB to do it. 40000 → ~14000 bytes, all 146 scripts still named,
   and `check-claude-md-inventory.js` is unchanged (it asserts naming, not table shape).
 
+### Hardened (rounds 3-6 of independent review)
+
+Six independent review rounds ran against this change; every round found a real defect. Beyond the
+reachability fixes above, the following fail-open paths were closed — each one could have let
+`apply` report success without establishing what it claimed, and the reaper deletes refs on that
+exit code:
+
+- Git probes no longer run with a "treat failure as a negative answer" flag. A failed
+  `for-each-ref` or `rev-list` is fatal, and object typing uses `cat-file --batch-check` so a
+  genuinely missing object (`<sha> missing`, exit 0, clean stderr) is distinguishable from a
+  CORRUPT one (same stdout, but an inflate error on stderr). The previous stderr-text heuristic
+  classified corruption as absence.
+- Receipt traversal resolves symlinks and unusual entries explicitly, with device+inode loop
+  detection, instead of skipping whatever was neither plain file nor directory. A dangling symlink
+  at the receipt root is distinguished from genuine absence via `lstat`, so an unavailable receipt
+  tree can no longer read as "this repo has no mission state".
+- Anchor repair happens in ONE `git update-ref --no-deref --stdin` transaction, creates ordered
+  before deletes. A mismatched anchor is frequently the last ref holding a receipt-referenced
+  commit up, so a separate delete followed by a failed create would have made the preservation step
+  the loss. `--no-deref` matters because a symbolic ref under the namespace would otherwise be
+  followed and the BRANCH it points at rewritten; symbolic anchors are now refused outright.
+- Every probe sets `GIT_NO_LAZY_FETCH=1`. In a partial clone `rev-list` and `cat-file` would
+  otherwise contact the promisor remote and write fetched objects into the repo, making `scan` —
+  documented read-only — mutate the repository.
+
 ### Boundary
 - The anchor namespace is additive and covers commits only. `refs/autopilot/lifecycle-roots/`
   points at blobs and never kept a commit alive; the two are complements, not duplicates.

@@ -13,7 +13,7 @@ Standalone lifecycle orchestration plugin: 28 skills, 3 methodology agents, 25 h
 
 `scripts/` ships deterministic tooling that the skills reference instead of asking the LLM to do mechanical work each run. **Before hand-coding any mechanical step, check whether a script already covers it.**
 
-What each one does — purpose, when to call it, pointer to its contract — lives in [`docs/scripts-inventory.md`](docs/scripts-inventory.md). That file is the canonical index; the grouped names below exist so a session knows what to go looking for without loading 30 KB of descriptions at every startup. Every script also answers `<script> --help`, and JSON emitters have stable schemas with exit codes documented in their own header.
+What each one does — purpose, when to call it, pointer to its contract — lives in [`docs/scripts-inventory.md`](docs/scripts-inventory.md). That file is the canonical index; the grouped names below exist so a session knows what to go looking for without loading 30 KB of descriptions at every startup. Most answer `<script> --help` — but 37 do not parse argv at all, and a few of those are installers that act immediately, so `--help` runs them. Check the header comment first when a script is unfamiliar. JSON emitters have stable schemas with exit codes documented in their own header.
 
 A caution learned the hard way (2026-08-06): several of these were fully built, tested and documented, yet doing nothing — an age threshold left at `0`, a hook never installed, a scanner keyed on an id the residue did not carry. **A script existing is not evidence it is running.** When one is supposed to be protecting something, check that it actually fires.
 

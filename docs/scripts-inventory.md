@@ -5,7 +5,9 @@
 >
 > **Row shape rule**: each row is an index entry — what it does, when to call it, and a pointer to the
 > canonical detail (reference doc, `--help`, or the script header). Release history belongs in
-> [`CHANGELOG.md`](../CHANGELOG.md), never here.
+> [`CHANGELOG.md`](../CHANGELOG.md), never here. `check-claude-md-inventory.js` enforces MEMBERSHIP
+> (every shipped script has a row) and byte caps on CLAUDE.md — it cannot detect prose that drifts,
+> so row accuracy is on you.
 
 `scripts/` ships deterministic tooling that the skills reference instead of asking the LLM to do mechanical work each run. Before hand-coding any mechanical step, check whether a script already covers it.
 
@@ -14,7 +16,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | Script | Purpose |
 |--------|---------|
 | [`scripts/completeness-scan.sh`](../scripts/completeness-scan.sh) | Anti-stub regex (TODO/FIXME/empty-impl/DISABLED_) on staged diff; JSON output; exit 1 ⇒ new findings (quality-pipeline completeness gate). |
-| [`scripts/error-path-scan.sh`](../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error branches). JSON output; exit 0 always (advisory findings for reviewer). |
+| [`scripts/error-path-scan.sh`](../scripts/error-path-scan.sh) | L0 attention-slip scan for error paths (swallowed errors, broadened catches, untested error branches). JSON output; exit 0 always for findings (they are ADVISORY), exit 2 on usage error. |
 | [`scripts/secret-scan-diff.js`](../scripts/secret-scan-diff.js) | L0 attention-slip scan for secrets. JSON output; exit 1 ⇒ findings (quality-pipeline completeness gate blocking step). |
 | [`scripts/check-redispatch-prompt.sh`](../scripts/check-redispatch-prompt.sh) | Leaky-phrase linter for round-2+ re-dispatch prompts; encodes `references/blind-dispatch.md` checklist. Exit 1 ⇒ strip and retry. |
 | [`scripts/check-dispatch-suppression.sh`](../scripts/check-dispatch-suppression.sh) | Anti-gaming linter for all dispatch prompts; exit 1 ⇒ strip and retry. Contract: `references/blind-dispatch.md`. |
@@ -25,7 +27,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/resolve-dispatch.sh`](../scripts/resolve-dispatch.sh) | Role → `{model, mode, agent}` JSON (`--tree` for the task-tree role table). Consults `.claude/model-routing-config.md` or `references/model-routing.md` defaults. Use instead of hardcoding dispatch metadata. |
 | [`scripts/resolve-endpoint.sh`](../scripts/resolve-endpoint.sh) | Fail-closed named-endpoint credential resolver; emits readiness metadata, never tokens. Used by dispatch rails. |
 | [`scripts/load-endpoints-env.sh`](../scripts/load-endpoints-env.sh) + [`scripts/lib/load-endpoints-env.js`](../scripts/lib/load-endpoints-env.js) | Mode-600 endpoint credential loader; never evaluates input or prints tokens. Contract/example: [`scripts/endpoints.env.example`](../scripts/endpoints.env.example). |
-| `bin/autopilot.js endpoints <sub>` ([`src/endpoints/cli.js`](../src/endpoints/cli.js)) | `autopilot endpoints` CLI — control surface for the credential system: `init` / `list` / `which` (this repo's merged view) / `set` (**token via STDIN only, never argv**) / `doctor`. Never prints token values. |
+| `bin/autopilot.js endpoints <sub>` ([`src/endpoints/cli.js`](../src/endpoints/cli.js)) | `autopilot endpoints` CLI — control surface for the credential system: `init` / `list` / `which` (this repo's merged view) / `test` / `set` (**token via STDIN only, never argv**) / `doctor`. Never prints token values. |
 | `bin/autopilot.js status <sub>` ([`src/status/cli.js`](../src/status/cli.js)) | Read-only `quota` / `runs --tree` / `roster` / `task --root-run-id` status; task human output is bounded `DONE\|NOT DONE` plus independent merge/consumer/push/residue labels. |
 | [`scripts/verify-preexisting.sh`](../scripts/verify-preexisting.sh) | Test failure classification: PRE_EXISTING / INTRODUCED / NO_FAILURE / INCONCLUSIVE. Replaces manual `git stash + checkout develop` recipe. |
 | [`scripts/verify-red-green.sh`](../scripts/verify-red-green.sh) | Artifact-based red/green validation in an isolated worktree; JSON, fail-closed. |
@@ -34,7 +36,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/reap-dispatch-worktrees.sh`](../scripts/reap-dispatch-worktrees.sh) | Fail-closed campaign worktree lifecycle controller and exact branch-inventory producer; never deletes branches. |
 | [`scripts/pin-evidence-anchors.js`](../scripts/pin-evidence-anchors.js) | `scan`/`apply` pins receipt-referenced commits no ref reaches, under `refs/autopilot/evidence-anchors/`; fail-closed pre-delete step in `reap-dispatch-branches.sh`. |
 | [`scripts/lifecycle-residue-receipt.js`](../scripts/lifecycle-residue-receipt.js) | Issue and freshness-check a content-bound `LifecycleResidueReceipt` after exact worktree and branch disposition; proves resource residue only and never computes task `can_close`. |
-| [`scripts/risk-counter.js`](../scripts/risk-counter.js) | Persistent WTF-Likelihood Cap counter (per repo+branch). Subcommands: `status`, `increment --event <kind>`, `threshold-hit`, `reset`. |
+| [`scripts/risk-counter.js`](../scripts/risk-counter.js) | Persistent WTF-Likelihood Cap counter (per repo+branch). Subcommands: `status`, `increment --event <kind>`, `threshold-hit`, `reset`, `path`. |
 | [`scripts/session-mode.js`](../scripts/session-mode.js) | L3-L6 session marker `set`/`status`/`clear`; `set` runs Mission routing admission before marker effects and preserves entry/fallback binding, while explicit close evidence remains mandatory for managed L5/L6 clear. |
 | `scripts/mission-routing-admission.js` / `scripts/mission-execution-graph-check.js` / `scripts/mission-terminal-reconcile.js` | Mission admission, graph, and legacy reconciliation. |
 | `scripts/next-touch-validation.js` / `scripts/validate-next-touch-reservation.js` / `scripts/validate-next-touch-terminal.js` | Fail-closed next-touch reservation/terminal/integration gates; oracle: `hooks/tests/next-touch-validation.test.sh`. |
@@ -126,7 +128,7 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/task-width-fleet.sh`](../scripts/task-width-fleet.sh) | Fleet layer over the probe: `scan` every repo under roots → per-repo JSONL (+ optional POST to an ingest endpoint); `aggregate` dedups by remote and gates only over `confidence==ok` repos. |
 | [`scripts/task-width-ingest.py`](../scripts/task-width-ingest.py) | Zero-dependency stdlib inbox for fleet task-width data (`POST /submit` / `GET /report` / `GET /raw`; optional `X-Token` auth). |
 | [`scripts/calibration.sh`](../scripts/calibration.sh) | Panel verdict calibration store: `add-sample` / `report` (agreement, false-pass-on-critical, graduation) / `run-known-bad` (`evals/known-bad/`) / `run-clean-set` (over-flag specificity gate, fail-closed). |
-| [`scripts/qc-panel.js`](../scripts/qc-panel.js) | QC interrogation panel (P4): 2 judges × 3 question shapes over a node report; deterministic merge + synthesizer → `{verdict, dissents, extras}`; every run MUST write artifact AND append a calibration sample. Shadow-wired into `skills/quality-pipeline/` (tree-conditional). |
+| [`scripts/qc-panel.js`](../scripts/qc-panel.js) | QC interrogation panel (P4): 2 judges × 3 question shapes plus a Q4 cross-examination round over each claimed MISS; deterministic merge + synthesizer → `{verdict, dissents, extras}`; every non-skipped run writes an artifact AND appends a calibration sample; the null-verdict path writes a `*-skipped.json` and exits before the calibration step. Shadow-wired into `skills/quality-pipeline/` (tree-conditional). |
 | [`scripts/run-eval-batch.sh`](../scripts/run-eval-batch.sh) / [`run-skill-opt.sh`](../scripts/run-skill-opt.sh) | Eval harness; see `evals/`. |
 | [`scripts/toggle-payload-capture.js`](../scripts/toggle-payload-capture.js) | Hook payload capture (Tier B diagnostic — see hooks gotchas). |
 | [`scripts/doc-drift-gate.js`](../scripts/doc-drift-gate.js) + [`scripts/test-doc-drift-gate.sh`](../scripts/test-doc-drift-gate.sh) | Layer-1 deterministic doc↔code gate（links / fences / script-refs；`skills/doc-sync` 的 stopping condition；`scripts/...` 以被稽核 repo root 解析，支援 `--repo-root`）＋ consuming-repo root 回歸測試。 |
@@ -137,4 +139,4 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/resolve-worktree-teardown.sh`](../scripts/resolve-worktree-teardown.sh) | Worktree teardown policy resolver（`scripts/lib/worktree-reap.sh` 消費）。 |
 | [`scripts/install-opencode.sh`](../scripts/install-opencode.sh) / [`scripts/sync-opencode-plugin.sh`](../scripts/sync-opencode-plugin.sh) | OpenCode 接入：安裝 / plugin payload 同步（`dev-setup.sh` 消費）。 |
 
-All scripts respond to `<script> --help`. JSON-emitting scripts have stable schemas; exit codes follow each script's header.
+Most scripts answer `<script> --help`, but **37 of 129 do not parse argv at all** — and several of those are installers that act immediately, so `--help` EXECUTES them (`dev-update.sh` pulls, `install-hooks.sh` rewrites `core.hooksPath`, `setup-symlinks.sh` recreates symlinks). Read the header comment before invoking an unfamiliar script. JSON-emitting scripts have stable schemas; exit codes follow each script's header.

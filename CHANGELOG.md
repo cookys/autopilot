@@ -94,9 +94,21 @@ before.
   campaign carrying `mission_runtime` or `campaign_projection` requires admission; a bounded
   non-Mission one, an absent contract, and unreadable or unparseable bytes do not.
 
+### Fixed (config-ladder leak)
+- `dispatch-hetero-gc` and `resolve-worktree-teardown` were not a default drift: the template
+  default is still `0`, and this repo has dogfooded the reaper at `14` since `5c53201f`. The ladder
+  walks `$PWD/.claude` then `$REPO_ROOT/.claude` before the template, and `$REPO_ROOT` comes from
+  the script's own location — so the template tier is unreachable from inside this repo and both
+  suites were reading the dogfood config. `dispatch-hetero-gc` now states `stale_reaper_age_days: 0`
+  in its scratch repo the way its five sibling cases already did; `resolve-worktree-teardown` proves
+  the default against a plugin-shaped root carrying only what the payload ships (no `.claude/`,
+  matching the Codex payload). Swept: no other suite asserts the template tier.
+- Four `assert_eq` calls in `resolve-worktree-teardown` had actual and expected transposed, which is
+  why the drift reported itself backwards as `expected '14', got '0'`.
+
 ### Boundary
-- Three suites remain red on `develop` and are untouched here: `dispatch-hetero-gc` and
-  `resolve-worktree-teardown` (a `stale_reaper_age_days` default drift) and `next-touch-validation`.
+- `next-touch-validation` was red in CI and is untouched here; it passes in a full local run, so
+  what CI was seeing is still unidentified.
 - The narrowing removes no working control. For campaigns that carry no Mission projection the gate
   was 100% deny with no reachable pass, and it did not exist at all before v2.34.5.
 

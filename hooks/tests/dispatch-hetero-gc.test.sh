@@ -25,10 +25,20 @@ test_reaper_disabled() {
     git -C "$scratch" config user.name "Test User"
     git -C "$scratch" commit -q --allow-empty -m "initial"
     
-    # No config file - should be disabled
+    # Age 0 disables the reaper. State it in the scratch repo the way every
+    # other case here does, rather than leaning on the ambient repo having no
+    # config: since 5c53201f this one dogfoods the reaper at 14, and the
+    # resolver walks $PWD then $REPO_ROOT, so an unstated age resolves to 14.
+    # That the DEFAULT is 0 is the resolver's own claim, proved against a
+    # plugin-shaped root in resolve-worktree-teardown.test.sh.
+    mkdir -p "$scratch/.claude"
+    printf -- '- stale_reaper_age_days: 0\n' > "$scratch/.claude/worktree-teardown-config.md"
+
+    cd "$scratch"
     local output
     output=$(bash "$REPO_ROOT/scripts/dispatch-hetero.sh" --gc 2>&1)
     assert_eq 0 $? "reaper disabled exit code"
+    cd - > /dev/null
     assert_contains "$output" "reaper disabled (stale_reaper_age_days=0)" "disabled message"
 }
 

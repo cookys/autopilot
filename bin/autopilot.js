@@ -21,6 +21,7 @@ const {
 const {
   devFlowAdmissionRejection,
   validateManagedDevFlowAdmission,
+  campaignCarriesMissionProjection,
 } = require('../scripts/session-mode');
 
 function printHelp() {
@@ -367,7 +368,10 @@ if (args[0] === 'engine') {
         })}\n`);
         process.exit(1);
       }
-      if (!parsed.legacyUnmanaged) {
+      if (!parsed.legacyUnmanaged
+          && campaignCarriesMissionProjection(
+            parsed.campaignContract, parsed.cwd || process.cwd(),
+          )) {
         const admission = validateManagedDevFlowAdmission({
           repoRoot: parsed.cwd || process.cwd(),
           effectiveLevel: level,

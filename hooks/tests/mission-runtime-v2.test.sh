@@ -229,59 +229,16 @@ const repoIdentity = `git-common-dir:${common}`;
 // sealed session marker whose Mission projection matches the contract in hand
 // and a live level to compare that marker against. Production supplies both;
 // without them the Engine blocks before it mints a controller Work Order.
-const sessionModeDir = path.join(temp, 'session-mode');
-fs.mkdirSync(sessionModeDir, { recursive: true });
-const MISSION_SESSION_ID = 'mission-runtime-v2-sess';
-process.env.AUTOPILOT_SESSION_MODE_DIR = sessionModeDir;
-process.env.CLAUDE_CODE_SESSION_ID = MISSION_SESSION_ID;
-process.env.AUTOPILOT_LEVEL = 'l6';
-const { canonicalDigest: markerDigest } = require(path.join(
-  root, 'src', 'engine', 'campaign-verification',
+const { sealSessionMarker: sealMarkerFor } = require(path.join(
+  root, 'hooks', 'tests', 'lib', 'session-marker',
 ));
-function sealSessionMarker(contractPath) {
-  const authority = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-  const admissionBody = {
-    schema_version: 1,
-    artifact_type: 'mission_routing_admission',
-    authority_status: 'enforce',
-    repo_identity: authority.repo_identity,
-    mission_policy_digest: authority.mission_runtime.mission_policy_digest,
-    mission_graph_digest: authority.mission_runtime.mission_graph_digest,
-    sources_digest: 'a'.repeat(64),
-    deliverable_count: 2,
-    source_authoring_unit_count: 2,
-    critical_path: 2,
-    batch_count: 2,
-    reservation_totals: {
-      campaigns: 2,
-      wall_seconds: 200,
-      tool_calls: 6,
-      engine_attempts: 4,
-      external_wait_seconds: 0,
-      canonical_changed_files: 4,
-      output_bytes: 2048,
-    },
-  };
-  fs.writeFileSync(
-    path.join(sessionModeDir, `${MISSION_SESSION_ID}.json`),
-    `${JSON.stringify({
-      level: 'l6',
-      session_id: MISSION_SESSION_ID,
-      repo_root: repo,
-      started_at: '2026-07-28T00:00:00.000Z',
-      expires_at: '2099-01-01T00:00:00.000Z',
-      entry_level: 'l6',
-      fallback_reason: 'none',
-      mission_routing: {
-        status: 'READY',
-        admitted: true,
-        would_block: false,
-        prior_marker_status: 'absent',
-        admission: { ...admissionBody, admission_digest: markerDigest(admissionBody) },
-      },
-    }, null, 2)}\n`,
-  );
-}
+const sealSessionMarker = (contractPath) => sealMarkerFor({
+  root,
+  dir: path.join(temp, 'session-mode'),
+  repoRoot: repo,
+  contract: contractPath,
+  sessionId: 'mission-runtime-v2-sess',
+});
 
 const runtimeRoot = path.join(common, 'autopilot', 'mission');
 const registryPath = path.join(runtimeRoot, 'registry.json');

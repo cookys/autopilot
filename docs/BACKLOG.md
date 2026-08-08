@@ -79,6 +79,30 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: L
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 
+### Mission runtime retires superseded adoptions at closeout, not after the fact
+- **Trigger**: 下一次 Mission 重試鏈再留下多個 COMPLETE adoption，或要動 `src/mission/runtime.js` 的收尾路徑時。
+- **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE 之後每次重試都再鑄一個永久 terminal。治本是在收尾時就退役被取代的 adoption，讓 rollover 退回成救援工具而不是常規步驟。動這裡必讀 `scripts/mission-terminal-reconcile.js` 檔頭（記錄了兩層阻擋的完整診斷，以及 Work Order 豁免為何只對「observed_head 是 HEAD 祖先」成立）。
+- **Effort**: M。
+- **Source**: 2026-08-07 v2.34.6 rollover ship；`docs/projects/_archive/2026-08-06-dispatch-residue-cleanup/README.md`。
+
+### `reap-dispatch-branches.sh scan` cannot see branches that carry no `root_run_id`
+- **Trigger**: 下一次要盤點 dispatch 殘留分支時；或再出現「分支堆積但 scan 回報乾淨」。
+- **Context**: `scan` 以 `root_run_id` 為 key，沒帶 id 的殘留分支完全隱形——2026-08-06 清出的 20 個就是這樣躲過的。缺的是一個**報告-only 的 `--all` 模式**列出 `unattributed`，不自動刪（preserve-first 是這支工具的既有立場，不要為了方便破例）。目前 usage 只有 `--repo/--into/--pattern/--inventory-file`。刪任何分支前先 `pin-evidence-anchors.js apply --exclude-ref <待刪ref>`：receipt 綁的是 commit SHA 不是內容，這個 repo 已經永久失去過 4 個 commit 的證據。
+- **Effort**: S。
+- **Source**: 2026-08-06 dispatch residue cleanup（20 → 1 branches, 6.3 GB reclaimed）。
+
+### `prune_tmp_residue` has no owner for test-fixture prefixes
+- **Trigger**: `/tmp` 再次被 autopilot 殘留撐大，或有人要為 CI runner 加磁碟配額時。
+- **Context**: `prune_tmp_residue` 只被四個 dispatch 腳本以 `dispatch-author-*`／`dispatch-explore-*`／`dispatch-review-*`／`hetero-*` 前綴呼叫。`autopilot-test-*`、`autopilot-ci-repro*`、`autopilot-docsync*` **沒有任何 owner**，而它們是位元組大宗：2026-08-08 一次全套測試就留下 49 個 `autopilot-test-*` 目錄。要嘛讓 `hooks/tests/lib.sh` 的 `cleanup_test_tmp` 也掃同前綴的過期殘留，要嘛加一個認領這些前綴的呼叫點——先確認它真的會 fire，別再多一個「存在但沒在工作」的腳本。
+- **Effort**: S。
+- **Source**: 2026-08-06 dispatch residue cleanup（782 項 `/tmp`、1.9 GB）；2026-08-08 複驗仍成立。
+
+### `next-touch-validation.test.sh` asserts against un-versioned local Mission state
+- **Trigger**: 立刻——它在 CI 上**永遠**紅；或下次有人相信「本機全套綠」等於「CI 綠」時。
+- **Context**: 該套件讀 `.git/autopilot/mission/next-touch-debt-retirement/successor-prepared.json` 並斷言 `validatePreparedReceipt(...).state === 'ACTIVE'`，另外還綁 `D8_PUBLICATION_SHA` 與 `.autopilot/evidence/grok-implementer-ab.json`。那是 2026-08-03 已歸檔專案在**某一台機器**上一次真實執行留下的 authority artifact，不在版控裡，所以全新 clone 必 ENOENT crash（CI run 31206156093 實證）。本機會綠純粹因為那台剛好有。修法是造 fixture Mission state；**不要**改成「artifact 不存在就 skip」——那是把安全控制變成靜默通過。1760 行套件深度綁在真實 authority 上，工程量不小。
+- **Effort**: M–L。
+- **Source**: 2026-08-08 CI triage（11/273 紅的最後一個，其餘十個已於 v2.34.8 修復）。
+
 ### Dispatch-branch lifecycle — SHA-256 `check --ack` residual
 - **Trigger**: 第一個 SHA-256 object-format repository 要使用 manual `check --ack`／restore acknowledgment。
 - **Context**: inventory、reap 與 restore tests 已支援 SHA-256；剩餘缺口是 acknowledgment validator 仍只接受 40-hex SHA-1。

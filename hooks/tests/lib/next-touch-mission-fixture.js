@@ -107,17 +107,61 @@ function buildNextTouchMissionFixture({ root, scratch } = {}) {
   const sha = (value) => mission.sha256(
     typeof value === 'string' ? value : mission.canonicalJson(value),
   );
+  // One full task-authority envelope serves as both the prepare input and the
+  // file left beside the receipt, which is how the historical run had it. The
+  // envelope key set is closed, so every field below is required.
   const authority = {
     schema_version: 1,
     task_id: 'next-touch-fixture',
     task_authority_id: sha('next-touch-task-authority'),
     policy_hash: sha('next-touch-owner-policy'),
     authority_status: 'shadow',
-    intent: { objective: 'next-touch fixture', constraints: [] },
+    intent: {
+      objective: 'next-touch validation fixture',
+      requirements_hash: sha('next-touch-requirements'),
+      scope: {
+        allowed_tools: ['bash', 'git', 'node'],
+        artifact_roots: ['hooks', 'scripts', 'src'],
+        domains: ['autopilot'],
+        languages: ['javascript', 'shell'],
+        task_classes: ['implementation', 'verification'],
+      },
+    },
     acceptance: {
       contract_hash: sha('next-touch-acceptance-contract'),
       criteria_hash: sha('next-touch-acceptance-criteria'),
       required_evidence: ['tests'],
+    },
+    red_lines: ['no-external-publish', 'no-production-push', 'no-secret-disclosure'],
+    effect_permissions: { effects: [] },
+    resource_ceiling: {
+      max_cost_usd_micros: 50000000,
+      max_grant_ttl_seconds: 3600,
+      max_tokens: 1000000,
+      max_tool_calls: 1500,
+      max_wall_seconds: 36000,
+    },
+    data_egress_policy: { mode: 'local-only', rules: [] },
+    escalation_policy: {
+      on_role_denied: 'block',
+      on_scope_mismatch: 'block',
+      protected_effects_require_escalation: true,
+    },
+    finish_receipt_schema: {
+      required_fields: [
+        'authority_status', 'decisions_outside_user_intent', 'effective_profile', 'evidence',
+      ],
+      schema_id: 'mission-finish-v1',
+    },
+    execution_preferences: {
+      assurance_profile: 'conservative',
+      assurance_source: 'task-override',
+      data_egress: 'local-only',
+      data_egress_source: 'task-override',
+      guidance_profile: 'guided',
+      guidance_source: 'task-override',
+      topology_preference: 'heterogeneous',
+      topology_source: 'task-override',
     },
     mission_lineage_id: authorization.mission_lineage_id,
     mission_policy_digest: authorization.mission_policy_digest,

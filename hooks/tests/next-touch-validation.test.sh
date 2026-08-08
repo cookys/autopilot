@@ -557,8 +557,13 @@ try {
     'platforms/codex/plugin/scripts/dispatch-review.sh',
     'hooks/tests/dispatch-detached-campaign-authority.test.sh',
   ]) {
+    // Was tree 38046a7170afafc35aec5986a8dd285e33e31c80, which no reachable
+    // commit points at — it survived only in one machine's object store and
+    // was on track to be pruned from there too, so a clean clone could not
+    // resolve it. 4e7953a6 is an ancestor of develop and carries a byte-
+    // identical blob for all five paths, verified before the swap.
     const entry = execFileSync('git', [
-      '-C', root, 'ls-tree', '38046a7170afafc35aec5986a8dd285e33e31c80', '--', relative,
+      '-C', root, 'ls-tree', '4e7953a63b89e1d3277e51be5a57c4802e8551cf^{tree}', '--', relative,
     ], { encoding: 'utf8' }).trim();
     const [mode, , blob] = entry.split(/\s+/u);
     const gateFile = path.join(temp, relative.replaceAll('/', '-'));

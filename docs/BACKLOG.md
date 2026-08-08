@@ -79,6 +79,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: L
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 
+### `check-test-integrity.sh` does not cover this repo's main test surface
+- **Trigger**: 立刻——每一次對 `hooks/tests/*.test.sh` 的改動，anti-gaming 閘目前都是空轉的；或下一次要靠它擋 delegated／`/l5` hetero dispatch 交回的測試改動時。
+- **Context**: 2026-08-08 對一個改了 6 個 `hooks/tests/*.test.sh` 的 range 執行 `validate --range`，回 exit 0 並附 `"warning": "possible misconfiguration: zero test paths matched the diff"`——它一個檔都沒看。這個 repo 的測試主力就是 shell 套件（263 個 `*.test.sh`），所以「刪測試／跳過測試／弱化斷言」這條防線在最常改的檔案上不存在。當次改動改用手動補驗過關（八個套件斷言數 base vs head 只增不減；三處表面刪除是 `assert_eq` 參數順序修正且各有對應新增；無新增 skip／xfail／`.only`）——但手動不是閘。修法要先確認新覆蓋真的會在 negative control 下變紅，不要只是讓 warning 消失。
+- **Effort**: M。
+- **Source**: 2026-08-08 v2.34.8 pre-push QC。與同日另兩起同類：admission gate 對某類 campaign 永遠 deny、reaper 閾值被 repo 自身 dogfood 設定遮蔽——皆為 CLAUDE.md「腳本存在不是它在運作的證據」的實例。
+
 ### Engine and CLI have no session-mode fallback for bounded non-Mission campaigns
 - **Trigger**: 要把 session-marker 紀律擴到非 Mission 的 managed campaign 時；或 threat model 升級為「同一 host 上未經 /l3–/l6 進入的呼叫端不得驅動 managed loop」。單純誠實使用者不觸發。
 - **Context**: 三條路徑對「contract 不帶 Mission projection」的處置不一致。`dispatch-hetero.sh:1710` 在 `CAMPAIGN_PROJECTION_BOUND != 1` 時仍跑 `check_session_mode_gate` + `check_mission_enforcement_gate`；`src/engine/autopilot-engine.js` 與 `bin/autopilot.js` 則**沒有任何等價 fallback**——v2.34.8 收窄 admission 後，bounded campaign 在這兩條路徑上不經任何 session 檢查。此不對稱**早於** c3e2647d（2026-08-05 之前 Engine 根本沒有 admission），v2.34.8 只是讓它重新成為現行行為，**不是新退步**；而 c3e2647d 造成的中間狀態也不是可用的控制，是 100% 拒絕。真要補，得先決定一個沒有 Mission 身分的 campaign 該把 marker 綁到什麼上——不要為了對稱而發明一個假的綁定。

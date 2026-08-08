@@ -93,6 +93,7 @@ const { admitMissionRouting } = require('../../scripts/mission-routing-admission
 const {
   devFlowAdmissionRejection,
   validateManagedDevFlowAdmission,
+  campaignCarriesMissionProjection,
 } = require('../../scripts/session-mode');
 const {
   admitContinuation,
@@ -8218,7 +8219,8 @@ class AutopilotEngine {
       }
       loopCwd = path.resolve(input.cwd);
     }
-    if (campaignRequested) {
+    if (campaignRequested
+        && campaignCarriesMissionProjection(input.campaignContract, loopCwd)) {
       const admission = validateManagedDevFlowAdmission({
         repoRoot: loopCwd,
         effectiveLevel: String(process.env.AUTOPILOT_LEVEL || '').toLowerCase(),

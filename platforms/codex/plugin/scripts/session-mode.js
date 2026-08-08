@@ -273,6 +273,39 @@ function readCampaignAuthority(campaignContract, repoRoot) {
   };
 }
 
+// Where managed admission applies at all.
+//
+// Admission binds a sealed session marker to the campaign's Mission projection,
+// so it can only judge a campaign that carries one. dispatch-hetero.sh already
+// draws that line: it runs admission only once a strict projection is bound and
+// routes everything else to the session-mode gate. Callers that ran admission
+// on every managed campaign rejected bounded non-Mission ones at the door
+// permanently, because the closed contract schema gives them nowhere to put a
+// projection -- a deny that no fixture and no caller could ever satisfy.
+//
+// A contract this cannot read is left to campaign intake rather than answered
+// here. That is not a bypass: intake validates the contract before any
+// dispatch, so an unreadable one reaches no effect either way, and it names the
+// problem in the campaign's own vocabulary instead of reporting a stale session
+// marker for a campaign nobody can even parse.
+function campaignCarriesMissionProjection(campaignContract, repoRoot) {
+  if (campaignContract === null || campaignContract === undefined || campaignContract === '') {
+    return false;
+  }
+  let contract = campaignContract;
+  if (typeof campaignContract === 'string') {
+    const absolute = path.isAbsolute(campaignContract)
+      ? campaignContract : path.resolve(repoRoot || process.cwd(), campaignContract);
+    try {
+      contract = JSON.parse(fs.readFileSync(absolute, 'utf8'));
+    } catch (_error) {
+      return false;
+    }
+  }
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return false;
+  return Boolean(contract.mission_runtime || contract.campaign_projection);
+}
+
 function validateManagedDevFlowAdmission({
   repoRoot,
   effectiveLevel,
@@ -604,6 +637,7 @@ module.exports = {
   markerPath,
   markerRepoIdentity,
   validateManagedDevFlowAdmission,
+  campaignCarriesMissionProjection,
   validateCloseReceipt,
   verifyMissionRoutingProjection,
   LEVELS,

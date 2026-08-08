@@ -57,6 +57,68 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   `NOT_READY/NO_SHIP` for Codex-thread-bound direct-mutation enforcement, with zero dispatcher calls
   and no replacement campaign/work-order authority.
 
+## v2.34.8 — dev-flow admission only judges campaigns that carry a Mission projection
+
+**Headline**: Managed dev-flow admission binds a sealed session marker to the campaign's Mission
+projection, so it can only judge a campaign that has one. The Engine and the CLI ran it on every
+managed campaign regardless, and a bounded non-Mission campaign has nowhere to carry a projection —
+the closed contract schema rejects `campaign_projection` outright and ties `mission_runtime` to
+`strict_dispatch` plus an atomic Mission store. Every such campaign was denied at the door by a
+check no caller could ever satisfy. `dispatch-hetero.sh` already drew the line correctly, running
+admission only once a strict projection is bound and routing everything else to the session-mode
+gate; the Engine and CLI now draw the same one. Mission-backed campaigns are gated exactly as
+before.
+
+### Fixed
+- `scripts/session-mode.js` exports `campaignCarriesMissionProjection`, the single answer to where
+  admission applies. `src/engine/autopilot-engine.js` and `bin/autopilot.js` consult it before
+  running admission. A contract that cannot be read or parsed is left to campaign intake, which
+  validates it before any dispatch — so nothing reaches an effect either way, and the failure is
+  named in the campaign's own vocabulary instead of as a stale session marker.
+- Eight test suites had been failing on `develop` since 2026-08-05 for this reason, five of them
+  needing no fixture change once the gate stopped firing on them: `autopilot-engine`,
+  `controller-boundary-budget-bridge`, `implementation-campaign-dogfood`,
+  `implementation-campaign-routing`, `implementation-campaign-state` (that last one also seals a
+  marker for its genuinely Mission-backed strict root-identity cases, where the gate does apply).
+- The three Mission oracles were separately blind to the gate: `mission-routing-admission` sealed a
+  marker without exporting `AUTOPILOT_LEVEL`; `mission-routing-campaign-bridge` wrote markers under
+  per-case names that admission, which resolves exactly one `<session id>.json`, could not see;
+  `mission-runtime-v2` never sealed one at all and then lost all 99 invariants to an unguarded
+  `readFileSync`. It now flushes what it proved and names the crash as a failed
+  `oracle-ran-to-completion` invariant.
+
+### Added
+- `hooks/tests/lib/session-marker.js` — one definition of the digest-bound marker fixture, shared by
+  `mission-runtime-v2` and `implementation-campaign-state`.
+- A projection-scope matrix in `hooks/tests/session-mode.test.sh` covering both directions: a
+  campaign carrying `mission_runtime` or `campaign_projection` requires admission; a bounded
+  non-Mission one, an absent contract, and unreadable or unparseable bytes do not.
+
+### Fixed (config-ladder leak)
+- `dispatch-hetero-gc` and `resolve-worktree-teardown` were not a default drift: the template
+  default is still `0`, and this repo has dogfooded the reaper at `14` since `5c53201f`. The ladder
+  walks `$PWD/.claude` then `$REPO_ROOT/.claude` before the template, and `$REPO_ROOT` comes from
+  the script's own location — so the template tier is unreachable from inside this repo and both
+  suites were reading the dogfood config. `dispatch-hetero-gc` now states `stale_reaper_age_days: 0`
+  in its scratch repo the way its five sibling cases already did; `resolve-worktree-teardown` proves
+  the default against a plugin-shaped root carrying only what the payload ships (no `.claude/`,
+  matching the Codex payload). Swept: no other suite asserts the template tier.
+- Four `assert_eq` calls in `resolve-worktree-teardown` had actual and expected transposed, which is
+  why the drift reported itself backwards as `expected '14', got '0'`.
+
+### Boundary
+- `next-touch-validation` was red in CI and is untouched here; it passes in a full local run, so
+  what CI was seeing is still unidentified.
+- The narrowing removes no working control. For campaigns that carry no Mission projection the gate
+  was 100% deny with no reachable pass, and it did not exist at all before v2.34.5.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+prose-justification: v2.34.8 adds no skill or reference prose at all — the measured total is
+carried over unchanged from v2.34.7. Its own prose is the CHANGELOG entry plus the comment in
+`session-mode.js` recording why an unreadable contract is intake's to name and not admission's.
+
 ## v2.34.7 — cc-shim no longer loses a completed verdict to CLI chrome
 
 **Headline**: cc-shim drives non-Anthropic models through an Anthropic-compatible endpoint, so the

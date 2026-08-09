@@ -1,6 +1,39 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
+# The Mission artifacts this suite validates against are not versioned — they
+# were the residue of one real run on one machine, so a clean clone had nothing
+# to read and the suite crashed on ENOENT. Build the equivalent once here and
+# hand the repository path to every block that needs it; the module header
+# explains how the fixture reproduces the originals' behaviour.
+NTV_FIXTURE_REPO="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+'use strict';
+const path = require('path');
+const [root, scratch] = process.argv.slice(2);
+const {
+  buildNextTouchMissionFixture,
+} = require(path.join(root, 'hooks/tests/lib/next-touch-mission-fixture'));
+process.stdout.write(buildNextTouchMissionFixture({ root, scratch }).fixtureRepo);
+NODE
+)"
+[ -n "$NTV_FIXTURE_REPO" ] && [ -d "$NTV_FIXTURE_REPO" ] \
+  || { echo "next-touch Mission fixture build failed" >&2; exit 1; }
+
+# The ICC blocks read an implementation-campaign ledger holding a campaign that
+# projects to TERMINAL_READY. That was the other half of the un-versioned
+# residue; build it in the same fixture repository, through the shipped
+# run-ledger / appendCampaignEvent writers rather than hand-authored JSONL.
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
+'use strict';
+const path = require('path');
+const [root, fixtureRepo] = process.argv.slice(2);
+const {
+  buildTerminalReadyCampaignLedger,
+} = require(path.join(root, 'hooks/tests/lib/implementation-campaign-ledger-fixture'));
+buildTerminalReadyCampaignLedger({ root, repo: fixtureRepo });
+NODE
+[ "$?" -eq 0 ] || { echo "next-touch campaign ledger fixture build failed" >&2; exit 1; }
+
 expect_failure() {
   local label="$1"; local expected="$2"; shift 2
   local output rc
@@ -16,20 +49,38 @@ expect_failure() {
 
 expect_failure "reservation missing ledger" CLI_ARGUMENT_REQUIRED node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --pre-spend
 expect_failure "reservation unknown option" CLI_UNKNOWN_FLAG node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --ledger "$TEST_TMP/ledger" --pre-spend --nope x
-MISSION_COMMON="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
-case "$MISSION_COMMON" in /*) ;; *) MISSION_COMMON="$REPO_ROOT/$MISSION_COMMON" ;; esac
+# Two G8b blocks bind a synthetic authorization to develop's tip. The
+# repository under test does not always carry a LOCAL develop branch — a clone
+# of a feature branch, or a detached PR checkout, has only the remote one — so
+# resolve the same commit through whichever ref exists, once, and hand it down.
+# Neither ref present is still a hard stop, not a skip.
+NTV_DEVELOP_SHA=""
+for ntv_develop_ref in refs/heads/develop refs/remotes/origin/develop; do
+  NTV_DEVELOP_SHA="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${ntv_develop_ref}^{commit}" || true)"
+  [ -n "$NTV_DEVELOP_SHA" ] && break
+done
+[ -n "$NTV_DEVELOP_SHA" ] \
+  || { echo "repository under test has no develop ref (local or origin)" >&2; exit 1; }
+export NTV_DEVELOP_SHA
+
+# Every reservation invocation below names the fixture repository, not the
+# developer's checkout: repository, authorization and ledger have to agree, and
+# the real .git/autopilot is exactly the residue this suite stopped depending on.
+MISSION_COMMON="$(git -C "$NTV_FIXTURE_REPO" rev-parse --git-common-dir)"
+case "$MISSION_COMMON" in /*) ;; *) MISSION_COMMON="$NTV_FIXTURE_REPO/$MISSION_COMMON" ;; esac
 MISSION_LEDGER="$MISSION_COMMON/autopilot/implementation-campaign.jsonl"
-ARCHIVE_AUTH="$REPO_ROOT/docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json"
-expect_failure "reservation authorization path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --authorization "$TEST_TMP/auth.json" --ledger "$MISSION_LEDGER" --pre-spend
+ARCHIVE_AUTH="$NTV_FIXTURE_REPO/docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json"
+expect_failure "reservation authorization path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$TEST_TMP/auth.json" --ledger "$MISSION_LEDGER" --pre-spend
 ln -s "$ARCHIVE_AUTH" "$TEST_TMP/auth-link.json"
-expect_failure "reservation authorization symlink escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --authorization "$TEST_TMP/auth-link.json" --ledger "$MISSION_LEDGER" --pre-spend
-node - "$REPO_ROOT" <<'NODE'
+expect_failure "reservation authorization symlink escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$TEST_TMP/auth-link.json" --ledger "$MISSION_LEDGER" --pre-spend
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'next-touch-auth-path-'));
 const repo = path.join(parent, 'repo');
@@ -47,30 +98,36 @@ if (!rejected) throw new Error('canonical authorization symlink was accepted');
 NODE
 assert_exit_code "$?" "0" "canonical authorization path rejects symlinked external JSON"
 expect_failure "terminal unknown option" CLI_UNKNOWN_FLAG node "$REPO_ROOT/scripts/validate-next-touch-terminal.js" --receipt "$TEST_TMP/terminal.json" --base "$(printf 'a%.0s' {1..40})" --candidate "$(printf 'b%.0s' {1..40})" --assert-removed-ledger A01:A14 --integrate-worktree "$TEST_TMP/wt" --nope x
-expect_failure "reservation ledger path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --authorization "$ARCHIVE_AUTH" --ledger "$TEST_TMP/ledger" --pre-spend
+expect_failure "reservation ledger path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$ARCHIVE_AUTH" --ledger "$TEST_TMP/ledger" --pre-spend
 
+# The constructed 7e8e lineage is ACTIVE with zero active claims, so the grant
+# check is the branch it reaches. That is one exact code, measured, not a set of
+# three the live ledger might land anywhere inside.
 set +e
-OUT_CURRENT="$(node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --authorization "$ARCHIVE_AUTH" --ledger "$MISSION_LEDGER" --pre-spend 2>&1)"
+OUT_CURRENT="$(node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$ARCHIVE_AUTH" --ledger "$MISSION_LEDGER" --pre-spend 2>&1)"
 set -e
-case "$OUT_CURRENT" in
-  *MISSION_GRANT_INVALID*|*MISSION_BLOCKED_OR_TERMINAL*|*PREPARED_AUTHORITY_AMBIGUOUS*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
-  *) fail "current 7e8e Mission lineage is blocked: expected a blocked authority code" ;;
-esac
+assert_contains "$OUT_CURRENT" "MISSION_GRANT_INVALID" \
+  "constructed 7e8e Mission lineage is blocked at the grant check"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
-const repoInfo = runtime.canonicalRepository(root);
-const preparedPath = path.join(repoInfo.common, 'autopilot/mission/next-touch-debt-retirement/successor-prepared.json');
+const {
+  describeNextTouchMissionFixture,
+} = require(path.join(root, 'hooks/tests/lib/next-touch-mission-fixture'));
+const fixture = describeNextTouchMissionFixture({ root, fixtureRepo: process.argv[3] });
+const repoInfo = fixture.repoInfo;
+const preparedPath = fixture.preparedPath;
 const prepared = JSON.parse(fs.readFileSync(preparedPath, 'utf8'));
 const checked = runtime.validatePreparedReceipt(prepared, repoInfo);
-if (checked.state.state !== 'ACTIVE') throw new Error('canonical successor fixture state unexpectedly changed');
-const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
-const source = validation.sourceDigests(root);
+if (checked.state.state !== 'ACTIVE') throw new Error('prepared fixture state is not ACTIVE');
+const auth = validation.loadRepoAndAuthority({ repo: fixture.fixtureRepo, authorization: fixture.authorizationPath }).authorization;
+const source = validation.sourceDigests(fixture.fixtureRepo);
 let rejected = false;
 try {
   validation.validateMissionReservation(repoInfo, auth, {
@@ -80,18 +137,19 @@ try {
 } catch (error) {
   rejected = new Set(['MISSION_GRANT_INVALID', 'MISSION_BLOCKED_OR_TERMINAL', 'PREPARED_AUTHORITY_AMBIGUOUS']).has(error.code);
 }
-if (!rejected) throw new Error('blocked canonical Mission was accepted');
+if (!rejected) throw new Error('blocked Mission was accepted');
 NODE
-assert_exit_code "$?" "0" "canonical prepared receipt is accepted then blocked state is rejected"
+assert_exit_code "$?" "0" "prepared receipt is accepted then blocked state is rejected"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const path = require('path');
 const fs = require('fs');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 let escaped = false;
 try { validation.loadTerminalBundle('/tmp/next-touch-terminal-forbidden.json', repoInfo); }
 catch (error) { escaped = error.code === 'AUTHORITY_PATH_ESCAPE'; }
@@ -140,15 +198,16 @@ fs.rmSync(scratch, { recursive: true, force: true });
 NODE
 assert_exit_code "$?" "0" "terminal receipt containment, sealed digest, and integration state checks"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const source = validation.sourceDigests(root);
 const historical = validation.loadRepoAndAuthority({
   repo: root,
@@ -158,7 +217,7 @@ const common = repoInfo.common;
 const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'g8b-validation-'));
 const bundlePath = path.join(directory, 'terminal.json');
 const g8bPath = path.join(directory, 'g8b.json');
-const develop = execFileSync('git', ['-C', root, 'rev-parse', 'refs/heads/develop'], { encoding: 'utf8' }).trim();
+const develop = process.env.NTV_DEVELOP_SHA;
 const archiveAuth = JSON.parse(fs.readFileSync(
   path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
   'utf8',
@@ -317,7 +376,7 @@ console.log('G8b authority missing/tamper/lineage/cross-binding/CLI negatives pa
 NODE
 assert_exit_code "$?" "0" "fresh G8b authority is bundle-bound and rejects stale/cross-bound authority"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const crypto = require('crypto');
 const fs = require('fs');
@@ -325,6 +384,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const mission = require(path.join(root, 'src/engine/mission-convergence'));
@@ -334,7 +394,7 @@ const historical = validation.loadRepoAndAuthority({
   repo: root,
   authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
 }).authorization;
-const rootInfo = runtime.canonicalRepository(root);
+const rootInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const authorityEnvelopePath = path.join(
   rootInfo.common, 'autopilot/mission/next-touch-debt-retirement/task-authority.envelope.json',
 );
@@ -350,8 +410,13 @@ try {
   execFileSync('git', ['clone', '-q', '--no-local', root, repo]);
   git(['config', 'user.email', 'g8b-fixture@example.invalid']);
   git(['config', 'user.name', 'G8b Runtime Fixture']);
-  git(['update-ref', 'refs/heads/develop', validation.G8B_DEVELOP_PREMERGE_SHA]);
+  // Order matters. A clone made while the source repo sits on develop has HEAD
+  // on develop too, and moving a checked-out branch's ref leaves every file
+  // looking modified, so the checkout that follows refuses. Leave develop
+  // first, then move it. This is why the block passed on a feature branch and
+  // failed in CI, which always runs on develop.
   git(['checkout', '-q', '-B', 'fixture-base', validation.REVIEW_BASE_SHA]);
+  git(['update-ref', 'refs/heads/develop', validation.G8B_DEVELOP_PREMERGE_SHA]);
   const repoInfo = runtime.canonicalRepository(repo);
 
   const taskAuthority = JSON.parse(fs.readFileSync(authorityEnvelopePath, 'utf8'));
@@ -525,8 +590,13 @@ try {
     'platforms/codex/plugin/scripts/dispatch-review.sh',
     'hooks/tests/dispatch-detached-campaign-authority.test.sh',
   ]) {
+    // Was tree 38046a7170afafc35aec5986a8dd285e33e31c80, which no reachable
+    // commit points at — it survived only in one machine's object store and
+    // was on track to be pruned from there too, so a clean clone could not
+    // resolve it. 4e7953a6 is an ancestor of develop and carries a byte-
+    // identical blob for all five paths, verified before the swap.
     const entry = execFileSync('git', [
-      '-C', root, 'ls-tree', '38046a7170afafc35aec5986a8dd285e33e31c80', '--', relative,
+      '-C', root, 'ls-tree', '4e7953a63b89e1d3277e51be5a57c4802e8551cf^{tree}', '--', relative,
     ], { encoding: 'utf8' }).trim();
     const [mode, , blob] = entry.split(/\s+/u);
     const gateFile = path.join(temp, relative.replaceAll('/', '-'));
@@ -1022,16 +1092,15 @@ try {
 NODE
 assert_exit_code "$?" "0" "fresh G8b validator accepts normalized Mission/ICC runtime integration"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
-const repoInfo = runtime.canonicalRepository(root);
-const develop = require('child_process').execFileSync(
-  'git', ['-C', root, 'rev-parse', 'refs/heads/develop'], { encoding: 'utf8' },
-).trim();
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
+const develop = process.env.NTV_DEVELOP_SHA;
 let rejected = false;
 try {
   validation.validateIntegrationPreconditions({
@@ -1047,13 +1116,14 @@ if (!rejected) throw new Error('non-head candidate_ref was accepted for integrat
 NODE
 assert_exit_code "$?" "0" "integration requires an exact candidate head ref"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 
@@ -1192,10 +1262,11 @@ console.log('disposable integration fixtures passed');
 NODE
 assert_exit_code "$?" "0" "disposable ff-only integration, idempotent rerun, and non-FF no-state-advance"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const source = validation.sourceDigests(root);
 const result = validation.validateHeadingSet(
@@ -1211,14 +1282,15 @@ if (result.base_heading_count !== 47 || result.removed.length !== 14 || result.a
 NODE
 assert_exit_code "$?" "0" "frozen backlog heading ledger maps exact 14-entry removal"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const path = require('path');
 const { execFileSync } = require('child_process');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
 const source = validation.sourceDigests(root);
 const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -1246,11 +1318,12 @@ if (!rejected) throw new Error('empty/tampered candidate tree was accepted');
 NODE
 assert_exit_code "$?" "0" "mandatory candidate tree and source digests reject tamper"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const path = require('path');
 const { execFileSync } = require('child_process');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const paths = [
   '.autopilot/evidence/grok-implementer-ab.json',
@@ -1283,14 +1356,15 @@ if (!rejected) throw new Error('internally valid mutated D6 report was accepted'
 NODE
 assert_exit_code "$?" "0" "frozen D6 report bytes reject an internally valid descendant mutation"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
 const missionRoot = path.join(repoInfo.common, 'autopilot/mission');
 const bundle = {
@@ -1327,13 +1401,14 @@ if (!legacyDigestError || legacyDigestError.code !== 'RECEIPT_REF_DIGEST_INVALID
 NODE
 assert_exit_code "$?" "0" "canonical prepared/state terminal binding rejects non-ready state"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const body = {
   schema_version: 1,
   artifact_type: 'implementation_campaign_terminal',
@@ -1362,15 +1437,16 @@ if (!escaped) throw new Error('ICC ledger path escaped authority store');
 NODE
 assert_exit_code "$?" "0" "ICC follow-up and ledger path reject"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const campaignCli = require(path.join(root, 'src/campaign/cli'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const ledgerPath = path.join(repoInfo.common, 'autopilot/implementation-campaign.jsonl');
 const ledgerLines = fs.readFileSync(ledgerPath, 'utf8').trim().split('\n');
 if (ledgerLines.length < 2) throw new Error('ICC ledger fixture is not multi-line JSONL');
@@ -1433,14 +1509,15 @@ if (!missing || missing.code !== 'ICC_AUTHORITY_MISSING') {
 NODE
 assert_exit_code "$?" "0" "ICC JSONL ledger resolver accepts multiline ledger and rejects invalid refs"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'next-touch-verifier-'));
 try {
   const campaignId = 'campaign-v1-' + 'c'.repeat(64);
@@ -1558,10 +1635,11 @@ try {
 NODE
 assert_exit_code "$?" "0" "canonical GREEN verifier receipt preserves digest and rejects tampering"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const base = {
   schema_version: 1, artifact_type: 'next_touch_reviewer_attestation',
@@ -1595,14 +1673,15 @@ if (!wrongCandidate) throw new Error('wrong-candidate verifier attestation was a
 NODE
 assert_exit_code "$?" "0" "non-SHIP review and wrong-candidate verifier reject"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const dir = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'next-touch-review-'));
 const reviewPath = path.join(dir, 'review.json');
 const bundlePath = path.join(dir, 'bundle.json');
@@ -1661,15 +1740,16 @@ fs.rmSync(dir, { recursive: true, force: true });
 NODE
 assert_exit_code "$?" "0" "nested reviewer receipt binds base/candidate/tree and empty findings"
 
-node - "$REPO_ROOT" <<'NODE'
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
+const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
-const repoInfo = runtime.canonicalRepository(root);
+const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const auth = validation.loadRepoAndAuthority({
   repo: root,
   authorization: path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),

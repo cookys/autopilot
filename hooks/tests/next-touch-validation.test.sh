@@ -188,7 +188,7 @@ node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const root = process.argv[2];
 const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
@@ -203,7 +203,19 @@ const common = repoInfo.common;
 const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'g8b-validation-'));
 const bundlePath = path.join(directory, 'terminal.json');
 const g8bPath = path.join(directory, 'g8b.json');
-const develop = execFileSync('git', ['-C', root, 'rev-parse', 'refs/heads/develop'], { encoding: 'utf8' }).trim();
+// The repository under test does not always carry a LOCAL develop branch: a
+// clone of a feature branch, or a detached PR checkout, has only the remote
+// one. Resolve the same commit through whichever ref exists rather than
+// requiring the caller's checkout to look like a push build of develop; both
+// refs name the same tip, and neither present is still a hard stop.
+const resolveDevelop = () => {
+  for (const ref of ['refs/heads/develop', 'refs/remotes/origin/develop']) {
+    const probe = spawnSync('git', ['-C', root, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { encoding: 'utf8' });
+    if (probe.status === 0 && probe.stdout.trim()) return probe.stdout.trim();
+  }
+  throw new Error('repository under test has no develop ref (local or origin)');
+};
+const develop = resolveDevelop();
 const archiveAuth = JSON.parse(fs.readFileSync(
   path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
   'utf8',

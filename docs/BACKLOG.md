@@ -79,6 +79,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: L
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 
+### Implementer scorecard lapses on runner-version drift, silently degrading every /l5
+- **Trigger**: 立刻——目前 /l5 的異質 implementer 段是不可用的；或任何 runner CLI 升版之後。
+- **Context**: 2026-08-09 一次 /l5 在 \`dispatch-contract.js check\` 就拿到 NO-GO：\`engine-scorecard.js current --role implementer\` 回 grok-4.5/grok 但 \`status: expired, admissible: false\`——存的 row 釘 \`runner_version: grok 0.2.106\`，實際裝的是 \`grok 1.0.0\`。資格確實該失效，這點沒錯；問題是**後果是靜默的**：foreman 依文件降級成 inline，/l5 就退化成 /l4，成本套利消失而沒有任何告警。runner 升版是常態，所以這會一再發生。要嘛讓 /l5 前置檢查在 roster 解析時就先報 seat 不可用，要嘛把 re-qualification 做成 runner 版本變動時的例行程序。重新認證本身是 engine-onboarding 工作，有自己的證據門檻，不得為了解鎖某個 unit 而放行。
+- **Effort**: M。
+- **Source**: 2026-08-09 /l5 next-touch-validation 收尾；foreman 回報的 precondition_failed。
+
 ### Every gate needs a negative control — the caution needs a routine behind it
 - **Trigger**: 下一次新增或修改任何「閘」（release gate、drift gate、anti-gaming scan、admission check、hook）時；或再抓到一個閘存在卻沒在擋東西。
 - **Context**: CLAUDE.md 已經寫著「腳本存在不是它在運作的證據」，但 2026-08-08 一天之內出現三次同一種形狀，全部通過既有 CI 而沒被發現——(1) managed dev-flow admission 對 bounded 非 Mission campaign **永遠 deny**，沒有任何呼叫端或 fixture 能滿足；(2) `resolve-worktree-teardown` 的 template-tier 斷言被 repo 自身 dogfood 設定遮蔽，測的不是它宣稱在測的東西；(3) `check-test-integrity.sh` 對 263 個 shell 測試檔一個都沒看，回 exit 0。三者的共通點是 **exit 0 被當成「有在保護」**，而沒有人證明過它能變紅。警語擋不住這個，因為警語要人想起來才會啟動。可能的形狀：閘的測試必須含一個 negative control 案例（刻意違反 → 斷言變紅），並讓某個 meta-gate 檢查每個閘都有這樣一條；或讓閘在「零輸入匹配」時回非零而不是 0。先決定要哪一種，不要三種都做。

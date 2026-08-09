@@ -49,6 +49,20 @@ expect_failure() {
 
 expect_failure "reservation missing ledger" CLI_ARGUMENT_REQUIRED node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --pre-spend
 expect_failure "reservation unknown option" CLI_UNKNOWN_FLAG node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --ledger "$TEST_TMP/ledger" --pre-spend --nope x
+# Two G8b blocks bind a synthetic authorization to develop's tip. The
+# repository under test does not always carry a LOCAL develop branch — a clone
+# of a feature branch, or a detached PR checkout, has only the remote one — so
+# resolve the same commit through whichever ref exists, once, and hand it down.
+# Neither ref present is still a hard stop, not a skip.
+NTV_DEVELOP_SHA=""
+for ntv_develop_ref in refs/heads/develop refs/remotes/origin/develop; do
+  NTV_DEVELOP_SHA="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "${ntv_develop_ref}^{commit}" || true)"
+  [ -n "$NTV_DEVELOP_SHA" ] && break
+done
+[ -n "$NTV_DEVELOP_SHA" ] \
+  || { echo "repository under test has no develop ref (local or origin)" >&2; exit 1; }
+export NTV_DEVELOP_SHA
+
 # Every reservation invocation below names the fixture repository, not the
 # developer's checkout: repository, authorization and ledger have to agree, and
 # the real .git/autopilot is exactly the residue this suite stopped depending on.
@@ -188,7 +202,7 @@ node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { execFileSync, spawnSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const root = process.argv[2];
 const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
@@ -203,19 +217,7 @@ const common = repoInfo.common;
 const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'g8b-validation-'));
 const bundlePath = path.join(directory, 'terminal.json');
 const g8bPath = path.join(directory, 'g8b.json');
-// The repository under test does not always carry a LOCAL develop branch: a
-// clone of a feature branch, or a detached PR checkout, has only the remote
-// one. Resolve the same commit through whichever ref exists rather than
-// requiring the caller's checkout to look like a push build of develop; both
-// refs name the same tip, and neither present is still a hard stop.
-const resolveDevelop = () => {
-  for (const ref of ['refs/heads/develop', 'refs/remotes/origin/develop']) {
-    const probe = spawnSync('git', ['-C', root, 'rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { encoding: 'utf8' });
-    if (probe.status === 0 && probe.stdout.trim()) return probe.stdout.trim();
-  }
-  throw new Error('repository under test has no develop ref (local or origin)');
-};
-const develop = resolveDevelop();
+const develop = process.env.NTV_DEVELOP_SHA;
 const archiveAuth = JSON.parse(fs.readFileSync(
   path.join(root, 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
   'utf8',
@@ -1098,9 +1100,7 @@ const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
-const develop = require('child_process').execFileSync(
-  'git', ['-C', root, 'rev-parse', 'refs/heads/develop'], { encoding: 'utf8' },
-).trim();
+const develop = process.env.NTV_DEVELOP_SHA;
 let rejected = false;
 try {
   validation.validateIntegrationPreconditions({

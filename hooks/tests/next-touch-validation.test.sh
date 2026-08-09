@@ -19,6 +19,21 @@ NODE
 [ -n "$NTV_FIXTURE_REPO" ] && [ -d "$NTV_FIXTURE_REPO" ] \
   || { echo "next-touch Mission fixture build failed" >&2; exit 1; }
 
+# The ICC blocks read an implementation-campaign ledger holding a campaign that
+# projects to TERMINAL_READY. That was the other half of the un-versioned
+# residue; build it in the same fixture repository, through the shipped
+# run-ledger / appendCampaignEvent writers rather than hand-authored JSONL.
+node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
+'use strict';
+const path = require('path');
+const [root, fixtureRepo] = process.argv.slice(2);
+const {
+  buildTerminalReadyCampaignLedger,
+} = require(path.join(root, 'hooks/tests/lib/implementation-campaign-ledger-fixture'));
+buildTerminalReadyCampaignLedger({ root, repo: fixtureRepo });
+NODE
+[ "$?" -eq 0 ] || { echo "next-touch campaign ledger fixture build failed" >&2; exit 1; }
+
 expect_failure() {
   local label="$1"; local expected="$2"; shift 2
   local output rc
@@ -34,13 +49,16 @@ expect_failure() {
 
 expect_failure "reservation missing ledger" CLI_ARGUMENT_REQUIRED node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --pre-spend
 expect_failure "reservation unknown option" CLI_UNKNOWN_FLAG node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --ledger "$TEST_TMP/ledger" --pre-spend --nope x
-MISSION_COMMON="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
-case "$MISSION_COMMON" in /*) ;; *) MISSION_COMMON="$REPO_ROOT/$MISSION_COMMON" ;; esac
+# Every reservation invocation below names the fixture repository, not the
+# developer's checkout: repository, authorization and ledger have to agree, and
+# the real .git/autopilot is exactly the residue this suite stopped depending on.
+MISSION_COMMON="$(git -C "$NTV_FIXTURE_REPO" rev-parse --git-common-dir)"
+case "$MISSION_COMMON" in /*) ;; *) MISSION_COMMON="$NTV_FIXTURE_REPO/$MISSION_COMMON" ;; esac
 MISSION_LEDGER="$MISSION_COMMON/autopilot/implementation-campaign.jsonl"
-ARCHIVE_AUTH="$REPO_ROOT/docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json"
-expect_failure "reservation authorization path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --authorization "$TEST_TMP/auth.json" --ledger "$MISSION_LEDGER" --pre-spend
+ARCHIVE_AUTH="$NTV_FIXTURE_REPO/docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json"
+expect_failure "reservation authorization path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$TEST_TMP/auth.json" --ledger "$MISSION_LEDGER" --pre-spend
 ln -s "$ARCHIVE_AUTH" "$TEST_TMP/auth-link.json"
-expect_failure "reservation authorization symlink escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --authorization "$TEST_TMP/auth-link.json" --ledger "$MISSION_LEDGER" --pre-spend
+expect_failure "reservation authorization symlink escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$TEST_TMP/auth-link.json" --ledger "$MISSION_LEDGER" --pre-spend
 node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';
 const fs = require('fs');
@@ -66,15 +84,16 @@ if (!rejected) throw new Error('canonical authorization symlink was accepted');
 NODE
 assert_exit_code "$?" "0" "canonical authorization path rejects symlinked external JSON"
 expect_failure "terminal unknown option" CLI_UNKNOWN_FLAG node "$REPO_ROOT/scripts/validate-next-touch-terminal.js" --receipt "$TEST_TMP/terminal.json" --base "$(printf 'a%.0s' {1..40})" --candidate "$(printf 'b%.0s' {1..40})" --assert-removed-ledger A01:A14 --integrate-worktree "$TEST_TMP/wt" --nope x
-expect_failure "reservation ledger path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --authorization "$ARCHIVE_AUTH" --ledger "$TEST_TMP/ledger" --pre-spend
+expect_failure "reservation ledger path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$ARCHIVE_AUTH" --ledger "$TEST_TMP/ledger" --pre-spend
 
+# The constructed 7e8e lineage is ACTIVE with zero active claims, so the grant
+# check is the branch it reaches. That is one exact code, measured, not a set of
+# three the live ledger might land anywhere inside.
 set +e
-OUT_CURRENT="$(node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --authorization "$ARCHIVE_AUTH" --ledger "$MISSION_LEDGER" --pre-spend 2>&1)"
+OUT_CURRENT="$(node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$ARCHIVE_AUTH" --ledger "$MISSION_LEDGER" --pre-spend 2>&1)"
 set -e
-case "$OUT_CURRENT" in
-  *MISSION_GRANT_INVALID*|*MISSION_BLOCKED_OR_TERMINAL*|*PREPARED_AUTHORITY_AMBIGUOUS*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
-  *) fail "current 7e8e Mission lineage is blocked: expected a blocked authority code" ;;
-esac
+assert_contains "$OUT_CURRENT" "MISSION_GRANT_INVALID" \
+  "constructed 7e8e Mission lineage is blocked at the grant check"
 
 node - "$REPO_ROOT" "$NTV_FIXTURE_REPO" <<'NODE'
 'use strict';

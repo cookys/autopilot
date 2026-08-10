@@ -48,6 +48,13 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### Role qualification is absent across the whole roster, which fails L5 closed
+- **Trigger**: Already met (observed 2026-08-11). `bin/autopilot.js status readiness --probe` returns `transport: ready` and `live: ready` for all six seats while every one reports `qualification: unknown`; `engine-scorecard.js current --role implementer` yields no candidate, and the reviewer rows are rejected as malformed ("evidence methodology is missing kind, basis").
+- **Context**: `engine implement-review` requires a qualified reviewer by default, so `/l5` cannot run its own path — a `/l5` invocation on 2026-08-11 degraded to L3 inline via the skill's documented `precondition_failed` route. `--allow-unqualified-reviewer` exists but spends L5's cost while forfeiting what L5 buys (a decorrelated *qualified* reviewer), so it is not a fix. Also blocks the separate question of restoring the Codex/gpt seats after the 2026-07-16 quota outage: that roster swap was explicitly marked for re-evaluation after the 2026-07-23 reset, and the reset has long passed while the swap is still in place — but re-evaluating it is meaningless while no seat can be qualified at all.
+- **Effort**: L (`autopilot:engine-onboarding`; repair the malformed scorecard rows first, since they poison `current`/`ladder` for every role)
+- **Source**: `/l5` precondition probe 2026-08-11; supersedes the personal-memory note `codex-quota-outage-roster-swap`
+
+
 ### Fable skills absorption plan — Board triage
 - **Status**: UNDECIDED — genuine orphan plan found during exhaustive 111-plan audit。
 - **Trigger**: Before implementing any of its P1–P4 methodology changes, or when selecting the next behavior-rule improvement。

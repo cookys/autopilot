@@ -195,6 +195,41 @@ EXIT_VALIDATE_QODER=$?
 assert_eq "$EXIT_VALIDATE_QODER" "0" "JS-side validator accepts qoderclicn runners"
 assert_contains "$VALIDATE_QODER" "parity-ok" "qoderclicn validation returns parity-ok"
 
+# Case C3: kimi reviewer runner + kimi QC seat enum parity. The JS validator gates
+# qc_panel_seats[].runner on the reviewer_runner enum, so shell, schema, and JS must
+# agree that `kimi` (a first-class dispatch-review.sh transport) is admissible.
+KIMI_CFG="$TEST_TMP/review-loop-kimi.md"
+printf -- '- reviewer_runner: kimi\n- reviewer_engine: kimi-code/k3\n- qc_panel: kimi-code/k3\n- qc_panel_runners: kimi\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$KIMI_CFG"
+KIMI_ERR="$TEST_TMP/review-loop-kimi.stderr"
+KIMI_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_CFG" "$REPO_ROOT/scripts/resolve-review-loop.sh" 2>"$KIMI_ERR")"
+EXIT_KIMI=$?
+assert_eq "$EXIT_KIMI" "0" "resolve-review-loop exits 0 with a kimi reviewer runner"
+KIMI_SHAPE="$(node -e 'const fs = require("fs"); const obj = JSON.parse(fs.readFileSync(0, "utf8")); console.log(`${obj.reviewer_runner}/${obj.qc_panel_seats_complete}/${(obj.qc_panel_seats[0] || {}).runner}`);' <<< "$KIMI_OUT")"
+assert_eq "$KIMI_SHAPE" "kimi/true/kimi" "shell admits kimi as reviewer runner and as QC seat runner"
+
+KIMI_JS_RUNNER="$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_CFG" node -e '
+const { resolveReviewLoopJson } = require("./src/engine/resolve-review-loop.js");
+const resolved = resolveReviewLoopJson([]);
+if (resolved.error || resolved.parseError || resolved.status !== 0) {
+  console.error(JSON.stringify({
+    status: resolved.status,
+    error: resolved.error && resolved.error.message,
+    parseError: resolved.parseError && resolved.parseError.message,
+    stderr: resolved.stderr,
+  }));
+  process.exit(1);
+}
+console.log(resolved.result.qc_panel_seats[0].runner);
+')"
+EXIT_KIMI_JS=$?
+assert_eq "$EXIT_KIMI_JS" "0" "JS module resolves a kimi QC seat without error"
+assert_eq "$KIMI_JS_RUNNER" "kimi" "JS module preserves the kimi QC seat runner"
+
+VALIDATE_KIMI="$(node "$TEST_TMP/validate-parity.js" "$REPO_ROOT" "false" <<< "$KIMI_OUT")"
+EXIT_VALIDATE_KIMI=$?
+assert_eq "$EXIT_VALIDATE_KIMI" "0" "JS-side validator accepts a kimi QC seat"
+assert_contains "$VALIDATE_KIMI" "parity-ok" "kimi validation returns parity-ok"
+
 
 # Case D: Negative check - unknown key added
 TAMPERED_UNKNOWN="$(node -e 'const obj = JSON.parse(process.argv[1]); obj.bogus_key = "unexpected_value"; console.log(JSON.stringify(obj));' "$NORMAL_OUT")"

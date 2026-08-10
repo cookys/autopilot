@@ -126,7 +126,7 @@ function reviewerFallbacks(resolved, primaryTuple, now, ttlSeconds) {
     const endpoint = candidate.endpoint === undefined ? null : candidate.endpoint;
     const complete = typeof model === 'string'
       && model.length > 0
-      && /^(?:codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)$/.test(runner)
+      && /^(?:codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi)$/.test(runner)
       && /^(?:low|medium|high|xhigh|max)$/.test(effort)
       && (endpoint === null
         || (typeof endpoint === 'string' && /^[A-Za-z0-9_]+$/.test(endpoint)));

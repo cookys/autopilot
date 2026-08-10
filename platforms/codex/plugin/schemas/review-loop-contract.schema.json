@@ -71,7 +71,7 @@
   "properties": {
     "reviewer_engine": { "type": "string", "minLength": 1 },
     "reviewer_effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "x-shell-validated": true, "x-shell-var": "REV_EFFORT" },
-    "reviewer_runner": { "type": "string", "enum": ["codex", "auto", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn"], "x-shell-validated": true, "x-shell-var": "REV_RUNNER" },
+    "reviewer_runner": { "type": "string", "enum": ["codex", "auto", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn", "kimi"], "x-shell-validated": true, "x-shell-var": "REV_RUNNER" },
     "implementer_engine": { "type": "string", "minLength": 1 },
     "implementer_effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "x-shell-validated": true, "x-shell-var": "IMPL_EFFORT" },
     "implementer_runner": { "type": "string", "enum": ["auto", "codex", "agy", "grok", "cc-shim", "pi", "qoderclicn"], "x-shell-validated": true, "x-shell-var": "IMPL_RUNNER" },
@@ -122,7 +122,7 @@
         "required": ["role", "runner", "model", "effort", "endpoint", "family"],
         "properties": {
           "role": { "type": "string", "enum": ["qc"] },
-          "runner": { "type": "string", "enum": ["codex", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn"] },
+          "runner": { "type": "string", "enum": ["codex", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn", "kimi"] },
           "model": { "type": "string", "minLength": 1 },
           "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"] },
           "endpoint": {

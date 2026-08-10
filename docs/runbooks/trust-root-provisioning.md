@@ -7,8 +7,19 @@ automated. This step is not, and the reason is structural rather than cautious: 
 decides *within* an authority that something outside it established. An agent that mints its own
 trust anchor has certified itself, which is the one genuine circularity two independent review panels
 identified. The operator establishes **which evidence source is trusted**; the kernel then decides
-qualification *from* that source. Do not automate this step, and do not let an agent perform it —
-including when the host has passwordless sudo, which is a statement about convenience, not authority.
+qualification *from* that source. Do not automate this step, and do not let an agent perform it
+unattended — including when the host has passwordless sudo, which is a statement about convenience,
+not authority.
+
+> **This host's trust root was agent-executed under explicit owner authorisation (2026-08-11).**
+> Recorded here because a reviewer must not discover it by accident. The distinction that makes it
+> defensible is that the **trust decision** was the owner's — stated interactively, and scoped by the
+> owner as revocable once full function is verified — while the agent performed only the mechanical
+> steps. It is NOT equivalent to an independently established authority: its strength is exactly the
+> strength of that authorisation, no more. `provisioning_provenance` in the installed authority file
+> records this, so the qualification is visible at the artifact rather than only in this document.
+> A reviewer weighing evidence produced under this authority should read it accordingly, and the
+> Rollback section below is the intended revocation path.
 
 ---
 
@@ -159,7 +170,11 @@ The loader already refuses all of them. They are listed so nobody implements a w
 - **Never** hand-write a `receipt_journal` entry to represent an append that did not happen. The
   adapter re-derives every stored line's hash on lookup; a fabricated entry yields no anchored
   timestamp and fails verification.
-- **Never** let an agent perform Steps 4-6. See the top of this document.
+- **Never** let an agent perform Steps 4-6 unattended, or on its own initiative. An agent may
+  execute them as mechanical steps under an explicit, scoped, interactive authorisation from the
+  owner — and when it does, it must record that provenance in the authority file and here, as this
+  host's did. What must never happen is an agent deciding on its own that it should have an
+  authority, then creating one.
 
 ## Rollback
 

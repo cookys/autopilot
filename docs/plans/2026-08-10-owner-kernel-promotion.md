@@ -78,7 +78,8 @@ correctness is demonstrated by evidence a reader can re-execute.
 
 | File | Responsibility | Phase |
 |---|---|---|
-| *(host path, outside the repo)* `autopilot-witness-adapter.js` | **New, and the deepest gap in the project.** The host-resident production witness: adapter-owned anchored `getAppendTimestamp()` after verify, append-only head, non-`test` trustTier, journal outside repo and project. Never existed; every P0-P4 suite ran against the test-only `MemoryWitness` the release gate forbids. | P1 |
+| `src/host-adapters/witness-adapter.js` | **DONE 2026-08-10.** The host-resident production witness, and the deepest gap in the project: adapter-owned anchored `getAppendTimestamp()`, durable append-only head, non-writable `trustTier: 'external'`, self-contained (the deployed copy must not `require()` repo code). Never existed before; every P0-P4 suite ran against the test-only `MemoryWitness` the release gate forbids. Source lives here; the **deployed copy** goes to a host path outside the repo, pinned by sha256. | P1 |
+| `hooks/tests/host-witness-adapter.test.sh` | **DONE 2026-08-10.** 10 assertions incl. canonical-JSON byte-parity with the repo, and the non-vacuity control asserting `MemoryWitness` is still refused as production authority. | P1 |
 | `docs/runbooks/trust-root-provisioning.md` | **New.** Root-operator procedure for the two `/etc/autopilot` files: required fields, ownership, mode, sha256 binding to the deployed adapter, what must never source them. | P1 |
 | `hooks/tests/trust-root-provisioning.test.sh` | **New.** Acceptance check: one correct provisioning passes the loader; six insecure/self-supplied variants fail. | P1 |
 | `src/engine/owner-kernel/terminal.js` | **New.** Single terminal-state issuer. Emits `COMPLETE` only with every bound check satisfied; otherwise `BLOCKED`. No other module may issue a terminal state. | P2 |
@@ -115,12 +116,18 @@ project could never have left shadow — not because a clock had not started, bu
 component that would make production evidence possible was never built. This is the single reason
 the work sat complete-but-inert for three weeks.
 
-1. Implement the host-resident witness adapter. It must: expose `getAppendTimestamp()` returning an
-   adapter-owned anchored timestamp taken **after** verify (never a pass-through of a caller-supplied
-   time, which the checker's notes name as forgery); maintain an append-only head with
-   `appendIfHead` semantics; report a `trustTier` that is not `test`; and hold its receipt journal
-   outside both the repo and the project evidence boundary. `MemoryWitness` is the reference for the
-   head/receipt/batch mechanics — it is not the thing to deploy.
+1. ~~Implement the host-resident witness adapter.~~ **DONE 2026-08-10** —
+   `src/host-adapters/witness-adapter.js`, proven by `hooks/tests/host-witness-adapter.test.sh`
+   (10 assertions). `trustTier` is a non-writable `'external'`, so the kernel gate accepts it with
+   no `allowTestWitness` escape; `getAppendTimestamp()` resolves from the adapter's own durable
+   journal over a receipt the checker has already stripped of every time-shaped field; the journal
+   is append-only, fsync'd, lock-guarded, and its head survives adapter reconstruction. Caller-
+   supplied time is **rejected**, not ignored. Two properties are enforced beyond the written
+   contract, both because the tests demanded them: a tampered journal line cannot map a forged
+   receipt onto a genuine timestamp (the stored line is re-hashed on every lookup *and* on every
+   `verify`), and canonical-JSON byte-parity with `src/engine/owner-kernel/canonical.js` is asserted
+   rather than assumed — the deployed copy cannot `require()` repo code, so a silent hash divergence
+   would corrupt every receipt chain without failing loudly.
 2. Deploy it to a host path outside the repo and outside the project dir (the binding loader refuses
    an adapter resolving inside either), and record its sha256.
 3. Write `docs/runbooks/trust-root-provisioning.md`. Derive the required shape from

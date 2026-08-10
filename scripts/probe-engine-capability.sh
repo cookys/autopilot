@@ -302,9 +302,13 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
     codex)
       # codex accepts model_reasoning_effort via -c; exact effort when supplied.
       if [ -n "$EFFORT" ]; then
-        ( cd "$PROBE_CWD" && codex exec --model "$MODEL" -c "model_reasoning_effort=\"$EFFORT\"" --sandbox read-only "reply with the single word: probe" ) >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+        # ⛔ --skip-git-repo-check：PROBE_CWD 是 mktemp -d，不是 git repo。
+        #    少了它 codex 直接拒跑（rc=1、stdout 0 bytes、"Not inside a trusted
+        #    directory"），探測會把「環境沒設好」誤報成「這個引擎不能用」。
+        #    2026-08-10 實測：無旗標 rc=1/0 bytes；加旗標 rc=0/輸出 probe。
+        ( cd "$PROBE_CWD" && codex exec --model "$MODEL" -c "model_reasoning_effort=\"$EFFORT\"" --sandbox read-only --skip-git-repo-check "reply with the single word: probe" ) >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       else
-        ( cd "$PROBE_CWD" && codex exec --model "$MODEL" --sandbox read-only "reply with the single word: probe" ) >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+        ( cd "$PROBE_CWD" && codex exec --model "$MODEL" --sandbox read-only --skip-git-repo-check "reply with the single word: probe" ) >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi
       ;;
     agy)

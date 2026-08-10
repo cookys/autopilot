@@ -422,11 +422,25 @@ codex_transport_run() {
   # Redirections attach before exec so the worker and same-group descendants
   # inherit the private capture fds. setsid-escaped grandchildren leave the
   # group; reap_tree walks PPID descendants so they are still reaped.
+  # ⛔ --skip-git-repo-check 不可省。codex 從**非 git 目錄**執行時會直接拒跑：
+  #        Not inside a trusted directory and --skip-git-repo-check was not specified.
+  #    而它的輸出是 **stdout 0 bytes、rc=1** —— harness 仍會產出帶 verdict 的完整
+  #    artifact（transport_status=transport_exhausted、stdout_sha256 是空字串的雜湊），
+  #    只讀 verdict 的呼叫端會誤以為審查跑過了（2026-08-10 於 PEACE A-2 複審實測）。
+  #
+  #    D3 的 trusted_cwd 讓有 --repo-root 的呼叫端在真 repo 裡跑，那條路徑本來就通得過；
+  #    但註解自己寫的「empty keeps ambient cwd（legacy callers / non-repo authoring）」
+  #    那條**沒有** —— dispatch-plan-review.js 就是（它 spawn 時 cwd 是 mkdtemp 且不傳
+  #    --repo-root）。四個分支一律帶旗標：trusted_cwd 存在時它是 no-op，
+  #    不存在時它是唯一讓 codex 跑得起來的東西。
+  #
+  #    ⚠️ 在 ~/.codex/config.toml 把 /tmp 設成 trusted **不是**替代解：信任不繼承到子目錄。
   if [ "$CODEX_CONTAINMENT" = "cgroup" ]; then
     if [ -n "$trusted_cwd" ]; then
       systemd-run --user --scope --quiet --unit="$CODEX_CGROUP_UNIT" -- \
         env -C "$trusted_cwd" setsid "$bin" exec --model "$model" \
         --sandbox read-only \
+        --skip-git-repo-check \
         -c "model_reasoning_effort=\"$effort\"" \
         --output-last-message "$sidecar_path" \
         < "$prompt" > "$stdout_path" 2> "$stderr_path" &
@@ -434,6 +448,7 @@ codex_transport_run() {
       systemd-run --user --scope --quiet --unit="$CODEX_CGROUP_UNIT" -- \
         setsid "$bin" exec --model "$model" \
         --sandbox read-only \
+        --skip-git-repo-check \
         -c "model_reasoning_effort=\"$effort\"" \
         --output-last-message "$sidecar_path" \
         < "$prompt" > "$stdout_path" 2> "$stderr_path" &
@@ -442,12 +457,14 @@ codex_transport_run() {
     if [ -n "$trusted_cwd" ]; then
       env -C "$trusted_cwd" setsid "$bin" exec --model "$model" \
         --sandbox read-only \
+        --skip-git-repo-check \
         -c "model_reasoning_effort=\"$effort\"" \
         --output-last-message "$sidecar_path" \
         < "$prompt" > "$stdout_path" 2> "$stderr_path" &
     else
       setsid "$bin" exec --model "$model" \
         --sandbox read-only \
+        --skip-git-repo-check \
         -c "model_reasoning_effort=\"$effort\"" \
         --output-last-message "$sidecar_path" \
         < "$prompt" > "$stdout_path" 2> "$stderr_path" &

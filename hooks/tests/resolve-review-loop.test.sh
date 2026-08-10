@@ -281,6 +281,32 @@ assert_eq "450" "$(json_get "$EXACT_QC_OUT" provider_readiness_receipt_ttl_secon
 assert_eq "any" "$(json_get "$EXACT_QC_OUT" provider_readiness_fallback_family_constraint)" \
   "configured fallback family constraint is emitted"
 
+# 7b2. Kimi QC seat. `kimi` is a first-class review transport (dispatch-review.sh
+# --runner kimi, added 380405da for exactly this panel), so a QC seat configured on
+# it MUST resolve complete. The seat-runner allowlist used to omit `kimi`, which
+# silently turned a legitimately configured panel into qc_panel_seats_complete=false
+# with an empty roster — fail-closing every strict /l5 and /l6 run downstream.
+# Panel mirrors the real four-seat consumer config so the regression stays concrete.
+KIMI_QC_CFG="$TEST_TMP/exact-qc-kimi.md"
+printf -- '- qc_panel: claude-fable-5, kimi-code/k3, GLM-5.2, Qwen3.8-Max-Preview\n- qc_panel_runners: claude-native, kimi, anthropic-compatible, qoderclicn\n- qc_panel_efforts: high, high, high, max\n- qc_panel_endpoints: @none, @none, glm, @none\n' > "$KIMI_QC_CFG"
+KIMI_QC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_QC_CFG" bash "$SCRIPT")"
+assert_eq "true" "$(json_get "$KIMI_QC_OUT" qc_panel_seats_complete)" \
+  "a kimi-runner QC seat resolves complete"
+assert_eq '[{"role":"qc","runner":"claude-native","model":"claude-fable-5","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"kimi","model":"kimi-code/k3","effort":"high","endpoint":null,"family":"moonshot"},{"role":"qc","runner":"anthropic-compatible","model":"GLM-5.2","effort":"high","endpoint":"glm","family":"zhipu"},{"role":"qc","runner":"qoderclicn","model":"Qwen3.8-Max-Preview","effort":"max","endpoint":null,"family":"alibaba"}]' \
+  "$(json_get "$KIMI_QC_OUT" qc_panel_seats)" \
+  "kimi QC seat binds the kimi runner and the moonshot family"
+
+# 7b3. reviewer_runner accepts kimi. The JS contract validator gates
+# qc_panel_seats[].runner on the reviewer_runner enum (src/engine/resolve-review-loop.js),
+# and check-contract-schema.js parity-locks that enum to this shell case arm — so the
+# loop reviewer seat and the QC seat must admit the same transports.
+KIMI_REV_CFG="$TEST_TMP/rl-kimi-reviewer.md"
+printf -- '- reviewer_runner: kimi\n- reviewer_engine: kimi-code/k3\n' > "$KIMI_REV_CFG"
+assert_eq "kimi" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_REV_CFG" bash "$SCRIPT" --field reviewer_runner)" \
+  "kimi reviewer_runner honored"
+assert_eq "moonshot" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_REV_CFG" bash "$SCRIPT" --field reviewer_family)" \
+  "kimi reviewer maps to the moonshot family"
+
 # case/trim handling check
 AC_CFG_CASE="$TEST_TMP/all-calibrated-case.md"
 printf -- '- qc_panel:   All-Calibrated  \n' > "$AC_CFG_CASE"

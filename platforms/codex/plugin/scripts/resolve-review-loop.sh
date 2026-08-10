@@ -453,6 +453,7 @@ family_of() {
     *grok*|*composer*)                       echo xai ;;
     *minimax*|*abab*)                        echo minimax ;;
     *glm*|*zhipu*)                           echo zhipu ;;
+    *kimi*|*moonshot*)                       echo moonshot ;;
     *)                                       echo unknown ;;
   esac
 }
@@ -520,7 +521,7 @@ fi
 if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
   for _i in "${!QC_PANEL[@]}"; do
     case "${QC_PANEL_RUNNERS[$_i]}" in
-      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;;
+      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;;
       *) QC_PANEL_SEATS_COMPLETE="false" ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
@@ -551,9 +552,9 @@ fi
 # Runner identity selects the actual transport. Unknown or blank explicit values
 # fail loudly: silently substituting a different runner misattributes the review.
 case "$REV_RUNNER" in
-  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;;
+  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;;
   *)
-    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn): ${REV_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi): ${REV_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac

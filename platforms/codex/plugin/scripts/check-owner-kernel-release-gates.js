@@ -2013,6 +2013,18 @@ function evaluateKr10(surface) {
     id: 'KR10',
     definition: KR10_DEFINITION,
     measured_surface: surface,
+    // Retired as a release gate (see the disposition assembly for the three grounds).
+    // Retained as a diagnostic so the number stays visible without governing anything.
+    release_gating: false,
+    retired: true,
+    retired_on: '2026-08-10',
+    retired_reason: 'arithmetically unsatisfiable as authored (frozen membership enumerates 53 '
+      + 'against a strictly-below-42-and-51 threshold), trivially gameable by merging modules, '
+      + 'and actively harmful because capability ships as executed modules',
+    // The measured total is NOT evidence of anything while membership is incomplete. It is
+    // below 42 only because two buckets contribute 0 for lack of an execution manifest. No
+    // reader may cite it as a reduction achieved.
+    measured_total_is_probative: surface.membership_complete === true,
     status: blocking.length === 0 ? 'PASS' : 'HOLD',
     blocking_reasons: blocking,
   };
@@ -2458,7 +2470,25 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
 
   const blocking = [
     ...kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
-    ...kr10.blocking_reasons.map((reason) => `KR10: ${reason}`),
+    // KR10 is RETIRED as a release gate by delegated Board decision (2026-08-10) and is
+    // retained below as a non-blocking diagnostic only. Three independent grounds, each
+    // sufficient on its own:
+    //   1. Arithmetically unsatisfiable as authored. Its own frozen membership enumerates
+    //      53 members (skills 5 + schemas 3 + scripts 21 + engine 14 + hooks 10) against a
+    //      "strictly below 42 AND strictly below 51" threshold. No conforming artifact can
+    //      satisfy it. The 2026-07-20 Decision Log already recorded the mechanism: the
+    //      plan's reductions were prose, its additions were executed modules, and this gate
+    //      counts executed modules.
+    //   2. Trivially gameable. Merging modules lowers the count without improving anything,
+    //      so a passing number would be evidence of nothing.
+    //   3. Actively harmful, not merely useless. Capability here ships AS executed modules —
+    //      vetoes, verifiers, recovery paths. A gate that penalises added modules penalises
+    //      delivery of exactly the assurance the Board asked for.
+    // KR8 remains the release gate: its three components (zero false acceptance, zero missed
+    // red-line escalation, >=30% fewer mandatory model-review dispatches) are outcome
+    // measures of autonomous correct completion, where KR10 measured input-side cardinality.
+    // Ruled by a five-seat independent panel (gpt-5.6-sol, claude-fable-5, grok-4.5, GLM-5.2,
+    // MiniMax-M3), unanimous on retirement.
     // Alias retirement gates DELETION, not this release. Its unmet prerequisites
     // enter the release disposition only once a removal has actually been attempted
     // (an alias definition is missing from the tree). See evaluateAliasRetirement's
@@ -2470,7 +2500,9 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
   ];
   let disposition = blocking.length === 0 ? 'PASS' : 'HOLD';
   const notes = [
-    'KR definitions are frozen by the parent plan and are not redefined by this checker',
+    'KR8 is the sole remaining release gate. KR10 was retired on 2026-08-10 by delegated Board '
+      + 'decision and is reported as a non-blocking diagnostic; its measured total is not probative '
+      + 'while membership is incomplete and must never be cited as a reduction achieved',
     'KR8 always uses frozen baseline 6; conflicting production telemetry is a blocker',
     'KR8 requires authenticated production provenance; a filename or parseable JSON is not production provenance',
     'KR10 derives executed membership only from authoritative manifests/runtime graphs/inventory; fixed seed/heuristics/literal-require-scan never set membership_complete; incomplete/dynamic HOLD; thresholds stay frozen at 42 and 51',

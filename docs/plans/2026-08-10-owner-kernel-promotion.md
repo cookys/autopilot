@@ -211,12 +211,16 @@ terminations, zero accepted artifacts, and a fifth control where all checks pass
 fable's finding: additions carry executable evidence, removals carry prose. This closes the asymmetry
 that produced the KR10 failure in the first place.
 
-1. Define the receipt shape in `docs/retirement-receipts/README.md`: `removed` (path or authority
-   id), `replaced_by`, `evidence` (test or gate that proves the replacement works), `commit`.
-2. Write `scripts/check-retirement-receipts.js`. It diffs tracked deletions over a commit range and
-   fails closed when a removal under a governed path (`src/engine/`, `skills/`, `scripts/`) has no
-   matching receipt.
-3. Backfill receipts for the retirements this charter's own work performs; do not backfill history.
+1. ~~Define the receipt shape~~ **DONE 2026-08-10** — `docs/retirement-receipts/README.md`.
+   `evidence` may never be null even when `replaced_by` is: something must still show nothing broke.
+2. ~~Write `scripts/check-retirement-receipts.js`~~ **DONE 2026-08-10**, proven by
+   `hooks/tests/check-retirement-receipts.test.sh` (15 assertions). Renames are resolved with
+   `git diff -M` — a move is not a retirement, and demanding a receipt for one produces the noise
+   that gets gates switched off. Generated Codex mirrors are exempt for the same reason. A regime
+   start commit bounds it: history is not backfilled, because retroactive paperwork carries no
+   evidentiary value and invites disabling the check.
+3. Backfill receipts for retirements this charter's own work performs; history stays unbackfilled.
+   Nothing to backfill yet — the regime range is currently clean.
 
 **Acceptance**: a planted deletion without a receipt exits non-zero and names the file; the same
 deletion with a valid receipt exits zero.

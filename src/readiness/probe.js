@@ -118,6 +118,25 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
+// The live probe prompt is `Respond only with OK.` — a compliant provider may obey it
+// literally and echo the full stop (agy answers `OK.\n`), or wrap the token in quotes or
+// newlines. Accepting only the bare token contradicted the prompt that elicits it, so the
+// classifier strips packaging and nothing else: surrounding whitespace/quotes and a single
+// run of terminal `.`/`!`. `?` is deliberately not stripped (a question is not an
+// affirmation), the comparison stays case-sensitive, and it is anchored to the whole
+// remainder — a longer sentence that merely contains OK is still malformed, otherwise the
+// probe would stop proving the provider answered.
+const LIVE_PROBE_EXPECTED_RESPONSE = 'OK';
+const LIVE_PROBE_RESPONSE_LEAD = /^[\s"'`‘’“”]+/;
+const LIVE_PROBE_RESPONSE_TAIL = /[\s"'`‘’“”.!]+$/;
+const LIVE_PROBE_MAX_RESPONSE_BYTES = 256;
+
+function normalizeLiveProbeResponse(value) {
+  return value
+    .replace(LIVE_PROBE_RESPONSE_LEAD, '')
+    .replace(LIVE_PROBE_RESPONSE_TAIL, '');
+}
+
 const LIVE_PROBE_REQUEST_BODY = {
   schema_version: 1,
   operation: 'provider-readiness-live-probe',
@@ -283,9 +302,9 @@ function classifyLiveProbeResult(tupleValue, value) {
 
   switch (envelope.outcome.classification) {
     case 'success': {
-      if (responseBuffer.length > 256) return 'malformed_response';
+      if (responseBuffer.length > LIVE_PROBE_MAX_RESPONSE_BYTES) return 'malformed_response';
       const response = responseBuffer.toString('utf8');
-      return response.trim() === 'OK'
+      return normalizeLiveProbeResponse(response) === LIVE_PROBE_EXPECTED_RESPONSE
         ? 'success'
         : 'malformed_response';
     }

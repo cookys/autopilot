@@ -45,7 +45,7 @@ process exited 17 before emitting structured stdout, Codex executed the mutation
 and exited 0. No production direct-mutation claim is made, including fail-closed
 adapter crash/nonzero behavior. Shell/exec is classified as effect-capable as a
 whole; the probe adapter does not guess arbitrary command mutation semantics. The sanitized
-[receipt](../../docs/projects/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json)
+[receipt](../../docs/projects/_archive/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json)
 records the current probe source/generated adapter and manifest hashes, no-admission denial,
 attempted L3/L5/managed-entry sequence, and fail-open broken control. D4 remains `NOT_READY/NO_SHIP`: the two lifecycle entry commands ran, but no
 payload-session marker was visible to their following effect calls, so the L3 allow, L5 direct-deny

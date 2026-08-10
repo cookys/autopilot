@@ -15,11 +15,26 @@ const {
 } = require('../src/engine/owner-kernel/witness');
 
 const USAGE = `Usage:
-  node scripts/check-owner-kernel-release-gates.js --project <project-dir> [--repo-root <dir>] [--check]
+  node scripts/check-owner-kernel-release-gates.js --project <project-dir> [--repo-root <dir>]
+      [--release-claim shadow|production] [--check]
 
-Reports mechanical KR8, KR10, and alias-retirement readiness. With --check, exits
-non-zero when disposition is HOLD. Never redefines KR metrics or fabricates
-elapsed production telemetry.
+Reports mechanical release readiness. With --check, exits non-zero when disposition
+is HOLD. Never fabricates elapsed production telemetry.
+
+Gate strictness binds to what the release CLAIMS:
+  --release-claim production  (default)  KR8 must clear on authenticated production
+                                         provenance bound to the installed trust roots.
+  --release-claim shadow                 The kernel must be PROVEN to take no authority:
+                                         no production-authority constructor may be called
+                                         from outside the installed-host module family.
+                                         Fixture KR8 evidence then suffices, because no
+                                         production authority is asserted.
+A shadow claim is not a weaker gate — it is a different one, and it fails closed the
+moment the kernel starts deciding anything.
+
+KR10 (load-bearing surface count) was RETIRED as a release gate on 2026-08-10 and is
+reported as a non-blocking diagnostic only; its total is not probative while membership
+is incomplete. Alias retirement gates DELETION, not release.
 
 Production trust roots are fixed installation paths under /etc/autopilot only
 (not env, HOME, project, or CLI flags).`;
@@ -123,12 +138,26 @@ function parseArgs(argv) {
     project: null,
     repoRoot: path.resolve(__dirname, '..'),
     check: false,
+    // What the release CLAIMS. Gate strictness binds to the claim, because a
+    // release that asserts no production authority cannot be held to production
+    // evidence it never relies on. Defaults to the strict claim: an unspecified
+    // release is treated as claiming production authority.
+    releaseClaim: 'production',
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') return { help: true };
     if (arg === '--check') {
       options.check = true;
+      continue;
+    }
+    if (arg === '--release-claim') {
+      const value = argv[index + 1];
+      if (value !== 'shadow' && value !== 'production') {
+        fail('--release-claim must be shadow or production');
+      }
+      options.releaseClaim = value;
+      index += 1;
       continue;
     }
     if (arg === '--project' || arg === '--repo-root') {
@@ -2030,6 +2059,120 @@ function evaluateKr10(surface) {
   };
 }
 
+// Constructors that mint PRODUCTION action authority. While the kernel is in shadow
+// these exist and are even re-exported through src/engine/index.js, but nothing outside
+// the installed-host module family calls them — the kernel observes and records, it
+// decides nothing. That is the property a `shadow` release claim rests on, so it is
+// verified mechanically rather than taken from a telemetry string a module can print
+// about itself.
+const SHADOW_BOUNDARY = Object.freeze({
+  authority_constructors: Object.freeze([
+    'createEngineActionAuthority',
+    'createProbeEffectActionAuthority',
+    'createEngineAcceptanceCoordinator',
+  ]),
+  // The installed-host family. Reaching any of it requires a provisioned host under
+  // /etc/autopilot, which the trust-root gate governs separately. Calls WITHIN this
+  // family are the shadow-safe case; calls from anywhere else are not.
+  host_family_prefix: 'src/engine/supervised-owner-kernel-',
+});
+
+/**
+ * Verify that no production surface outside the installed-host family constructs
+ * production action authority. A violation means the kernel is no longer in shadow,
+ * and a `shadow` release claim would be false.
+ */
+function evaluateShadowBoundary(repoRoot) {
+  const blocking = [];
+  const violations = [];
+  const lsTracked = spawnSync('git', ['-C', repoRoot, 'ls-files', '-z'], {
+    encoding: 'buffer',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (lsTracked.error || lsTracked.status !== 0) {
+    blocking.push('shadow boundary scan could not enumerate tracked files; boundary unproven');
+    return {
+      id: 'shadow_boundary',
+      intact: false,
+      scanned_files: 0,
+      violations,
+      status: 'HOLD',
+      blocking_reasons: blocking,
+    };
+  }
+  const raw = lsTracked.stdout || Buffer.alloc(0);
+  const files = raw.length === 0 ? [] : raw.toString('utf8').split('\0').filter(Boolean);
+  if (files.length === 0) {
+    blocking.push('shadow boundary scan found zero tracked files; boundary unproven');
+    return {
+      id: 'shadow_boundary',
+      intact: false,
+      scanned_files: 0,
+      violations,
+      status: 'HOLD',
+      blocking_reasons: blocking,
+    };
+  }
+
+  // Tests, fixtures and archived evidence intentionally exercise these constructors;
+  // they are not production surfaces. The checker itself names them to scan for them.
+  function isProductionSurface(relPath) {
+    const n = relPath.replace(/\\/g, '/');
+    if (!n.endsWith('.js')) return false;
+    if (n.includes('/_archive/') || n.startsWith('_archive/')) return false;
+    if (n.includes('/hooks/tests/') || n.startsWith('hooks/tests/')) return false;
+    if (n.includes('/fixtures/') || n.startsWith('fixtures/')) return false;
+    if (n.includes('/evals/') || n.startsWith('evals/')) return false;
+    if (/\.test\.js$/.test(n)) return false;
+    if (/\/tests?\//.test(`/${n}`)) return false;
+    if (n.endsWith('check-owner-kernel-release-gates.js')) return false;
+    if (n.includes('/node_modules/') || n.startsWith('node_modules/')) return false;
+    // Generated Codex mirror of the same tree — scanning it double-reports every hit.
+    if (n.startsWith('platforms/codex/plugin/')) return false;
+    return true;
+  }
+
+  let scanned = 0;
+  for (const file of files) {
+    if (!isProductionSurface(file)) continue;
+    const normalized = file.replace(/\\/g, '/');
+    // Calls inside the installed-host family are the shadow-safe case.
+    if (normalized.startsWith(SHADOW_BOUNDARY.host_family_prefix)) continue;
+    let text;
+    try {
+      text = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+    } catch (_error) {
+      continue;
+    }
+    scanned += 1;
+    for (const ctor of SHADOW_BOUNDARY.authority_constructors) {
+      // A call site, not a re-export: `name(` but not `name,` / `name:` / `name }`.
+      const callRe = new RegExp(`(^|[^A-Za-z0-9_.])${ctor}\\s*\\(`, 'g');
+      const found = text.match(callRe);
+      if (found && found.length > 0) {
+        violations.push({ file: normalized, constructor: ctor, call_sites: found.length });
+      }
+    }
+  }
+  if (violations.length > 0) {
+    for (const v of violations) {
+      blocking.push(
+        `production authority constructor ${v.constructor} is called from ${v.file} `
+        + `(${v.call_sites} site(s)), outside the installed-host family; the kernel is not in shadow`,
+      );
+    }
+  }
+  return {
+    id: 'shadow_boundary',
+    definition: SHADOW_BOUNDARY,
+    intact: violations.length === 0,
+    scanned_files: scanned,
+    violations,
+    status: violations.length === 0 ? 'PASS' : 'HOLD',
+    blocking_reasons: blocking,
+  };
+}
+
 function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) {
   const blocking = [];
   const present = [];
@@ -2467,9 +2610,31 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
   const kr8 = evaluateKr8(loadKr8Evidence(projectDir, trustedAuthority));
   const kr10 = evaluateKr10(surface);
   const alias = evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority);
+  const claimInput = input.releaseClaim || input.release_claim;
+  const releaseClaim = claimInput === 'shadow' ? 'shadow' : 'production';
+  const shadowBoundary = evaluateShadowBoundary(repoRoot);
+  // A `shadow` claim is not a weaker gate — it is a DIFFERENT one. It trades the
+  // production-provenance requirement (which a shadow release never relies on) for a
+  // mechanically verified promise that the kernel decides nothing. Break that promise
+  // and the claim fails closed, exactly as a missing trust root fails a production claim.
+  const claimGate = releaseClaim === 'shadow'
+    ? {
+      claim: 'shadow',
+      satisfied_by: 'verified shadow boundary; fixture KR8 evidence is sufficient because '
+        + 'no production authority is asserted',
+      blocking_reasons: shadowBoundary.blocking_reasons.map((r) => `shadow_boundary: ${r}`),
+    }
+    : {
+      claim: 'production',
+      satisfied_by: 'authenticated production provenance bound to the installed trust roots',
+      blocking_reasons: kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
+    };
 
   const blocking = [
-    ...kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
+    // Gate strictness binds to what the release CLAIMS (see claimGate). A production
+    // claim must clear KR8 on authenticated production provenance; a shadow claim must
+    // instead prove, mechanically, that the kernel takes no authority at all.
+    ...claimGate.blocking_reasons,
     // KR10 is RETIRED as a release gate by delegated Board decision (2026-08-10) and is
     // retained below as a non-blocking diagnostic only. Three independent grounds, each
     // sufficient on its own:
@@ -2534,6 +2699,9 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
     project: path.relative(repoRoot, projectDir) || projectDir,
     disposition,
     fixture_mode: fixtureMode === true,
+    release_claim: releaseClaim,
+    claim_gate: claimGate,
+    shadow_boundary: shadowBoundary,
     kr8,
     kr10,
     alias_retirement: alias,
@@ -2584,6 +2752,7 @@ function main() {
     material = evaluateReleaseGates({
       project: options.project,
       repoRoot: options.repoRoot,
+      releaseClaim: options.releaseClaim,
     });
   } catch (error) {
     fail(error.message || String(error), 2);

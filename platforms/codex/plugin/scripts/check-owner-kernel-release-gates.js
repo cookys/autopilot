@@ -2408,6 +2408,19 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
     shipped_compatibility_cycle: shippedCompatibilityCycle,
     deterministic_caller_migration: deterministicCallerMigration,
     mechanical_caller_migration_scan: migrationScan,
+    // Deletion is only ATTEMPTED once an alias definition is gone from the tree.
+    // While every alias is still present, unmet retirement prerequisites describe
+    // a future deletion, not a defect in the current release.
+    deletion_attempted: missing.length > 0,
+    // Whether this gate may block the RELEASE disposition. The frozen definition
+    // governs when aliases may be REMOVED; the parent project excludes removal from
+    // this compatibility release entirely. Two of the prerequisites
+    // (shipped_compatibility_cycle, 14 witnessed production days) can only become
+    // true AFTER a release ships, so gating the release on them made the first
+    // compatibility shipment unreachable — the clock cannot start until release, and
+    // release was held on the clock. This gate now blocks only an attempted removal.
+    release_gating: missing.length > 0,
+    eligibility: blocking.length === 0 ? 'ELIGIBLE' : 'NOT_ELIGIBLE',
     status: blocking.length === 0 ? 'PASS' : 'HOLD',
     blocking_reasons: blocking,
   };
@@ -2446,7 +2459,14 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
   const blocking = [
     ...kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
     ...kr10.blocking_reasons.map((reason) => `KR10: ${reason}`),
-    ...alias.blocking_reasons.map((reason) => `alias_retirement: ${reason}`),
+    // Alias retirement gates DELETION, not this release. Its unmet prerequisites
+    // enter the release disposition only once a removal has actually been attempted
+    // (an alias definition is missing from the tree). See evaluateAliasRetirement's
+    // release_gating field for why: two prerequisites are only satisfiable after a
+    // release ships, so blocking the release on them was a deadlock, not caution.
+    ...(alias.release_gating
+      ? alias.blocking_reasons.map((reason) => `alias_retirement: ${reason}`)
+      : []),
   ];
   let disposition = blocking.length === 0 ? 'PASS' : 'HOLD';
   const notes = [
@@ -2460,7 +2480,10 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
     'self-hashed deterministic_caller_migration is not proof; mechanical scan of residual l3-l6 callers on current revision is MANDATORY (authority evidence supplements but never replaces)',
     'fixture telemetry is never promoted to production telemetry',
     'this checker never deletes compatibility aliases',
-    'present compatibility aliases are nonblocking; only unmet retirement prerequisites HOLD',
+    'alias retirement gates DELETION, not release: while every alias is still present its unmet '
+      + 'prerequisites report NOT_ELIGIBLE without blocking the release disposition, because '
+      + 'shipped_compatibility_cycle and the 14 witnessed production days can only become true '
+      + 'after a release ships. Removing an alias before those prerequisites hold is still blocked',
     'P4 role qualification is out of scope',
   ];
   if (fixtureMode) {

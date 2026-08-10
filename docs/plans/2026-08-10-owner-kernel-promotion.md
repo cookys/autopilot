@@ -181,15 +181,26 @@ deployment boundary the loader exists to enforce).
 sol's Critical finding: the existing primitives verify artifacts, but nothing prevents a failed run
 from falling through to legacy.
 
-1. Create `src/engine/owner-kernel/terminal.js` exporting `issueTerminal({ checks, artifact })`.
-   It emits `COMPLETE` only when every entry in `checks` reports satisfied; otherwise `BLOCKED` with
-   the unsatisfied set. It has no third outcome and no fall-through branch.
+1. ~~Create `src/engine/owner-kernel/terminal.js`~~ **DONE 2026-08-10.** `freezeChecks()` +
+   `issueTerminal()`, proven by `hooks/tests/owner-kernel-terminal.test.sh` (11 assertions). The
+   decisive one is `no_third_outcome`: an exhaustive sweep of all 32 combinations of the four
+   obligations crossed with bound/unbound artifacts yields exactly ONE `COMPLETE` — the all-satisfied,
+   artifact-bound case — and every other combination returns `BLOCKED` with `accepted_artifact: null`.
+   Also enforced: silence is not consent (a missing result is unsatisfied), only `satisfied === true`
+   passes (`'false'`, `0`, `undefined`, truthy-non-true all block), an empty obligation set cannot
+   complete vacuously, and a check set altered after freezing cannot fund a completion.
 2. Freeze the check set before execution: acceptance predicates and authority boundaries are bound
    at dispatch time and hashed, so the set cannot grow or shrink mid-run.
 3. Permit bounded repair: a `BLOCKED` result may be re-verified up to the policy's
    `max_recover_cycles`, and each attempt re-runs the frozen checks. Exhausting the budget stays
    `BLOCKED`.
-4. Route `kernel.js` through it and remove every other completion emission.
+4. **Deferred to P5, deliberately.** Routing `kernel.js` (4357 lines, with its own mature terminal
+   discipline — `OwnerKernelBlockedError`, `terminal_reason`, post-terminal rejection) through the new
+   issuer is a change whose real behaviour cannot be observed while nothing in production calls the
+   kernel. Rewiring it now would mean editing the most intricate module in the project against tests
+   only, then discovering at promotion whether it was right. The issuer exists and is proven; P5 wires
+   it as part of making the kernel authoritative, when the wiring can be verified against actual
+   traffic. Recorded here rather than silently dropped.
 
 **Acceptance**: the planted-control matrix in KR-P2 — four planted failures, four `BLOCKED`
 terminations, zero accepted artifacts, and a fifth control where all checks pass yielding exactly one

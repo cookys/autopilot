@@ -41,6 +41,17 @@ const path = require('node:path');
 
 const TRUST_TIER = 'external';
 const ADAPTER_PROTOCOL_VERSION = 1;
+
+/**
+ * Where the deployed adapter keeps its own append state.
+ *
+ * The release checker constructs this adapter through `createAuthority()` and passes
+ * NO journal location — deliberately: "Adapter must own append-time state, not caller
+ * journal fields." So the location is the adapter's, not the caller's. It must sit
+ * outside the repo and outside any project evidence directory, and in production it
+ * should be writable only by the account that runs the host.
+ */
+const DEFAULT_JOURNAL_ROOT = '/var/lib/autopilot/witness';
 const LOCK_STALE_MS = 30_000;
 const LOCK_RETRY_MS = 25;
 const LOCK_MAX_WAIT_MS = 10_000;
@@ -179,12 +190,22 @@ class HostWitnessAdapter {
         'INVALID_JOURNAL_PATH',
       );
     }
+    // normalizeWitnessBinding() enforces /^[A-Za-z0-9._:-]{1,128}$/ on identity, and
+    // identity embeds streamId. Reject here with a clear reason rather than letting the
+    // kernel's binding check fail later with a message about a field the operator never set.
+    const identity = `host-witness:${streamId}`;
+    if (!ID_PATTERN.test(identity)) {
+      throw new WitnessAdapterError(
+        `streamId yields an identity outside /^[A-Za-z0-9._:-]{1,128}$/: ${identity}`,
+        'INVALID_STREAM',
+      );
+    }
     this.streamId = streamId;
     this.journalPath = journalPath;
     this.lockPath = `${journalPath}.lock`;
     this.protocol_version = ADAPTER_PROTOCOL_VERSION;
-    this.identity = `host-witness:${streamId}`;
-    this.attestation_hash = sha256(`host-witness:${streamId}`);
+    this.identity = identity;
+    this.attestation_hash = sha256(identity);
 
     // Non-writable so a caller cannot downgrade or forge the tier the release gate reads.
     Object.defineProperty(this, 'trustTier', {
@@ -500,10 +521,50 @@ class HostWitnessAdapter {
   }
 }
 
+/**
+ * Factory the release checker looks for. It requires the deployed module to export
+ * `createAuthority()` or `createWitness()`, and calls it with the authority config's
+ * stream and journal — never with a storage location.
+ *
+ * The `receipts` / `receipt_journal` the checker passes come from the installed
+ * authority config and are DELIBERATELY NOT trusted as state here. They are the claims
+ * to be checked; this adapter's own durable journal is what checks them. Seeding
+ * in-memory state from them would let a config assert its own history, which is the
+ * whole failure the external-witness boundary exists to prevent.
+ *
+ * @param {object} options
+ * @param {string} options.streamId     Stream to witness (from the authority config).
+ * @param {string} [options.journalRoot] Deployment override for the adapter's own
+ *   storage root. Not supplied by the checker; present so an operator can place state
+ *   on a specific volume. It is not a trust input — adapter integrity comes from the
+ *   sha256 pin in the adapter binding.
+ */
+function createAuthority({ streamId, journalRoot } = {}) {
+  if (typeof streamId !== 'string' || streamId.length === 0) {
+    throw new WitnessAdapterError('createAuthority requires a non-empty streamId', 'INVALID_STREAM');
+  }
+  const root = typeof journalRoot === 'string' && journalRoot.length > 0
+    ? journalRoot
+    : DEFAULT_JOURNAL_ROOT;
+  if (!path.isAbsolute(root)) {
+    throw new WitnessAdapterError('journalRoot must be an absolute path', 'INVALID_JOURNAL_PATH');
+  }
+  // Keep the stream out of path semantics: no separators, no traversal, no surprises.
+  const safeStream = streamId.replace(/[^A-Za-z0-9._-]/g, '_');
+  return new HostWitnessAdapter({
+    streamId,
+    journalPath: path.join(root, `${safeStream}.jsonl`),
+  });
+}
+
 module.exports = {
   HostWitnessAdapter,
   WitnessAdapterError,
   ADAPTER_PROTOCOL_VERSION,
+  DEFAULT_JOURNAL_ROOT,
+  // The factory name the release checker resolves.
+  createAuthority,
+  createWitness: createAuthority,
   // Exported for the parity test only; not part of the witness contract.
   __canonical: { canonicalJson, sha256 },
 };

@@ -215,6 +215,68 @@ const H = (n) => require('crypto').createHash('sha256').update(String(n)).digest
   ok('cross_stream_isolation');
 }
 
+// --- 11. the factory the release checker actually resolves -----------------------
+{
+  const { createAuthority, createWitness } = require(path.join(root, 'src/host-adapters/witness-adapter.js'));
+  assert.equal(typeof createAuthority, 'function');
+  assert.equal(createWitness, createAuthority, 'both factory names must resolve to one implementation');
+  // Called with exactly the shape check-owner-kernel-release-gates.js uses.
+  const w = createAuthority({
+    streamId: 'owner-kernel-dogfood',
+    journalRoot: path.join(tmpRoot, 'factory'),
+    receipts: [],
+    receipt_journal: [],
+    authority_id: 'ap.test.authority',
+    adapter_sha256: '0'.repeat(64),
+  });
+  const authority = assertWitnessAdapter(w, { allowTestWitness: false, requireBinding: true });
+  assert.equal(authority.trustTier, 'external');
+  assert.equal(typeof authority.getAppendTimestamp, 'function');
+  assert.equal(w.protocol_version, 1);
+  assert.match(w.identity, /^[A-Za-z0-9._:-]{1,128}$/);
+  // A streamId that would produce an identity the kernel binding rejects must fail here,
+  // with a reason naming the real cause rather than surfacing later as a binding error.
+  assert.throws(
+    () => createAuthority({ streamId: 'bad stream/id', journalRoot: path.join(tmpRoot, 'factory') }),
+    (error) => error.code === 'INVALID_STREAM',
+  );
+  ok('factory_contract');
+}
+
+// --- 12. config-supplied receipts are NOT trusted as state -----------------------
+// The checker passes the installed authority config's journal into the factory. Those
+// are the claims to be checked, not the state that checks them. If the adapter seeded
+// itself from them, a config could assert its own history — precisely what an external
+// witness exists to prevent.
+{
+  const { createAuthority } = require(path.join(root, 'src/host-adapters/witness-adapter.js'));
+  const forgedReceipt = {
+    run_id: 'run-forged',
+    stream_id: 'stream-i',
+    sequence: 1,
+    event_hash: H('forged-event'),
+    previous_witness_head: null,
+  };
+  forgedReceipt.witness_head = __canonical.sha256(__canonical.canonicalJson({
+    run_id: forgedReceipt.run_id,
+    stream_id: forgedReceipt.stream_id,
+    sequence: forgedReceipt.sequence,
+    event_hash: forgedReceipt.event_hash,
+    previous_witness_head: null,
+  }));
+  // Internally consistent — it hashes correctly — but this adapter never issued it.
+  const w = createAuthority({
+    streamId: 'stream-i',
+    journalRoot: path.join(tmpRoot, 'untrusted'),
+    receipts: [forgedReceipt],
+    receipt_journal: [forgedReceipt],
+  });
+  assert.equal(w.getHead(), null, 'config receipts must not seed adapter head');
+  assert.equal(w.verify(forgedReceipt), false, 'a self-consistent receipt the adapter never issued must not verify');
+  assert.equal(w.getAppendTimestamp(forgedReceipt), null, 'config receipts must not yield anchored time');
+  ok('config_receipts_untrusted');
+}
+
 fs.rmSync(tmpRoot, { recursive: true, force: true });
 console.log(results.join('\n'));
 NODE
@@ -237,5 +299,7 @@ assert_contains "$OUT" "anchored_timestamp_from_adapter_state=ok" "timestamps mu
 assert_contains "$OUT" "tampered_journal_rejected=ok" "a tampered journal line must not yield a timestamp"
 assert_contains "$OUT" "atomic_batch_contract=ok" "batch append must be atomic and verifiable"
 assert_contains "$OUT" "cross_stream_isolation=ok" "streams sharing a journal must stay isolated"
+assert_contains "$OUT" "factory_contract=ok" "createAuthority must satisfy the release checker factory contract"
+assert_contains "$OUT" "config_receipts_untrusted=ok" "config-supplied receipts must never seed adapter state"
 
 finalize_test

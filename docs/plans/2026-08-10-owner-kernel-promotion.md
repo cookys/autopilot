@@ -80,7 +80,7 @@ correctness is demonstrated by evidence a reader can re-execute.
 |---|---|---|
 | `src/host-adapters/witness-adapter.js` | **DONE 2026-08-10.** The host-resident production witness, and the deepest gap in the project: adapter-owned anchored `getAppendTimestamp()`, durable append-only head, non-writable `trustTier: 'external'`, self-contained (the deployed copy must not `require()` repo code). Never existed before; every P0-P4 suite ran against the test-only `MemoryWitness` the release gate forbids. Source lives here; the **deployed copy** goes to a host path outside the repo, pinned by sha256. | P1 |
 | `hooks/tests/host-witness-adapter.test.sh` | **DONE 2026-08-10.** 10 assertions incl. canonical-JSON byte-parity with the repo, and the non-vacuity control asserting `MemoryWitness` is still refused as production authority. | P1 |
-| `docs/runbooks/trust-root-provisioning.md` | **New.** Root-operator procedure for the two `/etc/autopilot` files: required fields, ownership, mode, sha256 binding to the deployed adapter, what must never source them. | P1 |
+| `docs/runbooks/trust-root-provisioning.md` | **DONE 2026-08-10.** Root-operator procedure: deploy adapter outside repo, pin by sha256, create both `/etc/autopilot` files, lock ownership/mode, verify. States why the step is human-gated and why passwordless sudo does not change that. | P1 |
 | `hooks/tests/trust-root-provisioning.test.sh` | **New.** Acceptance check: one correct provisioning passes the loader; six insecure/self-supplied variants fail. | P1 |
 | `src/engine/owner-kernel/terminal.js` | **New.** Single terminal-state issuer. Emits `COMPLETE` only with every bound check satisfied; otherwise `BLOCKED`. No other module may issue a terminal state. | P2 |
 | `src/engine/owner-kernel/kernel.js` | Route terminal issuance through `terminal.js`; remove any direct completion emission. | P2 |
@@ -130,7 +130,7 @@ the work sat complete-but-inert for three weeks.
    would corrupt every receipt chain without failing loudly.
 2. Deploy it to a host path outside the repo and outside the project dir (the binding loader refuses
    an adapter resolving inside either), and record its sha256.
-3. Write `docs/runbooks/trust-root-provisioning.md`. Derive the required shape from
+3. ~~Write `docs/runbooks/trust-root-provisioning.md`.~~ **DONE 2026-08-10** — seven steps, each command verified runnable, plus an explicit rollback and a "never do these" list mirroring the loader's own refusals. Derived from
    `loadTrustedInstalledWitnessAuthority` and `loadTrustedWitnessAdapterBinding`:
    - authority file: `kind` ∈ {`trusted_installed_witness_authority`,
      `p37_installed_witness_authority`}; non-empty `stream_id`; `receipts` or `receipt_journal`

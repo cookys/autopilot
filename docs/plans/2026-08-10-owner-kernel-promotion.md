@@ -48,7 +48,7 @@ correctness is demonstrated by evidence a reader can re-execute.
 | **KR-P2** | No `COMPLETE` is emitted unless every bound check passed. Any unsatisfied check terminates `BLOCKED`. Zero fall-through paths. | Planted-control matrix: for each of {veto non-empty, evidence unbound, challenge absent, approval unconsumed}, the run terminates `BLOCKED` and no artifact is accepted. |
 | **KR-P3** | Every retirement (of an entry point, a module, or an authority) emits an executable receipt naming what was removed, what replaced it, and the evidence the replacement passed. A retirement without a receipt fails closed. | `scripts/check-retirement-receipts.js --check` exits non-zero when a tracked removal has no receipt. |
 | **KR-P4** | Shadow and legacy decisions are compared on live traffic; divergence is measured, not asserted. Promotion of a path requires a recorded divergence window on that path with zero unexplained divergences. | `scripts/divergence-monitor.js report --path <entry>` emits per-path counts; promotion refuses a path with `unexplained > 0` or `samples == 0`. |
-| **KR-P5** | The two `/etc/autopilot` trust roots have a documented provisioning procedure, and that procedure is proven by an acceptance check that a correct file passes and an insecure one fails. | `bash hooks/tests/trust-root-provisioning.test.sh` — six negative cases (symlink, non-root uid, group-writable, `adapter_module` present in authority file, mismatched `authority_id`, repo-supplied path) each rejected. |
+| **KR-P5** | A production witness adapter exists, is deployed outside the repo, and is bound by sha256 to root-owned trust roots created by a documented procedure. No release evidence is ever accepted from a `trustTier: 'test'` witness. | `bash hooks/tests/trust-root-provisioning.test.sh` — six negative cases (symlink, non-root uid, group-writable, `adapter_module` present in authority file, mismatched `authority_id`, repo-resident adapter) each rejected; plus a control asserting `MemoryWitness` is refused as release evidence. |
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -78,7 +78,8 @@ correctness is demonstrated by evidence a reader can re-execute.
 
 | File | Responsibility | Phase |
 |---|---|---|
-| `docs/runbooks/trust-root-provisioning.md` | **New.** Root-operator procedure for the two `/etc/autopilot` files: required fields, ownership, mode, what must never source them. | P1 |
+| *(host path, outside the repo)* `autopilot-witness-adapter.js` | **New, and the deepest gap in the project.** The host-resident production witness: adapter-owned anchored `getAppendTimestamp()` after verify, append-only head, non-`test` trustTier, journal outside repo and project. Never existed; every P0-P4 suite ran against the test-only `MemoryWitness` the release gate forbids. | P1 |
+| `docs/runbooks/trust-root-provisioning.md` | **New.** Root-operator procedure for the two `/etc/autopilot` files: required fields, ownership, mode, sha256 binding to the deployed adapter, what must never source them. | P1 |
 | `hooks/tests/trust-root-provisioning.test.sh` | **New.** Acceptance check: one correct provisioning passes the loader; six insecure/self-supplied variants fail. | P1 |
 | `src/engine/owner-kernel/terminal.js` | **New.** Single terminal-state issuer. Emits `COMPLETE` only with every bound check satisfied; otherwise `BLOCKED`. No other module may issue a terminal state. | P2 |
 | `src/engine/owner-kernel/kernel.js` | Route terminal issuance through `terminal.js`; remove any direct completion emission. | P2 |
@@ -92,10 +93,62 @@ correctness is demonstrated by evidence a reader can re-execute.
 
 ## 4. Phases
 
-### P1 — Trust-root provisioning (size: S) — no dependencies
+### P1 — The production witness adapter, then provisioning (size: L) — no dependencies; blocks everything
 
-The two `/etc/autopilot` files gate every production claim, and nothing in the repo produces or
-documents them. All six seats called this an in-scope gap.
+**Corrected 2026-08-10 after reading the code rather than the phase reports.** This phase was first
+sized S — "write a runbook for two JSON files". That was wrong, and the reason matters more than the
+correction: the two trust-root files are not the deepest gap. They bind an `adapter_module` by
+sha256, and **that adapter has never been written**.
+
+Evidence, not inference:
+
+- `src/engine/owner-kernel/witness.js:81` — `MemoryWitness` is annotated "permanently test-only" and
+  hard-sets `trustTier: 'test'` as a non-writable, non-configurable property. Its own comment says
+  "Production callers must inject a separate host-resident witness adapter."
+- `scripts/check-owner-kernel-release-gates.js:776` — release evidence requires the authority to
+  expose `getAppendTimestamp()` over adapter-owned anchored timestamps.
+- A repo-wide search for `getAppendTimestamp` returns exactly one file: the checker that demands it.
+  **No implementation exists anywhere.**
+
+So every green suite in P0-P4 ran against a witness the release gate explicitly forbids, and the
+project could never have left shadow — not because a clock had not started, but because the
+component that would make production evidence possible was never built. This is the single reason
+the work sat complete-but-inert for three weeks.
+
+1. Implement the host-resident witness adapter. It must: expose `getAppendTimestamp()` returning an
+   adapter-owned anchored timestamp taken **after** verify (never a pass-through of a caller-supplied
+   time, which the checker's notes name as forgery); maintain an append-only head with
+   `appendIfHead` semantics; report a `trustTier` that is not `test`; and hold its receipt journal
+   outside both the repo and the project evidence boundary. `MemoryWitness` is the reference for the
+   head/receipt/batch mechanics — it is not the thing to deploy.
+2. Deploy it to a host path outside the repo and outside the project dir (the binding loader refuses
+   an adapter resolving inside either), and record its sha256.
+3. Write `docs/runbooks/trust-root-provisioning.md`. Derive the required shape from
+   `loadTrustedInstalledWitnessAuthority` and `loadTrustedWitnessAdapterBinding`:
+   - authority file: `kind` ∈ {`trusted_installed_witness_authority`,
+     `p37_installed_witness_authority`}; non-empty `stream_id`; `receipts` or `receipt_journal`
+     array; `authority_id` matching `/^[A-Za-z0-9._:-]{1,128}$/`; **no** `adapter_module` /
+     `adapter_sha256` (adapter identity comes only from the binding).
+   - binding file: `kind` ∈ {`trusted_installed_witness_adapter_binding`,
+     `p37_installed_witness_adapter_binding`}; `adapter_module` resolving outside repo and project;
+     `adapter_sha256` matching the deployed file; `authority_id` equal to the authority file's; **no**
+     `anchored_append_timestamps` (the adapter owns those, not the config).
+4. State the placement rules from `assertSecureInstallationPath`: regular file (not symlink), uid 0,
+   `mode & 0o022 == 0`, and the same for every ancestor directory.
+5. State the prohibitions: never source content from the repo, project dir, or environment; never set
+   `skipInstallationOwnershipChecks`. The loader already refuses these — the runbook must not teach a
+   reader to work around them.
+6. Write `hooks/tests/trust-root-provisioning.test.sh`: a correct pair passes the loader; six
+   insecure variants each fail with the loader's own reason.
+
+**Acceptance**: the adapter exists and is deployed outside the repo; `--release-claim production`
+progresses past the trust-root reasons (KR8 may still hold on telemetry volume, which is P4's job);
+the acceptance test rejects all six negative cases. An in-repo installer stays out of scope.
+
+**Human-gated step**: the root operator performs the provisioning. This is deliberate and must not
+be automated by the kernel or by an agent — the operator establishes which evidence source is
+trusted, and the kernel then decides qualification from it. An agent minting its own trust anchor is
+the one genuine circularity both review panels identified.
 
 1. Write `docs/runbooks/trust-root-provisioning.md`. Derive the required shape from
    `loadTrustedInstalledWitnessAuthority` and `loadTrustedWitnessAdapterBinding`, not from memory:
@@ -207,6 +260,7 @@ not done.
 
 | Risk | Mitigation |
 |---|---|
+| The pattern that produced this situation repeats: interfaces get built, suites go green against test doubles, and nobody notices the production component was never written. This project ran three weeks complete-but-inert for exactly that reason. | Every phase's acceptance names the *production* artifact, not the interface. KR-P5 additionally requires a control asserting a `trustTier: 'test'` witness is REFUSED — a green suite must be impossible to obtain from a double. |
 | Promotion becomes "delete the old thing", re-triggering scope explosion and the alias clock. | §2.5 forbids deleting any entry point. Adapters stay. |
 | A failed kernel run silently falls back to legacy, so promotion is cosmetic and nobody notices. | KR-P2's planted controls assert the *absence* of a legacy completion, not just the presence of `BLOCKED`. |
 | The divergence monitor reports agreement because it never sampled anything. | `report` distinguishes `samples: 0` from agreement; promotion refuses a path with zero samples. |

@@ -44,7 +44,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
-const DEFAULT_STORE = path.join(os.homedir(), '.autopilot', 'divergence', 'observations.jsonl');
+// Telemetry location, not a trust input: overriding it changes where observations are
+// written, never what counts as evidence. (Contrast the trust roots, which are fixed
+// paths precisely because a caller-selectable one would not be a trust root.)
+const DEFAULT_STORE = process.env.AUTOPILOT_DIVERGENCE_STORE
+  || path.join(os.homedir(), '.autopilot', 'divergence', 'observations.jsonl');
 const ENTRY_PATTERN = /^[A-Za-z0-9._:/-]{1,128}$/;
 
 function fail(message, code = 2) {
@@ -102,29 +106,39 @@ function readObservations(storePath) {
   return rows;
 }
 
-function recordObservation(options) {
-  if (!options.path || !ENTRY_PATTERN.test(options.path)) {
-    fail('record requires --path matching /^[A-Za-z0-9._:\\/-]{1,128}$/');
+/**
+ * Programmatic append, shared with the CLI.
+ *
+ * Separate from the CLI wrapper so in-process producers (the shadow terminal observer)
+ * do not have to shell out or duplicate the row shape — a duplicated shape drifts, and a
+ * drifted row silently changes what `report` counts.
+ *
+ * @throws {Error} on an invalid entry path or decision; callers that must not fail
+ *   (observers) are responsible for swallowing.
+ */
+function appendObservation({
+  entryPath, shadow, legacy = null, reason = null, runId = null, store = DEFAULT_STORE,
+} = {}) {
+  if (typeof entryPath !== 'string' || !ENTRY_PATTERN.test(entryPath)) {
+    throw new Error('appendObservation requires a valid entryPath');
   }
-  if (typeof options.shadow !== 'string' || options.shadow.length === 0) {
-    fail('record requires --shadow <decision>');
+  if (typeof shadow !== 'string' || shadow.length === 0) {
+    throw new Error('appendObservation requires a shadow decision');
   }
-  const hasLegacy = typeof options.legacy === 'string' && options.legacy.length > 0;
+  const hasLegacy = typeof legacy === 'string' && legacy.length > 0;
   const row = {
     schema_version: 1,
-    entry_path: options.path,
-    shadow_decision: options.shadow,
-    legacy_decision: hasLegacy ? options.legacy : null,
+    entry_path: entryPath,
+    shadow_decision: shadow,
+    legacy_decision: hasLegacy ? legacy : null,
     kind: hasLegacy ? 'paired' : 'shadow_only',
-    agreed: hasLegacy ? options.shadow === options.legacy : null,
-    // A reason only means anything on a divergence; recording one elsewhere is harmless
-    // but never converts a shadow_only observation into evidence.
-    reason: typeof options.reason === 'string' && options.reason.length > 0 ? options.reason : null,
-    run_id: typeof options.runId === 'string' ? options.runId : null,
+    agreed: hasLegacy ? shadow === legacy : null,
+    reason: typeof reason === 'string' && reason.length > 0 ? reason : null,
+    run_id: typeof runId === 'string' ? runId : null,
     recorded_at: new Date().toISOString(),
   };
-  fs.mkdirSync(path.dirname(options.store), { recursive: true });
-  const fd = fs.openSync(options.store, 'a');
+  fs.mkdirSync(path.dirname(store), { recursive: true });
+  const fd = fs.openSync(store, 'a');
   try {
     fs.writeSync(fd, `${JSON.stringify(row)}\n`);
     fs.fsyncSync(fd);
@@ -132,6 +146,22 @@ function recordObservation(options) {
     fs.closeSync(fd);
   }
   return row;
+}
+
+function recordObservation(options) {
+  try {
+    return appendObservation({
+      entryPath: options.path,
+      shadow: options.shadow,
+      legacy: options.legacy,
+      reason: options.reason,
+      runId: options.runId,
+      store: options.store,
+    });
+  } catch (error) {
+    fail(error.message);
+    return null;
+  }
 }
 
 function summarize(rows, entryPath) {
@@ -227,4 +257,6 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { summarize, promotionReadiness, readObservations, DEFAULT_STORE };
+module.exports = {
+  summarize, promotionReadiness, readObservations, appendObservation, DEFAULT_STORE,
+};

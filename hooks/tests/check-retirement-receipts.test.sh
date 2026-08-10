@@ -37,11 +37,11 @@ assert_contains "$OUT" "governed removals examined: 5" "checker must see the fiv
 assert_contains "$OUT" "UNRECEIPTED" "unreceipted removals must be reported"
 
 node "$CHECKER" --base "${DEL_COMMIT}~1" --head "$DEL_COMMIT" --check >/dev/null 2>&1
-assert_eq "1" "$?" "--check must exit non-zero when a governed removal is unreceipted"
+assert_eq "$?" "1" "--check must exit non-zero when a governed removal is unreceipted"
 
 # --- 2. without --check it reports but does not fail the build -------------------
 node "$CHECKER" --base "${DEL_COMMIT}~1" --head "$DEL_COMMIT" >/dev/null 2>&1
-assert_eq "0" "$?" "reporting mode must not exit non-zero"
+assert_eq "$?" "0" "reporting mode must not exit non-zero"
 
 # --- 3. a valid receipt clears exactly its own removal ---------------------------
 plant_receipt "tree" "scripts/tree.sh" "hooks/tests/check-retirement-receipts.test.sh"
@@ -49,7 +49,7 @@ OUT="$(node "$CHECKER" --base "${DEL_COMMIT}~1" --head "$DEL_COMMIT" 2>&1)"
 assert_contains "$OUT" "✓ scripts/tree.sh — RECEIPTED" "a receipted removal must clear"
 assert_contains "$OUT" "✗ scripts/qc-panel.sh — UNRECEIPTED" "other removals must still be flagged"
 node "$CHECKER" --base "${DEL_COMMIT}~1" --head "$DEL_COMMIT" --check >/dev/null 2>&1
-assert_eq "1" "$?" "one receipt must not clear the remaining unreceipted removals"
+assert_eq "$?" "1" "one receipt must not clear the remaining unreceipted removals"
 
 # --- 4. receipt naming evidence that does not exist is refused -------------------
 plant_receipt "ghost" "scripts/qc-panel.sh" "hooks/tests/this-test-does-not-exist.test.sh"
@@ -64,7 +64,7 @@ PLANTED+=("$BAD")
 OUT="$(node "$CHECKER" --base "${DEL_COMMIT}~1" --head "$DEL_COMMIT" 2>&1)"
 assert_contains "$OUT" "missing required field" "a receipt missing required fields must be reported"
 node "$CHECKER" --base "${DEL_COMMIT}~1" --head "$DEL_COMMIT" --check >/dev/null 2>&1
-assert_eq "1" "$?" "a malformed receipt must fail --check even if every removal is otherwise covered"
+assert_eq "$?" "1" "a malformed receipt must fail --check even if every removal is otherwise covered"
 rm -f "$BAD"
 
 # --- 6. unparseable JSON is refused ----------------------------------------------
@@ -77,17 +77,17 @@ rm -f "$BROKEN"
 
 # --- 7. current regime range is clean and stays exit 0 ---------------------------
 node "$CHECKER" --check >/dev/null 2>&1
-assert_eq "0" "$?" "the live regime range must be clean"
+assert_eq "$?" "0" "the live regime range must be clean"
 
 # --- 8. JSON output is well-formed and carries the schema ------------------------
 JSON_OUT="$(node "$CHECKER" --base "${DEL_COMMIT}~1" --head "$DEL_COMMIT" --json 2>/dev/null)"
 SCHEMA="$(printf '%s' "$JSON_OUT" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const o=JSON.parse(d);console.log(o.schema_version+'|'+o.removals_examined+'|'+o.ok)})")"
-assert_eq "1|5|false" "$SCHEMA" "JSON report must carry schema_version, removal count, and ok=false"
+assert_eq "$SCHEMA" "1|5|false" "JSON report must carry schema_version, removal count, and ok=false"
 
 # --- 9. non-governed and mirror paths need no receipt ----------------------------
 # A commit touching only docs/ must produce zero governed removals.
 OUT="$(node "$CHECKER" --base HEAD~1 --head HEAD --json 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const o=JSON.parse(d);console.log(o.findings.filter(f=>f.removed.startsWith('platforms/codex/plugin/')).length)})")"
-assert_eq "0" "$OUT" "generated codex mirrors must never require their own receipt"
+assert_eq "$OUT" "0" "generated codex mirrors must never require their own receipt"
 
 cleanup_planted
 finalize_test

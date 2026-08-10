@@ -194,7 +194,9 @@ from falling through to legacy.
 3. Permit bounded repair: a `BLOCKED` result may be re-verified up to the policy's
    `max_recover_cycles`, and each attempt re-runs the frozen checks. Exhausting the budget stays
    `BLOCKED`.
-4. **Deferred to P5, deliberately.** Routing `kernel.js` (4357 lines, with its own mature terminal
+4. **Still deferred to P5** — but `terminal.js` is no longer callerless: the shadow terminal observer
+   drives it on every `status task`, so its behaviour is now exercised against real evidence rather
+   than only against fixtures. Routing `kernel.js` (4357 lines, with its own mature terminal
    discipline — `OwnerKernelBlockedError`, `terminal_reason`, post-terminal rejection) through the new
    issuer is a change whose real behaviour cannot be observed while nothing in production calls the
    kernel. Rewiring it now would mean editing the most intricate module in the project against tests
@@ -236,10 +238,15 @@ kimi's proposal, and the evidence source promotion needs. Promotion currently ha
    path reports `samples: 0` and `NOT READY` rather than vacuous agreement. A corrupt row counts
    against EVERY path query — it has no readable `entry_path`, and filtering it out would shrink the
    denominator and make agreement look better than it is. That was a real bug the suite caught.
-2. **Deferred to P5, deliberately.** Emitting from `shadow-translation.js` would install a hook with
-   no consumer: nothing holds the legacy decision today, so every emission would be `shadow_only` and
-   fund nothing. The pair becomes real when P5 puts both sides in one place. Recorded rather than
-   silently dropped — same judgement as P2 step 4.
+2. **DONE 2026-08-11, via a different producer than planned.** `shadow-translation.js` was the wrong
+   emitter: nothing there holds the legacy decision, so every emission would have been `shadow_only`
+   and funded nothing. `status task` does hold both — it is a real programmatic closure decision — so
+   `src/status/shadow-terminal-observer.js` emits from there instead, wired at `src/status/cli.js`.
+   Proven end to end by `hooks/tests/status-task-shadow-wiring.test.sh` (7 assertions): a real
+   `status task` run must land a `paired` observation in the store, or the suite fails.
+   **That suite exists because the observer first shipped with zero callers while its commit message
+   claimed otherwise.** A module with no caller is indistinguishable from one never written, and its
+   own unit tests pass either way — only an end-to-end run can tell them apart.
 3. ~~`report --path <entry>`~~ **DONE** — emits `{samples, agreements, divergences, unexplained,
    shadow_only, corrupt_rows}`. A divergence is "explained" only when a recorded reason is present,
    and an empty-string reason is not one; the monitor never infers an explanation, because an

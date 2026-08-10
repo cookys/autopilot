@@ -77,7 +77,37 @@ ls docs/plans/*.md 2>/dev/null | grep -v INDEX | grep -v _archive
 grep "_archive" docs/projects/INDEX.md 2>/dev/null
 
 # Check for "in progress" markers that should be resolved:
-grep -rn "in progress\|In Progress\|IN PROGRESS" docs/projects/INDEX.md docs/plans/INDEX.md 2>/dev/null
+grep -rn "in progress\|In Progress\|IN PROGRESS" docs/projects/INDEX.md 2>/dev/null
+```
+
+The sweep above scans INDEX→filesystem. That direction alone cannot see anything the INDEX never
+mentioned, so run the reverse direction too — filesystem→INDEX:
+
+```bash
+# REVERSE 1: archived project dirs not listed in INDEX
+for d in docs/projects/_archive/*/; do
+  [ -d "$d" ] || continue
+  name=$(basename "$d")
+  grep -q "$name" docs/projects/INDEX.md || echo "ORPHAN PROJECT: $name not in INDEX"
+done
+
+# REVERSE 2: project dirs whose README says COMPLETE but that never moved to _archive/
+for d in docs/projects/*/; do
+  case "$(basename "$d")" in _archive|ongoing-maintenance) continue ;; esac
+  grep -qi "status.*COMPLETE" "$d/README.md" 2>/dev/null \
+    && echo "UNARCHIVED COMPLETE: $(basename "$d") is done but still outside _archive/"
+done
+
+# REVERSE 3: branches named in the Active section that no longer exist.
+# Scope to the Active table only — the Completed table legitimately names branches that are gone,
+# and scanning the whole file reports every one of them as stale.
+sed -n '/^## 進行中/,/^## 已完成/p' docs/projects/INDEX.md 2>/dev/null \
+  | grep -oE '`(feat|fix|mission)/[A-Za-z0-9._/-]+`' \
+  | tr -d '`' | sort -u | while read -r branch; do
+  git rev-parse --verify --quiet "$branch" >/dev/null \
+    || git rev-parse --verify --quiet "origin/$branch" >/dev/null \
+    || echo "STALE BRANCH REF: $branch (deleted — project may be merged but not archived)"
+done
 ```
 
 **For each finding:**
@@ -85,6 +115,11 @@ grep -rn "in progress\|In Progress\|IN PROGRESS" docs/projects/INDEX.md docs/pla
 - Active table entry pointing to `_archive/` → remove from Active, ensure in Archived
 - "In progress" marker on completed project → update to final status
 - Empty Active table row → remove
+- `ORPHAN PROJECT` → add the missing INDEX row; the work happened, only the index lost it
+- `UNARCHIVED COMPLETE` → run the archive script on it; a COMPLETE README outside `_archive/` means
+  closeout stopped halfway
+- `STALE BRANCH REF` → the branch was deleted, so the project was most likely merged but never
+  archived; verify the merge, then archive
 
 ## Step 5: Invoke next (project-specific)
 

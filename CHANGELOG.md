@@ -24,7 +24,16 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased — Codex lifecycle admission and fail-closed promotion boundary
+## v2.34.9 — Codex lifecycle admission and fail-closed promotion boundary
+
+**Headline**: Codex now enters the lifecycle through packaged `session-mode` and the sealed
+Mission/Engine route, and one strict managed-admission validator — shared by the CLI, the Engine,
+and the campaign dispatcher — binds TTL, effective level, Git common-dir, host payload session
+identity, and digest-sealed Mission policy before any managed effect. What this release
+deliberately does **not** ship is the production pre-effect hook: the final lifecycle sequence never
+qualified a payload-session bridge, so D4 stays `NOT_READY/NO_SHIP` and the installed package still
+registers only `PostCompact`. The structured `PreToolUse` denial is retained as probe evidence, not
+as a shipped guarantee — a hook that admits a call it cannot verify is worse than no hook.
 
 ### Added
 - Generated Codex-native prefixes for exactly seven lifecycle/front-door skills. The prefix maps
@@ -49,6 +58,17 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - The frozen implementation plan and rubric were restored byte-for-byte. User-directed corrections
   live in a separately hashed, separately reviewable amendment and rubric attached to the same D4
   graph node.
+
+### North star
+- prose-justification: the +12% prose delta the gate reports is **not** this release. Measured
+  against the tracked baseline's own span, v2.34.9 adds a net 35 prose lines — the filesystem→INDEX
+  reverse checks in `skills/project-lifecycle/references/project-archive.md`, which exist to catch a
+  closeout that stopped halfway (three such projects had accumulated). The remaining ~1395 lines
+  accrued across every release from v2.32.59 to v2.34.8, because `docs/metrics/surface-lines.json`
+  was never refreshed after any of them even though `preflight-release.sh` documents that refresh as
+  part of each release. The baseline is refreshed as part of this release, so the next one diffs
+  against a real predecessor instead of re-reporting a year's drift. Engine lines moved 5188 →
+  78838 over the same span, so the ratio direction holds.
 
 ### Boundary
 - The installed Codex package registers only the existing `PostCompact` recovery hook. The structured

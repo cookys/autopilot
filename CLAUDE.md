@@ -23,7 +23,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh`
 
-**Mission, campaign & session state** — `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
+**Mission, campaign & session state** — `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `divergence-monitor.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
 
 **Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js` `probe-skill-frontmatter-portability.sh` `platform-capability-claims.js` `bench-engine-capability.sh` `import-aa-capabilities.js` `evaluate-profile-cutover.js`
 

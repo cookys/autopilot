@@ -153,8 +153,8 @@ function parseArgs(argv) {
     }
     if (arg === '--release-claim') {
       const value = argv[index + 1];
-      if (value !== 'shadow' && value !== 'production') {
-        fail('--release-claim must be shadow or production');
+      if (value !== 'shadow' && value !== 'production' && value !== 'promoted') {
+        fail('--release-claim must be shadow, production, or promoted');
       }
       options.releaseClaim = value;
       index += 1;
@@ -2173,6 +2173,72 @@ function evaluateShadowBoundary(repoRoot) {
   };
 }
 
+/** Entry points a promotion claim must have evidence for, one at a time. */
+const PROMOTABLE_PATHS = Object.freeze(['/l3', '/l4', '/l5', '/l6']);
+
+/**
+ * The `promoted` claim: the kernel actually decides.
+ *
+ * Strictly harder than `production`, and deliberately so — this is the claim that would
+ * let someone say the Board's goal was met. It requires everything `production` requires,
+ * plus two things a document cannot assert:
+ *
+ *  1. MEASURED per-path divergence evidence. `scripts/divergence-monitor.js` refuses a
+ *     path with zero paired samples, so "no disagreements observed" across an unexercised
+ *     path cannot be mistaken for agreement.
+ *  2. An INVERTED shadow boundary. Under `shadow` we prove production-authority
+ *     constructors are unreachable; under `promoted` their unreachability is the failure,
+ *     because a kernel that reaches no authority has been promoted in name only.
+ */
+function evaluatePromotionClaim(repoRoot, kr8, shadowBoundary) {
+  const blocking = kr8.blocking_reasons.map((reason) => `KR8: ${reason}`);
+
+  // Inversion: an intact shadow boundary means nothing calls production authority, so a
+  // promotion claim is false on its face.
+  if (shadowBoundary.intact) {
+    blocking.push(
+      'promotion_boundary: the shadow boundary is still intact — no production-authority '
+      + 'constructor is called from outside the installed-host family, so the kernel decides '
+      + 'nothing and a promoted claim would be false',
+    );
+  }
+
+  // Divergence evidence, per path, read from the monitor rather than asserted here.
+  let monitor = null;
+  try {
+    // eslint-disable-next-line global-require
+    monitor = require(path.join(repoRoot, 'scripts', 'divergence-monitor.js'));
+  } catch (error) {
+    blocking.push(`promotion_evidence: divergence monitor is unavailable: ${error.message}`);
+  }
+  const paths = {};
+  if (monitor) {
+    let rows = [];
+    try {
+      rows = monitor.readObservations(monitor.DEFAULT_STORE);
+    } catch (error) {
+      blocking.push(`promotion_evidence: divergence store unreadable: ${error.message}`);
+    }
+    for (const entryPath of PROMOTABLE_PATHS) {
+      const summary = monitor.summarize(rows, entryPath);
+      const readiness = monitor.promotionReadiness(summary);
+      paths[entryPath] = { ...summary, ...readiness };
+      for (const reason of readiness.blocking_reasons) {
+        blocking.push(`promotion_evidence[${entryPath}]: ${reason}`);
+      }
+    }
+  }
+
+  return {
+    id: 'promotion_claim',
+    promotable_paths: PROMOTABLE_PATHS,
+    paths,
+    shadow_boundary_inverted: shadowBoundary.intact === false,
+    blocking_reasons: blocking,
+    status: blocking.length === 0 ? 'PASS' : 'HOLD',
+  };
+}
+
 function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) {
   const blocking = [];
   const present = [];
@@ -2611,12 +2677,15 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
   const kr10 = evaluateKr10(surface);
   const alias = evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority);
   const claimInput = input.releaseClaim || input.release_claim;
-  const releaseClaim = claimInput === 'shadow' ? 'shadow' : 'production';
+  const releaseClaim = (claimInput === 'shadow' || claimInput === 'promoted')
+    ? claimInput
+    : 'production';
   const shadowBoundary = evaluateShadowBoundary(repoRoot);
   // A `shadow` claim is not a weaker gate — it is a DIFFERENT one. It trades the
   // production-provenance requirement (which a shadow release never relies on) for a
   // mechanically verified promise that the kernel decides nothing. Break that promise
   // and the claim fails closed, exactly as a missing trust root fails a production claim.
+  const promotion = releaseClaim === 'promoted' ? evaluatePromotionClaim(repoRoot, kr8, shadowBoundary) : null;
   const claimGate = releaseClaim === 'shadow'
     ? {
       claim: 'shadow',
@@ -2624,11 +2693,18 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
         + 'no production authority is asserted',
       blocking_reasons: shadowBoundary.blocking_reasons.map((r) => `shadow_boundary: ${r}`),
     }
-    : {
-      claim: 'production',
-      satisfied_by: 'authenticated production provenance bound to the installed trust roots',
-      blocking_reasons: kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
-    };
+    : (releaseClaim === 'promoted'
+      ? {
+        claim: 'promoted',
+        satisfied_by: 'production KR8 evidence, plus measured per-path divergence evidence, '
+          + 'plus an INVERTED shadow boundary (a promoted kernel must reach production authority)',
+        blocking_reasons: promotion.blocking_reasons,
+      }
+      : {
+        claim: 'production',
+        satisfied_by: 'authenticated production provenance bound to the installed trust roots',
+        blocking_reasons: kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
+      });
 
   const blocking = [
     // Gate strictness binds to what the release CLAIMS (see claimGate). A production
@@ -2702,6 +2778,7 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
     release_claim: releaseClaim,
     claim_gate: claimGate,
     shadow_boundary: shadowBoundary,
+    promotion_claim: promotion,
     kr8,
     kr10,
     alias_retirement: alias,

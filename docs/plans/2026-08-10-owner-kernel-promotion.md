@@ -229,13 +229,21 @@ deletion with a valid receipt exits zero.
 
 kimi's proposal, and the evidence source promotion needs. Promotion currently has no data behind it.
 
-1. Write `scripts/divergence-monitor.js` with `record` and `report` subcommands over a JSONL store
-   (`lib/jsonl-store.js`). A record is one decision pair: entry point, shadow decision, legacy
-   decision, agreement, and a reason when they differ.
-2. Emit a pair from `shadow-translation.js` on every translation. Additive only — existing telemetry
-   fields and hashes are unchanged.
-3. `report --path <entry>` emits `{samples, agreements, divergences, unexplained}`. A divergence is
-   "explained" only when a recorded reason is present; the monitor never infers one.
+1. ~~Write `scripts/divergence-monitor.js`~~ **DONE 2026-08-11**, proven by
+   `hooks/tests/divergence-monitor.test.sh` (17 assertions). Observations are of two kinds and are
+   never conflated: `paired` (both decisions present, counts toward `samples`) and `shadow_only`
+   (legacy side absent, funds nothing). Only `samples` can support a promotion, so an unexercised
+   path reports `samples: 0` and `NOT READY` rather than vacuous agreement. A corrupt row counts
+   against EVERY path query — it has no readable `entry_path`, and filtering it out would shrink the
+   denominator and make agreement look better than it is. That was a real bug the suite caught.
+2. **Deferred to P5, deliberately.** Emitting from `shadow-translation.js` would install a hook with
+   no consumer: nothing holds the legacy decision today, so every emission would be `shadow_only` and
+   fund nothing. The pair becomes real when P5 puts both sides in one place. Recorded rather than
+   silently dropped — same judgement as P2 step 4.
+3. ~~`report --path <entry>`~~ **DONE** — emits `{samples, agreements, divergences, unexplained,
+   shadow_only, corrupt_rows}`. A divergence is "explained" only when a recorded reason is present,
+   and an empty-string reason is not one; the monitor never infers an explanation, because an
+   inferred explanation is how a real disagreement becomes a footnote.
 
 **Acceptance**: `report` on a seeded store returns exact counts; a divergence with no reason is
 counted `unexplained`; a path with zero samples reports `samples: 0` rather than an empty pass.
@@ -246,9 +254,12 @@ counted `unexplained`; a path with zero samples reports `samples: 0` rather than
    policy hash.
 2. Convert the four skills to thin adapters: resolve state, route to the kernel when promoted, and
    to legacy **only** under an explicit operator rollback flag — never as an automatic fallback.
-3. Add `--release-claim promoted` to the release-gate checker, requiring: KR-P1..P4 evidence,
-   production trust roots present, and the shadow-boundary scan **inverted** for promoted paths (the
-   authority constructors are now expected to be reachable there, and their absence is the failure).
+3. ~~Add `--release-claim promoted`~~ **DONE 2026-08-11.** Strictly harder than `production`: it
+   requires production KR8 evidence, per-path divergence evidence read from the monitor rather than
+   asserted, and the shadow boundary **inverted** — an intact boundary means no production-authority
+   constructor is reached, so the kernel decides nothing and a promoted claim is false on its face.
+   Currently HOLDs with seven reasons (2 KR8, 1 boundary-still-intact, 4 zero-sample paths), each
+   naming a real gap rather than a missing formality.
 4. Promote one path first (`/l5`, the most exercised), gather a divergence window, then the rest.
 
 **Acceptance**: for each promoted path, a task drives to a kernel-issued terminal; a planted kernel

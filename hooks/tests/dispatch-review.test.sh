@@ -113,6 +113,35 @@ case "$MODE" in
     echo "NO-FINDING-PROOF: checked=spec; evidence=code; conclusion=no blocking discrepancy observed"
     echo "$END"
     ;;
+  ship_period_sep)
+    # kimi 真實形狀：checked 後用 `;`，conclusion 前用句號。
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow and keyPrefix equality; evidence=the gated block encloses every new read and write, so the off-arm reduces to the pre-change sequence. conclusion=both gates fully enclose their new control flow"
+    echo "$END"
+    ;;
+  ship_comma_sep)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=restore discipline in the sync window, evidence=each flipped node records its prior value and is restored inside finally, conclusion=no node outside the changed set is touched"
+    echo "$END"
+    ;;
+  ship_missing_conclusion)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow; evidence=the gated block encloses every new read and write"
+    echo "$END"
+    ;;
+  ship_tautology_period)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff; evidence=tests. conclusion=looks good"
+    echo "$END"
+    ;;
   fix_with_proof)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
@@ -473,9 +502,33 @@ assert_eq "0" "$EXIT" "structured no-finding proof reviewed exit 0"
 assert_contains "$OUT" '"no_finding_proof": "checked=' "SHIP-AS-IS emits parsed no-finding proof"
 assert_not_contains "$OUT" 'FINDINGS: none\\nNO-FINDING-PROOF' \
   "proof line is not swallowed into findings"
+# 契約改動 2026-08-15：非 SHIP 判決帶一行多餘的 NO-FINDING-PROOF **不再**丟棄整份
+# review。那行是噪音不是違約，而丟棄會把「審查者發現了真問題」變成「沒有判決」
+# ——往錯的方向 fail-closed，findings 靜默消失。實測 MiniMax-M3 3/3 都這樣，
+# 且改 prompt 措辭無效。該行被忽略、不解析、不外露（no_finding_proof 仍為 null）。
 OUT="$(STUB_MODE=fix_with_proof "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "FIX-THEN-SHIP with proof exit 1"
-assert_contains "$OUT" '"status": "no_verdict"' "FIX-THEN-SHIP proof is rejected"
+assert_eq "0" "$EXIT" "FIX-THEN-SHIP with stray proof line is accepted"
+assert_contains "$OUT" '"status": "reviewed"' "FIX-THEN-SHIP with stray proof → reviewed"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "FIX-THEN-SHIP verdict survives the stray proof line"
+assert_contains "$OUT" 'parser accepts unsafe input' "findings are NOT discarded over the stray proof line"
+assert_contains "$OUT" '"no_finding_proof": null' "stray proof line is not parsed or surfaced"
+
+# 分隔符韌性（2026-08-15）：欄位以 label 定位，不綁死 `;`。
+# kimi-code/k3 交出八個面向、七條帶原始碼的證據，只因為最後一欄用句號分隔就被
+# 判「欄位為空」——閘門越嚴，寫得越詳細的審查者越容易被踢掉。
+OUT="$(STUB_MODE=ship_period_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "period-separated no-finding proof is accepted"
+assert_contains "$OUT" '"no_finding_proof": "checked=' "period-separated proof is parsed"
+OUT="$(STUB_MODE=ship_comma_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "comma-separated no-finding proof is accepted"
+
+# 反向：放寬分隔符**沒有**放寬反鴨子蓋章的閘門。缺欄位、同義反覆仍然擋。
+OUT="$(STUB_MODE=ship_missing_conclusion "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "proof without a conclusion field still fails"
+assert_contains "$OUT" '"status": "no_verdict"' "proof without conclusion → no_verdict"
+OUT="$(STUB_MODE=ship_tautology_period "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "tautological proof still fails under the relaxed separator"
+assert_contains "$OUT" '"status": "no_verdict"' "tautological proof (period-separated) → no_verdict"
 
 # 4f. Extra/duplicated VERDICT token is rejected by the single-verdict guard.
 OUT="$(STUB_MODE=forged "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?

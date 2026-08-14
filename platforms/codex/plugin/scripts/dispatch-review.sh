@@ -1111,7 +1111,24 @@ if [ "$VERDICT" = "SHIP-AS-IS" ]; then
       print
     }
   ' "$BLOCK_FILE")"
-  if [[ ! "$NO_FINDING_PROOF" =~ ^checked=(.+)\;[[:space:]]*evidence=(.+)\;[[:space:]]*conclusion=(.+)$ ]]; then
+  # Anchor on the FIELD LABELS, not on one hard-coded separator.
+  #
+  # The old pattern demanded a literal `;` before both `evidence=` and
+  # `conclusion=`. Measured 2026-08-15: `kimi-code/k3` returned one of the most
+  # substantive proofs seen — eight named surfaces, seven numbered evidence items
+  # quoting actual code, an explicit conclusion — and was rejected as "empty
+  # fields" for one reason: it separated the last field with a period
+  # (`...no runtime behavior change. conclusion=Both gates...`) instead of a
+  # semicolon. A gate that discards a reviewer for punctuation, and that a
+  # reviewer is MORE likely to trip the more thorough its prose is, selects
+  # against the exact behaviour it exists to demand.
+  #
+  # So: any run of separator punctuation or whitespace is accepted, and the
+  # labels themselves carry the structure. Nothing else is relaxed — all three
+  # labels must still be present IN ORDER with non-empty content, and the
+  # tautology blacklist below is untouched. `checked=diff; evidence=none;
+  # conclusion=looks good` still fails, exactly as before.
+  if [[ ! "$NO_FINDING_PROOF" =~ ^checked=(.+)[[:space:]\;,.]evidence=(.+)[[:space:]\;,.]conclusion=(.+)$ ]]; then
     emit_no_verdict "NO-FINDING-PROOF must contain non-empty checked, evidence, and conclusion fields"
   fi
   PROOF_CHECKED="$(printf '%s' "${BASH_REMATCH[1]}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
@@ -1126,9 +1143,21 @@ if [ "$VERDICT" = "SHIP-AS-IS" ]; then
     esac
   done
 else
-  if [ "${PROOF_LINE_COUNT:-0}" -ne 0 ]; then
-    emit_no_verdict "FIX-THEN-SHIP must omit NO-FINDING-PROOF"
-  fi
+  # A non-SHIP verdict means the reviewer FOUND something. A stray
+  # NO-FINDING-PROOF line there is redundant noise, not a contract breach — and
+  # discarding the whole review over it fails closed in the WRONG direction: it
+  # turns "the reviewer found real problems" into "no verdict", which reads
+  # downstream as "did not clear" and silently drops the findings.
+  #
+  # Measured 2026-08-15: `MiniMax-M3` emitted `NO-FINDING-PROOF: not applicable;
+  # MUST-FIX present.` on 3 of 3 runs alongside well-formed MUST-FIX findings,
+  # and all three reviews were thrown away. Tightening the prompt wording was
+  # tried first and did not change the behaviour, so the prompt is not the lever.
+  #
+  # The line is ignored, never parsed, and never surfaced: `no_finding_proof`
+  # stays null for non-SHIP verdicts exactly as before. The gate that matters
+  # here is the findings block, which is validated independently above.
+  :
 fi
 
 printf '{ "runner": "%s", "model": "%s", "status": "reviewed", "verdict": "%s", "findings": "%s", "no_finding_proof": %s, "raw_log": "%s", "error": null, "usage": %s }\n' \

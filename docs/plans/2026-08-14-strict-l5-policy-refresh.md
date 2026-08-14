@@ -82,3 +82,69 @@ behavior_class、observed_at、ttl_seconds、result、transport_binding）、
 - readiness probe 把 `script(1)` transcript chrome 當回應（同上）
 - kimi 從未接上 author path（`2a2cf33e`）
 - live probe 的 `max_output_tokens: 4` 對會先推理的模型太緊 → 32（`7aa955a3`）
+
+
+---
+
+# 執行進度（2026-08-14）
+
+## 已完成
+
+1. **autopilot 自己的 `.claude/review-loop-config.md` 已改**：qc 的 codex 席
+   `gpt-5.5 @ xhigh` → `gpt-5.6-sol @ max`。resolver 解出來正好 6 條 tuple。
+   新的契約 `document_sha256` = `16c93e72045635d3eab4df8cb27befd91f91108afcfe8c1bf2fd395e647c4197`。
+2. **三個 CLI 的身分已採集**（archived claim 記的全部過期）：
+
+   | runner | binary_realpath | cli_version | claim 記的舊值 |
+   |---|---|---|---|
+   | codex | `/home/cookys/.codex/packages/standalone/releases/0.147.0-x86_64-unknown-linux-musl/bin/codex` | 0.147.0 | **0.146.0** |
+   | grok | `/home/cookys/.grok/downloads/grok-1.0.3-linux-x86_64` | 1.0.3 | **0.2.118** |
+   | cc-shim（Claude Code CLI） | `/home/cookys/.local/share/claude/versions/2.1.232` | 2.1.232 | — |
+
+   三者都能被 `extractVersion()` 正確解析（已驗）。
+3. **四條 transport surface 的真實證據已採集**（全部來自 `status: authored`
+   的執行，落在 `evidence/2026-08-14-strict-l5-policy-refresh/`）：
+
+   | key | 用於哪些席 | cmd_sha256 | out_sha256 |
+   |---|---|---|---|
+   | grok | implementer | `e87b6e03…` | `2ff59954…` |
+   | ccshim_glm | verification_author ＋ qc | `4e9cc76d…` | `ccf1d94b…` |
+   | ccshim_mm | reviewer ＋ qc | `7d36f244…` | `9fc0bae9…` |
+   | codex_sol | qc | `287bbaa6…` | `b735544d…` |
+
+   ⚠ `cc-shim + GLM-5.2` **第一次 `runner_failed`、重試即 `authored`**——與 agy
+   同樣是間歇性。記錄的雜湊取自成功那次；不得拿失敗的執行去簽 claim。
+4. 6 條 D4 claim 的 probe input 已組好（`evidence/.../probe-input.json`）。
+
+## 卡住的地方：簽發要整組重新認證，不是補 6 條
+
+```
+node scripts/platform-capability-claims.js generate --input probe-input.json --output …
+  → error: consumer D2 must have at least one claim
+```
+
+`generate()` 的制度規則（`scripts/platform-capability-claims.js:257-266`）：
+
+- `CONSUMER_ORDER`（D2 / D3 / D4）**每個 consumer 都必須至少有一條 claim**；
+- 每條 required claim 的 `status` 必須是 `validated`，而
+  `coreEvidenceReasons(..., {reprobe:true})` 會**實際執行該 binary `--version`**
+  並比對 `cli_version`，任何漂移就是 `blocked` → 直接 throw。
+
+archived 的 `platform-capabilities.json` 有 **17 條** claim，橫跨 D2/D3/D4。
+而 codex 與 grok 都已升版，所以其中引用它們的 D2/D3 claim **現在必然 blocked**。
+
+**結論：這不是「加 6 條 D4 claim」，是「把整組平台能力宣稱重新認證一輪」。**
+那是 autopilot 自己的 release-gate 工程，範圍遠大於換一個 qc 模型，
+應該當獨立專案做，並且要先決定 D2/D3 那些 claim 的現況與取捨。
+
+## 下一個 session 從這裡接
+
+1. 盤點 archived 17 條 claim 的 consumer 歸屬與現況（哪些還 valid、哪些因為
+   CLI 升版而 blocked）。
+2. 決定 D2/D3 要重新採證還是縮減。
+3. 用本文件已備好的 6 條 D4 input ＋ 重新採證的 D2/D3 一起 `generate`。
+4. 取新的 `claim_id` 更新 `STRICT_L5_CLAIM_IDS` ＋ `STRICT_L5_PROVIDER_POLICY`，
+   **兩棵樹**（`src/` 與 `platforms/codex/plugin/src/`）。
+5. revival.3d 的 roster 對齊成正好那 6 席。
+6. 驗收：`deriveStrictL5InvocationPolicy` 不再 drift、測試全綠、
+   `status readiness --probe` 全綠、真跑一次 `engine implement-review`。

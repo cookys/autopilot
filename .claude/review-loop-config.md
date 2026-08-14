@@ -38,9 +38,20 @@
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: glm
-- qc_panel: gpt-5.5, GLM-5.2, MiniMax-M3
+<!-- 2026-08-14 使用者裁定：qc 的 codex 席 `gpt-5.5 @ xhigh` → `gpt-5.6-sol @ max`。
+     模型出新版就該更新，這是維護不是繞道。實測 codex-cli 0.147.0 上
+     `codex exec --model gpt-5.6-sol -c model_reasoning_effort=max` 回 OK。
+
+     與檔頭 2026-07-13 那條註記的關係：那條管的是 **risk-tiered loop reviewer
+     overlay**（`reviewer_engine_low_risk`，依 resolver 算出的 `review_risk` 選
+     in-loop reviewer），front-door 明寫 `qc_panel is unaffected by this overlay`，
+     所以它從來沒管過 qc 這個 terminal-only gate；reviewer 席本身也已在 8/05
+     輪成 MiniMax-M3。保留該註記的實質理由供日後追溯：known-bad corpus 量的是
+     catch，不是 honesty-under-pressure（METR 對 sol 的 eval-awareness 發現）。
+     它被校準的檔位是 `high`；這裡用的是 `max`，比校準時更多算力。 -->
+- qc_panel: gpt-5.6-sol, GLM-5.2, MiniMax-M3
 - qc_panel_runners: codex, cc-shim, cc-shim
-- qc_panel_efforts: xhigh, high, high
+- qc_panel_efforts: max, high, high
 - qc_panel_endpoints: @none, glm, minimax
 - qc_panel_aggregation: union-on-verified-critical
 - provider_readiness_receipt_ttl_seconds: 300

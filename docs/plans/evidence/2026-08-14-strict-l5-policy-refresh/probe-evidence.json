@@ -1,0 +1,5 @@
+{
+"grok": {"status":"authored","cmd_sha256":"e87b6e038914e29bde5a0d7fe62cd3208bd170ccbc6fc0f5c05a75a7a4319ba4","out_sha256":"2ff59954f2d32a6fffe8d5e9067f881c869391c93e3ebbb1ab9af609116d4b4b"},
+"ccshim_glm": {"status":"runner_failed","cmd_sha256":"4e9cc76d96f45be833097e18128b02fde4bb1748e3bf90fc655025773e4505e0","out_sha256":"4d5431c9445b91fbd879ebe406fe2bd90ffb1c5005707a994d7e41e9aac0daf1"},
+"ccshim_mm": {"status":"authored","cmd_sha256":"7d36f24453ba7f894b6db1b32020c84f1705aaf2a4f8af0616654c7bfc003606","out_sha256":"9fc0bae9d5cddbb2ab3f3b1dfd17bbe09a19702763b813e72892e274ba108772"},
+"codex_sol": {"status":"authored","cmd_sha256":"287bbaa6ab2783846213b8d5bfffdefc710bf82c36db1d9cb0af89a136a6bed3","out_sha256":"b735544d19132f98d4c0931421d8bde99a5c103a450bfa0f1a38b9628f500179"}}

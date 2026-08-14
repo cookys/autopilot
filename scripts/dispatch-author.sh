@@ -678,8 +678,8 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
+case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -705,6 +705,13 @@ if [ "$RUNNER" = "agy" ]; then
   MODEL="$(normalize_agy_model "$MODEL" "$AGY_BIN")"
   command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
+fi
+
+if [ "$RUNNER" = "kimi" ]; then
+  KIMI_BIN="${BIN:-kimi}"
+  command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN"
+  KIMI_JS="$(cd "$(dirname "$0")" && pwd)/dispatch-author-kimi.js"
+  [[ -r "$KIMI_JS" ]] || die_precondition "dispatch-author-kimi.js not found beside dispatch-author.sh"
 fi
 
 if [[ -n "${AUTOPILOT_SETTLE_MS:-}" && ! "$AUTOPILOT_SETTLE_MS" =~ ^[0-9]+$ ]]; then
@@ -892,6 +899,24 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   RUNNER_EXIT=$?
   set -e
   rm -rf "$QODER_CWD"; QODER_CWD=""
+elif [[ "$RUNNER" = "kimi" ]]; then
+  # The transport lives in `src/runners/kimi.js` (contract-pinned by
+  # hooks/tests/dispatch-author-kimi.test.sh); this branch only supplies the
+  # shell-side contract — authored text on stdout into $RAW_LOG, non-zero exit
+  # otherwise — via scripts/dispatch-author-kimi.js. The adapter owns the
+  # scratch cwd, the required-CLI-surface probe, argv shape, and the UTF-8 /
+  # empty-output rejections, so none of that is duplicated here.
+  #
+  # `timeout` wraps it the same way the grok/qoderclicn branches wrap theirs:
+  # the enforced deadline is the hang backstop and stays a shell concern.
+  # STDERR is appended to $RAW_LOG rather than discarded — unlike qoder there is
+  # no known benign chatter to filter, and a swallowed adapter error would
+  # surface downstream as the unfalsifiable `empty_output`.
+  set +e
+  timeout "$TIMEOUT" node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
+    > "$RAW_LOG" 2>>"$RAW_LOG"
+  RUNNER_EXIT=$?
+  set -e
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"

@@ -361,19 +361,47 @@ function deriveStrictL5InvocationPolicy(resolved) {
 
   const policy = validateStrictL5ProviderPolicy();
   const byTuple = new Map(policy.map((entry) => [canonicalDigest(entry.tuple), entry]));
-  if (sorted.length !== policy.length) {
+
+  // Deliberate, recorded escape from byte-equal policy coverage.
+  //
+  // Without it the compiled policy is not a list of QUALIFIED tuples, it is the
+  // single legal roster: `sorted.length !== policy.length` means the roster must
+  // use every canonical tuple and nothing else, so choosing a different engine —
+  // even a better one, even one already qualified for another seat — is a hard
+  // pre-spend block until someone re-signs the whole claim set. One global roster
+  // for every consuming repo, and a signing ceremony to change your mind.
+  //
+  // What the gate is actually for is stopping an UNNOTICED run on unevidenced
+  // engines. That property survives an override that is explicit, loud, and
+  // recorded; it does not require refusing the operator outright. So: opt in by
+  // naming a reason in the consuming repo's review-loop config
+  // (`strict_l5_policy_override: <reason>`), every uncertified seat carries
+  // `claim_id: null` instead of borrowing a certified one, and the result reports
+  // `policy_override` so downstream can tell a certified bundle from an
+  // overridden one. Absent the key, behaviour is byte-identical to before.
+  const overrideReason = typeof resolved.strict_l5_policy_override === 'string'
+    ? resolved.strict_l5_policy_override.trim()
+    : '';
+  const override = overrideReason.length > 0;
+
+  if (!override && sorted.length !== policy.length) {
     fail(
       'strict_l5_provider_roster_drift',
       'strict /l5 invocation roster does not have byte-equal policy coverage',
     );
   }
+  const uncertified = [];
   const invocationPolicy = sorted.map((seat) => {
     const match = byTuple.get(canonicalDigest(seat.tuple));
     if (!match) {
-      fail(
-        'strict_l5_provider_unknown_tuple',
-        `strict /l5 invocation tuple ${seat.seat_id} is not in the canonical policy`,
-      );
+      if (!override) {
+        fail(
+          'strict_l5_provider_unknown_tuple',
+          `strict /l5 invocation tuple ${seat.seat_id} is not in the canonical policy`,
+        );
+      }
+      uncertified.push({ seat_id: seat.seat_id, tuple: seat.tuple });
+      return { seat_id: seat.seat_id, claim_id: null, tuple: seat.tuple };
     }
     return {
       seat_id: seat.seat_id,
@@ -381,8 +409,19 @@ function deriveStrictL5InvocationPolicy(resolved) {
       tuple: seat.tuple,
     };
   });
-  if (new Set(invocationPolicy.map((entry) => entry.claim_id)).size !== policy.length) {
+  if (!override
+      && new Set(invocationPolicy.map((entry) => entry.claim_id)).size !== policy.length) {
     fail('strict_l5_provider_claim_set_drift', 'strict /l5 invocation claim coverage drifted');
+  }
+  if (override) {
+    // stderr, every derivation, never once-per-process: an override that scrolls
+    // past on the first run and stays silent afterwards is how it stops being a
+    // decision and starts being the default.
+    const seats = uncertified.map((entry) => `${entry.seat_id}=${entry.tuple.runner}/${entry.tuple.model}`);
+    process.stderr.write(
+      `strict /l5 POLICY OVERRIDE — ${uncertified.length} seat(s) run without a capability claim: `
+      + `${seats.join(', ') || '(none)'} — reason: ${overrideReason}\n`,
+    );
   }
   return deepFreeze({
     invocation_policy: invocationPolicy,
@@ -392,6 +431,9 @@ function deriveStrictL5InvocationPolicy(resolved) {
     }))),
     policy_digest: STRICT_L5_PROVIDER_POLICY_DIGEST,
     claim_ids: [...STRICT_L5_CLAIM_IDS],
+    policy_override: override
+      ? deepFreeze({ reason: overrideReason, uncertified_seats: deepFreeze(uncertified) })
+      : null,
   });
 }
 

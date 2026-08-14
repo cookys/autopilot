@@ -174,7 +174,9 @@ function dispatchAuthorLiveProbe(input, options = {}) {
       cwd: scratch,
       env: {
         ...process.env,
-        AUTOPILOT_AUTHOR_MAX_TOKENS: '4',
+        // Must track LIVE_PROBE_REQUEST_BODY.max_output_tokens in probe.js —
+        // this is the same budget expressed to the dispatcher.
+        AUTOPILOT_AUTHOR_MAX_TOKENS: '32',
         DISPATCH_QUIET: '1',
       },
       encoding: 'utf8',

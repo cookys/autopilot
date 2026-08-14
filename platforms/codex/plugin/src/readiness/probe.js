@@ -232,12 +232,30 @@ function providerObservation(tuple, axis, status, now, ttlSeconds, evidenceClass
   };
 }
 
+// A `--version` call is a PROCESS-LAUNCH cost, not a network one: for a bundled
+// Node CLI it is dominated by interpreter start plus bundle parse, and it scales
+// with how loaded the box is — not with whether the provider works. 5s was below
+// the floor for at least one wired runner and turned "slow" into "broken", the
+// same wrong-diagnosis shape the live probe hit at 1m (see `live-probe.js`
+// `--timeout 3m`). Measured 2026-08-14 on an otherwise busy box, five runs each:
+// `kimi --version` 4288/5612/5769/6629/6926 ms — four of five over the old cap —
+// against `grok` 125 ms and `agy` 745 ms. The seat then reported
+// `safe_probe_timeout` and the whole strict-l5 trust root sat at 6/7 with a
+// perfectly healthy engine.
+//
+// 20s is ~3x the slowest observation, and it costs nothing on a healthy runner:
+// the probe returns as soon as the child exits, so grok still answers in 125 ms.
+// The gate is unchanged — a non-zero exit is still `binary_probe_failed`, a
+// missing binary is still `missing_binary`. This only stops a slow-but-present
+// CLI from being recorded as an absent one.
+const SAFE_BINARY_PROBE_TIMEOUT_MS = 20000;
+
 function probeSafeSurface({ tuple }) {
   const binary = BINARY_BY_RUNNER[tuple.runner] || tuple.runner;
   const version = spawnSync(binary, ['--version'], {
     cwd: REPO_ROOT,
     env: process.env,
-    timeout: 5000,
+    timeout: SAFE_BINARY_PROBE_TIMEOUT_MS,
     stdio: ['ignore', 'ignore', 'ignore'],
   });
   if (version.error && version.error.code === 'ENOENT') {

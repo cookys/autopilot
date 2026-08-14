@@ -69,6 +69,33 @@ function classifyFailure(child, result) {
   };
 }
 
+/**
+ * Remove the `script(1)` transcript framing from a captured raw log.
+ *
+ * The agy transport in `scripts/dispatch-author.sh` runs the model under
+ * `script -qec ... "$RAW_LOG"` because agy drops raw stdout on a non-TTY pipe
+ * (agy #76/#408). That capture is faithful but it is not the model's answer: it
+ * always carries `Script started on ...` / `Script done on ...` frames and CRs.
+ * Reading it verbatim makes the live probe compare `Script started on ...\r\nOK`
+ * against the expected `OK`, so the agy seat reported `malformed_response`
+ * forever regardless of model or credentials (measured 2026-08-14).
+ *
+ * The strip is byte-identical to the one `dispatch-author.sh` already applies
+ * for its own empty-output check (`tr -d '\r' | sed '/^Script started on /d;
+ * /^Script done on /d'`) — the canonical definition of "model content, not
+ * pseudo-TTY chrome" — kept here rather than in the dispatcher so `raw_log`
+ * stays a faithful transcript for every other consumer. Transports that do not
+ * use `script(1)` have no such lines and are unaffected.
+ */
+function stripPseudoTtyChrome(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) return Buffer.alloc(0);
+  const text = buffer.toString('utf8').replace(/\r/g, '');
+  const kept = text
+    .split('\n')
+    .filter((line) => !line.startsWith('Script started on ') && !line.startsWith('Script done on '));
+  return Buffer.from(kept.join('\n'), 'utf8');
+}
+
 function readPrivateResponse(rawLog) {
   if (typeof rawLog !== 'string' || rawLog.length === 0) return Buffer.alloc(0);
   let stat;
@@ -81,7 +108,7 @@ function readPrivateResponse(rawLog) {
     return Buffer.alloc(0);
   }
   try {
-    return fs.readFileSync(rawLog);
+    return stripPseudoTtyChrome(fs.readFileSync(rawLog));
   } catch (_error) {
     return Buffer.alloc(0);
   }

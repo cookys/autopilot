@@ -971,11 +971,26 @@ else
   # so capture through pseudo-TTY and strip CR to preserve exactness.
   RUN_SH="$(mktemp -t dispatch-author-agy-XXXXXX)"
   AGY_CWD="$(mktemp -d -t dispatch-author-agycwd-XXXXXX)"
+  # agy opens its own log + crash files under ~/.gemini/antigravity-cli. Under
+  # `--ro-bind / /` those opens fail, and agy does NOT degrade quietly: it
+  # redirects the whole language-server diagnostic stream to stdout instead
+  # ("ERROR: logging before google.Init: ... read-only file system"). Measured
+  # 2026-08-14: a 2-token probe came back as a 30,413-byte raw log, which the
+  # provider-readiness live probe classifies as `malformed_response`
+  # (`src/readiness/probe.js` LIVE_PROBE_MAX_RESPONSE_BYTES) — so the agy seat
+  # could never reach `ready` no matter which model was configured.
+  #
+  # tmpfs rather than a host bind: the writes are pure diagnostics, must not
+  # reach the host, and must not survive the run. `--ro-bind / /` containment is
+  # unchanged; only these two leaf paths become writable, and the credential
+  # material one level up at ~/.gemini stays read-only and readable.
+  AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_CWD" "$AGY_CWD" "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
+    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
+      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   set +e

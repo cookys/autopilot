@@ -13,16 +13,12 @@
 
 ## Settings
 
-<!-- 2026-07-21 live roster: Claude Code native quota is exhausted until Jul 23,
-     but hetero seats are available. Grok-4.5 live-smoked OK and remains the
-     implementer. MiniMax-M3 remains the calibrated reviewer (engine-qualify
-     13/13 known-bad, false_pass_on_critical=0, scorecard event 9). GLM-5.2
-     endpoint and cc-shim small-review shape were re-verified after the 529
-     transport patch, but GLM is NOT restored as the default author seat until a
-     full authoring re-drive passes. QoderCN/Qwen is now an explicit runner
-     candidate (`qoderclicn`) after CLI/stdin smoke; do not make it default until
-     role eval promotes it. claude-haiku/opus remain qualified fallback/qc seats,
-     but Claude native is not a default roster seat while quota is exhausted. -->
+<!-- 2026-08-05 quota rotation: Claude Code native is unavailable, so this
+     managed L5 campaign uses the live-smoked hetero seats instead. Grok-4.5
+     remains the implementer; MiniMax-M3 remains the calibrated reviewer;
+     GLM-5.2 is the verification-author and one QC seat; the other QC seats are
+     MiniMax-M3 and Codex gpt-5.5. This is an operational roster rotation only;
+     restore the normal Claude/agy seats after quota recovery and re-probe them. -->
 - reviewer_engine: MiniMax-M3
 - reviewer_effort: high
 - reviewer_runner: cc-shim
@@ -32,25 +28,30 @@
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
 - on_family_conflict: fallback
-- reviewer_fallback_preference: claude-opus
-- reviewer_fallback_preference_low_risk: claude-haiku
+- reviewer_fallback_preference: GLM-5.2
+- reviewer_fallback_preference_low_risk: GLM-5.2
 - implementer_engine: grok-4.5
 - implementer_effort: high
 - implementer_runner: grok
 - verification_author_present: true
-- verification_author_engine: Gemini 3.5 Flash (High)
-- verification_author_runner: agy
+- verification_author_engine: GLM-5.2
+- verification_author_runner: cc-shim
 - verification_author_effort: high
-- verification_author_endpoint:
-- qc_panel: gpt-5.5, claude-opus, Gemini 3.6 Flash (High)
-- qc_panel_runners: codex, claude-native, agy
+- verification_author_endpoint: glm
+- qc_panel: gpt-5.5, GLM-5.2, MiniMax-M3
+- qc_panel_runners: codex, cc-shim, cc-shim
 - qc_panel_efforts: xhigh, high, high
-- qc_panel_endpoints: @none, @none, @none
+- qc_panel_endpoints: @none, glm, minimax
 - qc_panel_aggregation: union-on-verified-critical
 - provider_readiness_receipt_ttl_seconds: 300
 - provider_readiness_fallback_family_constraint: different
 
-> **Gemini slot pinned to `Gemini 3.6 Flash (High)` (2026-07-23).** Previously
+> **Previous Gemini slot (temporarily suspended 2026-08-05).** The normal
+> `Gemini 3.6 Flash (High)` QC seat is restored only after quota recovery and a
+> fresh strict provider probe; it is intentionally not silently treated as ready
+> during this quota rotation.
+
+> **Historical Gemini slot pinned to `Gemini 3.6 Flash (High)` (2026-07-23).** Previously
 > this config omitted `qc_panel`, inheriting the template default whose Google
 > member `gemini-flash` dispatches an *implicit* Gemini 3.5 Flash. The slot is
 > now explicit at 3.6 on reviewer-qualification evidence:

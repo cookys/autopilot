@@ -9,6 +9,7 @@
 //
 // Subcommands:
 //   prepare --repo <git-repo> --authority <file> --graph <file> --out <receipt>
+//   successor --repo <git-repo> --prepared <receipt> --generation <n> --out <receipt>
 //   grant   --repo <git-repo> --prepared <receipt> --node <graph-node>
 //   init    --contract <file> --out <state>
 //   grant   --state <file> --out <file> --idempotency-key <k> --campaign-id <id>
@@ -152,6 +153,44 @@ function cmdPrepare(flags, options = {}) {
   emitTo({
     status: 'prepared',
     adopted: prepared.adopted,
+    mission_lineage_id: prepared.receipt.mission_lineage_id,
+    adoption_key: prepared.receipt.adoption_key,
+    mission_policy_digest: prepared.receipt.mission_policy_digest,
+    mission_graph_digest: prepared.receipt.mission_graph_digest,
+    state_hash: prepared.receipt.state_hash,
+    receipt: prepared.receipt,
+  }, options);
+  return 0;
+}
+
+function cmdSuccessor(flags, options = {}) {
+  rejectUnknownFlags(
+    flags,
+    new Set(['repo', 'prepared', 'generation', 'out', 'now']),
+    'successor Mission prepare',
+  );
+  const repo = path.resolve(flags.repo || options.cwd || process.cwd());
+  const rawGeneration = requireFlag(flags, 'generation');
+  if (!/^\d+$/.test(rawGeneration)) {
+    throw new MissionCliError('--generation must be a positive integer', 2);
+  }
+  const generation = Number(rawGeneration);
+  if (!Number.isSafeInteger(generation) || generation < 1) {
+    throw new MissionCliError('--generation must be a positive integer', 2);
+  }
+  const predecessorReceipt = readJson(requireFlag(flags, 'prepared'), 'predecessor Mission prepare receipt');
+  const prepared = runtime.prepareMissionRuntimeSuccessor({
+    repo,
+    predecessorReceipt,
+    generation,
+    preparedAt: flags.now,
+  });
+  runtime.atomicWriteJson(requireFlag(flags, 'out'), prepared.receipt);
+  emitTo({
+    status: 'successor_prepared',
+    adopted: prepared.adopted,
+    predecessor_adoption_key: prepared.predecessor_adoption_key,
+    successor_generation: prepared.successor_generation,
     mission_lineage_id: prepared.receipt.mission_lineage_id,
     adoption_key: prepared.receipt.adoption_key,
     mission_policy_digest: prepared.receipt.mission_policy_digest,
@@ -541,6 +580,7 @@ function cmdReceipt(flags) {
 
 const COMMANDS = {
   prepare: cmdPrepare,
+  successor: cmdSuccessor,
   init: cmdInit,
   grant: cmdGrant,
   consume: cmdConsume,
@@ -556,8 +596,9 @@ function runMissionCli(argv, options = {}) {
   const command = argv[0];
   if (!command || command === '-h' || command === '--help' || command === 'help') {
     stdout.write(`${[
-      'usage: mission <prepare|init|grant|consume|control|finalize-abort|check|receipt> [flags]',
+      'usage: mission <prepare|successor|init|grant|consume|control|finalize-abort|check|receipt> [flags]',
       '  prepare --repo <git-repo> --authority <file> --graph <file> --out <receipt>',
+      '  successor --repo <git-repo> --prepared <receipt> --generation <n> --out <receipt>',
       '  grant   --repo <git-repo> --prepared <receipt> --node <graph-node> [--now <iso>]',
       '  init    --contract <file> --out <state>',
       '  grant   --state <file> --out <file> --idempotency-key <k> --campaign-id <id>',

@@ -733,7 +733,18 @@ function classifyBoundaryRejected(dispatchResult) {
   };
 }
 
-function classifyMissingDisposition({ findings, dispositionAuthority, findingsIdentityOk = true }) {
+function classifyMissingDisposition({ findings, dispositionAuthority, findingsIdentityOk }) {
+  // Explicit findings-identity authority is mandatory (D2 A05). A missing or
+  // non-boolean value is fail-closed — never default to true.
+  if (findingsIdentityOk !== true && findingsIdentityOk !== false) {
+    return {
+      status: 'hard_fail',
+      phase: 'adjudication',
+      reason: 'findings identity authority was not provided; callers must pass an explicit identity verdict',
+      code: 'FINDING_IDENTITY_REQUIRED',
+      resumable: false,
+    };
+  }
   if (!findingsIdentityOk) {
     return {
       status: 'hard_fail',

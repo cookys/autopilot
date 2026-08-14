@@ -1156,6 +1156,35 @@ restore_deleted_ref() {
   [ "$current" = "$expected" ]
 }
 
+# Anchor receipt-referenced commits before any ref disappears.
+#
+# Preserve-first already bundled these branches, but a bundle is an OFFLINE file:
+# it does not keep the objects reachable inside this repo. Mission receipts under
+# $GIT_COMMON_DIR/autopilot/ bind their evidence to commit SHAs, and git cannot see
+# those references — they are JSON, not refs. So deleting the last ref to such a
+# commit starts a gc countdown on the evidence itself. That is not theoretical:
+# four receipt-anchored commits in this repo were already destroyed that way
+# (receipts present, objects absent) before this namespace existed.
+#
+# Reachability MUST be computed against the refs that will survive. A commit held
+# solely by a branch we are about to delete still looks reachable right now, so
+# without naming those refs the anchor step would skip exactly the commits it
+# exists to protect and orphan them milliseconds later.
+#
+# Fail-closed on purpose, including when the anchor script is missing. Preserve-
+# first is non-waivable here, and a pin that silently did not happen is exactly
+# the failure mode this guards against — the loss only becomes visible at the next
+# gc, long after the reap reported success.
+anchor_script="$self_dir/pin-evidence-anchors.js"
+[ -f "$anchor_script" ] || die_env "pin-evidence-anchors.js is missing; refusing to delete branch refs"
+anchor_args=(apply --repo-root "$repo")
+for name in "${eligible[@]}"; do
+  anchor_args+=(--exclude-ref "refs/heads/$name")
+done
+if ! node "$anchor_script" "${anchor_args[@]}" >/dev/null; then
+  die_env "cannot anchor receipt-referenced commits; refusing to delete branch refs"
+fi
+
 for name in "${eligible[@]}"; do
   expected_tip="${tip[$name]}"
   if ! validate_delete_proof "$name" "$expected_tip"; then

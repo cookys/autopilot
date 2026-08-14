@@ -67,11 +67,11 @@ assert_eq "0" "$EXIT" "default exit code"
 assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "default reviewer engine"
 assert_contains "$OUT" '"implementer_engine": "grok-4.5"' "default implementer (grok, Board decision A)"
 assert_contains "$OUT" '"verification_author_present": true' "default verification_author_present"
-assert_contains "$OUT" '"verification_author_engine": "Gemini 3.5 Flash (High)"' "default verification_author_engine"
-assert_contains "$OUT" '"verification_author_runner": "agy"' "default verification_author_runner"
+assert_contains "$OUT" '"verification_author_engine": "GLM-5.2"' "default verification_author_engine"
+assert_contains "$OUT" '"verification_author_runner": "cc-shim"' "default verification_author_runner"
 assert_contains "$OUT" '"verification_author_effort": "high"' "default verification_author_effort"
-assert_contains "$OUT" '"verification_author_endpoint": ""' "default verification_author_endpoint"
-assert_contains "$OUT" '"verification_author_family": "google"' "default derived verification_author_family"
+assert_contains "$OUT" '"verification_author_endpoint": "glm"' "default verification_author_endpoint"
+assert_contains "$OUT" '"verification_author_family": "zhipu"' "default derived verification_author_family"
 assert_contains "$OUT" '"implementer_family": "xai"' "default derived implementer_family"
 assert_contains "$OUT" '"config_path": "'"$REPO_ROOT/.claude/review-loop-config.md"'"' "default config_path is repo dogfood absolute path"
 assert_contains "$OUT" '"loop_convergence_verdict": "SHIP-AS-IS"' "default convergence verdict"
@@ -121,11 +121,11 @@ assert_eq "true" "$(bash "$SCRIPT" --field l1_required)" "--field l1_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_required)" "--field cross_family_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_satisfied)" "--field cross_family_satisfied"
 assert_eq "true" "$(bash "$SCRIPT" --field verification_author_present)" "--field verification_author_present"
-assert_eq "Gemini 3.5 Flash (High)" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
-assert_eq "agy" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
+assert_eq "GLM-5.2" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
+assert_eq "cc-shim" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
 assert_eq "high" "$(bash "$SCRIPT" --field verification_author_effort)" "--field verification_author_effort"
-assert_eq "" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
-assert_eq "google" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
+assert_eq "glm" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
+assert_eq "zhipu" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
 assert_eq "xai" "$(bash "$SCRIPT" --field implementer_family)" "--field implementer_family"
 assert_eq "$REPO_ROOT/.claude/review-loop-config.md" "$(bash "$SCRIPT" --field config_path)" "--field config_path"
 EMPTY_SCDIR="$TEST_TMP/empty-scorecard"
@@ -871,5 +871,63 @@ assert_contains "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PREF_CFG" bash "$SCRIPT")" '"re
 # --check-scorecard fallback_ladder carries implementer-family provenance
 SC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_LR_CFG" ENGINE_SCORECARD_DIR="${EMPTY_SCDIR:-$TEST_TMP/empty-sc}" bash "$SCRIPT" --check-scorecard 2>/dev/null)"
 assert_contains "$SC_OUT" '"fallback_ladder_implementer_family"' "ladder provenance key present under --check-scorecard"
+
+# ---------------------------------------------------------------------------
+# D1 A01 — behavioral per-field invalid-value proof for every shell-validated
+# enum: one garbage value each → documented fallback (or fail-closed exit).
+# Soft-fallback enums (effort/flags/aggregation/scope/policy) first; transport
+# and hard-fail enums (runners, plan_review, verification_author_present,
+# --domain) asserted separately as exit-code contracts.
+# ---------------------------------------------------------------------------
+ENUM_CFG="$TEST_TMP/enum-invalid.md"
+cat > "$ENUM_CFG" <<'CFG'
+- reviewer_effort: not-an-effort
+- implementer_effort: turbo
+- spec_review: maybe
+- independent_harness: maybe
+- qc_panel_aggregation: majority
+- review_diff_scope: partial
+- on_engine_unavailable: invent
+- on_family_conflict: invent
+- provider_readiness_fallback_family_constraint: invent
+CFG
+ENUM_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ENUM_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "$(json_get "$ENUM_OUT" reviewer_effort)" "xhigh" "invalid reviewer_effort falls back to xhigh"
+assert_eq "$(json_get "$ENUM_OUT" implementer_effort)" "high" "invalid implementer_effort falls back to high"
+assert_eq "$(json_get "$ENUM_OUT" spec_review)" "on" "invalid spec_review falls back to on"
+assert_eq "$(json_get "$ENUM_OUT" independent_harness)" "on" "invalid independent_harness falls back to on"
+assert_eq "$(json_get "$ENUM_OUT" qc_panel_aggregation)" "union-on-verified-critical" "invalid qc_panel_aggregation falls back to union"
+assert_eq "$(json_get "$ENUM_OUT" review_diff_scope)" "full" "invalid review_diff_scope falls back to full"
+assert_eq "$(json_get "$ENUM_OUT" on_engine_unavailable)" "ask" "invalid on_engine_unavailable falls back to ask"
+assert_eq "$(json_get "$ENUM_OUT" on_family_conflict)" "block" "invalid on_family_conflict fails closed to block"
+assert_eq "$(json_get "$ENUM_OUT" provider_readiness_fallback_family_constraint)" "different" "invalid readiness family constraint falls back to different"
+
+# Transport-selecting / hard-fail enums fail loudly (documented fail-closed)
+RUN_CFG="$TEST_TMP/enum-runner-bad.md"
+printf -- '- reviewer_runner: not-a-runner\n' > "$RUN_CFG"
+assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid reviewer_runner exits 3"
+printf -- '- implementer_runner: not-a-runner\n' > "$RUN_CFG"
+assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid implementer_runner exits 3"
+printf -- '- verification_author_present: maybe\n' > "$RUN_CFG"
+assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid verification_author_present exits 3"
+printf -- '- plan_review: maybe\n' > "$RUN_CFG"
+assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid plan_review exits 3"
+assert_eq "$(bash "$SCRIPT" --domain invent >/dev/null 2>&1; echo $?)" "2" "invalid --domain exits 2"
+
+# D7 A13 — verify_strength density input (fail-safe; protected-path never reduces)
+VS_BASE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --field loop_max_rounds)"
+VS_WEAK="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --verify-strength weak --field loop_max_rounds)"
+VS_STRONG="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --verify-strength strong --field loop_max_rounds)"
+VS_STRONG_PROT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --protected-path 1 --verify-strength strong --field loop_max_rounds)"
+VS_PROT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --protected-path 1 --field loop_max_rounds)"
+# weak raises rounds above base
+node -e 'const b=+process.argv[1],w=+process.argv[2]; process.exit(w>b?0:1)' "$VS_BASE" "$VS_WEAK"
+assert_eq "$?" "0" "verify_strength=weak increases loop_max_rounds"
+# strong may lower (at most -1) when not protected
+node -e 'const b=+process.argv[1],s=+process.argv[2]; process.exit(s<=b&&s>=b-1?0:1)' "$VS_BASE" "$VS_STRONG"
+assert_eq "$?" "0" "verify_strength=strong reduces by at most one when unprotected"
+# strong cannot reduce below protected-path baseline
+assert_eq "$VS_STRONG_PROT" "$VS_PROT" "verify_strength=strong cannot reduce protected-path rounds"
+assert_eq "$(bash "$SCRIPT" --verify-strength invent >/dev/null 2>&1; echo $?)" "2" "invalid --verify-strength exits 2"
 
 finalize_test

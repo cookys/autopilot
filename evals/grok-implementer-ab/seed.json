@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "seed": 20260803,
+  "bootstrap_resamples": 10000,
+  "initial_pairs": 30,
+  "max_pairs": 60,
+  "max_provider_sessions": 120,
+  "max_retries_per_arm": 6,
+  "arms": {
+    "A": {
+      "effort": "medium"
+    },
+    "B": {
+      "effort": "high"
+    }
+  },
+  "actor": {
+    "runner": "grok",
+    "model": "Grok-4.5",
+    "family": "xai"
+  },
+  "primary_endpoint": "usable_session_rate_diff",
+  "material_effect_pp": 10,
+  "quality_non_inferiority_pp": 5,
+  "arm_order": "ABBA"
+}

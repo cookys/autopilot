@@ -216,6 +216,7 @@ const {
   devFlowAdmissionRejection,
   markerRepoIdentity,
   validateManagedDevFlowAdmission,
+  campaignCarriesMissionProjection,
 } = require(path.join(root, 'scripts', 'session-mode.js'));
 const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
 process.env.CLAUDE_CODE_SESSION_ID = marker.session_id;
@@ -281,6 +282,40 @@ const copiedSessionMarker = validateManagedDevFlowAdmission({
 });
 assert.strictEqual(copiedSessionMarker.valid, false);
 assert.match(copiedSessionMarker.reason, /session mismatch/);
+
+// Where admission applies. It binds a marker to the campaign's Mission
+// projection, so a campaign carrying none has nothing for it to judge, and the
+// closed contract schema gives a bounded non-Mission campaign nowhere to put
+// one. Running it on those anyway is a permanent deny no caller can satisfy;
+// dispatch-hetero.sh already scopes it to a bound strict projection.
+const projectionScope = [
+  ['mission_runtime carries the projection', campaign, true],
+  ['campaign_projection carries the projection', {
+    repo_identity: campaign.repo_identity,
+    campaign_projection: { ...campaign.mission_runtime },
+  }, true],
+  ['bounded non-Mission campaign carries none', {
+    schema_version: 1, ticket: '057', profile: 'poc', repo_identity: campaign.repo_identity,
+  }, false],
+  ['no campaign at all', null, false],
+  ['empty contract reference', '', false],
+  ['contract path on disk', write('scoped-mission-campaign', campaign), true],
+  ['bounded contract path on disk', write('scoped-bounded-campaign', {
+    schema_version: 1, ticket: '058', repo_identity: campaign.repo_identity,
+  }), false],
+  // Unreadable input is campaign intake's to name, not admission's -- intake
+  // validates the contract before any dispatch, so nothing reaches an effect.
+  ['unreadable contract path', path.join(tmp, 'no-such-campaign.json'), false],
+  ['unparseable contract bytes', write('scoped-broken-campaign', 'not-json\n'), false],
+  ['non-object contract', 42, false],
+];
+for (const [name, contractValue, expected] of projectionScope) {
+  assert.strictEqual(
+    campaignCarriesMissionProjection(contractValue, managedWorktree),
+    expected,
+    `projection scope: ${name}`,
+  );
+}
 process.stdout.write('managed_admission_matrix_ready');
 NODE
 ); RC=$?

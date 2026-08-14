@@ -597,6 +597,7 @@ const {
   missionSubjectDigest,
 } = require(path.join(root, 'src', 'engine', 'mission-campaign-identity'));
 const workOrder = require(path.join(root, 'src', 'engine', 'work-order'));
+const { sealSessionMarker } = require(path.join(root, 'hooks', 'tests', 'lib', 'session-marker'));
 const roster = {
   reviewer_engine: 'fixture-reviewer',
   reviewer_effort: 'high',
@@ -1926,6 +1927,14 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
       dispatchCalls += 1;
       throw new Error(`strict identity ${label} must not call implementationDispatcher`);
     },
+  });
+  // Mission-backed, so managed dev-flow admission does apply here and wants an
+  // admitted session before the strict root-identity check is even reached.
+  sealSessionMarker({
+    root,
+    dir: path.join(repo, '.autopilot', 'session-mode'),
+    repoRoot: repo,
+    contract: strictContractPath,
   });
   const result = engine.runImplementationReviewLoop({
     promptFile,

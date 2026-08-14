@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "description": "D6 hook-multiplexer benchmark fixtures: cold|heavy × disabled|enabled",
+  "fixtures": [
+    {
+      "id": "cold-disabled",
+      "event": "PreToolUse",
+      "mode": "cold",
+      "enabled": false,
+      "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150",
+      "enabled_hook_ids": [],
+      "expected_child_count": 0
+    },
+    {
+      "id": "cold-enabled",
+      "event": "PreToolUse",
+      "mode": "cold",
+      "enabled": true,
+      "payload_sha256": "435e0dbbf63e7598caf2e2c8ea2e372ac7b37031ecb5d3521d8d9494a1be5150",
+      "enabled_hook_ids": ["branch-protection"],
+      "expected_child_count": 1
+    },
+    {
+      "id": "heavy-disabled",
+      "event": "PostToolUse",
+      "mode": "heavy",
+      "enabled": false,
+      "payload_sha256": "5022f8f4daacd244d7c2ae39d6f5f640d38f1ddb1561fcae9c12aff4168b8216",
+      "enabled_hook_ids": [],
+      "expected_child_count": 0
+    },
+    {
+      "id": "heavy-enabled",
+      "event": "PostToolUse",
+      "mode": "heavy",
+      "enabled": true,
+      "payload_sha256": "5022f8f4daacd244d7c2ae39d6f5f640d38f1ddb1561fcae9c12aff4168b8216",
+      "enabled_hook_ids": ["context-budget", "accumulator"],
+      "expected_child_count": 2
+    }
+  ],
+  "thresholds": {
+    "mad_median_max": 0.10,
+    "disabled_children": 0,
+    "candidate_disabled_median_p95_ratio_max": 0.75,
+    "candidate_enabled_median_p95_ratio_max": 1.05,
+    "candidate_p95_cold_ms_max": 250,
+    "candidate_p95_heavy_ms_max": 1000
+  }
+}

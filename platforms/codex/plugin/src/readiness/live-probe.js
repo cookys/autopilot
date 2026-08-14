@@ -111,6 +111,20 @@ function dispatchAuthorLiveProbe(input, options = {}) {
   fs.chmodSync(scratch, 0o700);
   const promptFile = path.join(scratch, 'prompt.txt');
   fs.writeFileSync(promptFile, request.prompt, { mode: 0o600, flag: 'wx' });
+  // Codex refuses to run outside a trusted Git checkout. The probe is still
+  // private and disposable; initialize only this scratch directory so the
+  // trust check can run without exposing the consuming repository or its
+  // active managed-session marker.
+  const gitInit = spawnSync('git', ['init', '--quiet', scratch], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 1024 * 1024,
+  });
+  if (gitInit.error || gitInit.status !== 0) {
+    fs.rmSync(scratch, { recursive: true, force: true });
+    throw new Error(`provider readiness scratch git init failed: ${gitInit.stderr || gitInit.error || 'unknown error'}`);
+  }
   const args = [
     scriptPath,
     '--runner', tuple.runner,
@@ -124,8 +138,13 @@ function dispatchAuthorLiveProbe(input, options = {}) {
 
   let child;
   try {
+    // The readiness request is deliberately repo-independent and read-only. Run
+    // the adapter from its private scratch cwd so an active managed L5/L6 marker
+    // cannot mistake this pre-spend probe for an unmanaged repository dispatch.
+    // The adapter receives its absolute script path and resolves credentials
+    // independently; no repository trust or mutation surface is needed here.
     child = spawnSync('bash', args, {
-      cwd: REPO_ROOT,
+      cwd: scratch,
       env: {
         ...process.env,
         AUTOPILOT_AUTHOR_MAX_TOKENS: '4',

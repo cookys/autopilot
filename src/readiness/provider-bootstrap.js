@@ -107,11 +107,11 @@ function deepFreeze(value) {
 }
 
 const STRICT_L5_CLAIM_IDS = deepFreeze([
-  'cap-v1-22e96639504e14d8a36e29a8e3d5747807a4ec7cc99f454d6898fe2680790575',
-  'cap-v1-3dec12f7c410d396af31af2392f11b3ec815543477269f6da1168604281d0693',
+  'cap-v1-2cddccba68504249195990b87d1f9a10678a17d470129395266738ee3c1696da',
+  'cap-v1-800438d87ae89a3c18a6b16171d44a691295d8a469890a9f10186bdd08f8dc5b',
   'cap-v1-441c3e019522b5db5a860dedf0184371bdf4f26fc4a41003b841aa78e8bc271b',
   'cap-v1-a1c91e7003c74984b6cd71aa1cd70cbc9f1990a7fbe4ac2926973926652673b6',
-  'cap-v1-a4011f749a1c57dcdf54e6526d8c307ea02114344f0ddce96a258e3f8b94b1ab',
+  'cap-v1-747b0b73ff612b90bdac2edbf3a020adbfe2b134dc2af303a4a772eb74c2f0f9',
   'cap-v1-be30ff9211e8a9a3f49df86171b4e4aa4cd9137655d7e45f16327d3bfec40237',
 ]);
 
@@ -119,23 +119,23 @@ const STRICT_L5_PROVIDER_POLICY = deepFreeze([
   {
     claim_id: STRICT_L5_CLAIM_IDS[0],
     tuple: {
-      runner: 'agy',
-      model: 'Gemini 3.5 Flash (High)',
+      runner: 'cc-shim',
+      model: 'GLM-5.2',
       role: 'verification_author',
       effort: 'high',
-      endpoint: null,
-      family: 'google',
+      endpoint: 'glm',
+      family: 'zhipu',
     },
   },
   {
     claim_id: STRICT_L5_CLAIM_IDS[1],
     tuple: {
-      runner: 'claude-native',
-      model: 'claude-opus',
+      runner: 'cc-shim',
+      model: 'GLM-5.2',
       role: 'qc',
       effort: 'high',
-      endpoint: null,
-      family: 'anthropic',
+      endpoint: 'glm',
+      family: 'zhipu',
     },
   },
   {
@@ -163,12 +163,12 @@ const STRICT_L5_PROVIDER_POLICY = deepFreeze([
   {
     claim_id: STRICT_L5_CLAIM_IDS[4],
     tuple: {
-      runner: 'agy',
-      model: 'Gemini 3.6 Flash (High)',
+      runner: 'cc-shim',
+      model: 'MiniMax-M3',
       role: 'qc',
       effort: 'high',
-      endpoint: null,
-      family: 'google',
+      endpoint: 'minimax',
+      family: 'minimax',
     },
   },
   {

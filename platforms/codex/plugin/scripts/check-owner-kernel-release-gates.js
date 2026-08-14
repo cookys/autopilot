@@ -15,11 +15,26 @@ const {
 } = require('../src/engine/owner-kernel/witness');
 
 const USAGE = `Usage:
-  node scripts/check-owner-kernel-release-gates.js --project <project-dir> [--repo-root <dir>] [--check]
+  node scripts/check-owner-kernel-release-gates.js --project <project-dir> [--repo-root <dir>]
+      [--release-claim shadow|production] [--check]
 
-Reports mechanical KR8, KR10, and alias-retirement readiness. With --check, exits
-non-zero when disposition is HOLD. Never redefines KR metrics or fabricates
-elapsed production telemetry.
+Reports mechanical release readiness. With --check, exits non-zero when disposition
+is HOLD. Never fabricates elapsed production telemetry.
+
+Gate strictness binds to what the release CLAIMS:
+  --release-claim production  (default)  KR8 must clear on authenticated production
+                                         provenance bound to the installed trust roots.
+  --release-claim shadow                 The kernel must be PROVEN to take no authority:
+                                         no production-authority constructor may be called
+                                         from outside the installed-host module family.
+                                         Fixture KR8 evidence then suffices, because no
+                                         production authority is asserted.
+A shadow claim is not a weaker gate — it is a different one, and it fails closed the
+moment the kernel starts deciding anything.
+
+KR10 (load-bearing surface count) was RETIRED as a release gate on 2026-08-10 and is
+reported as a non-blocking diagnostic only; its total is not probative while membership
+is incomplete. Alias retirement gates DELETION, not release.
 
 Production trust roots are fixed installation paths under /etc/autopilot only
 (not env, HOME, project, or CLI flags).`;
@@ -123,12 +138,26 @@ function parseArgs(argv) {
     project: null,
     repoRoot: path.resolve(__dirname, '..'),
     check: false,
+    // What the release CLAIMS. Gate strictness binds to the claim, because a
+    // release that asserts no production authority cannot be held to production
+    // evidence it never relies on. Defaults to the strict claim: an unspecified
+    // release is treated as claiming production authority.
+    releaseClaim: 'production',
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') return { help: true };
     if (arg === '--check') {
       options.check = true;
+      continue;
+    }
+    if (arg === '--release-claim') {
+      const value = argv[index + 1];
+      if (value !== 'shadow' && value !== 'production' && value !== 'promoted') {
+        fail('--release-claim must be shadow, production, or promoted');
+      }
+      options.releaseClaim = value;
+      index += 1;
       continue;
     }
     if (arg === '--project' || arg === '--repo-root') {
@@ -2013,8 +2042,200 @@ function evaluateKr10(surface) {
     id: 'KR10',
     definition: KR10_DEFINITION,
     measured_surface: surface,
+    // Retired as a release gate (see the disposition assembly for the three grounds).
+    // Retained as a diagnostic so the number stays visible without governing anything.
+    release_gating: false,
+    retired: true,
+    retired_on: '2026-08-10',
+    retired_reason: 'arithmetically unsatisfiable as authored (frozen membership enumerates 53 '
+      + 'against a strictly-below-42-and-51 threshold), trivially gameable by merging modules, '
+      + 'and actively harmful because capability ships as executed modules',
+    // The measured total is NOT evidence of anything while membership is incomplete. It is
+    // below 42 only because two buckets contribute 0 for lack of an execution manifest. No
+    // reader may cite it as a reduction achieved.
+    measured_total_is_probative: surface.membership_complete === true,
     status: blocking.length === 0 ? 'PASS' : 'HOLD',
     blocking_reasons: blocking,
+  };
+}
+
+// Constructors that mint PRODUCTION action authority. While the kernel is in shadow
+// these exist and are even re-exported through src/engine/index.js, but nothing outside
+// the installed-host module family calls them — the kernel observes and records, it
+// decides nothing. That is the property a `shadow` release claim rests on, so it is
+// verified mechanically rather than taken from a telemetry string a module can print
+// about itself.
+const SHADOW_BOUNDARY = Object.freeze({
+  authority_constructors: Object.freeze([
+    'createEngineActionAuthority',
+    'createProbeEffectActionAuthority',
+    'createEngineAcceptanceCoordinator',
+  ]),
+  // The installed-host family. Reaching any of it requires a provisioned host under
+  // /etc/autopilot, which the trust-root gate governs separately. Calls WITHIN this
+  // family are the shadow-safe case; calls from anywhere else are not.
+  host_family_prefix: 'src/engine/supervised-owner-kernel-',
+});
+
+/**
+ * Verify that no production surface outside the installed-host family constructs
+ * production action authority. A violation means the kernel is no longer in shadow,
+ * and a `shadow` release claim would be false.
+ */
+function evaluateShadowBoundary(repoRoot) {
+  const blocking = [];
+  const violations = [];
+  const lsTracked = spawnSync('git', ['-C', repoRoot, 'ls-files', '-z'], {
+    encoding: 'buffer',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (lsTracked.error || lsTracked.status !== 0) {
+    blocking.push('shadow boundary scan could not enumerate tracked files; boundary unproven');
+    return {
+      id: 'shadow_boundary',
+      intact: false,
+      scanned_files: 0,
+      violations,
+      status: 'HOLD',
+      blocking_reasons: blocking,
+    };
+  }
+  const raw = lsTracked.stdout || Buffer.alloc(0);
+  const files = raw.length === 0 ? [] : raw.toString('utf8').split('\0').filter(Boolean);
+  if (files.length === 0) {
+    blocking.push('shadow boundary scan found zero tracked files; boundary unproven');
+    return {
+      id: 'shadow_boundary',
+      intact: false,
+      scanned_files: 0,
+      violations,
+      status: 'HOLD',
+      blocking_reasons: blocking,
+    };
+  }
+
+  // Tests, fixtures and archived evidence intentionally exercise these constructors;
+  // they are not production surfaces. The checker itself names them to scan for them.
+  function isProductionSurface(relPath) {
+    const n = relPath.replace(/\\/g, '/');
+    if (!n.endsWith('.js')) return false;
+    if (n.includes('/_archive/') || n.startsWith('_archive/')) return false;
+    if (n.includes('/hooks/tests/') || n.startsWith('hooks/tests/')) return false;
+    if (n.includes('/fixtures/') || n.startsWith('fixtures/')) return false;
+    if (n.includes('/evals/') || n.startsWith('evals/')) return false;
+    if (/\.test\.js$/.test(n)) return false;
+    if (/\/tests?\//.test(`/${n}`)) return false;
+    if (n.endsWith('check-owner-kernel-release-gates.js')) return false;
+    if (n.includes('/node_modules/') || n.startsWith('node_modules/')) return false;
+    // Generated Codex mirror of the same tree — scanning it double-reports every hit.
+    if (n.startsWith('platforms/codex/plugin/')) return false;
+    return true;
+  }
+
+  let scanned = 0;
+  for (const file of files) {
+    if (!isProductionSurface(file)) continue;
+    const normalized = file.replace(/\\/g, '/');
+    // Calls inside the installed-host family are the shadow-safe case.
+    if (normalized.startsWith(SHADOW_BOUNDARY.host_family_prefix)) continue;
+    let text;
+    try {
+      text = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+    } catch (_error) {
+      continue;
+    }
+    scanned += 1;
+    for (const ctor of SHADOW_BOUNDARY.authority_constructors) {
+      // A call site, not a re-export: `name(` but not `name,` / `name:` / `name }`.
+      const callRe = new RegExp(`(^|[^A-Za-z0-9_.])${ctor}\\s*\\(`, 'g');
+      const found = text.match(callRe);
+      if (found && found.length > 0) {
+        violations.push({ file: normalized, constructor: ctor, call_sites: found.length });
+      }
+    }
+  }
+  if (violations.length > 0) {
+    for (const v of violations) {
+      blocking.push(
+        `production authority constructor ${v.constructor} is called from ${v.file} `
+        + `(${v.call_sites} site(s)), outside the installed-host family; the kernel is not in shadow`,
+      );
+    }
+  }
+  return {
+    id: 'shadow_boundary',
+    definition: SHADOW_BOUNDARY,
+    intact: violations.length === 0,
+    scanned_files: scanned,
+    violations,
+    status: violations.length === 0 ? 'PASS' : 'HOLD',
+    blocking_reasons: blocking,
+  };
+}
+
+/** Entry points a promotion claim must have evidence for, one at a time. */
+const PROMOTABLE_PATHS = Object.freeze(['/l3', '/l4', '/l5', '/l6']);
+
+/**
+ * The `promoted` claim: the kernel actually decides.
+ *
+ * Strictly harder than `production`, and deliberately so — this is the claim that would
+ * let someone say the Board's goal was met. It requires everything `production` requires,
+ * plus two things a document cannot assert:
+ *
+ *  1. MEASURED per-path divergence evidence. `scripts/divergence-monitor.js` refuses a
+ *     path with zero paired samples, so "no disagreements observed" across an unexercised
+ *     path cannot be mistaken for agreement.
+ *  2. An INVERTED shadow boundary. Under `shadow` we prove production-authority
+ *     constructors are unreachable; under `promoted` their unreachability is the failure,
+ *     because a kernel that reaches no authority has been promoted in name only.
+ */
+function evaluatePromotionClaim(repoRoot, kr8, shadowBoundary) {
+  const blocking = kr8.blocking_reasons.map((reason) => `KR8: ${reason}`);
+
+  // Inversion: an intact shadow boundary means nothing calls production authority, so a
+  // promotion claim is false on its face.
+  if (shadowBoundary.intact) {
+    blocking.push(
+      'promotion_boundary: the shadow boundary is still intact — no production-authority '
+      + 'constructor is called from outside the installed-host family, so the kernel decides '
+      + 'nothing and a promoted claim would be false',
+    );
+  }
+
+  // Divergence evidence, per path, read from the monitor rather than asserted here.
+  let monitor = null;
+  try {
+    // eslint-disable-next-line global-require
+    monitor = require(path.join(repoRoot, 'scripts', 'divergence-monitor.js'));
+  } catch (error) {
+    blocking.push(`promotion_evidence: divergence monitor is unavailable: ${error.message}`);
+  }
+  const paths = {};
+  if (monitor) {
+    let rows = [];
+    try {
+      rows = monitor.readObservations(monitor.DEFAULT_STORE);
+    } catch (error) {
+      blocking.push(`promotion_evidence: divergence store unreadable: ${error.message}`);
+    }
+    for (const entryPath of PROMOTABLE_PATHS) {
+      const summary = monitor.summarize(rows, entryPath);
+      const readiness = monitor.promotionReadiness(summary);
+      paths[entryPath] = { ...summary, ...readiness };
+      for (const reason of readiness.blocking_reasons) {
+        blocking.push(`promotion_evidence[${entryPath}]: ${reason}`);
+      }
+    }
+  }
+
+  return {
+    id: 'promotion_claim',
+    promotable_paths: PROMOTABLE_PATHS,
+    paths,
+    shadow_boundary_inverted: shadowBoundary.intact === false,
+    blocking_reasons: blocking,
+    status: blocking.length === 0 ? 'PASS' : 'HOLD',
   };
 }
 
@@ -2408,6 +2629,19 @@ function evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority = null) 
     shipped_compatibility_cycle: shippedCompatibilityCycle,
     deterministic_caller_migration: deterministicCallerMigration,
     mechanical_caller_migration_scan: migrationScan,
+    // Deletion is only ATTEMPTED once an alias definition is gone from the tree.
+    // While every alias is still present, unmet retirement prerequisites describe
+    // a future deletion, not a defect in the current release.
+    deletion_attempted: missing.length > 0,
+    // Whether this gate may block the RELEASE disposition. The frozen definition
+    // governs when aliases may be REMOVED; the parent project excludes removal from
+    // this compatibility release entirely. Two of the prerequisites
+    // (shipped_compatibility_cycle, 14 witnessed production days) can only become
+    // true AFTER a release ships, so gating the release on them made the first
+    // compatibility shipment unreachable — the clock cannot start until release, and
+    // release was held on the clock. This gate now blocks only an attempted removal.
+    release_gating: missing.length > 0,
+    eligibility: blocking.length === 0 ? 'ELIGIBLE' : 'NOT_ELIGIBLE',
     status: blocking.length === 0 ? 'PASS' : 'HOLD',
     blocking_reasons: blocking,
   };
@@ -2442,15 +2676,74 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
   const kr8 = evaluateKr8(loadKr8Evidence(projectDir, trustedAuthority));
   const kr10 = evaluateKr10(surface);
   const alias = evaluateAliasRetirement(repoRoot, projectDir, trustedAuthority);
+  const claimInput = input.releaseClaim || input.release_claim;
+  const releaseClaim = (claimInput === 'shadow' || claimInput === 'promoted')
+    ? claimInput
+    : 'production';
+  const shadowBoundary = evaluateShadowBoundary(repoRoot);
+  // A `shadow` claim is not a weaker gate — it is a DIFFERENT one. It trades the
+  // production-provenance requirement (which a shadow release never relies on) for a
+  // mechanically verified promise that the kernel decides nothing. Break that promise
+  // and the claim fails closed, exactly as a missing trust root fails a production claim.
+  const promotion = releaseClaim === 'promoted' ? evaluatePromotionClaim(repoRoot, kr8, shadowBoundary) : null;
+  const claimGate = releaseClaim === 'shadow'
+    ? {
+      claim: 'shadow',
+      satisfied_by: 'verified shadow boundary; fixture KR8 evidence is sufficient because '
+        + 'no production authority is asserted',
+      blocking_reasons: shadowBoundary.blocking_reasons.map((r) => `shadow_boundary: ${r}`),
+    }
+    : (releaseClaim === 'promoted'
+      ? {
+        claim: 'promoted',
+        satisfied_by: 'production KR8 evidence, plus measured per-path divergence evidence, '
+          + 'plus an INVERTED shadow boundary (a promoted kernel must reach production authority)',
+        blocking_reasons: promotion.blocking_reasons,
+      }
+      : {
+        claim: 'production',
+        satisfied_by: 'authenticated production provenance bound to the installed trust roots',
+        blocking_reasons: kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
+      });
 
   const blocking = [
-    ...kr8.blocking_reasons.map((reason) => `KR8: ${reason}`),
-    ...kr10.blocking_reasons.map((reason) => `KR10: ${reason}`),
-    ...alias.blocking_reasons.map((reason) => `alias_retirement: ${reason}`),
+    // Gate strictness binds to what the release CLAIMS (see claimGate). A production
+    // claim must clear KR8 on authenticated production provenance; a shadow claim must
+    // instead prove, mechanically, that the kernel takes no authority at all.
+    ...claimGate.blocking_reasons,
+    // KR10 is RETIRED as a release gate by delegated Board decision (2026-08-10) and is
+    // retained below as a non-blocking diagnostic only. Three independent grounds, each
+    // sufficient on its own:
+    //   1. Arithmetically unsatisfiable as authored. Its own frozen membership enumerates
+    //      53 members (skills 5 + schemas 3 + scripts 21 + engine 14 + hooks 10) against a
+    //      "strictly below 42 AND strictly below 51" threshold. No conforming artifact can
+    //      satisfy it. The 2026-07-20 Decision Log already recorded the mechanism: the
+    //      plan's reductions were prose, its additions were executed modules, and this gate
+    //      counts executed modules.
+    //   2. Trivially gameable. Merging modules lowers the count without improving anything,
+    //      so a passing number would be evidence of nothing.
+    //   3. Actively harmful, not merely useless. Capability here ships AS executed modules —
+    //      vetoes, verifiers, recovery paths. A gate that penalises added modules penalises
+    //      delivery of exactly the assurance the Board asked for.
+    // KR8 remains the release gate: its three components (zero false acceptance, zero missed
+    // red-line escalation, >=30% fewer mandatory model-review dispatches) are outcome
+    // measures of autonomous correct completion, where KR10 measured input-side cardinality.
+    // Ruled by a five-seat independent panel (gpt-5.6-sol, claude-fable-5, grok-4.5, GLM-5.2,
+    // MiniMax-M3), unanimous on retirement.
+    // Alias retirement gates DELETION, not this release. Its unmet prerequisites
+    // enter the release disposition only once a removal has actually been attempted
+    // (an alias definition is missing from the tree). See evaluateAliasRetirement's
+    // release_gating field for why: two prerequisites are only satisfiable after a
+    // release ships, so blocking the release on them was a deadlock, not caution.
+    ...(alias.release_gating
+      ? alias.blocking_reasons.map((reason) => `alias_retirement: ${reason}`)
+      : []),
   ];
   let disposition = blocking.length === 0 ? 'PASS' : 'HOLD';
   const notes = [
-    'KR definitions are frozen by the parent plan and are not redefined by this checker',
+    'KR8 is the sole remaining release gate. KR10 was retired on 2026-08-10 by delegated Board '
+      + 'decision and is reported as a non-blocking diagnostic; its measured total is not probative '
+      + 'while membership is incomplete and must never be cited as a reduction achieved',
     'KR8 always uses frozen baseline 6; conflicting production telemetry is a blocker',
     'KR8 requires authenticated production provenance; a filename or parseable JSON is not production provenance',
     'KR10 derives executed membership only from authoritative manifests/runtime graphs/inventory; fixed seed/heuristics/literal-require-scan never set membership_complete; incomplete/dynamic HOLD; thresholds stay frozen at 42 and 51',
@@ -2460,7 +2753,10 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
     'self-hashed deterministic_caller_migration is not proof; mechanical scan of residual l3-l6 callers on current revision is MANDATORY (authority evidence supplements but never replaces)',
     'fixture telemetry is never promoted to production telemetry',
     'this checker never deletes compatibility aliases',
-    'present compatibility aliases are nonblocking; only unmet retirement prerequisites HOLD',
+    'alias retirement gates DELETION, not release: while every alias is still present its unmet '
+      + 'prerequisites report NOT_ELIGIBLE without blocking the release disposition, because '
+      + 'shipped_compatibility_cycle and the 14 witnessed production days can only become true '
+      + 'after a release ships. Removing an alias before those prerequisites hold is still blocked',
     'P4 role qualification is out of scope',
   ];
   if (fixtureMode) {
@@ -2479,6 +2775,10 @@ function evaluateReleaseGatesCore(input = {}, { fixtureMode = false, trust = nul
     project: path.relative(repoRoot, projectDir) || projectDir,
     disposition,
     fixture_mode: fixtureMode === true,
+    release_claim: releaseClaim,
+    claim_gate: claimGate,
+    shadow_boundary: shadowBoundary,
+    promotion_claim: promotion,
     kr8,
     kr10,
     alias_retirement: alias,
@@ -2529,6 +2829,7 @@ function main() {
     material = evaluateReleaseGates({
       project: options.project,
       repoRoot: options.repoRoot,
+      releaseClaim: options.releaseClaim,
     });
   } catch (error) {
     fail(error.message || String(error), 2);

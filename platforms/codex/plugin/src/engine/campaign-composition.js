@@ -2304,6 +2304,8 @@ function runCampaignComposition(input = {}, adapters = {}) {
           },
         );
       }
+      // Reach here only after identity-invalid error codes were rejected above.
+      // Pass an explicit identity verdict — never rely on the removed fail-open default.
       const missing = classifyMissingDisposition({
         findings: adjudication.findings
           || (reviewForAdjudication && reviewForAdjudication.findings)

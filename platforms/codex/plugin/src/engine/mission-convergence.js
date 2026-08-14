@@ -1469,6 +1469,15 @@ function graphGrantContext(state, payload) {
     },
     verification_commands: node.verification_commands,
   };
+  if (Array.isArray(node.campaign.authorized_creates)
+      && node.campaign.authorized_creates.length > 0) {
+    expectedDispatch.authorized_creates = node.campaign.authorized_creates;
+  }
+  if (Array.isArray(node.campaign.version_mirror_paths)
+      && node.campaign.version_mirror_paths.length > 0) {
+    expectedDispatch.version_mirror_paths = node.campaign.version_mirror_paths;
+    expectedDispatch.version_mirror_generator = node.campaign.version_mirror_generator;
+  }
   if (!draft
       || canonicalJson(draft.mission_runtime) !== canonicalJson(expectedRuntime)
       || canonicalJson(draft.strict_dispatch) !== canonicalJson(expectedDispatch)) {

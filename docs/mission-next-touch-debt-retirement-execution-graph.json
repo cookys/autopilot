@@ -2,7 +2,7 @@
   "artifact_type": "mission_execution_graph",
   "calculated_batches": 1,
   "calculated_depth": 1,
-  "graph_digest": "aba0dd146880151e9087aad0c122f07b3a0416c8179dafa9e718f9ed5d796e8d",
+  "graph_digest": "c1c6f577ab9b00890e1be2f9b52f4c65a1f548da6bdfdf6adbb718055223a60d",
   "nodes": [
     {
       "acceptance_ids": [
@@ -13,8 +13,10 @@
       ],
       "campaign": {
         "allowed_path_prefixes": [
+          ".autopilot/evidence",
           ".claude",
           ".opencode",
+          "CLAUDE.md",
           "docs",
           "evals",
           "hooks",
@@ -24,6 +26,8 @@
           "src"
         ],
         "authorized_creates": [
+          ".autopilot/evidence/grok-implementer-ab.json",
+          ".autopilot/evidence/hook-multiplexer-benchmark.json",
           ".opencode/plugins/autopilot.ts",
           "docs/projects/2026-08-03-next-touch-debt-retirement/README.md",
           "docs/projects/2026-08-03-next-touch-debt-retirement/evidence/authorization.json",
@@ -61,8 +65,11 @@
         "max_repair_generations": 2,
         "max_wall_seconds": 3600,
         "output_paths": [
+          ".autopilot/evidence/grok-implementer-ab.json",
+          ".autopilot/evidence/hook-multiplexer-benchmark.json",
           ".claude/review-loop-config.md",
           ".opencode/plugins/autopilot.ts",
+          "CLAUDE.md",
           "docs/BACKLOG.md",
           "docs/plans/2026-08-03-next-touch-debt-retirement.md",
           "docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md",
@@ -164,7 +171,10 @@
         ],
         "profile": "high",
         "required_paths": [
+          ".autopilot/evidence/grok-implementer-ab.json",
+          ".autopilot/evidence/hook-multiplexer-benchmark.json",
           ".claude/review-loop-config.md",
+          "CLAUDE.md",
           "docs/BACKLOG.md",
           "docs/plans/2026-08-03-next-touch-debt-retirement.md",
           "docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md",
@@ -254,19 +264,19 @@
         "wall_seconds": 36000
       },
       "source_plan_ids": [
-        "plan-f29f43889a08dff65fa5af15c8b7e8609931158c82df00d902836d9f4a226114"
+        "plan-d61fa9da8d6e490b7712cd27248732ac4d9bfd46ad3be8d29c8b2a285f736f2b"
       ],
       "source_rubric_ids": [
-        "R24832813140007003341623273207780319594165120087483663145262794066993084524134",
-        "R31140793150289762105610345551204891411793058606965687311272198197010011376870",
-        "R34958217544482221655610853721827686404396153434876031999660668645653331668303",
-        "R4266376900227079198632624945293196340659717171467728886235457632892182430683",
-        "R50244254219754981742164876643450451563244599869731489484726987289867722413671",
-        "R58547392033401367052103724634955774478843995912944708296570492271581129866273",
-        "R7660526037993546755876995654116151998624434861760433342682653274506361319947",
-        "R77782202779301617742387561078607164816891588672607045945672568093498950484700",
-        "R83838493511362976414516745569032169706530251649175014825909521225643456383443",
-        "R93787968973975363452751408218486399505028621576007142242353758469363233996939"
+        "R21603832889974032791518829931957321851588481457132098344269681555682528221800",
+        "R27343767159852160868985349274614908714501195758627616788477861562357336667680",
+        "R31658861629601232451624707815120342949856300676971719696356562566766923255089",
+        "R42412282454080035327234367893405346821294250233224591373505238404533863044295",
+        "R46058596043966071360032196265851727593924750701854129587058177984573529077729",
+        "R64131488888837605297716094136061851576845510486153001947660759909376679533226",
+        "R73282689587827797965866567868808850040296053762369193127207531989150149120542",
+        "R91009773276577503411650947257946668288571542122774847562825269251488825312507",
+        "R91515747898282448389993115629662153761276174237764507758787897452014139314474",
+        "R97224286376837893523465506716135180238693662523004369682324038852169094691684"
       ],
       "verification_commands": [
         "bash hooks/tests/run.sh",

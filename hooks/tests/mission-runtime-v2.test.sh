@@ -28,6 +28,22 @@ const {
 
 const lines = [];
 const check = (id, value) => lines.push(`${id}\t${value ? 'PASS' : 'FAIL'}`);
+// Results are only written at the end, so an exception anywhere below used to
+// discard every invariant already proved — one broken fixture reported as a
+// suite-wide blackout, which says nothing about where the damage starts.
+// Flush what is known, then name the crash as its own failed invariant.
+let oracleFlushed = false;
+function flushOracle() {
+  if (oracleFlushed) return;
+  oracleFlushed = true;
+  for (const line of lines) console.log(line);
+}
+process.on('uncaughtException', (error) => {
+  lines.push('oracle-ran-to-completion\tFAIL');
+  flushOracle();
+  console.error(error && error.stack ? error.stack : String(error));
+  process.exit(1);
+});
 const sha = (value) => crypto.createHash('sha256').update(
   typeof value === 'string' ? value : mission.canonicalJson(value),
 ).digest('hex');
@@ -208,6 +224,22 @@ const commonRaw = execFileSync('git', ['-C', repo, 'rev-parse', '--git-common-di
 }).trim();
 const common = fs.realpathSync(path.isAbsolute(commonRaw) ? commonRaw : path.join(repo, commonRaw));
 const repoIdentity = `git-common-dir:${common}`;
+
+// Every managed campaign loop passes through dev-flow admission, which wants a
+// sealed session marker whose Mission projection matches the contract in hand
+// and a live level to compare that marker against. Production supplies both;
+// without them the Engine blocks before it mints a controller Work Order.
+const { sealSessionMarker: sealMarkerFor } = require(path.join(
+  root, 'hooks', 'tests', 'lib', 'session-marker',
+));
+const sealSessionMarker = (contractPath) => sealMarkerFor({
+  root,
+  dir: path.join(temp, 'session-mode'),
+  repoRoot: repo,
+  contract: contractPath,
+  sessionId: 'mission-runtime-v2-sess',
+});
+
 const runtimeRoot = path.join(common, 'autopilot', 'mission');
 const registryPath = path.join(runtimeRoot, 'registry.json');
 const registryLock = path.join(runtimeRoot, 'registry.lock');
@@ -885,6 +917,7 @@ if (runtime) {
       },
     },
   };
+  sealSessionMarker(granted.payload.contract_path);
 
   const intentOnlyAppender = (input, events) => {
     if (events) events.push(input.eventType);
@@ -2205,7 +2238,8 @@ fs.writeFileSync(outputPath, JSON.stringify(result));
 }
 
 const failed = lines.filter((line) => line.endsWith('\tFAIL'));
-for (const line of lines) console.log(line);
+lines.push('oracle-ran-to-completion\tPASS');
+flushOracle();
 if (failed.length > 0) {
   process.stderr.write(`mission-runtime-v2 failures:\n${failed.join('\n')}\n`);
   process.exitCode = 1;
@@ -2270,7 +2304,8 @@ for id in \
   terminal-acceptance-projection-is-exact terminal-requires-utc-observed-at \
   first-zero-delta-terminal-increments-stagnation second-zero-delta-terminal-blocks-mission \
   terminal-race-first-writer-wins terminal-race-recovers-journal-before-cas \
-  next-grant-rejects-after-stagnation
+  next-grant-rejects-after-stagnation \
+  oracle-ran-to-completion
 do
   assert_contains "$OUT" "$id	PASS" "Mission runtime v2 invariant $id"
 done

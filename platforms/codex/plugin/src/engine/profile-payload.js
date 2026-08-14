@@ -295,12 +295,34 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
     ? 'hooks/hooks.json'
     : 'profiles/baselines/claude-hooks.json';
   const hookManifest = readJsonInside(repoRoot, hookManifestPath, 'hook manifest');
+  // D6: when hooks.json wires opt-in-multiplexer per event, expand to the
+  // closed per-event stem table (same membership as check-hook-inventory.js).
+  const MULTIPLEXER_EVENT_TABLE = {
+    PreToolUse: [
+      'branch-protection', 'commit-secret-scan', 'large-file-warner',
+      'config-protection', 'mcp-health', 'dispatch-model-guard', 'orchestrator-edit-gate',
+    ],
+    PostToolUse: [
+      'context-budget', 'accumulator', 'test-runner', 'design-quality',
+    ],
+    PostToolUseFailure: ['mcp-health'],
+    Stop: [
+      'cost-tracker', 'session-summary', 'check-console', 'batch-format',
+    ],
+  };
   const wired = [];
-  for (const groups of Object.values(hookManifest.hooks || {})) {
+  for (const [eventName, groups] of Object.entries(hookManifest.hooks || {})) {
     for (const group of groups) {
       for (const hook of group.hooks || []) {
         const match = /\/hooks\/([A-Za-z0-9._-]+)\.js(?:\s|$)/u.exec(hook.command || '');
-        if (match) wired.push(match[1]);
+        if (!match) continue;
+        if (match[1] === 'opt-in-multiplexer') {
+          for (const stem of (MULTIPLEXER_EVENT_TABLE[eventName] || [])) {
+            wired.push(stem);
+          }
+          continue;
+        }
+        wired.push(match[1]);
       }
     }
   }

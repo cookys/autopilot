@@ -2,10 +2,13 @@
 name: distill
 description: >
   Distill your recurring procedures and corrections from local conversation history into personal
-  custom skills, routed into YOUR own skill dirs — never into autopilot. Use when: "/distill",
+  custom skills, routed into YOUR own skill dirs — never into autopilot. Boundary: learn records
+  facts/gotchas; distill produces reusable procedures. Use when: "/distill",
   "what do I keep redoing", "turn my repeated workflow into a skill", "提煉我的重複流程",
   "把我反覆做的變成 skill", "我一直在重複做什麼", "把剛做完的專案蒸餾成 skill", "趁熱把這套流程收下來", "這個專案的方法論值得留", "distill this project/session". Not for: writing autopilot's own skills, project
-  planning (→ dev-flow), or git-history productivity metrics (→ retro, the commit-history sibling).
+  planning (→ dev-flow), saving a one-off fact/gotcha (→ learn), or git-history productivity metrics
+  (→ retro, the commit-history sibling; "session analysis" there means commit windows, not distill's
+  conversation-session corpus).
 ---
 
 # distill — your recurring procedures → your personal skills

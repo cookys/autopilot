@@ -199,6 +199,10 @@ codex_transport_merge_pidsets() {
 # run's private capture paths (stdout, stderr, sidecar). Emits matching pids
 # (one per line), excluding the dispatcher itself. Permission errors on
 # /proc/<pid>/fd/* are ignored. CODEX-branch only.
+#
+# Also matches the Linux "path (deleted)" readlink form so a holder that
+# unlinked the capture path while keeping the fd open is still detected
+# (orphan_deleted_fd_holder contract).
 codex_transport_scan_fd_holders() {
   local stdout_path="$1"
   local stderr_path="$2"
@@ -219,12 +223,14 @@ codex_transport_scan_fd_holders() {
       # readlink fails with EACCES/ENOENT for some entries; ignore those.
       target="$(readlink "$fd_path" 2>/dev/null || true)"
       [ -n "$target" ] || continue
-      if [ "$target" = "$stdout_path" ] \
-        || [ "$target" = "$stderr_path" ] \
-        || [ "$target" = "$sidecar_path" ]; then
-        printf '%s\n' "$pid"
-        break
-      fi
+      case "$target" in
+        "$stdout_path"|"${stdout_path} (deleted)"|\
+        "$stderr_path"|"${stderr_path} (deleted)"|\
+        "$sidecar_path"|"${sidecar_path} (deleted)")
+          printf '%s\n' "$pid"
+          break
+          ;;
+      esac
     done
   done | sort -u
 }
@@ -333,10 +339,39 @@ codex_transport_timeout_seconds() {
   return 1
 }
 
-# Run the codex binary under process-group supervision.
-# Sets: RUNNER_EXIT, CODEX_DEADLINE_HIT, CODEX_INCOMPLETE_TREE, CODEX_WORKER_PGID
+# Probe whether systemd-run --user --scope is available (teardown hygiene only —
+# NOT a same-UID security boundary; see dispatch-hetero.sh cgroup notes).
+codex_transport_cgroup_available() {
+  command -v systemd-run >/dev/null 2>&1 \
+    && systemd-run --user --scope --quiet -- true >/dev/null 2>&1
+}
+
+# Verify a cgroup scope has empty cgroup.procs (or is already gone).
+# Returns 0 when empty/gone, 1 when live descendants remain.
+codex_transport_cgroup_empty() {
+  local unit="$1"
+  local cg=""
+  # Resolve the cgroup path from the unit name via systemd property when available.
+  cg="$(systemctl --user show -p ControlGroup --value "$unit" 2>/dev/null || true)"
+  if [ -z "$cg" ]; then
+    # Scope already gone → treated as empty (contained).
+    return 0
+  fi
+  if [ -s "/sys/fs/cgroup${cg}/cgroup.procs" ]; then
+    return 1
+  fi
+  return 0
+}
+
+# Run the codex binary under process-group supervision, with an optional
+# systemd-run --user --scope cgroup tier (D3 A07).
+# Sets: RUNNER_EXIT, CODEX_DEADLINE_HIT, CODEX_INCOMPLETE_TREE, CODEX_WORKER_PGID,
+#       CODEX_CONTAINMENT (cgroup|setsid|plain), CODEX_CONTAINED (0|1),
+#       CODEX_CGROUP_UNIT (when cgroup tier used)
 #
 # Args: bin model effort prompt_file stdout stderr sidecar timeout_spec
+# Optional 9th: trusted_cwd — when set, child runs with that working directory
+# (plan-review repository-trust binding). Empty keeps ambient cwd.
 codex_transport_run() {
   local bin="$1"
   local model="$2"
@@ -346,10 +381,14 @@ codex_transport_run() {
   local stderr_path="$6"
   local sidecar_path="$7"
   local timeout_spec="$8"
+  local trusted_cwd="${9:-}"
 
   CODEX_DEADLINE_HIT=0
   CODEX_INCOMPLETE_TREE=0
   CODEX_WORKER_PGID=""
+  CODEX_CONTAINMENT="setsid"
+  CODEX_CONTAINED=0
+  CODEX_CGROUP_UNIT=""
   RUNNER_EXIT=0
 
   local deadline_secs
@@ -364,15 +403,73 @@ codex_transport_run() {
     deadline_secs=1
   fi
 
-  # New session ⇒ process-group identity is the session leader (setsid child).
+  # Launch under setsid (process-group identity) — proven transport path.
+  # D3 A07: optional cgroup when AUTOPILOT_CODEX_CGROUP=1 (teardown hygiene via
+  # empty cgroup.procs). Default is setsid with honest CODEX_CONTAINMENT so
+  # incomplete-tree matrices and hosts without user systemd stay green.
+  if [ -n "$trusted_cwd" ] && [ ! -d "$trusted_cwd" ]; then
+    RUNNER_EXIT=2
+    return 1
+  fi
+
+  if [[ "${AUTOPILOT_CODEX_CGROUP:-0}" == "1" ]] && codex_transport_cgroup_available; then
+    CODEX_CONTAINMENT="cgroup"
+    CODEX_CGROUP_UNIT="dispatch-author-codex-$$-$RANDOM.scope"
+  else
+    CODEX_CONTAINMENT="setsid"
+  fi
+
   # Redirections attach before exec so the worker and same-group descendants
   # inherit the private capture fds. setsid-escaped grandchildren leave the
   # group; reap_tree walks PPID descendants so they are still reaped.
-  setsid "$bin" exec --model "$model" \
-    --sandbox read-only \
-    -c "model_reasoning_effort=\"$effort\"" \
-    --output-last-message "$sidecar_path" \
-    < "$prompt" > "$stdout_path" 2> "$stderr_path" &
+  # ⛔ --skip-git-repo-check 不可省。codex 從**非 git 目錄**執行時會直接拒跑：
+  #        Not inside a trusted directory and --skip-git-repo-check was not specified.
+  #    而它的輸出是 **stdout 0 bytes、rc=1** —— harness 仍會產出帶 verdict 的完整
+  #    artifact（transport_status=transport_exhausted、stdout_sha256 是空字串的雜湊），
+  #    只讀 verdict 的呼叫端會誤以為審查跑過了（2026-08-10 於 PEACE A-2 複審實測）。
+  #
+  #    D3 的 trusted_cwd 讓有 --repo-root 的呼叫端在真 repo 裡跑，那條路徑本來就通得過；
+  #    但註解自己寫的「empty keeps ambient cwd（legacy callers / non-repo authoring）」
+  #    那條**沒有** —— dispatch-plan-review.js 就是（它 spawn 時 cwd 是 mkdtemp 且不傳
+  #    --repo-root）。四個分支一律帶旗標：trusted_cwd 存在時它是 no-op，
+  #    不存在時它是唯一讓 codex 跑得起來的東西。
+  #
+  #    ⚠️ 在 ~/.codex/config.toml 把 /tmp 設成 trusted **不是**替代解：信任不繼承到子目錄。
+  if [ "$CODEX_CONTAINMENT" = "cgroup" ]; then
+    if [ -n "$trusted_cwd" ]; then
+      systemd-run --user --scope --quiet --unit="$CODEX_CGROUP_UNIT" -- \
+        env -C "$trusted_cwd" setsid "$bin" exec --model "$model" \
+        --sandbox read-only \
+        --skip-git-repo-check \
+        -c "model_reasoning_effort=\"$effort\"" \
+        --output-last-message "$sidecar_path" \
+        < "$prompt" > "$stdout_path" 2> "$stderr_path" &
+    else
+      systemd-run --user --scope --quiet --unit="$CODEX_CGROUP_UNIT" -- \
+        setsid "$bin" exec --model "$model" \
+        --sandbox read-only \
+        --skip-git-repo-check \
+        -c "model_reasoning_effort=\"$effort\"" \
+        --output-last-message "$sidecar_path" \
+        < "$prompt" > "$stdout_path" 2> "$stderr_path" &
+    fi
+  else
+    if [ -n "$trusted_cwd" ]; then
+      env -C "$trusted_cwd" setsid "$bin" exec --model "$model" \
+        --sandbox read-only \
+        --skip-git-repo-check \
+        -c "model_reasoning_effort=\"$effort\"" \
+        --output-last-message "$sidecar_path" \
+        < "$prompt" > "$stdout_path" 2> "$stderr_path" &
+    else
+      setsid "$bin" exec --model "$model" \
+        --sandbox read-only \
+        --skip-git-repo-check \
+        -c "model_reasoning_effort=\"$effort\"" \
+        --output-last-message "$sidecar_path" \
+        < "$prompt" > "$stdout_path" 2> "$stderr_path" &
+    fi
+  fi
   local worker_pid=$!
 
   local pgid="" i
@@ -473,6 +570,24 @@ codex_transport_run() {
     # TERM→KILL within the existing 10s budget; seed keeps reparented holders
     # addressable after the PPID walk goes blind.
     codex_transport_reap_tree "$pgid" 10 "$worker_pid" "$seed" || true
+  fi
+
+  # Cgroup empty-procs verification (D3). Only claim contained=1 when the scope
+  # is empty/gone; fallback hosts leave CODEX_CONTAINED=0 and never claim cgroup.
+  if [ "$CODEX_CONTAINMENT" = "cgroup" ] && [ -n "$CODEX_CGROUP_UNIT" ]; then
+    if [ "$CODEX_INCOMPLETE_TREE" -eq 0 ] && codex_transport_cgroup_empty "$CODEX_CGROUP_UNIT"; then
+      CODEX_CONTAINED=1
+    else
+      CODEX_CONTAINED=0
+      # Attempt to stop the scope unit so leftovers are reaped.
+      systemctl --user stop "$CODEX_CGROUP_UNIT" >/dev/null 2>&1 || true
+      if ! codex_transport_cgroup_empty "$CODEX_CGROUP_UNIT"; then
+        CODEX_INCOMPLETE_TREE=1
+      fi
+    fi
+  else
+    # Honest provenance: non-cgroup paths never claim cgroup containment.
+    CODEX_CONTAINED=0
   fi
   return 0
 }

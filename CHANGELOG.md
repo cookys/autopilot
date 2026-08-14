@@ -24,7 +24,16 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
-## Unreleased — Codex lifecycle admission and fail-closed promotion boundary
+## v2.34.9 — Codex lifecycle admission and fail-closed promotion boundary
+
+**Headline**: Codex now enters the lifecycle through packaged `session-mode` and the sealed
+Mission/Engine route, and one strict managed-admission validator — shared by the CLI, the Engine,
+and the campaign dispatcher — binds TTL, effective level, Git common-dir, host payload session
+identity, and digest-sealed Mission policy before any managed effect. What this release
+deliberately does **not** ship is the production pre-effect hook: the final lifecycle sequence never
+qualified a payload-session bridge, so D4 stays `NOT_READY/NO_SHIP` and the installed package still
+registers only `PostCompact`. The structured `PreToolUse` denial is retained as probe evidence, not
+as a shipped guarantee — a hook that admits a call it cannot verify is worse than no hook.
 
 ### Added
 - Generated Codex-native prefixes for exactly seven lifecycle/front-door skills. The prefix maps
@@ -50,12 +59,257 @@ RELEASE TEMPLATE (paste below this comment for each new release):
   live in a separately hashed, separately reviewable amendment and rubric attached to the same D4
   graph node.
 
+### North star
+- prose-justification: the +12% prose delta the gate reports is **not** this release. Measured
+  against the tracked baseline's own span, v2.34.9 adds a net 35 prose lines — the filesystem→INDEX
+  reverse checks in `skills/project-lifecycle/references/project-archive.md`, which exist to catch a
+  closeout that stopped halfway (three such projects had accumulated). The remaining ~1395 lines
+  accrued across every release from v2.32.59 to v2.34.8, because `docs/metrics/surface-lines.json`
+  was never refreshed after any of them even though `preflight-release.sh` documents that refresh as
+  part of each release. The baseline is refreshed as part of this release, so the next one diffs
+  against a real predecessor instead of re-reporting a year's drift. Engine lines moved 5188 →
+  78838 over the same span, so the ratio direction holds.
+
 ### Boundary
 - The installed Codex package registers only the existing `PostCompact` recovery hook. The structured
   `PreToolUse` result and exit-17 fail-open control remain D1 probe evidence, not a production hook.
   The final lifecycle sequence did not qualify a payload-session bridge, so D4 remains
   `NOT_READY/NO_SHIP` for Codex-thread-bound direct-mutation enforcement, with zero dispatcher calls
   and no replacement campaign/work-order authority.
+
+## v2.34.8 — dev-flow admission only judges campaigns that carry a Mission projection
+
+**Headline**: Managed dev-flow admission binds a sealed session marker to the campaign's Mission
+projection, so it can only judge a campaign that has one. The Engine and the CLI ran it on every
+managed campaign regardless, and a bounded non-Mission campaign has nowhere to carry a projection —
+the closed contract schema rejects `campaign_projection` outright and ties `mission_runtime` to
+`strict_dispatch` plus an atomic Mission store. Every such campaign was denied at the door by a
+check no caller could ever satisfy. `dispatch-hetero.sh` already drew the line correctly, running
+admission only once a strict projection is bound and routing everything else to the session-mode
+gate; the Engine and CLI now draw the same one. Mission-backed campaigns are gated exactly as
+before.
+
+### Fixed
+- `scripts/session-mode.js` exports `campaignCarriesMissionProjection`, the single answer to where
+  admission applies. `src/engine/autopilot-engine.js` and `bin/autopilot.js` consult it before
+  running admission. A contract that cannot be read or parsed is left to campaign intake, which
+  validates it before any dispatch — so nothing reaches an effect either way, and the failure is
+  named in the campaign's own vocabulary instead of as a stale session marker.
+- Eight test suites had been failing on `develop` since 2026-08-05 for this reason, five of them
+  needing no fixture change once the gate stopped firing on them: `autopilot-engine`,
+  `controller-boundary-budget-bridge`, `implementation-campaign-dogfood`,
+  `implementation-campaign-routing`, `implementation-campaign-state` (that last one also seals a
+  marker for its genuinely Mission-backed strict root-identity cases, where the gate does apply).
+- The three Mission oracles were separately blind to the gate: `mission-routing-admission` sealed a
+  marker without exporting `AUTOPILOT_LEVEL`; `mission-routing-campaign-bridge` wrote markers under
+  per-case names that admission, which resolves exactly one `<session id>.json`, could not see;
+  `mission-runtime-v2` never sealed one at all and then lost all 99 invariants to an unguarded
+  `readFileSync`. It now flushes what it proved and names the crash as a failed
+  `oracle-ran-to-completion` invariant.
+
+### Added
+- `hooks/tests/lib/session-marker.js` — one definition of the digest-bound marker fixture, shared by
+  `mission-runtime-v2` and `implementation-campaign-state`.
+- A projection-scope matrix in `hooks/tests/session-mode.test.sh` covering both directions: a
+  campaign carrying `mission_runtime` or `campaign_projection` requires admission; a bounded
+  non-Mission one, an absent contract, and unreadable or unparseable bytes do not.
+
+### Fixed (config-ladder leak)
+- `dispatch-hetero-gc` and `resolve-worktree-teardown` were not a default drift: the template
+  default is still `0`, and this repo has dogfooded the reaper at `14` since `5c53201f`. The ladder
+  walks `$PWD/.claude` then `$REPO_ROOT/.claude` before the template, and `$REPO_ROOT` comes from
+  the script's own location — so the template tier is unreachable from inside this repo and both
+  suites were reading the dogfood config. `dispatch-hetero-gc` now states `stale_reaper_age_days: 0`
+  in its scratch repo the way its five sibling cases already did; `resolve-worktree-teardown` proves
+  the default against a plugin-shaped root carrying only what the payload ships (no `.claude/`,
+  matching the Codex payload). Swept: no other suite asserts the template tier.
+- Four `assert_eq` calls in `resolve-worktree-teardown` had actual and expected transposed, which is
+  why the drift reported itself backwards as `expected '14', got '0'`.
+
+### Boundary
+- `next-touch-validation` was red in CI and is untouched here; it passes in a full local run, so
+  what CI was seeing is still unidentified.
+- The narrowing removes no working control. For campaigns that carry no Mission projection the gate
+  was 100% deny with no reachable pass, and it did not exist at all before v2.34.5.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+
+prose-justification: v2.34.8 adds no skill or reference prose at all — the measured total is
+carried over unchanged from v2.34.7. Its own prose is the CHANGELOG entry plus the comment in
+`session-mode.js` recording why an unreadable contract is intake's to name and not admission's.
+
+## v2.34.7 — cc-shim no longer loses a completed verdict to CLI chrome
+
+**Headline**: cc-shim drives non-Anthropic models through an Anthropic-compatible endpoint, so the
+model name is unknown to Claude Code by construction. The CLI prepended a context-window notice to
+stdout ahead of an intact, correctly-framed verdict, and the parser — which requires the wrapped
+block to be the first non-blank line — discarded the finished review as `no_verdict`.
+
+### Fixed
+- `scripts/dispatch-review.sh` sets `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1` in the
+  cc-shim launch env. Observed 2026-08-08 with MiniMax-M3: a real `VERDICT: SHIP-AS-IS` inside an
+  intact nonce block, reported as if the reviewer had said nothing.
+- `--help` no longer documents `--timeout` as agy-only — **shipped separately in commit `42947676`,
+  before this version was cut, and recorded here because it had no version entry of its own**. The
+  same `$TIMEOUT` caps every transport (agy via `--print-timeout`; codex/grok/qoder via an external
+  `timeout`), exceeding it is a non-zero exit that is fail-closed to `no_verdict`, and a large diff
+  at high effort exceeds the 5m default routinely. It is NOT in this version's diff; `git revert` of
+  this merge does not undo it.
+
+### Boundary
+- **The parser was deliberately NOT relaxed.** Allowing the wrapped block to appear anywhere in the
+  response would reopen the prompt-echo hole: the prompt necessarily contains both framing markers,
+  so a runner replaying it reproduces them, and position is what separates an echo from an answer.
+  An attempt to relax it failed exactly that pinned case; the suppression fixes the cause instead.
+- Only the cc-shim path is changed. Other transports that prepend chrome would still lose a verdict
+  the same way — the `docs/BACKLOG.md` entry stays open for that, now with a reproduced instance.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. The suppression is one env assignment; removing it restores
+  the previous behaviour (and turns `hooks/tests/dispatch-review.test.sh` red, by design).
+
+prose-justification: v2.34.7 is a one-line engine fix plus its regression assertion; the prose is
+the CHANGELOG entry and the comment recording why relaxing the parser was rejected.
+
+## v2.34.6 — Mission terminal rollover
+
+**Headline**: A retry chain left five COMPLETE adoptions of one Mission graph, all looking
+authoritative, and admission correctly refused to guess between them — which blocked every new
+Mission in the repository, not just a re-admission of the finished one. `rollover` names the
+integrated adoption, retires the superseded ones, and proves the claim rather than trusting it.
+
+### Added
+- `mission-terminal-reconcile.js rollover --graph-digest <sha256> --canonical-adoption <key>` —
+  records which same-graph adoption was integrated and disposes of the rest. It refuses unless the
+  named adoption is COMPLETE, each of its ready terminals resolves to exactly one journal receipt
+  whose recomputed digest matches, its evidence says `integrated` with `zero_residue` and no
+  retained branches, and — the load-bearing check — its `observed_head` is an **ancestor of HEAD**.
+  Emits one content-addressed artifact asserting zero Work Order synthesis, zero receipt mutation,
+  zero history rewrite. Idempotent, and refuses to silently replace a recorded disposition.
+- `hooks/tests/mission-terminal-rollover.test.sh` — 9 assertions covering both refusal and
+  acceptance, negative-controlled on the ancestry check.
+
+### Changed
+- `mission-routing-admission.js` consumes a validated rollover: superseded adoptions stop competing
+  for the same graph node, and the controller Work Order requirement is waived **for that exact
+  terminal only**. That waiver is sound because the WO exists to stop a missing one being read as
+  "first run" and replaying an effectful node, and a node whose output is provably already in
+  shipped history cannot be replayed — a stronger guarantee than the WO, not a weaker one. A
+  rollover failing any validation (digest, repo identity, graph binding, the three no-fabrication
+  assertions) is IGNORED rather than trusted, so tampering restores the original fail-closed
+  ambiguity instead of buying admission.
+
+### Boundary
+- Rollover does not decide which attempt "won" by chronology or preference. The caller names a
+  candidate and the evidence either supports it or the run is refused.
+- It retires only COMPLETE same-graph adoptions. Non-COMPLETE ones (e.g. ABORTED) are recorded as
+  retained and left alone.
+- The upstream cause is untouched: `src/mission/runtime.js` fences a same-graph adoption only while
+  the prior Mission is UNRESOLVED, so retries after a COMPLETE still accrue terminals. Rollover
+  cleans up after the fact; retiring at close would prevent the accrual.
+- `hooks/tests/mission-routing-admission.test.sh`, `mission-routing-campaign-bridge.test.sh` and
+  `mission-runtime-v2.test.sh` are RED on develop independently of this change
+  (`scripts/verify-preexisting.sh`: head=fail, base=fail, verdict PRE_EXISTING). Untouched here and
+  still open.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- The recorded rollover is a single file: `rm $GIT_COMMON_DIR/autopilot/mission/terminal-rollovers.json`
+  restores the previous fail-closed ambiguity. No Mission state, receipt, or history is modified.
+
+prose-justification: v2.34.6 adds one engine subcommand plus its oracle; the prose is the CHANGELOG
+entry and a header recording why the Work Order waiver is sound, not guidance.
+
+## v2.34.5 — Evidence anchors survive branch reaping
+
+**Headline**: Mission receipts bind their evidence to commit SHAs, but a receipt is JSON — Git
+cannot see that reference. When the only ref holding such a commit was a dispatch branch, reaping
+that branch started a `gc` countdown on the evidence itself, and the loss stayed invisible until
+someone tried to resolve the SHA. Reaping now anchors every receipt-referenced commit first, and
+refuses to delete any ref if that anchoring fails.
+
+### Added
+- `scripts/pin-evidence-anchors.js` — `scan` (read-only) reports receipt-referenced commits that
+  no ref reaches; `apply` pins them at `refs/autopilot/evidence-anchors/<sha>`, idempotently. Ref
+  names always equal the object they point at, and an anchor whose name and target disagree is
+  treated as covering nothing (and repaired), because trusting the name alone would let a
+  mismatched ref mask an unprotected commit. `cat-file -t` decides what is a commit, so content
+  digests that merely look like SHAs are never mistaken for one. Mismatched anchors are identified
+  BEFORE reachability is computed and excluded from it, since `apply` removes them: one named for a
+  SHA but pointing at that SHA's descendant genuinely keeps it reachable, and counting it would skip
+  anchoring the SHA immediately before deleting the ref holding it up. An unreadable receipt directory or
+  an exhausted traversal budget is an error, never a quietly shorter scan — a caller deletes refs
+  on the strength of the exit code, so "I could not read everything" must not look like "there was
+  nothing to protect".
+- `--exclude-ref` computes reachability against the refs that will SURVIVE. This is the whole point
+  at a pre-delete call site: a commit held solely by the branch about to be reaped still looks
+  reachable while that branch exists, so without the exclusion it is skipped and orphaned
+  milliseconds later — reproducing the exact failure the anchor exists to prevent. Independent
+  review caught this before release; the regression is now pinned by a test that anchors, deletes,
+  and asserts the commit survived.
+- `hooks/tests/pin-evidence-anchors.test.sh` — proves scan is genuinely read-only, an unreachable
+  receipt-referenced commit is found while a reachable one is not, apply is idempotent, anchor ref
+  names match their OIDs, fake 40-hex digests are ignored, a repo with no Mission state is a clean
+  no-op, and a missing repo fails closed.
+
+### Changed
+- `scripts/reap-dispatch-branches.sh` anchors receipt-referenced commits after bundling and before
+  the exact-tip CAS deletions, naming every eligible ref via `--exclude-ref` so reachability is
+  judged against what will survive. Fail-closed on anchoring failure **and on the anchor script
+  being absent**: preserve-first is non-waivable, and a silently skipped anchor step is the failure
+  mode itself. Preserve-first already bundled the branch, but a bundle is an offline file and does
+  not keep objects reachable inside the repo.
+- **`CLAUDE.md` restructured**: the scripts inventory was 78% of a file the harness loads in full
+  every session, and one added row put it at exactly 40000/40000. Descriptions moved verbatim to
+  `docs/scripts-inventory.md`; CLAUDE.md keeps a grouped name list, so a session still learns
+  what exists without loading 30 KB to do it. 40000 → ~14000 bytes, all 146 scripts still named,
+  and `check-claude-md-inventory.js` is unchanged (it asserts naming, not table shape).
+
+### Hardened (rounds 3-6 of independent review)
+
+Six independent review rounds ran against this change; every round found a real defect. Beyond the
+reachability fixes above, the following fail-open paths were closed — each one could have let
+`apply` report success without establishing what it claimed, and the reaper deletes refs on that
+exit code:
+
+- Git probes no longer run with a "treat failure as a negative answer" flag. A failed
+  `for-each-ref` or `rev-list` is fatal, and object typing uses `cat-file --batch-check` so a
+  genuinely missing object (`<sha> missing`, exit 0, clean stderr) is distinguishable from a
+  CORRUPT one (same stdout, but an inflate error on stderr). The previous stderr-text heuristic
+  classified corruption as absence.
+- Receipt traversal resolves symlinks and unusual entries explicitly, with device+inode loop
+  detection, instead of skipping whatever was neither plain file nor directory. A dangling symlink
+  at the receipt root is distinguished from genuine absence via `lstat`, so an unavailable receipt
+  tree can no longer read as "this repo has no mission state".
+- Anchor repair happens in ONE `git update-ref --no-deref --stdin` transaction, creates ordered
+  before deletes. A mismatched anchor is frequently the last ref holding a receipt-referenced
+  commit up, so a separate delete followed by a failed create would have made the preservation step
+  the loss. `--no-deref` matters because a symbolic ref under the namespace would otherwise be
+  followed and the BRANCH it points at rewritten; symbolic anchors are now refused outright.
+- Every probe sets `GIT_NO_LAZY_FETCH=1`. In a partial clone `rev-list` and `cat-file` would
+  otherwise contact the promisor remote and write fetched objects into the repo, making `scan` —
+  documented read-only — mutate the repository.
+
+### Boundary
+- The anchor namespace is additive and covers commits only. `refs/autopilot/lifecycle-roots/`
+  points at blobs and never kept a commit alive; the two are complements, not duplicates.
+- Anchors are never expired mechanically. Retiring one is an evidence-bound decision belonging to
+  Mission disposition.
+- Commits already destroyed before an anchor existed cannot be recovered by this.
+- The relocated inventory lives in `docs/`, not `references/`: the latter is skill-support material
+  that ships in the Codex payload, and this is repo-development material. Pre-existing mirrored
+  references still carry 9 unresolvable repo-root-relative links out of 36, because
+  `doc-drift-gate.js` excludes `platforms/codex/plugin`. That is untouched here and remains open.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`.
+- User-side (post-marketplace): `/plugin update autopilot @v2.34.4`.
+- Anchors already written are inert refs; drop them with
+  `git for-each-ref --format='%(refname)' refs/autopilot/evidence-anchors | xargs -r -n1 git update-ref -d`.
+
+prose-justification: v2.34.5 adds one engine script plus its oracle; the prose added is the
+CHANGELOG entry and a script header recording a measured fail-closed boundary, not guidance.
 
 ## v2.34.4 — Clean-checkout CI fixture portability
 

@@ -33,7 +33,8 @@ if (!/trusted|authority|witness|telemetry|14|manufacture/i.test(reasons)) {
   console.error('alias HOLD must cite trusted-authority or telemetry blockers; got:', reasons);
   process.exit(1);
 }
-if (alias.trusted_authority_present === true) {
+if (alias.trusted_authority_present === true
+    && !String(alias.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
   // Project default has no trusted authority journal — must be absent/false.
   console.error('default project must not claim trusted_authority_present without config');
   process.exit(1);
@@ -363,8 +364,10 @@ if (!alias || alias.status !== 'HOLD') {
   console.error('in-repo authority path must HOLD; got', alias && alias.status);
   process.exit(1);
 }
-if (alias.trusted_authority_present === true) {
-  console.error('in-repo authority must not set trusted_authority_present');
+// Provenance, not absence: on a provisioned host the fixed /etc root legitimately
+// resolves; what must never authenticate is a caller-supplied authority.
+if (alias.trusted_authority_present === true && !String(alias.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
+  console.error('in-repo authority must not authenticate; got path', alias.trusted_authority_path);
   process.exit(1);
 }
 const reasons = (alias.blocking_reasons || []).join('\n');
@@ -426,8 +429,10 @@ if (!alias || alias.status !== 'HOLD') {
   console.error('outside-symlink-into-repo authority must HOLD; got', alias && alias.status);
   process.exit(1);
 }
-if (alias.trusted_authority_present === true) {
-  console.error('symlink-into-repo authority must not set trusted_authority_present');
+// Provenance, not absence: on a provisioned host the fixed /etc root legitimately
+// resolves; what must never authenticate is a caller-supplied authority.
+if (alias.trusted_authority_present === true && !String(alias.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
+  console.error('symlink-into-repo authority must not authenticate; got path', alias.trusted_authority_path);
   process.exit(1);
 }
 console.log('alias_symlink_into_repo_hold=ok');

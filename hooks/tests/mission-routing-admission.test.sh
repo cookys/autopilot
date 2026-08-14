@@ -1251,6 +1251,9 @@ const sessionEnv = {
   ...process.env,
   AUTOPILOT_SESSION_MODE_DIR: sessDir,
   CLAUDE_CODE_SESSION_ID: 'ordinary-noop-sess',
+  // Managed admission compares the sealed marker level against the live
+  // AUTOPILOT_LEVEL; a sealed l6 marker without it reads as effective=absent.
+  AUTOPILOT_LEVEL: 'l6',
 };
 const sess = spawnSync(process.execPath, [
   sessionCli, 'set', '--level', 'l6', '--repo-root', repo,

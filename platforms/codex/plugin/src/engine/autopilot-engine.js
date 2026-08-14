@@ -93,6 +93,7 @@ const { admitMissionRouting } = require('../../scripts/mission-routing-admission
 const {
   devFlowAdmissionRejection,
   validateManagedDevFlowAdmission,
+  campaignCarriesMissionProjection,
 } = require('../../scripts/session-mode');
 const {
   admitContinuation,
@@ -8218,7 +8219,8 @@ class AutopilotEngine {
       }
       loopCwd = path.resolve(input.cwd);
     }
-    if (campaignRequested) {
+    if (campaignRequested
+        && campaignCarriesMissionProjection(input.campaignContract, loopCwd)) {
       const admission = validateManagedDevFlowAdmission({
         repoRoot: loopCwd,
         effectiveLevel: String(process.env.AUTOPILOT_LEVEL || '').toLowerCase(),
@@ -8339,6 +8341,13 @@ class AutopilotEngine {
           bundle,
           { roster, now: this.now() },
         );
+        // A consumed host-owned strict-L5 receipt is the authoritative
+        // qualification for this managed invocation. Project it onto the
+        // in-memory roster so the later final-review gate does not consult a
+        // stale disk-scorecard boolean (non-strict flows keep their old path).
+        if (roster.reviewer_qualified !== true) {
+          roster = { ...roster, reviewer_qualified: true };
+        }
         ledger.push(this.ledgerEntry('strict_l5_provider_readiness', 'ready', startedAt, {
           policy_digest: strictL5ProviderReadiness.policy_digest,
           roster_digest: strictL5ProviderReadiness.roster_digest,

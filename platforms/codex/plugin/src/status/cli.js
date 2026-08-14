@@ -413,6 +413,25 @@ function runStatusCli(argv, {
       stderr.write(`task status: ${error.code || 'unavailable'}: ${error.message}\n`);
       return 1;
     }
+    // Shadow observation: the Owner Kernel forms its own verdict on the same evidence and
+    // records whether it agreed. It changes nothing here — `receipt` is already final and
+    // is written below untouched. Fail-open by construction: a component that only watches
+    // must never be able to break what it watches, so every error is swallowed.
+    try {
+      // eslint-disable-next-line global-require
+      const { observeShadowTerminal } = require('./shadow-terminal-observer');
+      // eslint-disable-next-line global-require
+      const { appendObservation } = require('../../scripts/divergence-monitor');
+      observeShadowTerminal(receipt, {
+        record: (observation) => appendObservation({
+          entryPath: observation.entry_path,
+          shadow: observation.shadow_decision,
+          legacy: observation.legacy_decision,
+          reason: observation.reason,
+          runId: rootRunId,
+        }),
+      });
+    } catch (_error) { /* shadow never affects the authoritative answer */ }
     if (json) stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
     else taskHuman(receipt, stdout);
     return 0;

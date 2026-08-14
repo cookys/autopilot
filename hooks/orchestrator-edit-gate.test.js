@@ -170,14 +170,19 @@ function setupCodexGate() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-oeg-'));
   const repo = path.join(base, 'repo');
   const markers = path.join(base, 'markers');
+  const home = path.join(base, 'home');
   fs.mkdirSync(repo, { recursive: true });
+  fs.mkdirSync(path.join(home, '.autopilot'), { recursive: true });
   assert.strictEqual(spawnSync('git', ['init', '-q', repo]).status, 0);
   return {
     base,
     repo,
     markers,
+    home,
     env: {
       ...process.env,
+      HOME: home,
+      USERPROFILE: home,
       PLUGIN_ROOT: CODEX_PLUGIN_ROOT,
       AUTOPILOT_SESSION_MODE_DIR: markers,
       AUTOPILOT_SESSION_ID: 'codex-live-session',
@@ -337,15 +342,22 @@ function setup() {
   const init = spawnSync('git', ['init', repo], { encoding: 'utf8' });
   assert.strictEqual(init.status, 0, init.stderr);
   const markers = path.join(base, 'markers');
+  // Hermetic HOME: the hook may read ~/.autopilot/config.json via os.homedir().
+  // Pin HOME to an empty temp dir so the real user config cannot leak into the
+  // gate decision (D1 A03).
+  const home = path.join(base, 'home');
+  fs.mkdirSync(path.join(home, '.autopilot'), { recursive: true });
   const sid = `t-${path.basename(base)}`;
   const env = {
     ...process.env,
+    HOME: home,
+    USERPROFILE: home,
     AUTOPILOT_HOOK_ORCHESTRATOR_EDIT_GATE: '1',
     AUTOPILOT_SESSION_MODE_DIR: markers,
     AUTOPILOT_ORCH_EDIT_GATE_MODE: 'block',
     CLAUDE_CODE_SESSION_ID: sid,
   };
-  return { base, repo, env, sid };
+  return { base, repo, env, sid, home };
 }
 
 function setMarker(env, repo, level, extra = []) {

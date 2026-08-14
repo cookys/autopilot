@@ -105,6 +105,7 @@ SOURCE_TRUST=""
 CONFIG_PATH=""
 DIFF_LINES=0
 PROTECTED_PATH=0
+VERIFY_STRENGTH_ARG=""
 ORACLE_AVAILABLE=1
 SECURITY_SURFACE=0
 ENFORCE=0
@@ -136,6 +137,14 @@ while [[ $# -gt 0 ]]; do
     --store) STORE_PATH="${2:-}"; shift 2 ;;
     --now) NOW_VAL="${2:-}"; shift 2 ;;
     --skill-mode) SKILL_MODE_OVERRIDE="${2:-}"; shift 2 ;;
+    --verify-strength)
+      VERIFY_STRENGTH_ARG="${2:-}"
+      case "$VERIFY_STRENGTH_ARG" in
+        weak|medium|strong|inconclusive) : ;;
+        *) echo "invalid --verify-strength: $VERIFY_STRENGTH_ARG (must be weak|medium|strong|inconclusive)" >&2; exit 2 ;;
+      esac
+      shift 2
+      ;;
     --domain)
       DOMAIN_OVERRIDE="${2:-}"
       case "$DOMAIN_OVERRIDE" in
@@ -690,6 +699,44 @@ if (!found) process.stdout.write("unknown");
     VERIFY_FIRST="true"
     [[ "$MAX_ROUNDS" -gt 2 ]] && MAX_ROUNDS=2
   fi
+fi
+
+# D7 A13 — verify_strength as a density input (fail-safe: unknown/inconclusive → weak).
+# Does not emit a new always-on schema key (schemas/ is frozen); folds into loop_max_rounds
+# and l1_required. Protected-path / source-trust minima never reduce.
+VERIFY_STRENGTH="$(read_field "$CONFIG" verify_strength "")"
+if [[ -n "$VERIFY_STRENGTH_ARG" ]]; then
+  VERIFY_STRENGTH="$VERIFY_STRENGTH_ARG"
+fi
+case "$VERIFY_STRENGTH" in
+  weak|medium|strong|inconclusive) : ;;
+  '' ) VERIFY_STRENGTH="" ;;
+  *) VERIFY_STRENGTH="weak" ;; # invalid → weakest
+esac
+if [[ -n "$VERIFY_STRENGTH" ]]; then
+  case "$VERIFY_STRENGTH" in
+    weak|inconclusive)
+      # More review: +1 loop, never below user base after other scalers.
+      MAX_ROUNDS=$(( MAX_ROUNDS + 1 ))
+      [[ "$MAX_ROUNDS" -gt 7 ]] && MAX_ROUNDS=7
+      L1_REQUIRED="true"
+      DENSITY_SCALED="true"
+      ;;
+    medium)
+      # Neutral — no reduction, no increase.
+      :
+      ;;
+    strong)
+      # At most -1 loop, and NEVER when protected-path or low source-trust.
+      if [[ "$PROTECTED_PATH" -eq 0 && "$SOURCE_TRUST" != "low" && "$SECURITY_SURFACE" -eq 0 ]]; then
+        if [[ "$MAX_ROUNDS" -gt 1 ]]; then
+          MAX_ROUNDS=$(( MAX_ROUNDS - 1 ))
+          DENSITY_SCALED="true"
+        fi
+      fi
+      # Strong never clears l1_required that was already set by protected-path/high risk.
+      ;;
+  esac
 fi
 
 # If the implementer's family is unknown, a single known reviewer family cannot prove

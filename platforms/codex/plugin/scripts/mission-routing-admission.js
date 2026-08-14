@@ -605,6 +605,9 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
     let terminalReceipt = null;
     let terminalState = null;
     let terminalClaim = null;
+    // Set when a validated rollover certifies the selected terminal as the
+    // integrated one whose output is already in shipped history.
+    let terminalRolloverCertified = false;
 
     // Explicit terminal receipt path (production may pass; not required when registry works).
     if (isStr(options.missionTerminalReceiptPath)) {
@@ -628,8 +631,16 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
       const sealedGraph = isStr(options.missionGraphDigest) ? options.missionGraphDigest : null;
       const sealedLineage = isStr(options.missionLineageId) ? options.missionLineageId : null;
       const sealedPolicy = isStr(options.missionPolicyDigest) ? options.missionPolicyDigest : null;
+      const rollover = loadTerminalRollover(repoRoot, sealedGraph);
+      const supersededKeys = new Set(
+        rollover ? rollover.superseded.map((s) => s && s.adoption_key).filter(isStr) : [],
+      );
       const candidateTerminals = [];
       for (const [adoptionKey, entry] of Object.entries(registry.missions)) {
+        // A retry chain leaves several COMPLETE adoptions of one graph, all looking
+        // authoritative. A validated rollover names which one was integrated; the
+        // retired ones stop competing for the same graph node.
+        if (supersededKeys.has(adoptionKey)) continue;
         if (!SHA256.test(adoptionKey)
             || !hasExactKeys(entry, REGISTRY_ENTRY_KEYS)
             || entry.schema_version !== 1
@@ -804,6 +815,11 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
         }
       } else if (candidateTerminals.length === 1) {
         terminalReceipt = candidateTerminals[0].receipt;
+        terminalRolloverCertified = Boolean(rollover)
+          && Array.isArray(rollover.integrated_terminals)
+          && rollover.integrated_terminals.some(
+            (t) => isObj(t) && t.receipt_digest === candidateTerminals[0].receipt.receipt_digest,
+          );
         terminalState = candidateTerminals[0].state;
         terminalClaim = candidateTerminals[0].claim;
       }
@@ -846,7 +862,13 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
       // it was discovered from an explicit path or the ordinary registry.
       // Once that history exists, its exact controller Work Order is required:
       // treating a missing WO as "first run" would replay an effectful node.
-      if (!loaded.workOrder && enforce && isObj(terminalReceipt)) {
+      // The Work Order requirement exists to stop a missing WO being read as "first
+      // run", which would replay an effectful node. A rollover-certified terminal
+      // cannot be replayed: issuing it required proving observed_head is an ancestor
+      // of HEAD, i.e. the node's output is already in shipped history. That is a
+      // STRONGER guarantee than the WO provides, so it substitutes for it — and only
+      // for that exact terminal.
+      if (!loaded.workOrder && enforce && isObj(terminalReceipt) && !terminalRolloverCertified) {
         fail(
           'controller Work Order for Mission terminal evidence not found',
           'MISSION_EVIDENCE_MISSING',
@@ -882,6 +904,39 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
     allowTest,
     options,
   );
+}
+
+// A recorded rollover names which same-graph adoption is the integrated one and
+// retires the rest. It is validated to the same standard as the legacy disposition:
+// content-addressed, bound to this repository and this graph, and asserting that it
+// synthesized no Work Orders, mutated no receipts, and rewrote no history. A rollover
+// that fails any of those is IGNORED rather than trusted — the ambiguity it would
+// have resolved is the safer failure.
+function loadTerminalRollover(repoRoot, sealedGraph) {
+  if (!isStr(sealedGraph)) return null;
+  let commonDir;
+  try {
+    const { resolveGitCommonDir } = require('../src/engine/work-order');
+    commonDir = resolveGitCommonDir(repoRoot);
+  } catch { return null; }
+  if (!commonDir) return null;
+  const file = path.join(commonDir, 'autopilot', 'mission', 'terminal-rollovers.json');
+  if (!fs.existsSync(file)) return null;
+  let store;
+  try { store = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+  const artifact = store && store.rollovers && store.rollovers[sealedGraph];
+  if (!isObj(artifact)) return null;
+  const { rollover_digest: supplied, ...body } = artifact;
+  if (supplied !== sha256(canonicalJson(body))) return null;
+  if (artifact.artifact_type !== 'mission_terminal_rollover') return null;
+  if (artifact.repo_identity !== `git-common-dir:${commonDir}`) return null;
+  if (artifact.mission_graph_digest !== sealedGraph) return null;
+  if (artifact.synthesized_work_orders !== 0) return null;
+  if (artifact.mutated_receipts !== 0) return null;
+  if (artifact.history_rewritten !== false) return null;
+  if (!isStr(artifact.integrated_adoption_key)) return null;
+  if (!Array.isArray(artifact.superseded)) return null;
+  return artifact;
 }
 
 function requireExactLegacyTerminalDisposition(repoRoot, currentGraphDigest) {

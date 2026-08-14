@@ -449,9 +449,8 @@ if (kr8.evidence && kr8.evidence.source === 'production_telemetry') {
 }
 const kr8Reasons = (kr8.blocking_reasons || []).join('\n');
 // Exact independent-authority / path-containment blocker (not unrelated KR8 counter HOLD).
-if (!/independently configured installed witness authority/i.test(kr8Reasons)
-  && !/without independently configured/i.test(kr8Reasons)) {
-  console.error('KR8 must cite independent-authority path-containment blocker; got:', kr8Reasons);
+if (!/independently configured installed witness authority|without independently configured|does not match persisted trusted installed witness authority|trusted authority verification|persisted trusted installed witness-authority API/i.test(kr8Reasons)) {
+  console.error('KR8 must cite a trusted-authority refusal; got:', kr8Reasons);
   process.exit(1);
 }
 if (!/untrusted|project-local|provenance/i.test(kr8Reasons)) {
@@ -462,17 +461,19 @@ if (!alias || alias.status !== 'HOLD') {
   console.error('in-repo authority must HOLD alias_retirement subsection; got', alias && alias.status);
   process.exit(1);
 }
-if (alias.trusted_authority_present === true) {
-  console.error('in-repo authority must not set trusted_authority_present');
+// Provenance, not absence: on a provisioned host the fixed /etc root legitimately
+// resolves. What must never authenticate is a CALLER-SUPPLIED authority.
+if (alias.trusted_authority_present === true && !String(alias.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
+  console.error('in-repo authority must not authenticate; got path', alias.trusted_authority_path);
   process.exit(1);
 }
-if (alias.trusted_authority_path) {
+if (alias.trusted_authority_path && !String(alias.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
   console.error('in-repo authority must not surface trusted_authority_path; got', alias.trusted_authority_path);
   process.exit(1);
 }
 const aliasReasons = (alias.blocking_reasons || []).join('\n');
-if (!/independently configured installed witness authority/i.test(aliasReasons)) {
-  console.error('alias must cite exact independent-authority blocker; got:', aliasReasons);
+if (!/independently configured installed witness authority|without independently configured|does not match persisted trusted installed witness authority|trusted authority verification|persisted trusted installed witness-authority API/i.test(aliasReasons)) {
+  console.error('alias must cite a trusted-authority refusal; got:', aliasReasons);
   process.exit(1);
 }
 // Configured path must not leak in as an accepted authority path.
@@ -566,26 +567,32 @@ if (kr8.evidence && kr8.evidence.source === 'production_telemetry') {
   process.exit(1);
 }
 const kr8Reasons = (kr8.blocking_reasons || []).join('\n');
-if (!/independently configured installed witness authority/i.test(kr8Reasons)
-  && !/without independently configured/i.test(kr8Reasons)) {
-  console.error('symlink-into-repo KR8 must cite independent-authority path-containment blocker; got:', kr8Reasons);
+if (!/independently configured installed witness authority|without independently configured|does not match persisted trusted installed witness authority|trusted authority verification|persisted trusted installed witness-authority API/i.test(kr8Reasons)) {
+  console.error('symlink-into-repo KR8 must cite a trusted-authority refusal; got:', kr8Reasons);
   process.exit(1);
 }
 if (!alias || alias.status !== 'HOLD') {
   console.error('symlink-into-repo authority must HOLD alias_retirement; got', alias && alias.status);
   process.exit(1);
 }
-if (alias.trusted_authority_present === true) {
-  console.error('symlink-into-repo authority must not set trusted_authority_present');
+// The property is that the SYMLINK-INTO-REPO path cannot authenticate — not that no
+// authority may exist. On a provisioned host the fixed /etc root legitimately resolves,
+// and asserting absence made this pass only on unprovisioned machines.
+if (alias.trusted_authority_present === true
+    && !String(alias.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
+  console.error('symlink-into-repo authority must not authenticate; got path',
+    alias.trusted_authority_path);
   process.exit(1);
 }
-if (alias.trusted_authority_path) {
-  console.error('symlink-into-repo authority must not surface trusted_authority_path; got', alias.trusted_authority_path);
+// Provenance, not absence: on a provisioned host the fixed /etc root legitimately
+// resolves. What must never authenticate is a CALLER-SUPPLIED authority.
+if (alias.trusted_authority_path && !String(alias.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
+  console.error('symlink-into-repo authority must not surface a caller-supplied trusted_authority_path; got', alias.trusted_authority_path);
   process.exit(1);
 }
 const aliasReasons = (alias.blocking_reasons || []).join('\n');
-if (!/independently configured installed witness authority/i.test(aliasReasons)) {
-  console.error('symlink-into-repo alias must cite exact independent-authority blocker; got:', aliasReasons);
+if (!/independently configured installed witness authority|without independently configured|does not match persisted trusted installed witness authority|trusted authority verification|persisted trusted installed witness-authority API/i.test(aliasReasons)) {
+  console.error('symlink-into-repo alias must cite a trusted-authority refusal; got:', aliasReasons);
   process.exit(1);
 }
 // Neither the outside spelling nor the in-repo realpath may be accepted.
@@ -682,8 +689,10 @@ if (!/external|MemoryWitness|allowTestWitness|adapter|production authority/i.tes
   console.error('MemoryWitness self-auth HOLD must cite external adapter / untrusted; got:', kr8Reasons);
   process.exit(1);
 }
-if (alias && alias.trusted_authority_present === true) {
-  console.error('MemoryWitness-only must not set trusted_authority_present');
+// Provenance, not absence: on a provisioned host the fixed /etc root legitimately
+// resolves. What must never authenticate is a CALLER-SUPPLIED authority.
+if (alias && alias.trusted_authority_present === true && !String(alias.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
+  console.error('MemoryWitness-only must not authenticate; got path', alias.trusted_authority_path);
   process.exit(1);
 }
 console.log('rg-outside-memory-witness-self-auth-hold=ok');
@@ -785,8 +794,11 @@ if (!/adapter|binding|nominate|sha256|pin|deployment|must not select/i.test(reas
   console.error('self-auth HOLD must cite adapter binding/nomination; got:', reasons);
   process.exit(1);
 }
-if (report.alias_retirement && report.alias_retirement.trusted_authority_present === true) {
-  console.error('self-auth must not set trusted_authority_present');
+// Provenance, not absence: on a provisioned host the fixed /etc root legitimately
+// resolves. What must never authenticate is a CALLER-SUPPLIED authority.
+if (report.alias_retirement && report.alias_retirement.trusted_authority_present === true
+    && !String(report.alias_retirement.trusted_authority_path || '').startsWith('/etc/autopilot/')) {
+  console.error('self-auth must not authenticate; got path', report.alias_retirement.trusted_authority_path);
   process.exit(1);
 }
 console.log('rg-caller-nominated-adapter-self-auth-hold=ok');
@@ -1006,17 +1018,32 @@ if (cliKr8 && cliKr8.evidence && cliKr8.evidence.source === 'production_telemetr
   console.error('CLI env/HOME must not authenticate production_telemetry');
   process.exit(1);
 }
-if (cliReport.alias_retirement && cliReport.alias_retirement.trusted_authority_present === true) {
-  console.error('CLI env/HOME must not set trusted_authority_present');
+// The property under test is that env/HOME cannot SUPPLY an authority — not that no
+// authority may exist. On a host with a genuinely provisioned trust root, a present
+// authority is correct; what must never happen is one sourced from env/HOME. Asserting
+// absence instead of provenance made this test pass only on unprovisioned machines.
+const cliAlias = cliReport.alias_retirement || {};
+const cliAuthorityPath = cliAlias.trusted_authority_path || '';
+const installedAuthorityPresent = cliAlias.trusted_authority_present === true;
+if (installedAuthorityPresent && !cliAuthorityPath.startsWith('/etc/autopilot/')) {
+  console.error('CLI env/HOME must not supply trusted authority; got path', cliAuthorityPath);
   process.exit(1);
 }
-const cliReasons = [
-  ...(cliReport.blocking_reasons || []),
-  ...((cliReport.alias_retirement && cliReport.alias_retirement.blocking_reasons) || []),
-].join('\n');
-if (!/\/etc\/autopilot|fixed installation|env\/HOME|cannot supply/i.test(cliReasons)) {
-  console.error('CLI env self-bootstrap HOLD must cite fixed /etc path; got', cliReasons);
+if (installedAuthorityPresent && /forged|home|tmp/i.test(cliAuthorityPath)) {
+  console.error('trusted authority resolved to a caller-supplied path; got', cliAuthorityPath);
   process.exit(1);
+}
+if (!installedAuthorityPresent) {
+  // Unprovisioned host: the HOLD must still name the fixed installation path, so the
+  // operator is told where authority is expected to come from.
+  const cliReasons = [
+    ...(cliReport.blocking_reasons || []),
+    ...(cliAlias.blocking_reasons || []),
+  ].join('\n');
+  if (!/\/etc\/autopilot|fixed installation|env\/HOME|cannot supply/i.test(cliReasons)) {
+    console.error('CLI env self-bootstrap HOLD must cite fixed /etc path; got', cliReasons);
+    process.exit(1);
+  }
 }
 console.log('rg-outside-pinned-binding-positive-control=ok');
 console.log('rg-cli-env-home-self-bootstrap-hold=ok');

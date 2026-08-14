@@ -47,6 +47,13 @@ for src in "$REPO"/agents/{reviewer,debugger,planner}.md; do
     continue
   fi
 
+  # agents/<role>.md lives one directory level shallower than
+  # .opencode/agent-bodies/<role>.body.md. Rewrite repo-relative markdown
+  # targets that climb exactly one level (](../foo) → ](../../foo) so generated
+  # bodies resolve to the same repo paths. Skip already-rewritten ../../ links
+  # (next char after ../ must not be '.').
+  body=$(printf '%s\n' "$body" | sed -E 's#\]\(\.\./([^.])#](../../\1#g')
+
   if [ "$CHECK" = "1" ]; then
     if ! diff -q <(printf '%s\n' "$body") "$dst" >/dev/null 2>&1; then
       echo "drift: $dst" >&2

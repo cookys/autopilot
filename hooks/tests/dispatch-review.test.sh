@@ -1069,4 +1069,17 @@ OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --pack-file /nonex
 assert_eq "2" "$EXIT" "missing pack-file exit 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing pack-file precondition"
 
+# Regression: cc-shim must suppress Claude Code's unknown-model context-window notice.
+# cc-shim exists to drive NON-Anthropic models through an Anthropic-compatible endpoint,
+# so the model name is unknown to the CLI by construction. Without the suppression the CLI
+# prepends a multi-line notice to STDOUT ahead of an otherwise complete, correctly-framed
+# verdict. The parser requires the wrapped block to be the FIRST non-blank line — that is
+# deliberate, because a prompt echo reproduces the framing markers too and only position
+# separates the two — so the notice silently turned a finished review into no_verdict.
+# Observed 2026-08-08 with MiniMax-M3: a real VERDICT: SHIP-AS-IS inside an intact nonce
+# block, discarded. Fixing it at the launch env keeps the prompt-echo protection intact;
+# relaxing the parser would not have.
+assert_contains "$(cat "$SCRIPT")" "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1" \
+  "cc-shim launch suppresses the unknown-model context-window notice"
+
 finalize_test

@@ -41,6 +41,7 @@ const HOOKS_DIR = path.join(REPO, 'hooks');
 const NON_HOOK = [
   /-lib\.js$/, /\.test\.js$/, /^capture-payload\.js$/, /^_transcript-timing-probe\.js$/,
   /^transcript-reader\.test\.js$/, /\.bak$/,
+  /^opt-in-multiplexer\.js$/, // D6 infrastructure, not a user-facing hook stem
 ];
 
 function die(msg, code) { console.error(msg); process.exit(code === undefined ? 2 : code); }
@@ -58,13 +59,36 @@ function stemFromCommand(cmd) {
   return m ? m[1] : null;
 }
 
+// D6: the per-event opt-in multiplexer owns these stems. When the multiplexer is
+// wired for an event, each listed stem counts as wired (direct registrations are
+// removed to avoid spawning disabled opt-in handlers on every tool call).
+const MULTIPLEXER_EVENT_TABLE = {
+  PreToolUse: [
+    'branch-protection', 'commit-secret-scan', 'large-file-warner',
+    'config-protection', 'mcp-health', 'dispatch-model-guard', 'orchestrator-edit-gate',
+  ],
+  PostToolUse: [
+    'context-budget', 'accumulator', 'test-runner', 'design-quality',
+  ],
+  PostToolUseFailure: ['mcp-health'],
+  Stop: [
+    'cost-tracker', 'session-summary', 'check-console', 'batch-format',
+  ],
+};
+
 function stemsFromHookBlock(eventMap) {
   const out = new Set();
   for (const event of Object.keys(eventMap || {})) {
     for (const matcher of eventMap[event]) {
       for (const h of matcher.hooks || []) {
         const s = stemFromCommand(h.command || '');
-        if (s) out.add(s);
+        if (!s) continue;
+        if (s === 'opt-in-multiplexer') {
+          // Expand multiplexed opt-in membership for this event.
+          for (const stem of (MULTIPLEXER_EVENT_TABLE[event] || [])) out.add(stem);
+          continue;
+        }
+        out.add(s);
       }
     }
   }

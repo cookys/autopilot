@@ -336,6 +336,10 @@ poll_until() {
 }
 
 # Call once at end of each *.test.sh file.
+# Terminates the suite — it EXITS, it does not return. Anything appended after
+# the finalize_test call never runs, and the suite still reports PASS, so a new
+# case parked below it is invisible rather than failing. Insert new cases ABOVE
+# the call, and confirm each one can actually go red before trusting it.
 finalize_test() {
   if [ "${#__TEST_FAIL_MSGS[@]}" -eq 0 ]; then
     echo "PASS [$TEST_NAME] $__TEST_PASS_COUNT assertions"

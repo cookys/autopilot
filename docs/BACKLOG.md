@@ -13,11 +13,11 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 
-## Audit snapshot（2026-08-04，release candidate @ `12875e95`）
+## Audit snapshot（2026-08-05，post next-touch-debt-retirement）
 
-- **45 real entries**：2 個 Board decisions、14 個已排入執行計畫的 technical gaps、29 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
+- **31 real entries**：2 個 Board decisions、29 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
 - Platform capability trigger activation 的 D1 closed claims、D2 agy structured usage、D3 Codex production recovery 與 D4 strict-L5 trust root 已由 depth 0 驗證完成，依 lifecycle hygiene 從 backlog 刪除而非保留完成態條目。
-- 14 個 technical gaps 仍依序收斂於 [`2026-08-03-next-touch-debt-retirement.md`](plans/2026-08-03-next-touch-debt-retirement.md) 的 D1–D8。
+- 14 個 technical gaps（A01–A14）已由 [`next-touch-debt-retirement`](projects/_archive/2026-08-03-next-touch-debt-retirement/README.md) D1–D8 核銷並自本檔刪除。
 - 29 個 conditional entries 主要是四類：等待仍未出現的外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
 
 ---
@@ -34,7 +34,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: L
 - **Source**: health-roadmap P6 Decision Brief（2026-07-17）
 
-
 ## Format example
 
 ```markdown
@@ -48,6 +47,13 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ---
 
 ## Active entries
+
+### Role qualification is absent across the whole roster, which fails L5 closed
+- **Trigger**: Already met (observed 2026-08-11). `bin/autopilot.js status readiness --probe` returns `transport: ready` and `live: ready` for all six seats while every one reports `qualification: unknown`; `engine-scorecard.js current --role implementer` yields no candidate, and the reviewer rows are rejected as malformed ("evidence methodology is missing kind, basis").
+- **Context**: `engine implement-review` requires a qualified reviewer by default, so `/l5` cannot run its own path — a `/l5` invocation on 2026-08-11 degraded to L3 inline via the skill's documented `precondition_failed` route. `--allow-unqualified-reviewer` exists but spends L5's cost while forfeiting what L5 buys (a decorrelated *qualified* reviewer), so it is not a fix. Also blocks the separate question of restoring the Codex/gpt seats after the 2026-07-16 quota outage: that roster swap was explicitly marked for re-evaluation after the 2026-07-23 reset, and the reset has long passed while the swap is still in place — but re-evaluating it is meaningless while no seat can be qualified at all.
+- **Effort**: L (`autopilot:engine-onboarding`; repair the malformed scorecard rows first, since they poison `current`/`ladder` for every role)
+- **Source**: `/l5` precondition probe 2026-08-11; supersedes the personal-memory note `codex-quota-outage-roster-swap`
+
 
 ### Fable skills absorption plan — Board triage
 - **Status**: UNDECIDED — genuine orphan plan found during exhaustive 111-plan audit。
@@ -68,13 +74,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: M.
 - **Source**: `docs/projects/_archive/2026-07-08-t14-reinject/report.md` § Follow-up.
 
-### Review-loop enum gate — behavioral per-field invalid-value proof
-- **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-change deferral; the per-field behavioral acceptance gap already exists.
-- **Context**: The contract-schema SSOT checks declared enum parity, while generic resolver tests cover invalid→default behavior. D1 will drive one invalid value through every enum field and assert its fallback instead of deferring the known behavioral coverage gap.
-- **Effort**: S–M.
-- **Source**: `docs/projects/_archive/2026-07-10-contract-schema-ssot/README.md` § Residual / BACKLOG.
-
 ### Mission graph scheduler 與 portfolio optimization
 - **Trigger**: v2.34.0 的 frozen deliverable graph gate 已出貨，且至少兩個真實 portfolio 顯示靜態 dependency batches 造成可量測的 idle time，或使用者明確要求跨專案排程／dashboard。
 - **Context**: v2.34.0 只需要機械阻止 phase explosion：bounded deliverable count、DAG、parallel/batch/depth/gate budget 與 ready-node admission。Critical-path optimization、dynamic reorder、跨 repo portfolio、priority queue、進度 dashboard 與成本最佳化不屬於本次 prevention boundary；過早加入會把一個 P0 correctness gate 再膨脹成 scheduler 專案。啟動後應消費同一 frozen graph/receipt，不得建立第二套 Mission authority。
@@ -87,39 +86,61 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: L
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
 
-### grok implementer 摩擦調校（toolFailure 28%／零 commit 72%／effort 反效果假說）
-- **Status**: PLANNED — trigger satisfied；D8 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md). `develop` 已有 52 個 `dispatch-hetero(grok): edits` commits（原條目後新增 28 個），尚未做同任務 A/B。
-- **Trigger**: grok 真正被當成 `dispatch-hetero.sh` implementer 常態使用之後（累積 ≥30 個寫檔 session）。
-- **Context**: 原本「派遣路徑全為唯讀」的樣本描述已過時；現在真正剩下的是受控校準。歷史訊號仍只有相關性：`toolFailure>0`、零 commit 與 high-effort 較慢都可能是任務難度自選偏差。下一步應用同一批任務做 effort A/B，量測 tool failure、wrapper commit、返工與品質；**不可因舊相關性直接關掉 high**。
-- **Effort**: M（需先累積母體，再跑 A/B）
-- **Source**: 2026-07-25 context-window telemetry audit recorded by `9bc10591`。
+### Implementer scorecard lapses on runner-version drift, silently degrading every /l5
+- **Trigger**: 立刻——目前 /l5 的異質 implementer 段是不可用的；或任何 runner CLI 升版之後。
+- **Context**: 2026-08-09 一次 /l5 在 \`dispatch-contract.js check\` 就拿到 NO-GO：\`engine-scorecard.js current --role implementer\` 回 grok-4.5/grok 但 \`status: expired, admissible: false\`——存的 row 釘 \`runner_version: grok 0.2.106\`，實際裝的是 \`grok 1.0.0\`。資格確實該失效，這點沒錯；問題是**後果是靜默的**：foreman 依文件降級成 inline，/l5 就退化成 /l4，成本套利消失而沒有任何告警。runner 升版是常態，所以這會一再發生。要嘛讓 /l5 前置檢查在 roster 解析時就先報 seat 不可用，要嘛把 re-qualification 做成 runner 版本變動時的例行程序。重新認證本身是 engine-onboarding 工作，有自己的證據門檻，不得為了解鎖某個 unit 而放行。
+- **Effort**: M。
+- **Source**: 2026-08-09 /l5 next-touch-validation 收尾；foreman 回報的 precondition_failed。
 
-### dispatch-author codex transport：cgroup supervision tier（fd-less inter-poll escapee 殘差閉環）
-- **Status**: PLANNED — D3 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md)；2026-07-18 後 transport 已被多次修改（含 `1361ed01`），但 cgroup tier 尚未實作。
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；原 trigger 也已被 post-entry transport edits 滿足。
-- **Context**: v2.32.54 transport hardening 的 normal-exit 不完整樹偵測＝監控期累積 descendant snapshots＋exit 後 /proc fd-holder 掃描（TERM/KILL＋reject）；deadline 路徑的 `reap_tree(pgid,10,worker_pid)` 做 kill 前 worker-rooted tree walk。**已驗證涵蓋 honest-failure orphan**：deadline_setsid_orphan／orphan_deleted_fd_holder 兩個 executable 負控對現行實作 157/157 GREEN（regression 已 bank）。**殘差全屬對抗性 worker（out of threat model，v2.25.8 先例）**：(1) poll 間隙 setsid 逃逸「且」不持 private-channel fd 的子孫；(2) deadline 前蓄意兩層 setsid reparent-race 搶在 pre-kill walk 前脫離 worker 樹（gpt-5.5 P3-panel F2，depth-0 以 mutation-validation 判 non-reproducible-honestly、adversarial-only）；(3) 同 uid inode-rebind／`(deleted)` fd 自替換（gpt-5.5 F3/F4、非升權，worker 本就控自身輸出）；(4) model 在 CLI chrome 前注入 fake banner（F1，需 CLI compromise）。完全閉環＝把 dispatch-hetero 的 `systemd-run --user --scope`＋`cgroup.procs` 空集驗證 tier 移植過來（fallback 保留現行路徑＋誠實 provenance 欄位）。repo 先例：cgroup containment 是 teardown-hygiene provenance、非 security attestation。**同一 D3 新增 caller-boundary acceptance**：2026-08-04 live plan-review 證明 `dispatch-plan-review.js` 從 untrusted `/tmp` cwd 啟動 Codex author，0.146.0 兩次皆在 model 前以 repository-trust error exit；須綁 canonical reviewed repo cwd／等價 verified trust flag，並保留 wrong-binding fail-closed 負控，不能再讓 formal hetero gate 被 transport 假死。
-- **Effort**: S–M。
-- **Source**: 2026-07-18 v2.32.54 P1 review round 4 + P3 terminal qc panel（gpt-5.5/opus）＋ depth-0 mutation-validated adjudication（project ledger p1 round-4 / p3 finding_adjudicated events）；[`platform-capability-trigger-activation` review receipt](plans/2026-08-04-platform-capability-trigger-activation.review.md)（2026-08-04）。
+### Every gate needs a negative control — the caution needs a routine behind it
+- **Trigger**: 下一次新增或修改任何「閘」（release gate、drift gate、anti-gaming scan、admission check、hook）時；或再抓到一個閘存在卻沒在擋東西。
+- **Context**: CLAUDE.md 已經寫著「腳本存在不是它在運作的證據」，但 2026-08-08 一天之內出現三次同一種形狀，全部通過既有 CI 而沒被發現——(1) managed dev-flow admission 對 bounded 非 Mission campaign **永遠 deny**，沒有任何呼叫端或 fixture 能滿足；(2) `resolve-worktree-teardown` 的 template-tier 斷言被 repo 自身 dogfood 設定遮蔽，測的不是它宣稱在測的東西；(3) `check-test-integrity.sh` 對 263 個 shell 測試檔一個都沒看，回 exit 0。三者的共通點是 **exit 0 被當成「有在保護」**，而沒有人證明過它能變紅。警語擋不住這個，因為警語要人想起來才會啟動。可能的形狀：閘的測試必須含一個 negative control 案例（刻意違反 → 斷言變紅），並讓某個 meta-gate 檢查每個閘都有這樣一條；或讓閘在「零輸入匹配」時回非零而不是 0。先決定要哪一種，不要三種都做。
+- **Effort**: M。
+- **Source**: 2026-08-08 CI triage（11/273 → 1/273）三起獨立成因的共同模式；本檔另有三條各自的條目。
 
-### classify-error quota 共現 gate 偏寬 — 裸 `status`/`error` 子串共現即判 quota
-- **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；既有對抗 fixture 已證明 acceptance gap。
-- **Context**: v2.32.53 的 `payment required`/`balance exhausted` 共現 gate 用裸子串（`402`/`status`/`error`/`http` 任一共現即過）——opus 對抗探針實證兩個假陽性樣板可通過。要精度就把 gate 綁到數字 HTTP token（如 `\b402\b`/`status[ :=]4xx`）而非裸詞。前身兩項 run E 殘項（quota merge role 分片、`on_engine_unavailable` 接線）已於 v2.32.54 核銷。
-- **Effort**: Fix
-- **Source**: 2026-07-17 /l5 run E opus panel 🔵（殘留意見）；v2.32.54 核銷時拆出
+### `check-test-integrity.sh` does not cover this repo's main test surface
+- **Trigger**: 立刻——每一次對 `hooks/tests/*.test.sh` 的改動，anti-gaming 閘目前都是空轉的；或下一次要靠它擋 delegated／`/l5` hetero dispatch 交回的測試改動時。
+- **Context**: 2026-08-08 對一個改了 6 個 `hooks/tests/*.test.sh` 的 range 執行 `validate --range`，回 exit 0 並附 `"warning": "possible misconfiguration: zero test paths matched the diff"`——它一個檔都沒看。這個 repo 的測試主力就是 shell 套件（263 個 `*.test.sh`），所以「刪測試／跳過測試／弱化斷言」這條防線在最常改的檔案上不存在。當次改動改用手動補驗過關（八個套件斷言數 base vs head 只增不減；三處表面刪除是 `assert_eq` 參數順序修正且各有對應新增；無新增 skip／xfail／`.only`）——但手動不是閘。修法要先確認新覆蓋真的會在 negative control 下變紅，不要只是讓 warning 消失。
+- **Effort**: M。
+- **Source**: 2026-08-08 v2.34.8 pre-push QC。與同日另兩起同類：admission gate 對某類 campaign 永遠 deny、reaper 閾值被 repo 自身 dogfood 設定遮蔽——皆為 CLAUDE.md「腳本存在不是它在運作的證據」的實例。
+
+### Engine and CLI have no session-mode fallback for bounded non-Mission campaigns
+- **Trigger**: 要把 session-marker 紀律擴到非 Mission 的 managed campaign 時；或 threat model 升級為「同一 host 上未經 /l3–/l6 進入的呼叫端不得驅動 managed loop」。單純誠實使用者不觸發。
+- **Context**: 三條路徑對「contract 不帶 Mission projection」的處置不一致。`dispatch-hetero.sh:1710` 在 `CAMPAIGN_PROJECTION_BOUND != 1` 時仍跑 `check_session_mode_gate` + `check_mission_enforcement_gate`；`src/engine/autopilot-engine.js` 與 `bin/autopilot.js` 則**沒有任何等價 fallback**——v2.34.8 收窄 admission 後，bounded campaign 在這兩條路徑上不經任何 session 檢查。此不對稱**早於** c3e2647d（2026-08-05 之前 Engine 根本沒有 admission），v2.34.8 只是讓它重新成為現行行為，**不是新退步**；而 c3e2647d 造成的中間狀態也不是可用的控制，是 100% 拒絕。真要補，得先決定一個沒有 Mission 身分的 campaign 該把 marker 綁到什麼上——不要為了對稱而發明一個假的綁定。
+- **Effort**: M。
+- **Source**: 2026-08-08 v2.34.8 pre-push QC。兩個 family（MiniMax-M3、GLM-5.2）皆回 SHIP-AS-IS 且 findings=none，都沒抓到這條；MiniMax-M3 更在總結中斷言 bounded campaign「現在會走到 session-mode gate」——經查為假，`check_session_mode_gate` 僅存在於 dispatch-hetero.sh。此為 `resolve-review-loop.sh` 既有 MiniMax-M3 advisory（diff-only 中央主張 5/6 為假）的又一實例。
+
+### Mission runtime retires superseded adoptions at closeout, not after the fact
+- **Trigger**: 下一次 Mission 重試鏈再留下多個 COMPLETE adoption，或要動 `src/mission/runtime.js` 的收尾路徑時。
+- **Context**: v2.34.6 的 `mission-terminal-reconcile.js rollover` 是**事後清理**——它能指名已整合的 adoption 並退役其餘，但根因沒動：runtime 只在 mission UNRESOLVED 時圍籬，COMPLETE 之後每次重試都再鑄一個永久 terminal。治本是在收尾時就退役被取代的 adoption，讓 rollover 退回成救援工具而不是常規步驟。動這裡必讀 `scripts/mission-terminal-reconcile.js` 檔頭（記錄了兩層阻擋的完整診斷，以及 Work Order 豁免為何只對「observed_head 是 HEAD 祖先」成立）。
+- **Effort**: M。
+- **Source**: 2026-08-07 v2.34.6 rollover ship；`docs/projects/_archive/2026-08-06-dispatch-residue-cleanup/README.md`。
+
+### `reap-dispatch-branches.sh scan` cannot see branches that carry no `root_run_id`
+- **Trigger**: 下一次要盤點 dispatch 殘留分支時；或再出現「分支堆積但 scan 回報乾淨」。
+- **Context**: `scan` 以 `root_run_id` 為 key，沒帶 id 的殘留分支完全隱形——2026-08-06 清出的 20 個就是這樣躲過的。缺的是一個**報告-only 的 `--all` 模式**列出 `unattributed`，不自動刪（preserve-first 是這支工具的既有立場，不要為了方便破例）。目前 usage 只有 `--repo/--into/--pattern/--inventory-file`。刪任何分支前先 `pin-evidence-anchors.js apply --exclude-ref <待刪ref>`：receipt 綁的是 commit SHA 不是內容，這個 repo 已經永久失去過 4 個 commit 的證據。
+- **Effort**: S。
+- **Source**: 2026-08-06 dispatch residue cleanup（20 → 1 branches, 6.3 GB reclaimed）。
+
+### `prune_tmp_residue` has no owner for test-fixture prefixes
+- **Trigger**: `/tmp` 再次被 autopilot 殘留撐大，或有人要為 CI runner 加磁碟配額時。
+- **Context**: `prune_tmp_residue` 只被四個 dispatch 腳本以 `dispatch-author-*`／`dispatch-explore-*`／`dispatch-review-*`／`hetero-*` 前綴呼叫。`autopilot-test-*`、`autopilot-ci-repro*`、`autopilot-docsync*` **沒有任何 owner**，而它們是位元組大宗：2026-08-08 一次全套測試就留下 49 個 `autopilot-test-*` 目錄。要嘛讓 `hooks/tests/lib.sh` 的 `cleanup_test_tmp` 也掃同前綴的過期殘留，要嘛加一個認領這些前綴的呼叫點——先確認它真的會 fire，別再多一個「存在但沒在工作」的腳本。
+- **Effort**: S。
+- **Source**: 2026-08-06 dispatch residue cleanup（782 項 `/tmp`、1.9 GB）；2026-08-08 複驗仍成立。
+
+### `next-touch-validation.test.sh` asserts against un-versioned local Mission state
+- **Trigger**: 立刻——它在 CI 上**永遠**紅；或下次有人相信「本機全套綠」等於「CI 綠」時。
+- **Context**: 該套件讀 `.git/autopilot/mission/next-touch-debt-retirement/successor-prepared.json` 並斷言 `validatePreparedReceipt(...).state === 'ACTIVE'`，另外還綁 `D8_PUBLICATION_SHA` 與 `.autopilot/evidence/grok-implementer-ab.json`。那是 2026-08-03 已歸檔專案在**某一台機器**上一次真實執行留下的 authority artifact，不在版控裡，所以全新 clone 必 ENOENT crash（CI run 31206156093 實證）。本機會綠純粹因為那台剛好有。修法是造 fixture Mission state；**不要**改成「artifact 不存在就 skip」——那是把安全控制變成靜默通過。1760 行套件深度綁在真實 authority 上，工程量不小。
+- **Effort**: M–L。
+- **修法已驗證到 5/6（2026-08-08，未落地）**: fixture 用**本 repo 的本地 hardlink clone**（實測 0.31s／63 MB，且確認不帶 `.git/autopilot`）——如此真 history（`D8_PUBLICATION_SHA` `c43370dd` 可解析）、真 tracked 檔案（`.autopilot/evidence/grok-implementer-ab.json` 與 archived `authorization.json` 都在版控）與一個乾淨可寫的 Mission store 同時到位。在 clone 裡 commit 一個 `src/value.txt`（含 `## Next touch` ATX heading）當 graph node 的 spec anchor，別指向會變動的 repo 內容。然後 `runMissionCli(['prepare','--repo',clone,...])` 搭 `AUTOPILOT_TEST_ALLOW_MISSION_RUNTIME_SEAMS=1` 與 `testOnlyDependencies`：真 producer 做事，只覆寫四個身分值成 archived authorization 釘的那些——`mission_policy_digest`、`mission_graph_digest`、`deriveMissionLineageId`、以及 `deriveMissionAdoptionKey`（必須是 `7e8e6806aee8…`：`findPreparedReceipt` 用 `authorization.branch.split('/')[1]` 當前綴過濾）。`--out` 必須寫進 `<common>/autopilot/mission/next-touch-debt-retirement/successor-prepared.json`，因為 `assertAuthorityPath` 只收 canonical authority root 底下的檔案。`gate_attempt_budget` 要 ≥2。**剩下的最後一格**：真 artifact 的 state 是 ACTIVE 且 0 個 active claim（實測拒絕碼 `MISSION_GRANT_INVALID`「found 0」），fixture 目前停在 DRAFT（拒絕碼 `MISSION_BLOCKED_OR_TERMINAL`）——需要 grant 後再釋放 claim，只 grant 會變成 1 個 active claim 而落到 `MISSION_GRANT_BINDING_MISMATCH`，那不在 site 1 的接受集內。**不要**嘗試從版控的 graph 重建 archived digest：`docs/mission-next-touch-debt-retirement-execution-graph.json` 已漂移（其 digest `c1c6f577…`，authorization 釘 `aba0dd14…`）。sites 2/3 另需 D8 rebind 與 terminal bundle，尚未探。
+- **尾巴長度是可列舉的，不是未知的（2026-08-09 更正）**: 上一則把剩餘依賴描述成「尚未探」「長度未知」，那個判斷錯了。一次 grep 就把整條尾巴數完：只有三項——(1) `implementation-campaign.jsonl` 需要一個 project 到 `TERMINAL_READY` 的 campaign；(2) `MISSION_LEDGER`（第 39/41/43 行）指向真 repo 的 ledger；(3) `OUT_CURRENT`（第 72 行）跑開發者的活 ledger 並接受三個錯誤碼中的任一個。沒有第四項。三項都已收：新的 `hooks/tests/lib/implementation-campaign-ledger-fixture.js` 用**出貨中的 writer**（`run-ledger.sh` init/stage-acquire/journal-add ＋ `campaign-intake.js` 的 `appendCampaignEvent` ＋ 真 `reduceCampaignState`）造出 ledger——不是手寫 JSONL，所以它證明的是「production 造得出來」而不是「parser 讀得懂」；`MISSION_LEDGER`／`ARCHIVE_AUTH` 一起改指 fixture repo，每個 reservation 呼叫都補 `--repo`；`OUT_CURRENT` 實測為 `MISSION_GRANT_INVALID`（「found 0」）後釘死成單一碼，並改用一般的 `assert_contains`，不再手動加 pass counter。dogfood 套件的 rotation block 也改用同一個 library 的 `openCampaignLedger`，兩套件共用一份 intake 路徑。
+- **Source**: 2026-08-08 CI triage（11/273 紅的最後一個，其餘十個已於 v2.34.8 修復）；2026-08-09 收尾。
 
 ### Dispatch-branch lifecycle — SHA-256 `check --ack` residual
 - **Trigger**: 第一個 SHA-256 object-format repository 要使用 manual `check --ack`／restore acknowledgment。
 - **Context**: inventory、reap 與 restore tests 已支援 SHA-256；剩餘缺口是 acknowledgment validator 仍只接受 40-hex SHA-1。
 - **Effort**: S。
 - **Source**: 2026-07-31 code/backlog audit。
-
-### Orchestrator edit-gate hermetic baseline
-- **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-change deferral；test 繼承真實 HOME 是已知 hermeticity gap。
-- **Context**: 舊條目中的 context-budget HOME、OpenCode migration 與 eval-doc claims 均已修復；目前只剩 orchestrator edit-gate test 仍繼承真實 HOME，需建立 fresh hermetic baseline。
-- **Effort**: S。
-- **Source**: 2026-07-31 exhaustive backlog audit；targeted gate test目前 20 assertions green。
 
 ### context-budget T3 deny tier — calibration and obedience evidence
 - **Trigger**: 有可持久化的 context calibration／handoff obedience receipts，或再次觀察到 T3 後新派遣造成 spiral。
@@ -133,55 +154,22 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S（含兩平台 dry-run）
 - **Source**: docs/plans/2026-07-04-surface-area-reduction.md §B4；v2.31.16 收尾 deferred。
 
-### distill/learn 邊界句進 description(+ retro「session」詞彙鄰接註記)
-- **Status**: PLANNED — D5 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-description-change deferral；routing boundary is already absent from discovery text.
-- **Context**: v2.31.18 episodic 觸發語(「這個專案的方法論值得留」等)使 distill 的觸發面更靠近 learn 領域;「learn 記事實、distill 產程序」的邊界句目前只住在 finish-flow L-5.6 的提示裡,不在兩個 skill 自身的 description/Not-for(gap 先於本次變更存在,review 判非阻斷)。retro 的 "session analysis" 與 "distill this project/session" 詞彙鄰接、動詞相異,今日無字面碰撞。改 description = 路由面 = L 待遇。
-- **Effort**: S(但 L 待遇 review)
-- **Source**: 2026-07-05 v2.31.18 L-5.2 review(autopilot:reviewer)兩條 Suggestion。
-
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
 - **Trigger**: 下次要對 reviewer 契約/引擎做「絕對」(非配對)specificity 認證時;或 evals/clean/ 標籤再倒一個時。
 - **Context**: 2026-07-10 syscontract campaign 實測:12 個「clean」標籤(merged-未被翻 標注法)倒了 5 個(舊01/舊03/06/08/新03),其中新03 的 flag 還抓到當日 develop 現行真 bug(ladder-run.sh pipefail,v2.32.18 修)。全火力 reviewer(sonnet+全契約+tools)比「merged=clean」標注法強。配對一致性協議(m3-pathc-syscontract.md final protocol)不需要標籤,已作為現行量測法;真 certified-clean 集需逐案對抗性預審(每案先過一輪全火力 review + 人工裁決),成本高,等有絕對認證需求再建。
 - **Effort**: M
 - **Source**: 2026-07-10 L6-r2 WS-A campaign;MiniMax R2 的「reviewer-circular 標注」警告實證。
 
-### distill-scan 校準：friction bucket 混入非使用者文本 ＋ 複合命令儀式盲點
-- **Status**: PLANNED — D5 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；both precision and recall gaps were reproduced in the recorded corpus.
-- **Context**: 2026-07-04 首次全量掃描（761 sessions）發現兩個校準問題：(1) **friction bucket 噪音** —— 「recurring-correction candidates」樣本混入大量非使用者更正文本：`<teammate-message>` 轉發、dispatch prompt（「OUTPUT ONLY RAW JSON…」「Review this change for security…」）、session-continuation 摘要 —— `--real-only` 沒把這些注入類內容濾掉，稀釋了真實 friction 訊號；建議在抽取層排除 teammate-message 區塊/已知 dispatch-prompt 模板/continuation 標頭。(2) **複合命令儀式盲點** —— n-gram 對「單次 Bash 呼叫內的多步 pipeline」不可見：同 session 實測跑了 ≥8 次的「rewrap→encrypt→push」發布儀式完全沒出現在 trigram/bigram（每次都是一個大複合命令，tokenizer 只取首 token）；若複合命令內部的 `&&`/`;` 步驟能拆進 n-gram 流，這類儀式才可被挖掘。兩者都不影響現有計數正確性，是召回率問題。
-- **Effort**: S（friction 過濾）＋ S–M（複合命令拆解，注意別把 heredoc 內容誤拆）
-- **Source**: 2026-07-04 Fable 5 session 首次 /distill 全量掃描實測。
-
-
-### distill identifier lint 開放給外部 skill pack 使用（單獨入口）
-- **Status**: PLANNED — D5 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；the reusable lint entry point is a known missing interface.
-- **Context**: distill 的 identifier lint（email/IPv4/`/home/<user>/`/FQDN/key-shapes ＋ `~/.autopilot/distill/identifiers.deny`）目前只在 distill 流程內部可用。手寫的個人 pack（本次的 teaching-materials 等五個 skill 走 self-use 豁免，含使用者自己的路徑/帳號）在公開分享前需要同一道 lint，但沒有獨立入口可呼叫。建議：把 lint 抽成可獨立執行的入口（`--path <dir>` 掃任意 skill 目錄），distill 內部改為呼叫同一入口 —— 一份實作兩處使用。
-- **Effort**: S
-- **Source**: 2026-07-04 Fable 5 session；`~/projects/skills/` pack 建立時的自用豁免決定。
-
 ### Reviewer transport exits can erase an otherwise valid fail-closed verdict
 - **Trigger**: Grok／GLM／Kimi／Qwen／Codex reviewer transport 再出現「內容可解析、process exit 或 framing 使 verdict 遺失」。
 - **Context**: 為仍支援的 runner 建 exact residual fixtures；保留 process truth，但將已驗證的 verdict bytes 與 transport failure 分欄，禁止把 no-verdict 誤報成 review pass。
 - **Effort**: M。
 - **Source**: historical multi-runner incidents；2026-07-31 hygiene rewrite。
-
-### `dispatch-review.sh` echo-hardening — derived/transformed delimiter (max-security variant)
-- **Status**: PLANNED — D4 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-protocol-change deferral；runner reliability measurement is a gate inside D4, not a reason to leave the gap unscheduled.
-- **Context**: v2.31.3 chose the plain-nonce-as-prefix + reject-guard hybrid (codex's design-debate alternative: give a nonce and require the model to TRANSFORM it into the accepted delimiter, so a pure prompt-echo can't reproduce the derived marker). D4 owns the per-engine reliability matrix and canonical derived-delimiter implementation; a runner that cannot satisfy the frozen framing contract fails closed rather than keeping a permissive parser.
-- **Effort**: Fix (spike-gated)
-- **Source**: 2026-07-03 cross-family design debate (codex gpt-5.5 vs grok), v2.31.3.
-
-
-
-### Per-event opt-in hook multiplexer (perf) — avoid spawning gated-off opt-in hooks on every tool call
-- **Status**: PLANNED — D6 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；benchmarking stays inside D6, but the known disabled-process spawn is scheduled now.
-- **Context**: 現在共有 15 個 unique opt-in hooks、16 個 event registrations（`mcp-health` 同時註冊兩個 events）。每個 matching registration 即使 disabled 仍先 spawn `node` 再快速 gate-exit。D6 將以 single per-event multiplexer 讀 manifest/config、只派 enabled hooks，並把 before/after latency 與 process count 留作驗收證據。
-- **Effort**: L
-- **Source**: v2.26.2 design tradeoff (accepted, gpt-5.5 spec-reviewed).
+- **2026-08-08 reproduced**: cc-shim/MiniMax-M3 returned a complete `VERDICT: SHIP-AS-IS` inside an
+  intact nonce block, discarded as `no_verdict` because Claude Code prepended an unknown-model
+  context-window notice to stdout. Fixed at source for cc-shim in v2.34.7 by suppressing that
+  notice; the general problem stands — any transport that prepends chrome still loses the verdict,
+  and relaxing the parser is NOT the fix (it reopens the prompt-echo hole the suite pins).
 
 ### Domain-aware routing — consume the `work_domain` telemetry to route reviewer/implementer by diff domain
 - **Trigger**: ALL remaining prerequisites are met (telemetry alone is NOT a trigger): (1) a **two-pass resolve** in `resolve-review-loop.sh` without breaking the single-shot JSON contract; (2) a **pre-impl planned-scope signal** for implementer routing; (3) **per-project per-domain calibration with n≥30** real samples; (4) an **inner-reviewer-family field** distinct from panel-only `cross_family_*` semantics.
@@ -207,13 +195,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S (wire existing rails) — only if the trigger fires.
 - **Source**: 2026-06-23 `docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md` scope-cut + Phase L ship (`577ba8d`).
 
-### Generated `.opencode/agent-bodies/*.body.md` relative links break one level deep
-- **Status**: PLANNED — D1 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-touch deferral；the generated relative link is already known broken.
-- **Context**: 2026-06-02 link-check found `.opencode/agent-bodies/reviewer.body.md` inherits `../skills/quality-pipeline/references/code-review.md` from `agents/reviewer.md` — correct at `agents/` depth, but resolves to `.opencode/skills/...` (missing) from `.opencode/agent-bodies/`. Generated artifact; the link is informational and the body is consumed via OpenCode `{file:..}` inline, so low severity. Fix options: (a) sync script rewrites `../` → `../../` for links when generating bodies; (b) make the source links repo-root-relative; (c) accept. NOTE: the v2.7.x validate.sh link-check is scoped to `skills/` only, so this does NOT fail CI today.
-- **Effort**: S (fiddly — link-rewriting in the sync script risks other links)
-- **Source**: 2026-06-02 level-3 deep scan + validate.sh link-check enhancement
-
 ### Tree-engine graduation Board review
 - **Status**: TRIGGERED/OVERDUE — 30-day deadline passed with only 2 samples；Board must extend or abort。
 - **Trigger**: `~/.autopilot/calibration/samples.jsonl` reaches 50 reviewer-baseline samples OR 30 days after the first shadow run (2026-06-12), whichever comes first.
@@ -232,18 +213,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S (per-command compact wrapper, e.g. a `git diff --stat`-first reviewer feed) — scope to the one command that actually bloats first, don't build the whole rtk surface speculatively.
 - **Source**: 2026-06-23 `/next` follow-up — user-requested survey of headroom + rtk; two Explore-agent technical reports + same-session spike (rtk not installed, CC 2.1.186, intent `last_tool_source:"transcript"` confirms transcript-pivot ≠ stdin, zero live PreToolUse hooks).
 
-### `verify_strength` as the third density input — decomposed into ordered precursors
-- **Status**: PLANNED — D7 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — precursor (1) is shipped；owner decision admits scorer calibration and resolver consumption now instead of waiting for another density edit.
-- **Context**: The `t2×medium` escape cliff showed that verification quality is invisible to review routing; the remaining work is the calibrated scorer (2), then its fail-safe routing input (3).
-- **Effort**: L for precursor (2), then M for precursor (3).
-- **Source**: `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
-
-Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-07-09-verify-strength-precursors.md). Evidence: the escape cliff where `t2×medium` verification produced 100% escapes — verification QUALITY is invisible to `resolve-review-loop.sh` routing.
-
-- **✅ Precursor (1) — red-green validation instrument** — DELIVERED 2026-07-09 (v2.32.11): `scripts/verify-red-green.sh` proves a change's tests are RED at base+tests / GREEN at head (else they don't exercise the change). Isolated detached worktrees; verdict from real exit codes. This is the BACKLOG's named minimal precursor.
-- **📋 PLANNED D7 (2) — real test-suite "verification strength" scorer** — a graded (`weak|medium|strong`) score for an ACTUAL project's suite guarding a change (NOT the pipeline-bench synthetic fixtures). Candidate signals: per-test red-green (precursor 1), mutation-survival / assertion density on the diff, changed-line coverage, oracle presence. Needs its own calibration corpus tying scores to real escape outcomes. **Depends on (1).** Effort L.
-- **📋 PLANNED D7 (3) — `resolve-review-loop.sh` consumes `verify_strength`** — fold the (2) score into the existing risk/density machinery (weak suite ⇒ more review depth; strong ⇒ less). Must be additive (byte-identical prefix + appended keys, like `--domain`/`min_panel_size`) and fail-safe (unknown ⇒ weakest ⇒ most review). **Depends on (2)** + the trust-tiered-review policy. Effort M.
 ### M3-band fixtures（t15-t17）若供對抗性 implementer 情境重用，需 process-isolation 邊界
 - **Trigger**: 下次把 `evals/orchestration/tasks/t15-cache-invalidation`、`t16-findings-triage`、`t17-purity-invariant` 用於對抗性 implementer 情境（`/l5`、`/l6` hetero 派遣、或任何候選碼不可信的場合）。
 - **Context**: 這三個 oracle 的判分 python 與候選碼在**同一個 process** 內執行，候選模組 import 時可用 `sys._getframe()` 走訪呼叫端 frame 的 globals/locals，撈出判分器從未匯出的密鑰。opus 2026-07-09 對抗性重攻實測兩條可靠（5/5 PASS）exploit：N2（t15）——撈出真 `NONCE` 偽造 token 且從不呼叫注入的 `compute_fn`，fidelity 與 cache 軸皆假過；N2'（t17）——重同步 purity 檢查區塊的 `snapshot` 局部變數，一邊 mutate 一邊讓 `snapshot == recs` 恆真。R2 硬化（4 條 planted-file/env/stdout 攻擊）已修好且仍成立，但這條 in-process introspection 類別是**架構性**盲點，不是 R2 修復範圍。真正封死需要候選函式呼叫跑在與判分器分離的 subprocess/interpreter（process isolation），對映 `check-test-integrity.sh` L1 block-mode 在 CLAUDE.md 已記錄的同一結論（no local-only same-process mechanism 對抗同帳號候選碼是防偽的）。
@@ -326,15 +295,6 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 - **Effort**: S（re-estimate under the new ticket contract）
 - **Source**: depth-0-adjudication-760b
 
-<!-- autopilot-follow-up:aed0cfc35dd07b4cabf1545ca4bdba4d0a308824eaa3b1631f3f6d9c9ce11811 -->
-### Explicit findings identity authority
-- **Status**: PLANNED — trigger satisfied；D2 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md). Helper 已 export，且仍以 `findingsIdentityOk = true` fail-open。
-- **Trigger**: Before classifyMissingDisposition is reused or exported to any caller that may omit identity validation.
-- **Context**: Remove the fail-open findingsIdentityOk default and require every classifyMissingDisposition call to pass an explicit identity verdict.
-- **Effort**: S（re-estimate under the new ticket contract）
-- **Source**: depth-0-adjudication-760b
-
-<!-- autopilot-follow-up:42b943b1cd29c7de6d0b621337c605400ea73e33b531b47ee7d7b2dd04ccfc9f -->
 ### Mission graph and campaign capacity boundary hardening
 - **Status**: CONDITIONAL — retained post-merge follow-up；trigger 尚未成立，no active implementation worktree。
 - **Trigger**: Before graph hot reload/concurrent writers or caller-supplied non-default campaign capacities are supported.
@@ -358,10 +318,8 @@ Full design: [`docs/plans/2026-07-09-verify-strength-precursors.md`](plans/2026-
 - **Effort**: S（re-estimate under the new ticket contract）
 - **Source**: depth-0-adjudication-760b
 
-<!-- autopilot-follow-up:8f70c159902a5d75d701b775ac9378f53ec4e9380a2534cab6674bf06083d475 -->
-### Shared sealed zero-diff validator
-- **Status**: PLANNED — D2 in [`next-touch-debt-retirement`](plans/2026-08-03-next-touch-debt-retirement.md).
-- **Trigger**: ADMITTED 2026-08-03 — owner decision retired the next-schema-change deferral；three duplicated production validators are sufficient present debt.
-- **Context**: Move sealed zero-diff receipt validation into one deterministic shared helper consumed by shell, Engine, and runner boundaries.
-- **Effort**: S（re-estimate under the new ticket contract）
-- **Source**: depth-0-adjudication-760b
+### HETO task-return detection can miss completed work
+- **Trigger**: A second reproducible case where a completed HETO task produces no return event/notification, or before another HETO return-consumer is added.
+- **Context**: The controller can remain waiting when HETO has completed a dispatched task but the return detector does not fire; inspect event names, buffering/flush, timeout, and terminal-state reconciliation without treating silence as success.
+- **Effort**: S–M
+- **Source**: user-reported intermittent missed HETO return detection (2026-08-05)

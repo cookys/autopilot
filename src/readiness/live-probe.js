@@ -159,7 +159,19 @@ function dispatchAuthorLiveProbe(input, options = {}) {
     '--effort', tuple.effort,
     '--prompt-file', promptFile,
     '--context-window', 'off',
-    '--timeout', '1m',
+    // 1m was too tight and produced a WRONG diagnosis, not just a flaky one.
+    // Measured 2026-08-14 on `cc-shim --endpoint glm` (GLM-5.2): roughly one run
+    // in five exceeded 60s, `timeout` killed the CLI (exit 124), and the CLI's
+    // dying words — the literal text `Execution error` — flowed on as if they
+    // were the model's answer. The seat then reported `transport_failure` /
+    // `malformed_response`, which reads as "the provider is broken" when the
+    // truth was "we did not wait long enough".
+    //
+    // The gate is unchanged: the reply must still normalise to exactly `OK`.
+    // This only stops a slow-but-healthy endpoint from being recorded as a
+    // broken one. The spawn guard below stays comfortably above it so the shell
+    // deadline, not the Node one, is what fires first and stays attributable.
+    '--timeout', '3m',
   ];
   if (tuple.endpoint !== null) args.push('--endpoint', tuple.endpoint);
 
@@ -181,7 +193,7 @@ function dispatchAuthorLiveProbe(input, options = {}) {
       },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 90000,
+      timeout: 200000,
       maxBuffer: 1024 * 1024,
     });
   } finally {

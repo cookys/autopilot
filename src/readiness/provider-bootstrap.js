@@ -107,12 +107,12 @@ function deepFreeze(value) {
 }
 
 const STRICT_L5_CLAIM_IDS = deepFreeze([
-  'cap-v1-2cddccba68504249195990b87d1f9a10678a17d470129395266738ee3c1696da',
-  'cap-v1-800438d87ae89a3c18a6b16171d44a691295d8a469890a9f10186bdd08f8dc5b',
-  'cap-v1-441c3e019522b5db5a860dedf0184371bdf4f26fc4a41003b841aa78e8bc271b',
-  'cap-v1-a1c91e7003c74984b6cd71aa1cd70cbc9f1990a7fbe4ac2926973926652673b6',
-  'cap-v1-747b0b73ff612b90bdac2edbf3a020adbfe2b134dc2af303a4a772eb74c2f0f9',
-  'cap-v1-be30ff9211e8a9a3f49df86171b4e4aa4cd9137655d7e45f16327d3bfec40237',
+  'cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61',
+  'cap-v1-bca28cd7d6916ef0b87e555b914d384e93ae18d00d4d4358f03a19e114839fe2',
+  'cap-v1-457d6083dbfb5f225185a21f49dbab55fe82ba91e97d4ab6759d2bfe2677318a',
+  'cap-v1-ca37452a0f5de7391db73db82d1d280179c610635a0b012a1e35eaa75b6a8129',
+  'cap-v1-9854b4497d0a2ddc3735ac0dac15078a5bae5840c741637dc16402362a019f9c',
+  'cap-v1-4afeb9cc7200233255c91510646ac4135e61322b8ee93b64864e85f4a7582ed5',
 ]);
 
 const STRICT_L5_PROVIDER_POLICY = deepFreeze([
@@ -142,9 +142,9 @@ const STRICT_L5_PROVIDER_POLICY = deepFreeze([
     claim_id: STRICT_L5_CLAIM_IDS[2],
     tuple: {
       runner: 'codex',
-      model: 'gpt-5.5',
+      model: 'gpt-5.6-sol',
       role: 'qc',
-      effort: 'xhigh',
+      effort: 'max',
       endpoint: null,
       family: 'openai',
     },

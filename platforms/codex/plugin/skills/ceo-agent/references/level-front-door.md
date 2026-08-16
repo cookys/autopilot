@@ -757,6 +757,30 @@ repair unit. The ledger is plain append-only telemetry (ADR-0001): unlogged
 decisions are caught by the conformance audit's ledger-INDEPENDENT universe
 (dispatch manifests / run-ledger / git), never by trusting the ledger itself.
 
+### 7. Stateless round protocol (autonomous-brain P2)
+
+The depth-0 brain holds no load-bearing state in context — context is a cache,
+disk is the store (sol shapes F8/F9: compaction amnesia gets refilled by process
+reinvention; the fix is architectural, not mnemonic). Every round:
+
+```
+① rehydrate: node scripts/build-rehydration-bundle.js build --contract <c> \
+     --ledger <ledger> --manifest-dir /tmp/autopilot-dispatch-runs [--red-lines <f>]
+   (five frozen sections, 80KB cap, over-cap = BUILD ERROR — never truncated)
+② execute the round (dispatch under the conformance preflight, §-2/§3)
+③ persist: every decision → ledger (§6); progress → run-ledger; findings → BACKLOG
+④ round boundary: render the report (§6), then RESET context deliberately —
+   the next round boots from ① again
+```
+
+After any kill/compact/resume, the brain must pass the machine-graded state quiz
+BEFORE proceeding: emit `{current_unit_id, four_tuple_digest, owned_pids,
+last3_decision_ids}` and grade with `build-rehydration-bundle.js grade` — a
+mismatch means the resumed brain's picture of the run differs from disk truth,
+and the round refuses to start. Owned processes re-attach from the manifest
+table (§5_owned_processes), never from memory — a worker the ledger knows about
+is OURS even if the resumed context has never heard of it.
+
 ### Quality-floor conventions (v2.31.11)
 
 The five structural ledger-emission points — playbook no-match; adjudication unvalidatable-REFUTED / unconfirmed-PROOF_BY_TRACE; panel irreversible-disagreement; plan-revision checkpoint trips (risk-counter thresholds); depth-0 override of a dispatched artifact — each emits an `escalation_opened` tree event. See the quality-floor plan (`docs/plans/2026-07-04-quality-floor-engine.md`).

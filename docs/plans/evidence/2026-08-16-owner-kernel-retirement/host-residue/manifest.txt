@@ -23,3 +23,4 @@ MATCH trusted-installed-witness-authority.json
 MATCH trusted-witness-adapter-binding.json
 MATCH witness-adapter.js
 Ownership/mode restoration is command-documented above (root-owned targets; not exercised without sudo — plan §2.6 scope).
+

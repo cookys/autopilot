@@ -119,7 +119,7 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/lib/json-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/json-emit.sh" || true
 
-RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""
+RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
 REVIEW_USAGE_JSON="null"
 MAX_TOKENS=""; MAX_TOKENS_SUPPLIED=0; MAX_TOKENS_PARSE_ERROR=""
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
@@ -133,6 +133,7 @@ while [[ $# -gt 0 ]]; do
     --model)     MODEL="${2:-}"; shift 2 ;;
     --diff-file) DIFF_FILE="${2:-}"; shift 2 ;;
     --spec-file) SPEC_FILE="${2:-}"; shift 2 ;;
+    --allow-narrative) ALLOW_NARRATIVE="${2:-}"; shift 2 ;;
     --pack-file) PACK_FILE="${2:-}"; shift 2 ;;
     --effort)    EFFORT="${2:-}"; shift 2 ;;
     --timeout)   TIMEOUT="${2:-}"; shift 2 ;;
@@ -211,6 +212,22 @@ fi
 # Absent flag ⇒ byte-identical prompt. Same trust posture as --spec-file (dispatcher-authored).
 if [[ -n "$PACK_FILE" ]]; then
   [[ -f "$PACK_FILE" && -r "$PACK_FILE" ]] || die_precondition "--pack-file must be a readable regular file"
+fi
+# Blind-evidence gate (four-layer K1, references/four-layer-design.md): the assembled
+# reviewer payload (spec + pack — the surfaces an orchestrator could launder implementer
+# narrative through) must carry obligations/receipts, never completion claims. Fail closed;
+# --allow-narrative <reason> overrides loudly (stderr + manifest field).
+if [[ -n "$SPEC_FILE" || -n "$PACK_FILE" ]]; then
+  _BE_ARGS=()
+  [[ -n "$SPEC_FILE" ]] && _BE_ARGS+=(--payload "$SPEC_FILE")
+  [[ -n "$PACK_FILE" ]] && _BE_ARGS+=(--payload "$PACK_FILE")
+  if ! bash "$_REVIEW_SELF_DIR/check-blind-evidence.sh" "${_BE_ARGS[@]}" 1>&2; then
+    if [[ -n "$ALLOW_NARRATIVE" ]]; then
+      echo "dispatch-review: BLIND-EVIDENCE OVERRIDE — implementer narrative admitted to the reviewer payload; reason: $ALLOW_NARRATIVE" >&2
+    else
+      die_precondition "reviewer payload carries implementer narrative (blind-evidence rule K1); strip it or pass --allow-narrative <reason>"
+    fi
+  fi
 fi
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
@@ -483,8 +500,8 @@ write_review_manifest() {
   local root_json="null"; [ -n "${LINEAGE_ROOT:-}" ] && root_json="\"$(json_escape "$LINEAGE_ROOT")\""
   local depth_json="${LINEAGE_DEPTH:-0}"; case "$depth_json" in *[!0-9]*|"") depth_json=0 ;; esac; depth_json=$((10#$depth_json))
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s }\n' \
-      "$(json_escape "$REVIEW_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
+    printf '{ "schema": 1, "run_id": "%s", "role": "reviewer", "allow_narrative": %s, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s }\n' \
+      "$(json_escape "$REVIEW_RUN_ID")" "$( if [[ -n "$ALLOW_NARRATIVE" ]]; then json_escape "$ALLOW_NARRATIVE"; else printf null; fi )" "$RUNNER" "$(json_escape "$MODEL")" \
       "$(json_escape "$live_log")" "$log_format" "$aux_json" "$$" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEW_STARTED_EPOCH" \
       "$(json_escape "$PROMPT_FILE")" "$(json_escape "$DIFF_FILE")" \

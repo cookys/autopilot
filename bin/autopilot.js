@@ -28,7 +28,7 @@ function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
+  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume] [--prior-status none|no_verdict|ambiguous]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
@@ -75,6 +75,7 @@ Exit codes:
 function parseImplementReviewArgs(rawArgs) {
   const output = {
     promptFile: null,
+    priorStatus: null,
     branch: null,
     base: null,
     cwd: null,
@@ -105,6 +106,15 @@ function parseImplementReviewArgs(rawArgs) {
         return { error: '--prompt-file requires a value' };
       }
       output.promptFile = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--prior-status') {
+      const value = rawArgs[i + 1];
+      if (!value || !['none', 'no_verdict', 'ambiguous'].includes(value)) {
+        return { error: '--prior-status must be none|no_verdict|ambiguous' };
+      }
+      output.priorStatus = value;
       i += 2;
       continue;
     }

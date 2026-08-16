@@ -930,4 +930,16 @@ assert_eq "$?" "0" "verify_strength=strong reduces by at most one when unprotect
 assert_eq "$VS_STRONG_PROT" "$VS_PROT" "verify_strength=strong cannot reduce protected-path rounds"
 assert_eq "$(bash "$SCRIPT" --verify-strength invent >/dev/null 2>&1; echo $?)" "2" "invalid --verify-strength exits 2"
 
+# ── Cascade trigger (four-layer P2): --prior-status elevates risk on the EXISTING path ──
+PS_HIGH="$(bash "$SCRIPT" --prior-status no_verdict --diff-lines 10 --source-trust high --oracle-available 1 --security-surface 0 2>/dev/null \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s);process.stdout.write(d.review_risk+" "+d.required_review_families+" "+d.cross_family_required)});')"
+assert_eq "high 2 true" "$PS_HIGH" "prior no_verdict elevates to the existing high-risk escalation (families=2, cross-family)"
+PS_DEF="$(bash "$SCRIPT" --diff-lines 10 --source-trust high --oracle-available 1 --security-surface 0 2>/dev/null \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s);process.stdout.write(d.review_risk+" "+d.required_review_families)});')"
+PS_NONE="$(bash "$SCRIPT" --prior-status none --diff-lines 10 --source-trust high --oracle-available 1 --security-surface 0 2>/dev/null \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s);process.stdout.write(d.review_risk+" "+d.required_review_families)});')"
+assert_eq "$PS_DEF" "$PS_NONE" "--prior-status none is byte-identical to the default (existing behavior pinned)"
+bash "$SCRIPT" --prior-status bogus --diff-lines 10 2>/dev/null; PS_EXIT=$?
+assert_eq "2" "$PS_EXIT" "invalid --prior-status rejected"
+
 finalize_test

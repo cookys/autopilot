@@ -1135,4 +1135,20 @@ assert_contains "$OUT" '"status": "precondition_failed"' "missing pack-file prec
 assert_contains "$(cat "$SCRIPT")" "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1" \
   "cc-shim launch suppresses the unknown-model context-window notice"
 
+# ── Blind-evidence gate (four-layer K1, D2): implementer narrative in the assembled
+# payload fails closed BEFORE any runner spawn; --allow-narrative overrides loudly. ──
+BE_SPEC="$TEST_TMP/be-narrative-spec.md"
+BE_DIFF="$TEST_TMP/be-diff.txt"
+printf 'I have implemented everything and all tests pass.\n' > "$BE_SPEC"
+printf 'diff --git a/x b/x\n' > "$BE_DIFF"
+BE_OUT="$(bash "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
+  --diff-file "$BE_DIFF" --spec-file "$BE_SPEC" 2>/dev/null)"
+assert_contains "$BE_OUT" '"status": "precondition_failed"' \
+  "narrative payload fails closed before dispatch (blind-evidence K1)"
+assert_contains "$BE_OUT" "blind-evidence" "denial names the rule"
+BE_ERR="$(bash "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
+  --diff-file "$BE_DIFF" --spec-file "$BE_SPEC" --allow-narrative "fixture override test" 2>&1 >/dev/null | head -20)"
+assert_contains "$BE_ERR" "BLIND-EVIDENCE OVERRIDE" \
+  "--allow-narrative admits the payload with a loud stderr override record"
+
 finalize_test

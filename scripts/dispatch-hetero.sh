@@ -173,6 +173,9 @@ PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for the detach declare -p
+SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
+SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
+SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
 AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
 AGY_STDERR=""         # private native stderr, copied to agent_log only on failure
 AGY_PARSED=""         # validated derived {response,usage}; native envelope parsed once
@@ -1439,11 +1442,11 @@ write_manifest() {
     strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
   fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
@@ -1463,6 +1466,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
+    --scaffold-tier) SCAFFOLD_TIER_ARG="${2:-}"; shift 2 ;;
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
@@ -2182,6 +2186,39 @@ if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
   PROMPT_FILE="$CAMPAIGN_PROMPT_FILE"
 fi
 
+# --- scaffold-tier envelope (four-layer P1; references/scaffold-tiers.md is canonical) ---
+# Prepended to the SHARED prompt file BEFORE the per-runner branches, so every runner
+# (codex/grok/cc-shim/agy/pi/qoder) consumes the tier identically. Placed before the
+# context-window gate so the gate prices the envelope too. Disable per project with
+# `scaffold_tiers: off` in .claude/dispatch-config.md.
+if [ "$SCAFFOLD_TIER_ARG" != "off" ] \
+  && ! grep -qE '^scaffold_tiers:[[:space:]]*off' .claude/dispatch-config.md 2>/dev/null; then
+  # shellcheck source=/dev/null
+  . "$SELF_DIR/lib/scaffold-envelope.sh"
+  _resolved_tier="$(node "$SELF_DIR/resolve-scaffold-tier.js" \
+    --runner "$RUNNER" --model "$MODEL" --role implementer 2>/dev/null \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).tier)}catch{process.stdout.write("T2")}});' \
+    2>/dev/null)" || _resolved_tier="T2"
+  case "$_resolved_tier" in T0|T1|T2) ;; *) _resolved_tier="T2" ;; esac
+  _effective_tier="$_resolved_tier"
+  if [ "$SCAFFOLD_TIER_ARG" != "auto" ]; then
+    case "$SCAFFOLD_TIER_ARG" in T0|T1|T2) ;; *) die_precondition "--scaffold-tier must be auto|off|T0|T1|T2" ;; esac
+    # Explicit override may only ADD scaffolding (fail-closure applies to humans too):
+    # a request BELOW the resolved scaffolding amount is rejected.
+    if [ "$(scaffold_tier_rank "$SCAFFOLD_TIER_ARG")" -lt "$(scaffold_tier_rank "$_resolved_tier")" ]; then
+      die_precondition "explicit --scaffold-tier $SCAFFOLD_TIER_ARG requests LESS scaffolding than resolved $_resolved_tier — overrides may only add scaffolding (references/scaffold-tiers.md)"
+    fi
+    _effective_tier="$SCAFFOLD_TIER_ARG"
+  fi
+  SCAFFOLD_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-scaffold-prompt-XX''XX''XX')"
+  build_scaffold_envelope "$_effective_tier" "$SELF_DIR/../references/scaffold-tiers.md" \
+    "$PROMPT_FILE" "$SCAFFOLD_PROMPT_FILE" \
+    || die_precondition "scaffold envelope build failed (tier $_effective_tier)"
+  PROMPT_FILE="$SCAFFOLD_PROMPT_FILE"
+  SCAFFOLD_TIER_EFFECTIVE="$_effective_tier"
+  unset _resolved_tier _effective_tier
+fi
+
 # --- context-window gate ---
 # Placed AFTER skill-pack concatenation (the pack inflates PROMPT_FILE, and the engine
 # pays for the packed size, not the original) and BEFORE the worktree exists, so an
@@ -2661,6 +2698,7 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 abort_dispatch() {
   reap_container
   cleanup_managed_codex_home
+  [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"

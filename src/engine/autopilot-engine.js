@@ -2867,9 +2867,19 @@ class AutopilotEngine {
       };
     }
 
-    const rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
+    let rosterArgs = Object.prototype.hasOwnProperty.call(input, 'rosterArgs')
       ? input.rosterArgs
       : ['--check-scorecard'];
+    // Cascade producer (four-layer P2): a caller re-dispatching review after a round that
+    // ended no_verdict/ambiguous passes that status; the resolver elevates computed risk to
+    // high so the SAME families/cross-family escalation path seats a fresh disjoint-family
+    // reviewer instead of retrying the identical seat. Absent/none = byte-identical resolution.
+    if (input.priorStatus !== undefined && input.priorStatus !== null && input.priorStatus !== 'none') {
+      if (input.priorStatus !== 'no_verdict' && input.priorStatus !== 'ambiguous') {
+        throw new TypeError('priorStatus must be none|no_verdict|ambiguous');
+      }
+      rosterArgs = [...rosterArgs, '--prior-status', input.priorStatus];
+    }
     const resolverOptions = {
       ...(input.resolverOptions || {}),
       cwd: Object.prototype.hasOwnProperty.call(input.resolverOptions || {}, 'cwd')
@@ -9393,6 +9403,7 @@ class AutopilotEngine {
 
       const previousReviewForRemediation = round > 1 ? review : null;
       review = this.reviewDiff({
+        priorStatus: round === 1 ? input.priorStatus : undefined,
         diffFile,
         specFile: input.noReviewSpec !== true ? promptFile : undefined,
         roster: dynamicReviewRisk ? null : roster,

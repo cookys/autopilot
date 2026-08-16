@@ -24,6 +24,58 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.11 — Four-layer hardening: blind evidence, execution boundary, scaffold tiers, holdout gate
+
+**Headline**: The four survey-hardened governance mechanisms land on existing rails, each shipped
+with a planted red-case test (the broken case fails before the mechanism, passes after). This is
+the constructive half of the owner-kernel reversal (v2.34.10): instead of a trust chain that
+records claims immutably, four small gates that make false claims harder to submit — a
+narrative-stripping lint on review payloads, a non-LLM deny gate at the Bash boundary, scaffold
+weight indexed to each engine's measured qualification, and holdout verification for high-risk
+diffs. Design record: `references/four-layer-design.md`; survey + two-generation hetero plan
+review: `docs/plans/2026-08-16-four-layer-redesign*.md`.
+
+### Added
+- `scripts/check-blind-evidence.sh` — anti-laundering lint on the assembled reviewer payload
+  (first-person completion claims, self-assessed quality, unreceipted test assertions);
+  receipt-bound claims pass. Wired fail-closed into `dispatch-review.sh`
+  (`--allow-narrative <reason>` escape hatch, logged to stderr and the run manifest).
+- `hooks/exec-boundary.js` (**16th opt-in hook**) — PreToolUse/Bash deny gate: protected-ref
+  force-push (deliberate defense-in-depth overlap with default-on `branch-protection.js`),
+  recursive `rm` outside sanctioned roots, raw `DROP TABLE`/`TRUNCATE`, `sudo rm`.
+  Allow-by-default, zero LLM calls, per-project config
+  (`project-config-template/execution-boundary-config.md`). Enable:
+  `{"hooks":{"exec-boundary":true}}` or `AUTOPILOT_HOOK_EXEC_BOUNDARY=1`.
+- `scripts/resolve-scaffold-tier.js` — capability-indexed scaffold tier (T0 contract-only /
+  T1 + checklist / T2 full process) from scorecard qualification evidence; missing, unknown,
+  stale, or conflicting evidence all fail closed to T2; imported priors never lift above T2;
+  `evidence_refs` recorded for audit. Tier definitions + prompt skeletons:
+  `references/scaffold-tiers.md` (single canonical home). Consumed by `dispatch-hetero.sh`
+  shared prompt assembly (`--scaffold-tier`, default `auto`; explicit override may only ADD
+  scaffolding; dispatch-config `scaffold_tiers: off` disables).
+- `scripts/check-holdout-coverage.sh` — holdout gate for high-risk diffs: `run` materializes
+  SHA-stamped receipts from `probe-mutation.js`/`verify-strength.js` stdout; `check` fails
+  closed on absent, malformed, stale, or failed receipts when `classify-diff-risk.sh` reports
+  `adversarial_review`. Quality-pipeline gate step is the caller.
+- `references/four-layer-design.md` — the layer map + rule→enforcer table (every governance
+  rule names its enforcing mechanism or carries an explicit `documented-only` tag).
+
+### Changed
+- `resolve-review-loop.sh` gains `--prior-status none|no_verdict|ambiguous`: a prior review
+  round ending in `no_verdict`/`ambiguous` elevates computed risk to high, reusing the existing
+  `required_review_families=2` + `cross_family_required` escalation (producer: the engine
+  review-args assembly on round N+1). Default `none` is byte-identical to previous behavior
+  (pinned by fixture).
+- `references/evidence-contract.md` gains two additive clauses: single-round verification
+  (one verdict per seat per generation, depth-0 adjudicates, never rebuttal rounds) and the
+  holdout leg (verifier-authored checks frozen after the implementation diff).
+
+### Rollback
+- Maintainer: `git revert` of the phase commits (SHAs in
+  `docs/plans/evidence/2026-08-16-four-layer-redesign/`).
+- User-side: disable the opt-in hook (`{"hooks":{"exec-boundary":false}}`); dispatch-config
+  `scaffold_tiers: off`; `--allow-narrative` per dispatch.
+
 ## v2.34.10 — ⏮ REVERSAL: Owner Kernel trust framework retired
 
 **Headline**: This release removes more code than any release added: the Owner Kernel trust

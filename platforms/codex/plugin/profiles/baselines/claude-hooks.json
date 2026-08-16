@@ -42,7 +42,7 @@
     ],
     "PreToolUse": [
       {
-        "//": "D6: single per-event opt-in multiplexer. Spawns only enabled opt-in handlers (branch-protection, commit-secret-scan, large-file-warner, config-protection, mcp-health pre, dispatch-model-guard, orchestrator-edit-gate). Disabled stems start zero children.",
+        "//": "D6: single per-event opt-in multiplexer. Spawns only enabled opt-in handlers (branch-protection, exec-boundary, commit-secret-scan, large-file-warner, config-protection, mcp-health pre, dispatch-model-guard, orchestrator-edit-gate). Disabled stems start zero children.",
         "matcher": ".*",
         "hooks": [
           {

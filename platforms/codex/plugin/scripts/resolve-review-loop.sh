@@ -108,6 +108,7 @@ PROTECTED_PATH=0
 VERIFY_STRENGTH_ARG=""
 ORACLE_AVAILABLE=1
 SECURITY_SURFACE=0
+PRIOR_STATUS="none"
 ENFORCE=0
 CHECK_SCORECARD=0
 SCORECARD_SCOPE_FILE=""
@@ -131,6 +132,7 @@ while [[ $# -gt 0 ]]; do
     --diff-lines) DIFF_LINES="${2:-}"; shift 2 ;;
     --protected-path) PROTECTED_PATH="${2:-}"; shift 2 ;;
     --oracle-available) ORACLE_AVAILABLE="${2:-}"; shift 2 ;;
+    --prior-status) PRIOR_STATUS="${2:-}"; shift 2 ;;
     --security-surface) SECURITY_SURFACE="${2:-}"; shift 2 ;;
     --capability-state) CAPABILITY_STATE="${2:-}"; shift 2 ;;
     --input-bytes) INPUT_BYTES="${2:-0}"; shift 2 ;;
@@ -633,6 +635,15 @@ esac
 
 # Deterministic risk computation:
 # high iff source trust is low, diff lines > 150, protected-path, security-surface, or oracle disabled.
+# --prior-status no_verdict|ambiguous (four-layer P2, cascade): a prior review round that
+# produced no usable verdict elevates risk to high, reusing the SAME families/cross-family
+# escalation path — the next round seats a fresh disjoint-family reviewer instead of retrying
+# the identical seat. Producer: the engine review-args assembly on round N+1. Default `none`
+# is byte-identical to previous behavior (pinned by fixture in autopilot-cli.test.sh).
+case "$PRIOR_STATUS" in none|no_verdict|ambiguous) ;; *) echo "invalid --prior-status: $PRIOR_STATUS (must be none|no_verdict|ambiguous)" >&2; exit 2 ;; esac
+if [[ "$PRIOR_STATUS" == "no_verdict" || "$PRIOR_STATUS" == "ambiguous" ]]; then
+  SOURCE_TRUST="low"
+fi
 if [[ "$SOURCE_TRUST" == "low" || "$DIFF_LINES" -gt 150 || "$PROTECTED_PATH" -eq 1 || "$SECURITY_SURFACE" -eq 1 || "$ORACLE_AVAILABLE" -eq 0 ]]; then
   REVIEW_RISK="high"
   REQUIRED_REVIEW_FAMILIES=2

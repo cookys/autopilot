@@ -43,6 +43,23 @@ For whatever component ultimately declares COMPLETE/BLOCKED:
 - **Silence-is-not-consent**: an unevaluated check is a failure, not a pass.
 - **No third outcome**: COMPLETE or BLOCKED; there is no "mostly done".
 
+## Single-round verification (four-layer P3)
+
+One verdict per seat per generation; depth-0 adjudicates. A seat's verdict is never fed to
+another seat for a rebuttal round — multi-round debate AMPLIFIES wrong consensus (+30% in the
+survey's adversarial-debate result) rather than converging it. Escalation adds a FRESH
+disjoint-family seat with an independent single-round verdict (enforced on the review rail by
+`resolve-review-loop.sh --prior-status`), never a discussion.
+
+## The holdout leg (four-layer K3)
+
+For high-risk work, at least one obligation must be a check the implementer COULD NOT SEE at
+authoring time: verifier-authored tests frozen after the implementation diff, mutation probes,
+or strength scoring. Visible-gate gaming grows with task size (SpecBench: ~27pp per 10x LOC),
+so the visible obligations alone are insufficient exactly where the work is largest. Enforced
+by `scripts/check-holdout-coverage.sh` (receipts SHA-bound to the diff head; absent, malformed,
+stale, or failed receipts fail closed).
+
 ## What this contract deliberately does NOT include
 
 - Hash-chained event ledgers, witness receipts, attestation issuers, trust

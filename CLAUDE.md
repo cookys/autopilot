@@ -19,7 +19,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-explore.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js`
 
-**Routing & config resolution** — `resolve-dispatch.sh` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
+**Routing & config resolution** — `resolve-dispatch.sh` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/scaffold-envelope.sh` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh`
 

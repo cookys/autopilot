@@ -25,10 +25,11 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT
 
 // Closed table: event → ordered [{stem, matcher, args[]}]
 // Matchers use the same strings as hooks.json. Keep membership in lockstep with
-// hooks/opt-in-manifest.json (15 unique stems; mcp-health on two events).
+// hooks/opt-in-manifest.json (16 unique stems; mcp-health on two events).
 const EVENT_TABLE = {
   PreToolUse: [
     { stem: 'branch-protection', matcher: 'Bash', args: [] },
+    { stem: 'exec-boundary', matcher: 'Bash', args: [] },
     { stem: 'commit-secret-scan', matcher: 'Bash', args: [] },
     { stem: 'large-file-warner', matcher: 'Read', args: [] },
     { stem: 'config-protection', matcher: 'Write|Edit', args: [] },

@@ -64,7 +64,7 @@ function stemFromCommand(cmd) {
 // removed to avoid spawning disabled opt-in handlers on every tool call).
 const MULTIPLEXER_EVENT_TABLE = {
   PreToolUse: [
-    'branch-protection', 'commit-secret-scan', 'large-file-warner',
+    'branch-protection', 'exec-boundary', 'commit-secret-scan', 'large-file-warner',
     'config-protection', 'mcp-health', 'dispatch-model-guard', 'orchestrator-edit-gate',
   ],
   PostToolUse: [

@@ -6,8 +6,8 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
 
 ## What this repo is
 
-Standalone lifecycle orchestration plugin: 28 skills, 3 methodology agents, 25 hooks (10 default-on,
-15 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
+Standalone lifecycle orchestration plugin: 28 skills, 3 methodology agents, 26 hooks (10 default-on,
+16 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
 
 ## Scripts inventory (prefer over LLM judgment)
 
@@ -19,7 +19,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-explore.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js`
 
-**Routing & config resolution** — `resolve-dispatch.sh` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
+**Routing & config resolution** — `resolve-dispatch.sh` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `resolve-scaffold-tier.js` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh`
 
@@ -29,9 +29,9 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Execution profiles** — `build-profile-payload.js` `profile-session.js` `check-profile-isolation.js` `measure-profile-context.js`
 
-**Diff scanning & anti-gaming** — `completeness-scan.sh` `error-path-scan.sh` `secret-scan-diff.js` `check-redispatch-prompt.sh` `check-dispatch-suppression.sh` `diff-file-list.sh` `diff-scope-report.sh` `diff-since-last-round.sh` `probe-diff-domain.sh` `classify-diff-risk.sh` `check-disjointness.sh` `check-test-integrity.sh` `lib/test-integrity-l1.py`
+**Diff scanning & anti-gaming** — `completeness-scan.sh` `error-path-scan.sh` `secret-scan-diff.js` `check-redispatch-prompt.sh` `check-dispatch-suppression.sh` `diff-file-list.sh` `diff-scope-report.sh` `diff-since-last-round.sh` `probe-diff-domain.sh` `classify-diff-risk.sh` `check-disjointness.sh` `check-test-integrity.sh` `check-blind-evidence.sh` `lib/test-integrity-l1.py`
 
-**Verification & review synthesis** — `verify-preexisting.sh` `verify-red-green.sh` `verify-strength.js` `adjudicate-findings.js` `probe-mutation.js` `review-mvp-portfolio.js` `qc-panel.js` `qc-metric-emit.js` `calibration.sh` `ladder-run.sh` `check-node-report.js` `check-loop-convergence.js` `check-escalation-coverage.js` `rubric-freeze.js` `admit-backlog-follow-ups.js`
+**Verification & review synthesis** — `verify-preexisting.sh` `verify-red-green.sh` `verify-strength.js` `adjudicate-findings.js` `probe-mutation.js` `review-mvp-portfolio.js` `qc-panel.js` `qc-metric-emit.js` `calibration.sh` `ladder-run.sh` `check-node-report.js` `check-loop-convergence.js` `check-escalation-coverage.js` `rubric-freeze.js` `admit-backlog-follow-ups.js` `check-holdout-coverage.sh`
 
 **Task tree & risk** — `tree.js` `risk-counter.js`
 

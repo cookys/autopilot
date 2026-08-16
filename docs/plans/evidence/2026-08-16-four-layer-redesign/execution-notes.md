@@ -17,3 +17,19 @@ now regression tests in exec-boundary.test.sh. The bypass used for the fix was t
 config toggle (off → patch → test → on), exercising the documented escape path.
 Two readings recorded honestly: (1) the gate demonstrably fires in production; (2) the
 false-positive risk named in plan §6 was real and is now pinned by tests.
+
+## Phase commits
+| Phase | Commit |
+|---|---|
+| plan R0/R1/R2 + review chain (on develop) | 61ed7909 / 1826a4c9 / f74acb2f |
+| D1-D5 mechanisms + wiring registries | ba7b782f |
+| D2-D5 rail wiring + reference docs | 6fc814cb |
+| exec bits + hermetic test fixes | (two chore commits) |
+
+## Final acceptance (2026-08-17)
+Full suite: 3/236 failed — exactly the recorded baseline set (autopilot-engine,
+review-loop-runner, context-window); sync-all green; known flake absent. KR1-KR6 all
+demonstrated with planted red cases. Additional live catches during execution, all pinned
+as regression tests: exec-boundary denied its own builder's commit twice (E2/E4 prose →
+command-position anchoring); the structural guard flagged the gate's own override flag;
+the disabled-case test asserted machine-local dogfood config (evidence-discipline §5).

@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "owner-kernel-retirement-2026-08-16",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "50beee2d7e6eb5fbe334a114e42aab7d03259672de6841fd1da16ebcc7f2146f",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified against plan text: P1 recorded only sha256 of /usr/local/lib/autopilot while P5 rm -rf's it; rollback claim was false. Repaired: P1 now archives full directory contents + stat metadata with a verified-restore procedure."
+    },
+    {
+      "fingerprint": "7a814e468cbdcabb89501916fe943aa00524fa6d64dcd9f773270d742120e80b",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified in code: four supervised-owner-kernel-* modules destructure OwnerKernel/verifyLedger/deriveDisclosure from the barrel and call them at the cited lines; the zero-external-callers claim was false (author-side grep used `new OwnerKernel(` and module-path specifiers, missing static factories and barrel requires). Board resolution 2026-08-16: option (2) — the supervised family joins the delete-set; plan scope expanded accordingly."
+    },
+    {
+      "fingerprint": "ac2818af1cadbbdd7375c1bbb77f99bd32b1553885c025db575049cede85b6af",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: strict_l5_provider_roster_drift fail() sites exist at provider-bootstrap.js:389,481,494,546,616,623 plus claim-set/unknown-tuple sites; expires_at lives in platform-capability-claims.js, not the named function. P4 rewritten to enumerate every fail site and to locate (or record the absence of) runtime expiry enforcement."
+    },
+    {
+      "fingerprint": "612ebfdf77e86a2463e04f2d987b8c59f3f60162a5f0b963e72e4589001a8877",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: docs/configuration.md:57-75, docs/architecture.md:114+, docs/installation.md:281, schemas/owner-event.schema.json all present retired machinery as live. P3 rewritten to a closed inventory including these files, with a live-tree KR2 grep as P3 and P6 acceptance."
+    },
+    {
+      "fingerprint": "0f4d4a552081668d33c70f169c31cfe3f37d1a7c48b6d35e4c73b37626505e56",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: supervised-engine-bridge-contract.test.sh:29 and supervised-authenticated-intake.test.sh:36 require the barrel; validate.sh link-checks skills. Repaired: supervised set now in delete-set (Board), quality-pipeline row unwire moved into P2 before validate.sh, live-tree KR2 grep scheduled after P3 and P6."
+    },
+    {
+      "fingerprint": "fe117c08829b483e1bd9ae8097ebaebaec2ade90840e2bfcf5eba1c5eef5aa60",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: warn-and-proceed must itself emit the audit record, not merely keep the path available. P4 now freezes four acceptance cases: canonical silent; drifted warn+proceed+audit record; expired warn+proceed+audit record; unrelated strict gates retain failure behavior."
+    },
+    {
+      "fingerprint": "c7c2ed5cd436841532fc3f28df00c3c816ba0f297e1a164812e87b2a726ea51c",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted with GLM's 50beee2d finding: P1 now creates a verified restorable archive (contents + ownership/mode metadata + test-restore) of /usr/local/lib/autopilot and the /etc files before P5 is authorized."
+    },
+    {
+      "fingerprint": "9679701da3ac55f1bdfccb0070d470cca6d45ed8eb9c8f29e781fa3691b96267",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: Board resolved versioning 2026-08-16 (PATCH, policy basis recorded in §2.6); open question removed; §2.6 now commits to per-surface migration notes in the CHANGELOG entry and names the contract-validation gates."
+    },
+    {
+      "fingerprint": "c225c66bee229b0f95e13d16bf24f8474681a4642f0fe6f15131fe097fac9d7e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into P2 step 1: specifier-level grep of require paths (barrel and directory-qualified submodules) replaces the bare-symbol grep; symbol grep retained as secondary."
+    },
+    {
+      "fingerprint": "796150cdda972ede98dc54a7b19c60a378dd73713ccd525fb0daa6b2d61432ce",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into KR2/P3: non-module basenames (governance-config, trust-root-provisioning, retirement-receipts) and strict-l5 hard-block prose added to the enumerated pattern list."
+    },
+    {
+      "fingerprint": "869f8ac56a6c3da6f1d5eb6fde75dc6a3c2e04b3978c01a673c73877f4401497",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into KR2: exact directory-qualified pattern enumeration written into the plan; references/evidence-contract.md added to the exclusion list."
+    },
+    {
+      "fingerprint": "8c524e3afaf22c7dbb381e436d526b8439a14353f1047bd0937fd18d299c8aae",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into P1: retire-manifest gains a per-file policy-value disposition column (quarried / none-found / recoverable-via-anchor), making the R3 preservation claim auditable."
+    },
+    {
+      "fingerprint": "5cbe39c0338c6f84bca441691333c5c5f5a0feee25282e58bebb1edc6f286540",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into P1/P2: a mechanical test-to-target map (first require/script invocation per test) is precomputed in P1 and gates P2 deletion; unparsed tests are stop-and-review."
+    },
+    {
+      "fingerprint": "1fec5da8a659f232aa3e001d293761e19bd47d4dc8fe70d7be4a99c93809e4fa",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into the phase mechanics: each phase lands as one atomic commit and its SHA is recorded in retire-manifest.md, enabling surgical per-phase revert including P4's /l5 semantics."
+    },
+    {
+      "fingerprint": "312c37301f03dd5ce1f406f761beb162707862a0bdfe7c76d668f775bb69deaf",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Board resolved PATCH 2026-08-16; CHANGELOG entry will lead with an explicit reversal marker for visibility."
+    },
+    {
+      "fingerprint": "b25d87bd2ac7d3bf1ffa01bd3f2b584ee3d8be9b35fc2254a266f3dab6597efe",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into the P1 archive repair shared with the two R6 blockers: the deployed adapter bytes are copied, not merely hashed."
+    },
+    {
+      "fingerprint": "73870c19860336b1052e7d8b8d83eb9e51f4c787a60625f4d961507146a632d6",
+      "disposition": "accepted_nonblocking",
+      "rationale": "§2.6 rewritten with the real caller set (supervised family, now in delete-set; enumerated doc surfaces); Q3 removed after Board resolution."
+    },
+    {
+      "fingerprint": "7a30679bffbb51f5f40f824266bb284cfff5294d4807ec917ab49b40f36e4323",
+      "disposition": "duplicate",
+      "rationale": "Same repair as GLM's 8c524e3a per-module policy-disposition matrix; handled there."
+    },
+    {
+      "fingerprint": "e3011394c4d33b5b53b6c60b0f477499d4d045aff697835e271d06fa9f5a833d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded into P3: the sweep derives a retirement vocabulary (exports, commands, config paths, error identifiers) and scans all shipped surfaces, not only basenames; exemptions limited to explicitly historical passages."
+    },
+    {
+      "fingerprint": "c3bc781841801ccd06e5a683e5b39bac3358c91fcf65901d27d1b1b3e6c2e9ed",
+      "disposition": "duplicate",
+      "rationale": "Same substance as MiniMax's 5cbe39c0 test-coverage mapping; handled by the P1 test-to-target map."
+    }
+  ]
+}

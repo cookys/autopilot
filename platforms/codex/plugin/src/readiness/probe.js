@@ -137,13 +137,20 @@ function normalizeLiveProbeResponse(value) {
     .replace(LIVE_PROBE_RESPONSE_TAIL, '');
 }
 
+// 4 was too tight and misclassified healthy providers. A model that spends
+// output tokens before it emits text — MiniMax-M3 on the `minimax` endpoint,
+// measured 2026-08-14 — produces nothing at all within 4 and the seat reports
+// `transport_failure`; at 8 and 16 the same tuple answers `OK` every time. The
+// budget is what lets the model REACH the answer; the gate itself is unchanged,
+// because the response must still normalise to exactly `OK`. 32 buys headroom
+// for a longer reasoning preamble at no meaningful cost for a two-token reply.
 const LIVE_PROBE_REQUEST_BODY = {
   schema_version: 1,
   operation: 'provider-readiness-live-probe',
   prompt: 'Respond only with OK.',
   effect: 'read-only',
   tools: 'disabled',
-  max_output_tokens: 4,
+  max_output_tokens: 32,
 };
 const LIVE_PROBE_REQUEST = deepFreeze({
   ...LIVE_PROBE_REQUEST_BODY,

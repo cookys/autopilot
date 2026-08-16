@@ -48,6 +48,19 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### Four-layer redesign: contract-only policy + harness graph（2026-08-16 owner-kernel retirement 後繼）
+- **Trigger**: Board 排程啟動（research-to-ship 候選;retirement 已收官、`references/evidence-contract.md` 已就位可消費）
+- **Context**: 強模型時代的治理重構——Kernel（evidence discipline）/ Plumbing（dispatch 基建）/ Policy（能力索引的 contract-only mode）/ Graph（typed DAG + hetero 去相關 verify 節點）四層設計。核心工項是 owner-kernel 從未實作的 verifier adapters：獨立重跑 + 去相關引擎攻擊,對 `references/evidence-contract.md` 的合約實作驗證節點。
+- **Effort**: L（research-to-ship 全程）
+- **Source**: Board thread 2026-08-16;[`owner-kernel-retirement`](plans/2026-08-16-owner-kernel-retirement.md) P6
+
+### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
+- **Trigger**: 四層 redesign 的 Policy 層設計定案,且目標 skill 有 eval ON/OFF 證據（成績單前置）
+- **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。
+- **Effort**: L
+- **Source**: G2 review finding（MiniMax R8, 2026-08-16）;strategy thread 2026-08-16
+
+
 ### Role qualification is absent across the whole roster, which fails L5 closed
 - **Trigger**: Already met (observed 2026-08-11). `bin/autopilot.js status readiness --probe` returns `transport: ready` and `live: ready` for all six seats while every one reports `qualification: unknown`; `engine-scorecard.js current --role implementer` yields no candidate, and the reviewer rows are rejected as malformed ("evidence methodology is missing kind, basis").
 - **Context**: `engine implement-review` requires a qualified reviewer by default, so `/l5` cannot run its own path — a `/l5` invocation on 2026-08-11 degraded to L3 inline via the skill's documented `precondition_failed` route. `--allow-unqualified-reviewer` exists but spends L5's cost while forfeiting what L5 buys (a decorrelated *qualified* reviewer), so it is not a fix. Also blocks the separate question of restoring the Codex/gpt seats after the 2026-07-16 quota outage: that roster swap was explicitly marked for re-evaluation after the 2026-07-23 reset, and the reset has long passed while the swap is still in place — but re-evaluating it is meaningless while no seat can be qualified at all.

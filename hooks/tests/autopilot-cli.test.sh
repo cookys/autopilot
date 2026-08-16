@@ -259,28 +259,35 @@ EXIT=$?
 assert_eq "1" "$EXIT" "strict L5 executable fixture reaches the engine after fresh readiness"
 assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
   "strict L5 executable fixture consumes a fresh host-owned readiness bundle"
-assert_contains "$OUT" '"policy_digest":"33fb92e095c9ad5735754d50e5483086204c11a40494c28a4cf63a855d718a58"' \
+assert_contains "$OUT" '"policy_digest":"b3b525daaaf8f7363698a1035bcb5e029e5bf3e652e7730b8d88194f88d73d76"' \
   "strict L5 executable fixture records the frozen policy digest"
-assert_contains "$OUT" '"cap-v1-2cddccba68504249195990b87d1f9a10678a17d470129395266738ee3c1696da"' \
+assert_contains "$OUT" '"cap-v1-781c5519e00aaf01911c5680d41e30ceb34fb4037d9ac3559146e35c02d15f61"' \
   "strict L5 executable fixture records canonical claim provenance"
 
+# Advisory semantics (2026-08-16 retirement plan P4): a non-canonical roster is
+# no longer a pre-spend rejection. Derivation proceeds with a loud stderr
+# POLICY OVERRIDE warning (reason advisory_default), the uncertified seat runs
+# with claim_id null, and readiness continues to the live/fixture probe.
 STRICT_DRIFT_CFG="$TEST_TMP/strict-l5-drift-review-loop.md"
 sed 's/reviewer_engine: MiniMax-M3/reviewer_engine: unknown-reviewer-model/' \
   "$REPO_ROOT/.claude/review-loop-config.md" > "$STRICT_DRIFT_CFG"
-OUT="$(AUTOPILOT_LEVEL=l5 REVIEW_LOOP_CONFIG_OVERRIDE="$STRICT_DRIFT_CFG" \
+OUT="$(STRICT_L5_TEST_REPO_ROOT="$REPO_ROOT" \
+  NODE_OPTIONS="--require=$STRICT_L5_PRELOAD" \
+  AUTOPILOT_LEVEL=l5 REVIEW_LOOP_CONFIG_OVERRIDE="$STRICT_DRIFT_CFG" \
   AUTOPILOT_SESSION_MODE_DIR="$D3_MARKER_DIR" CLAUDE_CODE_SESSION_ID="$D3_SESSION_ID" \
   node "$CLI" engine implement-review \
     --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \
     --branch loop-branch --base "$BASE_SHA" --cwd "$D3_REPO" \
     --campaign-contract "$D3_CAMPAIGN" 2>&1)"
 EXIT=$?
-assert_eq "1" "$EXIT" "strict L5 CLI rejects roster drift"
-assert_contains "$OUT" '"rejection_code":"strict_l5_provider_unknown_tuple"' \
-  "strict L5 CLI reports the exact roster-drift rejection"
-assert_contains "$OUT" '"dispatcher_called":false' \
-  "strict L5 CLI roster rejection occurs before dispatcher invocation"
-assert_contains "$OUT" '"model_calls":0' \
-  "strict L5 CLI roster rejection spends zero model calls"
+assert_contains "$OUT" 'strict /l5 POLICY OVERRIDE' \
+  "strict L5 CLI warns loudly on every advisory derivation over a drifted roster"
+assert_contains "$OUT" 'reason: advisory_default' \
+  "strict L5 CLI records the advisory_default audit reason when no override is configured"
+assert_not_contains "$OUT" '"rejection_code":"strict_l5_provider_unknown_tuple"' \
+  "strict L5 CLI no longer hard-rejects a non-canonical roster before spend"
+assert_contains "$OUT" '"strict_l5_provider_readiness":{"status":"ready"' \
+  "strict L5 CLI proceeds to readiness under advisory policy"
 
 OUT="$(AUTOPILOT_LEVEL=l4 node "$CLI" engine implement-review \
   --prompt-file "$TEST_TMP/engine-impl-review-prompt.txt" \

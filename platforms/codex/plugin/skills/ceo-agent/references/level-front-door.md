@@ -374,7 +374,7 @@ foreman dispatch in a guard it owns:
 ### -2. Mission routing admission (before every topology effect)
 
 At `/l3` through `/l6` entry, `session-mode.js set` first resolves the consuming repository's
-authoritative Owner Kernel config and runs `mission-routing-admission.js` against the configured
+authoritative project governance config and runs `mission-routing-admission.js` against the configured
 graph and content-bound source manifest. The admission uses the canonical Mission policy resolver
 and execution-graph checker. It binds canonical Git-common-dir repository identity, Mission policy
 digest, graph digest, source coverage digest, deliverable count, critical path, batches, and

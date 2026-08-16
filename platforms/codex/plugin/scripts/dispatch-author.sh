@@ -678,8 +678,8 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
+case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -705,6 +705,13 @@ if [ "$RUNNER" = "agy" ]; then
   MODEL="$(normalize_agy_model "$MODEL" "$AGY_BIN")"
   command -v bwrap >/dev/null 2>&1 \
     || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
+fi
+
+if [ "$RUNNER" = "kimi" ]; then
+  KIMI_BIN="${BIN:-kimi}"
+  command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN"
+  KIMI_JS="$(cd "$(dirname "$0")" && pwd)/dispatch-author-kimi.js"
+  [[ -r "$KIMI_JS" ]] || die_precondition "dispatch-author-kimi.js not found beside dispatch-author.sh"
 fi
 
 if [[ -n "${AUTOPILOT_SETTLE_MS:-}" && ! "$AUTOPILOT_SETTLE_MS" =~ ^[0-9]+$ ]]; then
@@ -892,6 +899,24 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   RUNNER_EXIT=$?
   set -e
   rm -rf "$QODER_CWD"; QODER_CWD=""
+elif [[ "$RUNNER" = "kimi" ]]; then
+  # The transport lives in `src/runners/kimi.js` (contract-pinned by
+  # hooks/tests/dispatch-author-kimi.test.sh); this branch only supplies the
+  # shell-side contract — authored text on stdout into $RAW_LOG, non-zero exit
+  # otherwise — via scripts/dispatch-author-kimi.js. The adapter owns the
+  # scratch cwd, the required-CLI-surface probe, argv shape, and the UTF-8 /
+  # empty-output rejections, so none of that is duplicated here.
+  #
+  # `timeout` wraps it the same way the grok/qoderclicn branches wrap theirs:
+  # the enforced deadline is the hang backstop and stays a shell concern.
+  # STDERR is appended to $RAW_LOG rather than discarded — unlike qoder there is
+  # no known benign chatter to filter, and a swallowed adapter error would
+  # surface downstream as the unfalsifiable `empty_output`.
+  set +e
+  timeout "$TIMEOUT" node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
+    > "$RAW_LOG" 2>>"$RAW_LOG"
+  RUNNER_EXIT=$?
+  set -e
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
@@ -971,11 +996,26 @@ else
   # so capture through pseudo-TTY and strip CR to preserve exactness.
   RUN_SH="$(mktemp -t dispatch-author-agy-XXXXXX)"
   AGY_CWD="$(mktemp -d -t dispatch-author-agycwd-XXXXXX)"
+  # agy opens its own log + crash files under ~/.gemini/antigravity-cli. Under
+  # `--ro-bind / /` those opens fail, and agy does NOT degrade quietly: it
+  # redirects the whole language-server diagnostic stream to stdout instead
+  # ("ERROR: logging before google.Init: ... read-only file system"). Measured
+  # 2026-08-14: a 2-token probe came back as a 30,413-byte raw log, which the
+  # provider-readiness live probe classifies as `malformed_response`
+  # (`src/readiness/probe.js` LIVE_PROBE_MAX_RESPONSE_BYTES) — so the agy seat
+  # could never reach `ready` no matter which model was configured.
+  #
+  # tmpfs rather than a host bind: the writes are pure diagnostics, must not
+  # reach the host, and must not survive the run. `--ro-bind / /` containment is
+  # unchanged; only these two leaf paths become writable, and the credential
+  # material one level up at ~/.gemini stays read-only and readable.
+  AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_CWD" "$AGY_CWD" "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
+    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
+      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   set +e

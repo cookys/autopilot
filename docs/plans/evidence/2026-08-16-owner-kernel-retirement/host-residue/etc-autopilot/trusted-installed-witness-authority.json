@@ -1,0 +1,12 @@
+{
+  "kind": "trusted_installed_witness_authority",
+  "authority_id": "autopilot.dogfood.host-authority",
+  "stream_id": "owner-kernel-dogfood",
+  "receipt_journal": [],
+  "provisioning_provenance": {
+    "performed_by": "agent (Claude Opus 5) executing mechanical steps only",
+    "authorised_by": "repository owner, explicit interactive authorisation 2026-08-11",
+    "authorisation_scope": "one-time provisioning; owner stated it is revocable once full function is verified",
+    "note": "The TRUST DECISION was made by the human owner; the agent performed the deployment. A reviewer weighing this authority should treat its strength as that of the owner's authorisation, not as independently established. Revoke per docs/runbooks/trust-root-provisioning.md."
+  }
+}

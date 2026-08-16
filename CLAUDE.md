@@ -17,17 +17,17 @@ What each one does — purpose, when to call it, pointer to its contract — liv
 
 A caution learned the hard way (2026-08-06): several of these were fully built, tested and documented, yet doing nothing — an age threshold left at `0`, a hook never installed, a scanner keyed on an id the residue did not carry. **A script existing is not evidence it is running.** When one is supposed to be protecting something, check that it actually fires. That caution is one member of a family — a module with zero callers, a suite that passes when you delete the gate it tests, a shadow derived from the answer it is checking, an assertion pinned to one machine's local state. All of them, with the incident and the artifact that now prevents each, are in [`references/evidence-discipline.md`](references/evidence-discipline.md). Read it before recording anything as verified.
 
-**Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-explore.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js`
+**Dispatch rails** — `dispatch-hetero.sh` `dispatch-review.sh` `dispatch-author.sh` `dispatch-author-kimi.js` `dispatch-explore.sh` `dispatch-batch.sh` `dispatch-anthropic-review.js` `dispatch-local-openai.js` `dispatch-plan-review.js` `dispatch-contract.js` `dispatch-status.js` `check-context-window.js` `lib/context-window.sh` `lib/dispatch-author-codex-transport.sh` `lib/dispatch-detach.sh` `lib/output-quiescence.sh` `lib/pi-rpc-run.js` `lib/grok-effort.sh` `lib/plan-review-findings.js` `lib/plan-review-normalize.js`
 
 **Routing & config resolution** — `resolve-dispatch.sh` `resolve-doa.sh` `resolve-endpoint.sh` `resolve-qc-gate.sh` `resolve-review-loop.sh` `resolve-worktree-teardown.sh` `resolve-execution-profile.js` `lib/resolve-config.sh` `load-endpoints-env.sh` `lib/load-endpoints-env.js`
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh`
 
-**Mission, campaign & session state** — `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `divergence-monitor.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
+**Mission, campaign & session state** — `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
 
 **Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js` `probe-skill-frontmatter-portability.sh` `platform-capability-claims.js` `bench-engine-capability.sh` `import-aa-capabilities.js` `evaluate-profile-cutover.js`
 
-**Owner kernel & execution profiles** — `owner-kernel.js` `check-owner-kernel-release-gates.js` `build-profile-payload.js` `profile-session.js` `check-profile-isolation.js` `measure-profile-context.js`
+**Execution profiles** — `build-profile-payload.js` `profile-session.js` `check-profile-isolation.js` `measure-profile-context.js`
 
 **Diff scanning & anti-gaming** — `completeness-scan.sh` `error-path-scan.sh` `secret-scan-diff.js` `check-redispatch-prompt.sh` `check-dispatch-suppression.sh` `diff-file-list.sh` `diff-scope-report.sh` `diff-since-last-round.sh` `probe-diff-domain.sh` `classify-diff-risk.sh` `check-disjointness.sh` `check-test-integrity.sh` `lib/test-integrity-l1.py`
 
@@ -35,7 +35,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Task tree & risk** — `tree.js` `risk-counter.js`
 
-**Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-claude-md-inventory.js` `check-contract-schema.js` `check-hook-inventory.js` `check-l1-cache-key-parity.js` `check-optin-changelog.js` `check-readme-parity.js` `check-retirement-receipts.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh`
+**Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-claude-md-inventory.js` `check-contract-schema.js` `check-hook-inventory.js` `check-l1-cache-key-parity.js` `check-optin-changelog.js` `check-readme-parity.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh`
 
 **Setup & install** — `dev-setup.sh` `dev-update.sh` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js`
 

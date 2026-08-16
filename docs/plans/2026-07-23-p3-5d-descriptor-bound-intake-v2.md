@@ -67,7 +67,7 @@ against the current v1 lane would freeze or validate the wrong boundary.
 | `hooks/tests/supervised-authenticated-intake.test.sh` | Signature-domain, claims, replay, expiry, and v1/v2 crossover tests. |
 | `hooks/tests/supervised-intake-host.test.sh` | Root host/ticket/output schema and no-authority checks. |
 | `hooks/tests/supervised-intake-live-host.sh` | Privileged descriptor-bound v2 end-to-end proof and raw-path exclusion checks. |
-| `docs/projects/2026-07-20-owner-kernel-governance/{README.md,p3/README.md}` | Ship-state boundaries and next prerequisite, updated only after implementation verifies. |
+| `docs/projects/_archive/2026-07-20-owner-kernel-governance/{README.md,p3/README.md}` | Ship-state boundaries and next prerequisite, updated only after implementation verifies. |
 
 ## 4. Phases
 

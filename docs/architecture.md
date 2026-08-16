@@ -109,34 +109,17 @@ The central DI contract is `new AutopilotEngine({ reviewLoopResolver, reviewDisp
 
 Layering rule: the engine wraps the artifact-verified shell dispatchers; it does not replace their git-artifact rails. Shell owns process isolation, worktree creation, wrapper commits, raw logs, and runner-specific invocation. JS owns orchestration, schema validation, immutable endpoint checks, and deterministic ledger shape.
 
-### Owner Kernel authority profiles
+### Governance primitives (post owner-kernel retirement)
 
-Owner Kernel is the decision and acceptance state machine under `src/engine/owner-kernel/`. Its
-ledger freezes the resolved project governance policy, optional one-run mode override, acceptance
-contract, qualified owner principal, authority bindings, and external witness receipts. Public
-ledger tooling is read-only; model or worker output cannot append arbitrary events.
-
-P3.7 exposes three cumulative supervised profiles:
-
-1. `supervised-owner-kernel-semantic-witness.js` consumes the exact P3.5d v2 handoff and P3.6
-   durable cohort, then binds semantic Kernel events to compare-and-append, readback, and an
-   independently verified receipt anchor. Its action catalog is empty. The route keeps two
-   deliberately separate plan commitments: `substrate_plan_hash` mirrors the historical P3.6c
-   durable protocol field that binds the P3.5 bridge plan, while `p36_contract_plan_hash` binds
-   the P3.6a compiled substrate contract itself.
-2. `supervised-owner-kernel-probe-effect.js` enables one fixed reversible sentinel operation through
-   the Kernel permit, witnessed claim, post-claim authorization, broker receipt, and independent
-   outcome verification path. Callers cannot supply its command, path, tool, target, or receipt root.
-3. `supervised-owner-kernel-engine-acceptance.js` enables only the existing implementation-dispatch
-   Engine seam. Engine `committed` or `converged` is evidence, never acceptance. A schema-v2
-   coordinator accepts only an exact delivered manifest after verification, independent challenge,
-   and complete action reconciliation, then atomically appends `acceptance` plus `complete`.
-
-These modules are production code with injected external-host contracts. Their focused tests use
-deterministic host implementations; the existing P3.6 privileged Linux gate separately proves the
-root-installed cross-UID systemd/cgroup substrate. A consuming deployment must supply those host
-invocations outside model and workspace reach. The JavaScript API alone is not a claim that a P3.7
-systemd deployment is installed.
+The Owner Kernel decision/acceptance state machine and its supervised isolation substrate were
+retired on 2026-08-16 — rationale, two-generation review chain, and quarry anchors in
+`docs/plans/2026-08-16-owner-kernel-retirement.md`. What remains under `src/engine/owner-kernel/`
+is a keeper-only barrel of five shared primitives with live consumers: `canonical` (canonical JSON
++ sha256), `errors`, `actions` (action-catalog normalization), `policy`
+(`resolveGovernancePolicy` over the project governance config), and `task-authority`
+(content-addressed task/grant envelopes consumed by the execution-profile machinery). The policy
+content the retired acceptance machinery encoded — what a closure claim must prove — lives on as
+`references/evidence-contract.md`.
 
 ### Capability-adaptive execution profiles
 

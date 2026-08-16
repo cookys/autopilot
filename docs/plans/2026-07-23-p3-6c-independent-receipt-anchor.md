@@ -78,10 +78,10 @@ claim P0 acceptance metrics are production verified.
 | `src/engine/supervised-production-substrate-durable-host.py` | Provision receipt-verifier leaf, authenticate ACK socket peers by PID/UID/GID/cgroup, run the post-teardown audit, and retain only hash-safe disclosure. |
 | `hooks/tests/supervised-production-substrate-p0-replay.test.sh` | Deterministic P0-A0 mapping, hostile/mutation tests, and taxonomy validation. |
 | `hooks/tests/supervised-production-substrate-p0-live.test.sh` | Opt-in installed-snapshot outsider-peer and rewrite/audit evidence. |
-| `docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/p36-a0-corpus.json` | Frozen eight-attack and fifteen-category map; records unavailable original semantics. |
-| `docs/projects/2026-07-20-owner-kernel-governance/p0/fixtures/p36-a0-corpus.js` | Canonical evidence-report verifier; cannot emit a full P0 pass. |
-| `docs/projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md` | Separate P0-A0 boundary evidence from the original future authority replay. |
-| `docs/projects/2026-07-20-owner-kernel-governance/p3/README.md` | Document P3.6c scope and retained activation blockers. |
+| `docs/projects/_archive/2026-07-20-owner-kernel-governance/p0/fixtures/p36-a0-corpus.json` | Frozen eight-attack and fifteen-category map; records unavailable original semantics. |
+| `docs/projects/_archive/2026-07-20-owner-kernel-governance/p0/fixtures/p36-a0-corpus.js` | Canonical evidence-report verifier; cannot emit a full P0 pass. |
+| `docs/projects/_archive/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md` | Separate P0-A0 boundary evidence from the original future authority replay. |
+| `docs/projects/_archive/2026-07-20-owner-kernel-governance/p3/README.md` | Document P3.6c scope and retained activation blockers. |
 | `docs/plans/2026-07-23-p3-6-production-supervised-substrate.md` | Link the closed P3b phase to this required follow-on. |
 
 ## 4. Phases

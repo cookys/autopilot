@@ -48,7 +48,7 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 | [`scripts/import-aa-capabilities.js`](../../scripts/import-aa-capabilities.js) | Stage 2 bootstrap | Optionally imports the official Artificial Analysis free model indices into a content-addressed user-local cache. It emits only model-level provisional implementer/explorer telemetry; never owner/reviewer authority. |
 | [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2 | Records and reports historical evidence. Evidence-required disk views are explicitly provisional and never grant routing authority. |
 | [`scripts/engine-capability-state.js`](../../scripts/engine-capability-state.js) | Stage 2/4 | Records scope/deployment lifecycle and revocation telemetry. Stored `qualified` observations are projected as provisional. |
-| [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 compatibility | Fails closed on disk telemetry. It cannot replace the live Owner Kernel verifier capability. |
+| [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 compatibility | Fails closed on disk telemetry — weaker evidence than a live in-process qualification run. |
 
 ## Reference Methodology
 
@@ -165,17 +165,18 @@ untrusted telemetry because a same-UID model process can edit them.
 
 Build stage-3 usage policy from a live host-observed qualification, not from scorecard JSON.
 
-1. The trusted host imports `runQualification` and
-   `createSessionRoleCapabilityVerifier` from `scripts/engine-qualify.js`.
+1. The trusted host imports `runQualification` from `scripts/engine-qualify.js`.
 2. Run the exact role/scope/deployment evaluation in that process. The host verifies all static
    pins, generates and snapshots every nonce-derived case, executes the semantic invariants,
    isolates each panel process, parses every result, and creates a random run nonce.
-3. Pass the returned non-serializable verifier closure to Owner Kernel as
-   `roleCapabilityVerifier`. It is bound to the exact query, receipt set, and session nonce.
-4. Route only after Owner Kernel issues the shadow role grant. Re-resolve and re-run for every
-   fallback identity.
-5. A JSON roundtrip, process restart, scorecard row, or `current-evidence` output cannot recreate
-   the verifier. Without a live verifier, fail closed to guided/unqualified.
+3. The live in-process run is the strongest evidence tier; record its outcome to the scorecard
+   and reflect it in the review-loop roster. (The Owner Kernel grant machinery this stage once
+   routed through was retired 2026-08-16 — `docs/plans/2026-08-16-owner-kernel-retirement.md`;
+   routing authority is now the roster + capability state, with the epistemic rule below.)
+4. Re-resolve and re-run for every fallback identity.
+5. A JSON roundtrip, process restart, scorecard row, or `current-evidence` output is weaker
+   evidence than the live run that produced it. For an unproven role, fail closed to
+   guided/unqualified.
 
 No routing exception for phase/domain is allowed in this stage.
 
@@ -193,8 +194,8 @@ No routing exception for phase/domain is allowed in this stage.
 1. Stage 0 spike with role-scoped harness and identity capture.
 2. Stage 1 reviewer qualification (`scripts/engine-qualify.sh`); only move forward if reviewer passes.
 3. Stage 2 record telemetry to scorecard (`node scripts/engine-scorecard.js record`).
-4. Stage 3 keep the evaluator and Owner Kernel in one host process and inject the live session
-   verifier. Shell/JSON compatibility paths remain guided/unqualified.
+4. Stage 3 run the evaluator live and in-process; shell/JSON compatibility paths remain
+   guided/unqualified.
 5. Stage 4 set re-qualify expectation and TTL monitoring; restart onboarding when stale or model/version mismatch appears.
 
 Cross-process or cross-restart qualification reuse requires a separately trusted signer or

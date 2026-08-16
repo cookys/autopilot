@@ -54,6 +54,7 @@
     "qc_panel_seats_complete",
     "provider_readiness_receipt_ttl_seconds",
     "provider_readiness_fallback_family_constraint",
+    "strict_l5_policy_override",
     "plan_review",
     "plan_reviewer_engine",
     "plan_reviewer_effort",
@@ -69,89 +70,474 @@
     "plan_review_growth_stop_ratio"
   ],
   "properties": {
-    "reviewer_engine": { "type": "string", "minLength": 1 },
-    "reviewer_effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "x-shell-validated": true, "x-shell-var": "REV_EFFORT" },
-    "reviewer_runner": { "type": "string", "enum": ["codex", "auto", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn", "kimi"], "x-shell-validated": true, "x-shell-var": "REV_RUNNER" },
-    "implementer_engine": { "type": "string", "minLength": 1 },
-    "implementer_effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"], "x-shell-validated": true, "x-shell-var": "IMPL_EFFORT" },
-    "implementer_runner": { "type": "string", "enum": ["auto", "codex", "agy", "grok", "cc-shim", "pi", "qoderclicn"], "x-shell-validated": true, "x-shell-var": "IMPL_RUNNER" },
-    "loop_max_rounds": { "type": "integer" },
-    "loop_convergence_verdict": { "type": "string", "minLength": 1 },
-    "spec_review": { "type": "string", "enum": ["on", "off"], "x-shell-validated": true, "x-shell-var": "SPEC_REVIEW" },
-    "independent_harness": { "type": "string", "enum": ["on", "off"], "x-shell-validated": true, "x-shell-var": "HARNESS" },
-    "qc_panel": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-    "qc_panel_aggregation": { "type": "string", "enum": ["union-on-verified-critical", "unanimous-ship"], "x-shell-validated": true, "x-shell-var": "QC_AGG" },
-    "review_risk": { "type": "string", "enum": ["low", "high"] },
-    "required_review_families": { "type": "integer" },
-    "l1_required": { "type": "boolean" },
-    "cross_family_required": { "type": "boolean" },
-    "cross_family_satisfied": { "type": "boolean" },
-    "review_diff_scope": { "type": "string", "enum": ["full", "incremental-mitigated"], "x-shell-validated": true, "x-shell-var": "DIFF_SCOPE" },
-    "source": { "type": "string", "minLength": 1 },
-    "work_domain": { "type": "string", "enum": ["rust", "backend-cli", "frontend", "docs", "mixed"], "x-shell-validated": true, "x-shell-var": "DOMAIN_OVERRIDE" },
-    "domain_source": { "type": "string", "enum": ["none", "explicit", "auto"] },
-    "capability_state_source": { "type": "string", "minLength": 1 },
-    "quota_status": { "type": "string", "minLength": 1 },
-    "quota_reset_at": { "type": ["string", "null"] },
-    "skill_mode_requested": { "type": "string", "minLength": 1 },
-    "skill_mode_effective": { "type": "string", "minLength": 1 },
-    "capability_warnings": { "type": "array", "items": { "type": "string" } },
-    "reviewer_endpoint": { "type": "string" },
-    "reviewer_family": { "type": "string", "minLength": 1 },
-    "implementer_endpoint": { "type": "string" },
-    "verification_author_present": { "type": "boolean", "enum": [true, false], "x-shell-validated": true, "x-shell-var": "VER_AUTH_PRESENT" },
-    "verification_author_engine": { "type": "string" },
-    "verification_author_runner": { "type": "string", "enum": ["", "codex", "agy", "grok", "cc-shim", "anthropic-compatible", "qoderclicn"] },
-    "verification_author_effort": { "type": "string", "enum": ["", "low", "medium", "high", "xhigh", "max"] },
-    "verification_author_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9_]*$" },
-    "verification_author_family": { "type": "string" },
-    "implementer_family": { "type": "string" },
-    "config_path": { "type": "string" },
-    "min_panel_size": { "type": "integer", "minimum": 1 },
-    "on_engine_unavailable": { "type": "string", "enum": ["ask", "solo-fallback", "wait-reset"], "x-shell-validated": true, "x-shell-var": "ON_ENGINE_UNAVAILABLE" },
-    "reviewer_engine_low_risk": { "type": "string", "description": "Risk-tiered overlay: non-empty (with reviewer_effort_low_risk) = the LOOP reviewer engine for computed review_risk=low; empty = tiering off (reviewer_engine used at every risk). High risk always uses reviewer_engine." },
-    "reviewer_effort_low_risk": { "type": "string", "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off — fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string." },
-    "on_family_conflict": { "type": "string", "enum": ["fallback", "block"], "x-shell-validated": true, "x-shell-var": "ON_FAMILY_CONFLICT", "description": "Engine reviewDiff policy when the (effective) reviewer shares the implementer's model family: fallback = substitute the first cross-family qualified row from fallback_ladder (runner-allowlisted, fail-closed on no candidate); block = hard-block (pre-v2.32.25 behavior). Resolver coerces garbage to block; the engine treats absent/invalid as block. The conditional --check-scorecard key fallback_ladder_implementer_family carries ladder provenance (the implementer family the ladder was computed against) so a stale pre-resolved roster fails closed." },
-    "reviewer_fallback_preference": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "HUMAN-ordered engine ids the engine's family-conflict fallback prefers over raw ladder order; every candidate still passes all fallback guards. Empty = ladder order." },
-    "reviewer_fallback_preference_low_risk": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Preference list applied when computed review_risk=low; empty = use reviewer_fallback_preference." },
+    "reviewer_engine": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewer_effort": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "REV_EFFORT"
+    },
+    "reviewer_runner": {
+      "type": "string",
+      "enum": [
+        "codex",
+        "auto",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn",
+        "kimi"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "REV_RUNNER"
+    },
+    "implementer_engine": {
+      "type": "string",
+      "minLength": 1
+    },
+    "implementer_effort": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "IMPL_EFFORT"
+    },
+    "implementer_runner": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "pi",
+        "qoderclicn"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "IMPL_RUNNER"
+    },
+    "loop_max_rounds": {
+      "type": "integer"
+    },
+    "loop_convergence_verdict": {
+      "type": "string",
+      "minLength": 1
+    },
+    "spec_review": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "SPEC_REVIEW"
+    },
+    "independent_harness": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "HARNESS"
+    },
+    "qc_panel": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "qc_panel_aggregation": {
+      "type": "string",
+      "enum": [
+        "union-on-verified-critical",
+        "unanimous-ship"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "QC_AGG"
+    },
+    "review_risk": {
+      "type": "string",
+      "enum": [
+        "low",
+        "high"
+      ]
+    },
+    "required_review_families": {
+      "type": "integer"
+    },
+    "l1_required": {
+      "type": "boolean"
+    },
+    "cross_family_required": {
+      "type": "boolean"
+    },
+    "cross_family_satisfied": {
+      "type": "boolean"
+    },
+    "review_diff_scope": {
+      "type": "string",
+      "enum": [
+        "full",
+        "incremental-mitigated"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "DIFF_SCOPE"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "work_domain": {
+      "type": "string",
+      "enum": [
+        "rust",
+        "backend-cli",
+        "frontend",
+        "docs",
+        "mixed"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "DOMAIN_OVERRIDE"
+    },
+    "domain_source": {
+      "type": "string",
+      "enum": [
+        "none",
+        "explicit",
+        "auto"
+      ]
+    },
+    "capability_state_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quota_status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quota_reset_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "skill_mode_requested": {
+      "type": "string",
+      "minLength": 1
+    },
+    "skill_mode_effective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capability_warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reviewer_endpoint": {
+      "type": "string"
+    },
+    "reviewer_family": {
+      "type": "string",
+      "minLength": 1
+    },
+    "implementer_endpoint": {
+      "type": "string"
+    },
+    "verification_author_present": {
+      "type": "boolean",
+      "enum": [
+        true,
+        false
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "VER_AUTH_PRESENT"
+    },
+    "verification_author_engine": {
+      "type": "string"
+    },
+    "verification_author_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "qoderclicn"
+      ]
+    },
+    "verification_author_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "verification_author_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "verification_author_family": {
+      "type": "string"
+    },
+    "implementer_family": {
+      "type": "string"
+    },
+    "config_path": {
+      "type": "string"
+    },
+    "min_panel_size": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "on_engine_unavailable": {
+      "type": "string",
+      "enum": [
+        "ask",
+        "solo-fallback",
+        "wait-reset"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "ON_ENGINE_UNAVAILABLE"
+    },
+    "reviewer_engine_low_risk": {
+      "type": "string",
+      "description": "Risk-tiered overlay: non-empty (with reviewer_effort_low_risk) = the LOOP reviewer engine for computed review_risk=low; empty = tiering off (reviewer_engine used at every risk). High risk always uses reviewer_engine."
+    },
+    "reviewer_effort_low_risk": {
+      "type": "string",
+      "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off — fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string."
+    },
+    "on_family_conflict": {
+      "type": "string",
+      "enum": [
+        "fallback",
+        "block"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "ON_FAMILY_CONFLICT",
+      "description": "Engine reviewDiff policy when the (effective) reviewer shares the implementer's model family: fallback = substitute the first cross-family qualified row from fallback_ladder (runner-allowlisted, fail-closed on no candidate); block = hard-block (pre-v2.32.25 behavior). Resolver coerces garbage to block; the engine treats absent/invalid as block. The conditional --check-scorecard key fallback_ladder_implementer_family carries ladder provenance (the implementer family the ladder was computed against) so a stale pre-resolved roster fails closed."
+    },
+    "reviewer_fallback_preference": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "HUMAN-ordered engine ids the engine's family-conflict fallback prefers over raw ladder order; every candidate still passes all fallback guards. Empty = ladder order."
+    },
+    "reviewer_fallback_preference_low_risk": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Preference list applied when computed review_risk=low; empty = use reviewer_fallback_preference."
+    },
     "qc_panel_seats": {
       "type": "array",
       "description": "Exact readiness identity for every QC seat. Empty with qc_panel_seats_complete=false means the legacy model-only panel lacks enough metadata; consumers must fail closed rather than guess.",
       "items": {
         "type": "object",
-        "required": ["role", "runner", "model", "effort", "endpoint", "family"],
+        "required": [
+          "role",
+          "runner",
+          "model",
+          "effort",
+          "endpoint",
+          "family"
+        ],
         "properties": {
-          "role": { "type": "string", "enum": ["qc"] },
-          "runner": { "type": "string", "enum": ["codex", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn", "kimi"] },
-          "model": { "type": "string", "minLength": 1 },
-          "effort": { "type": "string", "enum": ["low", "medium", "high", "xhigh", "max"] },
-          "endpoint": {
-            "oneOf": [
-              { "type": "null" },
-              { "type": "string", "pattern": "^[A-Za-z0-9_]+$" }
+          "role": {
+            "type": "string",
+            "enum": [
+              "qc"
             ]
           },
-          "family": { "type": "string", "minLength": 1 }
+          "runner": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "agy",
+              "grok",
+              "cc-shim",
+              "anthropic-compatible",
+              "claude-native",
+              "qoderclicn",
+              "kimi"
+            ]
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effort": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          },
+          "endpoint": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]+$"
+              }
+            ]
+          },
+          "family": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "additionalProperties": false
       }
     },
-    "qc_panel_seats_complete": { "type": "boolean" },
-    "provider_readiness_receipt_ttl_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
-    "provider_readiness_fallback_family_constraint": { "type": "string", "enum": ["any", "different"], "x-shell-validated": true, "x-shell-var": "PROVIDER_READINESS_FAMILY_CONSTRAINT" },
-    "plan_review": { "type": "string", "enum": ["on", "off"], "x-shell-validated": true, "x-shell-var": "PLAN_REVIEW", "description": "Enable the first-class bounded plan-readiness rail. Independent from the deprecated spec_review implementation-loop switch." },
-    "plan_reviewer_engine": { "type": "string" },
-    "plan_reviewer_effort": { "type": "string", "enum": ["", "low", "medium", "high", "xhigh", "max"] },
-    "plan_reviewer_runner": { "type": "string", "enum": ["", "codex", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn"] },
-    "plan_reviewer_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9_]*$" },
-    "plan_deep_reviewer_engine": { "type": "string" },
-    "plan_deep_reviewer_effort": { "type": "string", "enum": ["", "low", "medium", "high", "xhigh", "max"] },
-    "plan_deep_reviewer_runner": { "type": "string", "enum": ["", "codex", "agy", "grok", "cc-shim", "anthropic-compatible", "claude-native", "qoderclicn"] },
-    "plan_deep_reviewer_endpoint": { "type": "string", "pattern": "^[A-Za-z0-9_]*$" },
-    "plan_review_max_generations": { "type": "integer", "minimum": 1, "maximum": 2 },
-    "plan_review_max_wall_seconds": { "type": "integer", "minimum": 1, "maximum": 7200 },
-    "plan_review_growth_warn_ratio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1.25 },
-    "plan_review_growth_stop_ratio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1.5 }
+    "qc_panel_seats_complete": {
+      "type": "boolean"
+    },
+    "provider_readiness_receipt_ttl_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "provider_readiness_fallback_family_constraint": {
+      "type": "string",
+      "enum": [
+        "any",
+        "different"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "PROVIDER_READINESS_FAMILY_CONSTRAINT"
+    },
+    "plan_review": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "PLAN_REVIEW",
+      "description": "Enable the first-class bounded plan-readiness rail. Independent from the deprecated spec_review implementation-loop switch."
+    },
+    "plan_reviewer_engine": {
+      "type": "string"
+    },
+    "plan_reviewer_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "plan_reviewer_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn"
+      ]
+    },
+    "plan_reviewer_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "plan_deep_reviewer_engine": {
+      "type": "string"
+    },
+    "plan_deep_reviewer_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "plan_deep_reviewer_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn"
+      ]
+    },
+    "plan_deep_reviewer_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "plan_review_max_generations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2
+    },
+    "plan_review_max_wall_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7200
+    },
+    "plan_review_growth_warn_ratio": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1.25
+    },
+    "plan_review_growth_stop_ratio": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1.5
+    },
+    "strict_l5_policy_override": {
+      "type": "string",
+      "description": "Non-empty = deliberate, recorded escape from strict /l5 byte-equal policy coverage; the string is the operator's reason and is surfaced on every derivation. Empty = fail-closed (default)."
+    }
   },
   "required": [
     "reviewer_engine",
@@ -215,7 +601,8 @@
     "plan_review_max_generations",
     "plan_review_max_wall_seconds",
     "plan_review_growth_warn_ratio",
-    "plan_review_growth_stop_ratio"
+    "plan_review_growth_stop_ratio",
+    "strict_l5_policy_override"
   ],
   "additionalProperties": true
 }

@@ -248,6 +248,16 @@ function generateDocDriftConfig() {
   return `${headerTitle('Doc-Sync')}\n\n## Domains\n<!-- TODO(onboard): one ### block per doc⇄code domain with focus prose -->\n\ngate_command: node scripts/doc-drift-gate.js\nstaleness_days: 30\n`;
 }
 
+function generateTaskClassConfig() {
+  // The canonical default lives in project-config-template/task-class-config.md
+  // (single canonical statement — no per-repo customization in v1, so the
+  // scaffold copies it verbatim instead of restating it here).
+  return fs.readFileSync(
+    path.join(__dirname, '..', 'project-config-template', 'task-class-config.md'),
+    'utf8',
+  );
+}
+
 function writeOrSkipFile(filePath, relativeName, content, state) {
   const current = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : null;
   if (current !== null && current === content) {
@@ -358,6 +368,7 @@ function main() {
     'qc-gate-config.md': generateQcGateConfig(protectedPaths),
     'skill-routing.md': generateSkillRoutingConfig(),
     'doc-drift-config.md': generateDocDriftConfig(),
+    'task-class-config.md': generateTaskClassConfig(),
   };
 
   const claudeDir = path.join(state.targetDir, '.claude');

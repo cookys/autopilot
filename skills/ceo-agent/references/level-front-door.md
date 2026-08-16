@@ -42,6 +42,18 @@ qualified owner across the full run; `milestone-led` re-instantiates that owner 
 and acceptance boundaries without turning milestones into user result-approval gates. The skill
 must not claim authoritative Kernel telemetry unless an external host bridge actually records it.
 
+### Task-class front door (autonomous-brain P8)
+
+When `.claude/task-class-config.md` exists, classify the incoming goal against
+its class table BEFORE sizing or dispatch: `hard-problem` stays at depth-0 (never
+dispatched, never auto-picked); `mechanical-impl`/`standard-impl` route to the
+per-class candidate preference; `direction` enters the hetero brainstorm/survey
+pipeline. **Ambiguous classification → STOP AND ASK** (AskUserQuestion with the
+candidate classes) until the blueprint scope is clear — guessing costs 2-3
+re-alignment rounds (sol F11). Common patterns default from a survey of current
+practice, ledgered. Absent config = unchanged behavior (no classification duty).
+Canonical table + weights: `project-config-template/task-class-config.md`.
+
 ### Mid-run question discipline (presets active)
 
 With the front-door presets (involvement=just-results, resolved red lines), "想確認一下 /

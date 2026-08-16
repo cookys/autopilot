@@ -81,7 +81,7 @@ if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
 OUT1="$(node "$SCRIPT" "$TARGET" --detect "$DETECT_JSON")"
 SUMMARY1="$(printf '%s\n' "$OUT1" | tail -n 1)"
 assert_eq "0" "$?" "scaffold-config first run exit code"
-assert_eq "9" "$(query_json "$SUMMARY1" "written.length")" "first run writes 9 files"
+assert_eq "10" "$(query_json "$SUMMARY1" "written.length")" "first run writes 10 files"
 assert_eq "0" "$(query_json "$SUMMARY1" "skipped.length")" "first run has no skipped files"
 
 for file in next-config.md project-lifecycle-config.md dispatch-config.md quality-gate-config.md dev-flow-config.md test-strategy-config.md qc-gate-config.md skill-routing.md doc-drift-config.md; do
@@ -131,6 +131,17 @@ printf '.claude/\nnode_modules/\n' > "$WS_TARGET/.gitignore"
 WS_ERR="$(node "$SCRIPT" "$WS_TARGET" --detect "$DETECT_JSON" 2>&1 >/dev/null)"
 assert_contains "$WS_ERR" "wholesale" "warns when target already ignores .claude/ wholesale"
 # control: a target WITHOUT a wholesale ignore emits no such warning
+# --- task-class-config (autonomous-brain P8): scaffolded verbatim from the canonical template ---
+assert_file_exists "$TARGET/.claude/task-class-config.md" "task-class config scaffolded"
+TC="$(cat "$TARGET/.claude/task-class-config.md")"
+assert_contains "$TC" "hard-problem" "hard-problem class present"
+assert_contains "$TC" "pinned to depth-0, NEVER dispatched" "depth-0 pin stated"
+assert_contains "$TC" "ABSENT FILE = unchanged behavior" "absent-config semantics stated"
+assert_contains "$TC" "STOP AND ASK" "ambiguity→ask rule stated"
+assert_eq "$(sha256sum "$REPO_ROOT/project-config-template/task-class-config.md" | cut -d' ' -f1)" \
+  "$(sha256sum "$TARGET/.claude/task-class-config.md" | cut -d' ' -f1)" \
+  "scaffold copies the canonical template byte-identically (no second statement)"
+
 NOWS_TARGET="$TEST_TMP/no-wholesale"; mkdir -p "$NOWS_TARGET"
 printf 'node_modules/\n' > "$NOWS_TARGET/.gitignore"
 NOWS_ERR="$(node "$SCRIPT" "$NOWS_TARGET" --detect "$DETECT_JSON" 2>&1 >/dev/null)"
@@ -141,7 +152,7 @@ DRY_TARGET="$TEST_TMP/dry-run-target"
 mkdir -p "$DRY_TARGET"
 OUT5="$(node "$SCRIPT" "$DRY_TARGET" --detect "$DETECT_JSON" --dry-run)"
 SUMMARY5="$(printf '%s\n' "$OUT5" | tail -n 1)"
-assert_eq "9" "$(query_json "$SUMMARY5" "written.length")" "dry-run reports prospective writes"
+assert_eq "10" "$(query_json "$SUMMARY5" "written.length")" "dry-run reports prospective writes"
 assert_file_absent "$DRY_TARGET/.claude"
 assert_file_absent "$DRY_TARGET/.gitignore"
 

@@ -86,3 +86,17 @@ Transport lessons baked into the adapter: models at temperature 0 reproducibly d
 one closing brace (type-aware bracket repair recovers it); hunk-header line
 arithmetic is unreliable model-side (the adapter re-derives file/line mechanically —
 judgment fields are never touched).
+
+## QC gate (pre-push)
+
+MiniMax-M3 (cc-shim, endpoint minimax, effort high) reviewed the full v2.34.12
+release diff (44 files). The envelope's `verdict` was null — the known
+`unrecognized_model` chrome/framing incident — but the raw log
+(`qc-minimax-raw.log`) carries a complete nonce-framed verdict:
+**SHIP-AS-IS, FINDINGS: none**, with a no-finding proof naming the
+resolve-scaffold-tier freshness path. Per the roster's reviewer-limitation tag the
+verdict is corroborated independently by the planted-negative-control test suites
+run this session (resolve-scaffold-tier 16, resolve-review-loop 294, engine-qualify
+64, status-cli 27, provider-readiness 32+28 assertions — all green) and the
+deterministic release gates (preflight 8/8, doc-drift, canonical invariants,
+CLAUDE.md inventory).

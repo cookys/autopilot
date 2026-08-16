@@ -801,6 +801,27 @@ re-verifying a finding with a full-suite rerun (`reverify.mode:"full-suite"`) �
 finding closure re-runs the finding's surface plus the frozen gate set, nothing
 more.
 
+### 9. Post-merge experience critic (autonomous-brain P6)
+
+AFTER merge-back (§4) completes — never before — launch the user-persona critic
+on the shipped deliverable (methodology: `references/experience-audit.md`; the
+script enforces the post-merge guard in-code via git ancestry, so no caller can
+turn it into a gate):
+
+```bash
+bash scripts/dispatch-experience-critic.sh \
+  --deliverable <merged-sha> --integration-ref develop --repo <repo> \
+  --instantiation <blueprint's frozen five-question answers> \
+  --evidence <rendered-consumption output> --out <critic.json> \
+  --runner <r> --model <m> [--endpoint <e>]   # decorrelated family, single round
+```
+
+Findings (≤7, stable IDs, BACKLOG-row-ready) feed the round-end report
+(`decision-ledger.js report --critic <critic.json>`); the brain appends accepted
+rows to docs/BACKLOG.md where `/next`'s queue prices them. `human_only` items go
+verbatim to the operator. A "blocking" marker from the critic is stripped and
+surfaced as an anomaly — correctness gates alone block.
+
 ### Quality-floor conventions (v2.31.11)
 
 The five structural ledger-emission points — playbook no-match; adjudication unvalidatable-REFUTED / unconfirmed-PROOF_BY_TRACE; panel irreversible-disagreement; plan-revision checkpoint trips (risk-counter thresholds); depth-0 override of a dispatched artifact — each emits an `escalation_opened` tree event. See the quality-floor plan (`docs/plans/2026-07-04-quality-floor-engine.md`).

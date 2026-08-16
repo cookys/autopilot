@@ -113,6 +113,7 @@ Autopilot is standalone-capable. When `superpowers` is installed, orchestrators 
 | Project tracking | `docs/projects/` (active + `_archive/`) |
 | Backlog | `docs/BACKLOG.md` |
 | Plans | `docs/plans/` |
+| Architecture decisions | `docs/adr/` (ADR-0001: verification over attestation — binding on governance work) |
 | Release notes | `CHANGELOG.md` |
 | Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |
 
@@ -126,6 +127,7 @@ Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `g
 - Don't write "manually check for TODO/FIXME" in a reference doc — call `scripts/completeness-scan.sh`.
 - Don't enumerate forbidden phrases inline in code-review logic — call `scripts/check-redispatch-prompt.sh`.
 - Don't introduce new severity vocabulary — use the unified 4-tier above.
+- Don't add trust machinery (hash chains, event ledgers, witness receipts, attestation, trust roots) — settled by [ADR-0001](docs/adr/0001-verification-over-attestation.md); verification is independent re-derivation, never tamper-evidence of a claim.
 - Don't add a second canonical statement of "what the reviewer reads" — code-review.md Invocation § is canonical; reviewer.md Workflow §1 references it.
 - Don't append per-release notes to a Scripts-inventory row — `CHANGELOG.md` owns history; the row is an index entry (see Row shape rule).
 - Don't claim cross-platform env vars or CLI subcommands without verifying — by official doc URL OR by running the real tool. Past lesson cuts both ways: `CODEX_PLUGIN_ROOT` / `AGY_PLUGIN_ROOT` / `GEMINI_PLUGIN_ROOT` env vars were fabricated and shipped to main; but the *correction* then over-corrected, labelling `agy plugin validate` + the root-`plugin.json` requirement as fabricated when installing real `agy` 1.0.1 proved both genuine. If you can't cite a URL or show a tool run, it's a Spike candidate, not a fact. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) "Corrected — previously mislabelled" §.

@@ -107,6 +107,14 @@ OUT="$(run_pf "$TEST_TMP/i-scope.json")"; RC=$?
 assert_exit_code "$RC" "1" "declared out-of-unit path refused"
 assert_contains "$OUT" "scope_escape" "scope escape named"
 
+# ── prefix-collision pin (QC adjudication 2026-08-17): a reviewer claimed
+# "src/feature/" admits "src/featureful/x.js"; refuted live — the trailing
+# slash in the prefix is the guard. Pinned so the refutation stays executable. ──
+intent "$TEST_TMP/i-collide.json" '["defect-review","qc-panel"]' '["src/featureful/x.js"]' 1 5 ''
+OUT="$(run_pf "$TEST_TMP/i-collide.json")"; RC=$?
+assert_exit_code "$RC" "1" "sibling-prefix path (featureful vs feature/) is refused"
+assert_contains "$OUT" "scope_escape" "prefix collision named as scope escape"
+
 # ── unknown unit ──
 node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('$TEST_TMP/i-ok.json','utf8'));j.unit_id='u9';fs.writeFileSync('$TEST_TMP/i-unit.json',JSON.stringify(j))"
 OUT="$(run_pf "$TEST_TMP/i-unit.json")"; RC=$?

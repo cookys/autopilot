@@ -1261,8 +1261,7 @@ process.stdin.on("data", (d) => (s += d)).on("end", () => {
       const match = doc && doc.schema === 1 && Array.isArray(doc.overrides)
         ? doc.overrides.find((o) => o && o.engine === engine
           && (runner === "auto" || o.runner === runner)
-          && String(o.role || "").replace(/^verifier$/, "reviewer") !== ""
-          && (o.role === "implementer")
+          && o.role === "implementer"
           && typeof o.reason === "string" && o.reason.trim()
           && typeof o.expires === "string" && o.expires >= today)
         : null;

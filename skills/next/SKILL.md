@@ -115,6 +115,18 @@ If all sources empty: suggest `/next --deep` or propose new features.
 | `improvement-queue (absorbed)` | Absorbed into Phase 0 ([references/phase0-hygiene.md](references/phase0-hygiene.md)) |
 | `memory-health (absorbed)` | B-level partially calls its checks; see `autopilot:learn` skill, Knowledge Health Audit section |
 
+## Autonomous auto-pick (CEO / l4-l6 idle transitions)
+
+When a depth-0 brain picks the next item WITHOUT the user (CEO mode idle
+transition), the pick is a proxy decision and goes through
+[`scripts/next-pick.js`](../../scripts/next-pick.js): `parse` extracts
+machine-readable candidate rows from `docs/BACKLOG.md`, `pick` ranks them
+deterministically from a materialized record (user class-weights outrank every
+system signal; L/H-effort, `board`-tagged, and `hard-problem` rows queue
+ask-first and are NEVER auto-picked) and appends the pick + record to the
+decision ledger for the round-end report. Interactive `/next` keeps this skill's
+judgment flow — the script is the autonomous path's deterministic subset.
+
 ## See Also
 
 - [Phase 0 Hygiene Details](references/phase0-hygiene.md)

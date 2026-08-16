@@ -781,6 +781,26 @@ and the round refuses to start. Owned processes re-attach from the manifest
 table (§5_owned_processes), never from memory — a worker the ledger knows about
 is OURS even if the resumed context has never heard of it.
 
+### 8. Stall fuse (autonomous-brain P4)
+
+At each round boundary, classify the burst's delta and consult the fuse before
+starting the next round (sol F5/F10: verification consumed the run — but note
+the F2 boundary: a mega-batch HAS product delta and is the churn preflight's
+kill, not this fuse's):
+
+```bash
+git diff --name-only <burst-base>..HEAD > /tmp/burst-names.txt
+node scripts/check-stall-fuse.js classify --names /tmp/burst-names.txt \
+  # → append {burst_id, product_files, verification_files} to the campaign's bursts.jsonl
+node scripts/check-stall-fuse.js check --bursts <campaign>/bursts.jsonl  # default N=3
+```
+
+Tripped ⇒ HALT: no further dispatch this campaign; render the round-end report
+with the stall section and stop for the operator. Also immediate-violation:
+re-verifying a finding with a full-suite rerun (`reverify.mode:"full-suite"`) —
+finding closure re-runs the finding's surface plus the frozen gate set, nothing
+more.
+
 ### Quality-floor conventions (v2.31.11)
 
 The five structural ledger-emission points — playbook no-match; adjudication unvalidatable-REFUTED / unconfirmed-PROOF_BY_TRACE; panel irreversible-disagreement; plan-revision checkpoint trips (risk-counter thresholds); depth-0 override of a dispatched artifact — each emits an `escalation_opened` tree event. See the quality-floor plan (`docs/plans/2026-07-04-quality-floor-engine.md`).

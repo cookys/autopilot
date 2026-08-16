@@ -34,14 +34,14 @@ KR1–KR6 with red cases: see plan §2 / §5 (frozen; not restated here).
 
 | Phase | Status | Commit | Acceptance |
 |---|---|---|---|
-| P1 four-tuple freeze + conformance preflight/audit | pending | — | check-blueprint-conformance.test.sh |
-| P2 rehydration bundle + round reset | pending | — | build-rehydration-bundle.test.sh |
-| P3 decision ledger + veto + report | pending | — | decision-ledger.test.sh |
-| P4 stall fuse | pending | — | check-stall-fuse.test.sh |
-| P5 auto-pick | pending | — | next-pick.test.sh |
-| P6 experience-audit reference + critic | pending | — | dispatch-experience-critic.test.sh |
-| P7 first-use qualification override | pending | — | resolve-review-loop.test.sh §override |
-| P8 task-class front-door config | pending | — | scaffold-config.test.sh §task-class |
+| P1 four-tuple freeze + conformance preflight/audit | done | 589b4137 | check-blueprint-conformance.test.sh |
+| P2 rehydration bundle + round reset | done | 3e348dd2 | build-rehydration-bundle.test.sh |
+| P3 decision ledger + veto + report | done | 56aa73e7 | decision-ledger.test.sh |
+| P4 stall fuse | done | c6e387ec | check-stall-fuse.test.sh |
+| P5 auto-pick | done | 4ab8c108 | next-pick.test.sh |
+| P6 experience-audit reference + critic | done | 788975a4 | dispatch-experience-critic.test.sh |
+| P7 first-use qualification override | done | d98a5b99 | resolve-review-loop.test.sh §override |
+| P8 task-class front-door config | done | 957b8be9 | scaffold-config.test.sh §task-class |
 | Close: wiring, CHANGELOG, version, QC, merge, finish-flow | pending | — | preflight-release.sh 8/8 |
 
 ## CEO decision log
@@ -49,6 +49,15 @@ KR1–KR6 with red cases: see plan §2 / §5 (frozen; not restated here).
 - D1 (2026-08-17): execution order P1→P3→P2→P4→P5→P6→P7→P8 — P3's ledger row format is
   consumed by P2's bundle section ④, so P3 lands before P2 (plan dependency P2←P1 is
   unaffected; the plan's own P3 text already extends P1's audit). Tactical, reversible.
+- D3 (2026-08-17): stall-fuse delta classification implemented in-script —
+  diff-scope-report.sh classifies scope-creep, not delta kind; forcing reuse would be a
+  false fit. Tactical, reversible.
+- D4 (2026-08-17): critic findings intake does NOT reuse admit-backlog-follow-ups.js
+  (campaign-receipt-schema bound — critic findings are not campaign receipts); the
+  wrapper emits BACKLOG-row-ready JSON and the round-report flow appends. Tactical.
+- D5 (2026-08-17): l3-l6 SKILL texts not individually edited for P8 — the task-class
+  section rides their existing MUST-READ pointer to level-front-door.md (single
+  canonical statement outranks the plan file-map letter). Tactical.
 - D2: no TaskCreate tool in this harness session — this README ledger + the single
   admitted mission deliverable are the tracking mechanism (Mission Routing Override
   supersedes legacy per-phase TaskCreate enumeration).

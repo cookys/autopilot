@@ -24,6 +24,56 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.13 — Autonomous brain integration: frozen four-tuple, stateless orchestrator, decision ledger
+
+**Headline**: The execution half of the autonomous-brain plan (frozen after a two-generation
+hetero review; evidence base: 12 forensically documented sol failure shapes from three weeks
+of codex transcripts). The orchestrator's four mid-run mutation surfaces — deliverable
+granularity, gate set, acceptance rubric, control plane — are digest-frozen into the campaign
+contract (including the governance scripts themselves, so a brain cannot neuter a gate by
+editing it), and a conformance preflight refuses deviating declared intent BEFORE any runner
+spawns. The brain becomes architecturally stateless (five-section rehydration bundle, no
+truncation, machine-graded resume quiz), every proxy decision lands in a vetoable ledger that
+renders a round-end report (no polling), a stall fuse trips on verification-spin, auto-pick is
+a deterministic replayable function over written queues, a structurally non-blocking post-merge
+experience critic feeds BACKLOG, and unqualified engines admit only via a loud per-invocation
+operator override. Plan + review log: `docs/plans/2026-08-17-autonomous-brain-integration.md`.
+
+### Added
+- `scripts/check-blueprint-conformance.js` — pre-spend `preflight` (gate drift, churn
+  mega-batch, scope escape, unknown unit, vetoed basis, pin drift, missing gate pin) on
+  dispatch-hetero's precondition rail via `--conformance-intent`; post-round `audit` incl.
+  manifest↔ledger completeness (the ledger-independent unlogged-decision universe).
+- `scripts/decision-ledger.js` — append/query/veto/report; rationale-less decisions refused;
+  round-end report renders 代決清單, auto-picks, ask-first queue, stall + critic sections.
+- `scripts/build-rehydration-bundle.js` — five frozen load-bearing sections, 80KB cap,
+  over-cap = build error (no truncation exists); `quiz`/`grade` machine-check a resumed brain.
+- `scripts/check-stall-fuse.js` — product-vs-verification burst accounting; trips at 3
+  consecutive zero-product bursts; full-suite finding re-verify is an immediate violation.
+- `scripts/next-pick.js` — deterministic auto-pick from a materialized pick-record; L/H,
+  board-tagged, and hard-problem rows queue ask-first and are never auto-picked.
+- `scripts/dispatch-experience-critic.sh` + `references/experience-audit.md` — post-merge
+  user-persona critic (in-script git-ancestry guard, protocol digest pinned, top-7 cap,
+  blocking markers stripped as anomalies); five-question instantiation protocol, no closed
+  artifact-type table, human-only qualities routed to the operator.
+- `project-config-template/task-class-config.md` — task-class front door (hard-problem pinned
+  to depth-0; ambiguity→STOP-AND-ASK; absent config = unchanged behavior), scaffolded verbatim.
+
+### Changed
+- `scripts/dispatch-contract.js` — additive `frozen_four_tuple` block with digest immutability
+  in `check`; `--qualification-override` is the only evidence-free engine admission, recorded
+  as `assurance: operator-override` with reason/operator/expiry in the GO output.
+- `scripts/dispatch-hetero.sh` — a frozen contract requires `--conformance-intent`; the
+  preflight refuses before the runner spawns.
+- `scripts/resolve-review-loop.sh` — `AUTOPILOT_QUALIFICATION_OVERRIDE` flips the
+  inadmissible-implementer warning into a loud EVIDENCE-FREE notice.
+- `skills/ceo-agent/references/level-front-door.md` — §§ task-class front door, decision
+  ledger, stateless round protocol, stall fuse, post-merge critic (l3–l6 ride the MUST-READ).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`. All contract fields are additive; contracts without
+  `frozen_four_tuple` and repos without `task-class-config.md` behave exactly as before.
+
 ## v2.34.12 — Roster qualification repair: store residue purge, real requalification rails
 
 **Headline**: The whole-roster qualification outage (BACKLOG 2026-08-11: every seat

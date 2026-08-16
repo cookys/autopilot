@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-17 | [autonomous-brain-integration](2026-08-17-autonomous-brain-integration/README.md) — frozen four-tuple + stateless orchestrator + decision ledger (8 phases, plan frozen after 2-gen hetero review) | v2.34.13 | `feat/autonomous-brain-integration` |
 
 ## 已完成 (Completed)
 

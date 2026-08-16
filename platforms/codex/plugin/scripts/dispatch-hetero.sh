@@ -55,6 +55,10 @@
 #       [--campaign-seal <path>]                # intake-validated seal, rechecked at leaf admission
 #       [--strict-contract]                     # required together with --contract-file
 #       [--contract-file <path>]                # required together with --strict-contract
+#       [--conformance-intent <path>]           # REQUIRED when the contract carries
+#                                               #   frozen_four_tuple: the round's declared
+#                                               #   intent, gated pre-spawn by
+#                                               #   check-blueprint-conformance.js preflight
 #       [--keep-worktree]                      # keep worktree even on success
 #       [--retain-owner <id> --retain-reason <text> --retain-until <epoch>]
 #       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
@@ -196,6 +200,7 @@ SKILL_PACK_CONTENT_TEMP=""
 STRICT_CONTRACT=0
 CONTRACT_FILE=""
 CONTRACT_FILE_SUPPLIED=0
+CONFORMANCE_INTENT_FILE=""
 STRICT_CONTRACT_RESULT_FIELDS=0
 STRICT_UNIT_ID=""
 STRICT_CONTRACT_SHA=""
@@ -872,6 +877,23 @@ run_strict_contract_preflight() {
   verdict="$(extract_json_value "$contract_check_json" verdict 2>/dev/null || true)"
   [ "$verdict" = "GO" ] || die_precondition "contract checker verdict is $verdict"
 
+  # frozen_four_tuple conformance preflight (autonomous-brain P1, KR1): a frozen
+  # contract REQUIRES a declared per-round intent, and the declared intent must
+  # conform BEFORE any runner spawns. Contracts without the block are unchanged.
+  __fft_probe="$(extract_file_json_value "$CONTRACT_FILE" "frozen_four_tuple.granularity_digest" 2>/dev/null || true)"
+  if [ -n "$__fft_probe" ]; then
+    [ -n "$CONFORMANCE_INTENT_FILE" ] \
+      || die_precondition "contract carries frozen_four_tuple: --conformance-intent <file> is required"
+    [ -r "$CONFORMANCE_INTENT_FILE" ] \
+      || die_precondition "conformance intent file not readable: $CONFORMANCE_INTENT_FILE"
+    if ! node "$SELF_DIR/check-blueprint-conformance.js" preflight \
+        --contract "$CONTRACT_FILE" --intent "$CONFORMANCE_INTENT_FILE" \
+        --repo "$CONSUMING_REPO_ROOT" >&2; then
+      die_precondition "blueprint conformance preflight refused the declared intent"
+    fi
+  fi
+  unset __fft_probe
+
   STRICT_CONTRACT_RESULT_FIELDS=1
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
   STRICT_CONTRACT_SHA="$(extract_json_value "$contract_check_json" contract_sha256 2>/dev/null || true)"
@@ -1484,6 +1506,7 @@ while [ $# -gt 0 ]; do
     --qoder-bin) QODER_BIN="${2:-}"; shift 2 ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
+    --conformance-intent) CONFORMANCE_INTENT_FILE="${2:-}"; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
     --retain-owner) RETENTION_OWNER="${2:-}"; shift 2 ;;
     --retain-reason) RETENTION_REASON="${2:-}"; shift 2 ;;

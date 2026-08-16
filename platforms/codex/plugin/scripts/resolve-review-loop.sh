@@ -1234,6 +1234,8 @@ if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
   _impl_warn="$(printf '%s' "$_impl_rows" | node -e '
 const engine = process.argv[1];
 const runner = process.argv[2];
+const overrideFile = process.argv[3] || "";
+const fs = require("fs");
 let s = "";
 process.stdin.on("data", (d) => (s += d)).on("end", () => {
   let rows = null;
@@ -1249,11 +1251,33 @@ process.stdin.on("data", (d) => (s += d)).on("end", () => {
   const admissible = row && (row.status === "qualified"
     || (row.status === "provisional" && row.observed_status === "qualified"));
   if (admissible) return;
+  // P7/KR6: an explicit operator override file (AUTOPILOT_QUALIFICATION_OVERRIDE)
+  // covering the tuple flips the warning from refusal guidance to a LOUD
+  // evidence-free-admission notice — never silent, never a third path.
+  if (overrideFile && fs.existsSync(overrideFile)) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(overrideFile, "utf8"));
+      const today = new Date().toISOString().slice(0, 10);
+      const match = doc && doc.schema === 1 && Array.isArray(doc.overrides)
+        ? doc.overrides.find((o) => o && o.engine === engine
+          && (runner === "auto" || o.runner === runner)
+          && o.role === "implementer"
+          && typeof o.reason === "string" && o.reason.trim()
+          && typeof o.expires === "string" && o.expires >= today)
+        : null;
+      if (match) {
+        process.stdout.write(
+          `implementer seat (${engine}/${runner}) runs on an EVIDENCE-FREE operator override (reason: ${match.reason}; expires ${match.expires}) — pass --qualification-override to dispatch-contract check`,
+        );
+        return;
+      }
+    } catch { /* unreadable override never admits */ }
+  }
   const detail = row ? `scorecard row status=${row.status}` : "no scorecard row";
   process.stdout.write(
-    `implementer seat (${engine}/${runner}) is not admissible: ${detail} — /l5 dispatch-contract will NO-GO; requalify via engine-onboarding`,
+    `implementer seat (${engine}/${runner}) is not admissible: ${detail} — /l5 dispatch-contract will NO-GO; requalify via engine-onboarding or provide a per-invocation qualification override`,
   );
-});' "$IMPL_ENGINE" "$IMPL_RUNNER" 2>/dev/null || true)"
+});' "$IMPL_ENGINE" "$IMPL_RUNNER" "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" 2>/dev/null || true)"
   if [[ -n "$_impl_warn" ]]; then
     CAP_WARNINGS_JSON="$(node -e '
 let a = [];

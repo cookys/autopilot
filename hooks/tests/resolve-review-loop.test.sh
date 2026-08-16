@@ -525,6 +525,15 @@ assert_not_contains "$(json_get "$IMPLOK_OUT" capability_warnings)" "implementer
 IMPLOFF_OUT="$(ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT")"
 assert_not_contains "$(json_get "$IMPLOFF_OUT" capability_warnings)" "implementer seat" \
   "without --check-scorecard the implementer admissibility check does not run"
+# 20d. P7/KR6: an operator override file flips the warning to a loud evidence-free notice
+cat > "$TEST_TMP/qual-override.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"grok-4.5","runner":"grok","role":"implementer","reason":"first-use audition","operator":"cookys","expires":"2099-01-01"}]}
+JSON
+IMPLOVR_OUT="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$TEST_TMP/qual-override.json" ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_contains "$(json_get "$IMPLOVR_OUT" capability_warnings)" "EVIDENCE-FREE operator override" \
+  "override file flips the warning to a loud evidence-free notice"
+assert_contains "$(json_get "$IMPLOVR_OUT" capability_warnings)" "first-use audition" \
+  "override reason surfaces in the warning"
 
 EXPDIR="$TEST_TMP/check-expired"
 mkdir -p "$EXPDIR"

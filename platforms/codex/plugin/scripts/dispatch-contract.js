@@ -80,6 +80,14 @@ function exitGo(unitId, contractSha, specSha, resolvedEngine, options = {}) {
   if (options.assurance === 'provisional') {
     payload.assurance = 'provisional';
   }
+  // P7/KR6: an evidence-free operator override is never silent — the GO output
+  // names the reason, the operator, and the expiry.
+  if (options.assurance === 'operator-override') {
+    payload.assurance = 'operator-override';
+  }
+  if (options.qualification_override) {
+    payload.qualification_override = options.qualification_override;
+  }
 
   console.log(JSON.stringify(payload));
   process.exit(0);
@@ -306,6 +314,7 @@ function validateSchema(contract, errors, repoPath = '') {
     'acceptance',
     'budget',
     'campaign_projection',
+    'frozen_four_tuple',
   ]);
   assertNoExtra('contract', contract, rootAllowed, errors);
 
@@ -742,6 +751,80 @@ function validateSchema(contract, errors, repoPath = '') {
       }
     }
   }
+
+  // frozen_four_tuple (optional, additive — autonomous-brain-integration P1).
+  // The four surfaces a mid-run brain must not mutate (granularity DAG, gate set,
+  // acceptance rubric, control plane). Granularity/rubric are CONTENT-pinned: the
+  // path locates the file, the digest is the authority — `check` recomputes and
+  // refuses on mismatch. control_plane_pins maps repo-relative paths (configs AND
+  // the governance scripts themselves) to sha256 digests so the brain cannot
+  // neuter a gate by editing it. Digest pins are configuration identity, not
+  // trust machinery: nothing chains or attests; a mismatch simply refuses.
+  if (hasKey(contract, 'frozen_four_tuple')) {
+    const fft = contract.frozen_four_tuple;
+    if (!fft || typeof fft !== 'object' || Array.isArray(fft)) {
+      errors.push('frozen_four_tuple: expected object');
+    } else {
+      const allowed = new Set([
+        'granularity_path',
+        'granularity_digest',
+        'gate_set',
+        'rubric_path',
+        'rubric_digest',
+        'control_plane_pins',
+      ]);
+      assertNoExtra('frozen_four_tuple', fft, allowed, errors);
+      for (const key of allowed) {
+        if (!hasKey(fft, key)) {
+          errors.push(`frozen_four_tuple: missing required key '${key}'`);
+        }
+      }
+      for (const key of ['granularity_path', 'rubric_path']) {
+        if (hasKey(fft, key) && !isNonEmptyString(fft[key])) {
+          errors.push(`frozen_four_tuple.${key}: must be non-empty string`);
+        }
+      }
+      for (const key of ['granularity_digest', 'rubric_digest']) {
+        if (hasKey(fft, key)
+            && (typeof fft[key] !== 'string' || !/^[0-9a-f]{64}$/.test(fft[key]))) {
+          errors.push(`frozen_four_tuple.${key}: must be lowercase SHA-256`);
+        }
+      }
+      if (hasKey(fft, 'gate_set')) {
+        if (!Array.isArray(fft.gate_set) || fft.gate_set.length === 0) {
+          errors.push('frozen_four_tuple.gate_set: must be a non-empty array');
+        } else {
+          const seen = new Set();
+          fft.gate_set.forEach((gate, idx) => {
+            if (!isNonEmptyString(gate)) {
+              errors.push(`frozen_four_tuple.gate_set[${idx}]: must be non-empty string`);
+              return;
+            }
+            if (seen.has(gate)) {
+              errors.push(`frozen_four_tuple.gate_set[${idx}]: duplicate gate '${gate}'`);
+            }
+            seen.add(gate);
+          });
+        }
+      }
+      if (hasKey(fft, 'control_plane_pins')) {
+        const pins = fft.control_plane_pins;
+        if (!pins || typeof pins !== 'object' || Array.isArray(pins)
+            || Object.keys(pins).length === 0) {
+          errors.push('frozen_four_tuple.control_plane_pins: must be a non-empty object');
+        } else {
+          for (const [pinPath, digest] of Object.entries(pins)) {
+            if (!isNonEmptyString(pinPath) || pinPath.startsWith('/') || pinPath.includes('..')) {
+              errors.push(`frozen_four_tuple.control_plane_pins: invalid path '${pinPath}'`);
+            }
+            if (typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)) {
+              errors.push(`frozen_four_tuple.control_plane_pins['${pinPath}']: must be lowercase SHA-256`);
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 function escapeRegExp(raw) {
@@ -961,7 +1044,7 @@ function getBaseSpecSection(baseSha, contract, repo) {
   return { ok: true, specText };
 }
 
-function checkPolicy(contract, repo, contractSha, resolvedEngine) {
+function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) {
   const reasons = [];
   const baseSha = contract.base_sha;
   const requiredEngineRole = contract.go.required_engine_role;
@@ -1015,6 +1098,38 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
       runGit(repo, ['merge-base', '--is-ancestor', dep, baseSha]);
     } catch (err) {
       reasons.push(`dependency: ${dep} is not ancestor of base`);
+    }
+  }
+
+  // frozen_four_tuple immutability: recompute every pinned digest from the repo's
+  // CURRENT files. A mismatch means a frozen surface (DAG, rubric, config, or a
+  // governance script itself) was edited mid-campaign — refuse, do not re-freeze.
+  if (contract.frozen_four_tuple) {
+    const fft = contract.frozen_four_tuple;
+    const pinned = [
+      ['frozen_four_tuple.granularity', fft.granularity_path, fft.granularity_digest],
+      ['frozen_four_tuple.rubric', fft.rubric_path, fft.rubric_digest],
+      ...Object.entries(fft.control_plane_pins || {}).map(
+        ([pinPath, digest]) => [`frozen_four_tuple.control_plane_pins['${pinPath}']`, pinPath, digest],
+      ),
+    ];
+    for (const [label, pinPath, digest] of pinned) {
+      const absolute = path.resolve(repo, pinPath);
+      if (!absolute.startsWith(path.resolve(repo) + path.sep)) {
+        reasons.push(`${label}: pinned path escapes the repository`);
+        continue;
+      }
+      let content;
+      try {
+        content = fs.readFileSync(absolute);
+      } catch (err) {
+        reasons.push(`${label}: pinned file is missing (${pinPath})`);
+        continue;
+      }
+      const actual = crypto.createHash('sha256').update(content).digest('hex');
+      if (actual !== digest) {
+        reasons.push(`${label}: frozen surface was modified (digest mismatch for ${pinPath})`);
+      }
     }
   }
 
@@ -1093,6 +1208,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
   }
 
   let engineAssurance = null;
+  let qualificationOverride = null;
   if (reasons.length === 0) {
     const matched = Array.isArray(scoreRows)
       ? scoreRows.find((row) => isAdmissibleScorecardRow(row, storeRole, resolvedEngine, {
@@ -1101,7 +1217,21 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
       : null;
 
     if (!matched) {
-      reasons.push('engine: no qualified scorecard row for configured role/engine/runner');
+      // P7/KR6: the operator's explicit per-invocation override is the only
+      // evidence-free admission; absent both evidence and override → refusal.
+      const override = loadQualificationOverride(
+        options.overridePath, storeRole, resolvedEngine, reasons,
+      );
+      if (override) {
+        engineAssurance = 'operator-override';
+        qualificationOverride = {
+          reason: override.reason,
+          operator: override.operator,
+          expires: override.expires,
+        };
+      } else {
+        reasons.push('engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
+      }
     } else if (matched.status === 'provisional') {
       // Explicit provisional assurance for bounded labor only (implementer commit
       // or verification-author raw-artifact). Never review/verify/merge authority.
@@ -1140,7 +1270,7 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
     reasons.push('engine: campaign projection disagrees with resolved runner/model');
   }
 
-  return { reasons, specSha, headSha, baseAtHead, engineAssurance };
+  return { reasons, specSha, headSha, baseAtHead, engineAssurance, qualificationOverride };
 }
 
 function parseArgs(argv) {
@@ -1151,6 +1281,7 @@ function parseArgs(argv) {
   let contractPath = '';
   let repoPath = '';
   let wantJson = false;
+  let overridePath = '';
 
   let i = 1;
   while (i < argv.length) {
@@ -1160,6 +1291,9 @@ function parseArgs(argv) {
       i += 2;
     } else if (arg === '--repo') {
       repoPath = argv[i + 1] || '';
+      i += 2;
+    } else if (arg === '--qualification-override') {
+      overridePath = argv[i + 1] || '';
       i += 2;
     } else if (arg === '--json') {
       wantJson = true;
@@ -1181,7 +1315,38 @@ function parseArgs(argv) {
     usage(2, '--json is required');
   }
 
-  return { contractPath, repoPath: path.resolve(repoPath) };
+  return { contractPath, repoPath: path.resolve(repoPath), overridePath };
+}
+
+// First-use qualification override (autonomous-brain P7, KR6): the operator's
+// explicit per-invocation artifact is the ONLY evidence-free path — Board
+// ruling: standing exam pass OR per-invocation override, never a silent third
+// path. A valid row must match the resolved tuple's engine+runner+role, carry a
+// non-empty reason and operator, and be unexpired. The override is recorded in
+// the check output so downstream always sees an evidence-free admission for
+// what it is.
+function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reasons) {
+  if (!overridePath) return null;
+  let doc;
+  try {
+    doc = JSON.parse(fs.readFileSync(overridePath, 'utf8'));
+  } catch (err) {
+    reasons.push('override: qualification override file unreadable or invalid JSON');
+    return null;
+  }
+  if (!doc || doc.schema !== 1 || !Array.isArray(doc.overrides)) {
+    reasons.push('override: qualification override must be {schema:1, overrides:[...]}');
+    return null;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const match = doc.overrides.find((row) => row
+    && row.engine === resolvedEngine.model
+    && row.runner === resolvedEngine.runner
+    && normalizeStoreRole(row.role) === storeRole
+    && typeof row.reason === 'string' && row.reason.trim().length > 0
+    && typeof row.operator === 'string' && row.operator.trim().length > 0
+    && typeof row.expires === 'string' && row.expires >= today);
+  return match || null;
 }
 
 (function main() {
@@ -1191,7 +1356,7 @@ function parseArgs(argv) {
     usage(2, 'Invalid local schema payload');
   }
 
-  const { contractPath, repoPath } = parseArgs(process.argv.slice(2));
+  const { contractPath, repoPath, overridePath } = parseArgs(process.argv.slice(2));
   const parsed = checkSchemaCompliance(contractPath, repoPath);
 
   if (!parsed.loaded) {
@@ -1209,7 +1374,7 @@ function parseArgs(argv) {
   const reasons = [];
 
   resolveEngine(repoPath, reasons, resolvedEngine, contract.go.required_engine_role);
-  const policy = checkPolicy(contract, repoPath, contractSha, resolvedEngine);
+  const policy = checkPolicy(contract, repoPath, contractSha, resolvedEngine, { overridePath });
 
   reasons.push(...policy.reasons);
 
@@ -1229,5 +1394,8 @@ function parseArgs(argv) {
     family: resolvedEngine.family,
   }, {
     assurance: policy.engineAssurance || null,
+    ...(policy.qualificationOverride
+      ? { qualification_override: policy.qualificationOverride }
+      : {}),
   });
 })();

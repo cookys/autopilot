@@ -23,7 +23,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Worktree & branch lifecycle** — `reap-dispatch-branches.sh` `reap-dispatch-worktrees.sh` `pin-evidence-anchors.js` `lifecycle-residue-receipt.js` `lib/worktree-reap.sh` `lib/prune-tmp-residue.sh`
 
-**Mission, campaign & session state** — `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
+**Mission, campaign & session state** — `check-blueprint-conformance.js` `decision-ledger.js` `build-rehydration-bundle.js` `check-stall-fuse.js` `next-pick.js` `mission-routing-admission.js` `mission-execution-graph-check.js` `mission-terminal-reconcile.js` `mission-convergence-check.js` `next-touch-validation.js` `validate-next-touch-reservation.js` `validate-next-touch-terminal.js` `session-mode.js` `compaction-rehydrate.js` `run-ledger.sh` `watch-foreman.js` `implementation-campaign-check.js` `check-plan-authority-ownership.js` `check-repair-scope.js`
 
 **Engine capability & qualification** — `engine-scorecard.js` `engine-capability-state.js` `engine-qualify.sh` `engine-qualify.js` `qualification-case-broker.js` `qualification-review-provider.js` `probe-engine-capability.sh` `probe-local-engine.js` `probe-harness-capabilities.sh` `probe-codex-enforcement.js` `probe-codex-postcompact-production.js` `probe-skill-frontmatter-portability.sh` `platform-capability-claims.js` `bench-engine-capability.sh` `import-aa-capabilities.js` `evaluate-profile-cutover.js`
 
@@ -31,7 +31,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Diff scanning & anti-gaming** — `completeness-scan.sh` `error-path-scan.sh` `secret-scan-diff.js` `check-redispatch-prompt.sh` `check-dispatch-suppression.sh` `diff-file-list.sh` `diff-scope-report.sh` `diff-since-last-round.sh` `probe-diff-domain.sh` `classify-diff-risk.sh` `check-disjointness.sh` `check-test-integrity.sh` `check-blind-evidence.sh` `lib/test-integrity-l1.py`
 
-**Verification & review synthesis** — `verify-preexisting.sh` `verify-red-green.sh` `verify-strength.js` `adjudicate-findings.js` `probe-mutation.js` `review-mvp-portfolio.js` `qc-panel.js` `qc-metric-emit.js` `calibration.sh` `ladder-run.sh` `check-node-report.js` `check-loop-convergence.js` `check-escalation-coverage.js` `rubric-freeze.js` `admit-backlog-follow-ups.js` `check-holdout-coverage.sh`
+**Verification & review synthesis** — `dispatch-experience-critic.sh` `verify-preexisting.sh` `verify-red-green.sh` `verify-strength.js` `adjudicate-findings.js` `probe-mutation.js` `review-mvp-portfolio.js` `qc-panel.js` `qc-metric-emit.js` `calibration.sh` `ladder-run.sh` `check-node-report.js` `check-loop-convergence.js` `check-escalation-coverage.js` `rubric-freeze.js` `admit-backlog-follow-ups.js` `check-holdout-coverage.sh`
 
 **Task tree & risk** — `tree.js` `risk-counter.js`
 

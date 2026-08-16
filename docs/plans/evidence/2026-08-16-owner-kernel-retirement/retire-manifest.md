@@ -47,3 +47,5 @@ Quarry anchor (resurrect any file from this commit): `3fd980b6f59a9b6776a3800e43
 | inventory fix (chore) | 9baf9499 |
 | P2 core + supervised retirement | b2d7eede |
 | P3 unwire + archive | (appended in P6 — same-commit self-reference impossible) |
+| P3 unwire + archive | 3c39fc21 |
+| P6 knowledge closeout + v2.34.10 | 7ef66453 |

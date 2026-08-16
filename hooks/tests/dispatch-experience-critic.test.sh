@@ -83,4 +83,19 @@ bash "$SCRIPT" --deliverable "$FEATURE_SHA" --integration-ref main --repo "$WORK
 assert_exit_code "$?" "0" "unparseable output is not a failure (non-blocking)"
 assert_contains "$(cat "$TEST_TMP/out3.json")" '"parse_error": true' "parse failure honestly flagged"
 
+# ── reviewer transport failure (nonzero exit) still degrades honestly, exit 0 ──
+# (caught live by the v2.34.13 dogfood: no_verdict framing → nonzero → set -e death)
+cat > "$TEST_TMP/stub-fail.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '{"status":"no_verdict","verdict":null,"findings":"","raw_log":"/tmp/some-raw-log"}\n'
+exit 1
+EOF
+chmod +x "$TEST_TMP/stub-fail.sh"
+bash "$SCRIPT" --deliverable "$FEATURE_SHA" --integration-ref main --repo "$WORK" \
+  --instantiation "$TEST_TMP/inst.json" --evidence "$TEST_TMP/evidence.txt" \
+  --out "$TEST_TMP/out4.json" --review-cmd "$TEST_TMP/stub-fail.sh" >/dev/null
+assert_exit_code "$?" "0" "nonzero reviewer exit does not abort the critic"
+assert_contains "$(cat "$TEST_TMP/out4.json")" '"parse_error": true' "transport failure degrades honestly"
+assert_contains "$(cat "$TEST_TMP/out4.json")" "/tmp/some-raw-log" "raw_log path preserved for recovery"
+
 finalize_test

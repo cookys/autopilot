@@ -42,7 +42,7 @@ KR1–KR6 with red cases: see plan §2 / §5 (frozen; not restated here).
 | P6 experience-audit reference + critic | done | 788975a4 | dispatch-experience-critic.test.sh |
 | P7 first-use qualification override | done | d98a5b99 | resolve-review-loop.test.sh §override |
 | P8 task-class front-door config | done | 957b8be9 | scaffold-config.test.sh §task-class |
-| Close: wiring, CHANGELOG, version, QC, merge, finish-flow | pending | — | preflight-release.sh 8/8 |
+| Close: wiring, CHANGELOG, version, QC, merge, finish-flow | done | 9c9c8b17 (merge) | preflight 8/8; QC adjudicated PASS; KR5 dogfood ran live — caught a real wrapper bug (fixed, +3 red cases) and 3 product UX gaps (BACKLOG row) |
 
 ## CEO decision log
 

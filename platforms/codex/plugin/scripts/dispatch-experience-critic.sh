@@ -86,16 +86,21 @@ trap 'rm -f "$SPEC"' EXIT
   cat "$INSTANTIATION"
 } > "$SPEC"
 
+# The critic is NON-BLOCKING even against its own transport: a nonzero reviewer
+# exit (no_verdict framing incidents included) must NOT abort this wrapper —
+# the post-processor degrades honestly and the raw_log stays recoverable.
+# (Caught live by the v2.34.13 KR5 dogfood run: GLM returned a framing-broken
+# response, dispatch-review exited nonzero, and set -e skipped the degrade path.)
 if [ -n "$REVIEW_CMD" ]; then
   # Test seam: the stubbed command receives spec + evidence paths.
-  "$REVIEW_CMD" "$SPEC" "$EVIDENCE" > "$OUT"
+  "$REVIEW_CMD" "$SPEC" "$EVIDENCE" > "$OUT" || true
 else
   [ -n "$RUNNER" ] && [ -n "$MODEL" ] || die_usage "--runner and --model are required without --review-cmd"
   ENDPOINT_ARGS=()
   [ -n "$ENDPOINT" ] && ENDPOINT_ARGS=(--endpoint "$ENDPOINT")
   bash "$SELF_DIR/dispatch-review.sh" --runner "$RUNNER" --model "$MODEL" \
     "${ENDPOINT_ARGS[@]}" --effort "$EFFORT" --timeout 15m \
-    --diff-file "$EVIDENCE" --spec-file "$SPEC" --allow-narrative "experience evidence legitimately narrates consumption" > "$OUT"
+    --diff-file "$EVIDENCE" --spec-file "$SPEC" --allow-narrative "experience evidence legitimately narrates consumption" > "$OUT" || true
 fi
 
 # Post-parse cap + blocking-marker anomaly surfacing (mechanical, never a gate).
@@ -114,7 +119,14 @@ if (start !== -1) {
   }
 }
 if (!parsed || !Array.isArray(parsed.findings)) {
-  parsed = { findings: [], human_only: [], parse_error: true, raw_bytes: Buffer.byteLength(raw) };
+  const rawLog = parsed && typeof parsed.raw_log === 'string' ? parsed.raw_log : null;
+  parsed = {
+    findings: [],
+    human_only: [],
+    parse_error: true,
+    raw_bytes: Buffer.byteLength(raw),
+    ...(rawLog ? { raw_log: rawLog } : {}),
+  };
 }
 const anomalies = [];
 parsed.findings = parsed.findings.slice(0, topK).map((f, i) => {

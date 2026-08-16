@@ -38,8 +38,10 @@ assert_eq "0" "$EXIT" "real historical spec doc passes clean (false-positive gua
 # The rail's only payload inputs are --diff-file and --spec-file (dispatcher-authored).
 # A future flag like --implementer-summary would open the laundering channel this linter
 # guards; this assertion forces that change to confront the blind-evidence rule.
-CHANNELS="$(grep -oE -- '--[a-z-]*(summary|narrative|notes|report)[a-z-]*' "$REPO_ROOT/scripts/dispatch-review.sh" | sort -u || true)"
-assert_eq "" "$CHANNELS" "dispatch-review.sh has no implementer-narrative input channel"
+# --allow-narrative is the gate's OWN loud override (logged to stderr + manifest), not a
+# silent input channel — the guard targets channels that would admit narrative unannounced.
+CHANNELS="$(grep -oE -- '--[a-z-]*(summary|narrative|notes|report)[a-z-]*' "$REPO_ROOT/scripts/dispatch-review.sh" | sort -u | grep -v '^--allow-narrative$' || true)"
+assert_eq "" "$CHANNELS" "dispatch-review.sh has no SILENT implementer-narrative input channel"
 
 # ── Disjointness from the controller-direction gate ──
 # check-dispatch-suppression.sh guards controller→reviewer coaching; its patterns must not

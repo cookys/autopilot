@@ -8,9 +8,11 @@ run_hook() { # $1 = command string; extra env via caller
     | AUTOPILOT_HOOK_EXEC_BOUNDARY=1 node "$HOOK" 2>"$TEST_TMP/hook-err.txt"
 }
 
-# ── Disabled by default (opt-in) ──
-printf '{"tool_input":{"command":"sudo rm -rf /"}}' | node "$HOOK" 2>/dev/null; EXIT=$?
-assert_eq "0" "$EXIT" "hook is a no-op when not opted in"
+# ── Disabled = no-op. Hermetic against machine-local dogfood config (evidence-discipline
+# §5): the shared opt-in gate is envFlag OR configFlag — env=0 cannot beat config=true —
+# so the test isolates by pointing HOME at an empty dir (no config, no env → disabled). ──
+printf '{"tool_input":{"command":"sudo rm -rf /"}}' | HOME="$TEST_TMP" node "$HOOK" 2>/dev/null; EXIT=$?
+assert_eq "0" "$EXIT" "hook is a no-op when not enabled"
 
 # ── E1: protected-ref force-push denied (defense-in-depth with branch-protection) ──
 run_hook "git push --force origin main"; EXIT=$?

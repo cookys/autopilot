@@ -19,7 +19,6 @@ const {
   consumeStrictL5ProviderReadiness,
   isStrictL5ProviderReadinessAuthority,
 } = require('../readiness/provider-bootstrap');
-const { AUTOPILOT_ENGINE_CONTROL_SINKS } = require('./supervised-engine-bridge-contract');
 const {
   appendCampaignEvent,
   completeCampaignAdmission,
@@ -9628,7 +9627,6 @@ class AutopilotEngine {
 }
 
 module.exports = {
-  AUTOPILOT_ENGINE_CONTROL_SINKS,
   AutopilotEngine,
   _defaultRemediationChecker: defaultRemediationChecker,
   _runRemediationCheckerBoundary: runRemediationCheckerBoundary,

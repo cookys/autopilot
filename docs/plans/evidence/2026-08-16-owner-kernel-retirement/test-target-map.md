@@ -30,3 +30,26 @@ subject is the `docs/projects/2026-07-20-owner-kernel-governance/p0/` fixture tr
 
 At P2, before deleting each file, confirm its map row matches its actual requires (mechanical re-grep);
 any mismatch is stop-and-review, not delete.
+
+## P2 execution amendments (2026-08-16, recorded per the map's own stop-and-review rule)
+
+- `execution-profile.test.sh` — reclassified retain → **rewritten in place**: it destructured
+  kernel symbols after all (MemoryWitness/OwnerKernel/validateEventShape/verifyLedger — the
+  first-require heuristic missed it, exactly as G2 warned). Kernel round-trip section
+  (node-block lines 1322-1529) and the `owner-kernel.js freeze-task` CLI section removed;
+  the 4320-case keeper behavior matrix and all `resolve-execution-profile.js` /
+  `validate-json-schema.js` CLI sections kept. PASS 33 assertions.
+- `owner-action-reconciliation.test.sh` — keeper section (node-block lines 84-458:
+  catalog classification, downgrade/classification blocks, host-capability coverage,
+  action-authority broker separation) extracted into **`owner-action-catalog.test.sh`**
+  (PASS 5 assertions); the kernel remainder deleted with the file.
+- `owner-action-hardening.test.sh`, `level-governance-translation.test.sh` — deleted:
+  subjects are kernel events/ledger/translation machinery; their keeper coverage
+  (resolveGovernancePolicy, freezeAcceptanceContract paths) survives via
+  profile-context-isolation (122), mission-policy-graph (9), execution-profile (33),
+  owner-action-catalog (5), and scripts/dispatch-local-openai.test.js.
+- 3 non-`.test.sh` helpers added to the delete-set: `supervised-intake-live-host.sh`,
+  `supervised-host-live-preflight.sh`, `supervised-host-live-launcher.sh`.
+- `AUTOPILOT_ENGINE_CONTROL_SINKS`: planned inline turned out unnecessary — zero
+  non-supervised consumers (only supervised modules/tests + re-exports); dropped from
+  autopilot-engine.js and src/engine/index.js instead of inlining.

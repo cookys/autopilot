@@ -17,3 +17,10 @@ failure and may incidentally fix baseline ones.
 Already fixed in this plan's P4 (baseline red, now green):
 - hooks/tests/autopilot-cli.test.sh — 2 stale constants (policy digest + claim id
   not updated by the 2026-08-14 re-signing e01992b5); updated to the live values.
+
+P2-run note (2026-08-16): `external-lifecycle-witness.test.sh` failed once under
+`run.sh --parallel` and passes standalone (53/53) — a socket-daemon timing flake
+surfaced by the post-deletion parallel schedule, not a retirement regression
+(the module and its keeper dependency are untouched). Watch in CI.
+P2 parallel-suite fail set: {autopilot-engine, review-loop-runner, context-window}
+⊆ baseline set; dev-setup and both inventory/mirror gates went green.

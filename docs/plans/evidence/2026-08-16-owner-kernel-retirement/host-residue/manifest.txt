@@ -24,3 +24,12 @@ MATCH trusted-witness-adapter-binding.json
 MATCH witness-adapter.js
 Ownership/mode restoration is command-documented above (root-owned targets; not exercised without sudo — plan §2.6 scope).
 
+
+## P5 removal receipt (2026-08-16T06:23:37Z)
+Removal executed via passwordless sudo in-session (user authorization: "你可以跑",
+after the user's own earlier attempt proved ineffective and a first premature
+receipt was retracted). Verification output read AFTER the removal:
+  ls /etc/autopilot           -> "No such file or directory"
+  ls /usr/local/lib/autopilot -> "No such file or directory"
+KR5 satisfied. The archives above (content copies + stat metadata + restore
+commands) remain the sole restoration source.

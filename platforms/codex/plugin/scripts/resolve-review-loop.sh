@@ -427,6 +427,10 @@ if ! [[ "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS" =~ ^[0-9]+$ ]] \
   PROVIDER_READINESS_RECEIPT_TTL_SECONDS="$DEF_PROVIDER_READINESS_RECEIPT_TTL_SECONDS"
 fi
 PROVIDER_READINESS_FAMILY_CONSTRAINT="$(read_field "$CONFIG" provider_readiness_fallback_family_constraint "$DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT")"
+# Deliberate, recorded escape from strict /l5 byte-equal policy coverage.
+# Empty = off (fail-closed, unchanged). Non-empty = the operator's reason, which
+# provider-bootstrap surfaces on every derivation and records in the result.
+STRICT_L5_POLICY_OVERRIDE="$(read_field "$CONFIG" strict_l5_policy_override "")"
 case "$PROVIDER_READINESS_FAMILY_CONSTRAINT" in
   any|different) ;;
   *) PROVIDER_READINESS_FAMILY_CONSTRAINT="$DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT" ;;
@@ -1254,6 +1258,7 @@ if [[ -n "$FIELD" ]]; then
     qc_panel_aggregation) printf '%s\n' "$QC_AGG" ;;
     provider_readiness_receipt_ttl_seconds) printf '%s\n' "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS" ;;
     provider_readiness_fallback_family_constraint) printf '%s\n' "$PROVIDER_READINESS_FAMILY_CONSTRAINT" ;;
+    strict_l5_policy_override) printf '%s\n' "$STRICT_L5_POLICY_OVERRIDE" ;;
     review_risk) printf '%s\n' "$REVIEW_RISK" ;;
     required_review_families) printf '%s\n' "$REQUIRED_REVIEW_FAMILIES" ;;
     l1_required) printf '%s\n' "$L1_REQUIRED" ;;
@@ -1329,12 +1334,13 @@ fi
 
 FMT_SUFFIX=" }\n"
 ARGS_SUFFIX=()
-READINESS_FMT=', "qc_panel_seats": %s, "qc_panel_seats_complete": %s, "provider_readiness_receipt_ttl_seconds": %s, "provider_readiness_fallback_family_constraint": "%s"'
+READINESS_FMT=', "qc_panel_seats": %s, "qc_panel_seats_complete": %s, "provider_readiness_receipt_ttl_seconds": %s, "provider_readiness_fallback_family_constraint": "%s", "strict_l5_policy_override": "%s"'
 READINESS_ARGS=(
   "$QC_PANEL_SEATS_JSON"
   "$QC_PANEL_SEATS_COMPLETE"
   "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS"
   "$PROVIDER_READINESS_FAMILY_CONSTRAINT"
+  "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(

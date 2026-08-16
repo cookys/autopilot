@@ -789,12 +789,31 @@ rejectsBeforeDispatch(
   'strict_l5_provider_claim_substitution',
 );
 
+// Advisory semantics (2026-08-16 retirement plan P4): a non-canonical roster
+// derives — it does not reject. The uncertified seat carries claim_id null and
+// the derivation reports policy_override with the advisory_default reason.
 const unknownTuple = clone(resolved);
 unknownTuple.reviewer_engine = 'unknown-reviewer-model';
-rejectsBeforeDispatch(
-  () => deriveStrictL5InvocationPolicy(unknownTuple),
-  'strict_l5_provider_unknown_tuple',
+const advisoryDerived = deriveStrictL5InvocationPolicy(unknownTuple);
+assert.ok(advisoryDerived.policy_override, 'advisory derivation must report policy_override');
+assert.equal(advisoryDerived.policy_override.reason, 'advisory_default');
+assert.equal(advisoryDerived.policy_override.uncertified_seats.length, 1);
+assert.equal(advisoryDerived.policy_override.uncertified_seats[0].tuple.model, 'unknown-reviewer-model');
+assert.ok(
+  advisoryDerived.invocation_policy.some((seat) => seat.claim_id === null),
+  'uncertified seat must carry claim_id null, never a borrowed claim',
 );
+
+// An operator-configured reason is preserved verbatim in place of advisory_default.
+const explicitOverride = clone(unknownTuple);
+explicitOverride.strict_l5_policy_override = 'qualifying replacement reviewer';
+assert.equal(
+  deriveStrictL5InvocationPolicy(explicitOverride).policy_override.reason,
+  'qualifying replacement reviewer',
+);
+
+// A byte-canonical roster still derives silently: policy_override stays null.
+assert.equal(deriveStrictL5InvocationPolicy(clone(resolved)).policy_override, null);
 const duplicateTuple = clone(resolved);
 duplicateTuple.qc_panel_seats[1] = clone(duplicateTuple.qc_panel_seats[0]);
 rejectsBeforeDispatch(
@@ -820,11 +839,14 @@ rejectsBeforeDispatch(
   () => deriveStrictL5InvocationPolicy(incomplete),
   'strict_l5_provider_tuple_unresolved',
 );
+// Post-bootstrap roster substitution is a pipeline-consistency violation, not a
+// canonical-policy question: it stays a hard block (roster_drift), because the
+// requested roster no longer digest-matches the roster this authority derived.
 const rosterDrift = clone(bootstrap.roster);
 rosterDrift.qc_panel_seats[0].model = 'drifted-qc';
 rejectsBeforeDispatch(
   () => bootstrap.providerReadinessAuthority({ roster: rosterDrift }),
-  'strict_l5_provider_unknown_tuple',
+  'strict_l5_provider_roster_drift',
 );
 rejectsBeforeDispatch(
   () => consumeStrictL5ProviderReadiness(

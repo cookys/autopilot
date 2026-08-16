@@ -727,6 +727,36 @@ if (value.zero_residue !== true) process.exit(1);
   `worktree-dispatch-gotchas`). Preserve its exact branch tip first, then
   `git worktree remove --force <path>` and `git worktree prune`. Never use a bare branch -D.
 
+### 6. Decision ledger + round-end report (autonomous-brain P3)
+
+Every autonomous depth-0 decision (proxy rulings, dispatches, auto-picks,
+re-freeze transitions) is appended to the campaign's decision ledger BEFORE the
+round ends, with a rationale — a decision the operator cannot read is a decision
+that did not happen (KR3; sol shape F12):
+
+```bash
+node scripts/decision-ledger.js append --ledger <campaign>/decision-ledger.jsonl \
+  --kind decision --json '{"decision_id":"d-N","round":R,"class":"tactical",
+  "rationale":"...","reversibility":"two-way"}'
+```
+
+At each round boundary render the report — the operator's no-polling window into
+the run (代決清單 with veto handles, auto-picks, ask-first queue, stall status,
+experience-critic findings):
+
+```bash
+node scripts/decision-ledger.js report --ledger <ledger> --round R \
+  [--stall <stall.json>] [--critic <critic.json>]
+```
+
+Vetoes are the operator's asynchronous authority: `decision-ledger.js veto --id
+<decision_id>` refuses every later round that declares that decision in
+`based_on_decisions` (enforced by `check-blueprint-conformance.js preflight`,
+never by convention). Undoing already-performed work becomes a front-queued
+repair unit. The ledger is plain append-only telemetry (ADR-0001): unlogged
+decisions are caught by the conformance audit's ledger-INDEPENDENT universe
+(dispatch manifests / run-ledger / git), never by trusting the ledger itself.
+
 ### Quality-floor conventions (v2.31.11)
 
 The five structural ledger-emission points — playbook no-match; adjudication unvalidatable-REFUTED / unconfirmed-PROOF_BY_TRACE; panel irreversible-disagreement; plan-revision checkpoint trips (risk-counter thresholds); depth-0 override of a dispatched artifact — each emits an `escalation_opened` tree event. See the quality-floor plan (`docs/plans/2026-07-04-quality-floor-engine.md`).

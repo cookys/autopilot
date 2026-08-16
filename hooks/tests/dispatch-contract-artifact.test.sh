@@ -247,4 +247,30 @@ assert_eq "$STATUS8" "committed"
 assert_contains "$LAST_JSON" '"boundary": "ok"'
 assert_not_contains "$LAST_JSON" "boundary_rejected"
 
+# Case 9: frozen_four_tuple digest immutability (autonomous-brain P1 / KR1 wiring).
+# check must name a modified frozen surface; a fresh digest must not raise it.
+FFT_BASE_SHA=$(git -C "$MINI_REPO" rev-parse HEAD)
+SPEC_SHA=$(sha256sum "$MINI_REPO/docs/plans/spec.md" | cut -d' ' -f1)
+DAG_JSON='{"schema":1,"deliverables":[{"id":"c3-fixture-unit","paths":["done.txt"],"churn_budget":{"max_files":1,"max_lines":10}}]}'
+printf '%s\n' "$DAG_JSON" > "$MINI_REPO/dag.json"
+( cd "$MINI_REPO" && git add dag.json && git commit -qm dag )
+FFT_BASE_SHA=$(git -C "$MINI_REPO" rev-parse HEAD)
+DAG_SHA=$(sha256sum "$MINI_REPO/dag.json" | cut -d' ' -f1)
+fft_contract() { # $1 out, $2 dag digest
+  node -e "
+const fs=require('fs');
+const c=JSON.parse(fs.readFileSync('$CONTRACTS_DIR/base.json','utf8'));
+c.base_sha='$FFT_BASE_SHA';
+c.frozen_four_tuple={granularity_path:'dag.json',granularity_digest:'$2',
+  gate_set:['defect-review'],rubric_path:'docs/plans/spec.md',rubric_digest:'$SPEC_SHA',
+  control_plane_pins:{'docs/plans/spec.md':'$SPEC_SHA'}};
+fs.writeFileSync('$1',JSON.stringify(c));"
+}
+fft_contract "$CONTRACTS_DIR/fft-bad.json" "0000000000000000000000000000000000000000000000000000000000000000"
+FFT_OUT=$(ENGINE_SCORECARD_DIR="$SCORES" ENGINE_CAPABILITY_DIR="$CAPS" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACTS_DIR/fft-bad.json" --repo "$MINI_REPO" --json 2>&1 || true)
+assert_contains "$FFT_OUT" "frozen surface was modified" "stale granularity digest is named by check"
+fft_contract "$CONTRACTS_DIR/fft-ok.json" "$DAG_SHA"
+FFT_OUT=$(ENGINE_SCORECARD_DIR="$SCORES" ENGINE_CAPABILITY_DIR="$CAPS" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACTS_DIR/fft-ok.json" --repo "$MINI_REPO" --json 2>&1 || true)
+assert_not_contains "$FFT_OUT" "frozen surface was modified" "fresh digests raise no frozen-surface reason"
+
 finalize_test

@@ -306,6 +306,7 @@ function validateSchema(contract, errors, repoPath = '') {
     'acceptance',
     'budget',
     'campaign_projection',
+    'frozen_four_tuple',
   ]);
   assertNoExtra('contract', contract, rootAllowed, errors);
 
@@ -742,6 +743,80 @@ function validateSchema(contract, errors, repoPath = '') {
       }
     }
   }
+
+  // frozen_four_tuple (optional, additive — autonomous-brain-integration P1).
+  // The four surfaces a mid-run brain must not mutate (granularity DAG, gate set,
+  // acceptance rubric, control plane). Granularity/rubric are CONTENT-pinned: the
+  // path locates the file, the digest is the authority — `check` recomputes and
+  // refuses on mismatch. control_plane_pins maps repo-relative paths (configs AND
+  // the governance scripts themselves) to sha256 digests so the brain cannot
+  // neuter a gate by editing it. Digest pins are configuration identity, not
+  // trust machinery: nothing chains or attests; a mismatch simply refuses.
+  if (hasKey(contract, 'frozen_four_tuple')) {
+    const fft = contract.frozen_four_tuple;
+    if (!fft || typeof fft !== 'object' || Array.isArray(fft)) {
+      errors.push('frozen_four_tuple: expected object');
+    } else {
+      const allowed = new Set([
+        'granularity_path',
+        'granularity_digest',
+        'gate_set',
+        'rubric_path',
+        'rubric_digest',
+        'control_plane_pins',
+      ]);
+      assertNoExtra('frozen_four_tuple', fft, allowed, errors);
+      for (const key of allowed) {
+        if (!hasKey(fft, key)) {
+          errors.push(`frozen_four_tuple: missing required key '${key}'`);
+        }
+      }
+      for (const key of ['granularity_path', 'rubric_path']) {
+        if (hasKey(fft, key) && !isNonEmptyString(fft[key])) {
+          errors.push(`frozen_four_tuple.${key}: must be non-empty string`);
+        }
+      }
+      for (const key of ['granularity_digest', 'rubric_digest']) {
+        if (hasKey(fft, key)
+            && (typeof fft[key] !== 'string' || !/^[0-9a-f]{64}$/.test(fft[key]))) {
+          errors.push(`frozen_four_tuple.${key}: must be lowercase SHA-256`);
+        }
+      }
+      if (hasKey(fft, 'gate_set')) {
+        if (!Array.isArray(fft.gate_set) || fft.gate_set.length === 0) {
+          errors.push('frozen_four_tuple.gate_set: must be a non-empty array');
+        } else {
+          const seen = new Set();
+          fft.gate_set.forEach((gate, idx) => {
+            if (!isNonEmptyString(gate)) {
+              errors.push(`frozen_four_tuple.gate_set[${idx}]: must be non-empty string`);
+              return;
+            }
+            if (seen.has(gate)) {
+              errors.push(`frozen_four_tuple.gate_set[${idx}]: duplicate gate '${gate}'`);
+            }
+            seen.add(gate);
+          });
+        }
+      }
+      if (hasKey(fft, 'control_plane_pins')) {
+        const pins = fft.control_plane_pins;
+        if (!pins || typeof pins !== 'object' || Array.isArray(pins)
+            || Object.keys(pins).length === 0) {
+          errors.push('frozen_four_tuple.control_plane_pins: must be a non-empty object');
+        } else {
+          for (const [pinPath, digest] of Object.entries(pins)) {
+            if (!isNonEmptyString(pinPath) || pinPath.startsWith('/') || pinPath.includes('..')) {
+              errors.push(`frozen_four_tuple.control_plane_pins: invalid path '${pinPath}'`);
+            }
+            if (typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)) {
+              errors.push(`frozen_four_tuple.control_plane_pins['${pinPath}']: must be lowercase SHA-256`);
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 function escapeRegExp(raw) {
@@ -1015,6 +1090,38 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine) {
       runGit(repo, ['merge-base', '--is-ancestor', dep, baseSha]);
     } catch (err) {
       reasons.push(`dependency: ${dep} is not ancestor of base`);
+    }
+  }
+
+  // frozen_four_tuple immutability: recompute every pinned digest from the repo's
+  // CURRENT files. A mismatch means a frozen surface (DAG, rubric, config, or a
+  // governance script itself) was edited mid-campaign — refuse, do not re-freeze.
+  if (contract.frozen_four_tuple) {
+    const fft = contract.frozen_four_tuple;
+    const pinned = [
+      ['frozen_four_tuple.granularity', fft.granularity_path, fft.granularity_digest],
+      ['frozen_four_tuple.rubric', fft.rubric_path, fft.rubric_digest],
+      ...Object.entries(fft.control_plane_pins || {}).map(
+        ([pinPath, digest]) => [`frozen_four_tuple.control_plane_pins['${pinPath}']`, pinPath, digest],
+      ),
+    ];
+    for (const [label, pinPath, digest] of pinned) {
+      const absolute = path.resolve(repo, pinPath);
+      if (!absolute.startsWith(path.resolve(repo) + path.sep)) {
+        reasons.push(`${label}: pinned path escapes the repository`);
+        continue;
+      }
+      let content;
+      try {
+        content = fs.readFileSync(absolute);
+      } catch (err) {
+        reasons.push(`${label}: pinned file is missing (${pinPath})`);
+        continue;
+      }
+      const actual = crypto.createHash('sha256').update(content).digest('hex');
+      if (actual !== digest) {
+        reasons.push(`${label}: frozen surface was modified (digest mismatch for ${pinPath})`);
+      }
     }
   }
 

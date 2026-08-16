@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "autonomous-brain-integration",
+  "logical_plan_id": "autonomous-brain-integration-2026-08-17",
+  "session_id": "619e67cb-e547-49a1-80d3-98185955d69d",
+  "session_key": "f4b8489a1bfdca00c209aed4441a3361c0bb6fad4e975a573853fa05b20e952b",
+  "generation": 2,
+  "verdict": "STOP",
+  "semantic_verdict": null,
+  "terminal": true,
+  "policy_reason": "plan_growth_hard_stop",
+  "rubric_sha256": "cb20fdf20088950a47c660c920533fe0cd15dd95162cc75dddd7b5934a243013",
+  "manifest_sha256": "ae282573a5961a5d537d43adc6289af4a314bbd75fd880fecad004b3a10360fe",
+  "plan_sha256": "c39f21e0d0e7fd1d84e542a440a158e674c6c6126eed01577968edb5550e3622",
+  "growth_ratio": {
+    "numerator": 22534,
+    "denominator": 14067
+  },
+  "growth_warning": true,
+  "transport_status": "policy_stop",
+  "attempts": [],
+  "substitutions": [],
+  "reviewer_verdicts": [],
+  "findings": [],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-16T21:55:59.353Z"
+}

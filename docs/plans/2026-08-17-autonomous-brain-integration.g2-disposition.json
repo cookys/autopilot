@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "autonomous-brain-integration-2026-08-17",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "63372087e9b6960f06fdf5cd0152e79b408da17e12b179b4dce4231a87c7a979",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: the five governance scripts are digest-pinned in the control plane; editing one mid-campaign refuses the round."
+    },
+    {
+      "fingerprint": "3b08c4d195fc81e89d45aebd8f6bf202e6fe5eefe69d78232c89ca85c3f8c7c0",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: truncation removed entirely — all five sections load-bearing and bounded by construction; over-cap is a build error."
+    },
+    {
+      "fingerprint": "9e0dd85defb078c339fc6bf0194388641c307e42b89dd3bdd2d14f2c76607160",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Recorded as backlog candidate at terminal adjudication; no plan change required."
+    },
+    {
+      "fingerprint": "b9f246389140e31f4dbbfe6979df9b86f4b30d1cc0b28c65fd165a53d08c615e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Recorded as backlog candidate at terminal adjudication; no plan change required."
+    },
+    {
+      "fingerprint": "5884544847616e135ae3ba67f52014bfb57343753c95d0bfbc218ee0db9197e4",
+      "disposition": "duplicate",
+      "rationale": "Same substance as the governance-script pinning finding; repaired there (explicit pin enumeration)."
+    },
+    {
+      "fingerprint": "04bf70b90d596be9122ed8fbb1e9cc71f82d1286ab81b529b809c1f5a2e983a2",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Recorded as backlog candidate at terminal adjudication; no plan change required."
+    },
+    {
+      "fingerprint": "166856de2a8de9f10ae39bbf996abcbf861ac13909caee0fe9f90991dabff17d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Recorded as backlog candidate at terminal adjudication; no plan change required."
+    },
+    {
+      "fingerprint": "058b1d14496c03d160b3f488a7dd0df27195ba884cd20215e5f9872345e7f53c",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: truncation removed entirely — all five sections load-bearing and bounded by construction; over-cap is a build error."
+    },
+    {
+      "fingerprint": "ca9c25169c44f364c78c0dcee7258daf2c9323bc931330be44d2f3178f58195e",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: F2 remapped to KR1 churn-budget preflight + scoped-reverify; KR4 covers F5/F10."
+    },
+    {
+      "fingerprint": "3aca150c54cd314713dda4553ba33f391bdfd8a8ab76c024245cfa9882663c20",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: granularity member is the DAG CONTENT digest, never a path reference."
+    },
+    {
+      "fingerprint": "45ebf7d27e7e7b7de0c216ac3db0a1afad9da31f89b6e9ccc0bff830431a472a",
+      "disposition": "duplicate",
+      "rationale": "Same substance as the truncation finding; repaired there (no truncation, build error)."
+    },
+    {
+      "fingerprint": "62813c33b8beff16cb755bee5fa35ab0726b2c05fde4f35c0325606bbe61c32e",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: experience-audit protocol is versioned canonical content; the critic template pins its digest; instantiated rulers freeze into the blueprint."
+    },
+    {
+      "fingerprint": "2086e03040d39ebc004d770a25a26b551536582a13b6929b0bdfad37c506025b",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: the critic script self-guards via git ancestry (reviewed commit must already be in the integration ref) regardless of caller."
+    },
+    {
+      "fingerprint": "0694415702ba57fa32fb0f498eef37813004622caae28f766983161b6840da86",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: pick inputs materialized into a ledger pick-record; replay recomputes from the recorded snapshot."
+    },
+    {
+      "fingerprint": "410160151f854106d3dfcd4b39b465e36d3d9f3f6a60d46cb2d6c85d3a5b739d",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: ask-first decided from row fields (Effort, board tag) at pick time + diff-scope declaration at preflight; irreversibility handled by standing execution red lines."
+    },
+    {
+      "fingerprint": "4d20e5d1cabece05312270959d5aae23dd053e9e26bfbe9d9a04ce22e90a7768",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: P1 audit uses pre-existing sources only; ledger-completeness cross-check moved to P3 as an extension."
+    },
+    {
+      "fingerprint": "28731f3b0ebf0acdd0ca1155d5c7605ab84bb8598efe3aa5f441ddc8b3ba8a1e",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: P7 claim scoped to the governed front-door paths with dual-branch red case; strict-l5 advisory boundary explicitly named."
+    }
+  ]
+}

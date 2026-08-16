@@ -1,0 +1,322 @@
+[
+  {
+    "test": "check-retirement-receipts.test.sh",
+    "hits": [
+      "script:check-retirement-receipts.js"
+    ]
+  },
+  {
+    "test": "divergence-monitor.test.sh",
+    "hits": [
+      "script:divergence-monitor.js"
+    ]
+  },
+  {
+    "test": "execution-profile.test.sh",
+    "hits": [
+      "barrel",
+      "script:owner-kernel.js"
+    ]
+  },
+  {
+    "test": "host-witness-adapter.test.sh",
+    "hits": [
+      "script:witness-adapter.js",
+      "owner-kernel/witness",
+      "script:check-owner-kernel-release-gates.js"
+    ]
+  },
+  {
+    "test": "level-governance-translation.test.sh",
+    "hits": [
+      "barrel",
+      "script:owner-kernel.js"
+    ]
+  },
+  {
+    "test": "owner-action-reconciliation.test.sh",
+    "hits": [
+      "barrel",
+      "script:owner-kernel.js"
+    ]
+  },
+  {
+    "test": "owner-kernel-acceptance.test.sh",
+    "hits": [
+      "barrel"
+    ]
+  },
+  {
+    "test": "owner-kernel-adversarial.test.sh",
+    "hits": [
+      "barrel"
+    ]
+  },
+  {
+    "test": "owner-kernel-alias-retirement.test.sh",
+    "hits": [
+      "script:check-owner-kernel-release-gates.js",
+      "owner-kernel/compatibility",
+      "owner-kernel/witness",
+      "script:witness-adapter.js"
+    ]
+  },
+  {
+    "test": "owner-kernel-cli.test.sh",
+    "hits": [
+      "script:owner-kernel.js",
+      "barrel"
+    ]
+  },
+  {
+    "test": "owner-kernel-installed-dogfood.test.sh",
+    "hits": [
+      "owner-kernel/state",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "owner-kernel-p0-supervised-profile.test.sh",
+    "hits": [
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "owner-kernel-p0-three-task-spike.test.sh",
+    "hits": [
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "owner-kernel-production-corpus.test.sh",
+    "hits": [
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "owner-kernel-release-gates.test.sh",
+    "hits": [
+      "script:check-owner-kernel-release-gates.js",
+      "owner-kernel/witness",
+      "script:witness-adapter.js",
+      "script:owner-kernel.js",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "owner-kernel-terminal.test.sh",
+    "hits": [
+      "owner-kernel/terminal"
+    ]
+  },
+  {
+    "test": "owner-kernel.test.sh",
+    "hits": [
+      "barrel"
+    ]
+  },
+  {
+    "test": "profile-context-isolation.test.sh",
+    "hits": [
+      "barrel"
+    ]
+  },
+  {
+    "test": "shadow-terminal-observer.test.sh",
+    "hits": [
+      "script:shadow-terminal-observer.js"
+    ]
+  },
+  {
+    "test": "status-task-shadow-wiring.test.sh",
+    "hits": [
+      "script:divergence-monitor.js"
+    ]
+  },
+  {
+    "test": "supervised-authenticated-intake.test.sh",
+    "hits": [
+      "barrel",
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-engine-bridge-contract.test.sh",
+    "hits": [
+      "barrel",
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-host-launcher.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-host-preflight.test.sh",
+    "hits": [
+      "barrel",
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-intake-host.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-owner-kernel-engine-acceptance.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-owner-kernel-installed-contract.test.sh",
+    "hits": [
+      "barrel",
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-owner-kernel-installed-engine.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-owner-kernel-installed-host.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-owner-kernel-installed-live.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-owner-kernel-probe-effect.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-owner-kernel-semantic-witness.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-p35-durable-handoff.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-contract.test.sh",
+    "hits": [
+      "barrel",
+      "owner-kernel/kernel",
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-durable-contract.test.sh",
+    "hits": [
+      "barrel",
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-durable-host.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-durable-transport.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-host.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-live.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-p0-live.test.sh",
+    "hits": [
+      "barrel",
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-p0-replay.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-peer-service.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-peer.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-production-substrate-recovery.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-shadow-engine-consumer.test.sh",
+    "hits": [
+      "supervised-named-test",
+      "supervised-ref"
+    ]
+  },
+  {
+    "test": "supervised-shadow-witness.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  },
+  {
+    "test": "supervised-workspace-registry.test.sh",
+    "hits": [
+      "supervised-named-test"
+    ]
+  }
+]

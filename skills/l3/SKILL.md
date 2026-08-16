@@ -29,3 +29,7 @@ Hard rules:
   → admitted deliverables → finish-flow) still applies. Plan headings, modules, tests,
   reviewers, and retries remain coverage/gates inside those deliverables.
 
+**MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
+(front-door semantics) and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md) (DOA,
+Prime Directives, quality gates).
+

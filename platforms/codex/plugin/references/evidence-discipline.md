@@ -123,6 +123,44 @@ Two prior incidents, both preserved here because they are the same shape:
 
 ---
 
+## 8. Tamper-evidence of a claim is not verification of the claim
+
+**The incident (2026-07-20 → 2026-08-16, the owner-kernel retirement).** Over four weeks the repo
+grew a ~27,000-line trust framework: a hash-chained event ledger, per-event witness receipts, a
+root-owned notary adapter outside the repo, an OKR-gated release checker, a shadow second-opinion
+observer. Every component defended one of two things — *the record cannot be rewritten afterwards*,
+or *the emitter is who it claims to be*. Not one component could answer the only question the system
+was built for: **was the claim true when it was recorded?** Independent re-derivation (re-run the
+test, re-scan the diff, decorrelated review) existed nowhere; truth entered exclusively through
+caller-injected verifier adapters that were never implemented. The kernel could not even run a test:
+no `child_process`, no `fs.stat`, anywhere in 13 files. The machinery hardened the *ledger* against
+an adversary who edits the past, while the actual adversary submits a false claim in the present —
+through the front door, with valid provenance, onto an immutable chain.
+
+Armor is not a verifier. If a component's failure mode is "the lie is now beautifully preserved",
+it is bookkeeping, not verification — however much cryptography it contains.
+
+**The second lesson, from the retirement's own review.** The retirement plan's author twice recorded
+"verified" claims that decorrelated reviewers then refuted with line-precise evidence:
+
+- *"zero external callers"* — the author's grep matched `new OwnerKernel(` and per-module require
+  paths, missing static factory calls (`OwnerKernel.start/.resume`) and barrel requires
+  (`require('./owner-kernel')`). Four production modules were live callers.
+- *"the config file is retired machinery"* — `.claude/owner-kernel-governance.json` carries a
+  kernel-flavored name but is a live mission-policy input read by five keeper surfaces; deleting it
+  would have silently flipped mission enforcement from `enforce` to `off`.
+- *"first-require tells you a test's subject"* — a keeper test's first require looked keeper-only;
+  it destructured four kernel symbols further down.
+
+Same-author verification inherits the author's blind spots: whoever wrote the grep pattern is the
+wrong person to certify what the pattern cannot see. A reviewer from a different model family,
+attacking the claim rather than confirming it, found in one pass what two same-author sweeps missed
+twice. The quarried decision rule now lives in [`evidence-contract.md`](evidence-contract.md):
+closure requires a clear challenge from a challenger that is not the author and not the author's
+model family.
+
+---
+
 ## The one question
 
 Before recording anything as verified:

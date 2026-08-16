@@ -24,6 +24,68 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.10 — ⏮ REVERSAL: Owner Kernel trust framework retired
+
+**Headline**: This release removes more code than any release added: the Owner Kernel trust
+framework and its supervised isolation substrate (~27,000 lines — hash-chained event ledger,
+witness receipts, root-owned notary adapter, shadow terminal observer, divergence monitor,
+OKR release gates, cross-UID sandbox machinery) are retired in full. Architecture review found
+the machinery solved record *integrity* (tamper-evident history, emitter authentication) while
+the project's actual threat is claim *veracity* (an authorized agent submitting a false claim);
+independent re-derivation existed nowhere in it, and its verifier slots were never implemented.
+The policy knowledge it contained survives as `references/evidence-contract.md`; the strict /l5
+canonical roster becomes advisory (loud warning + audit record, never a hard block). Retirement
+authorized by a two-generation heterogeneous plan review (GLM-5.3 / MiniMax-M3 / grok-4.6 /
+gpt-5.6-sol; 17 accepted blockers across both generations) — full chain in
+`docs/plans/2026-08-16-owner-kernel-retirement.md`.
+
+### Removed (migration notes — every removed public surface)
+
+| Removed surface | Outcome |
+|---|---|
+| `scripts/owner-kernel.js` (CLI: resolve / freeze-task / verify / status / disclose / translate-level) | removed, no replacement — the governance config it resolved (`.claude/owner-kernel-governance.json`) stays live and is read directly by mission machinery |
+| `scripts/check-owner-kernel-release-gates.js` | removed — release checking remains `scripts/preflight-release.sh` (unchanged; the removed script had zero callers) |
+| `scripts/divergence-monitor.js` + `src/status/shadow-terminal-observer.js` | removed, no replacement — the shadow-second-opinion promotion path is abandoned; the "obligations from raw evidence" lesson is preserved in `references/evidence-discipline.md` §3 |
+| `scripts/check-retirement-receipts.js` + `docs/retirement-receipts/` | removed — deletions are documented in CHANGELOG + plan docs (this entry is itself the receipt for this removal) |
+| `src/engine/owner-kernel/{kernel,state,events,ledger,witness,acceptance,shadow-translation,semantic-authority,compatibility,terminal}.js` | removed — resurrect from the quarry anchor in `docs/plans/evidence/2026-08-16-owner-kernel-retirement/retire-manifest.md` |
+| `src/engine/supervised-*.js` (14 modules) + ~46 supervised/owner-kernel test files + CI bwrap/AppArmor steps | removed — the adversarial multi-tenant threat model does not exist on a single-user host |
+| `src/host-adapters/witness-adapter.js` + `/etc/autopilot/trusted-*.json` + `/usr/local/lib/autopilot/` | removed (host files archived with metadata + tested restore in the plan's evidence dir before deletion) |
+| `schemas/owner-event.schema.json` | removed, no replacement |
+| `project-config-template/governance-config.md` kernel-CLI examples | trimmed — the template and the governance config itself remain (live mission-policy surface) |
+| `src/engine/owner-kernel/index.js` barrel | **kept**, thinned to keeper-only re-exports: `canonical`, `errors`, `actions`, `policy`, `task-authority` + mission re-exports |
+
+### Changed
+- **strict /l5 roster policy is advisory** (`src/readiness/provider-bootstrap.js`): a non-canonical
+  roster derives with a per-derivation stderr `POLICY OVERRIDE` warning and a structured
+  `policy_override` record (reason = configured `strict_l5_policy_override`, else
+  `advisory_default`); uncertified seats carry `claim_id: null`. Pipeline-consistency checks
+  (digest binding, replay/substitution) stay hard. Claim expiry has no runtime enforcement site
+  (verified; proof in the plan's evidence dir).
+- `skills/l3/SKILL.md`, `skills/quality-pipeline/SKILL.md` drop their dead owner-kernel invocation
+  blocks (triggers and routing unchanged); engine-onboarding Stage 3 no longer routes through
+  kernel role grants.
+- keeper coverage extracted before deletion: `hooks/tests/owner-action-catalog.test.sh` (new)
+  carries the actions/policy catalog assertions; `execution-profile.test.sh` rewritten to its
+  keeper behavior matrix.
+
+### Added
+- `references/evidence-contract.md` — the quarry: the acceptance-predicate policy content
+  (green evidence per leg; non-self, non-same-family challenger clear; zero blocking findings;
+  contract frozen at intake; evidence bound to artifact) + terminal-issuer invariants, as a
+  mechanism-free contract for the four-layer redesign to implement.
+- `references/evidence-discipline.md` §8 — the capstone case: tamper-evidence of a claim is not
+  verification of the claim; same-author verification inherits the author's blind spots.
+
+### Fixed
+- 2 stale constants in `hooks/tests/autopilot-cli.test.sh` (baseline-red since the 2026-08-14
+  re-signing); upstream `dispatch-author-kimi.js` registered in CLAUDE.md + scripts-inventory
+  (baseline-red inventory gates); codex mirror caught up (6 stale files).
+
+### Rollback
+- Maintainer: per-phase `git revert` — phase SHAs recorded in
+  `docs/plans/evidence/2026-08-16-owner-kernel-retirement/retire-manifest.md`; host files
+  restorable from `host-residue/` (content + `chown`/`chmod` sequence documented).
+
 ## v2.34.9 — Codex lifecycle admission and fail-closed promotion boundary
 
 **Headline**: Codex now enters the lifecycle through packaged `session-mode` and the sealed

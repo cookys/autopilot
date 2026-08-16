@@ -1,6 +1,6 @@
 # Plan — Four-layer redesign: contract hardening + capability tiering
 
-> Status: R1 (post-G1 bounded repair) · Owner: cookys (CEO-mode delegated 2026-08-16) · Branch: develop → feature branch `feat/four-layer` · Frame: mechanism hardening on existing rails
+> Status: R2 (final, post-G2 terminal adjudication) · Owner: cookys (CEO-mode delegated 2026-08-16) · Branch: develop → feature branch `feat/four-layer` · Frame: mechanism hardening on existing rails
 
 ## 0. Context / thesis
 
@@ -48,8 +48,9 @@ each has an existing rail to attach the fix to.
 - KR2 (execution boundary): the `exec-boundary` PreToolUse hook denies planted destructive
   commands (`git push --force` to a protected ref, `rm -rf` escaping the worktree, raw
   `DROP TABLE`, `sudo rm`) and permits benign commands, under hook-harness tests; opt-in manifest
-  entry + config template shipped; the hetero-engine boundary map (worktree containment + qc-gate
-  pre-push) is documented in the same reference.
+  entry + config template shipped; the force-push rule deliberately overlaps default-on
+  `branch-protection.js` (defense-in-depth); the hetero-engine boundary map (worktree
+  containment + qc-gate pre-push) is documented in the same reference.
 - KR3 (capability tiering): `resolve-scaffold-tier.js` deterministically maps fixture
   scorecard/capability-state inputs to tiers T0/T1/T2 with rationale and `evidence_refs`;
   **missing, unknown, STALE, or conflicting evidence all resolve to T2** (fail-closed to MOST
@@ -96,18 +97,24 @@ each has an existing rail to attach the fix to.
 
 ## 2.6 Change-policy decisions
 
-- **Compatibility impact**: `published-compatible` — additive public surfaces (a new opt-in
-  hook with config template + install docs, new resolver scripts, reference clauses); nothing
-  removed or renamed; no skill/agent added/removed; no routing-affecting description change;
-  existing config surfaces gain optional fields only. Versioning: PATCH (new hook + new scripts
-  per the user-facing-milestone policy).
+- **Compatibility impact**: `published-compatible`, with the behavior deltas named honestly
+  (G2 sol R8), each with an escape hatch: (1) `dispatch-review.sh` gains a fail-closed
+  narrative lint — `--allow-narrative <reason>` overrides, logged to stderr AND the run
+  manifest; (2) `dispatch-hetero.sh` prompt envelope gains the tier preamble — dispatch-config
+  `scaffold_tiers: off` disables, and default `auto` on an unqualified engine yields T2 (a
+  superset of today's implicit expectations, not a contradiction); (3) round-N+1 review after
+  `no_verdict|ambiguous` now requires a second family — previously that state meant a stalled
+  loop, so the delta strengthens an already-failing path; (4) quality-pipeline gains the holdout
+  gate step for high-risk diffs. Nothing removed or renamed; no skill/agent added/removed.
+  Versioning: PATCH per CLAUDE.md "Versioning (semver bump rule)" — new scripts/hooks are
+  PATCH-tier; the second digit is reserved for new skills/agents.
 - **Dependency decision**: `none` — Node built-ins throughout.
 
 ## 3. File-structure map
 
 | File / area | Action | Responsibility |
 |---|---|---|
-| `references/four-layer-design.md` | create | the design record: layer map, T0/T1/T2 tier definitions, cascade + single-round rules, blind-evidence rule, execution-boundary map, anti-cathedral constraints |
+| `references/four-layer-design.md` | create | the design record: layer map, rule→enforcer table, execution-boundary map, anti-cathedral constraints; LINKS to scaffold-tiers.md (tier definitions) and evidence-contract.md (single-round) — never restates them |
 | `scripts/check-blind-evidence.sh` | create | lint a review payload (spec/prompt file) for implementer completion-narrative markers; sibling of `check-dispatch-suppression.sh` (which guards the controller→reviewer direction; this guards implementer→reviewer) |
 | `scripts/dispatch-review.sh` | edit | run the blind-evidence lint on `--spec-file` before dispatch (fail closed, override flag with logged reason) |
 | `hooks/exec-boundary.js` + `hooks/tests/exec-boundary.test.sh` | create | PreToolUse(Bash) deny gate: configurable deny patterns (force-push to protected refs, `rm -rf` outside sanctioned roots, raw destructive SQL, `sudo rm`); allow-by-default outside the deny list |
@@ -139,9 +146,11 @@ Acceptance: baseline artifact committed; doc exists, links resolve, no rule lack
 enforcing mechanism or an explicit "documented-only" tag.
 
 ### D2 — Blind-evidence gate (S)
-1. `scripts/check-blind-evidence.sh`: scan the ASSEMBLED reviewer payload (spec file + any
-   prompt packs — the implementer→reviewer corruption surface per G1 grok R3; `--spec-file`
-   remains the trusted dispatcher-authored baseline) for implementer-narrative classes
+1. `scripts/check-blind-evidence.sh`: the guarded threat is LAUNDERING (G2 sol R3): no direct
+   implementer→reviewer channel exists today (the structural red case pins that), but an
+   orchestrator composing `--spec-file` can paste implementer output — completion claims enter
+   wearing the dispatcher's trust. The lint therefore scans the ASSEMBLED reviewer payload
+   (spec + any prompt packs) for implementer-narrative classes regardless of who pasted them
    (first-person completion claims, self-assessed quality, test-outcome assertions with no
    receipt path). Exit 1 + JSON findings on hit; exit 0 clean. Patterns in the script header
    with rationale, mirroring `check-dispatch-suppression.sh` conventions (which guards the
@@ -156,15 +165,16 @@ Acceptance: KR1.
 ### D3 — Execution-boundary hook (L)
 1. `hooks/exec-boundary.js`: PreToolUse Bash matcher; deny-list evaluation over the command
    string; config from `.claude/execution-boundary-config.md` (fallback: shipped defaults —
-   `rm -rf` outside `$TMPDIR`/worktree roots, `DROP TABLE|TRUNCATE` against non-test DSNs,
-   `sudo rm`; force-push stays with `branch-protection.js`). Deny = structured block message naming the matched rule;
+   protected-ref force-push, `rm -rf` outside `$TMPDIR`/worktree roots, `DROP TABLE|TRUNCATE`
+   against non-test DSNs, `sudo rm`). Protected-ref force-push OVERLAPS the default-on
+   `branch-protection.js` deliberately — defense-in-depth across an opt-in and a default-on
+   hook, not a conflict; the boundary map documents both. Deny = structured block message naming the matched rule;
    allow-by-default otherwise. NO LLM calls.
 2. Register opt-in via the per-event opt-in-multiplexer rail (entry in
    `hooks/opt-in-manifest.json`, armed per `~/.autopilot/config.json {"hooks":{"exec-boundary":true}}`
    or `AUTOPILOT_HOOK_EXEC_BOUNDARY=1`; opt-in changelog per `check-optin-changelog.js`); enable
-   in autopilot's own dogfood config. Protected-ref force-push is ALREADY covered by the shipped
-   `hooks/branch-protection.js` — exec-boundary defers to it (no duplicate rule; the boundary map
-   cites both).
+   in autopilot's own dogfood config. The force-push rule coexists with the default-on
+   `hooks/branch-protection.js` by design (defense-in-depth; boundary map cites both).
 3. Document the full boundary map in `references/four-layer-design.md`: Claude sessions → this
    hook; hetero dispatched engines → worktree containment + contained-branch-only deletion in `reap-dispatch-branches.sh` +
    qc-gate pre-push (already shipped; named as boundary components, not rebuilt).
@@ -183,7 +193,11 @@ Acceptance: KR2; hook inventory gates green.
    prescribed step sequence). Skeletons are per-tier sections consumed by dispatch assembly.
 3. Consumer wiring: `dispatch-hetero.sh` already assembles a runner-specific COMBINED prompt
    around the caller's `--prompt-file` (the `GROK_PROMPT_FILE`/`CCSHIM_PROMPT_FILE` step); the
-   tier skeleton is PREPENDED there (`--scaffold-tier auto|T0|T1|T2`, default auto→resolver);
+   tier skeleton is prepended to the SHARED prompt assembly BEFORE the per-runner branches (the
+   caller `--prompt-file` is wrapped once, so codex/agy/pi/qoder consume the tier identically to
+   grok/cc-shim — G2 grok R5); `--scaffold-tier` accepts `auto` (default → resolver) or an
+   explicit tier that may only ADD scaffolding relative to the resolved tier (requesting less
+   than resolved is rejected — fail-closure applies to humans too, G2 sol R5);
    resolver output recorded in the run manifest for audit. This is prompt-envelope assembly, not
    a second prompt source — the caller's prompt body is untouched (G1 grok note).
 4. Fixture tests: three scorecard fixtures → T0/T1/T2; missing scorecard → T2; tier recorded in
@@ -192,17 +206,27 @@ Acceptance: KR2; hook inventory gates green.
 Acceptance: KR3.
 
 ### D5 — Cascade, single-round, holdout formalization (S)
-1. `resolve-review-loop.sh`: fold escalation into the EXISTING consumed output — triggers
-   (computed `review_risk` ≥ threshold, new `--prior-status no_verdict|ambiguous` input,
-   security surface) extend `required_review_families` / `qc_panel` so the existing qc dispatch
-   path seats ONE fresh disjoint-family reviewer (family = roster `family` field);
-   no-disjoint-family-available fails closed with a named reason; fixtures prove the end-to-end
-   trigger→seat mapping and the red case asserts no same-family seat and no rebuttal dispatch;
-   existing risk-tier behavior unchanged.
-2. `scripts/check-holdout-coverage.sh` (NEW, the KR5 caller): given the diff risk tier (from
-   `classify-diff-risk.sh`) and the run evidence dir, exit 1 when high-risk and no
-   `probe-mutation.js` / `verify-strength.js` receipt exists; exit 0 otherwise. Wired into the
-   quality-pipeline deterministic gate list; red case per KR5.
+1. Cascade, on the REAL rail semantics (G2 grok): risk/security triggers ALREADY escalate —
+   computed `review_risk=high` sets `required_review_families=2` + `cross_family_required`,
+   which the loop consumer enforces (no new work; a fixture pins this existing behavior). The
+   genuinely missing trigger is prior-round outcome: add `--prior-status none|no_verdict|ambiguous`
+   to `resolve-review-loop.sh`; `no_verdict|ambiguous` elevates the computed risk to high
+   (thereby reusing the exact same families/cross-family escalation path). PRODUCER: the engine
+   review loop (`autopilot-engine.js` review-args assembly) passes the prior round's status on
+   round N+1 — a named same-phase caller edit. Fixtures: resolver-level (prior-status→high
+   mapping; default `none` byte-identical to today) and engine-level (round-2 after no_verdict
+   requires a second family; red case asserts the added seat is disjoint-family and no rebuttal
+   content is passed).
+2. `scripts/check-holdout-coverage.sh` (NEW, the KR5 gate): two subcommands. `run` executes
+   `probe-mutation.js` / `verify-strength.js` and writes their stdout JSON into the evidence dir
+   as receipts STAMPED with the diff range head SHA and probe exit status (the probes today
+   write stdout only — the gate materializes the receipts; G2 grok). `check` computes the risk
+   tier via `classify-diff-risk.sh` and, when high, requires a receipt that (a) parses, (b) is
+   BOUND to the current diff head SHA, (c) records a passing result — absent, malformed, stale,
+   or failed receipts all fail closed (G2 sol). Caller: a numbered quality-pipeline gate step,
+   same standing as `completeness-scan.sh` (SKILL-directed deterministic gate — the honest
+   description of that rail; it is not a machine-consumed list). Red cases: absent, stale-SHA,
+   and failed-result receipts each fail; a bound passing receipt passes.
 3. `references/evidence-contract.md` (additive): single-round clause; holdout-leg clause
    (verifier-authored checks frozen after the implementation diff; implementer-invisible).
 4. Quality-pipeline reference: gate row for `check-holdout-coverage.sh` + probes named as the
@@ -270,6 +294,18 @@ own dogfood settings); three tiers (T0/T1/T2); PATCH version.
   (now `check-holdout-coverage.sh`, a shipped gate); blind-evidence lint aimed at the trusted
   spec instead of the assembled payload; baseline fail-set capture undefined (now D1 step 0).
   Dispositions: `*.g1-disposition.json`.
+- **G2** (2026-08-16, terminal, transport complete): CONDITIONAL (GLM C, **MiniMax READY**,
+  grok STOP, sol STOP); 16 findings, 12 blocker candidates — depth-0 terminal adjudication:
+  **10 accepted** (force-push KR2/D3 contradiction → resolved as deliberate defense-in-depth
+  overlap with branch-protection.js; cascade re-landed on the REAL rail semantics with
+  `--prior-status` + engine producer, risk/security triggers recognized as already-escalating;
+  tier preamble moved to the shared prompt assembly so every runner consumes it; explicit tier
+  override restricted to adding scaffolding; holdout receipts materialized by the gate's `run`
+  subcommand and SHA-bound in `check`; blind-evidence threat named as laundering; canonical-home
+  contradiction fixed; change-policy deltas enumerated with escape hatches), **2 duplicates**
+  (grok/sol force-push = GLM's). 4 non-blocking folded (durable override log to run manifest,
+  unchanged-behavior fixture, versioning policy citation, lint-target wording). Dispositions:
+  `*.g2-disposition.json`. This R2 text is final; execution proceeds under CEO-mode delegation.
 - Bounded review: manifest + frozen rubric beside this plan
   (`2026-08-16-four-layer-redesign.plan-review-manifest.json`, `.rubric.md`); panel GLM-5.3 /
   MiniMax-M3 (required) + grok-4.6@xhigh / gpt-5.6-sol@max (best-effort), `excluded_families:

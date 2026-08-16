@@ -23,7 +23,7 @@ Architecture review (Board thread 2026-08-16, two read-only wiring scans + one l
 **O: the trust machinery and its substrate are gone, their knowledge is kept, and every gate that watched them agrees.**
 
 - KR1: ≥26,900 LOC of shipped code removed; `scripts/validate.sh` and the full `hooks/tests/` suite green on every phase commit; CI green without the bwrap/sandbox steps.
-- KR2 (enumerated grep gate): zero live-tree hits for the pattern set below, run over the **whole tree** after P3 (with `docs/projects/2026-07-20-owner-kernel-governance/` already archived in P3 before the run) and again after P6, excluding only `CHANGELOG.md`, `docs/plans/`, `docs/projects/_archive/`, `references/evidence-discipline.md`, `references/evidence-contract.md`, and `.git`:
+- KR2 (enumerated grep gate): zero live-tree hits for the pattern set below, run over the **whole tree** after P3 (with `docs/projects/_archive/2026-07-20-owner-kernel-governance/` already archived in P3 before the run) and again after P6, excluding only `CHANGELOG.md`, `docs/plans/`, `docs/projects/_archive/`, `references/evidence-discipline.md`, `references/evidence-contract.md`, and `.git`:
   - directory-qualified deleted modules: `owner-kernel/kernel`, `owner-kernel/state`, `owner-kernel/events`, `owner-kernel/ledger`, `owner-kernel/witness`, `owner-kernel/acceptance`, `owner-kernel/shadow-translation`, `owner-kernel/semantic-authority`, `owner-kernel/compatibility`, `owner-kernel/terminal`
   - script/module basenames: `owner-kernel.js` (the script), `check-owner-kernel-release-gates`, `divergence-monitor`, `check-retirement-receipts`, `shadow-terminal-observer`, `witness-adapter`, `supervised-` (under `src/engine/` or `hooks/tests/`)
   - non-module surfaces: `trust-root-provisioning`, `retirement-receipts`, `owner-event.schema.json`
@@ -78,7 +78,7 @@ Architecture review (Board thread 2026-08-16, two read-only wiring scans + one l
 | `references/evidence-contract.md` | create | the quarry |
 | `references/evidence-discipline.md` | append | the capstone case |
 | `CHANGELOG.md`, `.claude-plugin/plugin.json` | edit | reversal-marked entry + PATCH via `sync-version.js` |
-| `docs/projects/2026-07-20-owner-kernel-governance/` | archive **in P3, before the KR2 run** (G2 grok R5) | project closeout |
+| `docs/projects/_archive/2026-07-20-owner-kernel-governance/` | archive **in P3, before the KR2 run** (G2 grok R5) | project closeout |
 | `/etc/autopilot/trusted-*.json`, `/usr/local/lib/autopilot/` | user-executed sudo removal (P5, archive-gated) | host residue |
 
 ## 4. Phases
@@ -111,7 +111,7 @@ Architecture review (Board thread 2026-08-16, two read-only wiring scans + one l
 3. Edit operator docs: `docs/configuration.md` (drop the `owner-kernel.js resolve` example; keep the governance-json row), `docs/architecture.md` (~114-138), `docs/installation.md` (~281).
 4. **Retirement-vocabulary sweep**: from the delete-set derive the vocabulary (exported symbols, CLI commands, error identifiers incl. `strict_l5_provider_roster_drift`-as-hard-block prose) and grep every shipped surface; unwire every current-tense hit.
 5. `docs/scripts-inventory.md`: remove the 4 rows. `CLAUDE.md`: remove the 4 script names from their groups.
-6. **Archive `docs/projects/2026-07-20-owner-kernel-governance/`** via project-lifecycle (into `docs/projects/_archive/`, a KR2 exclusion) — before the KR2 run (G2 grok R5).
+6. **Archive `docs/projects/_archive/2026-07-20-owner-kernel-governance/`** via project-lifecycle (into `docs/projects/_archive/`, a KR2 exclusion) — before the KR2 run (G2 grok R5).
 7. `scripts/sync-all.sh`; verify mirrors dropped the deleted files.
 8. Run the **full KR2 whole-tree grep** + the KR3 gate set.
 

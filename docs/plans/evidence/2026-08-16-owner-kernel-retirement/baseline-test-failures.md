@@ -24,3 +24,10 @@ surfaced by the post-deletion parallel schedule, not a retirement regression
 (the module and its keeper dependency are untouched). Watch in CI.
 P2 parallel-suite fail set: {autopilot-engine, review-loop-runner, context-window}
 ⊆ baseline set; dev-setup and both inventory/mirror gates went green.
+
+P3 KR2 classification note: `docs/mission-platform-capability-trigger-activation-execution-graph.json`
+and `docs/mission-backlog-convergence-execution-graph.json` retain frozen references to deleted
+supervised test files. They are completed-mission execution graphs — immutable records of what a
+past mission ran (zero runtime readers, verified) — not current-tense claims; treated as a KR2
+exclusion category alongside CHANGELOG/plans/_archive. `mission-owner-kernel-installed-sources.json`
+moved into the archived project dir.

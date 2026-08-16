@@ -37,3 +37,13 @@ Quarry anchor (resurrect any file from this commit): `3fd980b6f59a9b6776a3800e43
 
 ## Phase commits
 (appended after each phase lands; same-commit self-reference is impossible — plan §2.5)
+
+| Phase | Commit |
+|---|---|
+| plan + review chain (docs) | 3fd980b6 |
+| P1 evidence freeze | 1c0878cf |
+| mirror catch-up (chore) | d097c77c |
+| P4 strict /l5 advisory | e6f99afd |
+| inventory fix (chore) | 9baf9499 |
+| P2 core + supervised retirement | b2d7eede |
+| P3 unwire + archive | (appended in P6 — same-commit self-reference impossible) |

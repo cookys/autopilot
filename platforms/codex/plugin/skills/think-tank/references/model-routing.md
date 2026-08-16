@@ -80,9 +80,12 @@ Fallback starts admission and profile resolution again for the replacement ident
 
 Artificial Analysis is an optional model-level prior for implementer/explorer discovery only.
 Imported rows are user-local and `provisional`; no bundled score or external reputation can qualify
-owner/reviewer. Likewise, scorecard and capability-state JSON are editable same-UID telemetry.
-Plugin-native admission requires the evaluator and Owner Kernel to share a live non-serializable
-verifier; a restart or JSON roundtrip cannot recreate it.
+owner/reviewer. Likewise, scorecard and capability-state JSON are editable same-UID telemetry:
+treat disk rows as advisory priors, never as admission authority. (The kernel-mediated
+live-verifier admission path was retired 2026-08-16 with the owner-kernel machinery; the surviving
+rule is the epistemic one — a routing decision must not claim stronger authority than the
+telemetry it reads, and the strongest available evidence tier is a live in-process qualification
+run via `scripts/engine-qualify.js`.)
 
 ## Codex-host native child boundary
 

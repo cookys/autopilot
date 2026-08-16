@@ -57,10 +57,10 @@ explicitly promotes that role to R3+.
 
 The store is also not an authenticity boundary: a same-UID model process can edit
 user-local JSONL. Disk rows are therefore untrusted telemetry and stored passes are
-projected as provisional. Current plugin-native R3 admission is session-local: the
-trusted host must run the evaluator in-process and inject its non-serializable
-`roleCapabilityVerifier` closure into Owner Kernel. Persistent reuse needs an
-external signer or cross-UID witness and is not implied by a scorecard row.
+projected as provisional. R3-tier confidence is session-local: run the evaluator
+in-process and act on that live result; a stored row is a record of a past run, not
+a transferable credential. (The kernel grant machinery that once enforced this was
+retired 2026-08-16; the epistemic rule outlives it.)
 
 ## Role Qualification Matrix
 

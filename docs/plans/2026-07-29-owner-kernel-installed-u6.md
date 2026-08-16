@@ -42,7 +42,7 @@ AUTOPILOT_P37_DOGFOOD=1 bash hooks/tests/owner-kernel-installed-dogfood.test.sh
 bash hooks/tests/owner-kernel-production-corpus.test.sh
 bash hooks/tests/owner-kernel-release-gates.test.sh
 bash hooks/tests/owner-kernel-alias-retirement.test.sh
-node scripts/check-owner-kernel-release-gates.js --project docs/projects/2026-07-20-owner-kernel-governance --check
+node scripts/check-owner-kernel-release-gates.js --project docs/projects/_archive/2026-07-20-owner-kernel-governance --check
 git diff --check
 ```
 

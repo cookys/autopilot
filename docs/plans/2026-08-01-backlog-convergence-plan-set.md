@@ -142,7 +142,7 @@ bank or Track 3.
 
 **Backlog entry:** `Readiness gate 的 session-local qualification provider`.
 
-**Owner:** `docs/projects/2026-07-20-owner-kernel-governance/` P4, with the readiness contract in
+**Owner:** `docs/projects/_archive/2026-07-20-owner-kernel-governance/` P4, with the readiness contract in
 `docs/plans/2026-07-26-provider-readiness-orchestrator.md`.
 
 **Goal:** provide exact-tuple, host-injected qualification authority for implementer,

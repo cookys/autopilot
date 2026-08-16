@@ -24,6 +24,60 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.12 — Roster qualification repair: store residue purge, real requalification rails
+
+**Headline**: The whole-roster qualification outage (BACKLOG 2026-08-11: every seat
+`qualification: unknown`, `/l5` fail-closed to inline) traced to test-fixture residue in the
+user-local stores: 289 of 299 scorecard rows and all 5 capability-evidence rows were
+`eng-review` fixtures leaked by a test that invoked `engine-scorecard.js record` without store
+isolation — one of them crashed `current --role reviewer` outright. The stores are purged
+(residue quarantined, 10 real rows kept), the leak is plugged with a landing assertion, and the
+two requalification rails now actually work: grok-4.5 was re-qualified as implementer on the
+current runner (grok 1.0.3) through three live dispatch-hetero baseline runs with pre-authored
+host oracles, a red→green planted bug, and an active injection canary; and a new remote-provider
+adapter lets `engine-qualify.sh reviewer` evaluate real Anthropic-compatible endpoints. Measured
+honestly: GLM-5.2 spiked 9/9 but FAILED the full 2-trial run by exactly one clean false positive
+(recorded as scorecard event 139 — not rerun-until-green); MiniMax-M3 spiked 5/9, consistent
+with its recorded diff-only limitation. `status readiness` now derives the same in-process
+strict-l5 qualification bootstrap the engine uses, so the diagnostic reports what an actual /l5
+invocation would decide. Evidence: `docs/plans/evidence/2026-08-17-roster-qualification/`.
+
+### Added
+- `scripts/qualification-review-provider.js` — host-side `--remote-provider-cmd` adapter for the
+  P3c qualification broker: direct `/v1/messages` call to env-token endpoints (MiniMax/GLM
+  family), an output-contract prompt that deliberately excludes detection patterns (the model's
+  judgment stays the thing being measured), type-aware JSON bracket repair, and mechanical
+  file/line anchoring from the diff.
+
+### Changed
+- `scripts/resolve-review-loop.sh --check-scorecard` now surfaces an inadmissible implementer
+  seat (missing / expired / failed scorecard row) in `capability_warnings` at roster-resolution
+  time, so `/l5` preflight sees the fact before the foreman silently degrades at
+  dispatch-contract (BACKLOG "Implementer scorecard lapses on runner-version drift").
+- `autopilot status readiness` builds the same in-process strict-l5 qualification bootstrap the
+  engine builds at /l5 entry (fail-open to the provider-less view when the roster is
+  unresolvable), so the qualification axis reports what an actual /l5 invocation would decide
+  instead of a permanent `unknown:missing_qualification_observation`.
+
+### Fixed
+- `scripts/resolve-scaffold-tier.js` premise error vs the canonical reference
+  (`references/scaffold-tiers.md`): freshness now follows the record's own `expires` field
+  (expiry-less rows are stale, fail-closed) instead of a 30-day window over `date` that treated
+  already-expired rows as fresh; and within the append-only scorecard the latest fresh row is
+  authoritative (supersession is not disagreement), so a superseded old failure can no longer
+  hold every new qualification at T2 for a month. Cross-source conflict→T2 returns when
+  engine-capability-state joins as an evidence input.
+- `hooks/tests/engine-qualify.test.sh` step 10 leaked one fixture scorecard row into the real
+  `~/.autopilot/engine-scorecard/scorecard.jsonl` per test run (`ENGINE_SCORECARD_DIR` was not
+  set for the `record` invocation); the run is now store-isolated and asserts the row landed in
+  the test store.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.34.11`; quarantined stores are restorable from
+  `~/.autopilot/engine-scorecard/scorecard.jsonl.test-residue-quarantined-20260817` and
+  `~/.autopilot/engine-capability/qualification-evidence.jsonl.test-residue-quarantined-20260817`.
+
 ## v2.34.11 — Four-layer hardening: blind evidence, execution boundary, scaffold tiers, holdout gate
 
 **Headline**: The four survey-hardened governance mechanisms land on existing rails, each shipped

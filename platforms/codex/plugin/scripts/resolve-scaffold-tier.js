@@ -15,10 +15,16 @@
  *   T2  everything else                                (full prescribed process)
  *
  * Evidence source: the engine scorecard (~/.autopilot/engine-scorecard/scorecard.jsonl),
- * the house qualification record written by engine-qualify. Rows carry `date` but no
- * expiry field, so freshness uses the frozen default window below over `date`
- * (deterministic; pinned by fixtures). Imported/provisional priors never lift above T2.
- * Malformed lines are skipped (and can only push toward T2, never away from it).
+ * the house qualification record written by engine-qualify. Freshness follows the
+ * canonical rule in references/scaffold-tiers.md: the record's own `expires` field is
+ * the cutoff, and a record without one is STALE (fail-closed) — house rows have
+ * carried `expires` since the first onboarding run. Within this one source the
+ * LATEST fresh row per tuple is authoritative — an append-only store accumulates
+ * requalification history, and supersession is not disagreement. The canonical
+ * conflicting→T2 rule concerns two SOURCES disagreeing; it applies once
+ * engine-capability-state joins as the higher-precedence input. Imported/provisional
+ * priors never lift above T2. Malformed lines are skipped (and can only push toward
+ * T2, never away from it).
  *
  * Usage:
  *   node scripts/resolve-scaffold-tier.js --runner <r> --model <m> --role <role>
@@ -31,7 +37,6 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const FRESH_WINDOW_DAYS = 30; // frozen freshness cutoff for expiry-less scorecard rows
 
 function usage(msg) {
   process.stderr.write(`resolve-scaffold-tier: ${msg}\n`);
@@ -64,7 +69,7 @@ function emit(tier, rationale, refs) {
     inputs: {
       runner: args.runner, model: args.model, role: args.role,
       effort: args.effort || null,
-      scorecard: storePath, fresh_window_days: FRESH_WINDOW_DAYS,
+      scorecard: storePath, freshness: 'record-expires',
     },
   }, null, 2)}\n`);
   process.exit(0);
@@ -94,8 +99,8 @@ if (matches.length === 0) {
 }
 
 function isFresh(row) {
-  const t = Date.parse(row.date || row.observed_at || '');
-  return Number.isFinite(t) && (now - t) <= FRESH_WINDOW_DAYS * 86400e3;
+  const t = Date.parse(row.expires || '');
+  return Number.isFinite(t) && t > now;
 }
 function isImportedPrior(row) {
   return row.version_source === 'imported' || row.provisional === true
@@ -121,18 +126,21 @@ if (fresh.length === 0) {
   emit('T2',
     priors.length === matches.length
       ? 'only imported/provisional priors exist — priors never lift above T2'
-      : 'qualification evidence exists but is stale (outside the frozen freshness window) — fails closed',
+      : 'qualification evidence exists but is stale (expired or expiry-less) — fails closed',
     refs(matches));
 }
 
-const qualities = new Set(fresh.map((m) => qualityOf(m.row)));
-if (qualities.has('unqualified') && (qualities.has('complete') || qualities.has('partial'))) {
-  emit('T2', 'conflicting fresh records disagree on qualification — fails closed with both refs recorded', refs(fresh));
+// The scorecard is append-only, so file order is event order and the LAST fresh
+// row is the current qualification state (supersession, not disagreement). The
+// reference's conflicting→T2 rule is about two SOURCES disagreeing on the same
+// tuple+role; it returns here when engine-capability-state joins as the
+// higher-precedence evidence input (references/scaffold-tiers.md, precedence list).
+const latest = fresh[fresh.length - 1];
+const quality = qualityOf(latest.row);
+if (quality === 'complete') {
+  emit('T0', 'fresh, complete role qualification — contract-only scaffolding', refs([latest]));
 }
-if (qualities.has('complete') && !qualities.has('unqualified')) {
-  emit('T0', 'fresh, complete role qualification — contract-only scaffolding', refs(fresh.filter((m) => qualityOf(m.row) === 'complete')));
+if (quality === 'partial') {
+  emit('T1', 'fresh but partial role qualification — contract plus obligation checklist', refs([latest]));
 }
-if (qualities.has('partial') && !qualities.has('unqualified')) {
-  emit('T1', 'fresh but partial role qualification — contract plus obligation checklist', refs(fresh.filter((m) => qualityOf(m.row) === 'partial')));
-}
-emit('T2', 'fresh records are unqualified for this role — fails closed', refs(fresh));
+emit('T2', 'latest fresh record is unqualified for this role — fails closed', refs([latest]));

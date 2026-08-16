@@ -492,6 +492,40 @@ assert_eq "false" "$(json_get "$FAIL_OUT" reviewer_qualified)" "failed reviewer 
 assert_eq "$FAIL_LADDER" "$(json_get "$FAIL_OUT" fallback_ladder)" "failed row still emits fallback ladder"
 assert_eq "3" "$(ENGINE_SCORECARD_DIR="$FAILDIR" bash "$SCRIPT" --check-scorecard --enforce >/dev/null 2>&1; echo $?)" "failed reviewer row with --enforce exits 3"
 
+# 20. --check-scorecard surfaces implementer scorecard inadmissibility in capability_warnings
+# (BACKLOG "Implementer scorecard lapses on runner-version drift, silently degrading every /l5")
+GROK_IMPL_CFG="$TEST_TMP/impl-grok.md"
+printf -- '- implementer_engine: grok-4.5\n- implementer_runner: grok\n' > "$GROK_IMPL_CFG"
+# 20a. Missing row → loud warning at roster resolution
+IMPLMISS_DIR="$TEST_TMP/impl-miss"
+mkdir -p "$IMPLMISS_DIR"
+IMPLMISS_OUT="$(ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_contains "$(json_get "$IMPLMISS_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: no scorecard row" \
+  "missing implementer row surfaces a capability warning under --check-scorecard"
+# 20b. Expired row → loud warning naming the status
+IMPLEXP_DIR="$TEST_TMP/impl-expired"
+mkdir -p "$IMPLEXP_DIR"
+cat > "$IMPLEXP_DIR/rec.json" <<'JSON'
+{"engine":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"2/2","false_pass_critical":0},"capability_score":1,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2026-07-14"}
+JSON
+ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$IMPLEXP_DIR/rec.json" > /dev/null
+IMPLEXP_OUT="$(ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_contains "$(json_get "$IMPLEXP_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: scorecard row status=expired" \
+  "expired implementer row surfaces a status-named capability warning"
+# 20c. Admissible (fresh) row → NO implementer warning; warning absent without --check-scorecard
+IMPLOK_DIR="$TEST_TMP/impl-ok"
+mkdir -p "$IMPLOK_DIR"
+cat > "$IMPLOK_DIR/rec.json" <<'JSON'
+{"engine":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"2/2","false_pass_critical":0},"capability_score":1,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+JSON
+ENGINE_SCORECARD_DIR="$IMPLOK_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$IMPLOK_DIR/rec.json" > /dev/null
+IMPLOK_OUT="$(ENGINE_SCORECARD_DIR="$IMPLOK_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_not_contains "$(json_get "$IMPLOK_OUT" capability_warnings)" "implementer seat" \
+  "admissible implementer row emits no implementer warning"
+IMPLOFF_OUT="$(ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT")"
+assert_not_contains "$(json_get "$IMPLOFF_OUT" capability_warnings)" "implementer seat" \
+  "without --check-scorecard the implementer admissibility check does not run"
+
 EXPDIR="$TEST_TMP/check-expired"
 mkdir -p "$EXPDIR"
 RECEXPIRED_JSON="$EXPDIR/rec.json"

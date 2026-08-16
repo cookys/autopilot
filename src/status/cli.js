@@ -442,9 +442,29 @@ function runStatusCli(argv, {
     return 0;
   }
   if (sub === 'readiness') {
+    // Qualification is admitted only through a live in-process host provider.
+    // The status CLI derives the SAME strict-l5 bootstrap the engine builds at
+    // /l5 entry (same process, never serialized), so the diagnostic reports
+    // what an actual /l5 invocation would decide. If the bootstrap cannot be
+    // built (roster unresolvable), fall back to the provider-less view — the
+    // qualification axis then honestly reads unknown.
+    let bootstrap = null;
+    try {
+      const { createStrictL5ProviderBootstrap } = require('../readiness/provider-bootstrap');
+      bootstrap = createStrictL5ProviderBootstrap({ cwd });
+    } catch {
+      bootstrap = null;
+    }
     let receipt;
     try {
-      receipt = collectProviderReadiness({ cwd, probe });
+      receipt = collectProviderReadiness({
+        cwd,
+        probe,
+        ...(bootstrap ? {
+          qualificationProvider: bootstrap.qualificationProvider,
+          resolvedRoster: bootstrap.roster,
+        } : {}),
+      });
     } catch (error) {
       stderr.write(`readiness: ${error.code || 'unavailable'}\n`);
       return 1;

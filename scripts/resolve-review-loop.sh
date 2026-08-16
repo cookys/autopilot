@@ -1222,6 +1222,49 @@ process.stdout.write(JSON.stringify([...(Array.isArray(a) ? a : []), ...(Array.i
   fi
 fi
 
+# --- implementer scorecard admissibility (REPORT-ONLY, --check-scorecard only) ---
+# BACKLOG "Implementer scorecard lapses on runner-version drift, silently degrading
+# every /l5": dispatch-contract.js check NO-GOes on an expired/failed implementer row
+# and the foreman then degrades L5→inline with no roster-time signal. Surface the
+# fact HERE, where the /l5 preflight already looks — same capability_warnings posture
+# as the quota and context-window facts above (the resolver reports, the consumer
+# decides per on_engine_unavailable).
+if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
+  _impl_rows="$(node "$SCRIPT_DIR/engine-scorecard.js" current --role implementer 2>/dev/null || true)"
+  _impl_warn="$(printf '%s' "$_impl_rows" | node -e '
+const engine = process.argv[1];
+const runner = process.argv[2];
+let s = "";
+process.stdin.on("data", (d) => (s += d)).on("end", () => {
+  let rows = null;
+  try { rows = JSON.parse(s); } catch { rows = null; }
+  if (!Array.isArray(rows)) {
+    process.stdout.write(
+      `implementer seat (${engine}/${runner}) is not admissible: scorecard store unreadable — /l5 dispatch-contract will NO-GO; requalify via engine-onboarding`,
+    );
+    return;
+  }
+  const row = rows.find((r) => r && String(r.engine) === engine
+    && (runner === "auto" || String(r.runner) === runner));
+  const admissible = row && (row.status === "qualified"
+    || (row.status === "provisional" && row.observed_status === "qualified"));
+  if (admissible) return;
+  const detail = row ? `scorecard row status=${row.status}` : "no scorecard row";
+  process.stdout.write(
+    `implementer seat (${engine}/${runner}) is not admissible: ${detail} — /l5 dispatch-contract will NO-GO; requalify via engine-onboarding`,
+  );
+});' "$IMPL_ENGINE" "$IMPL_RUNNER" 2>/dev/null || true)"
+  if [[ -n "$_impl_warn" ]]; then
+    CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "$_impl_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+  fi
+fi
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     reviewer_engine) printf '%s\n' "$REV_ENGINE" ;;

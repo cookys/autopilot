@@ -161,6 +161,28 @@ model family.
 
 ---
 
+## 9. A green test that writes outside its sandbox is manufacturing tomorrow's false evidence
+
+**The incident (discovered 2026-08-17, roster-qualification repair).** Every seat in the /l5
+roster reported `qualification: unknown` and `/l5` fail-closed to inline. The cause was not
+missing qualifications — it was that **289 of the 299 rows in the operator's real scorecard
+store were test fixtures**: `hooks/tests/engine-qualify.test.sh` piped its `--emit-row` output
+into `engine-scorecard.js record` without setting `ENGINE_SCORECARD_DIR`, appending one fake
+`eng-review` row to `~/.autopilot/engine-scorecard/scorecard.jsonl` on every run — for weeks,
+across every CI and local run, while the test itself PASSED every time. One leaked row carried a
+dangling `supersedes` reference that crashed `current --role reviewer` outright; five old-schema
+rows in the sibling capability-evidence store poisoned every role's `report-evidence`. The suite
+was green; the green was the damage.
+
+The trap is asymmetric visibility: a test's ASSERTIONS are checked on every run, but its WRITES
+are checked never. Isolation that covers one store (`ENGINE_CAPABILITY_DIR` was set) reads as
+"the test is isolated" while a second store leaks. The fix shape: every test that invokes a
+store-writing tool asserts WHERE the row landed (a landing assertion in the isolated store), and
+repairing the damage requires quarantine-and-filter, never wholesale deletion — 10 of the 299
+rows were the only real qualification history the roster had.
+
+---
+
 ## The one question
 
 Before recording anything as verified:

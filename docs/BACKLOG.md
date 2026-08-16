@@ -48,12 +48,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
-### Four-layer redesign: contract-only policy + harness graph（2026-08-16 owner-kernel retirement 後繼）
-- **Trigger**: Board 排程啟動（research-to-ship 候選;retirement 已收官、`references/evidence-contract.md` 已就位可消費）
-- **Context**: 強模型時代的治理重構——Kernel（evidence discipline）/ Plumbing（dispatch 基建）/ Policy（能力索引的 contract-only mode）/ Graph（typed DAG + hetero 去相關 verify 節點）四層設計。核心工項是 owner-kernel 從未實作的 verifier adapters：獨立重跑 + 去相關引擎攻擊,對 `references/evidence-contract.md` 的合約實作驗證節點。
-- **Effort**: L（research-to-ship 全程）
-- **Source**: Board thread 2026-08-16;[`owner-kernel-retirement`](plans/2026-08-16-owner-kernel-retirement.md) P6
-
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
 - **Trigger**: 四層 redesign 的 Policy 層設計定案,且目標 skill 有 eval ON/OFF 證據（成績單前置）
 - **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。
@@ -61,12 +55,13 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: G2 review finding（MiniMax R8, 2026-08-16）;strategy thread 2026-08-16
 
 
-### Role qualification is absent across the whole roster, which fails L5 closed
-- **Trigger**: Already met (observed 2026-08-11). `bin/autopilot.js status readiness --probe` returns `transport: ready` and `live: ready` for all six seats while every one reports `qualification: unknown`; `engine-scorecard.js current --role implementer` yields no candidate, and the reviewer rows are rejected as malformed ("evidence methodology is missing kind, basis").
-- **Context**: `engine implement-review` requires a qualified reviewer by default, so `/l5` cannot run its own path — a `/l5` invocation on 2026-08-11 degraded to L3 inline via the skill's documented `precondition_failed` route. `--allow-unqualified-reviewer` exists but spends L5's cost while forfeiting what L5 buys (a decorrelated *qualified* reviewer), so it is not a fix. Also blocks the separate question of restoring the Codex/gpt seats after the 2026-07-16 quota outage: that roster swap was explicitly marked for re-evaluation after the 2026-07-23 reset, and the reset has long passed while the swap is still in place — but re-evaluating it is meaningless while no seat can be qualified at all.
-- **Effort**: L (`autopilot:engine-onboarding`; repair the malformed scorecard rows first, since they poison `current`/`ladder` for every role)
-- **Source**: `/l5` precondition probe 2026-08-11; supersedes the personal-memory note `codex-quota-outage-roster-swap`
 
+
+### Reviewer-seat full qualifications on the now-working rail (gpt-5.6-sol transport; GLM re-attempt; verification-author suite)
+- **Trigger**: Before the next roster promotion decision, or when restoring the suspended Codex/gpt + Gemini seats after quota recovery (the 2026-08-05 rotation is still in place and re-evaluation is now MEANINGFUL — the qualification rail works as of v2.34.12).
+- **Context**: v2.34.12 repaired the stores and shipped `qualification-review-provider.js`, so `engine-qualify.sh reviewer` can evaluate real endpoints. Measured so far: GLM-5.2 failed the full run by exactly one clean false positive in trial 2 (scorecard event 139; sensitivity clean, spike 9/9) — a future re-attempt is a FRESH evaluation with its own acceptance, not a rerun-until-green; MiniMax-M3 spike 5/9 (semantic misses consistent with its recorded diff-only limitation) — full run not spent. Remaining build: a codex-transport mode for the adapter (gpt-5.6-sol qc:1 seat; `CODEX_HOME` redirect through the broker's env allowlist), and the verification_author role has NO shipped qualification suite at all (skill Stage 1 marks it follow-up) — that seat cannot be qualified until its suite exists.
+- **Effort**: M（adapter codex mode + 每席一次 full run）/ L（verification-author suite 設計）
+- **Source**: v2.34.12 roster-qualification repair;evidence `docs/plans/evidence/2026-08-17-roster-qualification/`
 
 ### Fable skills absorption plan — Board triage
 - **Status**: UNDECIDED — genuine orphan plan found during exhaustive 111-plan audit。
@@ -98,12 +93,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Context**: 本次只實作 current-host 可驗證的 Git-common-dir durable registry、CAS 與 fail-closed adapter。防惡意本機程序需要獨立 UID、root-owned/remote daemon 或具 authenticity 的 authority service；精確 provider token/tool/cost telemetry 也只能在 host 真能觀測時加入。未有實證前不得用 HMAC、自述 counter 或 skill prose 假裝形成安全邊界。
 - **Effort**: L
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
-
-### Implementer scorecard lapses on runner-version drift, silently degrading every /l5
-- **Trigger**: 立刻——目前 /l5 的異質 implementer 段是不可用的；或任何 runner CLI 升版之後。
-- **Context**: 2026-08-09 一次 /l5 在 \`dispatch-contract.js check\` 就拿到 NO-GO：\`engine-scorecard.js current --role implementer\` 回 grok-4.5/grok 但 \`status: expired, admissible: false\`——存的 row 釘 \`runner_version: grok 0.2.106\`，實際裝的是 \`grok 1.0.0\`。資格確實該失效，這點沒錯；問題是**後果是靜默的**：foreman 依文件降級成 inline，/l5 就退化成 /l4，成本套利消失而沒有任何告警。runner 升版是常態，所以這會一再發生。要嘛讓 /l5 前置檢查在 roster 解析時就先報 seat 不可用，要嘛把 re-qualification 做成 runner 版本變動時的例行程序。重新認證本身是 engine-onboarding 工作，有自己的證據門檻，不得為了解鎖某個 unit 而放行。
-- **Effort**: M。
-- **Source**: 2026-08-09 /l5 next-touch-validation 收尾；foreman 回報的 precondition_failed。
 
 ### Every gate needs a negative control — the caution needs a routine behind it
 - **Trigger**: 下一次新增或修改任何「閘」（release gate、drift gate、anti-gaming scan、admission check、hook）時；或再抓到一個閘存在卻沒在擋東西。

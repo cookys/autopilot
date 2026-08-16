@@ -494,12 +494,18 @@ for BAD_MODE in wrong-rule wrong-file wrong-line low-severity missing-witness ma
 done
 
 # 10) --emit-row emits engine-scorecard row accepted by record
+# ENGINE_SCORECARD_DIR must point at test tmp: without it, record appends the
+# fixture row to the operator's real ~/.autopilot/engine-scorecard store
+# (2026-08-17: 289 leaked eng-review rows poisoned every roster query).
 ROW_OUT="$($SCRIPT "${QUALIFY_ARGS[@]}" --panel-cmd "$PASS_PANEL" --emit-row)"
 RECORD_RC=0
 ROW_OUT_FILE="$(mktemp "$TEST_TMP/engine-qualify-row.out.XXXXXX")"
 ROW_ERR_FILE="$(mktemp "$TEST_TMP/engine-qualify-row.err.XXXXXX")"
-printf '%s\n' "$ROW_OUT" | node "$REPO_ROOT/scripts/engine-scorecard.js" record >"$ROW_OUT_FILE" 2>"$ROW_ERR_FILE" || RECORD_RC=$?
+printf '%s\n' "$ROW_OUT" | ENGINE_SCORECARD_DIR="$TEST_TMP/engine-scorecard" \
+  node "$REPO_ROOT/scripts/engine-scorecard.js" record >"$ROW_OUT_FILE" 2>"$ROW_ERR_FILE" || RECORD_RC=$?
 assert_exit_code "$RECORD_RC" "0" "emit-row output is accepted by engine-scorecard record"
+assert_file_exists "$TEST_TMP/engine-scorecard/scorecard.jsonl" \
+  "recorded row landed in the isolated test store"
 assert_contains "$ROW_OUT" '"source":"unknown"' "emit-row row uses cost.source=unknown"
 assert_contains "$ROW_OUT" '"status":"qualified"' "emit-row on pass uses qualified status"
 assert_contains "$ROW_OUT" '"repeated_trials":2' "emit-row records the repeated-trial floor"

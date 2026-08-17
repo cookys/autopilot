@@ -254,5 +254,11 @@ No open questions remain.
 
 ## Review log
 
-- R0: this document. `logical_plan_id`, rubric, and `plan-review-manifest` to be assigned
-  at Phase 3 of research-to-ship (bounded plan review) — paths will be recorded here.
+- **R0** — authored 2026-08-17 from the three-way research synthesis
+  (`evidence/2026-08-17-brain-seat-exam-suite/synthesis.md`); rev1 folded in the
+  Phase-2 gate Board rulings (Q1–Q3). `logical_plan_id`:
+  `brain-seat-exam-suite-2026-08-17`. Frozen rubric:
+  `2026-08-17-brain-seat-exam-suite.rubric.md` (R1–R7). Manifest:
+  `2026-08-17-brain-seat-exam-suite.plan-review-manifest.json` (GLM-5.3 architecture
+  required, MiniMax-M3 ops-skeptic required, grok-4.6 redteam optional, gpt-5.6-sol
+  dissent optional; anthropic excluded; ≥2 distinct families).

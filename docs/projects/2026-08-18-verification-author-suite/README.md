@@ -50,11 +50,11 @@ per-module skill rows configured for `scripts/`/`evals/` — N/A recorded.
 |---|---|---|
 | Plan v2 lineage | ⛔ STOPPED at G2 terminal | G1: 9 blockers, all accepted + repaired (trace re-derivation design). G2 (after a growth-gate compression + legal zero-consumption state surgery): chair STOP + deep CONDITIONAL, 9 NEW blockers — three fatal mechanics proven (same-process trace forgery, spec-blind exhaustive caller, unserializable contract). Generation cap spent ⇒ NOT approved; v3 needs Board authorization. Distillation: `docs/plans/evidence/2026-08-18-verification-author-suite/v3-design-requirements.md` |
 | Plan v3 lineage (Board ruling c) | ✅ FROZEN | v3-G1 9 blockers repaired in G2 revision; v3-G2 terminal left 8 specification-precision blockers, depth-0-adjudicated ACCEPTED + folded (zero construct findings = freeze basis, brain precedent) |
-| P1 generator + corpus | in progress | |
-| P2 runner + grader | pending | |
-| P3 engine-qualify subcommand | pending | |
-| P4 provider mode | pending | |
-| P5 dogfood + release | pending | |
+| P1 generator + corpus | done | 432 assertions; admission gate caught its own first solver draft |
+| P2 runner + grader | done | 26 assertions; discriminating mutation control |
+| P3 engine-qualify subcommand | done | 26 end-to-end; additive va_declared_plan evidence kind; broker role widened |
+| P4 provider mode | done | QRP_PROMPT_MODE=va; provider suite 115 |
+| P5 dogfood + release | in progress | GLM incumbent administration running; docs/version staged |
 
 ## Decision log
 

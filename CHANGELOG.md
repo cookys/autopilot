@@ -24,6 +24,52 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.17 — Verification-author qualification suite (declared test plans)
+
+**Headline**: The LAST canonical role without a qualification suite gets one.
+`engine-qualify.sh verification_author` administers a declared-test-plan exam: the
+candidate reads a clause-rendered requirements spec (never any implementation) and
+submits ordered calls with pre-declared expected outcomes as pure DATA; the host
+executes the plan against hidden clean/defect twins in the bwrap runner and grades
+declared-accuracy × sensitivity × robustness offline. No candidate code ever executes —
+trace forgery, harness-sandbox exhaustion, and white-box shortcuts are impossible by
+construction, and spec-blind fuzzing dies on the declaration line plus a constant step
+budget. Design survived a two-lineage hetero review (v2 STOPPED at its terminal with
+three proven-fatal mechanics; Board construct ruling (c); v3 froze after 18 blockers
+repaired + 8 terminal spec-precision blockers depth-0-adjudicated).
+
+### Added
+- `evals/va-eval-generator.js` + `evals/va-capability-evidence-corpus.json`: data-only
+  contract DSL with one pinned evaluator; six happy-path-blind defect families as
+  single-node tree mutations; twins COMPILED by an independent code path and
+  cross-checked against the oracle over a full sweep (admission — the oracle is never
+  a shadow of what it grades); spec-only reference solver with boundary-value and
+  fractional-part strategies proving in-budget solvability; clause-bijective invertible
+  renderers ×3; envelope-exact leak scan.
+- `evals/va-eval-grader.js`: pure-function grading with injected twin execution,
+  three-way declared accuracy, total taxonomy precedence, abort classes with NO verdict.
+- `engine-qualify.js verification_author` subcommand: both transports + local panel,
+  VA bwrap twin runner, `transport_fail`/`infra_fail` abort semantics, evidence on the
+  additive `va_declared_plan` methodology kind (brain-precedent chassis variant),
+  `--emit-row`/`--version-source` honored; broker role enum widened.
+- Provider `QRP_PROMPT_MODE=va`: teaches the imported `PLAN_CONTRACT` only (strategy is
+  the examined judgment), role-gated, honesty-scanned, single-line plans.
+- Suites: `va-eval-generator` (432 assertions incl. red cases for every admission
+  gate), `va-eval-grader` (26 incl. the discriminating delete-the-gate mutation
+  control), `engine-qualify-va` (26 end-to-end incl. a spec-only clause-reconstruction
+  mock through the REAL sandbox + broker transport parity), provider suite at 115.
+
+### Review
+- Plan lineage: v2 G1 9 blockers repaired → v2 G2 terminal STOP (3 fatal mechanics) →
+  Board ruling (c) → v3 G1 9 blockers repaired → v3 G2 terminal 8 spec-precision
+  blockers, all depth-0-adjudicated ACCEPTED + folded (zero construct findings = the
+  brain-precedent freeze basis). Seats: gpt-5.6-sol codex/max chair + glm-5.3 http/high
+  deep throughout.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.34.16`.
+
 ## v2.34.16 — CLI transport hardening + the roster's first qualified reviewer
 
 **Headline**: The v2.34.15 review's deferred hardening landed (seven of eight items — only

@@ -22,7 +22,7 @@ Reviewer, owner, and brain-seat end-to-end qualification are shipped gate paths 
 - ✅ `stage-0 spike` and exact-scope `stage-1 reviewer/owner qualification` are implemented with separate repeated nonce-derived corpora, host oracles, and executable mutation controls.
 - ✅ Qualification evidence is keyed by exact role, task/domain/language/tool scope and deployment identity; legacy scorecard rows remain compatibility-only.
 - ✅ Canonical roles are `owner`, `implementer`, `reviewer`, `verification_author`, and `explorer`. Scorecard input aliases `planner`/`orchestrator` to `owner` and `verifier` to `reviewer`; stored and returned rows are canonical.
-- ⚠️ Implementer, verification-author, and explorer auto-qualification require their own role-specific eval suites before autonomous routing.
+- ⚠️ Implementer and explorer auto-qualification still require their own role-specific eval suites before autonomous routing; reviewer, owner, brain, and verification_author suites are shipped (`engine-qualify.sh <role>`).
 - ⚠️ Local OpenAI-compatible transport is available only after a deployment's semantic and operational identity can be bound. A configured label or API response alone is not qualification.
 
 ## Governing constraint (routing-axis evidence bar)

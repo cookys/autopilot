@@ -76,7 +76,13 @@
      Effort 'default': claude -p exposes no effort control; the seat runs the
      model default. Re-pin prompt_config_hash + harness_version when the brain
      prompt or engine-qualify.js changes AND the seat re-sits — the identity file
-     records the SEATED deployment, not the repo tip. -->
+     records the SEATED deployment, not the repo tip.
+     Prompt-hash history: af99c673… (first sitting 2026-08-17, FAILED — the
+     administration diagnosis attributed 勤勞/收斂 to prompt teaching defects:
+     no incremental-flag semantics, no 12-round horizon; 公平 was a REAL seat
+     miss. Prompt repaired → f9e2d8b6…, identity re-pinned, re-sit is a fresh
+     identity's first administration; the af99c673… FAIL row stands in the
+     store untouched). -->
 - brain_seat_identity_file: .claude/brain-seat-identity.json
 
 > **Previous Gemini slot (temporarily suspended 2026-08-05).** The normal

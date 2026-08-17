@@ -48,12 +48,8 @@ per-module skill rows configured for `scripts/`/`evals/` — N/A recorded.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Plan + hetero review | G2 in review | G1 CONDITIONAL (sol STOP + glm CONDITIONAL, 9 blockers) → all accepted, plan revised (host trace re-derivation design), disposition filed, G2 dispatched |
-| P1 generator + corpus | pending | |
-| P2 host runner + grader | pending | |
-| P3 engine-qualify subcommand | pending | |
-| P4 provider authoring prompt | pending | |
-| P5 dogfood + docs + release | pending | |
+| Plan + hetero review | ⛔ STOPPED at G2 terminal | G1: 9 blockers, all accepted + repaired (trace re-derivation design). G2 (after a growth-gate compression + legal zero-consumption state surgery): chair STOP + deep CONDITIONAL, 9 NEW blockers — three fatal mechanics proven (same-process trace forgery, spec-blind exhaustive caller, unserializable contract). Generation cap spent ⇒ NOT approved; v3 needs Board authorization. Distillation: `docs/plans/evidence/2026-08-18-verification-author-suite/v3-design-requirements.md` |
+| P1–P5 implementation | not started | blocked on Board construct ruling (black-box vs white-box vs hybrid) |
 
 ## Decision log
 

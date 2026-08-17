@@ -1,6 +1,6 @@
 # Verification-author qualification suite (2026-08-18)
 
-> 狀態: G2 (G1 CONDITIONAL, 9 blockers, all repaired; see Review Loop History)
+> 狀態: ⛔ STOPPED at G2 terminal (generation cap with accepted blockers) — NOT approved for implementation; Board decision required for any v3 redesign
 > BACKLOG L item: the last canonical role with no qualification suite — the
 > /l6 VA seat runs on calibration notes alone.
 

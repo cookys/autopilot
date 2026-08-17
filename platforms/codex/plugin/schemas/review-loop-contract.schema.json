@@ -55,6 +55,7 @@
     "provider_readiness_receipt_ttl_seconds",
     "provider_readiness_fallback_family_constraint",
     "strict_l5_policy_override",
+    "brain_seat",
     "plan_review",
     "plan_reviewer_engine",
     "plan_reviewer_effort",
@@ -537,6 +538,18 @@
     "strict_l5_policy_override": {
       "type": "string",
       "description": "Non-empty = deliberate, recorded escape from strict /l5 byte-equal policy coverage; the string is the operator's reason and is surfaced on every derivation. Empty = fail-closed (default)."
+    },
+    "brain_seat": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["seat_class", "status", "admission", "strikes_since_pass"],
+      "description": "Brain-seat standing on the P7-governed paths (plan 2026-08-17-brain-seat-exam-suite P4). null = no seat context configured. Candidate seats without standing are refused; the incumbent annotates loudly (Board 2026-08-16 advisory bootstrap semantics); the per-invocation override admits with an EVIDENCE-FREE warning — never a silent third path.",
+      "properties": {
+        "seat_class": { "enum": ["incumbent", "candidate"] },
+        "status": { "type": "string" },
+        "admission": { "enum": ["admitted", "advisory", "refused", "override_admitted"] },
+        "strikes_since_pass": { "type": ["integer", "null"] }
+      }
     }
   },
   "required": [

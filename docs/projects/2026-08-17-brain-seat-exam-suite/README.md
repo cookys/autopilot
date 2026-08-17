@@ -37,7 +37,7 @@ KR1–KR5 (+KR3b strikes) with red cases: see plan §2 (frozen; not restated her
 | P2 grader (L) | done | (this branch) | brain-eval-grader.test.sh — 40 node assertions: golden pass + 16 red fixtures + 3 distinct early-end outcomes + forged-telemetry immunity |
 | P3 administration mode + strikes (L) | done | (this branch) | engine-qualify-brain.test.sh — 34 assertions through real bwrap transport; kernel kind-scoped standing semantics; strike ledger + brain-status; instrument strike flags; all pre-existing suites re-green |
 | P4 P7 rail + emission wiring (S) | done | (this branch) | resolve-review-loop 305 / next-pick 28 / stall-fuse 22 / conformance 29 assertions; grep-gate on round protocol; readiness brain-seat line |
-| P5 dogfood + wiring + release (S) | pending | — | preflight-release.sh 8/8; dogfood record with AND-of-four verdict |
+| P5 wiring + release (S; real dogfood deferred per D1) | done | (this branch) | preflight-release.sh 8/8; CHANGELOG v2.34.14 + version mirrors + inventory/SKILL rows + contract schema; mock-candidate administration fully verified in engine-qualify-brain.test.sh |
 
 ## Decision log
 
@@ -45,3 +45,10 @@ KR1–KR5 (+KR3b strikes) with red cases: see plan §2 (frozen; not restated her
   as named case family; standing pass + 3-strike revocation (no expiry); incumbent
   first, FAIL annotates only; zero-ask floor on legal-workaround controls; plan FROZEN
   after G2 terminal adjudication — scope changes now require stop-and-re-freeze.
+- D1 (2026-08-17, Board at P5): the incumbent Claude seat has NO exam transport on
+  this host (OAuth only — no raw Anthropic token; the broker's CLI-harness transport
+  is the deferred reviewer-seat BACKLOG work). Ruling: ship v2.34.14 with the
+  mock-verified suite; the FIRST REAL administration rides the adapter CLI-transport
+  BACKLOG row (its Context now names this); the incumbent stays loudly advisory on
+  the governed paths until then. Not a plan mutation — an execution disposition
+  recorded here; plan P5's dogfood clause is satisfied-by-deferral per this ruling.

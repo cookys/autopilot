@@ -24,6 +24,57 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.14 — Brain-seat standing exam: 勤勞×公平×收斂 qualification with strike revocation
+
+**Headline**: The brain seat (autonomous depth-0 orchestrator, canonical `owner` role) gains its
+standing qualification path — the KR6 two-path rule's first leg, which v2.34.13 left as an
+explicit-override-only stub. One administration = two seed-derived trials × 12 stateless rounds
+(rehydration-bundle-shaped inputs; four interleaved case families: 勤勞 contradiction plants with a
+mandatory late-window sentinel and reintroduction-after-gap, 公平 cross-trial dual-rendered
+adjudication pairs + provenance cases, F1/F3/F4 containment temptations + zero-ask legal controls,
+and a 收斂 world table with the F5 resurface trap, F2 churn offer, and F12 poll-spam window),
+graded by deterministic offline replay. Qualification is STANDING (Board 2026-08-17): no expiry —
+revocation is 3 identity-keyed production strikes (stall-fuse trip / conformance-audit fail) since
+the last pass, and every re-sit is a fresh administration. Plan frozen after a two-generation
+four-seat hetero review (G1 13+2, G2 11+3 blockers adjudicated). The first REAL administration
+rides the deferred adapter CLI-transport work (the incumbent Claude seat has no exam transport
+yet); until then the incumbent stays loudly advisory on the governed paths.
+
+### Added
+- `evals/brain-eval-generator.js` + `evals/brain-capability-evidence-corpus.json` — seed-derived
+  administration generator (≥3 held-out renderers, per-family placement exclusivity, placement
+  matrix, oracle leak scan; every validator rule red-cased).
+- `evals/brain-eval-grader.js` — offline replay grader: citation-valid 勤勞 flags, per-arm 公平
+  tuples (cross-trial invariance joined at administration level, CONJUNCTIVE with the correctness
+  oracle), lexicographic 收斂 hard fails, containment ask-floor; three DISTINCT early-end outcomes
+  (early_end FAIL / insufficient_budget no-verdict / malformed fail-closed); forged candidate
+  telemetry never influences verdicts.
+- `engine-qualify.sh brain` — drives rounds as ordinary single-shot panel cases (harness echoes the
+  realized-action record into each bundle), appends ONE atomic `owner-brain-seat-v1` record
+  (kind-scoped standing semantics in the capability-evidence kernel; pinned `construct_scope`
+  honesty field; forced `brain-seat` scope so lineage never interleaves with owner intent-control).
+- `engine-capability-state.js strike` / `brain-status` — identity_hash-keyed strike ledger
+  (strikes.jsonl under the existing store lock) and the three-way standing fold
+  (`no_record` / `qualified` / `requalification_required`; re-sit re-baselines).
+- Strike emission flags on `check-stall-fuse.js check` and `check-blueprint-conformance.js audit`
+  (both-or-neither, fail-closed append, absent = byte-identical) + the l4+ round protocol wires
+  both invocations (grep-gated).
+- P7 rail consumption: `resolve-review-loop.sh` emits the three-way `brain_seat` admission
+  (candidate refusal naming both legal paths / incumbent advisory per the Board 2026-08-16
+  bootstrap semantics / override admits loudly); `next-pick.js pick` gates the auto-pick the same
+  way; `status readiness` prints the brain-seat standing line.
+
+### Changed
+- `src/engine/capability-evidence.js` — additive `owner_brain_seat` methodology kind (brain
+  thresholds + `brain_trial` shape + promotion floors); qualified-TTL ceiling and expiry staling
+  are kind-exempt for the standing record (no far-future sentinel); existing rows revalidate.
+- `schemas/capability-evidence.schema.json` — additive brain_trial / thresholds / kind variants.
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.34.13`; new store files (`strikes.jsonl`) are inert
+  under the old version and may be left in place.
+
 ## v2.34.13 — Autonomous brain integration: frozen four-tuple, stateless orchestrator, decision ledger
 
 **Headline**: The execution half of the autonomous-brain plan (frozen after a two-generation

@@ -183,6 +183,30 @@ rows were the only real qualification history the roster had.
 
 ---
 
+## 10. An exam FAIL is a claim about the administration AND the candidate — attribute before you conclude
+
+**Incident (2026-08-17, brain-seat first real administrations)**: the incumbent seat failed
+3 of 4 subjects with "17 clean false positives" per trial. The raw-log replay showed those 17
+were 5 UNIQUE flag pairs — 4 of them REAL plants — re-reported every round, because the
+candidate prompt taught "cross-check every claim EVERY round" while the exam's pinned semantic
+(per its own mock candidate) is incremental first-visibility flagging. A second subject failed
+because the prompt never said the stream is 12 rounds long; a third sitting-2 failure traced to
+the prompt's own final-round teaching conflict. Three separate FAIL lines were administration
+defects wearing a seat-behavior costume — while one subject (fairness) was a genuine,
+seed-stable capability miss that no prompt repair changed.
+
+The trap: the grader is deterministic and the transport was clean, so the verdict LOOKS like
+pure candidate signal. But the candidate prompt is part of the instrument, and a teaching
+defect produces exactly the same red as incompetence. The counterfeit-signal test from §The
+one question applies to every subject line separately: for each failed line, replay the raw
+exchanges and ask "would a candidate doing exactly what the instrument TOLD it to do produce
+this failure?" If yes, the line indicts the instrument. Repair the instrument (new identity,
+recorded prompt-hash history), keep the FAIL rows untouched, and re-sit fresh — and when two
+independent seeds then put the same subjects at the same margins, that is capability signal:
+stop. A third sitting after that is selecting on the exam's own noise.
+
+---
+
 ## The one question
 
 Before recording anything as verified:

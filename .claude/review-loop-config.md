@@ -69,10 +69,17 @@
        'brain-seat-semantic-surface-v1', model:'claude-fable-5',
        transport:'claude-cli-headless-no-tools', setting_sources:'project'})).
      - containment_fingerprint = sha256(canonicalJson({kind:
-       'brain-seat-containment-surface-v1', exam_transport:
+       'brain-seat-containment-surface-v2', exam_transport:
        'qualification-case-broker-networkless-bwrap', cli_posture:
-       'claude -p --strict-mcp-config --tools-empty', credential_isolation:
-       'dedicated-exam-config-dir-credentials-only'})).
+       'claude -p --setting-sources-empty --strict-mcp-config --tools-empty',
+       credential_isolation:'dedicated-exam-config-dir-credentials-only'})).
+       (v1 used --setting-sources project; the hardening round made the exam
+       child hermetic — probed on claude 2.1.233 — and the sittings 1-2
+       identities keep their recorded v1 value.)
+     - harness_version engine-qualify-0a2f112f (the --version-source provenance
+       flag landed in the hardening round; sittings 1-2 recorded e9eb3890).
+       CLI-transport administrations from here on pass
+       --version-source operator-asserted.
      Effort 'default': claude -p exposes no effort control; the seat runs the
      model default. Re-pin prompt_config_hash + harness_version when the brain
      prompt or engine-qualify.js changes AND the seat re-sits — the identity file

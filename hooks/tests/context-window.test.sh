@@ -233,7 +233,12 @@ assert_eq "$(git -C "$REPO_ROOT" branch --list 'test/context-window-selftest' | 
 # --- resolver: reports over-budget seats without inventing fields -------------
 RESOLVED="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 2000000 2> /dev/null)"
 FIELD_COUNT="$(printf '%s' "$RESOLVED" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(Object.keys(JSON.parse(s)).length))}catch{process.stdout.write("ERR")}})')"
-assert_eq "$FIELD_COUNT" "62" "resolver contract includes reviewer-family, bounded plan-review, and provider-readiness fields while window checks reuse capability_warnings"
+# The no-invented-fields pin derives from the schema's own top-level key order —
+# a literal count here rotted twice as fields landed (62 vs 64, pre-existing red
+# caught by the v2.34.15 review). The schema suite pins order/content; this case
+# pins only "the resolver emits exactly the schema's surface, nothing invented".
+SCHEMA_FIELD_COUNT="$(node -e 'process.stdout.write(String((require(process.argv[1])["x-field-order"]||[]).length))' "$REPO_ROOT/schemas/review-loop-contract.schema.json")"
+assert_eq "$FIELD_COUNT" "$SCHEMA_FIELD_COUNT" "resolver emits exactly the schema x-field-order surface while window checks reuse capability_warnings"
 assert_contains "$RESOLVED" "cannot hold the intended input" "resolver reports an over-budget seat"
 
 # A model id containing spaces must not be split into phantom seats.

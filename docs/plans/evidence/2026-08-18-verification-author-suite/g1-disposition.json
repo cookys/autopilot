@@ -1,0 +1,52 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "verification-author-suite-2026-08-18",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "9c3dc0d83ea160b6d69236daa4882455f735a15816da4b8c4c5bbf3c442509e5",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: formal-contract oracle + probe-sweep twin validation added as generation preconditions (plan §2)."
+  },
+  {
+   "fingerprint": "6e54869cf7c391056e4ec484a9cf6e559b79e483abd48701eaf99a2576fc6076",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: grading redefined as host trace re-derivation on an instrumented proxy channel; candidate exit codes removed from grading (plan §2)."
+  },
+  {
+   "fingerprint": "f593cf38c37ec53b2af93da4838c5f1c4c192b2a2004c5873e62b8ddf205c371",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: envelope defined as exact broker payload bytes; scan set = twin token union minus public surface; opaque ids; pinned renderers (plan §4)."
+  },
+  {
+   "fingerprint": "aab32afd83cad80dfc43250ccbfc83bb63b06d7470d7483bc17c19c330b6d617",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: reuse of the policy-hashed witness-runner bwrap contract with explicit caps and named residuals (plan §5)."
+  },
+  {
+   "fingerprint": "2578e5606ef977e6993979a37fdb2209be14fac361413bda4ed779bac062b163",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: chassis contracts frozen; single HARNESS_CONTRACT export shared by provider and grader; transport-parity row-diff acceptance (plan §6)."
+  },
+  {
+   "fingerprint": "c17a100d4b211d1cd32944284cf64a7c54a7bb2e48caa563aa3d3d5ae2cba84c",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: source-reading argument withdrawn; trace re-derivation makes fake reds worthless; per-trial seeds; residuals named (plan §2/§3)."
+  },
+  {
+   "fingerprint": "0f550de5071dc77d015affffbd3b44bb9a40694acbbf798454d1a2da7925178b",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: full deviant-mock matrix enumerated incl. forged red, no-execution, fingerprint, store failure, transport corruption (plan §7)."
+  },
+  {
+   "fingerprint": "f439987fb1ac3abc146ef7acb1031e4cf9da2ca03db56f71e4eaea4db2c88b2d",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: grading redefined as host trace re-derivation on an instrumented proxy channel; candidate exit codes removed from grading (plan §2)."
+  },
+  {
+   "fingerprint": "c1193c67ddb8d95073fed43c92c383bfc03e2e51b92c1f5a9eb53f05371d81fe",
+   "disposition": "accepted_blocker",
+   "rationale": "Accepted: source-reading argument withdrawn; trace re-derivation makes fake reds worthless; per-trial seeds; residuals named (plan §2/§3)."
+  }
+ ]
+}

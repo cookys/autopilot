@@ -48,7 +48,7 @@ per-module skill rows configured for `scripts/`/`evals/` — N/A recorded.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Plan + hetero review (G1) | in review | seats: gpt-5.6-sol (codex/max) + glm-5.3 (http/high) |
+| Plan + hetero review | G2 in review | G1 CONDITIONAL (sol STOP + glm CONDITIONAL, 9 blockers) → all accepted, plan revised (host trace re-derivation design), disposition filed, G2 dispatched |
 | P1 generator + corpus | pending | |
 | P2 host runner + grader | pending | |
 | P3 engine-qualify subcommand | pending | |

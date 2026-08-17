@@ -1,18 +1,15 @@
 # Verification-author qualification suite (2026-08-18)
 
-> 狀態: G2 — revised after hetero plan review G1 (CONDITIONAL, 9 blockers, all
-> addressed below; disposition in Review Loop History)
-> BACKLOG "Roster qualification — remaining legs" L-effort item. The
-> verification_author role is the LAST canonical role with no qualification
-> suite — the /l6 VA seat currently runs on calibration notes alone.
+> 狀態: G2 (G1 CONDITIONAL, 9 blockers, all repaired; see Review Loop History)
+> BACKLOG L item: the last canonical role with no qualification suite — the
+> /l6 VA seat runs on calibration notes alone.
 
 ## 1. Goal
 
-`engine-qualify.sh verification_author` administers a deterministic standing
-exam for the role that AUTHORS verification harnesses on the /l6 rail: given a
-requirements contract (never an implementation), the candidate authors an
-executable harness; the host executes it against hidden implementations and
-grades **host-verified behavioral evidence** offline.
+`engine-qualify.sh verification_author`: given a requirements contract (never
+an implementation), the candidate authors an executable harness; the host
+executes it against hidden implementations and grades **host-verified
+behavioral evidence** offline.
 
 **Success criteria**:
 1. Seed-derived corpus: same ADMINISTRATION seed ⇒ byte-identical
@@ -62,22 +59,19 @@ else derives from it:
     module fails closed: no-execution).
   - Case passes iff both. Harness exit codes are never trusted; load errors,
     timeout, oversize, empty trace are infra-fail (fail-closed, robustness).
-- **Why source-reading no longer pays** (F5, replacing the G1-refuted
-  argument): reading module source can only produce a STATIC opinion; credit
-  requires a host-verified violating invocation, which only behavioral
-  exercise can produce. Residual (named): a candidate could statically locate
-  the defect and then craft the one violating call — that still requires
-  deriving the violating input from the requirements, which IS the examined
-  skill; what it cannot do is fake a red or pass without executing the module.
-  Execution-salt (per-execution identifier/layout re-rendering, semantics
-  preserved) additionally makes byte-pattern shortcuts brittle across the
-  administration.
+- **Why source-reading no longer pays** (F5): source reading yields only a
+  static opinion; credit requires a host-verified violating invocation.
+  Residual (named): statically locating the defect then crafting the violating
+  call — but deriving that input from requirements IS the examined skill; what
+  cannot happen is a fake red or a pass without executing the module.
+  Execution-salt (semantics-preserving identifier/layout re-render per
+  execution) makes byte-pattern shortcuts brittle besides.
 
 ## 3. Corpus shape
 
 One case = formal contract + rendered spec + validated twins over a small
-CommonJS module (reviewer-corpus scale). Defect families (≥6, each with clean
-twin, ≥2 cases per family per trial, interleaved; all happy-path-blind):
+CommonJS module. Defect families (≥6, clean twin each, ≥2 cases per family per
+trial, interleaved, all happy-path-blind):
 
 1. boundary-off-by-one (inclusive/exclusive bound flipped)
 2. error-path-swallow (required throw replaced by silent fallback)
@@ -88,12 +82,11 @@ twin, ≥2 cases per family per trial, interleaved; all happy-path-blind):
 6. precision-contract (rounding semantics flipped — integer-only blind)
 
 Trial subjects: `sensitivity` (all defect cases red), `specificity` (all clean
-cases green with zero violating traces), `robustness` (zero infra-fails).
-Qualification = AND of three, both trials. Trials draw DISTINCT per-trial
-seeds derived from the administration seed (brain-suite `trial_0/trial_1`
-precedent) — trial 2 is a different corpus instance (F8). Residual (named):
-cross-ADMINISTRATION structure memorization; countered by seed-derived values
-and salt, not eliminated.
+cases green, zero violating traces), `robustness` (zero infra-fails).
+Qualification = AND of three, both trials. Per-trial seeds derive from the
+administration seed (brain precedent) — trial 2 is a different corpus instance
+(F8). Named residual: cross-ADMINISTRATION structure memorization (countered
+by seed-derived values + salt, not eliminated).
 
 ## 4. Candidate-visible envelope + leak scan (G1-F2/F9)
 
@@ -214,35 +207,10 @@ administration is a recorded outcome, not a gate.
 
 ## Review Loop History
 
-- G1 (2026-08-18, seats gpt-5.6-sol codex/max = STOP, glm-5.3 http/high =
-  CONDITIONAL; 9 blocking + 1 future): all 9 blockers accepted and repaired in
-  this revision —
-  F0 (VA1 spec ambiguity / invalid twins) → formal-contract oracle + probe
-  -sweep twin validation as generation preconditions + renderer field-literal
-  coverage check;
-  F1+F7 (VA2 assertion-vs-infra undefined, no execution proof) → grading
-  redefined as host trace re-derivation: red requires a host-verified
-  violating invocation from an instrumented proxy trace on a host-owned
-  channel; candidate exit codes/assertion style removed from grading entirely;
-  F2+F9 (VA3 envelope/leak scan underspecified) → envelope defined as the
-  exact broker payload bytes; scan set = twin token union minus public
-  surface (covers defect-only sentinels); opaque case ids; pinned renderer
-  count; canonicalJson serialization;
-  F3 (VA4 sandbox) → reuse of the existing policy-hashed witness-runner bwrap
-  contract, fresh sandbox per case×twin, explicit caps, named CPU/fd residual;
-  F4 (VA5 chassis freeze) → evidence kind/row schema/broker envelope named;
-  single HARNESS_CONTRACT export consumed by both provider and grader;
-  transport-parity row-diff acceptance;
-  F5 (VA7 source-reading refutation wrong) → G1 was right, the old argument is
-  withdrawn; the trace-re-derivation design makes fake reds worthless and
-  no-execution fail-closed; static defect-location residual NAMED and argued
-  in-scope (deriving the violating input from requirements is the examined
-  skill); execution-salt added;
-  F6 (VA8 deviant coverage) → full enumerated matrix §7 incl. forged red,
-  no-execution, fingerprint, store-failure, partial subjects, transport
-  corruption;
-  F8 (VA7 trial memorization) → per-trial seeds (brain precedent), byte-
-  identical claim rescoped to administration level, cross-administration
-  memorization named as residual.
-  Non-blocking F9 folded into the F2 scan-set definition. Backlog candidate
-  (1) recorded by the review is retained in the envelope for P5 triage.
+- G1 (2026-08-18, sol codex/max = STOP + glm-5.3 http/high = CONDITIONAL; 9
+  blocking + 1 future): all 9 accepted; this revision's §2 (trace
+  re-derivation), §4 (envelope scan), §5 (sandbox), §6 (frozen contracts),
+  §7 (deviant matrix), and the per-trial seeds ARE the repairs. G1's
+  refutation of the old source-reading argument was right — it is withdrawn.
+  Full envelope + per-finding disposition:
+  `docs/plans/evidence/2026-08-18-verification-author-suite/g1-{envelope,disposition}.json`.

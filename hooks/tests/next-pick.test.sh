@@ -80,4 +80,59 @@ assert_contains "$P" '"effort": "S"' "S token extracted"
 assert_contains "$P" '"effort": "L"' "L token extracted"
 assert_contains "$P" '"board"' "board tag detected from Effort text"
 
+# ── Brain-seat gating on the auto-pick path (P7/KR4, brain-seat-exam-suite P4) ──
+cat > "$TEST_TMP/brain-status-norec.json" <<'JSON'
+{"schema_version":1,"artifact_type":"brain_seat_status","status":"no_record","strikes_since_pass":0}
+JSON
+cat > "$TEST_TMP/brain-status-requal.json" <<'JSON'
+{"schema_version":1,"artifact_type":"brain_seat_status","status":"requalification_required","strikes_since_pass":3}
+JSON
+cat > "$TEST_TMP/brain-status-ok.json" <<'JSON'
+{"schema_version":1,"artifact_type":"brain_seat_status","status":"qualified","strikes_since_pass":0}
+JSON
+cat > "$TEST_TMP/brain-override.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"any","runner":"any","role":"owner","reason":"test","expires":"2999-01-01"}]}
+JSON
+
+# candidate + no standing → refusal naming both legal paths, exit 1
+BS_OUT="$(node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-norec.json" --seat-class candidate 2>/dev/null)"; BS_RC=$?
+assert_eq "1" "$BS_RC" "candidate seat without standing refuses the auto-pick"
+assert_contains "$BS_OUT" "brain_seat_refused" "refusal artifact is machine-readable"
+assert_contains "$BS_OUT" "engine-qualify.sh brain" "refusal names the standing-exam path"
+assert_contains "$BS_OUT" "qualification-override" "refusal names the override path"
+
+# requalification_required behaves exactly like absence for a candidate
+node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate >/dev/null 2>&1
+assert_eq "1" "$?" "requalification_required refuses a candidate (no silent third path)"
+
+# the override still admits (two-path rule), loudly — and binds to the EXACT engine
+BS_OVR_ERR="$(node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate --seat-engine any \
+  --qualification-override "$TEST_TMP/brain-override.json" 2>&1 >/dev/null)"; BS_OVR_RC=$?
+assert_eq "0" "$BS_OVR_RC" "override admits a candidate with no standing"
+assert_contains "$BS_OVR_ERR" "EVIDENCE-FREE" "override admission is loudly labelled"
+# an override written for one engine never admits another (identity binding)
+node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate --seat-engine other-engine \
+  --qualification-override "$TEST_TMP/brain-override.json" >/dev/null 2>&1
+assert_eq "1" "$?" "an override for a different engine never admits (cross-path parity)"
+# override without the binding flag is a usage error, not a silent skip
+node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate \
+  --qualification-override "$TEST_TMP/brain-override.json" >/dev/null 2>&1
+assert_eq "2" "$?" "--qualification-override requires --seat-engine"
+
+# incumbent + no standing → advisory annotation, pick proceeds
+BS_INC="$(node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-norec.json" --seat-class incumbent 2>/dev/null)"; BS_INC_RC=$?
+assert_eq "0" "$BS_INC_RC" "incumbent seat proceeds (Board 2026-08-16 advisory semantics)"
+assert_contains "$BS_INC" '"admission": "advisory"' "incumbent admission is recorded as advisory"
+
+# qualified standing → admitted, no annotation
+BS_OK="$(node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-ok.json" --seat-class incumbent 2>/dev/null)"
+assert_contains "$BS_OK" '"admission": "admitted"' "standing pass admits cleanly"
+
 finalize_test

@@ -417,7 +417,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
@@ -984,5 +984,114 @@ PS_NONE="$(bash "$SCRIPT" --prior-status none --diff-lines 10 --source-trust hig
 assert_eq "$PS_DEF" "$PS_NONE" "--prior-status none is byte-identical to the default (existing behavior pinned)"
 bash "$SCRIPT" --prior-status bogus --diff-lines 10 2>/dev/null; PS_EXIT=$?
 assert_eq "2" "$PS_EXIT" "invalid --prior-status rejected"
+
+# ── Brain-seat standing (P7/KR4, plan 2026-08-17-brain-seat-exam-suite P4) ─────────
+BRAIN_TMP="$TEST_TMP/brain-seat"; mkdir -p "$BRAIN_TMP/store"
+BRAIN_ID="$BRAIN_TMP/incumbent-identity.json"
+node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  identity: "brain-model-exact", model_alias: "brain-engine", model_version: "1",
+  family: "test-family", runner: "brain-harness", runner_version: "1.0.0",
+  harness_version: "h1", effort: "high",
+  prompt_config_hash: "a".repeat(64), semantic_fingerprint: "b".repeat(64),
+  containment_fingerprint: "c".repeat(64), identity_resolved: true,
+}));
+' "$BRAIN_ID"
+cp "$BRAIN_ID" "$BRAIN_TMP/candidate-identity.json"
+BRAIN_CFG="$TEST_TMP/brain-cfg.md"
+printf -- '- brain_seat_identity_file: %s\n' "$BRAIN_ID" > "$BRAIN_CFG"
+
+# default config carries no brain seat context → field stays null (pinned no-op)
+assert_eq "null" "$(bash "$SCRIPT" --field brain_seat 2>/dev/null)" "no seat context => brain_seat null"
+
+# incumbent with NO record: loud advisory annotation, never a block
+BS_ADV="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "advisory" "$(json_get "$BS_ADV" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
+  "incumbent without standing => advisory (Board 2026-08-16 bootstrap semantics)"
+assert_contains "$(json_get "$BS_ADV" capability_warnings)" "engine-qualify.sh brain" \
+  "incumbent annotation names the standing-exam path"
+
+# non-incumbent candidate with NO record: hard refusal naming BOTH legal paths
+BS_REF="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "refused" "$(json_get "$BS_REF" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
+  "candidate without standing => refused (KR4 red case)"
+assert_contains "$(json_get "$BS_REF" capability_warnings)" "qualification override" \
+  "refusal names the override path too (two-path rule survives)"
+
+# the per-invocation override STILL admits every non-qualified state (no third path)
+BRAIN_OVR="$BRAIN_TMP/override.json"
+node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({ schema: 1, overrides: [{
+  engine: "brain-engine", runner: "brain-harness", role: "owner",
+  reason: "test drive", expires: "2999-01-01",
+}]}));
+' "$BRAIN_OVR"
+BS_OVR="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" \
+  AUTOPILOT_QUALIFICATION_OVERRIDE="$BRAIN_OVR" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "override_admitted" "$(json_get "$BS_OVR" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
+  "override admits a candidate with no standing (EVIDENCE-FREE, loud)"
+assert_contains "$(json_get "$BS_OVR" capability_warnings)" "EVIDENCE-FREE" \
+  "override admission is loudly labelled"
+
+# a real qualified brain record => admitted, silent; 3 strikes => requalification_required
+node -e '
+const path = require("path");
+const { appendEvidenceRecord, appendStrikeRecord, resolveStoreConfig } =
+  require(path.join(process.argv[2], "scripts", "engine-capability-state"));
+const { compileCapabilityEvidence, BRAIN_CONSTRUCT_SCOPE } =
+  require(path.join(process.argv[2], "src", "engine", "capability-evidence"));
+const identity = JSON.parse(require("fs").readFileSync(process.argv[3], "utf8"));
+const config = resolveStoreConfig({ store: process.argv[1] });
+const corpusHash = "d".repeat(64);
+const trial = (id) => ({
+  trial_id: id, observed_at: "2026-08-17T00:00:00.000Z", stop_reason: "completed",
+  construct_scope: BRAIN_CONSTRUCT_SCOPE, plants_total: 6, plants_caught: 6,
+  clean_false_positives: 0, fairness_cases_total: 4, fairness_correctness_failures: 0,
+  pair_delta_count: 0, hard_fail_count: 0, ask_floor_violations: 0,
+  convergence_terminal: true, economy_ok: true, verification_actions: 4,
+  findings_closed: 3, spend_tokens: 1000,
+  decision_trace_hash: "e".repeat(64), round_stream_hash: "f".repeat(64),
+  corpus_manifest_hash: corpusHash,
+});
+const evidence = compileCapabilityEvidence({
+  schema_version: 1, source: "internal_eval", source_ref: "engine-qualify:brain-v1",
+  state: "qualified", role: "owner",
+  scope: { task_classes: ["brain-seat"], domains: ["repository"], languages: ["en"], tool_surface: [] },
+  identity, issued_at: "2026-08-17T00:00:00.000Z", observed_at: "2026-08-17T00:00:00.000Z",
+  expires_at: "2026-09-16T00:00:00.000Z",
+  methodology: {
+    kind: "owner_brain_seat", name: "owner-brain-seat", version: "1.0.0",
+    corpus_version: "brain-seat-v1.brain-seat-metamorphic-v1", corpus_manifest_hash: corpusHash,
+    thresholds: { min_trials: 2, min_plants_per_trial: 3, max_clean_false_positives: 0,
+      max_critical_misses: 0, max_pair_deltas: 0, max_asks_on_legal_controls: 0 },
+    basis: null,
+  },
+  trials: [trial("trial-1"), trial("trial-2")], revocation: null, supersedes: null,
+});
+appendEvidenceRecord(config, evidence, "engine-qualify-v2");
+for (let i = 0; i < 3; i += 1) {
+  appendStrikeRecord(config, { identity, source: "fuse", receiptRef: `t${i}`,
+    observedAt: `2026-08-18T0${i}:00:00.000Z` });
+}
+' "$BRAIN_TMP/store" "$REPO_ROOT" "$BRAIN_ID"
+BS_REQ="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "requalification_required" "$(json_get "$BS_REQ" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).status))')" \
+  "3 post-pass strikes => requalification_required"
+assert_eq "refused" "$(json_get "$BS_REQ" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
+  "requalification_required refuses a candidate exactly like absence (no silent third path)"
+
+# under --enforce the resolver ITSELF is the gate: a refused candidate seating exits 3
+REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" \
+  bash "$SCRIPT" --enforce >/dev/null 2>&1
+assert_eq "3" "$?" "--enforce turns a refused brain seating into exit 3 (the shipped enforce rail)"
+REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  bash "$SCRIPT" --enforce >/dev/null 2>&1
+assert_eq "0" "$?" "--enforce leaves the incumbent advisory path passing (annotate, never block)"
 
 finalize_test

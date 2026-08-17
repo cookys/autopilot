@@ -17,7 +17,7 @@ If the task is about **how far to implement a cross-harness integration** or whe
 
 ## Current scope
 
-Reviewer and owner end-to-end qualification are shipped gate paths today.
+Reviewer, owner, and brain-seat end-to-end qualification are shipped gate paths today (`brain` = the 勤勞×公平×收斂 standing exam; one atomic `owner-brain-seat-v1` record on the owner role with forced `brain-seat` scope, no expiry, 3-strike revocation via `engine-capability-state.js brain-status`).
 
 - ✅ `stage-0 spike` and exact-scope `stage-1 reviewer/owner qualification` are implemented with separate repeated nonce-derived corpora, host oracles, and executable mutation controls.
 - ✅ Qualification evidence is keyed by exact role, task/domain/language/tool scope and deployment identity; legacy scorecard rows remain compatibility-only.
@@ -40,7 +40,7 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 
 | Script | Stage | Role in the runbook |
 |--------|-------|---------------------|
-| [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer/owner) | Runs at least two fresh role-specific known-bad + clean trials, independent host oracles, and a reversal control. Reviewer and owner corpora/methodologies are not interchangeable. CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
+| [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer/owner/brain) | Runs at least two fresh role-specific known-bad + clean trials, independent host oracles, and a reversal control. Reviewer/owner/brain corpora and methodologies are not interchangeable; `brain` drives 12 stateless rounds per trial and grades offline (evals/brain-eval-grader.js). CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
 | [`scripts/qualification-case-broker.js`](../../scripts/qualification-case-broker.js) | Remote qualification transport | Sends exactly one bounded case from a networkless sandbox over a per-case Unix socket while the host retains credentials, outbound access, timeout policy, and exact returned identity. |
 | [`scripts/qualification-review-provider.js`](../../scripts/qualification-review-provider.js) | Remote reviewer adapter | Host-side `--remote-provider-cmd` for real Anthropic-compatible endpoints (MiniMax/GLM family): teaches the output contract and per-rule witness recipes but never detection patterns; repairs transport-level JSON damage and anchors file/line mechanically. Pass creds via `--provider-env QRP_BASE_URL/QRP_AUTH_TOKEN/QRP_MODEL/QRP_PROVIDER`. |
 | [`scripts/probe-local-engine.js`](../../scripts/probe-local-engine.js) | Local deployment probe | Reads the protected user-local roster, probes runtime identity/capacity, and reports `identity_verified`, `identity_unverifiable`, `degraded`, or `not_configured` without promoting any role. |

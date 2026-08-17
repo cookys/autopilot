@@ -8,6 +8,7 @@ const path = require('path');
 const process = require('process');
 const { spawnSync } = require('child_process');
 const {
+  BRAIN_CONSTRUCT_SCOPE,
   compileCapabilityEvidence,
   evaluateCapabilityEvidence,
   verifyEvaluationCorpus,
@@ -33,6 +34,12 @@ const {
   RULES: OWNER_RULES,
   generateOwnerEvaluation,
 } = require('../evals/owner-eval-generator');
+const {
+  CORPUS: BRAIN_CORPUS,
+  GENERATOR_VERSION: BRAIN_GENERATOR_VERSION,
+  generateBrainAdministration,
+} = require('../evals/brain-eval-generator');
+const { gradeAdministration } = require('../evals/brain-eval-grader');
 const {
   expandTilde,
 } = require('./lib/jsonl-store');
@@ -62,6 +69,19 @@ const EXPECTED_ARTIFACT_ORACLE_HASH =
   '0f0a5519a0eade5de937aff0f6ed78e79b21cfcdc9fcf9476f3897b876ee86f5';
 const EXPECTED_GENERATOR_HASH =
   'a5d686853ee5e070f7e2a598e5999f063ad48110e2223d3e684834b4e8d525f3';
+const BRAIN_GENERATOR_PATH = path.join(REPO_ROOT, 'evals', 'brain-eval-generator.js');
+const BRAIN_GRADER_PATH = path.join(REPO_ROOT, 'evals', 'brain-eval-grader.js');
+const BRAIN_CORPUS_PATH = path.join(
+  REPO_ROOT,
+  'evals',
+  'brain-capability-evidence-corpus.json',
+);
+const EXPECTED_BRAIN_GENERATOR_HASH =
+  '9829c8c4fc7b900d27d02992e7b94b9b8002722bd45cec938a8233a1f091791e';
+const EXPECTED_BRAIN_GRADER_HASH =
+  '2a31692497831c345c3a7072ccd406df5548f5081265c4eb29761cf417ab2b4e';
+const EXPECTED_BRAIN_CORPUS_HASH =
+  '09b5bea4a6bda65a3030e2556ef8c76c28749fe1d0e6fc05b6bcaf532a10b216';
 const EXPECTED_OWNER_CORPUS_VERSION = 'owner-intent-control-v1';
 const EXPECTED_OWNER_MANIFEST_HASH =
   'b7b4d6159d9b01a7be06a663d35d205379a8df18b7a87dfbcb9a796d33be07a6';
@@ -183,7 +203,7 @@ function positiveInteger(value, label, minimum = 1) {
 function parseArgs(argv) {
   if (argv.length === 0) usage(2);
   if (['-h', '--help', 'help'].includes(argv[0])) usage(0);
-  if (!['reviewer', 'owner'].includes(argv[0])) {
+  if (!['reviewer', 'owner', 'brain'].includes(argv[0])) {
     usage(2, `unknown subcommand: ${argv[0]}`);
   }
   const options = {
@@ -213,6 +233,7 @@ function parseArgs(argv) {
     ['--semantic-fingerprint', 'semanticFingerprint'],
     ['--containment-fingerprint', 'containmentFingerprint'],
     ['--panel-cmd', 'panelCmd'],
+    ['--raw-dir', 'rawDir'],
     ['--remote-provider-cmd', 'remoteProviderCmd'],
     ['--remote-provider', 'remoteProvider'],
     ['--remote-timeout-ms', 'remoteTimeoutMs'],
@@ -1866,8 +1887,333 @@ function verifyPinnedOwnerEvaluationAssets(overrides = {}) {
   });
 }
 
+function verifyPinnedBrainEvaluationAssets() {
+  const generatorHash = sha256(fs.readFileSync(BRAIN_GENERATOR_PATH, 'utf8'));
+  if (generatorHash !== EXPECTED_BRAIN_GENERATOR_HASH) {
+    throw new Error('brain evaluation generator drifted from its pinned hash');
+  }
+  const graderHash = sha256(fs.readFileSync(BRAIN_GRADER_PATH, 'utf8'));
+  if (graderHash !== EXPECTED_BRAIN_GRADER_HASH) {
+    throw new Error('brain evaluation grader drifted from its pinned hash');
+  }
+  const corpusHash = sha256(fs.readFileSync(BRAIN_CORPUS_PATH, 'utf8'));
+  if (corpusHash !== EXPECTED_BRAIN_CORPUS_HASH) {
+    throw new Error('brain evaluation corpus drifted from its pinned hash');
+  }
+  return { generator_hash: generatorHash, grader_hash: graderHash, corpus_hash: corpusHash };
+}
+
+function parseBrainRoundOutput(stdout) {
+  if (typeof stdout !== 'string' || stdout.length === 0) return {};
+  const lines = stdout.split(/\r?\n/);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index].trim();
+    if (!line.startsWith('{')) continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch { /* keep scanning upward */ }
+  }
+  return {};
+}
+
+// Brain-seat standing exam (plan 2026-08-17-brain-seat-exam-suite P3). K stateless
+// rounds per trial reach the engine as ordinary single-shot panel cases (KR2
+// statelessness — the per-case transport surface is unchanged); grading is offline
+// replay by the pinned grader; the ONE atomic owner-brain-seat-v1 record rides the
+// canonical owner role with the FORCED scope task_classes:['brain-seat'] so its
+// lineage never interleaves with owner intent-control evidence.
+function runBrainQualification(options) {
+  let staticAssets;
+  try {
+    staticAssets = verifyPinnedBrainEvaluationAssets();
+    verifySandboxRuntime();
+  } catch (error) {
+    throw new Error(`qualification precondition failed: ${error.message}`);
+  }
+  if (options.trials !== BRAIN_CORPUS.budget.trials_per_administration) {
+    throw new Error(
+      `brain qualification requires exactly ${BRAIN_CORPUS.budget.trials_per_administration} trials`,
+    );
+  }
+  const panelConfig = snapshotPanelConfiguration({ ...options, role: 'owner' });
+  const runNonce = crypto.randomBytes(32).toString('hex');
+  const masterSeed = sha256(canonicalJson({
+    run_nonce: runNonce,
+    optional_test_salt: process.env.AUTOPILOT_QUALIFY_SEED || null,
+    generator_hash: staticAssets.generator_hash,
+    role: 'brain',
+  }));
+  const admin = generateBrainAdministration(masterSeed);
+  const tokenCap = BRAIN_CORPUS.budget.token_cap_per_administration;
+  const tokensOf = (text) => Math.ceil(Buffer.byteLength(text, 'utf8') / 4);
+  const started = Date.now();
+
+  const traces = [];
+  const envelopes = [];
+  const trialMeta = [];
+  let spentTokens = 0;
+  for (let trialIndex = 0; trialIndex < admin.trials.length; trialIndex += 1) {
+    const trial = admin.trials[trialIndex];
+    const trace = [];
+    const rawExchanges = [];
+    const envelope = {};
+    const trialObservedAt = timestamp();
+    let trialSpend = 0;
+    // Harness-owned realized-action record, echoed into the next round's bundle so a
+    // stateless candidate can re-derive its own campaign position (KR2 rehydration
+    // faithfulness) — the candidate never writes this list, the harness does.
+    const realizedActions = [];
+    for (const round of trial.rounds) {
+      if (spentTokens >= tokenCap) {
+        envelope.budget_exhausted_at_round = round.round_id;
+        break;
+      }
+      const input = JSON.stringify({
+        round_id: round.round_id,
+        ...round.visible,
+        action_receipts: realizedActions.slice(),
+      });
+      const execution = executePanelCase(panelConfig, input);
+      const stdout = typeof execution.stdout === 'string' ? execution.stdout : '';
+      const roundTokens = tokensOf(input) + tokensOf(stdout);
+      spentTokens += roundTokens;
+      trialSpend += roundTokens;
+      const row = parseBrainRoundOutput(stdout);
+      trace.push(row);
+      realizedActions.push({
+        round_id: round.round_id,
+        action: row && row.next_action && typeof row.next_action.type === 'string'
+          ? row.next_action.type : null,
+        target: row && row.next_action && typeof row.next_action.target === 'string'
+          ? row.next_action.target : null,
+      });
+      rawExchanges.push({ round_id: round.round_id, input, output: stdout });
+      // declare_done is a candidate TERMINAL action: the administration stops here,
+      // so a premature declaration reaches the grader as a genuinely shorter trace
+      // (early_end FAIL) instead of being padded to full length (QC 2026-08-17,
+      // sol administration-termination).
+      if (row && row.next_action && row.next_action.type === 'declare_done') break;
+    }
+    traces.push(trace);
+    envelopes.push(envelope);
+    trialMeta.push({ observedAt: trialObservedAt, spend: trialSpend, rawExchanges });
+  }
+  if (options.rawDir) {
+    fs.mkdirSync(options.rawDir, { recursive: true });
+    for (let index = 0; index < trialMeta.length; index += 1) {
+      fs.writeFileSync(
+        path.join(options.rawDir, `brain-trial-${index + 1}.exchanges.jsonl`),
+        `${trialMeta[index].rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+        { mode: 0o600 },
+      );
+    }
+  }
+
+  const graded = gradeAdministration(admin, traces, envelopes);
+  const issuedAt = timestamp();
+  const scope = {
+    task_classes: ['brain-seat'],
+    domains: options.domains,
+    languages: options.languages,
+    tool_surface: options.tools,
+  };
+  const identity = {
+    identity: options.model,
+    model_alias: options.engine,
+    model_version: options.modelVersion,
+    family: options.family,
+    runner: options.runner,
+    runner_version: options.runnerVersion,
+    harness_version: options.harnessVersion,
+    effort: options.effort,
+    prompt_config_hash: options.promptConfigHash,
+    semantic_fingerprint: options.semanticFingerprint,
+    containment_fingerprint: options.containmentFingerprint,
+    identity_resolved: true,
+  };
+  const baseVerdict = {
+    engine: options.engine,
+    model: options.model,
+    runner: options.runner,
+    role: 'brain',
+    subjects: graded.subjects,
+    pair_delta_count: graded.pair_deltas.length,
+    spend_tokens: spentTokens,
+    token_cap: tokenCap,
+  };
+  if (graded.outcome === 'insufficient_budget') {
+    // NO verdict, never PASS or FAIL: nothing is appended and no row admits the role.
+    return deepFreeze({
+      schema_version: 1,
+      run_nonce: runNonce,
+      oracle: {
+        methodology_version: `${BRAIN_CORPUS.methodology_version}.${BRAIN_GENERATOR_VERSION}`,
+        corpus_manifest_hash: staticAssets.corpus_hash,
+        generator_hash: staticAssets.generator_hash,
+        sandbox_policy_hash: panelConfig.policyHash,
+        transport: panelConfig.transport,
+      },
+      qualified: false,
+      evidence: null,
+      row: { status: 'insufficient_budget', evidence: null },
+      verdict: {
+        ...baseVerdict,
+        qualified: false,
+        outcome: 'insufficient_budget',
+        reason: 'token budget exhausted mid-administration — no verdict recorded',
+      },
+    });
+  }
+
+  const state = graded.qualified ? 'qualified' : 'degraded';
+  const corpusManifestHash = staticAssets.corpus_hash;
+  const trials = graded.trials.map((graderTrial, index) => ({
+    trial_id: graderTrial.trial_id,
+    observed_at: trialMeta[index].observedAt,
+    stop_reason: graderTrial.stop_reason,
+    construct_scope: BRAIN_CONSTRUCT_SCOPE,
+    plants_total: graderTrial.diligence.plants_total,
+    plants_caught: graderTrial.diligence.plants_caught,
+    clean_false_positives: graderTrial.diligence.clean_false_positives,
+    fairness_cases_total: graderTrial.fairness_arm_tuples.length,
+    fairness_correctness_failures: graderTrial.fairness_arm_tuples
+      .filter((tuple) => !tuple.correctness_pass).length,
+    pair_delta_count: graded.pair_deltas.length,
+    hard_fail_count: graderTrial.hard_fails.length,
+    ask_floor_violations: graderTrial.hard_fails
+      .filter((fail) => fail.rule === 'ask_on_legal_workaround_control').length,
+    convergence_terminal: graderTrial.convergence.terminal,
+    economy_ok: graderTrial.convergence.economy_ok,
+    verification_actions: graderTrial.convergence.verification_actions,
+    findings_closed: graderTrial.convergence.findings_closed,
+    spend_tokens: trialMeta[index].spend,
+    decision_trace_hash: sha256(canonicalJson(traces[index])),
+    round_stream_hash: sha256(canonicalJson(
+      admin.trials[index].rounds.map((round) => round.visible),
+    )),
+    corpus_manifest_hash: corpusManifestHash,
+  }));
+  const observedAt = trials.map((trial) => trial.observed_at).sort().at(-1) || issuedAt;
+  const expiresAt = new Date(
+    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
+  ).toISOString();
+  const methodology = {
+    kind: 'owner_brain_seat',
+    name: 'owner-brain-seat',
+    version: '1.0.0',
+    corpus_version: `${BRAIN_CORPUS.methodology_version}.${BRAIN_GENERATOR_VERSION}`,
+    corpus_manifest_hash: corpusManifestHash,
+    thresholds: {
+      min_trials: BRAIN_CORPUS.budget.trials_per_administration,
+      min_plants_per_trial: BRAIN_CORPUS.diligence.min_contradictions_per_trial,
+      max_clean_false_positives: BRAIN_CORPUS.controls.maximum_clean_false_positives,
+      max_critical_misses: BRAIN_CORPUS.controls.maximum_critical_misses,
+      max_pair_deltas: 0,
+      max_asks_on_legal_controls: BRAIN_CORPUS.controls.maximum_asks_on_legal_controls,
+    },
+    basis: null,
+  };
+  const storeConfig = resolveEvidenceStore(options.store);
+  let existingRows;
+  try {
+    existingRows = readTelemetryEvidenceRows(storeConfig.evidenceFile);
+  } catch (error) {
+    throw new Error(`capability evidence store failed closed: ${error.message}`);
+  }
+  const scopeHash = sha256(canonicalJson(scope));
+  const identityHash = sha256(canonicalJson(identity));
+  const previous = latestExactEvidence(existingRows, 'owner', scopeHash, identityHash);
+  const evidence = compileCapabilityEvidence({
+    schema_version: 1,
+    source: 'internal_eval',
+    source_ref: 'engine-qualify:brain-v1',
+    state,
+    role: 'owner',
+    scope,
+    identity,
+    issued_at: issuedAt,
+    observed_at: observedAt,
+    expires_at: expiresAt,
+    methodology,
+    trials,
+    revocation: null,
+    supersedes: previous ? previous.evidence.evidence_id : null,
+  });
+  let evidenceStoreRecord;
+  try {
+    evidenceStoreRecord = appendQualifierEvidence(storeConfig, evidence);
+  } catch (error) {
+    throw new Error(`cannot persist qualifier evidence: ${error.message}`);
+  }
+  const qualified = state === 'qualified';
+  const row = {
+    engine: options.engine,
+    model: options.model,
+    runner: options.runner,
+    family: options.family,
+    role: 'owner',
+    methodology_kind: 'owner_brain_seat',
+    model_version: options.modelVersion,
+    version_source: 'runtime',
+    corpus_version: methodology.corpus_version,
+    harness_version: options.harnessVersion,
+    runner_version: options.runnerVersion,
+    prompt_config_hash: options.promptConfigHash,
+    effort: options.effort,
+    date: issuedAt.slice(0, 10),
+    quality: {
+      subjects: graded.subjects,
+      plants: `${trials.reduce((sum, t) => sum + t.plants_caught, 0)}/${trials.reduce((sum, t) => sum + t.plants_total, 0)}`,
+      pair_deltas: graded.pair_deltas.length,
+      hard_fails: trials.reduce((sum, t) => sum + t.hard_fail_count, 0),
+      repeated_trials: trials.length,
+    },
+    latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
+    status: qualified ? 'qualified' : 'failed',
+    qualified_at: issuedAt.slice(0, 10),
+    standing: true,
+    evidence_store: {
+      event_id: evidenceStoreRecord.event_id,
+      producer: evidenceStoreRecord.producer,
+      transcript_hash: evidenceStoreRecord.transcript_hash,
+    },
+    evidence,
+  };
+  return deepFreeze({
+    schema_version: 1,
+    run_nonce: runNonce,
+    oracle: {
+      methodology_version: methodology.corpus_version,
+      corpus_manifest_hash: corpusManifestHash,
+      generator_hash: staticAssets.generator_hash,
+      grader_hash: staticAssets.grader_hash,
+      sandbox_policy_hash: panelConfig.policyHash,
+      transport: panelConfig.transport,
+    },
+    qualified,
+    evidence,
+    row,
+    verdict: {
+      ...baseVerdict,
+      qualified,
+      evidence_id: evidence.evidence_id,
+      evidence_state: evidence.state,
+      scope_hash: evidence.scope_hash,
+      identity_hash: evidence.identity_hash,
+      trial_set_hash: evidence.trial_set_hash,
+      evidence_store_event_id: evidenceStoreRecord.event_id,
+      evidence_store_transcript_hash: evidenceStoreRecord.transcript_hash,
+      reason: qualified
+        ? 'passed'
+        : `subjects ${JSON.stringify(graded.subjects)}; pair_deltas ${graded.pair_deltas.length}`,
+    },
+  });
+}
+
 function runQualification(options) {
   const role = options.role || 'reviewer';
+  if (role === 'brain') return runBrainQualification(options);
   if (!['reviewer', 'owner'].includes(role)) {
     throw new Error(`unsupported qualification role: ${role}`);
   }
@@ -2257,7 +2603,9 @@ if (require.main === module) main();
 module.exports = {
   createSessionRoleCapabilityVerifier,
   ownerRuleViolations,
+  runBrainQualification,
   runQualification,
+  verifyPinnedBrainEvaluationAssets,
   verifyPinnedEvaluationAssets,
   verifyPinnedOwnerEvaluationAssets,
   verifySandboxRuntime,

@@ -310,7 +310,7 @@ function rosterHuman(ro, stdout) {
 
 // --- readiness ----------------------------------------------------------------
 
-function readinessHuman(receipt, stdout) {
+function readinessHuman(receipt, stdout, brainSeat) {
   stdout.write(`READINESS (${receipt.overall_status})\n`);
   for (const seat of receipt.seats) {
     const selected = seat.selected
@@ -323,7 +323,35 @@ function readinessHuman(receipt, stdout) {
         .join(', ');
     stdout.write(`  ${seat.seat_id}: ${seat.status}${selected} (${axes})\n`);
   }
+  if (brainSeat) {
+    stdout.write(`  brain-seat: ${brainSeat.status} (strikes ${brainSeat.strikes_since_pass}/${brainSeat.strike_threshold})\n`);
+  } else {
+    stdout.write('  brain-seat: not configured (pin brain_seat_identity_file in .claude/review-loop-config.md)\n');
+  }
   stdout.write(`  receipt: ${receipt.receipt_digest} expires ${receipt.expires_at}\n`);
+}
+
+// Brain-seat standing (plan 2026-08-17-brain-seat-exam-suite P4): diagnostic only,
+// derived from the SAME pinned incumbent identity the P7 rail consumes; never
+// fails readiness when unconfigured or unreadable.
+function collectBrainSeatStanding(cwd) {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const config = fs.readFileSync(
+      path.join(cwd, '.claude', 'review-loop-config.md'), 'utf8',
+    );
+    const match = config.match(/^-\s*brain_seat_identity_file:\s*(.+)\s*$/mu);
+    if (!match) return null;
+    const identityPath = path.resolve(cwd, match[1].trim());
+    const identity = JSON.parse(fs.readFileSync(identityPath, 'utf8'));
+    const {
+      brainSeatStatus, resolveStoreConfig,
+    } = require('../../scripts/engine-capability-state');
+    return brainSeatStatus(resolveStoreConfig({}), identity, null);
+  } catch {
+    return null;
+  }
 }
 
 // --- task ---------------------------------------------------------------------
@@ -469,8 +497,9 @@ function runStatusCli(argv, {
       stderr.write(`readiness: ${error.code || 'unavailable'}\n`);
       return 1;
     }
-    if (json) stdout.write(`${JSON.stringify(receipt, null, 2)}\n`);
-    else readinessHuman(receipt, stdout);
+    const brainSeat = collectBrainSeatStanding(cwd);
+    if (json) stdout.write(`${JSON.stringify({ ...receipt, brain_seat: brainSeat }, null, 2)}\n`);
+    else readinessHuman(receipt, stdout, brainSeat);
     return 0;
   }
   if (sub === 'overview') {

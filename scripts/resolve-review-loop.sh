@@ -1289,6 +1289,92 @@ process.stdout.write(JSON.stringify(a));
   fi
 fi
 
+# ── Brain-seat standing (P7/KR4, plan 2026-08-17-brain-seat-exam-suite P4) ─────────
+# Canonical seat context: the pinned incumbent identity file comes from config
+# (brain_seat_identity_file); a proposed non-incumbent identity arrives via
+# AUTOPILOT_BRAIN_SEAT_IDENTITY. Three-way standing (no_record / qualified /
+# requalification_required); both non-qualified states = absence of standing —
+# the per-invocation override STILL admits (two-path rule); only absence AND no
+# override refuses (candidate) or loudly annotates (incumbent, Board 2026-08-16
+# advisory bootstrap semantics).
+BRAIN_SEAT_JSON='null'
+BRAIN_IDENTITY_FILE="$(read_field "$CONFIG" brain_seat_identity_file "")"
+PROPOSED_BRAIN_IDENTITY="${AUTOPILOT_BRAIN_SEAT_IDENTITY:-}"
+if [[ -n "$BRAIN_IDENTITY_FILE" || -n "$PROPOSED_BRAIN_IDENTITY" ]]; then
+  _brain_seat_class="incumbent"
+  _brain_ident="$BRAIN_IDENTITY_FILE"
+  if [[ -n "$PROPOSED_BRAIN_IDENTITY" && "$PROPOSED_BRAIN_IDENTITY" != "$BRAIN_IDENTITY_FILE" ]]; then
+    _brain_seat_class="candidate"
+    _brain_ident="$PROPOSED_BRAIN_IDENTITY"
+  fi
+  _brain_status_json="$(node "$SCRIPT_DIR/engine-capability-state.js" brain-status --identity-file "$_brain_ident" 2>/dev/null || true)"
+  _brain_eval="$(node -e '
+const fs = require("fs");
+let status = null;
+try { status = JSON.parse(process.argv[1]); } catch { status = null; }
+const seatClass = process.argv[2];
+const overrideFile = process.argv[3] || "";
+let identity = null;
+try { identity = JSON.parse(fs.readFileSync(process.argv[4], "utf8")); } catch { identity = null; }
+const standing = status && status.status === "qualified";
+const state = status ? status.status : "status_unavailable";
+let admission = "admitted";
+let warning = "";
+if (!standing) {
+  let override = null;
+  if (overrideFile && fs.existsSync(overrideFile) && identity) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(overrideFile, "utf8"));
+      const today = new Date().toISOString().slice(0, 10);
+      override = doc && doc.schema === 1 && Array.isArray(doc.overrides)
+        ? doc.overrides.find((o) => o && o.role === "owner"
+          && (o.engine === identity.model_alias || o.engine === identity.identity)
+          && typeof o.reason === "string" && o.reason.trim()
+          && typeof o.expires === "string" && o.expires >= today)
+        : null;
+    } catch { override = null; }
+  }
+  if (override) {
+    admission = "override_admitted";
+    warning = `brain seat (${seatClass}) runs on an EVIDENCE-FREE operator override (reason: ${override.reason}; expires ${override.expires}) — standing status: ${state}`;
+  } else if (seatClass === "candidate") {
+    admission = "refused";
+    warning = `brain seat (candidate) REFUSED: standing status ${state} — the two legal paths are a standing exam pass (engine-qualify.sh brain) or a per-invocation qualification override (AUTOPILOT_QUALIFICATION_OVERRIDE, role owner)`;
+  } else {
+    admission = "advisory";
+    warning = `brain seat (incumbent) has NO standing qualification (status ${state}) — advisory per Board 2026-08-16 bootstrap semantics; sit the exam (engine-qualify.sh brain) or provide a per-invocation override`;
+  }
+}
+process.stdout.write(JSON.stringify({
+  brain_seat: {
+    seat_class: seatClass,
+    status: state,
+    admission,
+    strikes_since_pass: status ? status.strikes_since_pass : null,
+  },
+  warning,
+}));
+' "$_brain_status_json" "$_brain_seat_class" "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" "$_brain_ident" 2>/dev/null || printf '{"brain_seat":null,"warning":""}')"
+  BRAIN_SEAT_JSON="$(printf '%s' "$_brain_eval" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{try{process.stdout.write(JSON.stringify(JSON.parse(s).brain_seat));}catch{process.stdout.write("null");}})' 2>/dev/null || printf 'null')"
+  _brain_warn="$(printf '%s' "$_brain_eval" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).warning||"");}catch{}})' 2>/dev/null || true)"
+  if [[ -n "$_brain_warn" ]]; then
+    CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "$_brain_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+  fi
+  # Refusal ENFORCEMENT rides the shipped --enforce rail (report-mode emits JSON and
+  # the CALLER enforces; with --enforce the resolver itself is the gate — same split
+  # every other admission signal uses). A refused candidate seating exits 3.
+  if [[ "$ENFORCE" == "1" ]]; then
+    _brain_admission="$(printf '%s' "$BRAIN_SEAT_JSON" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).admission||"");}catch{}})' 2>/dev/null || true)"
+    [[ "$_brain_admission" == "refused" ]] && ENFORCE_EXIT=3
+  fi
+fi
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     reviewer_engine) printf '%s\n' "$REV_ENGINE" ;;
@@ -1405,6 +1491,7 @@ if [[ -n "$FIELD" ]]; then
     skill_mode_requested) printf '%s\n' "$CAP_SKILL_MODE_REQ" ;;
     skill_mode_effective) printf '%s\n' "$CAP_SKILL_MODE_EFF" ;;
     capability_warnings) printf '%s\n' "$CAP_WARNINGS_JSON" ;;
+    brain_seat) printf '%s\n' "$BRAIN_SEAT_JSON" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit "$ENFORCE_EXIT"
@@ -1412,13 +1499,14 @@ fi
 
 FMT_SUFFIX=" }\n"
 ARGS_SUFFIX=()
-READINESS_FMT=', "qc_panel_seats": %s, "qc_panel_seats_complete": %s, "provider_readiness_receipt_ttl_seconds": %s, "provider_readiness_fallback_family_constraint": "%s", "strict_l5_policy_override": "%s"'
+READINESS_FMT=', "qc_panel_seats": %s, "qc_panel_seats_complete": %s, "provider_readiness_receipt_ttl_seconds": %s, "provider_readiness_fallback_family_constraint": "%s", "strict_l5_policy_override": "%s", "brain_seat": %s'
 READINESS_ARGS=(
   "$QC_PANEL_SEATS_JSON"
   "$QC_PANEL_SEATS_COMPLETE"
   "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS"
   "$PROVIDER_READINESS_FAMILY_CONSTRAINT"
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
+  "$BRAIN_SEAT_JSON"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(

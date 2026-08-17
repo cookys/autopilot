@@ -48,12 +48,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
-### Brain-seat exam suite（勤勞×公平×收斂 三科標準考場）
-- **Trigger**: Before seating any engine in the brain seat（depth-0 autonomous loop / auto-pick consumer）via the standing-exam path — KR6 兩路制下 brain 席目前沒有 standing 考試,每次入座都得燒一張 explicit override。
-- **Context**: v2.34.13 out-of-scope 承諾（plan §7「follow-up plan; BACKLOG row at close」）。考三科,每科對應 sol-pathology 失敗形狀:勤勞（長序列摻回歸、量第幾輪開始漏——F5/F10）、公平（跨家族產物同尺——F7）、收斂（產品增量/驗證支出比,拿 `check-stall-fuse.js` 的記帳當量具——F2/F4）。耐力不考:已決議做進無狀態輪迴圈架構,不靠選模型。t14 per-turn verification gate 條目是勤勞科的機制雛形。
-- **Effort**: L（hetero survey → plan → loop review → dev-flow 管線）
-- **Source**: `docs/plans/2026-08-17-autonomous-brain-integration.md` §7;`docs/plans/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md`;HANDOFF 2026-08-17。
-
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
 - **Trigger**: 四層 redesign 的 Policy 層設計定案,且目標 skill 有 eval ON/OFF 證據（成績單前置）
 - **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。
@@ -65,7 +59,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ### Reviewer-seat full qualifications on the now-working rail (gpt-5.6-sol transport; GLM re-attempt; verification-author suite)
 - **Trigger**: Before the next roster promotion decision, or when restoring the suspended Codex/gpt + Gemini seats after quota recovery (the 2026-08-05 rotation is still in place and re-evaluation is now MEANINGFUL — the qualification rail works as of v2.34.12).
-- **Context**: v2.34.12 repaired the stores and shipped `qualification-review-provider.js`, so `engine-qualify.sh reviewer` can evaluate real endpoints. Measured so far: GLM-5.2 failed the full run by exactly one clean false positive in trial 2 (scorecard event 139; sensitivity clean, spike 9/9) — a future re-attempt is a FRESH evaluation with its own acceptance, not a rerun-until-green; MiniMax-M3 spike 5/9 (semantic misses consistent with its recorded diff-only limitation) — full run not spent. Remaining build: a codex-transport mode for the adapter (gpt-5.6-sol qc:1 seat; `CODEX_HOME` redirect through the broker's env allowlist), and the verification_author role has NO shipped qualification suite at all (skill Stage 1 marks it follow-up) — that seat cannot be qualified until its suite exists.
+- **Context**: v2.34.12 repaired the stores and shipped `qualification-review-provider.js`, so `engine-qualify.sh reviewer` can evaluate real endpoints. Measured so far: GLM-5.2 failed the full run by exactly one clean false positive in trial 2 (scorecard event 139; sensitivity clean, spike 9/9) — a future re-attempt is a FRESH evaluation with its own acceptance, not a rerun-until-green; MiniMax-M3 spike 5/9 (semantic misses consistent with its recorded diff-only limitation) — full run not spent. Remaining build: a codex/CLI-transport mode for the adapter (gpt-5.6-sol qc:1 seat; `CODEX_HOME` redirect through the broker's env allowlist), and the verification_author role has NO shipped qualification suite at all (skill Stage 1 marks it follow-up) — that seat cannot be qualified until its suite exists. The v2.34.14 brain-seat exam's FIRST REAL administration also rides this CLI-transport work (Board 2026-08-17: incumbent Claude seat has no exam transport — OAuth only, no raw token; ship first, real administration lands with the adapter; a brain round-mode provider prompt is needed alongside the reviewer one).
 - **Effort**: M（adapter codex mode + 每席一次 full run）/ L（verification-author suite 設計）
 - **Source**: v2.34.12 roster-qualification repair;evidence `docs/plans/evidence/2026-08-17-roster-qualification/`
 

@@ -75,4 +75,46 @@ assert_exit_code "$?" "0" "scoped reverify passes"
 node "$SCRIPT" check --bursts "$TEST_TMP/sol.jsonl" --threshold 4 >/dev/null
 assert_exit_code "$?" "0" "threshold 4 does not trip on a streak of 3"
 
+# ── Strike emission (brain-seat-exam-suite KR3b): integration fixture ──
+node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  identity: "brain-model-exact", model_alias: "brain-engine", model_version: "1",
+  family: "test-family", runner: "brain-harness", runner_version: "1.0.0",
+  harness_version: "h1", effort: "high",
+  prompt_config_hash: "a".repeat(64), semantic_fingerprint: "b".repeat(64),
+  containment_fingerprint: "c".repeat(64), identity_resolved: true,
+}));
+' "$TEST_TMP/strike-identity.json"
+# flags absent = byte-identical stdout on the same tripped input
+NOFLAG_OUT="$(node "$SCRIPT" check --bursts "$TEST_TMP/sol.jsonl" 2>/dev/null)"
+FLAG_OUT="$(node "$SCRIPT" check --bursts "$TEST_TMP/sol.jsonl" \
+  --strike-identity-file "$TEST_TMP/strike-identity.json" --strike-store "$TEST_TMP/strike-store" 2>/dev/null)"
+assert_eq "$NOFLAG_OUT" "$FLAG_OUT" "strike flags never change the fuse verdict output"
+STRIKES="$(wc -l < "$TEST_TMP/strike-store/strikes.jsonl")"
+assert_eq "1" "$STRIKES" "a tripped check with flags appends exactly one strike row"
+assert_contains "$(cat "$TEST_TMP/strike-store/strikes.jsonl")" '"source":"fuse"' "the strike names its source"
+# a healthy check never strikes
+node "$SCRIPT" check --bursts "$TEST_TMP/scoped.jsonl" \
+  --strike-identity-file "$TEST_TMP/strike-identity.json" --strike-store "$TEST_TMP/strike-store" >/dev/null
+assert_eq "1" "$(wc -l < "$TEST_TMP/strike-store/strikes.jsonl")" "a passing check appends no strike"
+# half-wired flags refuse loudly (dead-gate prevention)
+node "$SCRIPT" check --bursts "$TEST_TMP/sol.jsonl" --strike-store "$TEST_TMP/strike-store" >/dev/null 2>&1
+assert_exit_code "$?" "2" "a single strike flag is a usage error"
+node "$SCRIPT" classify --names "$TEST_TMP/names.txt" \
+  --strike-identity-file "$TEST_TMP/strike-identity.json" --strike-store "$TEST_TMP/strike-store" >/dev/null 2>&1
+assert_exit_code "$?" "2" "strike flags are check-mode only"
+# unappendable store fails closed (exit 2, not a plain trip)
+touch "$TEST_TMP/not-a-dir"
+node "$SCRIPT" check --bursts "$TEST_TMP/sol.jsonl" \
+  --strike-identity-file "$TEST_TMP/strike-identity.json" --strike-store "$TEST_TMP/not-a-dir/nested" >/dev/null 2>&1
+assert_exit_code "$?" "2" "an incompletable strike append fails the instrument closed"
+
+# ── Liveness grep-gate: the canonical round protocol carries BOTH flags on BOTH audits ──
+PROTOCOL="$REPO_ROOT/skills/ceo-agent/references/level-front-door.md"
+FUSE_WIRED="$(grep -A 1 'check-stall-fuse.js check' "$PROTOCOL" | grep -c 'strike-identity-file.*strike-store')"
+AUDIT_WIRED="$(grep -A 3 'check-blueprint-conformance.js audit' "$PROTOCOL" | grep -c 'strike-identity-file.*strike-store')"
+assert_eq "1" "$FUSE_WIRED" "round protocol wires both strike flags on the fuse check"
+assert_eq "1" "$AUDIT_WIRED" "round protocol wires both strike flags on the conformance audit"
+
 finalize_test

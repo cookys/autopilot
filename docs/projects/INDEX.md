@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-17 | [brain-seat-exam-suite](2026-08-17-brain-seat-exam-suite/README.md) — standing qualification exam for the brain seat（勤勞×公平×收斂 + containment case family）on the engine-qualify chassis; standing pass + 3-strike revocation; P7 rail consumption. Plan frozen after 2-generation hetero review (G1 13+2, G2 11+3 adjudicated) | v2.34.14 | `feat/brain-seat-exam-suite` |
 
 ## 已完成 (Completed)
 

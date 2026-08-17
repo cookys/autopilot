@@ -69,6 +69,10 @@ function parseArgs(argv) {
     else if (arg === '--ledger') opts.ledger = value;
     else if (arg === '--decision-id') opts.decisionId = value;
     else if (arg === '--round') opts.round = Number(value);
+    else if (arg === '--brain-status') opts.brainStatus = value;
+    else if (arg === '--seat-class') opts.seatClass = value;
+    else if (arg === '--seat-engine') opts.seatEngine = value;
+    else if (arg === '--qualification-override') opts.qualificationOverride = value;
     else usage(`unknown argument: ${arg}`);
     i += 1;
   }
@@ -76,7 +80,65 @@ function parseArgs(argv) {
   if (mode === 'pick' && (!opts.candidates || !opts.preferences)) {
     usage('pick requires --candidates and --preferences');
   }
+  if (opts.seatClass && !['incumbent', 'candidate'].includes(opts.seatClass)) {
+    usage('--seat-class must be incumbent|candidate');
+  }
+  if (opts.brainStatus && !opts.seatClass) usage('--brain-status requires --seat-class');
+  if (opts.qualificationOverride && !opts.seatEngine) {
+    usage('--qualification-override requires --seat-engine (the override binds to the seated engine)');
+  }
   return opts;
+}
+
+// P7/KR4 (plan 2026-08-17-brain-seat-exam-suite P4): auto-pick is a governed path.
+// A seated brain without standing (no_record or requalification_required) either
+// admits on the explicit per-invocation override (loud, EVIDENCE-FREE) or, for a
+// candidate seat, refuses the auto-pick outright; the incumbent seat annotates
+// loudly per Board 2026-08-16 advisory bootstrap semantics.
+function checkBrainSeat(opts) {
+  if (!opts.brainStatus) return null;
+  let status;
+  try {
+    status = JSON.parse(fs.readFileSync(opts.brainStatus, 'utf8'));
+  } catch (err) {
+    usage(`--brain-status unreadable: ${opts.brainStatus}`);
+  }
+  const standing = status && status.status === 'qualified';
+  if (standing) return { seat_class: opts.seatClass, status: status.status, admission: 'admitted' };
+  if (opts.qualificationOverride && fs.existsSync(opts.qualificationOverride)) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(opts.qualificationOverride, 'utf8'));
+      const today = new Date().toISOString().slice(0, 10);
+      // The override binds to the EXACT seated engine — an override written for one
+      // engine never admits another (QC 2026-08-17, cross-path parity with the
+      // resolver's identity-bound check).
+      const match = doc && doc.schema === 1 && Array.isArray(doc.overrides)
+        ? doc.overrides.find((o) => o && o.role === 'owner'
+          && o.engine === opts.seatEngine
+          && typeof o.reason === 'string' && o.reason.trim()
+          && typeof o.expires === 'string' && o.expires >= today)
+        : null;
+      if (match) {
+        process.stderr.write(`next-pick: brain seat (${opts.seatClass}) runs on an EVIDENCE-FREE operator override (reason: ${match.reason}; expires ${match.expires})\n`);
+        return { seat_class: opts.seatClass, status: status ? status.status : 'status_unavailable', admission: 'override_admitted' };
+      }
+    } catch { /* unreadable override never admits */ }
+  }
+  if (opts.seatClass === 'candidate') {
+    process.stdout.write(`${JSON.stringify({
+      schema_version: 1,
+      artifact_type: 'next_pick_result',
+      error: 'brain_seat_refused',
+      brain_seat: { seat_class: 'candidate', status: status ? status.status : 'status_unavailable', admission: 'refused' },
+      legal_paths: [
+        'standing exam pass: engine-qualify.sh brain',
+        'per-invocation override: --qualification-override (role owner)',
+      ],
+    }, null, 1)}\n`);
+    process.exit(1);
+  }
+  process.stderr.write(`next-pick: brain seat (incumbent) has NO standing qualification (status ${status ? status.status : 'status_unavailable'}) — advisory per Board 2026-08-16 bootstrap semantics; sit the exam or provide an override\n`);
+  return { seat_class: 'incumbent', status: status ? status.status : 'status_unavailable', admission: 'advisory' };
 }
 
 function sha256(value) {
@@ -122,6 +184,7 @@ function askFirstReason(row) {
 }
 
 function pick(opts) {
+  const brainSeat = checkBrainSeat(opts);
   let candidates;
   let preferences;
   try {
@@ -168,6 +231,7 @@ function pick(opts) {
     pick: chosen,
     ask_first_queue: askFirst,
     pick_record: pickRecord,
+    ...(brainSeat ? { brain_seat: brainSeat } : {}),
   };
   process.stdout.write(`${JSON.stringify(result, null, 1)}\n`);
 

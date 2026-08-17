@@ -104,11 +104,22 @@ function parseArgs(argv) {
     else if (arg === '--plugin-root') opts.pluginRoot = value;
     else if (arg === '--ledger') opts.ledger = value;
     else if (arg === '--manifest-dir') opts.manifestDir = value;
+    else if (arg === '--strike-identity-file') opts.strikeIdentityFile = value;
+    else if (arg === '--strike-store') opts.strikeStore = value;
     else usage(`unknown argument: ${arg}`);
     i += 1;
   }
   if (!opts.contract || !opts.repo) usage('--contract and --repo are required');
   if (!opts.intent) usage('--intent is required');
+  // Strike emission (plan 2026-08-17-brain-seat-exam-suite KR3b): audit-mode only
+  // (preflight refusals are pre-spend protection, not seat failures), both flags or
+  // neither — a half-wired emitter is a dead gate, refuse it loudly.
+  if ((opts.strikeIdentityFile != null) !== (opts.strikeStore != null)) {
+    usage('--strike-identity-file and --strike-store must be given together');
+  }
+  if (opts.mode !== 'audit' && opts.strikeIdentityFile != null) {
+    usage('strike flags are audit-mode only');
+  }
   return opts;
 }
 
@@ -366,6 +377,25 @@ function main() {
   process.stdout.write(opts.json
     ? `${JSON.stringify(result)}\n`
     : `${result.conformant ? 'CONFORMANT' : 'REFUSED'} (${opts.mode}) unit=${intent.unit_id}\n${violations.map((v) => `  - [${v.code}] ${v.detail}`).join('\n')}${violations.length ? '\n' : ''}`);
+  if (violations.length > 0 && opts.strikeIdentityFile) {
+    // Fail closed: an audit failure that cannot be recorded as a strike must not
+    // exit as a plain refusal — the revocation ledger is load-bearing (KR3b).
+    try {
+      const crypto = require('crypto');
+      const state = require('./engine-capability-state');
+      const identity = JSON.parse(fs.readFileSync(opts.strikeIdentityFile, 'utf8'));
+      const receiptRef = `conformance-${crypto.createHash('sha256')
+        .update(JSON.stringify(result)).digest('hex').slice(0, 16)}`;
+      const row = state.appendStrikeRecord(
+        state.resolveStoreConfig({ store: opts.strikeStore }),
+        { identity, source: 'conformance_audit', receiptRef },
+      );
+      process.stderr.write(`check-blueprint-conformance: strike ${row.event_id} appended for ${row.identity_hash.slice(0, 12)}\n`);
+    } catch (err) {
+      process.stderr.write(`check-blueprint-conformance: strike append failed closed: ${err.message}\n`);
+      process.exit(2);
+    }
+  }
   process.exit(violations.length === 0 ? 0 : 1);
 }
 

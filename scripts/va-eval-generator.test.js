@@ -59,8 +59,40 @@ const adminJson = (admin) => g.canonicalJson({
 {
   const admin = g.generateAdministration('t-indep');
   for (const c of admin.trials[0].cases) {
-    equal(g.buildEnvelope(c, c.renderer_id), c.envelope,
-      `envelope reconstructs from contract+renderer alone (${c.family})`);
+    // DISCRIMINATING independence (review 2026-08-18): a clone with every
+    // defect-derived field DELETED must produce the identical envelope — a
+    // buildEnvelope that reads any mutation-derived field throws or diverges.
+    const stripped = {
+      case_id: c.case_id,
+      contract: c.contract,
+      renderer_id: c.renderer_id,
+    };
+    equal(g.buildEnvelope(stripped, c.renderer_id), c.envelope,
+      `envelope is byte-identical from the mutation-free projection (${c.family})`);
+  }
+  // Negative control: a sabotaged builder that consults a defect field cannot
+  // satisfy the stripped-projection equality.
+  const sample = admin.trials[0].cases[0];
+  const sabotagedEnvelope = `${g.buildEnvelope(sample, sample.renderer_id)}${sample.defect_source.length}`;
+  check(sabotagedEnvelope !== g.buildEnvelope(
+    { case_id: sample.case_id, contract: sample.contract }, sample.renderer_id,
+  ), 'a defect-consulting builder diverges from the projection output');
+}
+
+// ── leak scan catches a whole-twin injection for EVERY family ────────────────
+// (review 2026-08-18: the identifier heuristic alone was blind to operator-flip
+// mutations in 5 of 6 families; the compiled-source-line rule closes it.)
+{
+  const admin = g.generateAdministration('t-leak-inject');
+  for (const c of admin.trials[0].cases) {
+    const sabotaged = {
+      trials: [{
+        cases: [{ ...c, envelope: `${c.envelope}${c.defect_source}` }],
+      }],
+    };
+    const violations = g.leakScan(sabotaged);
+    check(violations.length > 0,
+      `injecting the defect twin source is detected (${c.family})`);
   }
 }
 

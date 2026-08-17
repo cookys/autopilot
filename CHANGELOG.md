@@ -40,7 +40,7 @@ repaired + 8 terminal spec-precision blockers depth-0-adjudicated).
 
 ### Added
 - `evals/va-eval-generator.js` + `evals/va-capability-evidence-corpus.json`: data-only
-  contract DSL with one pinned evaluator; six happy-path-blind defect families as
+  contract DSL with one pinned evaluator; six defect families biased against shallow probing (single-probe reveal rates 14-60% by family; the 24/24 bar is what enforces rigor) as
   single-node tree mutations; twins COMPILED by an independent code path and
   cross-checked against the oracle over a full sweep (admission — the oracle is never
   a shadow of what it grades); spec-only reference solver with boundary-value and

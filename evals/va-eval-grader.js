@@ -49,6 +49,18 @@ function argInDomain(value, domain) {
 
 // Returns { steps } (validated) or { outcome: 'malformed_plan'|'budget_exceeded',
 // detail }.
+function jsonDepth(value, depth = 0) {
+  if (depth > CORPUS.budget.plan_max_json_depth) return depth;
+  if (Array.isArray(value)) {
+    return value.reduce((m, v) => Math.max(m, jsonDepth(v, depth + 1)), depth + 1);
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value)
+      .reduce((m, v) => Math.max(m, jsonDepth(v, depth + 1)), depth + 1);
+  }
+  return depth;
+}
+
 function validatePlan(caseData, plan) {
   if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
     return { outcome: 'malformed_plan', detail: 'plan is not an object' };
@@ -59,9 +71,15 @@ function validatePlan(caseData, plan) {
   if (!Array.isArray(plan.steps) || plan.steps.length === 0) {
     return { outcome: 'malformed_plan', detail: 'steps missing or empty' };
   }
-  if (plan.steps.length > CORPUS.budget.steps_per_case) {
-    return { outcome: 'budget_exceeded', detail: `${plan.steps.length} steps` };
+  if (jsonDepth(plan) > CORPUS.budget.plan_max_json_depth) {
+    return { outcome: 'malformed_plan', detail: 'json depth exceeds the cap' };
   }
+  // Shape violations outrank budget (taxonomy precedence, review 2026-08-18:
+  // malformed_plan > budget_exceeded when both signals are present) — validate
+  // every step FIRST, then apply the budget to a well-formed plan.
+  const overBudget = plan.steps.length > CORPUS.budget.steps_per_case
+    ? { outcome: 'budget_exceeded', detail: `${plan.steps.length} steps` }
+    : null;
   const surface = caseData.contract.surface.functions;
   const steps = [];
   for (const [index, step] of plan.steps.entries()) {
@@ -91,6 +109,7 @@ function validatePlan(caseData, plan) {
     }
     steps.push({ call, declared });
   }
+  if (overBudget) return overBudget;
   return { steps };
 }
 
@@ -148,12 +167,21 @@ function gradeCase(caseData, plan, executeTwin = inProcessExecutor) {
     const { result, state: next } = evaluateCall(caseData.contract, state, step.call);
     state = next;
     const oracle = normalizeObserved(result);
-    if (!observationsEqual(step.declared, oracle)
-        || !observationsEqual(step.declared, observedClean[index])) {
+    if (!observationsEqual(step.declared, oracle)) {
       return {
         case_id: caseData.case_id,
         outcome: 'declared_mismatch',
         detail: `step ${index}`,
+      };
+    }
+    if (!observationsEqual(oracle, observedClean[index])) {
+      // The declaration matched the CONTRACT but the clean twin disagreed with
+      // its own oracle — a generator/runner defect, never the candidate's
+      // (review 2026-08-18: route to the abort class, not declared_mismatch).
+      return {
+        case_id: caseData.case_id,
+        outcome: 'infra_fail',
+        detail: `oracle/clean-twin divergence at step ${index}`,
       };
     }
   }

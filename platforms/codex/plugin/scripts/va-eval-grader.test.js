@@ -119,6 +119,35 @@ const stateCase = trial.cases.find((c) => c.family === 'state-residue');
     'ordered stateful plan passes end-to-end');
 }
 
+// ── taxonomy precedence + caps (review 2026-08-18 MUST-FIX rows) ─────────────
+{
+  // Overlap: oversize AND malformed steps ⇒ malformed_plan wins (precedence).
+  const junk = Array.from({ length: g.CORPUS.budget.steps_per_case + 3 },
+    () => ({ garbage: true }));
+  equal(grader.gradeCase(sample, { case_id: sample.case_id, steps: junk }).outcome,
+    'malformed_plan', 'malformed_plan outranks budget_exceeded on overlap');
+  // Deep JSON beyond the corpus cap ⇒ malformed_plan.
+  let deep = { v: 1 };
+  for (let i = 0; i < g.CORPUS.budget.plan_max_json_depth + 2; i += 1) deep = { d: deep };
+  const p = perfectPlan(sample);
+  p.steps[0] = { ...p.steps[0], call: { ...p.steps[0].call }, expected: { kind: 'returns', value: deep } };
+  equal(grader.gradeCase(sample, p).outcome, 'malformed_plan',
+    'json depth beyond the corpus cap is malformed_plan');
+}
+{
+  // Oracle-vs-clean-twin divergence with a CORRECT declaration is the host's
+  // defect, never the candidate's ⇒ infra_fail (abort class).
+  const lyingClean = (source, steps) => {
+    const real = grader.inProcessExecutor(source, steps);
+    if (source === sample.clean_source) {
+      return real.map(() => g.normalizeObserved({ kind: 'returns', value: 'wrong' }));
+    }
+    return real;
+  };
+  equal(grader.gradeCase(sample, perfectPlan(sample), lyingClean).outcome, 'infra_fail',
+    'clean twin disagreeing with its own oracle routes to infra_fail, not declared_mismatch');
+}
+
 // ── infra / abort semantics ─────────────────────────────────────────────────
 {
   const crash = () => { throw new grader.InfraError('sandbox launch failed'); };

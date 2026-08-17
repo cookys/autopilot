@@ -54,7 +54,7 @@ per-module skill rows configured for `scripts/`/`evals/` — N/A recorded.
 | P2 runner + grader | done | 26 assertions; discriminating mutation control |
 | P3 engine-qualify subcommand | done | 26 end-to-end; additive va_declared_plan evidence kind; broker role widened |
 | P4 provider mode | done | QRP_PROMPT_MODE=va; provider suite 115 |
-| P5 dogfood + release | in progress | GLM incumbent administration running; docs/version staged |
+| P5 dogfood + release | done | GLM-5.3 QUALIFIED 24/24 (scorecard 142, evidence 7); pre-merge review round in progress |
 
 ## Decision log
 

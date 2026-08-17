@@ -9,8 +9,8 @@ assert_exit_code "$RC" "0" "verification_author end-to-end suite passes"
 if printf '%s' "$OUT" | grep -q '^SKIP:'; then
   assert_contains "$OUT" "SKIP:" "sandbox unavailable — suite self-skipped honestly"
 else
-  assert_contains "$OUT" "26 assertions passed" \
-    "spec-only clause-reconstruction mock qualifies through the REAL sandbox; happy-path/over-strict/flood/lazy/malformed deviants fail on their exact subjects; broker+stub transport parity holds on every transport-independent surface; precondition aborts fire"
+  assert_contains "$OUT" "29 assertions passed" \
+    "spec-only clause-reconstruction mock qualifies through the REAL sandbox; happy-path/over-strict/flood/lazy/malformed deviants fail on their exact subjects; broker+stub transport parity holds on every transport-independent surface; the literal bwrap allowlist is pinned; precondition aborts fire"
 fi
 
 finalize_test

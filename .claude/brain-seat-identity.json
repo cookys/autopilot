@@ -5,7 +5,7 @@
   "family": "anthropic",
   "runner": "claude-cli",
   "runner_version": "2.1.233",
-  "harness_version": "engine-qualify-56535d6b",
+  "harness_version": "engine-qualify-9e7befef",
   "effort": "default",
   "prompt_config_hash": "5feb7076fc7ee775e8adfde08e56cc54bc5d715ea0d36c665a127ac7a7e41a84",
   "semantic_fingerprint": "ec8ee7faf237c66ad45264bd7f626ab865383e52cec3f1dc32a26acde6b67c52",

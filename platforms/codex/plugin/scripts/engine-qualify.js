@@ -61,6 +61,7 @@ const {
 const {
   normalizeOptions: normalizeBrokerOptions,
 } = require('./qualification-case-broker');
+const { extractJsonObject } = require('./lib/extract-json-object');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_MANIFEST = path.join(REPO_ROOT, 'evals', 'capability-evidence-corpus.json');
@@ -94,8 +95,8 @@ const VA_CORPUS_PATH = path.join(
   'evals',
   'va-capability-evidence-corpus.json',
 );
-const EXPECTED_VA_GENERATOR_HASH = 'accd307b12f6629ebaf2a80df619c7d6981a9663b2960f273c136b4c4e29f449';
-const EXPECTED_VA_GRADER_HASH = '6cdf540b963d8f144e29e48c21472a6b7fb3bf8a59e1595aefc132ac70f85a03';
+const EXPECTED_VA_GENERATOR_HASH = 'c37cd9fced8d4da2a1eb06cf5ea220dbf7b0aa02f89c8c5ff1de86c0f39c6a35';
+const EXPECTED_VA_GRADER_HASH = 'dedaea5cf11072b2e6f40490c3e02ec88e80ba756d44c2e5d1ca5891337128a3';
 const EXPECTED_VA_CORPUS_HASH = '85ede154ce11f89ceca3af3c9f895c9fa94e7bc0a84ffd8dc0da391535ccd9b8';
 const EXPECTED_BRAIN_GENERATOR_HASH =
   '9829c8c4fc7b900d27d02992e7b94b9b8002722bd45cec938a8233a1f091791e';
@@ -1982,7 +1983,7 @@ const VA_RUNNER_SOURCE = [
   '    const value = fn.apply(null, step.call.args);',
   '    let serialized;',
   "    try { serialized = JSON.parse(JSON.stringify({ v: value })); } catch { serialized = null; }",
-  '    if (value === undefined || serialized === null) {',
+  '    if (value === undefined || serialized === null || (typeof value === \'number\' && (Number.isNaN(value) || Object.is(value, -0)))) {',
   "      out.push({ kind: 'raw_unserializable' });",
   '    } else {',
   "      out.push({ kind: 'returns', value: serialized.v });",
@@ -2078,20 +2079,19 @@ function executeVaTwinSandboxed(source, steps) {
   }
 }
 
-// Defensive plan extraction from provider text (the provider's va mode emits a
-// single JSON object; the host still recovers fenced/prefixed forms).
+// Plan extraction from provider/panel text: the SAME static extraction rule
+// the provider transport uses (review 2026-08-18 MUST-FIX — a competent
+// local-panel answer followed by prose must not grade malformed), plus the
+// corpus byte cap enforced on the RAW text before any parse.
 function parseVaPlanOutput(stdout) {
-  const text = String(stdout || '').trim()
-    .replace(/^\s*```(?:json)?\s*/u, '')
-    .replace(/\s*```\s*$/u, '')
-    .trim();
-  for (const candidate of [text, text.slice(text.indexOf('{'))]) {
-    if (!candidate || candidate[0] !== '{') continue;
-    try {
-      const parsed = JSON.parse(candidate);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
-    } catch { /* next form */ }
-  }
+  const text = String(stdout || '');
+  if (Buffer.byteLength(text, 'utf8') > VA_CORPUS.budget.plan_max_bytes) return null;
+  const extracted = extractJsonObject(text);
+  if (!extracted) return null;
+  try {
+    const parsed = JSON.parse(extracted);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  } catch { /* fall through */ }
   return null;
 }
 
@@ -3045,6 +3045,8 @@ module.exports = {
   runBrainQualification,
   runQualification,
   runVaQualification,
+  sandboxArguments,
+  vaSandboxArguments,
   verifyPinnedBrainEvaluationAssets,
   verifyPinnedEvaluationAssets,
   verifyPinnedOwnerEvaluationAssets,

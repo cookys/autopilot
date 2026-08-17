@@ -10,7 +10,7 @@ z.ai resolves to glm-5.3, probe-confirmed same session) sat the brand-new
   sensitivity ✓ robustness ✓; zero declared mismatches, zero missed defects,
   zero robustness violations. Wall 187 s. capability_score 1.0.
 - Evidence event 7 (state `qualified`, methodology `va_declared_plan`, expires
-  +60 d per the role TTL); scorecard event 142.
+  +30 d (the CLI --expires-days cap; the role schema ceiling is 60 d)); scorecard event 142.
 - Raw per-case exchanges: `raw/va-exchanges.jsonl` (24 envelopes + submitted
   plans, both trials).
 

@@ -747,11 +747,20 @@ function surfaceDoc(contract) {
   }));
 }
 
+// The envelope is a function of the PUBLIC projection only (review 2026-08-18
+// MUST-FIX: destructuring the exact fields makes the mutation-independence
+// property testable — a case clone with every defect-derived field deleted
+// must produce byte-identical envelope output).
+function envelopeProjection(caseData) {
+  return { case_id: caseData.case_id, contract: caseData.contract };
+}
+
 function buildEnvelope(caseData, rendererId) {
+  const projection = envelopeProjection(caseData);
   const envelope = {
-    case_id: caseData.case_id,
-    rendered_spec: renderSpec(caseData, rendererId),
-    module_surface: surfaceDoc(caseData.contract),
+    case_id: projection.case_id,
+    rendered_spec: renderSpec({ contract: projection.contract }, rendererId),
+    module_surface: surfaceDoc(projection.contract),
     budget: CORPUS.budget.steps_per_case,
     plan_contract_ref: PLAN_CONTRACT.name,
   };
@@ -787,6 +796,18 @@ function leakScan(admin) {
       for (const t of idTokens(caseData.defect_source)) {
         if (!cleanIds.has(t) && !publicTokens.has(t) && visible.includes(t)) {
           violations.push({ case_id: caseData.case_id, tag: `defect-only:${t}` });
+        }
+      }
+      // Compiled-source LINE detection (review 2026-08-18 MUST-FIX: an
+      // operator-flip mutation adds no new identifier, so the token heuristic
+      // alone is blind to a whole-twin injection — any compiled line of EITHER
+      // twin appearing in the envelope is a leak regardless of identifiers).
+      for (const source of [caseData.clean_source, caseData.defect_source]) {
+        for (const line of source.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed.length > 10 && visible.includes(trimmed)) {
+            violations.push({ case_id: caseData.case_id, tag: `source-line:${trimmed.slice(0, 40)}` });
+          }
         }
       }
       if (visible.includes(caseData.canary)) {

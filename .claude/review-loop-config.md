@@ -76,7 +76,9 @@
        (v1 used --setting-sources project; the hardening round made the exam
        child hermetic — probed on claude 2.1.233 — and the sittings 1-2
        identities keep their recorded v1 value.)
-     - harness_version engine-qualify-56535d6b (VA suite subcommand landed in
+     - harness_version engine-qualify-9e7befef (VA suite + its review-round repairs
+       landed in v2.34.17; the dogfood administration recorded 56535d6b at its
+       own sit time; earlier pins:
        v2.34.17; the --version-source flag round recorded 0a2f112f; sittings
        1-2 recorded e9eb3890).
        CLI-transport administrations from here on pass

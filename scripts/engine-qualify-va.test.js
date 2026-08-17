@@ -14,6 +14,7 @@ const os = require('os');
 const path = require('path');
 const {
   runVaQualification,
+  vaSandboxArguments,
   verifySandboxRuntime,
 } = require('./engine-qualify');
 const g = require('../evals/va-eval-generator');
@@ -343,6 +344,52 @@ process.stdout.write(JSON.stringify({
       .digest('hex'),
     'broker-path corpus hash parity');
   equal(remote.oracle.transport, 'remote', 'transport field records the broker path');
+}
+
+// ── literal sandbox-argument allowlist (frozen plan §4, review MUST-FIX #2) ──
+// The exam's spec-only validity rests on the runner and the authoring panel
+// never seeing the corpus/generator/twins. Pin the EXACT bwrap argument list;
+// any future convenience bind breaks this assertion before it breaks the exam.
+{
+  const fakeRoot = '/fake/case-root';
+  equal(vaSandboxArguments(fakeRoot), [
+    '--die-with-parent',
+    '--new-session',
+    '--unshare-pid',
+    '--unshare-ipc',
+    '--unshare-uts',
+    '--unshare-net',
+    '--ro-bind', '/usr', '/usr',
+    '--symlink', 'usr/bin', '/bin',
+    '--symlink', 'usr/lib', '/lib',
+    '--symlink', 'usr/lib64', '/lib64',
+    '--ro-bind', '/etc', '/etc',
+    '--proc', '/proc',
+    '--dev', '/dev',
+    '--tmpfs', '/tmp',
+    '--dir', '/case',
+    '--dir', '/work',
+    '--dir', '/work/home',
+    '--ro-bind', process.execPath, '/case/node',
+    '--ro-bind', `${fakeRoot}/runner.cjs`, '/case/runner.cjs',
+    '--ro-bind', `${fakeRoot}/module.cjs`, '/case/module.cjs',
+    '--ro-bind', `${fakeRoot}/steps.json`, '/case/steps.json',
+    '--chdir', '/work',
+    '--clearenv',
+    '--setenv', 'HOME', '/work/home',
+    '--setenv', 'NO_COLOR', '1',
+    '--setenv', 'PATH', '/usr/bin:/bin',
+    '--setenv', 'TMPDIR', '/tmp',
+    '/case/node', '--max-old-space-size=256', '/case/runner.cjs',
+  ], 'VA twin-runner bwrap arguments match the frozen literal allowlist');
+  // The authoring panel of THIS suite binds only the mock + node — no source
+  // inside the repository (corpus/generator/twins live under REPO_ROOT/evals).
+  const repoRoot = path.join(__dirname, '..');
+  for (const bind of baseOptions.panelReadOnlyBinds) {
+    const source = bind.split('=')[0];
+    check(!path.resolve(source).startsWith(path.join(repoRoot, 'evals')),
+      `authoring-panel bind stays outside evals/ (${source})`);
+  }
 }
 
 // ── precondition aborts ──────────────────────────────────────────────────────

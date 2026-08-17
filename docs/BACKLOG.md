@@ -49,10 +49,17 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ## Active entries
 
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
+- **Status**: CLAIMED（dev-flow leg）by [docs/plans/2026-08-18-dev-flow-contract-card.md](plans/2026-08-18-dev-flow-contract-card.md)（2026-08-18,in progress）— trigger 稽核:條件一（Policy 層定案,v2.34.11 + ADR-0001）成立;條件二（eval ON/OFF 證據）由該案 P3/P5 產出。quality-pipeline leg 留在本 row,等 dev-flow 儀器驗證後跟進。
 - **Trigger**: 四層 redesign 的 Policy 層設計定案,且目標 skill 有 eval ON/OFF 證據（成績單前置）
 - **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。
 - **Effort**: L
 - **Source**: G2 review finding（MiniMax R8, 2026-08-16）;strategy thread 2026-08-16
+
+### Scaffold-tier effect A/B measurement（four-layer D6 promised row — repaired 2026-08-18）
+- **Trigger**: Before any skill or routing policy CONSUMES scaffold tiers（T0/T1/T2）as an outcome-quality claim（成績單前置 applies）;or before the next capability-tier expansion.
+- **Context**: v2.34.11 shipped capability-tiered scaffolding with fail-closed T2, but `references/scaffold-tiers.md` Non-goals explicitly disclaims any tier→outcome effect claim — the A/B was deferred. Four-layer plan D6（docs/plans/2026-08-16-four-layer-redesign.md:269）recorded this row as added, but it was never created; repaired by dev-flow-contract-card P0. Design can reuse the `evals/skill-onoff/` 3-arm instrument pattern（tier as the manipulated variable, dispatched-leaf channel）.
+- **Effort**: M
+- **Source**: four-layer-redesign D6 closeout leftover（2026-08-17）;audit 2026-08-18（dev-flow-contract-card prologue）.
 
 
 

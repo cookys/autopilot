@@ -183,6 +183,18 @@ Use these bars before a role becomes eligible for routing.
 - Verification authoring family differs from implementer family when possible.
 - Depth-0 executes the harness and owns the verdict.
 - False confidence from weak/generated tests blocks qualification.
+- **Standing exam** (`engine-qualify.sh verification_author`, v2.34.17,
+  plan 2026-08-18-verification-author-suite-v3): the candidate reads a
+  clause-rendered requirements spec (never any implementation — black-box is
+  construct-guaranteed) and submits a DECLARED TEST PLAN: ordered calls with
+  pre-declared expected outcomes, within a constant step budget. The host
+  executes the plan against hidden clean/defect twins in the bwrap runner and
+  grades offline: `declared_accuracy` (declaration === contract oracle ===
+  clean-twin observation), `sensitivity` (defect twin deviates somewhere),
+  `robustness` (no malformed/budget violations) — AND of three, 2 trials with
+  distinct per-trial corpora. No candidate code ever executes; fuzzing dies on
+  the declaration line + budget; transport/infra failures abort with NO
+  verdict. Evidence rides the additive `va_declared_plan` methodology kind.
 
 ### Reviewer
 

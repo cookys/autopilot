@@ -57,6 +57,7 @@ const MAX_QUALIFIED_TTL_DAYS = Object.freeze({
 const METHODOLOGY_KINDS = new Set([
   'role_eval',
   'owner_brain_seat',
+  'va_declared_plan',
   'external_prior',
   'runtime_probe',
   'ordinary_receipt',
@@ -68,13 +69,16 @@ const SOURCE_METHODOLOGY_KINDS = Object.freeze({
   external_prior: new Set(['external_prior']),
   self_report: new Set(['self_report']),
   ordinary_receipt: new Set(['ordinary_receipt']),
-  internal_eval: new Set(['role_eval', 'owner_brain_seat']),
+  internal_eval: new Set(['role_eval', 'owner_brain_seat', 'va_declared_plan']),
   runtime_probe: new Set(['runtime_probe']),
 });
 // Board 2026-08-17: brain-seat qualification is STANDING — expires_at stays a
 // schema-compatible placeholder that never stales this kind and is exempt from the
 // qualified-owner TTL ceiling; revocation is strike-based, never clock-based.
 const BRAIN_METHODOLOGY_KIND = 'owner_brain_seat';
+// Verification-author declared-plan exam (va_declared_plan,
+// plan 2026-08-18-verification-author-suite-v3).
+const VA_METHODOLOGY_KIND = 'va_declared_plan';
 const BRAIN_CONSTRUCT_SCOPE = 'per-round-exam.long-horizon-production-audit';
 const BRAIN_STOP_REASONS = new Set(['completed', 'early_end', 'malformed', 'insufficient_budget']);
 
@@ -292,6 +296,25 @@ function normalizeBrainThresholds(raw) {
   };
 }
 
+function normalizeVaThresholds(raw) {
+  const label = 'evidence methodology.thresholds';
+  const value = plainObject(raw, label);
+  const fields = [
+    'min_trials',
+    'max_declared_mismatches',
+    'max_missed_defects',
+    'max_robustness_violations',
+  ];
+  onlyKeys(value, new Set(fields), label);
+  requiredKeys(value, fields, label);
+  return {
+    min_trials: integer(value.min_trials, `${label}.min_trials`, 2),
+    max_declared_mismatches: integer(value.max_declared_mismatches, `${label}.max_declared_mismatches`),
+    max_missed_defects: integer(value.max_missed_defects, `${label}.max_missed_defects`),
+    max_robustness_violations: integer(value.max_robustness_violations, `${label}.max_robustness_violations`),
+  };
+}
+
 function normalizeMethodologyBasis(raw) {
   if (raw === null) return null;
   const value = plainObject(raw, 'evidence methodology.basis');
@@ -359,10 +382,12 @@ function normalizeMethodology(raw) {
       ? null
       : (kind === BRAIN_METHODOLOGY_KIND
         ? normalizeBrainThresholds(value.thresholds)
-        : normalizeThresholds(value.thresholds)),
+        : (kind === VA_METHODOLOGY_KIND
+          ? normalizeVaThresholds(value.thresholds)
+          : normalizeThresholds(value.thresholds))),
     basis: normalizeMethodologyBasis(value.basis),
   };
-  if (kind === 'role_eval' || kind === BRAIN_METHODOLOGY_KIND) {
+  if (kind === 'role_eval' || kind === BRAIN_METHODOLOGY_KIND || kind === VA_METHODOLOGY_KIND) {
     if (methodology.corpus_version === null
         || methodology.corpus_manifest_hash === null
         || methodology.thresholds === null
@@ -495,6 +520,51 @@ function normalizeTrial(raw, index, methodology) {
   return trial;
 }
 
+function normalizeVaTrial(raw, index, methodology) {
+  const label = `evidence trials[${index}]`;
+  const value = plainObject(raw, label);
+  const fields = [
+    'trial_id',
+    'observed_at',
+    'corpus_manifest_hash',
+    'cases_total',
+    'cases_passed',
+    'declared_mismatches',
+    'missed_defects',
+    'robustness_violations',
+    'subjects',
+    'plan_set_hash',
+    'envelope_stream_hash',
+  ];
+  onlyKeys(value, new Set(fields), label);
+  requiredKeys(value, fields, label);
+  const subjects = plainObject(value.subjects, `${label}.subjects`);
+  onlyKeys(subjects, new Set(['declared_accuracy', 'sensitivity', 'robustness']), `${label}.subjects`);
+  requiredKeys(subjects, ['declared_accuracy', 'sensitivity', 'robustness'], `${label}.subjects`);
+  const trial = {
+    trial_id: token(value.trial_id, `${label}.trial_id`),
+    observed_at: timestamp(value.observed_at, `${label}.observed_at`),
+    corpus_manifest_hash: digest(value.corpus_manifest_hash, `${label}.corpus_manifest_hash`),
+    cases_total: integer(value.cases_total, `${label}.cases_total`, 1),
+    cases_passed: integer(value.cases_passed, `${label}.cases_passed`),
+    declared_mismatches: integer(value.declared_mismatches, `${label}.declared_mismatches`),
+    missed_defects: integer(value.missed_defects, `${label}.missed_defects`),
+    robustness_violations: integer(value.robustness_violations, `${label}.robustness_violations`),
+    subjects: {
+      declared_accuracy: boolean(subjects.declared_accuracy, `${label}.subjects.declared_accuracy`),
+      sensitivity: boolean(subjects.sensitivity, `${label}.subjects.sensitivity`),
+      robustness: boolean(subjects.robustness, `${label}.subjects.robustness`),
+    },
+    plan_set_hash: digest(value.plan_set_hash, `${label}.plan_set_hash`),
+    envelope_stream_hash: digest(value.envelope_stream_hash, `${label}.envelope_stream_hash`),
+  };
+  if (methodology.corpus_manifest_hash !== null
+      && trial.corpus_manifest_hash !== methodology.corpus_manifest_hash) {
+    evidenceError(`${label} corpus hash differs from the methodology manifest`);
+  }
+  return trial;
+}
+
 function normalizeBrainTrial(raw, index, methodology) {
   const label = `evidence trials[${index}]`;
   const value = plainObject(raw, label);
@@ -564,15 +634,18 @@ function normalizeBrainTrial(raw, index, methodology) {
 
 function normalizeTrials(raw, methodology) {
   if (!Array.isArray(raw)) evidenceError('evidence trials must be an array');
-  if (methodology.kind !== 'role_eval' && methodology.kind !== BRAIN_METHODOLOGY_KIND) {
+  if (methodology.kind !== 'role_eval' && methodology.kind !== BRAIN_METHODOLOGY_KIND
+      && methodology.kind !== VA_METHODOLOGY_KIND) {
     if (raw.length !== 0) {
       evidenceError(`${methodology.kind} methodology cannot carry reviewer eval trials`);
     }
     return [];
   }
-  const trials = raw.map((entry, index) => (methodology.kind === BRAIN_METHODOLOGY_KIND
-    ? normalizeBrainTrial(entry, index, methodology)
-    : normalizeTrial(entry, index, methodology)));
+  const trials = raw.map((entry, index) => (methodology.kind === VA_METHODOLOGY_KIND
+    ? normalizeVaTrial(entry, index, methodology)
+    : (methodology.kind === BRAIN_METHODOLOGY_KIND
+      ? normalizeBrainTrial(entry, index, methodology)
+      : normalizeTrial(entry, index, methodology))));
   const ids = trials.map((trial) => trial.trial_id);
   if (new Set(ids).size !== ids.length) evidenceError('evidence trials must have unique ids');
   return trials.sort((left, right) => left.trial_id.localeCompare(right.trial_id));
@@ -610,14 +683,19 @@ function enforcePromotion(record) {
     evidenceError('qualified evidence requires an exact resolved identity', 'EVIDENCE_PROMOTION_DENIED');
   }
   if (record.methodology.kind !== 'role_eval'
-      && record.methodology.kind !== BRAIN_METHODOLOGY_KIND) {
+      && record.methodology.kind !== BRAIN_METHODOLOGY_KIND
+      && record.methodology.kind !== VA_METHODOLOGY_KIND) {
     evidenceError(
-      'qualified evidence requires a role_eval or owner_brain_seat methodology',
+      'qualified evidence requires a role_eval, owner_brain_seat, or va_declared_plan methodology',
       'EVIDENCE_PROMOTION_DENIED',
     );
   }
   if (record.methodology.kind === BRAIN_METHODOLOGY_KIND) {
     enforceBrainPromotion(record);
+    return;
+  }
+  if (record.methodology.kind === VA_METHODOLOGY_KIND) {
+    enforceVaPromotion(record);
     return;
   }
   const thresholds = record.methodology.thresholds;
@@ -643,6 +721,32 @@ function enforcePromotion(record) {
     }
     if (!trial.mutation_validation.oracle_rejected) {
       evidenceError('qualified evidence requires live mutation validation', 'EVIDENCE_PROMOTION_DENIED');
+    }
+  }
+}
+
+function enforceVaPromotion(record) {
+  if (record.role !== 'verification_author') {
+    evidenceError('va_declared_plan evidence must ride the verification_author role', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  const thresholds = record.methodology.thresholds;
+  if (record.trials.length < thresholds.min_trials || record.trials.length < 2) {
+    evidenceError('qualified verification-author evidence requires repeated trials', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  for (const trial of record.trials) {
+    if (trial.declared_mismatches > thresholds.max_declared_mismatches
+        || !trial.subjects.declared_accuracy) {
+      evidenceError('declared-accuracy floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.missed_defects > thresholds.max_missed_defects || !trial.subjects.sensitivity) {
+      evidenceError('sensitivity floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.robustness_violations > thresholds.max_robustness_violations
+        || !trial.subjects.robustness) {
+      evidenceError('robustness floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.cases_passed !== trial.cases_total) {
+      evidenceError('qualified verification-author evidence requires every case to pass', 'EVIDENCE_PROMOTION_DENIED');
     }
   }
 }

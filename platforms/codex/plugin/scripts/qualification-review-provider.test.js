@@ -424,6 +424,94 @@ function parseResponse(child) {
     'brain output is re-serialized to a single line for the host round parser');
 }
 
+// ── 7b. va prompt mode over claude CLI ─────────────────────────────────────────
+const VA_ENVELOPE = JSON.stringify({
+  case_id: 'case_abc123',
+  rendered_spec: [
+    '[fn_x:domain] In fn_x: accepts: n is an integer from 1 to 9',
+    '[fn_x:body.ret] In fn_x: returns exactly 7',
+  ],
+  module_surface: [{ export_path: ['fn_x'], params: [{ name: 'n', domain: { type: 'int', min: 1, max: 9 } }] }],
+  budget: 12,
+  plan_contract_ref: 'va-plan-contract-v1',
+});
+const VA_MODEL_OUTPUT = JSON.stringify({
+  case_id: 'case_abc123',
+  steps: [{ call: { export_path: ['fn_x'], args: [1] }, expected: { kind: 'returns', value: 7 } }],
+});
+
+function vaRequest(content = VA_ENVELOPE) {
+  return {
+    schema_version: 1,
+    request_id: 'req-3',
+    role: 'verification_author',
+    payload: { format: 'unified_diff', content },
+  };
+}
+{
+  const { child, captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'va',
+    },
+    request: vaRequest(),
+    stubOutput: JSON.stringify(JSON.parse(VA_MODEL_OUTPUT), null, 2),
+  });
+  equal(child.status, 0, `va case over claude CLI succeeds (stderr: ${child.stderr})`);
+  check(captured.stdin.includes('declared test design'), 'va prompt frames the authoring task');
+  check(captured.stdin.includes('va-plan-contract-v1'), 'va prompt teaches the imported PLAN_CONTRACT');
+  check(captured.stdin.includes('case_abc123'), 'the envelope travels on stdin');
+  check(!captured.stdin.includes('behavioral-call-v1'), 'no reviewer recipes in va mode');
+  const vaOracle = require('../evals/va-eval-generator').ORACLE_ONLY_STRINGS;
+  for (const token of vaOracle) {
+    check(!captured.stdin.replace(VA_ENVELOPE, '').includes(token),
+      `va prompt leaks no oracle vocabulary (${token})`);
+  }
+  const { parsed, output } = parseResponse(child);
+  equal(output, JSON.parse(VA_MODEL_OUTPUT), 'va plan passes through unmodified');
+  check(!parsed.output.includes('\n'), 'va output is re-serialized to a single line');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'va',
+    },
+    request: reviewerRequest(),
+    stubOutput: VA_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'va mode refuses a reviewer-role request');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'va',
+    },
+    request: brainRequest(),
+    stubOutput: VA_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'va mode refuses an owner-role request');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'va',
+    },
+    request: vaRequest('not an envelope'),
+    stubOutput: VA_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'va mode refuses non-envelope content');
+}
+{
+  const { child } = runProvider({
+    env: { QRP_PROMPT_MODE: 'va' },
+    request: vaRequest(),
+  });
+  equal(child.status, 1, 'va over http still requires the http env family');
+}
+
 // ── 8. brain prompt mode over http keeps the env contract ─────────────────────
 {
   const { child } = runProvider({

@@ -92,7 +92,7 @@ const CLIENT_SOURCE = [
 
 const HELP = `Usage:
   node scripts/qualification-case-broker.js run
-    --role <reviewer|owner> --provider <provider-id> --model <exact-model-id>
+    --role <reviewer|owner|verification_author> --provider <provider-id> --model <exact-model-id>
     --provider-cmd '<trusted host adapter command>'
     [--provider-env <name>] [--timeout-ms <n>]
 
@@ -189,8 +189,8 @@ function parseArgs(argv) {
 
 function normalizeOptions(raw) {
   const role = requireToken(raw.role, 'role');
-  if (!['reviewer', 'owner'].includes(role)) {
-    throw new BrokerError('role must be reviewer or owner', 'invalid_argument');
+  if (!['reviewer', 'owner', 'verification_author'].includes(role)) {
+    throw new BrokerError('role must be reviewer, owner, or verification_author', 'invalid_argument');
   }
   const providerCmd = String(raw.providerCmd || '');
   if (providerCmd.trim().length === 0 || providerCmd.length > 16_384

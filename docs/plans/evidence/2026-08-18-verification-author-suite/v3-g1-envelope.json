@@ -1,0 +1,439 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "va-suite-v3-20260818",
+  "logical_plan_id": "verification-author-suite-v3-2026-08-18",
+  "session_id": "va-v3-g1",
+  "session_key": "e3504180d2c771b19ec5dd125deb968b339a4052d4bcf53031fe80db22913b6e",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "accepted_blockers_authorize_generation_2",
+  "rubric_sha256": "e839ca17fce4d5620ac69f0491da2684882561de95ebfa9d1fc332ae419e4eb9",
+  "manifest_sha256": "665692cd49e60c468b7b304e8e2adf1bf36a4aecc69a7d7830a61f15160803f6",
+  "plan_sha256": "8e9f5abf66a50ffb82a7c4301d41cf4552ddc99bcb008b6de9dcba4f66ace7bc",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "chair",
+      "target_id": "chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "9819f0e5854c7d01b690054c3563375b7149fbd5968863d042840c14092cc4b6"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "879d2935ae7f97b86a9c0dcaf44b539c8bcef45aca2a06034b4b59f3aae47269",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-7B4pOY/stdout",
+          "digest": "879d2935ae7f97b86a9c0dcaf44b539c8bcef45aca2a06034b4b59f3aae47269"
+        },
+        "receipt_digest": "635fcba3b5b8f0bbf40d18b1bc651b58481674a9d8b369c437f41b9ac1adbbde"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "deep",
+      "target_id": "deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3",
+          "operation": "plan-review",
+          "request_digest": "709923fca06bab8a1af655120ae225c4ceb843ac2747c31a9831babb26748f29"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "8faaed2affbf515bb2c070f42039056df342a853ae343ff616db9f0e732ffb36",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-JhtdJ2",
+          "digest": "8faaed2affbf515bb2c070f42039056df342a853ae343ff616db9f0e732ffb36"
+        },
+        "receipt_digest": "86c6be05486959cd4b0ededae1e5374606789043b9e74ad948d0e0c6c65d70e1"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "chair",
+      "target_id": "chair",
+      "family": "legacy-gpt-5.6-sol",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "deep",
+      "target_id": "deep",
+      "family": "legacy-glm-5.3",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "VA1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Budget derivation and corpus admission",
+      "claim": "The admission rule proves only that some defect-revealing sequence exists within the budget; it does not prove that an author using only the visible requirements can identify a passing sequence within that budget.",
+      "evidence": "The budget is defined as a small multiple of the minimal revealing sequence, while admission requires only that violating inputs exist within the budget. A hidden-defect-specific witness can satisfy that condition even when covering the plausible behaviors exposed by the specification requires more steps.",
+      "evidence_reference": "Plan §2 Bounded and §3 Twins",
+      "repair": "Make the budget depend only on candidate-visible contract structure, never on the selected mutation. Require an admission witness that consumes exactly the visible envelope, has no oracle, tree, family, or twin access, and passes every admitted case within the published budget.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "0bd479774c82c5095ed88c6a4abbd60d8ddbce684e7d358b15f3b185f92af2dd",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Rendered specification semantics",
+      "claim": "The proposed renderer test does not establish that the visible prose completely and unambiguously represents the formal contract.",
+      "evidence": "The DSL contains arithmetic, conditionals, throw nodes, bounded state, ordering, and precision semantics, but the stated property test reparses only comparison directions, negations, values, and field literals. A renderer can therefore omit or distort other behavior while passing P1.",
+      "evidence_reference": "Plan §3 Formal contract and Rendered spec",
+      "repair": "Define a lossless controlled-language grammar for every DSL node and require complete render-to-AST round trips or an equivalent semantic conformance test covering state transitions, exceptions, ordering, arithmetic, and precision for all three renderers.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "e3dac5bbc7d0d257edf5fb1c24bfa969e363c109eb58cc21d4d8bb4c6255fccb",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Oracle observations and comparison semantics",
+      "claim": "Clean-green and defect-red grading is not deterministic until the observable value algebra and equality rules are specified.",
+      "evidence": "The submission schema provides only a returns-or-throws kind and an optional value. It does not define throwable identity, stateful oracle advancement, numeric precision, ordered collections, unsupported JavaScript values, serialization failures, or exact versus tolerant comparison, despite error, ordering, state, and precision defect families.",
+      "evidence_reference": "Plan §2 submission schema, §3 evaluator, and §5 outcome taxonomy",
+      "repair": "Pin a JSON-safe observation algebra and canonical comparator, including exception fields, numeric representation, collection ordering, unsupported-output rejection, and step-by-step clean-oracle state transitions. Use that same comparator for declarations and both twins.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "80fd5064bcd32ebff9991b32164e92cba0533e7d0a966f4f1b5033d8c5b9e702",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Specificity subject and outcome taxonomy",
+      "claim": "Specificity is logically implied by declared accuracy, making the claimed independent false-alarm path and deviant mapping inconsistent.",
+      "evidence": "Admission requires the clean twin to conform to the oracle everywhere. Therefore, if every declaration equals the oracle, clean execution must equal every declaration. A defect-imitating declaration first violates declared accuracy, yet the deviant matrix assigns it to specificity, while the single-valued taxonomy gives no precedence for the simultaneous mismatch.",
+      "evidence_reference": "Plan §2 Declared accuracy and Specificity, §3 twin validation, §5 taxonomy, and §7 deviant matrix",
+      "repair": "Decide whether specificity is a documented derived diagnostic or remove it as an independent subject. Define a deterministic multi-predicate result and primary-outcome precedence, then provide a reachable production-path fixture for every retained taxonomy value.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "88e6b8704e7e45573a7728755394669ff401b14fde91bb8bd926d1d1eebdca45",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Fail-closed administration and runner outcomes",
+      "claim": "The outcome model does not cover every crash, timeout, empty, oversized, or invalid-protocol path.",
+      "evidence": "Infra_fail is defined only as a twin runner crash or timeout. The plan does not map runner output overflow, empty or malformed runner protocol, signal termination, sandbox-launch failure, or local, HTTP, and CLI authoring failures. The statement that candidate exit codes are absent from grading does not specify their fail-closed administration result.",
+      "evidence_reference": "Plan §4 Host runner isolation, §5 Outcome taxonomy, and §8 P3",
+      "repair": "Specify one exhaustive state table for author invocation, response parsing, sandbox startup, twin execution, and result decoding. Map every termination and cap violation to either candidate failure or administration abort, with required nonzero exit behavior and evidence-row/store rules.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "90606ebeef003883fd85baf5e2fbf88cc80217f034fb4e15a03b96a1f44a341c",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Visible metadata leakage and seed-domain independence",
+      "claim": "The visible budget can distinguish hidden twins, and the plan does not prevent seed-induced correlations between renderers and defect selection.",
+      "evidence": "Budget is derived from the minimal revealing sequence and is included in the exact candidate-visible envelope. That quantity can vary with the selected hidden mutation. The corpus is seed-derived and renderers are seed-assigned, but no domain-separated derivation or independence invariant is specified. Exact-token leak scans cannot detect either structural channel.",
+      "evidence_reference": "Plan §2 Bounded and §3 Envelope, leak scan, and renderer assignment",
+      "repair": "Derive visible budgets solely from public specification structure or use a constant budget per public shape. Domain-separate seeds for contract generation, mutation, renderer, identifiers, ordering, and trials, and add structural leakage tests proving those visible fields are independent of the hidden family and twin.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "92505fc0cf44ddc23f863f472db9149844922555982fcea3fbc8fb663ca382c3",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Deterministic hash closure",
+      "claim": "The exact transitive hash boundary needed for reproducible grading is not yet defined.",
+      "evidence": "The plan says the corpus hash covers the generator and evaluator but does not explicitly include the DSL schema, mutation logic, renderer implementations, canonical serializer, emitted twins, budgets, runner policy, or runtime-version assumptions.",
+      "evidence_reference": "Plan §3 Formal contract and §8 P1 and P3",
+      "repair": "During P1, define and golden-test a canonical manifest covering every grading-affecting source, policy, artifact, seed derivation, and runtime constraint; verify byte identity across fresh processes and varied locale and timezone settings.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_nonblocking",
+      "fingerprint": "f43ab8da28c58252bf465cc69987124b8597c0d4fb577756753ba169de4b4f11",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Canonical candidate-response and broker transport contract",
+      "claim": "The plan has incompatible descriptions of the candidate artifact and does not define how either transport yields the JSON plan without executing candidate code.",
+      "evidence": "The construct calls the submission data and describes pure JSON parsing, while also calling it a HARNESS_CONTRACT export and sending a broker request whose format is unified_diff even though its content is the JSON envelope. No canonical response wrapper, static extraction rule, or HTTP, CLI, and local parity boundary is stated.",
+      "evidence_reference": "Plan §2 Construct, §4 plan handling, and §6 Chassis",
+      "repair": "Define one imported response contract. Specify whether the existing unified-diff chassis carries a single JSON artifact, how it is statically extracted without evaluation, when byte and depth caps apply, how extra code or files are rejected, and how the identical adapter is used by local, HTTP, and CLI paths.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "7c196c7992e4a5be3d69341920db65c03b184206027b1dba9b11bc2bb48be1e5",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Renderer-grammar and cross-case anti-gaming controls",
+      "claim": "Two named attacks lack mechanical counters, and the residual-risk statement is incomplete.",
+      "evidence": "Three seed-assigned renderers, opaque identifiers, and interleaving do not prevent renderer-template exploitation or cross-case adaptation. The plan does not require fresh authoring contexts, lock all submissions before feedback, forbid result leakage between cases, or prove renderer allocation independent of mutations. P5 names only cross-administration structure memorization as residual risk.",
+      "evidence_reference": "Plan §3 renderer and corpus rules, §7 deviant matrix, and §8 P5",
+      "repair": "Add an attack-to-counter matrix with executable checks. At minimum, independently assign renderers and mutations, use holdout structural variants, isolate authoring contexts, lock an administration's submissions before releasing any result, prohibit prior-case artifacts in later envelopes, and explicitly name any remaining grammar and memorization risks.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "88d32e8c3a8dd1f5f8aab14bef8df15226d06df6d03fac1ee95574184ef50d3d",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase acceptance and negative-control coverage",
+      "claim": "The acceptance contract does not yet prove that every red line executes production logic or that a vacuous suite cannot report green.",
+      "evidence": "The phases require broad categories such as full deviant rows and end-to-end mock candidates, but do not map every retained outcome and subject to an exact fixture, exit status, evidence row, and store effect. They also lack a negative control proving both clean and defect twins were actually invoked, and omit the unclassified runner and transport failures identified by the taxonomy gap.",
+      "evidence_reference": "Plan §7 Deviant matrix, §8 phase suites, and §9 Verification contract",
+      "repair": "Freeze a coverage table for every invariant and failure class, naming the production entry point, deviant fixture, exact taxonomy and subject result, exit code, row, and store expectation. Add sabotage tests showing the suite fails if twin execution, declaration comparison, caps, hash checks, or store failure propagation is disabled, plus pinned assertion counts.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "cafc0364033da093b40c68c3a9ddbd429066605980fe3639058894e26a67a4bb",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1 generator/corpus admission suite and rendered-spec renderer design (v3 §3)",
+      "claim": "The plan proves renderer/tree fidelity (P1 re-parsing property test) but never proves spec sufficiency: that every oracle expectation expected(call) — including exact return values and throw kinds/values the candidate must declare — is fully derivable from the rendered prose alone. A competent spec-reading candidate could fail declared_accuracy on details the renderer omits, which is the fail-despite-competent-authoring failure mode VA1 names.",
+      "evidence": "Section 3 pins expected(call) = evaluator(behavior, state, args) and the property test only re-parses comparison directions/negations/values from renderings against the tree; no acceptance case verifies that a prose-only reader (or an independent prose-derived solver) can reconstruct expected(call) exactly, e.g., exact returned values or throw payloads for the error-path-swallow family.",
+      "evidence_reference": "v3 plan §3 (Rendered spec, P1 property test) and §2 (Declared accuracy line)",
+      "repair": "Add a P1 admission check: for each case, run an independent prose-only derivation of expected(call) for all admitted budget-feasible revealing sequences (or a sampled sweep) and abort corpus admission on any divergence from the tree oracle; also require renderers to emit exact-value and throw-payload vocabulary for every behavior node.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "deep",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_nonblocking",
+      "fingerprint": "37b193bff5393e2e6320ba8d7cde6f5a34661de240bcc3cca99e3fcd026d9995",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA5",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "Broker transport wiring in P3 (v3 §6)",
+      "claim": "The broker request reuses payload format 'unified_diff' while carrying a JSON envelope as content, which conflicts with the established meaning of that format field in existing role transports and risks a second, drifting statement of the transport contract.",
+      "evidence": "Section 6 specifies broker request {role: 'verification_author', payload: {format: 'unified_diff', content: <envelope>}} — an envelope JSON is not a unified diff, so the format tag no longer describes the content the broker/stub contract expects.",
+      "evidence_reference": "v3 plan §6 Chassis paragraph, broker request line",
+      "repair": "No current change; follow-up only. Either introduce/extend a payload format tag that matches the envelope content (e.g., a json or va_envelope format) or document explicitly in the transport-parity field diff list that 'unified_diff' is reused verbatim as an opaque container per chassis precedent.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "deep",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_nonblocking",
+      "fingerprint": "e0a7c3fc0b2e712dfc04f70227ec1aca82593e74bc5dc51f11471fcae49615a8",
+      "disposition_rationale": "legacy compatibility translation"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "f43ab8da28c58252bf465cc69987124b8597c0d4fb577756753ba169de4b4f11",
+      "rubric_id": "VA3",
+      "affected_surface": "Deterministic hash closure",
+      "claim": "The exact transitive hash boundary needed for reproducible grading is not yet defined.",
+      "evidence_reference": "Plan §3 Formal contract and §8 P1 and P3",
+      "disposition": "accepted_nonblocking"
+    },
+    {
+      "fingerprint": "37b193bff5393e2e6320ba8d7cde6f5a34661de240bcc3cca99e3fcd026d9995",
+      "rubric_id": "VA1",
+      "affected_surface": "P1 generator/corpus admission suite and rendered-spec renderer design (v3 §3)",
+      "claim": "The plan proves renderer/tree fidelity (P1 re-parsing property test) but never proves spec sufficiency: that every oracle expectation expected(call) — including exact return values and throw kinds/values the candidate must declare — is fully derivable from the rendered prose alone. A competent spec-reading candidate could fail declared_accuracy on details the renderer omits, which is the fail-despite-competent-authoring failure mode VA1 names.",
+      "evidence_reference": "v3 plan §3 (Rendered spec, P1 property test) and §2 (Declared accuracy line)",
+      "disposition": "accepted_nonblocking"
+    },
+    {
+      "fingerprint": "e0a7c3fc0b2e712dfc04f70227ec1aca82593e74bc5dc51f11471fcae49615a8",
+      "rubric_id": "VA5",
+      "affected_surface": "Broker transport wiring in P3 (v3 §6)",
+      "claim": "The broker request reuses payload format 'unified_diff' while carrying a JSON envelope as content, which conflicts with the established meaning of that format field in existing role transports and risks a second, drifting statement of the transport contract.",
+      "evidence_reference": "v3 plan §6 Chassis paragraph, broker request line",
+      "disposition": "accepted_nonblocking"
+    }
+  ],
+  "accepted_blocker_count": 9,
+  "repair_authorized": true,
+  "next_generation": 2,
+  "reviewed_at": "2026-08-17T18:00:58.334Z"
+}

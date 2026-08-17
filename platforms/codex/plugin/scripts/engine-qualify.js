@@ -41,6 +41,17 @@ const {
 } = require('../evals/brain-eval-generator');
 const { gradeAdministration } = require('../evals/brain-eval-grader');
 const {
+  CORPUS: VA_CORPUS,
+  GENERATOR_VERSION: VA_GENERATOR_VERSION,
+  canonicalJson: vaCanonicalJson,
+  generateAdministration: generateVaAdministration,
+  normalizeObserved: vaNormalizeObserved,
+} = require('../evals/va-eval-generator');
+const {
+  InfraError: VaInfraError,
+  gradeAdministration: gradeVaAdministration,
+} = require('../evals/va-eval-grader');
+const {
   expandTilde,
 } = require('./lib/jsonl-store');
 const {
@@ -50,6 +61,7 @@ const {
 const {
   normalizeOptions: normalizeBrokerOptions,
 } = require('./qualification-case-broker');
+const { extractJsonObject } = require('./lib/extract-json-object');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_MANIFEST = path.join(REPO_ROOT, 'evals', 'capability-evidence-corpus.json');
@@ -76,6 +88,16 @@ const BRAIN_CORPUS_PATH = path.join(
   'evals',
   'brain-capability-evidence-corpus.json',
 );
+const VA_GENERATOR_PATH = path.join(REPO_ROOT, 'evals', 'va-eval-generator.js');
+const VA_GRADER_PATH = path.join(REPO_ROOT, 'evals', 'va-eval-grader.js');
+const VA_CORPUS_PATH = path.join(
+  REPO_ROOT,
+  'evals',
+  'va-capability-evidence-corpus.json',
+);
+const EXPECTED_VA_GENERATOR_HASH = 'c37cd9fced8d4da2a1eb06cf5ea220dbf7b0aa02f89c8c5ff1de86c0f39c6a35';
+const EXPECTED_VA_GRADER_HASH = 'dedaea5cf11072b2e6f40490c3e02ec88e80ba756d44c2e5d1ca5891337128a3';
+const EXPECTED_VA_CORPUS_HASH = '85ede154ce11f89ceca3af3c9f895c9fa94e7bc0a84ffd8dc0da391535ccd9b8';
 const EXPECTED_BRAIN_GENERATOR_HASH =
   '9829c8c4fc7b900d27d02992e7b94b9b8002722bd45cec938a8233a1f091791e';
 const EXPECTED_BRAIN_GRADER_HASH =
@@ -141,7 +163,7 @@ const HOST_OBSERVED_RUNS = new WeakSet();
 const ACTIVE_SESSION_RUNS = new Map();
 
 const HELP = `Usage:
-  scripts/engine-qualify.sh <reviewer|owner>
+  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author>
     --engine <display-id> --model <exact-model-id> --model-version <version>
     --runner <name> --runner-version <version> --family <family>
     --harness-version <version> --effort <effort>
@@ -205,7 +227,7 @@ function positiveInteger(value, label, minimum = 1) {
 function parseArgs(argv) {
   if (argv.length === 0) usage(2);
   if (['-h', '--help', 'help'].includes(argv[0])) usage(0);
-  if (!['reviewer', 'owner', 'brain'].includes(argv[0])) {
+  if (!['reviewer', 'owner', 'brain', 'verification_author'].includes(argv[0])) {
     usage(2, `unknown subcommand: ${argv[0]}`);
   }
   const options = {
@@ -1928,6 +1950,411 @@ function parseBrainRoundOutput(stdout) {
   return {};
 }
 
+// ── Verification-author declared-plan exam (plan 2026-08-18-…-v3, FROZEN) ─────
+
+function verifyPinnedVaEvaluationAssets() {
+  const generatorHash = byteHash(fs.readFileSync(VA_GENERATOR_PATH));
+  const graderHash = byteHash(fs.readFileSync(VA_GRADER_PATH));
+  const corpusHash = byteHash(fs.readFileSync(VA_CORPUS_PATH));
+  if (generatorHash !== EXPECTED_VA_GENERATOR_HASH) {
+    throw new Error('va evaluation generator drifted from its pinned hash');
+  }
+  if (graderHash !== EXPECTED_VA_GRADER_HASH) {
+    throw new Error('va evaluation grader drifted from its pinned hash');
+  }
+  if (corpusHash !== EXPECTED_VA_CORPUS_HASH) {
+    throw new Error('va evaluation corpus drifted from its pinned hash');
+  }
+  return { generator_hash: generatorHash, grader_hash: graderHash, corpus_hash: corpusHash };
+}
+
+// Host-authored twin runner: loads /case/module.cjs, applies /case/steps.json
+// in order, prints one JSON array of raw observations. Only generator-compiled
+// twins execute here — the candidate contributes DATA only (plan §2).
+const VA_RUNNER_SOURCE = [
+  "'use strict';",
+  "const fs = require('fs');",
+  "const mod = require('/case/module.cjs');",
+  "const steps = JSON.parse(fs.readFileSync('/case/steps.json', 'utf8'));",
+  'const out = [];',
+  'for (const step of steps) {',
+  '  try {',
+  '    const fn = mod[step.call.export_path[0]];',
+  '    const value = fn.apply(null, step.call.args);',
+  '    let serialized;',
+  "    try { serialized = JSON.parse(JSON.stringify({ v: value })); } catch { serialized = null; }",
+  '    if (value === undefined || serialized === null || (typeof value === \'number\' && (Number.isNaN(value) || Object.is(value, -0)))) {',
+  "      out.push({ kind: 'raw_unserializable' });",
+  '    } else {',
+  "      out.push({ kind: 'returns', value: serialized.v });",
+  '    }',
+  '  } catch (error) {',
+  "    out.push({ kind: 'throws', name: String(error && error.name), message_token: String(error && error.message) });",
+  '  }',
+  '}',
+  'process.stdout.write(JSON.stringify(out));',
+  '',
+].join('\n');
+
+function vaSandboxArguments(caseRoot) {
+  return [
+    '--die-with-parent',
+    '--new-session',
+    '--unshare-pid',
+    '--unshare-ipc',
+    '--unshare-uts',
+    '--unshare-net',
+    '--ro-bind', '/usr', '/usr',
+    '--symlink', 'usr/bin', '/bin',
+    '--symlink', 'usr/lib', '/lib',
+    '--symlink', 'usr/lib64', '/lib64',
+    '--ro-bind', '/etc', '/etc',
+    '--proc', '/proc',
+    '--dev', '/dev',
+    '--tmpfs', '/tmp',
+    '--dir', '/case',
+    '--dir', '/work',
+    '--dir', '/work/home',
+    '--ro-bind', process.execPath, '/case/node',
+    '--ro-bind', path.join(caseRoot, 'runner.cjs'), '/case/runner.cjs',
+    '--ro-bind', path.join(caseRoot, 'module.cjs'), '/case/module.cjs',
+    '--ro-bind', path.join(caseRoot, 'steps.json'), '/case/steps.json',
+    '--chdir', '/work',
+    '--clearenv',
+    '--setenv', 'HOME', '/work/home',
+    '--setenv', 'NO_COLOR', '1',
+    '--setenv', 'PATH', '/usr/bin:/bin',
+    '--setenv', 'TMPDIR', '/tmp',
+    '/case/node', '--max-old-space-size=256', '/case/runner.cjs',
+  ];
+}
+
+// Sandboxed twin executor injected into the grader. Throws VaInfraError on any
+// runner/sandbox-level failure (plan §5: infra_fail aborts the administration).
+function executeVaTwinSandboxed(source, steps) {
+  const caseRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-va-case-'));
+  try {
+    fs.writeFileSync(path.join(caseRoot, 'runner.cjs'), VA_RUNNER_SOURCE, { mode: 0o600 });
+    fs.writeFileSync(path.join(caseRoot, 'module.cjs'), source, { mode: 0o600 });
+    fs.writeFileSync(
+      path.join(caseRoot, 'steps.json'),
+      `${JSON.stringify(steps.map((s) => ({ call: s.call })))}\n`,
+      { mode: 0o600 },
+    );
+    const result = spawnSync(BWRAP_PATH, vaSandboxArguments(caseRoot), {
+      encoding: 'utf8',
+      maxBuffer: VA_CORPUS.budget.runner_output_cap_bytes + 64 * 1024,
+      timeout: VA_CORPUS.budget.runner_wall_ms_per_execution,
+    });
+    if (result.error || result.signal || result.status !== 0) {
+      throw new VaInfraError(
+        `twin runner failed: ${result.error ? result.error.message : (result.signal || result.status)}`,
+      );
+    }
+    if (Buffer.byteLength(result.stdout || '') > VA_CORPUS.budget.runner_output_cap_bytes) {
+      throw new VaInfraError('twin runner output exceeded its cap');
+    }
+    let raw;
+    try {
+      raw = JSON.parse(result.stdout || '');
+    } catch (error) {
+      throw new VaInfraError(`twin runner protocol: ${error.message}`);
+    }
+    if (!Array.isArray(raw) || raw.length !== steps.length) {
+      throw new VaInfraError('twin runner protocol shape');
+    }
+    return raw.map((entry) => {
+      if (entry && entry.kind === 'returns') {
+        return vaNormalizeObserved({ kind: 'returns', value: entry.value });
+      }
+      if (entry && entry.kind === 'throws') {
+        return vaNormalizeObserved({
+          kind: 'throws', name: entry.name, message_token: entry.message_token,
+        });
+      }
+      return vaNormalizeObserved({ kind: 'returns', value: undefined });
+    });
+  } finally {
+    fs.rmSync(caseRoot, { recursive: true, force: true });
+  }
+}
+
+// Plan extraction from provider/panel text: the SAME static extraction rule
+// the provider transport uses (review 2026-08-18 MUST-FIX — a competent
+// local-panel answer followed by prose must not grade malformed), plus the
+// corpus byte cap enforced on the RAW text before any parse.
+function parseVaPlanOutput(stdout) {
+  const text = String(stdout || '');
+  if (Buffer.byteLength(text, 'utf8') > VA_CORPUS.budget.plan_max_bytes) return null;
+  const extracted = extractJsonObject(text);
+  if (!extracted) return null;
+  try {
+    const parsed = JSON.parse(extracted);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  } catch { /* fall through */ }
+  return null;
+}
+
+function runVaQualification(options) {
+  let staticAssets;
+  try {
+    staticAssets = verifyPinnedVaEvaluationAssets();
+    verifySandboxRuntime();
+  } catch (error) {
+    throw new Error(`qualification precondition failed: ${error.message}`);
+  }
+  if (options.trials !== VA_CORPUS.budget.trials_per_administration) {
+    throw new Error(
+      `verification_author qualification requires exactly ${VA_CORPUS.budget.trials_per_administration} trials`,
+    );
+  }
+  const panelConfig = snapshotPanelConfiguration({ ...options, role: 'verification_author' });
+  const runNonce = crypto.randomBytes(32).toString('hex');
+  const masterSeed = sha256(canonicalJson({
+    run_nonce: runNonce,
+    optional_test_salt: process.env.AUTOPILOT_QUALIFY_SEED || null,
+    generator_hash: staticAssets.generator_hash,
+    role: 'verification_author',
+  }));
+  const admin = generateVaAdministration(masterSeed);
+  const started = Date.now();
+
+  const plansPerTrial = [];
+  const rawExchanges = [];
+  let transportAbort = null;
+  for (const trial of admin.trials) {
+    const plans = {};
+    for (const caseData of trial.cases) {
+      const execution = executePanelCase(panelConfig, caseData.envelope);
+      const output = typeof execution.stdout === 'string' ? execution.stdout : '';
+      rawExchanges.push({
+        trial_id: trial.trial_id,
+        case_id: caseData.case_id,
+        envelope: caseData.envelope,
+        transport_ok: execution.ok,
+        output,
+      });
+      if (!execution.ok) {
+        // Broker/launcher/host-side failure: transport_fail ABORTS with no
+        // verdict (plan §5, G2-F1) — never graded against the candidate.
+        transportAbort = `transport failure on ${caseData.case_id}: ${execution.error}`;
+        break;
+      }
+      plans[caseData.case_id] = parseVaPlanOutput(output);
+    }
+    plansPerTrial.push(plans);
+    if (transportAbort) break;
+  }
+  if (options.rawDir) {
+    fs.mkdirSync(options.rawDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(options.rawDir, 'va-exchanges.jsonl'),
+      `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+      { mode: 0o600 },
+    );
+  }
+  const baseVerdict = {
+    engine: options.engine,
+    model: options.model,
+    runner: options.runner,
+    role: 'verification_author',
+  };
+  const oracleMeta = {
+    methodology_version: `${VA_CORPUS.corpus_version}.${VA_GENERATOR_VERSION}`,
+    corpus_manifest_hash: staticAssets.corpus_hash,
+    generator_hash: staticAssets.generator_hash,
+    sandbox_policy_hash: panelConfig.policyHash,
+    transport: panelConfig.transport,
+  };
+  if (transportAbort) {
+    return deepFreeze({
+      schema_version: 1,
+      run_nonce: runNonce,
+      oracle: oracleMeta,
+      qualified: false,
+      evidence: null,
+      row: { status: 'transport_fail', evidence: null },
+      verdict: {
+        ...baseVerdict,
+        qualified: false,
+        outcome: 'transport_fail',
+        reason: `${transportAbort} — administration aborted, no verdict recorded`,
+      },
+    });
+  }
+
+  const graded = gradeVaAdministration(admin, plansPerTrial, executeVaTwinSandboxed);
+  if (graded.outcome === 'aborted') {
+    return deepFreeze({
+      schema_version: 1,
+      run_nonce: runNonce,
+      oracle: oracleMeta,
+      qualified: false,
+      evidence: null,
+      row: { status: graded.abort_class, evidence: null },
+      verdict: {
+        ...baseVerdict,
+        qualified: false,
+        outcome: graded.abort_class,
+        reason: 'administration aborted (host-side failure) — no verdict recorded',
+      },
+    });
+  }
+
+  const issuedAt = timestamp();
+  const state = graded.qualified ? 'qualified' : 'degraded';
+  const scope = {
+    task_classes: options.taskClasses,
+    domains: options.domains,
+    languages: options.languages,
+    tool_surface: options.tools,
+  };
+  const identity = {
+    identity: options.model,
+    model_alias: options.engine,
+    model_version: options.modelVersion,
+    family: options.family,
+    runner: options.runner,
+    runner_version: options.runnerVersion,
+    harness_version: options.harnessVersion,
+    effort: options.effort,
+    prompt_config_hash: options.promptConfigHash,
+    semantic_fingerprint: options.semanticFingerprint,
+    containment_fingerprint: options.containmentFingerprint,
+    identity_resolved: true,
+  };
+  const outcomeCount = (trialResult, outcome) => trialResult.results
+    .filter((r) => r.outcome === outcome).length;
+  const trials = graded.trials.map((trialResult, index) => ({
+    trial_id: trialResult.trial_id,
+    observed_at: issuedAt,
+    corpus_manifest_hash: staticAssets.corpus_hash,
+    cases_total: trialResult.results.length,
+    cases_passed: outcomeCount(trialResult, 'pass'),
+    declared_mismatches: outcomeCount(trialResult, 'declared_mismatch'),
+    missed_defects: outcomeCount(trialResult, 'missed_defect'),
+    robustness_violations: outcomeCount(trialResult, 'malformed_plan')
+      + outcomeCount(trialResult, 'budget_exceeded'),
+    subjects: trialResult.subjects,
+    plan_set_hash: sha256(vaCanonicalJson(plansPerTrial[index] || {})),
+    envelope_stream_hash: sha256(vaCanonicalJson(
+      admin.trials[index].cases.map((c) => c.envelope),
+    )),
+  }));
+  const expiresAt = new Date(
+    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
+  ).toISOString();
+  const methodology = {
+    kind: 'va_declared_plan',
+    name: 'va-declared-plan',
+    version: '1.0.0',
+    corpus_version: `${VA_CORPUS.corpus_version}.${VA_GENERATOR_VERSION}`,
+    corpus_manifest_hash: staticAssets.corpus_hash,
+    thresholds: {
+      min_trials: VA_CORPUS.thresholds.min_trials,
+      max_declared_mismatches: VA_CORPUS.thresholds.max_declared_mismatches,
+      max_missed_defects: VA_CORPUS.thresholds.max_missed_defects,
+      max_robustness_violations: VA_CORPUS.thresholds.max_robustness_violations,
+    },
+    basis: null,
+  };
+  const evidence = compileCapabilityEvidence({
+    schema_version: 1,
+    source: 'internal_eval',
+    source_ref: 'engine-qualify:verification_author-v1',
+    state,
+    role: 'verification_author',
+    scope,
+    identity,
+    issued_at: issuedAt,
+    observed_at: issuedAt,
+    expires_at: expiresAt,
+    methodology,
+    trials,
+    revocation: null,
+    supersedes: null,
+  });
+  const storeConfig = resolveEvidenceStore(options.store);
+  let evidenceStoreRecord;
+  try {
+    evidenceStoreRecord = appendQualifierEvidence(storeConfig, evidence);
+  } catch (error) {
+    throw new Error(`cannot persist qualifier evidence: ${error.message}`);
+  }
+  const totals = (key) => trials.reduce((sum, t) => sum + t[key], 0);
+  const qualified = graded.qualified;
+  const row = {
+    engine: options.engine,
+    model: options.model,
+    runner: options.runner,
+    family: options.family,
+    role: 'verification_author',
+    model_version: options.modelVersion,
+    version_source: options.versionSource,
+    corpus_version: methodology.corpus_version,
+    harness_version: options.harnessVersion,
+    runner_version: options.runnerVersion,
+    prompt_config_hash: options.promptConfigHash,
+    effort: options.effort,
+    date: issuedAt.slice(0, 10),
+    quality: {
+      corpus_pass: `${totals('cases_passed')}/${totals('cases_total')}`,
+      false_pass_critical: totals('missed_defects'),
+      specificity: `${totals('declared_mismatches')}/${totals('cases_total')}`,
+      repeated_trials: options.trials,
+    },
+    capability_score: totals('cases_total') === 0
+      ? 0
+      : totals('cases_passed') / totals('cases_total'),
+    cost: {
+      source: 'unknown',
+      usd_per_mtok_input: 0,
+      usd_per_mtok_output: 0,
+      sample_tokens: 0,
+    },
+    latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
+    status: qualified ? 'qualified' : 'failed',
+    qualified_at: issuedAt.slice(0, 10),
+    expires: expiresAt.slice(0, 10),
+    evidence_store: {
+      event_id: evidenceStoreRecord.event_id,
+      producer: evidenceStoreRecord.producer,
+      transcript_hash: evidenceStoreRecord.transcript_hash,
+    },
+    evidence,
+  };
+  const failures = [];
+  for (const [index, trialResult] of graded.trials.entries()) {
+    for (const r of trialResult.results) {
+      if (r.outcome !== 'pass') {
+        failures.push(`trial-${index + 1}: ${r.case_id} ${r.outcome}${r.detail ? ` (${r.detail})` : ''}`);
+      }
+    }
+  }
+  const verdict = {
+    ...baseVerdict,
+    subjects: graded.subjects,
+    qualified,
+    evidence_id: evidence.evidence_id,
+    evidence_state: evidence.state,
+    scope_hash: evidence.scope_hash,
+    identity_hash: evidence.identity_hash,
+    trial_set_hash: evidence.trial_set_hash,
+    evidence_store_event_id: evidenceStoreRecord.event_id,
+    evidence_store_transcript_hash: evidenceStoreRecord.transcript_hash,
+    reason: qualified ? 'passed' : failures.join('; '),
+  };
+  return deepFreeze({
+    schema_version: 1,
+    run_nonce: runNonce,
+    oracle: oracleMeta,
+    qualified,
+    evidence,
+    row,
+    verdict,
+  });
+}
+
 // Brain-seat standing exam (plan 2026-08-17-brain-seat-exam-suite P3). K stateless
 // rounds per trial reach the engine as ordinary single-shot panel cases (KR2
 // statelessness — the per-case transport surface is unchanged); grading is offline
@@ -2225,6 +2652,7 @@ function runBrainQualification(options) {
 function runQualification(options) {
   const role = options.role || 'reviewer';
   if (role === 'brain') return runBrainQualification(options);
+  if (role === 'verification_author') return runVaQualification(options);
   if (!['reviewer', 'owner'].includes(role)) {
     throw new Error(`unsupported qualification role: ${role}`);
   }
@@ -2616,6 +3044,9 @@ module.exports = {
   ownerRuleViolations,
   runBrainQualification,
   runQualification,
+  runVaQualification,
+  sandboxArguments,
+  vaSandboxArguments,
   verifyPinnedBrainEvaluationAssets,
   verifyPinnedEvaluationAssets,
   verifyPinnedOwnerEvaluationAssets,

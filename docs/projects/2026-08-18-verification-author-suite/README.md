@@ -48,10 +48,23 @@ per-module skill rows configured for `scripts/`/`evals/` — N/A recorded.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Plan + hetero review | ⛔ STOPPED at G2 terminal | G1: 9 blockers, all accepted + repaired (trace re-derivation design). G2 (after a growth-gate compression + legal zero-consumption state surgery): chair STOP + deep CONDITIONAL, 9 NEW blockers — three fatal mechanics proven (same-process trace forgery, spec-blind exhaustive caller, unserializable contract). Generation cap spent ⇒ NOT approved; v3 needs Board authorization. Distillation: `docs/plans/evidence/2026-08-18-verification-author-suite/v3-design-requirements.md` |
-| P1–P5 implementation | not started | blocked on Board construct ruling (black-box vs white-box vs hybrid) |
+| Plan v2 lineage | ⛔ STOPPED at G2 terminal | G1: 9 blockers, all accepted + repaired (trace re-derivation design). G2 (after a growth-gate compression + legal zero-consumption state surgery): chair STOP + deep CONDITIONAL, 9 NEW blockers — three fatal mechanics proven (same-process trace forgery, spec-blind exhaustive caller, unserializable contract). Generation cap spent ⇒ NOT approved; v3 needs Board authorization. Distillation: `docs/plans/evidence/2026-08-18-verification-author-suite/v3-design-requirements.md` |
+| Plan v3 lineage (Board ruling c) | ✅ FROZEN | v3-G1 9 blockers repaired in G2 revision; v3-G2 terminal left 8 specification-precision blockers, depth-0-adjudicated ACCEPTED + folded (zero construct findings = freeze basis, brain precedent) |
+| P1 generator + corpus | done | 432 assertions; admission gate caught its own first solver draft |
+| P2 runner + grader | done | 26 assertions; discriminating mutation control |
+| P3 engine-qualify subcommand | done | 26 end-to-end; additive va_declared_plan evidence kind; broker role widened |
+| P4 provider mode | done | QRP_PROMPT_MODE=va; provider suite 115 |
+| P5 dogfood + release | done | GLM-5.3 QUALIFIED 24/24 (scorecard 142, evidence 7); pre-merge review round in progress |
 
 ## Decision log
+
+- 2026-08-18: **Board ruled construct option (c)** — declared expectations
+  (candidate pre-declares each call's expected outcome; host scores against
+  the contract). v3 pushes it further: the submission becomes pure DATA (an
+  ordered declared test plan) and no candidate code executes at all —
+  eliminating the trace-forgery, harness-sandbox, and white-box problems by
+  construction. v3 plan: `docs/plans/2026-08-18-verification-author-suite-v3.md`,
+  fresh review lineage.
 
 - 2026-08-18: PATCH version (v2.34.17) per the brain-suite precedent (a new
   exam is scripts/evals, not a new user-invocable skill/agent).

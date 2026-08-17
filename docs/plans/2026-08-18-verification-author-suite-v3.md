@@ -1,6 +1,6 @@
 # Verification-author qualification suite v3 (2026-08-18)
 
-> 狀態: ✅ FROZEN — v3-G2 terminal reached; the 8 residual blockers (all specification-precision class, zero construct/mechanism defects) were depth-0-adjudicated ACCEPTED and folded below (brain-suite freeze precedent).
+> 狀態: ✅ Shipped in v2.34.17 — merged as `99c618d9`（frozen at v3-G2 terminal with depth-0 adjudication; implemented P1-P5 + two-round implementation review）
 > Lineage: v2 STOPPED at its terminal; Board ruled construct (c). Prior
 > findings: `evidence/2026-08-18-verification-author-suite/`.
 

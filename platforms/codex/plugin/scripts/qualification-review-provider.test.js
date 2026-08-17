@@ -518,6 +518,27 @@ function parseResponse(child) {
   const { output } = parseResponse(child);
   equal(output.verdict, 'fail', 'the answer produced before the orphan outlived it is preserved');
 }
+{
+  // Round-2 residual race: the deadline fires INSIDE the exit-flush window —
+  // the child already exited in-budget with a complete answer, and the timeout
+  // must settle from that recorded exit, never discard the answer as a timeout.
+  // Deterministic geometry: child exits ~0.6s (spin 500 + startup), flush
+  // window widened to 2000ms, deadline at 1000ms ⇒ the deadline always lands
+  // between exit and flush-settle.
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_TIMEOUT_MS: '1000', QRP_EXIT_FLUSH_MS: '2000', STUB_SPAWN_ORPHAN: '1',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+    stubSleepMs: 500,
+  });
+  equal(child.status, 0,
+    `a deadline inside the flush window settles from the recorded exit (stderr: ${child.stderr})`);
+  const { output } = parseResponse(child);
+  equal(output.verdict, 'fail', 'the in-budget answer survives the deadline race');
+}
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
 process.stdout.write(`${assertions} assertions passed\n`);

@@ -79,6 +79,12 @@ const REQUEST_TIMEOUT_MS = (() => {
   return parsed;
 })();
 const MAX_DIFF_BYTES = 2 * 1024 * 1024;
+// Post-exit stdout flush window for the CLI transport (ms). Tunable so the
+// deterministic race test can widen it; production default stays 200.
+const EXIT_FLUSH_MS = (() => {
+  const parsed = Number(process.env.QRP_EXIT_FLUSH_MS || 200);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 200;
+})();
 
 const SYSTEM_PROMPT = `You are a precision code reviewer being evaluated on single-diff review.
 You receive ONE unified diff of ONE small CommonJS module. Decide whether the change
@@ -497,8 +503,17 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     // successfully in 0.2s yet settled after 8.2s as a spurious timeout). So:
     // 'close' settles immediately; 'exit' arms a short flush window and settles
     // from the child's own exit even if a pipe is still held open; the timeout
-    // kill arms a grace window that force-settles unconditionally.
+    // kill arms a grace window that force-settles. And when the deadline fires
+    // INSIDE the exit-flush window (round-2 residual race: the child already
+    // exited in-budget with a complete answer), the timeout settles from the
+    // recorded exit instead of discarding that answer as a timeout.
+    let exitRecord = null;
     const timer = setTimeout(() => {
+      if (exitRecord) {
+        clearTimeout(graceTimer);
+        settleFromExit(exitRecord.status, exitRecord.signal);
+        return;
+      }
       timedOut = true;
       try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* gone */ } }
       graceTimer = setTimeout(
@@ -510,8 +525,9 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     child.stdout.on('data', (chunk) => stdout.push(chunk));
     child.stderr.on('data', (chunk) => { if (stderr.length < 64) stderr.push(chunk); });
     child.once('exit', (status, signal) => {
+      exitRecord = { status, signal };
       if (graceTimer === null) {
-        graceTimer = setTimeout(() => settleFromExit(status, signal), 200);
+        graceTimer = setTimeout(() => settleFromExit(status, signal), EXIT_FLUSH_MS);
       }
     });
     child.once('close', (status, signal) => settleFromExit(status, signal));

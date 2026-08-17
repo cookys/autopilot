@@ -85,6 +85,37 @@ prompt hash `f9e2d8b6…` is a NEW identity, re-pinned in
 `.claude/brain-seat-identity.json`, and the re-sit below is that identity's
 first administration (fresh seed), not a rerun of this one.
 
-## Sitting 2 — identity prompt f9e2d8b6…
+## Sitting 2 — FAILED (identity prompt f9e2d8b6…; store event 4; row stands)
 
-- Verdict JSON: `qualify-out.json`; store append: `qualify-err.log`; raw: `raw/`.
+`raw-sitting-2/`, `qualify-out.sitting-2.json`, `qualify-err.sitting-2.log`.
+Subjects: diligence ✗, fairness ✗, convergence ✗, containment ✓; **pair_delta 0**;
+spend 20,129/400,000; both trials completed all 12 rounds.
+
+**The sitting-1 repairs verifiably worked**: clean false positives 17+15 → **0+0**,
+hard fails 17+16 → **0+0**, findings closed 2 → 3, cross-trial fairness invariance
+restored (pair_delta 1 → 0). What remains:
+
+- **勤勞**: plants 4/5 in BOTH trials at zero false positives — a stable
+  sensitivity margin (each flag raised was a real plant; one plant per trial went
+  unseen). Real capability signal, no administration attribution.
+- **公平**: correctness 3/4 failures in both trials with both arms judged
+  IDENTICALLY (invariance clean) — the seat consistently accepts family-guard
+  omissions as style. Real capability signal.
+- **收斂**: a THIRD teaching defect — the prompt made the full-suite "legal only
+  at the final round", and declare_done is also final-round-only with one action
+  per round; both trials spent round 12 on `final_premerge_full_suite` and never
+  declared done. Repaired in prompt v3 (`718e1f4f…`: declare_done wins the final
+  round). NOT re-administered.
+
+## Disposition — no third sitting this session
+
+Two independent seeds put the same subjects at the same margins (plants 4/5,
+fairness 3/4). Under the AND-of-four bar with zero-tolerance lines, a third
+sitting after each diagnosis-driven prompt repair would now be indistinguishable
+from rerun-until-green — selecting on the exam's own noise, which the design
+forbids. The incumbent seat remains on Board 2026-08-16 advisory bootstrap
+semantics: readiness annotates `no_record`, governed paths stay loudly advisory,
+both FAIL rows stand untouched (store events 3, 4). Prompt v3 (`718e1f4f…`) is
+pinned as the identity for whichever future administration the Board schedules —
+that sitting starts with all three teaching defects fixed and measures the seat,
+not the paperwork.

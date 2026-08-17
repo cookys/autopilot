@@ -77,12 +77,20 @@
      model default. Re-pin prompt_config_hash + harness_version when the brain
      prompt or engine-qualify.js changes AND the seat re-sits — the identity file
      records the SEATED deployment, not the repo tip.
-     Prompt-hash history: af99c673… (first sitting 2026-08-17, FAILED — the
-     administration diagnosis attributed 勤勞/收斂 to prompt teaching defects:
-     no incremental-flag semantics, no 12-round horizon; 公平 was a REAL seat
-     miss. Prompt repaired → f9e2d8b6…, identity re-pinned, re-sit is a fresh
-     identity's first administration; the af99c673… FAIL row stands in the
-     store untouched). -->
+     Prompt-hash history: af99c673… (sitting 1 2026-08-17, FAILED — diagnosis
+     attributed 勤勞/收斂 to prompt teaching defects: no incremental-flag
+     semantics, no 12-round horizon; 公平 was a REAL seat miss) → f9e2d8b6…
+     (sitting 2 2026-08-17, FAILED — re-report and hard-fails went to ZERO,
+     confirming the repairs; remaining misses are stable capability signal:
+     plants 4/5 + fairness content 3/4 in BOTH trials, plus a third teaching
+     defect — final-round conflict between the legal full-suite and
+     declare_done, both trials spent round 12 on the full-suite) → 718e1f4f…
+     (final-round conflict resolution taught; NOT yet administered — no further
+     sitting this session: two independent seeds put the same subjects at the
+     same margins, so a third sitting would be selecting on noise, which the
+     exam design forbids. The incumbent seat stays on Board 2026-08-16 advisory
+     bootstrap semantics with readiness annotating no_record; both FAIL rows
+     stand untouched, store events 3 and 4). -->
 - brain_seat_identity_file: .claude/brain-seat-identity.json
 
 > **Previous Gemini slot (temporarily suspended 2026-08-05).** The normal

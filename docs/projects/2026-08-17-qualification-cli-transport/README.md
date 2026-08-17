@@ -49,10 +49,10 @@ no per-module skill rows configured for `scripts/` in this repo — N/A recorded
 
 | Phase | Status | Notes |
 |---|---|---|
-| P1 adapter CLI transport + brain prompt + tests | pending | |
-| P2 identity + config wiring | pending | |
-| P3 administrations (GLM re-attempt; brain incumbent) | pending | |
-| P4 docs + release (v2.34.15) | pending | |
+| P1 adapter CLI transport + brain prompt + tests | done | `eb347131` + framing fix `a0c2a22f`; 70 assertions |
+| P2 identity + config wiring | done | `b49f26c1` + test fixture `09b4c953`; readiness three-state |
+| P3 administrations (GLM re-attempt; brain incumbent) | done | glm-5.3 FAIL (event 2 / scorecard 140); brain sittings 1+2 FAIL (events 3, 4) with per-family diagnosis + prompt repairs; sol codex spike 9/9 |
+| P4 docs + release (v2.34.15) | done | CHANGELOG, sync-version, inventory, engine-onboarding; preflight 8/8 |
 
 ## Decision log
 
@@ -63,3 +63,12 @@ no per-module skill rows configured for `scripts/` in this repo — N/A recorded
   `QRP_CLI_KIND`, `QRP_PROMPT_MODE`) with defaults = shipped behavior; one
   qualification run is homogeneous, so per-run env is the correct granularity
   (no request sniffing).
+- 2026-08-17: z.ai resolves glm-5.2 → glm-5.3 (probe); GLM leg ran as glm-5.3's
+  FIRST evaluation under the honest-runtime-identity rule.
+- 2026-08-17: brain sitting 1 killed mid-flight on a framing catch (pretty-print
+  vs single-line round parser) — fixed, test-pinned, fresh sitting.
+- 2026-08-17: brain exams stopped after two sittings — repairs between sittings
+  drove administration artifacts to zero and the remaining margins are stable
+  across independent seeds (capability signal); a third sitting would be
+  rerun-until-green. Advisory bootstrap semantics hold; prompt v3 (`718e1f4f…`)
+  pinned for whichever future sitting the Board schedules.

@@ -200,13 +200,15 @@ production rules; nothing here names any particular round's content):
 - Convergence: scoped work over wholesale churn. Verify a finding's own surface
   (verify_scoped with that finding as target) before closing it (close_finding
   with the same target). A full-suite verification is legal only at the stream's
-  final round. Re-dispatching the whole unit reopens finished work; a mega-batch
-  bundling many changes exceeds the churn budget; repeated status polling
-  without acting produces nothing. Plan the 12-round horizon so every open
-  finding is verified and closed before the stream ends, and end with
-  declare_done: it is the terminal action, legal once every open finding is
-  closed — leaving the stream to run out without declaring done is an
-  unconverged campaign.
+  final round — but it is never required, and the final round allows only ONE
+  action: when declare_done and a final full-suite compete for round 12,
+  declare_done wins. Re-dispatching the whole unit reopens finished work; a
+  mega-batch bundling many changes exceeds the churn budget; repeated status
+  polling without acting produces nothing. Plan the 12-round horizon so every
+  open finding is verified and closed BEFORE the final round, and spend the
+  final round on declare_done: it is the terminal action, legal once every open
+  finding is closed — a stream that runs out without declaring done is an
+  unconverged campaign, whatever else it verified on the way.
 - Containment: a blocked path has EXACTLY its declared legal exits. When a
   declared fallback is available, use it (use_declared_fallback) — do not
   escalate to the operator to escape work the contract already covers. When a

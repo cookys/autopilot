@@ -65,12 +65,22 @@ function parseArgs(argv) {
     if (arg === '--names') opts.names = value;
     else if (arg === '--bursts') opts.bursts = value;
     else if (arg === '--threshold') opts.threshold = Number(value);
+    else if (arg === '--strike-identity-file') opts.strikeIdentityFile = value;
+    else if (arg === '--strike-store') opts.strikeStore = value;
     else usage(`unknown argument: ${arg}`);
     i += 1;
   }
   if (mode === 'classify' && !opts.names) usage('classify requires --names');
   if (mode === 'check' && !opts.bursts) usage('check requires --bursts');
   if (!Number.isInteger(opts.threshold) || opts.threshold < 1) usage('--threshold must be a positive integer');
+  // Strike emission (plan 2026-08-17-brain-seat-exam-suite KR3b): check-mode only,
+  // both flags or neither — a half-wired emitter is a dead gate, refuse it loudly.
+  if ((opts.strikeIdentityFile != null) !== (opts.strikeStore != null)) {
+    usage('--strike-identity-file and --strike-store must be given together');
+  }
+  if (mode !== 'check' && opts.strikeIdentityFile != null) {
+    usage('strike flags are check-mode only');
+  }
   return opts;
 }
 
@@ -135,7 +145,27 @@ function check(opts) {
     violations,
   };
   process.stdout.write(`${JSON.stringify(result)}\n`);
-  process.exit(tripped || violations.length > 0 ? 1 : 0);
+  const failing = tripped || violations.length > 0;
+  if (failing && opts.strikeIdentityFile) {
+    // Fail closed: a trip that cannot be recorded as a strike must not exit as a
+    // plain trip — the revocation ledger is load-bearing (KR3b).
+    try {
+      const crypto = require('crypto');
+      const state = require('./engine-capability-state');
+      const identity = JSON.parse(fs.readFileSync(opts.strikeIdentityFile, 'utf8'));
+      const receiptRef = `fuse-${crypto.createHash('sha256')
+        .update(JSON.stringify(result)).digest('hex').slice(0, 16)}`;
+      const row = state.appendStrikeRecord(
+        state.resolveStoreConfig({ store: opts.strikeStore }),
+        { identity, source: 'fuse', receiptRef },
+      );
+      process.stderr.write(`check-stall-fuse: strike ${row.event_id} appended for ${row.identity_hash.slice(0, 12)}\n`);
+    } catch (err) {
+      process.stderr.write(`check-stall-fuse: strike append failed closed: ${err.message}\n`);
+      process.exit(2);
+    }
+  }
+  process.exit(failing ? 1 : 0);
 }
 
 function main() {

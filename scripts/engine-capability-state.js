@@ -6,9 +6,12 @@ const path = require('path');
 const process = require('process');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 const {
+  BRAIN_CONSTRUCT_SCOPE,
+  BRAIN_METHODOLOGY_KIND,
   capabilityEvidenceProducerHash,
   compileCapabilityEvidence,
   evaluateCapabilityEvidence,
+  normalizeIdentity,
 } = require('../src/engine/capability-evidence');
 const {
   canonicalJson,
@@ -34,6 +37,8 @@ const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js report-evidence --role <role> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js prune [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js classify-error [--string <text>] [--file <path>] [--exit-code <code>]
+  node scripts/engine-capability-state.js strike --identity-file <path> --source <fuse|conformance_audit> --receipt-ref <token> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js brain-status --identity-file <path> [--now <ISO-date>] [--store <path>]
 
 Options:
   --file <path>        Read event JSON from file (for record) or classify error from file.
@@ -322,7 +327,10 @@ function resolveStoreConfig(options) {
   }
   const lockFile = path.join(storeDir, '.lock');
   const evidenceFile = path.join(storeDir, 'qualification-evidence.jsonl');
-  return { storeDir, storeFile, evidenceFile, lockFile };
+  // Strike ledger (brain-seat revocation, plan 2026-08-17-brain-seat-exam-suite KR3b):
+  // a separately named ledger in the SAME store dir, serialized under the SAME lock.
+  const strikesFile = path.join(storeDir, 'strikes.jsonl');
+  return { storeDir, storeFile, evidenceFile, strikesFile, lockFile };
 }
 
 function readStoreRows(storeFile, silentWarn = false) {
@@ -649,6 +657,125 @@ function appendEvidenceRecords(config, rawEvidenceRecords, producer, transaction
 
 function appendEvidenceRecord(config, evidence, producer) {
   return appendEvidenceRecords(config, [evidence], producer)[0];
+}
+
+// --- brain-seat strike ledger (plan 2026-08-17-brain-seat-exam-suite KR3b) --------
+// Strikes are identity_hash-keyed revocation events, NOT capability evidence: they
+// live in strikes.jsonl beside the evidence ledger, serialized under the same lock,
+// and are counted by brainSeatStatus against the newest qualified brain record.
+
+const STRIKE_SOURCES = new Set(['fuse', 'conformance_audit']);
+const STRIKE_FIELDS = new Set([
+  'schema_version', 'event_id', 'identity_hash', 'source', 'observed_at', 'receipt_ref',
+]);
+
+function identityHashOf(rawIdentity) {
+  return sha256(canonicalJson(normalizeIdentity(rawIdentity)));
+}
+
+function readStrikeRows(strikesFile) {
+  const lines = readTextLines(strikesFile);
+  const rows = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    let row;
+    try {
+      row = JSON.parse(lines[index]);
+    } catch (error) {
+      throw new Error(`malformed strike line ${index + 1}: ${error.message}`);
+    }
+    if (!row || typeof row !== 'object' || Array.isArray(row)
+        || row.schema_version !== 1
+        || toEventId(row.event_id) === null
+        || !isSha256(row.identity_hash)
+        || !STRIKE_SOURCES.has(row.source)
+        || typeof row.observed_at !== 'string' || Number.isNaN(Date.parse(row.observed_at))
+        || typeof row.receipt_ref !== 'string' || row.receipt_ref.length === 0
+        || Object.keys(row).some((key) => !STRIKE_FIELDS.has(key))) {
+      throw new Error(`malformed strike line ${index + 1}: invalid strike row shape`);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+function appendStrikeRecord(config, { identity, source, receiptRef, observedAt }) {
+  if (!STRIKE_SOURCES.has(source)) {
+    throw new Error(`strike source must be one of ${[...STRIKE_SOURCES].join('|')}`);
+  }
+  if (typeof receiptRef !== 'string' || receiptRef.trim().length === 0) {
+    throw new Error('strike receipt_ref is required');
+  }
+  const identityHash = identityHashOf(identity);
+  const observed = observedAt || new Date().toISOString();
+  if (Number.isNaN(Date.parse(observed))) throw new Error('strike observed_at must be ISO-8601');
+  return withWriteLock({
+    storeDir: config.storeDir,
+    lockFile: config.lockFile,
+    name: 'capability strikes',
+  }, () => {
+    const rows = readStrikeRows(config.strikesFile);
+    const row = {
+      schema_version: 1,
+      event_id: maxEventId(rows) + 1,
+      identity_hash: identityHash,
+      source,
+      observed_at: observed,
+      receipt_ref: receiptRef.trim(),
+    };
+    appendRow(config.strikesFile, row);
+    return row;
+  });
+}
+
+const STRIKE_REVOCATION_THRESHOLD = 3;
+
+function brainSeatStatus(config, rawIdentity, nowIso) {
+  const identityHash = identityHashOf(rawIdentity);
+  const evidenceRows = fs.existsSync(config.evidenceFile)
+    ? readEvidenceRows(config.evidenceFile)
+    : [];
+  // Pass baseline = the newest QUALIFIED owner_brain_seat record for this identity.
+  // Ordered fold (Board 2026-08-17): failed / insufficient_budget administrations
+  // are recorded but never revoke; only strikes do; a later pass re-baselines.
+  let baseline = null;
+  for (const wrapper of evidenceRows) {
+    const evidence = wrapper.evidence;
+    if (evidence.role !== 'owner') continue;
+    if (evidence.methodology.kind !== BRAIN_METHODOLOGY_KIND) continue;
+    if (evidence.identity_hash !== identityHash) continue;
+    if (evidence.state !== 'qualified') continue;
+    if (nowIso && Date.parse(evidence.observed_at) > Date.parse(nowIso)) continue;
+    if (!baseline
+        || Date.parse(evidence.observed_at) > Date.parse(baseline.evidence.observed_at)
+        || (Date.parse(evidence.observed_at) === Date.parse(baseline.evidence.observed_at)
+          && wrapper.event_id > baseline.event_id)) {
+      baseline = wrapper;
+    }
+  }
+  const strikes = readStrikeRows(config.strikesFile).filter((row) => {
+    if (row.identity_hash !== identityHash) return false;
+    if (nowIso && Date.parse(row.observed_at) > Date.parse(nowIso)) return false;
+    return baseline ? Date.parse(row.observed_at) > Date.parse(baseline.evidence.observed_at) : true;
+  });
+  let status = 'no_record';
+  if (baseline) {
+    status = strikes.length >= STRIKE_REVOCATION_THRESHOLD
+      ? 'requalification_required'
+      : 'qualified';
+  }
+  const baselineTrial = baseline && Array.isArray(baseline.evidence.trials)
+    ? baseline.evidence.trials[0] : null;
+  return {
+    schema_version: 1,
+    artifact_type: 'brain_seat_status',
+    identity_hash: identityHash,
+    status,
+    strikes_since_pass: baseline ? strikes.length : 0,
+    strike_threshold: STRIKE_REVOCATION_THRESHOLD,
+    baseline_evidence_id: baseline ? baseline.evidence.evidence_id : null,
+    baseline_observed_at: baseline ? baseline.evidence.observed_at : null,
+    construct_scope: baselineTrial ? baselineTrial.construct_scope : BRAIN_CONSTRUCT_SCOPE,
+  };
 }
 
 function buildObservedRevocation(target, observation, observedAt) {
@@ -1031,6 +1158,8 @@ function parseCommandLineArgs(argv) {
     ['report-evidence', new Set(['role', 'now', 'store'])],
     ['prune', new Set(['now', 'store'])],
     ['classify-error', new Set(['string', 'file', 'exit-code'])],
+    ['strike', new Set(['identity-file', 'source', 'receipt-ref', 'now', 'store'])],
+    ['brain-status', new Set(['identity-file', 'now', 'store'])],
   ]);
   const allowed = commandOptions.get(command);
   if (!allowed) return { command, options: {} };
@@ -1229,6 +1358,41 @@ function main() {
       failValidation(`qualification evidence store: ${error.message}`);
     }
     process.stdout.write(`${JSON.stringify(written)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'strike') {
+    if (!options['identity-file'] || !options.source || !options['receipt-ref']) {
+      failUsage('strike requires --identity-file, --source, and --receipt-ref');
+    }
+    const identity = readJsonObject(options['identity-file'], 'identity file');
+    const config = resolveStoreConfig(options);
+    let row;
+    try {
+      row = appendStrikeRecord(config, {
+        identity,
+        source: options.source,
+        receiptRef: options['receipt-ref'],
+        observedAt: options.now,
+      });
+    } catch (error) {
+      failValidation(`strike ledger: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify({ schema_version: 1, artifact_type: 'brain_seat_strike', ...row })}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'brain-status') {
+    if (!options['identity-file']) failUsage('brain-status requires --identity-file');
+    const identity = readJsonObject(options['identity-file'], 'identity file');
+    const config = resolveStoreConfig(options);
+    let status;
+    try {
+      status = brainSeatStatus(config, identity, options.now || null);
+    } catch (error) {
+      failValidation(`brain-status: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify(status)}\n`);
     process.exit(0);
   }
 
@@ -1550,7 +1714,10 @@ if (require.main === module) {
 module.exports = {
   appendEvidenceRecord,
   appendEvidenceRecords,
+  appendStrikeRecord,
+  brainSeatStatus,
   readEvidenceRows,
+  readStrikeRows,
   resolveStoreConfig,
   validateEvidenceProducer,
 };

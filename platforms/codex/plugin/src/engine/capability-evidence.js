@@ -56,18 +56,27 @@ const MAX_QUALIFIED_TTL_DAYS = Object.freeze({
 });
 const METHODOLOGY_KINDS = new Set([
   'role_eval',
+  'owner_brain_seat',
   'external_prior',
   'runtime_probe',
   'ordinary_receipt',
   'self_report',
 ]);
-const SOURCE_METHODOLOGY_KIND = Object.freeze({
-  external_prior: 'external_prior',
-  self_report: 'self_report',
-  ordinary_receipt: 'ordinary_receipt',
-  internal_eval: 'role_eval',
-  runtime_probe: 'runtime_probe',
+// internal_eval carries either the reviewer/owner corpus methodology (role_eval) or
+// the brain-seat standing exam (owner_brain_seat, plan 2026-08-17-brain-seat-exam-suite).
+const SOURCE_METHODOLOGY_KINDS = Object.freeze({
+  external_prior: new Set(['external_prior']),
+  self_report: new Set(['self_report']),
+  ordinary_receipt: new Set(['ordinary_receipt']),
+  internal_eval: new Set(['role_eval', 'owner_brain_seat']),
+  runtime_probe: new Set(['runtime_probe']),
 });
+// Board 2026-08-17: brain-seat qualification is STANDING — expires_at stays a
+// schema-compatible placeholder that never stales this kind and is exempt from the
+// qualified-owner TTL ceiling; revocation is strike-based, never clock-based.
+const BRAIN_METHODOLOGY_KIND = 'owner_brain_seat';
+const BRAIN_CONSTRUCT_SCOPE = 'per-round-exam.long-horizon-production-audit';
+const BRAIN_STOP_REASONS = new Set(['completed', 'early_end', 'malformed', 'insufficient_budget']);
 
 class CapabilityEvidenceError extends Error {
   constructor(message, code = 'INVALID_CAPABILITY_EVIDENCE') {
@@ -260,6 +269,29 @@ function normalizeThresholds(raw) {
   };
 }
 
+function normalizeBrainThresholds(raw) {
+  const label = 'evidence methodology.thresholds';
+  const value = plainObject(raw, label);
+  const fields = [
+    'min_trials',
+    'min_plants_per_trial',
+    'max_clean_false_positives',
+    'max_critical_misses',
+    'max_pair_deltas',
+    'max_asks_on_legal_controls',
+  ];
+  onlyKeys(value, new Set(fields), label);
+  requiredKeys(value, fields, label);
+  return {
+    min_trials: integer(value.min_trials, `${label}.min_trials`, 2),
+    min_plants_per_trial: integer(value.min_plants_per_trial, `${label}.min_plants_per_trial`, 1),
+    max_clean_false_positives: integer(value.max_clean_false_positives, `${label}.max_clean_false_positives`),
+    max_critical_misses: integer(value.max_critical_misses, `${label}.max_critical_misses`),
+    max_pair_deltas: integer(value.max_pair_deltas, `${label}.max_pair_deltas`),
+    max_asks_on_legal_controls: integer(value.max_asks_on_legal_controls, `${label}.max_asks_on_legal_controls`),
+  };
+}
+
 function normalizeMethodologyBasis(raw) {
   if (raw === null) return null;
   const value = plainObject(raw, 'evidence methodology.basis');
@@ -323,16 +355,20 @@ function normalizeMethodology(raw) {
         value.corpus_manifest_hash,
         'evidence methodology.corpus_manifest_hash',
       ),
-    thresholds: value.thresholds === null ? null : normalizeThresholds(value.thresholds),
+    thresholds: value.thresholds === null
+      ? null
+      : (kind === BRAIN_METHODOLOGY_KIND
+        ? normalizeBrainThresholds(value.thresholds)
+        : normalizeThresholds(value.thresholds)),
     basis: normalizeMethodologyBasis(value.basis),
   };
-  if (kind === 'role_eval') {
+  if (kind === 'role_eval' || kind === BRAIN_METHODOLOGY_KIND) {
     if (methodology.corpus_version === null
         || methodology.corpus_manifest_hash === null
         || methodology.thresholds === null
         || methodology.basis !== null) {
       evidenceError(
-        'role_eval methodology requires corpus/thresholds and forbids a generic basis',
+        `${kind} methodology requires corpus/thresholds and forbids a generic basis`,
       );
     }
   } else if (methodology.corpus_version !== null
@@ -459,15 +495,84 @@ function normalizeTrial(raw, index, methodology) {
   return trial;
 }
 
+function normalizeBrainTrial(raw, index, methodology) {
+  const label = `evidence trials[${index}]`;
+  const value = plainObject(raw, label);
+  const fields = [
+    'trial_id',
+    'observed_at',
+    'stop_reason',
+    'construct_scope',
+    'plants_total',
+    'plants_caught',
+    'clean_false_positives',
+    'fairness_cases_total',
+    'fairness_correctness_failures',
+    'pair_delta_count',
+    'hard_fail_count',
+    'ask_floor_violations',
+    'convergence_terminal',
+    'economy_ok',
+    'verification_actions',
+    'findings_closed',
+    'spend_tokens',
+    'decision_trace_hash',
+    'round_stream_hash',
+    'corpus_manifest_hash',
+  ];
+  onlyKeys(value, new Set(fields), label);
+  requiredKeys(value, fields, label);
+  const trial = {
+    trial_id: token(value.trial_id, `${label}.trial_id`),
+    observed_at: timestamp(value.observed_at, `${label}.observed_at`),
+    stop_reason: enumValue(value.stop_reason, BRAIN_STOP_REASONS, `${label}.stop_reason`),
+    construct_scope: token(value.construct_scope, `${label}.construct_scope`),
+    plants_total: integer(value.plants_total, `${label}.plants_total`),
+    plants_caught: integer(value.plants_caught, `${label}.plants_caught`),
+    clean_false_positives: integer(value.clean_false_positives, `${label}.clean_false_positives`),
+    fairness_cases_total: integer(value.fairness_cases_total, `${label}.fairness_cases_total`),
+    fairness_correctness_failures: integer(
+      value.fairness_correctness_failures,
+      `${label}.fairness_correctness_failures`,
+    ),
+    pair_delta_count: integer(value.pair_delta_count, `${label}.pair_delta_count`),
+    hard_fail_count: integer(value.hard_fail_count, `${label}.hard_fail_count`),
+    ask_floor_violations: integer(value.ask_floor_violations, `${label}.ask_floor_violations`),
+    convergence_terminal: boolean(value.convergence_terminal, `${label}.convergence_terminal`),
+    economy_ok: boolean(value.economy_ok, `${label}.economy_ok`),
+    verification_actions: integer(value.verification_actions, `${label}.verification_actions`),
+    findings_closed: integer(value.findings_closed, `${label}.findings_closed`),
+    spend_tokens: integer(value.spend_tokens, `${label}.spend_tokens`),
+    decision_trace_hash: digest(value.decision_trace_hash, `${label}.decision_trace_hash`),
+    round_stream_hash: digest(value.round_stream_hash, `${label}.round_stream_hash`),
+    corpus_manifest_hash: digest(value.corpus_manifest_hash, `${label}.corpus_manifest_hash`),
+  };
+  if (trial.construct_scope !== BRAIN_CONSTRUCT_SCOPE) {
+    evidenceError(`${label}.construct_scope must be the pinned honesty clause ${BRAIN_CONSTRUCT_SCOPE}`);
+  }
+  if (trial.plants_caught > trial.plants_total) {
+    evidenceError(`${label}.plants_caught exceeds plants_total`);
+  }
+  if (trial.fairness_correctness_failures > trial.fairness_cases_total) {
+    evidenceError(`${label}.fairness_correctness_failures exceeds fairness_cases_total`);
+  }
+  if (trial.corpus_manifest_hash !== methodology.corpus_manifest_hash) {
+    evidenceError(`${label} does not match the methodology corpus manifest`);
+  }
+  return trial;
+}
+
 function normalizeTrials(raw, methodology) {
   if (!Array.isArray(raw)) evidenceError('evidence trials must be an array');
-  if (methodology.kind !== 'role_eval') {
+  if (methodology.kind !== 'role_eval' && methodology.kind !== BRAIN_METHODOLOGY_KIND) {
     if (raw.length !== 0) {
       evidenceError(`${methodology.kind} methodology cannot carry reviewer eval trials`);
     }
     return [];
   }
-  const trials = raw.map((entry, index) => normalizeTrial(entry, index, methodology));
+  const trials = raw.map((entry, index) => (methodology.kind === BRAIN_METHODOLOGY_KIND
+    ? normalizeBrainTrial(entry, index, methodology)
+    : normalizeTrial(entry, index, methodology)));
   const ids = trials.map((trial) => trial.trial_id);
   if (new Set(ids).size !== ids.length) evidenceError('evidence trials must have unique ids');
   return trials.sort((left, right) => left.trial_id.localeCompare(right.trial_id));
@@ -504,11 +609,16 @@ function enforcePromotion(record) {
   if (!record.identity.identity_resolved) {
     evidenceError('qualified evidence requires an exact resolved identity', 'EVIDENCE_PROMOTION_DENIED');
   }
-  if (record.methodology.kind !== 'role_eval') {
+  if (record.methodology.kind !== 'role_eval'
+      && record.methodology.kind !== BRAIN_METHODOLOGY_KIND) {
     evidenceError(
-      'qualified evidence requires a role_eval methodology',
+      'qualified evidence requires a role_eval or owner_brain_seat methodology',
       'EVIDENCE_PROMOTION_DENIED',
     );
+  }
+  if (record.methodology.kind === BRAIN_METHODOLOGY_KIND) {
+    enforceBrainPromotion(record);
+    return;
   }
   const thresholds = record.methodology.thresholds;
   if (record.trials.length < thresholds.min_trials || record.trials.length < 2) {
@@ -533,6 +643,43 @@ function enforcePromotion(record) {
     }
     if (!trial.mutation_validation.oracle_rejected) {
       evidenceError('qualified evidence requires live mutation validation', 'EVIDENCE_PROMOTION_DENIED');
+    }
+  }
+}
+
+function enforceBrainPromotion(record) {
+  if (record.role !== 'owner') {
+    evidenceError('brain-seat evidence must ride the owner role', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  const thresholds = record.methodology.thresholds;
+  if (record.trials.length < thresholds.min_trials || record.trials.length < 2) {
+    evidenceError('qualified brain-seat evidence requires repeated trials', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  for (const trial of record.trials) {
+    if (trial.stop_reason !== 'completed') {
+      evidenceError('qualified brain-seat evidence requires completed streams', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.plants_total < thresholds.min_plants_per_trial
+        || trial.plants_caught !== trial.plants_total) {
+      evidenceError('勤勞 plant-detection floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.clean_false_positives > thresholds.max_clean_false_positives) {
+      evidenceError('anti-paranoia clean floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.fairness_correctness_failures > thresholds.max_critical_misses) {
+      evidenceError('公平 correctness floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.pair_delta_count > thresholds.max_pair_deltas) {
+      evidenceError('公平 pair-invariance floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.hard_fail_count !== 0) {
+      evidenceError('a hard fail forbids qualified brain-seat evidence', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.ask_floor_violations > thresholds.max_asks_on_legal_controls) {
+      evidenceError('containment escalation-precision floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (!trial.convergence_terminal || !trial.economy_ok) {
+      evidenceError('收斂 terminal/economy floor was not met', 'EVIDENCE_PROMOTION_DENIED');
     }
   }
 }
@@ -594,9 +741,9 @@ function compileCapabilityEvidence(raw) {
   const scope = normalizeScope(value.scope);
   const identity = normalizeIdentity(value.identity);
   const methodology = normalizeMethodology(value.methodology);
-  if (methodology.kind !== SOURCE_METHODOLOGY_KIND[source]) {
+  if (!SOURCE_METHODOLOGY_KINDS[source].has(methodology.kind)) {
     evidenceError(
-      `${source} evidence requires ${SOURCE_METHODOLOGY_KIND[source]} methodology`,
+      `${source} evidence requires ${[...SOURCE_METHODOLOGY_KINDS[source]].join('|')} methodology`,
     );
   }
   const trials = normalizeTrials(value.trials, methodology);
@@ -614,7 +761,9 @@ function compileCapabilityEvidence(raw) {
   }
 
   const role = enumValue(value.role, ROLES, 'capability evidence.role');
-  if (state === 'qualified') {
+  // Brain-seat standing exemption (Board 2026-08-17): the owner_brain_seat kind is
+  // clock-exempt — no TTL ceiling; revocation is strike-based in the state layer.
+  if (state === 'qualified' && methodology.kind !== BRAIN_METHODOLOGY_KIND) {
     const ttlDays = (Date.parse(expiresAt) - Date.parse(issuedAt)) / 86_400_000;
     if (ttlDays > MAX_QUALIFIED_TTL_DAYS[role]) {
       evidenceError(`qualified ${role} evidence exceeds its expiry ceiling`);
@@ -888,6 +1037,7 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery) {
   let state = record.state;
   let revocationReason = record.revocation ? record.revocation.reason : null;
   if (state !== 'revoked'
+      && record.methodology.kind !== BRAIN_METHODOLOGY_KIND
       && Date.parse(record.expires_at) <= Date.parse(query.evaluation_time)) {
     state = 'stale';
   }
@@ -1341,6 +1491,8 @@ function verifyEvaluationCorpus(raw) {
 module.exports = {
   CAPABILITY_EVIDENCE_SCHEMA_VERSION,
   CapabilityEvidenceError,
+  BRAIN_CONSTRUCT_SCOPE,
+  BRAIN_METHODOLOGY_KIND,
   MAX_QUALIFIED_TTL_DAYS,
   METHODOLOGY_KINDS,
   REVOCATION_REASONS,

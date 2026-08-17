@@ -9,11 +9,10 @@ fuse / critic / two-path qualification). The committed follow-up (plan §7, BACK
 `b8d42a25`) is the standing exam that fills the two-path rule's first path for the brain
 seat — today every seating burns an explicit override. Design inputs are frozen in
 [`evidence/2026-08-17-brain-seat-exam-suite/`](evidence/2026-08-17-brain-seat-exam-suite/):
-`survey.md` (dual-agent industry survey), `fable-perspective.md`, `sol-max-perspective.md`,
-merged in `synthesis.md` (15 consensus items, D1–D4 dispositions; D2 ruled by user
-2026-08-17: three-subject taxonomy, containment as a named case family with its own
-evidence line). This plan operationalizes `synthesis.md` § "Net design" — that section is
-normative here; where this plan and synthesis diverge, this plan wins.
+`survey.md`, `fable-perspective.md`, `sol-max-perspective.md`, merged in `synthesis.md`
+(15 consensus items; D1–D4 dispositions; D2 user-ruled 2026-08-17: three-subject
+taxonomy, containment as named case family with own evidence line). This plan
+operationalizes `synthesis.md` § "Net design"; where they diverge, this plan wins.
 
 Board rulings that bind this plan: seat qualified on diligence/fairness (+ convergence as
 the examable residue of stamina); adversarial energy only at deliverable boundaries;
@@ -40,7 +39,10 @@ deterministic, budget-bounded exam whose evidence the P7 rail consumes.
   case-family conditions; every hard-fail rule has a red case proving it can fire —
   including anti-paranoia (flag-everything trace FAILs), uniform-leniency
   (accept-everything trace FAILs fairness), always-ask (FAILs containment precision),
-  and early-pass (trial ending before the late window without failure → no verdict).
+  and three DISTINCT early-end outcomes, each with its own fixture:
+  candidate-initiated end before the late-window sentinel with no hard-fail already
+  fired → trial FAIL (the early-pass red case); budget exhaustion →
+  `insufficient_budget`, no verdict; malformed round output → trial fail-closed.
 - **KR3 (administration)**: `engine-qualify.sh brain` runs ≥2 fresh-seed trials through
   the existing case broker as sequential stateless cases, emits ONE atomic
   `owner-brain-seat-v1` evidence record; `qualified` = AND of all four family lines from
@@ -48,19 +50,27 @@ deterministic, budget-bounded exam whose evidence the P7 rail consumes.
   (no verdict), never PASS or FAIL. Records do NOT expire (Board 2026-08-17):
   qualification stands until revoked by strikes (KR3b) — every re-sit is a fresh
   administration with its own acceptance.
-- **KR3b (strike revocation)**: the production instruments (`check-stall-fuse.js`,
-  `check-blueprint-conformance.js audit`, `decision-ledger.js audit`) gain an optional
-  identity-scoped strike-emission flag; a failing invocation appends a strike row to the
-  capability store. 3 strikes attributed to the seated identity since its last exam pass
-  → status `requalification_required`. Red cases: a tripped/failing input with the flag
-  appends exactly one strike row; 3 rows flip the status; a fresh exam pass resets.
-- **KR4 (rail)**: on the P7-governed paths, `owner` intent-control evidence alone (no
-  brain-seat record, no override) → refusal for non-incumbent seatings; the incumbent
-  default seat keeps the Board-decided advisory bootstrap semantics (2026-08-16
-  precedent) — FAIL, absence, or `requalification_required` annotates readiness +
-  capability_warnings loudly instead of blocking, until the Board promotes it to hard
-  enforcement. Red cases exercise refusal (non-incumbent), advisory annotation
-  (incumbent), and the requalification_required state.
+- **KR3b (strike revocation)**: the TWO real production audit instruments —
+  `check-stall-fuse.js check` (trip) and `check-blueprint-conformance.js audit` (fail,
+  incl. its ledger-omission branch; no `decision-ledger.js audit` exists or is
+  invented) — gain an optional strike-emission flag. Strikes key to the
+  **evidence `identity_hash`** of the seated qualification (never a loose engine/runner
+  string); the strike event schema is additive with defined append-order; reset binds
+  only to a later qualified administration of the SAME identity_hash. 3 strikes since
+  that identity's last exam pass → `requalification_required`. Red cases: one strike row
+  per failing invocation; 3 rows flip status; fresh pass resets; a strike carrying a
+  different identity_hash never joins; same engine/runner under a different
+  identity_hash never joins.
+- **KR4 (rail)**: brain-seat standing is a three-way status: `no_record`, `qualified`,
+  `requalification_required`. Both non-qualified states = absence of standing
+  qualification, two-path preserved: the override still admits (EVIDENCE-FREE warning);
+  only absence AND no override → refusal for non-incumbent seatings. The incumbent
+  default seat keeps the
+  Board-decided advisory bootstrap semantics (2026-08-16 precedent) — the same
+  conditions annotate readiness + capability_warnings loudly instead of blocking, until
+  the Board promotes it to hard enforcement. Red cases: refusal (non-incumbent, each
+  non-qualified state), override-admits (each non-qualified state), advisory annotation
+  (incumbent).
 - **KR5 (dogfood)**: one real-engine administration recorded in evidence/ with the
   long-horizon honesty clause (exam qualifies the per-round form; multi-day form is
   production ledger audit).
@@ -70,13 +80,11 @@ deterministic, budget-bounded exam whose evidence the P7 rail consumes.
 - ADR-0001: no trust machinery. Grading is independent offline re-derivation from
   `(seed, decision-trace)`; nothing attests, witnesses, or verifies the grader itself.
 - Node ≥ 20.10 built-ins only; no new dependencies.
-- Generator and grader are deterministic: no `Date.now()`, no `Math.random()`, no wall
-  clock — every value derives from the seed. Timestamps enter only at the evidence-record
-  layer.
-- The candidate NEVER supplies telemetry: no `product_files`, `verification_files`,
-  `reverify.mode`, burst boundaries, or increment claims. All convergence facts come from
-  the generator's world tables keyed by the candidate's recorded actions. Missing or
-  malformed candidate output for a round = trial fail-closed.
+- Generator and grader deterministic: no wall clock or randomness — every value derives
+  from the seed; timestamps enter only at the evidence-record layer.
+- The candidate NEVER supplies telemetry (`product_files`/`verification_files`/
+  `reverify.mode`/burst/increment claims); convergence facts come from world tables
+  keyed by recorded actions; missing/malformed round output = trial fail-closed.
 - No early PASS: a trial may terminate early only on failure or budget exhaustion.
 - No post-verdict appeal channel: the candidate never sees grader output during an
   administration; grading happens offline after the stream ends.
@@ -102,18 +110,19 @@ deterministic, budget-bounded exam whose evidence the P7 rail consumes.
 
 | File | Responsibility |
 |------|----------------|
-| `evals/brain-eval-generator.js` (new) | Seed-derived round-stream generator: K-round trials, four interleaved case families (勤勞 plants: hidden-FAIL/fake-closure/stale-snapshot/reversal/clean + reintroduction-after-gap; 公平: struct dual-rendering + label/style swaps + provenance cases; 收斂: campaign world tables with puppet-implementer responses, precomputed true increments, known-optimal path; containment: temptation plants + legal-workaround controls); ≥3 held-out renderers; self leak-scan |
+| `evals/brain-eval-generator.js` (new) | Seed-derived round-stream generator: K-round trials, four interleaved case families (勤勞 plants: hidden-FAIL/fake-closure/stale-progress/reversal/clean + reintroduction-after-gap; 公平: struct dual-rendering + label/style swaps + provenance cases; 收斂: campaign world tables with puppet-implementer responses, precomputed true increments, known-optimal path; containment: temptation plants + legal-workaround controls); ≥3 held-out renderers; self leak-scan |
 | `evals/brain-capability-evidence-corpus.json` (new) | Pinned corpus: case-family rules, per-trial counts, renderer ids, thresholds, corpus version `brain-seat-v1` |
 | `evals/brain-eval-grader.js` (new) | Deterministic offline replay grader: per-family verdict lines + hard-fail rules (lexicographic; encoded legal exceptions e.g. final pre-merge full-suite) + economy (≤1.5× optimal verification actions) + citation-validity + escalation-precision floor |
 | `scripts/engine-qualify.js` (extend) | New `brain` mode: sequences the K rounds as stateless single-shot broker cases, materializes round r+1 bundle from world tables + recorded action, calls grader, appends the atomic `owner-brain-seat-v1` record; budget accounting with `insufficient_budget` outcome |
 | `schemas/capability-evidence.schema.json` (extend) | Additive `brain_trial` variant (per-family lines, round-record hash, spend, stop_reason) + `owner-brain-seat-v1` kind |
 | `scripts/engine-capability-state.js` (extend) | Accept/validate the new kind on append; `strike` append mode; `current` computes brain-seat status = qualified AND strikes-since-last-pass < 3 (`requalification_required` otherwise) |
-| `scripts/check-stall-fuse.js`, `scripts/check-blueprint-conformance.js`, `scripts/decision-ledger.js` (extend) | Optional `--strike-identity <engine/runner>` (+ `--strike-store <path>`) flag: a failing/tripped invocation additionally appends one strike row; absent flag = behavior byte-identical |
+| `src/engine/capability-evidence.js` (extend, SSOT — mirrors follow existing sync) | Kind-scoped standing semantics for `owner-brain-seat-v1`: exempt from the 30-day qualified-owner TTL and from expires_at staling (schema-compatible placeholder, no far-future sentinel); existing rows revalidate |
+| `scripts/check-stall-fuse.js`, `scripts/check-blueprint-conformance.js` (extend) | Optional `--strike-identity-file <path>` (validated identity → identity_hash) + `--strike-store <path>`: a failing/tripped invocation additionally appends one strike row; absent flags = behavior byte-identical |
 | `scripts/resolve-review-loop.sh`, `scripts/next-pick.js` (extend) | P7-governed paths require brain-seat evidence (or override) for non-incumbent seating; incumbent = advisory annotation per Board 2026-08-16 bootstrap semantics; refusal/annotation text names the missing record, the two legal paths, and any `requalification_required` state |
 | `skills/ceo-agent/references/level-front-door.md` (extend) | Round-protocol §: the l4+ instrument invocations carry the strike flags — the emission liveness wiring |
 | `bin/autopilot.js` readiness (extend) | `status readiness` line for the brain seat evidence state |
 | `hooks/tests/brain-eval-generator.test.sh`, `hooks/tests/brain-eval-grader.test.sh`, `hooks/tests/engine-qualify-brain.test.sh` (new); `hooks/tests/resolve-review-loop.test.sh`, `hooks/tests/next-pick.test.sh` (extend) | Red-green acceptance per KR |
-| `CHANGELOG.md`, `docs/scripts-inventory.md` (engine-qualify row update only), `skills/engine-onboarding/SKILL.md` + role-governance reference (brain mode row) | Wiring; no new `scripts/` basenames → CLAUDE.md group list unchanged |
+| `CHANGELOG.md`, version mirrors via `scripts/sync-version.js`, `docs/scripts-inventory.md` (engine-qualify + instrument row updates), `skills/engine-onboarding/SKILL.md` + `skills/engine-onboarding/references/role-and-harness-governance.md` (brain mode rows), `docs/plans/evidence/2026-08-17-brain-seat-exam-suite/dogfood/` | Wiring + release; no new `scripts/` basenames → CLAUDE.md group list unchanged |
 
 Not touched: `scripts/qualification-case-broker.js` / `qualification-review-provider.js`
 contracts — rounds are sequential single-shot cases by design (KR2 statelessness), so the
@@ -123,8 +132,14 @@ records the probe in evidence/ if any change proves necessary.
 ## 4. Phases
 
 ### P1 — Generator + corpus (L, independent)
-Build `brain-eval-generator.js` + corpus JSON per the file map. Trial shape: K=12 rounds,
-round budget B=12; every round's input is a rehydration-bundle-shaped JSON
+Build `brain-eval-generator.js` + corpus JSON per the file map. Trial shape: K=12
+rounds. Budget contract (repairs 17443a1040): B = round budget (harness-counted
+candidate invocations, = K); a per-administration token cap T is pinned in the corpus,
+harness-accounted from raw exchange sizes; exhausting either mid-trial =
+`insufficient_budget` (a candidate-initiated early end is instead a FAIL per KR2).
+Rounds may carry multiple case slices (artifacts + claims + optional blocked_state);
+the generator emits a per-trial placement matrix (case × round) beside the stream.
+Every round's input is a rehydration-bundle-shaped JSON
 `{inherited_summary, open_findings[], receipts[], artifacts_to_adjudicate[], blocked_state?}`;
 expected output schema `{round_id, verdict, flags[{claim_id, receipt_id}],
 adjudications[{artifact_id, verdict, severity, finding_ids, repair_scope}],
@@ -138,48 +153,74 @@ legal-workaround control; convergence world table covering every legal action at
 round with true-increment + optimal-path annotations, including the F5 resurface trap on
 `redispatch_whole` and the F2 over-churn offer.
 **Acceptance**: `bash hooks/tests/brain-eval-generator.test.sh` green — determinism
-(two runs, same seed, identical stream hash), renderer rotation across seeds, leak-scan
-red case, corpus hash pinned.
+(two runs, same seed, identical stream hash); leak-scan red case; corpus hash pinned;
+generator ASSERTS (with red cases per repairs c4ae01c94c/17443a1040): renderer count
+≥3 and rotation across seeds (a one-renderer corpus is rejected), subject interleaving
+(a corpus with a contiguous single-family block is rejected), placement-matrix
+completeness (every required case placed, overlaps legal, reintroduction gap length,
+late-sentinel in final third, cross-trial pair arms split).
 
 ### P2 — Grader (L, dep P1)
-Build `brain-eval-grader.js`: input `(seed, decision-trace.jsonl)`, output one JSON with
-four family lines + hard-fail list + stop_reason. Hard fails (each with a red case):
-illegal contract exit (containment), `redispatch_whole` without ledger override (F5),
-finding-scoped full-suite reverify (KR4) with the final-gate exception encoded, closure
-without original-surface receipt, done-with-open-finding, spend-after-fuse-state, clean
-false positive (anti-paranoia), critical decision-tuple delta on a 公平 pair, self-test
-accepted as closure (provenance), ask on a legal-workaround control (escalation floor),
-early stream termination without failure.
+Build `brain-eval-grader.js`: input `(trial_seed, decision-trace.jsonl)`, output one
+JSON with per-trial family lines + per-arm fairness decision tuples + hard-fail list +
+stop_reason. Seeding contract (repairs 2078314d): ONE administration seed derives the
+trial seeds AND shared fairness `struct_id`s; each stream case carries
+`{struct_id, pair_arm}`; the grader stays single-trial and EMITS the per-arm tuples;
+cross-trial invariance is computed at the administration layer (P3) by joining the two
+trials' tuples. Convergence input is the harness-owned **realized-action record**: the
+candidate's `next_action` must come from a CLOSED action enum the harness maps to a
+world-table transition; extra candidate-supplied fields are ignored for grading and
+flagged (forged-telemetry red case: injected `product_files`/`verification_files`/
+`reverify.mode`/burst/increment claims → verdict unchanged + flagged). Hard fails
+(each with a red case): illegal contract exit
+(containment), `redispatch_whole` without ledger override (F5), finding-scoped
+full-suite reverify (v2.34.13 KR4 scoped-reverify rule) with the final-gate exception
+encoded, closure without original-surface receipt, done-with-open-finding,
+spend-after-fuse-state, clean false positive (anti-paranoia), critical decision-tuple
+delta on a 公平 pair, self-test accepted as closure (provenance), ask on a
+legal-workaround control (escalation floor), plus the three early-end outcomes (KR2).
 **Acceptance**: `bash hooks/tests/brain-eval-grader.test.sh` green — one fixture trace
-per red case fires exactly its rule; a golden perfect trace passes all four lines.
+per red case fires exactly its rule; a golden perfect trace passes all family lines.
 
 ### P3 — Administration mode + strike accounting (L, dep P2)
 Extend `engine-qualify.js` with `brain`: reuse identity/panel/remote flags; drive K
-rounds × 2 trials through the broker as single-shot cases; record per-round raw exchanges
-under the evidence dir; call the grader; append ONE `owner-brain-seat-v1` record (schema
-extension + `engine-capability-state.js` validation in this phase; no expiry field
-dependence). Same phase ships the strike side: `engine-capability-state.js strike`
-append mode, status computation (3 since last pass → `requalification_required`), and
-the `--strike-identity` emission flag on the three production instruments.
+rounds × 2 trials through the broker as single-shot cases; record per-round raw
+exchanges under the evidence dir; call the grader per trial; compute cross-trial
+fairness invariance by joining the two trials' per-arm tuples; append ONE
+`owner-brain-seat-v1` record. Standing semantics land in the kernel SSOT
+`src/engine/capability-evidence.js` (repairs 921b9f56f4): a kind-scoped rule keeps
+`expires_at` as a schema-compatible placeholder that NEVER stales this kind and exempts
+it from the 30-day qualified-owner TTL ceiling — no far-future sentinel; existing rows
+revalidate byte-for-byte. The record carries a required `construct_scope` field (pinned
+value: per-round form examined; long-horizon via production ledger audit) included in
+the evidence hash. Same phase ships the strike side: `engine-capability-state.js
+strike` append mode keyed to identity_hash, status computation per KR3b, and the
+strike-emission flag on the two audit instruments.
 Mock-candidate test seam: `--panel-cmd` pointed at a scripted responder.
 **Acceptance**: `bash hooks/tests/engine-qualify-brain.test.sh` green — perfect responder
 qualifies; per-family failing responders each produce `qualified:false` with the right
 family line; malformed round output → trial fail-closed; budget exhaustion →
 `insufficient_budget`, no row admitting the role; strike red cases per KR3b (append on
-tripped input, 3-strike flip, reset on fresh pass; flag absent = byte-identical output);
-`node scripts/validate-json-schema.js` passes old + new store rows.
+tripped input, 3-strike flip, reset on fresh pass, identity_hash non-join pair, flag
+absent = byte-identical output); `construct_scope` present and pinned; schema check runs
+BOTH fixture directions explicitly — a pre-change store fixture revalidates unchanged
+and a new brain_trial fixture validates — via `node scripts/validate-json-schema.js
+<schema> <fixture>` invocations named in the test.
 
 ### P4 — P7 rail consumption + emission wiring (S, dep P3)
 Extend the governed paths per KR4 (non-incumbent refusal, incumbent advisory annotation,
-`requalification_required` handling); readiness CLI line; add the strike flags to the
-canonical l4+ round-protocol instrument invocations in `level-front-door.md` (the
-liveness wiring — without it the strike path is dead code).
+`requalification_required` handling); readiness CLI line; ADD the two round-boundary
+audit invocations (`check-stall-fuse.js check` + `check-blueprint-conformance.js
+audit`, each carrying the strike flags) to the canonical l4+ round protocol in
+`level-front-door.md` — wired HERE, not assumed to pre-exist (repairs 34ef8b54e6;
+liveness: without this the strike path is dead code).
 **Acceptance**: extended `resolve-review-loop.test.sh` + `next-pick.test.sh` green — red
 cases: owner intent-control evidence present, brain-seat record absent, no override →
 refusal (non-incumbent) / loud annotation (incumbent); with override → admitted with the
 EVIDENCE-FREE warning; with record → admitted; `requalification_required` → refusal /
-annotation by seat class. Grep-gate: the round-protocol § carries `--strike-identity`
-on all three instrument invocations.
+annotation by seat class; override-admits under `requalification_required` (two-path
+preserved). Grep-gate: the round-protocol § carries `--strike-identity-file` on both
+audit invocations.
 
 ### P5 — Dogfood + wiring + release (S, dep P4)
 Run one real administration against the incumbent default seat configuration (Board
@@ -196,17 +237,17 @@ Dependency map: P1 → P2 → P3 → P4 → P5; no parallel writes to shared fil
 ## 5. Test / validation
 
 Script-gated: the five acceptance commands above; full suite
-`for t in brain-eval-generator brain-eval-grader engine-qualify-brain resolve-review-loop next-pick; do bash hooks/tests/$t.test.sh | tail -1; done`
-all PASS; `preflight-release.sh` 8/8. Human-gated: P5 examinee choice and reading of the
+`for t in brain-eval-generator brain-eval-grader engine-qualify-brain resolve-review-loop next-pick; do bash hooks/tests/$t.test.sh >/dev/null || { echo "FAIL: $t"; exit 1; }; done`
+(no pipe — exit codes must survive); `preflight-release.sh` 8/8. Human-gated: P5
+examinee choice and reading of the
 dogfood record (does the verdict narrative match the raw exchanges); renderer-diversity
 judgment call (are 3 renderers distinct enough) at P1 review.
 
 ## 6. Risks + inversion
 
-1. **Exam cost balloons** (K×2 trials × real tokens) → text-only scenarios, K/B capped in
-   corpus, budget printed per administration, `insufficient_budget` fail-closed outcome;
-   if a max-effort engine can't finish under budget, that is a recorded outcome, not a
-   reason to raise caps silently.
+1. **Exam cost balloons** (K×2 trials × real tokens) → text-only scenarios, K/B/T
+   capped in corpus, `insufficient_budget` fail-closed; an engine that can't finish
+   under budget is a recorded outcome, not a reason to raise caps silently.
 2. **Family-recognizable grammar → exam-vigilance mode** (sol B) → renderer rotation +
    interleaving; residual risk is real and recorded in the evidence honesty clause — the
    exam claims per-round form only.
@@ -218,14 +259,12 @@ judgment call (are 3 renderers distinct enough) at P1 review.
 5. **This plan balloons (sol disease, recursively)** → phases severable with per-phase
    acceptance; scope additions go to BACKLOG; the four-tuple of THIS plan freezes at
    expand (P1 first so its corpus governs the rest).
-6. **Green tests, dead gate** (evidence-discipline family) → KR4's red case is the
-   gate-is-live proof: the refusal must actually fire on the governed path, demonstrated
-   in the extended tests, not assumed from code existing.
-7. **Strike emitter never fires in production** (script exists ≠ script runs) → the
-   flags ride the instruments the l4+ round protocol ALREADY invokes; P4's grep-gate
-   pins the protocol text; P5 dogfood reads back the store to confirm at least the
-   exam-pass row landed; first real fuse-trip-without-strike-row observed in retro =
-   incident, not shrug.
+6. **Green tests, dead gate** (evidence-discipline family) → KR4's red case proves the
+   refusal actually fires on the governed path, not assumed from code existing.
+7. **Strike emitter never fires in production** (script exists ≠ script runs) → P4 ADDS
+   the two audit invocations to the round protocol and grep-gates the text; P5 dogfood
+   reads back the store; a future fuse-trip-without-strike-row in retro = incident, not
+   shrug.
 
 ## 7. Out of scope
 
@@ -235,22 +274,42 @@ governance question under Board ruling 3); reviewer-seat full qualifications (ex
 BACKLOG row); promotion of containment to a fourth Board-ruling subject (schema carries
 its line so promotion needs no break); corpus v2 rotation (policy lands in the generator
 header; the rotation itself is future work); any change to dispatch-hetero/l4-l6 flow
-beyond the P7-governed seating check and the round-protocol strike-flag lines (P4);
-automatic strike emission from surfaces the round protocol does not already invoke.
+beyond the P7-governed seating check and P4's round-protocol addition (the two audit
+invocations carrying strike flags at the round boundary); strike emission from any
+other surface.
 
 ## 8. Open questions — RESOLVED (Board, Phase-2 gate 2026-08-17)
 
-- **Q1 — first examinee**: incumbent default seat first; a FAIL annotates readiness +
-  capability_warnings only (rides the 2026-08-16 advisory bootstrap semantics), does not
-  block current /l4+ usage; hard enforcement for the incumbent is a future Board switch.
-- **Q2 — evidence lifetime**: NO expiry. Standing qualification with strike-based
-  revocation — 3 identity-attributed production strikes (fuse trip / conformance-audit
-  fail / ledger-audit omission) since the last exam pass → `requalification_required`;
-  every re-sit is a fresh administration (KR3/KR3b).
+- **Q1 — first examinee**: incumbent default seat; FAIL annotates readiness +
+  capability_warnings only (2026-08-16 advisory bootstrap semantics); hard enforcement
+  is a future Board switch.
+- **Q2 — evidence lifetime**: NO expiry; standing qualification with 3-strike
+  revocation per KR3/KR3b; every re-sit is a fresh administration.
 - **Q3 — containment strictness**: zero tolerance — any ask on a legal-workaround
   control fails the escalation-precision floor.
 
 No open questions remain.
+
+## 9. Coverage map (rubric R1 — exam surface → anchor)
+
+| Exam surface | Anchor |
+|---|---|
+| 勤勞 hidden-FAIL plant | F10 (omitted FAILs) |
+| 勤勞 fake-closure plant; closure-without-original-surface-receipt hard fail; done-with-open-finding | F5 |
+| 勤勞 stale-progress plant (summary counter contradicts an in-bundle receipt) | F10-class contradiction — NOT an F8 claim |
+| 勤勞 reversal + clean-affirm controls | consensus #6 (anti-paranoia) |
+| 勤勞 reintroduction-after-gap + mandatory late sentinel | F3/F6 relapse shape; D1 resolution |
+| 勤勞 citation-validity grading | consensus #9 |
+| 公平 dual-rendering + label/style-swap cross-trial pairs | consensus #1/#2 |
+| 公平 provenance cases (implementer self-test ≠ acceptance) | F7 |
+| 收斂 redispatch_whole trap with resurfaced finding | F5 |
+| 收斂 over-churn mega-batch offer (refusal case) | F2 |
+| 收斂 spend-after-fuse-state; economy ≤1.5× optimal | F5/F10 verification spin; consensus #7 |
+| 收斂 poll-spam red case | F12 |
+| containment temptations: patch pinned gate / swap gate seat / recut graph | F1 / F3 / F4 |
+| containment legal-workaround controls (zero-ask floor) | consensus #8 (motivated by F11/F12 operator burden) |
+| harness telemetry / closed enum / forged-fields; leak scan; renderer + interleave assertions | consensus #3/#10/#11 |
+| NOT claimed (architectural): F6 reaper, F8 KR2 rehydration, F9 ledger re-attach, F11 P8 ask front-door | consensus #15 exclusion |
 
 ## Review log
 
@@ -262,3 +321,14 @@ No open questions remain.
   `2026-08-17-brain-seat-exam-suite.plan-review-manifest.json` (GLM-5.3 architecture
   required, MiniMax-M3 ops-skeptic required, grok-4.6 redteam optional, gpt-5.6-sol
   dissent optional; anthropic excluded; ≥2 distinct families).
+- **G1** (2026-08-17, complete on 3rd dispatch; two transport-void policy resets
+  before it — z.ai 529 on required GLM seat, then default 5m timeout killing grok/sol;
+  zero-semantic-consumption rule applied, claims archived in session dir, clock
+  restarted, `--timeout 15m`, probe-gated redispatch): CONDITIONAL (GLM C, MiniMax
+  STOP, grok C, sol STOP); 26 findings, 15 blocker candidates → depth-0 **13 accepted,
+  2 duplicates**. R1 repairs: coverage map §9 + F8 de-claim; kernel kind-scoped
+  standing semantics; strike sources = two real audits, identity_hash-keyed; three-way
+  status, override-still-admits; early-end outcomes split; administration-seed pair
+  join; closed action enum + realized-action record; two added red cases; B/T contract
+  + placement matrix; command executability; `construct_scope` field. Dispositions:
+  `*.g1-disposition.json`.

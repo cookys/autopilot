@@ -140,3 +140,29 @@ recorded outcomes, not gates.
 - (this session) plan authored from live transport probes; no generation-review —
   M-effort BACKLOG continuation under the frozen brain-seat-exam-suite plan's
   adjudications (D1 transport deferral explicitly anticipated this work).
+- Pre-merge review (autopilot:reviewer agent, 2026-08-17): 1 Critical + 4 Major
+  MUST-FIX, all repaired same round —
+  (1) config pin broke two ambient `context-window` assertions → minus-brain
+  fixture (mirrors the resolve-review-loop fixture);
+  (2) `callCli` settlement starvation: a detached descendant holding a stdio
+  pipe delayed 'close' past the budget and misattributed a produced answer as
+  timeout → settle on 'exit'+flush with a post-kill grace window and stream
+  destroy on finish; test-pinned with an orphan-held-pipe case + group-kill
+  liveness/residue proof;
+  (3) the dogfood brain pin leaked to consumers via the config ladder's
+  project-repo fallback and resolved relative paths against caller cwd → pin
+  honored only for override/project-cwd configs, relative paths resolve against
+  the config's project root; three red-green resolver cases added;
+  (4) honesty scan was mutation-blind (field names only) → semantic answer-key
+  token scan + sha256(BRAIN_SYSTEM_PROMPT) pinned to the identity file (any
+  prompt edit fails the suite until identity + honesty are re-reviewed);
+  (5) CLI identity is operator-asserted (no runtime model echo) → recorded as
+  an explicit caveat in role-and-harness-governance + the dogfood README;
+  runtime capture deferred to BACKLOG.
+  Minor fixes ridden: convergence clause names exact action ids (prompt v4
+  `5feb7076…`, identity re-pinned), strict `QRP_TIMEOUT_MS` validation,
+  CHANGELOG count/outcome wording, dogfood raw paths. Deferred-with-trigger:
+  BACKLOG "Qualification CLI transport hardening". Reviewer's verified-clean
+  list covered hash pinning (recomputed), identity↔record reconciliation,
+  gating matrix, sidecar cleanup, CLI flag verification against installed
+  harnesses, and mirror parity.

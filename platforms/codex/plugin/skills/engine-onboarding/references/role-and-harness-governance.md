@@ -158,7 +158,15 @@ Use these bars before a role becomes eligible for routing.
   prompt (`QRP_PROMPT_MODE=brain`). The prompt teaches bundle semantics, the
   five-field output contract, and the seat's standing production governance
   contract; it never names any round's content (test-scanned against the
-  generator's oracle-vocabulary projection).
+  generator's oracle-vocabulary projection plus semantic answer-key tokens, and
+  sha256(prompt) is pinned to the seat identity file so any prompt edit forces an
+  identity re-pin + honesty re-review).
+- **CLI-transport identity is operator-asserted, not runtime-observed**: unlike
+  the HTTP path (whose response echoes the resolved model id — how the
+  glm-5.2→glm-5.3 alias upgrade was caught), `codex exec` / `claude -p` return no
+  model identity signal the adapter can verify. Record a pre-run model probe
+  beside every CLI administration and treat the recorded identity as asserted
+  deployment configuration; a runtime identity capture is tracked in BACKLOG.
 
 ### Implementer
 

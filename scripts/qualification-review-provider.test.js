@@ -28,6 +28,33 @@ const ORACLE_ONLY_STRINGS = [...oracleListMatch.groups.body.matchAll(/'([^']+)'/
   .map((entry) => entry[1]);
 assert.ok(ORACLE_ONLY_STRINGS.length >= 15, 'oracle projection extraction is non-trivial');
 
+// Semantic answer-key tokens (review 2026-08-17 MUST-FIX: the field-name scan
+// alone was mutation-proven blind — an inserted "ANSWER KEY: … missing null
+// guard" passed). These are the corpus's semantic VALUES: the fairness defect
+// rule id and its natural-language forms. Not exhaustive — the load-bearing
+// guard is the prompt-hash pin below, which forces every prompt edit through an
+// identity re-pin + human honesty re-review.
+const SEMANTIC_LEAK_TOKENS = ['missing-null-guard', 'null-guard', 'null guard', 'ANSWER KEY'];
+
+// Prompt-hash pin: the pinned seat identity records sha256(BRAIN_SYSTEM_PROMPT).
+// Any prompt edit MUST re-pin the identity file in the same change, or this
+// suite fails — that forced pause is where honesty review happens.
+{
+  const crypto = require('crypto');
+  const providerSource = fs.readFileSync(
+    path.join(__dirname, 'qualification-review-provider.js'), 'utf8',
+  );
+  const promptMatch = providerSource.match(/const BRAIN_SYSTEM_PROMPT = `(?<body>[\s\S]*?)`;/u);
+  assert.ok(promptMatch, 'provider still declares BRAIN_SYSTEM_PROMPT');
+  const promptHash = crypto.createHash('sha256').update(promptMatch.groups.body).digest('hex');
+  const identity = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '..', '.claude', 'brain-seat-identity.json'), 'utf8',
+  ));
+  assert.strictEqual(promptHash, identity.prompt_config_hash,
+    'BRAIN_SYSTEM_PROMPT hash must equal the pinned identity prompt_config_hash '
+    + '(edit the prompt ⇒ re-pin .claude/brain-seat-identity.json + re-review honesty)');
+}
+
 const PROVIDER = path.join(__dirname, 'qualification-review-provider.js');
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-qrp-test-'));
 let assertions = 0;
@@ -73,6 +100,15 @@ const stdin = fs.readFileSync(0, 'utf8');
 fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({
   argv: process.argv.slice(2), env: process.env, stdin,
 }));
+if (process.env.STUB_SPAWN_ORPHAN) {
+  // A detached descendant in its OWN process group that INHERITS stdout: it
+  // survives the provider's group kill and holds the stdout pipe open long
+  // after this stub exits — the exact 'close'-starvation shape from review.
+  require('child_process')
+    .spawn(process.execPath, ['-e', 'setTimeout(()=>{}, 8000)'],
+      { detached: true, stdio: ['ignore', 'inherit', 'ignore'] })
+    .unref();
+}
 if (process.env.STUB_SLEEP_MS) {
   const until = Date.now() + Number(process.env.STUB_SLEEP_MS);
   while (Date.now() < until) { /* spin */ }
@@ -338,6 +374,10 @@ function parseResponse(child) {
     check(!captured.stdin.includes(token),
       `brain prompt leaks no oracle-only vocabulary (${token})`);
   }
+  for (const token of SEMANTIC_LEAK_TOKENS) {
+    check(!captured.stdin.replace(BRAIN_BUNDLE, '').includes(token),
+      `brain prompt leaks no semantic answer-key token (${token})`);
+  }
   const { parsed, output } = parseResponse(child);
   equal(output, JSON.parse(BRAIN_MODEL_OUTPUT),
     'brain output passes through without anchor normalization');
@@ -435,10 +475,11 @@ function parseResponse(child) {
   equal(child.status, 1, 'unparseable CLI output fails the case');
 }
 {
+  const { execSync } = require('child_process');
   const started = Date.now();
   const { child } = runProvider({
     env: {
-      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_CLI_BIN: stubCodex,
       QRP_TIMEOUT_MS: '400',
     },
     request: reviewerRequest(),
@@ -447,7 +488,35 @@ function parseResponse(child) {
   });
   equal(child.status, 1, 'CLI child exceeding QRP_TIMEOUT_MS fails the case');
   check(/timed out/i.test(child.stderr), 'timeout is named in the error');
-  check(Date.now() - started < 10_000, 'timeout kill happens well before the stub sleep ends');
+  check(Date.now() - started < 5_000,
+    'the promise settles within budget + grace, not at the stub lifetime');
+  // [s] bracket keeps the pgrep helper shell's own cmdline from matching itself.
+  const selfSafePattern = stubCodex.replace(/stub-codex$/u, '[s]tub-codex');
+  let alive = '';
+  try { alive = execSync(`pgrep -f "${selfSafePattern}" || true`).toString().trim(); } catch { alive = ''; }
+  equal(alive, '', 'the timed-out stub process tree is actually dead (group kill)');
+  const residue = fs.readdirSync(tempRoot).filter((name) => name.startsWith('qrp-codex-'));
+  equal(residue, [], 'the codex sidecar tempdir is removed on timeout');
+}
+{
+  // Review 2026-08-17 repro: the CLI answers and exits 0 quickly, but left a
+  // detached descendant holding stdout. 'close' cannot fire until the orphan
+  // dies; settlement must ride 'exit' + flush and return the ANSWER fast.
+  const started = Date.now();
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_TIMEOUT_MS: '6000', STUB_SPAWN_ORPHAN: '1',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 0,
+    `orphan-held stdout does not starve settlement (stderr: ${child.stderr})`);
+  check(Date.now() - started < 4_000,
+    'the answer settles at child exit + flush window, not at the orphan lifetime');
+  const { output } = parseResponse(child);
+  equal(output.verdict, 'fail', 'the answer produced before the orphan outlived it is preserved');
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });

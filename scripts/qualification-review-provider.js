@@ -68,8 +68,15 @@
  */
 
 const REQUEST_TIMEOUT_MS = (() => {
-  const parsed = Number(process.env.QRP_TIMEOUT_MS || 180_000);
-  return Number.isSafeInteger(parsed) && parsed >= 100 ? parsed : 180_000;
+  const raw = process.env.QRP_TIMEOUT_MS;
+  if (raw === undefined || raw === '') return 180_000;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 100) {
+    // A silently-defaulted timeout misgrades the seat (a shrunken budget turns
+    // slow-but-correct answers into failures) — misconfiguration must be loud.
+    fail(`QRP_TIMEOUT_MS must be an integer >= 100 (got: ${raw})`);
+  }
+  return parsed;
 })();
 const MAX_DIFF_BYTES = 2 * 1024 * 1024;
 
@@ -199,9 +206,11 @@ production rules; nothing here names any particular round's content):
   (critical/major/minor/suggestion).
 - Convergence: scoped work over wholesale churn. Verify a finding's own surface
   (verify_scoped with that finding as target) before closing it (close_finding
-  with the same target). A full-suite verification is legal only at the stream's
-  final round — but it is never required, and the final round allows only ONE
-  action: when declare_done and a final full-suite compete for round 12,
+  with the same target). Full-suite reverification of scoped findings
+  (verify_full_suite) is over-verification at ANY round; the only legal
+  full-suite action is final_premerge_full_suite at the stream's final round —
+  and even that is never required, because the final round allows only ONE
+  action: when declare_done and final_premerge_full_suite compete for round 12,
   declare_done wins. Re-dispatching the whole unit reopens finished work; a
   mega-batch bundling many changes exceeds the churn budget; repeated status
   polling without acting produces nothing. Plan the 12-round horizon so every
@@ -440,22 +449,23 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     const stderr = [];
     let settled = false;
     let timedOut = false;
+    let graceTimer = null;
     const finish = (error, value) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(graceTimer);
+      // Release the pipe handles: a detached descendant that inherited a stdio
+      // fd would otherwise keep this process's event loop alive (and the
+      // provider process resident) until IT exits, long after settlement.
+      for (const stream of [child.stdin, child.stdout, child.stderr]) {
+        try { stream.destroy(); } catch { /* already closed */ }
+      }
       if (sidecar) fs.rmSync(path.dirname(sidecar), { recursive: true, force: true });
       if (error) reject(error);
       else resolve(value);
     };
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* gone */ } }
-    }, timeoutMs);
-    child.once('error', (error) => finish(new Error(`could not spawn ${kind} (${bin}): ${error.message}`)));
-    child.stdout.on('data', (chunk) => stdout.push(chunk));
-    child.stderr.on('data', (chunk) => { if (stderr.length < 64) stderr.push(chunk); });
-    child.once('close', (status, signal) => {
+    const settleFromExit = (status, signal) => {
       if (timedOut) {
         finish(new Error(`${kind} CLI timed out after ${timeoutMs}ms`));
         return;
@@ -480,7 +490,31 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
         return;
       }
       finish(null, { text, resolvedModel: model });
+    };
+    // The promise MUST settle within its declared budget. 'close' alone cannot be
+    // trusted for that: a detached descendant that inherits a stdio pipe keeps
+    // 'close' from firing until IT exits (review 2026-08-17: a stub answered
+    // successfully in 0.2s yet settled after 8.2s as a spurious timeout). So:
+    // 'close' settles immediately; 'exit' arms a short flush window and settles
+    // from the child's own exit even if a pipe is still held open; the timeout
+    // kill arms a grace window that force-settles unconditionally.
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch { /* gone */ } }
+      graceTimer = setTimeout(
+        () => finish(new Error(`${kind} CLI timed out after ${timeoutMs}ms`)),
+        500,
+      );
+    }, timeoutMs);
+    child.once('error', (error) => finish(new Error(`could not spawn ${kind} (${bin}): ${error.message}`)));
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.stderr.on('data', (chunk) => { if (stderr.length < 64) stderr.push(chunk); });
+    child.once('exit', (status, signal) => {
+      if (graceTimer === null) {
+        graceTimer = setTimeout(() => settleFromExit(status, signal), 200);
+      }
     });
+    child.once('close', (status, signal) => settleFromExit(status, signal));
     child.stdin.once('error', () => {});
     child.stdin.end(prompt);
   });

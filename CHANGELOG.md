@@ -36,16 +36,22 @@ contract + the seat's standing production governance contract — no detection p
 test-scanned against the generator's pinned oracle-vocabulary projection). The incumbent
 depth-0 identity is pinned (`.claude/brain-seat-identity.json` + `brain_seat_identity_file`),
 flipping `status readiness` brain-seat to three-state, and the first real administrations ran
-on the new rail (brain incumbent first sitting; GLM reviewer fresh evaluation — the z.ai
-endpoint now resolves to glm-5.3, so it sits as a new identity, recorded honestly).
+on the new rail — **all recorded honestly as FAILED**: the brain incumbent sat twice (both
+FAIL, store events 3–4; the between-sittings prompt repairs drove false-report and hard-fail
+counts to zero, and the remaining margins are stable capability signal, so no third sitting —
+advisory bootstrap semantics hold), and the GLM leg ran as glm-5.3's first evaluation (the
+z.ai endpoint upgraded the glm-5.2 alias; 4 clean false positives + 1 miss, scorecard
+event 140). A gpt-5.6-sol 9/9 spike proved the codex rail live.
 
 ### Added
 - `qualification-review-provider.js` CLI transport (`QRP_TRANSPORT`, `QRP_CLI_KIND`,
   `QRP_CLI_BIN`, `QRP_CLI_EFFORT`, `QRP_TIMEOUT_MS`) and brain round-mode prompt
   (`QRP_PROMPT_MODE=brain`; role-gated: reviewer↔reviewer, brain↔owner round bundles).
-- `hooks/tests/qualification-review-provider.test.sh` — 69 assertions (env contracts, CLI
-  argv shapes, credential env passthrough, prompt-mode gates, brain-prompt honesty scan,
-  fenced-output recovery, fail-closed CLI errors, timeout tree-kill).
+- `hooks/tests/qualification-review-provider.test.sh` — 79 assertions (env contracts, CLI
+  argv shapes, credential env passthrough, prompt-mode gates, brain-prompt honesty scan —
+  oracle fields + semantic answer-key tokens + a prompt-hash pin to the seat identity file,
+  fenced-output recovery, fail-closed CLI errors, timeout group-kill with liveness and
+  sidecar-residue proof, orphan-held-pipe settlement).
 - `.claude/brain-seat-identity.json` — pinned incumbent identity (claude-fable-5 @
   claude-cli 2.1.233); every fingerprint derivation recorded in the review-loop-config
   comment (the earlier roster run's fingerprint recipes were unrecorded and proved

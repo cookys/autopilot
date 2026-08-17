@@ -85,12 +85,17 @@
      plants 4/5 + fairness content 3/4 in BOTH trials, plus a third teaching
      defect — final-round conflict between the legal full-suite and
      declare_done, both trials spent round 12 on the full-suite) → 718e1f4f…
-     (final-round conflict resolution taught; NOT yet administered — no further
-     sitting this session: two independent seeds put the same subjects at the
-     same margins, so a third sitting would be selecting on noise, which the
-     exam design forbids. The incumbent seat stays on Board 2026-08-16 advisory
-     bootstrap semantics with readiness annotating no_record; both FAIL rows
-     stand untouched, store events 3 and 4). -->
+     (final-round conflict resolution taught; never administered) → 5feb7076…
+     (pre-merge review round: full-suite action ids disambiguated — the
+     production contract already forbids full-suite reverify. NOT yet
+     administered — no further sitting this session: two independent seeds put
+     the same subjects at the same margins, so a third sitting would be
+     selecting on noise, which the exam design forbids. The incumbent seat
+     stays on Board 2026-08-16 advisory bootstrap semantics with readiness
+     annotating no_record; both FAIL rows stand untouched, store events 3
+     and 4. The provider test suite pins sha256(BRAIN_SYSTEM_PROMPT) to this
+     file's prompt_config_hash — a prompt edit fails the suite until identity
+     and honesty are re-reviewed together). -->
 - brain_seat_identity_file: .claude/brain-seat-identity.json
 
 > **Previous Gemini slot (temporarily suspended 2026-08-05).** The normal

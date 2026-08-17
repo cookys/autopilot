@@ -20,7 +20,13 @@ derivations are recorded in the `.claude/review-loop-config.md` comment.
   `~/.autopilot/exam-claude-config` (dedicated dir seeded with `.credentials.json`
   only — see the live `.claude.json`-reset incident in the adapter header).
 - Timeouts: broker 600000 ms/case, adapter 540000 ms/child.
-- Raw per-round exchanges: `raw/brain-trial-{1,2}.exchanges.jsonl`.
+- Raw per-round exchanges: `raw-sitting-{1,2}/brain-trial-{1,2}.exchanges.jsonl`.
+- **Identity caveat (pre-merge review)**: CLI-transport identity is
+  operator-asserted — `claude -p` returns no runtime model id the adapter can
+  verify (unlike the HTTP path, which caught glm-5.2→glm-5.3 exactly that way).
+  The asserted identity here is the session's own deployment (claude-fable-5,
+  the model this repo's depth-0 sessions run on); a runtime identity capture is
+  a BACKLOG follow-up.
 - **Aborted first attempt (recorded honestly)**: the initial launch was killed
   mid-trial-1 by the dispatcher after catching a framing defect (claude -p answers
   pretty-printed JSON; the host round parser accepts single-line only — every round

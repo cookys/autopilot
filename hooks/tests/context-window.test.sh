@@ -241,12 +241,16 @@ assert_not_contains "$RESOLVED" '"3.5 seat' "space-containing model id is not wo
 assert_not_contains "$RESOLVED" '"Flash seat' "space-containing model id is not word-split into phantom seats (2)"
 
 # Small input produces no window warnings at all (UNKNOWN_WINDOW must stay silent,
-# else the default roster emits constant noise).
-RESOLVED_SMALL="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 10000 2> /dev/null)"
+# else the default roster emits constant noise). The repo's own config pins a
+# brain seat (2026-08-17) whose advisory is out of scope here — measure the
+# window-warning surface against an ambient-minus-brain fixture.
+CW_NO_BRAIN="$TEST_TMP/ambient-config-no-brain.md"
+grep -v 'brain_seat_identity_file' "$REPO_ROOT/.claude/review-loop-config.md" > "$CW_NO_BRAIN" 2>/dev/null || : > "$CW_NO_BRAIN"
+RESOLVED_SMALL="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_NO_BRAIN" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --input-bytes 10000 2> /dev/null)"
 assert_contains "$RESOLVED_SMALL" '"capability_warnings": []' "in-budget resolve emits no warnings"
 
 # Absent --input-bytes must leave the resolver byte-identical to before.
-RESOLVED_NONE="$(bash "$REPO_ROOT/scripts/resolve-review-loop.sh" 2> /dev/null)"
+RESOLVED_NONE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CW_NO_BRAIN" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" 2> /dev/null)"
 assert_contains "$RESOLVED_NONE" '"capability_warnings": []' "no --input-bytes ⇒ no window checks"
 
 finalize_test

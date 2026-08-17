@@ -1017,6 +1017,28 @@ printf -- '- brain_seat_identity_file: %s\n' "$BRAIN_ID" > "$BRAIN_CFG"
 # own config pins a seat since 2026-08-17, so the no-seat shape uses the fixture)
 assert_eq "null" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --field brain_seat 2>/dev/null)" "no seat context => brain_seat null"
 
+# Seat-pin scope guard (review 2026-08-17): the ladder's project-repo fallback
+# (caller cwd OUTSIDE any project with its own config) must NOT project the
+# autopilot repo's own pin onto the consumer — brain_seat stays null and no
+# brain advisory reaches capability_warnings.
+BRAIN_FALLBACK_CWD="$TEST_TMP/consumer-no-config"; mkdir -p "$BRAIN_FALLBACK_CWD"
+assert_eq "null" "$(cd "$BRAIN_FALLBACK_CWD" && bash "$SCRIPT" --field brain_seat 2>/dev/null)" \
+  "project-repo ladder fallback never seats the repo's own brain pin"
+_BRAIN_FB_WARN="$(cd "$BRAIN_FALLBACK_CWD" && bash "$SCRIPT" --field capability_warnings 2>/dev/null)"
+assert_not_contains "$_BRAIN_FB_WARN" "brain seat" \
+  "no brain advisory leaks to consumers through the ladder fallback"
+
+# A RELATIVE pin resolves against the config's project root (dirname(config)/..),
+# never the caller's cwd: a caller-cwd project config with a relative pin still
+# finds its identity file when invoked from elsewhere via override.
+BRAIN_REL_ROOT="$TEST_TMP/rel-pin-project"; mkdir -p "$BRAIN_REL_ROOT/.claude"
+cp "$BRAIN_ID" "$BRAIN_REL_ROOT/.claude/rel-identity.json"
+printf -- '- brain_seat_identity_file: .claude/rel-identity.json\n' > "$BRAIN_REL_ROOT/.claude/review-loop-config.md"
+_BRAIN_REL="$(cd "$TEST_TMP" && REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_REL_ROOT/.claude/review-loop-config.md" \
+  ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" --field brain_seat 2>/dev/null)"
+assert_contains "$_BRAIN_REL" '"seat_class":"incumbent"' \
+  "relative pin resolves against the config project root, not caller cwd"
+
 # incumbent with NO record: loud advisory annotation, never a block
 BS_ADV="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" 2>/dev/null)"
 assert_eq "advisory" "$(json_get "$BS_ADV" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \

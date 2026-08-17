@@ -58,6 +58,14 @@ first qualified reviewer row, earned over a CLI harness transport.
 - Maintainer: `git revert <merge-sha>`
 - User-side: `/plugin update autopilot @v2.34.15`.
 
+prose-justification: +5.1% against a baseline last refreshed at v2.34.9 (six releases
+un-refreshed — refreshed after this merge). The increment is governance/exam reference
+prose the last two releases exist to ship: the brain-seat standing contract and P7 rail
+docs (v2.34.13–14), the CLI exam transport contract + the CLAUDE_CONFIG_DIR trap +
+operator-asserted identity caveat (v2.34.15), evidence-discipline §10, and the
+`brain_seat_identity_file` template documentation this release adds. No skill grew;
+the delta is references/ + engine-onboarding governance surface.
+
 ## v2.34.15 — Qualification CLI transport: real exams for CLI-credentialed seats
 
 **Headline**: The qualification rail can now examine seats whose credentials live in a CLI

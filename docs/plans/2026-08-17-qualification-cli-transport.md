@@ -1,5 +1,7 @@
 # Qualification CLI transport + brain round-mode provider (2026-08-17)
 
+> 狀態: ✅ Shipped in v2.34.15 — merged as `6b8b29e6`
+
 > Continuation of BACKLOG "Reviewer-seat full qualifications on the now-working rail".
 > Inherits the brain-seat exam suite's deferred P5 real administration (Board
 > 2026-08-17 D1: incumbent Claude seat had no exam transport — OAuth only, no raw

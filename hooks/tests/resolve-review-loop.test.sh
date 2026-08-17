@@ -1085,4 +1085,13 @@ assert_eq "requalification_required" "$(json_get "$BS_REQ" brain_seat | node -e 
 assert_eq "refused" "$(json_get "$BS_REQ" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
   "requalification_required refuses a candidate exactly like absence (no silent third path)"
 
+# under --enforce the resolver ITSELF is the gate: a refused candidate seating exits 3
+REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" \
+  bash "$SCRIPT" --enforce >/dev/null 2>&1
+assert_eq "3" "$?" "--enforce turns a refused brain seating into exit 3 (the shipped enforce rail)"
+REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  bash "$SCRIPT" --enforce >/dev/null 2>&1
+assert_eq "0" "$?" "--enforce leaves the incumbent advisory path passing (annotate, never block)"
+
 finalize_test

@@ -139,6 +139,19 @@ Use these bars before a role becomes eligible for routing.
 - Scope and acceptance remain concrete enough for a separate implementer and independent verifier;
   no output may create effect or acceptance authority.
 
+### Owner — brain seat (standing exam)
+
+- Seating an engine as the autonomous depth-0 brain requires the SEPARATE
+  `engine-qualify.sh brain` standing exam (勤勞×公平×收斂 + containment case family):
+  two seed-derived trials × 12 stateless rounds, deterministic offline grading, one
+  atomic `owner-brain-seat-v1` record on the owner role with forced `brain-seat` scope.
+- The record has NO expiry: standing holds until 3 identity-keyed production strikes
+  (stall-fuse trip / conformance-audit fail) since the last pass flip it to
+  `requalification_required` (`engine-capability-state.js brain-status`); every re-sit
+  is a fresh administration.
+- Owner intent-control evidence alone never seats the brain: the governed paths refuse
+  a candidate without brain-seat standing (or an explicit per-invocation override).
+
 ### Implementer
 
 - Baseline tasks pass in isolated worktrees.

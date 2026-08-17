@@ -1366,6 +1366,13 @@ a.push(process.argv[2]);
 process.stdout.write(JSON.stringify(a));
 ' "$CAP_WARNINGS_JSON" "$_brain_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
   fi
+  # Refusal ENFORCEMENT rides the shipped --enforce rail (report-mode emits JSON and
+  # the CALLER enforces; with --enforce the resolver itself is the gate — same split
+  # every other admission signal uses). A refused candidate seating exits 3.
+  if [[ "$ENFORCE" == "1" ]]; then
+    _brain_admission="$(printf '%s' "$BRAIN_SEAT_JSON" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).admission||"");}catch{}})' 2>/dev/null || true)"
+    [[ "$_brain_admission" == "refused" ]] && ENFORCE_EXIT=3
+  fi
 fi
 
 if [[ -n "$FIELD" ]]; then

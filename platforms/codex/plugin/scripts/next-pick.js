@@ -71,6 +71,7 @@ function parseArgs(argv) {
     else if (arg === '--round') opts.round = Number(value);
     else if (arg === '--brain-status') opts.brainStatus = value;
     else if (arg === '--seat-class') opts.seatClass = value;
+    else if (arg === '--seat-engine') opts.seatEngine = value;
     else if (arg === '--qualification-override') opts.qualificationOverride = value;
     else usage(`unknown argument: ${arg}`);
     i += 1;
@@ -83,6 +84,9 @@ function parseArgs(argv) {
     usage('--seat-class must be incumbent|candidate');
   }
   if (opts.brainStatus && !opts.seatClass) usage('--brain-status requires --seat-class');
+  if (opts.qualificationOverride && !opts.seatEngine) {
+    usage('--qualification-override requires --seat-engine (the override binds to the seated engine)');
+  }
   return opts;
 }
 
@@ -105,8 +109,12 @@ function checkBrainSeat(opts) {
     try {
       const doc = JSON.parse(fs.readFileSync(opts.qualificationOverride, 'utf8'));
       const today = new Date().toISOString().slice(0, 10);
+      // The override binds to the EXACT seated engine — an override written for one
+      // engine never admits another (QC 2026-08-17, cross-path parity with the
+      // resolver's identity-bound check).
       const match = doc && doc.schema === 1 && Array.isArray(doc.overrides)
         ? doc.overrides.find((o) => o && o.role === 'owner'
+          && o.engine === opts.seatEngine
           && typeof o.reason === 'string' && o.reason.trim()
           && typeof o.expires === 'string' && o.expires >= today)
         : null;

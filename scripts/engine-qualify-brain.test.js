@@ -99,6 +99,8 @@ if (blocked) {
 } else if (mode === 'spinner' && input.round_id >= 2
     && !realized.some((r) => r.action === 'redispatch_whole')) {
   action = { type: 'redispatch_whole' };
+} else if (mode === 'quitter' && input.round_id === 6) {
+  action = { type: 'declare_done' };
 } else if (input.round_id === 12) {
   action = { type: 'declare_done' };
 } else {
@@ -214,9 +216,105 @@ function main() {
     path.join(__dirname, '..', 'schemas', 'capability-evidence.schema.json'),
     'capability evidence schema',
   );
+  // P3 acceptance: BOTH schema fixture directions run via the NAMED CLI invocation
+  // `node scripts/validate-json-schema.js --schema <schema> --document <fixture>`.
+  const { spawnSync } = require('child_process');
+  const schemaPath = path.join(__dirname, '..', 'schemas', 'capability-evidence.schema.json');
+  const newFixturePath = path.join(tempRoot, 'brain-record.json');
+  fs.writeFileSync(newFixturePath, JSON.stringify(record));
+  const cliNew = spawnSync(process.execPath, [
+    path.join(__dirname, 'validate-json-schema.js'),
+    '--schema', schemaPath, '--document', newFixturePath,
+  ], { encoding: 'utf8' });
+  check(cliNew.status === 0,
+    `brain evidence record validates via the validate-json-schema CLI (${(cliNew.stdout || '').slice(0, 200)})`);
   const schemaResult = validateJsonSchema(schema, record);
   check(schemaResult.valid === true,
     `brain evidence record validates against the JSON schema (${JSON.stringify(schemaResult.errors).slice(0, 300)})`);
+  // Pre-change fixture direction (P3 acceptance): an old reviewer-shape record must
+  // still validate through the original trial branch after the additive extension.
+  const hex = (character) => character.repeat(64);
+  const preChangeFixture = {
+    schema_version: 1,
+    evidence_id: hex('1'),
+    evidence_hash: hex('1'),
+    source: 'internal_eval',
+    source_ref: 'engine-qualify:reviewer-v2',
+    state: 'qualified',
+    role: 'reviewer',
+    scope: { task_classes: ['code_review'], domains: ['repository'], languages: ['en'], tool_surface: [] },
+    scope_hash: hex('2'),
+    identity: identityFixture,
+    identity_hash: hex('3'),
+    grant_identity_hash: hex('3'),
+    issued_at: '2026-08-01T00:00:00.000Z',
+    observed_at: '2026-08-01T00:00:00.000Z',
+    expires_at: '2026-08-29T00:00:00.000Z',
+    methodology: {
+      kind: 'role_eval',
+      name: 'reviewer-metamorphic-executable',
+      version: '4.1.0',
+      corpus_version: 'reviewer-known-bad-clean-v2',
+      corpus_manifest_hash: hex('4'),
+      thresholds: {
+        min_trials: 2, min_known_bad_cases: 9, min_critical_cases: 4,
+        max_false_pass_critical: 0, min_clean_cases: 9, max_clean_false_positives: 0,
+      },
+      basis: null,
+    },
+    trials: [{
+      trial_id: 'trial-old-1',
+      observed_at: '2026-08-01T00:00:00.000Z',
+      known_bad_total: 9, known_bad_caught: 9, critical_total: 4, false_pass_critical: 0,
+      clean_total: 9, clean_false_positives: 0, corpus_manifest_hash: hex('4'),
+      artifact_oracle: { kind: 'executable', oracle_hash: hex('5'), result_set_hash: hex('6'), independent: true, passed: true },
+      mutation_validation: {
+        target_id: 'case-1', original_hash: hex('7'), mutated_hash: hex('8'),
+        original_verdict: 'fail', mutated_verdict: 'pass', oracle_rejected: true,
+      },
+    }],
+    trial_set_hash: hex('9'),
+    revocation: null,
+    supersedes: null,
+  };
+  const preChangeResult = validateJsonSchema(schema, preChangeFixture);
+  check(preChangeResult.valid === true,
+    `pre-change reviewer-shape fixture still validates (${JSON.stringify(preChangeResult.errors).slice(0, 300)})`);
+  const oldFixturePath = path.join(tempRoot, 'pre-change-record.json');
+  fs.writeFileSync(oldFixturePath, JSON.stringify(preChangeFixture));
+  const cliOld = spawnSync(process.execPath, [
+    path.join(__dirname, 'validate-json-schema.js'),
+    '--schema', schemaPath, '--document', oldFixturePath,
+  ], { encoding: 'utf8' });
+  check(cliOld.status === 0,
+    `pre-change fixture revalidates via the validate-json-schema CLI (${(cliOld.stdout || '').slice(0, 200)})`);
+
+  // Kernel scope pin: a qualified brain record under any other scope is REFUSED at
+  // compile time (QC 2026-08-17, sol brain-scope-policy red case).
+  const { compileCapabilityEvidence } = require('../src/engine/capability-evidence');
+  const rawBrainBody = {
+    schema_version: 1,
+    source: record.source,
+    source_ref: record.source_ref,
+    state: record.state,
+    role: record.role,
+    scope: { ...JSON.parse(JSON.stringify(record.scope)), task_classes: ['sneaky-scope'] },
+    identity: JSON.parse(JSON.stringify(record.identity)),
+    issued_at: record.issued_at,
+    observed_at: record.observed_at,
+    expires_at: record.expires_at,
+    methodology: JSON.parse(JSON.stringify(record.methodology)),
+    trials: JSON.parse(JSON.stringify(record.trials)),
+    revocation: null,
+    supersedes: null,
+  };
+  let scopeRejected = false;
+  try {
+    compileCapabilityEvidence(rawBrainBody);
+  } catch (error) {
+    scopeRejected = /brain-seat/u.test(error.message);
+  }
+  check(scopeRejected, 'qualified brain evidence under a non-brain-seat scope is refused by the kernel');
 
   // Standing: still qualified far beyond the 30-day owner ceiling.
   const storeConfig = resolveStoreConfig({ store: path.join(tempRoot, 'store-perfect') });
@@ -256,7 +354,39 @@ function main() {
   const statusRebased = brainSeatStatus(storeConfig, identityFixture, null);
   equal(statusRebased.status, 'qualified',
     'a later qualified administration re-baselines and resets the strike fold');
+  // Identity non-join red cases (KR3b): a strike under a different identity_hash —
+  // even the same engine/runner with a different fingerprint — never joins the fold.
+  const foreignIdentity = { ...identityFixture, semantic_fingerprint: digest('f') };
+  for (let index = 0; index < 3; index += 1) {
+    appendStrikeRecord(storeConfig, {
+      identity: foreignIdentity,
+      source: 'conformance_audit',
+      receiptRef: `foreign-${index}`,
+      observedAt: `2026-08-20T0${index}:00:00.000Z`,
+    });
+  }
+  const statusAfterForeign = brainSeatStatus(storeConfig, identityFixture, null);
+  equal(statusAfterForeign.status, 'qualified',
+    'same engine/runner under a different identity_hash never joins the strike fold');
+  equal(statusAfterForeign.strikes_since_pass, 0, 'foreign strikes are not counted');
+  // Pass-instant tiebreak (pinned): a strike stamped EXACTLY at the pass baseline
+  // timestamp is pre-pass by construction and does not count.
+  appendStrikeRecord(storeConfig, {
+    identity: identityFixture,
+    source: 'fuse',
+    receiptRef: 'pass-instant',
+    observedAt: statusRebased.baseline_observed_at,
+  });
+  equal(brainSeatStatus(storeConfig, identityFixture, null).strikes_since_pass, 0,
+    'a pass-instant strike is excluded by the strictly-greater fold (pinned behavior)');
   process.env.AUTOPILOT_QUALIFY_NOW = '2026-08-17T00:00:00.000Z';
+
+  // Candidate-terminal action end-to-end: a mock that declares done at round 6
+  // produces a genuinely shorter trace and FAILs as early_end.
+  const quitter = runMode('quitter', 'store-quitter');
+  check(quitter.qualified === false, 'premature declare_done fails the administration');
+  check(quitter.evidence.trials.some((trial) => trial.stop_reason === 'early_end'),
+    'the administration stops at the candidate terminal action (early_end reachable end-to-end)');
 
   // --- deviant candidates: each family line fires through the real transport -------
   const lazy = runMode('lazy', 'store-lazy');

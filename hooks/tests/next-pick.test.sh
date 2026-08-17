@@ -107,12 +107,22 @@ node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TES
   --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate >/dev/null 2>&1
 assert_eq "1" "$?" "requalification_required refuses a candidate (no silent third path)"
 
-# the override still admits (two-path rule), loudly
+# the override still admits (two-path rule), loudly — and binds to the EXACT engine
 BS_OVR_ERR="$(node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
-  --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate \
+  --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate --seat-engine any \
   --qualification-override "$TEST_TMP/brain-override.json" 2>&1 >/dev/null)"; BS_OVR_RC=$?
 assert_eq "0" "$BS_OVR_RC" "override admits a candidate with no standing"
 assert_contains "$BS_OVR_ERR" "EVIDENCE-FREE" "override admission is loudly labelled"
+# an override written for one engine never admits another (identity binding)
+node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate --seat-engine other-engine \
+  --qualification-override "$TEST_TMP/brain-override.json" >/dev/null 2>&1
+assert_eq "1" "$?" "an override for a different engine never admits (cross-path parity)"
+# override without the binding flag is a usage error, not a silent skip
+node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \
+  --brain-status "$TEST_TMP/brain-status-requal.json" --seat-class candidate \
+  --qualification-override "$TEST_TMP/brain-override.json" >/dev/null 2>&1
+assert_eq "2" "$?" "--qualification-override requires --seat-engine"
 
 # incumbent + no standing → advisory annotation, pick proceeds
 BS_INC="$(node "$SCRIPT" pick --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" \

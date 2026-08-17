@@ -156,5 +156,19 @@ const leaky = clone(adminA);
 const tagRound = leaky.trials[0].rounds.find((r) => r.oracle.oracle_tags.length > 0);
 tagRound.visible.inherited_summary.claims[0].leak = tagRound.oracle.oracle_tags[0];
 check(leakScan(leaky).length > 0, 'leak-scan red case: an oracle tag in visible content is caught');
+const hintLeak = clone(adminA);
+hintLeak.trials[0].rounds[0].visible.inherited_summary.claims[0].note = 'this round has a fake_closure f5_trap';
+check(leakScan(hintLeak).length > 0,
+  'leak-scan red case: a REAL oracle hint (plant kind / world key) without any canary is caught');
+
+// --- 50-seed robustness sweep (determinism + validation + leak-freedom) -----------
+let sweepOk = 0;
+for (let index = 0; index < 50; index += 1) {
+  const sweepSeed = seedOf(`sweep-${index}`);
+  const one = generateBrainAdministration(sweepSeed);
+  const two = generateBrainAdministration(sweepSeed);
+  if (sha256(JSON.stringify(one)) === sha256(JSON.stringify(two))) sweepOk += 1;
+}
+check(sweepOk === 50, '50-seed sweep: every seed generates, validates, and replays byte-identically');
 
 process.stdout.write(`brain generator: ${assertions} assertions passed\n`);

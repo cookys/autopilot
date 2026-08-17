@@ -742,6 +742,9 @@ function brainSeatStatus(config, rawIdentity, nowIso) {
     const evidence = wrapper.evidence;
     if (evidence.role !== 'owner') continue;
     if (evidence.methodology.kind !== BRAIN_METHODOLOGY_KIND) continue;
+    if (!Array.isArray(evidence.scope.task_classes)
+        || evidence.scope.task_classes.length !== 1
+        || evidence.scope.task_classes[0] !== 'brain-seat') continue;
     if (evidence.identity_hash !== identityHash) continue;
     if (evidence.state !== 'qualified') continue;
     if (nowIso && Date.parse(evidence.observed_at) > Date.parse(nowIso)) continue;
@@ -752,6 +755,10 @@ function brainSeatStatus(config, rawIdentity, nowIso) {
       baseline = wrapper;
     }
   }
+  // PINNED tiebreak: a strike stamped at EXACTLY the pass instant does not count —
+  // the administration that issued the pass is still concluding at that timestamp,
+  // so pass-instant strikes are pre-pass by construction (strictly-greater fold;
+  // behavior pinned by test, QC 2026-08-17 sol strike-store-order adjudication).
   const strikes = readStrikeRows(config.strikesFile).filter((row) => {
     if (row.identity_hash !== identityHash) return false;
     if (nowIso && Date.parse(row.observed_at) > Date.parse(nowIso)) return false;

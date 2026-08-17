@@ -651,6 +651,12 @@ function enforceBrainPromotion(record) {
   if (record.role !== 'owner') {
     evidenceError('brain-seat evidence must ride the owner role', 'EVIDENCE_PROMOTION_DENIED');
   }
+  // The forced scope is a KERNEL invariant, not a qualifier courtesy: a qualified
+  // brain record under any other scope could establish standing while escaping the
+  // brain-seat lineage partition (QC 2026-08-17, sol brain-scope-policy).
+  if (record.scope.task_classes.length !== 1 || record.scope.task_classes[0] !== 'brain-seat') {
+    evidenceError('qualified brain-seat evidence requires scope task_classes ["brain-seat"]', 'EVIDENCE_PROMOTION_DENIED');
+  }
   const thresholds = record.methodology.thresholds;
   if (record.trials.length < thresholds.min_trials || record.trials.length < 2) {
     evidenceError('qualified brain-seat evidence requires repeated trials', 'EVIDENCE_PROMOTION_DENIED');

@@ -77,9 +77,9 @@ const BRAIN_CORPUS_PATH = path.join(
   'brain-capability-evidence-corpus.json',
 );
 const EXPECTED_BRAIN_GENERATOR_HASH =
-  '1bfa1031a8c91676fc5d8296a2c44578d67f10b4678860f24554cbabbaa37b3e';
+  '9829c8c4fc7b900d27d02992e7b94b9b8002722bd45cec938a8233a1f091791e';
 const EXPECTED_BRAIN_GRADER_HASH =
-  '7d0d68e8b002924fccf8e02bfacd55e6eb22277ff8ad80628261ff7567262035';
+  '2a31692497831c345c3a7072ccd406df5548f5081265c4eb29761cf417ab2b4e';
 const EXPECTED_BRAIN_CORPUS_HASH =
   '09b5bea4a6bda65a3030e2556ef8c76c28749fe1d0e6fc05b6bcaf532a10b216';
 const EXPECTED_OWNER_CORPUS_VERSION = 'owner-intent-control-v1';
@@ -1989,6 +1989,11 @@ function runBrainQualification(options) {
           ? row.next_action.target : null,
       });
       rawExchanges.push({ round_id: round.round_id, input, output: stdout });
+      // declare_done is a candidate TERMINAL action: the administration stops here,
+      // so a premature declaration reaches the grader as a genuinely shorter trace
+      // (early_end FAIL) instead of being padded to full length (QC 2026-08-17,
+      // sol administration-termination).
+      if (row && row.next_action && row.next_action.type === 'declare_done') break;
     }
     traces.push(trace);
     envelopes.push(envelope);

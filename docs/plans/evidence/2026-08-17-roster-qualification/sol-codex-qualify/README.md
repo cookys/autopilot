@@ -38,6 +38,14 @@ session, `codex exec --model gpt-5.6-sol -c model_reasoning_effort="max"
 recorded model_version `gpt-5.6-sol-20260817` is asserted deployment
 configuration (requested id + probe date), not a runtime echo.
 
+⚠️ The row's `version_source: "runtime"` field is a chassis hardcode of the
+pre-v2.34.16 `engine-qualify.js` and is WRONG for this transport — this caveat
+is authoritative (sol review 2026-08-17). The `--version-source
+operator-asserted` flag landed in the v2.34.16 hardening round; every
+CLI-transport administration from then on records honest provenance. The store
+row is append-only history and is not rewritten; a future re-sit supersedes it
+with a correctly-labelled row.
+
 ## Transport
 
 `engine-qualify.sh reviewer --remote-provider-cmd` → case-only broker →

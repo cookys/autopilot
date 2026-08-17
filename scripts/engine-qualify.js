@@ -153,6 +153,8 @@ const HELP = `Usage:
     [--provider-env <name>] [--remote-timeout-ms <n>]
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
+    [--version-source runtime|operator-asserted]   (CLI transports observe no
+      runtime model id — pass operator-asserted so the row says so)
 
 The qualifier generates fresh role-specific known-bad, clean, and defect-reversal trials.
 Reviewer output uses {"verdict":"pass|fail","findings":[...]} with a structured
@@ -240,6 +242,7 @@ function parseArgs(argv) {
     ['--trials', 'trials'],
     ['--expires-days', 'expiresDays'],
     ['--store', 'store'],
+    ['--version-source', 'versionSource'],
   ]);
   const repeated = new Map([
     ['--task-class', 'taskClasses'],
@@ -320,6 +323,14 @@ function parseArgs(argv) {
     if (!Object.hasOwn(process.env, name)) usage(2, `--panel-env ${name} is not set`);
     return name;
   }))].sort();
+  // Model-version provenance (sol review 2026-08-17): HTTP transports observe
+  // the model id from the response (runtime); CLI transports return no identity
+  // signal, so their recorded version is operator-asserted — the row must say
+  // which. Default stays 'runtime' for byte-compatibility with HTTP callers.
+  options.versionSource = options.versionSource || 'runtime';
+  if (!['runtime', 'operator-asserted'].includes(options.versionSource)) {
+    usage(2, '--version-source must be runtime or operator-asserted');
+  }
   options.trials = positiveInteger(options.trials, '--trials', 2);
   options.expiresDays = positiveInteger(options.expiresDays, '--expires-days');
   if (options.expiresDays > 30) {
@@ -2155,7 +2166,7 @@ function runBrainQualification(options) {
     role: 'owner',
     methodology_kind: 'owner_brain_seat',
     model_version: options.modelVersion,
-    version_source: 'runtime',
+    version_source: options.versionSource,
     corpus_version: methodology.corpus_version,
     harness_version: options.harnessVersion,
     runner_version: options.runnerVersion,
@@ -2409,7 +2420,7 @@ function runQualification(options) {
     family: options.family,
     role,
     model_version: options.modelVersion,
-    version_source: 'runtime',
+    version_source: options.versionSource,
     corpus_version: methodology.corpus_version,
     harness_version: options.harnessVersion,
     runner_version: options.runnerVersion,

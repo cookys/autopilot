@@ -49,10 +49,25 @@ first qualified reviewer row, earned over a CLI harness transport.
 
 ### Fixed
 - `callCli` deadline-inside-flush-window race: a complete in-budget answer arriving just
-  before the deadline was discarded as a timeout; the timeout now settles from the recorded
-  exit (negative-control mutant proven red).
+  before the deadline was discarded as a timeout; the deadline now DEFERS to the armed
+  flush/close settlement when the child already exited in-budget (the gpt-5.6-sol review
+  seat caught that settling immediately could parse a truncated read — byte-complete
+  400 KB coverage case added; negative-control mutant proven red).
+- Trusted case-intro instruction sat BELOW the stdin data fence (contradictory boundary,
+  sol seat finding) — every instruction now precedes the fence, only payload follows.
+- The prompt-hash extraction is escape-aware (a lazy regex stopped AT the truncating
+  sequence, so its own truncation guard could never fire — sol seat finding).
+- `engine-qualify.js` gains `--version-source runtime|operator-asserted` (sol seat
+  finding: CLI-transport rows hardcoded `runtime` provenance the transport cannot
+  observe); the sol qualification row's caveat is authoritative for its history.
 - Six `hooks/tests/*.test.sh` files lacked the exec bit, which made `bash hooks/tests/run.sh`
   exit before its whole shell (L2) stage — canonical entry restored.
+
+### Review
+- Reviewed by the newly-qualified gpt-5.6-sol seat over the codex rail (its first
+  duty): FIX-THEN-SHIP with four 🟠 findings, all repaired above — the Anthropic-side
+  reviewer path was 529-degraded, and the decorrelated CLI rail this release family
+  built carried the review instead.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`

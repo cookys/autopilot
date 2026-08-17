@@ -76,6 +76,10 @@
        (v1 used --setting-sources project; the hardening round made the exam
        child hermetic — probed on claude 2.1.233 — and the sittings 1-2
        identities keep their recorded v1 value.)
+     - harness_version engine-qualify-0a2f112f (the --version-source provenance
+       flag landed in the hardening round; sittings 1-2 recorded e9eb3890).
+       CLI-transport administrations from here on pass
+       --version-source operator-asserted.
      Effort 'default': claude -p exposes no effort control; the seat runs the
      model default. Re-pin prompt_config_hash + harness_version when the brain
      prompt or engine-qualify.js changes AND the seat re-sits — the identity file

@@ -152,4 +152,30 @@ assert_contains "$OUT" "unlogged_decision" "unlogged decision named"
 # dispatch-contract's own digest verification is covered with a fully schema-valid
 # contract in hooks/tests/dispatch-contract-artifact.test.sh case 9 (KR1 wiring).
 
+# ── Strike emission (brain-seat-exam-suite KR3b): audit-source integration fixture ──
+node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  identity: "brain-model-exact", model_alias: "brain-engine", model_version: "1",
+  family: "test-family", runner: "brain-harness", runner_version: "1.0.0",
+  harness_version: "h1", effort: "high",
+  prompt_config_hash: "a".repeat(64), semantic_fingerprint: "b".repeat(64),
+  containment_fingerprint: "c".repeat(64), identity_resolved: true,
+}));
+' "$TEST_TMP/strike-identity.json"
+node "$SCRIPT" audit --contract "$TEST_TMP/contract.json" --intent "$TEST_TMP/i-ok.json" \
+  --repo "$WORK" --plugin-root "$PLUGIN" \
+  --strike-identity-file "$TEST_TMP/strike-identity.json" --strike-store "$TEST_TMP/strike-store" >/dev/null 2>&1
+assert_exit_code "$?" "1" "audit still refuses with strike flags"
+assert_eq "1" "$(wc -l < "$TEST_TMP/strike-store/strikes.jsonl")" "a failing audit appends exactly one strike row"
+assert_contains "$(cat "$TEST_TMP/strike-store/strikes.jsonl")" '"source":"conformance_audit"' "the strike names the audit source"
+# preflight refusals are pre-spend protection, never strikes
+node "$SCRIPT" preflight --contract "$TEST_TMP/contract.json" --intent "$TEST_TMP/i-ok.json" \
+  --repo "$WORK" --plugin-root "$PLUGIN" \
+  --strike-identity-file "$TEST_TMP/strike-identity.json" --strike-store "$TEST_TMP/strike-store" >/dev/null 2>&1
+assert_exit_code "$?" "2" "strike flags are audit-mode only (preflight refuses them)"
+node "$SCRIPT" audit --contract "$TEST_TMP/contract.json" --intent "$TEST_TMP/i-ok.json" \
+  --repo "$WORK" --plugin-root "$PLUGIN" --strike-store "$TEST_TMP/strike-store" >/dev/null 2>&1
+assert_exit_code "$?" "2" "a single strike flag is a usage error"
+
 finalize_test

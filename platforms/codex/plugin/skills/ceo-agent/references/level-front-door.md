@@ -804,8 +804,19 @@ kill, not this fuse's):
 git diff --name-only <burst-base>..HEAD > /tmp/burst-names.txt
 node scripts/check-stall-fuse.js classify --names /tmp/burst-names.txt \
   # → append {burst_id, product_files, verification_files} to the campaign's bursts.jsonl
-node scripts/check-stall-fuse.js check --bursts <campaign>/bursts.jsonl  # default N=3
+node scripts/check-stall-fuse.js check --bursts <campaign>/bursts.jsonl \
+  --strike-identity-file <seat-identity.json> --strike-store <capability-store>
+node scripts/check-blueprint-conformance.js audit \
+  --contract <contract> --intent <intent> --repo <repo> \
+  --manifest-dir /tmp/autopilot-dispatch-runs --ledger <ledger> \
+  --strike-identity-file <seat-identity.json> --strike-store <capability-store>
 ```
+
+The strike flags (brain-seat-exam-suite KR3b) make a trip / audit failure also
+append ONE identity-keyed strike row to the capability store — 3 strikes since
+the seat's last exam pass flip its standing to `requalification_required`
+(`engine-capability-state.js brain-status`). Both flags together or neither; a
+strike append that cannot complete fails the instrument closed (exit 2).
 
 Tripped ⇒ HALT: no further dispatch this campaign; render the round-end report
 with the stall section and stop for the operator. Also immediate-violation:

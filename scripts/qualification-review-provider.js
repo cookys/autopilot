@@ -553,6 +553,15 @@ async function main() {
     } catch {
       // leave the extracted output untouched if it fails to round-trip
     }
+  } else {
+    // Brain rounds: the host's round parser accepts SINGLE-LINE JSON only, and CLI
+    // models routinely pretty-print. Re-serializing is transport framing (byte
+    // layout), never content — the parsed value is emitted unchanged.
+    try {
+      normalized = JSON.stringify(JSON.parse(output));
+    } catch {
+      // leave the extracted output untouched if it fails to round-trip
+    }
   }
   process.stdout.write(JSON.stringify({
     schema_version: 1,

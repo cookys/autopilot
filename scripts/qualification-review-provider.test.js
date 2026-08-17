@@ -315,13 +315,16 @@ function parseResponse(child) {
 
 // ── 7. brain prompt mode over claude CLI ───────────────────────────────────────
 {
+  // The stub answers with PRETTY-PRINTED JSON — live claude -p does exactly this,
+  // and the host's brain round parser accepts single-line JSON only. The adapter
+  // must re-serialize (framing, not content).
   const { child, captured } = runProvider({
     env: {
       QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
       QRP_PROMPT_MODE: 'brain',
     },
     request: brainRequest(),
-    stubOutput: BRAIN_MODEL_OUTPUT,
+    stubOutput: JSON.stringify(JSON.parse(BRAIN_MODEL_OUTPUT), null, 2),
   });
   equal(child.status, 0, `brain round over claude CLI succeeds (stderr: ${child.stderr})`);
   check(captured.stdin.includes('"round_id":3') || captured.stdin.includes('"round_id": 3'),
@@ -335,9 +338,11 @@ function parseResponse(child) {
     check(!captured.stdin.includes(token),
       `brain prompt leaks no oracle-only vocabulary (${token})`);
   }
-  const { output } = parseResponse(child);
+  const { parsed, output } = parseResponse(child);
   equal(output, JSON.parse(BRAIN_MODEL_OUTPUT),
     'brain output passes through without anchor normalization');
+  check(!parsed.output.includes('\n'),
+    'brain output is re-serialized to a single line for the host round parser');
 }
 
 // ── 8. brain prompt mode over http keeps the env contract ─────────────────────

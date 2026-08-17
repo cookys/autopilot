@@ -151,6 +151,14 @@ Use these bars before a role becomes eligible for routing.
   is a fresh administration.
 - Owner intent-control evidence alone never seats the brain: the governed paths refuse
   a candidate without brain-seat standing (or an explicit per-invocation override).
+- Real administrations reach CLI-credentialed seats through the provider adapter's
+  CLI transport (`QRP_TRANSPORT=cli`: codex via `CODEX_HOME`, claude via
+  `CLAUDE_CONFIG_DIR` pointing at a DEDICATED exam config dir seeded with
+  `.credentials.json` only — never the live `~/.claude`) with the brain round-mode
+  prompt (`QRP_PROMPT_MODE=brain`). The prompt teaches bundle semantics, the
+  five-field output contract, and the seat's standing production governance
+  contract; it never names any round's content (test-scanned against the
+  generator's oracle-vocabulary projection).
 
 ### Implementer
 

@@ -24,6 +24,50 @@ RELEASE TEMPLATE (paste below this comment for each new release):
 - User-side (post-marketplace): `/plugin update autopilot @v<previous>` + cleanup new sibling files (e.g., `rm -rf ~/.autopilot/<new-dir>/`)
 -->
 
+## v2.34.15 — Qualification CLI transport: real exams for CLI-credentialed seats
+
+**Headline**: The qualification rail can now examine seats whose credentials live in a CLI
+harness, closing the v2.34.14 Board deferral ("incumbent Claude seat has no exam transport —
+OAuth only, no raw token"). `qualification-review-provider.js` gains `QRP_TRANSPORT=cli`
+(codex → `codex exec --sandbox read-only` sidecar path with `CODEX_HOME` passthrough;
+claude → `claude -p --strict-mcp-config --tools ""` stdin path with `CLAUDE_CONFIG_DIR`
+passthrough) and `QRP_PROMPT_MODE=brain` (round-bundle semantics + five-field output
+contract + the seat's standing production governance contract — no detection patterns,
+test-scanned against the generator's pinned oracle-vocabulary projection). The incumbent
+depth-0 identity is pinned (`.claude/brain-seat-identity.json` + `brain_seat_identity_file`),
+flipping `status readiness` brain-seat to three-state, and the first real administrations ran
+on the new rail (brain incumbent first sitting; GLM reviewer fresh evaluation — the z.ai
+endpoint now resolves to glm-5.3, so it sits as a new identity, recorded honestly).
+
+### Added
+- `qualification-review-provider.js` CLI transport (`QRP_TRANSPORT`, `QRP_CLI_KIND`,
+  `QRP_CLI_BIN`, `QRP_CLI_EFFORT`, `QRP_TIMEOUT_MS`) and brain round-mode prompt
+  (`QRP_PROMPT_MODE=brain`; role-gated: reviewer↔reviewer, brain↔owner round bundles).
+- `hooks/tests/qualification-review-provider.test.sh` — 69 assertions (env contracts, CLI
+  argv shapes, credential env passthrough, prompt-mode gates, brain-prompt honesty scan,
+  fenced-output recovery, fail-closed CLI errors, timeout tree-kill).
+- `.claude/brain-seat-identity.json` — pinned incumbent identity (claude-fable-5 @
+  claude-cli 2.1.233); every fingerprint derivation recorded in the review-loop-config
+  comment (the earlier roster run's fingerprint recipes were unrecorded and proved
+  unrecoverable — recorded derivations are now the convention).
+
+### Changed
+- `.claude/review-loop-config.md` pins `brain_seat_identity_file`; readiness brain-seat
+  line reports real standing (`no_record (strikes 0/3)` until a pass lands).
+- `resolve-review-loop.test.sh` no-seat default pins run against an ambient-minus-brain
+  fixture (the repo config now dogfoods a pinned seat).
+
+### Operational caution
+- ⚠️ `CLAUDE_CONFIG_DIR` must point at a DEDICATED exam config dir seeded with
+  `.credentials.json` only. Pointing it at the live `~/.claude` RESETS `.claude.json`
+  (live incident this release, recovered from the CLI's own backup; trap documented in
+  the adapter header and engine-onboarding).
+
+### Rollback
+- Maintainer: `git revert <merge-sha>`
+- User-side: `/plugin update autopilot @v2.34.14`; optionally remove
+  `~/.autopilot/exam-claude-config/`.
+
 ## v2.34.14 — Brain-seat standing exam: 勤勞×公平×收斂 qualification with strike revocation
 
 **Headline**: The brain seat (autonomous depth-0 orchestrator, canonical `owner` role) gains its

@@ -1299,6 +1299,21 @@ fi
 # advisory bootstrap semantics).
 BRAIN_SEAT_JSON='null'
 BRAIN_IDENTITY_FILE="$(read_field "$CONFIG" brain_seat_identity_file "")"
+# Seat-pin scope guard (review 2026-08-17 MUST-FIX): a brain seat is per-project
+# governance. Only a config the CALLER owns may seat one — an explicit override
+# or the caller-cwd project config. When the ladder fell back to the autopilot
+# repo's own config (SOURCE=project-repo) or the template, the pin must NOT
+# project onto the consumer (it would announce the maintainer's seat, and its
+# relative path would resolve against the wrong cwd).
+case "$SOURCE" in
+  override|project-cwd) ;;
+  *) BRAIN_IDENTITY_FILE="" ;;
+esac
+# A relative pin resolves against the CONFIG's own directory (the file travels
+# with the config that declares it), never against the caller's cwd.
+if [[ -n "$BRAIN_IDENTITY_FILE" && "$BRAIN_IDENTITY_FILE" != /* ]]; then
+  BRAIN_IDENTITY_FILE="$(cd "$(dirname -- "$CONFIG")" 2>/dev/null && pwd -P)/../$BRAIN_IDENTITY_FILE"
+fi
 PROPOSED_BRAIN_IDENTITY="${AUTOPILOT_BRAIN_SEAT_IDENTITY:-}"
 if [[ -n "$BRAIN_IDENTITY_FILE" || -n "$PROPOSED_BRAIN_IDENTITY" ]]; then
   _brain_seat_class="incumbent"

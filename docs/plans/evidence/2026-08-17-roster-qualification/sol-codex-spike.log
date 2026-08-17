@@ -1,0 +1,12 @@
+OK   known-bad:error-propagation
+OK   known-bad:boundary-overrun
+OK   known-bad:null-dereference
+OK   known-bad:cycle-detection-removal
+OK   known-bad:contract-regression
+OK   clean:clean-01
+OK   clean:clean-05
+OK   clean:clean-10
+OK   clean:clean-15
+
+9/9 cases correct
+SPIKE_EXIT=0

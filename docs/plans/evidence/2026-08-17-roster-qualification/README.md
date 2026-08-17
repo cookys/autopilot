@@ -68,6 +68,21 @@ evaluator applies (rule/file/line/severity + canonical witness equality).
   qualification run would fail its bars; not spent.
 - **GLM-5.2** (seat: qc:2 / verification_author engine): **9/9** — proceeded to the
   full `engine-qualify.sh reviewer` run (`glm-qualify/`).
+- **gpt-5.6-sol** (seat: qc:1; 2026-08-17, v2.34.15 CLI transport): **9/9** over the
+  codex CLI exam transport (`QRP_TRANSPORT=cli QRP_CLI_KIND=codex`, effort max —
+  the seat's calibrated tier; `sol-codex-spike.log`, seed `sol-codex-spike-1`).
+  First live end-to-end proof of the codex rail: 5/5 known-bad incl. the
+  matrix-literal contract-regression call, 4/4 clean, zero FPs. Full 42-case run
+  not spent this session (out of the qualification-cli-transport project scope) —
+  spike-clean is the full-run admission bar, tracked in BACKLOG.
+
+## 2026-08-17 (v2.34.15) — GLM leg re-run on the shipped rail
+
+`glm53-qualify/` — the planned GLM-5.2 re-attempt ran as **glm-5.3's first full
+evaluation** (z.ai upgraded the alias upstream; identity follows the runtime id).
+**FAILED**: 41/42, 4 clean false positives across both trials + 1 sensitivity
+miss — worse than the glm-5.2 sitting. Scorecard event 140, evidence event 2.
+Details + recorded fingerprint derivations in that directory's README.
 
 ## GLM-5.2 full qualification run (`glm-qualify/`)
 

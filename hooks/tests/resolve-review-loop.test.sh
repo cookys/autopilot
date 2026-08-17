@@ -399,11 +399,22 @@ assert_eq "mixed" "$(bash "$SCRIPT" --field work_domain)" "--field work_domain"
 assert_eq "none" "$(bash "$SCRIPT" --field domain_source)" "--field domain_source"
 assert_eq "2" "$(bash "$SCRIPT" --domain nope >/dev/null 2>&1; echo $?)" "--domain invalid returns usage exit 2"
 
+# Dogfood shim (2026-08-17 qualification-cli-transport): the repo's own config now
+# pins a brain seat, but the ambient-default pins below measure the NO-seat default
+# shape. Derive an ambient-minus-brain fixture so those pins keep their original
+# measurement surface (everything except brain_seat_identity_file is untouched).
+AMBIENT_NO_BRAIN="$TEST_TMP/ambient-config-no-brain.md"
+if [ -f "$REPO_ROOT/.claude/review-loop-config.md" ]; then
+  grep -v 'brain_seat_identity_file' "$REPO_ROOT/.claude/review-loop-config.md" > "$AMBIENT_NO_BRAIN"
+else
+  : > "$AMBIENT_NO_BRAIN"
+fi
+
 # 13. --auto-domain inserts exactly two keys at JSON tail (legacy output is unchanged prefix)
-BASE_JSON="$(bash "$SCRIPT")"
-AUTO_JSON="$(bash "$SCRIPT" --auto-domain HEAD..HEAD)"
-AUTO_WD="$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field work_domain)"
-AUTO_SOURCE="$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field domain_source)"
+BASE_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT")"
+AUTO_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --auto-domain HEAD..HEAD)"
+AUTO_WD="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --auto-domain HEAD..HEAD --field work_domain)"
+AUTO_SOURCE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --auto-domain HEAD..HEAD --field domain_source)"
 BASE_JSON_STRIPPED="$(printf '%s' "$BASE_JSON" | sed -E 's/, "capability_state_source":.* }/ }/')"
 AUTO_JSON_STRIPPED="$(printf '%s' "$AUTO_JSON" | sed -E 's/, "capability_state_source":.* }/ }/')"
 BASE_LEGACY_PREFIX="$(printf '%s' "$BASE_JSON_STRIPPED" | sed 's/, "work_domain": "[^"]*", "domain_source": "[^"]*" }$/ }/')"
@@ -553,13 +564,13 @@ mkdir -p "$CAP_TEST_DIR"
 # A. Empty store test (capability state is enabled by default)
 # Omitting --capability-state (or empty store) keeps capability state unknown.
 # MiniMax calibration is a resolver diagnostic, not an operational capability warning.
-EMPTY_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
+EMPTY_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
 assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
 
 # B. --capability-state off test
-OFF_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
+OFF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
 assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
 assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
 assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
@@ -1002,8 +1013,31 @@ cp "$BRAIN_ID" "$BRAIN_TMP/candidate-identity.json"
 BRAIN_CFG="$TEST_TMP/brain-cfg.md"
 printf -- '- brain_seat_identity_file: %s\n' "$BRAIN_ID" > "$BRAIN_CFG"
 
-# default config carries no brain seat context → field stays null (pinned no-op)
-assert_eq "null" "$(bash "$SCRIPT" --field brain_seat 2>/dev/null)" "no seat context => brain_seat null"
+# a config with no brain seat context → field stays null (pinned no-op; the repo's
+# own config pins a seat since 2026-08-17, so the no-seat shape uses the fixture)
+assert_eq "null" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --field brain_seat 2>/dev/null)" "no seat context => brain_seat null"
+
+# Seat-pin scope guard (review 2026-08-17): the ladder's project-repo fallback
+# (caller cwd OUTSIDE any project with its own config) must NOT project the
+# autopilot repo's own pin onto the consumer — brain_seat stays null and no
+# brain advisory reaches capability_warnings.
+BRAIN_FALLBACK_CWD="$TEST_TMP/consumer-no-config"; mkdir -p "$BRAIN_FALLBACK_CWD"
+assert_eq "null" "$(cd "$BRAIN_FALLBACK_CWD" && bash "$SCRIPT" --field brain_seat 2>/dev/null)" \
+  "project-repo ladder fallback never seats the repo's own brain pin"
+_BRAIN_FB_WARN="$(cd "$BRAIN_FALLBACK_CWD" && bash "$SCRIPT" --field capability_warnings 2>/dev/null)"
+assert_not_contains "$_BRAIN_FB_WARN" "brain seat" \
+  "no brain advisory leaks to consumers through the ladder fallback"
+
+# A RELATIVE pin resolves against the config's project root (dirname(config)/..),
+# never the caller's cwd: a caller-cwd project config with a relative pin still
+# finds its identity file when invoked from elsewhere via override.
+BRAIN_REL_ROOT="$TEST_TMP/rel-pin-project"; mkdir -p "$BRAIN_REL_ROOT/.claude"
+cp "$BRAIN_ID" "$BRAIN_REL_ROOT/.claude/rel-identity.json"
+printf -- '- brain_seat_identity_file: .claude/rel-identity.json\n' > "$BRAIN_REL_ROOT/.claude/review-loop-config.md"
+_BRAIN_REL="$(cd "$TEST_TMP" && REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_REL_ROOT/.claude/review-loop-config.md" \
+  ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" --field brain_seat 2>/dev/null)"
+assert_contains "$_BRAIN_REL" '"status":"no_record"' \
+  "relative pin resolves against the config project root, not caller cwd (pre-fix cwd resolution yields status_unavailable, so this pin is mutation-sensitive)"
 
 # incumbent with NO record: loud advisory annotation, never a block
 BS_ADV="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" 2>/dev/null)"

@@ -56,6 +56,47 @@
 - qc_panel_aggregation: union-on-verified-critical
 - provider_readiness_receipt_ttl_seconds: 300
 - provider_readiness_fallback_family_constraint: different
+<!-- brain_seat_identity_file (2026-08-17, qualification-cli-transport): pinned
+     incumbent depth-0 identity for the P7 rail + readiness three-state. The file
+     is EXACTLY the 12-field capability-identity object (identity_hash =
+     sha256(canonicalJson(file))). Derivations (recorded this time — the earlier
+     roster run left its fingerprint recipes unrecorded):
+     - prompt_config_hash = sha256 of BRAIN_SYSTEM_PROMPT in
+       scripts/qualification-review-provider.js (exam-facing prompt surface;
+       same convention the GLM reviewer run used for its SYSTEM_PROMPT).
+     - harness_version = engine-qualify-<first8 sha256(scripts/engine-qualify.js)>.
+     - semantic_fingerprint = sha256(canonicalJson({kind:
+       'brain-seat-semantic-surface-v1', model:'claude-fable-5',
+       transport:'claude-cli-headless-no-tools', setting_sources:'project'})).
+     - containment_fingerprint = sha256(canonicalJson({kind:
+       'brain-seat-containment-surface-v1', exam_transport:
+       'qualification-case-broker-networkless-bwrap', cli_posture:
+       'claude -p --strict-mcp-config --tools-empty', credential_isolation:
+       'dedicated-exam-config-dir-credentials-only'})).
+     Effort 'default': claude -p exposes no effort control; the seat runs the
+     model default. Re-pin prompt_config_hash + harness_version when the brain
+     prompt or engine-qualify.js changes AND the seat re-sits — the identity file
+     records the SEATED deployment, not the repo tip.
+     Prompt-hash history: af99c673… (sitting 1 2026-08-17, FAILED — diagnosis
+     attributed 勤勞/收斂 to prompt teaching defects: no incremental-flag
+     semantics, no 12-round horizon; 公平 was a REAL seat miss) → f9e2d8b6…
+     (sitting 2 2026-08-17, FAILED — re-report and hard-fails went to ZERO,
+     confirming the repairs; remaining misses are stable capability signal:
+     plants 4/5 + fairness content 3/4 in BOTH trials, plus a third teaching
+     defect — final-round conflict between the legal full-suite and
+     declare_done, both trials spent round 12 on the full-suite) → 718e1f4f…
+     (final-round conflict resolution taught; never administered) → 5feb7076…
+     (pre-merge review round: full-suite action ids disambiguated — the
+     production contract already forbids full-suite reverify. NOT yet
+     administered — no further sitting this session: two independent seeds put
+     the same subjects at the same margins, so a third sitting would be
+     selecting on noise, which the exam design forbids. The incumbent seat
+     stays on Board 2026-08-16 advisory bootstrap semantics with readiness
+     annotating no_record; both FAIL rows stand untouched, store events 3
+     and 4. The provider test suite pins sha256(BRAIN_SYSTEM_PROMPT) to this
+     file's prompt_config_hash — a prompt edit fails the suite until identity
+     and honesty are re-reviewed together). -->
+- brain_seat_identity_file: .claude/brain-seat-identity.json
 
 > **Previous Gemini slot (temporarily suspended 2026-08-05).** The normal
 > `Gemini 3.6 Flash (High)` QC seat is restored only after quota recovery and a

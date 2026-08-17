@@ -193,6 +193,16 @@ rename (BACKLOG).
 
 ## Review Loop History
 
+- Pre-merge implementation review (fable agent chair + sol codex fix-checks,
+  2026-08-18): 1 Critical + 2 Major + 6 Minor MUST-FIX, all repaired same
+  round (discriminating leak scan + payload independence, literal bwrap
+  allowlist pins, plan byte/depth caps, taxonomy precedence, shared
+  extractJsonObject, oracle-divergence infra routing); sol round-2 surfaced
+  the codex-mirror eval-asset gap whose repair also healed the pre-existing
+  packaged-qualifier red (codex-plugin-package 112/0). Chair verified-clean
+  list included byte-level evidence re-derivation, 130k-observation state
+  fuzz, and head-to-head develop baselines.
+
 - v3-G2 terminal (2026-08-18, sol chair STOP + glm deep CONDITIONAL; 8
   blocking + 2 non-blocking): generation cap reached. Depth-0 adjudication
   (brain-suite freeze precedent — semantic authority returns to depth-0 at

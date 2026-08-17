@@ -1,152 +1,169 @@
 # Verification-author qualification suite v3 (2026-08-18)
 
-> 狀態: DRAFT — fresh review lineage (Board ruled construct option (c),
-> 2026-08-18). Predecessor v2 STOPPED at its G2 terminal; all 19 findings are
-> design inputs here (`evidence/2026-08-18-verification-author-suite/
-> v3-design-requirements.md`).
+> 狀態: G2 revision (v3-G1 CONDITIONAL, 9 blockers, all repaired here).
+> Lineage: v2 STOPPED at its terminal; Board ruled construct (c). Prior
+> findings: `evidence/2026-08-18-verification-author-suite/`.
 
 ## 1. Goal
 
 `engine-qualify.sh verification_author`: the candidate reads a requirements
-spec and authors a **declared test plan** — an ordered list of calls, each
-with a pre-declared expected outcome. The HOST executes the plan against
-hidden clean/defect twins in its own isolated runner and grades offline.
-No candidate code ever executes.
-
-**Success criteria**: seed-derived deterministic corpus with pinned hashes;
-grading purely host-derived; both broker transports + local panel; every red
-line deviant-proven; existing suites unchanged-green.
+spec and authors a **declared test plan** — ordered calls, each with a
+pre-declared expected outcome. The HOST executes the plan against hidden
+clean/defect twins in its own isolated runner and grades offline. No
+candidate code ever executes.
 
 ## 2. Construct — declared expectations (Board option (c))
 
-The candidate submission per case is DATA, not code (`HARNESS_CONTRACT`
-export, single canonical statement):
+Submission = the candidate's TEXT output, extracted to one JSON object by the
+same static `extractJsonObject` rule the reviewer transport uses, then
+validated against `PLAN_CONTRACT` (one named schema constant exported by the
+generator; provider prompt and grader both import it — G1-F7):
 
 ```
 {"case_id", "steps": [ {"call": {"export_path", "args"},
                         "expected": {"kind": "returns"|"throws", "value"?}} ]}
 ```
 
-- **Bounded**: `steps.length ≤ budget` (corpus-pinned, a small multiple of the
-  minimal revealing sequence; G2's spec-blind exhaustive caller dies here).
-- **Declared accuracy**: for EVERY step, `expected` must equal the contract
-  oracle's `expected(call)` — the direct measurement of having read and
-  understood the spec. A source-reading shortcut is impossible by
-  construction: the candidate never sees any implementation (its only input
-  is the spec envelope), and a fuzzing shortcut fails because wrong
-  declarations fail this line even when a call happens to hit the defect.
-- **Sensitivity**: host executes the step sequence IN ORDER against the
-  defect twin in a fresh isolated runner; ≥1 step's observed behavior must
-  deviate from the declared (= contract) expectation. Ordered execution makes
-  state-residue defects reachable.
-- **Specificity**: same sequence against the clean twin must show ZERO
-  deviations (an over-strict or defect-imitating declaration dies here or on
-  declared accuracy).
-- Case passes iff all three. Subjects per trial: `declared_accuracy`,
-  `sensitivity`, `specificity`, `robustness` (no malformed/oversize/budget
-  violations). Qualification = AND, 2 trials, per-trial seeds
-  (admin-seed-derived; trial 2 is a different corpus instance).
+- **Budget is a CORPUS CONSTANT** (same for every case, pinned in the corpus
+  JSON) — it cannot encode the hidden mutation (G1-F5) and bounds spec-blind
+  enumeration.
+- **Solvability admission** (G1-F0): the generator runs a reference SOLVER
+  that sees ONLY the formal contract (never the twins) and derives test
+  vectors systematically (domain boundary values, enum sweeps, state
+  sequences). A case is admitted only if the solver's vector set reveals the
+  defect within the constant budget — a constructive proof that a spec-only
+  author can pass.
+- **Subjects (three — G1-F3 accepted: specificity is implied by declared
+  accuracy and is removed as a subject)**:
+  - `declared_accuracy`: every step's `expected` equals the contract oracle's
+    `expected(call)` under the value algebra (§3).
+  - `sensitivity`: executing the sequence in order against the defect twin
+    yields ≥1 host-observed deviation from the declared expectation.
+  - `robustness`: zero malformed/oversize/budget/protocol violations.
+  Qualification = AND, 2 trials, per-trial seeds (distinct corpus instances).
+  Clean-twin execution remains an ADMISSION cross-check (clean must match the
+  oracle on the solver vectors), not a graded subject.
+- **Per-case isolation** (G1-F8): each case is one fresh stateless provider
+  invocation (existing broker semantics, now normative); no cross-case
+  context, no feedback — all grading is offline after the full
+  administration, so nothing about earlier cases' correctness can steer later
+  submissions.
 
-**What v3 removes relative to v2** (why G2's fatal findings do not recur):
-no candidate process ⇒ no trace channel to forge (G2-F3), no harness sandbox
-exhaustion surface (G2-F6), no readable implementation ⇒ black-box is
-construct-guaranteed, mooting the white-box dispute (G2-F7). Scope note: the
-exam measures test DESIGN (revealing inputs + correct expectations), which
-matches the /l6 authoring rail's actual product (dispatch-author emits
-test-plan/verification text, executed by depth-0); authoring executable test
-CODE is explicitly out of scope for v1 and named in the honesty clause.
-
-## 3. Contract + corpus (data-only, G2-F5 repaired)
+## 3. Contract, value algebra, corpus
 
 - **Formal contract** = data-only DSL in canonical JSON: exported surface,
-  typed finite parameter domains, behavior as an expression tree (comparisons,
-  arithmetic, conditionals, throw nodes, bounded state slots for the
-  state-residue family). ONE pinned evaluator inside the generator interprets
-  it; `expected(call)` = evaluator(behavior, state, args). Corpus hash covers
-  generator + evaluator; no functions in serialized artifacts.
-- **Rendered spec**: prose rendered from the SAME expression tree (not
-  hand-written per renderer), 3 renderers, seed-assigned. P1 property test:
-  re-parsing each rendering's comparison directions/negations/values against
-  the tree (G2-F1 semantic corruption check), plus field-literal coverage.
-- **Twins**: generator emits clean + defect implementations FROM the tree
-  (defect = a single mutated tree node per family); twin validation executes
-  both against an exhaustive-or-sampled domain sweep — clean conforms
-  everywhere, defect deviates exactly on its family's surface; violating
-  inputs must exist within the step budget (admission precondition).
-- Defect families (6, unchanged from v2 §3): boundary-off-by-one,
-  error-path-swallow, default-fallback-widening, state-residue,
-  ordering-contract, precision-contract. ≥2 cases/family/trial, interleaved.
+  typed FINITE parameter domains, behavior as an expression tree
+  (comparisons, integer arithmetic, conditionals, throw nodes, explicit
+  state slots with per-step transitions for the state family). ONE pinned
+  evaluator in the generator interprets it; corpus hash covers both.
+- **Observable value algebra** (G1-F2): values are JSON primitives, arrays,
+  and plain objects only; all numeric domains are integers (the precision
+  family rounds TO integers, so outputs stay in-algebra); equality =
+  canonicalJson byte equality; `throws` matches `error.name` plus a
+  seed-derived message token, exactly; `undefined`/`NaN`/`-0`/functions/
+  cycles normalize to `unsupported` and never satisfy any expectation
+  (fail-closed). Stateful oracles advance their state slot per step in
+  declaration order — the oracle is a fold, not a pure map.
+- **Spec rendering** (G1-F1/F10): the tree renders to a STRUCTURED CLAUSE
+  LIST — one clause per tree node, bijective — and prose is the natural-
+  language surface of those clauses. P1 property test inverts each rendering
+  clause-by-clause back to its node (direction, negation, values, state
+  transitions), proving the visible spec is complete and unambiguous, not
+  merely literal-covered.
+- **Derivation independence** (G1-F5): renderer assignment, mutation
+  selection, and value derivation use DOMAIN-SEPARATED seed labels
+  (`renderer:*`, `mutation:*`, `values:*`); P1 pins an independence
+  invariant (changing the mutation label chain leaves renderer assignment
+  byte-identical).
+- Defect families (6): boundary-off-by-one, error-path-swallow,
+  default-fallback-widening, state-residue, ordering-contract,
+  precision-contract. ≥2 cases/family/trial, interleaved.
 - **Envelope + leak scan**: candidate-visible envelope = exact broker payload
-  bytes `canonicalJson({case_id, rendered_spec, module_surface, budget,
-  output_contract_ref})`; scan rejects any token from the twins' identifier/
-  literal sets minus the public surface, family names, oracle vocabulary,
-  canary; opaque seed-derived case ids. (Implementations never leave the
-  host, so the scan now guards renderer bugs only — defense in depth.)
+  `content` bytes `canonicalJson({case_id, rendered_spec, module_surface,
+  budget, plan_contract_ref})` (budget is the same constant everywhere);
+  scan rejects twin identifier/literal tokens minus public surface, family
+  names, oracle vocabulary, canary; opaque seed-derived case ids.
+- **Hash boundary** (G1-F6 spike, resolved here): the administration is a
+  pure function of (admin seed, generator file, corpus JSON); pinned hashes
+  cover exactly those two files — the same transitive boundary every
+  existing suite uses.
 
-## 4. Host runner isolation (G2-F4/F6 repaired by shrinkage)
+## 4. Host runner isolation
 
-Only HOST-AUTHORED code runs: the runner loads a twin and applies the
-declared calls. Still executed inside the existing policy-hashed bwrap family
+Only host-authored runner code executes candidate-declared calls against
+generated twins, inside the existing policy-hashed bwrap family
 (networkless, RO binds, tmpfs, fresh sandbox per case×twin, 60 s wall, 1 MB
-output) because twins are generated code — but the threat model is now
-"generator bug", not "adversarial candidate code". Candidate-plan handling is
-pure parsing under caps: bytes ≤ 256 KB, JSON depth ≤ 16, steps ≤ budget,
-args must type-check against the declared domains (malformed ⇒ fail-closed
-robustness, never a crash). Local panel-cmd authoring runs in the SAME
-no-corpus/no-generator sandbox posture the reviewer local panel already has
-(explicit mount list in P3 acceptance; G2-F4).
+output). Threat model is "generator bug", not adversarial candidate code.
+Plan parsing caps: ≤256 KB, JSON depth ≤16, steps ≤ budget, args
+domain-typed. The local panel authoring path uses the same
+no-corpus/no-generator mount posture the reviewer local panel has (P3
+acceptance lists the exact mounts).
 
-## 5. Outcome taxonomy (G2-F2/F9 repaired)
+## 5. Outcome taxonomy (G1-F4 — complete and host-observable)
 
-Host-observable, complete, deterministic — per case:
-`pass | declared_mismatch | missed_defect | false_alarm | malformed_plan |
-budget_exceeded | infra_fail` (infra_fail = twin runner crash/timeout, which
-twin-validation preconditions make a generator defect ⇒ administration aborts
-rather than grading). No candidate exit codes exist anywhere in grading.
+Per case: `pass | declared_mismatch | missed_defect | malformed_plan |
+budget_exceeded | infra_fail`. Mapping is exhaustive: runner crash, signal,
+timeout, output overflow, empty/malformed runner protocol, sandbox-launch
+failure → `infra_fail`; since twins passed admission, any `infra_fail` is a
+generator/runner defect ⇒ the ADMINISTRATION aborts with no verdict (never
+graded against the candidate). Authoring-transport failures (local/HTTP/CLI
+error, empty or unextractable output) → the case is `malformed_plan`
+(fail-closed against the candidate, matching every existing role transport).
+Anything unclassified ⇒ `infra_fail` abort (catch-all clause). Candidate
+exit codes do not exist in this design.
 
-## 6. Chassis (unchanged from v2 §6, all G1-F4 freezes kept)
+## 6. Chassis
 
 Evidence kind `role_eval`, role `verification_author`, methodology
 `va-declared-plan-v1`; existing emit-row schema; broker request
 `{role: 'verification_author', payload: {format: 'unified_diff', content:
-<envelope>}}`; `HARNESS_CONTRACT` single export consumed by provider prompt
-and grader; transport-parity row-diff acceptance (local panel vs broker+stub,
-explicit field diff list); `--version-source` honored.
+<envelope>}}` — the format token stays the opaque chassis constant (brain
+precedent); renaming it repo-wide is BACKLOG (G1-F11). `--version-source`
+honored; transport-parity acceptance diffs evidence rows local-panel vs
+broker+stub with an explicit allowed-field list.
 
-## 7. Deviant matrix (v2 §7 + G2-F8 rows, adapted to declared plans)
+## 7. Deviant + acceptance matrix (G1-F9 — exact mapping)
 
-perfect ⇒ qualified; spec-blind exhaustive caller (budget-exceeding or
-wrong-declaration) ⇒ declared/budget fail; defect-imitating declarations ⇒
-specificity fail; happy-path-only plan ⇒ missed_defect; over-strict
-declarations ⇒ declared_mismatch; malformed/oversize/deep JSON ⇒ fail-closed;
-surface-outside call ⇒ malformed; args outside domain ⇒ malformed; semantic
-renderer corruption (literals preserved, direction flipped) ⇒ P1 property
-test red; off-sweep twin defect ⇒ admission abort; hash mismatch ⇒
-precondition abort; partial subjects / one-trial-only ⇒ not qualified; store
-append failure ⇒ fail-closed nonzero.
+Every row names its fixture, expected per-case taxonomy value, subject
+outcome, exit status, and evidence/store effect; the suite asserts ALL of
+them, plus two negative controls: (a) runner invocation counters prove both
+twins were actually executed per case; (b) a mutation control deletes the
+sensitivity gate in a sandbox copy and asserts the perfect-mock run then
+reports qualified — i.e., the suite goes red when the gate is gone.
+
+perfect ⇒ qualified · spec-blind enumerator ⇒ budget_exceeded /
+declared_mismatch · defect-imitating declarations ⇒ declared_mismatch ·
+happy-path-only ⇒ missed_defect · over-strict ⇒ declared_mismatch ·
+malformed/oversize/deep JSON, surface-outside call, out-of-domain args ⇒
+malformed_plan · semantic renderer corruption ⇒ P1 property red · off-sweep
+or unsolvable-in-budget case ⇒ admission abort · hash mismatch ⇒
+precondition abort · runner protocol/overflow/signal ⇒ infra_fail abort ·
+partial subjects / one-trial ⇒ not qualified · store append failure ⇒
+fail-closed nonzero · transport empty/unextractable ⇒ malformed_plan.
 
 ## 8. Phases
 
-- **P1 generator + corpus** (`evals/va-eval-generator.js` + corpus JSON):
-  DSL + evaluator, tree-derived renderers + property test, twin emit +
-  domain-sweep validation + budget-existence check, envelope + leak scan,
-  `HARNESS_CONTRACT`. Suite: determinism, per-trial divergence, each
+- **P1 generator + corpus**: DSL + evaluator, clause-bijective renderers +
+  inversion property test, twins + admission (domain sweep, solver,
+  clean cross-check), derivation-independence invariant, envelope + leak
+  scan, `PLAN_CONTRACT`. Suite: determinism, per-trial divergence, every
   admission red case.
-- **P2 runner + grader** (`evals/va-eval-grader.js`): plan parsing under
-  caps, sandboxed twin execution, taxonomy fold. Suite: full deviant rows
-  that are grader-local.
+- **P2 runner + grader**: plan parsing under caps, sandboxed ordered
+  execution, value algebra, taxonomy fold. Suite: grader-local deviant rows
+  + both negative controls.
 - **P3 `engine-qualify.js verification_author`**: administration loop, both
-  transports, pinned hashes, evidence + `--emit-row` + `--version-source`.
-  Suite: end-to-end mock candidates through the real sandbox, transport
-  parity, precondition aborts, store fail-closed.
+  transports + local panel, pinned hashes, evidence + `--emit-row` +
+  `--version-source`. Suite: end-to-end mocks through the real sandbox,
+  transport parity, precondition/infra aborts, store fail-closed.
 - **P4 provider mode** (`QRP_PROMPT_MODE=va`): teaches imported
-  `HARNESS_CONTRACT` + honesty boundary (no defect-family enumeration;
+  `PLAN_CONTRACT` + honesty boundary (no defect-family enumeration;
   oracle-token scan; prompt hash recorded). Suite extension.
 - **P5 dogfood + release**: one real administration of the incumbent VA seat
   (GLM @ HTTP, sol backup), recorded honestly; CHANGELOG v2.34.17,
-  scripts-inventory, engine-onboarding docs, BACKLOG retirement; honesty
-  clause names the construct scope (test design, not test-code authoring)
-  and residuals (cross-administration structure memorization).
+  scripts-inventory, engine-onboarding docs, BACKLOG retirement (incl. the
+  G1-F11 format-token rename entry); honesty clause names construct scope
+  (declared test design, not test-code authoring) and residuals
+  (renderer-template familiarity, cross-administration memorization).
 
 P1 → P2 → P3 → P4 → P5.
 
@@ -159,11 +176,15 @@ qualification-review-provider; do bash hooks/tests/$t.test.sh; done` green
 ## 10. Out of scope
 
 /l6 routing changes; diversity enforcement; implementer/explorer suites;
-executable-test-code authoring (measured construct is declared test design);
-multi-file scale.
+executable-test-code authoring; multi-file scale; the broker format-token
+rename (BACKLOG).
 
 ## Review Loop History
 
-- Lineage: v2 plan STOPPED at G2 terminal (2026-08-18) — this file is a fresh
-  design under Board construct ruling (c); prior findings and dispositions:
-  `docs/plans/evidence/2026-08-18-verification-author-suite/`.
+- v3-G1 (2026-08-18, sol chair STOP + glm deep CONDITIONAL; 9 blocking, 3
+  non-blocking): all accepted; repairs are §2 (constant budget, solver
+  admission, three subjects, per-case isolation), §3 (value algebra,
+  clause-bijective rendering, domain-separated derivation, hash boundary),
+  §5 (complete taxonomy), §6 (transport statement unified), §7 (exact
+  acceptance mapping + negative controls). Envelope:
+  `evidence/2026-08-18-verification-author-suite/v3-g1-envelope.json`.

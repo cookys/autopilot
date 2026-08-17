@@ -1036,8 +1036,8 @@ cp "$BRAIN_ID" "$BRAIN_REL_ROOT/.claude/rel-identity.json"
 printf -- '- brain_seat_identity_file: .claude/rel-identity.json\n' > "$BRAIN_REL_ROOT/.claude/review-loop-config.md"
 _BRAIN_REL="$(cd "$TEST_TMP" && REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_REL_ROOT/.claude/review-loop-config.md" \
   ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" --field brain_seat 2>/dev/null)"
-assert_contains "$_BRAIN_REL" '"seat_class":"incumbent"' \
-  "relative pin resolves against the config project root, not caller cwd"
+assert_contains "$_BRAIN_REL" '"status":"no_record"' \
+  "relative pin resolves against the config project root, not caller cwd (pre-fix cwd resolution yields status_unavailable, so this pin is mutation-sensitive)"
 
 # incumbent with NO record: loud advisory annotation, never a block
 BS_ADV="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" 2>/dev/null)"

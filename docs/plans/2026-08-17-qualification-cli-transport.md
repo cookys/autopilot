@@ -166,3 +166,15 @@ recorded outcomes, not gates.
   list covered hash pinning (recomputed), identity↔record reconciliation,
   gating matrix, sidecar cleanup, CLI flag verification against installed
   harnesses, and mirror parity.
+- Fix-verification round 2 (autopilot:reviewer agent, 2026-08-17): all five
+  round-1 findings CONFIRMED-FIXED by independent re-derivation (pre-fix
+  worktree mutations, own settlement repro at 338 ms vs 9166 ms pre-fix, three
+  honesty-scan mutations all red, ladder leak re-probed from a foreign cwd).
+  One NEW MUST-FIX: the relative-pin resolver case asserted a substring the
+  pre-fix resolver also emits (mutation-blind — and this history briefly
+  claimed "three red-green cases" when one wasn't); closed by pinning
+  `"status":"no_record"`, which the pre-fix cwd resolution cannot produce
+  (it yields `status_unavailable`). Round-2 minors (200 ms exit-vs-timeout
+  race, prompt-hash regex extraction, undocumented template field) appended to
+  the BACKLOG hardening row. Reviewer's stated closure condition: the one-line
+  assertion + suite at 310 green ⇒ merge.

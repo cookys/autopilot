@@ -1,0 +1,449 @@
+#!/usr/bin/env node
+'use strict';
+
+// qualification-review-provider.test.js — unit suite for the trusted host-side
+// qualification provider adapter. Covers the HTTP-mode env contract, the CLI
+// transport mode (codex / claude stubs: argv shape, stdin prompt, sidecar/stdout
+// extraction, env passthrough, timeout tree-kill), the reviewer/brain prompt-mode
+// switch (role gating, anchor normalization on/off), and the brain-prompt honesty
+// scan against the generator's pinned ORACLE_ONLY_STRINGS projection.
+
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+// ORACLE_ONLY_STRINGS is deliberately not exported by the generator (its file
+// hash is triple-pinned; exporting for a test would force a re-pin). Extract the
+// pinned projection from the source text so this suite tracks the real list.
+const generatorSource = fs.readFileSync(
+  path.join(__dirname, '..', 'evals', 'brain-eval-generator.js'),
+  'utf8',
+);
+const oracleListMatch = generatorSource.match(
+  /ORACLE_ONLY_STRINGS = Object\.freeze\(\[(?<body>[\s\S]*?)\]\)/u,
+);
+assert.ok(oracleListMatch, 'generator still declares ORACLE_ONLY_STRINGS');
+const ORACLE_ONLY_STRINGS = [...oracleListMatch.groups.body.matchAll(/'([^']+)'/gu)]
+  .map((entry) => entry[1]);
+assert.ok(ORACLE_ONLY_STRINGS.length >= 15, 'oracle projection extraction is non-trivial');
+
+const PROVIDER = path.join(__dirname, 'qualification-review-provider.js');
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-qrp-test-'));
+let assertions = 0;
+
+function check(value, message) {
+  assertions += 1;
+  assert.ok(value, message);
+}
+
+function equal(actual, expected, message) {
+  assertions += 1;
+  assert.deepStrictEqual(actual, expected, message);
+}
+
+// ── stub CLI binaries ──────────────────────────────────────────────────────────
+// Each stub records {argv, env, stdin} into $STUB_CAPTURE, emits $STUB_OUTPUT
+// (codex → the --output-last-message sidecar; claude → stdout), exits $STUB_EXIT.
+
+const stubCodex = path.join(tempRoot, 'stub-codex');
+fs.writeFileSync(stubCodex, `#!/usr/bin/env node
+'use strict';
+const fs = require('fs');
+const stdin = fs.readFileSync(0, 'utf8');
+fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({
+  argv: process.argv.slice(2), env: process.env, stdin,
+}));
+if (process.env.STUB_SLEEP_MS) {
+  const until = Date.now() + Number(process.env.STUB_SLEEP_MS);
+  while (Date.now() < until) { /* spin so SIGKILL is the only exit */ }
+}
+const sidecarFlag = process.argv.indexOf('--output-last-message');
+if (sidecarFlag !== -1 && process.env.STUB_OUTPUT !== undefined) {
+  fs.writeFileSync(process.argv[sidecarFlag + 1], process.env.STUB_OUTPUT);
+}
+process.exit(Number(process.env.STUB_EXIT || 0));
+`, { mode: 0o755 });
+
+const stubClaude = path.join(tempRoot, 'stub-claude');
+fs.writeFileSync(stubClaude, `#!/usr/bin/env node
+'use strict';
+const fs = require('fs');
+const stdin = fs.readFileSync(0, 'utf8');
+fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({
+  argv: process.argv.slice(2), env: process.env, stdin,
+}));
+if (process.env.STUB_SLEEP_MS) {
+  const until = Date.now() + Number(process.env.STUB_SLEEP_MS);
+  while (Date.now() < until) { /* spin */ }
+}
+if (process.env.STUB_OUTPUT !== undefined) process.stdout.write(process.env.STUB_OUTPUT);
+process.exit(Number(process.env.STUB_EXIT || 0));
+`, { mode: 0o755 });
+
+// ── fixtures ───────────────────────────────────────────────────────────────────
+
+const REVIEWER_DIFF = [
+  'diff --git a/lib/mod.js b/lib/mod.js',
+  'index 1111111..2222222 100644',
+  '--- a/lib/mod.js',
+  '+++ b/lib/mod.js',
+  '@@ -1,4 +1,4 @@',
+  " const status = require('./status');",
+  '-function run(result) { if (!result.ok) throw new Error("bad"); return result; }',
+  '+function run(result) { return result; }',
+  ' module.exports = { run };',
+  '',
+].join('\n');
+// First added line lands at new-file line 2 (context line 1 precedes it).
+const EXPECTED_ANCHOR = { file: 'lib/mod.js', line: 2 };
+
+const REVIEWER_MODEL_OUTPUT = JSON.stringify({
+  verdict: 'fail',
+  findings: [{
+    rule_id: 'error-propagation',
+    severity: 'critical',
+    file: 'WRONG/path.js',
+    line: 999,
+    witness: {
+      protocol: 'behavioral-call-v1',
+      export_path: [],
+      args: [{ ok: false }],
+      environment: {},
+      expectation: { kind: 'throws' },
+    },
+  }],
+});
+
+const BRAIN_BUNDLE = JSON.stringify({
+  round_id: 3,
+  inherited_summary: { claims: [{ claim_id: 'claim_a', text: 'unit u1 closed' }] },
+  open_findings: ['finding_x'],
+  receipts: [{ receipt_id: 'receipt_r1', kind: 'test_run', summary: 'suite green' }],
+  artifacts_to_adjudicate: [],
+  blocked_state: null,
+  legal_actions: ['continue', 'verify_scoped', 'stop_and_ask'],
+  action_receipts: [],
+});
+
+const BRAIN_MODEL_OUTPUT = JSON.stringify({
+  round_id: 3,
+  verdict: 'affirm',
+  flags: [],
+  adjudications: [],
+  next_action: { type: 'verify_scoped', target: 'finding_x' },
+});
+
+function reviewerRequest(content = REVIEWER_DIFF) {
+  return {
+    schema_version: 1,
+    request_id: 'req-1',
+    role: 'reviewer',
+    payload: { format: 'unified_diff', content },
+  };
+}
+
+function brainRequest(content = BRAIN_BUNDLE) {
+  return {
+    schema_version: 1,
+    request_id: 'req-2',
+    role: 'owner',
+    payload: { format: 'unified_diff', content },
+  };
+}
+
+let captureCounter = 0;
+function runProvider({ env = {}, request, stubOutput, stubExit, stubSleepMs }) {
+  captureCounter += 1;
+  const capture = path.join(tempRoot, `capture-${captureCounter}.json`);
+  const child = spawnSync(process.execPath, [PROVIDER], {
+    input: `${JSON.stringify(request)}\n`,
+    encoding: 'utf8',
+    timeout: 30_000,
+    env: {
+      PATH: process.env.PATH,
+      HOME: tempRoot,
+      TMPDIR: tempRoot,
+      QRP_PROVIDER: 'fake-provider',
+      QRP_MODEL: 'fake-model-exact',
+      STUB_CAPTURE: capture,
+      ...(stubOutput !== undefined ? { STUB_OUTPUT: stubOutput } : {}),
+      ...(stubExit !== undefined ? { STUB_EXIT: String(stubExit) } : {}),
+      ...(stubSleepMs !== undefined ? { STUB_SLEEP_MS: String(stubSleepMs) } : {}),
+      ...env,
+    },
+  });
+  let captured = null;
+  if (fs.existsSync(capture)) {
+    try { captured = JSON.parse(fs.readFileSync(capture, 'utf8')); } catch { captured = null; }
+  }
+  return { child, captured };
+}
+
+function parseResponse(child) {
+  const parsed = JSON.parse(child.stdout);
+  const output = JSON.parse(parsed.output);
+  return { parsed, output };
+}
+
+// ── 1. HTTP-mode env contract is unchanged ─────────────────────────────────────
+{
+  const { child } = runProvider({ request: reviewerRequest() });
+  equal(child.status, 1, 'http mode without base url/token exits 1');
+  check(/QRP_BASE_URL/.test(child.stderr), 'http mode names the missing env family');
+}
+
+// ── 2. CLI transport usage gates ───────────────────────────────────────────────
+{
+  const { child } = runProvider({
+    env: { QRP_TRANSPORT: 'cli' },
+    request: reviewerRequest(),
+  });
+  equal(child.status, 1, 'cli transport without QRP_CLI_KIND exits 1');
+  check(/QRP_CLI_KIND/.test(child.stderr), 'cli transport names QRP_CLI_KIND');
+}
+{
+  const { child } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'gemini', QRP_CLI_BIN: stubCodex },
+    request: reviewerRequest(),
+  });
+  equal(child.status, 1, 'unknown QRP_CLI_KIND exits 1');
+}
+{
+  const { child } = runProvider({
+    env: { QRP_TRANSPORT: 'carrier-pigeon' },
+    request: reviewerRequest(),
+  });
+  equal(child.status, 1, 'unknown QRP_TRANSPORT exits 1');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_CLI_BIN: stubCodex,
+      QRP_PROVIDER: '',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'cli transport still requires QRP_PROVIDER');
+}
+
+// ── 3. codex CLI reviewer happy path ───────────────────────────────────────────
+{
+  const { child, captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_CLI_BIN: stubCodex,
+      CODEX_HOME: '/fake/codex-home',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 0, `codex reviewer run succeeds (stderr: ${child.stderr})`);
+  check(captured, 'codex stub captured the invocation');
+  equal(captured.argv.slice(0, 6), [
+    'exec', '--model', 'fake-model-exact',
+    '--sandbox', 'read-only', '--skip-git-repo-check',
+  ], 'codex argv opens with the proven exec/read-only/skip-git shape');
+  const sidecarIndex = captured.argv.indexOf('--output-last-message');
+  check(sidecarIndex !== -1 && captured.argv[sidecarIndex + 1], 'codex gets a sidecar path');
+  check(!captured.argv.includes('-c'), 'no effort override when QRP_CLI_EFFORT is unset');
+  check(captured.stdin.includes('precision code reviewer'),
+    'reviewer system prompt travels on codex stdin');
+  check(captured.stdin.includes('behavioral-call-v1'),
+    'reviewer prompt carries the witness recipes');
+  check(captured.stdin.includes('+++ b/lib/mod.js'), 'the case diff travels on stdin');
+  equal(captured.env.CODEX_HOME, '/fake/codex-home',
+    'credential env (CODEX_HOME) passes through to the CLI child');
+  const { parsed, output } = parseResponse(child);
+  equal(parsed.schema_version, 1, 'response schema_version');
+  equal(parsed.provider, 'fake-provider', 'provider echo');
+  equal(parsed.model, 'fake-model-exact', 'model echo');
+  equal(output.findings[0].file, EXPECTED_ANCHOR.file, 'reviewer anchor file normalized');
+  equal(output.findings[0].line, EXPECTED_ANCHOR.line, 'reviewer anchor line normalized');
+}
+
+// ── 4. codex effort override ───────────────────────────────────────────────────
+{
+  const { child, captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_CLI_BIN: stubCodex,
+      QRP_CLI_EFFORT: 'max',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 0, 'codex effort run succeeds');
+  const cIndex = captured.argv.indexOf('-c');
+  check(cIndex !== -1, 'effort override adds -c');
+  equal(captured.argv[cIndex + 1], 'model_reasoning_effort="max"',
+    'effort override uses the proven quoted TOML form');
+}
+
+// ── 5. claude CLI reviewer happy path ──────────────────────────────────────────
+{
+  const { child, captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      CLAUDE_CONFIG_DIR: '/fake/exam-config',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 0, `claude reviewer run succeeds (stderr: ${child.stderr})`);
+  equal(captured.argv, [
+    '-p', '--model', 'fake-model-exact',
+    '--setting-sources', 'project', '--strict-mcp-config', '--tools', '',
+  ], 'claude argv is the probed no-tools headless shape');
+  check(captured.stdin.includes('+++ b/lib/mod.js'), 'diff travels on claude stdin');
+  equal(captured.env.CLAUDE_CONFIG_DIR, '/fake/exam-config',
+    'credential env (CLAUDE_CONFIG_DIR) passes through');
+  const { output } = parseResponse(child);
+  equal(output.findings[0].line, EXPECTED_ANCHOR.line, 'claude path also normalizes anchors');
+}
+
+// ── 6. claude output wrapped in markdown fences still extracts ────────────────
+{
+  const { child } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(),
+    stubOutput: '```json\n' + REVIEWER_MODEL_OUTPUT + '\n```\n',
+  });
+  equal(child.status, 0, 'fenced CLI output is recovered');
+  const { output } = parseResponse(child);
+  equal(output.verdict, 'fail', 'fenced output round-trips');
+}
+
+// ── 7. brain prompt mode over claude CLI ───────────────────────────────────────
+{
+  const { child, captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'brain',
+    },
+    request: brainRequest(),
+    stubOutput: BRAIN_MODEL_OUTPUT,
+  });
+  equal(child.status, 0, `brain round over claude CLI succeeds (stderr: ${child.stderr})`);
+  check(captured.stdin.includes('"round_id":3') || captured.stdin.includes('"round_id": 3'),
+    'round bundle travels on stdin');
+  check(!captured.stdin.includes('behavioral-call-v1'),
+    'brain prompt does not carry reviewer witness recipes');
+  check(captured.stdin.includes('affirm') && captured.stdin.includes('flag'),
+    'brain prompt teaches the verdict enum');
+  check(captured.stdin.includes('next_action'), 'brain prompt teaches the action field');
+  for (const token of ORACLE_ONLY_STRINGS) {
+    check(!captured.stdin.includes(token),
+      `brain prompt leaks no oracle-only vocabulary (${token})`);
+  }
+  const { output } = parseResponse(child);
+  equal(output, JSON.parse(BRAIN_MODEL_OUTPUT),
+    'brain output passes through without anchor normalization');
+}
+
+// ── 8. brain prompt mode over http keeps the env contract ─────────────────────
+{
+  const { child } = runProvider({
+    env: { QRP_PROMPT_MODE: 'brain' },
+    request: brainRequest(),
+  });
+  equal(child.status, 1, 'brain over http still requires the http env family');
+}
+
+// ── 9. prompt-mode role gates ──────────────────────────────────────────────────
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'brain',
+    },
+    request: reviewerRequest(),
+    stubOutput: BRAIN_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'brain mode refuses a reviewer-role request');
+}
+{
+  const { child } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
+    request: brainRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'reviewer mode refuses an owner-role request');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'brain',
+    },
+    request: brainRequest('this is not a round bundle'),
+    stubOutput: BRAIN_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'brain mode refuses non-JSON round content');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'brain',
+    },
+    request: brainRequest(JSON.stringify({ not_a_round: true })),
+    stubOutput: BRAIN_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'brain mode refuses a bundle without round_id');
+}
+{
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_PROMPT_MODE: 'sonnet-dreams',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'unknown QRP_PROMPT_MODE exits 1');
+}
+
+// ── 10. CLI failure modes fail closed ─────────────────────────────────────────
+{
+  const { child } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+    stubExit: 3,
+  });
+  equal(child.status, 1, 'nonzero CLI exit fails the case');
+}
+{
+  const { child } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'codex', QRP_CLI_BIN: stubCodex },
+    request: reviewerRequest(),
+    stubOutput: '',
+  });
+  equal(child.status, 1, 'empty codex sidecar fails the case');
+}
+{
+  const { child } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(),
+    stubOutput: 'no json here at all',
+  });
+  equal(child.status, 1, 'unparseable CLI output fails the case');
+}
+{
+  const started = Date.now();
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_TIMEOUT_MS: '400',
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+    stubSleepMs: 15_000,
+  });
+  equal(child.status, 1, 'CLI child exceeding QRP_TIMEOUT_MS fails the case');
+  check(/timed out/i.test(child.stderr), 'timeout is named in the error');
+  check(Date.now() - started < 10_000, 'timeout kill happens well before the stub sleep ends');
+}
+
+fs.rmSync(tempRoot, { recursive: true, force: true });
+process.stdout.write(`${assertions} assertions passed\n`);

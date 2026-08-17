@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-17 | [qualification-cli-transport](2026-08-17-qualification-cli-transport/README.md) | v2.34.15 | `feat/v2.34.15-qualification-cli-transport` |
 
 ## 已完成 (Completed)
 

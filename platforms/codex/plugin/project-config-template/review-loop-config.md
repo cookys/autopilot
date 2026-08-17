@@ -282,3 +282,19 @@ v1 report-only — never a hard gate. **Skill transport**: pass `--skill-mode of
 requires a `scripts/bench-engine-capability.sh` bench to have recorded native support, else it fails
 closed. See [`references/hetero-dispatch.md`](../references/hetero-dispatch.md) § "Skill transport is now
 a MEASURED capability".
+
+## Brain-seat identity pin (v2.34.15+, optional)
+
+```
+- brain_seat_identity_file: .claude/brain-seat-identity.json
+```
+
+Pins the incumbent depth-0 brain identity (the exact 12-field capability-identity
+object; `identity_hash = sha256(canonicalJson(file))`) for the P7 governed-path
+rail and the `status readiness` brain-seat line. Scope rule: the pin is honored
+ONLY from an explicit `REVIEW_LOOP_CONFIG_OVERRIDE` or the caller-cwd project
+config — a config the ladder pulled from the plugin repo or template never seats
+a brain for a consumer. A relative path resolves against the config's project
+root (`dirname(config)/..`), never the caller's cwd. Standing comes exclusively
+from a passed `engine-qualify.sh brain` administration (or a loud per-invocation
+override); see `skills/engine-onboarding/references/role-and-harness-governance.md`.

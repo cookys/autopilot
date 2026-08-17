@@ -76,6 +76,15 @@ evaluator applies (rule/file/line/severity + canonical witness equality).
   not spent this session (out of the qualification-cli-transport project scope) —
   spike-clean is the full-run admission bar, tracked in BACKLOG.
 
+## 2026-08-17 (post-v2.34.15) — gpt-5.6-sol full run: QUALIFIED
+
+`sol-codex-qualify/` — the full 2-trial run over the codex CLI transport at max
+effort: **42/42 both trials, 0 false positives, 0 critical false passes,
+capability score 1.0**, wall 744 s. Scorecard event 141, evidence event 5
+(state `qualified`), expires 2026-09-16. The roster's first qualified reviewer
+row, and the first earned over a CLI harness transport. Identity is
+operator-asserted with the pre-run probe recorded in that directory's README.
+
 ## 2026-08-17 (v2.34.15) — GLM leg re-run on the shipped rail
 
 `glm53-qualify/` — the planned GLM-5.2 re-attempt ran as **glm-5.3's first full

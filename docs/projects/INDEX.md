@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-18 | [verification-author-suite](2026-08-18-verification-author-suite/README.md) | v2.34.17 | `feat/v2.34.17-verification-author-suite` |
 
 ## 已完成 (Completed)
 

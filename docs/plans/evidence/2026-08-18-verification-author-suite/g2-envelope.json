@@ -1,0 +1,373 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "va-suite-20260818",
+  "logical_plan_id": "verification-author-suite-2026-08-18",
+  "session_id": "va-suite-g2b",
+  "session_key": "4a7e0b4146aac6072d79f6904c1912fdc5afab98086ba2c3b9a632eb0a6b3ffd",
+  "generation": 2,
+  "verdict": "STOP",
+  "semantic_verdict": "STOP",
+  "terminal": true,
+  "policy_reason": "generation_cap_with_accepted_blockers",
+  "rubric_sha256": "e839ca17fce4d5620ac69f0491da2684882561de95ebfa9d1fc332ae419e4eb9",
+  "manifest_sha256": "0857af192b72d73a185991bada602cb6b25a0dd80a5b05cc3c161d9f46700bf5",
+  "plan_sha256": "dd42104b8bb6bf1c70e395036fc2c9ac0acf2b538f11cb19b489333f5ff4bb1d",
+  "growth_ratio": {
+    "numerator": 12491,
+    "denominator": 8646
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "chair",
+      "target_id": "chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "b5edadb92b054a0cd73b287b79fbc8b9ec534a2c809c6cf890e53f37108f9d08"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ccd598289e6c070b5df59e4efdc1548ca2bb9abf2b0b937346788858fe06097b",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-A9QbCM/stdout",
+          "digest": "ccd598289e6c070b5df59e4efdc1548ca2bb9abf2b0b937346788858fe06097b"
+        },
+        "receipt_digest": "a9b283c82881dcdd538de03fae338a526798331e74d259d24fe586d2c21e692c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "deep",
+      "target_id": "deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3",
+          "operation": "plan-review",
+          "request_digest": "5504512004f71dd1516b6386acfe2a8d0d40d02e5153e21d4a17be55cfd961e4"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "1de1279f9702615dd938c9673d4b28d3d025a045ae461b8debae04531658958c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-GtbV74",
+          "digest": "1de1279f9702615dd938c9673d4b28d3d025a045ae461b8debae04531658958c"
+        },
+        "receipt_digest": "85ddced0a600cc94060f42f88b980aa8f24ee86855e5f265a1580a4dbbd5716b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "chair",
+      "target_id": "chair",
+      "family": "legacy-gpt-5.6-sol",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "deep",
+      "target_id": "deep",
+      "family": "legacy-glm-5.3",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "VA1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Construct grading in §2 and qualification subjects in §3",
+      "claim": "The proposed score measures input coverage rather than requirements-grounded executable harness authoring, allowing a candidate to pass without reading the rendered specification.",
+      "evidence": "The plan makes candidate assertion style irrelevant and awards defect_red whenever any recorded invocation violates the host oracle. It specifies neither candidate-authored expected outcomes nor an invocation budget. A generic harness can therefore enumerate common boundary, error, ordering, precision, and repeated-call inputs, exit successfully, and receive sensitivity credit solely from the host oracle.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2, especially Instrumented execution and Grading is trace re-derivation; §§3 and 7.",
+      "repair": "Freeze a harness contract that binds each credited invocation to a candidate-authored expected outcome before execution. Require both a candidate-detected mismatch and a host-confirmed oracle violation for defect_red, retain candidate success plus host conformance for clean_green, impose a justified credited-call budget, and add a specification-blind exhaustive caller that must fail. Otherwise narrow the stated construct to stimulus generation rather than harness authoring.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "35e5371d2441a2be96457f968bbb4fca7fa681a3b7377d7c65e81e556c43bf35",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Formal-contract case admission and renderer validation in §§2 and 8",
+      "claim": "The case-admission checks do not guarantee that the visible prose, oracle, clean twin, and defect twin describe the same behavior, so a competent author can fail an invalid or misleading case.",
+      "evidence": "Literal-value presence does not detect reversed inequalities, missing negation, incorrect field relationships, or literals attached to the wrong rule. Twin validation covers only a probe sweep, while the typed domains are not declared finite or exhaustively traversed; a clean twin can therefore violate the oracle outside the sweep, and a defect twin can contain additional off-sweep defects.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2 Rendered spec and Twin validation; §8 P1 acceptance.",
+      "repair": "Define a data schema whose renderers are semantically validated through a normalized round trip or an independently frozen rule truth table, with mutations for reversed operators, negation, and field reassociation. Make formal domains finite and exhaustively validate them, or use correctness-by-construction twin templates with an explicit proof obligation covering all admitted inputs; add off-sweep clean and defect counterexamples to P1 acceptance.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "2b493c6b64ff522bf60347c3ce7900dfd5655dc883102d2af7c24de81ad861a6",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Runner outcome state machine and subject folding in §§2, 3, and 7",
+      "claim": "Assertion failure, candidate crash, and infrastructure failure have no deterministic and complete classification.",
+      "evidence": "clean_green requires process success, defect_red does not require any candidate verdict, assertion style is declared irrelevant, and crashes are classified as infra-fail. A normal assertion failure and an unintended JavaScript exception can both produce the same nonzero exit after a valid trace, yet the plan provides no structured completion protocol or total transition table for that state or for signals, malformed trace tails, and post-violation crashes.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2 Grading is trace re-derivation; §3 robustness; §7 over-strict, forged-red, and crash rows.",
+      "repair": "Freeze a total outcome table over sandbox launch, module load, trace validity, candidate completion, exit or signal, output limits, and host-oracle result. Use a structured host-owned assertion or completion protocol if candidate detection is credited, and specify fail-closed treatment for every unmatched state. Add tests for legitimate assertion failure, generic exception before and after a violation, signal termination, and truncated trace.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "99345dde6380fc6fc9641bcf55c334ed95e4264101d80cbd633c5fcdb82feafe",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Trace authenticity and no-execution enforcement in §§2 and 5",
+      "claim": "File descriptor 3 is not a host-only channel when the trusted proxy and arbitrary candidate JavaScript execute in the same process, so the candidate can forge behavioral evidence without executing the module.",
+      "evidence": "The sandbox explicitly exposes the trace descriptor number through the environment, and the candidate CommonJS process can use Node filesystem APIs to write, close, replay, or truncate that descriptor. The plan promises that direct writes are detected or ignored but defines no authentication or process trust boundary; host parsing alone cannot distinguish a valid-looking candidate frame from a proxy frame.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2 Instrumented execution; §5 environment allowlist; §8 P2 trace-tamper acceptance.",
+      "repair": "Move module execution and trace construction into a separate trusted process that does not expose its trace-write endpoint or implementation source to the candidate. Give the candidate only a constrained invocation proxy, and have the trusted parent record actual arguments and results. Add valid-frame injection, descriptor close, replay, reordering, proxy bypass, and direct-module-load attacks that must fail closed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "bdc1025db21a2966e211d370ce53c4bf28533161c87f17251a4649502ae782a6",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Requirements-only authoring boundary across local and broker transports",
+      "claim": "The requirements-only guarantee is defined only for payload bytes and does not prevent the local panel command from reading hidden generator, corpus, or twin files during authoring.",
+      "evidence": "The candidate-visible envelope is declared to be exactly the broker content bytes, but P3 also administers through a local panel command. The only stated sandbox is the later case-by-twin harness execution sandbox; no clean working directory, filesystem isolation, environment allowlist, or canary check is specified for the local authoring process.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §4 candidate-visible envelope; §5 harness sandbox; §6 transport parity; §8 P3.",
+      "repair": "Define and policy-hash an authoring-stage visibility boundary for every transport. Run local authoring commands in an empty requirements-only environment with no repository, generator, corpus, twin, host-home, or prior-case access, and add inaccessible canaries. Test information-access parity between local and broker paths rather than only comparing their final evidence rows.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "6792ab8fbda0e566ac3ad655ae7580813cb4a2ebe12e07dc6b59fe75c1e883e9",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Canonical contract representation, hashing, and execution-salt derivation",
+      "claim": "The byte-canonical administration cannot be implemented from the stated representation because JSON cannot contain an executable function and the per-execution salt has no deterministic derivation.",
+      "evidence": "The formal contract is described as canonical JSON containing an executable expected(args) function. RFC 8259 JSON has no function value. The plan also requires same-seed byte identity while re-rendering identifiers and layout per execution, but it does not bind that salt to the administration seed and stable execution coordinates.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §§2, 4, and 8 P1.",
+      "repair": "Freeze a versioned data-only oracle schema or deterministic oracle DSL with a pinned interpreter hash. Define canonical encoding for every value and domain-separate all entropy from the administration seed using stable trial, case, twin, and execution coordinates. Specify exactly which generated bytes are hashed and add same-seed tests covering contracts, rendered specs, salted module bytes, envelopes, and manifests.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "9c28f3f8801b545c476f4a5a34dfcfd87988aa3352bb20102763c7aa3e27d829",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Shared witness-runner resource containment in §5",
+      "claim": "The stated sandbox does not bound several host-exhaustion paths available to arbitrary Node.js code.",
+      "evidence": "A wall timeout and V8 heap flag do not cap child-process count, native or Buffer memory, file descriptors, or aggregate CPU. Read-only access to Node and system binaries permits process spawning, and a PID namespace without a PID or cgroup limit can still exhaust host resources before the timeout. The named residual mentions only indirect CPU and descriptor enforcement and omits process-count and non-V8-memory exposure.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §5 Sandbox posture.",
+      "repair": "Strengthen the canonical shared witness-runner policy, rather than creating a VA-specific sandbox, with proven OS-level limits for processes, total memory, CPU, and file descriptors. Policy-hash those controls and add fork-bomb, child-process heap, native-buffer allocation, descriptor-exhaustion, and CPU-burn tests that demonstrate bounded host impact and complete cleanup.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "64a098e47bd017d3639aea94cde94ed4fa7e5d74d80993e091682161b16afb71",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Runtime source-reading countermeasure and residual-risk statement",
+      "claim": "Runtime source-reading remains a passing strategy, not merely a harmless residual, because a source-guided harness can create a genuine violating invocation without deriving the test from requirements.",
+      "evidence": "The implementation file is read-only mounted and its path is given to the candidate process. The static-fingerprint deviant covers only a fake red with no call. A harness can instead inspect the implementation, identify a branch or mutant pattern, invoke the corresponding input, and receive a host-verified violating trace. Identifier and layout salt do not hide control flow or semantic constants.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2 Why source-reading no longer pays; §5 module mount; §7 static-fingerprint row.",
+      "repair": "Remove implementation-source visibility by exposing only a trusted callable proxy, or treat source-guided invocation as a disqualifying unresolved threat and do not claim requirements-grounded qualification. Add a source-guided candidate that produces a real violating call and require it to fail, alongside blind enumeration and renderer-template gaming candidates.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "102906ab3d1afdb6fbe3ab799a7bec77545e291ce6e680996e9c2d3ef67a6e42",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Deviant-mock matrix and phase acceptance criteria in §§7 through 9",
+      "claim": "The acceptance suite can pass while the principal construct, authenticity, leakage, and containment failures remain present.",
+      "evidence": "The matrix omits a specification-blind exhaustive caller, a source-guided real invocation, semantic renderer corruptions that preserve all literals, off-sweep twin defects, local-panel filesystem leakage, valid trace-frame forgery, proxy bypass, and child-process or native-memory exhaustion. The generic trace-tamper row and one probe-detected bad twin do not prove these red lines.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §§7, 8, and 9.",
+      "repair": "Add independently specified negative fixtures for every omitted attack and require each to demonstrate the intended red line before its production repair is enabled. Include mutation checks proving that disabling each admission, trace-authenticity, authoring-isolation, and resource-limit control makes the corresponding test fail; retain those receipts in the phase acceptance record.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "f4528019163fc7c0ada58cef4f8f686a76e2382e6db001c072f81cc9ac6e632e",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§2 grading definitions (clean_green) and §7 deviant matrix interpretation",
+      "claim": "The clean_green criterion requires the harness process to 'report success' while §2 also states harness exit codes are 'never trusted', leaving the precise signal for 'reports success' undefined.",
+      "evidence": "§2 defines clean_green as 'harness process reports success AND the trace contains zero violations AND >=1 invocation', and in the same paragraph says 'Harness exit codes are never trusted'. The over-strict deviant row (§7) depends on this exact definition: clean twins must be graded green only when no violating trace exists, so an implementer must know whether a nonzero exit on a clean twin with zero violations counts as success or as infra/specificity failure.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2 bullet 'Grading is trace re-derivation' and §7 row 'over-strict (fails everything)'.",
+      "repair": "State explicitly in §2 that 'reports success' means exit code 0 (or a defined success signal) and that a nonzero exit with zero violations and >=1 invocation on a clean twin is a specificity failure, not an infra-fail; keep the fail-closed paths (load error, timeout, oversize, empty trace) enumerated as the only infra-fail conditions.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "deep",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_nonblocking",
+      "fingerprint": "2adcfa1878bdb1614289eb223eda4586889970063f6c32572bc25458edbcfadd",
+      "disposition_rationale": "legacy compatibility translation"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "2adcfa1878bdb1614289eb223eda4586889970063f6c32572bc25458edbcfadd",
+      "rubric_id": "VA2",
+      "affected_surface": "§2 grading definitions (clean_green) and §7 deviant matrix interpretation",
+      "claim": "The clean_green criterion requires the harness process to 'report success' while §2 also states harness exit codes are 'never trusted', leaving the precise signal for 'reports success' undefined.",
+      "evidence_reference": "PLAN_UNDER_REVIEW §2 bullet 'Grading is trace re-derivation' and §7 row 'over-strict (fails everything)'.",
+      "disposition": "accepted_nonblocking"
+    }
+  ],
+  "accepted_blocker_count": 9,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-17T17:34:46.464Z"
+}

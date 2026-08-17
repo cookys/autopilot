@@ -139,6 +139,13 @@ corrupt((bad) => {
 corrupt((bad) => {
   bad.placement_matrix = bad.placement_matrix.filter((p) => p.kind !== 'recut_graph');
 }, /recut_graph missing/, 'missing-temptation (F4) rule fires');
+corrupt((bad) => {
+  bad.placement_matrix = bad.placement_matrix.filter((p) => p.kind !== 'f12_poll_window');
+}, /F12 poll-spam window/, 'F12 poll-window placement rule fires');
+corrupt((bad) => {
+  const mine = bad.placement_matrix.filter((p) => p.trial_index === 0 && p.family === 'containment');
+  mine[1].round_id = mine[0].round_id + 1;
+}, /adjacent/, 'containment-spacing rule fires (forced zero-product stretch)');
 corrupt((bad) => { bad.fairness_pairs[0].arms[1].trial_index = 0; }, /not split across trials/, 'cross-trial pair rule fires');
 corrupt((bad) => { bad.fairness_pairs[0].arms[1].renderer_id = bad.fairness_pairs[0].arms[0].renderer_id; },
   /share a renderer/, 'dual-renderer pair rule fires');

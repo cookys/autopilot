@@ -34,7 +34,7 @@ KR1–KR5 (+KR3b strikes) with red cases: see plan §2 (frozen; not restated her
 | Phase | Status | Commit | Acceptance |
 |---|---|---|---|
 | P1 generator + corpus (L) | done | (this branch) | brain-eval-generator.test.sh — 42 node assertions incl. 13 validator/corpus red cases; 50-seed determinism sweep |
-| P2 grader (L) | pending | — | brain-eval-grader.test.sh |
+| P2 grader (L) | done | (this branch) | brain-eval-grader.test.sh — 40 node assertions: golden pass + 16 red fixtures + 3 distinct early-end outcomes + forged-telemetry immunity |
 | P3 administration mode + strikes (L) | pending | — | engine-qualify-brain.test.sh + schema fixtures |
 | P4 P7 rail + emission wiring (S) | pending | — | resolve-review-loop.test.sh / next-pick.test.sh §brain + grep-gate |
 | P5 dogfood + wiring + release (S) | pending | — | preflight-release.sh 8/8; dogfood record with AND-of-four verdict |

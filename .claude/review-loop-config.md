@@ -56,6 +56,28 @@
 - qc_panel_aggregation: union-on-verified-critical
 - provider_readiness_receipt_ttl_seconds: 300
 - provider_readiness_fallback_family_constraint: different
+<!-- brain_seat_identity_file (2026-08-17, qualification-cli-transport): pinned
+     incumbent depth-0 identity for the P7 rail + readiness three-state. The file
+     is EXACTLY the 12-field capability-identity object (identity_hash =
+     sha256(canonicalJson(file))). Derivations (recorded this time — the earlier
+     roster run left its fingerprint recipes unrecorded):
+     - prompt_config_hash = sha256 of BRAIN_SYSTEM_PROMPT in
+       scripts/qualification-review-provider.js (exam-facing prompt surface;
+       same convention the GLM reviewer run used for its SYSTEM_PROMPT).
+     - harness_version = engine-qualify-<first8 sha256(scripts/engine-qualify.js)>.
+     - semantic_fingerprint = sha256(canonicalJson({kind:
+       'brain-seat-semantic-surface-v1', model:'claude-fable-5',
+       transport:'claude-cli-headless-no-tools', setting_sources:'project'})).
+     - containment_fingerprint = sha256(canonicalJson({kind:
+       'brain-seat-containment-surface-v1', exam_transport:
+       'qualification-case-broker-networkless-bwrap', cli_posture:
+       'claude -p --strict-mcp-config --tools-empty', credential_isolation:
+       'dedicated-exam-config-dir-credentials-only'})).
+     Effort 'default': claude -p exposes no effort control; the seat runs the
+     model default. Re-pin prompt_config_hash + harness_version when the brain
+     prompt or engine-qualify.js changes AND the seat re-sits — the identity file
+     records the SEATED deployment, not the repo tip. -->
+- brain_seat_identity_file: .claude/brain-seat-identity.json
 
 > **Previous Gemini slot (temporarily suspended 2026-08-05).** The normal
 > `Gemini 3.6 Flash (High)` QC seat is restored only after quota recovery and a

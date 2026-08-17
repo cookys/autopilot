@@ -1,0 +1,14 @@
+{
+  "identity": "claude-fable-5",
+  "model_alias": "Claude-Fable-5",
+  "model_version": "claude-fable-5",
+  "family": "anthropic",
+  "runner": "claude-cli",
+  "runner_version": "2.1.233",
+  "harness_version": "engine-qualify-e9eb3890",
+  "effort": "default",
+  "prompt_config_hash": "af99c67377a5978fd94b0d77ae8f374434bca03c2aba1458324f5f4611d9e417",
+  "semantic_fingerprint": "ec8ee7faf237c66ad45264bd7f626ab865383e52cec3f1dc32a26acde6b67c52",
+  "containment_fingerprint": "f580461fa1c4e9ecc05f3ecb959fd43f4303b38ad29b8bbf3dc8ea2499c85123",
+  "identity_resolved": true
+}

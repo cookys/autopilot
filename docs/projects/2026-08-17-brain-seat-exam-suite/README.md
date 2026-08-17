@@ -4,7 +4,8 @@
 > · Rubric + 2-generation hetero review log therein (G1 13+2, G2 11+3 adjudicated)
 > · Evidence: [`2026-08-17-brain-seat-exam-suite/`](../../plans/evidence/2026-08-17-brain-seat-exam-suite/)
 > (survey + fable/sol perspectives + synthesis)
-> · Frame: research-to-ship Phase 5 (execute per dev-flow) · Branch: `feat/brain-seat-exam-suite`
+> · Frame: research-to-ship Phase 5 (execute per dev-flow) · Mode: l3 inline (Board
+> 2026-08-17) · Branch: `feat/brain-seat-exam-suite`
 > · Target version: v2.34.14 (PATCH — scripts/schema/evals, no new skill/agent)
 
 ## OKR
@@ -32,7 +33,7 @@ KR1–KR5 (+KR3b strikes) with red cases: see plan §2 (frozen; not restated her
 
 | Phase | Status | Commit | Acceptance |
 |---|---|---|---|
-| P1 generator + corpus (L) | pending | — | brain-eval-generator.test.sh |
+| P1 generator + corpus (L) | done | (this branch) | brain-eval-generator.test.sh — 42 node assertions incl. 13 validator/corpus red cases; 50-seed determinism sweep |
 | P2 grader (L) | pending | — | brain-eval-grader.test.sh |
 | P3 administration mode + strikes (L) | pending | — | engine-qualify-brain.test.sh + schema fixtures |
 | P4 P7 rail + emission wiring (S) | pending | — | resolve-review-loop.test.sh / next-pick.test.sh §brain + grep-gate |

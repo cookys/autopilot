@@ -48,6 +48,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### Brain-seat exam suite（勤勞×公平×收斂 三科標準考場）
+- **Trigger**: Before seating any engine in the brain seat（depth-0 autonomous loop / auto-pick consumer）via the standing-exam path — KR6 兩路制下 brain 席目前沒有 standing 考試,每次入座都得燒一張 explicit override。
+- **Context**: v2.34.13 out-of-scope 承諾（plan §7「follow-up plan; BACKLOG row at close」）。考三科,每科對應 sol-pathology 失敗形狀:勤勞（長序列摻回歸、量第幾輪開始漏——F5/F10）、公平（跨家族產物同尺——F7）、收斂（產品增量/驗證支出比,拿 `check-stall-fuse.js` 的記帳當量具——F2/F4）。耐力不考:已決議做進無狀態輪迴圈架構,不靠選模型。t14 per-turn verification gate 條目是勤勞科的機制雛形。
+- **Effort**: L（hetero survey → plan → loop review → dev-flow 管線）
+- **Source**: `docs/plans/2026-08-17-autonomous-brain-integration.md` §7;`docs/plans/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md`;HANDOFF 2026-08-17。
+
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
 - **Trigger**: 四層 redesign 的 Policy 層設計定案,且目標 skill 有 eval ON/OFF 證據（成績單前置）
 - **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。

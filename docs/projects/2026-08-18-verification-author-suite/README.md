@@ -48,8 +48,13 @@ per-module skill rows configured for `scripts/`/`evals/` — N/A recorded.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Plan + hetero review | ⛔ STOPPED at G2 terminal | G1: 9 blockers, all accepted + repaired (trace re-derivation design). G2 (after a growth-gate compression + legal zero-consumption state surgery): chair STOP + deep CONDITIONAL, 9 NEW blockers — three fatal mechanics proven (same-process trace forgery, spec-blind exhaustive caller, unserializable contract). Generation cap spent ⇒ NOT approved; v3 needs Board authorization. Distillation: `docs/plans/evidence/2026-08-18-verification-author-suite/v3-design-requirements.md` |
-| P1–P5 implementation | not started | blocked on Board construct ruling (black-box vs white-box vs hybrid) |
+| Plan v2 lineage | ⛔ STOPPED at G2 terminal | G1: 9 blockers, all accepted + repaired (trace re-derivation design). G2 (after a growth-gate compression + legal zero-consumption state surgery): chair STOP + deep CONDITIONAL, 9 NEW blockers — three fatal mechanics proven (same-process trace forgery, spec-blind exhaustive caller, unserializable contract). Generation cap spent ⇒ NOT approved; v3 needs Board authorization. Distillation: `docs/plans/evidence/2026-08-18-verification-author-suite/v3-design-requirements.md` |
+| Plan v3 lineage (Board ruling c) | ✅ FROZEN | v3-G1 9 blockers repaired in G2 revision; v3-G2 terminal left 8 specification-precision blockers, depth-0-adjudicated ACCEPTED + folded (zero construct findings = freeze basis, brain precedent) |
+| P1 generator + corpus | in progress | |
+| P2 runner + grader | pending | |
+| P3 engine-qualify subcommand | pending | |
+| P4 provider mode | pending | |
+| P5 dogfood + release | pending | |
 
 ## Decision log
 

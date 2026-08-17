@@ -1,6 +1,6 @@
 # Verification-author qualification suite v3 (2026-08-18)
 
-> 狀態: G2 revision (v3-G1 CONDITIONAL, 9 blockers, all repaired here).
+> 狀態: ✅ FROZEN — v3-G2 terminal reached; the 8 residual blockers (all specification-precision class, zero construct/mechanism defects) were depth-0-adjudicated ACCEPTED and folded below (brain-suite freeze precedent).
 > Lineage: v2 STOPPED at its terminal; Board ruled construct (c). Prior
 > findings: `evidence/2026-08-18-verification-author-suite/`.
 
@@ -35,14 +35,17 @@ generator; provider prompt and grader both import it — G1-F7):
   author can pass.
 - **Subjects (three — G1-F3 accepted: specificity is implied by declared
   accuracy and is removed as a subject)**:
-  - `declared_accuracy`: every step's `expected` equals the contract oracle's
-    `expected(call)` under the value algebra (§3).
+  - `declared_accuracy`: three-way agreement per step — the declared `expected`
+    equals the contract oracle's `expected(call)` AND the candidate's FULL
+    sequence is also executed against the clean twin with every observation
+    matching the declaration (G2-F0: calls outside the solver vectors get real
+    clean-side verification, not just an oracle table lookup).
   - `sensitivity`: executing the sequence in order against the defect twin
     yields ≥1 host-observed deviation from the declared expectation.
   - `robustness`: zero malformed/oversize/budget/protocol violations.
   Qualification = AND, 2 trials, per-trial seeds (distinct corpus instances).
-  Clean-twin execution remains an ADMISSION cross-check (clean must match the
-  oracle on the solver vectors), not a graded subject.
+  (Admission additionally cross-checks clean-vs-oracle on the solver vectors
+  before any candidate is involved.)
 - **Per-case isolation** (G1-F8): each case is one fresh stateless provider
   invocation (existing broker semantics, now normative); no cross-case
   context, no feedback — all grading is offline after the full
@@ -73,8 +76,9 @@ generator; provider prompt and grader both import it — G1-F7):
 - **Derivation independence** (G1-F5): renderer assignment, mutation
   selection, and value derivation use DOMAIN-SEPARATED seed labels
   (`renderer:*`, `mutation:*`, `values:*`); P1 pins an independence
-  invariant (changing the mutation label chain leaves renderer assignment
-  byte-identical).
+  invariant at the PAYLOAD level (G2-F3): changing only the mutation label
+  chain leaves the entire candidate-visible envelope bytes identical — not
+  merely the renderer assignment.
 - Defect families (6): boundary-off-by-one, error-path-swallow,
   default-fallback-widening, state-residue, ordering-contract,
   precision-contract. ≥2 cases/family/trial, interleaved.
@@ -95,9 +99,10 @@ generated twins, inside the existing policy-hashed bwrap family
 (networkless, RO binds, tmpfs, fresh sandbox per case×twin, 60 s wall, 1 MB
 output). Threat model is "generator bug", not adversarial candidate code.
 Plan parsing caps: ≤256 KB, JSON depth ≤16, steps ≤ budget, args
-domain-typed. The local panel authoring path uses the same
-no-corpus/no-generator mount posture the reviewer local panel has (P3
-acceptance lists the exact mounts).
+domain-typed. The local panel authoring path binds EXACTLY { node runtime, panel script,
+spec-envelope file } read-only — no corpus, generator, twins, repo, or host
+home on ANY host-local provider path (G2-F4); P3 acceptance asserts the
+literal bwrap argument list against that allowlist.
 
 ## 5. Outcome taxonomy (G1-F4 — complete and host-observable)
 
@@ -106,11 +111,16 @@ budget_exceeded | infra_fail`. Mapping is exhaustive: runner crash, signal,
 timeout, output overflow, empty/malformed runner protocol, sandbox-launch
 failure → `infra_fail`; since twins passed admission, any `infra_fail` is a
 generator/runner defect ⇒ the ADMINISTRATION aborts with no verdict (never
-graded against the candidate). Authoring-transport failures (local/HTTP/CLI
-error, empty or unextractable output) → the case is `malformed_plan`
-(fail-closed against the candidate, matching every existing role transport).
-Anything unclassified ⇒ `infra_fail` abort (catch-all clause). Candidate
-exit codes do not exist in this design.
+graded against the candidate). Authoring-transport failures split by origin (G2-F1): a delivered provider
+response that is empty/unextractable/schema-invalid → `malformed_plan`
+(candidate-attributed); broker/launcher/request-delivery/host-side failures →
+`transport_fail`, which ABORTS the administration with no verdict (never
+graded against the candidate; re-sit is a fresh administration).
+Anything unclassified ⇒ `infra_fail` abort (catch-all). Total classification
+precedence when signals overlap (G2-F2): abort classes (`infra_fail`,
+`transport_fail`) > `malformed_plan` > `budget_exceeded` >
+`declared_mismatch` > `missed_defect` > `pass` — one deterministic outcome
+per case. Candidate exit codes do not exist in this design.
 
 ## 6. Chassis
 
@@ -124,12 +134,16 @@ broker+stub with an explicit allowed-field list.
 
 ## 7. Deviant + acceptance matrix (G1-F9 — exact mapping)
 
-Every row names its fixture, expected per-case taxonomy value, subject
-outcome, exit status, and evidence/store effect; the suite asserts ALL of
-them, plus two negative controls: (a) runner invocation counters prove both
-twins were actually executed per case; (b) a mutation control deletes the
-sensitivity gate in a sandbox copy and asserts the perfect-mock run then
-reports qualified — i.e., the suite goes red when the gate is gone.
+The suite implements the matrix TABLE-DRIVEN: one fixture per row, each row
+pinning ONE deterministic taxonomy value (no either/or rows — G2-F5), the
+subject fold, the process exit status, and the evidence/store effect;
+timeout, sandbox-launch failure, host-vs-provider transport faults, vacuous
+plans, and unsupported-value expectations each get an explicit fixture. Two
+negative controls: (a) runner invocation counters prove both twins actually
+executed per case; (b) the mutation control deletes the sensitivity gate in
+a sandbox copy and asserts the HAPPY-PATH-ONLY deviant (missed_defect under
+the real gate) then reports qualified — a discriminating flip, unlike the
+perfect mock which qualifies either way (G2-F6).
 
 perfect ⇒ qualified · spec-blind enumerator ⇒ budget_exceeded /
 declared_mismatch · defect-imitating declarations ⇒ declared_mismatch ·
@@ -169,9 +183,7 @@ P1 → P2 → P3 → P4 → P5.
 
 ## 9. Verification contract
 
-`for t in va-eval-generator va-eval-grader engine-qualify-va
-qualification-review-provider; do bash hooks/tests/$t.test.sh; done` green
-(authored red-first) + preflight 8/8 + existing suites unchanged-green.
+`for t in va-eval-generator va-eval-grader engine-qualify-va qualification-review-provider; do bash hooks/tests/$t.test.sh || exit 1; done` — the `|| exit 1` is normative so an early failure can never be masked by a later green (G2-F7) — plus preflight 8/8 and existing suites unchanged-green. Suites authored red-first.
 
 ## 10. Out of scope
 
@@ -181,6 +193,16 @@ rename (BACKLOG).
 
 ## Review Loop History
 
+- v3-G2 terminal (2026-08-18, sol chair STOP + glm deep CONDITIONAL; 8
+  blocking + 2 non-blocking): generation cap reached. Depth-0 adjudication
+  (brain-suite freeze precedent — semantic authority returns to depth-0 at
+  the terminal): ALL 8 accepted as specification-precision repairs and
+  folded into §2 (clean-twin execution of the candidate sequence), §3
+  (payload-level independence invariant), §4 (literal mount allowlist), §5
+  (transport_fail abort class + total precedence), §7 (one-deterministic-
+  outcome rows + discriminating mutation control), §9 (exit-surviving loop).
+  Zero construct/mechanism findings remained — the freeze basis. Envelope:
+  `evidence/2026-08-18-verification-author-suite/v3-g2-envelope.json`.
 - v3-G1 (2026-08-18, sol chair STOP + glm deep CONDITIONAL; 9 blocking, 3
   non-blocking): all accepted; repairs are §2 (constant budget, solver
   admission, three subjects, per-case isolation), §3 (value algebra,

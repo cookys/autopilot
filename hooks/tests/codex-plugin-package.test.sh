@@ -178,6 +178,12 @@ for (const rel of [
   'evals/owner-capability-evidence-corpus.json',
   'evals/owner-eval-generator.js',
   'evals/reviewer-eval-generator.js',
+  'evals/brain-eval-generator.js',
+  'evals/brain-eval-grader.js',
+  'evals/brain-capability-evidence-corpus.json',
+  'evals/va-eval-generator.js',
+  'evals/va-eval-grader.js',
+  'evals/va-capability-evidence-corpus.json',
   'docs/plans/2026-06-04-distill-consolidate.md',
   'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
   'docs/plans/2026-06-26-trust-tiered-review-policy.md',
@@ -344,6 +350,17 @@ cp "$SYNC_SANDBOX/evals/owner-capability-evidence-corpus.json" \
 printf "'use strict';\n" > "$SYNC_SANDBOX/evals/owner-eval-generator.js"
 cp "$SYNC_SANDBOX/evals/owner-eval-generator.js" \
   "$SYNC_SANDBOX/platforms/codex/plugin/evals/owner-eval-generator.js"
+# brain + va eval assets joined the sync list in v2.34.17 (the packaged
+# engine-qualify.js requires them at load time — they were the missing half
+# of the mirror).
+for extra in brain-eval-generator.js brain-eval-grader.js va-eval-generator.js va-eval-grader.js; do
+  printf "'use strict';\n" > "$SYNC_SANDBOX/evals/$extra"
+  cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
+done
+for extra in brain-capability-evidence-corpus.json va-capability-evidence-corpus.json; do
+  printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/$extra"
+  cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
+done
 mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example" \
   "$SYNC_SANDBOX/platforms/codex/skill-adapters"
 printf -- '---\nname: example\ndescription: sandbox skill\n---\n# Example\n' > "$SYNC_SANDBOX/skills/example/SKILL.md"

@@ -80,6 +80,12 @@ SUPPORT_FILES=(
   "evals/capability-evidence-corpus.json"
   "evals/owner-capability-evidence-corpus.json"
   "evals/owner-eval-generator.js"
+  "evals/brain-eval-generator.js"
+  "evals/brain-eval-grader.js"
+  "evals/brain-capability-evidence-corpus.json"
+  "evals/va-eval-generator.js"
+  "evals/va-eval-grader.js"
+  "evals/va-capability-evidence-corpus.json"
   "evals/reviewer-eval-generator.js"
 )
 

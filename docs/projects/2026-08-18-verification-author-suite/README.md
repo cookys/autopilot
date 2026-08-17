@@ -53,6 +53,14 @@ per-module skill rows configured for `scripts/`/`evals/` — N/A recorded.
 
 ## Decision log
 
+- 2026-08-18: **Board ruled construct option (c)** — declared expectations
+  (candidate pre-declares each call's expected outcome; host scores against
+  the contract). v3 pushes it further: the submission becomes pure DATA (an
+  ordered declared test plan) and no candidate code executes at all —
+  eliminating the trace-forgery, harness-sandbox, and white-box problems by
+  construction. v3 plan: `docs/plans/2026-08-18-verification-author-suite-v3.md`,
+  fresh review lineage.
+
 - 2026-08-18: PATCH version (v2.34.17) per the brain-suite precedent (a new
   exam is scripts/evals, not a new user-invocable skill/agent).
 - 2026-08-18: plan review runs on the non-Anthropic rails (sol codex + glm

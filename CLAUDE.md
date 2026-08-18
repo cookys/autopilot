@@ -70,7 +70,7 @@ Rule of thumb: **if it parses JSON or could run under agy, write it in Node; oth
 
 ## Skill evolution rules
 
-- **童子軍規則 (boy-scout)**: any touch of a skill trims it toward contract-card shape (trigger/inputs/decision-table/engine-pointers; judgment prose → references/). The north-star gate (prose↓ engine↑) watches per release.
+- **童子軍規則 (boy-scout)**: any touch of a skill trims it toward contract-card shape — canonical definition + review checklist: [`references/skill-contract-card.md`](references/skill-contract-card.md). The north-star gate (prose↓ engine↑, incl. the per-skill ratchet) watches per release.
 - **成績單前置 (scorecard-first)**: rewriting or deleting any skill requires prior eval ON/OFF evidence (evals/orchestration harness); an unevidenced rewrite = unevidenced trust.
 
 ## Severity vocabulary

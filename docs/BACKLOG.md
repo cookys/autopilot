@@ -49,11 +49,23 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ## Active entries
 
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
-- **Status**: CLAIMED（dev-flow leg）by [docs/plans/2026-08-18-dev-flow-contract-card.md](plans/2026-08-18-dev-flow-contract-card.md)（2026-08-18,in progress）— trigger 稽核:條件一（Policy 層定案,v2.34.11 + ADR-0001）成立;條件二（eval ON/OFF 證據）由該案 P3/P5 產出。quality-pipeline leg 留在本 row,等 dev-flow 儀器驗證後跟進。
+- **Status**: dev-flow leg RESOLVED-NO-SWAP（2026-08-18,[plan](plans/2026-08-18-dev-flow-contract-card.md)）— 儀器（evals/skill-onoff）、規格（references/skill-contract-card.md）、P4 baseline 機制已出貨;primary block 63 runs 機械裁決 **INSTRUMENT-INVALID（V2 vacuous,1/5 家族承重）**,card 不出貨（見下方「dev-flow card re-attempt」row）。quality-pipeline leg 留本 row,前置改為:skill-onoff 儀器修復並通過 V2。
 - **Trigger**: 四層 redesign 的 Policy 層設計定案,且目標 skill 有 eval ON/OFF 證據（成績單前置）
 - **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。
 - **Effort**: L
 - **Source**: G2 review finding（MiniMax R8, 2026-08-16）;strategy thread 2026-08-16
+
+### dev-flow card re-attempt — instrument repair first (V2-vacuous verdict 2026-08-18)
+- **Trigger**: A new evidence campaign budget is approved AND the skill-onoff task set is repaired so ≥4 of 5 families are load-bearing (per the frozen V2 rule). Repair directions from the data: harder tasks where sonnet's base rate drops (F1/F5 ceilinged: OFF 6/9, 5/6); an observable for F6/F4 that survives headless (or multi-turn runs); consider a weaker-model primary block.
+- **Context**: The 499-line card draft is digest-frozen at `evals/skill-onoff/packs/dev-flow-card/` and was NON-INFERIOR on the only load-bearing family (F3 branch discipline: FULL 9/9, CARD 9/9, OFF 0/9 — total discrimination, perfectly preserved). Verdict INSTRUMENT-INVALID forbids a card verdict either way; budget hard-cap (111) blocked an in-project re-run (spent 86). Evidence: `docs/plans/evidence/2026-08-18-dev-flow-contract-card/p6-adjudication.md`. Card edits invalidate CARD-arm rows (frozen rules §4).
+- **Effort**: M（task-set repair + 63-run re-campaign）
+- **Source**: dev-flow-contract-card P6 adjudication（2026-08-18）.
+
+### dev-flow "MANDATORY" rules with zero observed compliance (F6 quality gate, F4 ledger)
+- **Trigger**: Next dev-flow body revision, or when designing any enforcement for the quality-gate-before-commit rule; also a candidate negative-control case for the "every gate needs a negative control" row.
+- **Context**: Measured 2026-08-18 (63-run primary block): with the FULL 713-line dev-flow loaded and invoked at depth 0, sonnet complied 0/9 with "invoke autopilot:quality-pipeline before committing" and 0/3 with the ongoing-maintenance ledger row. The prose says non-negotiable; observed single-turn headless compliance is 0%. These rules are documented-only in effect — either they need a mechanical enforcer (hook/TaskCreate-class) or the claim in the prose should be scoped honestly. Same family as CLAUDE.md's "a script existing is not evidence it is running", applied to skill prose.
+- **Effort**: M
+- **Source**: dev-flow-contract-card primary block（`evidence/…/primary-sonnet-results.jsonl`）.
 
 ### Scaffold-tier effect A/B measurement（four-layer D6 promised row — repaired 2026-08-18）
 - **Trigger**: Before any skill or routing policy CONSUMES scaffold tiers（T0/T1/T2）as an outcome-quality claim（成績單前置 applies）;or before the next capability-tier expansion.

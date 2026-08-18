@@ -37,13 +37,13 @@
 |---|---|---|
 | G1/G2 | Bounded hetero plan review (rubric-frozen, max 2 generations) | G1 done (CONDITIONAL; 10/10 adjudicated, folded `8fc1ce1f`, 1.198×); G2 dispatched |
 | P0 | Prologue: tier-A/B BACKLOG row repair + contract-card row annotation (no-bump) | done `142508ee` |
-| P1 | `references/skill-contract-card.md` + preflight check-8 per-skill map | pending |
-| P2 | Card draft fixture (branch-only; digest-frozen; frontmatter byte-identical) | pending |
-| P3 | `evals/skill-onoff/` harness + d1-d7 + 3 tests + rules freeze + Phase-0 smoke | pending |
-| P4 | Profiles baseline re-establishment (擴大來源宇宙; red-case test; 798 literals) | pending |
-| P5 | Primary block 63 runs (sonnet) + advisory 21 (haiku), resume-by-cell | pending |
-| P6 | Adjudication: mechanical verdict + Board read + evidence report | pending |
-| P7 | Conditional ship: single swap commit (SKILL.md + profiles regen + mirror resync) | pending |
+| P1 | `references/skill-contract-card.md` + preflight check-8 per-skill map | done `435cdc27` (red/green proven; review SHIP-AS-IS from raw log) |
+| P2 | Card draft fixture (branch-only; digest-frozen; frontmatter byte-identical) | done `7bb7349e` (713→499 lines; all pins verbatim) |
+| P3 | `evals/skill-onoff/` harness + d1-d7 + 3 tests + Phase-0 smoke → rules freeze | done `a6795ea1` (3 suites green; smoke: dev-flow naturally routed, 19s; RULES LOCKED) |
+| P4 | Profiles baseline re-establishment (擴大來源宇宙; 3-class dispositions; red-cases) | done `bb3ee9cf` (7-case red/green; existing suites green; 798 literals ride P7) |
+| P5 | Primary block 63 runs (sonnet) + advisory 21 (haiku), resume-by-cell | primary DONE 63/63 (0 infra, 0 excluded); advisory running |
+| P6 | Adjudication: mechanical verdict + Board read + evidence report | verdict **INSTRUMENT-INVALID (V2 vacuous, 1/5 load-bearing)** — `p6-adjudication.md`; V1 pass; F3 total discrimination (9/9/0) with card non-inferior on it; F6/F4 zero compliance even in FULL |
+| P7 | Conditional ship: single swap commit (SKILL.md + profiles regen + mirror resync) | **NOT TAKEN** (pre-registered non-SHIP branch): card stays frozen fixture; 2 BACKLOG rows filed (re-attempt + zero-compliance finding) |
 | P8 | Closeout: finish-flow L-5, preflight-release, --update-baseline, INDEX/archive | pending |
 
 ## Scope completeness audit (L-1.5 record)

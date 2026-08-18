@@ -9,10 +9,11 @@
  * narrative-steerable; this gate makes no LLM calls and cannot be argued with.
  *
  * Deny classes (allow-by-default outside them):
- *   E1 protected-ref force-push        — deliberate defense-in-depth OVERLAP with the
- *                                        default-on branch-protection.js (an opt-in and a
- *                                        default-on hook covering the same accident class
- *                                        is redundancy, not conflict)
+ *   E1 protected-ref force-push        — deliberate defense-in-depth OVERLAP with
+ *                                        branch-protection.js (two hooks covering the same
+ *                                        accident class is redundancy, not conflict). BOTH
+ *                                        are opt-in: neither protects anything until
+ *                                        enabled (oracle: check-hook-inventory.js)
  *   E2 recursive rm outside sanctioned roots — absolute/home paths not under cwd,
  *                                        $TMPDIR, /tmp, or configured sanctioned_roots
  *   E3 raw destructive SQL             — DROP TABLE / TRUNCATE in a shell command

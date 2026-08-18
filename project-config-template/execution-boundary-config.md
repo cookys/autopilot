@@ -19,8 +19,9 @@ allow_sql: false
 ## Semantics
 
 - `protected_refs` — regex alternation of branch names whose force-push is denied (rule E1).
-  Deliberately overlaps the default-on `branch-protection.js` hook: an opt-in and a
-  default-on hook covering the same accident class is defense-in-depth, not a conflict.
+  Deliberately overlaps the `branch-protection.js` hook: two hooks covering the same accident
+  class is defense-in-depth, not a conflict. Both are **opt-in** (default-off) — neither
+  protects anything until enabled; `node scripts/check-hook-inventory.js` prints the truth.
 - `sanctioned_roots` — comma-separated absolute path prefixes where recursive `rm` is
   permitted, IN ADDITION to the always-sanctioned cwd, `/tmp`, and `$TMPDIR` (rule E2).
 - `allow_sql` — `true` disables the raw `DROP TABLE`/`TRUNCATE` denial (rule E3) for repos

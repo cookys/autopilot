@@ -22,6 +22,15 @@ cp -r "$REPO_ROOT/skills/dev-flow" "$SANDBOX/skills/dev-flow"
 cp -r "$REPO_ROOT/docs/projects/_archive/2026-07-26-capability-adaptive-profiles" \
       "$SANDBOX/docs/projects/_archive/2026-07-26-capability-adaptive-profiles"
 
+# The sandbox inherits the real tree's dispositions, and the real tree's sources are short
+# exactly those baseline rules. Synthetic cases must be ADDED to that list, never replace it —
+# replacing it would strand every real shortfall and turn this suite red on an honest repo.
+BASE_DISPOSITIONS=$(node -e '
+  const fs=require("fs"),path=require("path");
+  const f=path.join(process.argv[1],"profiles/guided-baseline-dispositions.json");
+  console.log(JSON.stringify(JSON.parse(fs.readFileSync(f,"utf8")).dispositions));
+' "$SANDBOX")
+
 check() { # → echoes exit code; output to $TEST_TMP/check-out.txt
   set +e
   node "$REPO_ROOT/scripts/build-profile-payload.js" catalog --check --repo "$SANDBOX" \
@@ -56,20 +65,20 @@ plant() {
     console.log(sha256(rule.trim().replace(/\s+/g," ")));
   ' "$SANDBOX" "$REPO_ROOT" "$FAKE_RULE"
 }
-set_dispositions() { # $1 = JSON array for dispositions
+set_dispositions() { # $1 = JSON array of SYNTHETIC dispositions, appended to the real ones
   node -e '
     const fs=require("fs"),path=require("path"),crypto=require("crypto");
     const sandbox=process.argv[1];
     const f=path.join(sandbox,"profiles/guided-baseline-dispositions.json");
     const doc=JSON.parse(fs.readFileSync(f,"utf8"));
-    doc.dispositions=JSON.parse(process.argv[2]);
+    doc.dispositions=JSON.parse(process.argv[3]).concat(JSON.parse(process.argv[2]));
     fs.writeFileSync(f,JSON.stringify(doc,null,2)+"\n");
     const sha=x=>crypto.createHash("sha256").update(fs.readFileSync(x)).digest("hex");
     const catPath=path.join(sandbox,"profiles/profile-catalog.json");
     const cat=JSON.parse(fs.readFileSync(catPath,"utf8"));
     cat.guided_dispositions_sha256=sha(f);
     fs.writeFileSync(catPath,JSON.stringify(cat,null,2)+"\n");
-  ' "$SANDBOX" "$1"
+  ' "$SANDBOX" "$1" "$BASE_DISPOSITIONS"
 }
 
 echo "=== red: baseline rule missing, no disposition ==="

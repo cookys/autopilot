@@ -1,5 +1,55 @@
 # Changelog
 
+## v2.34.19 — dev-flow 的 quality-gate 規則自我矛盾:0/9 遵循率的根因是文件,不是缺 enforcer
+
+**Headline**: v2.34.18 量到的獨立發現(dev-flow MANDATORY 規則 headless depth-0 遵循 0%)裁決完畢。
+think-tank 五席 panel 在分析中找到真正的根因:body 自相矛盾——`SKILL.md:133` 要求無條件 invoke
+`autopilot:quality-pipeline` 並稱 non-negotiable,但編號步驟(`:241` S-2、`:275` Fix-4)在**動作發生
+的那一步**擺著更便宜的合法替代品「per project config, or: lint + test」。照步驟走的模型是步驟合規、
+§133 違規——0/9 不能推論「MANDATORY prose 無約束力」,只能推論「這條規則自廢」。裁決 C-shape:規則
+搬回動作發生處、主張按 size 誠實化、enforcement 狀態記為 `documented-only`,**不建 hook**。同一份
+資料裡的 F3(branch discipline,指令長在編號第 1 步)是 FULL 9/9 · OFF 0/9——同文件同模型同批 runs
+的對照,指出的是文件架構問題而非服從性問題。
+
+### Changed
+- `skills/dev-flow/SKILL.md` — "Quality Gate Rule" 段落由獨立主張降為指標(淨 0 行,713 不變):
+  canonical 陳述回到編號步驟,並按 size 誠實化 — S/Fix 是 project-config gate(預設 lint + test),
+  L/H 在 merge 邊界經 finish-flow L-5.2 / H-9.2 跑 `autopilot:quality-pipeline`。移除
+  "This is non-negotiable"(該主張的實測遵循率為 0/9)。
+- `skills/ceo-agent/SKILL.md` — anti-pattern 列攜帶的同一主張同步修正(550 不變)。
+- `references/four-layer-design.md` — 新增 § Skill-layer rules with no enforcer:S1(quality gate)
+  / S2(Fix ledger)兩列標 `documented-only` 並附實測數字。這是該文件自己開宗明義的規則
+  (「a rule without a named enforcer is prose」)首次套用到 skill body 上。
+- **同一句假話的全部四個站點**(pre-merge review 抓出後兩個——原本只修了前兩個,而 CHANGELOG 已宣稱
+  修好,本身就是一次「宣稱與事實不符」):`references/four-layer-design.md` K2 + Execution-boundary map、
+  `project-config-template/execution-boundary-config.md`(**user-facing**:consuming repo 照抄會以為
+  force-push 保護預設開著)、`hooks/exec-boundary.js` header 註解。四處都曾稱 `hooks/branch-protection.js`
+  為 **default-on**;`check-hook-inventory.js` oracle 判它 **opt-in**(exec-boundary 亦然)。一份講
+  enforcer 的表宣稱某 enforcer 在跑而它其實關著,正是本 repo「腳本存在不等於它在跑」的同族缺陷。
+- `skills/dev-flow/SKILL.md:515-516`(pre-merge review 抓出)——「invoke finish-flow **for the same
+  effect**」是假的:finish-flow 的 Fix 尺寸 F.1 跑 `quality-pipeline --size S`,比 step 4 的
+  project-config gate **更嚴**。這是同一個矛盾的另一半,不修的話規則只是被搬家而非消除。§133 的
+  size→gate 索引同步補上 F.1 這條可選路徑。
+- `profiles/guided-baseline-dispositions.json` — **首次有內容**(5 筆):4 筆 `rewritten`、1 筆
+  `removed`。`removed` 那筆記的是「non-negotiable」主張被**撤回**——把撤回登記成改寫等於漂白,而這本
+  帳的存在目的就是讓撤回發得出聲音。連帶 `profiles/{rule-inventory,rule-migration,profile-catalog}.json`
+  重釘雜湊(segment 行段經覆核未變、兩支 SKILL.md 行數中性)。
+- `hooks/tests/profile-guided-dispositions.test.sh` — `set_dispositions` 原本整包覆蓋 dispositions,
+  會把樹上真實的條目全部沖掉(套件因此在誠實的 repo 上變紅);改為附加。五個 red case 經注入變異覆核
+  仍會紅(4/5 mutant killed;第 5 個是既有的空洞紅案,已進 BACKLOG)。
+- `docs/BACKLOG.md` — zero-compliance row 收斂為 F4-only(F6 leg 結案);新增 outcome-shaped
+  opt-in enforcer row(取代被否決的 invocation 檢查);card re-attempt row 補記舊 F6 marker 失效
+  與 FULL pack 已與 live skill 分岔。
+- `evals/skill-onoff/README.md` — 標註 `packs/dev-flow-full/` 自本版起是**歷史**凍結(記錄當時被量的
+  body),不得回同步;下一輪 campaign 三臂重凍。
+
+### Evidence
+- `docs/plans/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md` — panel 全文、
+  共識/分歧、三條碰撞洞見(指令放置的對照實驗;機械化 F6 會用下游 campaign 有效性支付;0% 的是
+  process 主張而其 outcome 在 OFF 臂已 5/6)、裁決與未做事項。
+- F4(ledger,0/3)**未依此資料處置**:n=3 且 fixture repo 完全沒有 `docs/` 樹,模型得憑空建目錄而非
+  append 一行——併入儀器修復重測。
+
 ## v2.34.18 — Skill ON/OFF instrument + contract-card spec; the card itself was evidence-gated and did NOT ship
 
 **Headline**: 北極星序列第三步(contract-card 改寫)開跑,而成績單前置真的把關了:新的

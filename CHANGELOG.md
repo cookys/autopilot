@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.34.22 — harness 衛生三件:每次派工都白燒 8 秒、併發假紅、零呼叫者的 reaper
+
+**Headline**: 三個累積的小缺陷,共同點是**都在暗處持續收稅**。最貴的一個在生產派工路徑上:
+codex transport 每次正常結束都要走一遍 `/proc`,fork 約 5000 次,實測 7.4–8.2 秒。
+
+### Changed
+- `scripts/lib/dispatch-author-codex-transport.sh` — `codex_transport_scan_fd_holders()` 由
+  「每個 PID fork 一次 `stat`、每個 fd fork 一次 `readlink`」改為單一 Node 走訪。
+  **實測 8000ms → 80ms(約 95×)**;`dispatch-author-codex-transport.test.sh` 由 **318s → 52s**
+  (204 assertions 不變)。語意逐條保留:跳過 pid 0/1 與掃描者自身(`$$` 顯式傳入——漏掉它
+  掃描者會把自己報成 holder)、僅自身 uid、跳過 zombie、匹配 Linux `path (deleted)` 形式
+  (`orphan_deleted_fd_holder` 契約)。**順帶修掉一個正確性 bug**:舊碼用 `awk '{print $3}'`
+  讀 `/proc/<pid>/stat` 判 zombie,但 comm 欄含空格或括號時欄位會位移,可能把活著的 holder
+  誤判成 zombie 而跳過——那是 containment miss,故改為從最後一個 `)` 之後解析。
+  紅綠驗證:活 holder 抓得到、死 holder 不再回報、unlink 後仍持有 fd 的 holder 抓得到。
+- `hooks/tests/run.sh` — `codex-plugin-package` 與 `dev-setup` 移入序列名單。前者有 14 次
+  非 `--check` 的 sync 呼叫,會**重生 repo 內的 live codex mirror**,而後者正在斷言同一棵樹裡的
+  檔案;8 路並發下兩者對撞。2026-08-18 實測:並發皆紅、串行皆綠。這不只是 flake ——
+  **部分為雜訊的紅字會讓人不再讀它**,11 個真紅因此被埋了一天。
+- `scripts/dev-update.sh` — 接上 `dispatch-status.js --reap --days 7`。該 reaper 早就存在、
+  被 `lib/prune-tmp-residue.sh` 註解指名為此事的負責人,卻是**零呼叫者**:2026-08-18 已累積
+  249 份 manifest、橫跨兩週。刻意接在 dev-update 而非每次派工:reaper 在「確定死鎖 + marker +
+  鎖已釋放」時**也會刪 failure-kept worktree**,而那正是 `prune_tmp_residue` 明文拒碰的類別,
+  不該放在熱路徑上。Advisory,永不使更新失敗。
+
 ## v2.34.21 — hetero 委託的四條路徑,兩條原本是瞎的
 
 **Headline**: 委託出去的 {plan / impl / verify-author / qc} 四條路徑裡,只有 impl 與 qc 會在啟動時

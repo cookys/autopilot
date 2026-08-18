@@ -207,32 +207,45 @@ codex_transport_scan_fd_holders() {
   local stdout_path="$1"
   local stderr_path="$2"
   local sidecar_path="$3"
-  local my_uid pid owner fd_path target
-  my_uid="$(id -u)"
-
-  for proc in /proc/[0-9]*; do
-    pid="${proc#/proc/}"
-    case "$pid" in ''|*[!0-9]*|0|1) continue ;; esac
-    [ "$pid" = "$$" ] && continue
-    # Own-uid only; unreadable /proc entries (other users) are skipped.
-    owner="$(stat -c '%u' "$proc" 2>/dev/null || true)"
-    [ "$owner" = "$my_uid" ] || continue
-    # Skip zombies — they hold no fds and are not "live" for incomplete-tree.
-    codex_transport_pid_is_live "$pid" || continue
-    for fd_path in "$proc"/fd/*; do
-      # readlink fails with EACCES/ENOENT for some entries; ignore those.
-      target="$(readlink "$fd_path" 2>/dev/null || true)"
-      [ -n "$target" ] || continue
-      case "$target" in
-        "$stdout_path"|"${stdout_path} (deleted)"|\
-        "$stderr_path"|"${stderr_path} (deleted)"|\
-        "$sidecar_path"|"${sidecar_path} (deleted)")
-          printf '%s\n' "$pid"
-          break
-          ;;
-      esac
-    done
-  done | sort -u
+  # Single-process /proc walk. The previous shell loop forked stat(1) once per PID and
+  # readlink(1) once per fd — ~5000 forks, measured 7.4-8.2s on a 543-process host — and it
+  # runs on the NORMAL-exit path of essentially every codex dispatch, so it dominated both
+  # production dispatch latency and the 318s test file. Cost is O(host process count), so it
+  # got worse under a parallel test pool. Semantics are preserved one-for-one:
+  #   · skip pid 0, 1 and the scanning shell ($$, passed explicitly — dropping it would let
+  #     the scanner report ITSELF as a holder, since it owns the capture fds)
+  #   · own-uid only (explicit uid compare, as before — not merely "readdir succeeded")
+  #   · skip zombies (they hold no fds and are not live for incomplete-tree)
+  #   · match the Linux "path (deleted)" readlink form (orphan_deleted_fd_holder contract)
+  #   · one pid per line, deduplicated, lexicographic like the previous `sort -u`
+  # Zombie detection reads /proc/<pid>/stat AFTER the last ')' rather than by whitespace
+  # field: a comm containing a space or paren shifted the old `awk '{print $3}'` onto the
+  # wrong field, which could misread a live holder as a zombie and skip it — a containment
+  # miss, so it is fixed here rather than faithfully reproduced.
+  node -e '
+    const fs = require("fs");
+    const [self, ...paths] = process.argv.slice(1);
+    const targets = new Set(paths.filter(Boolean).flatMap((p) => [p, `${p} (deleted)`]));
+    const uid = process.getuid();
+    const hits = new Set();
+    for (const pid of fs.readdirSync("/proc")) {
+      if (!/^[0-9]+$/u.test(pid) || pid === "0" || pid === "1" || pid === self) continue;
+      try {
+        if (fs.statSync(`/proc/${pid}`).uid !== uid) continue;
+        const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+        const after = stat.slice(stat.lastIndexOf(")") + 1).trim();
+        if (after.startsWith("Z")) continue;
+      } catch { continue; }
+      let fds;
+      try { fds = fs.readdirSync(`/proc/${pid}/fd`); } catch { continue; }
+      for (const fd of fds) {
+        let link;
+        try { link = fs.readlinkSync(`/proc/${pid}/fd/${fd}`); } catch { continue; }
+        if (targets.has(link)) { hits.add(pid); break; }
+      }
+    }
+    process.stdout.write([...hits].sort().map((p) => `${p}\n`).join(""));
+  ' "$$" "$stdout_path" "$stderr_path" "$sidecar_path"
 }
 
 # Reap remaining members of the worker tree within a fixed cleanup budget (seconds).

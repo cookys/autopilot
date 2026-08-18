@@ -21,7 +21,7 @@ enforcer is prose, and prose is not governance (the owner-kernel lesson,
 | # | Rule | Enforcer | Survey basis |
 |---|---|---|---|
 | K1 | A review payload carries obligations, diff, and receipts — never the implementer's narrative about them | `scripts/check-blind-evidence.sh`, wired in `dispatch-review.sh` transport assembly | framing bias: 97.2%→3.6% detection under "secure" narrative |
-| K2 | Destructive commands are denied at the execution boundary by non-LLM code | `hooks/exec-boundary.js` (opt-in, PreToolUse Bash); protected-ref force-push deliberately covered by BOTH exec-boundary and the default-on `hooks/branch-protection.js` (defense-in-depth) | Replit lesson: "the freeze lived only in the instructions" |
+| K2 | Destructive commands are denied at the execution boundary by non-LLM code | `hooks/exec-boundary.js` (opt-in, PreToolUse Bash); protected-ref force-push deliberately covered by BOTH exec-boundary and `hooks/branch-protection.js` (defense-in-depth — but both are opt-in per `hooks/opt-in-manifest.json`; neither runs until enabled, oracle: `check-hook-inventory.js`) | Replit lesson: "the freeze lived only in the instructions" |
 | K3 | High-risk diffs require holdout verification the implementer could not see at authoring time | `scripts/check-holdout-coverage.sh` in the quality-pipeline gate list; instruments: `probe-mutation.js`, `verify-strength.js` | SpecBench: visible-gate gaming grows ~27pp per 10x LOC |
 | K4 | Evidence binds to artifacts (commit/diff/receipt), or it is treated as false | `references/evidence-contract.md` clause; `lifecycle-residue-receipt.js` pattern | inaccurate self-reporting = 22.6% of misalignment episodes |
 | P1 | Scaffold weight = f(engine qualification tier), fail-closed to T2 | `scripts/resolve-scaffold-tier.js` + prepend in `dispatch-hetero.sh` (definitions: [`scaffold-tiers.md`](scaffold-tiers.md)) | capability-indexed scaffolding — Terminal-Bench 2.0, SWE-bench lineage |
@@ -30,11 +30,21 @@ enforcer is prose, and prose is not governance (the owner-kernel lesson,
 | G1 | Implementer stays single-threaded; fan-out only for independent work (review seats, research) | `documented-only` (structural: no parallel-implementer rail exists) | coding is deep-and-narrow (Cognition); no topology benchmark exists |
 | G2 | No orchestration framework dependencies | `documented-only` (dependency policy §2.6 of the plan) | framework churn incidents; <50ms orchestration vs 2-15s inference |
 
+### Skill-layer rules with no enforcer
+
+The header rule applies to skill bodies too: a workflow rule stated in skill prose and enforced by
+nothing is prose. These are named here rather than left implied.
+
+| # | Rule | Enforcer | Measured |
+|---|---|---|---|
+| S1 | Quality gate before commit/merge — `skills/dev-flow` (S/Fix: project-config gate, default lint + test; L/H: `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2) | `documented-only` — no commit-time gate exists; an outcome-shaped opt-in enforcer is BACKLOG-tracked, and an invocation-shaped one would govern process, which [ADR-0001](../docs/adr/0001-verification-over-attestation.md) forbids | FULL-arm compliance **0/9** at depth 0, 2026-08-18 ([P7 adjudication](../docs/plans/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md)) |
+| S2 | Fix workflow appends an ongoing-maintenance ledger row — `skills/dev-flow` Fix step 6 | `documented-only` | FULL-arm **0/3**, same block — n=3 and the fixture repo had no `docs/` tree to append to; re-measure before acting on it |
+
 ## Execution-boundary map
 
 | Executor | Boundary |
 |---|---|
-| Claude Code session (this repo) | `exec-boundary.js` (opt-in deny gate) + `branch-protection.js` (force-push/protected commits) |
+| Claude Code session (this repo) | `exec-boundary.js` (opt-in deny gate) + `branch-protection.js` (opt-in; force-push/protected commits) |
 | Hetero dispatched engines (L5/L6) | worktree containment + contained-branch-only deletion (`reap-dispatch-branches.sh`) + qc-gate pre-push (`.githooks/pre-push`) |
 | Anything touching protected paths | `QC-Verdict` trailer requirement (qc-gate, mode=block) |
 

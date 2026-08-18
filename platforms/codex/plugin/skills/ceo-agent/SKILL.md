@@ -507,7 +507,7 @@ with exit 3). See `references/model-routing.md` §"Tree roles".
 |-------|-------|
 | Ask user about every small decision | Tactical: autonomous + record |
 | Report only good news | Risks and bad news are more important |
-| Skip quality-pipeline "because I'm sure" | Quality gate is non-negotiable |
+| Skip quality-pipeline "because I'm sure" | L / H run it at the merge boundary via finish-flow L-5.2 / H-9.2 |
 | Pivot without evidence | Must have data/research backing |
 | Silently expand scope | Beyond original scope → must report |
 | Same fix strategy after repeated failure | Consecutive failures → circuit breaker |

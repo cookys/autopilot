@@ -162,8 +162,8 @@ If the config file does not exist, proceed normally without it.
 
 ### Quality Gate Rule
 
-**Before committing or merging, invoke `autopilot:quality-pipeline`.**
-This is non-negotiable. The quality pipeline runs: test → scan → completeness → review.
+Stated at the step that runs it — S step 2 / Fix step 4 run the project-config gate (default lint + test; the
+optional finish-flow route runs the stricter `quality-pipeline --size S` at F.1); L / H run `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2. Enforcer: `documented-only`.
 
 ### Session End Rule
 
@@ -544,8 +544,8 @@ TaskCreate: "H-9: Invoke autopilot:finish-flow"
 > H-9.6), not a standalone section you run yourself. Do not duplicate the checklist here —
 > `finish-flow` creates the discrete tasks and this section is their reference material.
 >
-> **S and Fix**: `finish-flow` is optional. You may either run the inline S-Lite below or
-> invoke `autopilot:finish-flow` for the same effect in TaskCreate form.
+> **S and Fix**: `finish-flow` is optional. You may either run the inline S-Lite below or invoke
+> `autopilot:finish-flow` in TaskCreate form — whose Fix-size F.1 runs `quality-pipeline --size S`, a stricter gate than step 4's, not the same one.
 
 ### S-Lite (S and Fix workflows, inline)
 

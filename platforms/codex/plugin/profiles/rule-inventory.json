@@ -46,7 +46,7 @@
   "sources": [
     {
       "path": "skills/ceo-agent/SKILL.md",
-      "sha256": "064f77976de4f044ee3103b939cb698438c3600232db06acc4cd644d6a866af2",
+      "sha256": "d9a4cf118cca70b5600ebbc07d2f8e43317ca20dc6fe6b309218b4b4a65d317d",
       "segments": [
         { "id": "ceo.discovery-routing", "category": "topology", "start_line": 4, "end_line": 7 },
         { "id": "ceo.dispatch-config", "category": "topology", "start_line": 12, "end_line": 19 },
@@ -94,7 +94,7 @@
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "782d234c6f7b142f77249fdc1e38cb6c980b39beb4546232f92c9d8f3bd11cf5",
+      "sha256": "535d48b5205b60a174a2b7277e6e0449723157ff269c80eb39f73ce417d955fe",
       "segments": [
         { "id": "dev.discovery-routing", "category": "topology", "start_line": 4, "end_line": 9 },
         { "id": "dev.config-and-routing", "category": "topology", "start_line": 14, "end_line": 28 },

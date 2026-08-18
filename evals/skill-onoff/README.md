@@ -20,6 +20,10 @@ old orchestration-harness ON-arm confound is removed by construction. All packs 
 digest-frozen in `packs/manifest.json`; a mismatch is a fatal harness error. Any card edit
 invalidates CARD-arm rows (re-run per the frozen rules).
 
+Since the 2026-08-18 P7 quality-gate fix, `packs/dev-flow-full/` is a **historical** freeze of the
+body that was measured — it no longer matches the live `skills/dev-flow/SKILL.md`, and must not be
+re-synced. The next campaign re-freezes all three arms from scratch.
+
 ## Run
 
 ```bash

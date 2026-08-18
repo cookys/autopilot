@@ -1,0 +1,643 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "skill-onoff-instrument-repair",
+  "logical_plan_id": "skill-onoff-instrument-repair-2026-08-18",
+  "session_id": "ir-g1-20260818",
+  "session_key": "e6be82a9b5ddf6c1de3f52fc4ada4f32a548be206a6397c2f7f340481dea893e",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "e8057b3e02d88420f21e592a26d68b651b464c3e72f0d0f777ed238bd5606a84",
+  "manifest_sha256": "3fa4d393433f0855018f94116a1954c5192547035294c33d73273f27526a730a",
+  "plan_sha256": "9d05fcd6304c9cf43e0a4b62234205671a309c98d8fdf6542838163db79b5834",
+  "growth_ratio": {
+    "numerator": 802,
+    "denominator": 943
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_construct_validity",
+      "target_id": "sol_construct_validity",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "a39a38fc8cacb37e74dc01a9136b4172fab202ebfe7583a1c95de9fc66cc78f0"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a656cfd0d6c49c3df93138a6f0fe4b0b701bc1407e3f07648210d14ddcd0ecff",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-SFM3EX/stdout",
+          "digest": "a656cfd0d6c49c3df93138a6f0fe4b0b701bc1407e3f07648210d14ddcd0ecff"
+        },
+        "receipt_digest": "bb0dcf1c736dee5fc7747fd8ddb9e18b7e9b9e81c32ecc5c06155c431cc68e3b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "minimax_measurement_skeptic",
+      "target_id": "minimax_measurement_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "597c477725e1bad93c8d7af0743a2d2267b58ad6c867d41a9d1e84c34c8b482a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9380dd18878d7498ef1bc9e42c0fea9af7d4f51efac29dfd7badfd5bc48308ca",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-wzqt9b",
+          "digest": "9380dd18878d7498ef1bc9e42c0fea9af7d4f51efac29dfd7badfd5bc48308ca"
+        },
+        "receipt_digest": "ae1b497087e55531a11827a4bf2793b9a80a5248da0c50ebb5d6eaf57306d342"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_budget_redteam",
+      "target_id": "grok_budget_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "99080df0fbd921695d65018be632d4d7670773aae473953703222f4a87e615bf"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a523f0343a24d90c0c2c75914df5e90921e5e19d50df41a78eca3d4360ef69af",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-NbxFFA",
+          "digest": "a523f0343a24d90c0c2c75914df5e90921e5e19d50df41a78eca3d4360ef69af"
+        },
+        "receipt_digest": "fc098321f7cccf691322f86c1be3a6e16eb2f94bf883ff53b248758021ad69d2"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_construct_validity",
+      "target_id": "sol_construct_validity",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_measurement_skeptic",
+      "target_id": "minimax_measurement_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_budget_redteam",
+      "target_id": "grok_budget_redteam",
+      "family": "xai",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "IR1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Diagnosis in section 1 and recommendation A in section 6",
+      "claim": "The observed arm rates do not causally establish marker shape or refute task difficulty and single-turn truncation.",
+      "evidence": "High OFF rates fit both default behavior and tasks that are too easy, while near-zero results in every arm fit both ceremony markers and insufficient execution horizon. The plan provides no discriminating manipulation or uncertainty treatment for cells with three or six repetitions, yet infers that difficulty fixes none of the defects and that only four admissible families exist.",
+      "evidence_reference": "Plan sections 1 and 6; frozen rubric IR1",
+      "repair": "Describe the table as evidence consistent with marker-shape defects, retain difficulty, truncation, and sampling noise as competing explanations, and either test a discriminating manipulation or withdraw the causal refutation and exhaustive-family claim.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0d62f02732eb3d49a99b4860c28092ca10aa6f0023882e4b071d60b57174a524"
+    },
+    {
+      "rubric_id": "IR2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Admission rule and Phase 1 budget in sections 4 and 6",
+      "claim": "FULL greater than zero is not a sufficient or fully preregistered FULL-side admission threshold.",
+      "evidence": "A marker with one FULL success among several attempts is technically nonzero but may remain unreliable or effectively vacuous for the planned comparison. Section 4 says per-marker repetitions are stated in section 6, but section 6 gives only an aggregate estimate of about 21 runs and no arm allocation, repetition count, success floor, or cost derivation.",
+      "evidence_reference": "Plan sections 4 and 6; frozen rubric IR2",
+      "repair": "Freeze equal OFF and FULL pilot allocations and a repeatability threshold before any run, such as OFF at 0 of 3 and FULL at least 2 of 3 unless another threshold is justified from Phase 2 power. Include every unconditional FULL check in the run budget.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "70c696c5977bff6ef851502b8f3781ead324de86ce928ca53a4dd52e4f881fa3"
+    },
+    {
+      "rubric_id": "IR3",
+      "class": "implementation-spike",
+      "severity": "blocking",
+      "affected_surface": "Operational definition of candidate families G1, G2, G3, and G5",
+      "claim": "The proposed four-family set does not yet contain four frozen, mechanically observable markers.",
+      "evidence": "G2 still needs predicate authoring, G3 still needs fixture repair, and G5 is explicitly blocked because Read details are unavailable and the fixture lacks the target file. The plan also does not show that G2 predicates resist keyword gaming or that G3 compares against the seeded baseline and requires the exact run commit. Only G1 is presently described as operational.",
+      "evidence_reference": "Plan section 3; frozen rubric IR3",
+      "repair": "Before piloting, freeze executable fixtures and oracles: positive and negative semantic cases for G2, a baseline diff and exact generated commit identifier for G3, validated event detail and ordering for G5, and same-run creation, merge, and deletion evidence for G1. Do not count G5 while it remains unobservable.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a72f1747502670927d381d8a7e0c1a7f480cc9ae8937f8e1ece4369336e6ba8a"
+    },
+    {
+      "rubric_id": "IR4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase boundary, survivor rule, and pre-registration in sections 4 and 5",
+      "claim": "The plan leaves the outcome for fewer than four surviving families open to post-pilot adjustment.",
+      "evidence": "The candidate list is frozen, but no rule requires stopping when fewer than four independent families survive. Section 5 instead says V2 will be a function of the surviving count without providing that function. Because G2 may be dropped and G5 is already blocked, this unresolved branch is likely rather than hypothetical.",
+      "evidence_reference": "Plan sections 3 through 5; frozen rubric IR4",
+      "repair": "Before collecting Phase 1 data, freeze either a stop rule for fewer than four survivors or an explicit, construct-justified verdict threshold for every possible survivor count. State that pilot observations cannot be pooled into Phase 2 results.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8e78a23190fdad8e768fa41fa98667e560bb3928860f6cb36184d712a5d76d23"
+    },
+    {
+      "rubric_id": "IR6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "V1, V2, V3, sample sizes, exclusions, and historical evidence carry-over",
+      "claim": "The promised re-derived confirmatory protocol is absent, so coherence with the replacement family set cannot be evaluated.",
+      "evidence": "The plan supplies no exact V1, V2, or V3 rules, per-family sample sizes, paired-exclusion rule, or minimum evaluable-pair requirement despite saying these will be written before Phase 1. It also labels G1 proven while separately prohibiting comparison with predecessor cells, without stating that the old observations are candidate-development evidence only and cannot satisfy the new admission or verdict gates.",
+      "evidence_reference": "Plan sections 2, 3, and 5; frozen rubric IR6",
+      "repair": "Freeze the complete fresh-campaign protocol now: pack identities, arm sizes, exclusions, minimum evaluable pairs, and exact verdict margins for every allowed family count. Explicitly prohibit P6 observations from satisfying any new admission or verdict requirement.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bd9f0987162629eb00bf1ce0c7fd78eb4a46551d13117b9918fe8bf69da769a4"
+    },
+    {
+      "rubric_id": "IR7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Cost and benefit comparison for option C",
+      "claim": "Option C prices only instrument development while claiming a result that requires an unpriced confirmatory phase.",
+      "evidence": "The approximately 21 runs are described as OFF plus FULL Phase 1 runs, so they contain no CARD observations and can establish only marker feasibility. Nevertheless, the option says it buys a broader hygiene claim. Phase 2 cost and stopping probabilities are absent, making the alternatives non-comparable.",
+      "evidence_reference": "Plan sections 4 through 6; frozen rubric IR7",
+      "repair": "Relabel option C as feasibility-only and provide the staged and maximum cost through a fresh CARD comparison, or remove it from the decision table. Preserve option A as the zero-run alternative and identify a bounded multi-turn or alternate-channel result that would justify reopening the whole-skill question.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "38b2229e86e5862f9d7a3794066519d6f8d9bdb259684296811621a272e6288c"
+    },
+    {
+      "rubric_id": "IR1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "marker-shape diagnosis (§1)",
+      "claim": "The SHAPE diagnosis (absence / ceremony / base-rate) is entailed by the per-marker FULL/CARD/OFF table and refutes the difficulty explanation.",
+      "evidence": "Plan defers the per-marker breakdown to evidence/2026-08-18-skill-onoff-instrument-repair/marker-shape-analysis.md without reproducing it inline; §1 names only the difficulty explanation as a competing hypothesis and does not address single-turn truncation dominating or three reps being too few to distinguish 5/6 from 3/6. The diagnosis is the foundation for every downstream choice (admission rule, family ceiling, recommendation); if it does not survive these competing explanations, the repair aims at the wrong lever.",
+      "evidence_reference": "§1 Diagnosis; evidence/2026-08-18-skill-onoff-instrument-repair/marker-shape-analysis.md",
+      "repair": "Reproduce the per-marker FULL/CARD/OFF table inline with n and exact counts per arm; explicitly address the small-n critique (Fisher exact on the 5/6 vs 3/6 distinction and a check that single-turn truncation cannot produce the same pattern) before any other decision freezes on the SHAPE classification.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a35d9762f662a7b4365cdb068ed892999fb1fcbece6f8413bc5fa838441fc560"
+    },
+    {
+      "rubric_id": "IR2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "admission gate (§4)",
+      "claim": "An OFF-zero marker is admitted only if an unconditional FULL spot check scores FULL > 0; this closes the F4/F6 blind spot.",
+      "evidence": "FULL > 0 admits any marker that scores at least one positive in n runs. With n = 9, a 1/9 observation has a 95% CI spanning roughly 0–48%, so a marker could plausibly be at OFF base rate. The plan sets no minimum FULL count or rate beyond > 0. The ≤1 with rationale hatch was deleted, but nothing replaced it on the upper bound.",
+      "evidence_reference": "§4 Corrected admission",
+      "repair": "Specify a minimum FULL-side evidence bar — e.g., FULL ≥ floor(n/2) with lower-CI bound > 0, or FULL ≥ 2 for n ≤ 6 — before any marker can enter Phase 2. State this before Phase 1 runs.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "190ed031d37f359c7e4431d7665906011ca9617730bc2b0822d3b22f1afa679f"
+    },
+    {
+      "rubric_id": "IR3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "candidate family G5 (§3, §5)",
+      "claim": "G5 (Read of `.claude/test-strategy-config.md` before the first test run) is included in the exhaustive candidate set and counted toward the four-family ceiling.",
+      "evidence": "Plan states the family is blocked: transcript-query.js emits no detail for Read; fixture has no `.claude/`. Both are prerequisites, not assumptions. Mechanical observability in single-turn headless is the rubric criterion; without the transcript emission and the fixture directory, the marker cannot be scored. The exhaustive list is frozen before any live run, but the prerequisite fix is not on the critical path; if the prerequisites are not met, G5 drops and the four-family ceiling collapses to three, invalidating the re-derived V2 margins referenced in §5.",
+      "evidence_reference": "§3 G5 row; §5 four-family ceiling; §4 frozen-as-exhaustive-before-any-live-run",
+      "repair": "Either (a) move G5 to a future-spike list and freeze the exhaustive set as {G1, G2, G3} with V2 re-derived on three families, or (b) gate Phase 1 on a prerequisite-completion check (transcript-query emits Read detail AND fixture contains `.claude/`) and freeze the exhaustive set as {G1, G2, G3, G5} only after that gate passes. Pick one path and state it before Phase 1.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "23df8ce00d0be402ef4454b43ec086b1b068916b348a7e90cf07936b3229374c"
+    },
+    {
+      "rubric_id": "IR3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "candidate family G2 (§3)",
+      "claim": "G2 commit-message contract predicates are fixture-specific greps that measure the contract rather than verbosity.",
+      "evidence": "Plan says needs authoring; drop if predicates cannot be made fixture-specific. The fixture-specificity criterion is not operationally defined. Without knowing what makes a predicate fixture-specific — e.g., must reference commit-hash ranges, file paths, or branch names from the fixture; must fail on a counterfactual fixture that swaps these strings — the criterion is unfalsifiable and G2 could be admitted on the basis of generic English keywords.",
+      "evidence_reference": "§3 G2 row",
+      "repair": "Define fixture-specificity concretely: a predicate grep must (i) reference a string unique to the fixture (sha, branch, file path) and (ii) fail when that string is swapped for a counterfactual. Author at least one predicate per clause before Phase 1; freeze the predicate set with the family.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d851c0bf9f3e25dca5dd69a436c8433a43dd1ed4f3c0ba39ca3eadacc1da7f47"
+    },
+    {
+      "rubric_id": "IR5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Option A recommendation (§6)",
+      "claim": "Option A records: card non-inferior on branch discipline (FULL 9/9 · CARD 9/9 · OFF 0/9).",
+      "evidence": "The §3 G1 row reports proven (6/6 vs 0/6, 3/3 vs 0/3) without labeling which arm is FULL, CARD, or OFF. If the 0/6 and 0/3 are CARD (card never does branch discipline), then Option A CARD 9/9 contradicts the measured data and is wrong. If the 0/6 and 0/3 are OFF, then CARD status is unmeasured and CARD 9/9 is asserted without evidence. Either way, the Option A summary is not traceable to the G1 row.",
+      "evidence_reference": "§3 G1 row; §6 Option A row",
+      "repair": "Label the G1 row 6/6 vs 0/6, 3/3 vs 0/3 by arm (FULL / CARD / OFF). Restate Option A branch-discipline summary using only measured numbers, or cite the campaign from which FULL 9/9 · CARD 9/9 · OFF 0/9 was observed.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e26cd63002e4c2e32b12f52fab6bc9ff9b2f5905a5cf0e2e362ae679c4bfaf7c"
+    },
+    {
+      "rubric_id": "IR6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "verdict rules / V2 (§5)",
+      "claim": "V2 is re-derived as a function of the surviving independent family count, with per-family n and margins written before Phase 1 — not carried over.",
+      "evidence": "V2 re-derivation is promised in §5 but the actual margins (per-family counts and V2 thresholds for n=9 and n≤6) are not in the plan. The <4-family stopping rule is referenced in §6 (With a four-family ceiling, an inherited ≥4 of 5 is either unwinnable or silently relaxed; both are disqualifying) but not pinned to a specific V2 number. Plan §2 correctly notes P6 cells are not comparable to G1-B12 — that part is honest.",
+      "evidence_reference": "§5 Corrected verdict rules; §6 four-family ceiling; §2 pack re-freezing",
+      "repair": "Before Phase 1 starts, include the re-derived V2 margins for the planned per-family n (e.g., for n=9, ≥3 successes; for n≤6, ≥2), and state the <4-family stopping rule as: if fewer than k independent families survive Phase 1, V2 is undefined and the plan returns to G1 with no verdict.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ef3dad42ea796354619e1a988d8a93f7c572d71eae53ea3156d488cbf3e6735c"
+    },
+    {
+      "rubric_id": "IR3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 3 family table (G1 proof, G2 authoring, G5 observability) and Section 6 Option C",
+      "claim": "Section 3 treats an unmeasured cleanup conjunction as already proven, and Option C's four-family instrument is not runnable at single-turn depth 0.",
+      "evidence": "P6 f3_fix_branch_flow on d3 is work_done plus a reflog checkout to fix/ plus current branch develop; d7 is work_done plus that reflog only; d4 is a reflog checkout to hotfix/ plus a merge subject matching hotfix/. None of those scorers test that the topic branch is gone, that hotfix started from main, or that the merge was --no-ff. Section 3 still cites 6/6 versus 0/6 and 3/3 versus 0/3 as proof of G1 including cleanup. G2 is still unauthored fixture-specific greps and may be dropped. G5 cannot fire: transcript-query.js fills detail only for Skill, Bash, Edit, Write, and NotebookEdit, so a Read of .claude/test-strategy-config.md cannot be matched, the live skill says to skip that Read when the file does not exist, and the fixture has no .claude/. G4 is correctly deleted. Runnable today is G1 as the old F3 create/merge residue, plus an unpiloted G3 after seeding.",
+      "evidence_reference": "evals/skill-onoff/tasks/d3-fix-known-bug/markers.sh:11-15; evals/skill-onoff/tasks/d7-fix-vs-l-boundary/markers.sh:9-12; evals/skill-onoff/tasks/d4-hotfix/markers.sh:9-14; evals/skill-onoff/lib/transcript-query.js:47-51; plan section 3 G1/G2/G5 rows and G4 deletion; skills/dev-flow/SKILL.md Config Injection Rules (skip Read if the file does not exist).",
+      "repair": "Keep Option A's 9/9 attached to the P6 F3 scorers only. Do not authorize Option C until G2 clause predicates exist, G5 has Read detail plus a seeded .claude/test-strategy-config.md, and cleanup is omitted from G1 or piloted as a new conjunct.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "01f131d4874ae99b75fe7ce1ed3cd31d638ac62ac8bca366924b8f65918d21d4"
+    },
+    {
+      "rubric_id": "IR4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 4 admission/pre-registration claims and Section 5 V2 rewrite as they apply to Option C",
+      "claim": "Phase 1 is correctly relabelled instrument development, but the plan still claims a frozen n table and a re-derived V2 that are not in the text, so Option C would be tunable after seeing which families survive.",
+      "evidence": "Section 4 says per-marker n and reps are stated with the budget in section 6, and section 5 says V2 is re-derived from the surviving independent family count with per-family n and margins written before Phase 1. Section 6 states only a lump sum of about 21 runs: no task-to-family matrix, no FULL denominator for FULL>0, and no numeric V2 or stop rule. Deleting the old at-most-1 hatch is real, but replacing the old less-than-4 stop with V2 as a function of whatever survives lets a two-family Phase 1 continue by loosening the gate after the data. Selecting survivors on OFF+FULL also peeks at the FULL arm of the later estimand. Option A does not use this machinery.",
+      "evidence_reference": "plan section 4 last two bullets (n stated in section 6; candidate list frozen); plan section 5 V2 paragraph; plan section 6 Option C row (~21 runs).",
+      "repair": "Do not authorize Option C from this text. If Option A is chosen, no n table is required. Any later C rewrite must publish per-family n, a FULL>0 denominator, and a numeric stop rule before the first run.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dd928bc3d0cc4bda9eb88cede94309461a09bcb1115b2cce44f465b5ce299277"
+    },
+    {
+      "rubric_id": "IR5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 5 estimand versus Section 6 Option A close",
+      "claim": "Option A would record card non-inferiority on branch-and-commit hygiene as if it met the section 5 estimand for this skill version, but the 9/9 cells are P6 pack results and whole-skill equivalence remains unmeasured.",
+      "evidence": "Section 5 pre-declares the estimand as card non-inferior to the full body on Fix/S branch-and-commit hygiene for this task set and this skill version, and correctly says whole-skill equivalence is not claimable. Section 2 says v2.34.19 changed skills/dev-flow/SKILL.md bytes, packs/dev-flow-full/ is a historical fixture, and P6 cells are not comparable to any new block. The live Quality Gate Rule is size-scoped lint+test at Fix; the frozen pack still requires invoking quality-pipeline before commit. F3 branch steps look unchanged, so historical FULL 9/9, CARD 9/9, OFF 0/9 on f3_fix_branch_flow plus f3_hotfix_compound is a real P6 finding, but it is not a measurement of post-v2.34.19 FULL bytes. Option C is OFF+FULL only and cannot extend a CARD claim. Closing depth 0 as such would also retire the one channel that can still see F3 hygiene.",
+      "evidence_reference": "plan section 2 pack re-freeze bullet; plan section 5 estimand and swap-removed bullet; plan section 6 Option A record line; skills/dev-flow/SKILL.md Quality Gate Rule versus evals/skill-onoff/packs/dev-flow-full/SKILL.md:131-134; evidence/2026-08-18-skill-onoff-instrument-repair/marker-shape-analysis.md F3 rows.",
+      "repair": "Record Option A as: on the P6 packs, F3 was FULL 9/9, CARD 9/9, OFF 0/9; live body bytes changed in v2.34.19 so current-byte hygiene is unmeasured; whole-skill equivalence is unmeasurable at single-turn depth 0; no swap. Close the whole-skill swap question only, not the depth-0 hygiene channel.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "667ee9b1a0bcecdd25cd5e3c4c705628161aa77ab6e189217105702a8a3f980b"
+    },
+    {
+      "rubric_id": "IR6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 5 inherited V2/verdict map and Section 2 pack re-freeze versus the Option A close",
+      "claim": "The plan no longer silently inherits 4-of-5, but the replacement V2 is an unwritten function, and Option A still spends P6 cells as the close while declaring them non-comparable.",
+      "evidence": "Section 5 correctly says an inherited at-least-4-of-5 rule is either unwinnable or silently relaxed on a four-family ceiling, and that P6 cells cannot be compared to a new block after the v2.34.19 pack re-freeze. It then promises V2 re-derived from independent family count with n and margins written before Phase 1; those numbers are absent. Predecessor V2 used margins of at least 3 at n=9 and at least 2 at n<=6; without new denominators those margins have no meaning on G2, G3, or G5. V1, V3, paired exclusion, and the old verdict map are unnamed rather than restated as unused. Option A then reports 9/9 as the recorded close, which is coherent only as a historical F3 cell, not as a new-block V3 pass on re-frozen packs.",
+      "evidence_reference": "plan section 2 (P6 cells not comparable); plan section 5 V2 paragraph; plan section 6 Option A; predecessor 2026-08-18-dev-flow-contract-card.md section 4 V2 rule (at least 3 at n=9, at least 2 at n<=6, instrument valid iff at least 4 of 5 families load-bearing).",
+      "repair": "If Option A is chosen, state that no V1/V2/V3 map is being applied and that the 9/9 is a historical F3 cell, not a new-block V3 pass. Do not carry predecessor margins into any later C rewrite.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "293563ef27899a72425b92ee2eb502b5cc08a6b9182e9f86d3b0dddbbe0f3f2c"
+    },
+    {
+      "rubric_id": "IR7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 6 options table and purchase recommendation",
+      "claim": "Option A is the only spend that matches the decision (may the card replace the body). Option C is not a cheaper answer to that question: it spends about 21 runs on OFF+FULL work that cannot license a swap and cannot score CARD on new families.",
+      "evidence": "Section 6 names the decision as whether the card may replace the body. Section 5 removes the swap branch because a Fix/S hygiene instrument cannot license a whole-skill rewrite. Option C is described as buying a broader hygiene claim than F3, but its design is four-family OFF+FULL with no CARD arm, so it cannot produce even the narrowed card-hygiene estimand. G1 is already measured on P6. G2 may be dropped. G5 is blocked. The recommendation prose already admits C would add one more hygiene family at the cost of a re-freeze; that family would be G3 at best, still without CARD. Multi-turn Option B is undesigned and is the only path to a whole-skill claim. Evidence that would change this: the owner treats current-byte Fix/S hygiene, including a CARD arm, as the thing being bought, and first writes runnable markers and n. Until then, buy neither phase.",
+      "evidence_reference": "plan section 6 recommendation and change-my-mind paragraph; plan section 5 swap-removed bullet; plan section 3 G2 needs-authoring and G5 blocked rows; plan section 6 Option C What it buys column.",
+      "repair": "Owner should pick Option A and refuse B and C from this document. Authorize a new design only if hygiene-on-current-bytes with a CARD arm is itself the decision, after G2, G5, and n are specified.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "aac8cb7e7101e0e701f7e36daa9b8c2d36ba12d087ee805cdfec113a4e9dab15"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "a72f1747502670927d381d8a7e0c1a7f480cc9ae8937f8e1ece4369336e6ba8a",
+      "rubric_id": "IR3",
+      "affected_surface": "Operational definition of candidate families G1, G2, G3, and G5",
+      "claim": "The proposed four-family set does not yet contain four frozen, mechanically observable markers.",
+      "evidence_reference": "Plan section 3; frozen rubric IR3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "190ed031d37f359c7e4431d7665906011ca9617730bc2b0822d3b22f1afa679f",
+      "rubric_id": "IR2",
+      "affected_surface": "admission gate (§4)",
+      "claim": "An OFF-zero marker is admitted only if an unconditional FULL spot check scores FULL > 0; this closes the F4/F6 blind spot.",
+      "evidence_reference": "§4 Corrected admission",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d851c0bf9f3e25dca5dd69a436c8433a43dd1ed4f3c0ba39ca3eadacc1da7f47",
+      "rubric_id": "IR3",
+      "affected_surface": "candidate family G2 (§3)",
+      "claim": "G2 commit-message contract predicates are fixture-specific greps that measure the contract rather than verbosity.",
+      "evidence_reference": "§3 G2 row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "e26cd63002e4c2e32b12f52fab6bc9ff9b2f5905a5cf0e2e362ae679c4bfaf7c",
+      "rubric_id": "IR5",
+      "affected_surface": "Option A recommendation (§6)",
+      "claim": "Option A records: card non-inferior on branch discipline (FULL 9/9 · CARD 9/9 · OFF 0/9).",
+      "evidence_reference": "§3 G1 row; §6 Option A row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ef3dad42ea796354619e1a988d8a93f7c572d71eae53ea3156d488cbf3e6735c",
+      "rubric_id": "IR6",
+      "affected_surface": "verdict rules / V2 (§5)",
+      "claim": "V2 is re-derived as a function of the surviving independent family count, with per-family n and margins written before Phase 1 — not carried over.",
+      "evidence_reference": "§5 Corrected verdict rules; §6 four-family ceiling; §2 pack re-freezing",
+      "disposition": null
+    },
+    {
+      "fingerprint": "01f131d4874ae99b75fe7ce1ed3cd31d638ac62ac8bca366924b8f65918d21d4",
+      "rubric_id": "IR3",
+      "affected_surface": "Section 3 family table (G1 proof, G2 authoring, G5 observability) and Section 6 Option C",
+      "claim": "Section 3 treats an unmeasured cleanup conjunction as already proven, and Option C's four-family instrument is not runnable at single-turn depth 0.",
+      "evidence_reference": "evals/skill-onoff/tasks/d3-fix-known-bug/markers.sh:11-15; evals/skill-onoff/tasks/d7-fix-vs-l-boundary/markers.sh:9-12; evals/skill-onoff/tasks/d4-hotfix/markers.sh:9-14; evals/skill-onoff/lib/transcript-query.js:47-51; plan section 3 G1/G2/G5 rows and G4 deletion; skills/dev-flow/SKILL.md Config Injection Rules (skip Read if the file does not exist).",
+      "disposition": null
+    },
+    {
+      "fingerprint": "dd928bc3d0cc4bda9eb88cede94309461a09bcb1115b2cce44f465b5ce299277",
+      "rubric_id": "IR4",
+      "affected_surface": "Section 4 admission/pre-registration claims and Section 5 V2 rewrite as they apply to Option C",
+      "claim": "Phase 1 is correctly relabelled instrument development, but the plan still claims a frozen n table and a re-derived V2 that are not in the text, so Option C would be tunable after seeing which families survive.",
+      "evidence_reference": "plan section 4 last two bullets (n stated in section 6; candidate list frozen); plan section 5 V2 paragraph; plan section 6 Option C row (~21 runs).",
+      "disposition": null
+    },
+    {
+      "fingerprint": "667ee9b1a0bcecdd25cd5e3c4c705628161aa77ab6e189217105702a8a3f980b",
+      "rubric_id": "IR5",
+      "affected_surface": "Section 5 estimand versus Section 6 Option A close",
+      "claim": "Option A would record card non-inferiority on branch-and-commit hygiene as if it met the section 5 estimand for this skill version, but the 9/9 cells are P6 pack results and whole-skill equivalence remains unmeasured.",
+      "evidence_reference": "plan section 2 pack re-freeze bullet; plan section 5 estimand and swap-removed bullet; plan section 6 Option A record line; skills/dev-flow/SKILL.md Quality Gate Rule versus evals/skill-onoff/packs/dev-flow-full/SKILL.md:131-134; evidence/2026-08-18-skill-onoff-instrument-repair/marker-shape-analysis.md F3 rows.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "293563ef27899a72425b92ee2eb502b5cc08a6b9182e9f86d3b0dddbbe0f3f2c",
+      "rubric_id": "IR6",
+      "affected_surface": "Section 5 inherited V2/verdict map and Section 2 pack re-freeze versus the Option A close",
+      "claim": "The plan no longer silently inherits 4-of-5, but the replacement V2 is an unwritten function, and Option A still spends P6 cells as the close while declaring them non-comparable.",
+      "evidence_reference": "plan section 2 (P6 cells not comparable); plan section 5 V2 paragraph; plan section 6 Option A; predecessor 2026-08-18-dev-flow-contract-card.md section 4 V2 rule (at least 3 at n=9, at least 2 at n<=6, instrument valid iff at least 4 of 5 families load-bearing).",
+      "disposition": null
+    },
+    {
+      "fingerprint": "aac8cb7e7101e0e701f7e36daa9b8c2d36ba12d087ee805cdfec113a4e9dab15",
+      "rubric_id": "IR7",
+      "affected_surface": "Section 6 options table and purchase recommendation",
+      "claim": "Option A is the only spend that matches the decision (may the card replace the body). Option C is not a cheaper answer to that question: it spends about 21 runs on OFF+FULL work that cannot license a swap and cannot score CARD on new families.",
+      "evidence_reference": "plan section 6 recommendation and change-my-mind paragraph; plan section 5 swap-removed bullet; plan section 3 G2 needs-authoring and G5 blocked rows; plan section 6 Option C What it buys column.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-18T10:27:59.648Z"
+}

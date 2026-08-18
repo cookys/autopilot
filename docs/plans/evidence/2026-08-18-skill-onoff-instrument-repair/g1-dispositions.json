@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "skill-onoff-instrument-repair-2026-08-18",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "a438f1a66057eb220a9e75ca5fa214998ea0e0fa69914fa517efefd44f2560cf",
+      "disposition": "accepted_blocker",
+      "rationale": "IR2 accepted. The conditional FULL spot check reintroduces the exact blind spot that voided the predecessor block: a marker with OFF=0 and FULL=0 is vacuous and the OFF-only screen cannot see it. Survival is rewritten to OFF=0 AND FULL>0, spot check unconditional on every OFF-zero survivor."
+    },
+    {
+      "fingerprint": "e1a902ed66a2bff6def592b976562bcad97ca35e9fdba5abe59782acaadcf873",
+      "disposition": "accepted_blocker",
+      "rationale": "IR3 accepted. Depth-0 had independently logged both halves before the panel returned: transcript-query.js populates detail only for Skill/Bash/Edit/Write/NotebookEdit, so G5 cannot match on Read; and G4 has G1 behaviour as its first conjunct. G2 as written scores line count, not the three contract clauses. G4 folds into G1, G5 is gated on instrument work, G2 is rewritten to clause predicates or dropped."
+    },
+    {
+      "fingerprint": "ae93c6e4fc6cafc946cccf6abc4eb57301506b182eecb9d24a25f9393088ca03",
+      "disposition": "accepted_blocker",
+      "rationale": "IR4 accepted. Phase 1 is instrument DEVELOPMENT and was mislabelled as pre-registration. The at-most-1-with-rationale hatch is post-hoc discretion wearing a pre-registration label. Hatch deleted; the candidate list is frozen as exhaustive before any live run; pre-registration attaches to Phase 2 only, on data Phase 1 never saw."
+    },
+    {
+      "fingerprint": "d604401ccdbb9919d1b4a710b58144b35ec515414f7aadf86343378b5351a42b",
+      "disposition": "accepted_blocker",
+      "rationale": "IR5 accepted. The estimand was unbounded. Any claim is now explicitly scoped to Fix/S branch-and-commit hygiene, for this subject model, harness, task set and skill version, with whole-skill equivalence named as NOT measured."
+    },
+    {
+      "fingerprint": "a139b446dcfc37175a3a2922ff9816d989eb0bd234d727cb5f2dd1a61af296fd",
+      "disposition": "accepted_blocker",
+      "rationale": "IR6 accepted. Inheriting V2 4-of-5 and its n-margins onto a replaced, partly dependent family set is incoherent. V2 is re-derived as a function of the surviving INDEPENDENT family count, with per-family n and margins stated before Phase 1, and P6 cells declared non-comparable because the FULL pack bytes changed in v2.34.19."
+    },
+    {
+      "fingerprint": "7a33fff9a39115651037783073060568b968d96b4e09ae795e05685c9e4ec8a3",
+      "disposition": "accepted_blocker",
+      "rationale": "IR7 accepted. The plan recommended buying before comparing the cheaper alternatives. Section 6 is rewritten to present three options with an explicit recommendation and the evidence that would change it."
+    },
+    {
+      "fingerprint": "0ec5d59ed8be77907712188e10fe46c6755b1dc4787a3047b1f4dd72bc603469",
+      "disposition": "accepted_blocker",
+      "rationale": "IR2 accepted, same defect as a438f1a6 reported from a second seat. Folded into the same repair: unconditional FULL spot check, FULL=0 becomes a Phase 1 stopping criterion alongside the surviving-family count."
+    },
+    {
+      "fingerprint": "cc6569f51d69baa8d46f59039a6555da7abbb184ab12cf1d5a5e97a820a656b0",
+      "disposition": "accepted_blocker",
+      "rationale": "IR2 accepted, third independent report of the vacuity hole. Go/no-go is rewritten to require at least four families with OFF=0 AND FULL>0; an OFF-only pass is explicitly NOT authorization for Phase 2."
+    },
+    {
+      "fingerprint": "5ceb05a2fe38b8a6357a73b9fa7c3e8dbcacbf91328e99cd12efff8f34efa701",
+      "disposition": "accepted_blocker",
+      "rationale": "IR3 accepted. Concurs with e1a902ed and adds the decisive point: the candidate set cannot honestly supply four INDEPENDENT families at single-turn depth 0. Depth-0 enumerated the same ceiling separately. The revision states the ceiling instead of assuming slack."
+    },
+    {
+      "fingerprint": "c9d7a6baa756846fb008346228bbb1405bfe7add3a70765d9d3eea9a7ba65111",
+      "disposition": "accepted_blocker",
+      "rationale": "IR4 accepted. Admission n contradicted the budgeted reps and the rationale hatch reopened the stopping rule after data. Both fixed: n is stated per marker and matches the budget, the hatch is removed, and the family list is exhaustive before the first run."
+    },
+    {
+      "fingerprint": "923d2aefed5911687534a54f53802b124c79bd6d9490fb1372a85b80d76a8869",
+      "disposition": "accepted_blocker",
+      "rationale": "IR5 accepted, and adjudicated as the sharpest finding of the round. The inherited verdict map would let a Fix/S-hygiene-only instrument reach SHIP-GATE-MET and authorize swapping the whole 713-line skill. The revision removes the swap branch outright: no Phase 2 outcome can authorize a body swap."
+    },
+    {
+      "fingerprint": "565b005be6f06a1f10a5b386391894b371421a5e51c7c8f010baa03459422a3d",
+      "disposition": "accepted_blocker",
+      "rationale": "IR6 accepted. With four candidates against a 4-of-5 rule the arithmetic was broken before the first run, and G4 was double-counted. Both corrected; V2 is restated as a function of independent survivors."
+    },
+    {
+      "fingerprint": "47fcdf237c6b591dc2ba14915d5755b1a737325cf9474d7e5d2a59bed9f22c8f",
+      "disposition": "accepted_blocker",
+      "rationale": "IR7 accepted with amendment. Depth-0 agrees neither phase should be bought as written, and amends the disposition so that closing the question does not discard what WAS measured: on the only discriminating surface the card was exactly non-inferior (FULL 9/9, CARD 9/9, OFF 0/9). The close records that finding and its scope limit, rather than recording nothing."
+    }
+  ]
+}

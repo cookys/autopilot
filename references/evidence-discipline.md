@@ -205,6 +205,43 @@ recorded prompt-hash history), keep the FAIL rows untouched, and re-sit fresh �
 independent seeds then put the same subjects at the same margins, that is capability signal:
 stop. A third sitting after that is selecting on the exam's own noise.
 
+## 11. A grep is not a call graph — and a rule can be spelled in arithmetic
+
+**2026-08-16 → fired 2026-08-17.** A retirement sweep asked "does anything enforce capability-claim
+expiry at runtime?", answered **no**, and shipped that as evidence
+(`docs/plans/evidence/2026-08-16-owner-kernel-retirement/p4-claim-expiry-non-enforcement.md`). It
+even named the `2026-08-17` date and classified it harmless. At `2026-08-17T22:23:16Z` that expiry
+hard-blocked every agy dispatch, every agy review, and every Codex PostCompact, and turned twelve
+test files red.
+
+The sweep was `grep -rn "expires_at|freshness" src scripts` plus a check for `require()` consumers.
+Both instruments were blind in the same direction:
+
+- **The consumers were subprocesses.** `dispatch-hetero.sh` and `dispatch-review.sh` run
+  `node "$CLAIMS_SCRIPT" validate-consumer …`; `post-compact.js` runs
+  `spawnSync(process.execPath, [validator, …])`. A `require()`/import search sees none of it. **A
+  module with zero importers can still be the most load-bearing code in the repo** — the inverse of
+  §1's dead-module lesson, and it hides in exactly the same blind spot.
+- **The rule was computed, not spelled.** The enforcing line is
+  `Date.parse(expiration(live)) <= nowMs`, where `expiration()` is derived from
+  `observed_at + ttl_seconds`. Neither grep token occurs there. **Searching for a rule's vocabulary
+  does not find the rule** when the rule is arithmetic over other fields.
+
+The two dispositions this produces:
+
+1. To prove a rule is *not enforced*, do not enumerate call sites — **make the condition true and
+   watch what happens.** Shift the clock, delete the check, feed the expired input. §2's "delete the
+   gate and see if the suite notices" applied to a claim of absence. Two independent agents each
+   settled this in one run by rewinding `Date` seven days; the paper sweep had been wrong for a day.
+2. Grep for the **enforcement verb**, not the field name: `die_`, `block(`, `exit 1`, `throw`,
+   `precondition_failed` — then read what each one is conditioned on.
+
+Related failure the same incident exposed: a fuse **nobody could defuse**. The four D3 claims replay
+a hardcoded `codexHostObservedAt` (`probe-harness-capabilities.sh:126`) because a live Codex
+compaction cannot be provoked from a script, so re-probing could never clear their expiry. **Before
+shipping a check that fails on a schedule, verify the path that clears it actually exists and can be
+run by the person who will be holding the pager.**
+
 ---
 
 ## The one question

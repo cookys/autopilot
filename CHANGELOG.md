@@ -1,5 +1,46 @@
 # Changelog
 
+## v2.34.20 — 到期不再是拒絕的理由:一條排定好、且無法自救的中斷被拆掉
+
+**Headline**: `2026-08-17T22:23:16Z`,capability 收據過了 14 天 TTL,於是 `dispatch-hetero.sh`
+的 agy 派工、`dispatch-review.sh` 的 agy 審查、`platforms/codex/hooks/post-compact.js` 的每一次
+Codex PostCompact 全部 `precondition_failed`——12 個測試檔變紅只是它的回聲。而且**重新認證救不
+回來**:`probe-harness-capabilities.sh:126` 把 D3 四條 claim 的 `codexHostObservedAt` 寫死(腳本
+無法觸發真的 Codex compaction,只能重播),`generate` 又規定任一 required claim 被擋就整份不發,
+所以那份收據從 8/17 起**永遠發不出來**,連順便修好 D2 都不行。這不是忘了續期,是出廠就排定一次
+不可修復的中斷。
+
+**Owner ruling(2026-08-18)**:autopilot 是要協助使用者,不是搞死使用者。**到期一律提醒、不阻擋**;
+真要擋就解釋清楚並取得授權。而資格/授權的降級應該用**不信任投票累積**,不是日曆。
+
+### Changed
+- `scripts/platform-capability-claims.js` — 三類訊號由致命降為 advisory(仍大聲印出):
+  `stale_live_evidence`(記錄型觀察的壁鐘年齡)、`current_version_drift`(這些 CLI 會自己更新——
+  agy 在**同一個 session 內**從 1.1.10 跳到 1.1.14,收據還沒安裝就已經漂移)、以及「舊路徑消失但
+  工具用名字找得到」(codex/grok/claude 都把版本內嵌在安裝路徑裡,更新即刪除舊路徑,舊檢查會誤報
+  成「工具沒裝」)。**維持致命**:收據自我矛盾、觀察與宣稱牴觸、工具真的找不到、收據/claim-ID 竄改。
+  理據:每次呼叫都實跑 `--version` 再推導才是驗證;紙上紀錄的年齡是對記錄的防竄改,ADR-0001 明言
+  那不算驗證。
+- `platforms/codex/hooks/post-compact.js` — 把 validator 的 advisory 轉發到 stderr。先前整段吞掉,
+  等於「提醒」根本傳不到任何人眼前。
+- `hooks/tests/{mission-runtime-v2,harness-capabilities}.test.sh` — 三條斷言原本編碼舊政策(斷言
+  漂移/過期**必須擋**)。**改寫成斷言新行為而非刪除**:仍要求偵測到並印出,只是不致命;並補上
+  「工具真的不存在時仍 fail closed」的正向紅案。
+- `docs/plans/evidence/2026-08-16-owner-kernel-retirement/p4-claim-expiry-non-enforcement.md` —
+  加更正區塊(原文保留)。那份存證當初結論是「沒有 enforcement site」,還點名 `2026-08-17` 判定無害,
+  而它正是那天引爆的。掃描用 `grep require()` + `grep expires_at|freshness`,兩者都看不到子行程呼叫,
+  也看不到由 `observed_at + ttl_seconds` **算出來**的判斷式。
+- `references/evidence-discipline.md` §11「A grep is not a call graph」——把上面那族教訓收進正典:
+  零 `require()` 消費者的模組仍可能是全 repo 最承重的碼;要證明一條規則「沒被強制」,不要枚舉呼叫點,
+  **把條件弄成真的再看會怎樣**。另附一條:**上任何會按時引爆的檢查之前,先確認拆彈的路徑真的存在**。
+
+### Evidence
+- `docs/plans/evidence/2026-08-18-capability-receipt-expiry/README.md` — 量測、根因、政策對照表、
+  負向控制、以及「刻意沒做」的項目(新收據沒安裝——漂移既然是提醒,裝了只會逼人重釘 8 個雜湊,
+  而下次自動更新又作廢)。
+- 驗證:六組 consumer × receipt 全通過;負向控制(工具不存在、claim-ID 錯、收據竄改、
+  version-mismatch、contradiction)全部仍擋;15/15 受影響測試檔綠。
+
 ## v2.34.19 — dev-flow 的 quality-gate 規則自我矛盾:0/9 遵循率的根因是文件,不是缺 enforcer
 
 **Headline**: v2.34.18 量到的獨立發現(dev-flow MANDATORY 規則 headless depth-0 遵循 0%)裁決完畢。

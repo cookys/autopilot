@@ -96,6 +96,11 @@ function validateClaims(pluginRoot) {
     '--reprobe',
     '--reprobe-binary', codexBinary,
   ], { encoding: 'utf8', cwd: pluginRoot });
+  // Forward the validator's advisories (recorded-evidence age, identity drift). These do not
+  // block — see scripts/platform-capability-claims.js — but swallowing them would leave the
+  // user with no signal at all that the receipt no longer describes the running build.
+  const advisories = String(validation.stderr || '').trim();
+  if (advisories) process.stderr.write(`${advisories}\n`);
   if (validation.status !== 0) {
     block('d3_claim_validation_failed', 'exact D3 capability claims did not revalidate');
   }

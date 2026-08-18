@@ -1297,9 +1297,17 @@ if (runtime) {
     { ...manualPayload, turn_id: 'codex-version-drift-turn' },
     { AUTOPILOT_CODEX_BIN: codexVersionDriftFixture },
   );
-  check('codex-production-postcompact-selected-codex-version-drift-blocks',
-    codexVersionDrift.status === 2
-    && /d3_claim_validation_failed/.test(codexVersionDrift.stderr));
+  // Policy change (v2.34.20, owner decision 2026-08-18): a selected-binary version that
+  // differs from the recorded observation WARNS, it does not block. These CLIs self-update
+  // (agy moved 1.1.10 → 1.1.14 within one session), so blocking on drift made a vendor's
+  // auto-updater able to kill every dispatch. The drift must still be DETECTED and surfaced —
+  // that is what this now asserts, and it is why the assertion was rewritten rather than
+  // deleted. What still blocks: an unusable receipt, a contradicted contract, a binary that
+  // is genuinely absent (asserted by the neighbouring claim-drift and identity cases).
+  check('codex-production-postcompact-selected-codex-version-drift-warns-not-blocks',
+    codexVersionDrift.status === 0
+    && /current_version_drift/.test(codexVersionDrift.stderr)
+    && !/d3_claim_validation_failed/.test(codexVersionDrift.stderr));
   const receiptBytes = fs.readFileSync(productionReceiptPath);
   fs.appendFileSync(productionReceiptPath, '\ncorrupt prior receipt\n');
   const corruptPriorReceipt = runProductionHook({

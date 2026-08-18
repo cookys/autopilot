@@ -153,16 +153,47 @@ function revalidationCommandDigest(target) {
   return sha256(canonicalJson({ argv: [target.binary_realpath, '--version'] }));
 }
 
-function currentVersionResult(target, reprobeBinary = null) {
+// Several of these CLIs install to a VERSION-EMBEDDED path (codex
+// `releases/<ver>/bin/codex`, grok `downloads/grok-<ver>-linux-x86_64`, claude
+// `versions/<ver>`), so an auto-update deletes the recorded realpath and the old check
+// reported `binary_unavailable` — "the tool is gone" — when the tool was merely newer.
+// Resolve the same tool by name before concluding it is missing. Only when neither the
+// recorded path NOR the name resolves is it genuinely unavailable, and that stays fatal:
+// you cannot dispatch to a tool that is not installed.
+// Runners that are not themselves executables. Both drive the local `claude` CLI —
+// see scripts/dispatch-author.sh:943 and scripts/dispatch-review.sh:886 (`${BIN:-claude}`).
+const RUNNER_BINARY_ALIAS = { 'cc-shim': 'claude', 'claude-native': 'claude' };
+
+function resolveMovedBinary(target) {
+  const candidates = [
+    path.basename(target.binary_realpath || ''),
+    RUNNER_BINARY_ALIAS[target.runner] || target.runner,
+  ].filter((name) => name && !name.includes('/'));
+  for (const name of candidates) {
+    const which = childProcess.spawnSync('command', ['-v', name], {
+      encoding: 'utf8', timeout: 5000, shell: true,
+    });
+    const found = (which.stdout || '').trim().split('\n')[0];
+    if (which.status === 0 && found) {
+      try { return fs.realpathSync(found); } catch { /* fall through to next candidate */ }
+    }
+  }
+  return null;
+}
+
+function currentVersionResult(target, reprobeBinary = null, onAdvisory = null) {
   let binary = reprobeBinary;
   if (binary === null) {
     try {
       const resolved = fs.realpathSync(target.binary_realpath);
       if (resolved !== target.binary_realpath) return `binary_realpath_drift:${resolved}`;
+      binary = target.binary_realpath;
     } catch (error) {
-      return `binary_unavailable:${error.code || 'unknown'}`;
+      const moved = resolveMovedBinary(target);
+      if (!moved) return `binary_unavailable:${error.code || 'unknown'}`;
+      if (onAdvisory) onAdvisory(`binary_realpath_drift:${moved}`);
+      binary = moved;
     }
-    binary = target.binary_realpath;
   }
   const run = childProcess.spawnSync(binary, ['--version'], {
     encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024,
@@ -177,19 +208,70 @@ function expiration(live) {
   return new Date(Date.parse(live.observed_at) + live.ttl_seconds * 1000).toISOString();
 }
 
-function coreEvidenceReasons(source, nowMs, { reprobe = true, reprobeBinary = null } = {}) {
+function isStale(live, nowMs) {
+  return Date.parse(expiration(live)) <= nowMs;
+}
+
+// Wall-clock age of a RECORDED observation is not a blocking reason (v2.34.20).
+// Rationale, and why this is not a weakening: what makes a claim currently true is
+// (a) the running binary still being the identity the observation was made against —
+// re-derived live on every call by `currentVersionResult`, which spawns `--version`
+// and stays fatal — and (b) the observation not contradicting the official contract,
+// also fatal. `observed_at + ttl_seconds` is tamper-evidence about a record, which
+// ADR-0001 explicitly does not count as verification ("only independent re-derivation
+// verifies"). Enforcing it made the rail fail closed on wall-clock time alone.
+// It was also unsatisfiable by construction: `probe-harness-capabilities.sh:126`
+// replays a hardcoded `codexHostObservedAt` for the four D3 codex-postcompact claims
+// (a live Codex compaction cannot be provoked from a script), so re-probing could
+// never clear it — the receipt became permanently unissuable on 2026-08-17T22:23:16Z.
+// Staleness is still computed and reported loudly by `warnIfStale`; it is advisory.
+// Identity DRIFT is advisory for the same reason wall-clock age is (v2.34.20): these CLIs
+// self-update. `agy` went 1.1.10 → 1.1.12 → 1.1.14 inside a single session on 2026-08-18,
+// and each bump would otherwise have hard-failed every dispatch until a human re-pinned
+// eight content-addressed hashes across six files. A gate that a vendor's auto-updater can
+// trip is not protecting the user, it is obstructing them. What stays FATAL is what the
+// receipt can actually be wrong about: internal inconsistency, a contradicted contract, and
+// a binary that is missing or cannot report itself at all.
+const ADVISORY_REPROBE = /^(current_version_drift|binary_realpath_drift):/u;
+
+function coreEvidenceReasons(source, nowMs, { reprobe = true, reprobeBinary = null, onAdvisory = null } = {}) {
   const reasons = [];
   const target = source.target_identity;
   const official = source.official_contract;
   const live = source.live_evidence;
   if (target.cli_version !== live.cli_version) reasons.push('target_live_version_mismatch');
   if (source.agreement !== true || official.assertion !== live.result) reasons.push('contract_live_contradiction');
-  if (Date.parse(expiration(live)) <= nowMs) reasons.push('stale_live_evidence');
   if (reprobe) {
-    const result = currentVersionResult(target, reprobeBinary);
-    if (result !== 'passed') reasons.push(result);
+    const result = currentVersionResult(target, reprobeBinary, onAdvisory);
+    if (result !== 'passed') {
+      if (ADVISORY_REPROBE.test(result)) {
+        if (onAdvisory) onAdvisory(result);
+      } else {
+        reasons.push(result);
+      }
+    }
   }
   return reasons;
+}
+
+function advisoryWarner(label, capabilityId) {
+  return (result) => {
+    process.stderr.write(
+      `warning: ${label} ${capabilityId} ${result} (advisory — the recorded observation was made `
+      + 'against a different build; contract agreement and binary availability still gate. Re-run '
+      + 'scripts/probe-harness-capabilities.sh if you want the receipt to describe the current build)\n',
+    );
+  };
+}
+
+function warnIfStale(source, nowMs, label) {
+  if (!isStale(source.live_evidence, nowMs)) return false;
+  process.stderr.write(
+    `warning: ${label} ${source.capability_id} recorded evidence expired ${expiration(source.live_evidence)} `
+    + '(advisory — identity re-probe and contract agreement still gate; re-run '
+    + 'scripts/probe-harness-capabilities.sh to refresh what is refreshable)\n',
+  );
+  return true;
 }
 
 function claimBodyForId(claim) {
@@ -231,7 +313,11 @@ function generate(inputPath, outputPath) {
     validateInputClaim(source, `probe input.claims[${index}]`);
     if (capabilityIds.has(source.capability_id)) throw new ClaimsError(`duplicate capability_id: ${source.capability_id}`);
     capabilityIds.add(source.capability_id);
-    const reasons = coreEvidenceReasons(source, now.getTime(), { reprobe: true });
+    const reasons = coreEvidenceReasons(source, now.getTime(), {
+      reprobe: true,
+      onAdvisory: advisoryWarner('generate:', source.capability_id),
+    });
+    warnIfStale(source, now.getTime(), 'generate:');
     const claim = {
       claim_id: '',
       capability_id: source.capability_id,
@@ -449,7 +535,9 @@ function validateCommand(options, single) {
         const reasons = coreEvidenceReasons(claim, Date.now(), {
           reprobe: true,
           reprobeBinary: options.reprobeBinary,
+          onAdvisory: advisoryWarner(consumerId, claim.capability_id),
         });
+        warnIfStale(claim, Date.now(), `${consumerId}`);
         if (reasons.length) throw new ClaimsError(`reprobe failed for ${id}: ${reasons.join(',')}`);
       }
     }

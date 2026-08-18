@@ -637,8 +637,18 @@ chmod +x "$SELECTED_WRONG_VERSION_BIN"
 OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
   --reprobe --reprobe-binary "$SELECTED_WRONG_VERSION_BIN" 2>&1)"
 EXIT=$?
-assert_exit_code "$EXIT" 1 "selected binary version drift fails closed"
+# Policy change (v2.34.20, owner decision 2026-08-18): version drift WARNS, it does not block —
+# these CLIs self-update, so a vendor's auto-updater could otherwise kill every dispatch. The
+# drift must still be detected and surfaced, which is what the two assertions below require.
+# Rewritten, not deleted: a binary that is genuinely absent still fails closed (asserted next).
+assert_exit_code "$EXIT" 0 "selected binary version drift warns instead of failing closed"
 assert_contains "$OUT" "current_version_drift:0.0.1" "selected binary drift reports its observed version"
+
+ABSENT_OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
+  --reprobe --reprobe-binary "$TEST_TMP/definitely-not-installed" 2>&1)"
+ABSENT_EXIT=$?
+assert_exit_code "$ABSENT_EXIT" 1 "a genuinely absent binary still fails closed"
+assert_contains "$ABSENT_OUT" "version_probe_error" "absent binary reports the fail-closed reason"
 
 OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$CLAIMS_RECEIPT" --consumer D2 \
   --reprobe-binary "$SELECTED_VERSION_BIN" 2>&1)"
@@ -773,7 +783,24 @@ assert_input_rejected() {
 
 assert_input_rejected missing-official "missing field: official_contract"
 assert_input_rejected missing-live "missing field: live_evidence"
-assert_input_rejected stale "required claim"
+# Policy change (v2.34.20, owner decision 2026-08-18): wall-clock age of a RECORDED
+# observation is advisory, so generation must SUCCEED and say so loudly. It was fatal, and
+# that made the rail unusable by construction — probe-harness-capabilities.sh replays a
+# hardcoded observed_at for the four D3 claims, so no re-probe could ever clear it.
+# The neighbouring version-mismatch and contradiction cases below still fail closed, which
+# is what keeps this from being a blanket weakening.
+assert_input_warned() {
+  local action="$1"
+  local expected="$2"
+  local input="$TEST_TMP/input-$action.json"
+  node "$CLAIMS_INPUT_MUTATOR" "$CLAIMS_INPUT" "$input" "$action" ""
+  OUT="$(node "$CLAIMS_SCRIPT" generate --input "$input" --output "$TEST_TMP/output-$action.json" 2>&1)"
+  EXIT=$?
+  assert_exit_code "$EXIT" 0 "claim generation accepts $action evidence"
+  assert_contains "$OUT" "$expected" "$action evidence is still surfaced as an advisory"
+}
+
+assert_input_warned stale "recorded evidence expired"
 assert_input_rejected version-mismatch "required claim"
 assert_input_rejected contradiction "required claim"
 assert_input_rejected agy-tier-effort-mismatch "mismatched agy model-tier/effort metadata"
@@ -790,7 +817,9 @@ printf '#!/usr/bin/env bash\nprintf "fake 1.2.4\\n"\n' > "$FAKE_VERSION_BIN"
 chmod +x "$FAKE_VERSION_BIN"
 OUT="$(node "$CLAIMS_SCRIPT" validate-consumer --receipt "$FAKE_RECEIPT" --consumer D2 --reprobe 2>&1)"
 EXIT=$?
-assert_exit_code "$EXIT" 1 "current binary version drift rejects a previously valid claim"
+# Same policy change: drift warns, it does not reject. The observed replacement version must
+# still appear, so a silent swap remains impossible.
+assert_exit_code "$EXIT" 0 "current binary version drift warns on a previously valid claim"
 assert_contains "$OUT" "current_version_drift:1.2.4" "current version drift reports observed replacement version"
 
 finalize_test

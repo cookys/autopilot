@@ -35,8 +35,8 @@
 
 | Phase | Deliverable | Status |
 |---|---|---|
-| G1/G2 | Bounded hetero plan review (rubric-frozen, max 2 generations) | pending |
-| P0 | Prologue: tier-A/B BACKLOG row repair + contract-card row annotation (no-bump) | pending |
+| G1/G2 | Bounded hetero plan review (rubric-frozen, max 2 generations) | G1 done (CONDITIONAL; 10/10 adjudicated, folded `8fc1ce1f`, 1.198×); G2 dispatched |
+| P0 | Prologue: tier-A/B BACKLOG row repair + contract-card row annotation (no-bump) | done `142508ee` |
 | P1 | `references/skill-contract-card.md` + preflight check-8 per-skill map | pending |
 | P2 | Card draft fixture (branch-only; digest-frozen; frontmatter byte-identical) | pending |
 | P3 | `evals/skill-onoff/` harness + d1-d7 + 3 tests + rules freeze + Phase-0 smoke | pending |
@@ -69,3 +69,5 @@ matrix; P4 擴大來源宇宙→P4; G1+G2 review→G1/G2 row. All mapped.
 | Date | Item |
 |---|---|
 | 2026-08-18 | Plan authored; admission READY (l3 inline, 1 deliverable); branch + project dirs created. |
+| 2026-08-18 | Phase-0 probe (1 live call): `--plugin-dir` channel CONFIRMED headless; TaskCreate/task-store channel REFUTED → F2 family dropped, V2 4-of-5. Evidence `phase0-probe.md`. |
+| 2026-08-18 | G1 CONDITIONAL (3 seats semantic; sol transport-void ×2). 10 findings (3 blocking) all accepted + folded; R1 at 1.198× growth. G2 dispatched on `8fc1ce1f`. |

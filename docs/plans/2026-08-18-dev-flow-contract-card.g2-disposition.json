@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "dev-flow-contract-card-2026-08-18",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "82a5e701b4d4b8964054b7b249bc3f51c4c1b50966e2aca6d20e8f834e0980ed",
+      "disposition": "accepted_blocker",
+      "rationale": "Real ontology hole: KEEP-compressed rewordings were neither relocated nor removed, so the superset gate would fail or silently exempt them. Folded: three-class disposition ontology relocated/removed/rewritten with explicit old-hash→new-hash mapping, plus red-cases (undispositioned baseline rule fails; rewritten mapping to nonexistent successor fails). Depth-0 terminal adjudication under generation cap; repair folded into the frozen plan text (§7)."
+    },
+    {
+      "fingerprint": "12ff322a539a51cd2a0078c84ed058f0421fdd60fa113a14568d9c63ca544a43",
+      "disposition": "accepted_nonblocking",
+      "rationale": "The three canonical_rules test literals are hand-edited files that change with the swap's rule count; they now ride inside the P7 swap commit's atomic surface (§8 P7), restoring single-commit revertability. Folded into the frozen plan text."
+    }
+  ]
+}

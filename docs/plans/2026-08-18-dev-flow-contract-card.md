@@ -1,6 +1,6 @@
 # dev-flow contract-card rewrite — evidence-gated (成績單前置)
 
-> Status: Draft (pre-review)
+> Status: R2 (FROZEN, post-G2 terminal adjudication 2026-08-18)
 > Consumes BACKLOG row: "Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）" (docs/BACKLOG.md:51)
 > North-star sequence step 3 (ADR-0001): roster qualification → eval ON/OFF 證據 → contract-card 改寫.
 > Trigger audit (2026-08-18): conjunct 1 (四層 Policy 層定案) SATISFIED — shipped v2.34.11, ADR-0001 accepted.
@@ -231,11 +231,16 @@ since 2026-07-26 was purely additive). Deleting or rewording ANY of those lines 
 **Approach (Board decision at plan approval)**: establish a successor baseline whose source
 universe extends to `{ceo-agent SKILL.md, dev-flow SKILL.md, skills/dev-flow/references/*.md}` so
 the superset check proves rules were **relocated, not lost** (faithful to
-`profiles/guided-compatibility.json` intent). Truly deleted duplicates get explicit `removed`
-dispositions in the migration map (the `obsolete` category already models this). Old snapshot
-retained for audit. The `798` literals + baseline pointer update in the same commit, with a
-red-case test: deleting a rule present in the NEW baseline must still fail. ADR-0001-compatible:
-this is verification of rule retention, not trust machinery. P4 merges before P7 can.
+`profiles/guided-compatibility.json` intent). **Disposition ontology is three-class (G2-F1) —
+every baseline rule the card swap touches must be accounted as exactly one of**:
+`relocated` (verbatim, anywhere in the extended universe — the superset check finds it),
+`removed` (explicit disposition for a true deletion, e.g. the S-Session-End dedup), or
+`rewritten` (explicit old-rule-hash → new-rule-hash(es) mapping for KEEP-compressed content —
+reworded lines are NEVER silently exempted from the relocation-not-loss proof). Red-case tests:
+a baseline rule with no disposition fails; a `rewritten` mapping to a nonexistent successor hash
+fails; deleting a rule present in the NEW baseline still fails. Old snapshot retained for audit.
+The `798` literals + baseline pointer update in the same commit. ADR-0001-compatible: this is
+verification of rule retention, not trust machinery. P4 merges before P7 can.
 **Commit split (G1-F4)**: P4 ships the successor baseline + migration machinery + relocation-
 universe red-case tests; the regenerated rule-inventory/rule-migration rows — including the
 explicit `removed` dispositions for the CUT — land inside the P7 swap commit, because the
@@ -256,9 +261,11 @@ P3  Instrument: evals/skill-onoff/ harness + tasks + 3 hooks/tests (stub-runner,
 P4  Profiles baseline re-establishment (§7)                      [∥ P3; Board gate at approval]
 P5  Primary block 63 runs (resume-by-cell) + advisory haiku 21
 P6  Adjudication: score-onoff.js verdict + Board read; evidence dir report
-P7  Conditional ship: single swap commit (SKILL.md + regenerated profiles artifacts + codex
-    mirror resync) — clean `git revert` granularity. On non-SHIP verdict: ship P0/P1/P3/P4 only,
-    record verdict, BACKLOG the draft with evidence pointer
+P7  Conditional ship: single swap commit (SKILL.md + regenerated profiles artifacts incl.
+    rule-migration removed/rewritten rows + the three canonical_rules test literals updated to
+    the post-swap count (G2-F2) + codex mirror resync) — clean `git revert` granularity. On
+    non-SHIP verdict: ship P0/P1/P3/P4 only, record verdict, BACKLOG the draft with evidence
+    pointer
 P8  Closeout: finish-flow L-5; preflight-release + --update-baseline; INDEX/archive;
     BACKLOG rows created: quality-pipeline card (trigger: instrument validated) +
     post-ship observation window (G1-F5)
@@ -336,4 +343,14 @@ task-prompt leakage grep).
   CLAUDE_CONFIG_DIR leak. Depth-0 adjudication: **10/10 accepted** (3 accepted_blocker,
   7 accepted_nonblocking), dispositions in `…g1-disposition.json`, all folded into this
   revision (marked G1-F* inline). Envelope: `evidence/…/g1-envelope.json`.
-- (pending) G2 terminal generation on the repaired plan.
+- **G2 (2026-08-18, terminal — generation cap)**: same manifest. Transport: GLM strict,
+  MiniMax extracted; grok exit_failure ×2, sol transport-void ×2 (both optional; panel valid at
+  2 required families). Semantic: GLM CONDITIONAL / MiniMax READY → envelope CONDITIONAL,
+  reason `generation_cap_requires_depth_0_adjudication`. 2 findings, both R5: G2-F1 (blocking)
+  successor-baseline ontology lacked a class for KEEP-compressed rewordings → folded as the
+  three-class `relocated/removed/rewritten` ontology with explicit hash mapping + red-cases;
+  G2-F2 (non-blocking) the three canonical_rules literals belong inside the P7 swap commit →
+  folded. Depth-0 adjudication: 2/2 accepted, dispositions in `…g2-disposition.json`.
+  **FREEZE (2026-08-18)**: cap exhausted, all residual findings adjudicated, zero unresolved
+  construct-level findings. No G3, no new lineage (G2-terminal 治理 per repo precedent). Envelope:
+  `evidence/…/g2-envelope.json`.

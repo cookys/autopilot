@@ -15,7 +15,11 @@ const DEFAULT_EXCLUDES = [
   ".venv",
   ".opencode",
   "_bodies",
-  "platforms/codex/plugin"
+  "platforms/codex/plugin",
+  // Byte-frozen eval fixtures (digest-pinned byte-copies of live skills; their relative
+  // links intentionally dangle from the pack location — rewriting them would break the
+  // byte-identity the skill-onoff arm-parity tests assert).
+  "evals/skill-onoff/packs"
 ];
 
 // Regex configuration

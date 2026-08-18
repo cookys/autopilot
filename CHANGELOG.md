@@ -32,6 +32,7 @@ baseline 三類 disposition 本體論照常出貨。
   past its recorded baseline without a current-version `prose-justification:` line.
 
 ### Changed
+- `doc-drift-gate.js`: byte-frozen eval pack fixtures (`evals/skill-onoff/packs`) excluded from the links check — their relative links intentionally dangle (byte-identity with live skills is test-asserted).
 - `docs/BACKLOG.md`: contract-card row (dev-flow leg RESOLVED-NO-SWAP), new rows — dev-flow
   card re-attempt (instrument repair first), zero-compliance finding (F6/F4), scaffold-tier A/B
   (four-layer D6 leftover repaired), cc-shim `generate_session_title` framing leak (Fix).

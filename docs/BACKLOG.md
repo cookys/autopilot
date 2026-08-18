@@ -79,13 +79,13 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: M
 - **Source**: 2026-08-18 capability-receipt expiry investigation.
 
-### `codex_transport_scan_fd_holders` walks all of /proc with a fork per fd
+### ~~`codex_transport_scan_fd_holders` walks all of /proc with a fork per fd~~ — RESOLVED v2.34.22 (8000ms → 80ms; test 318s → 52s; stat field-shift bug fixed too)
 - **Trigger**: Next touch of `scripts/lib/dispatch-author-codex-transport.sh`, or when test wall-clock becomes a problem.
 - **Context**: `dispatch-author-codex-transport.test.sh` takes **318 s** — not failing, just slow enough to look hung under a timeout wrapper. Root cause: `codex_transport_scan_fd_holders()` (`scripts/lib/dispatch-author-codex-transport.sh:206-236`) forks `stat` per PID and `readlink` per fd (~5000 forks), measured **7.4–8.2 s per call** on a 543-process host, and it runs on the normal-exit path of essentially every dispatch. Cost is O(host process count), so it inflates further under `run.sh --parallel 8`. A single-process Node walk measured 0.06 s (~125×) with the same semantics — EACCES reproduces the own-uid filter, zombies read back empty. Whoever does it must keep `$$` excluded (else the scanning shell self-reports as a holder) and verify an orphan/incomplete-tree case still positively detects a reparented fd holder, or the speedup silently blinds the scan.
 - **Effort**: Fix
 - **Source**: 2026-08-18 red-test-gate investigation (autopilot:debugger cluster B).
 
-### Two test files are not parallel-safe — `run.sh --parallel 8` produces false reds
+### ~~Two test files are not parallel-safe~~ — RESOLVED v2.34.22 (root-caused: codex-plugin-package regenerates the live mirror that dev-setup asserts on; both serialized)
 - **Trigger**: Next time `hooks/tests/run.sh --parallel 8` reports a failure that does not reproduce serially; or when adding to the serial list at `hooks/tests/run.sh:190`.
 - **Context**: The 2026-08-18 clean-up run ended `2/260 FAILED` — `dev-setup.test.sh` and `codex-plugin-package.test.sh` — and **both pass serially** (verified immediately after, same tree). So they contend on shared state under an 8-way pool. This is not cosmetic: parallel false reds are what let eleven REAL failures sit unnoticed, because a red count that is partly noise stops being read. Either add them to the serial list or isolate whatever they share. **PLAUSIBLE, not confirmed**: observed in one parallel run; the contended resource was not identified. Related: `dispatch-author-codex-transport` takes 318 s and its cost scales with host process count, which makes it the most likely pool-slot hog (separate row).
 - **Effort**: Fix

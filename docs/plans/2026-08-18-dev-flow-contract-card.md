@@ -16,10 +16,12 @@ depth-0 orchestrator. The evidence instrument, the contract-card spec doc, and t
 baseline re-establishment ship regardless of the card verdict; the card body swap is conditional.
 
 **Claim scoping (honest boundary)**: the experiment measures single-turn, sonnet-class depth-0
-behavior on 7 micro-tasks over the marker families below. Multi-turn scope-creep escalation and
-Mission Routing Override are NOT measured — those sections are preserved under a static
-KEEP-verbatim checklist instead (§6 disposition). Opus-class behavior is an acknowledged
-extrapolation; a haiku advisory block bounds the weak end. Prior `evals/skill-transport/` H1
+behavior on 7 micro-tasks over the marker families below. NOT measured: multi-turn scope-creep
+escalation, Mission Routing Override, and the forcing-function TaskCreate family (headless `-p`
+has no TaskCreate tool — Phase-0 probe `evidence/…/phase0-probe.md`; its text is KEEP-verbatim
+pinned so FULL/CARD are byte-identical on it anyway) — all preserved under the static
+KEEP-verbatim checklist (§6). Opus-class behavior is an acknowledged extrapolation; a haiku
+advisory block bounds the weak end. Prior `evals/skill-transport/` H1
 (dev-flow prose as dispatched-leaf pack, D=0) answered the leaf channel; this instrument answers
 the so-far-unmeasured **routing + loading at depth 0** channel.
 
@@ -28,8 +30,9 @@ the so-far-unmeasured **routing + loading at depth 0** channel.
 1. **證據閘控出貨**: single project; card draft is instrument input first, shipped only on
    SHIP-GATE-MET verdict.
 2. **Target: dev-flow only**. quality-pipeline is a follow-up after the instrument is validated.
-3. **Budget: 60–90 live runs** (each ≈ one `claude -p` call). Pre-registered spend: 63 primary
-   (sonnet) + 21 advisory (haiku) + ≤6 smoke; worst case +21 card-iteration re-run.
+3. **Budget** (pinned ledger; the user-approved 60-90 governs the nominal total): gating = 63
+   primary (sonnet); non-gating = ≤6 smoke + 21 advisory (haiku); nominal total 90; contingency
+   = 21 CARD-iteration re-run; **hard total cap 111 live calls**. P6 report carries the ledger.
 4. **Frontmatter `description:` frozen byte-identical** — routing surface constant; a description
    change is a separate MAJOR-class decision, explicitly avoided.
 
@@ -48,50 +51,63 @@ tests. Resume-by-cell + recorded-seed matrix driver copied from `evals/skill-tra
 
 Per run, the harness assembles a synthetic plugin in scratch space:
 
-| Arm | `skills/dev-flow/SKILL.md` in synthetic plugin |
+| Arm | `skills/dev-flow/` in synthetic plugin |
 |-----|---|
-| FULL | frozen byte-copy of current 713-line file (digest-pinned in `packs/manifest.json`) |
-| CARD | frozen draft card (digest-pinned; frontmatter byte-identical to FULL — test-asserted) |
+| FULL | frozen byte-copy of current 713-line SKILL.md **+ current `references/` tree** (digest-pinned in `packs/manifest.json`) |
+| CARD | frozen draft card **+ the card's `references/` tree (incl. new session-end.md)** — the relocation ships with the card, never content-ablation (G1-F9); frontmatter byte-identical to FULL — test-asserted |
 | OFF  | directory absent |
 
 Companion roster (`finish-flow`, `quality-pipeline`, `learn` SKILL.md byte-copies) is IDENTICAL
 across all three arms — the only variable is dev-flow presence/content. OFF = "dev-flow absent",
 not "plugin absent" (controls for catalog existence; gives quality-pipeline equal self-routing
 base rate). No hooks in the synthetic plugin. Runner: non-bare `claude -p` (`--bare` breaks OAuth
-credential seeding), scratch HOME, `--plugin-dir`, `--output-format stream-json --verbose`,
+credential seeding), scratch HOME **and scratch CLAUDE_CONFIG_DIR both explicitly exported**
+(unset config dir can leak the operator's installed plugin into OFF — G1-F9; arm-isolation test
+asserts both), `--plugin-dir`, `--output-format stream-json --verbose`,
 `--setting-sources project --strict-mcp-config --dangerously-skip-permissions`.
 
-**Pre-registered fallback**: if Phase-0 smoke shows `--plugin-dir` skills not surfacing in `-p`
-mode, downgrade to prompt-injection arms AND narrow the recorded claim to "prose-in-context
-non-inferiority" with the routing/loading channel explicitly recorded as unmeasured.
+**Channel verified** (Phase-0 probe, 2026-08-18, claude 2.1.234, 1 live call): plugin skills
+surface and load headless — `autopilot:dev-flow` listed AND invoked via Skill tool_use under
+exactly this flag set. The prompt-injection fallback is not needed. Same probe REFUTED the
+task-store channel: no TaskCreate tool exists in headless `-p` (tool absent, zero task JSON
+residue) — the F2 marker family is dropped (its text is pinned byte-identical across FULL/CARD,
+so it carried no discriminating power for non-inferiority). Evidence: `phase0-probe.md`.
 
 ### Task set (d1–d7, single-turn, prompts byte-identical across arms, zero artifacts contract)
 
-Marker channels (all deterministic, no LLM judging): (1) git/FS residue in temp repo; (2) task-store
-residue `$SCRATCH_HOME/.claude/tasks/<session>/<n>.json` copied out before cleanup (TaskCreate JSON
-incl. `blockedBy` — Phase-0 re-probes the path on current CLI); (3) stream-json tool_use events
-(Skill invocations, Bash-before-Edit ordering).
+Marker channels (all deterministic, no LLM judging): (1) git/FS residue in temp repo; (2)
+stream-json tool_use events (`{name:"Skill", input.skill}` shape pinned by the probe; Skill
+invocations, Bash-before-Edit ordering). Task-store channel removed per Phase-0 probe (G1-F8).
+**Per-task repo branch topology is part of the task fixture** (G1-F8): d3/d7 init `develop` as
+default with `main` present; d4 inits `main` as default with `develop` present; others single
+default branch. The harness builds each layout from the task's repo spec, frozen base SHA per
+branch.
 
 | Task | Exercise | Key markers (family) |
 |---|---|---|
-| d1-s-tiny-feature | S path | task title `^S-scope-gate:` (F2); NO `docs/projects/` (F1); Skill(quality-pipeline) before commit (F6) |
-| d2-l-multimodule | L gates | `.claude/session-start-sha` == frozen base SHA + plan file + project README (F1); `L-1.5:`/`L-1.6:`/`L-5:` tasks + phase task `blockedBy`→L-1.6 (F2) |
+| d1-s-tiny-feature | S path | NO `docs/projects/` created (F1); Skill(quality-pipeline) before commit (F6) |
+| d2-l-multimodule | L gates | `.claude/session-start-sha` == frozen base SHA + plan file + project README with goal/criteria headings (F1) |
 | d3-fix-known-bug | Fix path | `fix/*` branch merged to develop (F3); ongoing-maintenance ledger row regex (F4); test-run event before first Edit (F5) |
-| d4-hotfix | H path | compound: `^hotfix/` branch AND from main AND `--no-ff` merge to main (F3); `^H-9:` task (F2) |
+| d4-hotfix | H path | compound: `^hotfix/` branch AND from main AND `--no-ff` merge to main (F3) |
 | d5-verify-contract | 驗證合約 | red run before first Edit, green run after last (F5) |
 | d6-quality-gate | quality-gate rule | Skill(quality-pipeline) before first `git commit` (F6) |
-| d7-fix-vs-l-boundary | anti-pattern cell (multi-module bug stays Fix) | `fix/*` branch (F3); absence of project dir AND of L-1.x tasks (F1, divergence pair with d2) |
+| d7-fix-vs-l-boundary | anti-pattern cell (multi-module bug stays Fix) | `fix/*` branch (F3); absence of project dir AND of plan file (F1, divergence pair with d2) |
 | all | manipulation check | Skill tool_use naming dev-flow (M; FULL/CARD only) |
 
 Prompt-hygiene grep gate (test-enforced): no task.md contains marker vocabulary (`S-scope-gate`,
 `L-1.5`, `L-1.6`, `L-5`, `H-9`, `ongoing-maintenance`, `session-start-sha`, `dev-flow`,
-`quality-pipeline`, `finish-flow`, `blockedBy`).
+`quality-pipeline`, `finish-flow`, `blockedBy`, `fix/`, `hotfix/`, `驗證合約` — G1-F3), and the
+scorer test derives coverage: every literal token a `markers.sh` greps for must appear in the
+forbidden list or carry a recorded allow-rationale (description-trigger phrases stay allowed by
+design — routing is the mechanism under test).
 
 ### Run matrix
 
 - **Primary (gating)**: sonnet, 7 tasks × 3 arms × 3 reps = **63 runs**. All rules evaluate here.
 - **Advisory (non-gating)**: haiku, 7 × 3 × 1 = **21 runs** — weak-orchestrator robustness signal.
-- Phase-0 smoke ≤6 live runs, reused as matrix cells via resume-by-cell.
+- **Phase-0 smoke ≤6 live runs is non-gating and precedes the rules freeze; smoke rows are NEVER
+  reused as gating matrix cells** (pre-freeze observations stay out of the gating dataset —
+  G1-F1). Canonical order: harness+tests → smoke → freeze → gating block (§8 P3 and §11.2 agree).
 - Model rationale: production depth-0 is strong-model; historical sonnet ceiling was on *outcome*
   oracles, but *compliance-residue* markers discriminated 80% vs 0% on sonnet (2026-07-04 campaign,
   `patterns_named`). Claim ships scoped to sonnet-class depth-0.
@@ -99,21 +115,27 @@ Prompt-hygiene grep gate (test-enforced): no task.md contains marker vocabulary 
 ## 4. Pre-registered decision rules (FROZEN before first live run; mid-campaign edits = restart block)
 
 ```
-Marker families: F1 sizing/workflow-selection (d1,d2,d7) · F2 forcing-function
-TaskCreates (d1,d2,d4) · F3 branch discipline (d3,d4,d7) · F4 maintenance ledger (d3)
+Marker families (F2 forcing-function TaskCreates REMOVED — Phase-0 probe: tool absent
+headless; text pinned byte-identical across FULL/CARD): F1 sizing/workflow-selection
+(d1,d2,d7) · F3 branch discipline (d3,d4,d7) · F4 maintenance ledger (d3)
 · F5 verification contract (d3,d5) · F6 quality gate (d1,d3,d6).
-Per family per arm: n = tasks×3 reps (F1/F2/F3/F6: n=9; F5: n=6; F4: n=3);
+Per family per arm: n = tasks×3 reps (F1/F3/F6: n=9; F5: n=6; F4: n=3);
 a run scores 1 for a family iff ALL that family's markers for that task are true.
 
 Exclusions: rows with failure_class=infra_fail (timeout/auth/5xx/empty) are excluded
-and their cells re-run (max 3 attempts, then recorded missing). If >10% of any arm's
-cells end infra_fail, the campaign block is invalid — fix infra, re-run block.
+and their cells re-run (max 3 attempts, then recorded missing). A missing cell
+excludes that (task,rep) pair from ALL THREE arms (paired exclusion keeps arms
+comparable); if any family loses ≥2 pairs, the block is invalid. V1's denominator
+is the effective per-arm run count after exclusion. If >10% of any arm's cells end
+infra_fail, the campaign block is invalid — fix infra, re-run block.
 
-V1 Manipulation check: skill_invoked_devflow ≥ 14/21 runs in FULL AND in CARD.
+V1 Manipulation check: skill_invoked_devflow ≥ 2/3 of effective runs in FULL AND in
+   CARD (nominal ≥ 14/21).
    Failure ⇒ INSTRUMENT-INVALID (routing failure, no content judgment recorded).
 V2 Sensitivity gate (negative-control discipline): family f is LOAD-BEARING iff
    FULL_f − OFF_f ≥ 3 counts (n=9), ≥ 2 (n=6), ≥ 2 (n=3).
-   Instrument VALID iff ≥ 4 of 6 families are load-bearing. Otherwise
+   Instrument VALID iff ≥ 4 of 5 families are load-bearing (proportionally STRICTER
+   than the pre-probe 4-of-6 — the family drop must not relax the gate). Otherwise
    INSTRUMENT-INVALID (vacuous: FULL ≈ OFF; per references/evidence-discipline.md
    "The one question"), regardless of how CARD looks.
 V3 Non-inferiority (evaluated only if V1∧V2): on EVERY load-bearing family,
@@ -165,7 +187,9 @@ governance") + `references/scaffold-tiers.md` (single-canonical-home). Sections:
 6. **Review checklist** — checkbox rows each naming its verification command.
 
 Enforcer for rule 4: extend `preflight-release.sh` check 8 with the per-skill map (no new script
-basename — avoids new inventory wiring).
+basename — avoids new inventory wiring). **Single canonical home (G1-F6)**: P1 also edits
+CLAUDE.md:73 so the boy-scout one-liner becomes a pointer to this spec doc — the references doc
+is canonical, CLAUDE.md keeps only the pointer; CLAUDE.md joins §9 ship surfaces.
 
 ## 6. Card draft methodology (P2) — dev-flow disposition summary
 
@@ -212,6 +236,10 @@ dispositions in the migration map (the `obsolete` category already models this).
 retained for audit. The `798` literals + baseline pointer update in the same commit, with a
 red-case test: deleting a rule present in the NEW baseline must still fail. ADR-0001-compatible:
 this is verification of rule retention, not trust machinery. P4 merges before P7 can.
+**Commit split (G1-F4)**: P4 ships the successor baseline + migration machinery + relocation-
+universe red-case tests; the regenerated rule-inventory/rule-migration rows — including the
+explicit `removed` dispositions for the CUT — land inside the P7 swap commit, because the
+deletion only exists then.
 
 ## 8. Phase DAG
 
@@ -222,15 +250,18 @@ P0  Prologue repairs (no-bump, docs-only commit)
 P1  Card spec doc references/skill-contract-card.md + check-8 per-skill map (PATCH-carrying commit)
 P2  Card draft (branch-only fixture, NOT merged) per §6; frozen into packs/ with digest
 P3  Instrument: evals/skill-onoff/ harness + tasks + 3 hooks/tests (stub-runner, planted-red)
-    → rules freeze (§4) → Phase-0 live smoke ≤6 runs (plugin load / dev-flow invocation /
-    tasks-dir capture proven)                                   [P2∥P3 until CARD fixture needed]
+    → Phase-0 smoke ≤6 live runs, non-gating (plugin load / dev-flow invocation / event shape
+    re-proven on the final harness) → THEN rules freeze (§4; review-log entry "LOCKED")
+                                                                [P2∥P3 until CARD fixture needed]
 P4  Profiles baseline re-establishment (§7)                      [∥ P3; Board gate at approval]
 P5  Primary block 63 runs (resume-by-cell) + advisory haiku 21
 P6  Adjudication: score-onoff.js verdict + Board read; evidence dir report
 P7  Conditional ship: single swap commit (SKILL.md + regenerated profiles artifacts + codex
     mirror resync) — clean `git revert` granularity. On non-SHIP verdict: ship P0/P1/P3/P4 only,
     record verdict, BACKLOG the draft with evidence pointer
-P8  Closeout: finish-flow L-5; preflight-release + --update-baseline; INDEX/archive
+P8  Closeout: finish-flow L-5; preflight-release + --update-baseline; INDEX/archive;
+    BACKLOG rows created: quality-pipeline card (trigger: instrument validated) +
+    post-ship observation window (G1-F5)
 ```
 
 ## 9. Ship surfaces (L-1.5 audit output; verification command per surface)
@@ -247,11 +278,13 @@ P8  Closeout: finish-flow L-5; preflight-release + --update-baseline; INDEX/arch
 | 8 | README badges (28 skills unchanged); no doc pins dev-flow line counts (grep "713" clean) | `node scripts/sync-version.js --check`; `node scripts/doc-drift-gate.js` |
 | 9 | CHANGELOG + version: **PATCH** (no new skill/agent; body rewrite + refs + scripts are PATCH classes; description change would be MAJOR — avoided) | `bash scripts/preflight-release.sh` 8/8 |
 | 10 | Plan/project/INDEX/evidence dirs | preflight INDEX check |
-| 11 | BACKLOG: consume contract-card row; add tier-A/B row (P0); add post-ship observation row (2-release watch via ongoing-maintenance + retro; TaskCreate-compliance telemetry is `documented-only` — honest gap) | manual diff |
+| 11 | BACKLOG: consume contract-card row; add tier-A/B row (P0); at P8 add BOTH the quality-pipeline-card row (trigger: instrument validated) AND the post-ship observation row (2-release watch via ongoing-maintenance + retro; TaskCreate-compliance telemetry is `documented-only` — honest gap) (G1-F5) | manual diff |
+| 12 | CLAUDE.md:73 boy-scout line → pointer to `references/skill-contract-card.md` (single canonical home — G1-F6) | `node scripts/check-claude-md-inventory.js`; grep shows one canonical statement |
 
 Instrument regression tests (all spend-free via `ONOFF_STUB_BIN`):
 `hooks/tests/skill-onoff-eval.test.sh` (arm assembly digests; roster parity across arms; prompt
-byte-identity; task-store capture; infra_fail classification),
+byte-identity; per-arm references-tree presence + scratch CLAUDE_CONFIG_DIR isolation (G1-F9);
+per-task branch-topology construction (G1-F8); infra_fail classification),
 `skill-onoff-markers.test.sh` (per-task three-way probe: no-op ⇒ false / planted-compliant ⇒ true
 / planted-cheat ⇒ false),
 `skill-onoff-score.test.sh` (vacuous FULL==OFF fixture can NEVER reach SHIP-GATE-MET; margin and
@@ -270,15 +303,16 @@ task-prompt leakage grep).
 | CLI auto-update mid-block | runner_version recorded per row; version change invalidates block |
 | Routing regression from body trim | description frozen; `evals/run-trigger-test.sh` as cheap negative control post-swap |
 | Non-inferior in-lab, degrades in production | per-skill baseline ratchet; post-ship observation BACKLOG row; limits stated honestly in claim scoping |
-| Rollback | P7 single swap commit; revert ritual = same-commit profiles regen + mirror resync |
+| Rollback | P7 single swap commit; revert ritual = same-commit profiles regen + mirror resync + `surface-lines.json` per-skill map refresh with a CHANGELOG `prose-justification:` line (post-P8 `--update-baseline` records the card cap; restoring 713 lines must not trip the P1 ratchet — G1-F10) |
 | Plan-review churn | evidence → evidence dir; growth hard-stop 1.45×; rubric IDs `- R1: [label]`; G2 disposition generation=1; clear `~/.autopilot/plan-review/<hash>/` before re-panel |
 
 ## 11. Acceptance criteria (quantified)
 
 1. Instrument: 3 new hooks/tests green; planted-red demonstrations recorded (delete-the-gate
    mutation turns skill-onoff-score.test.sh red) — evidence dir.
-2. Phase-0 smoke: dev-flow Skill invocation observable in ≥1 FULL-arm transcript; tasks-dir
-   residue captured or fallback channel pinned — before rules freeze.
+2. Phase-0 smoke (non-gating, before rules freeze, never reused as gating cells): dev-flow Skill
+   invocation observable in ≥1 FULL-arm transcript on the final harness; stream-json event shape
+   pinned. (First probe already recorded: channel confirmed, task-store channel refuted.)
 3. Campaign: 63 primary rows with 0 unresolved infra_fail cells; verdict computed mechanically by
    score-onoff.js; committed results JSONL + report.
 4. Card ship (conditional): V1∧V2∧V3 per §4; all §9 surface checks pass; preflight-release 8/8.
@@ -293,4 +327,13 @@ task-prompt leakage grep).
 
 ## Review Loop History
 
-- (pending) G1/G2 bounded hetero plan review per dispatch-plan-review contract.
+- **G1 (2026-08-18)**: 4-seat manifest (GLM-5.3 architecture / MiniMax-M3 ops-skeptic /
+  grok-4.6 redteam / sol dissent). Transport: GLM strict, MiniMax extracted, grok attempt-2
+  extracted; **sol both attempts transport-void** (codex exit 3, empty stdout — quota-class;
+  optional seat, panel valid at 3 families). Semantic verdicts: GLM CONDITIONAL / MiniMax READY /
+  grok STOP → envelope CONDITIONAL. 10 findings (3 blocking): F1/F8 freeze-order contradiction +
+  smoke-reuse + stale F2 family + branch topology; F9 CARD references-tree ablation +
+  CLAUDE_CONFIG_DIR leak. Depth-0 adjudication: **10/10 accepted** (3 accepted_blocker,
+  7 accepted_nonblocking), dispositions in `…g1-disposition.json`, all folded into this
+  revision (marked G1-F* inline). Envelope: `evidence/…/g1-envelope.json`.
+- (pending) G2 terminal generation on the repaired plan.

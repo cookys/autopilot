@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "dev-flow-contract-card-2026-08-18",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "5889ee3df6cdc3ede747ac443f8ac25c8b19f0733a48db9fff733c0751dba50c",
+      "disposition": "accepted_blocker",
+      "rationale": "Real internal contradiction (§8 freeze→smoke vs §11 smoke→freeze) plus pre-freeze data admission via smoke-row reuse. Repair: canonical order = harness+tests → Phase-0 smoke (non-gating, ≤6) → rules freeze → gating block; smoke rows are never reused as gating cells."
+    },
+    {
+      "fingerprint": "c28c4b6d39bdd43b64ceae6e58f453d2824f3db3ae213968060d3d260e129365",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct on all three: Phase-0 probe already refuted the task-store channel so freezing 6 families/4-of-6 would freeze known-dead rules; ordering contradiction as in F1; d3/d4/d7 need explicit per-task branch topology the orchestration temp-repo init does not create. Repair: 5 families, V2 ≥4-of-5 (proportionally stricter, not laxer), per-task repo branch-layout spec."
+    },
+    {
+      "fingerprint": "381ad0dc8b0084b9b94555ff3a295ddce146e494a3520fb876b6563786a98120",
+      "disposition": "accepted_blocker",
+      "rationale": "Both sub-claims verified: CARD without its relocated references tree is content-ablation (straw-man, second variable); unset CLAUDE_CONFIG_DIR can leak the operator's installed plugin into OFF (the working probe exported it, the runner spec did not). Repair: per-arm skills/dev-flow/references/ tree in the synthetic plugin (FULL=current, CARD=card tree), digest-pinned; runner exports scratch CLAUDE_CONFIG_DIR; arm-isolation test asserts both."
+    },
+    {
+      "fingerprint": "93eaf3acac983255fba19f42208e932246389638fe42c1a0ae2d56766ba7977b",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Missing-cell semantics now pre-registered: a cell recorded missing after 3 attempts excludes that (task,rep) pair from ALL arms (paired exclusion keeps arms comparable); if any family loses ≥2 pairs the block is invalid; V1 denominator becomes effective per-arm run count."
+    },
+    {
+      "fingerprint": "0019512ca8c0e755d9e2e379be524cfea35f0b1c1931bf8c8eb9293e8c13efec",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Leakage vocabulary extended (fix/, hotfix/, 驗證合約, run-tests-ordering hint terms) and the scorer test adds a derivation check: every literal token a markers.sh greps for must appear in the forbidden list or carry a recorded allow-rationale (description-trigger phrases stay allowed by design)."
+    },
+    {
+      "fingerprint": "9e77538389255662979c902df55207c6cac3cd10bb33e8e6f3ecae22c214bbbf",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Commit split named: P4 ships the successor baseline + migration machinery + relocation-universe red-case tests; the regenerated rule-inventory/rule-migration rows including explicit removed dispositions land inside the P7 swap commit, because the deletion only exists then."
+    },
+    {
+      "fingerprint": "856902492d40e605e2e33e9f83d39dda5a4a08294c2ec58ba05a84b01af50655",
+      "disposition": "accepted_nonblocking",
+      "rationale": "P8 closeout now creates the quality-pipeline-card BACKLOG row (trigger: skill-onoff instrument validated) alongside the already-planned post-ship observation row; both named in §9 surface 11."
+    },
+    {
+      "fingerprint": "5a22fd7249588db3c8e61cbe39010fb851ebab9f6802b095b6ab01f3fae571d4",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Single-canonical-home restored: P1 also edits CLAUDE.md:73 to point at references/skill-contract-card.md as the canonical definition (one-liner keeps only the pointer); CLAUDE.md added to §9 ship surfaces."
+    },
+    {
+      "fingerprint": "e64317e6831b662f1610ed13316087f7ec6c1f6dde0136796acad896f219a883",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Budget arithmetic pinned: gating spend = 63 primary; non-gating = ≤6 smoke + 21 advisory; contingency = 21 CARD-iteration; hard total cap 111 live calls; P6 evidence report carries the run ledger. The user-approved 60-90 figure governs the nominal total (63+21+6=90)."
+    },
+    {
+      "fingerprint": "85bccde73e85ff2540b0cfa077c79414e91157aa0b24946d269a46175861e2bd",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Rollback ritual extended: reverting P7 also refreshes docs/metrics/surface-lines.json (per-skill map) in the same commit with a CHANGELOG prose-justification line, so the restored 713-line body does not trip the P1 ratchet; recorded in §10 risks."
+    }
+  ]
+}

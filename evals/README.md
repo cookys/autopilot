@@ -2,6 +2,11 @@
 
 Test harness for verifying skill triggers, behavioral markers, and hook logic.
 
+> `skill-onoff/` — depth-0 skill presence/content instrument (3-arm FULL/CARD/OFF, real
+> `--plugin-dir` plugin loading, deterministic markers, pre-registered decision rules). See
+> [`skill-onoff/README.md`](skill-onoff/README.md); spend-free regression tests in
+> `hooks/tests/skill-onoff-*.test.sh`.
+
 ## Test Categories
 
 ### 1. Hook Unit Tests (fast, no API cost)

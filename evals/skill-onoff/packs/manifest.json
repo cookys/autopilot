@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "artifact_type": "skill_onoff_pack_manifest",
-  "frozen_at_commit": "P2",
-  "note": "dev-flow-card digests frozen at P2; dev-flow-full + companions added at P3 harness build; any card edit = re-run CARD arm (plan §4)",
+  "frozen_at": "P3",
+  "note": "all three pack families digest-frozen; companions identical across arms (test-asserted); card frontmatter byte-identical to full (test-asserted); any card edit = CARD-arm re-run (plan §4)",
   "packs": {
     "dev-flow-card": {
       "dev-flow-card/SKILL.md": "cb5b0b48fc23ec03dfdd8f68a7b040a1780299cebc1c7c48110afb430f0332e8",
@@ -11,6 +11,18 @@
       "dev-flow-card/references/model-routing.md": "24a113d3d9aa020ebb16b062d56921a607990d70c2f6bfba199a69c72d665e6c",
       "dev-flow-card/references/post-feature-doc-sync.md": "f036506025ae240ee1f87ba44682179237ee4192cef387ed275285657ea46a94",
       "dev-flow-card/references/session-end.md": "3a5fc18eed7d1ab87289b8c9934b6c58682a11c5ccf851077fc743249b1239a2"
+    },
+    "dev-flow-full": {
+      "dev-flow-full/SKILL.md": "782d234c6f7b142f77249fdc1e38cb6c980b39beb4546232f92c9d8f3bd11cf5",
+      "dev-flow-full/references/context-continuation.md": "76ca43b304b64bc164d3ceafa25c5ac6218f0c1ecf8b4dce1cd31c1f7f02b9c7",
+      "dev-flow-full/references/historical-rationale.md": "985e7476c110b9a3425d01c7d7a5d8e2b3e9a3e76b92e6f7e791ff78415cca9c",
+      "dev-flow-full/references/model-routing.md": "24a113d3d9aa020ebb16b062d56921a607990d70c2f6bfba199a69c72d665e6c",
+      "dev-flow-full/references/post-feature-doc-sync.md": "f036506025ae240ee1f87ba44682179237ee4192cef387ed275285657ea46a94"
+    },
+    "companions": {
+      "companions/finish-flow/SKILL.md": "1796285bac9223a91f70ed528a03380bdca874a1bfe4a5bb7713dd669afc897c",
+      "companions/learn/SKILL.md": "64e2b6226be2c5a59c0a14210e09988c44319829830e096d1d5ef334519b2144",
+      "companions/quality-pipeline/SKILL.md": "a5a4de8874d4e6165fa93c8c85935debb8b75008c8a986972a93292af4e62a2e"
     }
   }
 }

@@ -354,3 +354,9 @@ task-prompt leakage grep).
   **FREEZE (2026-08-18)**: cap exhausted, all residual findings adjudicated, zero unresolved
   construct-level findings. No G3, no new lineage (G2-terminal 治理 per repo precedent). Envelope:
   `evidence/…/g2-envelope.json`.
+- **RULES LOCKED (2026-08-18, P3 complete)**: harness + d1-d7 + 3 regression tests green;
+  Phase-0 smoke on the FINAL harness (1 live FULL-arm run, sonnet, 19s): dev-flow **naturally
+  routed and invoked** (first tool event = Skill autopilot:dev-flow), markers emitting, result
+  schema complete — `evidence/…/phase0-smoke-{result,transcript}.jsonl`. §4 rules text, task
+  set, markers, pack digests (`packs/manifest.json`) are FROZEN as of this entry; live spend
+   2/6 smoke. Mid-campaign edits to any frozen artifact = restart the block.

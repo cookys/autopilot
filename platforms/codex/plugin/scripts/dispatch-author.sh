@@ -774,6 +774,65 @@ timeout_to_ms() {
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
 
+# ── mid-run observability ────────────────────────────────────────────────────
+# Until v2.34.21 this rail was fire-and-forget: the run's identity surfaced only in
+# the FINAL JSON, so nothing could locate, watch or liveness-probe an author run
+# in flight. dispatch-hetero.sh and dispatch-review.sh already emit a START-time
+# manifest that scripts/dispatch-status.js consumes (--run / --list / --stall-secs);
+# this mirrors it. It matters twice over, because dispatch-plan-review.js spawns THIS
+# script once per seat — so plan review was unobservable for the same reason.
+# Trust boundary is unchanged: scheduling telemetry only, never a verdict input,
+# never worker self-report.
+AUTHOR_RUN_ID="${RUN_ID:-}"
+[ -n "$AUTHOR_RUN_ID" ] || AUTHOR_RUN_ID="author-$(date +%s)-$$"
+AUTHOR_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+AUTHOR_STARTED_EPOCH="$(date +%s)"
+AUTHOR_MANIFEST_FILE=""
+AUTHOR_MANIFEST_ENDED=""
+AUTHOR_MANIFEST_ENDED_EPOCH=""
+AUTHOR_FINAL_STATUS=""
+write_author_manifest() {
+  [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" = "0" ] && return 0
+  local dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
+  { mkdir -p "$dir"; } 2>/dev/null || return 0
+  local safe_id; safe_id="$(printf '%s' "$AUTHOR_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
+  AUTHOR_MANIFEST_FILE="$dir/${safe_id}.manifest.json"
+  local tmp="$AUTHOR_MANIFEST_FILE.tmp.$$"
+  # log_format is dispatcher-DECLARED, never content-sniffed, so an authored payload
+  # containing JSON lines can never self-report telemetry (same rule as dispatch-review).
+  local log_format="plain" aux_json="null"
+  if [ "${CODEX_TRANSPORT:-0}" = "1" ]; then
+    log_format="codex-chrome"
+    [ -n "${CODEX_STDERR:-}" ] && aux_json="\"$(json_escape "$CODEX_STDERR")\""
+  fi
+  local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(json_escape "$LEDGER")\""
+  local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(json_escape "$STAGE")\""
+  local ended_json="null" endep_json="null"
+  if [ -n "$AUTHOR_MANIFEST_ENDED" ]; then
+    ended_json="\"$AUTHOR_MANIFEST_ENDED\""
+    endep_json="${AUTHOR_MANIFEST_ENDED_EPOCH:-null}"
+  fi
+  local final_json="null"
+  [ -n "$AUTHOR_FINAL_STATUS" ] && final_json="\"$(json_escape "$AUTHOR_FINAL_STATUS")\""
+  {
+    printf '{ "schema": 1, "run_id": "%s", "role": "author", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": null, "root_run_id": null, "depth": 0 }\n' \
+      "$(json_escape "$AUTHOR_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
+      "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
+      "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
+      "$(json_escape "$PROMPT_FILE")" \
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
+  } 2>/dev/null && mv -f "$tmp" "$AUTHOR_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
+  return 0
+}
+author_manifest_finalize() {
+  [ -n "$AUTHOR_MANIFEST_FILE" ] || return 0
+  AUTHOR_MANIFEST_ENDED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  AUTHOR_MANIFEST_ENDED_EPOCH="$(date +%s)"
+  write_author_manifest
+}
+write_author_manifest
+[ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: run_id=${AUTHOR_RUN_ID} manifest=${AUTHOR_MANIFEST_FILE:-none} (watch: scripts/dispatch-status.js --run ${AUTHOR_RUN_ID})" >&2
+
 # Context-window gate — runs BEFORE any runner spawns, so an over-budget authoring
 # payload costs nothing. Authoring prompts are the largest single-file payloads on
 # any rail (see the header note about the 4096 review default truncating them), which
@@ -818,6 +877,9 @@ cleanup() {
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD" || true
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
   # Codex private run artifacts are retained for raw_log consumers (not deleted).
+  # Stamp the manifest terminal so a watcher can tell "finished" from "hung" — the
+  # whole point of emitting it. Runs last so it records the real end of the process.
+  author_manifest_finalize
 }
 trap cleanup EXIT
 
@@ -863,6 +925,9 @@ if [[ "$RUNNER" = "codex" ]]; then
   rm -f "$RAW_LOG" 2>/dev/null || true
   RAW_LOG="$CODEX_STDOUT"
   CODEX_TRANSPORT=1
+  # The codex branch retargets the live log after the manifest was first written;
+  # re-emit so a watcher follows the file that is actually being appended to.
+  write_author_manifest
   set +e
   # 9th arg: trusted cwd for repository-trust preflight (D3). Prefer explicit
   # --repo-root; empty keeps ambient cwd (legacy callers / non-repo authoring).

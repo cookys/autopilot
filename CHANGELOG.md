@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.34.21 — hetero 委託的四條路徑,兩條原本是瞎的
+
+**Headline**: 委託出去的 {plan / impl / verify-author / qc} 四條路徑裡,只有 impl 與 qc 會在啟動時
+寫 run manifest,所以只有那兩條能被 `scripts/dispatch-status.js` 查活性、判卡住。**verify-author 與
+plan 完全不可觀測**——派出去之後,呼叫端只能等最終 JSON,中途無法知道「還在跑」還是「已經死了」。
+本次補上,而且是**修一處補兩條**:`dispatch-plan-review.js` 每個席位都是 spawn `dispatch-author.sh`
+出去的,所以讓 author 寫 manifest,plan review 同時變可觀測。
+
+### Changed
+- `scripts/dispatch-author.sh` — 啟動時寫 START manifest 到
+  `${TMPDIR}/autopilot-dispatch-runs/`(鏡像 `dispatch-review.sh:472` 的寫法),並在 `cleanup`
+  EXIT trap 蓋上 `ended_at`,讓 watcher 能區分「跑完」與「卡住」。codex 分支在 `RAW_LOG` 被改指到
+  私有 stdout 之後**重寫一次** manifest,watcher 才會追到真正在被 append 的檔案。
+  `log_format` 一律由 dispatcher **宣告**、不做內容嗅探——被授寫的 payload 含 JSON 行也無法自報遙測。
+  信任邊界不變:排程遙測,永不作為 verdict 輸入、永不採信 worker 自報。
+- `RUN_ID` 未提供時自動生成(plan-review 的席位不帶 `--run-id`),所以 plan review 的每一席
+  現在各自有可查的 run id。
+
+### Evidence
+- 零花費實測(`--bin /nonexistent/grok`,在 manifest 寫入之後、runner 啟動之前 die):manifest 有
+  寫出、`ended_at` 有蓋上;`dispatch-status.js --list` 列得到、`--run … --stall-secs 60` 回報
+  `phase=exited`、`alive=false`、`liveness.pid=dead`、`stall=false`、log bytes 與 mtime age。
+- 回歸:`dispatch-status`、`dispatch-review`、`dispatch-hetero`、`codex-plugin-package`、
+  `dispatch-author-codex-transport` 全綠;`sync-all --check` ok。
+
 ## v2.34.20 — 到期不再是拒絕的理由:一條排定好、且無法自救的中斷被拆掉
 
 **Headline**: `2026-08-17T22:23:16Z`,capability 收據過了 14 天 TTL,於是 `dispatch-hetero.sh`

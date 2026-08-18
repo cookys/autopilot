@@ -25,11 +25,30 @@
 
 ## Forcing functions (harness has no TaskCreate this session — tracked here, honesty fallback)
 
-- [ ] **L-1.5 Scope completeness audit** — plan §9 surface table is the output; recorded below.
-- [ ] **L-1.6 Skill routing** — no `.claude/skill-routing.md` entries for touched areas; invoked:
-      dev-flow (sizing/gates), handoff (resume). quality-pipeline to be invoked at every commit
-      gate; finish-flow at P8. N/A-justification: repo has no per-area skill routing config.
-- [ ] **L-5 finish-flow** — MUST invoke `autopilot:finish-flow` at P8; do not close inline.
+- [x] **L-1.5 Scope completeness audit** — plan §9 surface table is the output; recorded below.
+- [x] **L-1.6 Skill routing** — no `.claude/skill-routing.md` entries for touched areas; invoked:
+      dev-flow (sizing/gates), handoff (resume). quality-pipeline gates ran per phase (P1 review
+      SHIP-AS-IS, P3+P4 review SHIP-AS-IS); finish-flow invoked at P8. N/A-justification: repo
+      has no per-area skill routing config.
+- [x] **L-5 finish-flow** — invoked 2026-08-18; sub-task record below.
+
+## L-5 finish-flow record (2026-08-18)
+
+- **L-5.1 Final Goal Review** — success criteria vs evidence, all 5 PASS:
+  1. 3 skill-onoff tests green + planted-red recorded ✓ (re-run at close: GREEN ×3;
+     `evidence/p1-ratchet-redgreen.md`, test files assert vacuous-can-never-ship).
+  2. Phase-0 smoke before rules freeze ✓ (2 live runs ≤6; `phase0-probe.md` +
+     `phase0-smoke-result.json`; dev-flow naturally routed).
+  3. 63 primary rows, 0 unresolved infra, mechanical verdict ✓ (`primary-sonnet-*.{jsonl,json}`).
+  4. Card ship conditional on V1∧V2∧V3 ✓ — condition NOT met (V2), card correctly NOT shipped;
+     preflight-release 8/8 at `cbf6d0c9`.
+  5. Spec doc + P4 merged regardless of verdict ✓ (P1 `435cdc27`, P4 `bb3ee9cf` with 7-case
+     red/green; on merge to develop at L-5.3).
+  Requirements ledger: 證據閘控出貨 ✓(non-SHIP branch honored)/ dev-flow 單點 ✓ / 60-90 runs
+  ✓(86 total, cap 111)/ P4 擴大來源宇宙 ✓ / G1+G2 review ✓。Zero dropped requirements.
+- **L-5.2 Pre-Merge Review** — completeness scan 0 findings; full battery GREEN (skill-onoff ×3,
+  guided-dispositions, profile-context-isolation); per-phase reviews SHIP-AS-IS ×2 (raw logs in
+  evidence); final residual-diff review: see below.
 
 ## Phases (admitted Mission deliverable: this bounded DAG; source headings ≠ tasks)
 

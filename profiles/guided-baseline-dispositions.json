@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "artifact_type": "guided_baseline_dispositions",
+  "note": "Every P0 guided-baseline rule the current tree no longer carries verbatim must be accounted here as removed (true deletion, rationale required) or rewritten (old-hash → present successor hashes). Empty until the card swap (dev-flow-contract-card P7). Dead entries (rule still present / hash not in baseline) are validation failures.",
+  "dispositions": []
+}

@@ -142,6 +142,7 @@ function validateCatalog(raw, repoRoot = DEFAULT_REPO_ROOT) {
     'hook_classes_sha256',
     'rule_migration_sha256',
     'guided_compatibility_sha256',
+    'guided_dispositions_sha256',
     'category_totals',
     'core',
     'profiles',
@@ -156,6 +157,7 @@ function validateCatalog(raw, repoRoot = DEFAULT_REPO_ROOT) {
     'hook_classes_sha256',
     'rule_migration_sha256',
     'guided_compatibility_sha256',
+    'guided_dispositions_sha256',
   ]) {
     assertSha(catalog[field], `profile catalog.${field}`);
   }
@@ -206,6 +208,11 @@ function validateCatalog(raw, repoRoot = DEFAULT_REPO_ROOT) {
       'profiles/guided-compatibility.json',
       catalog.guided_compatibility_sha256,
       'guided compatibility record',
+    ],
+    [
+      'profiles/guided-baseline-dispositions.json',
+      catalog.guided_dispositions_sha256,
+      'guided baseline dispositions',
     ],
   ];
   for (const [relative, expectedHash, label] of bindingFiles) {

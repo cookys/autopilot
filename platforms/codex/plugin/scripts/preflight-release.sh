@@ -42,8 +42,25 @@ if [ "${1:-}" = "--update-baseline" ]; then
   P=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
   E=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
   mkdir -p docs/metrics
-  printf '{\n  "version": "%s",\n  "prose": %s,\n  "engine": %s,\n  "note": "north-star baseline (prose down, engine up) — refreshed at each release via preflight-release.sh --update-baseline; formula: find skills references -name *.md -type f | sort -u | xargs cat | wc -l (R1-F6 dedup, symlinks excluded by -type f)"\n}\n' "$V" "$P" "$E" > docs/metrics/surface-lines.json
-  echo "baseline updated: v$V prose=$P engine=$E → docs/metrics/surface-lines.json"
+  # Per-skill SKILL.md line map feeds the check-8 per-skill ratchet
+  # (references/skill-contract-card.md "Measurable per-skill definition").
+  node -e '
+    const fs = require("fs");
+    const skills = {};
+    for (const d of fs.readdirSync("skills").sort()) {
+      const p = `skills/${d}/SKILL.md`;
+      if (fs.existsSync(p)) skills[d] = fs.readFileSync(p, "utf8").split("\n").length - 1;
+    }
+    const out = {
+      version: process.argv[1],
+      prose: Number(process.argv[2]),
+      engine: Number(process.argv[3]),
+      skills,
+      note: "north-star baseline (prose down, engine up) — refreshed at each release via preflight-release.sh --update-baseline; formula: find skills references -name *.md -type f | sort -u | xargs cat | wc -l (R1-F6 dedup, symlinks excluded by -type f); skills{} = per-SKILL.md line counts for the check-8 per-skill ratchet (references/skill-contract-card.md)",
+    };
+    fs.writeFileSync("docs/metrics/surface-lines.json", JSON.stringify(out, null, 2) + "\n");
+  ' "$V" "$P" "$E"
+  echo "baseline updated: v$V prose=$P engine=$E skills=$(ls skills | wc -l) → docs/metrics/surface-lines.json"
   exit 0
 fi
 
@@ -217,13 +234,48 @@ check_north_star() {
   if [ "$SURF_PROSE" -gt "$limit" ]; then
     if current_changelog_has_justification "$CHANGELOG" "$VERSION"; then
       echo "    WARNING: prose grew >+5% vs baseline — current-version CHANGELOG justification found, allowed"
-      return 0
+    else
+      echo "    prose grew >+5% vs baseline ($base_prose → $SURF_PROSE) with NO 'prose-justification:' line in the v$VERSION section of $CHANGELOG" >&2
+      echo "    north star is prose↓ engine↑ — justify the growth in the CHANGELOG or reduce it" >&2
+      return 1
     fi
-    echo "    prose grew >+5% vs baseline ($base_prose → $SURF_PROSE) with NO 'prose-justification:' line in the v$VERSION section of $CHANGELOG" >&2
-    echo "    north star is prose↓ engine↑ — justify the growth in the CHANGELOG or reduce it" >&2
-    return 1
   fi
-  return 0
+  check_per_skill_ratchet
+}
+
+# Per-skill ratchet (references/skill-contract-card.md "Measurable per-skill definition"):
+# a skill's SKILL.md may not grow past its recorded baseline line count. Same soft-hard
+# escape as the aggregate gate (current-version 'prose-justification:' line). Skills
+# absent from the baseline map (new skills, pre-map baselines) pass — they are covered
+# by the aggregate +5% gate and get recorded at the next --update-baseline.
+check_per_skill_ratchet() {
+  local grown
+  grown=$(node -e '
+    const fs = require("fs");
+    const base = require("./" + process.argv[1]).skills || {};
+    for (const [name, cap] of Object.entries(base)) {
+      const p = `skills/${name}/SKILL.md`;
+      if (!fs.existsSync(p)) continue; // removed skill: aggregate gate + semver policy own that
+      const cur = fs.readFileSync(p, "utf8").split("\n").length - 1;
+      if (cur > cap) console.log(`${name} ${cap} ${cur}`);
+    }
+  ' "$SURFACE_BASELINE" 2>/dev/null) || {
+    echo "    per-skill ratchet: baseline map unreadable ($SURFACE_BASELINE)" >&2
+    return 1
+  }
+  if [ -z "$grown" ]; then
+    return 0
+  fi
+  echo "    per-skill ratchet: SKILL.md grew past recorded baseline:"
+  while read -r name cap cur; do
+    echo "      skills/$name/SKILL.md: $cap → $cur"
+  done <<<"$grown"
+  if current_changelog_has_justification "$CHANGELOG" "$VERSION"; then
+    echo "    WARNING: per-skill growth — current-version CHANGELOG justification found, allowed"
+    return 0
+  fi
+  echo "    no 'prose-justification:' line in the v$VERSION section of $CHANGELOG — justify or trim (references/skill-contract-card.md)" >&2
+  return 1
 }
 
 if [ "$ONLY_SLASH_PROBE" = "1" ]; then

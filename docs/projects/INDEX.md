@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-18 | [dev-flow-contract-card](2026-08-18-dev-flow-contract-card/README.md) — evidence-gated contract-card rewrite of dev-flow: `evals/skill-onoff/` 3-arm depth-0 instrument (FULL/CARD/OFF, pre-registered V1/V2/V3 rules), card spec doc, profiles guided-compatibility baseline re-establishment; card swap ships only on SHIP-GATE-MET | v2.34.18 | `feat/v2.34.18-dev-flow-contract-card` |
 
 ## 已完成 (Completed)
 

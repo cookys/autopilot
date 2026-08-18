@@ -1,5 +1,47 @@
 # Changelog
 
+## v2.34.18 — Skill ON/OFF instrument + contract-card spec; the card itself was evidence-gated and did NOT ship
+
+**Headline**: 北極星序列第三步(contract-card 改寫)開跑,而成績單前置真的把關了:新的
+depth-0 skill 開/關量測儀器(`evals/skill-onoff/`,三臂 FULL/CARD/OFF 真 `--plugin-dir`
+插件載入)跑滿 63-run 預註冊 campaign 後,機械裁決 INSTRUMENT-INVALID(V2 vacuous — 5 個
+marker 家族只有 branch discipline 承重:FULL 9/9、CARD 9/9、OFF 0/9),依凍結 verdict map
+card 不出貨(`skills/dev-flow/SKILL.md` 維持 713 行;499 行 card 草稿以 digest 凍結 fixture
+留存)。同時量到獨立重大發現:dev-flow 的 MANDATORY quality-gate/ledger 規則在 headless
+depth-0 遵循率 0%(FULL 臂 0/9、0/3)——規則寫著不等於規則在運作。儀器、規格、profiles
+baseline 三類 disposition 本體論照常出貨。
+
+### Added
+- `evals/skill-onoff/` — depth-0 skill presence/content instrument: 3-arm synthetic-plugin
+  runner (digest-frozen packs, scratch HOME + scratch CLAUDE_CONFIG_DIR, task-owned branch
+  topology, byte-identical prompts with zero artifacts contract), resume-by-cell matrix driver,
+  `score-onoff.js` (pre-registered V1 manipulation / V2 sensitivity / V3 non-inferiority +
+  verdict map; exit 0 only on SHIP-GATE-MET), `lib/transcript-query.js`, tasks d1–d7 with
+  work_done-conjoined deterministic markers. Tests: `hooks/tests/skill-onoff-{eval,markers,score}.test.sh`
+  (planted red: the vacuous FULL==OFF fixture can never ship).
+- `references/skill-contract-card.md` — canonical operational definition of contract-card shape
+  (four elements, judgment-prose extraction, named-enforcer-or-documented-only, per-skill line
+  budgets 500/250, review checklist). CLAUDE.md 童子軍規則 line is now a pointer to it.
+- Guided-baseline **three-class disposition ontology** (`relocated`/`removed`/`rewritten`) in
+  `scripts/build-profile-payload.js` + `src/engine/profile-payload.js`: extended successor
+  universe (`skills/dev-flow/references/*.md`), catalog-bound
+  `profiles/guided-baseline-dispositions.json` (ships empty), dead-disposition fail-closed.
+  Tests: `hooks/tests/profile-guided-dispositions.test.sh` (7-case red/green).
+- `preflight-release.sh` check 8 **per-skill ratchet**: `--update-baseline` records a
+  per-SKILL.md line map (`skills{}` in `docs/metrics/surface-lines.json`); a skill may not grow
+  past its recorded baseline without a current-version `prose-justification:` line.
+
+### Changed
+- `docs/BACKLOG.md`: contract-card row (dev-flow leg RESOLVED-NO-SWAP), new rows — dev-flow
+  card re-attempt (instrument repair first), zero-compliance finding (F6/F4), scaffold-tier A/B
+  (four-layer D6 leftover repaired), cc-shim `generate_session_title` framing leak (Fix).
+
+### Evidence
+- Plan (R2, frozen after G1+G2 hetero review, 12 findings adjudicated):
+  `docs/plans/2026-08-18-dev-flow-contract-card.md`; campaign + adjudication:
+  `docs/plans/evidence/2026-08-18-dev-flow-contract-card/` (63+21 result rows, mechanical
+  score, Phase-0 probes, per-phase review raw logs).
+
 <!--
 RELEASE TEMPLATE (paste below this comment for each new release):
 

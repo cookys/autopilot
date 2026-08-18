@@ -1,8 +1,8 @@
 # shellcheck shell=bash
-# grok-effort.sh — map autopilot's 5-level effort scale onto the grok CLI's 3 levels.
+# grok-effort.sh — map autopilot's 5-level effort scale onto the grok CLI's 4 levels.
 #
 # Provides:
-#   grok_effort_clamp <effort>            → echoes a grok-accepted level (low|medium|high)
+#   grok_effort_clamp <effort>            → echoes a grok-accepted level (low|medium|high|xhigh)
 #   grok_effort_note  <requested> <bin>   → one-line stderr heads-up IFF the value was clamped
 #
 # WHY THIS EXISTS
@@ -10,13 +10,19 @@
 # The xAI Grok Build CLI DOES accept `--reasoning-effort` (alias `--effort`), but it
 # validates the value against a 3-item enum and **hard-fails** on anything else:
 #
-#   $ grok --prompt-file p.txt --cwd . --model grok-4.5 --reasoning-effort xhigh ...
-#   {"type":"error","message":"--effort/--reasoning-effort: unknown effort level 'xhigh';
-#                              use one of: high, medium, low"}
+#   $ grok --effort max -p hi
+#   {"type":"error","message":"--effort/--reasoning-effort: unknown effort level 'max';
+#                              use one of: xhigh, high, medium, low"}
 #
-# Probe-verified 2026-07-25 (grok 0.2.111 (94172f2aa4) [stable], model grok-4.5):
-#   low → accepted | medium → accepted | high → accepted
-#   xhigh → REJECTED (hard error) | max → REJECTED (hard error)
+# Probe-verified 2026-08-19 (grok 1.0.5 (5115b46bc9)):
+#   low → accepted | medium → accepted | high → accepted | xhigh → accepted
+#   max → REJECTED (hard error)
+#
+# ⚠ THIS ENUM MOVES. The 2026-07-25 probe (grok 0.2.111, grok-4.5) found xhigh REJECTED,
+# and this file clamped xhigh→high for a month after xAI shipped it. A stale clamp is
+# worse than no clamp: it silently under-delivers a level the operator asked for and the
+# engine can now honour, while printing a confident note saying the level does not exist.
+# Re-probe with `grok --effort bogus -p hi` — the CLI's own error lists the live enum.
 #
 # autopilot's own scale is low|medium|high|xhigh|max and every dispatch script defaults
 # to `EFFORT="xhigh"`. So passing `$EFFORT` through verbatim would break EVERY default
@@ -39,7 +45,7 @@
 _AUTOPILOT_GROK_EFFORT_SH=1
 
 # grok_effort_clamp <effort> → grok-accepted level on stdout.
-# Unknown/empty input degrades to `high` (the grok ceiling) rather than failing: this lib's
+# Unknown/empty input degrades to `xhigh` (the grok ceiling) rather than failing: this lib's
 # job is to keep a dispatch runnable, and the caller's own --effort validation already
 # rejected out-of-scale values before reaching here.
 grok_effort_clamp() {
@@ -47,8 +53,9 @@ grok_effort_clamp() {
     low)    printf 'low' ;;
     medium) printf 'medium' ;;
     high)   printf 'high' ;;
-    xhigh|max) printf 'high' ;;   # grok ceiling; see probe table above
-    *)      printf 'high' ;;
+    xhigh)  printf 'xhigh' ;;
+    max)    printf 'xhigh' ;;     # grok ceiling; see probe table above
+    *)      printf 'xhigh' ;;
   esac
 }
 
@@ -59,6 +66,6 @@ grok_effort_note() {
   local clamped
   clamped="$(grok_effort_clamp "$requested")"
   [ "$requested" = "$clamped" ] && return 0
-  printf '%s: effort %s is not a grok level (accepts low|medium|high) — running at %s.\n' \
+  printf '%s: effort %s is not a grok level (accepts low|medium|high|xhigh) — running at %s.\n' \
     "$context" "$requested" "$clamped" >&2
 }

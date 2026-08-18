@@ -3443,7 +3443,7 @@ assert_contains "$OUT" "no_verify_first_key_signal_entries=absent" "AutopilotEng
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
-const { validateReviewLoopConfig } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
+const { validateReviewLoopConfig, REVIEW_LOOP_FIELDS } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
 
 function logPayloadCase(name, payload) {
   try {
@@ -3520,7 +3520,23 @@ const validPayload = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  strict_l5_policy_override: '',
+  brain_seat: null,
 };
+
+// Drift guard (v2.34.20): this fixture is HAND-maintained on purpose — deriving it from
+// REVIEW_LOOP_FIELDS would make it a shadow of the very list the validator checks against,
+// so a dropped field could never be caught here. Instead, compare the two independent
+// artifacts and fail LOUDLY. Without this, adding a required field silently turns every
+// case below into the same "missing field" error — which is exactly what 8b443bf8 did:
+// 40 assertions reported wrong-reason failures, and the negative cases (nonstring_*,
+// invalid_primitive_type) stopped discriminating at all.
+// SIBLING: hooks/tests/review-loop-runner.test.sh carries 7 copies of the same payload
+// shape and breaks the same way — when this guard fires, update that file too.
+{
+  const missing = REVIEW_LOOP_FIELDS.filter((f) => !(f in validPayload));
+  console.log(`fixture_field_drift=${missing.length === 0 ? 'none' : missing.join(',')}`);
+}
 
 const validated = logPayloadCase('validated', validPayload);
 if (validated) {
@@ -3651,6 +3667,7 @@ if (presentTrue) {
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "validateReviewLoopConfig validates new fields process exits 0"
+assert_contains "$OUT" "fixture_field_drift=none" "validPayload fixture covers every REVIEW_LOOP_FIELDS entry (drift guard — see 8b443bf8)"
 assert_contains "$OUT" "validated=true" "validateReviewLoopConfig validates payload with new fields"
 assert_contains "$OUT" "capability_state_source=unknown" "validateReviewLoopConfig carries capability_state_source"
 assert_contains "$OUT" "quota_status=ok" "validateReviewLoopConfig carries quota_status"

@@ -119,6 +119,10 @@ PREFLIGHT_SCRIPT="$REPO_ROOT/scripts/preflight-release.sh"
 eval "$(sed -n '/^changelog_version_section()/,/^}$/p' "$PREFLIGHT_SCRIPT")"
 eval "$(sed -n '/^current_changelog_has_justification()/,/^}$/p' "$PREFLIGHT_SCRIPT")"
 eval "$(sed -n '/^check_north_star()/,/^}$/p' "$PREFLIGHT_SCRIPT")"
+# check_north_star tail-calls this (added by 435cdc27, v2.34.18). Extracting the REAL
+# function rather than stubbing it keeps the coupling visible — stubbing is what would
+# have let this break silently in the first place.
+eval "$(sed -n '/^check_per_skill_ratchet()/,/^}$/p' "$PREFLIGHT_SCRIPT")"
 
 NORTH_STAR_FIXTURE="$TEST_TMP/north-star"
 mkdir -p "$NORTH_STAR_FIXTURE"

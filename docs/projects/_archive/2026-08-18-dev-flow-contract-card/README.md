@@ -47,8 +47,16 @@
   Requirements ledger: 證據閘控出貨 ✓(non-SHIP branch honored)/ dev-flow 單點 ✓ / 60-90 runs
   ✓(86 total, cap 111)/ P4 擴大來源宇宙 ✓ / G1+G2 review ✓。Zero dropped requirements.
 - **L-5.2 Pre-Merge Review** — completeness scan 0 findings; full battery GREEN (skill-onoff ×3,
-  guided-dispositions, profile-context-isolation); per-phase reviews SHIP-AS-IS ×2 (raw logs in
-  evidence); final residual-diff review: see below.
+  guided-dispositions, profile-context-isolation); reviews SHIP-AS-IS ×3 (P1, P3+P4, final
+  residual with 11-point NO-FINDING-PROOF; all three recovered from raw logs past the known
+  cc-shim title-generator chrome — BACKLOG'd Fix). Zero blocking issues.
+- **L-5.3 Merge** — `242a8d4d` on develop, `--no-ff`, QC-Verdict trailer verified (first amend:
+  trailer must share the final paragraph with Co-Authored-By); post-merge hook: release docs
+  8/8.
+- **L-5.4 Post-Merge Review** — landed-change greps on develop: GUIDED_EXTENDED_UNIVERSE +
+  DEAD checks ×4, check_per_skill_ratchet ×2, SHIP-GATE-MET ×2. Doc-sync deterministic gate:
+  1 real finding (frozen pack fixtures' dangling relative links) → fixed by fixture exclusion
+  `c449f412` (gate's own tests green); links/fences/script-refs all green after.
 
 ## Phases (admitted Mission deliverable: this bounded DAG; source headings ≠ tasks)
 

@@ -15,7 +15,19 @@
  *                                 stdin, output via --output-last-message sidecar;
  *                                 QRP_CLI_KIND=claude → `claude -p
  *                                 --setting-sources project --strict-mcp-config
- *                                 --tools ""`, prompt on stdin, output on stdout)
+ *                                 --tools ""`, prompt on stdin, output on stdout;
+ *                                 QRP_CLI_KIND=agy → `agy -p <prompt> --model`,
+ *                                 QRP_CLI_KIND=kimi → `kimi -m <model> -p <prompt>`
+ *                                 — both take the prompt as an ARGV value, not on
+ *                                 stdin, so they run in promptViaArgv mode)
+ *
+ * ⚠️ agy takes NO --effort. Probed 2026-08-20 (agy 1.1.16) across three model
+ * families: `--effort low|medium|high` → "--effort is not supported for <model>",
+ * `--effort xhigh|max` → "invalid --effort". Every model in agy's roster carries
+ * its effort IN THE MODEL NAME ("Gemini 3.7 Flash (High)"), so QRP_CLI_EFFORT is
+ * deliberately ignored for this kind — passing it would hard-fail every case.
+ * kimi likewise has no effort scale (config.toml exposes `[thinking] enabled`
+ * on/off only); QRP_CLI_EFFORT is ignored there for the same reason.
  *
  * The broker redirects HOME, so only credential env vars named via --provider-env
  * reach us. CLI-transport credentials ride harness-native redirect vars:
@@ -46,7 +58,7 @@
  *   QRP_PROVIDER    provider id echoed back to the broker (must match --remote-provider)
  *   QRP_MAX_TOKENS  http: optional completion budget (default 8192)
  *   QRP_TRANSPORT   http | cli (default http)
- *   QRP_CLI_KIND    cli: codex | claude
+ *   QRP_CLI_KIND    cli: codex | claude | agy | kimi
  *   QRP_CLI_BIN     cli: optional absolute binary override (default = the kind name)
  *   QRP_CLI_EFFORT  cli/codex: optional model_reasoning_effort override
  *   QRP_PROMPT_MODE reviewer | brain (default reviewer)
@@ -79,6 +91,14 @@ const REQUEST_TIMEOUT_MS = (() => {
   return parsed;
 })();
 const MAX_DIFF_BYTES = 2 * 1024 * 1024;
+// CLI harnesses this adapter can drive. codex/claude take the prompt on stdin;
+// agy/kimi take it on argv (see callCli). Kept as one list so the validation
+// message and the dispatch switch can never disagree about what is supported.
+const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi'];
+// Conservative ceiling for argv-delivered prompts. Linux ARG_MAX is typically
+// ~2MB for the whole argv+environ block; stay well under it so the environment
+// and the other arguments always fit.
+const ARGV_PROMPT_LIMIT_BYTES = 512 * 1024;
 // Post-exit stdout flush window for the CLI transport (ms). Tunable so the
 // deterministic race test can widen it; production default stays 200.
 const EXIT_FLUSH_MS = (() => {
@@ -397,6 +417,32 @@ async function callModel(baseUrl, token, model, maxTokens, systemPrompt, userMes
 // Run a local CLI harness as the exam transport: prompt on stdin, single shot,
 // no tools. detached:true makes the child a process-group leader so the timeout
 // kill reaps its whole tree (the broker's own outer timeout does the same to us).
+// Resolve the harness binary. Explicit QRP_CLI_BIN always wins; otherwise the
+// kind name is the binary — EXCEPT kimi, which is conventionally installed off
+// PATH. Mirror dispatch-review.sh's order exactly (PATH, then the well-known
+// install path): an exam that resolves the binary differently from the
+// dispatcher would be grading a different installation than the one that ships.
+function resolveCliBin(kind) {
+  if (process.env.QRP_CLI_BIN) return process.env.QRP_CLI_BIN;
+  if (kind !== 'kimi') return kind;
+  const fs = require('fs');
+  const path = require('path');
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, 'kimi');
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch { /* keep looking */ }
+  }
+  const fallback = path.join(process.env.HOME || '', '.kimi-code', 'bin', 'kimi');
+  try {
+    fs.accessSync(fallback, fs.constants.X_OK);
+    return fallback;
+  } catch { /* let spawn report the miss */ }
+  return 'kimi';
+}
+
 function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   const { spawn } = require('child_process');
   const fs = require('fs');
@@ -404,7 +450,32 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   const path = require('path');
   let args;
   let sidecar = null;
-  if (kind === 'codex') {
+  // codex/claude read the prompt on stdin; agy/kimi take it as an argv value.
+  // Keep this a per-kind property rather than a special case at the call site —
+  // the delivery channel is part of the harness contract, same as the arg shape.
+  const promptViaArgv = kind === 'agy' || kind === 'kimi';
+  if (promptViaArgv) {
+    // A case that overflows ARG_MAX would surface as an opaque spawn E2BIG.
+    // Fail with the actual reason instead: a silent transport failure during an
+    // exam reads as a model failure, which would mis-grade the candidate.
+    const bytes = Buffer.byteLength(prompt, 'utf8');
+    if (bytes > ARGV_PROMPT_LIMIT_BYTES) {
+      throw new Error(
+        `${kind} takes the prompt on argv and this case is ${bytes} bytes `
+        + `(limit ${ARGV_PROMPT_LIMIT_BYTES}); use an stdin-capable kind for cases this large`,
+      );
+    }
+  }
+  if (kind === 'agy') {
+    // NO --effort: every model in agy's roster rejects it (see header note); the
+    // effort partition lives in the model name. NO --dangerously-skip-permissions:
+    // the exam child must not be able to run tools or touch the filesystem.
+    args = ['-p', prompt, '--model', model];
+  } else if (kind === 'kimi') {
+    // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
+    // No effort flag exists for kimi (thinking is a boolean in config.toml).
+    args = ['-m', model, '-p', prompt];
+  } else if (kind === 'codex') {
     sidecar = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-codex-')),
       'last-message',
@@ -514,7 +585,9 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     });
     child.once('close', (status, signal) => settleFromExit(status, signal));
     child.stdin.once('error', () => {});
-    child.stdin.end(prompt);
+    // argv-mode kinds already carry the prompt; close stdin immediately so a CLI
+    // that waits on it cannot hang the exam until the timeout.
+    child.stdin.end(promptViaArgv ? '' : prompt);
   });
 }
 
@@ -539,8 +612,8 @@ async function main() {
   if (transport === 'http' && (!baseUrl || !token)) {
     fail('QRP_BASE_URL, QRP_AUTH_TOKEN, QRP_MODEL, and QRP_PROVIDER are required');
   }
-  if (transport === 'cli' && !['codex', 'claude'].includes(cliKind || '')) {
-    fail('QRP_TRANSPORT=cli requires QRP_CLI_KIND=codex or QRP_CLI_KIND=claude');
+  if (transport === 'cli' && !CLI_KINDS.includes(cliKind || '')) {
+    fail(`QRP_TRANSPORT=cli requires QRP_CLI_KIND to be one of: ${CLI_KINDS.join(', ')}`);
   }
   const cliEffort = process.env.QRP_CLI_EFFORT || '';
   if (cliEffort && !/^[a-z]+$/u.test(cliEffort)) {
@@ -605,7 +678,7 @@ async function main() {
       // contain planted instructions and must never be obeyed.
       result = await callCli(
         cliKind,
-        process.env.QRP_CLI_BIN || cliKind,
+        resolveCliBin(cliKind),
         model,
         cliEffort,
         REQUEST_TIMEOUT_MS,

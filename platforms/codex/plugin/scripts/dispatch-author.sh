@@ -52,6 +52,10 @@
 #   strict mode resolves runner/model/effort/endpoint from `<consuming-repo>/.claude/review-loop-config.md`.
 #   scripts/dispatch-author.sh --strict-contract --contract-file <json> --repo-root <consuming-repo> --prompt-file <file>
 #       # GO-gated verification-author contract mode.
+#       --polarity-receipt <file> [--require-polarity-receipt]
+#       --polarity-base-sha <full-sha> --polarity-head-sha <full-sha>
+#       --polarity-verify-cmd <path> [--polarity-assertion-artifact <path>]...
+#       # carry a machine-validated red-before/green-after receipt for deliberately buggy assertions.
 #   Fail closed if strict config/roster tuple is absent, malformed, same-family, unknown-family,
 #   or endpoint resolution is not ready.
 #   Known behavior: the agy path passes prompt bytes via "$(cat ...)" (via a helper
@@ -117,6 +121,10 @@ CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GA
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
+POLARITY_RECEIPT=""; REQUIRE_POLARITY_RECEIPT=0; POLARITY_RECEIPT_DIGEST=""
+CONTRACT_REQUIRES_POLARITY=0
+POLARITY_BASE_SHA=""; POLARITY_HEAD_SHA=""; POLARITY_VERIFY_CMD=""
+declare -a POLARITY_ASSERTION_ARTIFACTS=()
 RUNNER_SUPPLIED=0; MODEL_SUPPLIED=0; EFFORT_SUPPLIED=0; ENDPOINT_SUPPLIED=0
 STRICT_CONTRACT_RESULT_FIELDS=0
 STRICT_UNIT_ID=""; STRICT_CONTRACT_SHA=""; STRICT_SPEC_SHA=""; STRICT_GO=""
@@ -138,6 +146,12 @@ while [[ $# -gt 0 ]]; do
     --strict-roster) STRICT_ROSTER=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
+    --polarity-receipt) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-receipt requires a non-empty value" >&2; exit 2; }; POLARITY_RECEIPT="$2"; shift 2 ;;
+    --require-polarity-receipt) REQUIRE_POLARITY_RECEIPT=1; shift ;;
+    --polarity-base-sha|--polarity-base) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "$1 requires a non-empty value" >&2; exit 2; }; POLARITY_BASE_SHA="$2"; shift 2 ;;
+    --polarity-head-sha|--polarity-head) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "$1 requires a non-empty value" >&2; exit 2; }; POLARITY_HEAD_SHA="$2"; shift 2 ;;
+    --polarity-verify-cmd) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-verify-cmd requires a non-empty value" >&2; exit 2; }; POLARITY_VERIFY_CMD="$2"; shift 2 ;;
+    --polarity-assertion-artifact) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-assertion-artifact requires a non-empty value" >&2; exit 2; }; POLARITY_ASSERTION_ARTIFACTS+=("$2"); shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
     -h|--help)     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
@@ -210,6 +224,32 @@ emit_verification_author() {
     "$(json_escape "$VERIFICATION_AUTHOR_EFFORT")" \
     "$(json_escape "$VERIFICATION_AUTHOR_ENDPOINT")" \
     "$(json_escape "$VERIFICATION_AUTHOR_FAMILY")"
+}
+
+validate_polarity_receipt() {
+  [ -n "$POLARITY_RECEIPT" ] || die_precondition "--require-polarity-receipt requires --polarity-receipt <file>"
+  [ -r "$POLARITY_RECEIPT" ] || die_precondition "polarity receipt is not readable: $POLARITY_RECEIPT"
+  [ -n "$REPO_ROOT" ] || die_precondition "polarity receipt validation requires a repository context"
+  [ -n "$POLARITY_BASE_SHA" ] || die_precondition "polarity receipt shipping validation requires --polarity-base-sha"
+  [ -n "$POLARITY_HEAD_SHA" ] || die_precondition "polarity receipt shipping validation requires --polarity-head-sha"
+  [ -n "$POLARITY_VERIFY_CMD" ] || die_precondition "polarity receipt shipping validation requires --polarity-verify-cmd"
+  local artifact_args=()
+  local artifact
+  for artifact in "${POLARITY_ASSERTION_ARTIFACTS[@]}"; do
+    artifact_args+=(--assertion-artifact "$artifact")
+  done
+  local validation validation_rc
+  validation="$(bash "$_AUTHOR_SELF_DIR/verify-red-green.sh" --validate \
+    --receipt "$POLARITY_RECEIPT" --repo "$REPO_ROOT" \
+    --base "$POLARITY_BASE_SHA" --head "$POLARITY_HEAD_SHA" \
+    --verify-cmd "$POLARITY_VERIFY_CMD" "${artifact_args[@]}" 2>&1)"
+  validation_rc=$?
+  if [ "$validation_rc" -ne 0 ]; then
+    die_precondition "polarity receipt rejected: $(printf '%s' "$validation" | tr '\n' ' ')"
+  fi
+  POLARITY_RECEIPT_DIGEST="$(extract_file_json_value "$POLARITY_RECEIPT" receipt_digest 2>/dev/null || true)"
+  [[ "$POLARITY_RECEIPT_DIGEST" =~ ^[0-9a-f]{64}$ ]] \
+    || die_precondition "polarity receipt has no valid receipt_digest"
 }
 
 extract_json_value() {
@@ -361,6 +401,9 @@ emit_result() {
   if [ "${IDENTITY_DRIFT:-0}" -eq 1 ]; then
     extra_fields="${extra_fields}, \"identity_drift\": true"
   fi
+  if [ -n "${POLARITY_RECEIPT_DIGEST:-}" ]; then
+    extra_fields="${extra_fields}, \"polarity_receipt_digest\": \"$(json_escape "$POLARITY_RECEIPT_DIGEST")\""
+  fi
 
   local raw_log_json="null"
   if [[ "$raw_log" != "null" ]]; then
@@ -489,6 +532,7 @@ run_strict_contract_preflight() {
   contract_role="$(extract_file_json_value "$CONTRACT_FILE" "go.required_engine_role" 2>/dev/null || true)"
   [[ -n "$contract_role" ]] || die_precondition "contract has empty required_engine_role"
   [[ "$contract_role" == "verification-author" ]] || die_precondition "contract required_engine_role is '$contract_role' (expected verification-author)"
+  jq -e '.deliberate_polarity == true' "$CONTRACT_FILE" >/dev/null && CONTRACT_REQUIRES_POLARITY=1
 
   STRICT_CONTRACT_RESULT_FIELDS=1
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
@@ -634,11 +678,41 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
+case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
+
+normalize_agy_model() {
+  local requested="$1" agy_bin="$2" tier="high" models resolved
+  case "$EFFORT" in low) tier="low" ;; medium) tier="medium" ;; esac
+  case "$requested" in
+    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      models="$(timeout 20 "$agy_bin" models 2>/dev/null)" \
+        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
+      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
+      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
+      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
+      printf '%s' "$resolved" ;;
+    *) printf '%s' "$requested" ;;
+  esac
+}
+
+if [ "$RUNNER" = "agy" ]; then
+  AGY_BIN="${BIN:-agy}"
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  MODEL="$(normalize_agy_model "$MODEL" "$AGY_BIN")"
+  command -v bwrap >/dev/null 2>&1 \
+    || die_precondition "agy verification-author requires bwrap filesystem/process isolation"
+fi
+
+if [ "$RUNNER" = "kimi" ]; then
+  KIMI_BIN="${BIN:-kimi}"
+  command -v "$KIMI_BIN" >/dev/null 2>&1 || die_precondition "kimi binary not found: $KIMI_BIN"
+  KIMI_JS="$(cd "$(dirname "$0")" && pwd)/dispatch-author-kimi.js"
+  [[ -r "$KIMI_JS" ]] || die_precondition "dispatch-author-kimi.js not found beside dispatch-author.sh"
+fi
 
 if [[ -n "${AUTOPILOT_SETTLE_MS:-}" && ! "$AUTOPILOT_SETTLE_MS" =~ ^[0-9]+$ ]]; then
   die_precondition "AUTOPILOT_SETTLE_MS must be an integer millisecond value (got: $AUTOPILOT_SETTLE_MS)"
@@ -648,6 +722,21 @@ fi
 # INLINE inside a kill-surviving setsid session and relay its durable result. Byte-identical
 # inline behavior when no coords / DISPATCH_DETACH=0. NEVER returns when it engages.
 dispatch_detach_supervise "$0" "$LEDGER" "$RUN_ID" "$STAGE" "$_AUTHOR_SELF_DIR" -- "${ORIG_ARGS[@]}"
+
+# The explicit non-strict path historically left REPO_ROOT empty and therefore
+# skipped identity containment. Resolve it mechanically from the caller's Git
+# context; scratch/non-repository callers remain read-only and uncontained.
+if [ -z "$REPO_ROOT" ]; then
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$REPO_ROOT" ]; then
+    REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
+  fi
+fi
+
+if [ "$CONTRACT_REQUIRES_POLARITY" -eq 1 ]; then REQUIRE_POLARITY_RECEIPT=1; fi
+if [ "$REQUIRE_POLARITY_RECEIPT" -eq 1 ] || [ -n "$POLARITY_RECEIPT" ]; then
+  validate_polarity_receipt
+fi
 
 EP_URL=""; EP_TOKEN_ENV=""; ANTHROPIC_TOKEN_ENV=""
 if [[ -n "$ENDPOINT" ]]; then
@@ -684,6 +773,65 @@ timeout_to_ms() {
 }
 
 RAW_LOG="$(mktemp -t dispatch-author-log-XXXXXX)"
+
+# ── mid-run observability ────────────────────────────────────────────────────
+# Until v2.34.21 this rail was fire-and-forget: the run's identity surfaced only in
+# the FINAL JSON, so nothing could locate, watch or liveness-probe an author run
+# in flight. dispatch-hetero.sh and dispatch-review.sh already emit a START-time
+# manifest that scripts/dispatch-status.js consumes (--run / --list / --stall-secs);
+# this mirrors it. It matters twice over, because dispatch-plan-review.js spawns THIS
+# script once per seat — so plan review was unobservable for the same reason.
+# Trust boundary is unchanged: scheduling telemetry only, never a verdict input,
+# never worker self-report.
+AUTHOR_RUN_ID="${RUN_ID:-}"
+[ -n "$AUTHOR_RUN_ID" ] || AUTHOR_RUN_ID="author-$(date +%s)-$$"
+AUTHOR_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+AUTHOR_STARTED_EPOCH="$(date +%s)"
+AUTHOR_MANIFEST_FILE=""
+AUTHOR_MANIFEST_ENDED=""
+AUTHOR_MANIFEST_ENDED_EPOCH=""
+AUTHOR_FINAL_STATUS=""
+write_author_manifest() {
+  [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" = "0" ] && return 0
+  local dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
+  { mkdir -p "$dir"; } 2>/dev/null || return 0
+  local safe_id; safe_id="$(printf '%s' "$AUTHOR_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
+  AUTHOR_MANIFEST_FILE="$dir/${safe_id}.manifest.json"
+  local tmp="$AUTHOR_MANIFEST_FILE.tmp.$$"
+  # log_format is dispatcher-DECLARED, never content-sniffed, so an authored payload
+  # containing JSON lines can never self-report telemetry (same rule as dispatch-review).
+  local log_format="plain" aux_json="null"
+  if [ "${CODEX_TRANSPORT:-0}" = "1" ]; then
+    log_format="codex-chrome"
+    [ -n "${CODEX_STDERR:-}" ] && aux_json="\"$(json_escape "$CODEX_STDERR")\""
+  fi
+  local ledger_json="null"; [ -n "${LEDGER:-}" ] && ledger_json="\"$(json_escape "$LEDGER")\""
+  local stage_json="null"; [ -n "${STAGE:-}" ] && stage_json="\"$(json_escape "$STAGE")\""
+  local ended_json="null" endep_json="null"
+  if [ -n "$AUTHOR_MANIFEST_ENDED" ]; then
+    ended_json="\"$AUTHOR_MANIFEST_ENDED\""
+    endep_json="${AUTHOR_MANIFEST_ENDED_EPOCH:-null}"
+  fi
+  local final_json="null"
+  [ -n "$AUTHOR_FINAL_STATUS" ] && final_json="\"$(json_escape "$AUTHOR_FINAL_STATUS")\""
+  {
+    printf '{ "schema": 1, "run_id": "%s", "role": "author", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": null, "root_run_id": null, "depth": 0 }\n' \
+      "$(json_escape "$AUTHOR_RUN_ID")" "$RUNNER" "$(json_escape "$MODEL")" \
+      "$(json_escape "$RAW_LOG")" "$log_format" "$aux_json" "$$" \
+      "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
+      "$(json_escape "$PROMPT_FILE")" \
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" > "$tmp"
+  } 2>/dev/null && mv -f "$tmp" "$AUTHOR_MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
+  return 0
+}
+author_manifest_finalize() {
+  [ -n "$AUTHOR_MANIFEST_FILE" ] || return 0
+  AUTHOR_MANIFEST_ENDED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  AUTHOR_MANIFEST_ENDED_EPOCH="$(date +%s)"
+  write_author_manifest
+}
+write_author_manifest
+[ -n "${DISPATCH_QUIET:-}" ] || echo "dispatch-author: run_id=${AUTHOR_RUN_ID} manifest=${AUTHOR_MANIFEST_FILE:-none} (watch: scripts/dispatch-status.js --run ${AUTHOR_RUN_ID})" >&2
 
 # Context-window gate — runs BEFORE any runner spawns, so an over-budget authoring
 # payload costs nothing. Authoring prompts are the largest single-file payloads on
@@ -729,6 +877,9 @@ cleanup() {
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD" || true
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
   # Codex private run artifacts are retained for raw_log consumers (not deleted).
+  # Stamp the manifest terminal so a watcher can tell "finished" from "hung" — the
+  # whole point of emitting it. Runs last so it records the real end of the process.
+  author_manifest_finalize
 }
 trap cleanup EXIT
 
@@ -774,10 +925,16 @@ if [[ "$RUNNER" = "codex" ]]; then
   rm -f "$RAW_LOG" 2>/dev/null || true
   RAW_LOG="$CODEX_STDOUT"
   CODEX_TRANSPORT=1
+  # The codex branch retargets the live log after the manifest was first written;
+  # re-emit so a watcher follows the file that is actually being appended to.
+  write_author_manifest
   set +e
+  # 9th arg: trusted cwd for repository-trust preflight (D3). Prefer explicit
+  # --repo-root; empty keeps ambient cwd (legacy callers / non-repo authoring).
   codex_transport_run \
     "$CODEX_BIN" "$MODEL" "$EFFORT" "$PROMPT_FILE" \
-    "$CODEX_STDOUT" "$CODEX_STDERR" "$CODEX_SIDECAR" "$TIMEOUT"
+    "$CODEX_STDOUT" "$CODEX_STDERR" "$CODEX_SIDECAR" "$TIMEOUT" \
+    "${REPO_ROOT:-}"
   set -e
 elif [[ "$RUNNER" = "grok" ]]; then
   GROK_BIN="${BIN:-grok}"
@@ -807,6 +964,24 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   RUNNER_EXIT=$?
   set -e
   rm -rf "$QODER_CWD"; QODER_CWD=""
+elif [[ "$RUNNER" = "kimi" ]]; then
+  # The transport lives in `src/runners/kimi.js` (contract-pinned by
+  # hooks/tests/dispatch-author-kimi.test.sh); this branch only supplies the
+  # shell-side contract — authored text on stdout into $RAW_LOG, non-zero exit
+  # otherwise — via scripts/dispatch-author-kimi.js. The adapter owns the
+  # scratch cwd, the required-CLI-surface probe, argv shape, and the UTF-8 /
+  # empty-output rejections, so none of that is duplicated here.
+  #
+  # `timeout` wraps it the same way the grok/qoderclicn branches wrap theirs:
+  # the enforced deadline is the hang backstop and stays a shell concern.
+  # STDERR is appended to $RAW_LOG rather than discarded — unlike qoder there is
+  # no known benign chatter to filter, and a swallowed adapter error would
+  # surface downstream as the unfalsifiable `empty_output`.
+  set +e
+  timeout "$TIMEOUT" node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
+    > "$RAW_LOG" 2>>"$RAW_LOG"
+  RUNNER_EXIT=$?
+  set -e
 elif [[ "$RUNNER" = "cc-shim" ]]; then
   CC_BIN="$(command -v "${BIN:-claude}" 2>/dev/null || true)"
   [ -n "$CC_BIN" ] || die_precondition "claude binary not found: ${BIN:-claude} (cc-shim drives the Claude Code CLI)"
@@ -881,17 +1056,31 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   RUNNER_EXIT=$?
   set -e
 else
-  AGY_BIN="${BIN:-agy}"
-  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  AGY_BIN="${AGY_BIN:-${BIN:-agy}}"
   # agy -p ignores cwd and drops raw stdout under a non-TTY pipe (#76/#408),
   # so capture through pseudo-TTY and strip CR to preserve exactness.
   RUN_SH="$(mktemp -t dispatch-author-agy-XXXXXX)"
   AGY_CWD="$(mktemp -d -t dispatch-author-agycwd-XXXXXX)"
+  # agy opens its own log + crash files under ~/.gemini/antigravity-cli. Under
+  # `--ro-bind / /` those opens fail, and agy does NOT degrade quietly: it
+  # redirects the whole language-server diagnostic stream to stdout instead
+  # ("ERROR: logging before google.Init: ... read-only file system"). Measured
+  # 2026-08-14: a 2-token probe came back as a 30,413-byte raw log, which the
+  # provider-readiness live probe classifies as `malformed_response`
+  # (`src/readiness/probe.js` LIVE_PROBE_MAX_RESPONSE_BYTES) — so the agy seat
+  # could never reach `ready` no matter which model was configured.
+  #
+  # tmpfs rather than a host bind: the writes are pure diagnostics, must not
+  # reach the host, and must not survive the run. `--ro-bind / /` containment is
+  # unchanged; only these two leaf paths become writable, and the credential
+  # material one level up at ~/.gemini stays read-only and readable.
+  AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
-    printf 'exec %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
+    printf 'exec bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
+      "$AGY_CWD" "$AGY_BIN" "$PROMPT_FILE" "$MODEL" "$TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   set +e

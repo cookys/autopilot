@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-25 Claude Code hooks for runtime enforcement of development discipline: **10 default-on** (Tier A) + **15 opt-in** (Tier B) — zero disabled as of v2.25.2. As of v2.26.2 **all 25 are wired in `hooks.json`** (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 15 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
+26 Claude Code hooks for runtime enforcement of development discipline: **10 default-on** (Tier A) + **16 opt-in** (Tier B) — zero disabled as of v2.25.2. As of v2.26.2 **all 26 are wired in `hooks.json`** (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 16 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
 ## Tool-event stdin: the `/dev/stdin` path is broken, but **fd 0 works** (fd-0 fix)
 
@@ -189,7 +189,7 @@ rm -f ~/.autopilot/.state-checkpoint.log
 
 Maintainer-side rollback (within this repo): `git revert <merge-sha>` on `develop` produces a new commit reversing the change. The v2.7.1 bash version is retrievable from git history (`git log -- hooks/state-checkpoint.sh`), no in-tree copy.
 
-## Tier B — Opt-In (15 hooks)
+## Tier B — Opt-In (16 hooks)
 
 Wired in `hooks.json` but **default-OFF** — each self-gates via `_shared/opt-in.js` and no-ops until you opt in. **Enable** by adding the stem to `~/.autopilot/config.json`:
 
@@ -205,7 +205,8 @@ Per-hook env override also works: `AUTOPILOT_HOOK_BRANCH_PROTECTION=1` (stem upp
 |------|-------|---------|----------|
 | cost-tracker | Stop | — | Sums per-turn `usage` from `transcript_path` → `~/.claude/metrics/costs.jsonl` (cache-aware cost; per-session cursor avoids per-turn double-count). Opt-out `AUTOPILOT_COST_TRACKER=false` |
 | branch-protection | PreToolUse | Bash | Hard-blocks commit/force-push on `^(main\|master)$`; override `AUTOPILOT_PROTECTED_BRANCHES` |
-| commit-secret-scan | PreToolUse | Bash | Hard-blocks `git commit` when `git diff --cached` contains secrets (`_shared/secret-patterns.js`) |
+| exec-boundary | PreToolUse | Bash | Non-LLM deny gate at the execution boundary (four-layer K2): protected-ref force-push (defense-in-depth with branch-protection), recursive `rm` outside sanctioned roots, raw `DROP TABLE`/`TRUNCATE`, `sudo rm`. Allow-by-default; per-project config `.claude/execution-boundary-config.md` |
+| commit-secret-scan | PreToolUse | Bash | Hard-blocks `git commit` when added staged hunk content contains secrets (`_shared/secret-patterns.js`); deletion-only cleanup passes, diff metadata is excluded, and diagnostics expose pattern names rather than secret values |
 | large-file-warner | PreToolUse | Read | >500KB warn, >2MB block. Bypasses if offset/limit set |
 | config-protection | PreToolUse | Write\|Edit | Blocks linter/formatter config edits |
 | session-summary | Stop | — | Appends cwd / git status / recent commits to `~/.claude/sessions/{date}-{sid}.md` |

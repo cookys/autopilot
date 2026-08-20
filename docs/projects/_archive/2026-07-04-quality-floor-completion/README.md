@@ -3,7 +3,7 @@
 **Mode**: CEO L6 (Board directive: triggers waived, ship P2-P4 to done)
 **Branch**: `feat/quality-floor-completion`
 **Target**: v2.31.12 (PATCH)
-**Plan**: [docs/plans/2026-07-04-quality-floor-engine.md](../../plans/2026-07-04-quality-floor-engine.md) §7 (post-Board-directive revision)
+**Plan**: [docs/plans/2026-07-04-quality-floor-engine.md](../../../plans/2026-07-04-quality-floor-engine.md) §7 (post-Board-directive revision)
 
 ## OKR
 - KR1 (P3-pre2): full suite 93/93 — the 3 pre-existing failing test files fixed.

@@ -1,0 +1,671 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "autonomous-brain-integration",
+  "logical_plan_id": "autonomous-brain-integration-2026-08-17",
+  "session_id": "619e67cb-e547-49a1-80d3-98185955d69d",
+  "session_key": "f4b8489a1bfdca00c209aed4441a3361c0bb6fad4e975a573853fa05b20e952b",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "cb20fdf20088950a47c660c920533fe0cd15dd95162cc75dddd7b5934a243013",
+  "manifest_sha256": "ae282573a5961a5d537d43adc6289af4a314bbd75fd880fecad004b3a10360fe",
+  "plan_sha256": "bf6ad3fd60ff2d05128a45f2bc3dac68f9efdf17669112682cd39f5e4d39b4e5",
+  "growth_ratio": {
+    "numerator": 15500,
+    "denominator": 14067
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.3",
+          "operation": "plan-review",
+          "request_digest": "46dc5526b1b4f8c0155b7a2cbec988d8fa5680a70655ab2ce45effae2084724d"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "c7bf96a1b54db9c59ae9e29c35fa60ab42ed7707205463f0703fa698660edfa8",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ptEZ27",
+          "digest": "c7bf96a1b54db9c59ae9e29c35fa60ab42ed7707205463f0703fa698660edfa8"
+        },
+        "receipt_digest": "6d2b76f34c2135564c45f4051149ad5181d6c3eb1702b82d1fb1335dd630b882"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "67cf0c9493ba9b65efd984b22a81070fb096f5c65c3cc4e8b7b1d5463e50d35d"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "1a1ccac703e8a05e92d7103d0e24c8f326af4cfe3fb768bc80f01cb9132b81ab",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-dMgV0N",
+          "digest": "1a1ccac703e8a05e92d7103d0e24c8f326af4cfe3fb768bc80f01cb9132b81ab"
+        },
+        "receipt_digest": "ae6a7ee4c9b05e5f3dc4f758d508fd0ddf2fe8620a6d4322faa4becb4f6f5697"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "7cced916bdfe268644e8037c5bdd45bf8aa16210375d19390bfbf819bfe1da8a"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "5879807f29efe8957174dd1d48fd8aa72a89e6639d738fd716090f7fbe6aff8a",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ypwdgR",
+          "digest": "5879807f29efe8957174dd1d48fd8aa72a89e6639d738fd716090f7fbe6aff8a"
+        },
+        "receipt_digest": "47bd06fdabc69f1dc8f732b6f37af001cb71e863cdba1a2d2c8ec0c46eef2ef7"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "19b0152f16731ada9f6e7138e4c2397731f130b794495c4fa500436bbbf3daf5"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "56f1f481df77025e99f9e4dc4233272e172cf821b0e8f1bb0342fd6735922a3e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-xZ9qDi",
+          "digest": "56f1f481df77025e99f9e4dc4233272e172cf821b0e8f1bb0342fd6735922a3e"
+        },
+        "receipt_digest": "e3f1e00ec8df81c54d8020cb9bc39ea35a2b2286b7744619647954254834c27c"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_adversarial_dissent",
+      "target_id": "sol_adversarial_dissent",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "e595593933c01d7a4c9c5afbbd5920eb398b18ad592cc41937e585d57e526e83"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "cbe2f344d07c8a60fd2e4a58dc65feeaa72cc5b908d36d00805d05d552ccfa72",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-ACGFzL/stdout",
+          "digest": "cbe2f344d07c8a60fd2e4a58dc65feeaa72cc5b908d36d00805d05d552ccfa72"
+        },
+        "receipt_digest": "46f221cab1bada087c6dc52580c01cc922cfbd3909cc283801eedee7b36b8d6f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "sol_adversarial_dissent",
+      "target_id": "sol_adversarial_dissent",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Frozen four-tuple control-plane field (Plan §2.5 fourth bullet; scripts/dispatch-contract.js frozen_four_tuple block, P1) and the five new orchestration scripts plus dispatch-experience-critic.sh listed in §3",
+      "claim": "The control plane pins digests of only three config files and 'declared lifecycle scripts'; the plan never states that the new gate and orchestration scripts themselves (check-blueprint-conformance.js, build-rehydration-bundle.js, decision-ledger.js, check-stall-fuse.js, next-pick.js, dispatch-experience-critic.sh) are inside the pinned set, so the brain's own gates are a plausible unfrozen fifth mutation surface: a mid-campaign edit to the fuse, the pick function, or the ledger would alter runtime decision policy without being a conformance violation that preflight or audit can detect.",
+      "evidence": "§2.5 defines the fourth tuple element as 'control plane: digest pins of task-class config, preference config, roster config, and declared lifecycle scripts'; the F6 coverage sentence ('reap-dispatch-worktrees.sh + lifecycle-residue-receipt.js, pinned as the declared lifecycle mechanism by KR1's control-plane freeze') shows 'declared lifecycle scripts' reads as the lifecycle mechanism scripts, not the new gate scripts; the G1 disposition 'control-plane digest pins close the fifth mutation surface (decision policy)' closed only the config files, not the scripts that enforce policy at runtime.",
+      "evidence_reference": "Plan §2.5 fourth bullet (four-tuple definition); §2 KR1; §2 F6 coverage sentence; §1 Review log G1 disposition; §3 file-structure map",
+      "repair": "Enumerate the control-plane pin set in §2.5 and in the dispatch-contract.js frozen_four_tuple header docs so it explicitly includes a digest of every gate/orchestration script the run depends on (the five new .js scripts and dispatch-experience-critic.sh), with the conformance checker itself pinned by a digest recorded in the contract; under the existing rule that editing a pinned file is a violation, any mid-campaign edit to these scripts then fails preflight/audit instead of silently mutating the control plane.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "63372087e9b6960f06fdf5cd0152e79b408da17e12b179b4dce4231a87c7a979"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "build-rehydration-bundle.js truncation policy and P2 process re-attach (Plan §3 file map; P2 acceptance)",
+      "claim": "The truncation order makes the owned-process table (section 5) and the ledger tail (section 4) the first state dropped under token pressure, so in exactly the size-stress scenario the cap exists for, the run restarts without process-custody information; as written this is fail-open for re-attachment and contradicts both the rubric requirement that process re-attachment comes from the ledger, not memory, and KR2's zero-orphans/duplicates guarantee.",
+      "evidence": "§3 specifies 'per-section caps, ≤20k total; breach = build error; truncation drops ⑤→③ only, never ①②', i.e. under truncation the owned-process table and then the ledger tail are dropped before the roster digests; §2 KR2 simultaneously requires that 're-attach adopts every owned process (zero orphans/duplicates)', which cannot hold once section 5 is truncated.",
+      "evidence_reference": "Plan §3 build-rehydration-bundle.js row; §2 KR2; §5 red-case matrix KR2 row",
+      "repair": "Make process custody non-truncatable: declare the on-disk decision ledger the authoritative re-attach source, then either mark section 5 and the spawn entries of section 4 exempt from truncation (breach = build error, fail-closed), or have re-attach always read owned processes from the ledger on disk with section 5 as a display-only cache; add a P2 test in build-rehydration-bundle.test.sh where a forced over-cap bundle either still re-attaches every owned process or refuses to start.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3b08c4d195fc81e89d45aebd8f6bf202e6fe5eefe69d78232c89ca85c3f8c7c0"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§2 failure-shape coverage map and §3 next-pick.js (auto-pick plus ask-first enforcement)",
+      "claim": "The auto-pick mechanism has no explicit failure-shape attribution: the coverage list maps F1–F12 to KR1–KR4, P8, and shipped mechanisms, but never names which observed failure shape scope-inventing picks trace to, even though problem statement (d) asserts the failure was observed; the 'complete and honest' mapping claim is therefore not auditable for this deliverable.",
+      "evidence": "§2 'Failure-shape coverage (complete)' assigns F1/F3/F4 to KR1, F2/F5/F10 to KR4, F8/F9 to KR2, F12 to KR3, F6 and F7 to shipped mechanisms, and F11 to P8, with no entry covering next-pick.js or the ask-first predicate; §1(d) 'next work is picked without scope invention' presupposes an observed failure that the map never names.",
+      "evidence_reference": "Plan §2 coverage list versus §3 next-pick.js row and §1(d); evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md",
+      "repair": "Add one line to §2 naming the specific F-number (or a recorded §0 Board ruling) that auto-pick and the ask-first predicate answer, citing sol-pathology.md; if no recorded shape covers scope-inventing picks, record the Board ruling the plan's own R1 rule requires. No mechanism change.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9e0dd85defb078c339fc6bf0194388641c307e42b89dd3bdd2d14f2c76607160"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§2.5 ask-first predicate; next-pick.js classification logic; P5 acceptance tests",
+      "claim": "The ask-first classification is asserted machine-checkable, but the 'irreversible/outward action' clause has no machine-checkable definition anywhere in the plan: Effort L/H, qc-gate protected paths, and the board tag are all decidable from queue-row metadata and path sets, while irreversibility is not, so this clause could decay into heuristic judgment inside the pick function and break replayable classification.",
+      "evidence": "§2.5 states 'Ask-first is machine-checkable: Effort L/H, OR touches qc-gate protected paths (skills/agents/scripts/references/hooks), OR irreversible/outward action, OR board tag'; three of the four clauses name an enumerable source of truth, the fourth names none, and no §3 file or §2.6 config is assigned to define it.",
+      "evidence_reference": "Plan §2.5 auto-pick bullet; §3 next-pick.js and project-config-template/task-class-config.md rows; §5 P5 red-case row",
+      "repair": "Define the clause as a closed enumerated list — outward surfaces and destructive or publishing actions enumerated in task-class-config.md or a protected-actions inventory that next-pick.js reads by digest — and add a next-pick.test.sh case classifying an enumerated outward action as ask-first, with anything unlisted and plausibly outward defaulting to ask-first rather than auto-eligible.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b9f246389140e31f4dbbfe6979df9b86f4b30d1cc0b28c65fd165a53d08c615e"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Frozen four-tuple, control-plane element scope",
+      "claim": "Decision policy is frozen because it lives inside the control-plane digest via 'declared lifecycle scripts'",
+      "evidence": "§2.5 names the control plane as digest pins of task-class config, preference config, roster config, and 'declared lifecycle scripts'. 'Declared lifecycle scripts' is not enumerated. G1 disposition states 'control-plane digest pins close the fifth mutation surface (decision policy)' but does not say whether decision policy is carried by a pinned config file (for example a new policy.md) or by a pinned script (next-pick.js). If by script, the script must be enumerated under 'declared lifecycle scripts' for the closure to be auditable; without enumeration P1's conformance check has no unambiguous target list.",
+      "evidence_reference": "Plan §2.5 fourth bullet of the Frozen four-tuple definition; G1 disposition line 'control-plane digest pins close the fifth mutation surface (decision policy)'; Plan §4 P1 acceptance on check-blueprint-conformance.test.sh",
+      "repair": "Enumerate the files that count as 'declared lifecycle scripts' in §2.5 (or define the inclusion criterion). At minimum list next-pick.js, decision-ledger.js, check-blueprint-conformance.js, build-rehydration-bundle.js, check-stall-fuse.js, and dispatch-experience-critic.sh, plus any existing script whose digest is pinned, so P1's conformance check has an unambiguous target and a reviewer can verify decision-policy mutations are caught.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5884544847616e135ae3ba67f52014bfb57343753c95d0bfbc218ee0db9197e4"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Auto-pick ledger entry shape (next-pick.js)",
+      "claim": "Every pick lands in the decision ledger with rationale",
+      "evidence": "§3 row for next-pick.js reads 'logs to ledger' without naming rationale as part of the entry. The rubric requires rationale; the plan leaves the entry shape implicit via the generic decision-ledger.js append interface. P5 acceptance is 'next-pick.test.sh green — deterministic replay, ask-first row never picked (red case), KR6 preference-precedence fixture' — none of those asserts rationale presence on the ledger entry.",
+      "evidence_reference": "Plan §3 file-structure map row for next-pick.js; Plan §4 P5 acceptance line; rubric R6 clause 'every pick lands in the decision ledger with rationale'",
+      "repair": "No current change; follow-up only. Update §3 next-pick.js row to 'logs pick plus rationale to ledger' and add one assertion to P5's acceptance — for example a fixture where the ledger entry for a replayed pick contains the same rationale string as the original.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "04bf70b90d596be9122ed8fbb1e9cc71f82d1286ab81b529b809c1f5a2e983a2"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Experience critic launch placement",
+      "claim": "The critic runs strictly post-acceptance and cannot gate any merge under any code path",
+      "evidence": "The plan alternates between 'post-merge' (§2 KR5, §3, §6 risk 5) and 'post-acceptance' (rubric language; implicit in §2 KR5 'launches only from the post-merge hook (after the integration ref advances)'). The two are synonymous only if 'merge' is the acceptance event; the plan never equates them. A literal reader of 'post-merge' could interpret it as 'after any merge, including a feature-branch merge', which would not equal 'post-acceptance'. KR5's red case 'planted blocking marker inert, surfaced as anomaly' is correct, but the wording leaves a reviewer no quoted sentence that pins the launch site.",
+      "evidence_reference": "Plan §2 KR5; Plan §2.5 'The experience critic never blocks a merge (post-merge by construction)'; Plan §6 risk 5; rubric R5 'runs strictly post-acceptance'",
+      "repair": "No current change; follow-up only. Pin one phrase — for example 'launched only from the post-integration-merge hook, equivalent to post-acceptance for this plan' — and use it consistently in §2 KR5, §2.5, §3, and §6. Optionally add the same one-sentence definition to references/experience-audit.md so the methodology document is the single canonical statement.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "166856de2a8de9f10ae39bbf996abcbf861ac13909caee0fe9f90991dabff17d"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Bundle truncation contract",
+      "claim": "The bundle has a hard token cap with fail-closed truncation",
+      "evidence": "Plan §3 build-rehydration-bundle.js row reads 'per-section caps, ≤20k total; breach = build error; truncation drops ⑤→③ only, never ①②'. 'Fail-closed truncation' can be read two ways: (a) the truncation strategy is fail-closed because it preserves the highest-priority sections — plan satisfies this; (b) any over-cap input refuses to build rather than truncating — plan only does this at total cap, not at section caps. The plan's intent is (a), but the rubric wording leaves both readings live and a strict reviewer could flag it.",
+      "evidence_reference": "Plan §3 build-rehydration-bundle.js row; Plan §6 risk 3 'Bundle grows into its own context problem'; rubric R4 clause 'bundle has a hard token cap with fail-closed truncation'",
+      "repair": "No current change; follow-up only. Add a single sentence in §2.5 or in the bundle-layout appendix of references/experience-audit.md defining 'fail-closed truncation' as section-order-preserving partial drop (lowest-priority first), with total-cap breach as the only build-refusal path.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "058b1d14496c03d160b3f488a7dd0df27195ba884cd20215e5f9872345e7f53c"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "F2 coverage and pre-spend scope control",
+      "claim": "The declared F2-to-KR4 mapping is not honest because the stall fuse cannot catch a product-producing mega-batch.",
+      "evidence": "Section 2 maps F2 to KR4, while KR4 trips only after three consecutive zero-product bursts. A large burst containing product changes bypasses that condition. Section 2.5 mentions a file/churn budget but assigns it no enforcing script, caller, or red case.",
+      "evidence_reference": "Plan §2 failure-shape coverage; Plan §2 KR4; Plan §2.5 Global Constraints; frozen rubric R1 and R7",
+      "repair": "Add a deterministic pre-spawn file/churn budget gate on a named existing rail, freeze its parameters, add an over-budget product-bearing red case, and map F2 to that gate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ca9c25169c44f364c78c0dcee7258daf2c9323bc931330be44d2f3178f58195e"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Frozen granularity member",
+      "claim": "The granularity surface is referenced but not demonstrably content-pinned, so the DAG can be mutated without changing the four-tuple.",
+      "evidence": "The tuple defines granularity as a deliverable DAG ref, whereas the rubric and control-plane members explicitly use content digests. The plan never requires the ref to be an immutable content address or requires preflight to digest and compare the referenced DAG.",
+      "evidence_reference": "Plan §2.5 Frozen four-tuple; Plan KR1; Plan §4 P1; frozen rubric R3",
+      "repair": "Define granularity as an immutable DAG content digest or immutable object ID, specify canonical resolution, and require preflight to recompute it before any spawn; any mismatch must enter the stop-and-refreeze path.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3aca150c54cd314713dda4553ba33f391bdfd8a8ab76c024245cfa9882663c20"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Rehydration bundle overflow behavior",
+      "claim": "The bundle policy is internally contradictory and permits removal of load-bearing restart data.",
+      "evidence": "The file map says cap breach is a build error but also says truncation drops sections ⑤ through ③. Those sections contain the owned-process table, ledger tail, and roster/preference data. The plan neither defines when truncation versus failure occurs nor requires exact disk reload before proceeding. It also leaves the 20k measurement unit unspecified despite requiring a token cap.",
+      "evidence_reference": "Plan §3 build-rehydration-bundle.js; Plan §4 P2; Plan §6 risk 3; frozen rubric R4",
+      "repair": "Specify one deterministic cap unit and overflow algorithm. Preserve mandatory data or immutable disk pointers, require exact reload before use, and abort resume if any mandatory section cannot be reconstructed; test every overflow boundary and owned-process reattachment.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "45ebf7d27e7e7b7de0c216ac3db0a1afad9da31f89b6e9ccc0bff830431a472a"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Experience-audit methodology contract",
+      "claim": "The mandatory five-question protocol is not frozen, and the plan introduces an undefined seven-step methodology that could replace or alter it.",
+      "evidence": "The only specification is a promise that a new reference will contain a seven-step methodology and a five-question instantiation protocol. The five questions, their outputs, and the boundary between the seven steps and the required protocol are absent, so P6 leaves rubric-critical behavior to implementer invention.",
+      "evidence_reference": "Plan §3 references/experience-audit.md; Plan §4 P6; frozen rubric R5",
+      "repair": "Freeze the exact five questions and output schema before dispatch, state that any surrounding steps are execution plumbing rather than another methodology, prohibit closed artifact-type tables explicitly, and define the human-only routing result.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "62813c33b8beff16cb755bee5fa35ab0726b2c05fde4f35c0325606bbe61c32e"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Critic launch and merge isolation",
+      "claim": "Post-acceptance non-blocking behavior is asserted but not structurally enforced under every caller.",
+      "evidence": "KR5 names a post-merge hook, while the file map names an l4/l5 SKILL slice and another row assigns critic launch to l4/l5/l6. No mechanical integration-ref guard, fail-isolated exit contract, or caller-inventory assertion is specified. The proposed blocking-marker test alone does not prove invocation occurs only after ref advancement or that every caller ignores critic failure.",
+      "evidence_reference": "Plan KR5; Plan §3 dispatch-experience-critic.sh; Plan §3 skills row; Plan §4 P6; frozen rubric R5",
+      "repair": "Attach the critic to one mechanically identified post-integration rail for l4, l5, and l6; guard on recorded ref advancement; make its exit unable to alter merge status; and test ordering, failure isolation, and the complete caller inventory.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2086e03040d39ebc004d770a25a26b551536582a13b6929b0bdfad37c506025b"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Auto-pick replay input envelope",
+      "claim": "The stated pick function is not closed over all data that can affect eligibility or ranking, so its result is not replayable from recorded inputs.",
+      "evidence": "The function lists only a BACKLOG digest, preference digest, and readiness snapshot, while permitted queues also include docs/plans and behavior depends on task-class configuration and qualification state. A digest alone is also insufficient unless the corresponding immutable content is retained and resolvable. No canonical readiness-snapshot schema is defined.",
+      "evidence_reference": "Plan §3 next-pick.js; Plan §2.5 Auto-pick and User authority; Plan §3 task-class-config; frozen rubric R6",
+      "repair": "Define and persist a canonical input envelope containing immutable queue contents or resolvable content addresses for every eligible queue, task-class config, qualification snapshot, preference config, and readiness data; record its digest and rationale with every pick.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0694415702ba57fa32fb0f498eef37813004622caae28f766983161b6840da86"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Ask-first classification",
+      "claim": "The ask-first rule is not machine-checkable from the specified queue data and is not demonstrably closed.",
+      "evidence": "Effort, touched protected paths, irreversible or outward action, and board tag are listed as predicates, but no required queue schema or missing-field behavior is defined. Touched paths and irreversible or outward action require undeclared semantic inference. P8 separately adds ambiguity-to-ask without reconciling ambiguity with the supposedly closed list.",
+      "evidence_reference": "Plan §2.5 Ask-first rule; Plan §3 task-class-config; Plan §4 P8; frozen rubric R6 and R8",
+      "repair": "Create a closed normalized eligibility schema with explicit effort, affected paths, outward-action, irreversibility, board-tag, and ambiguity fields; define deterministic path matching and make missing or unparseable metadata ask-first.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "410160151f854106d3dfcd4b39b465e36d3d9f3f6a60d46cb2d6c85d3a5b739d"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 and P3 deliverable dependency",
+      "claim": "P1 is not independently shippable because its production audit depends on the decision ledger that does not land until P3.",
+      "evidence": "P1 adds and wires audit mode and accepts against unmatched ledger entries, but decision-ledger.js and its round-end writer land in P3. If P1 activates audit, existing rounds lack required entries and fail; if audit remains inactive, P1 does not ship the claimed same-phase caller and gate.",
+      "evidence_reference": "Plan §3 check-blueprint-conformance.js; Plan §3 decision-ledger.js; Plan §4 P1 and P3; frozen rubric R7",
+      "repair": "Move ledger-completeness audit and its caller to P3, or land the minimal production ledger schema and append path in P1. Update dependencies and acceptance so every shipped phase is usable without a dormant or universally failing gate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4d20e5d1cabece05312270959d5aae23dd053e9e26bfbe9d9a04ce22e90a7768"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Qualification no-third-path gate tests",
+      "claim": "P7 does not prove that standing exam and per-invocation override are the only accepted qualification paths.",
+      "evidence": "Its sole stated red case rejects the absence of both evidence and override. An implementation could also accept an implicit fallback, capability warning, stale evidence, or another artifact and still pass that test. Headless refusal is stated but the acceptance matrix does not exercise all two-path boundaries.",
+      "evidence_reference": "Plan §0 Board ruling 5; Plan KR6; Plan §4 P7; Plan §5 red-case matrix; frozen rubric R8 and R9",
+      "repair": "Add positive fixtures for a fresh standing exam and an explicit per-invocation override, plus negative fixtures for stale evidence, capability warnings, implicit defaults, malformed overrides, and headless execution without either authorized artifact.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "28731f3b0ebf0acdd0ca1155d5c7605ab84bb8598efe3aa5f441ddc8b3ba8a1e"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "9e0dd85defb078c339fc6bf0194388641c307e42b89dd3bdd2d14f2c76607160",
+      "rubric_id": "R1",
+      "affected_surface": "§2 failure-shape coverage map and §3 next-pick.js (auto-pick plus ask-first enforcement)",
+      "claim": "The auto-pick mechanism has no explicit failure-shape attribution: the coverage list maps F1–F12 to KR1–KR4, P8, and shipped mechanisms, but never names which observed failure shape scope-inventing picks trace to, even though problem statement (d) asserts the failure was observed; the 'complete and honest' mapping claim is therefore not auditable for this deliverable.",
+      "evidence_reference": "Plan §2 coverage list versus §3 next-pick.js row and §1(d); evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md",
+      "disposition": null
+    },
+    {
+      "fingerprint": "b9f246389140e31f4dbbfe6979df9b86f4b30d1cc0b28c65fd165a53d08c615e",
+      "rubric_id": "R6",
+      "affected_surface": "§2.5 ask-first predicate; next-pick.js classification logic; P5 acceptance tests",
+      "claim": "The ask-first classification is asserted machine-checkable, but the 'irreversible/outward action' clause has no machine-checkable definition anywhere in the plan: Effort L/H, qc-gate protected paths, and the board tag are all decidable from queue-row metadata and path sets, while irreversibility is not, so this clause could decay into heuristic judgment inside the pick function and break replayable classification.",
+      "evidence_reference": "Plan §2.5 auto-pick bullet; §3 next-pick.js and project-config-template/task-class-config.md rows; §5 P5 red-case row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "04bf70b90d596be9122ed8fbb1e9cc71f82d1286ab81b529b809c1f5a2e983a2",
+      "rubric_id": "R6",
+      "affected_surface": "Auto-pick ledger entry shape (next-pick.js)",
+      "claim": "Every pick lands in the decision ledger with rationale",
+      "evidence_reference": "Plan §3 file-structure map row for next-pick.js; Plan §4 P5 acceptance line; rubric R6 clause 'every pick lands in the decision ledger with rationale'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "166856de2a8de9f10ae39bbf996abcbf861ac13909caee0fe9f90991dabff17d",
+      "rubric_id": "R5",
+      "affected_surface": "Experience critic launch placement",
+      "claim": "The critic runs strictly post-acceptance and cannot gate any merge under any code path",
+      "evidence_reference": "Plan §2 KR5; Plan §2.5 'The experience critic never blocks a merge (post-merge by construction)'; Plan §6 risk 5; rubric R5 'runs strictly post-acceptance'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "058b1d14496c03d160b3f488a7dd0df27195ba884cd20215e5f9872345e7f53c",
+      "rubric_id": "R4",
+      "affected_surface": "Bundle truncation contract",
+      "claim": "The bundle has a hard token cap with fail-closed truncation",
+      "evidence_reference": "Plan §3 build-rehydration-bundle.js row; Plan §6 risk 3 'Bundle grows into its own context problem'; rubric R4 clause 'bundle has a hard token cap with fail-closed truncation'",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-16T22:19:27.351Z"
+}

@@ -597,6 +597,7 @@ const {
   missionSubjectDigest,
 } = require(path.join(root, 'src', 'engine', 'mission-campaign-identity'));
 const workOrder = require(path.join(root, 'src', 'engine', 'work-order'));
+const { sealSessionMarker } = require(path.join(root, 'hooks', 'tests', 'lib', 'session-marker'));
 const roster = {
   reviewer_engine: 'fixture-reviewer',
   reviewer_effort: 'high',
@@ -1926,6 +1927,14 @@ function runDurableStrictIdentityCase(label, env, loopOverrides = {}) {
       dispatchCalls += 1;
       throw new Error(`strict identity ${label} must not call implementationDispatcher`);
     },
+  });
+  // Mission-backed, so managed dev-flow admission does apply here and wants an
+  // admitted session before the strict root-identity check is even reached.
+  sealSessionMarker({
+    root,
+    dir: path.join(repo, '.autopilot', 'session-mode'),
+    repoRoot: repo,
+    contract: strictContractPath,
   });
   const result = engine.runImplementationReviewLoop({
     promptFile,
@@ -4133,6 +4142,9 @@ const vertical = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize:
   convergence: () => ({ passed: true }),
   finalPanel: () => ({
     reviewed: true,
+    verdict: 'SHIP-AS-IS',
+    findings: '[]',
+    review_digest: 'f'.repeat(64),
     sealed_min_panel_size: 1,
     final_panel_count: 1,
     final_panel_seat_receipts: [{
@@ -4435,6 +4447,9 @@ const result = runCampaignComposition({ maxRepairGenerations: 1, minPanelSize: 1
   convergence: () => ({ passed: true }),
   finalPanel: () => ({
     reviewed: true,
+    verdict: 'SHIP-AS-IS',
+    findings: '[]',
+    review_digest: 'f'.repeat(64),
     sealed_min_panel_size: 1,
     final_panel_count: 1,
     final_panel_seat_receipts: [seat()],
@@ -4543,7 +4558,8 @@ const over = runCampaignComposition({
     };
     s.receipt_digest = canonicalDigest(s);
     return {
-      reviewed: true, sealed_min_panel_size: 1, final_panel_count: 1,
+      reviewed: true, verdict: 'SHIP-AS-IS', findings: '[]',
+      review_digest: 'f'.repeat(64), sealed_min_panel_size: 1, final_panel_count: 1,
       final_panel_seat_receipts: [s],
     };
   },
@@ -4668,6 +4684,9 @@ const result = runCampaignComposition({
   convergence: () => ({ passed: true }),
   finalPanel: () => ({
     reviewed: true,
+    verdict: 'SHIP-AS-IS',
+    findings: '[]',
+    review_digest: 'f'.repeat(64),
     sealed_min_panel_size: 1,
     final_panel_count: 1,
     final_panel_seat_receipts: [seat()],

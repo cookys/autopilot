@@ -80,23 +80,24 @@ Fallback starts admission and profile resolution again for the replacement ident
 
 Artificial Analysis is an optional model-level prior for implementer/explorer discovery only.
 Imported rows are user-local and `provisional`; no bundled score or external reputation can qualify
-owner/reviewer. Likewise, scorecard and capability-state JSON are editable same-UID telemetry.
-Plugin-native admission requires the evaluator and Owner Kernel to share a live non-serializable
-verifier; a restart or JSON roundtrip cannot recreate it.
+owner/reviewer. Likewise, scorecard and capability-state JSON are editable same-UID telemetry:
+treat disk rows as advisory priors, never as admission authority. (The kernel-mediated
+live-verifier admission path was retired 2026-08-16 with the owner-kernel machinery; the surviving
+rule is the epistemic one — a routing decision must not claim stronger authority than the
+telemetry it reads, and the strongest available evidence tier is a live in-process qualification
+run via `scripts/engine-qualify.js`.)
 
-## Codex-host caveat (spawn_agent model lock)
+## Codex-host native child boundary
 
-On a Codex host the native `spawn_agent` tool exposes NO `model` field by default
-(server-reserved schema on MultiAgentV2 models; the official agents-TOML `model` is
-also ignored on codex-cli 0.144.x) — so this routing table CANNOT be expressed on
-subagent spawns: every child silently inherits the parent's model. Before routing
-by model on Codex, check the user has the documented opt-in enabled
-(`[features.multi_agent_v2]` with `hide_spawn_agent_metadata = false` AND
-`tool_namespace = "agents"` in their own `~/.codex/config.toml`); a one-call probe
-is asking for spawn_agent's parameter names (3 fields = locked, 7 = open). Without
-the opt-in, degrade honestly: spawn same-model and say so — do not claim a model
-was routed. Spike evidence + recipe: `references/multi-agent-portability.md`
-§ spawn_agent MODEL routing and `platforms/codex/README.md` § Subagent model routing.
+The current `codex-cli 0.146.0` native `spawn_agent` schema exposes five fields:
+`task_name`, `message`, `fork_turns`, `model`, and `reasoning_effort`. Model and effort
+are therefore requestable, but the resulting child identity must still be observed
+from the completed tool event before claiming heterogeneous routing. Native children
+are host-owned: use native list/wait/interrupt lifecycle operations and record the
+terminal disposition. Shell PGID/cgroup cleanup does not cover an engine-internal
+child. If the active host cannot expose or interrupt a surviving child, fail closed
+rather than claiming teardown. The rerunnable probe contract lives in
+`references/multi-agent-portability.md` § Codex native child lifecycle.
 
 ## Evidence
 

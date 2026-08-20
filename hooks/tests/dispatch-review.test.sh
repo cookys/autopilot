@@ -13,6 +13,14 @@ printf '+def f(): return x[::1]\n' > "$DIFF"
 STUB_MARKER="$TEST_TMP/eng-marker"
 cat > "$STUB_MARKER" <<'EOF'
 #!/usr/bin/env bash
+if [ "${1:-}" = models ]; then
+  printf '%s\n' 'Gemini 3.5 Flash (High)' 'gemini-3.6-flash-high'
+  exit 0
+fi
+if [ -n "${AGY_CONTAINMENT_PROBE:-}" ]; then
+  printf '%s\n' mutated 2>/dev/null > "$AGY_CONTAINMENT_PROBE" && exit 88
+  touch ./agy-scratch-write || exit 89
+fi
 read_prompt_arg() {
   # Parse the passed prompt whether stdin is used or a prompt-file/ -p arg is provided.
   local prompt=""
@@ -105,6 +113,35 @@ case "$MODE" in
     echo "NO-FINDING-PROOF: checked=spec; evidence=code; conclusion=no blocking discrepancy observed"
     echo "$END"
     ;;
+  ship_period_sep)
+    # kimi 真實形狀：checked 後用 `;`，conclusion 前用句號。
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow and keyPrefix equality; evidence=the gated block encloses every new read and write, so the off-arm reduces to the pre-change sequence. conclusion=both gates fully enclose their new control flow"
+    echo "$END"
+    ;;
+  ship_comma_sep)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=restore discipline in the sync window, evidence=each flipped node records its prior value and is restored inside finally, conclusion=no node outside the changed set is touched"
+    echo "$END"
+    ;;
+  ship_missing_conclusion)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=neutral-arm control flow; evidence=the gated block encloses every new read and write"
+    echo "$END"
+    ;;
+  ship_tautology_period)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff; evidence=tests. conclusion=looks good"
+    echo "$END"
+    ;;
   fix_with_proof)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
@@ -135,6 +172,12 @@ case "$MODE" in
     echo "line after fake diff"
     echo "$END"
     ;;
+  lexical)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: this valid finding discusses prompt, diff, marker, Diff under review:, diff --git, @@ -1 +1 @@, and <one finding per line> as vocabulary"
+    echo "$END"
+    ;;
   trailing)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
@@ -162,6 +205,12 @@ case "$MODE" in
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
     echo "FINDINGS: none"
+    ;;
+  ship_no_end)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=capped fixture; evidence=partial favourable block lacks the closing marker; conclusion=truncation cannot authorize shipping"
     ;;
   oversized)
     echo "$BEGIN"
@@ -200,9 +249,54 @@ STUB_EMPTY="$TEST_TMP/eng-empty"
 printf '#!/usr/bin/env bash\ncat >/dev/null 2>&1 || true\nexit 0\n' > "$STUB_EMPTY"
 chmod +x "$STUB_EMPTY"
 STUB_SHIP="$STUB_MARKER"
+STUB_AGY_JSON="$TEST_TMP/agy-json-envelope"
+cat > "$STUB_AGY_JSON" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = models ]; then
+  exec "$AGY_TEXT_STUB" "$@"
+fi
+response="$("$AGY_TEXT_STUB" "$@")"
+stub_rc=$?
+[ "$stub_rc" -eq 0 ] || exit "$stub_rc"
+case "${AGY_ENVELOPE_MODE:-valid}" in
+  malformed) printf '%s' '{"response":'; exit 0 ;;
+  duplicate)
+    RESPONSE="$response" node -e '
+      const base = JSON.stringify({conversation_id:"fixture",duration_seconds:1,num_turns:1,response:process.env.RESPONSE,status:"SUCCESS",usage:{cache_read_tokens:7,input_tokens:101,output_tokens:23,thinking_tokens:11,total_tokens:142}});
+      process.stdout.write(base.replace("\"response\":", "\"response\":\"forged\",\"response\":"));
+    '
+    exit 0
+    ;;
+  negative) usage_input=-1 ;;
+  trailing) trailing='trailing bytes' ;;
+  *) usage_input=101 ;;
+esac
+RESPONSE="$response" USAGE_INPUT="${usage_input:-101}" node -e '
+  process.stdout.write(JSON.stringify({
+    conversation_id: "fixture",
+    duration_seconds: 1,
+    num_turns: 1,
+    response: process.env.RESPONSE,
+    status: "SUCCESS",
+    usage: {
+      cache_read_tokens: 7,
+      input_tokens: Number(process.env.USAGE_INPUT),
+      output_tokens: 23,
+      thinking_tokens: 11,
+      total_tokens: 142,
+    },
+  }));
+'
+[ -z "${trailing:-}" ] || printf '%s' "$trailing"
+[ "${AGY_ENVELOPE_MODE:-valid}" != nonzero_valid ] || exit 77
+EOF
+chmod +x "$STUB_AGY_JSON"
+make_agy_stub_versioned "$STUB_AGY_JSON"
+export AGY_TEXT_STUB="$STUB_MARKER"
 STUB_QODERCN_MARKER="$TEST_TMP/qoderclicn-marker"
 cat > "$STUB_QODERCN_MARKER" <<'EOF'
 #!/usr/bin/env bash
+[ -z "${QODER_ARGV_FILE:-}" ] || printf '%s\n' "$@" > "$QODER_ARGV_FILE"
 PROMPT="$(cat)"
 begin="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
 end="$(printf '%s\n' "$PROMPT" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
@@ -214,6 +308,63 @@ echo "NO-FINDING-PROOF: checked=fixture diff and acceptance criteria; evidence=t
 echo "$end"
 EOF
 chmod +x "$STUB_QODERCN_MARKER"
+
+STUB_SPAWN_MARKER="$TEST_TMP/spawn-marker-runner"
+cat > "$STUB_SPAWN_MARKER" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' spawned > "$SPAWN_MARKER_FILE"
+exit 99
+EOF
+chmod +x "$STUB_SPAWN_MARKER"
+
+# Valid receipt whose D2 partition is foreign to this consumer's frozen claim IDs.
+# Recompute both digests so rejection proves exact downstream ID binding rather
+# than generic JSON/integrity failure.
+FOREIGN_D2_RECEIPT="$TEST_TMP/foreign-d2-receipt.json"
+node - "$REPO_ROOT/docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json" "$FOREIGN_D2_RECEIPT" <<'NODE'
+const crypto = require('crypto');
+const fs = require('fs');
+const [source, destination] = process.argv.slice(2);
+const receipt = JSON.parse(fs.readFileSync(source, 'utf8'));
+const canonical = (value) => {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+};
+const digest = (value) => crypto.createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+const d2 = receipt.consumer_manifest.consumers.find((row) => row.consumer_id === 'D2');
+const d3 = receipt.consumer_manifest.consumers.find((row) => row.consumer_id === 'D3');
+[d2.required_claim_ids, d3.required_claim_ids] = [d3.required_claim_ids, d2.required_claim_ids];
+receipt.consumer_manifest_digest = digest(receipt.consumer_manifest);
+receipt.receipt_digest = '';
+const body = { ...receipt, receipt_digest: undefined };
+receipt.receipt_digest = digest(body);
+fs.writeFileSync(destination, `${JSON.stringify(receipt, null, 2)}\n`);
+NODE
+
+FAKE_NODE_DIR="$TEST_TMP/fake-node-bin"
+mkdir -p "$FAKE_NODE_DIR"
+cat > "$FAKE_NODE_DIR/node" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$ANTHROPIC_ARGV_FILE"
+prompt_file=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--prompt-file" ]; then
+    prompt_file="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+prompt="$(cat "$prompt_file")"
+begin="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-REVIEW-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+end="$(printf '%s\n' "$prompt" | sed -n 's/^\(<<<AUTOPILOT-END-[0-9a-f]\{32\}>>>\)$/\1/p' | sed -n '1p')"
+echo "$begin"
+echo "VERDICT: FIX-THEN-SHIP"
+echo "FINDINGS: fixture finding"
+echo "$end"
+EOF
+chmod +x "$FAKE_NODE_DIR/node"
 
 # 1. --help
 HELP_OUT="$("$SCRIPT" --help 2>&1)"; assert_eq "0" "$?" "--help exit code"
@@ -229,6 +380,73 @@ assert_eq "2" "$EXIT" "missing diff-file exit 2"
 OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --spec-file /nonexistent-spec 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing spec-file exit 2"
 OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --effort turbo 2>&1)"; assert_eq "2" "$?" "bad effort exit 2"
+
+# 2b. --max-tokens validation is strict, JSON-valid, and happens before any runner spawn.
+for VALUE in 0 -1 1.5 01 abc 200001 999999999999999999999999999999; do
+  SPAWN_MARKER_FILE="$TEST_TMP/invalid-max-spawn-$VALUE"; export SPAWN_MARKER_FILE
+  rm -f "$SPAWN_MARKER_FILE"
+  OUT="$("$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens "$VALUE" 2>&1)"; EXIT=$?
+  assert_eq "2" "$EXIT" "invalid --max-tokens '$VALUE' exits 2"
+  assert_contains "$OUT" '"status": "precondition_failed"' "invalid --max-tokens '$VALUE' is a precondition"
+  node -e 'JSON.parse(process.argv[1])' "$OUT"
+  assert_eq "0" "$?" "invalid --max-tokens '$VALUE' emits valid JSON"
+  assert_file_absent "$SPAWN_MARKER_FILE" "invalid --max-tokens '$VALUE' does not spawn runner"
+done
+SPAWN_MARKER_FILE="$TEST_TMP/missing-max-spawn"; export SPAWN_MARKER_FILE
+rm -f "$SPAWN_MARKER_FILE"
+OUT="$("$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "missing --max-tokens value exits 2"
+assert_contains "$OUT" '"status": "precondition_failed"' "missing --max-tokens value is a precondition"
+node -e 'JSON.parse(process.argv[1])' "$OUT"
+assert_eq "0" "$?" "missing --max-tokens value emits valid JSON"
+assert_file_absent "$SPAWN_MARKER_FILE" "missing --max-tokens value does not spawn runner"
+
+for RUNNER_NAME in codex agy grok cc-shim claude-native; do
+  SPAWN_MARKER_FILE="$TEST_TMP/unsupported-$RUNNER_NAME-spawn"; export SPAWN_MARKER_FILE
+  rm -f "$SPAWN_MARKER_FILE"
+  OUT="$("$SCRIPT" --runner "$RUNNER_NAME" --model fixture --diff-file "$DIFF" --bin "$STUB_SPAWN_MARKER" --max-tokens 100 2>&1)"; EXIT=$?
+  assert_eq "2" "$EXIT" "$RUNNER_NAME rejects --max-tokens"
+  assert_contains "$OUT" '"status": "precondition_failed"' "$RUNNER_NAME rejection is a precondition"
+  assert_contains "$OUT" "runner '$RUNNER_NAME'" "$RUNNER_NAME rejection names the runner"
+  assert_contains "$OUT" 'no verified enforceable output-token mapping' "$RUNNER_NAME rejection states the unsupported contract"
+  node -e 'JSON.parse(process.argv[1])' "$OUT"
+  assert_eq "0" "$?" "$RUNNER_NAME rejection emits valid JSON"
+  assert_file_absent "$SPAWN_MARKER_FILE" "$RUNNER_NAME rejects before runner spawn"
+done
+
+# D2 capability identity is a fail-before-spend precondition, not a soft
+# telemetry warning. The foreign receipt is internally valid but binds other IDs.
+SPAWN_MARKER_FILE="$TEST_TMP/foreign-d2-review-spawn"; export SPAWN_MARKER_FILE
+rm -f "$SPAWN_MARKER_FILE"
+OUT="$(AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT="$FOREIGN_D2_RECEIPT" "$SCRIPT" \
+  --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" \
+  --bin "$STUB_SPAWN_MARKER" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "foreign D2 review receipt exits as precondition failure"
+assert_contains "$OUT" '"status": "precondition_failed"' "foreign D2 review receipt is fail closed"
+assert_contains "$OUT" 'D2 capability claim validation failed' "foreign D2 review receipt names claim authority"
+assert_contains "$OUT" '"usage": null' "foreign D2 review receipt has no usage"
+assert_file_absent "$SPAWN_MARKER_FILE" "foreign D2 review receipt spawns no runner"
+
+# 2c. Supported rails receive their exact native argv; omission synthesizes no argument or result field.
+QODER_ARGV_FILE="$TEST_TMP/qoder-max.argv"; export QODER_ARGV_FILE
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" --max-tokens 200000 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "qoder accepts upper-bound --max-tokens"
+assert_contains "$(paste -sd ' ' "$QODER_ARGV_FILE")" '--max-output-tokens 200000' "qoder receives exact output-token argv"
+OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner qoderclicn --model qwen --diff-file "$DIFF" --bin "$STUB_QODERCN_MARKER" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "qoder omission preserves reviewed behavior"
+assert_not_contains "$(cat "$QODER_ARGV_FILE")" '--max-output-tokens' "qoder omission adds no output-token argv"
+assert_not_contains "$OUT" 'max_tokens' "qoder omission adds no result field"
+
+ANTHROPIC_ARGV_FILE="$TEST_TMP/anthropic-max.argv"; export ANTHROPIC_ARGV_FILE
+OUT="$(PATH="$FAKE_NODE_DIR:$PATH" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --context-window off --max-tokens 1 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "anthropic-compatible accepts lower-bound --max-tokens"
+assert_contains "$(paste -sd ' ' "$ANTHROPIC_ARGV_FILE")" '--max-tokens 1' "anthropic-compatible receives exact adapter argv"
+OUT="$(PATH="$FAKE_NODE_DIR:$PATH" DISPATCH_QUIET=1 "$SCRIPT" --runner anthropic-compatible --model fixture --diff-file "$DIFF" --context-window off 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "anthropic-compatible omission preserves reviewed behavior"
+assert_not_contains "$(cat "$ANTHROPIC_ARGV_FILE")" '--max-tokens' "anthropic-compatible omission adds no adapter argv"
+RESULT_KEYS="$(node -e 'const v=JSON.parse(process.argv[1]); console.log(Object.keys(v).sort().join(","))' "$OUT")"
+assert_eq "error,findings,model,no_finding_proof,raw_log,runner,status,usage,verdict" "$RESULT_KEYS" \
+  "omitted --max-tokens preserves result JSON shape"
 
 # 3. codex path: verdict parsed → reviewed, exit 0
 OUT="$("$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
@@ -284,9 +502,33 @@ assert_eq "0" "$EXIT" "structured no-finding proof reviewed exit 0"
 assert_contains "$OUT" '"no_finding_proof": "checked=' "SHIP-AS-IS emits parsed no-finding proof"
 assert_not_contains "$OUT" 'FINDINGS: none\\nNO-FINDING-PROOF' \
   "proof line is not swallowed into findings"
+# 契約改動 2026-08-15：非 SHIP 判決帶一行多餘的 NO-FINDING-PROOF **不再**丟棄整份
+# review。那行是噪音不是違約，而丟棄會把「審查者發現了真問題」變成「沒有判決」
+# ——往錯的方向 fail-closed，findings 靜默消失。實測 MiniMax-M3 3/3 都這樣，
+# 且改 prompt 措辭無效。該行被忽略、不解析、不外露（no_finding_proof 仍為 null）。
 OUT="$(STUB_MODE=fix_with_proof "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
-assert_eq "1" "$EXIT" "FIX-THEN-SHIP with proof exit 1"
-assert_contains "$OUT" '"status": "no_verdict"' "FIX-THEN-SHIP proof is rejected"
+assert_eq "0" "$EXIT" "FIX-THEN-SHIP with stray proof line is accepted"
+assert_contains "$OUT" '"status": "reviewed"' "FIX-THEN-SHIP with stray proof → reviewed"
+assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "FIX-THEN-SHIP verdict survives the stray proof line"
+assert_contains "$OUT" 'parser accepts unsafe input' "findings are NOT discarded over the stray proof line"
+assert_contains "$OUT" '"no_finding_proof": null' "stray proof line is not parsed or surfaced"
+
+# 分隔符韌性（2026-08-15）：欄位以 label 定位，不綁死 `;`。
+# kimi-code/k3 交出八個面向、七條帶原始碼的證據，只因為最後一欄用句號分隔就被
+# 判「欄位為空」——閘門越嚴，寫得越詳細的審查者越容易被踢掉。
+OUT="$(STUB_MODE=ship_period_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "period-separated no-finding proof is accepted"
+assert_contains "$OUT" '"no_finding_proof": "checked=' "period-separated proof is parsed"
+OUT="$(STUB_MODE=ship_comma_sep "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "comma-separated no-finding proof is accepted"
+
+# 反向：放寬分隔符**沒有**放寬反鴨子蓋章的閘門。缺欄位、同義反覆仍然擋。
+OUT="$(STUB_MODE=ship_missing_conclusion "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "proof without a conclusion field still fails"
+assert_contains "$OUT" '"status": "no_verdict"' "proof without conclusion → no_verdict"
+OUT="$(STUB_MODE=ship_tautology_period "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "tautological proof still fails under the relaxed separator"
+assert_contains "$OUT" '"status": "no_verdict"' "tautological proof (period-separated) → no_verdict"
 
 # 4f. Extra/duplicated VERDICT token is rejected by the single-verdict guard.
 OUT="$(STUB_MODE=forged "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
@@ -297,6 +539,12 @@ assert_contains "$OUT" '"status": "no_verdict"' "forged diff content → no_verd
 OUT="$(STUB_MODE=leak "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "leak content exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "leakage content → no_verdict"
+
+# 4g1. Natural-language findings may mention detector vocabulary without being
+#     rejected; only structurally echoed framing is leakage.
+OUT="$(STUB_MODE=lexical "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "lexical detector vocabulary exits 0"
+assert_contains "$OUT" '"status": "reviewed"' "lexical detector vocabulary remains reviewed"
 
 # 4g. Content after END is rejected (trailing non-blank payload).
 OUT="$(STUB_MODE=trailing "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
@@ -313,14 +561,47 @@ OUT="$(STUB_MODE=no_end "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$D
 assert_eq "1" "$EXIT" "missing END exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "missing END → no_verdict"
 
-# 5. agy path (through the script -qec pseudo-TTY wrapper) with a stub engine
-if command -v script >/dev/null 2>&1; then
-  OUT="$(STUB_MODE=ship "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_SHIP" 2>&1)"; EXIT=$?
-  assert_eq "0" "$EXIT" "agy reviewed exit 0 (pseudo-TTY capture)"
+# 5. agy native JSON path: response feeds the existing framing parser while usage
+# comes only from the closed harness envelope.
+if command -v bwrap >/dev/null 2>&1; then
+  printf '%s\n' protected > "$TEST_TMP/agy-protected"
+  OUT="$(AGY_CONTAINMENT_PROBE="$TEST_TMP/agy-protected" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "agy reviewed exit 0 (native JSON capture)"
   assert_contains "$OUT" '"runner": "agy"' "agy runner provenance"
-  assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy verdict parsed through script -qec"
+  assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy verdict parsed from the extracted response"
+  assert_contains "$OUT" '"usage": {"total_tokens":142,"input_tokens":101,"output_tokens":23,"cache_read_tokens":7,"source":"agy-json"}' \
+    "agy review exposes normalized harness-native usage"
+  assert_eq "protected" "$(cat "$TEST_TMP/agy-protected")" "agy reviewer cannot mutate a path outside scratch"
+
+  OUT="$(STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model gemini-flash --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+  assert_eq "0" "$EXIT" "agy reviewer generic alias exits 0"
+  assert_contains "$OUT" '"model": "gemini-3.6-flash-high"' "agy reviewer generic alias resolves before spend"
+  assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy reviewer alias path preserves the verdict"
+
+  for ENVELOPE_MODE in malformed duplicate negative trailing; do
+    OUT="$(AGY_ENVELOPE_MODE="$ENVELOPE_MODE" STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+    assert_eq "1" "$EXIT" "agy $ENVELOPE_MODE envelope fails closed"
+    assert_contains "$OUT" '"status": "no_verdict"' "agy $ENVELOPE_MODE envelope emits no_verdict"
+    assert_contains "$OUT" '"usage": null' "agy $ENVELOPE_MODE envelope cannot expose usage"
+    assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy $ENVELOPE_MODE envelope cannot authorize shipping"
+  done
+  OUT="$(AGY_ENVELOPE_MODE=nonzero_valid STUB_MODE=ship AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner agy --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" 2>&1)"; EXIT=$?
+  assert_eq "1" "$EXIT" "agy nonzero after valid-looking envelope fails closed"
+  assert_contains "$OUT" '"usage": null' "agy nonzero after valid-looking envelope discards usage"
+  assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "agy nonzero after valid-looking response is never parsed"
+
+  mkdir -p "$TEST_TMP/fail-bwrap"
+  printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\\n" "$*" > "$BWRAP_ARGS_FILE"' 'exit 77' > "$TEST_TMP/fail-bwrap/bwrap"
+  chmod +x "$TEST_TMP/fail-bwrap/bwrap"
+  BWRAP_ARGS_FILE="$TEST_TMP/bwrap.args" PATH="$TEST_TMP/fail-bwrap:$PATH" STUB_MODE=ship "$SCRIPT" --runner agy \
+    --model "Gemini 3.5 Flash (High)" --diff-file "$DIFF" --bin "$STUB_AGY_JSON" \
+    >"$TEST_TMP/agy-bwrap-fail.out" 2>&1
+  EXIT=$?
+  assert_eq "1" "$EXIT" "agy reviewer transport fails closed when sandbox execution fails"
+  assert_contains "$(cat "$TEST_TMP/bwrap.args")" "--proc /proc" \
+    "agy reviewer mounts a fresh proc for its private PID namespace"
 else
-  echo "  (skip agy pseudo-TTY case: 'script' not available)"
+  echo "  (skip agy native JSON case: 'bwrap' not available)"
 fi
 
 # 5b. qoderclicn path: prompt via STDIN, scratch cwd, text output parsed.
@@ -331,6 +612,28 @@ assert_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn verdict parsed"
 OUT="$("$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_EMPTY" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "qoderclicn empty clean exit is no_verdict"
 assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn empty clean output fails closed"
+OUT="$(STUB_MODE=ship_no_end "$SCRIPT" --runner qoderclicn --model Qwen3.8-Max-Preview --diff-file "$DIFF" --bin "$STUB_VERDICT" --max-tokens 5 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "qoderclicn capped partial wrapped block is no_verdict"
+assert_contains "$OUT" '"status": "no_verdict"' "qoderclicn capped partial SHIP never passes"
+assert_not_contains "$OUT" '"verdict": "SHIP-AS-IS"' "qoderclicn partial SHIP is not accepted"
+
+# 5c. Blind review requires no-tools containment and hides the caller escape sentinel.
+OUT="$(AUTOPILOT_BLIND_DISCOVERY=1 "$SCRIPT" --runner codex --model fixture --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "blind codex review requires a no-tools profile"
+assert_contains "$OUT" 'enforceable no-tools runner profile' "blind precondition explains containment"
+BLIND_SOURCE="$TEST_TMP/blind-source"; mkdir -p "$BLIND_SOURCE"; printf 'diff\n' > "$BLIND_SOURCE/diff"; printf 'spec\n' > "$BLIND_SOURCE/spec"; printf 'escape\n' > "$BLIND_SOURCE/escape-sentinel"
+BLIND_SCRIPT="$TEST_TMP/blind-probe"
+printf '#!/usr/bin/env bash\nif [ -e escape-sentinel ]; then printf '\''%s\\n'\'' '\''{"runner":"fixture","model":"fixture","status":"reviewed","verdict":"SHIP-AS-IS","findings":"","no_finding_proof":"checked=sentinel; evidence=absent; conclusion=isolated","raw_log":null,"error":null,"usage":null}'\''; else exit 1; fi\n' > "$BLIND_SCRIPT"; chmod +x "$BLIND_SCRIPT"
+OUT="$(BLIND_SOURCE="$BLIND_SOURCE" BLIND_SCRIPT="$BLIND_SCRIPT" REPO_ROOT="$REPO_ROOT" node - <<'NODE'
+const { dispatchReviewJson } = require(`${process.env.REPO_ROOT}/src/runners/review`);
+const source = process.env.BLIND_SOURCE;
+const result = dispatchReviewJson(['--runner', 'fixture', '--model', 'fixture', '--diff-file', `${source}/diff`, '--spec-file', `${source}/spec`], { cwd: source, scriptPath: process.env.BLIND_SCRIPT, blindDiscovery: true });
+console.log(JSON.stringify({ status: result.result && result.result.status, launch_cwd: result.transportEnvelope.cwd }));
+NODE
+  )"; EXIT=$?
+assert_eq "0" "$EXIT" "blind adapter probe returns transport result"
+assert_contains "$OUT" '"status":null' "blind adapter rejects caller escape sentinel"
+assert_not_contains "$OUT" '"status":"reviewed"' "blind adapter never accepts crawl verdict"
 
 # 6. anthropic-compatible: transport precondition failures collapse to no_verdict, exit 1 (no network)
 OUT="$(env -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY -u ANTHROPIC_COMPATIBLE_AUTH_TOKEN -u MINIMAX_API_KEY \
@@ -404,6 +707,7 @@ const server = http.createServer((req, res) => {
     }
     const payload = JSON.parse(body);
     fs.appendFileSync(logPath, `[model=${payload.model}]\n`);
+    fs.appendFileSync(logPath, `[call=${calls} max_tokens=${payload.max_tokens}]\n`);
     if (Object.prototype.hasOwnProperty.call(payload, 'thinking')) {
       res.writeHead(400, { 'content-type': 'application/json' });
       res.end('{"error":"unexpected thinking"}');
@@ -526,9 +830,10 @@ OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT/v1" ANTHROPIC_
 assert_eq "0" "$EXIT" "anthropic-compatible /v1 base-url reviewed exit 0"
 assert_not_contains "$(cat "$MOCK_LOG")" 'POST /v1/v1/messages' "anthropic-compatible /v1 base-url does not double-append /v1"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
-  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
+  "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" --max-tokens 17 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "anthropic-compatible max_tokens exit 1"
 assert_contains "$OUT" '"status": "no_verdict"' "anthropic-compatible max_tokens → no_verdict"
+assert_contains "$(cat "$MOCK_LOG")" '[call=7 max_tokens=17]' "anthropic-compatible forwards the requested cap into the API payload"
 assert_not_contains "$(cat "$MOCK_LOG")" 'POST /v1/v1/messages' "anthropic-compatible max_tokens does not double-append /v1"
 OUT="$(ANTHROPIC_COMPATIBLE_BASE_URL="http://127.0.0.1:$MOCK_PORT" ANTHROPIC_COMPATIBLE_AUTH_TOKEN="$TEST_AUTH_TOKEN" \
   "$SCRIPT" --runner anthropic-compatible --model MiniMax-M3 --diff-file "$DIFF" 2>&1)"; EXIT=$?
@@ -816,5 +1121,34 @@ assert_not_contains "$NOPACK_PROMPT" "--- end methodology ---" "prompt omits met
 OUT="$("$SCRIPT" --runner codex --model x --diff-file "$DIFF" --pack-file /nonexistent-pack 2>&1)"; EXIT=$?
 assert_eq "2" "$EXIT" "missing pack-file exit 2"
 assert_contains "$OUT" '"status": "precondition_failed"' "missing pack-file precondition"
+
+# Regression: cc-shim must suppress Claude Code's unknown-model context-window notice.
+# cc-shim exists to drive NON-Anthropic models through an Anthropic-compatible endpoint,
+# so the model name is unknown to the CLI by construction. Without the suppression the CLI
+# prepends a multi-line notice to STDOUT ahead of an otherwise complete, correctly-framed
+# verdict. The parser requires the wrapped block to be the FIRST non-blank line — that is
+# deliberate, because a prompt echo reproduces the framing markers too and only position
+# separates the two — so the notice silently turned a finished review into no_verdict.
+# Observed 2026-08-08 with MiniMax-M3: a real VERDICT: SHIP-AS-IS inside an intact nonce
+# block, discarded. Fixing it at the launch env keeps the prompt-echo protection intact;
+# relaxing the parser would not have.
+assert_contains "$(cat "$SCRIPT")" "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1" \
+  "cc-shim launch suppresses the unknown-model context-window notice"
+
+# ── Blind-evidence gate (four-layer K1, D2): implementer narrative in the assembled
+# payload fails closed BEFORE any runner spawn; --allow-narrative overrides loudly. ──
+BE_SPEC="$TEST_TMP/be-narrative-spec.md"
+BE_DIFF="$TEST_TMP/be-diff.txt"
+printf 'I have implemented everything and all tests pass.\n' > "$BE_SPEC"
+printf 'diff --git a/x b/x\n' > "$BE_DIFF"
+BE_OUT="$(bash "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
+  --diff-file "$BE_DIFF" --spec-file "$BE_SPEC" 2>/dev/null)"
+assert_contains "$BE_OUT" '"status": "precondition_failed"' \
+  "narrative payload fails closed before dispatch (blind-evidence K1)"
+assert_contains "$BE_OUT" "blind-evidence" "denial names the rule"
+BE_ERR="$(bash "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax \
+  --diff-file "$BE_DIFF" --spec-file "$BE_SPEC" --allow-narrative "fixture override test" 2>&1 >/dev/null | head -20)"
+assert_contains "$BE_ERR" "BLIND-EVIDENCE OVERRIDE" \
+  "--allow-narrative admits the payload with a loud stderr override record"
 
 finalize_test

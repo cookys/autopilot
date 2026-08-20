@@ -113,4 +113,67 @@ if ! echo "$OUT_SKIP" | grep -qiE "SKIPPED|SKIP"; then
 fi
 assert_file_absent "$MARKER_SKIP" "P1 no spawn marker"
 
+# North-star prose growth must be justified in the current canonical version's
+# section. Exercise the real check with deterministic surface measurements.
+PREFLIGHT_SCRIPT="$REPO_ROOT/scripts/preflight-release.sh"
+eval "$(sed -n '/^changelog_version_section()/,/^}$/p' "$PREFLIGHT_SCRIPT")"
+eval "$(sed -n '/^current_changelog_has_justification()/,/^}$/p' "$PREFLIGHT_SCRIPT")"
+eval "$(sed -n '/^check_north_star()/,/^}$/p' "$PREFLIGHT_SCRIPT")"
+# check_north_star tail-calls this (added by 435cdc27, v2.34.18). Extracting the REAL
+# function rather than stubbing it keeps the coupling visible — stubbing is what would
+# have let this break silently in the first place.
+eval "$(sed -n '/^check_per_skill_ratchet()/,/^}$/p' "$PREFLIGHT_SCRIPT")"
+
+NORTH_STAR_FIXTURE="$TEST_TMP/north-star"
+mkdir -p "$NORTH_STAR_FIXTURE"
+printf '{"version":"9.9.8","prose":100,"engine":10}\n' > "$NORTH_STAR_FIXTURE/baseline.json"
+
+run_north_star() {
+  local prose="$1"
+  (
+    cd "$NORTH_STAR_FIXTURE" || exit 1
+    VERSION="9.9.9"
+    CHANGELOG="CHANGELOG.md"
+    SURFACE_BASELINE="baseline.json"
+    TEST_SURF_PROSE="$prose"
+    measure_surface() {
+      SURF_PROSE="$TEST_SURF_PROSE"
+      SURF_ENGINE=11
+    }
+    check_north_star
+  ) >/dev/null 2>&1
+}
+
+cat > "$NORTH_STAR_FIXTURE/CHANGELOG.md" <<'CHANGELOG'
+## v9.9.9
+
+- Current release without a growth explanation.
+
+## v9.9.8
+
+- prose-justification: historical growth only.
+CHANGELOG
+run_north_star 106
+assert_eq "$?" "1" "north-star rejects justification found only in a historical version"
+
+cat > "$NORTH_STAR_FIXTURE/CHANGELOG.md" <<'CHANGELOG'
+## v9.9.9
+
+- prose-justification: current release needs the additional methodology text.
+
+## v9.9.8
+
+- Older release.
+CHANGELOG
+run_north_star 106
+assert_eq "$?" "0" "north-star accepts justification in the current version section"
+
+cat > "$NORTH_STAR_FIXTURE/CHANGELOG.md" <<'CHANGELOG'
+## v9.9.9
+
+- No justification required at or below the threshold.
+CHANGELOG
+run_north_star 105
+assert_eq "$?" "0" "north-star preserves the under-threshold path"
+
 finalize_test

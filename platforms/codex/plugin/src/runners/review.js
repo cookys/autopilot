@@ -2,6 +2,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawnSync } = require('child_process');
 const { bufferToString } = require('../lib/common');
 const { createRunnerTransportEnvelope } = require('../transport/runner-envelope');
@@ -17,6 +18,7 @@ const REVIEW_RESULT_FIELDS = [
   'no_finding_proof',
   'raw_log',
   'error',
+  'usage',
 ];
 const REVIEW_STATUSES = ['reviewed', 'no_verdict', 'precondition_failed'];
 const REVIEW_VERDICTS = ['SHIP-AS-IS', 'FIX-THEN-SHIP', null];
@@ -47,6 +49,33 @@ function isValidNoFindingProof(value) {
     const normalized = part.trim().toLowerCase().replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
     return !NO_FINDING_TAUTOLOGIES.has(normalized);
   });
+}
+
+function validateUsage(value) {
+  if (value === null) return;
+  const fields = [
+    'total_tokens',
+    'input_tokens',
+    'output_tokens',
+    'cache_read_tokens',
+    'source',
+  ];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('review output JSON field usage must be null or an object');
+  }
+  const keys = Object.keys(value).sort();
+  if (JSON.stringify(keys) !== JSON.stringify([...fields].sort())) {
+    throw new Error('review output JSON field usage has invalid closed shape');
+  }
+  for (const field of fields.slice(0, 4)) {
+    if (value[field] !== null
+        && (!Number.isSafeInteger(value[field]) || value[field] < 0)) {
+      throw new Error(`review output JSON field usage.${field} must be null or a nonnegative safe integer`);
+    }
+  }
+  if (typeof value.source !== 'string' || value.source.length === 0) {
+    throw new Error('review output JSON field usage.source must be a non-empty string');
+  }
 }
 
 function validateReviewResult(value) {
@@ -99,6 +128,7 @@ function validateReviewResult(value) {
   if (value.error !== null && (typeof value.error !== 'string' || value.error.length === 0)) {
     throw new Error('review output JSON field error must be null or non-empty string');
   }
+  validateUsage(value.usage);
   return value;
 }
 
@@ -144,15 +174,39 @@ function dispatchReview(args, options = {}) {
       signal: null,
     };
   }
+  let launchArgs = args;
+  let launchCwd = options.cwd || REPO_ROOT;
+  let blindCwd = null;
   try {
-    return spawnSync(scriptPath, args, {
-      cwd: options.cwd || REPO_ROOT,
-      env: options.env || process.env,
+    if (options.blindDiscovery === true) {
+      blindCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-blind-'));
+      fs.chmodSync(blindCwd, 0o700);
+      launchArgs = [...args];
+      for (const flag of ['--diff-file', '--spec-file']) {
+        const index = launchArgs.indexOf(flag);
+        if (index < 0 || typeof launchArgs[index + 1] !== 'string') continue;
+        const source = launchArgs[index + 1];
+        const target = path.join(blindCwd, flag.slice(2, -5).replace(/-/g, '.') + '.input');
+        fs.copyFileSync(source, target);
+        fs.chmodSync(target, 0o600);
+        launchArgs[index + 1] = target;
+      }
+      launchCwd = blindCwd;
+    }
+    const child = spawnSync(scriptPath, launchArgs, {
+      cwd: launchCwd,
+      env: options.blindDiscovery === true
+        ? { ...(options.env || process.env), AUTOPILOT_BLIND_DISCOVERY: '1' }
+        : (options.env || process.env),
       shell: false,
       stdio: options.stdio || 'inherit',
     });
+    child.autopilotLaunchCwd = launchCwd;
+    return child;
   } catch (error) {
     return { error, status: null, signal: null };
+  } finally {
+    if (blindCwd) fs.rmSync(blindCwd, { recursive: true, force: true });
   }
 }
 
@@ -172,7 +226,7 @@ function dispatchReviewJson(args, options = {}) {
     model: argValue('--model') || 'unknown',
     operation: 'review',
     argv: args,
-    cwd: options.cwd || REPO_ROOT,
+    cwd: child.autopilotLaunchCwd || options.cwd || REPO_ROOT,
     child: { ...child, stdout, stderr },
     outcomeHints: options.transportOutcomeHints,
     privateRawReference: options.privateRawReference,

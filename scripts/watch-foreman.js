@@ -15,6 +15,7 @@
 //   LEAF_START <run-id> role=<role> <runner>/<model>      new dispatch manifest
 //   LEAF_END <run-id> <final_status>                      manifest finalized
 //   LEAF_STALL <run-id> log quiet <age>s (report-only)    live leaf log went quiet
+//   CONDITION run=<id> <stage> <condition> gen=<g> ...   typed durable condition
 //   QUIET <age>s since last ledger event (report-only)    foreman ledger went quiet
 //   WAIT ledger not created yet                           foreman not started
 //
@@ -78,17 +79,102 @@ function tsToMs(value) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function procStartSeconds(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  let line;
+  try { line = fs.readFileSync(`/proc/${pid}/stat`, 'utf8'); } catch (_e) { return null; }
+  const tail = line.slice(line.lastIndexOf(') ') + 2).trim().split(/\s+/);
+  const ticks = Number(tail[19]);
+  if (!Number.isFinite(ticks)) return null;
+  let btime = null;
+  try {
+    btime = Number(fs.readFileSync('/proc/stat', 'utf8').split('\n').find((x) => x.startsWith('btime '))?.split(/\s+/)[1]);
+  } catch (_e) { return null; }
+  const hz = 100;
+  return Number.isFinite(btime) && btime > 0 ? btime + Math.floor(ticks / hz) : null;
+}
+
+function procState(pid) {
+  try {
+    const line = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return line.slice(line.lastIndexOf(') ') + 2).trim().split(/\s+/)[0] || '?';
+  } catch (_e) { return '?'; }
+}
+
+function stageCondition(record, event, nowMs, quietSecs) {
+  const generation = Number(record?.generation);
+  const expectedStart = Number(record?.start_time);
+  const pid = Number(record?.pid);
+  const heartbeat = Number(record?.heartbeat_ts);
+  const valid = Number.isInteger(generation) && generation > 0
+    && typeof record?.nonce === 'string' && record.nonce.length > 0
+    && Number.isInteger(pid) && pid > 0 && Number.isInteger(expectedStart) && expectedStart > 0
+    && Number.isFinite(heartbeat);
+  if (!valid) return { condition: 'unknown', reason: 'malformed_lease_evidence' };
+  let alive = true;
+  try { process.kill(pid, 0); } catch (_e) { alive = false; }
+  const currentStart = procStartSeconds(pid);
+  if (alive && (currentStart === null || currentStart !== expectedStart)) {
+    return { condition: 'unknown', reason: 'identity_unreadable_or_mismatched' };
+  }
+  const state = alive ? procState(pid) : 'absent';
+  if (state.startsWith('D')) return { condition: 'blocked', reason: 'd_state_resource_holder' };
+  if (!alive || state.startsWith('Z')) {
+    return record.resources ? { condition: 'unknown', reason: 'owner_absent_resource_holder' } : { condition: 'dead', reason: 'owner_absent' };
+  }
+  const eventGeneration = Number(event?.generation);
+  const eventPid = Number(event?.pid);
+  const eventStart = Number(event?.start_time);
+  const eventProgress = Number(event?.progress_ts);
+  const eventIdentity = event && Number.isInteger(eventGeneration) && eventGeneration > 0
+    && eventGeneration === generation
+    && event.nonce === record.nonce
+    && Number.isInteger(eventPid) && eventPid === pid
+    && Number.isInteger(eventStart) && eventStart === expectedStart
+    && Number.isInteger(eventProgress) && eventProgress > 0;
+  const freshness = eventIdentity ? Math.max(heartbeat, eventProgress) : heartbeat;
+  const age = Math.max(0, Math.round((nowMs - freshness * 1000) / 1000));
+  if (eventIdentity) {
+    if (event.condition === 'blocked') return { condition: 'blocked', reason: event.reason || 'explicit_blocked_event' };
+    // A waiting event is authoritative only while the exact owner continues
+    // to publish a fresh heartbeat; a stale wait enters bounded inquiry.
+    if (event.condition === 'waiting' && (quietSecs <= 0 || age < quietSecs)) {
+      return { condition: 'waiting', reason: event.reason || 'explicit_wait_event' };
+    }
+  }
+  if (age >= quietSecs && quietSecs > 0) return { condition: 'unknown', reason: 'stale_without_bounded_inquiry' };
+  return { condition: 'working', reason: 'fresh_heartbeat' };
+}
+
 const state = {
   ledgerOffset: 0,
   ledgerSeenWait: false,
   lastLedgerEventMs: null,
   quietAnnounced: false,
-  stageState: new Map(),   // stage -> `${state}:${generation}`
+  stageState: new Map(),   // run_id + stage -> `${state}:${generation}`
+  stageRecords: new Map(), // run_id + stage -> latest stage lease row
+  workerEvents: new Map(), // run_id + stage -> latest generation-bound worker event
+  conditionState: new Map(), // run_id + stage -> last typed condition
   leaves: new Map(),       // run_id -> { ended: bool, stallAnnounced: bool }
 };
 
 function emit(line) {
   process.stdout.write(`${line}\n`);
+}
+
+function stageKey(runId, stage) {
+  // JSON tuple avoids stage-only collisions without emitting a NUL byte into
+  // --once snapshot output (shell command substitutions drop NULs).
+  return JSON.stringify([runId || '', stage || '']);
+}
+
+function completeWorkerEvent(event) {
+  return event && Number.isInteger(Number(event.generation)) && Number(event.generation) > 0
+    && typeof event.nonce === 'string' && event.nonce.length > 0
+    && Number.isInteger(Number(event.pid)) && Number(event.pid) > 0
+    && Number.isInteger(Number(event.start_time)) && Number(event.start_time) > 0
+    && Number.isInteger(Number(event.progress_ts)) && Number(event.progress_ts) > 0
+    && ['working', 'waiting', 'blocked'].includes(event.condition);
 }
 
 function tickLedger(args, nowMs) {
@@ -110,13 +196,64 @@ function tickLedger(args, nowMs) {
       try { rec = JSON.parse(t); } catch (_e) { continue; }
       const ms = tsToMs(rec.heartbeat_ts) || tsToMs(rec.ts);
       if (ms && (!state.lastLedgerEventMs || ms > state.lastLedgerEventMs)) state.lastLedgerEventMs = ms;
+      if (rec.kind === 'stage' && rec.stage) {
+        state.stageRecords.set(stageKey(rec.run_id, rec.stage), rec);
+      } else if (rec.kind === 'heartbeat' && rec.stage) {
+        const identity = stageKey(rec.run_id, rec.stage);
+        const lease = state.stageRecords.get(identity);
+        if (lease && Number(rec.generation) === Number(lease.generation)
+            && rec.nonce === lease.nonce
+            && Number(rec.pid) === Number(lease.pid)
+            && Number(rec.start_time) === Number(lease.start_time)
+            && Number.isFinite(Number(rec.heartbeat_ts))) {
+          state.stageRecords.set(identity, { ...lease, heartbeat_ts: rec.heartbeat_ts });
+        }
+      } else if ((rec.kind === 'worker_event' || rec.kind === 'worker_signal') && rec.stage) {
+        const identity = stageKey(rec.run_id, rec.stage);
+        const lease = state.stageRecords.get(identity);
+        // Malformed, stale, or incomplete events are observations only; they
+        // must not shadow the latest complete event for the current lease.
+        const matchesLease = !lease || (Number(rec.generation) === Number(lease.generation)
+          && rec.nonce === lease.nonce && Number(rec.pid) === Number(lease.pid)
+          && Number(rec.start_time) === Number(lease.start_time));
+        if (completeWorkerEvent(rec) && matchesLease) state.workerEvents.set(identity, rec);
+        if (lease) {
+          const c = stageCondition(lease, rec, nowMs, args.quietSecs);
+          const cKey = `${c.condition}:${lease.generation}:${c.reason}`;
+          if (state.conditionState.get(identity) !== cKey) {
+            state.conditionState.set(identity, cKey);
+            emit(`CONDITION run=${lease.run_id || '?'} ${rec.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}`);
+          }
+        }
+        continue;
+      }
       if (rec.kind !== 'stage' || !rec.stage) continue;
       if (rec.reason === 'heartbeat') continue; // liveness signal, not an event
       const key = `${rec.state}:${rec.generation}`;
-      if (state.stageState.get(rec.stage) !== key) {
-        state.stageState.set(rec.stage, key);
+      const identity = stageKey(rec.run_id, rec.stage);
+      if (state.stageState.get(identity) !== key) {
+        state.stageState.set(identity, key);
         emit(`STAGE run=${rec.run_id || '?'} ${rec.stage} ${rec.state} gen=${rec.generation} reason=${rec.reason || ''}`);
       }
+      const c = stageCondition(rec, state.workerEvents.get(identity), nowMs, args.quietSecs);
+      const cKey = `${c.condition}:${rec.generation}:${c.reason}`;
+      if (state.conditionState.get(identity) !== cKey) {
+        state.conditionState.set(identity, cKey);
+        emit(`CONDITION run=${rec.run_id || '?'} ${rec.stage} ${c.condition} gen=${rec.generation} reason=${c.reason}`);
+      }
+    }
+  }
+  // Freshness is a wall-clock property, not an append-only event. Recompute
+  // every tracked lease on every observation tick so a quiet stage transitions
+  // fresh -> stale even when no new ledger bytes arrive, and a heartbeat/progress
+  // refresh transitions it back without requiring a stage record rewrite.
+  for (const [identity, lease] of state.stageRecords.entries()) {
+    const event = state.workerEvents.get(identity);
+    const c = stageCondition(lease, event, nowMs, args.quietSecs);
+    const cKey = `${c.condition}:${lease.generation}:${c.reason}`;
+    if (state.conditionState.get(identity) !== cKey) {
+      state.conditionState.set(identity, cKey);
+      emit(`CONDITION run=${lease.run_id || '?'} ${lease.stage} ${c.condition} gen=${lease.generation} reason=${c.reason}`);
     }
   }
   // Use file mtime as the freshest liveness signal (covers heartbeat rewrites too).
@@ -189,20 +326,27 @@ function tickLeaves(args, nowMs) {
 function snapshot(args) {
   // --once: current view, then exit — the non-Monitor / non-CC fallback.
   state.watchStartMs = 0; // include historic leaves in a snapshot
-  tickLedger(args, Date.now());
-  tickLeaves(args, Date.now());
+  const nowMs = observationNow();
+  tickLedger(args, nowMs);
+  tickLeaves(args, nowMs);
   const stages = Array.from(state.stageState.entries()).map(([s, v]) => `${s}=${v}`).join(' ') || '(none)';
   const live = Array.from(state.leaves.entries()).filter(([, v]) => !v.ended).map(([k]) => k).join(' ') || '(none)';
   emit(`SNAPSHOT stages: ${stages} | live leaves: ${live}`);
 }
 
+function observationNow() {
+  const raw = process.env.AUTOPILOT_WATCH_NOW_MS;
+  const override = raw === undefined || raw === '' ? NaN : Number(raw);
+  return Number.isFinite(override) && override >= 0 ? override : Date.now();
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  state.watchStartMs = Date.now();
+  state.watchStartMs = observationNow();
   if (args.once) { snapshot(args); return; }
-  const startMs = Date.now();
+  const startMs = observationNow();
   const tick = () => {
-    const nowMs = Date.now();
+    const nowMs = observationNow();
     tickLedger(args, nowMs);
     tickLeaves(args, nowMs);
     if (args.maxSecs > 0 && (nowMs - startMs) / 1000 >= args.maxSecs) process.exit(0);

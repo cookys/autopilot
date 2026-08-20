@@ -1,0 +1,20 @@
+# Rendered consumption evidence — running the five governance CLIs as a new consumer
+## wrong args (usage paths)
+check-blueprint-conformance: mode must be preflight|audit
+decision-ledger: mode must be append|veto|query|report
+build-rehydration-bundle: mode must be build|quiz|grade
+check-stall-fuse: mode must be classify|check
+next-pick: mode must be parse|pick
+## a real refusal message
+decision-ledger: no decision 'nope' in the ledger — nothing to veto
+## a stall fuse healthy run
+{"schema_version":1,"artifact_type":"stall_fuse_result","tripped":false,"consecutive_zero_product":0,"threshold":3,"violations":[]}
+## next-pick parse on the real BACKLOG
+[
+ {
+  "title": "Codex payload install-time generation（2026-08-02 residual spike：NO-GO）",
+  "effort": "L",
+  "tags": [],
+  "class": "standard-impl",
+  "age_days": null,
+  "source": "health-roadmap P6 Decision Brief（2026-07-17）；[`codex-payload-residual-spike`](projects/_archive/2026-08-02-codex-payload-residual-spike/README.md) evidence（2026-08-02）"

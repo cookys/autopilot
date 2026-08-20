@@ -1,0 +1,107 @@
+{
+  "artifact_type": "mission_execution_graph",
+  "calculated_batches": 1,
+  "calculated_depth": 1,
+  "graph_digest": "6dac89b07eea8f0ee0f85497c87d6fc46991a9b90934d52f5ad3d3a59363c3f2",
+  "nodes": [
+    {
+      "acceptance_ids": [
+        "installed-payload-e2e",
+        "marketplace-semantics-honest",
+        "native-lifecycle-hook-proven-or-absent",
+        "conjunctive-decision",
+        "reproducible-zero-residue-evidence",
+        "scoped-reviewed-lifecycle-closure"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike.rubric.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike",
+          "docs/projects/INDEX.md",
+          "platforms/codex/plugin/.codex-plugin/plugin.json",
+          "platforms/codex/plugin/references/routing-tiebreaks.md",
+          "platforms/codex/plugin/skills/audit/SKILL.md",
+          "references/multi-agent-portability.md",
+          "scripts/sync-codex-plugin-skills.sh"
+        ],
+        "authorized_creates": [
+          "docs/projects/2026-08-02-codex-payload-residual-spike/evidence.json"
+        ],
+        "baseline_churn": 700,
+        "max_changed_files": 6,
+        "max_extra_churn": 350,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 1,
+        "max_wall_seconds": 1800,
+        "output_paths": [
+          "docs/BACKLOG.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/README.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/dev-info.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/evidence.json",
+          "docs/projects/INDEX.md",
+          "references/multi-agent-portability.md"
+        ],
+        "profile": "poc",
+        "required_change_paths": [
+          "docs/BACKLOG.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/README.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/dev-info.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/evidence.json",
+          "docs/projects/INDEX.md",
+          "references/multi-agent-portability.md"
+        ],
+        "required_paths": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike.md",
+          "docs/plans/2026-08-02-codex-payload-residual-spike.rubric.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/README.md",
+          "docs/projects/2026-08-02-codex-payload-residual-spike/dev-info.md",
+          "docs/projects/INDEX.md",
+          "platforms/codex/plugin/.codex-plugin/plugin.json",
+          "platforms/codex/plugin/references/routing-tiebreaks.md",
+          "platforms/codex/plugin/skills/audit/SKILL.md",
+          "references/multi-agent-portability.md",
+          "scripts/sync-codex-plugin-skills.sh"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-08-02-codex-payload-residual-spike.md",
+          "section": "Deliverable contract"
+        }
+      },
+      "dependencies": [],
+      "gate_attempt_budget": 2,
+      "id": "codex-payload-residual-spike",
+      "reservation": {
+        "campaigns": 1,
+        "canonical_changed_files": 6,
+        "engine_attempts": 1,
+        "external_wait_seconds": 1200,
+        "output_bytes": 500000,
+        "tool_calls": 180,
+        "wall_seconds": 3600
+      },
+      "source_plan_ids": [
+        "plan-8e20ae62ae223a239610248b765715397cf05891f1480dbb6c4016bfb67b196b"
+      ],
+      "source_rubric_ids": [
+        "R100240976491396737577424971077866655752112195769462622907497513965085896538566",
+        "R60912842449827076804179904285695729727140533787848024192718444471891638068725",
+        "R50153929063124352734866085591725565937132079349031402705869409677324101442625",
+        "R87745548533300558928835285863679029216969407585973970912457984485660552512070",
+        "R97484739642263964315897240077576752673794880309889545634432919555826225768619",
+        "R56472705609112376442090732221073785006862931312253486645848551430931931578131"
+      ],
+      "verification_commands": [
+        "node -e 'const e=require(\"./docs/projects/2026-08-02-codex-payload-residual-spike/evidence.json\"); if(e.schema_version!==1||!e.final_decision||e.cleanup?.zero_residue!==true) process.exit(1)'",
+        "git diff --check",
+        "bash scripts/validate.sh",
+        "node scripts/sync-version.js --check",
+        "node scripts/check-hook-inventory.js --check",
+        "bash scripts/sync-all.sh --check"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

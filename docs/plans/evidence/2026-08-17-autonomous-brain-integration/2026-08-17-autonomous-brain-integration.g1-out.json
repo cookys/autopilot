@@ -1,0 +1,983 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "autonomous-brain-integration",
+  "logical_plan_id": "autonomous-brain-integration-2026-08-17",
+  "session_id": "619e67cb-e547-49a1-80d3-98185955d69d",
+  "session_key": "f4b8489a1bfdca00c209aed4441a3361c0bb6fad4e975a573853fa05b20e952b",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "cb20fdf20088950a47c660c920533fe0cd15dd95162cc75dddd7b5934a243013",
+  "manifest_sha256": "ae282573a5961a5d537d43adc6289af4a314bbd75fd880fecad004b3a10360fe",
+  "plan_sha256": "8ecfffd1e8ed767c894662d40be62638bb0554465ea367addb3c81c49bb694d3",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.3",
+          "operation": "plan-review",
+          "request_digest": "14534a7131216ddaec852d2fb531e584643b1fb3eea04d664c7b85cbf1ece4c7"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "28d8b50d57914e10e1d9fc3f7aeae670d45ea52d7e4ae072f0b405d0f98cb19b",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-LJvJay",
+          "digest": "28d8b50d57914e10e1d9fc3f7aeae670d45ea52d7e4ae072f0b405d0f98cb19b"
+        },
+        "receipt_digest": "bd9edb0185aa8dbefda5c2e2bdcbb0fb2ea64829c8f2135b0a64af9857cf4df4"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "db52a1e214eb1fd76ad783d66831c324899eb79867fea9196d213c478a69b55a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "f1d01ccf1fa49c71f9a16a02692bddfc9a19ce3003627fc8ffc70bf18b6024b5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-9s3inP",
+          "digest": "f1d01ccf1fa49c71f9a16a02692bddfc9a19ce3003627fc8ffc70bf18b6024b5"
+        },
+        "receipt_digest": "5e6cf4cc708ac904ab6d6a34fe3e6a84a48cefb443f0058b5d9e91c43b1b823d"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "02c16743740f8116744e68f94e074388b8527e2f00f8433516e0a00a19b3018f"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "815813de1a2187b8119801f5f337c0e8698ec9c63b88588f604bc9dd51ccc841",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-P4o9eJ",
+          "digest": "815813de1a2187b8119801f5f337c0e8698ec9c63b88588f604bc9dd51ccc841"
+        },
+        "receipt_digest": "305766fad896e4cc9b5c75032d524ace84ca13c454e4c3cdc526a10a34cdb31c"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "b16265ff1d70e05631474d6878a3dff74d6a4abb7b333363eb664fae1038e76a"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ff128d50e42758378e1ceb4995fa832d43620606084ca1d1e72ce9bcf8008048",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-E36XTt",
+          "digest": "ff128d50e42758378e1ceb4995fa832d43620606084ca1d1e72ce9bcf8008048"
+        },
+        "receipt_digest": "c97166e55cd5c7cf09b9a11d1d9689fb5cb1b1a0775ad97189592de0858f288f"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_adversarial_dissent",
+      "target_id": "sol_adversarial_dissent",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "703914fbb8acecfef2c3e046871b5f6afb890a1c4d3accf10dbc4dae703ea2af"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "f4cb0d9936245f8cd8527ed5b6abf6b74a025f873c22a373600ec35e69150271",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-EZ46kF/stdout",
+          "digest": "f4cb0d9936245f8cd8527ed5b6abf6b74a025f873c22a373600ec35e69150271"
+        },
+        "receipt_digest": "687fc4f3e37186f12f134443714639268ad1a86a163e45605b094d3ad6c604d4"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "sol_adversarial_dissent",
+      "target_id": "sol_adversarial_dissent",
+      "family": "openai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN section 2 (KR1-KR6 failure-shape mapping) and section 0 thesis",
+      "claim": "The KR-to-failure-shape mapping is incomplete: shapes F6, F7, and F11 appear nowhere in the plan, and the thesis failure 'written promises did not survive as behavior' (same root cause written to BACKLOG P0 four times and recurring each time) is claimed by no KR, so pathology fidelity cannot be verified as complete and honest before the plan freezes.",
+      "evidence": "KR1 cites F1/F3/F4, KR2 cites F8/F9, KR3 cites F12, KR4 cites F2/F5/F10; F6, F7, and F11 are never mentioned in any KR, phase, or out-of-scope entry, and the section 0 promise-decay failure has no owning KR or recorded disposition.",
+      "evidence_reference": "PLAN section 2 KR1-KR6; PLAN section 0 thesis paragraph 3; RUBRIC R1",
+      "repair": "Amend section 2 with a shape-by-shape disposition table covering F1-F12 (each marked covered-by-KR, covered-by-Board-ruling, out-of-scope-with-ticket, or explicitly unaddressed) and explicitly assign or disposition the BACKLOG-P0 recurrence failure before freeze.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "987da8dbcd777f4a9b97a831dc37e7c92f26ca9fe147f4863a3f634339c54269"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN section 3 file map row for skills/l4-l5-l6 SKILL.md and section 4 phases P2-P4",
+      "claim": "The single SKILL.md touch bundles callers for three different phases (P2 round loop, P3 report emission, P4 stall-fuse consultation) with no per-phase attribution, so the requirement that each deliverable's caller land in the same phase is unverifiable from the phase list.",
+      "evidence": "File map row lists 'rehydrate, execute, persist, reset; round-end report emission; stall-fuse consultation' as one touch, while P2 claims the round loop, P3 ships the report renderer, and P4 ships the fuse consultation, and no phase text assigns the SKILL.md edit.",
+      "evidence_reference": "PLAN section 3 file map (skills/l4 l5 l6 SKILL.md row); PLAN section 4 P2, P3, P4; RUBRIC R2",
+      "repair": "Split the SKILL.md touch into per-phase line items (P2 rehydrate/reset loop, P3 report emission call, P4 stall-fuse consultation) so each mechanism ships with its caller in the same phase.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4bb8464038463c7976f37a703ad2c05085e6e801a737bad35152bec892146c21"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN section 3 scripts/check-blueprint-conformance.js row; section 2 KR1; section 4 P1",
+      "claim": "The conformance gate as specified inspects a round's recorded actions (run-ledger stages, diff scope, gate invocations), which exist only after the round has acted and spent, contradicting KR1 and R3's requirement that the check block BEFORE spend.",
+      "evidence": "File map says the gate 'compares the round's recorded actions ... against the frozen four-tuple; nonzero exit blocks the round', and KR1 claims a planted mutating round 'is BLOCKED by a deterministic script before spend'; recorded actions cannot be compared before the spend that produces them.",
+      "evidence_reference": "PLAN section 3 check-blueprint-conformance.js row; PLAN section 2 KR1; RUBRIC R3 clause 2",
+      "repair": "Specify two firing points in P1: a pre-spend check of the round's declared scope against the frozen tuple at dispatch time, plus the post-round recorded-actions check as backstop; or restate KR1 honestly as exposure bounded to one round with the block landing at the round boundary.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "427cb9f37d20f6a85f22dfddd1795c51709c44be98b6be12c818497135cb8af2"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN section 2.5 Global Constraints; section 3 dispatch-contract.js frozen_four_tuple; section 4 P5 and P8",
+      "claim": "The user preference and task-class config files that drive auto-pick ranking are not covered by the freeze, any digest, or a brain-read-only red line, leaving a fifth mutation surface (decision policy) unfrozen and exploitable by a drifting brain editing its own weights.",
+      "evidence": "Section 2.5 makes the user preference config outrank any system ranking and P5's deterministic priority starts from 'user weights', yet the frozen_four_tuple pins a digest only on the granularity DAG ref and no clause forbids brain edits to .claude/task-class-config.md or the preference config; the conformance gate's inputs (stages, diff scope, gate invocations) name neither file.",
+      "evidence_reference": "PLAN section 2.5 last bullet; PLAN section 3 dispatch-contract.js row; PLAN section 4 P5; RUBRIC R3 clause 4",
+      "repair": "Declare the preference and task-class config files part of the frozen control-plane declaration (or red-line them as brain-read-only) and extend the conformance check to treat any diff to them as a frozen-tuple mutation that blocks before spend.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7ee3fe801765f0a5c62c02a766fd15780e9314fd8d14ffe99acafebe6d21d4a3"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN section 2 KR2; section 4 P2 acceptance",
+      "claim": "KR2's equivalence criterion 'answers a fixed constraint quiz identically to pre-kill' specifies no answer format, grading rule, or answer-key storage, so free-text model outputs cannot yield a deterministic test and KR2 is not testable as written.",
+      "evidence": "KR2 requires the resumed brain to answer 'a fixed constraint quiz identically to pre-kill' with no definition of identical, no grading script, and no statement of where the pre-kill answer key lives, while section 5 asserts every KR maps to a script-gated named test file.",
+      "evidence_reference": "PLAN section 2 KR2; PLAN section 5 first paragraph; RUBRIC R4 clause 3",
+      "repair": "Define the quiz as N questions with script-checkable discrete answers derivable from bundle content, store the pre-kill answer key on disk, make pass equal all-match, and route any genuinely free-text portion to Board judgment at the round-end report rather than to a script.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e973eae5ed39035915a47727192aa3adbedf3b5a09dc0008546b2e84c538593f"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN section 6 risk 3 mitigation; section 3 scripts/build-rehydration-bundle.js",
+      "claim": "The declared fail-closed truncation order names only three of the bundle's five sections, leaving the roster and the owned-process table without a declared truncation position even though process re-attachment depends on the latter.",
+      "evidence": "The bundle comprises blueprint, red lines, roster, ledger tail, and owned-process table, but the truncation order is stated only as 'blueprint > red lines > ledger tail', leaving two sections unplaced; only the build-error-on-cap-breach clause bounds silent trimming.",
+      "evidence_reference": "PLAN section 3 build-rehydration-bundle.js row; PLAN section 6 risk 3; RUBRIC R4 clause 2",
+      "repair": "Extend the declared order to all five sections, for example blueprint > red lines > owned-process table > roster > ledger tail, keeping cap breach a hard build error, and state that the owned-process table is never truncated.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a49e0a4e6a011b05989673be574422a14ed7074d042492f9cc1751e533d6583f"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN section 2.5 ask-first class list; section 4 P5 predicate and priority chain",
+      "claim": "Ask-first classes such as 'architecture-changing' are semantic rather than machine-checkable at pick time, and the plan never says the classification is materialized as a row attribute at admission; the priority chain also lacks a final total tiebreak, weakening determinism and replayability.",
+      "evidence": "P5's auto-eligible predicate is machine-checkable, but the ask-first classes (L effort, architecture-changing, Board-marked, new spend class) contain judgments a script cannot derive from a row at pick time, and the stated order 'user weights, blast radius, staleness, smallest effort' has no stated terminal tiebreak for rows equal on all four keys.",
+      "evidence_reference": "PLAN section 2.5 ask-first bullet; PLAN section 4 P5; RUBRIC R6 clauses 1-2 and 5",
+      "repair": "State that ask-first classification is stamped as a machine-checkable row attribute when a queue row is admitted, per the closed class list in section 2.5, and add a final deterministic tiebreak (for example stable row ID or file order) after 'smallest effort'.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1a10f4591dd8cb921b956e45541a3a1b68a9086907dffa2702a9f10f31986690"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN section 2.5 user-authority clause; section 4 P3 report sections",
+      "claim": "Vetoability at the round-end report is asserted but no veto channel or veto effect is specified: how the user registers a veto and what the system then does (revert, correction row, stop, suppress a pick class) is unstated, so decisions executed mid-round are visible but not demonstrably reversible.",
+      "evidence": "Section 2.5 says every proxy decision is vetoable at the round-end report and P3 renders proxy decisions and auto-picks in the report, but no phase or file defines the veto intake, its recording, or its enforcement on the next round.",
+      "evidence_reference": "PLAN section 2.5 last bullet; PLAN section 4 P3; RUBRIC R8 clause 1",
+      "repair": "Name the veto rail in P3: a veto recorded in the decision ledger at the next round boundary that forces a correction or BACKLOG row, halts further auto-picks in the vetoed class until acknowledged, and appears as a report section.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5a95d7b4f0f7e7cd784f024c24e889806bbd30c3b5009eaf22b9472b2aec26bc"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "PLAN section 2 KR2 and KR5; section 5 test/validation",
+      "claim": "KR5 names no red case and neither KR5 nor KR2 states what MUST fail before the mechanism exists, so the red-before/pass-after discipline R9 demands is unmet for these KRs and their phase acceptance is unevaluable as written.",
+      "evidence": "KR5's acceptance is only 'demonstrably blocks nothing (merge completes before the critic finishes)' with no pre-mechanism failing assertion, and KR2 states no pre-mechanism failure either, despite section 5 asserting that KR1-KR6 each map to one named red-case test file.",
+      "evidence_reference": "PLAN section 2 KR5 and KR2; PLAN section 5 first paragraph; RUBRIC R9 clause 1",
+      "repair": "Author the missing red directions in the plan text: for KR5, a fixture critic emitting a blocking verdict that the intake must refuse and that fails pre-mechanism; for KR2, a resume-without-bundle fixture that fails the quiz and orphans processes pre-mechanism and passes post.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c38241c235efa2f43503bf11f08a4657b74aad68ecef28ebaf42561f1a53ee31"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "PLAN section 3 seven new scripts; section 5 test/validation",
+      "claim": "The plan nowhere places the repo's new-script 4-place wiring or the release gates in scope, so the seven new scripts have no declared wiring or release-gate registration path.",
+      "evidence": "Section 3 lists hooks/tests/*.test.sh per script and section 5 covers red-case test files, but no section mentions the 4-place wiring convention or any release-gate rail for the new scripts.",
+      "evidence_reference": "PLAN section 3 file map; PLAN section 5; RUBRIC R9 clause 3",
+      "repair": "Add a section 5 line item enumerating the 4 wiring places per repo convention for each new script and naming the release-gate rail each script registers with. No current change to mechanisms; follow-up scoped into the plan text before freeze.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "13d519a6bd1c5cd3f32525a650d3392e1ed1aff2d75f5ea63f6ebf45dd7d8a4f"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "KR-to-failure-shape mapping completeness (sol-pathology F1-F12)",
+      "claim": "The KR-to-failure-shape mapping omits F6, F7, and F11 from the 12-shape family cited in sol-pathology.md; rubric R1 requires the mapping be complete and honest.",
+      "evidence": "Plan §2 KRs name F1/F2/F3/F4/F5/F8/F9/F10/F12 across KR1-KR4; F6, F7, and F11 appear in the §0 evidence reference to a 12-shape family but are not anchored to any KR or Board ruling; KR5 and KR6 trace to Board rulings #4 and #5 instead of F-shapes.",
+      "evidence_reference": "PLAN §0 third paragraph (12 shapes F1-F12) and §2 KR1-KR6 mapping lines.",
+      "repair": "Add to §1 or §2 a short paragraph naming each of F6, F7, F11 and stating the covering rail (e.g., 'F6 mitigated by dev-flow BACKLOG hygiene', 'F7/F11 deferred to spike or named follow-up BACKLOG row'); only mechanisms, not failures, must trace, so honest accounting is the requirement.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6bdb4b0d07d2097a81c6180825520c9091ab7081f6518884d1887d52e995f2d9"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Frozen four-tuple scope and fifth-surface enumeration",
+      "claim": "Plan freezes granularity/gate set/rubric/control plane but does not enumerate other potential mutation surfaces (process roster, capability config, task-class config, bundle composition order, ledger schema, user-preference config) and confirm each is non-exploitable or covered.",
+      "evidence": "§3 file-structure map and §4 P1 describe the four-tuple; P7 (capability) and P8 (task-class) touch other surfaces but are not framed as part of the freeze; no paragraph audits additional surfaces against exploitability.",
+      "evidence_reference": "PLAN §3 and §4 P1/P7/P8 cross-reference; rubric R3 'no fifth mutation surface is left unfrozen and exploitable'.",
+      "repair": "Add a 'freeze-scope audit' paragraph in §3 or §4 enumerating each candidate mutation surface (roster, capability state, task-class config, bundle composition order, ledger schema, user preference config) and stating for each: 'frozen by X' / 'covered by phase Y' / 'out of freeze by design because Z'.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5c1804f3b0830ddea9694d14253fb97ef16759dce2d78ce5db5f17c0231a7b39"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Conformance-check ordering within the foreman round loop",
+      "claim": "Rubric R3 requires the conformance check to block BEFORE spend; KR1 says 'before spend' but the implementation-level ordering (first action of round bootstrap, before any tool or agent invocation) is not stated explicitly in §3 or §4 P1.",
+      "evidence": "§4 P1 second bullet: 'check-blueprint-conformance.js wired into the foreman round loop'; §3 file row for the same script: 'nonzero exit blocks the round'. The exact insertion point in the round bootstrap (relative to other actions that could be 'spend') is implicit.",
+      "evidence_reference": "PLAN §3 (check-blueprint-conformance.js row) and §4 P1 second bullet.",
+      "repair": "In §4 P1 add a sentence stating the conformance check runs as the FIRST action of every round bootstrap, before any tool or agent invocation that could mutate state, and naming the exact foreman-loop step it precedes.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3f384989dce793ae817a1a89618977b6460425ebf1e82f467a8c15954a7a8ec2"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Rehydration bundle hard token cap value",
+      "claim": "Risk #3 commits to a hard token cap with fail-closed truncation order, but §8 leaves the cap value in Open Question 4 ('propose 20k') and §3 / §4 do not commit the number.",
+      "evidence": "§3 file-structure map build-rehydration-bundle.js row says only 'token-capped'; §6 risk #3 says 'hard token cap' without a value; §8 Open Question 4: 'Rehydration bundle token cap: propose 20k'.",
+      "evidence_reference": "PLAN §3 (build-rehydration-bundle.js row), §6 risk #3, §8 Open Question 4.",
+      "repair": "Resolve Open Question 4 in §8 by committing the cap (20k or other) in §3 build-rehydration-bundle.js row and §4 P2 acceptance before P2 ships; keep the explicit truncation order (blueprint > red lines > ledger tail) and the 'cap breach is a build error, not a silent trim' behavior.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4f496a379e127e84e665832b62f3295a41f51a976a89123c50270e060a3c080b"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Experience critic human-only routing guarantee",
+      "claim": "Rubric R5 requires human-only qualities to be routed to the user, never simulated; plan §3 references/experience-audit.md row lists 'machine/human split' but does not state that human-only qualities bypass the critic and reach the user directly, nor name a 'user-decision' BACKLOG row class.",
+      "evidence": "§3 references/experience-audit.md row lists '+ machine/human split + domain-ruler sourcing'; §4 P6 acceptance proves BACKLOG intake and merge-before-critic but does not assert the human-routing behavior.",
+      "evidence_reference": "PLAN §3 (experience-audit.md row), §4 P6 acceptance.",
+      "repair": "In §4 P6 acceptance or the experience-audit.md summary add: any quality the critic determines is human-only is emitted as a 'user-decision' BACKLOG row class (separate from auto-fixable findings), does not block, is not simulated, and explicitly asks the user.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "45d3cfb0af06713552e67cff6af0453b183facd87aed73057cba976f15941c6d"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "New-script wiring enumeration across named rails and release-gate entries",
+      "claim": "Rubric R9 references 'new-script 4-place wiring and release gates'; plan introduces 6 new scripts but does not provide a consolidated script-x-rail mapping nor name release-gate entries (red-case test file paths under hooks/tests/).",
+      "evidence": "§3 lists 6 new scripts (check-blueprint-conformance.js, build-rehydration-bundle.js, decision-ledger.js, check-stall-fuse.js, next-pick.js, dispatch-experience-critic.sh) and 2 extended scripts; §4 phases describe wires per phase but no consolidated table; §2.5 names rails (campaign contract, run-ledger, foreman loop, BACKLOG, /next, admit-backlog-follow-ups) without assigning each script explicitly.",
+      "evidence_reference": "PLAN §3 file-structure map, §4 P1-P8 wiring references, §2.5 Global Constraints rail list.",
+      "repair": "Add a 'script x rail' matrix in §3 showing each new script's consumer rail(s); for each script also list its release-gate red-case test file path under hooks/tests/ to make R9 'release gates in scope' auditable.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_operations_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0e8c7bb38e733060bd0d29c7ee2ce01ecf4e36050c7cfe7850ba56430ace003a"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR5, KR6, and P8 traceability",
+      "claim": "The mechanism-to-pathology mapping is incomplete.",
+      "evidence": "KR1 through KR4 cite F identifiers, but KR5 and KR6 do not cite a failure shape or numbered Board ruling. P8 additionally introduces a five-class taxonomy, ambiguity routing, and a survey default without tracing those mechanisms to F1–F12 or a specific ruling.",
+      "evidence_reference": "Plan sections 0, 2, and 4 P8",
+      "repair": "Add an exhaustive KR-and-mechanism traceability table mapping every behavior to an F identifier or numbered Board ruling; remove or defer every unmapped mechanism and state the disposition of unaddressed failure shapes.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6e5f75b8d7618e7d73c9e7d73ecf730bafcbf848e5e7a51b99e6c5b4b66414a6"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P5 and P6 caller integration",
+      "claim": "Two deliverables create components without naming a same-phase production caller.",
+      "evidence": "P5 creates next-pick.js but does not place its invocation in /next or the foreman loop. P6 creates dispatch-experience-critic.sh and intake wiring but does not identify the existing post-acceptance caller that invokes it. Merely listing existing rails in the global constraints does not establish a caller.",
+      "evidence_reference": "Plan sections 2.5, 3, and 4 P5–P6",
+      "repair": "For each new component, name the existing caller file and invocation point, include that caller change in the same phase, and add an acceptance test proving the production rail reaches the component.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "836a8ceefdab7de94a3096753bcf84b11e1917b674ab0176162eb25aa9031ffc"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 pre-spend conformance gate",
+      "claim": "The described conformance check is post-hoc and therefore does not establish blocking before spend.",
+      "evidence": "check-blueprint-conformance.js is described as comparing recorded run-ledger stages, diff scope, and gate invocations. Diff scope and invoked gates are outcomes of work already performed, while P1 never identifies a mandatory checkpoint before the first dispatch or paid engine action.",
+      "evidence_reference": "Plan sections 2 KR1, 3 check-blueprint-conformance.js, and 4 P1",
+      "repair": "Define a prospective round action envelope checked before any dispatch, require the first executable action to depend on a successful check receipt, and add a red test proving the downstream process is never launched after a mutation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4cae5e7156c9429428114744625e30b2e5dfefdf23bc8f8d98507d302c8bf1bc"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P1 re-freeze lifecycle",
+      "claim": "The re-freeze procedure permits an in-flight contract amendment.",
+      "evidence": "P1 defines the exception channel as stop, amend the contract, re-run dispatch-contract.js check, then resume. Resuming the same campaign after amendment is precisely an in-flight re-freeze rather than a terminal stop.",
+      "evidence_reference": "Plan section 4 P1",
+      "repair": "Make mutation terminate the current campaign and require a new campaign identity, fresh frozen contract, fresh ledger lineage, and new pre-spend check; prohibit resume of the amended campaign.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "986ad9ba91bdec1409b24e2e15cf46795d537e94ab3bb7ccf4334f03ead02a21"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P2 rehydration schema and KR2",
+      "claim": "The round-start state contract and hard-cap behavior are not frozen completely enough to prove statelessness.",
+      "evidence": "The bundle lists blueprint, red lines, roster, ledger tail, and owned-process table, but does not enumerate authoritative loading for preference configuration, task-class configuration, ask-first state, decision state, stall state, or gate-attempt counters. The token cap remains an open proposal at 20k, and KR2 tests a fixed quiz rather than equivalence of the next executable round action.",
+      "evidence_reference": "Plan sections 3, 4 P2, 6 risk 3, and 8 question 4",
+      "repair": "Freeze a complete round-start input manifest with canonical disk paths and reconstruction rules, decide the cap and deterministic counting method, fail closed on missing or over-cap mandatory state, and test identical next-action planning as well as process ownership after kill and resume.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bee9d702b2cd50a6ce133e17adf6a900ffb0071cf76a2759bf59cb314538b63c"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P6 experience critic isolation",
+      "claim": "The plan demonstrates one favorable ordering but does not make critic non-blocking behavior invariant under every code path.",
+      "evidence": "KR5 only requires that one merge complete before one critic finishes. No acceptance covers critic timeout, nonzero exit, malformed output, dispatch failure, or backlog-intake failure. K remains an open question, and the reference-file description does not explicitly prohibit a closed artifact table or require human-only qualities to be routed to the user.",
+      "evidence_reference": "Plan sections 2 KR5, 3 experience-audit files, 4 P6, and 8 question 2",
+      "repair": "Freeze K; place dispatch strictly after recorded acceptance; isolate every critic and intake failure from merge status; test timeout, crash, and malformed output; and require the five-question protocol to route human-only judgments to the round-end user report without a closed artifact-type taxonomy.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2ba980bdba1b697427453b8cfa2ad6bf94fb22d3625285f1b0d1038af223c71e"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P5 candidate schema and ranking",
+      "claim": "The pick algorithm is not yet a deterministic total function replayable from frozen inputs.",
+      "evidence": "The priority chain ends at smallest effort without a final stable tie-breaker, and staleness has no recorded evaluation time. BACKLOG rows and docs/plans are both candidate sources, but no common machine-readable schema is defined. The auto-eligible conditions also introduce red-lines and irreversibility predicates without reconciling them to the closed ask-first classes.",
+      "evidence_reference": "Plan sections 2.5 and 4 P5",
+      "repair": "Define one normalized candidate schema and closed classification union, record the evaluation timestamp and all ranking inputs, add a stable candidate-ID tie-breaker, make ask-first precedence absolute, and test ties plus docs/plans candidates during replay.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4005368cf9463e8aad5b133ef24f421d2555147a3c874dacf3a9cf48562e9864"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Deliverable DAG and acceptance contracts",
+      "claim": "The declared DAG is not independently executable and its phase acceptances are not concrete commands.",
+      "evidence": "P6 is marked independent while its acceptance requires a real shipped deliverable from this plan, creating an undeclared dependency. P1 through P8 name outcomes or broad test groups rather than executable acceptance commands. Per-finding verification also includes the frozen gate set without excluding an automatic full-suite gate.",
+      "evidence_reference": "Plan sections 4, 5, and 6 risk 1",
+      "repair": "Declare P6's actual shipped-deliverable dependency, give every phase an exact acceptance command and fixture, and separate scoped finding verification from phase or release full-suite execution so a frozen full-suite gate cannot run automatically per finding.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ec1c43d18e5ac4308beac7596bd5e5482b5a310b64b2a77ca9c2260a736bf943"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P3 and P5 proxy-decision veto lifecycle",
+      "claim": "Rendering decisions at round end provides visibility but does not make them vetoable.",
+      "evidence": "The plan defines report sections but no veto input, decision status transition, response deadline, next-round checkpoint, cancellation behavior, or compensation rule. An auto-picked item can therefore execute before the report with no specified effect for a later user objection.",
+      "evidence_reference": "Plan sections 2 KR3, 2.5 user authority, 4 P3, and 4 P5",
+      "repair": "Define stable decision IDs and a veto channel, specify which effects may occur before reporting, require veto processing before the next irreversible step, and define deterministic cancel or rollback behavior recorded in the ledger.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "648976d025294d742207fb9508af0185ec82f953f63ff3c9ceb13460c5d8bbef"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P7 and P8 qualification routing",
+      "claim": "The plan does not prove the exact two-outcome qualification contract or preference precedence.",
+      "evidence": "P7 rides a capability-warnings rail and tests only refusal without an override. It does not identify and test the standing-exam evidence path, prove that warning-only continuation is impossible, or test that user preference outranks system ranking among qualified candidates. Section 7 also excludes the brain-seat exam suite without clarifying whether P7 relies on a different existing exam.",
+      "evidence_reference": "Plan sections 0 ruling 5, 3 resolve-review-loop.sh, 4 P7–P8, and 7",
+      "repair": "Freeze the applicable standing-exam artifact and freshness schema, make interactive first use expose exactly exam or per-invocation override, make headless execution refuse both missing paths, eliminate warning-only continuation, and add a preference-precedence test.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cc487ae156b2b6f00a81bae6d73d0a3cc9a8029463124fbee4455afa956b23f4"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR3 unlogged-decision red case",
+      "claim": "The plan lacks an independent observable universe from which an unlogged decision can be detected.",
+      "evidence": "KR3 says a planted unlogged decision fails conformance, but the plan defines no closed taxonomy of decision-bearing actions or required correlation key between run-ledger events and decision-ledger entries. A checker cannot detect an omitted event by consulting only the ledger where that event should have been written.",
+      "evidence_reference": "Plan sections 2 KR3, 3 decision-ledger.js, and 3 check-blueprint-conformance.js",
+      "repair": "Define the complete set of decision-bearing stage and action types, require their records to carry a decision ID before execution, reconcile those records against the decision ledger, and include missing, duplicate, and orphan correlation fixtures.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6d4ed24d9b71ce40e4e4cc113d35d1552a988cb40308d1656ee5664faa49f30a"
+    },
+    {
+      "rubric_id": "R9",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Cross-phase test, inventory, and release wiring",
+      "claim": "The mandated red-case matrix, four-place new-script wiring, and release gates are absent from phase scope.",
+      "evidence": "The file map adds five Node scripts and one shell wrapper, while section 5 only promises wildcard tests and generic full-suite comparison. It does not name one pre-mechanism failure and post-mechanism pass fixture for every KR, enumerate the four required wiring locations for each script, or list the release-gate commands. KR5 in particular has no must-fail-before case.",
+      "evidence_reference": "Plan sections 3, 4, and 5",
+      "repair": "Add a KR-by-test matrix with exact files, commands, and expected red and green results; enumerate all four repository wiring locations for every new script; and place the canonical validation, invariant, inventory, package-sync, and release commands in the responsible phases.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_dissent",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5b236186f152b31a0bb7bbb38f410d9f5b8e9c7f2056d1f5affa73d8272416f7"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "4bb8464038463c7976f37a703ad2c05085e6e801a737bad35152bec892146c21",
+      "rubric_id": "R2",
+      "affected_surface": "PLAN section 3 file map row for skills/l4-l5-l6 SKILL.md and section 4 phases P2-P4",
+      "claim": "The single SKILL.md touch bundles callers for three different phases (P2 round loop, P3 report emission, P4 stall-fuse consultation) with no per-phase attribution, so the requirement that each deliverable's caller land in the same phase is unverifiable from the phase list.",
+      "evidence_reference": "PLAN section 3 file map (skills/l4 l5 l6 SKILL.md row); PLAN section 4 P2, P3, P4; RUBRIC R2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a49e0a4e6a011b05989673be574422a14ed7074d042492f9cc1751e533d6583f",
+      "rubric_id": "R4",
+      "affected_surface": "PLAN section 6 risk 3 mitigation; section 3 scripts/build-rehydration-bundle.js",
+      "claim": "The declared fail-closed truncation order names only three of the bundle's five sections, leaving the roster and the owned-process table without a declared truncation position even though process re-attachment depends on the latter.",
+      "evidence_reference": "PLAN section 3 build-rehydration-bundle.js row; PLAN section 6 risk 3; RUBRIC R4 clause 2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1a10f4591dd8cb921b956e45541a3a1b68a9086907dffa2702a9f10f31986690",
+      "rubric_id": "R6",
+      "affected_surface": "PLAN section 2.5 ask-first class list; section 4 P5 predicate and priority chain",
+      "claim": "Ask-first classes such as 'architecture-changing' are semantic rather than machine-checkable at pick time, and the plan never says the classification is materialized as a row attribute at admission; the priority chain also lacks a final total tiebreak, weakening determinism and replayability.",
+      "evidence_reference": "PLAN section 2.5 ask-first bullet; PLAN section 4 P5; RUBRIC R6 clauses 1-2 and 5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5a95d7b4f0f7e7cd784f024c24e889806bbd30c3b5009eaf22b9472b2aec26bc",
+      "rubric_id": "R8",
+      "affected_surface": "PLAN section 2.5 user-authority clause; section 4 P3 report sections",
+      "claim": "Vetoability at the round-end report is asserted but no veto channel or veto effect is specified: how the user registers a veto and what the system then does (revert, correction row, stop, suppress a pick class) is unstated, so decisions executed mid-round are visible but not demonstrably reversible.",
+      "evidence_reference": "PLAN section 2.5 last bullet; PLAN section 4 P3; RUBRIC R8 clause 1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "13d519a6bd1c5cd3f32525a650d3392e1ed1aff2d75f5ea63f6ebf45dd7d8a4f",
+      "rubric_id": "R9",
+      "affected_surface": "PLAN section 3 seven new scripts; section 5 test/validation",
+      "claim": "The plan nowhere places the repo's new-script 4-place wiring or the release gates in scope, so the seven new scripts have no declared wiring or release-gate registration path.",
+      "evidence_reference": "PLAN section 3 file map; PLAN section 5; RUBRIC R9 clause 3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6bdb4b0d07d2097a81c6180825520c9091ab7081f6518884d1887d52e995f2d9",
+      "rubric_id": "R1",
+      "affected_surface": "KR-to-failure-shape mapping completeness (sol-pathology F1-F12)",
+      "claim": "The KR-to-failure-shape mapping omits F6, F7, and F11 from the 12-shape family cited in sol-pathology.md; rubric R1 requires the mapping be complete and honest.",
+      "evidence_reference": "PLAN §0 third paragraph (12 shapes F1-F12) and §2 KR1-KR6 mapping lines.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5c1804f3b0830ddea9694d14253fb97ef16759dce2d78ce5db5f17c0231a7b39",
+      "rubric_id": "R3",
+      "affected_surface": "Frozen four-tuple scope and fifth-surface enumeration",
+      "claim": "Plan freezes granularity/gate set/rubric/control plane but does not enumerate other potential mutation surfaces (process roster, capability config, task-class config, bundle composition order, ledger schema, user-preference config) and confirm each is non-exploitable or covered.",
+      "evidence_reference": "PLAN §3 and §4 P1/P7/P8 cross-reference; rubric R3 'no fifth mutation surface is left unfrozen and exploitable'.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "3f384989dce793ae817a1a89618977b6460425ebf1e82f467a8c15954a7a8ec2",
+      "rubric_id": "R3",
+      "affected_surface": "Conformance-check ordering within the foreman round loop",
+      "claim": "Rubric R3 requires the conformance check to block BEFORE spend; KR1 says 'before spend' but the implementation-level ordering (first action of round bootstrap, before any tool or agent invocation) is not stated explicitly in §3 or §4 P1.",
+      "evidence_reference": "PLAN §3 (check-blueprint-conformance.js row) and §4 P1 second bullet.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "4f496a379e127e84e665832b62f3295a41f51a976a89123c50270e060a3c080b",
+      "rubric_id": "R4",
+      "affected_surface": "Rehydration bundle hard token cap value",
+      "claim": "Risk #3 commits to a hard token cap with fail-closed truncation order, but §8 leaves the cap value in Open Question 4 ('propose 20k') and §3 / §4 do not commit the number.",
+      "evidence_reference": "PLAN §3 (build-rehydration-bundle.js row), §6 risk #3, §8 Open Question 4.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "45d3cfb0af06713552e67cff6af0453b183facd87aed73057cba976f15941c6d",
+      "rubric_id": "R5",
+      "affected_surface": "Experience critic human-only routing guarantee",
+      "claim": "Rubric R5 requires human-only qualities to be routed to the user, never simulated; plan §3 references/experience-audit.md row lists 'machine/human split' but does not state that human-only qualities bypass the critic and reach the user directly, nor name a 'user-decision' BACKLOG row class.",
+      "evidence_reference": "PLAN §3 (experience-audit.md row), §4 P6 acceptance.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0e8c7bb38e733060bd0d29c7ee2ce01ecf4e36050c7cfe7850ba56430ace003a",
+      "rubric_id": "R9",
+      "affected_surface": "New-script wiring enumeration across named rails and release-gate entries",
+      "claim": "Rubric R9 references 'new-script 4-place wiring and release gates'; plan introduces 6 new scripts but does not provide a consolidated script-x-rail mapping nor name release-gate entries (red-case test file paths under hooks/tests/).",
+      "evidence_reference": "PLAN §3 file-structure map, §4 P1-P8 wiring references, §2.5 Global Constraints rail list.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-08-16T21:51:38.615Z"
+}

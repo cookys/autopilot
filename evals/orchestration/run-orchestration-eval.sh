@@ -85,6 +85,10 @@ trap cleanup EXIT
 
 # Copy the micro-repo content
 cp -r "$TASK_DIR/repo"/. "$TEMP_REPO"/
+# The prompt tells the arm to use this helper, so it is part of the frozen harness
+# base rather than an unexplained post-base repository effect.
+mkdir -p "$TEMP_REPO/scripts"
+cp "$REPO_ROOT/scripts/adjudicate-findings.js" "$TEMP_REPO/scripts/adjudicate-findings.js"
 
 # Initialize git and make frozen base commit
 (
@@ -96,6 +100,7 @@ cp -r "$TASK_DIR/repo"/. "$TEMP_REPO"/
   git add -A
   git commit -q -m "frozen base" --no-verify
 )
+FROZEN_BASE_SHA="$(git -C "$TEMP_REPO" rev-parse HEAD)"
 
 # Compose prompt
 PROMPT_FILE="$OUT_DIR/prompt.md"
@@ -170,12 +175,6 @@ clean_scratch_home() {
 trap 'clean_scratch_home; cleanup' EXIT
 
 set +e
-# Provide the adjudication helper INSIDE the arm repo BEFORE the orchestrator runs —
-# the required-artifacts contract tells the agent to use it; copying it afterward made
-# adherence structurally impossible.
-mkdir -p "$TEMP_REPO/scripts"
-cp "$REPO_ROOT/scripts/adjudicate-findings.js" "$TEMP_REPO/scripts/adjudicate-findings.js"
-
 if [ "$RUNNER" = "cc" ]; then
   if [ "$HAS_TURNS" = "true" ]; then
     TURNS_COMPLETED=0
@@ -369,6 +368,47 @@ else
   oracle_pass="false"
 fi
 
+# Classify every failed row from observable harness evidence.  Keep both fields on
+# successful rows as null so old successful results remain scoreable.  Causes are
+# deliberately a closed, content-free vocabulary: result.json must never copy raw
+# provider/oracle logs.
+failure_class="null"
+failure_cause="null"
+if [ "$oracle_pass" = "false" ]; then
+  failure_class='"capability_fail"'
+  failure_cause='"oracle_rejected"'
+
+  run_effect="false"
+  if [ "$(git -C "$TEMP_REPO" rev-parse HEAD)" != "$FROZEN_BASE_SHA" ] \
+      || git -C "$TEMP_REPO" status --porcelain \
+        | grep -Ev '^\?\? oracle\.sh$' \
+        | grep -q .; then
+    run_effect="true"
+  fi
+
+  if [ "${RUN_EXIT:-0}" -eq 124 ] || [ "${RUN_EXIT:-0}" -eq 137 ]; then
+    failure_class='"infra_fail"'
+    failure_cause='"runner_timeout"'
+  elif [ "${RUN_EXIT:-0}" -ne 0 ] \
+      && grep -Eqi '(^|[^a-z])(unauthorized|forbidden|authentication|invalid[ _-]?(api[ _-]?)?key|login required|token expired)([^a-z]|$)' "$RAW_LOG" 2>/dev/null; then
+    failure_class='"infra_fail"'
+    failure_cause='"authentication"'
+  elif [ "${RUN_EXIT:-0}" -ne 0 ]; then
+    failure_class='"infra_fail"'
+    failure_cause='"runner_error"'
+  elif [ ! -s "$RAW_LOG" ] && [ "$run_effect" = "false" ]; then
+    failure_class='"infra_fail"'
+    failure_cause='"empty_output"'
+  elif [ ! -f "$TASK_DIR/oracle.sh" ]; then
+    failure_class='"infra_fail"'
+    failure_cause='"missing_oracle"'
+  elif ! bash -n "$TASK_DIR/oracle.sh" >/dev/null 2>&1 \
+      || [ "$ORACLE_EXIT" -eq 126 ] || [ "$ORACLE_EXIT" -eq 127 ]; then
+    failure_class='"infra_fail"'
+    failure_cause='"oracle_error"'
+  fi
+fi
+
 # Adherence checks
 adjudication_valid="false"
 patterns_named="false"
@@ -420,16 +460,15 @@ if [ -n "${REINJECT_SRC:-}" ]; then
 fi
 
 if [ "$HAS_TURNS" = "true" ]; then
-  printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s,"turns":%s,"turns_completed":%s,"run_error":%s%s}\n' \
+  printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"failure_class":%s,"failure_cause":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s,"turns":%s,"turns_completed":%s,"run_error":%s%s}\n' \
     "$(printf %s "$TASK_ID" | tr -d '"\\')" "$ARM" "$RUNNER" "$(printf %s "$MODEL" | tr -d '"\\')" "$runner_version_clean" "$DURATION" \
-    "$oracle_pass" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
+    "$oracle_pass" "$failure_class" "$failure_cause" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
     "$patterns_named" "$probe_evidence_present" "$TURNS_TOTAL" "$TURNS_COMPLETED" "$run_error" "$REINJECT_JSON_FRAGMENT" > "$RESULT_JSON"
 else
-  # Single-prompt tasks: result.json stays byte-identical to the pre-multi-turn
-  # schema (no turns/run_error keys) — hard compat bar, round-3 review finding.
-  printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s}\n' \
+  # Single-prompt tasks still omit turns/run_error; failure truth is additive.
+  printf '{"task_id":"%s","arm":"%s","runner":"%s","model":"%s","runner_version":"%s","duration":%s,"oracle_pass":%s,"failure_class":%s,"failure_cause":%s,"decoy_respected":%s,"fidelity_ok":%s,"adjudication_valid":%s,"patterns_named":%s,"probe_evidence_present":%s}\n' \
     "$(printf %s "$TASK_ID" | tr -d '"\\')" "$ARM" "$RUNNER" "$(printf %s "$MODEL" | tr -d '"\\')" "$runner_version_clean" "$DURATION" \
-    "$oracle_pass" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
+    "$oracle_pass" "$failure_class" "$failure_cause" "$decoy_respected" "$fidelity_ok" "$adjudication_valid" \
     "$patterns_named" "$probe_evidence_present" > "$RESULT_JSON"
 fi
 

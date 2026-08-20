@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const process = require('process');
+const transcriptSecrets = require('../hooks/_shared/secret-patterns');
 const { expandTilde, ensureDir, sleepMs, acquireLock, releaseLock, withWriteLock, appendRow, toEventId, maxEventId } = require('./lib/jsonl-store');
 const {
   buildCapabilityEvidenceReceipt,
@@ -21,9 +22,20 @@ const {
 
 const VALID_ROLES = new Set(ROLE_IDS);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
-const VALID_VERSION_SOURCES = new Set(['runtime', 'manual']);
+// `manual` is the legacy spelling (all 34 pre-2026-08-20 rows use it) and stays
+// accepted so history keeps validating. `operator-asserted` is what
+// engine-qualify.sh's --version-source actually emits, and without it EVERY
+// CLI-transport qualification row was unrecordable: the qualifier passed, then
+// `engine-scorecard.js record` rejected its own emitted row. Two spellings for
+// one concept is not ideal — but rewriting evidence rows is worse. New rows
+// should use `operator-asserted`.
+const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted']);
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
+const TRANSCRIPT_PROVIDERS = new Set(['codex', 'grok', 'opencode', 'agy']);
+const TRANSCRIPT_EXTENSIONS = new Set(['.json', '.jsonl', '.ndjson']);
+const MAX_TRANSCRIPT_FILES = 10000;
+const MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024;
 
 const REQUIRED_FIELDS = [
   'engine',
@@ -61,6 +73,7 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js current --role <role> [--now <ISO-date>] [--require-evidence] [--scope-file <path>] [--identity-file <path>]\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
+  node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
   --role is required for current/report/ladder.\n\
   --key accepts capability (default) or cost.\n\
@@ -71,6 +84,8 @@ const HELP_TEXT = `Usage:\n\
   --scope-file and --identity-file constrain lifecycle evidence to an exact applicability query.\n\
   --implementer-family is optional; if provided, ladder demotes matching family entries.\n\
   verification_author/explorer rows are evidence-only in v1; use current/report, not ladder.\n\
+  import-transcripts requires explicit roots and emits aggregate-only, untrusted telemetry;\n\
+    it never appends scorecard rows. --output atomically writes the same JSON printed to stdout.\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -224,9 +239,14 @@ function validateRecordRow(row) {
   // OPTIONAL effort (v2.32.25, family-conflict fallback): when present it names the
   // calibrated reasoning effort of this row's invocation tuple. Only codex-runner
   // consumers require it; absent = "not effort-calibrated" (ladder projects null).
+  // `none` is a real, distinct state — the transport has NO effort dimension at
+  // all (http /v1/messages, agy where effort is baked into the model name, kimi
+  // whose config exposes only `[thinking] enabled`). That is not the same as
+  // omitting the field, which means "unknown/unrecorded". Collapsing the two
+  // would lose the fact that the tuple was checked and found effort-less.
   if (row.effort !== undefined
-      && !['low', 'medium', 'high', 'xhigh', 'max'].includes(row.effort)) {
-    failValidation(`invalid effort '${row.effort}' (low|medium|high|xhigh|max or omit)`);
+      && !['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(row.effort)) {
+    failValidation(`invalid effort '${row.effort}' (none|low|medium|high|xhigh|max or omit)`);
   }
 
   // OPTIONAL model (v2.32.25): the exact --model string for this row's runner when
@@ -571,6 +591,564 @@ function parseRecordArgs(args) {
   return { file };
 }
 
+function physicalPathWithMissingTail(target) {
+  const suffix = [];
+  let existing = path.resolve(target);
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) break;
+    suffix.unshift(path.basename(existing));
+    existing = parent;
+  }
+  return path.resolve(fs.realpathSync(existing), ...suffix);
+}
+
+function isSameOrDescendant(candidate, root) {
+  const relative = path.relative(root, candidate);
+  return relative === ''
+    || (relative !== '..'
+      && !relative.startsWith(`..${path.sep}`)
+      && !path.isAbsolute(relative));
+}
+
+function outputOverlapsTranscriptRoot(output, root) {
+  const outputPaths = new Set([output, physicalPathWithMissingTail(output)]);
+  const rootPaths = new Set([root, physicalPathWithMissingTail(root)]);
+  return [...outputPaths].some((candidate) => (
+    [...rootPaths].some((boundary) => isSameOrDescendant(candidate, boundary))
+  ));
+}
+
+function parseTranscriptImportArgs(args) {
+  const roots = [];
+  let output = null;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (isHelpToken(arg)) usage(0);
+    if (arg === '--root') {
+      if (i + 1 >= args.length) failUsage('--root requires provider=path');
+      const spec = args[++i];
+      const separator = spec.indexOf('=');
+      if (separator <= 0 || separator === spec.length - 1) {
+        failUsage('--root requires provider=path');
+      }
+      const provider = spec.slice(0, separator).toLowerCase();
+      if (!TRANSCRIPT_PROVIDERS.has(provider)) {
+        failUsage(`unsupported transcript provider '${provider}'`);
+      }
+      const root = path.resolve(expandTilde(spec.slice(separator + 1)));
+      roots.push({ provider, root });
+      continue;
+    }
+    if (arg === '--output') {
+      if (i + 1 >= args.length) failUsage('--output requires a path');
+      output = path.resolve(expandTilde(args[++i]));
+      continue;
+    }
+    failUsage(`unknown option: ${arg}`);
+  }
+  if (roots.length === 0) failUsage('import-transcripts requires at least one explicit --root');
+  const unique = new Map();
+  for (const spec of roots) unique.set(`${spec.provider}\0${spec.root}`, spec);
+  const sortedRoots = [...unique.values()]
+    .sort((a, b) => a.provider.localeCompare(b.provider) || a.root.localeCompare(b.root));
+  if (output && sortedRoots.some(({ root }) => outputOverlapsTranscriptRoot(output, root))) {
+    failUsage('--output must be outside transcript roots');
+  }
+  return { roots: sortedRoots, output };
+}
+
+function transcriptFiles(root) {
+  if (!fs.existsSync(root)) failValidation('transcript root does not exist');
+  const result = [];
+  const visit = (target) => {
+    const stat = fs.lstatSync(target);
+    if (stat.isSymbolicLink()) return;
+    if (stat.isFile()) {
+      if (TRANSCRIPT_EXTENSIONS.has(path.extname(target).toLowerCase())) result.push(target);
+      return;
+    }
+    if (!stat.isDirectory()) return;
+    const entries = fs.readdirSync(target, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      visit(path.join(target, entry.name));
+      if (result.length > MAX_TRANSCRIPT_FILES) {
+        failValidation(`transcript root exceeds ${MAX_TRANSCRIPT_FILES} supported files`);
+      }
+    }
+  };
+  visit(root);
+  return result;
+}
+
+function parseTranscriptFile(file) {
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_TRANSCRIPT_BYTES) return null;
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  try {
+    if (path.extname(file).toLowerCase() === '.json') return JSON.parse(raw);
+    const rows = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    if (rows.length === 0) return null;
+    return rows.map((line) => JSON.parse(line));
+  } catch {
+    return null;
+  }
+}
+
+const SESSION_IDENTIFIER_FRAGMENT = /(?:^|[^A-Za-z0-9])sess(?:ion)?[_-][A-Za-z0-9][A-Za-z0-9_-]{7,}(?=$|[^A-Za-z0-9])/i;
+const UUID_IDENTIFIER_FRAGMENT = /(?:^|[^A-Za-z0-9])[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?=$|[^A-Za-z0-9])/i;
+const CODEX_ENGINE_NAMES = new Set([
+  'gpt-5.3-codex-spark',
+  'gpt-5.4-mini',
+  'gpt-5.5',
+  'gpt-5.6-luna',
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'o1',
+  'o1-mini',
+  'o1-preview',
+  'o1-pro',
+  'o3',
+  'o3-mini',
+  'o3-pro',
+  'o4-mini',
+]);
+const GROK_ENGINE_NAMES = new Set([
+  'grok-4.5',
+  'grok-4.5-fast',
+  'grok-composer-2.5-fast',
+]);
+const OPENCODE_ENGINE_NAMES = new Set([
+  ...CODEX_ENGINE_NAMES,
+  ...GROK_ENGINE_NAMES,
+  'glm-4.6',
+  'glm-4.7',
+  'glm-5.2',
+  'qwen-3.8',
+  'minimax-m2.7',
+  'minimax-m3',
+  'claude-3-haiku-20240307',
+  'claude-3-5-sonnet',
+  'claude-haiku-4-5',
+  'claude-haiku-4-5-20251001',
+  'claude-opus-4-7',
+  'claude-opus-4-8',
+  'claude-sonnet-4-6',
+  'claude-sonnet-5',
+  'gemini-1.5',
+  'gemini-3-flash',
+  'gemini-3.5-flash',
+  'deepseek-r1',
+  'deepseek-v3',
+  'kimi-k2.5',
+]);
+
+function safeEngineName(provider, value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:+()/ -]{0,119}$/.test(normalized)
+      || /(?:secret|token|password|bearer|api[_ -]?key|credential)/i.test(normalized)
+      || SESSION_IDENTIFIER_FRAGMENT.test(normalized)
+      || UUID_IDENTIFIER_FRAGMENT.test(normalized)
+      || transcriptSecrets.scan(normalized).length > 0
+      || normalized.includes('/') || normalized.includes('\\')) return null;
+  const key = normalized.toLowerCase();
+  const admitted = provider === 'codex'
+    ? CODEX_ENGINE_NAMES.has(key)
+    : provider === 'grok'
+      ? GROK_ENGINE_NAMES.has(key)
+      : provider === 'opencode'
+        ? OPENCODE_ENGINE_NAMES.has(key)
+        : provider === 'agy'
+          ? /^Gemini 3\.6 (?:Flash|Pro)(?: \((?:Low|Medium|High)\))?$/i.test(normalized)
+          : false;
+  return admitted ? normalized : null;
+}
+
+function nonEmptyContent(value) {
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some(nonEmptyContent);
+  if (!value || typeof value !== 'object') return false;
+  return Object.values(value).some(nonEmptyContent);
+}
+
+function finiteMetric(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function transcriptObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function hasDirectField(obj, fields) {
+  return fields.some((field) => Object.prototype.hasOwnProperty.call(obj, field));
+}
+
+function recognizedTranscriptSchema(provider, parsed) {
+  if (provider === 'codex') {
+    const records = Array.isArray(parsed) ? parsed : [parsed];
+    return records.some((value) => {
+      const record = transcriptObject(value);
+      if (!record) return false;
+      const type = String(record.type || '').toLowerCase();
+      const payload = transcriptObject(record.payload);
+      if (type === 'session_meta') return payload !== null;
+      if (type === 'turn.completed' || type === 'turn.failed') return true;
+      if (type === 'event_msg') {
+        return payload !== null && String(payload.type || '').toLowerCase() === 'token_count';
+      }
+      if (type !== 'response_item' || !payload) return false;
+      const payloadType = String(payload.type || '').toLowerCase();
+      return payloadType === 'message'
+        || /^(?:tool|function_call)(?:[._-](?:output|result))?$/.test(payloadType);
+    });
+  }
+
+  const root = transcriptObject(parsed);
+  if (!root) return false;
+  const commonFields = [
+    'status', 'state', 'completed', 'success', 'usage', 'cost_usd', 'costUSD',
+    'tool', 'tool_status', 'tool_state', 'tool_exit_code', 'finish_reason',
+    'stop_reason', 'truncated',
+  ];
+  const providerFields = {
+    grok: ['model', 'response_text'],
+    opencode: ['modelID', 'messages'],
+    agy: ['model', 'output_text'],
+  };
+  return hasDirectField(root, [...commonFields, ...(providerFields[provider] || [])]);
+}
+
+function directCompletion(obj) {
+  if (!obj) return null;
+  if (typeof obj.completed === 'boolean') return obj.completed;
+  if (typeof obj.success === 'boolean') return obj.success;
+  const status = String(obj.status || obj.state || '').toLowerCase();
+  if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)) return true;
+  if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) return false;
+  return null;
+}
+
+function directTruncation(obj) {
+  if (!obj) return false;
+  const finishReason = String(obj.finish_reason || obj.stop_reason || '').toLowerCase();
+  return obj.truncated === true
+    || ['length', 'max_tokens', 'token_limit'].includes(finishReason);
+}
+
+function directToolFailure(obj) {
+  if (!obj) return false;
+  const tool = transcriptObject(obj.tool);
+  const status = String(
+    (tool && (tool.status || tool.state)) || obj.tool_status || obj.tool_state || '',
+  ).toLowerCase();
+  const exitCode = tool
+    ? finiteMetric(tool.exit_code)
+    : finiteMetric(obj.tool_exit_code);
+  return ['failed', 'error'].includes(status) || (exitCode !== null && exitCode > 0);
+}
+
+function emptyUsageAccumulator() {
+  return {
+    input: 0,
+    output: 0,
+    total: 0,
+    cost: 0,
+    inputSeen: false,
+    outputSeen: false,
+    totalSeen: false,
+    costSeen: false,
+  };
+}
+
+function addRecognizedUsage(accumulator, value) {
+  const usage = transcriptObject(value);
+  if (!usage) return;
+  const input = finiteMetric(usage.input_tokens ?? usage.prompt_tokens ?? usage.inputTokens);
+  const output = finiteMetric(
+    usage.output_tokens ?? usage.completion_tokens ?? usage.outputTokens,
+  );
+  const total = finiteMetric(usage.total_tokens ?? usage.totalTokens);
+  const cost = finiteMetric(usage.cost_usd ?? usage.costUSD);
+  if (input !== null) { accumulator.input += input; accumulator.inputSeen = true; }
+  if (output !== null) { accumulator.output += output; accumulator.outputSeen = true; }
+  if (total !== null) { accumulator.total += total; accumulator.totalSeen = true; }
+  if (cost !== null) { accumulator.cost += cost; accumulator.costSeen = true; }
+}
+
+function agyDispatchUsage(root) {
+  if (!root || root.runner !== 'agy'
+      || !['reviewed', 'committed'].includes(root.status)
+      || !safeEngineName('agy', root.model)) return null;
+  const usage = transcriptObject(root.usage);
+  const keys = usage ? Object.keys(usage).sort() : [];
+  const expected = [
+    'cache_read_tokens',
+    'input_tokens',
+    'output_tokens',
+    'source',
+    'total_tokens',
+  ];
+  if (JSON.stringify(keys) !== JSON.stringify(expected)
+      || usage.source !== 'agy-json') return null;
+  for (const key of expected.filter((field) => field !== 'source')) {
+    if (!Number.isSafeInteger(usage[key]) || usage[key] < 0) return null;
+  }
+  return usage;
+}
+
+function inspectCodexTranscript(parsed) {
+  const result = {
+    engine: 'unknown',
+    completion: null,
+    hasOutput: false,
+    toolFailure: false,
+    truncated: false,
+    usage: emptyUsageAccumulator(),
+  };
+  const records = Array.isArray(parsed) ? parsed : [parsed];
+  for (const value of records) {
+    const record = transcriptObject(value);
+    if (!record) continue;
+    const type = String(record.type || '').toLowerCase();
+    const payload = transcriptObject(record.payload);
+    if (type === 'session_meta' && payload && result.engine === 'unknown') {
+      result.engine = safeEngineName('codex', payload.model) || 'unknown';
+    } else if (type === 'response_item' && payload) {
+      const payloadType = String(payload.type || '').toLowerCase();
+      if (payloadType === 'message' && String(payload.role || '').toLowerCase() === 'assistant') {
+        result.hasOutput = result.hasOutput || nonEmptyContent(payload.content);
+      }
+      if (/^(?:tool|function_call)(?:[._-](?:output|result))?$/.test(payloadType)) {
+        const status = String(payload.status || payload.state || '').toLowerCase();
+        const exitCode = finiteMetric(payload.exit_code);
+        if (['failed', 'error'].includes(status) || (exitCode !== null && exitCode > 0)) {
+          result.toolFailure = true;
+        }
+      }
+    } else if (type === 'event_msg' && payload
+        && String(payload.type || '').toLowerCase() === 'token_count') {
+      const info = transcriptObject(payload.info);
+      addRecognizedUsage(result.usage, info && info.last_token_usage);
+    } else if (type === 'turn.completed') {
+      result.completion = true;
+    } else if (type === 'turn.failed') {
+      result.completion = false;
+    }
+  }
+  return result;
+}
+
+function inspectRootTranscript(provider, parsed) {
+  const root = transcriptObject(parsed);
+  const result = {
+    engine: 'unknown',
+    completion: null,
+    hasOutput: false,
+    toolFailure: false,
+    truncated: false,
+    usage: emptyUsageAccumulator(),
+    evidenceClass: 'transcript',
+  };
+  if (!root) return result;
+  result.engine = safeEngineName(
+    provider,
+    provider === 'opencode' ? root.modelID : root.model,
+  ) || 'unknown';
+  result.completion = directCompletion(root);
+  result.toolFailure = directToolFailure(root);
+  result.truncated = directTruncation(root);
+  if (provider === 'grok') {
+    result.hasOutput = nonEmptyContent(root.response_text);
+  } else if (provider === 'opencode') {
+    if (Array.isArray(root.messages)) {
+      result.hasOutput = root.messages.some((value) => {
+        const message = transcriptObject(value);
+        return message && String(message.role || '').toLowerCase() === 'assistant'
+          && nonEmptyContent(message.content);
+      });
+    }
+  } else if (provider === 'agy') {
+    const dispatchUsage = agyDispatchUsage(root);
+    if (dispatchUsage) {
+      result.completion = true;
+      result.hasOutput = true;
+      result.evidenceClass = 'dispatch-result';
+      addRecognizedUsage(result.usage, dispatchUsage);
+    } else {
+      result.hasOutput = nonEmptyContent(root.output_text);
+    }
+  }
+  if (provider !== 'agy') {
+    addRecognizedUsage(result.usage, root.usage);
+    if (!result.usage.costSeen) {
+      const rootCost = finiteMetric(root.cost_usd ?? root.costUSD);
+      if (rootCost !== null) {
+        result.usage.cost += rootCost;
+        result.usage.costSeen = true;
+      }
+    }
+  }
+  return result;
+}
+
+function inspectTranscript(provider, parsed, file, rootHasCalibrationComponent) {
+  const inspected = provider === 'codex'
+    ? inspectCodexTranscript(parsed)
+    : inspectRootTranscript(provider, parsed);
+
+  const pathParts = file.split(path.sep).map((part) => part.toLowerCase());
+  let cohort = 'general';
+  if (provider === 'opencode' && (rootHasCalibrationComponent
+      || pathParts.some((part) => part === 'swe-calibrate'))) {
+    cohort = 'swe-calibrate';
+  }
+  if (inspected.completion === null) inspected.completion = inspected.hasOutput;
+  const usage = inspected.usage;
+  return {
+    provider,
+    engine: inspected.engine,
+    cohort,
+    evidenceClass: inspected.evidenceClass || 'transcript',
+    completed: inspected.completion,
+    zeroOutput: !inspected.hasOutput,
+    toolFailure: inspected.toolFailure,
+    truncated: inspected.truncated,
+    tokens: provider === 'agy' && inspected.evidenceClass !== 'dispatch-result' ? null : {
+      input: usage.inputSeen ? usage.input : null,
+      output: usage.outputSeen ? usage.output : null,
+      total: usage.totalSeen ? usage.total : null,
+    },
+    costUsd: provider === 'agy' || !usage.costSeen ? null : usage.cost,
+  };
+}
+
+function rate(count, total) {
+  return total === 0 ? null : Number((count / total).toFixed(6));
+}
+
+function aggregateTranscriptSessions(sessions) {
+  const grouped = new Map();
+  for (const session of sessions) {
+    const key = `${session.provider}\0${session.engine}\0${session.cohort}\0${session.evidenceClass}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(session);
+  }
+  return [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, rows]) => {
+      const first = rows[0];
+      const tokenRows = rows.filter((row) => row.tokens
+        && Object.values(row.tokens).some((value) => value !== null));
+      const costRows = rows.filter((row) => row.costUsd !== null);
+      const historicalAgy = first.provider === 'agy' && first.evidenceClass === 'transcript';
+      const tokens = historicalAgy
+        ? { availability: 'unavailable', reason: 'transcript_schema_not_exposed' }
+        : tokenRows.length === 0
+          ? { availability: 'unavailable', reason: 'source_metric_absent' }
+          : {
+            availability: 'available',
+            observed_samples: tokenRows.length,
+            input_tokens_total: tokenRows.some((row) => row.tokens.input !== null)
+              ? tokenRows.reduce((sum, row) => sum + (row.tokens.input || 0), 0) : null,
+            output_tokens_total: tokenRows.some((row) => row.tokens.output !== null)
+              ? tokenRows.reduce((sum, row) => sum + (row.tokens.output || 0), 0) : null,
+            total_tokens: tokenRows.some((row) => row.tokens.total !== null)
+              ? tokenRows.reduce((sum, row) => sum + (row.tokens.total || 0), 0) : null,
+          };
+      const cost = historicalAgy
+        ? { availability: 'unavailable', reason: 'transcript_schema_not_exposed' }
+        : costRows.length === 0
+          ? { availability: 'unavailable', reason: 'source_metric_absent' }
+          : {
+            availability: 'available',
+            observed_samples: costRows.length,
+            usd_total: Number(costRows.reduce((sum, row) => sum + row.costUsd, 0).toFixed(8)),
+          };
+      return {
+        provider: first.provider,
+        engine: first.engine,
+        cohort: first.cohort,
+        evidence_class: first.evidenceClass,
+        sample_size: rows.length,
+        completion_rate: rate(rows.filter((row) => row.completed).length, rows.length),
+        zero_output_rate: rate(rows.filter((row) => row.zeroOutput).length, rows.length),
+        tool_failure_rate: rate(rows.filter((row) => row.toolFailure).length, rows.length),
+        truncation_rate: rate(rows.filter((row) => row.truncated).length, rows.length),
+        tokens,
+        cost,
+      };
+    });
+}
+
+function cmdImportTranscripts(args) {
+  const { roots, output } = parseTranscriptImportArgs(args);
+  const sessions = [];
+  const coverage = new Map();
+  const seenFilesByProvider = new Map();
+  for (const { provider, root } of roots) {
+    const files = transcriptFiles(root);
+    const current = coverage.get(provider) || { candidate_files: 0, parsed_sessions: 0 };
+    const seenFiles = seenFilesByProvider.get(provider) || new Set();
+    const rootHasCalibrationComponent = root.split(path.sep)
+      .some((part) => part.toLowerCase() === 'swe-calibrate');
+    for (const file of files) {
+      let physicalFile;
+      try {
+        physicalFile = fs.realpathSync(file);
+      } catch {
+        physicalFile = path.resolve(file);
+      }
+      if (seenFiles.has(physicalFile)) continue;
+      seenFiles.add(physicalFile);
+      current.candidate_files += 1;
+      const parsed = parseTranscriptFile(file);
+      if (parsed === null) continue;
+      if (!recognizedTranscriptSchema(provider, parsed)) continue;
+      current.parsed_sessions += 1;
+      sessions.push(inspectTranscript(
+        provider,
+        parsed,
+        path.relative(root, file),
+        rootHasCalibrationComponent,
+      ));
+    }
+    seenFilesByProvider.set(provider, seenFiles);
+    coverage.set(provider, current);
+  }
+  const sources = [...coverage.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([provider, item]) => ({
+      provider,
+      candidate_files: item.candidate_files,
+      parsed_sessions: item.parsed_sessions,
+      schema_coverage_rate: rate(item.parsed_sessions, item.candidate_files),
+    }));
+  const result = {
+    schema_version: 1,
+    authority_status: 'untrusted_telemetry',
+    admissible: false,
+    imported_scorecard_rows: 0,
+    sources,
+    aggregates: aggregateTranscriptSessions(sessions),
+  };
+  const serialized = `${JSON.stringify(result, null, 2)}\n`;
+  if (output) {
+    fs.mkdirSync(path.dirname(output), { recursive: true });
+    const temp = `${output}.tmp-${process.pid}`;
+    fs.writeFileSync(temp, serialized, { mode: 0o600 });
+    fs.renameSync(temp, output);
+  }
+  process.stdout.write(serialized);
+}
+
 function currentRowsForRole(role, nowMs, options = {}) {
   const rows = readStoreRows(false, options.requireEvidence === true);
   const capabilityRows = options.requireEvidence ? readCapabilityEvidenceRows() : null;
@@ -906,5 +1484,6 @@ function cmdLadder(args) {
   else if (command === 'current') cmdCurrent(commandArgs);
   else if (command === 'report') cmdReport(commandArgs);
   else if (command === 'ladder') cmdLadder(commandArgs);
+  else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);
   else failUsage(`unknown subcommand '${command}'`);
 })();

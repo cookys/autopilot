@@ -1,6 +1,6 @@
 # Heterogeneous decorrelation: agy-implementer fix + cross-family QC panel (v2.25.9)
 
-> Branch `feat/v2.25.9-cross-family-qc-panel` · Plan: [`../../plans/2026-06-26-cross-family-qc-panel.md`](../../plans/2026-06-26-cross-family-qc-panel.md)
+> Branch `feat/v2.25.9-cross-family-qc-panel` · Plan: [`../../plans/2026-06-26-cross-family-qc-panel.md`](../../../plans/2026-06-26-cross-family-qc-panel.md)
 >
 > **Scope expanded 2026-06-26 (Board-approved)**: originally a read-only qc panel built on
 > the premise "agy can't write". That premise was overturned mid-session — agy implements

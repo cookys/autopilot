@@ -243,6 +243,14 @@ check_opencode_agent_body_clean() {
 }
 
 # ─── Run them all ───
+if [ "${1:-}" = "--meta-fixture" ]; then
+  echo "preflight-portability — hermetic meta fixture"
+  run_check ".agents/skills adapter targets CARRY their name: invariant (≥2 seeds)" \
+    check_adapter_targets_carry_invariant
+  [ "$FAILS" -eq 0 ] && exit 0
+  exit "$FAILS"
+fi
+
 echo "preflight-portability — autopilot v2.7.3+ acceptance gate"
 echo ""
 

@@ -4,13 +4,13 @@
   "kind": "cli",
   "status": "warning",
   "harness_level": "H1",
-  "last_checked_at": "2026-07-02",
+  "last_checked_at": "2026-08-03T22:29:53.000Z",
   "verified_at": null,
-  "expires_at": "2026-07-16",
+  "expires_at": "2026-08-17T22:29:53.000Z",
   "evidence": {
     "source": "local-probe-and-user-constraint",
-    "command": "claude --version",
-    "result": "2.1.197 (Claude Code); Anthropic subscription quota exhausted for native Anthropic-backed use, but the CLI driver itself is present"
+    "command": "claude --version; sha256 hooks/hooks.json; exact opus/high no-effect provider probe",
+    "result": "2.1.220 (Claude Code); CLI model/effort transport and current hook baseline are digest-bound; native Anthropic weekly quota is unavailable until its reported reset, separately from healthy driver capability"
   },
   "capabilities": {
     "read_only_dispatch": "unavailable",

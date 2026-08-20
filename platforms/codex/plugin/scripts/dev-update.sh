@@ -47,6 +47,17 @@ else
   echo "(No Claude Code marketplace clone at $MKT_DIR — skipping that layer.)"
 fi
 
+# Dispatch-runs retention. `dispatch-status.js --reap` existed, was documented as the owner
+# of this cleanup by lib/prune-tmp-residue.sh, and had ZERO callers — 249 manifests spanning
+# two weeks had accumulated by 2026-08-18. This is dev-update rather than per-dispatch on
+# purpose: the reaper can also delete a failure-kept worktree (on a definitive dead-lock
+# verdict + marker + free lock), which is exactly the class prune_tmp_residue refuses to
+# touch, so it does not belong on a hot path. Advisory: never fails the update.
+if REAP_OUT="$(node "$REPO_DIR/scripts/dispatch-status.js" --reap --days 7 2>/dev/null)"; then
+  REAPED="$(printf '%s' "$REAP_OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(String((j.reaped_manifests||[]).length))}catch{process.stdout.write("0")}})' 2>/dev/null || echo 0)"
+  [ "${REAPED:-0}" = "0" ] || echo "Reaped $REAPED stale dispatch-run manifests (>7d, not live)."
+fi
+
 echo ""
 if [[ "$BEFORE" == "$AFTER" ]]; then
   echo "Already up to date ($AFTER) — nothing pulled."

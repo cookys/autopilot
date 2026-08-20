@@ -55,6 +55,10 @@
 #       [--campaign-seal <path>]                # intake-validated seal, rechecked at leaf admission
 #       [--strict-contract]                     # required together with --contract-file
 #       [--contract-file <path>]                # required together with --strict-contract
+#       [--conformance-intent <path>]           # REQUIRED when the contract carries
+#                                               #   frozen_four_tuple: the round's declared
+#                                               #   intent, gated pre-spawn by
+#                                               #   check-blueprint-conformance.js preflight
 #       [--keep-worktree]                      # keep worktree even on success
 #       [--retain-owner <id> --retain-reason <text> --retain-until <epoch>]
 #       [--reuse-worktree <absolute-path>]      # campaign repair: reuse an exact retained
@@ -115,6 +119,7 @@ AGY_BIN="agy"
 GROK_BIN="grok"
 CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PATH ambiguity: a
                      # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
+MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
 KEEP=0
 RETENTION_OWNER=""
@@ -172,6 +177,13 @@ PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for the detach declare -p
+SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
+SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
+SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
+AGY_ENVELOPE=""       # private native JSON stdout; never exposed as agent_log
+AGY_STDERR=""         # private native stderr, copied to agent_log only on failure
+AGY_PARSED=""         # validated derived {response,usage}; native envelope parsed once
+AGY_USAGE_JSON="null"
 CONTAINMENT="plain"   # plain|setsid|cgroup — set when the worker actually runs
 CONTAINED=0           # 1 iff the container was provably reaped empty (setsid-proof only for cgroup)
 IDENTITY_DRIFT=0      # 1 iff worker mutated consuming-repo user.name/email via shared .git/config
@@ -188,6 +200,7 @@ SKILL_PACK_CONTENT_TEMP=""
 STRICT_CONTRACT=0
 CONTRACT_FILE=""
 CONTRACT_FILE_SUPPLIED=0
+CONFORMANCE_INTENT_FILE=""
 STRICT_CONTRACT_RESULT_FIELDS=0
 STRICT_UNIT_ID=""
 STRICT_CONTRACT_SHA=""
@@ -418,6 +431,9 @@ cleanup() {
   [ -n "${CAMPAIGN_PROMPT_FILE:-}" ] && rm -f "$CAMPAIGN_PROMPT_FILE"
   [ -n "${CAMPAIGN_CONTRACT_SNAPSHOT:-}" ] && rm -f "$CAMPAIGN_CONTRACT_SNAPSHOT"
   [ -n "${SKILL_PACK_CONTENT_TEMP:-}" ] && rm -f "$SKILL_PACK_CONTENT_TEMP"
+  [ -n "${AGY_ENVELOPE:-}" ] && rm -f "$AGY_ENVELOPE"
+  [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR"
+  [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
   # Parent that transferred claim to detached child must not mark WO failed on its EXIT.
   if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ] && [ "${_CONT_WO_PARENT_TRANSFERRED:-0}" != "1" ]; then
@@ -688,16 +704,23 @@ emit() { # status commit files ins del worktree error
   if [ "${AGENT_EXIT:-1}" -eq 0 ] && [ -n "${LOG:-}" ] && [ -r "${LOG:-/nonexistent}" ] \
      && [ -r "$SELF_DIR/dispatch-status.js" ] && command -v node >/dev/null 2>&1; then
     # Format is DECLARED by runner (this script knows its own invocation flags: codex =
-    # chrome text, grok = --output-format json, agy/cc-shim = plain) — never content-
+    # chrome text, grok = --output-format json, agy = response-only plain log with a
+    # separately validated native envelope, cc-shim = plain) — never content-
     # sniffed, so a worker printing JSON/fake-chrome cannot self-report telemetry.
     # AGENT_EXIT==0 gate: on a clean exit the harness footer always owns the log tail,
     # so the parser's tail-anchored token read cannot be spoofed; on an abnormal exit
     # the tail is worker-controlled → usage stays null (honest, not fabricated).
-    local log_format="plain"
-    [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
-    [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
-    [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
-    usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
+    if [ "${IS_CODEX:-0}" -eq 0 ] && [ "${IS_GROK:-0}" -eq 0 ] \
+       && [ "${IS_CCSHIM:-0}" -eq 0 ] && [ "${IS_PI:-0}" -eq 0 ] \
+       && [ "${IS_QODER:-0}" -eq 0 ]; then
+      usage_json="${AGY_USAGE_JSON:-null}"
+    else
+      local log_format="plain"
+      [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
+      [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
+      [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
+      usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
+    fi
     case "$usage_json" in
       '{'*'}') ;;   # single-line JSON object — accepted
       *) usage_json="null" ;;
@@ -853,6 +876,23 @@ run_strict_contract_preflight() {
 
   verdict="$(extract_json_value "$contract_check_json" verdict 2>/dev/null || true)"
   [ "$verdict" = "GO" ] || die_precondition "contract checker verdict is $verdict"
+
+  # frozen_four_tuple conformance preflight (autonomous-brain P1, KR1): a frozen
+  # contract REQUIRES a declared per-round intent, and the declared intent must
+  # conform BEFORE any runner spawns. Contracts without the block are unchanged.
+  __fft_probe="$(extract_file_json_value "$CONTRACT_FILE" "frozen_four_tuple.granularity_digest" 2>/dev/null || true)"
+  if [ -n "$__fft_probe" ]; then
+    [ -n "$CONFORMANCE_INTENT_FILE" ] \
+      || die_precondition "contract carries frozen_four_tuple: --conformance-intent <file> is required"
+    [ -r "$CONFORMANCE_INTENT_FILE" ] \
+      || die_precondition "conformance intent file not readable: $CONFORMANCE_INTENT_FILE"
+    if ! node "$SELF_DIR/check-blueprint-conformance.js" preflight \
+        --contract "$CONTRACT_FILE" --intent "$CONFORMANCE_INTENT_FILE" \
+        --repo "$CONSUMING_REPO_ROOT" >&2; then
+      die_precondition "blueprint conformance preflight refused the declared intent"
+    fi
+  fi
+  unset __fft_probe
 
   STRICT_CONTRACT_RESULT_FIELDS=1
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
@@ -1204,6 +1244,7 @@ try {
   process.stdout.write(error.message || String(error));
   process.exit(3);
 }
+
 NODE
     )"
     bridge_rc=$?
@@ -1228,6 +1269,41 @@ NODE
         ;;
     esac
   done
+}
+
+check_managed_dev_flow_admission() {
+  local consumed_repo admission_out admission_rc
+  [ "$CAMPAIGN_PROJECTION_BOUND" -eq 1 ] || return 0
+  [ -n "$CAMPAIGN_CONTRACT_FILE" ] || return 0
+  consumed_repo="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$consumed_repo" ] \
+    || die_dev_flow_admission "session marker repository mismatch: no Git repository"
+  admission_out="$(
+    node - "$SELF_DIR/session-mode.js" "$consumed_repo" \
+      "${AUTOPILOT_LEVEL:-}" "$CAMPAIGN_CONTRACT_FILE" <<'NODE' 2>&1
+'use strict';
+const [sessionModePath, repoRoot, effectiveLevel, campaignContract] = process.argv.slice(2);
+try {
+  const { validateManagedDevFlowAdmission } = require(sessionModePath);
+  const result = validateManagedDevFlowAdmission({
+    repoRoot,
+    effectiveLevel: String(effectiveLevel || '').toLowerCase(),
+    campaignContract,
+  });
+  if (!result.valid) {
+    process.stdout.write(result.reason);
+    process.exit(3);
+  }
+  process.stdout.write('READY');
+} catch (error) {
+  process.stdout.write(error.message || String(error));
+  process.exit(3);
+}
+NODE
+  )"
+  admission_rc=$?
+  [ "$admission_rc" -eq 0 ] && [ "$admission_out" = "READY" ] \
+    || die_dev_flow_admission "${admission_out:-session marker admission validation failed}"
 }
 
 check_mission_enforcement_gate() {
@@ -1276,9 +1352,15 @@ die_precondition() {
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": %s, "duplex": %s, "retention_lease": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$1")" \
     "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" "$run_id_json" "$duplex_json"
+  exit 2
+}
+
+die_dev_flow_admission() {
+  printf '{ "status": "blocked", "phase": "dev_flow_admission", "rejection_code": "DEV_FLOW_ADMISSION_REQUIRED_OR_STALE", "reason": "%s", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "resources_created": 0 }\n' \
+    "$(_flat_json_escape "$1")"
   exit 2
 }
 
@@ -1294,126 +1376,22 @@ emit_sealed_zero_diff_if_authorized() {
   [ -n "${CONTRACT_FILE:-}" ] && [ -r "$CONTRACT_FILE" ] || return 0
   [ -z "${STRICT_NOOP_RECEIPT_PATH:-}" ] \
     || die_precondition "ambient STRICT_NOOP_RECEIPT_PATH is not authority; seal zero_diff_receipt into the dispatch unit"
-  local repo base_sha result rc
+  local repo base_sha result rc validator
   repo="${CONSUMING_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null)}"
   [ -n "$repo" ] || die_precondition "sealed zero-diff admission requires repository root"
   base_sha="$(git -C "$repo" rev-parse "${BASE}^{commit}" 2>/dev/null)" \
     || die_precondition "sealed zero-diff admission cannot resolve immutable base"
+  # Single production sealed zero-diff validator (D2 A06) — shared with
+  # dispatch-contract.js and campaign-dispatch-projection.js.
+  validator="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/engine/sealed-zero-diff-validator.js"
   if result="$(
-    node - "$CONTRACT_FILE" "$repo" "$base_sha" \
-      "${MISSION_NOOP_RECEIPT_DIGEST:-}" "${MISSION_NOOP_GRAPH_NODE:-}" <<'NODE'
-'use strict';
-const crypto = require('crypto');
-const fs = require('fs');
-const { execFileSync } = require('child_process');
-const [
-  contractPath,
-  repo,
-  baseSha,
-  missionNoopReceiptDigest,
-  missionNoopGraphNode,
-] = process.argv.slice(2);
-const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
-const sha256Json = (value) => sha256(Buffer.from(JSON.stringify(value), 'utf8'));
-const fail = (code, exit = 2) => {
-  process.stdout.write(code);
-  process.exit(exit);
-};
-try {
-  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
-  if (!receipt || typeof receipt !== 'object') fail('absent', 3);
-  const expectedKeys = [
-    'schema_version',
-    'artifact_type',
-    'base_sha',
-    'acceptance_digest',
-    'campaign_contract_digest',
-    'strict_dispatch_digest',
-    'campaign_id',
-    'mission_lineage_id',
-    'mission_policy_digest',
-    'mission_graph_digest',
-    'graph_node_id',
-    'mission_noop_receipt_digest',
-    'source_work_order_id',
-    'source_work_order_digest',
-    'path_byte_digests',
-    'candidate_zero_change',
-    'digest',
-  ].sort();
-  if (receipt.schema_version !== 1
-      || !new Set([
-        'campaign_zero_diff_receipt',
-        'controller_zero_diff_receipt',
-      ]).has(receipt.artifact_type)
-      || receipt.candidate_zero_change !== true
-      || JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
-      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
-      || typeof receipt.source_work_order_id !== 'string'
-      || receipt.source_work_order_id.length === 0) {
-    fail('bad_shape');
-  }
-  const body = { ...receipt };
-  delete body.digest;
-  if (sha256Json(body) !== receipt.digest) fail('forged');
-  if (receipt.base_sha !== baseSha) fail('stale_base');
-  const projection = contract.campaign_projection || {};
-  for (const [receiptKey, projectionKey, code] of [
-    ['campaign_id', 'campaign_id', 'foreign_campaign'],
-    ['campaign_contract_digest', 'campaign_contract_sha256', 'foreign_contract'],
-    ['strict_dispatch_digest', 'strict_dispatch_sha256', 'foreign_strict'],
-    ['mission_lineage_id', 'mission_lineage_id', 'foreign_lineage'],
-    ['mission_policy_digest', 'mission_policy_digest', 'foreign_policy'],
-    ['mission_graph_digest', 'mission_graph_digest', 'foreign_graph'],
-    ['graph_node_id', 'graph_node_id', 'foreign_node'],
-  ]) {
-    if (receipt[receiptKey] !== projection[projectionKey]) {
-      fail(code);
-    }
-  }
-  if (missionNoopReceiptDigest
-      && receipt.mission_noop_receipt_digest !== missionNoopReceiptDigest) {
-    fail('foreign_mission_noop');
-  }
-  if (missionNoopGraphNode && receipt.graph_node_id !== missionNoopGraphNode) {
-    fail('foreign_marker_node');
-  }
-  const acceptance = Array.isArray(contract.acceptance)
-    ? contract.acceptance.map((entry) => ({ argv: entry.argv, exit: entry.exit }))
-    : [];
-  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')
-      || sha256Json(acceptance) !== receipt.acceptance_digest) {
-    fail('acceptance_mismatch');
-  }
-  const required = Array.isArray(contract.output.required_change_paths)
-    ? contract.output.required_change_paths : [];
-  const outputs = Array.isArray(contract.output.paths) ? contract.output.paths : [];
-  const relevant = [...new Set([...required, ...outputs])].sort();
-  const digests = receipt.path_byte_digests;
-  if (!digests || typeof digests !== 'object'
-      || JSON.stringify(Object.keys(digests).sort()) !== JSON.stringify(relevant)) {
-    fail('path_set_mismatch');
-  }
-  for (const relativePath of relevant) {
-    let bytes;
-    try {
-      bytes = execFileSync('git', [
-        '-C', repo, 'show', `${baseSha}:${relativePath}`,
-      ], { encoding: null, stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (_error) {
-      fail('path_missing');
-    }
-    if (sha256(bytes) !== digests[relativePath]) fail('byte_digest_mismatch');
-  }
-  process.stdout.write(receipt.digest);
-} catch (error) {
-  fail(error && error.message ? String(error.message).slice(0, 80) : 'verify_threw');
-}
-NODE
+    node "$validator" validate \
+      --contract "$CONTRACT_FILE" \
+      --repo "$repo" \
+      --base "$base_sha" \
+      --verify-bytes \
+      ${MISSION_NOOP_RECEIPT_DIGEST:+--mission-noop-digest "$MISSION_NOOP_RECEIPT_DIGEST"} \
+      ${MISSION_NOOP_GRAPH_NODE:+--mission-noop-node "$MISSION_NOOP_GRAPH_NODE"}
   )"; then
     printf '{ "status": "no_op", "runner": "sealed-zero-diff-admission", "model": null, "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": null, "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": "%s", "skill_mode_effective": "off", "skills_injected": [], "retention_lease": null }\n' \
       "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" "$result"
@@ -1433,7 +1411,7 @@ die_resource_budget() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
-  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null }\n' \
+  printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
     "$count" "$limit" "$EFFECTIVE_SKILL_MODE" "$SKILLS_INJECTED_JSON" \
@@ -1460,7 +1438,9 @@ write_manifest() {
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
-  # grok --output-format json / agy+cc-shim plain). dispatch-status.js trusts this
+  # grok --output-format json / agy response-only plain log with a separate private
+  # native envelope / cc-shim plain).
+  # dispatch-status.js trusts this
   # over content sniffing so worker output can never self-report telemetry.
   local log_format="plain"
   [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
@@ -1484,11 +1464,11 @@ write_manifest() {
     strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
   fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
@@ -1508,6 +1488,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --branch) BRANCH="${2:-}"; shift 2 ;;
     --prompt-file) PROMPT_FILE="${2:-}"; shift 2 ;;
+    --scaffold-tier) SCAFFOLD_TIER_ARG="${2:-}"; shift 2 ;;
     --campaign-contract) CAMPAIGN_CONTRACT_FILE="${2:-}"; shift 2 ;;
     --campaign-contract-sha256) CAMPAIGN_CONTRACT_SHA256="${2:-}"; shift 2 ;;
     --campaign-seal) CAMPAIGN_SEAL_FILE="${2:-}"; shift 2 ;;
@@ -1525,6 +1506,7 @@ while [ $# -gt 0 ]; do
     --qoder-bin) QODER_BIN="${2:-}"; shift 2 ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
+    --conformance-intent) CONFORMANCE_INTENT_FILE="${2:-}"; shift 2 ;;
     --keep-worktree) KEEP=1; shift ;;
     --retain-owner) RETENTION_OWNER="${2:-}"; shift 2 ;;
     --retain-reason) RETENTION_REASON="${2:-}"; shift 2 ;;
@@ -1589,6 +1571,16 @@ if [ -n "${AUTOPILOT_PARENT_RUN_ID:-}" ]; then
     LINEAGE_DEPTH=1
   fi
 else
+  # NOTE: AUTOPILOT_ROOT_RUN_ID is deliberately NOT read here. Without a parent
+  # there is no lineage to attach to, so this dispatch becomes its own lineage
+  # root. That does not discard the variable: the continuation/rehydration
+  # resolver below still honours it (see `_cont_root`), which is how a dispatch
+  # re-attaches to an existing root after compaction — exercised by
+  # hooks/tests/codex-compaction-rehydration.test.sh with ROOT set and no PARENT.
+  # ⇒ Do NOT "fail closed" on root-without-parent; that rejects a supported
+  # configuration. (Tried 2026-07-31; it broke 8 assertions in that test.)
+  # The sealed-campaign rail is the case that needs BOTH — see
+  # references/hetero-dispatch.md § Trace lineage contract.
   LINEAGE_ROOT="$DISPATCH_RUN_ID"
   LINEAGE_DEPTH=0
 fi
@@ -1656,6 +1648,22 @@ set_runner_flags() {
       ;;
     *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn (got: $RUNNER)" ;;
   esac
+}
+
+D2_AGY_RESPONSE_CLAIM="cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4"
+D2_AGY_USAGE_CLAIM="cap-v1-c631dffdbdbd4d5fecc97d90510392c397a896fde25182f10371776f30006b3e"
+D2_AGY_EXPECTED_IDS="[\"$D2_AGY_RESPONSE_CLAIM\",\"$D2_AGY_USAGE_CLAIM\"]"
+validate_d2_agy_claims() {
+  local receipt validator observed rc=0
+  receipt="${AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT:-$SELF_DIR/../docs/projects/_archive/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json}"
+  validator="$SELF_DIR/platform-capability-claims.js"
+  [ -r "$receipt" ] && [ -r "$validator" ] && command -v node >/dev/null 2>&1 \
+    || die_precondition "D2 capability claim validation failed"
+  observed="$(node "$validator" validate-consumer --receipt "$receipt" --consumer D2 \
+    --claim-id "$D2_AGY_RESPONSE_CLAIM" --claim-id "$D2_AGY_USAGE_CLAIM" \
+    --emit-claim-ids --reprobe --reprobe-binary "$AGY_BIN" 2>/dev/null)" || rc=$?
+  [ "$rc" -eq 0 ] && [ "$observed" = "$D2_AGY_EXPECTED_IDS" ] \
+    || die_precondition "D2 capability claim validation failed"
 }
 
 case "$EFFORT" in
@@ -1731,6 +1739,7 @@ if [ "$CAMPAIGN_PROJECTION_BOUND" -ne 1 ]; then
 else
   # Sealed strict projection is present: still bind active L5/L6 (and L3
   # fallback) markers to the campaign's policy/graph digests before spend.
+  check_managed_dev_flow_admission
   check_marker_campaign_admission_bridge
 fi
 emit_sealed_zero_diff_if_authorized
@@ -1739,6 +1748,32 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
     "Mission no-op marker requires the exact matching sealed zero_diff_receipt"
 fi
 set_runner_flags
+
+if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+  command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
+  validate_d2_agy_claims
+fi
+
+normalize_agy_model() {
+  local requested="$1" tier="high" models resolved
+  case "$EFFORT" in low) tier=low ;; medium) tier=medium ;; esac
+  case "$requested" in
+    gemini-flash|gemini-flash-low|gemini-flash-medium|gemini-flash-high)
+      models="$(timeout 20 "$AGY_BIN" models 2>/dev/null)" \
+        || die_precondition "agy model inventory unavailable; alias resolution fails closed"
+      case "$requested" in *-low) tier=low ;; *-medium) tier=medium ;; *-high) tier=high ;; esac
+      resolved="$(printf '%s\n' "$models" | grep -E "^gemini-[0-9]+([.][0-9]+)*-flash-${tier}$" | sort -Vr | head -n 1)"
+      [ -n "$resolved" ] || die_precondition "agy alias '$requested' has no current canonical model"
+      printf '%s' "$resolved" ;;
+    *) printf '%s' "$requested" ;;
+  esac
+}
+
+if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+  MODEL="$(normalize_agy_model "$MODEL")"
+fi
 
 if [ "${#SKILLS[@]}" -gt 0 ]; then
   for skill in "${SKILLS[@]}"; do
@@ -1856,10 +1891,16 @@ if [ -z "$_cont_root" ] && { [ -n "${AUTOPILOT_MISSION_ROOT_RUN_ID:-}" ] \
 fi
 if [ -n "$_cont_common" ] && [ -n "$_cont_root" ]; then
   # Exact-root enumerate under fail-closed semantics — never `|| echo 0` on errors.
+  # The managed engine owns a controller Work Order under the campaign root.
+  # That record is controller authority, not an implementer continuation claim;
+  # counting it here makes the child runner demand a reconcile receipt for the
+  # very dispatch that created the controller (and blocks before model spend).
+  # Keep this in lockstep with the engine-side continuation admission filter.
   _cont_has_wo="$(node -e '
 const wo=require(process.argv[1]);
 try {
-  const n=wo.listNonterminalWorkOrders(process.argv[2], process.argv[3]);
+  const n=wo.listNonterminalWorkOrders(process.argv[2], process.argv[3])
+    .filter((entry) => !(entry && entry.work_order && entry.work_order.role === "controller"));
   process.stdout.write(n.length>0?"1":"0");
 } catch (e) {
   process.stderr.write(String(e && e.message || e));
@@ -2166,6 +2207,39 @@ if [ -n "$CAMPAIGN_CONTRACT_FILE" ]; then
   CAMPAIGN_CONTRACT_SNAPSHOT=""
   unset _campaign_snapshot_digest
   PROMPT_FILE="$CAMPAIGN_PROMPT_FILE"
+fi
+
+# --- scaffold-tier envelope (four-layer P1; references/scaffold-tiers.md is canonical) ---
+# Prepended to the SHARED prompt file BEFORE the per-runner branches, so every runner
+# (codex/grok/cc-shim/agy/pi/qoder) consumes the tier identically. Placed before the
+# context-window gate so the gate prices the envelope too. Disable per project with
+# `scaffold_tiers: off` in .claude/dispatch-config.md.
+if [ "$SCAFFOLD_TIER_ARG" != "off" ] \
+  && ! grep -qE '^scaffold_tiers:[[:space:]]*off' .claude/dispatch-config.md 2>/dev/null; then
+  # shellcheck source=/dev/null
+  . "$SELF_DIR/lib/scaffold-envelope.sh"
+  _resolved_tier="$(node "$SELF_DIR/resolve-scaffold-tier.js" \
+    --runner "$RUNNER" --model "$MODEL" --role implementer 2>/dev/null \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).tier)}catch{process.stdout.write("T2")}});' \
+    2>/dev/null)" || _resolved_tier="T2"
+  case "$_resolved_tier" in T0|T1|T2) ;; *) _resolved_tier="T2" ;; esac
+  _effective_tier="$_resolved_tier"
+  if [ "$SCAFFOLD_TIER_ARG" != "auto" ]; then
+    case "$SCAFFOLD_TIER_ARG" in T0|T1|T2) ;; *) die_precondition "--scaffold-tier must be auto|off|T0|T1|T2" ;; esac
+    # Explicit override may only ADD scaffolding (fail-closure applies to humans too):
+    # a request BELOW the resolved scaffolding amount is rejected.
+    if [ "$(scaffold_tier_rank "$SCAFFOLD_TIER_ARG")" -lt "$(scaffold_tier_rank "$_resolved_tier")" ]; then
+      die_precondition "explicit --scaffold-tier $SCAFFOLD_TIER_ARG requests LESS scaffolding than resolved $_resolved_tier — overrides may only add scaffolding (references/scaffold-tiers.md)"
+    fi
+    _effective_tier="$SCAFFOLD_TIER_ARG"
+  fi
+  SCAFFOLD_PROMPT_FILE="$(mktemp -t 'dispatch-hetero-scaffold-prompt-XX''XX''XX')"
+  build_scaffold_envelope "$_effective_tier" "$SELF_DIR/../references/scaffold-tiers.md" \
+    "$PROMPT_FILE" "$SCAFFOLD_PROMPT_FILE" \
+    || die_precondition "scaffold envelope build failed (tier $_effective_tier)"
+  PROMPT_FILE="$SCAFFOLD_PROMPT_FILE"
+  SCAFFOLD_TIER_EFFECTIVE="$_effective_tier"
+  unset _resolved_tier _effective_tier
 fi
 
 # --- context-window gate ---
@@ -2646,9 +2720,14 @@ reap_container() { # reaps the worker container on ANY exit path; sets CONTAINED
 # legacy minimal remover + branch deletion remains only for unmanaged one-shots.
 abort_dispatch() {
   reap_container
+  cleanup_managed_codex_home
+  [ -n "$SCAFFOLD_PROMPT_FILE" ] && rm -f "$SCAFFOLD_PROMPT_FILE"
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
+  [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
+  [ -n "$AGY_STDERR" ] && rm -f "$AGY_STDERR"
+  [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
   [ -n "${PACKED_PROMPT_TEMP:-}" ] && rm -f "$PACKED_PROMPT_TEMP"
   if [ -n "${AUTOPILOT_WORKTREE_ROOT_RUN_ID:-}" ]; then
     local abort_tip
@@ -2678,6 +2757,37 @@ trap abort_dispatch INT TERM
 # Build the worker command line, then run it inside the strongest available
 # container. The command cd's into the worktree itself (we cannot rely on a
 # subshell cwd surviving the container boundary).
+prepare_managed_codex_home() {
+  local controller_home="${CODEX_HOME:-$HOME/.codex}"
+  MANAGED_CODEX_HOME="$(mktemp -d -t autopilot-managed-codex-home-XXXXXX)" \
+    || die_precondition "cannot allocate isolated managed Codex home"
+  chmod 700 "$MANAGED_CODEX_HOME" \
+    || die_precondition "cannot protect isolated managed Codex home"
+  # Codex documents that --ignore-user-config still reads authentication from
+  # CODEX_HOME. Copy only that credential file: plugin/config/session state is
+  # deliberately excluded so the controller's PreToolUse hook cannot intercept
+  # the managed implementer.
+  if [ -r "$controller_home/auth.json" ]; then
+    cp "$controller_home/auth.json" "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot stage managed Codex authentication"
+    chmod 600 "$MANAGED_CODEX_HOME/auth.json" \
+      || die_precondition "cannot protect managed Codex authentication"
+  fi
+}
+
+cleanup_managed_codex_home() {
+  [ -n "${MANAGED_CODEX_HOME:-}" ] || return 0
+  case "$MANAGED_CODEX_HOME" in
+    "${TMPDIR:-/tmp}"/autopilot-managed-codex-home-*)
+      rm -rf -- "$MANAGED_CODEX_HOME"
+      ;;
+    *)
+      echo "WARNING: refusing to remove unexpected managed Codex home: $MANAGED_CODEX_HOME" >&2
+      ;;
+  esac
+  MANAGED_CODEX_HOME=""
+}
+
 run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + CONTAINMENT
   if [ "${IN_DETACHED_CHILD:-0}" -eq 1 ]; then
     # In the detached child we already ARE the surviving `setsid` session (created at launch),
@@ -2714,10 +2824,13 @@ run_worker() { # "$@" = argv of the worker; redirects to LOG; sets AGENT_EXIT + 
 # the SAME engine invocation with ZERO behavioral difference.
 run_agent() {
 if [ "$IS_CODEX" -eq 1 ]; then
-  run_worker bash -c 'cd "$1" && exec "$5" exec --model "$2" \
+  prepare_managed_codex_home
+  run_worker bash -c 'cd "$1" && exec env -u CODEX_THREAD_ID CODEX_HOME="$6" \
+      "$5" exec --ignore-user-config --model "$2" \
       --dangerously-bypass-approvals-and-sandbox \
       --dangerously-bypass-hook-trust \
-      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN"
+      -c "model_reasoning_effort=\"$3\"" < "$4"' _ "$WT" "$MODEL" "$EFFORT" "$PROMPT_FILE" "$CODEX_BIN" "$MANAGED_CODEX_HOME"
+  cleanup_managed_codex_home
 elif [ "$IS_CCSHIM" -eq 1 ]; then
   # cc-shim: the Claude Code CLI (`claude -p`) driving an arbitrary Anthropic-compatible
   # endpoint via ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN from the env. The MODEL (e.g.
@@ -2842,8 +2955,39 @@ run build/test or to commit.
 ===
 
 "
-  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" --dangerously-skip-permissions --print-timeout "$5"' \
-      _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT"
+  AGY_ENVELOPE="$(mktemp -t dispatch-hetero-agy-envelope-XXXXXX)"
+  AGY_STDERR="$(mktemp -t dispatch-hetero-agy-stderr-XXXXXX)"
+  AGY_PARSED="$(mktemp -t dispatch-hetero-agy-parsed-XXXXXX)"
+  AGY_USAGE_JSON="null"
+  run_worker bash -c 'cd "$1" && exec "$2" -p "$3" --model "$4" \
+      --dangerously-skip-permissions --output-format json --print-timeout "$5" \
+      >"$6" 2>"$7"' \
+      _ "$WT" "$AGY_BIN" "${AGY_EDIT_ONLY}$(cat "$PROMPT_FILE")" "$MODEL" "$TIMEOUT" \
+      "$AGY_ENVELOPE" "$AGY_STDERR"
+  if [ "$AGENT_EXIT" -ne 0 ]; then
+    cat "$AGY_STDERR" >> "$LOG"
+    printf '\n[dispatch-hetero: agy exited non-zero (rc=%s) — native envelope and usage NOT parsed]\n' \
+      "$AGENT_EXIT" >> "$LOG"
+    return 0
+  fi
+  if ! node "$SELF_DIR/dispatch-status.js" --log "$AGY_ENVELOPE" --agy-envelope \
+      > "$AGY_PARSED" 2>/dev/null; then
+    cat "$AGY_STDERR" >> "$LOG"
+    printf '\n[dispatch-hetero: agy native JSON envelope invalid — response and usage NOT parsed]\n' \
+      >> "$LOG"
+    AGENT_EXIT=65
+    AGY_USAGE_JSON="null"
+    return 0
+  fi
+  node - "$AGY_PARSED" "$LOG" <<'NODE'
+const fs = require('fs');
+const parsed = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+fs.writeFileSync(process.argv[3], parsed.response);
+NODE
+  AGY_USAGE_JSON="$(node -e '
+    const fs = require("fs");
+    process.stdout.write(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).usage));
+  ' "$AGY_PARSED")"
 fi
 }
 
@@ -3121,123 +3265,15 @@ run_strict_boundary_postcheck() {
         STRICT_POSTCHECK_ERROR="boundary_rejected: ambient STRICT_NOOP_RECEIPT_PATH is not authority; seal zero_diff_receipt into the dispatch unit"
         return 1
       fi
-      local __noop_verify
-      # shellcheck disable=SC2016
+      local __noop_verify __noop_validator
+      __noop_validator="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/engine/sealed-zero-diff-validator.js"
       __noop_verify="$(
-        WORKTREE_CWD="$WT" \
-        node - "$CONTRACT_FILE" "$BASE_SHA" <<'NODE' 2>/dev/null || true
-'use strict';
-const fs = require('fs');
-const crypto = require('crypto');
-const path = require('path');
-const { execFileSync } = require('child_process');
-const [contractPath, baseSha] = process.argv.slice(2);
-const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
-const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
-const fail = (code) => { process.stdout.write(code); process.exit(2); };
-try {
-  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
-  if (!receipt || typeof receipt !== 'object') fail('missing_sealed_receipt');
-  const expectedKeys = [
-    'schema_version',
-    'artifact_type',
-    'base_sha',
-    'acceptance_digest',
-    'campaign_contract_digest',
-    'strict_dispatch_digest',
-    'campaign_id',
-    'mission_lineage_id',
-    'mission_policy_digest',
-    'mission_graph_digest',
-    'graph_node_id',
-    'mission_noop_receipt_digest',
-    'source_work_order_id',
-    'source_work_order_digest',
-    'path_byte_digests',
-    'candidate_zero_change',
-    'digest',
-  ].sort();
-  if (receipt.schema_version !== 1) fail('bad_schema');
-  if (receipt.artifact_type !== 'campaign_zero_diff_receipt'
-      && receipt.artifact_type !== 'controller_zero_diff_receipt') {
-    fail('bad_artifact');
-  }
-  if (receipt.candidate_zero_change !== true) fail('not_zero_change');
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
-      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
-      || typeof receipt.source_work_order_id !== 'string'
-      || receipt.source_work_order_id.length === 0) {
-    fail('bad_digest');
-  }
-  const body = { ...receipt };
-  delete body.digest;
-  if (sha256Json(body) !== receipt.digest) fail('forged');
-  if (!/^[0-9a-f]{40}$/.test(receipt.base_sha || '')) fail('stale_base');
-  if (baseSha && receipt.base_sha !== baseSha) fail('stale_base');
-  // Bind campaign projection identity when present on the sealed unit.
-  const proj = contract.campaign_projection || {};
-  if (proj.campaign_id && receipt.campaign_id !== proj.campaign_id) {
-    fail('foreign_campaign');
-  }
-  if (proj.campaign_contract_sha256
-      && receipt.campaign_contract_digest !== proj.campaign_contract_sha256) {
-    fail('foreign_contract');
-  }
-  if (proj.strict_dispatch_sha256
-      && receipt.strict_dispatch_digest !== proj.strict_dispatch_sha256) {
-    fail('foreign_strict');
-  }
-  if (proj.mission_lineage_id
-      && receipt.mission_lineage_id !== proj.mission_lineage_id) {
-    fail('foreign_lineage');
-  }
-  if (proj.mission_policy_digest
-      && receipt.mission_policy_digest !== proj.mission_policy_digest) {
-    fail('foreign_policy');
-  }
-  if (proj.mission_graph_digest
-      && receipt.mission_graph_digest !== proj.mission_graph_digest) {
-    fail('foreign_graph');
-  }
-  if (proj.graph_node_id && receipt.graph_node_id !== proj.graph_node_id) {
-    fail('foreign_node');
-  }
-  // Recompute live path byte digests from the worktree and compare.
-  const digests = receipt.path_byte_digests;
-  if (!digests || typeof digests !== 'object') fail('missing_path_digests');
-  const cwd = process.env.WORKTREE_CWD || process.cwd();
-  const required = Array.isArray(contract.output.required_change_paths)
-    ? contract.output.required_change_paths : [];
-  const outputs = Array.isArray(contract.output.paths) ? contract.output.paths : [];
-  const relevant = [...new Set([...required, ...outputs])].sort();
-  const receiptKeys = Object.keys(digests).sort();
-  if (JSON.stringify(receiptKeys) !== JSON.stringify(relevant)) fail('path_set_mismatch');
-  for (const rel of relevant) {
-    const abs = path.join(cwd, rel);
-    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) fail('path_missing');
-    const live = sha256(fs.readFileSync(abs));
-    if (live !== digests[rel]) fail('byte_digest_mismatch');
-  }
-  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')) {
-    fail('acceptance_missing');
-  }
-  if (Array.isArray(contract.acceptance)) {
-    const accBody = contract.acceptance.map((a) => ({ argv: a.argv, exit: a.exit }));
-    const recomputed = sha256Json(accBody);
-    if (recomputed !== receipt.acceptance_digest) fail('acceptance_mismatch');
-  }
-  process.stdout.write('ok');
-  process.exit(0);
-} catch (e) {
-  process.stdout.write('unreadable');
-  process.exit(2);
-}
-NODE
-)"
+        node "$__noop_validator" validate \
+          --contract "$CONTRACT_FILE" \
+          --base "$BASE_SHA" \
+          --worktree "$WT" \
+          --print-ok 2>/dev/null || true
+      )"
       if [ "$__noop_verify" != "ok" ]; then
         STRICT_POSTCHECK_STATUS="boundary_rejected"
         STRICT_POSTCHECK_ERROR="boundary_rejected: no-op receipt failed verification (${__noop_verify:-missing})"
@@ -3421,122 +3457,14 @@ classify_outcome() {
         OUTCOME_EXIT=1
         __eq_noop_status="rejected"
       elif [ "$STRICT_CONTRACT" -eq 1 ] && [ -n "${CONTRACT_FILE:-}" ] && [ -r "${CONTRACT_FILE:-}" ]; then
-        local __eq_noop_verify
+        local __eq_noop_verify __eq_noop_validator
+        __eq_noop_validator="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/engine/sealed-zero-diff-validator.js"
         __eq_noop_verify="$(
-          WORKTREE_CWD="$WT" \
-          node - "$CONTRACT_FILE" "$BASE_SHA" <<'NODE' 2>/dev/null || true
-'use strict';
-const fs = require('fs');
-const crypto = require('crypto');
-const path = require('path');
-const [contractPath, baseSha] = process.argv.slice(2);
-const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
-const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
-const fail = (code) => { process.stdout.write(code); process.exit(2); };
-try {
-  const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
-  const receipt = contract && contract.output && contract.output.zero_diff_receipt;
-  if (!receipt || typeof receipt !== 'object') fail('missing_sealed_receipt');
-  const expectedKeys = [
-    'schema_version',
-    'artifact_type',
-    'base_sha',
-    'acceptance_digest',
-    'campaign_contract_digest',
-    'strict_dispatch_digest',
-    'campaign_id',
-    'mission_lineage_id',
-    'mission_policy_digest',
-    'mission_graph_digest',
-    'graph_node_id',
-    'mission_noop_receipt_digest',
-    'source_work_order_id',
-    'source_work_order_digest',
-    'path_byte_digests',
-    'candidate_zero_change',
-    'digest',
-  ].sort();
-  if (receipt.schema_version !== 1) fail('bad_schema');
-  if (receipt.artifact_type !== 'campaign_zero_diff_receipt'
-      && receipt.artifact_type !== 'controller_zero_diff_receipt') {
-    fail('bad_artifact');
-  }
-  if (receipt.candidate_zero_change !== true) fail('not_zero_change');
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)
-      || !/^[0-9a-f]{64}$/.test(receipt.digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_policy_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.mission_noop_receipt_digest || '')
-      || !/^[0-9a-f]{64}$/.test(receipt.source_work_order_digest || '')
-      || typeof receipt.source_work_order_id !== 'string'
-      || receipt.source_work_order_id.length === 0) {
-    fail('bad_digest');
-  }
-  const body = { ...receipt };
-  delete body.digest;
-  if (sha256Json(body) !== receipt.digest) fail('forged');
-  if (!/^[0-9a-f]{40}$/.test(receipt.base_sha || '')) fail('stale_base');
-  if (baseSha && receipt.base_sha !== baseSha) fail('stale_base');
-  const projection = contract.campaign_projection || {};
-  if (projection.campaign_id && receipt.campaign_id !== projection.campaign_id) {
-    fail('foreign_campaign');
-  }
-  if (projection.campaign_contract_sha256
-      && receipt.campaign_contract_digest !== projection.campaign_contract_sha256) {
-    fail('foreign_contract');
-  }
-  if (projection.strict_dispatch_sha256
-      && receipt.strict_dispatch_digest !== projection.strict_dispatch_sha256) {
-    fail('foreign_strict');
-  }
-  if (projection.mission_lineage_id
-      && receipt.mission_lineage_id !== projection.mission_lineage_id) {
-    fail('foreign_lineage');
-  }
-  if (projection.mission_policy_digest
-      && receipt.mission_policy_digest !== projection.mission_policy_digest) {
-    fail('foreign_policy');
-  }
-  if (projection.mission_graph_digest
-      && receipt.mission_graph_digest !== projection.mission_graph_digest) {
-    fail('foreign_graph');
-  }
-  if (projection.graph_node_id && receipt.graph_node_id !== projection.graph_node_id) {
-    fail('foreign_node');
-  }
-  if (!/^[0-9a-f]{64}$/.test(receipt.acceptance_digest || '')) {
-    fail('acceptance_missing');
-  }
-  const digests = receipt.path_byte_digests;
-  if (!digests || typeof digests !== 'object') fail('missing_path_digests');
-  const cwd = process.env.WORKTREE_CWD || process.cwd();
-  const required = Array.isArray(contract.output && contract.output.required_change_paths)
-    ? contract.output.required_change_paths : [];
-  const outputs = Array.isArray(contract.output && contract.output.paths)
-    ? contract.output.paths : [];
-  const relevant = [...new Set([...required, ...outputs])].sort();
-  const receiptKeys = Object.keys(digests).sort();
-  if (JSON.stringify(receiptKeys) !== JSON.stringify(relevant)) fail('path_set_mismatch');
-  for (const rel of relevant) {
-    const abs = path.join(cwd, rel);
-    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) fail('path_missing');
-    const live = sha256(fs.readFileSync(abs));
-    if (live !== digests[rel]) fail('byte_digest_mismatch');
-  }
-  if (Array.isArray(contract.acceptance)) {
-    const acceptance = contract.acceptance.map((entry) => ({
-      argv: entry.argv,
-      exit: entry.exit,
-    }));
-    if (sha256Json(acceptance) !== receipt.acceptance_digest) {
-      fail('acceptance_mismatch');
-    }
-  }
-  process.stdout.write('ok');
-  process.exit(0);
-} catch (error) {
-  fail(error && error.message ? String(error.message).slice(0, 80) : 'verify_threw');
-}
-NODE
+          node "$__eq_noop_validator" validate \
+            --contract "$CONTRACT_FILE" \
+            --base "$BASE_SHA" \
+            --worktree "$WT" \
+            --print-ok 2>/dev/null || true
         )" || __eq_noop_verify="verify_failed"
         if [ "$__eq_noop_verify" = "ok" ]; then
           __eq_noop_status="sealed_zero_diff"
@@ -3678,6 +3606,9 @@ detached_main() {
   rm -f "$child_prompt" 2>/dev/null || true
   [ -n "$packed_prompt_for_child" ] && rm -f "$packed_prompt_for_child" 2>/dev/null || true
   [ -n "$campaign_prompt_for_child" ] && rm -f "$campaign_prompt_for_child" 2>/dev/null || true
+  [ -n "${AGY_ENVELOPE:-}" ] && rm -f "$AGY_ENVELOPE" 2>/dev/null || true
+  [ -n "${AGY_STDERR:-}" ] && rm -f "$AGY_STDERR" 2>/dev/null || true
+  [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED" 2>/dev/null || true
   exit "$OUTCOME_EXIT"
 }
 
@@ -3690,11 +3621,12 @@ dispatch_detached_run() {
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE \
+      AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
-      CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_PROJECTION_BOUND \
+      CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \
       CLASSIFIED_ERROR \
@@ -3708,7 +3640,7 @@ dispatch_detached_run() {
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
-    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container run_worker run_agent compute_artifacts passive_capture \
+    declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
       _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_acceptance_checks \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
@@ -3780,7 +3712,7 @@ write_manifest "$$"
 if [ "$STRICT_CONTRACT" -eq 1 ]; then
   preflight_err="$(node -e '
 const fs = require("fs");
-const cp = require("child_process");
+const path = require("path");
 let contract;
 try {
   contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -3789,12 +3721,31 @@ try {
   process.exit(0);   // schema problems are the checker s job, not this pre-flight s
 }
 const acceptance = Array.isArray(contract.acceptance) ? contract.acceptance : [];
+const cwd = process.argv[2] || process.cwd();
+function executableStatus(command) {
+  const candidates = command.includes(path.sep)
+    ? [path.isAbsolute(command) ? command : path.resolve(cwd, command)]
+    : (process.env.PATH || "").split(path.delimiter).filter(Boolean)
+      .map((dir) => path.join(dir, command));
+  let sawPermissionError = false;
+  for (const candidate of candidates) {
+    try {
+      const stat = fs.statSync(candidate);
+      if (!stat.isFile()) continue;
+      if ((stat.mode & 0o111) !== 0) return null;
+      sawPermissionError = true;
+    } catch (err) {
+      if (err && err.code === "EACCES") sawPermissionError = true;
+    }
+  }
+  return sawPermissionError ? "EACCES" : "ENOENT";
+}
 for (let i = 0; i < acceptance.length; i++) {
   const argv = Array.isArray(acceptance[i] && acceptance[i].argv) ? acceptance[i].argv : [];
   if (!argv.length) continue;
-  const r = cp.spawnSync(argv[0], argv.slice(1), { cwd: process.argv[2], stdio: "ignore" });
-  if (r.error && (r.error.code === "ENOENT" || r.error.code === "EACCES")) {
-    process.stdout.write("acceptance command #" + (i + 1) + " is not executable (" + r.error.code + "): " + argv[0]);
+  const errorCode = executableStatus(argv[0]);
+  if (errorCode) {
+    process.stdout.write("acceptance command #" + (i + 1) + " is not executable (" + errorCode + "): " + argv[0]);
     process.exit(0);
   }
 }

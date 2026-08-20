@@ -1,0 +1,1 @@
+{"task_id":"d1-s-tiny-feature","arm":"full","model":"sonnet","runner":"cc","runner_version":"2.1.234 (Claude Code)","rep":1,"duration_s":19,"frozen_base_sha":"8a8c6107904364fcc4c2d5bd7dee0ab17fbb1844","markers":{"f1_s_no_tracking":true,"f6_gate_before_commit":false},"skill_invoked_devflow":true,"failure_class":null,"failure_cause":null}

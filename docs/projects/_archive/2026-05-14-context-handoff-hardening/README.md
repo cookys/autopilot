@@ -1,7 +1,7 @@
 # Context-Handoff Hardening — v2.7.2
 
-**Status**: 🟡 In progress — L-1 setup
-**Plan doc**: [`docs/plans/2026-05-14-context-handoff-hardening.md`](../../plans/2026-05-14-context-handoff-hardening.md)
+**Status**: Complete — shipped in v2.7.2 and archived.
+**Plan doc**: [`docs/plans/2026-05-14-context-handoff-hardening.md`](../../../plans/2026-05-14-context-handoff-hardening.md)
 **Branch**: `feat/v2.7.2-context-handoff-hardening`
 **CHANGELOG**: pending v2.7.2 entry
 

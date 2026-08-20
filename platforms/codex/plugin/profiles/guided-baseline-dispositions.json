@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "artifact_type": "guided_baseline_dispositions",
+  "note": "Every P0 guided-baseline rule the current tree no longer carries verbatim must be accounted here as removed (true deletion, rationale required) or rewritten (old-hash → present successor hashes). Dead entries (rule still present / hash not in baseline) are validation failures. First entries recorded at v2.34.19 (dev-flow quality-gate contradiction fix) — NOT the card swap, which did not ship.",
+  "dispositions": [
+    {
+      "content_hash": "3d9c7a81859bdcbce40d21001106a4ddf2d4e06919811647172eecdaf91637d8",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "7d0337f1ae93ba31c2298b31b7ca4923123fb6f998841dbb6065264d400eee81",
+        "df8380fc73c2b0f56e976f6fc03f89e27ccc3a27f627079ea313365e1b948307"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:133 ('Before committing or merging, invoke autopilot:quality-pipeline'). The obligation to run a quality gate before committing/merging survives; the two successor lines (current :133-:134) are the size→gate INDEX, and the surviving imperative itself lives at the pre-existing step lines :241 (S step 2) and :275 (Fix step 4) for S/Fix and in finish-flow L-5.2 / H-9.2 for L/H. What changed is scope, not existence. v2.34.19, evidence docs/plans/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md."
+    },
+    {
+      "content_hash": "a5db6d6a76a989ce29934a93e902860ab1f3eed26a155eda28544d17911a6e41",
+      "disposition": "removed",
+      "rationale": "P0 skills/dev-flow/SKILL.md:134 ('This is non-negotiable. The quality pipeline runs: test → scan → completeness → review'). The universal claim is RETRACTED, not restated: measured FULL-arm compliance was 0/9 at depth 0 (2026-08-18) while the body's own numbered steps :241/:275 offered lint+test at the point of action, so the claim was false as written. Recording it as rewritten would launder a retraction. The pipeline stage list it carried is not restated in dev-flow — skills/quality-pipeline/SKILL.md owns it. Enforcement status now recorded as documented-only in references/four-layer-design.md § Skill-layer rules (S1)."
+    },
+    {
+      "content_hash": "b3712f01441c07cf1ad6b331998b03736468a377e6f20779a958069f0e2ceec6",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "c915e4d248c29e2774f14f315f9c404aeb22bc4fcd53a19acc973f21f9aa772e"
+      ],
+      "rationale": "P0 skills/ceo-agent/SKILL.md:477 (anti-pattern row 'Quality gate is non-negotiable'). The anti-pattern — do not skip the gate on confidence — survives at current :478; only its justification changes from the retracted 'non-negotiable' claim to the size-scoped truth (L/H run it at the merge boundary via finish-flow L-5.2 / H-9.2). v2.34.19."
+    },
+    {
+      "content_hash": "fd2203c30c4d0457ffd7bc0a62cbc69bd70658571cb198a062b4278d118a7d54",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "a58276ff20aca35afa0fa941d1bde567d6d3d5613709a56a093136cb68f8d18a"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:512 ('S and Fix: finish-flow is optional. You may either run the inline S-Lite below or'). Reflowed only — the rule that finish-flow is optional at S/Fix is unchanged at current :515. v2.34.19."
+    },
+    {
+      "content_hash": "63066dae4c54680f96b487e6dd7c4f58577ab8394a1d54ce12f22f4305436761",
+      "disposition": "rewritten",
+      "successor_hashes": [
+        "dc66dd5f6baecf0be537dd4c3599966fca8371ba220b9e3885476ef003baa2bb"
+      ],
+      "rationale": "P0 skills/dev-flow/SKILL.md:513 ('invoke autopilot:finish-flow for the same effect in TaskCreate form'). The alternative route survives at current :516; the false equivalence is corrected — finish-flow's Fix-size F.1 runs `quality-pipeline --size S`, a STRICTER gate than step 4's project-config gate, so 'the same effect' was untrue and was the second half of the same contradiction this release fixes (pre-merge review finding, v2.34.19)."
+    }
+  ]
+}

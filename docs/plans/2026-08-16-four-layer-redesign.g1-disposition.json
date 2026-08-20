@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "four-layer-redesign-2026-08-16",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "25d36b51c1404ec4baf7a44f6e34f4f97a1bcf07ab52f7789f589680bd3c1744",
+      "disposition": "accepted_blocker",
+      "rationale": "Author drafting contradiction confirmed; repaired: stale/unknown/missing/conflicting all resolve T2, T1 = fresh-but-partial only, fixtures for all four cases."
+    },
+    {
+      "fingerprint": "296cc80ca0794ac476771d4c07a99847ef7178cc637e735cb9884df0dc653df4",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: escalation folds into the existing required_review_families/qc_panel output whose existing qc dispatch path seats the reviewer — a same-phase acting caller, not inert fields."
+    },
+    {
+      "fingerprint": "2b8611091556ae81b012a4acd3a2f2f763940da58a2a5815035b12f385118115",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: KR5 is now a shipped gate (check-holdout-coverage.sh) with planted fail-before/pass-after red case and the quality-pipeline gate list as its same-phase caller."
+    },
+    {
+      "fingerprint": "a9d637010071e983aba1812d14aaa3f6583b4f89341b15c5c90eac6cbf9c2a40",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Canonical homes fixed: tier definitions/skeletons only in scaffold-tiers.md; single-round clause canonical in evidence-contract.md; design record links, never restates."
+    },
+    {
+      "fingerprint": "6bce87b7fa879a6a67afaa7096e2cff7d2cec497c12f044e1cb7eccbcc2246d8",
+      "disposition": "duplicate",
+      "rationale": "Same substance as GLM 2b861109."
+    },
+    {
+      "fingerprint": "f0855d68dd7da0b383e015139a62ee069ccb7a466f56e607426203f0e678e966",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Citation precision: boundary map now cites contained-branch-only deletion in reap-dispatch-branches.sh (verified shipped behavior)."
+    },
+    {
+      "fingerprint": "d89b1a8d938b24430aa55e9d4fb07b0a5dc0ed1cb83566de1f27a8240bd0ef4d",
+      "disposition": "duplicate",
+      "rationale": "Same substance as GLM 25d36b51; repaired there."
+    },
+    {
+      "fingerprint": "4785f56e6757ea24cc79c43b2b3a8b0c1eeab6f7db152ee0daba5833a3e0d3af",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: lint targets the assembled reviewer payload; --spec-file stays the trusted baseline; structural red case asserts no implementer-narrative input channel exists in dispatch-review.sh; real historical spec pinned as clean fixture."
+    },
+    {
+      "fingerprint": "d5c08ab09d6105678f14915b2fa4d24f8aa598e3a8d0bdc2a6a0b173d3044f24",
+      "disposition": "accepted_blocker",
+      "rationale": "Chosen landing per this finding: fold into required_review_families/qc_panel; new --prior-status input added for the no_verdict/ambiguous trigger; end-to-end fixture."
+    },
+    {
+      "fingerprint": "2f7e82c49bcf3bc40941e6fe9f3d1aa9f896b4678170c5192d8f905cdd6b51c4",
+      "disposition": "duplicate",
+      "rationale": "Same substance as GLM 2b861109; the mechanism option was chosen over the retag-documented-only option."
+    },
+    {
+      "fingerprint": "6408a55c0f0c3e719e0d3655a483eb6254a1ba46e7657e9cebc845e5a9c265aa",
+      "disposition": "accepted_nonblocking",
+      "rationale": "D3 now names the opt-in-multiplexer arming rail and defers force-push to the shipped branch-protection.js (no duplicate rule)."
+    },
+    {
+      "fingerprint": "2fe55ec0005e342fa827fde1b9531693e57ba6f7336ea66f39cd8fc5c9c2cc92",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Precision: dispatch-hetero PREPENDS the tier skeleton in its existing combined-prompt assembly step — prompt-envelope assembly, not a second prompt source."
+    },
+    {
+      "fingerprint": "fb72367386e85d6dbaacb39f776fd0012fbf4f7b00ef9c67e7b8221699522c65",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted with the R5 pair; adds frozen freshness cutoff, source precedence, and conflicting-record fixtures — folded into KR3/D4."
+    },
+    {
+      "fingerprint": "3eb09de8fa9992b01736a0df59734bd736ed93248edc15bac4397d10b5086809",
+      "disposition": "duplicate",
+      "rationale": "Same substance as the accepted R6 pair; family identity (roster family field), no-disjoint-family fail-closed behavior, and the no-same-family/no-rebuttal red case are folded in."
+    },
+    {
+      "fingerprint": "8dfb235ef7298a0015b929b7b752af6fc9f6f821e5feaa25993079ed9da33ad1",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: classify-diff-risk + probes wired through the new check-holdout-coverage.sh gate into the quality-pipeline deterministic gate list, with the planted high-risk red case."
+    },
+    {
+      "fingerprint": "0f5b5f3afd6d7dbb0ac2ba74cf89cd0a3280e3dcbb923e8e5c8f3cddecf71039",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: D1 step 0 records baseline-suite.json as the immutable comparison artifact; per-KR red cases enumerated incl. skipped-holdout (KR5) and seeded inventory drift (KR6)."
+    },
+    {
+      "fingerprint": "05e8d9eed46f370d33b957e6c9805cb870e376e490e5248d821e96666ca826c5",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Change-policy corrected to published-compatible (additive public opt-in hook surface); PATCH unchanged."
+    }
+  ]
+}

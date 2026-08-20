@@ -4,11 +4,37 @@
 
 # Note: 120-second hook-timeout branch untestable without timeout seam
 
+# The template tier is unreachable from inside this repo. The ladder walks $PWD
+# then $REPO_ROOT before the template, $REPO_ROOT is derived from the script's
+# own location, and since 5c53201f this repo dogfoods the reaper at 14 — so
+# every in-repo call resolves to that instead. A shipped plugin carries no
+# .claude/ (checked: the Codex payload has none), so what a consuming project
+# actually sees is a root holding only what the payload ships. Build that.
+plugin_shaped_root() {
+    local sandbox="$TEST_TMP/plugin-shaped"
+    if [ ! -d "$sandbox" ]; then
+        mkdir -p "$sandbox/scripts/lib" "$sandbox/project-config-template" "$sandbox/cwd"
+        cp "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" "$sandbox/scripts/"
+        cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$REPO_ROOT/scripts/lib/resolve-config.sh" \
+           "$sandbox/scripts/lib/"
+        cp "$REPO_ROOT/project-config-template/worktree-teardown-config.md" \
+           "$sandbox/project-config-template/"
+    fi
+    printf '%s' "$sandbox"
+}
+
+# Run the resolver as a consuming project would: no config anywhere on the ladder.
+resolve_unconfigured() {
+    local sandbox
+    sandbox="$(plugin_shaped_root)"
+    (cd "$sandbox/cwd" && bash "$sandbox/scripts/resolve-worktree-teardown.sh" "$@")
+}
+
 # Test 1: Default config output
 test_default_config() {
     local output
-    output=$(bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh")
-    
+    output=$(resolve_unconfigured)
+
     assert_contains "$output" '"teardown_hook": ""' "default hook should be empty"
     assert_contains "$output" '"stale_reaper_age_days": 0' "default age should be 0"
     assert_contains "$output" '"reaper_scope": "marker-only"' "default scope should be marker-only"
@@ -22,15 +48,15 @@ test_default_config() {
 # Test 2: Field query for age
 test_field_age() {
     local age
-    age=$(bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field stale_reaper_age_days)
-    assert_eq "0" "$age" "default age should be 0"
+    age=$(resolve_unconfigured --field stale_reaper_age_days)
+    assert_eq "$age" "0" "default age should be 0"
 }
 
 # Test 3: Field query for hook
 test_field_hook() {
     local hook
-    hook=$(bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh" --field teardown_hook)
-    assert_eq "" "$hook" "default hook should be empty"
+    hook=$(resolve_unconfigured --field teardown_hook)
+    assert_eq "$hook" "" "default hook should be empty"
 }
 
 # Test 4: Config override
@@ -72,11 +98,11 @@ test_override_field_query() {
 # Test 7: JSON parses with node
 test_json_node_parse() {
     local output
-    output=$(bash "$REPO_ROOT/scripts/resolve-worktree-teardown.sh")
-    
+    output=$(resolve_unconfigured)
+
     local parsed
     parsed=$(echo "$output" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).stale_reaper_age_days)' 2>/dev/null)
-    assert_eq "0" "$parsed" "node should parse JSON and extract age"
+    assert_eq "$parsed" "0" "node should parse JSON and extract age"
 }
 
 test_leaf_budget_bounds() {

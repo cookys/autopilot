@@ -57,6 +57,79 @@ const NEW_ONLY = args.includes('--new-only');
 const INCREMENTAL = NEW_ONLY || args.includes('--incremental');
 const STATE_PATH = (() => { const i = args.indexOf('--state'); return i >= 0 && args[i + 1] ? args[i + 1] : DEFAULT_STATE; })();
 const TOP = (() => { const i = args.indexOf('--top'); return i >= 0 ? parseInt(args[i + 1], 10) || 25 : 25; })();
+const LINT_PATH = (() => { const i = args.indexOf('--path'); return i >= 0 && args[i + 1] ? args[i + 1] : null; })();
+
+// D5 A11 — shared identifier lint for skill packs (standalone --path <dir>).
+// Patterns: email / IPv4 / /home/<user>/ / FQDN / common key-shapes + optional deny list.
+function runIdentifierLint(rootDir) {
+  const denyFile = path.join(os.homedir(), '.autopilot', 'distill', 'identifiers.deny');
+  const deny = [];
+  try {
+    const raw = fs.readFileSync(denyFile, 'utf8');
+    for (const line of raw.split(/\r?\n/)) {
+      const t = line.trim();
+      if (t && !t.startsWith('#')) deny.push(t.toLowerCase());
+    }
+  } catch (_e) { /* optional */ }
+  const patterns = [
+    { id: 'email', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
+    { id: 'ipv4', re: /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b/g },
+    { id: 'home_path', re: /\/home\/[A-Za-z0-9._-]+\//g },
+    { id: 'fqdn', re: /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|dev|ai|local|internal)\b/gi },
+    { id: 'key_shape', re: /\b(?:sk|pk|api)[-_]?[A-Za-z0-9]{16,}\b/g },
+  ];
+  const findings = [];
+  function walk(dir) {
+    let ents;
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === 'node_modules' || e.name === '.git') continue;
+        walk(full);
+      } else if (e.isFile() && /\.(md|txt|json|ya?ml)$/i.test(e.name)) {
+        let text;
+        try { text = fs.readFileSync(full, 'utf8'); } catch { continue; }
+        for (const p of patterns) {
+          p.re.lastIndex = 0;
+          let m;
+          while ((m = p.re.exec(text)) !== null) {
+            findings.push({ file: full, kind: p.id, match: m[0] });
+          }
+        }
+        const lower = text.toLowerCase();
+        for (const d of deny) {
+          if (d && lower.includes(d)) {
+            findings.push({ file: full, kind: 'deny_list', match: d });
+          }
+        }
+      }
+    }
+  }
+  walk(path.resolve(rootDir));
+  return findings;
+}
+
+if (LINT_PATH) {
+  if (!fs.existsSync(LINT_PATH) || !fs.statSync(LINT_PATH).isDirectory()) {
+    process.stderr.write(`distill-scan --path: not a directory: ${LINT_PATH}\n`);
+    process.exit(2);
+  }
+  const findings = runIdentifierLint(LINT_PATH);
+  if (AS_JSON) {
+    process.stdout.write(JSON.stringify({ path: LINT_PATH, findings }, null, 2) + '\n');
+  } else {
+    process.stdout.write(`# distill identifier lint — ${LINT_PATH}\n`);
+    if (!findings.length) {
+      process.stdout.write('clean: no identifier findings\n');
+    } else {
+      for (const f of findings) {
+        process.stdout.write(`  ${f.kind}: ${f.match}  (${f.file})\n`);
+      }
+    }
+  }
+  process.exit(findings.length ? 1 : 0);
+}
 
 // --- normalize a bash command to a stable "shape" (command + subcommand, args/paths/hashes dropped) ---
 const MULTIWORD = new Set(['git', 'npm', 'pnpm', 'yarn', 'cargo', 'go', 'docker', 'kubectl', 'gh',
@@ -81,6 +154,47 @@ function normCmd(cmd) {
   return shape.length > 40 ? shape.slice(0, 40) : shape;
 }
 
+// D5 A10 — split compound shell rituals for n-grams WITHOUT parsing heredoc bodies.
+// Strip heredoc contents first (<<[-]?['"]?WORD ... WORD), then split on && / ; / || / |
+// that are not inside single quotes.
+function stripHeredocs(cmd) {
+  // Remove heredoc bodies: <<[-]?['"]?WORD ... newline WORD
+  return String(cmd).replace(
+    /<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n\1\b/g,
+    ' ',
+  );
+}
+function splitCompoundSteps(cmd) {
+  if (!cmd || typeof cmd !== 'string') return [];
+  const stripped = stripHeredocs(cmd);
+  // Split on chain operators outside single quotes (best-effort, no full shell parse).
+  const parts = [];
+  let buf = '';
+  let inSingle = false;
+  for (let i = 0; i < stripped.length; i += 1) {
+    const ch = stripped[i];
+    const next = stripped[i + 1] || '';
+    if (ch === "'" && !inSingle) { inSingle = true; buf += ch; continue; }
+    if (ch === "'" && inSingle) { inSingle = false; buf += ch; continue; }
+    if (!inSingle) {
+      if ((ch === '&' && next === '&') || (ch === '|' && next === '|')) {
+        if (buf.trim()) parts.push(buf.trim());
+        buf = '';
+        i += 1;
+        continue;
+      }
+      if (ch === ';' || ch === '\n' || (ch === '|' && next !== '|')) {
+        if (buf.trim()) parts.push(buf.trim());
+        buf = '';
+        continue;
+      }
+    }
+    buf += ch;
+  }
+  if (buf.trim()) parts.push(buf.trim());
+  return parts;
+}
+
 // --- bilingual friction-phrase proxy (lexical, documented as a proxy not a detector) ---
 const FRICTION = [
   /\bagain\b/i, /\bi told you\b/i, /\bas i said\b/i, /\bstop\b.*\bdoing\b/i, /\bwhy did you\b/i,
@@ -100,12 +214,23 @@ function userText(content) {
   return '';
 }
 // reject harness-injected / system text masquerading as a user record — keep only genuinely typed prompts
+// D5 A10: also exclude teammate forwards, dispatch prompt templates, and session-continuation headers.
 const INJECTED = [
   /^\s*</,                              // <task-notification>, <command-name>, <local-command-…>
+  /<teammate-message[\s>]/i,
+  /<\/teammate-message>/i,
   /^\s*Base directory for this skill:/, /^\s*Caveat:/, /^\s*"""/, /^\s*⎿/,
   /PostToolUse:|hook error|Plugin directory does not exist/,
   /tool-use-id|output-file|<task-id>/,
   /^\s*\[Request interrupted/, /system-reminder/,
+  /OUTPUT ONLY RAW JSON/i,
+  /Review this change for security/i,
+  /You are a code reviewer/i,
+  /DISPATCHER-AUTHORED/i,
+  /session[- ]continuation/i,
+  /Handoff from previous session/i,
+  /This session is being continued from a previous/i,
+  /compaction summary/i,
 ];
 function isGenuineUserText(t) {
   if (!t || t.length < 4) return false;
@@ -155,8 +280,15 @@ function scanFile(fp) {
         if (!c || c.type !== 'tool_use') continue;
         inc(tool, c.name);
         if (c.name === 'Bash' && c.input) {
-          const shape = normCmd(c.input.command);
-          if (shape) { inc(cmd, shape); seq.push(shape); }
+          // D5: emit one shape per compound step (&& / ; / |) so multi-step
+          // rituals enter n-grams; heredoc bodies are stripped first.
+          const steps = splitCompoundSteps(c.input.command);
+          const shapes = steps.length ? steps.map(normCmd).filter(Boolean)
+            : [normCmd(c.input.command)].filter(Boolean);
+          for (const shape of shapes) {
+            inc(cmd, shape);
+            seq.push(shape);
+          }
         }
       }
     }

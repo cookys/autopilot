@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-01-backlog-convergence-plan-set.md",
+      "rubric_path": "plans/2026-08-01-backlog-convergence-plan-set.rubric.md",
+      "plan_sha256": "003712f29cc7b4bb625f0ece00b535f1ae1edfb562a3e74d4b2cd7b7ee47f77c",
+      "rubric_sha256": "5d53c28023813174ede4cc72e9a28ad3e77accf8adf64cc264e5a0bfc42a199e"
+    }
+  ]
+}

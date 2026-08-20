@@ -1,6 +1,6 @@
 # `verify_strength` as a review-density axis — ordered precursors
 
-**Status**: precursor (1) shipped 2026-07-09 (v2.32.11); (2) and (3) BACKLOG'd.
+**Status**: precursor (1) shipped 2026-07-09 (v2.32.11); (2) and (3) scheduled as D7 in [`2026-08-03-next-touch-debt-retirement.md`](2026-08-03-next-touch-debt-retirement.md).
 **Source**: `docs/BACKLOG.md` § "`verify_strength` as the third density input" (Effort L) + `docs/plans/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
 **Evidence anchor**: the escape cliff where `t2 × medium` verification produced **100% escapes** (pipeline-bench archive report) — verification QUALITY is currently invisible to `resolve-review-loop.sh`'s density/risk routing, so a weak suite buys the same review depth as a strong one.
 
@@ -22,14 +22,14 @@ Shipping the density axis before those exist would route on a number nobody can 
 **Mechanism reuse**: `git worktree add --detach` isolation (shared with the `check-test-integrity.sh` L1 collector), NOT the in-place `git stash`/`checkout` of `verify-preexisting.sh` — so it never mutates the live tree and base+head coexist.
 **Effort**: S (done).
 
-## Segment 2 — real test-suite "verification strength" scorer 🔜 (BACKLOG, next)
+## Segment 2 — real test-suite "verification strength" scorer 📋 (planned D7)
 
 **What**: an instrument that assigns a strength score to a REAL project's test suite for a given change — not the synthetic weak/medium/strong fixtures of the pipeline bench. Candidate signals (to be designed, not prescribed here): red-green pass rate over the changed surface (Segment 1 applied per test), assertion density / mutation-survival on the diff, coverage delta on changed lines, presence-of-oracle. The output must be a small ordinal (e.g. `weak | medium | strong`) with a documented, deterministic derivation.
 **Why it's separate**: Segment 1 answers "does THIS test exercise THIS change" (binary, per-test). Segment 2 answers "how strong is the suite guarding this change overall" (graded, per-change) — a strictly harder instrument that must run against arbitrary real repos and real runners, and must not depend on synthetic fixtures. Building it needs its own calibration (what score correlates with the observed escape cliff?).
 **Depends on**: Segment 1 (a per-test red-green signal is one input); a calibration corpus tying scores to real escape outcomes.
 **Effort**: L.
 
-## Segment 3 — `resolve-review-loop.sh` consumes `verify_strength` as the third density axis 🔜 (BACKLOG, after 2)
+## Segment 3 — `resolve-review-loop.sh` consumes `verify_strength` as the third density axis 📋 (planned D7, after 2)
 
 **What**: `resolve-review-loop.sh` reads a `verify_strength` signal (from Segment 2, or an explicit `--verify-strength` / config key) and folds it into the same risk/density machinery that already consumes diff-lines / source-trust / protected-path — a weak suite RAISES required review depth (more families, higher effort, `l1_required`), a strong suite may LOWER it. Must be **additive** to the current schema (byte-identical prefix, new keys appended — same discipline as the `--domain` / `min_panel_size` additions) and **fail-safe** (unknown/absent strength ⇒ treat as weakest ⇒ most review, never least).
 **Why last**: it's the consumer; routing on a score is meaningless until Segment 2 can produce one, and dangerous unless fail-closed.

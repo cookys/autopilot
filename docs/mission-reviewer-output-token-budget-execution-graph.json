@@ -1,0 +1,117 @@
+{
+  "artifact_type": "mission_execution_graph",
+  "calculated_batches": 1,
+  "calculated_depth": 1,
+  "graph_digest": "e9f1e70ecd84bf18a6efe8b42cfd605af552172686938772a379e5e1e6d9e9d0",
+  "nodes": [
+    {
+      "acceptance_ids": [
+        "exact-supported-mappings",
+        "honest-doc-scope",
+        "omission-compatibility",
+        "review-authority-preserved",
+        "strict-canonical-input",
+        "truncation-fail-closed",
+        "unsupported-pre-spend-rejection",
+        "verified-lifecycle-closure"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          "CHANGELOG.md",
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-02-reviewer-output-token-budget.md",
+          "docs/plans/2026-08-02-reviewer-output-token-budget.rubric.md",
+          "docs/projects/2026-08-02-reviewer-output-token-budget",
+          "docs/projects/INDEX.md",
+          "hooks/tests",
+          "references/hetero-dispatch.md",
+          "scripts/dispatch-anthropic-review.js",
+          "scripts/dispatch-review.sh"
+        ],
+        "baseline_churn": 650,
+        "max_changed_files": 8,
+        "max_extra_churn": 300,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "output_paths": [
+          "CHANGELOG.md",
+          "docs/BACKLOG.md",
+          "docs/projects/2026-08-02-reviewer-output-token-budget/README.md",
+          "docs/projects/2026-08-02-reviewer-output-token-budget/dev-info.md",
+          "docs/projects/INDEX.md",
+          "hooks/tests/dispatch-review.test.sh",
+          "references/hetero-dispatch.md",
+          "scripts/dispatch-review.sh"
+        ],
+        "profile": "standard",
+        "required_change_paths": [
+          "CHANGELOG.md",
+          "docs/BACKLOG.md",
+          "docs/projects/2026-08-02-reviewer-output-token-budget/README.md",
+          "docs/projects/2026-08-02-reviewer-output-token-budget/dev-info.md",
+          "docs/projects/INDEX.md",
+          "hooks/tests/dispatch-review.test.sh",
+          "references/hetero-dispatch.md",
+          "scripts/dispatch-review.sh"
+        ],
+        "required_paths": [
+          "CHANGELOG.md",
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-02-reviewer-output-token-budget.md",
+          "docs/plans/2026-08-02-reviewer-output-token-budget.rubric.md",
+          "docs/projects/2026-08-02-reviewer-output-token-budget/README.md",
+          "docs/projects/2026-08-02-reviewer-output-token-budget/dev-info.md",
+          "docs/projects/INDEX.md",
+          "hooks/tests/dispatch-detach.test.sh",
+          "hooks/tests/dispatch-review.test.sh",
+          "hooks/tests/lib.sh",
+          "hooks/tests/run.sh",
+          "references/hetero-dispatch.md",
+          "scripts/dispatch-anthropic-review.js",
+          "scripts/dispatch-review.sh"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-08-02-reviewer-output-token-budget.md",
+          "section": "Deliverable contract"
+        }
+      },
+      "dependencies": [],
+      "gate_attempt_budget": 3,
+      "id": "reviewer-output-token-budget",
+      "reservation": {
+        "campaigns": 1,
+        "canonical_changed_files": 8,
+        "engine_attempts": 1,
+        "external_wait_seconds": 1800,
+        "output_bytes": 1000000,
+        "tool_calls": 300,
+        "wall_seconds": 7200
+      },
+      "source_plan_ids": [
+        "plan-d0b6a5e4802d7f0933b196a5500522863b6b5f93e9754bec0fcf74eda1603301"
+      ],
+      "source_rubric_ids": [
+        "R16036901460548751966598141019585788156823504879063407100294309806142703539575",
+        "R33046184887003126965579546473744150282679393898974594891804111779464270790403",
+        "R40063613788123454032528373250481595031134136865474579793119624558436303602347",
+        "R60543005447984590138192351147254214699492627642286724604005112318783385606177",
+        "R6759421711529799962792980367804715546993523202295552364263128228266162423007",
+        "R70800073854734146145660205181101798014683254424348458301724254645668646876824",
+        "R84021950770389553692679447024699679420068336815799594428780332268287239970826",
+        "R95920017034368581068196513650445848312825926446900331289918679341438615250591"
+      ],
+      "verification_commands": [
+        "bash -n scripts/dispatch-review.sh",
+        "bash hooks/tests/dispatch-review.test.sh",
+        "bash hooks/tests/dispatch-detach.test.sh",
+        "AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh",
+        "bash scripts/validate.sh",
+        "node scripts/sync-version.js --check",
+        "node scripts/check-hook-inventory.js --check",
+        "bash scripts/sync-all.sh --check"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

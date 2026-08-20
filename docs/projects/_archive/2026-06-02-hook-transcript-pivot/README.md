@@ -1,7 +1,7 @@
 # Hook Transcript Pivot
 
 > **Status**: ✅ Completed (v2.8.0) · **Size**: L · **Branch**: `feat/hook-transcript-pivot`
-> **Started**: 2026-06-02 · **Plan**: [plan](../../plans/2026-06-02-hook-transcript-pivot.md)
+> **Started**: 2026-06-02 · **Plan**: [plan](../../../plans/2026-06-02-hook-transcript-pivot.md)
 
 ## OKR
 **Objective**: Recover tool-event data for PostToolUse hooks without the broken stdin pipe, by reading the session transcript JSONL — re-enabling the v2.7.4-disabled log-only hooks.

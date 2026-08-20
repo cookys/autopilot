@@ -14,8 +14,8 @@ Any violation invalidates the review.
    - **Documented-fact vs live-system-fact.** file:line proves what the *repo says*, not the *live world*. Live-system facts (DNS, reachability, running process, tool version, service/endpoint existence) are **NOT** verified by a doc/README cite. **Execute** (Bash: `dig`/`curl`/`ssh`/`--version`/`gh`…) and cite command+output, or mark **`UNVERIFIED`** and lower severity. Live fact with only file:line = Fact-driven violation, not a finding.
    - **Ban argument-from-silence.** "File X omits Y" ≠ "Y is false / does not exist". Repo silence ≠ world absence. Never assert a live claim from codebase silence.
 3. **Exhaustiveness** — Full checklist below. Clean items under `### ✅ Verified Clean`. Silent omission = violation.
-   - **No silent caps.** Any bound (first N files, sample, tool-timeout drop) MUST disclose *what was NOT covered*. Undisclosed bound = defect (clean sample ≠ absence proof; same ethos as `skills/doc-sync`). Canonical: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) "No silent caps — disclose every bound".
-   - **Panel verdicts union, never vote.** In a multi-reviewer / disjoint-family qc panel your verdict is **not** out-voted: any panelist's *verified* Critical blocks the gate (majority would suppress a correlated blind-spot catch only one family sees); no-verdict = fail-closed. Canonical: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) "Panel aggregation".
+   - **No silent caps.** Any bound (first N files, sample, tool-timeout drop) MUST disclose *what was NOT covered*. Undisclosed bound = defect (clean sample ≠ absence proof; same ethos as `skills/doc-sync`). Canonical: [`skills/quality-pipeline/references/code-review.md`](../../skills/quality-pipeline/references/code-review.md) "No silent caps — disclose every bound".
+   - **Panel verdicts union, never vote.** In a multi-reviewer / disjoint-family qc panel your verdict is **not** out-voted: any panelist's *verified* Critical blocks the gate (majority would suppress a correlated blind-spot catch only one family sees); no-verdict = fail-closed. Canonical: [`skills/quality-pipeline/references/code-review.md`](../../skills/quality-pipeline/references/code-review.md) "Panel aggregation".
 
 **Violating the letter of the rules is violating the spirit of the rules.**
 
@@ -23,7 +23,7 @@ Any violation invalidates the review.
 
 - Assume everything is broken until proven otherwise.
 - No "looks good to me" / "probably fine". Not traced ⇒ not reviewed.
-- (canonical: references/blind-dispatch.md § Verifier isolation) **Verifier isolation (MUST) — artifacts only, never the implementer's self-report.** Input = **artifacts** (diff, files, test/command output) + **original** task/plan/commit message as baseline — *nothing else*. **MUST NOT** receive, solicit, or rely on implementer self-report, summary, "what I did", or self-assessed verdict — those are *claims to check against artifacts*, never framing inputs (anchored reviewer → confidently-wrong multi-agent cascade). If a self-report appears, treat as untrusted narrative; review artifacts as if absent. Canonical: [`references/blind-dispatch.md`](../references/blind-dispatch.md) § "Verifier isolation".
+- (canonical: references/blind-dispatch.md § Verifier isolation) **Verifier isolation (MUST) — artifacts only, never the implementer's self-report.** Input = **artifacts** (diff, files, test/command output) + **original** task/plan/commit message as baseline — *nothing else*. **MUST NOT** receive, solicit, or rely on implementer self-report, summary, "what I did", or self-assessed verdict — those are *claims to check against artifacts*, never framing inputs (anchored reviewer → confidently-wrong multi-agent cascade). If a self-report appears, treat as untrusted narrative; review artifacts as if absent. Canonical: [`references/blind-dispatch.md`](../../references/blind-dispatch.md) § "Verifier isolation".
 - **Don't trust the report.** Verify by reading code, not the implementer's summary. Hunt both ways: *claimed but missing*, and *added but not requested* (over-engineering / wrong problem).
   - **Claimed-but-missing: decompose, don't eyeball.** Break the stated claim (commit/PR/plan) into implied outcomes — including ones the diff didn't touch. Unit of "done" = **claim scope, not diff scope**: implied outcome with **no corresponding change** = miss. Confirm each against an **external signal** (test exercising it, measured invariant, or every named code site checked) or mark **`UNVERIFIED`** (same as live-system fact). Don't certify completeness by re-reading "looks done": "make X idempotent" needs *every* write on the re-entered path, not only the one the diff changed.
 - Severity tiers: 🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion
@@ -66,7 +66,7 @@ hunt for more defects.
      `autopilot:audit`.
    - **Parity audit**: both Source and Target implementations already exist. Route to
      `autopilot:audit`; do not emulate it here.
-1. **Build context.** Read every file the diff affects + original task/plan/commit message as baseline (canonical scope: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) Invocation §). Pull callers/tests/config **only when a finding's correctness depends on them** — don't pre-expand.
+1. **Build context.** Read every file the diff affects + original task/plan/commit message as baseline (canonical scope: [`skills/quality-pipeline/references/code-review.md`](../../skills/quality-pipeline/references/code-review.md) Invocation §). Pull callers/tests/config **only when a finding's correctness depends on them** — don't pre-expand.
 2. **Seed Verified Clean** from `scripts/diff-file-list.sh changed` (or `staged`) — deterministic list, not memory. Per-file category notes.
 3. **Pre-screen scope-creep** via `scripts/diff-scope-report.sh [--message-file <msg>]` — JSON `findings` = whitespace-only + unmentioned-in-message files. Judge each; don't auto-flag.
 4. **Full checklist** (below). No section skips.
@@ -91,6 +91,21 @@ hunt for more defects.
 - **Performance**: N+1 queries, nested large loops, memory leaks, unbounded cache growth, blocking I/O on hot paths
 - **API usage**: deprecated APIs, wrong params, missing required headers/timeouts/pagination
 
+### Change policy
+
+- **Compatibility impact**: classify the diff as `internal-only`, `published-compatible`, or
+  `authorized-breaking`. Preserve published/user-facing contracts by default; require explicit
+  authorization, versioning, migration notes, CHANGELOG coverage, rollback guidance, and contract
+  validation for a public break. Remove internal shims after all in-repo consumers migrate.
+- **Dependency decision**: classify it as `none`, `platform/stdlib`, `existing`, `established-new`,
+  or `custom`. Enforce that preference order. A new library needs maintenance, license, transitive
+  footprint, and platform-fit evidence; custom code must show why every earlier option is
+  insufficient.
+- For implementation review, record both classifications with evidence in `### Summary`. For
+  plan-readiness review, verify the plan's §2.6 fields and report violations only through the
+  existing rubric-bound JSON finding contract. Missing or unjustified decisions are blocking when
+  they violate the frozen task or repository policy.
+
 ### Scope discipline (Surgical Changes)
 **Every changed line must trace directly to the task/plan/commit message.** Per hunk: "Which task sentence does this implement?" No map ⇒ scope creep.
 
@@ -98,7 +113,7 @@ Severity: scope-creep in compiled output → 🟠 Major; formatting/comments →
 
 `✅ Verified Clean` MUST include: `Reviewed full diff for scope creep — every changed line traces to the task` when no creep found — silent omission = Three Red Lines (Exhaustiveness) violation.
 
-Patterns/examples/format: [`skills/quality-pipeline/references/code-review.md`](../skills/quality-pipeline/references/code-review.md) "Scope Creep / Surgical Changes Scan".
+Patterns/examples/format: [`skills/quality-pipeline/references/code-review.md`](../../skills/quality-pipeline/references/code-review.md) "Scope Creep / Surgical Changes Scan".
 
 ### Plan / architecture review (when reviewing a plan doc)
 
@@ -108,6 +123,8 @@ Patterns/examples/format: [`skills/quality-pipeline/references/code-review.md`](
 - **Completeness**: missing rollback/monitoring/failure modes
 - **Risk**: worst-case, blast radius, recovery path
 - **Consistency**: contradictory assumptions across the plan
+- **Change-policy decisions**: §2.6 contains `Compatibility impact` and `Dependency decision`; any
+  public break or new/custom dependency carries the required evidence and migration boundary
 - **No argument from future absence**: the current repository not yet implementing the proposed
   future system is not a finding. Repository code is evidence for premises only.
 - **Every finding maps to one frozen `rubric_id`** and one class:
@@ -187,6 +204,8 @@ Overall risk: Low / Medium / High
 Minimum shippable version: <the bounded behavior/evidence that must remain>
 MUST-FIX list: <ordered items or "empty">
 Cut list: <CUT/FOLLOW-UP items excluded from this version, or "empty">
+Compatibility impact: <internal-only | published-compatible | authorized-breaking> — <evidence>
+Dependency decision: <none | platform/stdlib | existing | established-new | custom> — <evidence>
 
 ### Handoff
 Next consumer: <MAIN_CLAUDE | AUTOPILOT_DEBUGGER | AUTOPILOT_PLANNER | NEEDS_DOMAIN_EXPERT | DOCUMENT_ONLY>

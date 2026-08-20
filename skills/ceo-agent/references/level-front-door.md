@@ -42,6 +42,18 @@ qualified owner across the full run; `milestone-led` re-instantiates that owner 
 and acceptance boundaries without turning milestones into user result-approval gates. The skill
 must not claim authoritative Kernel telemetry unless an external host bridge actually records it.
 
+### Task-class front door (autonomous-brain P8)
+
+When `.claude/task-class-config.md` exists, classify the incoming goal against
+its class table BEFORE sizing or dispatch: `hard-problem` stays at depth-0 (never
+dispatched, never auto-picked); `mechanical-impl`/`standard-impl` route to the
+per-class candidate preference; `direction` enters the hetero brainstorm/survey
+pipeline. **Ambiguous classification → STOP AND ASK** (AskUserQuestion with the
+candidate classes) until the blueprint scope is clear — guessing costs 2-3
+re-alignment rounds (sol F11). Common patterns default from a survey of current
+practice, ledgered. Absent config = unchanged behavior (no classification duty).
+Canonical table + weights: `project-config-template/task-class-config.md`.
+
 ### Mid-run question discipline (presets active)
 
 With the front-door presets (involvement=just-results, resolved red lines), "想確認一下 /
@@ -192,6 +204,24 @@ REACTING too fast, not from seeing too little):
    § Directive reachability: pi-rpc = mid-run steer; a CC foreman = stage
    boundary; one-shot batch runners = only the NEXT round's dispatch. The
    read-only `watch-foreman.js` NEVER gains a directive-send surface.
+
+#### Stage-3 recovery (R6, feature-gated)
+
+The normal `/l4`/`/l5`/`/l6` posture remains report-only. A depth-0 controller
+may opt into the ledger recovery rail only with
+`AUTOPILOT_ADAPTIVE_INTERVENTION=1` (or an explicit `stage-coordinate --enable`)
+and an exact run/stage lease. The rail is ordered: send one lease-bound inquiry,
+wait the bounded acknowledgement deadline, re-observe PID/start-time/process
+state/heartbeat/resource holders, terminate only the same exact alive
+non-responsive process group (SIGKILL only after SIGTERM grace), then reconcile
+Git/result/side-effect truth before adopting or authorizing one generation-
+advanced same-lineage replacement.
+
+`unknown` is fail-closed: unreadable or mismatched identity, D-state, held
+resources, or stale quietness without an inquiry cannot signal, seize, or
+replace. An acknowledged inquiry prevents intervention. The watcher itself is
+still observation-only; the `coordination` receipt makes retries idempotent and
+fences late generations.
 
 HONEST BOUNDARY (SCOPE): dispatcher lineages only include runs emitted by
 `dispatch-hetero.sh`/`dispatch-review.sh`. Engine-native internal subprocesses
@@ -356,7 +386,7 @@ foreman dispatch in a guard it owns:
 ### -2. Mission routing admission (before every topology effect)
 
 At `/l3` through `/l6` entry, `session-mode.js set` first resolves the consuming repository's
-authoritative Owner Kernel config and runs `mission-routing-admission.js` against the configured
+authoritative project governance config and runs `mission-routing-admission.js` against the configured
 graph and content-bound source manifest. The admission uses the canonical Mission policy resolver
 and execution-graph checker. It binds canonical Git-common-dir repository identity, Mission policy
 digest, graph digest, source coverage digest, deliverable count, critical path, batches, and
@@ -708,6 +738,112 @@ if (value.zero_residue !== true) process.exit(1);
   `git worktree list` diff (worktree base ≠ HEAD — see memory
   `worktree-dispatch-gotchas`). Preserve its exact branch tip first, then
   `git worktree remove --force <path>` and `git worktree prune`. Never use a bare branch -D.
+
+### 6. Decision ledger + round-end report (autonomous-brain P3)
+
+Every autonomous depth-0 decision (proxy rulings, dispatches, auto-picks,
+re-freeze transitions) is appended to the campaign's decision ledger BEFORE the
+round ends, with a rationale — a decision the operator cannot read is a decision
+that did not happen (KR3; sol shape F12):
+
+```bash
+node scripts/decision-ledger.js append --ledger <campaign>/decision-ledger.jsonl \
+  --kind decision --json '{"decision_id":"d-N","round":R,"class":"tactical",
+  "rationale":"...","reversibility":"two-way"}'
+```
+
+At each round boundary render the report — the operator's no-polling window into
+the run (代決清單 with veto handles, auto-picks, ask-first queue, stall status,
+experience-critic findings):
+
+```bash
+node scripts/decision-ledger.js report --ledger <ledger> --round R \
+  [--stall <stall.json>] [--critic <critic.json>]
+```
+
+Vetoes are the operator's asynchronous authority: `decision-ledger.js veto --id
+<decision_id>` refuses every later round that declares that decision in
+`based_on_decisions` (enforced by `check-blueprint-conformance.js preflight`,
+never by convention). Undoing already-performed work becomes a front-queued
+repair unit. The ledger is plain append-only telemetry (ADR-0001): unlogged
+decisions are caught by the conformance audit's ledger-INDEPENDENT universe
+(dispatch manifests / run-ledger / git), never by trusting the ledger itself.
+
+### 7. Stateless round protocol (autonomous-brain P2)
+
+The depth-0 brain holds no load-bearing state in context — context is a cache,
+disk is the store (sol shapes F8/F9: compaction amnesia gets refilled by process
+reinvention; the fix is architectural, not mnemonic). Every round:
+
+```
+① rehydrate: node scripts/build-rehydration-bundle.js build --contract <c> \
+     --ledger <ledger> --manifest-dir /tmp/autopilot-dispatch-runs [--red-lines <f>]
+   (five frozen sections, 80KB cap, over-cap = BUILD ERROR — never truncated)
+② execute the round (dispatch under the conformance preflight, §-2/§3)
+③ persist: every decision → ledger (§6); progress → run-ledger; findings → BACKLOG
+④ round boundary: render the report (§6), then RESET context deliberately —
+   the next round boots from ① again
+```
+
+After any kill/compact/resume, the brain must pass the machine-graded state quiz
+BEFORE proceeding: emit `{current_unit_id, four_tuple_digest, owned_pids,
+last3_decision_ids}` and grade with `build-rehydration-bundle.js grade` — a
+mismatch means the resumed brain's picture of the run differs from disk truth,
+and the round refuses to start. Owned processes re-attach from the manifest
+table (§5_owned_processes), never from memory — a worker the ledger knows about
+is OURS even if the resumed context has never heard of it.
+
+### 8. Stall fuse (autonomous-brain P4)
+
+At each round boundary, classify the burst's delta and consult the fuse before
+starting the next round (sol F5/F10: verification consumed the run — but note
+the F2 boundary: a mega-batch HAS product delta and is the churn preflight's
+kill, not this fuse's):
+
+```bash
+git diff --name-only <burst-base>..HEAD > /tmp/burst-names.txt
+node scripts/check-stall-fuse.js classify --names /tmp/burst-names.txt \
+  # → append {burst_id, product_files, verification_files} to the campaign's bursts.jsonl
+node scripts/check-stall-fuse.js check --bursts <campaign>/bursts.jsonl \
+  --strike-identity-file <seat-identity.json> --strike-store <capability-store>
+node scripts/check-blueprint-conformance.js audit \
+  --contract <contract> --intent <intent> --repo <repo> \
+  --manifest-dir /tmp/autopilot-dispatch-runs --ledger <ledger> \
+  --strike-identity-file <seat-identity.json> --strike-store <capability-store>
+```
+
+The strike flags (brain-seat-exam-suite KR3b) make a trip / audit failure also
+append ONE identity-keyed strike row to the capability store — 3 strikes since
+the seat's last exam pass flip its standing to `requalification_required`
+(`engine-capability-state.js brain-status`). Both flags together or neither; a
+strike append that cannot complete fails the instrument closed (exit 2).
+
+Tripped ⇒ HALT: no further dispatch this campaign; render the round-end report
+with the stall section and stop for the operator. Also immediate-violation:
+re-verifying a finding with a full-suite rerun (`reverify.mode:"full-suite"`) —
+finding closure re-runs the finding's surface plus the frozen gate set, nothing
+more.
+
+### 9. Post-merge experience critic (autonomous-brain P6)
+
+AFTER merge-back (§4) completes — never before — launch the user-persona critic
+on the shipped deliverable (methodology: `references/experience-audit.md`; the
+script enforces the post-merge guard in-code via git ancestry, so no caller can
+turn it into a gate):
+
+```bash
+bash scripts/dispatch-experience-critic.sh \
+  --deliverable <merged-sha> --integration-ref develop --repo <repo> \
+  --instantiation <blueprint's frozen five-question answers> \
+  --evidence <rendered-consumption output> --out <critic.json> \
+  --runner <r> --model <m> [--endpoint <e>]   # decorrelated family, single round
+```
+
+Findings (≤7, stable IDs, BACKLOG-row-ready) feed the round-end report
+(`decision-ledger.js report --critic <critic.json>`); the brain appends accepted
+rows to docs/BACKLOG.md where `/next`'s queue prices them. `human_only` items go
+verbatim to the operator. A "blocking" marker from the critic is stripped and
+surfaced as an anomaly — correctness gates alone block.
 
 ### Quality-floor conventions (v2.31.11)
 

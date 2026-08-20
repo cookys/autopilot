@@ -1188,6 +1188,7 @@ const task = buildTaskStatus({
   },
   merge_preflight: null,
   merge_execution: null,
+  merge_provenance: null,
 }, {
   resolveRepoIdentity: () => repoIdentity,
   inspectLifecycleReceipt: ({ repo: target, rootRunId, receipt }) =>
@@ -1202,6 +1203,7 @@ const task = buildTaskStatus({
   resolveRef: () => null,
   isAncestor: () => null,
   treeForCommit: () => null,
+  inspectMergeProvenance: () => ({ ok: false, error: 'not_applicable' }),
 });
 if (task.campaigns_terminal !== true) {
   console.error(`lsm_campaign_diagnostic=${JSON.stringify(task.evidence.campaigns)}`);
@@ -1240,68 +1242,46 @@ const {
   projectCampaign,
   runCampaignCli,
 } = require(path.join(root, 'src', 'campaign', 'cli'));
+// The intake root comes from the shared fixture library, so this block and
+// next-touch-validation.test.sh journal it through the same shipped
+// run-ledger sequence instead of two open-coded copies drifting apart.
 const {
-  campaignIdFor,
-  canonicalDigest,
-  createCampaignState,
-} = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+  campaignLedgerContract,
+  openCampaignLedger,
+} = require(path.join(root, 'hooks', 'tests', 'lib', 'implementation-campaign-ledger-fixture'));
 
+const rotationEnv = {
+  RUN_LEDGER_MAX_BYTES: '700',
+  RUN_LEDGER_MAX_ROTATIONS: '8',
+};
 const rl = path.join(root, 'scripts', 'run-ledger.sh');
 const ledger = path.join(tmp, 'rotation-campaign.jsonl');
 const runLedger = (...args) => execFileSync('bash', [rl, ...args], {
   encoding: 'utf8',
-  env: {
-    ...process.env,
-    RUN_LEDGER_MAX_BYTES: '700',
-    RUN_LEDGER_MAX_ROTATIONS: '8',
-  },
+  env: { ...process.env, ...rotationEnv },
 }).trim();
 
 const repoIdentity = 'git-common-dir:/tmp/rotation-fixture';
-const contract = {
-  ticket: 'rot-057',
-  profile: 'poc',
-  max_repair_generations: 1,
-  max_wall_seconds: 600,
-  max_changed_files: 5,
-  baseline_churn: 10,
-  max_extra_churn: 40,
-};
-const contractDigest = canonicalDigest(contract);
-const campaignId = campaignIdFor(repoIdentity, contract.ticket, contractDigest);
-const initialState = createCampaignState({
-  contract,
-  contractDigest,
+const contract = campaignLedgerContract({
   repoIdentity,
-  startedAt: '2026-07-28T12:00:00.000Z',
+  ticket: 'rot-057',
+  baseSha: 'a'.repeat(40),
+  branch: 'impl/rot-057',
 });
+const opened = openCampaignLedger({
+  root,
+  repo: tmp,
+  ledger,
+  contract,
+  startedAt: '2026-07-28T12:00:00.000Z',
+  env: rotationEnv,
+});
+const campaignId = opened.campaignId;
+const initialState = opened.initialState;
+const intakePayload = opened.intakePayload;
 assert.strictEqual(initialState.campaign_id, campaignId);
-
-runLedger('init', '--ledger', ledger);
-const acquire = JSON.parse(runLedger(
-  'stage-acquire', '--ledger', ledger,
-  '--run-id', campaignId, '--stage', 'campaign',
-  '--pid', String(process.pid),
-  '--resources', `campaign:${campaignId}`,
-));
-const gen = acquire.generation;
-const nonce = acquire.nonce;
-const intakePayload = {
-  schema_version: 1,
-  artifact_type: 'implementation_campaign_intake',
-  campaign_id: campaignId,
-  contract_digest: initialState.contract_digest,
-  initial_state: initialState,
-  initial_state_digest: canonicalDigest(initialState),
-};
-runLedger(
-  'journal-add', '--ledger', ledger,
-  '--run-id', campaignId, '--stage', 'campaign',
-  '--generation', String(gen), '--nonce', nonce,
-  '--idempotency-key', `intake:${campaignId}`,
-  '--op', 'campaign_intake',
-  '--payload', JSON.stringify(intakePayload),
-);
+const gen = opened.generation;
+const nonce = opened.nonce;
 
 // Force rotation by padding other runs until the live segment rolls.
 for (let i = 0; i < 8; i += 1) {

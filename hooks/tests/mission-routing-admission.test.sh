@@ -7,6 +7,10 @@ TEST_NAME="mission-routing-admission"
 unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
   AUTOPILOT_PARENT_RUN_ID AUTOPILOT_RECONCILE_RECEIPT AUTOPILOT_WORKTREE_ROOT_RUN_ID \
   AUTOPILOT_DISPATCH_DEPTH 2>/dev/null || true
+SOURCE_ROOT="$REPO_ROOT"
+git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
+git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
+REPO_ROOT="$TEST_TMP/hermetic-repo"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 const assert = require('assert/strict');
@@ -1247,6 +1251,9 @@ const sessionEnv = {
   ...process.env,
   AUTOPILOT_SESSION_MODE_DIR: sessDir,
   CLAUDE_CODE_SESSION_ID: 'ordinary-noop-sess',
+  // Managed admission compares the sealed marker level against the live
+  // AUTOPILOT_LEVEL; a sealed l6 marker without it reads as effective=absent.
+  AUTOPILOT_LEVEL: 'l6',
 };
 const sess = spawnSync(process.execPath, [
   sessionCli, 'set', '--level', 'l6', '--repo-root', repo,
@@ -1297,6 +1304,7 @@ fs.writeFileSync(promptPath, 'this runner must never execute\n');
 const runnerSentinel = path.join(authorityDir, 'runner-called');
 const runnerStub = path.join(authorityDir, 'runner-stub.sh');
 fs.writeFileSync(runnerStub, `#!/usr/bin/env bash
+[ "\${1:-}" != "--version" ] || { printf '1.1.10\\n'; exit 0; }
 touch "${runnerSentinel}"
 exit 99
 `);
@@ -1666,15 +1674,17 @@ assert.strictEqual(
 );
 fs.writeFileSync(written.path, missingWoBytes);
 
-// Missing terminal journal → no evidence → first-run may proceed (no historical).
+// A canonical terminal+reconciled claim makes its applied journal mandatory.
+// Deleting that receipt must fail closed rather than replay as a first run.
 fs.unlinkSync(journalPath);
-const empty = loadDurableMissionEvidence(repo, {
-  enforceEvidence: true,
-  missionGraphDigest: graphDig,
-  graphNodeId: 'n1',
-});
-// Without terminal, no WO loaded via icc → no historical (first-run).
-assert.equal(empty.historicalOutputs, null);
+assert.throws(() => {
+  loadDurableMissionEvidence(repo, {
+    enforceEvidence: true,
+    missionGraphDigest: graphDig,
+    graphNodeId: 'n1',
+  });
+}, (e) => e && e.code === 'MISSION_EVIDENCE_MISSING'
+  && /applied terminal (journal|receipt)/i.test(String(e.message)));
 
 // Foreign graph digest on terminal when present again must fail closed.
 fs.writeFileSync(
@@ -1707,7 +1717,7 @@ console.log(JSON.stringify({
   ordinary_dispatch_worktree_not_created: true,
   ordinary_engine_shell_bridge: true,
   ambient_ready_missing_wo_fail_closed: true,
-  ordinary_missing_terminal_first_run: true,
+  ordinary_missing_terminal_fail_closed: true,
   ordinary_corrupt_registry_fail_closed: true,
   session_mode_ordinary_cli: true,
   dispatcher_called: false,

@@ -1,9 +1,9 @@
 # Owner Kernel P3.7 production activation
 
-> **Status**: P3.7a-c external-host contract milestone implemented; installed-host activation remains
-> pending under the original production/dogfood/KR gates; v2.32.59 verification in progress
+> **Status**: P3.7 installed-host U5/U6 activation implemented; release remains `HOLD` on
+> production KR8/KR10 evidence and the 14-day alias-retirement window. P4 is ready, not started.
 > **Parent plan**: [`2026-07-20-owner-kernel-evolution.md`](2026-07-20-owner-kernel-evolution.md)
-> **Project**: [`../projects/2026-07-20-owner-kernel-governance/README.md`](../projects/2026-07-20-owner-kernel-governance/README.md)
+> **Project**: [`../projects/_archive/2026-07-20-owner-kernel-governance/README.md`](../projects/_archive/2026-07-20-owner-kernel-governance/README.md)
 > **Release target**: v2.32.59
 
 ## Background

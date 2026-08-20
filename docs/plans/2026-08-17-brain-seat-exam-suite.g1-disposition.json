@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "brain-seat-exam-suite-2026-08-17",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "9d5335b4963992a9f87fa8d460b5433b6737c55d2787d9a9cbb5c460e3c08d91",
+      "disposition": "accepted_blocker",
+      "rationale": "Coverage traceability is a rubric R1 requirement the plan body cannot currently satisfy; the map becomes a plan appendix, not a deferred corpus deliverable."
+    },
+    {
+      "fingerprint": "b5ed14039dff5f5cd1dff9af2ce53c6206f2f1fc033ec90be94cb85d05b48067",
+      "disposition": "accepted_blocker",
+      "rationale": "Genuine internal contradiction: the stale-snapshot plant carries an F8 anchor while F8 is ruled architectural/not-claimed; re-anchor as F10-class receipt-vs-summary contradiction and fix the ambiguous KR4 citation (v2.34.13 scoped-reverify rule, not this plan の KR4)."
+    },
+    {
+      "fingerprint": "921b9f56f473a912b9513107cb0f22b1f493a3cb868d464cf9bd3db4121bf82f",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified real: the live evidence kernel requires expires_at and caps qualified owner TTL at 30 days — the Board no-expiry ruling needs kind-scoped standing semantics in src/engine/capability-evidence.js, which the file map omitted."
+    },
+    {
+      "fingerprint": "bd242c212d14dfdea447900fd872ee7656fef12f70ebaa04adad51b94ea0db39",
+      "disposition": "duplicate",
+      "rationale": "Same kernel-TTL/no-expiry implementability discovery as 921b9f56f4; merged into that repair."
+    },
+    {
+      "fingerprint": "34ef8b54e61500b2e2a35da65c6b110c422ca0467a6ce3c6fb90766c9a10825d",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified real: decision-ledger.js has no audit command — the invented third strike source is removed; ledger-omission strikes route through check-blueprint-conformance.js audit, and §7 lifts the ban for exactly the two real audit invocations."
+    },
+    {
+      "fingerprint": "2cff4d6fcd5a4ea7fcc50b10f3b62b71ba66303ba98f26e68ada9f9835b36402",
+      "disposition": "duplicate",
+      "rationale": "Same nonexistent-audit-invocation discovery as 34ef8b54e6; merged into that repair."
+    },
+    {
+      "fingerprint": "e638217ca864a1adee5fff7d37aabb23d9ce9d6b85c230908a64767073fc515f",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct two-path defense: requalification_required must mean absence-of-standing-qualification with override still admitting; as written the plan created a silent third path."
+    },
+    {
+      "fingerprint": "6ac5a7d3fb915c8f9365ae53c8a8eeb1b0fea5406bbd992403ad66fe0efa6cb5",
+      "disposition": "accepted_blocker",
+      "rationale": "Genuine contradiction between KR2 no-verdict wording and the consensus no-early-PASS rule; three distinct terminal outcomes each need their own fixture."
+    },
+    {
+      "fingerprint": "2078314d134affb5dc7f05fc9a36127489c9b5b5091b9b15b7523492ef2638de",
+      "disposition": "accepted_blocker",
+      "rationale": "Real contract gap: single-(seed,trace) grader cannot see the paired arm; cross-trial invariance moves to the administration layer with an administration seed deriving trial seeds and shared struct ids."
+    },
+    {
+      "fingerprint": "cd83024082ecbe5604172ad73e85c0a239dd18f5b84f68fde0f2e100c629930e",
+      "disposition": "accepted_blocker",
+      "rationale": "Concretizes the harness-only telemetry rule into an enforceable surface: closed action-request enum + harness-owned realized-action record + forged-fields red case."
+    },
+    {
+      "fingerprint": "c4ae01c94c0e14d5dbc40781ee42ac38d89b138647d19d65ec52751d6d966f4c",
+      "disposition": "accepted_blocker",
+      "rationale": "R3 requires counter AND red case per named strategy; self-report inflation and family recognition lacked their red fixtures."
+    },
+    {
+      "fingerprint": "d5fec093181dde39a8ab34748e0b0339d87cc403961c93b5bdfdde309dc077aa",
+      "disposition": "accepted_blocker",
+      "rationale": "Strike-to-identity join as specified (engine/runner string) is ambiguous; strikes must key to the validated evidence identity_hash with append-order and reset-binding semantics."
+    },
+    {
+      "fingerprint": "17443a104016b403131b1da2a6eee4e8671de28c88fc731228598272bc6c5673",
+      "disposition": "accepted_blocker",
+      "rationale": "K/B was declared but not contracted: B unit, exhaustion semantics vs K, and a generator-asserted placement matrix are required for the 12-round packing to be feasible and provable."
+    },
+    {
+      "fingerprint": "a04c1e158bc8fb5d441f84d53b34fc42726f84974fcad88f899ab8dafbee5774",
+      "disposition": "accepted_blocker",
+      "rationale": "File-map and acceptance-command executability gaps are real (capability-evidence.js, version mirrors, exact reference names, fixture-level schema commands, per-test exit checks)."
+    },
+    {
+      "fingerprint": "ad5c4f8873b132f7b1fdfee41e7b29905c2b2da54b5694e563127bc1077fb4d4",
+      "disposition": "accepted_blocker",
+      "rationale": "Cheap and correct hardening: the honesty clause becomes a required construct_scope field inside the atomic record, not adjacent prose."
+    }
+  ]
+}

@@ -57,10 +57,10 @@ explicitly promotes that role to R3+.
 
 The store is also not an authenticity boundary: a same-UID model process can edit
 user-local JSONL. Disk rows are therefore untrusted telemetry and stored passes are
-projected as provisional. Current plugin-native R3 admission is session-local: the
-trusted host must run the evaluator in-process and inject its non-serializable
-`roleCapabilityVerifier` closure into Owner Kernel. Persistent reuse needs an
-external signer or cross-UID witness and is not implied by a scorecard row.
+projected as provisional. R3-tier confidence is session-local: run the evaluator
+in-process and act on that live result; a stored row is a record of a past run, not
+a transferable credential. (The kernel grant machinery that once enforced this was
+retired 2026-08-16; the epistemic rule outlives it.)
 
 ## Role Qualification Matrix
 
@@ -139,6 +139,35 @@ Use these bars before a role becomes eligible for routing.
 - Scope and acceptance remain concrete enough for a separate implementer and independent verifier;
   no output may create effect or acceptance authority.
 
+### Owner — brain seat (standing exam)
+
+- Seating an engine as the autonomous depth-0 brain requires the SEPARATE
+  `engine-qualify.sh brain` standing exam (勤勞×公平×收斂 + containment case family):
+  two seed-derived trials × 12 stateless rounds, deterministic offline grading, one
+  atomic `owner-brain-seat-v1` record on the owner role with forced `brain-seat` scope.
+- The record has NO expiry: standing holds until 3 identity-keyed production strikes
+  (stall-fuse trip / conformance-audit fail) since the last pass flip it to
+  `requalification_required` (`engine-capability-state.js brain-status`); every re-sit
+  is a fresh administration.
+- Owner intent-control evidence alone never seats the brain: the governed paths refuse
+  a candidate without brain-seat standing (or an explicit per-invocation override).
+- Real administrations reach CLI-credentialed seats through the provider adapter's
+  CLI transport (`QRP_TRANSPORT=cli`: codex via `CODEX_HOME`, claude via
+  `CLAUDE_CONFIG_DIR` pointing at a DEDICATED exam config dir seeded with
+  `.credentials.json` only — never the live `~/.claude`) with the brain round-mode
+  prompt (`QRP_PROMPT_MODE=brain`). The prompt teaches bundle semantics, the
+  five-field output contract, and the seat's standing production governance
+  contract; it never names any round's content (test-scanned against the
+  generator's oracle-vocabulary projection plus semantic answer-key tokens, and
+  sha256(prompt) is pinned to the seat identity file so any prompt edit forces an
+  identity re-pin + honesty re-review).
+- **CLI-transport identity is operator-asserted, not runtime-observed**: unlike
+  the HTTP path (whose response echoes the resolved model id — how the
+  glm-5.2→glm-5.3 alias upgrade was caught), `codex exec` / `claude -p` return no
+  model identity signal the adapter can verify. Record a pre-run model probe
+  beside every CLI administration and treat the recorded identity as asserted
+  deployment configuration; a runtime identity capture is tracked in BACKLOG.
+
 ### Implementer
 
 - Baseline tasks pass in isolated worktrees.
@@ -154,6 +183,18 @@ Use these bars before a role becomes eligible for routing.
 - Verification authoring family differs from implementer family when possible.
 - Depth-0 executes the harness and owns the verdict.
 - False confidence from weak/generated tests blocks qualification.
+- **Standing exam** (`engine-qualify.sh verification_author`, v2.34.17,
+  plan 2026-08-18-verification-author-suite-v3): the candidate reads a
+  clause-rendered requirements spec (never any implementation — black-box is
+  construct-guaranteed) and submits a DECLARED TEST PLAN: ordered calls with
+  pre-declared expected outcomes, within a constant step budget. The host
+  executes the plan against hidden clean/defect twins in the bwrap runner and
+  grades offline: `declared_accuracy` (declaration === contract oracle ===
+  clean-twin observation), `sensitivity` (defect twin deviates somewhere),
+  `robustness` (no malformed/budget violations) — AND of three, 2 trials with
+  distinct per-trial corpora. No candidate code ever executes; fuzzing dies on
+  the declaration line + budget; transport/infra failures abort with NO
+  verdict. Evidence rides the additive `va_declared_plan` methodology kind.
 
 ### Reviewer
 

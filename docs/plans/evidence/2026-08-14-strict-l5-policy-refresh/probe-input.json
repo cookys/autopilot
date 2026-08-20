@@ -1,0 +1,221 @@
+{
+ "schema_version": 1,
+ "claims": [
+  {
+   "capability_id": "provider-transport-implementer-grok-grok-4-5-high",
+   "consumer_id": "D4",
+   "target_identity": {
+    "runner": "grok",
+    "model": "grok-4.5",
+    "role": "implementer",
+    "effort": "high",
+    "endpoint": null,
+    "family": "xai",
+    "binary_realpath": "/home/cookys/.grok/downloads/grok-1.0.3-linux-x86_64",
+    "cli_version": "1.0.3"
+   },
+   "official_contract": {
+    "locator": "repo:.claude/review-loop-config.md#review-roster",
+    "retrieved_at": "2026-08-14T05:54:14.634Z",
+    "document_sha256": "16c93e72045635d3eab4df8cb27befd91f91108afcfe8c1bf2fd395e647c4197",
+    "assertion": "exact provider transport tuple implementer-grok-grok-4-5-high is declared and its installed CLI exposes the required model/effort transport surface"
+   },
+   "live_evidence": {
+    "cli_version": "1.0.3",
+    "probe_command_sha256": "e87b6e038914e29bde5a0d7fe62cd3208bd170ccbc6fc0f5c05a75a7a4319ba4",
+    "probe_output_sha256": "2ff59954f2d32a6fffe8d5e9067f881c869391c93e3ebbb1ab9af609116d4b4b",
+    "behavior_class": "installed-transport-surface",
+    "observed_at": "2026-08-14T05:54:14.634Z",
+    "ttl_seconds": 1209600,
+    "result": "exact provider transport tuple implementer-grok-grok-4-5-high is declared and its installed CLI exposes the required model/effort transport surface",
+    "transport_binding": {
+     "execution_model": "grok-4.5",
+     "execution_effort_argument": "high",
+     "normalized_model": "grok-4.5",
+     "normalized_effort": "high"
+    }
+   },
+   "agreement": true
+  },
+  {
+   "capability_id": "provider-transport-reviewer-cc-shim-minimax-m3-high",
+   "consumer_id": "D4",
+   "target_identity": {
+    "runner": "cc-shim",
+    "model": "MiniMax-M3",
+    "role": "reviewer",
+    "effort": "high",
+    "endpoint": "minimax",
+    "family": "minimax",
+    "binary_realpath": "/home/cookys/.local/share/claude/versions/2.1.232",
+    "cli_version": "2.1.232"
+   },
+   "official_contract": {
+    "locator": "repo:.claude/review-loop-config.md#review-roster",
+    "retrieved_at": "2026-08-14T05:54:14.634Z",
+    "document_sha256": "16c93e72045635d3eab4df8cb27befd91f91108afcfe8c1bf2fd395e647c4197",
+    "assertion": "exact provider transport tuple reviewer-cc-shim-minimax-m3-high is declared and its installed CLI exposes the required model/effort transport surface"
+   },
+   "live_evidence": {
+    "cli_version": "2.1.232",
+    "probe_command_sha256": "7d36f24453ba7f894b6db1b32020c84f1705aaf2a4f8af0616654c7bfc003606",
+    "probe_output_sha256": "9fc0bae9d5cddbb2ab3f3b1dfd17bbe09a19702763b813e72892e274ba108772",
+    "behavior_class": "installed-transport-surface",
+    "observed_at": "2026-08-14T05:54:14.634Z",
+    "ttl_seconds": 1209600,
+    "result": "exact provider transport tuple reviewer-cc-shim-minimax-m3-high is declared and its installed CLI exposes the required model/effort transport surface",
+    "transport_binding": {
+     "execution_model": "MiniMax-M3",
+     "execution_effort_argument": "high",
+     "normalized_model": "MiniMax-M3",
+     "normalized_effort": "high"
+    }
+   },
+   "agreement": true
+  },
+  {
+   "capability_id": "provider-transport-verification-author-cc-shim-glm-5-2-high",
+   "consumer_id": "D4",
+   "target_identity": {
+    "runner": "cc-shim",
+    "model": "GLM-5.2",
+    "role": "verification_author",
+    "effort": "high",
+    "endpoint": "glm",
+    "family": "zhipu",
+    "binary_realpath": "/home/cookys/.local/share/claude/versions/2.1.232",
+    "cli_version": "2.1.232"
+   },
+   "official_contract": {
+    "locator": "repo:.claude/review-loop-config.md#review-roster",
+    "retrieved_at": "2026-08-14T05:54:14.634Z",
+    "document_sha256": "16c93e72045635d3eab4df8cb27befd91f91108afcfe8c1bf2fd395e647c4197",
+    "assertion": "exact provider transport tuple verification-author-cc-shim-glm-5-2-high is declared and its installed CLI exposes the required model/effort transport surface"
+   },
+   "live_evidence": {
+    "cli_version": "2.1.232",
+    "probe_command_sha256": "4e9cc76d96f45be833097e18128b02fde4bb1748e3bf90fc655025773e4505e0",
+    "probe_output_sha256": "ccf1d94b14393339a6c1679bd3781705fdf8a08c6a921fa81368e0ad23c53f79",
+    "behavior_class": "installed-transport-surface",
+    "observed_at": "2026-08-14T05:54:14.634Z",
+    "ttl_seconds": 1209600,
+    "result": "exact provider transport tuple verification-author-cc-shim-glm-5-2-high is declared and its installed CLI exposes the required model/effort transport surface",
+    "transport_binding": {
+     "execution_model": "GLM-5.2",
+     "execution_effort_argument": "high",
+     "normalized_model": "GLM-5.2",
+     "normalized_effort": "high"
+    }
+   },
+   "agreement": true
+  },
+  {
+   "capability_id": "provider-transport-qc-cc-shim-glm-5-2-high",
+   "consumer_id": "D4",
+   "target_identity": {
+    "runner": "cc-shim",
+    "model": "GLM-5.2",
+    "role": "qc",
+    "effort": "high",
+    "endpoint": "glm",
+    "family": "zhipu",
+    "binary_realpath": "/home/cookys/.local/share/claude/versions/2.1.232",
+    "cli_version": "2.1.232"
+   },
+   "official_contract": {
+    "locator": "repo:.claude/review-loop-config.md#review-roster",
+    "retrieved_at": "2026-08-14T05:54:14.634Z",
+    "document_sha256": "16c93e72045635d3eab4df8cb27befd91f91108afcfe8c1bf2fd395e647c4197",
+    "assertion": "exact provider transport tuple qc-cc-shim-glm-5-2-high is declared and its installed CLI exposes the required model/effort transport surface"
+   },
+   "live_evidence": {
+    "cli_version": "2.1.232",
+    "probe_command_sha256": "4e9cc76d96f45be833097e18128b02fde4bb1748e3bf90fc655025773e4505e0",
+    "probe_output_sha256": "ccf1d94b14393339a6c1679bd3781705fdf8a08c6a921fa81368e0ad23c53f79",
+    "behavior_class": "installed-transport-surface",
+    "observed_at": "2026-08-14T05:54:14.634Z",
+    "ttl_seconds": 1209600,
+    "result": "exact provider transport tuple qc-cc-shim-glm-5-2-high is declared and its installed CLI exposes the required model/effort transport surface",
+    "transport_binding": {
+     "execution_model": "GLM-5.2",
+     "execution_effort_argument": "high",
+     "normalized_model": "GLM-5.2",
+     "normalized_effort": "high"
+    }
+   },
+   "agreement": true
+  },
+  {
+   "capability_id": "provider-transport-qc-codex-gpt-5-6-sol-max",
+   "consumer_id": "D4",
+   "target_identity": {
+    "runner": "codex",
+    "model": "gpt-5.6-sol",
+    "role": "qc",
+    "effort": "max",
+    "endpoint": null,
+    "family": "openai",
+    "binary_realpath": "/home/cookys/.codex/packages/standalone/releases/0.147.0-x86_64-unknown-linux-musl/bin/codex",
+    "cli_version": "0.147.0"
+   },
+   "official_contract": {
+    "locator": "repo:.claude/review-loop-config.md#review-roster",
+    "retrieved_at": "2026-08-14T05:54:14.634Z",
+    "document_sha256": "16c93e72045635d3eab4df8cb27befd91f91108afcfe8c1bf2fd395e647c4197",
+    "assertion": "exact provider transport tuple qc-codex-gpt-5-6-sol-max is declared and its installed CLI exposes the required model/effort transport surface"
+   },
+   "live_evidence": {
+    "cli_version": "0.147.0",
+    "probe_command_sha256": "287bbaa6ab2783846213b8d5bfffdefc710bf82c36db1d9cb0af89a136a6bed3",
+    "probe_output_sha256": "b735544d19132f98d4c0931421d8bde99a5c103a450bfa0f1a38b9628f500179",
+    "behavior_class": "installed-transport-surface",
+    "observed_at": "2026-08-14T05:54:14.634Z",
+    "ttl_seconds": 1209600,
+    "result": "exact provider transport tuple qc-codex-gpt-5-6-sol-max is declared and its installed CLI exposes the required model/effort transport surface",
+    "transport_binding": {
+     "execution_model": "gpt-5.6-sol",
+     "execution_effort_argument": "max",
+     "normalized_model": "gpt-5.6-sol",
+     "normalized_effort": "max"
+    }
+   },
+   "agreement": true
+  },
+  {
+   "capability_id": "provider-transport-qc-cc-shim-minimax-m3-high",
+   "consumer_id": "D4",
+   "target_identity": {
+    "runner": "cc-shim",
+    "model": "MiniMax-M3",
+    "role": "qc",
+    "effort": "high",
+    "endpoint": "minimax",
+    "family": "minimax",
+    "binary_realpath": "/home/cookys/.local/share/claude/versions/2.1.232",
+    "cli_version": "2.1.232"
+   },
+   "official_contract": {
+    "locator": "repo:.claude/review-loop-config.md#review-roster",
+    "retrieved_at": "2026-08-14T05:54:14.634Z",
+    "document_sha256": "16c93e72045635d3eab4df8cb27befd91f91108afcfe8c1bf2fd395e647c4197",
+    "assertion": "exact provider transport tuple qc-cc-shim-minimax-m3-high is declared and its installed CLI exposes the required model/effort transport surface"
+   },
+   "live_evidence": {
+    "cli_version": "2.1.232",
+    "probe_command_sha256": "7d36f24453ba7f894b6db1b32020c84f1705aaf2a4f8af0616654c7bfc003606",
+    "probe_output_sha256": "9fc0bae9d5cddbb2ab3f3b1dfd17bbe09a19702763b813e72892e274ba108772",
+    "behavior_class": "installed-transport-surface",
+    "observed_at": "2026-08-14T05:54:14.634Z",
+    "ttl_seconds": 1209600,
+    "result": "exact provider transport tuple qc-cc-shim-minimax-m3-high is declared and its installed CLI exposes the required model/effort transport surface",
+    "transport_binding": {
+     "execution_model": "MiniMax-M3",
+     "execution_effort_argument": "high",
+     "normalized_model": "MiniMax-M3",
+     "normalized_effort": "high"
+    }
+   },
+   "agreement": true
+  }
+ ]
+}

@@ -4,19 +4,20 @@
   "kind": "cli",
   "status": "verified",
   "harness_level": "H2",
-  "last_checked_at": "2026-07-16",
-  "verified_at": "2026-07-16",
-  "expires_at": "2026-08-16",
+  "last_checked_at": "2026-08-03T22:28:33.000Z",
+  "verified_at": "2026-08-03T22:28:33.000Z",
+  "expires_at": "2026-09-02T22:28:33.000Z",
   "evidence": {
     "source": "local-probe",
-    "command": "grok --version && grok plugin install /path/to/autopilot --trust && grok inspect && grok plugin details autopilot",
-    "result": "grok 0.2.101 (5bc4b5dfad) [stable]; install registers plugin autopilot v2.32.37; grok inspect lists 28 skills (source plugin: autopilot), 3 agents (autopilot:debugger|planner|reviewer), and hooks file entry plugin: autopilot; plugin details reports 1 skill dir, 1 agent dir, hooks"
+    "command": "grok --version plus exact grok-4.5/high single-turn JSON probe; D1 aggregate receipt",
+    "result": "grok 0.2.118; headless JSON returned text plus numeric usage for grok-4.5/high, while SessionEnd host firing remains explicitly blocked and optional"
   },
   "capabilities": {
     "read_only_dispatch": "verified",
     "skills": "verified",
     "agents": "verified",
     "plugin_install": "verified",
+    "headless_usage": "verified",
     "hooks": "warning",
     "mutation_dispatch": "unverified",
     "blocking_gate": "unverified"

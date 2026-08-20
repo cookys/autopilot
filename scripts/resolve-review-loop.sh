@@ -105,8 +105,10 @@ SOURCE_TRUST=""
 CONFIG_PATH=""
 DIFF_LINES=0
 PROTECTED_PATH=0
+VERIFY_STRENGTH_ARG=""
 ORACLE_AVAILABLE=1
 SECURITY_SURFACE=0
+PRIOR_STATUS="none"
 ENFORCE=0
 CHECK_SCORECARD=0
 SCORECARD_SCOPE_FILE=""
@@ -130,12 +132,21 @@ while [[ $# -gt 0 ]]; do
     --diff-lines) DIFF_LINES="${2:-}"; shift 2 ;;
     --protected-path) PROTECTED_PATH="${2:-}"; shift 2 ;;
     --oracle-available) ORACLE_AVAILABLE="${2:-}"; shift 2 ;;
+    --prior-status) PRIOR_STATUS="${2:-}"; shift 2 ;;
     --security-surface) SECURITY_SURFACE="${2:-}"; shift 2 ;;
     --capability-state) CAPABILITY_STATE="${2:-}"; shift 2 ;;
     --input-bytes) INPUT_BYTES="${2:-0}"; shift 2 ;;
     --store) STORE_PATH="${2:-}"; shift 2 ;;
     --now) NOW_VAL="${2:-}"; shift 2 ;;
     --skill-mode) SKILL_MODE_OVERRIDE="${2:-}"; shift 2 ;;
+    --verify-strength)
+      VERIFY_STRENGTH_ARG="${2:-}"
+      case "$VERIFY_STRENGTH_ARG" in
+        weak|medium|strong|inconclusive) : ;;
+        *) echo "invalid --verify-strength: $VERIFY_STRENGTH_ARG (must be weak|medium|strong|inconclusive)" >&2; exit 2 ;;
+      esac
+      shift 2
+      ;;
     --domain)
       DOMAIN_OVERRIDE="${2:-}"
       case "$DOMAIN_OVERRIDE" in
@@ -207,6 +218,7 @@ else
   IMPL_RUNNER="$DEF_IMPL_RUNNER"
 fi
 REV_ENDPOINT="$(read_field "$CONFIG" reviewer_endpoint "$DEF_REV_ENDPOINT")"
+REV_LIMITATION="$(read_field "$CONFIG" reviewer_limitation "")"
 IMPL_ENDPOINT="$(read_field "$CONFIG" implementer_endpoint "$DEF_IMPL_ENDPOINT")"
 VER_AUTH_PRESENT="$(read_field "$CONFIG" verification_author_present "$DEF_VER_AUTHOR_PRESENT")"
 VER_AUTH_ENGINE="$(read_field "$CONFIG" verification_author_engine "$DEF_VER_AUTHOR_ENGINE")"
@@ -219,6 +231,18 @@ VER_AUTH_ENDPOINT="$(read_field "$CONFIG" verification_author_endpoint "$DEF_VER
 [[ -z "$REV_ENDPOINT"  || "$REV_ENDPOINT"  =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid reviewer_endpoint (must be [A-Za-z0-9_]): $REV_ENDPOINT" >&2; REV_ENDPOINT=""; }
 [[ -z "$IMPL_ENDPOINT" || "$IMPL_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: ignoring invalid implementer_endpoint (must be [A-Za-z0-9_]): $IMPL_ENDPOINT" >&2; IMPL_ENDPOINT=""; }
 [[ -z "$VER_AUTH_ENDPOINT" || "$VER_AUTH_ENDPOINT" =~ ^[A-Za-z0-9_]+$ ]] || { echo "resolve-review-loop: invalid verification_author_endpoint (must be [A-Za-z0-9_]): $VER_AUTH_ENDPOINT" >&2; exit 3; }
+# The exact MiniMax diff-only tuple has a recorded false-central-claim limitation.
+# Keep calibration telemetry out of capability_warnings: that array is an operational
+# dispatch channel. A diagnostic makes every exact-seat resolution non-silent, and
+# the exact tuple unconditionally requires the limitation tag. The legacy
+# reviewer_limitation_required field is compatibility metadata, never guard authority.
+if [[ "$REV_ENGINE" == "MiniMax-M3" && "$REV_RUNNER" == "cc-shim" && "$REV_ENDPOINT" == "minimax" ]]; then
+  echo "resolve-review-loop: ADVISORY — MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false; findings require independent verification." >&2
+  if [[ "$REV_LIMITATION" != "minimax-false-central-claim-5-of-6" ]]; then
+    echo "resolve-review-loop: MiniMax-M3 cc-shim/minimax reviewer requires reviewer_limitation=minimax-false-central-claim-5-of-6" >&2
+    exit 3
+  fi
+fi
 case "$VER_AUTH_PRESENT" in
   true|false) ;;
   *)
@@ -405,6 +429,10 @@ if ! [[ "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS" =~ ^[0-9]+$ ]] \
   PROVIDER_READINESS_RECEIPT_TTL_SECONDS="$DEF_PROVIDER_READINESS_RECEIPT_TTL_SECONDS"
 fi
 PROVIDER_READINESS_FAMILY_CONSTRAINT="$(read_field "$CONFIG" provider_readiness_fallback_family_constraint "$DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT")"
+# Deliberate, recorded escape from strict /l5 byte-equal policy coverage.
+# Empty = off (fail-closed, unchanged). Non-empty = the operator's reason, which
+# provider-bootstrap surfaces on every derivation and records in the result.
+STRICT_L5_POLICY_OVERRIDE="$(read_field "$CONFIG" strict_l5_policy_override "")"
 case "$PROVIDER_READINESS_FAMILY_CONSTRAINT" in
   any|different) ;;
   *) PROVIDER_READINESS_FAMILY_CONSTRAINT="$DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT" ;;
@@ -440,7 +468,18 @@ family_of() {
     *grok*|*composer*)                       echo xai ;;
     *minimax*|*abab*)                        echo minimax ;;
     *glm*|*zhipu*)                           echo zhipu ;;
+    *kimi*|*moonshot*)                       echo moonshot ;;
     *)                                       echo unknown ;;
+  esac
+}
+
+# Canonical agy slug observed by the committed 1.1.9 model-inventory probe.
+# Dispatch rails still re-query `agy models` immediately before spend and fail
+# closed if the installed host no longer offers this slug.
+normalize_agy_alias() {
+  case "$1" in
+    gemini-flash) printf '%s' 'gemini-3.6-flash-high' ;;
+    *) printf '%s' "$1" ;;
   esac
 }
 
@@ -457,6 +496,7 @@ IFS=',' read -ra _parts <<< "$QC_PANEL_RAW"
 for _p in "${_parts[@]}"; do
   _p="$(printf '%s' "$_p" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   [[ -z "$_p" ]] && continue
+  _p="$(normalize_agy_alias "$_p")"
   QC_PANEL+=("$_p")
   [[ $_first -eq 0 ]] && QC_PANEL_JSON+=", "
   QC_PANEL_JSON+="\"$(json_escape "$_p")\""
@@ -496,7 +536,7 @@ fi
 if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
   for _i in "${!QC_PANEL[@]}"; do
     case "${QC_PANEL_RUNNERS[$_i]}" in
-      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;;
+      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;;
       *) QC_PANEL_SEATS_COMPLETE="false" ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
@@ -527,9 +567,9 @@ fi
 # Runner identity selects the actual transport. Unknown or blank explicit values
 # fail loudly: silently substituting a different runner misattributes the review.
 case "$REV_RUNNER" in
-  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;;
+  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;;
   *)
-    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn): ${REV_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi): ${REV_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac
@@ -563,6 +603,7 @@ case "$SECURITY_SURFACE" in 0|1) ;; *) SECURITY_SURFACE=0 ;; esac
 # if NO panel member is a different family from the implementer, the panel can't catch the
 # implementer's family-correlated blind spots.
 IMPL_FAMILY="$(family_of "$IMPL_ENGINE")"
+REV_FAMILY="$(family_of "$REV_ENGINE")"
 VER_AUTH_FAMILY="$(family_of "$VER_AUTH_ENGINE")"
 _diff_family=0
 _distinct_families=""
@@ -594,6 +635,15 @@ esac
 
 # Deterministic risk computation:
 # high iff source trust is low, diff lines > 150, protected-path, security-surface, or oracle disabled.
+# --prior-status no_verdict|ambiguous (four-layer P2, cascade): a prior review round that
+# produced no usable verdict elevates risk to high, reusing the SAME families/cross-family
+# escalation path — the next round seats a fresh disjoint-family reviewer instead of retrying
+# the identical seat. Producer: the engine review-args assembly on round N+1. Default `none`
+# is byte-identical to previous behavior (pinned by fixture in autopilot-cli.test.sh).
+case "$PRIOR_STATUS" in none|no_verdict|ambiguous) ;; *) echo "invalid --prior-status: $PRIOR_STATUS (must be none|no_verdict|ambiguous)" >&2; exit 2 ;; esac
+if [[ "$PRIOR_STATUS" == "no_verdict" || "$PRIOR_STATUS" == "ambiguous" ]]; then
+  SOURCE_TRUST="low"
+fi
 if [[ "$SOURCE_TRUST" == "low" || "$DIFF_LINES" -gt 150 || "$PROTECTED_PATH" -eq 1 || "$SECURITY_SURFACE" -eq 1 || "$ORACLE_AVAILABLE" -eq 0 ]]; then
   REVIEW_RISK="high"
   REQUIRED_REVIEW_FAMILIES=2
@@ -664,6 +714,44 @@ if (!found) process.stdout.write("unknown");
     VERIFY_FIRST="true"
     [[ "$MAX_ROUNDS" -gt 2 ]] && MAX_ROUNDS=2
   fi
+fi
+
+# D7 A13 — verify_strength as a density input (fail-safe: unknown/inconclusive → weak).
+# Does not emit a new always-on schema key (schemas/ is frozen); folds into loop_max_rounds
+# and l1_required. Protected-path / source-trust minima never reduce.
+VERIFY_STRENGTH="$(read_field "$CONFIG" verify_strength "")"
+if [[ -n "$VERIFY_STRENGTH_ARG" ]]; then
+  VERIFY_STRENGTH="$VERIFY_STRENGTH_ARG"
+fi
+case "$VERIFY_STRENGTH" in
+  weak|medium|strong|inconclusive) : ;;
+  '' ) VERIFY_STRENGTH="" ;;
+  *) VERIFY_STRENGTH="weak" ;; # invalid → weakest
+esac
+if [[ -n "$VERIFY_STRENGTH" ]]; then
+  case "$VERIFY_STRENGTH" in
+    weak|inconclusive)
+      # More review: +1 loop, never below user base after other scalers.
+      MAX_ROUNDS=$(( MAX_ROUNDS + 1 ))
+      [[ "$MAX_ROUNDS" -gt 7 ]] && MAX_ROUNDS=7
+      L1_REQUIRED="true"
+      DENSITY_SCALED="true"
+      ;;
+    medium)
+      # Neutral — no reduction, no increase.
+      :
+      ;;
+    strong)
+      # At most -1 loop, and NEVER when protected-path or low source-trust.
+      if [[ "$PROTECTED_PATH" -eq 0 && "$SOURCE_TRUST" != "low" && "$SECURITY_SURFACE" -eq 0 ]]; then
+        if [[ "$MAX_ROUNDS" -gt 1 ]]; then
+          MAX_ROUNDS=$(( MAX_ROUNDS - 1 ))
+          DENSITY_SCALED="true"
+        fi
+      fi
+      # Strong never clears l1_required that was already set by protected-path/high risk.
+      ;;
+  esac
 fi
 
 # If the implementer's family is unknown, a single known reviewer family cannot prove
@@ -1134,6 +1222,174 @@ process.stdout.write(JSON.stringify([...(Array.isArray(a) ? a : []), ...(Array.i
   fi
 fi
 
+# --- implementer scorecard admissibility (REPORT-ONLY, --check-scorecard only) ---
+# BACKLOG "Implementer scorecard lapses on runner-version drift, silently degrading
+# every /l5": dispatch-contract.js check NO-GOes on an expired/failed implementer row
+# and the foreman then degrades L5→inline with no roster-time signal. Surface the
+# fact HERE, where the /l5 preflight already looks — same capability_warnings posture
+# as the quota and context-window facts above (the resolver reports, the consumer
+# decides per on_engine_unavailable).
+if [[ "$CHECK_SCORECARD" -eq 1 ]]; then
+  _impl_rows="$(node "$SCRIPT_DIR/engine-scorecard.js" current --role implementer 2>/dev/null || true)"
+  _impl_warn="$(printf '%s' "$_impl_rows" | node -e '
+const engine = process.argv[1];
+const runner = process.argv[2];
+const overrideFile = process.argv[3] || "";
+const fs = require("fs");
+let s = "";
+process.stdin.on("data", (d) => (s += d)).on("end", () => {
+  let rows = null;
+  try { rows = JSON.parse(s); } catch { rows = null; }
+  if (!Array.isArray(rows)) {
+    process.stdout.write(
+      `implementer seat (${engine}/${runner}) is not admissible: scorecard store unreadable — /l5 dispatch-contract will NO-GO; requalify via engine-onboarding`,
+    );
+    return;
+  }
+  const row = rows.find((r) => r && String(r.engine) === engine
+    && (runner === "auto" || String(r.runner) === runner));
+  const admissible = row && (row.status === "qualified"
+    || (row.status === "provisional" && row.observed_status === "qualified"));
+  if (admissible) return;
+  // P7/KR6: an explicit operator override file (AUTOPILOT_QUALIFICATION_OVERRIDE)
+  // covering the tuple flips the warning from refusal guidance to a LOUD
+  // evidence-free-admission notice — never silent, never a third path.
+  if (overrideFile && fs.existsSync(overrideFile)) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(overrideFile, "utf8"));
+      const today = new Date().toISOString().slice(0, 10);
+      const match = doc && doc.schema === 1 && Array.isArray(doc.overrides)
+        ? doc.overrides.find((o) => o && o.engine === engine
+          && (runner === "auto" || o.runner === runner)
+          && o.role === "implementer"
+          && typeof o.reason === "string" && o.reason.trim()
+          && typeof o.expires === "string" && o.expires >= today)
+        : null;
+      if (match) {
+        process.stdout.write(
+          `implementer seat (${engine}/${runner}) runs on an EVIDENCE-FREE operator override (reason: ${match.reason}; expires ${match.expires}) — pass --qualification-override to dispatch-contract check`,
+        );
+        return;
+      }
+    } catch { /* unreadable override never admits */ }
+  }
+  const detail = row ? `scorecard row status=${row.status}` : "no scorecard row";
+  process.stdout.write(
+    `implementer seat (${engine}/${runner}) is not admissible: ${detail} — /l5 dispatch-contract will NO-GO; requalify via engine-onboarding or provide a per-invocation qualification override`,
+  );
+});' "$IMPL_ENGINE" "$IMPL_RUNNER" "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" 2>/dev/null || true)"
+  if [[ -n "$_impl_warn" ]]; then
+    CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "$_impl_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+  fi
+fi
+
+# ── Brain-seat standing (P7/KR4, plan 2026-08-17-brain-seat-exam-suite P4) ─────────
+# Canonical seat context: the pinned incumbent identity file comes from config
+# (brain_seat_identity_file); a proposed non-incumbent identity arrives via
+# AUTOPILOT_BRAIN_SEAT_IDENTITY. Three-way standing (no_record / qualified /
+# requalification_required); both non-qualified states = absence of standing —
+# the per-invocation override STILL admits (two-path rule); only absence AND no
+# override refuses (candidate) or loudly annotates (incumbent, Board 2026-08-16
+# advisory bootstrap semantics).
+BRAIN_SEAT_JSON='null'
+BRAIN_IDENTITY_FILE="$(read_field "$CONFIG" brain_seat_identity_file "")"
+# Seat-pin scope guard (review 2026-08-17 MUST-FIX): a brain seat is per-project
+# governance. Only a config the CALLER owns may seat one — an explicit override
+# or the caller-cwd project config. When the ladder fell back to the autopilot
+# repo's own config (SOURCE=project-repo) or the template, the pin must NOT
+# project onto the consumer (it would announce the maintainer's seat, and its
+# relative path would resolve against the wrong cwd).
+case "$SOURCE" in
+  override|project-cwd) ;;
+  *) BRAIN_IDENTITY_FILE="" ;;
+esac
+# A relative pin resolves against the CONFIG's own directory (the file travels
+# with the config that declares it), never against the caller's cwd.
+if [[ -n "$BRAIN_IDENTITY_FILE" && "$BRAIN_IDENTITY_FILE" != /* ]]; then
+  BRAIN_IDENTITY_FILE="$(cd "$(dirname -- "$CONFIG")" 2>/dev/null && pwd -P)/../$BRAIN_IDENTITY_FILE"
+fi
+PROPOSED_BRAIN_IDENTITY="${AUTOPILOT_BRAIN_SEAT_IDENTITY:-}"
+if [[ -n "$BRAIN_IDENTITY_FILE" || -n "$PROPOSED_BRAIN_IDENTITY" ]]; then
+  _brain_seat_class="incumbent"
+  _brain_ident="$BRAIN_IDENTITY_FILE"
+  if [[ -n "$PROPOSED_BRAIN_IDENTITY" && "$PROPOSED_BRAIN_IDENTITY" != "$BRAIN_IDENTITY_FILE" ]]; then
+    _brain_seat_class="candidate"
+    _brain_ident="$PROPOSED_BRAIN_IDENTITY"
+  fi
+  _brain_status_json="$(node "$SCRIPT_DIR/engine-capability-state.js" brain-status --identity-file "$_brain_ident" 2>/dev/null || true)"
+  _brain_eval="$(node -e '
+const fs = require("fs");
+let status = null;
+try { status = JSON.parse(process.argv[1]); } catch { status = null; }
+const seatClass = process.argv[2];
+const overrideFile = process.argv[3] || "";
+let identity = null;
+try { identity = JSON.parse(fs.readFileSync(process.argv[4], "utf8")); } catch { identity = null; }
+const standing = status && status.status === "qualified";
+const state = status ? status.status : "status_unavailable";
+let admission = "admitted";
+let warning = "";
+if (!standing) {
+  let override = null;
+  if (overrideFile && fs.existsSync(overrideFile) && identity) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(overrideFile, "utf8"));
+      const today = new Date().toISOString().slice(0, 10);
+      override = doc && doc.schema === 1 && Array.isArray(doc.overrides)
+        ? doc.overrides.find((o) => o && o.role === "owner"
+          && (o.engine === identity.model_alias || o.engine === identity.identity)
+          && typeof o.reason === "string" && o.reason.trim()
+          && typeof o.expires === "string" && o.expires >= today)
+        : null;
+    } catch { override = null; }
+  }
+  if (override) {
+    admission = "override_admitted";
+    warning = `brain seat (${seatClass}) runs on an EVIDENCE-FREE operator override (reason: ${override.reason}; expires ${override.expires}) — standing status: ${state}`;
+  } else if (seatClass === "candidate") {
+    admission = "refused";
+    warning = `brain seat (candidate) REFUSED: standing status ${state} — the two legal paths are a standing exam pass (engine-qualify.sh brain) or a per-invocation qualification override (AUTOPILOT_QUALIFICATION_OVERRIDE, role owner)`;
+  } else {
+    admission = "advisory";
+    warning = `brain seat (incumbent) has NO standing qualification (status ${state}) — advisory per Board 2026-08-16 bootstrap semantics; sit the exam (engine-qualify.sh brain) or provide a per-invocation override`;
+  }
+}
+process.stdout.write(JSON.stringify({
+  brain_seat: {
+    seat_class: seatClass,
+    status: state,
+    admission,
+    strikes_since_pass: status ? status.strikes_since_pass : null,
+  },
+  warning,
+}));
+' "$_brain_status_json" "$_brain_seat_class" "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" "$_brain_ident" 2>/dev/null || printf '{"brain_seat":null,"warning":""}')"
+  BRAIN_SEAT_JSON="$(printf '%s' "$_brain_eval" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{try{process.stdout.write(JSON.stringify(JSON.parse(s).brain_seat));}catch{process.stdout.write("null");}})' 2>/dev/null || printf 'null')"
+  _brain_warn="$(printf '%s' "$_brain_eval" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).warning||"");}catch{}})' 2>/dev/null || true)"
+  if [[ -n "$_brain_warn" ]]; then
+    CAP_WARNINGS_JSON="$(node -e '
+let a = [];
+try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));
+' "$CAP_WARNINGS_JSON" "$_brain_warn" 2>/dev/null || printf '%s' "$CAP_WARNINGS_JSON")"
+  fi
+  # Refusal ENFORCEMENT rides the shipped --enforce rail (report-mode emits JSON and
+  # the CALLER enforces; with --enforce the resolver itself is the gate — same split
+  # every other admission signal uses). A refused candidate seating exits 3.
+  if [[ "$ENFORCE" == "1" ]]; then
+    _brain_admission="$(printf '%s' "$BRAIN_SEAT_JSON" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).admission||"");}catch{}})' 2>/dev/null || true)"
+    [[ "$_brain_admission" == "refused" ]] && ENFORCE_EXIT=3
+  fi
+fi
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     reviewer_engine) printf '%s\n' "$REV_ENGINE" ;;
@@ -1143,6 +1399,7 @@ if [[ -n "$FIELD" ]]; then
     implementer_effort) printf '%s\n' "$IMPL_EFFORT" ;;
     implementer_runner) printf '%s\n' "$IMPL_RUNNER" ;;
     reviewer_endpoint) printf '%s\n' "$REV_ENDPOINT" ;;
+    reviewer_family) printf '%s\n' "$REV_FAMILY" ;;
     implementer_endpoint) printf '%s\n' "$IMPL_ENDPOINT" ;;
     verification_author_present) printf '%s\n' "$VER_AUTH_PRESENT" ;;
     verification_author_engine) printf '%s\n' "$VER_AUTH_ENGINE" ;;
@@ -1180,6 +1437,7 @@ if [[ -n "$FIELD" ]]; then
     qc_panel_aggregation) printf '%s\n' "$QC_AGG" ;;
     provider_readiness_receipt_ttl_seconds) printf '%s\n' "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS" ;;
     provider_readiness_fallback_family_constraint) printf '%s\n' "$PROVIDER_READINESS_FAMILY_CONSTRAINT" ;;
+    strict_l5_policy_override) printf '%s\n' "$STRICT_L5_POLICY_OVERRIDE" ;;
     review_risk) printf '%s\n' "$REVIEW_RISK" ;;
     required_review_families) printf '%s\n' "$REQUIRED_REVIEW_FAMILIES" ;;
     l1_required) printf '%s\n' "$L1_REQUIRED" ;;
@@ -1248,6 +1506,7 @@ if [[ -n "$FIELD" ]]; then
     skill_mode_requested) printf '%s\n' "$CAP_SKILL_MODE_REQ" ;;
     skill_mode_effective) printf '%s\n' "$CAP_SKILL_MODE_EFF" ;;
     capability_warnings) printf '%s\n' "$CAP_WARNINGS_JSON" ;;
+    brain_seat) printf '%s\n' "$BRAIN_SEAT_JSON" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit "$ENFORCE_EXIT"
@@ -1255,12 +1514,14 @@ fi
 
 FMT_SUFFIX=" }\n"
 ARGS_SUFFIX=()
-READINESS_FMT=', "qc_panel_seats": %s, "qc_panel_seats_complete": %s, "provider_readiness_receipt_ttl_seconds": %s, "provider_readiness_fallback_family_constraint": "%s"'
+READINESS_FMT=', "qc_panel_seats": %s, "qc_panel_seats_complete": %s, "provider_readiness_receipt_ttl_seconds": %s, "provider_readiness_fallback_family_constraint": "%s", "strict_l5_policy_override": "%s", "brain_seat": %s'
 READINESS_ARGS=(
   "$QC_PANEL_SEATS_JSON"
   "$QC_PANEL_SEATS_COMPLETE"
   "$PROVIDER_READINESS_RECEIPT_TTL_SECONDS"
   "$PROVIDER_READINESS_FAMILY_CONSTRAINT"
+  "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
+  "$BRAIN_SEAT_JSON"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(
@@ -1284,7 +1545,7 @@ if [[ "$DENSITY_SOURCE" != "off" ]]; then
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -1292,17 +1553,17 @@ if [[ "$CHECK_SCORECARD" == "1" ]]; then
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" "$IMPL_FAMILY" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
+    "$REV_ENDPOINT" "$(json_escape "$REV_FAMILY")" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
     "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
     "$QC_PANEL_JSON" "$(json_escape "$QC_AGG")" "$REVIEW_RISK" \
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
-    "$REV_ENDPOINT" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
+    "$REV_ENDPOINT" "$(json_escape "$REV_FAMILY")" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
     "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 fi
 exit "$ENFORCE_EXIT"

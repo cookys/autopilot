@@ -16,5 +16,6 @@
     "outputs",
     "acceptance"
   ],
-  "required_relation": "current_rule_multiset_superset_of_baseline"
+  "required_relation": "current_rule_multiset_superset_of_baseline_modulo_explicit_dispositions",
+  "dispositions_file": "profiles/guided-baseline-dispositions.json"
 }

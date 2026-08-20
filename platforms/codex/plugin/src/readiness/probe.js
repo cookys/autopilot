@@ -118,13 +118,39 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
+// The live probe prompt is `Respond only with OK.` — a compliant provider may obey it
+// literally and echo the full stop (agy answers `OK.\n`), or wrap the token in quotes or
+// newlines. Accepting only the bare token contradicted the prompt that elicits it, so the
+// classifier strips packaging and nothing else: surrounding whitespace/quotes and a single
+// run of terminal `.`/`!`. `?` is deliberately not stripped (a question is not an
+// affirmation), the comparison stays case-sensitive, and it is anchored to the whole
+// remainder — a longer sentence that merely contains OK is still malformed, otherwise the
+// probe would stop proving the provider answered.
+const LIVE_PROBE_EXPECTED_RESPONSE = 'OK';
+const LIVE_PROBE_RESPONSE_LEAD = /^[\s"'`‘’“”]+/;
+const LIVE_PROBE_RESPONSE_TAIL = /[\s"'`‘’“”.!]+$/;
+const LIVE_PROBE_MAX_RESPONSE_BYTES = 256;
+
+function normalizeLiveProbeResponse(value) {
+  return value
+    .replace(LIVE_PROBE_RESPONSE_LEAD, '')
+    .replace(LIVE_PROBE_RESPONSE_TAIL, '');
+}
+
+// 4 was too tight and misclassified healthy providers. A model that spends
+// output tokens before it emits text — MiniMax-M3 on the `minimax` endpoint,
+// measured 2026-08-14 — produces nothing at all within 4 and the seat reports
+// `transport_failure`; at 8 and 16 the same tuple answers `OK` every time. The
+// budget is what lets the model REACH the answer; the gate itself is unchanged,
+// because the response must still normalise to exactly `OK`. 32 buys headroom
+// for a longer reasoning preamble at no meaningful cost for a two-token reply.
 const LIVE_PROBE_REQUEST_BODY = {
   schema_version: 1,
   operation: 'provider-readiness-live-probe',
   prompt: 'Respond only with OK.',
   effect: 'read-only',
   tools: 'disabled',
-  max_output_tokens: 4,
+  max_output_tokens: 32,
 };
 const LIVE_PROBE_REQUEST = deepFreeze({
   ...LIVE_PROBE_REQUEST_BODY,
@@ -213,12 +239,30 @@ function providerObservation(tuple, axis, status, now, ttlSeconds, evidenceClass
   };
 }
 
+// A `--version` call is a PROCESS-LAUNCH cost, not a network one: for a bundled
+// Node CLI it is dominated by interpreter start plus bundle parse, and it scales
+// with how loaded the box is — not with whether the provider works. 5s was below
+// the floor for at least one wired runner and turned "slow" into "broken", the
+// same wrong-diagnosis shape the live probe hit at 1m (see `live-probe.js`
+// `--timeout 3m`). Measured 2026-08-14 on an otherwise busy box, five runs each:
+// `kimi --version` 4288/5612/5769/6629/6926 ms — four of five over the old cap —
+// against `grok` 125 ms and `agy` 745 ms. The seat then reported
+// `safe_probe_timeout` and the whole strict-l5 trust root sat at 6/7 with a
+// perfectly healthy engine.
+//
+// 20s is ~3x the slowest observation, and it costs nothing on a healthy runner:
+// the probe returns as soon as the child exits, so grok still answers in 125 ms.
+// The gate is unchanged — a non-zero exit is still `binary_probe_failed`, a
+// missing binary is still `missing_binary`. This only stops a slow-but-present
+// CLI from being recorded as an absent one.
+const SAFE_BINARY_PROBE_TIMEOUT_MS = 20000;
+
 function probeSafeSurface({ tuple }) {
   const binary = BINARY_BY_RUNNER[tuple.runner] || tuple.runner;
   const version = spawnSync(binary, ['--version'], {
     cwd: REPO_ROOT,
     env: process.env,
-    timeout: 5000,
+    timeout: SAFE_BINARY_PROBE_TIMEOUT_MS,
     stdio: ['ignore', 'ignore', 'ignore'],
   });
   if (version.error && version.error.code === 'ENOENT') {
@@ -283,9 +327,9 @@ function classifyLiveProbeResult(tupleValue, value) {
 
   switch (envelope.outcome.classification) {
     case 'success': {
-      if (responseBuffer.length > 256) return 'malformed_response';
+      if (responseBuffer.length > LIVE_PROBE_MAX_RESPONSE_BYTES) return 'malformed_response';
       const response = responseBuffer.toString('utf8');
-      return response.trim() === 'OK'
+      return normalizeLiveProbeResponse(response) === LIVE_PROBE_EXPECTED_RESPONSE
         ? 'success'
         : 'malformed_response';
     }

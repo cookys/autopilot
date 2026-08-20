@@ -85,6 +85,26 @@ echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","
 
 [`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
+## Reviewer output-token budget
+
+`dispatch-review.sh --max-tokens <n>` optionally requests a maximum model response of 1 through
+200000 tokens. This is an output-token budget only: it does not limit input context, prompt bytes,
+visible characters, wall time, tool turns, reasoning effort, or monetary spend. The flag is mapped
+only where the installed runner exposes a verified enforceable surface:
+
+| Reviewer runner | Mapping when `--max-tokens <n>` is supplied |
+|-----------------|-----------------------------------------------|
+| `anthropic-compatible` | Direct adapter `--max-tokens <n>` (Anthropic API `max_tokens`) |
+| `qoderclicn` | Qoder CLI `--max-output-tokens <n>` |
+| `codex`, `agy`, `grok`, `cc-shim`, `claude-native` | Unsupported: exit 2 with `status=precondition_failed` before runner resolution or spawn |
+
+The value must be an unpadded positive base-10 integer in the inclusive range; missing, zero,
+negative, fractional, non-numeric, or over-range values fail before spend. Omitting the flag adds no
+runner argument, synthesizes no wrapper default, and adds no result field, so each transport keeps
+its existing default and the review JSON schema is unchanged. Truncation never authorizes a review:
+Anthropic `stop_reason=max_tokens` and a Qoder exit-0 response missing the complete wrapped block
+both remain `no_verdict`; a partial `SHIP-AS-IS` is not parsed.
+
 ## Script
 
 ```bash
@@ -128,7 +148,7 @@ Usage is derived from declared `pi-rpc` parsing only: `message_end` messages are
 `pi-rpc` is intentionally separated from the generic JSONL scanner so nested `cost` fields cannot
 pollute totals. A stalled stream gets one report-only `supervisor_stall_probe` steer injection
 (`no_event_timeout`) and remains report-only by default unless `PI_RPC_MAX_SECS` is set.
-Evidence + residuals: [`docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](../docs/projects/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
+Evidence + residuals: [`docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md`](https://github.com/cookys/autopilot/blob/develop/docs/projects/_archive/2026-07-11-dispatch-observability-s1/spike-pi-rpc.md). The trust rails
 (`worktree` isolation, wrapper-commit, artifact verification) remain unchanged.
 
 ### Directive reachability (Phase 2 — advisory nudge channel)
@@ -447,18 +467,34 @@ scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (se
   worker self-report. The stream format is **dispatcher-declared** (manifest `log_format` /
   `--format`, derived from the invocation flags the dispatcher itself chose), never content-
   sniffed — a worker printing JSON usage lines into a plain-text log cannot promote its own
-  output into telemetry. Formats carrying no signal (agy pseudo-TTY, cc-shim plain text) yield
-  honest `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
-- **Final JSON**: `dispatch-hetero.sh` output gains ADDITIVE `run_id` / `usage` / `wall_secs`
-  (usage via `dispatch-status.js --usage-only`, embedded fail-safe — any parse failure ⇒ `null`).
-  `dispatch-review.sh`'s final JSON is deliberately UNCHANGED (strict `additionalProperties:false`
-  schema, v2.32.19 SSOT) — correlate a review run via its `raw_log` path and derive usage post-hoc
-  with `--usage-only`.
+  output into telemetry. Production agy dispatches capture `--output-format json` into a private
+  envelope, validate its closed response/usage schema, and copy only the response into the framed
+  worker log; malformed, duplicate-key, trailing, invalid-number, or nonzero-exit envelopes yield
+  `usage:null`. Formats carrying no signal (including cc-shim plain text) likewise yield honest
+  `null`, not fabricated numbers. `files_touched` is git-artifact-derived from the worktree.
+- **Final JSON**: `dispatch-hetero.sh` emits `run_id` / `usage` / `wall_secs`; agy usage comes only
+  from the validated private envelope, while other runners retain their declared-format parser.
+  `dispatch-review.sh` now also emits required `usage` (`null` for runners without an admitted
+  signal or any failed agy envelope; closed agy usage with `source:"agy-json"` on success).
 - **Trust boundary unchanged**: all of this is SCHEDULING telemetry. Verdicts still come from git
   artifacts + fail-closed parsers only. Disable manifests with `AUTOPILOT_DISPATCH_MANIFEST=0`.
-- **Trace lineage contract (telemetry only):** dispatchers inherit lineage from incoming env
+- **Trace lineage contract:** dispatchers inherit lineage from incoming env
   (`AUTOPILOT_PARENT_RUN_ID`, `AUTOPILOT_ROOT_RUN_ID`, `AUTOPILOT_DISPATCH_DEPTH`) and stamp
   each manifest with `parent_run_id` + `root_run_id` + `depth` so dispatch trees are auditable.
+  - ⚠️ **`AUTOPILOT_ROOT_RUN_ID` alone does not set the LINEAGE root.** It is read only inside
+    the has-parent branch, so without `AUTOPILOT_PARENT_RUN_ID` the dispatch becomes its own
+    lineage root. It is **not** discarded, though, and passing it alone is **supported**: the
+    continuation/rehydration resolver still honours it (`_cont_root`), which is how a run
+    re-attaches to an existing root after compaction. Do **not** add a fail-closed guard on
+    root-without-parent — tried 2026-07-31, it broke 8 assertions in
+    `codex-compaction-rehydration.test.sh`. To set the lineage root, **set both to that id**.
+  - ⚠️ **Lineage is telemetry-only ONLY off the sealed-campaign rail.** With
+    `--campaign-contract`, `root_run_id` is load-bearing: `deriveCampaignDispatchUnit`
+    requires `rootRunId === campaignContract.mission_runtime.root_run_id` and otherwise
+    rejects with `caller root_run_id disagrees with campaign mission_runtime` — an error
+    that names neither env var, so read this bullet before believing the campaign contract
+    is at fault. A Mission leaf therefore dispatches with
+    `AUTOPILOT_PARENT_RUN_ID=AUTOPILOT_ROOT_RUN_ID=<mission_runtime.root_run_id>`.
 - **HONEST BOUNDARY (observability scope):** lineage spans only layers passing through
   `dispatch-hetero.sh` / `dispatch-review.sh`; engine-internal spawns (e.g. codex `spawn_agent`,
   agy recursion) and depth-0-only tooling do not appear unless they emit one of those
@@ -494,7 +530,7 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
 | `codex` | OpenAI `gpt-*`/`*codex*` | ✅ self-commits, can run build/test mid-turn | ✅ | default; `--effort` reasoning. Auto-selected for `*gpt*`/`*codex*` models. |
 | `agy` | Google Gemini (Antigravity CLI) | ✅ can run build/test (sync foreground; auto-managed to completion, bounded by `--print-timeout` — the old "run_command 10s cap" is REFUTED on 1.0.14, see portability § 2026-07-02) | ✅ | needs interactive auth; absolute-worktree anchor (agy `-p` ignores cwd). Gotcha: no cross-call `&`/`nohup` bg jobs (each `run_command` = isolated subshell, reaps its children) — run long tasks as ONE sync command. |
 | `grok` | xAI `grok-4.5` (upstream renamed from `grok-build`, verified 2026-07-14), `grok-composer-2.5-fast` | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd) | needs `grok login`. HONORS `--cwd` (no anchor). Composer 2.5 lives in the grok CLI on the Grok Build plan. Auto-selected for `*grok*`/`*composer*`. |
-| `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3 reviewer-calibrated** (10/10 known-bad, 0 false-pass-on-critical, 3/3 clean). **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. |
+| `cc-shim` | Claude Code CLI → **any Anthropic-compatible endpoint** (`MiniMax-M3`, GLM, …) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, no skip-perms) | **EXPLICIT-only**. Set `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` in env (NOT `ANTHROPIC_API_KEY` — it's unset so it can't override the shim token). Prompt via STDIN. For an IMPLEMENTER the MODEL writes the code, not the driver family. **MiniMax-M3:** baseline reviewer calibration is 10/10 known-bad, 0 false-pass-on-critical, 3/3 clean, but its diff-only seat later produced false central claims in 5/6 observations. The exact `MiniMax-M3` + `cc-shim` + `minimax` tuple requires `reviewer_limitation: minimax-false-central-claim-5-of-6`; independently verify its findings. **GLM-5.2**: endpoint verified but 529-overloaded as of 2026-06-30 — full loop unverified. |
 | `pi` | `pi` coding agent RPC mode (`v0.80.6`), MiniMax provider | ✅ EDIT-ONLY + wrapper-commit + duplex supervision | ❌ NOT wired (implementer-only — `dispatch-review.sh` rejects `--runner pi`; do NOT count pi toward reviewer/qc-panel family coverage) | **EXPLICIT-only** (declarative via `implementer_runner: pi` in `review-loop-config.md`, or hand-typed `--runner pi`; never auto-routed). `--provider` defaults `minimax` (env `PI_RPC_PROVIDER` override), `--pi-bin` test seam, `PI_MODELS_JSON` precondition path override for auth lookup, native `pi-rpc` stream + report-only stall probe. |
 | `qoderclicn` | Qoder CLI CN → Alibaba `Qwen3.8-Max-Preview` (also gateways GLM-5.2 / DeepSeek-V4 / Kimi / MiniMax-M2.7) | ✅ EDIT-ONLY + wrapper-commit | ✅ read-only (scratch cwd, `--tools ""`) | needs Qoder CLI CN auth (`~/.qoder-cn`). HONORS `-w`/`--cwd` (no anchor — grok-shaped, NOT agy). Prompt via STDIN; `-p` print mode; effort → `--reasoning-effort`; `--qoder-bin` test seam. Reviewer splits STDOUT/STDERR (a benign `fatal: not a git repository` on stderr from the non-git scratch cwd stays out of the parse). Auto-selected for `*qwen*`/`*qwq*`. Spike-verified 2026-07-24 (edit-only + `-w` honored, both paths e2e-passed on Qwen3.8-Max-Preview). |
 

@@ -48,6 +48,7 @@ git add ok.txt
 git -c user.email=t@t -c user.name=t commit -q -m "test: smoke"
 EOF
 chmod +x "$STUB_OK"
+make_agy_stub_versioned "$STUB_OK"
 
 RUNS="$TEST_TMP/runs"
 mkdir -p "$RUNS"

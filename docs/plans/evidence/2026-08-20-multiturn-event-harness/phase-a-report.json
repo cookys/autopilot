@@ -1,0 +1,83 @@
+{
+  "summary": {
+    "scanned": 766,
+    "eligible": 3,
+    "per_marker": {
+      "m1_session_sha": {
+        "sessions_fired": 1,
+        "label": "insufficient"
+      },
+      "m2_plan_doc": {
+        "sessions_fired": 2,
+        "label": "observed"
+      },
+      "m3_project_readme": {
+        "sessions_fired": 2,
+        "label": "observed"
+      },
+      "m4_ff_taskcreate": {
+        "sessions_fired": 2,
+        "label": "observed"
+      }
+    }
+  },
+  "eligible_sessions": [
+    {
+      "file": "/home/cookys/.claude/projects/-home-cookys-projects-308/2f6d30b0-ac16-4b51-80a0-f26b9844e232.jsonl",
+      "real_user_turns": 15,
+      "qualifying_records": 1059,
+      "devflow_engaged": true,
+      "eligible": true,
+      "markers": {
+        "m1_session_sha": 2,
+        "m2_plan_doc": 5,
+        "m3_project_readme": 10,
+        "m4_ff_taskcreate": 2
+      },
+      "raw": {
+        "taskcreate_any": true,
+        "skill_devflow_any": true
+      },
+      "first_q_ts": "2026-08-13T14:51:20.579Z",
+      "last_q_ts": "2026-08-14T04:37:10.708Z"
+    },
+    {
+      "file": "/home/cookys/.claude/projects/-home-cookys-projects-autopilot/c338ae81-f0d8-4a33-9535-25f8bfe1103f.jsonl",
+      "real_user_turns": 24,
+      "qualifying_records": 1038,
+      "devflow_engaged": true,
+      "eligible": true,
+      "markers": {
+        "m1_session_sha": 0,
+        "m2_plan_doc": 2,
+        "m3_project_readme": 6,
+        "m4_ff_taskcreate": 1
+      },
+      "raw": {
+        "taskcreate_any": true,
+        "skill_devflow_any": true
+      },
+      "first_q_ts": "2026-08-06T07:38:47.186Z",
+      "last_q_ts": "2026-08-07T22:17:49.308Z"
+    },
+    {
+      "file": "/home/cookys/.claude/projects/-home-cookys-projects-mple2-recovery/ac13d41b-1605-4c89-a87f-4ca021db5ecc.jsonl",
+      "real_user_turns": 6,
+      "qualifying_records": 492,
+      "devflow_engaged": true,
+      "eligible": true,
+      "markers": {
+        "m1_session_sha": 0,
+        "m2_plan_doc": 0,
+        "m3_project_readme": 0,
+        "m4_ff_taskcreate": 0
+      },
+      "raw": {
+        "taskcreate_any": false,
+        "skill_devflow_any": true
+      },
+      "first_q_ts": "2026-08-10T20:22:53.575Z",
+      "last_q_ts": "2026-08-11T03:28:40.677Z"
+    }
+  ]
+}

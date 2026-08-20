@@ -187,6 +187,14 @@ else
       continue
     fi
     case "$(basename "$file")" in
+      # codex-plugin-package REGENERATES the live repo mirror (platforms/codex/plugin/) —
+      # 14 non---check sync invocations — while dev-setup asserts on files inside that same
+      # tree. In the 8-way pool they raced: both reported FAILED on 2026-08-18 and both
+      # passed serially on the same tree. That is worse than a flake, because a red count
+      # that is partly noise stops being read: eleven REAL failures sat unnoticed behind it
+      # for a day. Proper fix is to make codex-plugin-package work on a scratch copy the way
+      # sync-all.test.sh already does; serializing is the right-sized fix until then.
+      codex-plugin-package.test.sh|dev-setup.test.sh|\
       dispatch-detach.test.sh|dispatch-hetero.test.sh|dispatch-lineage.test.sh|dispatch-pi.test.sh|sync-all.test.sh)
         SERIAL_L2_FILES+=("$file")
         ;;

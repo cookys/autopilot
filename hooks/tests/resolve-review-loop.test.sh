@@ -67,11 +67,11 @@ assert_eq "0" "$EXIT" "default exit code"
 assert_contains "$OUT" '"reviewer_engine": "MiniMax-M3"' "default reviewer engine"
 assert_contains "$OUT" '"implementer_engine": "grok-4.5"' "default implementer (grok, Board decision A)"
 assert_contains "$OUT" '"verification_author_present": true' "default verification_author_present"
-assert_contains "$OUT" '"verification_author_engine": "Gemini 3.5 Flash (High)"' "default verification_author_engine"
-assert_contains "$OUT" '"verification_author_runner": "agy"' "default verification_author_runner"
+assert_contains "$OUT" '"verification_author_engine": "GLM-5.2"' "default verification_author_engine"
+assert_contains "$OUT" '"verification_author_runner": "cc-shim"' "default verification_author_runner"
 assert_contains "$OUT" '"verification_author_effort": "high"' "default verification_author_effort"
-assert_contains "$OUT" '"verification_author_endpoint": ""' "default verification_author_endpoint"
-assert_contains "$OUT" '"verification_author_family": "google"' "default derived verification_author_family"
+assert_contains "$OUT" '"verification_author_endpoint": "glm"' "default verification_author_endpoint"
+assert_contains "$OUT" '"verification_author_family": "zhipu"' "default derived verification_author_family"
 assert_contains "$OUT" '"implementer_family": "xai"' "default derived implementer_family"
 assert_contains "$OUT" '"config_path": "'"$REPO_ROOT/.claude/review-loop-config.md"'"' "default config_path is repo dogfood absolute path"
 assert_contains "$OUT" '"loop_convergence_verdict": "SHIP-AS-IS"' "default convergence verdict"
@@ -80,6 +80,35 @@ assert_contains "$OUT" '"required_review_families": 2' "default required_review_
 assert_contains "$OUT" '"l1_required": true' "default l1_required"
 assert_contains "$OUT" '"cross_family_required": true' "default cross_family_required"
 assert_contains "$OUT" '"cross_family_satisfied": true' "default cross_family_satisfied"
+assert_contains "$OUT" 'MiniMax-M3 diff-only reviewer limitation: 5/6 recorded central claims were false' "default MiniMax seat surfaces calibration limitation"
+
+# A2 perturbation: deleting the exact-seat caveat makes the roster fail closed.
+NO_MINIMAX_CAVEAT_CFG="$TEST_TMP/no-minimax-caveat.md"
+sed '/^[[:space:]]*- reviewer_limitation:/d' "$REPO_ROOT/.claude/review-loop-config.md" > "$NO_MINIMAX_CAVEAT_CFG"
+NO_CAVEAT_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$NO_MINIMAX_CAVEAT_CFG" bash "$SCRIPT" 2>&1)"
+NO_CAVEAT_EXIT=$?
+assert_eq "3" "$NO_CAVEAT_EXIT" "MiniMax exact seat is rejected when its limitation tag is removed"
+assert_contains "$NO_CAVEAT_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "removed MiniMax caveat is diagnosed"
+
+# Removing or falsifying the legacy required flag must not weaken the exact-seat
+# guard. The tuple itself is the authority boundary.
+NO_MINIMAX_GUARD_FIELDS_CFG="$TEST_TMP/no-minimax-guard-fields.md"
+sed -e '/^[[:space:]]*- reviewer_limitation:/d' \
+  -e '/^[[:space:]]*- reviewer_limitation_required:/d' \
+  "$REPO_ROOT/.claude/review-loop-config.md" > "$NO_MINIMAX_GUARD_FIELDS_CFG"
+NO_GUARD_FIELDS_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$NO_MINIMAX_GUARD_FIELDS_CFG" bash "$SCRIPT" 2>&1)"
+NO_GUARD_FIELDS_EXIT=$?
+assert_eq "3" "$NO_GUARD_FIELDS_EXIT" "MiniMax exact seat rejects caveat removal even when required flag is deleted"
+assert_contains "$NO_GUARD_FIELDS_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "deleted MiniMax guard fields are diagnosed"
+
+MINIMAX_FALSE_REQUIRED_CFG="$TEST_TMP/minimax-false-required.md"
+sed -e '/^[[:space:]]*- reviewer_limitation:/d' \
+  -e 's/^[[:space:]]*- reviewer_limitation_required:.*/- reviewer_limitation_required: false/' \
+  "$REPO_ROOT/.claude/review-loop-config.md" > "$MINIMAX_FALSE_REQUIRED_CFG"
+FALSE_REQUIRED_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$MINIMAX_FALSE_REQUIRED_CFG" bash "$SCRIPT" 2>&1)"
+FALSE_REQUIRED_EXIT=$?
+assert_eq "3" "$FALSE_REQUIRED_EXIT" "MiniMax exact seat rejects caveat removal when required flag is false"
+assert_contains "$FALSE_REQUIRED_OUT" "requires reviewer_limitation=minimax-false-central-claim-5-of-6" "false MiniMax required flag cannot silence diagnosis"
 
 # 4. --field accessors
 # DOGFOOD PIN (Board decision A roster — see §3 rationale).
@@ -92,11 +121,11 @@ assert_eq "true" "$(bash "$SCRIPT" --field l1_required)" "--field l1_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_required)" "--field cross_family_required"
 assert_eq "true" "$(bash "$SCRIPT" --field cross_family_satisfied)" "--field cross_family_satisfied"
 assert_eq "true" "$(bash "$SCRIPT" --field verification_author_present)" "--field verification_author_present"
-assert_eq "Gemini 3.5 Flash (High)" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
-assert_eq "agy" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
+assert_eq "GLM-5.2" "$(bash "$SCRIPT" --field verification_author_engine)" "--field verification_author_engine"
+assert_eq "cc-shim" "$(bash "$SCRIPT" --field verification_author_runner)" "--field verification_author_runner"
 assert_eq "high" "$(bash "$SCRIPT" --field verification_author_effort)" "--field verification_author_effort"
-assert_eq "" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
-assert_eq "google" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
+assert_eq "glm" "$(bash "$SCRIPT" --field verification_author_endpoint)" "--field verification_author_endpoint"
+assert_eq "zhipu" "$(bash "$SCRIPT" --field verification_author_family)" "--field verification_author_family"
 assert_eq "xai" "$(bash "$SCRIPT" --field implementer_family)" "--field implementer_family"
 assert_eq "$REPO_ROOT/.claude/review-loop-config.md" "$(bash "$SCRIPT" --field config_path)" "--field config_path"
 EMPTY_SCDIR="$TEST_TMP/empty-scorecard"
@@ -217,12 +246,12 @@ assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QXFCFG" bash "$SCRIPT" --sourc
 # whose qc_panel is a moving target (pinned to Gemini 3.6 Flash (High) on 2026-07-23) — this
 # case asserts the BUILT-IN default roster, so it must not read the live config.
 OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT")"
-assert_contains "$OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash"]' "default qc_panel array emitted"
+assert_contains "$OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-3.6-flash-high"]' "default qc_panel array emits canonical agy slug"
 assert_contains "$OUT" '"qc_panel_aggregation": "union-on-verified-critical"' "default aggregation"
-assert_eq "gpt-5.5 claude-opus gemini-flash" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
+assert_eq "gpt-5.5 claude-opus gemini-3.6-flash-high" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field qc_panel)" "--field qc_panel space-joined"
 assert_eq "true" "$(json_get "$OUT" qc_panel_seats_complete)" \
   "built-in panel has a complete exact-tuple roster"
-assert_eq '[{"role":"qc","runner":"codex","model":"gpt-5.5","effort":"xhigh","endpoint":null,"family":"openai"},{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"agy","model":"gemini-flash","effort":"high","endpoint":null,"family":"google"}]' \
+assert_eq '[{"role":"qc","runner":"codex","model":"gpt-5.5","effort":"xhigh","endpoint":null,"family":"openai"},{"role":"qc","runner":"claude-native","model":"claude-opus","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"agy","model":"gemini-3.6-flash-high","effort":"high","endpoint":null,"family":"google"}]' \
   "$(json_get "$OUT" qc_panel_seats)" \
   "built-in QC seats bind runner, model, effort, endpoint, role, and family"
 assert_eq "300" "$(json_get "$OUT" provider_readiness_receipt_ttl_seconds)" \
@@ -234,7 +263,7 @@ assert_eq "different" "$(json_get "$OUT" provider_readiness_fallback_family_cons
 AC_CFG="$TEST_TMP/all-calibrated.md"
 printf -- '- qc_panel: all-calibrated\n' > "$AC_CFG"
 AC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG" bash "$SCRIPT")"
-assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset expands to the 5-family roster"
+assert_contains "$AC_OUT" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-3.6-flash-high", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset expands to canonical 5-family roster"
 assert_not_contains "$(json_get "$AC_OUT" qc_panel)" "all-calibrated" "alias string is absent from parsed qc_panel value"
 assert_eq "false" "$(json_get "$AC_OUT" qc_panel_seats_complete)" \
   "an explicit panel without exact companion metadata fails closed"
@@ -252,11 +281,37 @@ assert_eq "450" "$(json_get "$EXACT_QC_OUT" provider_readiness_receipt_ttl_secon
 assert_eq "any" "$(json_get "$EXACT_QC_OUT" provider_readiness_fallback_family_constraint)" \
   "configured fallback family constraint is emitted"
 
+# 7b2. Kimi QC seat. `kimi` is a first-class review transport (dispatch-review.sh
+# --runner kimi, added 380405da for exactly this panel), so a QC seat configured on
+# it MUST resolve complete. The seat-runner allowlist used to omit `kimi`, which
+# silently turned a legitimately configured panel into qc_panel_seats_complete=false
+# with an empty roster — fail-closing every strict /l5 and /l6 run downstream.
+# Panel mirrors the real four-seat consumer config so the regression stays concrete.
+KIMI_QC_CFG="$TEST_TMP/exact-qc-kimi.md"
+printf -- '- qc_panel: claude-fable-5, kimi-code/k3, GLM-5.2, Qwen3.8-Max-Preview\n- qc_panel_runners: claude-native, kimi, anthropic-compatible, qoderclicn\n- qc_panel_efforts: high, high, high, max\n- qc_panel_endpoints: @none, @none, glm, @none\n' > "$KIMI_QC_CFG"
+KIMI_QC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_QC_CFG" bash "$SCRIPT")"
+assert_eq "true" "$(json_get "$KIMI_QC_OUT" qc_panel_seats_complete)" \
+  "a kimi-runner QC seat resolves complete"
+assert_eq '[{"role":"qc","runner":"claude-native","model":"claude-fable-5","effort":"high","endpoint":null,"family":"anthropic"},{"role":"qc","runner":"kimi","model":"kimi-code/k3","effort":"high","endpoint":null,"family":"moonshot"},{"role":"qc","runner":"anthropic-compatible","model":"GLM-5.2","effort":"high","endpoint":"glm","family":"zhipu"},{"role":"qc","runner":"qoderclicn","model":"Qwen3.8-Max-Preview","effort":"max","endpoint":null,"family":"alibaba"}]' \
+  "$(json_get "$KIMI_QC_OUT" qc_panel_seats)" \
+  "kimi QC seat binds the kimi runner and the moonshot family"
+
+# 7b3. reviewer_runner accepts kimi. The JS contract validator gates
+# qc_panel_seats[].runner on the reviewer_runner enum (src/engine/resolve-review-loop.js),
+# and check-contract-schema.js parity-locks that enum to this shell case arm — so the
+# loop reviewer seat and the QC seat must admit the same transports.
+KIMI_REV_CFG="$TEST_TMP/rl-kimi-reviewer.md"
+printf -- '- reviewer_runner: kimi\n- reviewer_engine: kimi-code/k3\n' > "$KIMI_REV_CFG"
+assert_eq "kimi" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_REV_CFG" bash "$SCRIPT" --field reviewer_runner)" \
+  "kimi reviewer_runner honored"
+assert_eq "moonshot" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$KIMI_REV_CFG" bash "$SCRIPT" --field reviewer_family)" \
+  "kimi reviewer maps to the moonshot family"
+
 # case/trim handling check
 AC_CFG_CASE="$TEST_TMP/all-calibrated-case.md"
 printf -- '- qc_panel:   All-Calibrated  \n' > "$AC_CFG_CASE"
 AC_OUT_CASE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AC_CFG_CASE" bash "$SCRIPT")"
-assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-flash", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
+assert_contains "$AC_OUT_CASE" '"qc_panel": ["gpt-5.5", "claude-opus", "gemini-3.6-flash-high", "grok-4.5", "MiniMax-M3"]' "all-calibrated preset case/trim is handled correctly"
 
 # cross-family field computed over the expanded list
 AC_CFG_XFAM="$TEST_TMP/all-calibrated-xfam.md"
@@ -344,11 +399,22 @@ assert_eq "mixed" "$(bash "$SCRIPT" --field work_domain)" "--field work_domain"
 assert_eq "none" "$(bash "$SCRIPT" --field domain_source)" "--field domain_source"
 assert_eq "2" "$(bash "$SCRIPT" --domain nope >/dev/null 2>&1; echo $?)" "--domain invalid returns usage exit 2"
 
+# Dogfood shim (2026-08-17 qualification-cli-transport): the repo's own config now
+# pins a brain seat, but the ambient-default pins below measure the NO-seat default
+# shape. Derive an ambient-minus-brain fixture so those pins keep their original
+# measurement surface (everything except brain_seat_identity_file is untouched).
+AMBIENT_NO_BRAIN="$TEST_TMP/ambient-config-no-brain.md"
+if [ -f "$REPO_ROOT/.claude/review-loop-config.md" ]; then
+  grep -v 'brain_seat_identity_file' "$REPO_ROOT/.claude/review-loop-config.md" > "$AMBIENT_NO_BRAIN"
+else
+  : > "$AMBIENT_NO_BRAIN"
+fi
+
 # 13. --auto-domain inserts exactly two keys at JSON tail (legacy output is unchanged prefix)
-BASE_JSON="$(bash "$SCRIPT")"
-AUTO_JSON="$(bash "$SCRIPT" --auto-domain HEAD..HEAD)"
-AUTO_WD="$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field work_domain)"
-AUTO_SOURCE="$(bash "$SCRIPT" --auto-domain HEAD..HEAD --field domain_source)"
+BASE_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT")"
+AUTO_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --auto-domain HEAD..HEAD)"
+AUTO_WD="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --auto-domain HEAD..HEAD --field work_domain)"
+AUTO_SOURCE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --auto-domain HEAD..HEAD --field domain_source)"
 BASE_JSON_STRIPPED="$(printf '%s' "$BASE_JSON" | sed -E 's/, "capability_state_source":.* }/ }/')"
 AUTO_JSON_STRIPPED="$(printf '%s' "$AUTO_JSON" | sed -E 's/, "capability_state_source":.* }/ }/')"
 BASE_LEGACY_PREFIX="$(printf '%s' "$BASE_JSON_STRIPPED" | sed 's/, "work_domain": "[^"]*", "domain_source": "[^"]*" }$/ }/')"
@@ -362,7 +428,7 @@ assert_eq "none" "$AUTO_SOURCE" "empty auto-diff range keeps domain_source=none"
 #      Pin the exact key NAMES + ORDER (independent of values): base keys plus new
 #      provenance fields in schema order (verification-author tuple, family provenance, config path),
 #      then density-variant keys when scale/source flags are enabled.
-EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":'
+EXPECTED_KEYS='"reviewer_engine":"reviewer_effort":"reviewer_runner":"implementer_engine":"implementer_effort":"implementer_runner":"loop_max_rounds":"loop_convergence_verdict":"spec_review":"independent_harness":"qc_panel":"qc_panel_aggregation":"review_risk":"required_review_families":"l1_required":"cross_family_required":"cross_family_satisfied":"review_diff_scope":"source":"work_domain":"domain_source":"capability_state_source":"quota_status":"quota_reset_at":"skill_mode_requested":"skill_mode_effective":"capability_warnings":"reviewer_endpoint":"reviewer_family":"implementer_endpoint":"verification_author_present":"verification_author_engine":"verification_author_runner":"verification_author_effort":"verification_author_endpoint":"verification_author_family":"implementer_family":"config_path":"min_panel_size":"on_engine_unavailable":"reviewer_engine_low_risk":"reviewer_effort_low_risk":"on_family_conflict":"reviewer_fallback_preference":"reviewer_fallback_preference_low_risk":"qc_panel_seats":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"role":"runner":"model":"effort":"endpoint":"family":"qc_panel_seats_complete":"provider_readiness_receipt_ttl_seconds":"provider_readiness_fallback_family_constraint":"strict_l5_policy_override":"brain_seat":"plan_review":"plan_reviewer_engine":"plan_reviewer_effort":"plan_reviewer_runner":"plan_reviewer_endpoint":"plan_deep_reviewer_engine":"plan_deep_reviewer_effort":"plan_deep_reviewer_runner":"plan_deep_reviewer_endpoint":"plan_review_max_generations":"plan_review_max_wall_seconds":"plan_review_growth_warn_ratio":"plan_review_growth_stop_ratio":'
 ACTUAL_KEYS="$(printf '%s' "$AUTO_JSON" | grep -oE '"[a-z0-9_]+":' | tr -d '\n')"
 assert_eq "$EXPECTED_KEYS" "$ACTUAL_KEYS" "JSON schema key order is exact, including newly surfaced provenance keys"
 
@@ -437,6 +503,49 @@ assert_eq "false" "$(json_get "$FAIL_OUT" reviewer_qualified)" "failed reviewer 
 assert_eq "$FAIL_LADDER" "$(json_get "$FAIL_OUT" fallback_ladder)" "failed row still emits fallback ladder"
 assert_eq "3" "$(ENGINE_SCORECARD_DIR="$FAILDIR" bash "$SCRIPT" --check-scorecard --enforce >/dev/null 2>&1; echo $?)" "failed reviewer row with --enforce exits 3"
 
+# 20. --check-scorecard surfaces implementer scorecard inadmissibility in capability_warnings
+# (BACKLOG "Implementer scorecard lapses on runner-version drift, silently degrading every /l5")
+GROK_IMPL_CFG="$TEST_TMP/impl-grok.md"
+printf -- '- implementer_engine: grok-4.5\n- implementer_runner: grok\n' > "$GROK_IMPL_CFG"
+# 20a. Missing row → loud warning at roster resolution
+IMPLMISS_DIR="$TEST_TMP/impl-miss"
+mkdir -p "$IMPLMISS_DIR"
+IMPLMISS_OUT="$(ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_contains "$(json_get "$IMPLMISS_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: no scorecard row" \
+  "missing implementer row surfaces a capability warning under --check-scorecard"
+# 20b. Expired row → loud warning naming the status
+IMPLEXP_DIR="$TEST_TMP/impl-expired"
+mkdir -p "$IMPLEXP_DIR"
+cat > "$IMPLEXP_DIR/rec.json" <<'JSON'
+{"engine":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"2/2","false_pass_critical":0},"capability_score":1,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2026-07-14"}
+JSON
+ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$IMPLEXP_DIR/rec.json" > /dev/null
+IMPLEXP_OUT="$(ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_contains "$(json_get "$IMPLEXP_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: scorecard row status=expired" \
+  "expired implementer row surfaces a status-named capability warning"
+# 20c. Admissible (fresh) row → NO implementer warning; warning absent without --check-scorecard
+IMPLOK_DIR="$TEST_TMP/impl-ok"
+mkdir -p "$IMPLOK_DIR"
+cat > "$IMPLOK_DIR/rec.json" <<'JSON'
+{"engine":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"2/2","false_pass_critical":0},"capability_score":1,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+JSON
+ENGINE_SCORECARD_DIR="$IMPLOK_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$IMPLOK_DIR/rec.json" > /dev/null
+IMPLOK_OUT="$(ENGINE_SCORECARD_DIR="$IMPLOK_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_not_contains "$(json_get "$IMPLOK_OUT" capability_warnings)" "implementer seat" \
+  "admissible implementer row emits no implementer warning"
+IMPLOFF_OUT="$(ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT")"
+assert_not_contains "$(json_get "$IMPLOFF_OUT" capability_warnings)" "implementer seat" \
+  "without --check-scorecard the implementer admissibility check does not run"
+# 20d. P7/KR6: an operator override file flips the warning to a loud evidence-free notice
+cat > "$TEST_TMP/qual-override.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"grok-4.5","runner":"grok","role":"implementer","reason":"first-use audition","operator":"cookys","expires":"2099-01-01"}]}
+JSON
+IMPLOVR_OUT="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$TEST_TMP/qual-override.json" ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_contains "$(json_get "$IMPLOVR_OUT" capability_warnings)" "EVIDENCE-FREE operator override" \
+  "override file flips the warning to a loud evidence-free notice"
+assert_contains "$(json_get "$IMPLOVR_OUT" capability_warnings)" "first-use audition" \
+  "override reason surfaces in the warning"
+
 EXPDIR="$TEST_TMP/check-expired"
 mkdir -p "$EXPDIR"
 RECEXPIRED_JSON="$EXPDIR/rec.json"
@@ -453,17 +562,18 @@ CAP_TEST_DIR="$TEST_TMP/cap-store"
 mkdir -p "$CAP_TEST_DIR"
 
 # A. Empty store test (capability state is enabled by default)
-# Omitting --capability-state (or empty store) => source: unknown, status: unknown, warnings: []
-EMPTY_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
+# Omitting --capability-state (or empty store) keeps capability state unknown.
+# MiniMax calibration is a resolver diagnostic, not an operational capability warning.
+EMPTY_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT")"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" capability_state_source)" "empty store => capability_state_source is unknown"
 assert_eq "unknown" "$(json_get "$EMPTY_OUT" quota_status)" "empty store => quota_status is unknown"
-assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => capability_warnings is empty []"
+assert_eq "[]" "$(json_get "$EMPTY_OUT" capability_warnings)" "empty store => no operational capability warning"
 
 # B. --capability-state off test
-OFF_OUT="$(ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
+OFF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" ENGINE_CAPABILITY_DIR="$CAP_TEST_DIR" bash "$SCRIPT" --capability-state off)"
 assert_eq "none" "$(json_get "$OFF_OUT" capability_state_source)" "--capability-state off => capability_state_source is none"
 assert_eq "unknown" "$(json_get "$OFF_OUT" quota_status)" "--capability-state off => quota_status is unknown"
-assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => capability_warnings is empty []"
+assert_eq "[]" "$(json_get "$OFF_OUT" capability_warnings)" "--capability-state off => no operational capability warning"
 
 # C. Record a fresh exhausted/high implementer event
 cat <<'JSON' > "$TEST_TMP/event-exhausted.json"
@@ -815,5 +925,207 @@ assert_contains "$(REVIEW_LOOP_CONFIG_OVERRIDE="$PREF_CFG" bash "$SCRIPT")" '"re
 # --check-scorecard fallback_ladder carries implementer-family provenance
 SC_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_LR_CFG" ENGINE_SCORECARD_DIR="${EMPTY_SCDIR:-$TEST_TMP/empty-sc}" bash "$SCRIPT" --check-scorecard 2>/dev/null)"
 assert_contains "$SC_OUT" '"fallback_ladder_implementer_family"' "ladder provenance key present under --check-scorecard"
+
+# ---------------------------------------------------------------------------
+# D1 A01 — behavioral per-field invalid-value proof for every shell-validated
+# enum: one garbage value each → documented fallback (or fail-closed exit).
+# Soft-fallback enums (effort/flags/aggregation/scope/policy) first; transport
+# and hard-fail enums (runners, plan_review, verification_author_present,
+# --domain) asserted separately as exit-code contracts.
+# ---------------------------------------------------------------------------
+ENUM_CFG="$TEST_TMP/enum-invalid.md"
+cat > "$ENUM_CFG" <<'CFG'
+- reviewer_effort: not-an-effort
+- implementer_effort: turbo
+- spec_review: maybe
+- independent_harness: maybe
+- qc_panel_aggregation: majority
+- review_diff_scope: partial
+- on_engine_unavailable: invent
+- on_family_conflict: invent
+- provider_readiness_fallback_family_constraint: invent
+CFG
+ENUM_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ENUM_CFG" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "$(json_get "$ENUM_OUT" reviewer_effort)" "xhigh" "invalid reviewer_effort falls back to xhigh"
+assert_eq "$(json_get "$ENUM_OUT" implementer_effort)" "high" "invalid implementer_effort falls back to high"
+assert_eq "$(json_get "$ENUM_OUT" spec_review)" "on" "invalid spec_review falls back to on"
+assert_eq "$(json_get "$ENUM_OUT" independent_harness)" "on" "invalid independent_harness falls back to on"
+assert_eq "$(json_get "$ENUM_OUT" qc_panel_aggregation)" "union-on-verified-critical" "invalid qc_panel_aggregation falls back to union"
+assert_eq "$(json_get "$ENUM_OUT" review_diff_scope)" "full" "invalid review_diff_scope falls back to full"
+assert_eq "$(json_get "$ENUM_OUT" on_engine_unavailable)" "ask" "invalid on_engine_unavailable falls back to ask"
+assert_eq "$(json_get "$ENUM_OUT" on_family_conflict)" "block" "invalid on_family_conflict fails closed to block"
+assert_eq "$(json_get "$ENUM_OUT" provider_readiness_fallback_family_constraint)" "different" "invalid readiness family constraint falls back to different"
+
+# Transport-selecting / hard-fail enums fail loudly (documented fail-closed)
+RUN_CFG="$TEST_TMP/enum-runner-bad.md"
+printf -- '- reviewer_runner: not-a-runner\n' > "$RUN_CFG"
+assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid reviewer_runner exits 3"
+printf -- '- implementer_runner: not-a-runner\n' > "$RUN_CFG"
+assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid implementer_runner exits 3"
+printf -- '- verification_author_present: maybe\n' > "$RUN_CFG"
+assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid verification_author_present exits 3"
+printf -- '- plan_review: maybe\n' > "$RUN_CFG"
+assert_eq "$(REVIEW_LOOP_CONFIG_OVERRIDE="$RUN_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" "3" "invalid plan_review exits 3"
+assert_eq "$(bash "$SCRIPT" --domain invent >/dev/null 2>&1; echo $?)" "2" "invalid --domain exits 2"
+
+# D7 A13 — verify_strength density input (fail-safe; protected-path never reduces)
+VS_BASE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --field loop_max_rounds)"
+VS_WEAK="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --verify-strength weak --field loop_max_rounds)"
+VS_STRONG="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --verify-strength strong --field loop_max_rounds)"
+VS_STRONG_PROT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --protected-path 1 --verify-strength strong --field loop_max_rounds)"
+VS_PROT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --source-trust high --diff-lines 10 --protected-path 1 --field loop_max_rounds)"
+# weak raises rounds above base
+node -e 'const b=+process.argv[1],w=+process.argv[2]; process.exit(w>b?0:1)' "$VS_BASE" "$VS_WEAK"
+assert_eq "$?" "0" "verify_strength=weak increases loop_max_rounds"
+# strong may lower (at most -1) when not protected
+node -e 'const b=+process.argv[1],s=+process.argv[2]; process.exit(s<=b&&s>=b-1?0:1)' "$VS_BASE" "$VS_STRONG"
+assert_eq "$?" "0" "verify_strength=strong reduces by at most one when unprotected"
+# strong cannot reduce below protected-path baseline
+assert_eq "$VS_STRONG_PROT" "$VS_PROT" "verify_strength=strong cannot reduce protected-path rounds"
+assert_eq "$(bash "$SCRIPT" --verify-strength invent >/dev/null 2>&1; echo $?)" "2" "invalid --verify-strength exits 2"
+
+# ── Cascade trigger (four-layer P2): --prior-status elevates risk on the EXISTING path ──
+PS_HIGH="$(bash "$SCRIPT" --prior-status no_verdict --diff-lines 10 --source-trust high --oracle-available 1 --security-surface 0 2>/dev/null \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s);process.stdout.write(d.review_risk+" "+d.required_review_families+" "+d.cross_family_required)});')"
+assert_eq "high 2 true" "$PS_HIGH" "prior no_verdict elevates to the existing high-risk escalation (families=2, cross-family)"
+PS_DEF="$(bash "$SCRIPT" --diff-lines 10 --source-trust high --oracle-available 1 --security-surface 0 2>/dev/null \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s);process.stdout.write(d.review_risk+" "+d.required_review_families)});')"
+PS_NONE="$(bash "$SCRIPT" --prior-status none --diff-lines 10 --source-trust high --oracle-available 1 --security-surface 0 2>/dev/null \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const d=JSON.parse(s);process.stdout.write(d.review_risk+" "+d.required_review_families)});')"
+assert_eq "$PS_DEF" "$PS_NONE" "--prior-status none is byte-identical to the default (existing behavior pinned)"
+bash "$SCRIPT" --prior-status bogus --diff-lines 10 2>/dev/null; PS_EXIT=$?
+assert_eq "2" "$PS_EXIT" "invalid --prior-status rejected"
+
+# ── Brain-seat standing (P7/KR4, plan 2026-08-17-brain-seat-exam-suite P4) ─────────
+BRAIN_TMP="$TEST_TMP/brain-seat"; mkdir -p "$BRAIN_TMP/store"
+BRAIN_ID="$BRAIN_TMP/incumbent-identity.json"
+node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  identity: "brain-model-exact", model_alias: "brain-engine", model_version: "1",
+  family: "test-family", runner: "brain-harness", runner_version: "1.0.0",
+  harness_version: "h1", effort: "high",
+  prompt_config_hash: "a".repeat(64), semantic_fingerprint: "b".repeat(64),
+  containment_fingerprint: "c".repeat(64), identity_resolved: true,
+}));
+' "$BRAIN_ID"
+cp "$BRAIN_ID" "$BRAIN_TMP/candidate-identity.json"
+BRAIN_CFG="$TEST_TMP/brain-cfg.md"
+printf -- '- brain_seat_identity_file: %s\n' "$BRAIN_ID" > "$BRAIN_CFG"
+
+# a config with no brain seat context → field stays null (pinned no-op; the repo's
+# own config pins a seat since 2026-08-17, so the no-seat shape uses the fixture)
+assert_eq "null" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$AMBIENT_NO_BRAIN" bash "$SCRIPT" --field brain_seat 2>/dev/null)" "no seat context => brain_seat null"
+
+# Seat-pin scope guard (review 2026-08-17): the ladder's project-repo fallback
+# (caller cwd OUTSIDE any project with its own config) must NOT project the
+# autopilot repo's own pin onto the consumer — brain_seat stays null and no
+# brain advisory reaches capability_warnings.
+BRAIN_FALLBACK_CWD="$TEST_TMP/consumer-no-config"; mkdir -p "$BRAIN_FALLBACK_CWD"
+assert_eq "null" "$(cd "$BRAIN_FALLBACK_CWD" && bash "$SCRIPT" --field brain_seat 2>/dev/null)" \
+  "project-repo ladder fallback never seats the repo's own brain pin"
+_BRAIN_FB_WARN="$(cd "$BRAIN_FALLBACK_CWD" && bash "$SCRIPT" --field capability_warnings 2>/dev/null)"
+assert_not_contains "$_BRAIN_FB_WARN" "brain seat" \
+  "no brain advisory leaks to consumers through the ladder fallback"
+
+# A RELATIVE pin resolves against the config's project root (dirname(config)/..),
+# never the caller's cwd: a caller-cwd project config with a relative pin still
+# finds its identity file when invoked from elsewhere via override.
+BRAIN_REL_ROOT="$TEST_TMP/rel-pin-project"; mkdir -p "$BRAIN_REL_ROOT/.claude"
+cp "$BRAIN_ID" "$BRAIN_REL_ROOT/.claude/rel-identity.json"
+printf -- '- brain_seat_identity_file: .claude/rel-identity.json\n' > "$BRAIN_REL_ROOT/.claude/review-loop-config.md"
+_BRAIN_REL="$(cd "$TEST_TMP" && REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_REL_ROOT/.claude/review-loop-config.md" \
+  ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" --field brain_seat 2>/dev/null)"
+assert_contains "$_BRAIN_REL" '"status":"no_record"' \
+  "relative pin resolves against the config project root, not caller cwd (pre-fix cwd resolution yields status_unavailable, so this pin is mutation-sensitive)"
+
+# incumbent with NO record: loud advisory annotation, never a block
+BS_ADV="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "advisory" "$(json_get "$BS_ADV" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
+  "incumbent without standing => advisory (Board 2026-08-16 bootstrap semantics)"
+assert_contains "$(json_get "$BS_ADV" capability_warnings)" "engine-qualify.sh brain" \
+  "incumbent annotation names the standing-exam path"
+
+# non-incumbent candidate with NO record: hard refusal naming BOTH legal paths
+BS_REF="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "refused" "$(json_get "$BS_REF" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
+  "candidate without standing => refused (KR4 red case)"
+assert_contains "$(json_get "$BS_REF" capability_warnings)" "qualification override" \
+  "refusal names the override path too (two-path rule survives)"
+
+# the per-invocation override STILL admits every non-qualified state (no third path)
+BRAIN_OVR="$BRAIN_TMP/override.json"
+node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({ schema: 1, overrides: [{
+  engine: "brain-engine", runner: "brain-harness", role: "owner",
+  reason: "test drive", expires: "2999-01-01",
+}]}));
+' "$BRAIN_OVR"
+BS_OVR="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" \
+  AUTOPILOT_QUALIFICATION_OVERRIDE="$BRAIN_OVR" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "override_admitted" "$(json_get "$BS_OVR" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
+  "override admits a candidate with no standing (EVIDENCE-FREE, loud)"
+assert_contains "$(json_get "$BS_OVR" capability_warnings)" "EVIDENCE-FREE" \
+  "override admission is loudly labelled"
+
+# a real qualified brain record => admitted, silent; 3 strikes => requalification_required
+node -e '
+const path = require("path");
+const { appendEvidenceRecord, appendStrikeRecord, resolveStoreConfig } =
+  require(path.join(process.argv[2], "scripts", "engine-capability-state"));
+const { compileCapabilityEvidence, BRAIN_CONSTRUCT_SCOPE } =
+  require(path.join(process.argv[2], "src", "engine", "capability-evidence"));
+const identity = JSON.parse(require("fs").readFileSync(process.argv[3], "utf8"));
+const config = resolveStoreConfig({ store: process.argv[1] });
+const corpusHash = "d".repeat(64);
+const trial = (id) => ({
+  trial_id: id, observed_at: "2026-08-17T00:00:00.000Z", stop_reason: "completed",
+  construct_scope: BRAIN_CONSTRUCT_SCOPE, plants_total: 6, plants_caught: 6,
+  clean_false_positives: 0, fairness_cases_total: 4, fairness_correctness_failures: 0,
+  pair_delta_count: 0, hard_fail_count: 0, ask_floor_violations: 0,
+  convergence_terminal: true, economy_ok: true, verification_actions: 4,
+  findings_closed: 3, spend_tokens: 1000,
+  decision_trace_hash: "e".repeat(64), round_stream_hash: "f".repeat(64),
+  corpus_manifest_hash: corpusHash,
+});
+const evidence = compileCapabilityEvidence({
+  schema_version: 1, source: "internal_eval", source_ref: "engine-qualify:brain-v1",
+  state: "qualified", role: "owner",
+  scope: { task_classes: ["brain-seat"], domains: ["repository"], languages: ["en"], tool_surface: [] },
+  identity, issued_at: "2026-08-17T00:00:00.000Z", observed_at: "2026-08-17T00:00:00.000Z",
+  expires_at: "2026-09-16T00:00:00.000Z",
+  methodology: {
+    kind: "owner_brain_seat", name: "owner-brain-seat", version: "1.0.0",
+    corpus_version: "brain-seat-v1.brain-seat-metamorphic-v1", corpus_manifest_hash: corpusHash,
+    thresholds: { min_trials: 2, min_plants_per_trial: 3, max_clean_false_positives: 0,
+      max_critical_misses: 0, max_pair_deltas: 0, max_asks_on_legal_controls: 0 },
+    basis: null,
+  },
+  trials: [trial("trial-1"), trial("trial-2")], revocation: null, supersedes: null,
+});
+appendEvidenceRecord(config, evidence, "engine-qualify-v2");
+for (let i = 0; i < 3; i += 1) {
+  appendStrikeRecord(config, { identity, source: "fuse", receiptRef: `t${i}`,
+    observedAt: `2026-08-18T0${i}:00:00.000Z` });
+}
+' "$BRAIN_TMP/store" "$REPO_ROOT" "$BRAIN_ID"
+BS_REQ="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" bash "$SCRIPT" 2>/dev/null)"
+assert_eq "requalification_required" "$(json_get "$BS_REQ" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).status))')" \
+  "3 post-pass strikes => requalification_required"
+assert_eq "refused" "$(json_get "$BS_REQ" brain_seat | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).admission))')" \
+  "requalification_required refuses a candidate exactly like absence (no silent third path)"
+
+# under --enforce the resolver ITSELF is the gate: a refused candidate seating exits 3
+REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  AUTOPILOT_BRAIN_SEAT_IDENTITY="$BRAIN_TMP/candidate-identity.json" \
+  bash "$SCRIPT" --enforce >/dev/null 2>&1
+assert_eq "3" "$?" "--enforce turns a refused brain seating into exit 3 (the shipped enforce rail)"
+REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN_CFG" ENGINE_CAPABILITY_DIR="$BRAIN_TMP/store" \
+  bash "$SCRIPT" --enforce >/dev/null 2>&1
+assert_eq "0" "$?" "--enforce leaves the incumbent advisory path passing (annotate, never block)"
 
 finalize_test

@@ -2,8 +2,8 @@
 
 > **Status**: Complete (2026-06-12) — execution state lives in [`tree/events.jsonl`](tree/events.jsonl); read via `scripts/tree.sh report 2026-06-12-task-tree-engine <node>`. Shadow calibration ongoing; graduation = Board decision (see BACKLOG checkpoint)
 > **Branch**: `feat/task-tree-engine`
-> **Plan**: [`docs/plans/2026-06-12-task-tree-engine.md`](../../plans/2026-06-12-task-tree-engine.md) (R1 dialectic converged, 10 binding amendments)
-> **Spec**: [`docs/plans/2026-06-12-task-tree-engine-design-spec.md`](../../plans/2026-06-12-task-tree-engine-design-spec.md) (Board-approved)
+> **Plan**: [`docs/plans/2026-06-12-task-tree-engine.md`](../../../plans/2026-06-12-task-tree-engine.md) (R1 dialectic converged, 10 binding amendments)
+> **Spec**: [`docs/plans/2026-06-12-task-tree-engine-design-spec.md`](../../../plans/2026-06-12-task-tree-engine-design-spec.md) (Board-approved)
 > **Mode**: CEO (involvement 3); graduation of verification authority is explicitly a Board decision, NOT within CEO DOA.
 
 ## Intent (this README owns intent only — per plan amendment 7, execution state will move into the tree once P1 ships; until then the phase table below is transitional)

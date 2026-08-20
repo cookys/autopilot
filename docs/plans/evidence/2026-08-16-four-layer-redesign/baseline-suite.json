@@ -1,0 +1,17 @@
+{
+  "captured_at": "2026-08-16",
+  "command": "bash hooks/tests/run.sh --parallel",
+  "total_files": 231,
+  "fail_set": [
+    "hooks/tests/autopilot-engine.test.sh",
+    "hooks/tests/review-loop-runner.test.sh",
+    "hooks/tests/context-window.test.sh"
+  ],
+  "known_flaky": [
+    "hooks/tests/external-lifecycle-witness.test.sh"
+  ],
+  "in_flight_artifacts": {
+    "hooks/tests/sync-all.test.sh": "mirror drift from this branch's own uncommitted new scripts during the capture run; resolves at D6 sync — NOT part of the acceptance baseline"
+  },
+  "acceptance_rule": "final fail set must be a subset of fail_set ∪ known_flaky; sync-all must be GREEN at D6"
+}

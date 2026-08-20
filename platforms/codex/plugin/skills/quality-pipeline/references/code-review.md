@@ -83,7 +83,7 @@ Task tool:
 
 Whichever reviewer the chain selects, the agent (canonical scope also consumed by `agents/reviewer.md`) will:
 1. Read every file affected by the diff and the **original task / plan / commit message** as baseline. Callers / tests / config only when a finding depends on them.
-2. Run the full correctness / security / boundary / error-handling / performance / API-usage / scope-creep checklist (scope-creep in "Scope Creep / Surgical Changes Scan" below).
+2. Run the full correctness / security / boundary / error-handling / performance / API-usage / change-policy / scope-creep checklist (scope-creep in "Scope Creep / Surgical Changes Scan" below).
 3. Return findings with 4-tier severity (🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion) + `✅ Verified Clean` section + `### Handoff` with enum `Next consumer`.
 
 (Non-autopilot reviewers may use another shape — see "Handoff Consumption" for enum vocabulary; foreign shapes → quality-pipeline inline interpretation.)
@@ -106,6 +106,26 @@ search for further defects.
   checked, evidence observed, and why no `MUST-FIX` remains. Bare `none`, `no findings`, `looks
   good`, or `all passed` claims fail closed. This is an auditable reviewer attestation, not proof
   of hidden cognition; the gate proves that a structured, non-tautological review trace exists.
+
+## Change Policy Review
+
+Every review records two decision fields against the actual diff and frozen task:
+
+- **Compatibility impact**: `internal-only`, `published-compatible`, or `authorized-breaking`.
+  Published and user-facing contracts are preserved by default. Internal compatibility shims are
+  removed after all in-repository consumers migrate. An authorized public break must include its
+  authorization, versioning decision, migration notes, CHANGELOG coverage, rollback guidance, and
+  contract validation.
+- **Dependency decision**: `none`, `platform/stdlib`, `existing`, `established-new`, or `custom`.
+  Enforce that preference order. A new library needs evidence for maintenance health, license
+  compatibility, transitive footprint, and supported-platform fit; custom code must explain why
+  every earlier option is insufficient.
+
+An implementation-review report's `### Summary` includes both fields with concrete evidence. A
+plan-readiness review instead verifies the plan's §2.6 fields and reports any violation through its
+existing rubric-bound JSON finding contract. Missing fields or an unjustified public break/new
+dependency/custom implementation are blocking when they violate the frozen task or repository
+policy. This is a checklist receipt, not a new review generation.
 
 ## Handoff Consumption
 

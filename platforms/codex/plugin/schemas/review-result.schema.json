@@ -2,9 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://autopilot.local/schemas/review-result.schema.json",
   "title": "ReviewResult",
-  "description": "Review-specific dispatch output emitted by dispatch-review.sh and dispatch-anthropic-review.js.",
   "type": "object",
-  "required": ["status", "runner", "model", "verdict", "findings", "no_finding_proof", "raw_log", "error"],
+  "required": ["status", "runner", "model", "verdict", "findings", "no_finding_proof", "raw_log", "error", "usage"],
   "properties": {
     "status": {
       "type": "string",
@@ -21,40 +20,45 @@
       "enum": ["SHIP-AS-IS", "FIX-THEN-SHIP", null]
     },
     "findings": {
-      "type": "string",
-      "description": "Parsed FINDINGS line or empty string on failure paths."
+      "type": "string"
     },
     "no_finding_proof": {
-      "type": ["string", "null"],
-      "description": "Machine-parsed checked/evidence/conclusion receipt required for SHIP-AS-IS; null for FIX-THEN-SHIP and failure paths."
+      "type": ["string", "null"]
     },
     "raw_log": {
-      "type": ["string", "null"],
-      "description": "Filesystem path to redacted raw capture; request headers are not logged, and runner auth tokens are exact-match redacted from captured response text."
+      "type": ["string", "null"]
     },
     "error": {
       "type": ["string", "null"]
+    },
+    "usage": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["total_tokens", "input_tokens", "output_tokens", "cache_read_tokens", "source"],
+      "properties": {
+        "total_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "output_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "cache_read_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "source": { "type": "string", "minLength": 1 }
+      }
     }
   },
-  "allOf": [
+  "oneOf": [
     {
-      "if": {
-        "properties": { "verdict": { "const": "SHIP-AS-IS" } },
-        "required": ["verdict"]
-      },
-      "then": {
-        "properties": {
-          "no_finding_proof": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^checked=.+;\\s*evidence=.+;\\s*conclusion=.+$"
-          }
+      "properties": {
+        "verdict": { "const": "SHIP-AS-IS" },
+        "no_finding_proof": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^checked=.+;\\s*evidence=.+;\\s*conclusion=.+$"
         }
-      },
-      "else": {
-        "properties": {
-          "no_finding_proof": { "type": "null" }
-        }
+      }
+    },
+    {
+      "properties": {
+        "verdict": { "enum": ["FIX-THEN-SHIP", null] },
+        "no_finding_proof": { "type": "null" }
       }
     }
   ],

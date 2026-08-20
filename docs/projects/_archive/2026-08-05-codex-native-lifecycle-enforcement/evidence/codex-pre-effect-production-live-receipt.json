@@ -1,0 +1,159 @@
+{
+  "schema_version": 3,
+  "artifact_type": "codex_pre_effect_production_receipt",
+  "observed_at": "2026-08-04T20:16:00.487Z",
+  "codex_version": "codex-cli 0.146.0",
+  "capability_evidence": {
+    "schema_version": 1,
+    "artifact_type": "codex_pre_effect_contract_receipt",
+    "observed_at": "2026-08-04T16:59:12.145Z",
+    "codex_version": "codex-cli 0.146.0",
+    "installed_plugin_manifest_sha256": "df8d9d4d6b7720e7181e0519dd958f15117cb5ac4c65a7e72e31a341a891307f",
+    "probe_adapter_sha256": "3aa0241d5e6b7a254a8cdc83bf4e538dcc668865e53057378ec47c1aefe9130e",
+    "hook_manifest_sha256": "bb0a8c8c677df56fde002d9fa93881f3b32bfbacd1eac63de6ad89f2f8d90971",
+    "transcript_sha256": "7ac125268f8e0dee7bcbd5e6514570ae7bc75ac61a6f70a896ec07d8c2470911",
+    "payload_contract": {
+      "event": "PreToolUse",
+      "matcher": ".*",
+      "cwd_stable": true,
+      "tool_name_stable": true,
+      "session_identity_stable": true
+    },
+    "denial_contract": {
+      "structured_stdout": {
+        "decision": "block",
+        "reason": "AUTOPILOT_PRE_EFFECT_DENY_CONTROL"
+      },
+      "broken_adapter_exit_status": 17,
+      "cli_exit_nonzero": false
+    },
+    "effect_sentinel_counts": {
+      "allow": 1,
+      "deny": 0,
+      "broken": 1
+    },
+    "hook_action_counts": {
+      "allow": 1,
+      "deny": 1,
+      "broken": 1
+    },
+    "installer": {
+      "marketplace_exit_status": 0,
+      "plugin_exit_status": 0
+    },
+    "execution": {
+      "exit_status": 0,
+      "signal": null
+    },
+    "verdict": "READY",
+    "structured_deny_verdict": "READY",
+    "production_pretooluse_allowed": true,
+    "d4_verdict": "PENDING_PRODUCTION_PROOF",
+    "broken_adapter_semantics": "DOCUMENTED_FAIL_OPEN",
+    "known_limitations": [
+      "Codex 0.146.0 continues the tool call when a PreToolUse command adapter exits 17 without a structured denial.",
+      "Production enforcement does not claim fail-closed behavior when the adapter process cannot emit structured stdout."
+    ],
+    "terminal_blocker": null,
+    "superseded_qc_classification": {
+      "verdict": "BLOCKED",
+      "production_pretooluse_allowed": false,
+      "d4_verdict": "BLOCKED",
+      "terminal_blocker": "broken PreToolUse command failed open: mutation occurred and Codex exited zero",
+      "receipt_sha256": "e5f134a7902c1ddd90f331e3fe6be2e59eca1c063246bf1dc8e670582678c1ee"
+    },
+    "receipt_sha256": "df0a546e66dd60bc6f85451e6568ecf12ecea3b512e49730403bd0d6ecd7d19a"
+  },
+  "production_contract": {
+    "qualification": "UNREGISTERED_PROBE_ONLY",
+    "evidence_scope": "D1_PRETOOLUSE_CAPABILITY_PROBE",
+    "production_hook_registered": false,
+    "production_registered_events": [
+      "PostCompact"
+    ],
+    "direct_mutation_enforcement": "NOT_SHIPPED",
+    "event": "PreToolUse",
+    "matcher": ".*",
+    "denial": {
+      "decision": "block",
+      "reason_code": "DEV_FLOW_ENTRY_REQUIRED"
+    },
+    "probe_plugin_manifest_sha256": "9ac21e3bcecfa54e4d0a8906d3ff3b2b6ca7ae790b255a56de199c1261559457",
+    "probe_hook_manifest_source_sha256": "6f9da9485027ec5c55844ca3c2ebcaa5b774bf913c5da3fd360b3ba1357fcee9",
+    "probe_hook_manifest_generated_sha256": "6f9da9485027ec5c55844ca3c2ebcaa5b774bf913c5da3fd360b3ba1357fcee9",
+    "probe_adapter_source_sha256": "de052330fef2acc53ab6f071c754f08715b62793dee7d001cda8fdc5b30d6450",
+    "probe_adapter_generated_sha256": "de052330fef2acc53ab6f071c754f08715b62793dee7d001cda8fdc5b30d6450",
+    "probe_hook_manifest_source_matches_generated_payload": true,
+    "probe_adapter_source_matches_generated_payload": true
+  },
+  "controls": {
+    "negative_no_admission": {
+      "hook_invocations": 3,
+      "cli_exit_status": 0,
+      "sentinel_count": 0,
+      "git_state_unchanged": true,
+      "transcript_sha256": "00b468ba85adab1693408bcfdd80e986b030f29c06afb5e188f4db053eb57936"
+    },
+    "positive_canonical_l3": {
+      "lifecycle_entry_hook_invocations": 1,
+      "hook_invocations": 0,
+      "cli_exit_status": 0,
+      "sentinel_count": 0,
+      "session_bound_to_hook_payload": false,
+      "transcript_sha256": "8b54a54b02222c7b12a6e8e74ca372ee75415a671691a09618a9323ab2f5c71c"
+    },
+    "l5_direct_denial": {
+      "lifecycle_entry_hook_invocations": 1,
+      "hook_invocations": 0,
+      "sentinel_count": 0,
+      "reason_code": "DEPTH_ZERO_MUTATION_FORBIDDEN",
+      "session_bound_to_same_hook_payload": false
+    },
+    "managed_engine_entry": {
+      "hook_invocations": 0,
+      "expected_command_sha256": "3a74e05c0149fc6ed0d1e775b7bdb7712c8adc64237972f240d591ffc6e2a4a7",
+      "observed_exact_command_hash": false,
+      "existing_campaign_reused": true,
+      "campaign_contract_sha256": "0d1f494b6052b08de86d451492956f94b5fa842b2d99550f9269c885a4f1ccd5",
+      "campaign_seal_sha256": "2c975d070e7d483289bbc4f4615944fbe700440732167ef7d13364bef6daf5e2",
+      "dispatcher_called_true_count": 0,
+      "dispatcher_called_false_count": 0,
+      "exactly_one_managed_dispatcher_path": false,
+      "child_isolation_assertion": {
+        "actual_runner_test_exit_status": 0,
+        "assertion_count": 213,
+        "controller_config_plugins_and_thread_absent": true,
+        "dispatch_script_sha256": "f8cf15f598bb13014a597f1328a39b2322b0336487d88ac0d4fe88a392738266",
+        "test_transcript_sha256": "8f48b9a8e2c38b46e56e197ae857742dfbf28d2da0a12a13cfea10205cd4dcab"
+      },
+      "new_campaign_or_work_order_created": false,
+      "git_state_unchanged": true
+    },
+    "broken_adapter": {
+      "adapter_exit_status": 17,
+      "cli_exit_status": 0,
+      "sentinel_count": 1,
+      "git_refs_and_worktrees_unchanged": false,
+      "observed_semantics": "FAIL_OPEN",
+      "transcript_sha256": "efdfb07e3a3f2910f1bba9242b89c36ff165b215544eca4897a0c90d0afd824c"
+    }
+  },
+  "model_calls": 3,
+  "model_call_budget": {
+    "installed_codex_sessions": 3,
+    "managed_dispatcher_calls": 0
+  },
+  "verdict": "NOT_READY",
+  "d1_verdict": "READY",
+  "d4_verdict": "NOT_READY",
+  "ship_status": "NO_SHIP",
+  "production_pretooluse_registered": false,
+  "production_registered_events": [
+    "PostCompact"
+  ],
+  "direct_mutation_enforcement": "NOT_SHIPPED",
+  "hook_controls_verdict": "BLOCKED",
+  "terminal_blocker": "Codex-thread-bound PreToolUse lifecycle enforcement was not qualified; the structured result remains D1 probe evidence only",
+  "known_limitation": "On Codex 0.146.0, a PreToolUse probe adapter that exits nonzero before emitting a structured denial fails open; this probe does not claim adapter-failure fail-closed semantics.",
+  "receipt_sha256": "e359b40c299f4cec368a684c0fbfaefe98d590055026f6a62ce7dc687d6e21f7"
+}

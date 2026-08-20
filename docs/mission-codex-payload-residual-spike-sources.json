@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-02-codex-payload-residual-spike.md",
+      "rubric_path": "plans/2026-08-02-codex-payload-residual-spike.rubric.md",
+      "plan_sha256": "8e20ae62ae223a239610248b765715397cf05891f1480dbb6c4016bfb67b196b",
+      "rubric_sha256": "7a3e63d16784975d6627e92525d9077c2a830e8cda78c5794491285a270f0f2f"
+    }
+  ]
+}

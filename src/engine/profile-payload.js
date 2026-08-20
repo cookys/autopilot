@@ -142,6 +142,7 @@ function validateCatalog(raw, repoRoot = DEFAULT_REPO_ROOT) {
     'hook_classes_sha256',
     'rule_migration_sha256',
     'guided_compatibility_sha256',
+    'guided_dispositions_sha256',
     'category_totals',
     'core',
     'profiles',
@@ -156,6 +157,7 @@ function validateCatalog(raw, repoRoot = DEFAULT_REPO_ROOT) {
     'hook_classes_sha256',
     'rule_migration_sha256',
     'guided_compatibility_sha256',
+    'guided_dispositions_sha256',
   ]) {
     assertSha(catalog[field], `profile catalog.${field}`);
   }
@@ -206,6 +208,11 @@ function validateCatalog(raw, repoRoot = DEFAULT_REPO_ROOT) {
       'profiles/guided-compatibility.json',
       catalog.guided_compatibility_sha256,
       'guided compatibility record',
+    ],
+    [
+      'profiles/guided-baseline-dispositions.json',
+      catalog.guided_dispositions_sha256,
+      'guided baseline dispositions',
     ],
   ];
   for (const [relative, expectedHash, label] of bindingFiles) {
@@ -283,16 +290,46 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
   }
 
   const liveHookManifest = path.join(repoRoot, 'hooks', 'hooks.json');
-  const hookManifestPath = fs.existsSync(liveHookManifest)
+  const codexPluginManifest = path.join(repoRoot, '.codex-plugin', 'plugin.json');
+  const isCodexPluginPayload = fs.existsSync(codexPluginManifest)
+    && readJsonInside(repoRoot, '.codex-plugin/plugin.json', 'Codex plugin manifest').hooks
+      === './hooks/hooks.json';
+  // The Codex package now has its own production PostCompact manifest. Profile
+  // policy still classifies the canonical Claude hook inventory preserved in
+  // the immutable package baseline; never reinterpret the Codex event as that
+  // inventory merely because both platforms use hooks/hooks.json.
+  const hookManifestPath = fs.existsSync(liveHookManifest) && !isCodexPluginPayload
     ? 'hooks/hooks.json'
     : 'profiles/baselines/claude-hooks.json';
   const hookManifest = readJsonInside(repoRoot, hookManifestPath, 'hook manifest');
+  // D6: when hooks.json wires opt-in-multiplexer per event, expand to the
+  // closed per-event stem table (same membership as check-hook-inventory.js).
+  const MULTIPLEXER_EVENT_TABLE = {
+    PreToolUse: [
+      'branch-protection', 'commit-secret-scan', 'large-file-warner',
+      'config-protection', 'mcp-health', 'dispatch-model-guard', 'orchestrator-edit-gate',
+    ],
+    PostToolUse: [
+      'context-budget', 'accumulator', 'test-runner', 'design-quality',
+    ],
+    PostToolUseFailure: ['mcp-health'],
+    Stop: [
+      'cost-tracker', 'session-summary', 'check-console', 'batch-format',
+    ],
+  };
   const wired = [];
-  for (const groups of Object.values(hookManifest.hooks || {})) {
+  for (const [eventName, groups] of Object.entries(hookManifest.hooks || {})) {
     for (const group of groups) {
       for (const hook of group.hooks || []) {
         const match = /\/hooks\/([A-Za-z0-9._-]+)\.js(?:\s|$)/u.exec(hook.command || '');
-        if (match) wired.push(match[1]);
+        if (!match) continue;
+        if (match[1] === 'opt-in-multiplexer') {
+          for (const stem of (MULTIPLEXER_EVENT_TABLE[eventName] || [])) {
+            wired.push(stem);
+          }
+          continue;
+        }
+        wired.push(match[1]);
       }
     }
   }

@@ -10,10 +10,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.34.1-E8A838?style=flat-square" alt="v2.34.1">
+  <img src="https://img.shields.io/badge/version-2.34.31-E8A838?style=flat-square" alt="v2.34.31">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
-  <img src="https://img.shields.io/badge/hooks-25-6B8E6B?style=flat-square" alt="25 Hooks">
+  <img src="https://img.shields.io/badge/hooks-26-6B8E6B?style=flat-square" alt="26 Hooks">
   <img src="https://img.shields.io/badge/dependencies-zero-A8B5A0?style=flat-square" alt="Zero Dependencies">
   <img src="https://img.shields.io/badge/license-MIT-D4A5A5?style=flat-square" alt="MIT License">
 </p>
@@ -95,7 +95,7 @@ Autopilot is Claude Code-first, but not Claude Code-only. Pick the entry point t
 | If you are... | Start with | What you get |
 |---|---|---|
 | **Claude Code user** | The two-command install above | The complete path: skills, methodology agents, hooks, `/l3`-`/l6`, and plugin-managed defaults |
-| **Codex user** | `.agents/skills/` in this repo, or the local package under `platforms/codex/plugin` | Autopilot skills plus bundled support payload for linked scripts/references; no Claude hook parity claim |
+| **Codex user** | `.agents/skills/` in this repo, or the local package under `platforms/codex/plugin` | Autopilot skills, bundled support payload, and the one production `PostCompact` recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped (`D4=NOT_READY/NO-SHIP`) |
 | **OpenCode user** | `.agents/skills/` plus `.opencode/opencode.json` | Shared skills and methodology agent bodies, with an OpenCode-specific in-process plugin wrapper |
 | **Antigravity (`agy`) user** | `scripts/install-antigravity.sh` | Guarded import as a Claude Code-source plugin; no loose skills-dir scan |
 | **Contributor** | `./scripts/dev-setup.sh --check` | A read-only readiness dashboard for Claude/Codex/OpenCode/agy; mutating non-Claude setup requires `--harness <name> --install` |
@@ -138,6 +138,11 @@ The course-sized idea is simple: teach the agent the collaboration discipline on
 | **`/l4`** | one background, worktree-isolated **foreman** | a long run you'd rather offload — your context stays clean, the authoritative quality verdict is held at depth 0 |
 | **`/l5`** | `/l4`, but the **implementer is a different engine** (agy / Gemini) | cost-arbitrage, or a decorrelated second engine doing the mechanical coding |
 | **`/l6`** | `/l5`, plus **verification authoring is delegated** to a different engine | when you want implementation and verification labor offloaded, while depth 0 keeps merge authority |
+
+Ordinary strict `/l5` Engine execution is fail-closed: before workflow dispatch, the CLI must match
+the exact implementer/reviewer/verification-author/QC roster to Autopilot's frozen provider policy
+and consume fresh host-owned qualification plus live-readiness evidence. Lower-level and legacy
+flows remain explicitly non-strict.
 
 ```
 /l3 fix the flaky reconnect test, you decide     # inline
@@ -190,12 +195,18 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 **Claude Code** (primary) — the two commands above. All 28 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
 
+> **⚠️ Claude Code ≥ 2.1.233 + Claude 5-era models**: the task tools (`TaskCreate` family)
+> are gated **off** by default on Opus ≥ 4.8 / Sonnet ≥ 5 / Fable ≥ 5 — which silently
+> disables every dev-flow forcing function. Fix: keep `{"env": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"}}`
+> in your project's `.claude/settings.json` (tracked, so worktrees inherit it). `autopilot:onboard`
+> scaffolds this pin automatically; dev-flow warns once if the tools are still missing.
+
 ### Harness Support
 
 | Harness | How to start | Supported today | Known limits |
 |---|---|---|---|
 | **Claude Code** | `/plugin marketplace add cookys/autopilot` then `/plugin install autopilot@autopilot` | Full plugin path: 28 skills, 3 methodology agents, 25 hooks | Primary host; Claude-specific hooks and slash behavior do not automatically transfer to other harnesses |
-| **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills-only package with generated support payload and repo-local marketplace | The default Codex package intentionally does not load Claude hooks, apps, or MCP servers. Subagent model routing via `spawn_agent` needs a user opt-in — see `platforms/codex/README.md` § Subagent model routing |
+| **Codex** | `.agents/skills/`, or `codex plugin add autopilot@autopilot-local` after adding `platforms/codex` as a marketplace | Skills, generated support payload, and one production `PostCompact` recovery hook (`manual\|auto`) | This is a Codex-native recovery boundary, not Claude hook parity; no Claude hook bundle, apps, or MCP servers are loaded. Subagent model routing via `spawn_agent` needs a user opt-in — see `platforms/codex/README.md` |
 | **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
 | **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
 

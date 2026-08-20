@@ -20,6 +20,9 @@ never invent one).
      `scripts/completeness-scan.sh`'s anti-stub intent).
    - **Dependency map** — phase ordering is explicit; what blocks what.
    - **Risks + inversion** — "what would guarantee this fails?" named, with mitigations.
+5. **Change-policy decisions** — record the compatibility impact and dependency decision explicitly;
+   when there is no compatibility or dependency impact, use `internal-only` and `none` with a
+   one-line reason rather than inventing another state.
 
 ## Section skeleton
 
@@ -31,6 +34,7 @@ never invent one).
 ## 1. Problem                 — the actual user goal (not the artifact)
 ## 2. OKR / KRs               — measurable success
 ## 2.5 Global Constraints     — verbatim-propagated invariants (see § below); copied UNCHANGED into every implementer + reviewer dispatch
+## 2.6 Change-policy decisions — required Compatibility impact + Dependency decision fields
 ## 3. File-structure map      — files touched + responsibility (discipline #1)
 ## 4. Phases                  — bite-sized, each with a dev-flow size + acceptance (discipline #2/#3)
 ## 5. Test / validation       — what proves it; what is human-gated vs script-gated
@@ -75,6 +79,22 @@ Two rules:
   consumes a producer task's output, name that contract inside the task's existing `input`/`output`
   elements ("consumes the `{id}` JSON from task 3 / produces the allowlist task 5 reads") — do **not**
   open a separate Interfaces section that would restate it and drift.
+
+## Change-policy decisions (§2.6)
+
+Every plan carries this short decision record; it is a field pair, not a new phase or gate:
+
+```markdown
+## 2.6 Change-policy decisions
+- **Compatibility impact**: `internal-only | published-compatible | authorized-breaking` — name affected consumers and migration/removal work, or explain why none exist.
+- **Dependency decision**: `none | platform/stdlib | existing | established-new | custom` — name the selected option and why earlier options in the preference order do not satisfy the requirement.
+```
+
+For `authorized-breaking`, include the authorization, versioning decision, migration notes,
+CHANGELOG coverage, rollback guidance, and contract validation. For `established-new`, record
+maintenance health, license compatibility, transitive footprint, and supported-platform fit.
+For `custom`, explain why platform/stdlib, existing dependencies, and established libraries are
+insufficient.
 
 ## Boundaries
 - **Authoring vs decomposition**: this template authors the *plan*; `agents/planner.md` decomposes an

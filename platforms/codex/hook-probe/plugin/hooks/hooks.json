@@ -52,6 +52,19 @@
         ]
       }
     ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/hooks/probe.js\"",
+            "timeout": 5,
+            "statusMessage": "Recording Autopilot hook probe"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

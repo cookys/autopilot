@@ -12,7 +12,11 @@ const {
   readProfileBundle,
 } = require('../src/engine/profile-payload');
 const { canonicalJson, sha256 } = require('../src/engine/owner-kernel/canonical');
-const { extractRuleCandidates, validateRuleInventory } = require('./measure-profile-context');
+const {
+  canonicalizeProjectedSkillSource,
+  extractRuleCandidates,
+  validateRuleInventory,
+} = require('./measure-profile-context');
 const { preflightJsonSource } = require('./validate-json-schema');
 
 const EXIT_SUCCESS = 0;
@@ -159,7 +163,11 @@ function buildRuleMigration(repoRoot) {
   );
   const occurrences = [];
   for (const sourceEntry of inventory.sources) {
-    const source = readUtf8(path.join(repoRoot, sourceEntry.path), sourceEntry.path);
+    const source = canonicalizeProjectedSkillSource(
+      readUtf8(path.join(repoRoot, sourceEntry.path), sourceEntry.path),
+      repoRoot,
+      sourceEntry.path,
+    );
     for (const unit of extractRuleCandidates(source)) {
       const segment = sourceEntry.segments.find(
         (candidate) => unit.line >= candidate.start_line && unit.line <= candidate.end_line,
@@ -329,6 +337,49 @@ function writeBaselineSnapshots(outPath, repoRoot) {
   return target;
 }
 
+// Successor-universe rule (dev-flow-contract-card P4, Board-approved 2026-08-18):
+// the guided baseline may additionally be satisfied from dev-flow's own references
+// tree, so the superset check proves rules were RELOCATED, not lost. Any other
+// extra source path is still universe drift.
+const GUIDED_EXTENDED_UNIVERSE = /^skills\/dev-flow\/references\/[A-Za-z0-9._-]+\.md$/u;
+
+function loadGuidedDispositions(repoRoot) {
+  const file = path.join(repoRoot, 'profiles', 'guided-baseline-dispositions.json');
+  const doc = readStrictJson(file, 'guided baseline dispositions').value;
+  if (!doc || doc.schema_version !== 1
+    || doc.artifact_type !== 'guided_baseline_dispositions'
+    || !Array.isArray(doc.dispositions)) {
+    fail(
+      'guided baseline dispositions file is invalid',
+      'PROFILE_GUIDED_DISPOSITION_INVALID',
+    );
+  }
+  const seen = new Set();
+  for (const entry of doc.dispositions) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)
+      || typeof entry.content_hash !== 'string' || !/^[a-f0-9]{64}$/u.test(entry.content_hash)
+      || !['removed', 'rewritten'].includes(entry.disposition)
+      || typeof entry.rationale !== 'string' || entry.rationale.trim() === ''
+      || (entry.disposition === 'rewritten'
+        && (!Array.isArray(entry.successor_hashes) || entry.successor_hashes.length === 0
+          || entry.successor_hashes.some((h) => typeof h !== 'string' || !/^[a-f0-9]{64}$/u.test(h))))
+      || (entry.disposition === 'removed' && 'successor_hashes' in entry)) {
+      fail(
+        'guided baseline disposition entry is invalid',
+        'PROFILE_GUIDED_DISPOSITION_INVALID',
+      );
+    }
+    if (seen.has(entry.content_hash)) {
+      fail(
+        `duplicate guided baseline disposition for ${entry.content_hash}`,
+        'PROFILE_GUIDED_DISPOSITION_INVALID',
+      );
+    }
+    seen.add(entry.content_hash);
+  }
+  return doc.dispositions;
+}
+
 function validateGuidedCompatibility(repoRoot, inventory) {
   const file = path.join(repoRoot, 'profiles', 'guided-compatibility.json');
   const record = readStrictJson(file, 'guided compatibility record').value;
@@ -344,23 +395,39 @@ function validateGuidedCompatibility(repoRoot, inventory) {
     runtime_behavior_status: 'unverified_until_effectful_transport_witness',
     golden_trace_status: 'not_claimed',
     active_slice_fields: ['slice_id', 'objective', 'dependencies', 'inputs', 'outputs', 'acceptance'],
-    required_relation: 'current_rule_multiset_superset_of_baseline',
+    required_relation: 'current_rule_multiset_superset_of_baseline_modulo_explicit_dispositions',
+    dispositions_file: 'profiles/guided-baseline-dispositions.json',
   };
   if (canonicalJson(record) !== canonicalJson(expected)) {
     fail('guided compatibility record drifted', 'PROFILE_GUIDED_COMPATIBILITY_DRIFT');
   }
+  const dispositions = loadGuidedDispositions(repoRoot);
   const baselineFiles = baselineSourceEntries(baseline);
   const baselinePaths = baselineFiles.map((entry) => entry.path);
   const inventoryPaths = inventory.sources.map((entry) => entry.path);
-  if (canonicalJson(inventoryPaths) !== canonicalJson(baselinePaths)) {
+  const inventoryPathSet = new Set(inventoryPaths);
+  const baselinePathSet = new Set(baselinePaths);
+  if (baselinePaths.some((p) => !inventoryPathSet.has(p))) {
     fail(
-      'current inventory source universe differs from the immutable P0 baseline',
+      'current inventory source universe lost a P0 baseline source',
       'PROFILE_GUIDED_SOURCE_UNIVERSE_DRIFT',
     );
   }
+  for (const extra of inventoryPaths.filter((p) => !baselinePathSet.has(p))) {
+    if (!GUIDED_EXTENDED_UNIVERSE.test(extra)) {
+      fail(
+        `inventory source ${extra} is outside the guided successor universe`,
+        'PROFILE_GUIDED_SOURCE_UNIVERSE_DRIFT',
+      );
+    }
+  }
   const currentCounts = new Map();
   for (const entry of inventory.sources) {
-    const source = readUtf8(path.join(repoRoot, entry.path), entry.path);
+    const source = canonicalizeProjectedSkillSource(
+      readUtf8(path.join(repoRoot, entry.path), entry.path),
+      repoRoot,
+      entry.path,
+    );
     for (const unit of extractRuleCandidates(source)) {
       currentCounts.set(unit.content_hash, (currentCounts.get(unit.content_hash) || 0) + 1);
     }
@@ -381,11 +448,44 @@ function validateGuidedCompatibility(repoRoot, inventory) {
       requiredCounts.set(unit.content_hash, (requiredCounts.get(unit.content_hash) || 0) + 1);
     }
   }
+  const dispositionByHash = new Map(dispositions.map((entry) => [entry.content_hash, entry]));
   for (const [contentHash, count] of requiredCounts.entries()) {
-    if ((currentCounts.get(contentHash) || 0) < count) {
+    const shortfall = count - (currentCounts.get(contentHash) || 0);
+    if (shortfall <= 0) continue;
+    const disposition = dispositionByHash.get(contentHash);
+    if (!disposition) {
       fail(
         `guided compatibility lost baseline rule ${contentHash}`,
         'PROFILE_GUIDED_COMPATIBILITY_DRIFT',
+      );
+    }
+    if (disposition.disposition === 'rewritten') {
+      for (const successor of disposition.successor_hashes) {
+        if ((currentCounts.get(successor) || 0) < 1) {
+          fail(
+            `rewritten baseline rule ${contentHash} names absent successor ${successor}`,
+            'PROFILE_GUIDED_DISPOSITION_SUCCESSOR_MISSING',
+          );
+        }
+      }
+    }
+    // 'removed' discharges the shortfall loudly via the recorded rationale.
+  }
+  // Dead-disposition check: an entry whose baseline rule is NOT actually short is
+  // stale accounting — it would silently pre-authorize a future deletion.
+  for (const entry of dispositions) {
+    const required = requiredCounts.get(entry.content_hash) || 0;
+    if (required === 0) {
+      fail(
+        `guided baseline disposition targets a hash not in the baseline: ${entry.content_hash}`,
+        'PROFILE_GUIDED_DISPOSITION_DEAD',
+      );
+    }
+    const shortfall = required - (currentCounts.get(entry.content_hash) || 0);
+    if (shortfall <= 0) {
+      fail(
+        `guided baseline disposition is dead (rule still present): ${entry.content_hash}`,
+        'PROFILE_GUIDED_DISPOSITION_DEAD',
       );
     }
   }

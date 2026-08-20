@@ -2,7 +2,7 @@
 
 **Written**: 2026-06-23 (for a post-context-clear resume)
 **Branch**: `feat/l4-l5-dep-graph-fanout` @ `6d4ee29` (1 ahead of develop, **5 behind** — sync first)
-**Project**: [`README.md`](README.md) · **Plan**: [`../../plans/2026-06-23-l4-l5-dep-graph-fanout.md`](../../plans/2026-06-23-l4-l5-dep-graph-fanout.md)
+**Project**: [`README.md`](README.md) · **Plan**: [`../../plans/2026-06-23-l4-l5-dep-graph-fanout.md`](../../../plans/2026-06-23-l4-l5-dep-graph-fanout.md)
 
 ## TL;DR — what to do next
 

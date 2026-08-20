@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-03-next-touch-debt-retirement.md",
+      "rubric_path": "plans/2026-08-03-next-touch-debt-retirement.rubric.md",
+      "plan_sha256": "d61fa9da8d6e490b7712cd27248732ac4d9bfd46ad3be8d29c8b2a285f736f2b",
+      "rubric_sha256": "16ca0694ed6edbcfcb55b471e3a0da28bc81d04a246901105c1f9d4f1b4c0975"
+    }
+  ]
+}

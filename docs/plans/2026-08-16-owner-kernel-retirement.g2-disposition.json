@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "owner-kernel-retirement-2026-08-16",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "5cc520297960466c8d02ffbf9330fa46840270fbb0df8cb9493f531618309ad1",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Correct framing of the frozen-rubric deviation as authorized and physically necessary; adopted as the controlling interpretation."
+    },
+    {
+      "fingerprint": "05105527810911a97cf5d6fddfbb6e6b28a1be79a0e7347371cb13d4763143de",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Non-blocking; folded into the R2 text where applicable (KR2 pattern alignment, stub naming, restore-scope wording, backlog row)."
+    },
+    {
+      "fingerprint": "126709b173c0b80603d2b384485577ec7d109df41fab43bfd4242c3745777cbf",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Non-blocking; folded into the R2 text where applicable (KR2 pattern alignment, stub naming, restore-scope wording, backlog row)."
+    },
+    {
+      "fingerprint": "c97f5de0ad515188daed41cf3c61c1aa583b2426a81b7bf157262bdacac53642",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Non-blocking; folded into the R2 text where applicable (KR2 pattern alignment, stub naming, restore-scope wording, backlog row)."
+    },
+    {
+      "fingerprint": "963158e3bd808e69d6a620e503682619c0ce1131c7a4cbe8f5f7ef80071e9f6f",
+      "disposition": "rejected",
+      "rationale": "Frozen-rubric technicality: the supervised-scope deviation is the Board-authorized response (2026-08-16) to G1 blocker 7a814e46, which proved the frozen scope physically impossible. The freeze guards against author goalpost-moving, which is not implicated; GLM non-blocking framing adopted."
+    },
+    {
+      "fingerprint": "f7e2db08a60b75af9fed4ef9dcff877e9ea624463c19f77222c5667cf7cd8af1",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Non-blocking; folded into the R2 text where applicable (KR2 pattern alignment, stub naming, restore-scope wording, backlog row)."
+    },
+    {
+      "fingerprint": "1eb18293939527f84829d5709327f150d4831273fa9104871007043cd4f9d4db",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Non-blocking; folded into the R2 text where applicable (KR2 pattern alignment, stub naming, restore-scope wording, backlog row)."
+    },
+    {
+      "fingerprint": "59f96082398feee7cb97bd751a0f563e6830f29b041c86aa1fda13ee1071ef48",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: .claude/owner-kernel-governance.json is read by 5 keeper surfaces (mission-routing-admission.js:195, implementation-campaign-check.js:183, src/mission/cli.js:140, codex pre-effect.js:123, hooks/tests/lib.sh:54) with enforcement_mode=enforce. Repaired: file constitutionally out of the delete-set, KR2 pattern removed, template edited not deleted, l3-only skill edit."
+    },
+    {
+      "fingerprint": "84beeadee6039b843026c7e69181f9d208c9cfe0f4e2a81618a69a00eb767fc1",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified: 6 keeper tests require the barrel outside the candidate globs. Repaired: barrel thinned to keeper-only index (never deleted); P1 map covers every barrel/deleted-module reference with per-test decisions; status-task-shadow-wiring retired in the P2 cli.js commit."
+    },
+    {
+      "fingerprint": "bd49c0bf9a8ab179dda5bc1786c03b3657c8af4c2acc7e560259fa712134b208",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: project archive moved into P3 before the KR2 run; governance filename removed from KR2 patterns; P6 keeps the final whole-tree run."
+    },
+    {
+      "fingerprint": "de08fd4a392ed236b0db85ea4deaacbdf5a274db05b94e5fa14749e1f5afc97b",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Non-blocking; folded into the R2 text where applicable (KR2 pattern alignment, stub naming, restore-scope wording, backlog row)."
+    },
+    {
+      "fingerprint": "555bbbec9fa6d0f22cd832837644f0beb04ad38bd6501c634139b4bdfb5bc344",
+      "disposition": "rejected",
+      "rationale": "Frozen-rubric technicality: the supervised-scope deviation is the Board-authorized response (2026-08-16) to G1 blocker 7a814e46, which proved the frozen scope physically impossible. The freeze guards against author goalpost-moving, which is not implicated; GLM non-blocking framing adopted."
+    },
+    {
+      "fingerprint": "3c86a3c7b0cb7663c385f33ac960a1e472057ce3b9aca3813b737ab6b5dd05a1",
+      "disposition": "rejected",
+      "rationale": "Frozen-rubric technicality: the supervised-scope deviation is the Board-authorized response (2026-08-16) to G1 blocker 7a814e46, which proved the frozen scope physically impossible. The freeze guards against author goalpost-moving, which is not implicated; GLM non-blocking framing adopted."
+    },
+    {
+      "fingerprint": "573abffa42bb139cbc8b0a8e530cb724aa9b5dd987052127684860b4875ac632",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: P1 disposition matrix explicitly covers supervised files; quarried entries must land in evidence-contract.md or its supervised-isolation appendix at P6."
+    },
+    {
+      "fingerprint": "9c11f928b2cb945fbd2f89079e37b09adc0fe41d651210a11097c4a588f19171",
+      "disposition": "duplicate",
+      "rationale": "Same substance as grok R7 test-map closure; handled there."
+    },
+    {
+      "fingerprint": "97bfce87f892d1d0eb364e127530302b94aef7d6dca85d59566cbed664ea3a49",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: restore claim scoped precisely — content restore tested; ownership/modes restored via documented chown/chmod sequence from recorded stat output."
+    },
+    {
+      "fingerprint": "729d2fecb5b3862f3758233a4f6efb2733da3c24d46c9af5086ce3307405448b",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified logically: same-commit SHA self-reference is impossible. Repaired: SHAs appended after landing, in the next phase commit or the P6 trailing chore commit."
+    },
+    {
+      "fingerprint": "ba23b94e9f9204dead1bbbf4a0330a045b4486371a81c0446c6848a83e5df04a",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: P2 closure grep is repo-wide (whole tree), covering specifiers and re-exported symbols."
+    },
+    {
+      "fingerprint": "0a9d83c80b9a4bb049c5eaf6c7519c487010ab3ea7757350e761692843c32171",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: KR4 case (c) is conditional — downgrade the enforcement site if one exists, else commit the non-enforcement proof to the evidence dir."
+    },
+    {
+      "fingerprint": "f7bcff6f45bca9bec1bcae6fb60bfd88b606ead1a10010b4b86de81f5f152a6d",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: versioning rationale restated precisely — no skill/agent added, removed, or renamed and no routing-affecting description change; SKILL.md body edits are PATCH-tier."
+    }
+  ]
+}

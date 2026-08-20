@@ -1,0 +1,627 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "multiturn-event-harness",
+  "logical_plan_id": "multiturn-event-harness-2026-08-20",
+  "session_id": "037b0b79-4146-4fab-8922-c32e2ea17fcf",
+  "session_key": "cc55855b770f8a7b4db87a6463ddd92e09a4d1f88ff5e05215c3125e55021150",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "e1d434ea01bc51168505ed4ffbe19973bef811897912a6f5f0a791aad72af26e",
+  "manifest_sha256": "a52be52a6f0a85caad91804a1d7c1623be4d33feb6d5bf6509152361e1ce566e",
+  "plan_sha256": "f81fab610037ccd80669cddace9026a08946f0a6a9b315af69568a962dd7dc49",
+  "growth_ratio": {
+    "numerator": 6542,
+    "denominator": 7605
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_construct_validity",
+      "target_id": "sol_construct_validity",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "cf0d523dcb9d3a031f1eec9b544007541cc73d37c95a92ae91687bee7a230486"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9ef6fa33dec10978fe85276920846e808853f066f99275857dbdb13964f91454",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-BYAVBy/stdout",
+          "digest": "9ef6fa33dec10978fe85276920846e808853f066f99275857dbdb13964f91454"
+        },
+        "receipt_digest": "ccb8c11a95b3605a322c2a0755c1468f905586859537a0c2989de5f034c5e1c0"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "minimax_measurement_skeptic",
+      "target_id": "minimax_measurement_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "beb69569d6b5df8a55712b8afb83247cac3ffb5fb29f6deacb04fee3c0b6aeb3"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "7dd9da4eff2690234091b1cda4426944abbcca4769567e878e939eac5cac3b5a",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-XznCOC",
+          "digest": "7dd9da4eff2690234091b1cda4426944abbcca4769567e878e939eac5cac3b5a"
+        },
+        "receipt_digest": "dd0be5dad49c577bad256a1f3236e6d393fa34315ad6bf65da9b5e8bc9512a6c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_budget_redteam",
+      "target_id": "grok_budget_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "192c80a34634ab887898f331b92d9ac9c8ed908669e3a4dab61b0e1009954bdd"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "8befb5b477f8a66b9408a9326e9d563a378fe31ab080ee3ca64772c7378a9033",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-s2f5MV",
+          "digest": "8befb5b477f8a66b9408a9326e9d563a378fe31ab080ee3ca64772c7378a9033"
+        },
+        "receipt_digest": "b74a3336f3dac74104d033504e66cb6bb0281ea9b1b62ac9f51d1baea8499a0c"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_construct_validity",
+      "target_id": "sol_construct_validity",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_measurement_skeptic",
+      "target_id": "minimax_measurement_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_budget_redteam",
+      "target_id": "grok_budget_redteam",
+      "family": "xai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "MH6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 1, 4, 5, and 7",
+      "claim": "The campaign cannot answer its stated Q1 because the comparative and session-end-wrap constructs have no corresponding controls or observables.",
+      "evidence": "Q1 asks whether behaviours occur more under FULL than without the skill and explicitly includes session-end wrap. Phase A selects dev-flow-engaged sessions, Phase B is FULL-only, OFF arms are excluded, and no marker identifies or times a wrap at session end. The licensed sentences support only raw marker counts.",
+      "evidence_reference": "Q1; Phase A and Phase B definitions; licensed sentences in Section 5; out-of-scope list",
+      "repair": "Narrow Q1 and the KRs to descriptive occurrence counts for the four specified markers under engaged or FULL sessions, explicitly excluding FULL-versus-OFF effects and session-end wrap. Otherwise add separately reviewed OFF controls and an operationalized end-wrap marker.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9d6f88ba667cc4db784e3ed5b6e2c2ff1976545d51b40ddc11d0e936ee2d9e62"
+    },
+    {
+      "rubric_id": "MH1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase A eligibility and forcing-function marker",
+      "claim": "The alternate engagement criterion is outcome-contaminated and can make the forcing-function marker appear by construction.",
+      "evidence": "A session may qualify through a TaskCreate subject matching ^L-[0-9], while a scored outcome is the presence of a forcing-function TaskCreate. The plan does not prove these predicates are disjoint. Sessions admitted through the overlapping event can therefore inflate the marker count and even satisfy the two-session ceremony-observed rule tautologically.",
+      "evidence_reference": "Section 4 Phase A eligibility and marker definitions; Section 5 ceremony-observed threshold",
+      "repair": "Use Skill tool_use as the independent primary engagement criterion. If ^L TaskCreate discovery is necessary, analyze those sessions as a separate stratum and do not score the TaskCreate marker in that stratum, with exact disjoint predicates frozen before corpus access.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "245cd76de2e9acd139ef54a67fde25451f4b6385aff041407d1fefcd17e4e535"
+    },
+    {
+      "rubric_id": "MH2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase A archaeology scanner and Phase B FS or task residue measurement",
+      "claim": "The plan lacks channel-validity controls that distinguish absent behaviour from detector failure or pre-existing residue.",
+      "evidence": "The new archaeology scanner is the sole interpreter of historical tool records, but no planted-positive, planted-negative, schema-coverage, or detector-health requirement is specified. Phase B defines firing from terminal FS, git, or task residue without requiring a clean pre-state and attributable post-session delta. Consequently a zero can be a parser miss, while a positive can predate the session.",
+      "evidence_reference": "Sections 3 and 4; Global Constraint limiting Phase B to FS or git-residue markers",
+      "repair": "Require frozen synthetic positive and negative fixtures plus schema-health assertions before the one corpus query. For every Phase B session, require an isolated clean fixture, recorded pre-state, session-scoped task storage, and a post-state delta; define firing only from newly created attributable residue.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e3cdea3d0c738352dc5b13c60823ffd069ce8a09d6deb47511858a8cf69dae4a"
+    },
+    {
+      "rubric_id": "MH3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase A classification-to-gate transition",
+      "claim": "The gate does not cover all outcomes produced by the per-marker verdict rules.",
+      "evidence": "With at least five eligible sessions and exactly one fire for a marker, that marker is corpus-insufficient, yet the gate does not run Phase B unless the total corpus is below five or another marker creates an observed-versus-absent conflict. Thus one or all markers can remain insufficient while the campaign closes. Conversely, two fires among fewer than five sessions classify as observed while the global below-five rule still forces Phase B.",
+      "evidence_reference": "Section 4 frozen gate; Section 5 per-marker verdict rules",
+      "repair": "Freeze a complete transition table over all vectors of observed, absent, and insufficient marker results. Either require at least five eligible sessions for every decisive label or gate directly on per-marker labels, including any insufficient result; remove the contradictory global shorthand.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6dfbf349005dd05633eae52561832329654de24cf1c117d53b82d3193d792fd7"
+    },
+    {
+      "rubric_id": "MH4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase B fixture freeze timing",
+      "claim": "Phase B turn wording can still be chosen after Phase A results are known.",
+      "evidence": "Only the Phase A query and classification rules must be hashed before the corpus is examined. Phase B texts need merely be frozen before any live call, but Phase A consumes zero live calls. This permits archaeology results to influence the pilot cues despite the no-discretion task-selection rule.",
+      "evidence_reference": "Global Constraints; pre-registration file responsibility; Section 4 Phase A and Phase B ordering",
+      "repair": "Freeze and hash the complete Phase B task texts, turn texts, scoring predicates, and exclusion rules before executing the Phase A corpus query, or pre-register an explicit bounded adaptive policy before seeing Phase A data.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ce7ab332afba99e9ca1523b2175d96147eb028c23857453835ba12afb13a182c"
+    },
+    {
+      "rubric_id": "MH4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase B discard policy and six-call cap",
+      "claim": "The replacement policy is incompatible with the hard call cap and leaves post-hoc exclusion discretion.",
+      "evidence": "Two three-turn sessions consume all six authorized calls. Any consumed failed session followed by a replacement either exceeds six calls or prevents completion of two sessions. The term liveness-broken is not operationalized, so transcript-aware exclusion remains possible.",
+      "evidence_reference": "KR3; Global Constraints; Section 4 Phase B retry sentence",
+      "repair": "Freeze objective liveness and discard criteria and count every attempted turn against the cap. Under the six-call cap, prohibit replacements and report a reduced completed-session count; otherwise authorize a larger cap before any data are observed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f62107b975a170a4e20d6c7f8feb65b39221ffb1f8818cb04d0e0b4d30f7f1c3"
+    },
+    {
+      "rubric_id": "MH6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase A corpus eligibility and licensed production-corpus sentence",
+      "claim": "The licensed pre-2026-08-16 claim is not supported by the stated corpus filter.",
+      "evidence": "Eligibility constrains client version and model but contains no record or session timestamp cutoff. A session produced after 2026-08-16 using an older client version would qualify, while the licensed sentence would still describe it as pre-2026-08-16.",
+      "evidence_reference": "Section 4 Phase A corpus definition; licensed sentence 5(a)",
+      "repair": "Add a frozen timestamp cutoff with defined timezone and session-level inclusion semantics using the permitted record timestamps, or remove the pre-2026-08-16 wording from every licensed claim.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "82da0519754d81701d678cb21b185c6d4fa624dd68fae62e59d4c102cb437399"
+    },
+    {
+      "rubric_id": "MH1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Phase B manipulation design",
+      "claim": "Phase B's scripted turns may not elicit session-START L-setup behaviors; a turn-2 'Continue.' gives no model-visible reason to revisit setup it skipped on turn 1.",
+      "evidence": "Phase B uses 'first two L-size d2 tasks of the predecessor's frozen pack' with turn texts frozen in pre-registration.md; the plan already acknowledges Phase B is descriptive-only (KR2) and explicitly excludes wrap-cued session-end this campaign.",
+      "evidence_reference": "§4 Phase B description; §5 licensed sentences; KR2.",
+      "repair": "No current change; the descriptive-only framing in KR2 already licenses the limitation. If Phase B is gated in, pre-registration.md should ensure turn-1 establishes session-START context (e.g., a task-loading prompt that gives the model a reason to do L-setup), so the screen has a chance of capturing the markers of interest.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9edafae5374cffe6aff267c3455ed811ac28f0705cf7f459a53937bf05265ea3"
+    },
+    {
+      "rubric_id": "MH3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§5 verdict rules and gate condition",
+      "claim": "Edge case in verdict table: a marker with 0 fires across fewer than 5 eligible sessions is corpus-insufficient, not absent. The gate requires 'absent with ≥ 5 eligible sessions each', so a corpus with, say, 1 marker observed and 1 marker zero-firing in 4 eligible sessions does NOT trigger Phase B (the latter is insufficient, not absent), even though the human reading would call that a conflict.",
+      "evidence": "§4 Gate ('per-marker results conflict (some markers ceremony-observed, others absent with ≥ 5 eligible sessions each)'); §5 verdict rules ('ceremony-absent iff 0 fires across ≥ 5 eligible sessions').",
+      "evidence_reference": "§4 Gate; §5 verdict rules.",
+      "repair": "Either (a) explicitly state in §5 that corpus-insufficient markers do not trigger Phase B (and accept that a borderline-corpus mixed case closes the campaign unresolved), or (b) relax the gate's 'absent' threshold to e.g. ≥3 eligible sessions with 0 fires so the gate also fires on the borderline case. Cheapest seal: option (a), one clarifying sentence.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "41e1baa5be352df71d66379f1e878af52efad591ffef192c21be4036c171d43f"
+    },
+    {
+      "rubric_id": "MH4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "pre-registration.md content (Phase A scan)",
+      "claim": "Marker predicates and eligibility-filter definitions must be explicitly enumerated and hashed before any corpus scan runs. The plan currently lists the filters and markers narratively in §4 but does not require JSONL-field-level predicates be frozen alongside 'classification rules'. Each unfixed term ('real user turn', 'creation of', 'forcing-function TaskCreate') is a post-hoc discretion leak at scan time.",
+      "evidence": "§4 Phase A: '≥ 3 real user turns' (undefined), 'dev-flow engaged (Skill tool_use autopilot:dev-flow OR ≥ 1 TaskCreate whose subject matches ^L-[0-9])' (tool name and input shape not pinned), markers 'creation of .claude/session-start-sha; creation of a plan doc under docs/plans/; creation of docs/projects/*/README.md; ≥1 forcing-function TaskCreate' (no definition of which tool_use names count as 'creation', no path/content regex, no record field used for 'fires in session'). §2.5 freezes 'classification rules' but is ambiguous whether that includes the predicates themselves.",
+      "evidence_reference": "§4 Phase A description; §2.5 Global Constraints ('Phase A runs ONLY after its corpus query + classification rules are hashed into pre-registration.md').",
+      "repair": "Before execution, pre-registration.md must enumerate and hash: (a) JSONL field path and value predicate for 'real user turn' — explicitly exclude tool_result-only records, system-reminder-only records, and synthetic events; (b) exact tool_use name and required input fields for Skill call 'autopilot:dev-flow'; (c) for each marker, the tool_use name(s) that count as 'creation' (Write vs Edit vs Bash-redirect), and any path regex (e.g. docs/plans/ vs docs/plans/.*), and any content regex (e.g. README.md must contain a specific heading); (d) the JSONL record field used to determine 'fires in session' (timestamp from the tool_use record itself, NOT filesystem mtime, per the §12 mtime-forbidden rule). Hash the document and append the hash to pre-registration.md before running the scan.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "778ad8be4a0ba9ee9de2142dc606aa88009aad0164ab4ebe20ce3bb58b72b64d"
+    },
+    {
+      "rubric_id": "MH7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan scope / Phase B gating",
+      "claim": "The plan IS the cheaper alternative to R1 (≤6 calls vs 80). Could it be even cheaper by skipping Phase B entirely?",
+      "evidence": "§4 Gate explicitly conditions Phase B on Phase A insufficiency or marker conflict; if Phase A yields a uniform answer (all-observed or all-absent with ≥5 sessions each), the campaign closes on Phase A alone. KR3 hard-caps spend at 6 calls.",
+      "evidence_reference": "§4 Gate; §2.5 Global Constraints ('Budget cap: 6 calls'); KR3.",
+      "repair": "No current change; follow-up only. The gate already implements the cheapest-possible staged design — Phase B is bought only if Phase A cannot answer.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0a21c8e6dc7daa0279b709f8f0daeff098d77a83d3d4f144f23121ba08b9290d"
+    },
+    {
+      "rubric_id": "MH1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase A eligibility predicate versus the forcing-function TaskCreate marker; Phase B k=3 FULL@3 negative screen for session-START markers",
+      "claim": "Phase A admits sessions through an L-numbered TaskCreate disjunct that is not shown to be disjoint from the forcing-function marker, so that marker can fire by admission rather than by independently observed ceremony; Phase B's scripted k=3 FULL arm still cannot operationalize room for the same session-START behaviours, so a zero-fire pilot is not a valid negative screen.",
+      "evidence": "Section 4 admits a session as dev-flow engaged if it has Skill tool_use autopilot:dev-flow OR at least one TaskCreate whose subject matches the L-number pattern. The same section lists at least one forcing-function TaskCreate as a frozen ceremony marker and never states a disjoint subject/tool shape for forcing-function. Sessions that enter only through the second disjunct therefore already carry a TaskCreate of the L-setup family; Section 5 then labels ceremony-observed at two such fires. Separately, Section 0 records that G1 already held scripted multi-turn cannot operationalize room for session-START L-setup, yet Section 4 still buys a sonnet FULL@3 of two sessions whose four markers are all start artifacts (session-start-sha, plan doc, project README, forcing-function TaskCreate). A turn-2 Continue does not give a model that skipped start-setup a new reason to go back; zero fires on that schedule are compatible with skipped-at-start plus no repair cue. Phase A production sessions with three-plus real user turns do operationalize room; that part is sound only if eligibility is not selecting on a marker.",
+      "evidence_reference": "Plan Section 0 G1 ruling that multi-turn cannot operationalize room for session-START L-setup; Section 4 Eligibility per session (Skill tool_use OR TaskCreate L-number); Section 4 Markers (session-start-sha, docs/plans plan doc, docs/projects README, forcing-function TaskCreate); Section 4 Phase B FULL@3 2 sessions x 3 turns; Section 5 ceremony-observed iff the marker fires in >=2 eligible sessions; Section 8 sonnet-only and k=3 fixed as Phase-B-only constants.",
+      "repair": "Freeze eligibility as Skill tool_use name autopilot:dev-flow plus >=3 real user turns only. Keep L-numbered TaskCreate as a marker, not an admission rule. Delete Phase B from this campaign (see MH7). If a later scripted arm is bought, pre-register it as a one-sided positive screen: fire is informative; zero fire is uninterpretable for start markers, and no Continue turn is used to claim room.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6071124a7bf761f02e9bdc3b49cea7a1765595492dd92469101427daf00a1841"
+    },
+    {
+      "rubric_id": "MH2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Phase A JSONL tool_use marker channel, archaeology-scan.js predicates, and the Section 5 ceremony-absent campaign-close",
+      "claim": "Zero fires on tool_use-only predicates are not distinguishable from matcher miss, hook-written files, or Bash-written files, and the plan lets that zero close the campaign as ceremony-absent without a planted-positive proving the scanner would have fired.",
+      "evidence": "Section 4 freezes markers as creation events from tool_use records and forbids mtime. It does not name tool names, input paths, relative-versus-absolute matching, or whether Bash/hook writes count. Section 7 drops the hook channel and its non-reactivity program, so the original P1 planted-positive (hook-fired-per-turn versus artifact-exists) is not replaced. Section 5 scores ceremony-absent when a marker fires in 0 of >=5 eligible sessions, and Section 4 then CLOSES the campaign on Phase A's answer, which licenses sentence (a) with K=0. A SessionStart or PostToolUse hook, or a Bash redirect, that created session-start-sha in a historical session would leave no Write tool_use and would be scored the same as behaviour absent. There is no synthetic JSONL fixture, no known-positive transcript, and no requirement that archaeology-scan.js fire on a planted tool_use before the corpus query is executed once.",
+      "evidence_reference": "Plan Section 4 Phase A Markers (frozen, from tool_use records) and Per-record timestamps only (mtime forbidden); Section 4 Gate Otherwise the campaign CLOSES on Phase A's answer; Section 5 ceremony-absent iff 0 fires across >=5 eligible sessions; Section 5 licensed sentence (a); Section 7 hook event channel plus non-reactivity program out of scope; Section 3 archaeology-scan.js (new).",
+      "repair": "Before any corpus read, freeze per-marker matchers (Write, Edit, and Bash command-string path/subject regexes) in the hashed pre-registration text. Commit synthetic JSONL fixtures: one planted-positive per marker that must score fire=1, and near-misses that must score fire=0. Run the scanner on those fixtures only (0 live calls). Rename the close label to marker-unobserved-in-tool-use. Do not execute the hashed corpus query, and do not treat K=0 as a campaign close, until that fixture smoke is green.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "537724cbfa398b3d1f8d90d53777154818b244f1f39333e371bc0d82bda78065"
+    },
+    {
+      "rubric_id": "MH3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 4 Gate versus Section 5 per-marker outcome table (including auto-start of Phase B and close)",
+      "claim": "The verdict/gate rules are not a total function of N and the four per-marker labels, so several enumerated cells either auto-spend the 6-call arm or close with the wrong verb, including the F2-style dependency error of treating a different instrument as proof the primary channel worked.",
+      "evidence": "Section 5 defines corpus-insufficient per marker as the residual of (>=2 fires) or (0 fires and N>=5). Section 4's gate instead treats corpus-insufficient as N<5 sessions and treats conflict as some markers ceremony-observed and others ceremony-absent. Cell: N>=5 and exactly one fire on every marker is per-marker corpus-insufficient, is not N<5, is not conflict, so the campaign closes with no resolved marker and no Board decision. Cell: N=4 with >=2 fires is ceremony-observed per Section 5 but still opens Phase B via N<5. Cell: some observed and some 1-fire (insufficient) is not conflict, so it closes while leaving markers unanswered. Phase B is also a different estimand (scripted sonnet FULL@3, FS residue) than Phase A (historical opus-5 tool_use); using B when A is thin repeats the rejected F2 pattern of taking fire in a different fixture as proof the ceremony-task channel worked. KR2 correctly refuses 2/3 inference at n=2 and cites n approximately 23 for confirmation; that honesty is not a substitute for a closed table. Three-rep skill-does-not-drive/F2 rules are gone, but the replacement table still has holes.",
+      "evidence_reference": "Plan Section 5 Phase A per-marker labels (ceremony-observed / ceremony-absent / corpus-insufficient); Section 4 Gate Phase B runs ONLY if corpus-insufficient (<5 eligible sessions) OR per-marker results conflict; Section 4 Phase B sonnet FULL@3 FS-only; Section 5 licensed sentences (a) versus (b); KR2 n=2 descriptive screen and n approximately 23 not bought.",
+      "repair": "Rewrite Section 4 and Section 5 as a closed table on (N, four labels) with one verb per cell: always emit sentence (a); never auto-start Phase B. All-insufficient, mixed observed/insufficient, N<5, and observed-plus-absent each map to close-this-campaign or new-plan-required, not to a bundled pilot. If Phase B remains anywhere, it is a separate estimand and cannot validate Phase A's channel.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "981e79a70162c3d7c11d31abf2eb270e50fa433c803be32c276d50b1bb3901fe"
+    },
+    {
+      "rubric_id": "MH4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "pre-registration.md hash window, archaeology-scan.js authoring, corpus glob/host, Phase B turn texts, discard/retry versus the 6-call cap",
+      "claim": "Post-hoc discretion still leaks in scanner-fitting on the real corpus, unfrozen executable predicates, an unanchored home-directory glob, undefined liveness discards, retries that can double the 6-call cap, and Phase B turn/task strings authored after this review-freeze.",
+      "evidence": "Section 2.5 hashes the corpus query and classification rules only after this review, while Section 4 still states markers as English creation-of-path rather than executable predicates, so evals/skill-onoff/archaeology-scan.js can be developed against the home .claude/projects jsonl before the official one-shot run. The corpus root is an unanchored home glob, so the operator can choose a host with empty or rich opus-5 history after seeing the auto-gate. Phase B says a failed/liveness-broken session is discarded and re-run at most once, but liveness-broken is undefined and can be used to drop no-artifact runs; two sessions plus two retries of three turns is 12 live calls against KR3's hard cap of 6. Task plus turn texts are to be frozen verbatim in pre-registration.md before any live call, not in this packet; only turn-3 is constrained (no wrap cue). First two L-size d2 tasks of the predecessor pack has no sort key or explicit paths. Section 8 says open questions are none, which hides these unfrozen choices. Smokes-may-repair-the-instrument is not restated for the scanner; unspecified repair-and-rerun on the real corpus is a peek.",
+      "evidence_reference": "Plan Section 2.5 Phase A runs ONLY after query+rules hashed into pre-registration.md; Section 3 archaeology-scan.js (new) and pre-registration.md; Section 4 corpus home .claude/projects glob; Section 4 Phase B first two L-size d2 tasks, turn texts frozen in pre-registration.md, failed/liveness-broken re-run at most once; KR3 total spend <=6 live calls hard cap; Section 8 Open questions None; Section 5 adjudication freezes at review-freeze.",
+      "repair": "Copy executable eligibility/marker matchers, named corpus root (absolute path plus a file-list hash taken before classification), and the one-shot abort-on-scanner-bug rule into this plan text and hash that text with no added clauses. Develop the scanner only against committed synthetic fixtures. If Phase B is not cut, also freeze the three turn strings, the two explicit pack task paths, discard equals API error/timeout/crash only (not missing artifacts), and retries count inside the 6-call cap (budget exhaustion reports whatever completed).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "676e32ab015a5eef59da3cd9fbf3399de3ead4c67001bb4777a30e6101b72418"
+    },
+    {
+      "rubric_id": "MH5",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "External CLAUDE_CODE_ENABLE_TODO_TOOLS pin probe versus any later scripted FS-residue arm",
+      "claim": "This plan correctly refuses to use an F2 3-green/2-red block as a production guard; the remaining coupling is only that a later FS-only pilot would still spend calls without a green pin probe as a precondition.",
+      "evidence": "Section 5 states the pin probe is a Fix outside this plan and nothing here is a production guard, which severs the rerunnable-guard coupling G1 objected to (cost, flake, model drift, tying a production check to a retireable experimental instrument). Section 2.5 still requires the env pin in any Phase B fixture settings. There is no precondition that the external one-call probe is green before FS residue is collected, so a pin regression would yield empty residue that looks like no ceremony. That matters only if a scripted arm is kept or rebought.",
+      "evidence_reference": "Plan Section 5 last paragraph (pin probe is a Fix OUTSIDE this plan; nothing here is a production guard); Section 2.5 Env pin CLAUDE_CODE_ENABLE_TODO_TOOLS=1 in any Phase B fixture; Section 4 Phase B FS/git-residue markers ONLY.",
+      "repair": "No current change; follow-up only. If a later plan buys an FS-residue pilot, require the separate single-call pin probe green as a precondition, not as a cell inside that campaign.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1aafb29e4e586ea1fcba4d49faa92af15da2c5a13b99bf9ee7b696d587fb2bb6"
+    },
+    {
+      "rubric_id": "MH6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 1 Q1 wording, KR1 ceremony-absent/ceremony-observed labels, and wrap as a named behaviour without a marker",
+      "claim": "Licensed sentences (a) and (b) are tight, but Q1 and the close labels still tempt FULL-versus-OFF, wrap, and skill-does-not-drive claims this campaign cannot support.",
+      "evidence": "Section 1 Q1 asks whether ceremony appears under FULL in real multi-turn sessions and specifically more under FULL than without the skill, and it names session-end wrap alongside L-setup. Section 7 puts OFF arms out of scope. Section 4's frozen markers are four START artifacts; wrap is not a marker, and wrap-cued session-end is explicitly not licensed. Section 5 forbids sentences about truncation, OFF behaviour, dev-flow as a whole, or any skill edit, and names (a) and (b) as the ONLY claims. KR1 and the gate nevertheless use ceremony-observed and ceremony-absent, which are the everyday words for skill-does-not-drive and for dev-flow works multi-turn. A K=0 close under those labels is the overclaim path MH6 warned about, even if the frozen sentences are narrower.",
+      "evidence_reference": "Plan Section 1 Q1 (FULL vs without the skill; L-setup and session-end wrap); Section 4 markers (start artifacts only) and Turn-3 closer carries NO wrap cue; wrap-cued session-end is NOT licensed; Section 5 licensed result sentences (a)(b) and the no-sentence-about list; KR1 per-marker classification set; Section 7 OFF arms and any dev-flow SKILL.md edit out of scope.",
+      "repair": "Rewrite Q1 to match sentence (a) only (and (b) only if a later plan buys it). Drop wrap from the question or add a frozen wrap marker. Rename ceremony-absent to marker-unobserved-in-tool-use and ceremony-observed to marker-seen-in-tool-use. Keep the Section 5 firewall paragraph unchanged.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3567b1b90d52306720ed46816b55d6a7900689d0d25f435d7498596d48053ba1"
+    },
+    {
+      "rubric_id": "MH7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Campaign buy: bundled auto-gate from Phase A into the 6-call sonnet FULL@3 pilot",
+      "claim": "The cheapest design that answers the remaining valid question is hashed production-transcript archaeology alone; auto-starting a 6-call scripted FULL@3 when the opus-5 corpus is thin re-buys the instrument G1 rejected, on a different model, as if it substituted for missing historical data.",
+      "evidence": "Section 0 says R2 buys ONLY the cheaper path after G1 refuted the 80-call 2x2. Phase A is 0 live calls on local opus-5 jsonl with version at most 2.1.232, which is the MH7 alternative (read production transcripts where opus-5 already ran multi-turn with tools live before 2026-08-16). The Section 4 gate then still auto-runs Phase B (2x3 sonnet FULL@3, FS residue, no hooks) when N<5 or markers conflict, under a hard cap of 6 calls. KR2 admits n=2 cannot separate 1/3 from 2/3. Sentence (b) is a different estimand than sentence (a). On a dispatch host whose home .claude/projects has few eligible files, Phase A is theatre and the campaign spends the full budget on Continue-scheduled start markers G1 already called invalid. Transcript-only without hooks is already Phase A; a FULL@3 pilot before a 2x2 is not cheaper given 2x2 is out of scope. Evidence that would change this: a pre-hash file-list inventory showing N>=5 eligible opus-5 sessions on a named host (then buy Phase A only), or a new plan whose manipulation is turn-1 long-horizon L-size work without a Continue repair cue and whose estimand is explicitly sonnet-scripted, not a substitute for opus-5 history.",
+      "evidence_reference": "Plan Section 0 R2 buys ONLY that path, staged; G1 80-call 2x2 NOT bought; Section 4 Phase A 0 live calls corpus version<=2.1.232 model claude-opus-5; Section 4 Gate Phase B if <5 eligible OR conflict; Section 4 Phase B <=6 live calls 2 sessions x 3 turns FULL only; KR2 n=2 descriptive; KR3 cap 6; Section 5 sentences (a) vs (b); Section 7 2x2, OFF, hooks, F2, confirmatory-n out of scope.",
+      "repair": "Buy Phase A only. Delete Phase B, the 6-call budget, and the auto-gate from this plan. Close on the Section 5 labels plus sentence (a), including corpus-insufficient. Any scripted pilot is a new plan plus new review, not a fallback arm.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0a76fb9d773504e6d4092be701e60e339c6c2a0752f878c3d97e83e470ef8547"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "9edafae5374cffe6aff267c3455ed811ac28f0705cf7f459a53937bf05265ea3",
+      "rubric_id": "MH1",
+      "affected_surface": "Phase B manipulation design",
+      "claim": "Phase B's scripted turns may not elicit session-START L-setup behaviors; a turn-2 'Continue.' gives no model-visible reason to revisit setup it skipped on turn 1.",
+      "evidence_reference": "§4 Phase B description; §5 licensed sentences; KR2.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "41e1baa5be352df71d66379f1e878af52efad591ffef192c21be4036c171d43f",
+      "rubric_id": "MH3",
+      "affected_surface": "§5 verdict rules and gate condition",
+      "claim": "Edge case in verdict table: a marker with 0 fires across fewer than 5 eligible sessions is corpus-insufficient, not absent. The gate requires 'absent with ≥ 5 eligible sessions each', so a corpus with, say, 1 marker observed and 1 marker zero-firing in 4 eligible sessions does NOT trigger Phase B (the latter is insufficient, not absent), even though the human reading would call that a conflict.",
+      "evidence_reference": "§4 Gate; §5 verdict rules.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0a21c8e6dc7daa0279b709f8f0daeff098d77a83d3d4f144f23121ba08b9290d",
+      "rubric_id": "MH7",
+      "affected_surface": "Plan scope / Phase B gating",
+      "claim": "The plan IS the cheaper alternative to R1 (≤6 calls vs 80). Could it be even cheaper by skipping Phase B entirely?",
+      "evidence_reference": "§4 Gate; §2.5 Global Constraints ('Budget cap: 6 calls'); KR3.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1aafb29e4e586ea1fcba4d49faa92af15da2c5a13b99bf9ee7b696d587fb2bb6",
+      "rubric_id": "MH5",
+      "affected_surface": "External CLAUDE_CODE_ENABLE_TODO_TOOLS pin probe versus any later scripted FS-residue arm",
+      "claim": "This plan correctly refuses to use an F2 3-green/2-red block as a production guard; the remaining coupling is only that a later FS-only pilot would still spend calls without a green pin probe as a precondition.",
+      "evidence_reference": "Plan Section 5 last paragraph (pin probe is a Fix OUTSIDE this plan; nothing here is a production guard); Section 2.5 Env pin CLAUDE_CODE_ENABLE_TODO_TOOLS=1 in any Phase B fixture; Section 4 Phase B FS/git-residue markers ONLY.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "3567b1b90d52306720ed46816b55d6a7900689d0d25f435d7498596d48053ba1",
+      "rubric_id": "MH6",
+      "affected_surface": "Section 1 Q1 wording, KR1 ceremony-absent/ceremony-observed labels, and wrap as a named behaviour without a marker",
+      "claim": "Licensed sentences (a) and (b) are tight, but Q1 and the close labels still tempt FULL-versus-OFF, wrap, and skill-does-not-drive claims this campaign cannot support.",
+      "evidence_reference": "Plan Section 1 Q1 (FULL vs without the skill; L-setup and session-end wrap); Section 4 markers (start artifacts only) and Turn-3 closer carries NO wrap cue; wrap-cued session-end is NOT licensed; Section 5 licensed result sentences (a)(b) and the no-sentence-about list; KR1 per-marker classification set; Section 7 OFF arms and any dev-flow SKILL.md edit out of scope.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-20T10:46:56.066Z"
+}

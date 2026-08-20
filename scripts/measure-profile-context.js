@@ -15,6 +15,16 @@ const INVENTORY_CATEGORIES = new Set([
   'topology',
   'obsolete',
 ]);
+const CODEX_PROJECTED_SKILL_PATHS = new Set([
+  'skills/dev-flow/SKILL.md',
+  'skills/ceo-agent/SKILL.md',
+  'skills/l3/SKILL.md',
+  'skills/l4/SKILL.md',
+  'skills/l5/SKILL.md',
+  'skills/l6/SKILL.md',
+  'skills/finish-flow/SKILL.md',
+]);
+const CODEX_LIFECYCLE_ADAPTER_MARKER = 'AUTOPILOT_CODEX_LIFECYCLE_ADAPTER_V1';
 
 const HELP = `Usage:
   node scripts/measure-profile-context.js source --file <path> [--file <path>] [--divisor <n>]
@@ -114,6 +124,33 @@ function readUtf8Bounded(file, maxBytes, code = 'FILE_UNREADABLE') {
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function canonicalizeProjectedSkillSource(source, repo, relativePath) {
+  if (!CODEX_PROJECTED_SKILL_PATHS.has(relativePath)) return source;
+  const adapterPath = path.join(repo, 'skill-adapters', 'lifecycle.md');
+  if (!fs.existsSync(adapterPath)) return source;
+  const adapter = readUtf8(adapterPath, 'SOURCE_PROJECTION_UNREADABLE');
+  if ((adapter.match(new RegExp(CODEX_LIFECYCLE_ADAPTER_MARKER, 'gu')) || []).length !== 1) {
+    fail('SOURCE_PROJECTION_DRIFT', 'Codex lifecycle adapter marker must occur exactly once');
+  }
+  if (!source.startsWith('---\n')) {
+    fail('SOURCE_PROJECTION_DRIFT', `${relativePath}: projected source frontmatter is missing`);
+  }
+  const close = source.indexOf('\n---\n', 4);
+  if (close === -1) {
+    fail('SOURCE_PROJECTION_DRIFT', `${relativePath}: projected source frontmatter is unterminated`);
+  }
+  const split = close + '\n---\n'.length;
+  const insertion = `\n${adapter}`;
+  if (source.slice(split, split + insertion.length) !== insertion) {
+    fail('SOURCE_PROJECTION_DRIFT', `${relativePath}: lifecycle adapter bytes differ`);
+  }
+  const canonical = source.slice(0, split) + source.slice(split + insertion.length);
+  if (canonical.includes(CODEX_LIFECYCLE_ADAPTER_MARKER)) {
+    fail('SOURCE_PROJECTION_DRIFT', `${relativePath}: duplicate lifecycle adapter marker`);
+  }
+  return canonical;
 }
 
 function positiveDivisor(value) {
@@ -305,7 +342,11 @@ function validateRuleInventory(inventoryPath, repo = process.cwd(), sourceManife
     if (seenSourcePaths.has(entry.path)) fail('DUPLICATE_SOURCE', entry.path);
     seenSourcePaths.add(entry.path);
     const absoluteSource = assertInsideRepo(repo, entry.path, 'source');
-    const source = readUtf8(absoluteSource, 'SOURCE_UNREADABLE');
+    const source = canonicalizeProjectedSkillSource(
+      readUtf8(absoluteSource, 'SOURCE_UNREADABLE'),
+      repo,
+      entry.path,
+    );
     const actualHash = sha256(source);
     if (entry.sha256 !== actualHash) {
       fail('SOURCE_HASH_DRIFT', `${entry.path}: expected ${entry.sha256}, got ${actualHash}`);
@@ -687,6 +728,7 @@ if (require.main === module) {
 module.exports = {
   MeasurementError,
   analyzeCodexTrace,
+  canonicalizeProjectedSkillSource,
   estimateTokens,
   extractRuleCandidates,
   run,

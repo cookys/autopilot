@@ -1,11 +1,12 @@
 name: tests
 
 on:
+  # Full CI is release-gated: the canonical plugin manifest changes on every
+  # version bump, while ordinary code pushes and pull requests stay quiet.
   push:
     branches: [develop, main]
-  pull_request:
-    branches: [develop, main]
-  workflow_dispatch:
+    paths:
+      - '.claude-plugin/plugin.json'
 
 # A superseded push's run is dead signal — cancel it instead of queueing.
 concurrency:
@@ -25,53 +26,9 @@ jobs:
           # (base-ref walk) need real history — shallow clone kept CI red for 100+ runs.
           fetch-depth: 0
 
-      # owner-kernel P0's supervised-profile probe needs a real Linux sandbox +
-      # syscall tracer. Without them the probe dies on `spawn bwrap ENOENT` /
-      # `spawnSync strace ENOENT` and ALL 8 assertions of
-      # hooks/tests/owner-kernel-p0-supervised-profile.test.sh fail — which is what
-      # turned develop red on 2026-07-25 (the failure predates the commit that
-      # surfaced it; the run that would have shown it was cancelled by a later push).
-      # Declared as a prerequisite in docs/projects/2026-07-20-owner-kernel-governance/README.md
-      # ("Linux sandbox/runtime prerequisite | Yes"). Installing them — rather than
-      # skipping the probe — is deliberate: those 8 assertions ARE the security
-      # controls (forged intent rejected, capability exposure rejected, protected
-      # write rejected, receipt-mount rejected, payload tamper rejected). A skip
-      # would turn a security gate into a silent pass.
-      - name: Install sandbox prerequisites (owner-kernel P0 supervised profile)
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq bubblewrap strace
-          bwrap --version
-          strace -V | head -1
-
-      # Ubuntu 24.04 ships `kernel.apparmor_restrict_unprivileged_userns=1`, an AppArmor
-      # restriction that did not exist on 22.04 and does not exist on most other distros. It
-      # blocks unconfined binaries from creating unprivileged user namespaces, so bwrap (which
-      # is NOT setuid here: `-rwxr-xr-x root root`) cannot get a userns and dies with
-      #   bwrap: setting up uid map: Permission denied
-      #   bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
-      # taking all 8 owner-kernel P0 supervised-profile controls down with it.
-      #
-      # Measured on the runner (diagnostic run 2026-07-25, ubuntu-24.04.4, kernel 6.17-azure):
-      #   unprivileged `bwrap --unshare-net`        -> rc=1 (RTM_NEWADDR)
-      #   `sudo bwrap --unshare-net`                -> rc=0
-      #   the probe under `sudo -E`                 -> rc=1  (STILL fails: it re-spawns bwrap
-      #                                                without inheriting root, so "just run
-      #                                                the tests as root" is NOT a fix)
-      # Clearing the knob is therefore the option that keeps the probe running exactly as
-      # designed — UNPRIVILEGED, in a real user namespace — instead of either running security
-      # tests as root or declaring the controls unverifiable in CI. It only relaxes an
-      # Ubuntu-24.04-specific hardening on an ephemeral runner VM, not in the sandbox itself.
-      - name: Allow unprivileged user namespaces (Ubuntu 24.04 AppArmor restriction)
-        run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          # Fail loudly if bwrap still cannot build a sandbox — a silent regression here would
-          # take the 8 security controls down again while the suite blames application logic.
-          if ! bwrap --unshare-user --unshare-net --dev-bind / / true; then
-            echo "::error::bwrap still cannot create an unprivileged user namespace; the owner-kernel P0 controls cannot be verified in this environment" >&2
-            exit 1
-          fi
-          echo "bwrap unprivileged sandbox: OK"
+      # The bwrap/strace sandbox-prerequisite steps that used to live here served
+      # the owner-kernel P0 supervised-profile probes, retired 2026-08-16
+      # (docs/plans/2026-08-16-owner-kernel-retirement.md).
 
       - name: Set up Node
         uses: actions/setup-node@v4

@@ -81,7 +81,7 @@ if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
 OUT1="$(node "$SCRIPT" "$TARGET" --detect "$DETECT_JSON")"
 SUMMARY1="$(printf '%s\n' "$OUT1" | tail -n 1)"
 assert_eq "0" "$?" "scaffold-config first run exit code"
-assert_eq "9" "$(query_json "$SUMMARY1" "written.length")" "first run writes 9 files"
+assert_eq "11" "$(query_json "$SUMMARY1" "written.length")" "first run writes 11 files (10 configs + settings env pin)"
 assert_eq "0" "$(query_json "$SUMMARY1" "skipped.length")" "first run has no skipped files"
 
 for file in next-config.md project-lifecycle-config.md dispatch-config.md quality-gate-config.md dev-flow-config.md test-strategy-config.md qc-gate-config.md skill-routing.md doc-drift-config.md; do
@@ -131,17 +131,69 @@ printf '.claude/\nnode_modules/\n' > "$WS_TARGET/.gitignore"
 WS_ERR="$(node "$SCRIPT" "$WS_TARGET" --detect "$DETECT_JSON" 2>&1 >/dev/null)"
 assert_contains "$WS_ERR" "wholesale" "warns when target already ignores .claude/ wholesale"
 # control: a target WITHOUT a wholesale ignore emits no such warning
+# --- task-class-config (autonomous-brain P8): scaffolded verbatim from the canonical template ---
+assert_file_exists "$TARGET/.claude/task-class-config.md" "task-class config scaffolded"
+TC="$(cat "$TARGET/.claude/task-class-config.md")"
+assert_contains "$TC" "hard-problem" "hard-problem class present"
+assert_contains "$TC" "pinned to depth-0, NEVER dispatched" "depth-0 pin stated"
+assert_contains "$TC" "ABSENT FILE = unchanged behavior" "absent-config semantics stated"
+assert_contains "$TC" "STOP AND ASK" "ambiguity→ask rule stated"
+assert_eq "$(sha256sum "$REPO_ROOT/project-config-template/task-class-config.md" | cut -d' ' -f1)" \
+  "$(sha256sum "$TARGET/.claude/task-class-config.md" | cut -d' ' -f1)" \
+  "scaffold copies the canonical template byte-identically (no second statement)"
+
 NOWS_TARGET="$TEST_TMP/no-wholesale"; mkdir -p "$NOWS_TARGET"
 printf 'node_modules/\n' > "$NOWS_TARGET/.gitignore"
 NOWS_ERR="$(node "$SCRIPT" "$NOWS_TARGET" --detect "$DETECT_JSON" 2>&1 >/dev/null)"
 assert_not_contains "$NOWS_ERR" "wholesale" "no false warning when .claude/ not pre-ignored"
+
+# --- settings.json env pin (task tools gated off on 5-era models since CC 2.1.233) ---
+assert_file_exists "$TARGET/.claude/settings.json" "settings.json scaffolded"
+assert_eq "1" "$(query_json "$(cat "$TARGET/.claude/settings.json")" "env.CLAUDE_CODE_ENABLE_TODO_TOOLS")" \
+  "fresh scaffold pins CLAUDE_CODE_ENABLE_TODO_TOOLS=1"
+assert_contains "$(query_json "$SUMMARY1" "written")" "settings.json" "first run reports settings.json written"
+assert_eq "true" "$(query_json "$SUMMARY1" "settings_env_pinned")" "summary reports settings_env_pinned"
+assert_eq "false" "$(query_json "$SUMMARY2" "settings_env_pinned")" "second run does not re-pin"
+
+# merge preserves existing keys, without --force (merge is additive, not an overwrite)
+MERGE_TARGET="$TEST_TMP/settings-merge"; mkdir -p "$MERGE_TARGET/.claude"
+printf '{\n  "model": "claude-sonnet-5",\n  "env": {\n    "FOO": "bar"\n  }\n}\n' > "$MERGE_TARGET/.claude/settings.json"
+OUT_M="$(node "$SCRIPT" "$MERGE_TARGET" --detect "$DETECT_JSON")"
+SUMMARY_M="$(printf '%s\n' "$OUT_M" | tail -n 1)"
+MERGED="$(cat "$MERGE_TARGET/.claude/settings.json")"
+assert_eq "claude-sonnet-5" "$(query_json "$MERGED" "model")" "merge preserves unrelated top-level keys"
+assert_eq "bar" "$(query_json "$MERGED" "env.FOO")" "merge preserves unrelated env keys"
+assert_eq "1" "$(query_json "$MERGED" "env.CLAUDE_CODE_ENABLE_TODO_TOOLS")" "merge adds the pin"
+assert_eq "true" "$(query_json "$SUMMARY_M" "settings_env_pinned")" "merge run reports pinned"
+
+# an EXPLICIT existing value — even an opt-out — is the user's choice and stays untouched
+OPTOUT_TARGET="$TEST_TMP/settings-optout"; mkdir -p "$OPTOUT_TARGET/.claude"
+printf '{\n  "env": {\n    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "0"\n  }\n}\n' > "$OPTOUT_TARGET/.claude/settings.json"
+OUT_O="$(node "$SCRIPT" "$OPTOUT_TARGET" --detect "$DETECT_JSON")"
+SUMMARY_O="$(printf '%s\n' "$OUT_O" | tail -n 1)"
+assert_eq "0" "$(query_json "$(cat "$OPTOUT_TARGET/.claude/settings.json")" "env.CLAUDE_CODE_ENABLE_TODO_TOOLS")" \
+  "explicit opt-out value is respected"
+assert_eq "false" "$(query_json "$SUMMARY_O" "settings_env_pinned")" "opt-out run reports not pinned"
+
+# invalid JSON → warn + skip, byte-identical file (never clobber what we cannot parse)
+BADJSON_TARGET="$TEST_TMP/settings-badjson"; mkdir -p "$BADJSON_TARGET/.claude"
+printf '{not json' > "$BADJSON_TARGET/.claude/settings.json"
+BAD_ERR="$(node "$SCRIPT" "$BADJSON_TARGET" --detect "$DETECT_JSON" 2>&1 >/dev/null)"
+assert_contains "$BAD_ERR" "not valid JSON" "invalid settings.json warns"
+assert_eq "{not json" "$(cat "$BADJSON_TARGET/.claude/settings.json")" "invalid settings.json left untouched"
+
+# pin file itself gitignored → loud warning (foremen worktrees never see ignored files)
+IGNPIN_TARGET="$TEST_TMP/settings-ignored"; mkdir -p "$IGNPIN_TARGET"
+printf '.claude/settings.json\n' > "$IGNPIN_TARGET/.gitignore"
+IGN_ERR="$(node "$SCRIPT" "$IGNPIN_TARGET" --detect "$DETECT_JSON" 2>&1 >/dev/null)"
+assert_contains "$IGN_ERR" "env pin will not reach" "warns when settings.json is gitignored"
 
 # --- --dry-run does not write ---
 DRY_TARGET="$TEST_TMP/dry-run-target"
 mkdir -p "$DRY_TARGET"
 OUT5="$(node "$SCRIPT" "$DRY_TARGET" --detect "$DETECT_JSON" --dry-run)"
 SUMMARY5="$(printf '%s\n' "$OUT5" | tail -n 1)"
-assert_eq "9" "$(query_json "$SUMMARY5" "written.length")" "dry-run reports prospective writes"
+assert_eq "11" "$(query_json "$SUMMARY5" "written.length")" "dry-run reports prospective writes"
 assert_file_absent "$DRY_TARGET/.claude"
 assert_file_absent "$DRY_TARGET/.gitignore"
 

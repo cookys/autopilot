@@ -552,6 +552,9 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
 
   try {
     const { resolveGitCommonDir } = require('../src/engine/work-order');
+    // Mission authority is inseparable from the repository's canonical Git
+    // common-dir. Tests that need hermetic authority must create a hermetic Git
+    // repository instead of selecting a production-visible alternate store.
     const commonDir = resolveGitCommonDir(repoRoot);
     if (!commonDir) {
       if (enforce) {
@@ -602,6 +605,9 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
     let terminalReceipt = null;
     let terminalState = null;
     let terminalClaim = null;
+    // Set when a validated rollover certifies the selected terminal as the
+    // integrated one whose output is already in shipped history.
+    let terminalRolloverCertified = false;
 
     // Explicit terminal receipt path (production may pass; not required when registry works).
     if (isStr(options.missionTerminalReceiptPath)) {
@@ -625,8 +631,16 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
       const sealedGraph = isStr(options.missionGraphDigest) ? options.missionGraphDigest : null;
       const sealedLineage = isStr(options.missionLineageId) ? options.missionLineageId : null;
       const sealedPolicy = isStr(options.missionPolicyDigest) ? options.missionPolicyDigest : null;
+      const rollover = loadTerminalRollover(repoRoot, sealedGraph);
+      const supersededKeys = new Set(
+        rollover ? rollover.superseded.map((s) => s && s.adoption_key).filter(isStr) : [],
+      );
       const candidateTerminals = [];
       for (const [adoptionKey, entry] of Object.entries(registry.missions)) {
+        // A retry chain leaves several COMPLETE adoptions of one graph, all looking
+        // authoritative. A validated rollover names which one was integrated; the
+        // retired ones stop competing for the same graph node.
+        if (supersededKeys.has(adoptionKey)) continue;
         if (!SHA256.test(adoptionKey)
             || !hasExactKeys(entry, REGISTRY_ENTRY_KEYS)
             || entry.schema_version !== 1
@@ -680,8 +694,51 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
         if (sealedGraph && sealedGraph !== state.mission_graph_digest) {
           continue;
         }
+        const expectedReadyReceiptDigests = new Set();
+        for (const [nodeId, progress] of Object.entries(
+          isObj(state.graph_progress) ? state.graph_progress : {},
+        )) {
+          if (graphNode && nodeId !== graphNode) continue;
+          if (!isObj(progress) || progress.status !== 'ready') continue;
+          if (!SHA256.test(progress.last_receipt_digest || '')) {
+            if (enforce) {
+              fail(
+                `current ready Mission state for ${nodeId} lacks a canonical terminal receipt digest`,
+                'MISSION_EVIDENCE_CORRUPT',
+              );
+            }
+            continue;
+          }
+          const matchingClaim = Object.values(
+            isObj(state.claims) ? state.claims : {},
+          ).find((claim) => (
+            isObj(claim)
+              && claim.graph_node_id === nodeId
+              && claim.terminal === true
+              && claim.reconciled === true
+          ));
+          if (!matchingClaim) {
+            if (enforce) {
+              fail(
+                `current ready Mission state for ${nodeId} lacks a terminal reconciled claim`,
+                'MISSION_EVIDENCE_CORRUPT',
+              );
+            }
+            continue;
+          }
+          expectedReadyReceiptDigests.add(progress.last_receipt_digest);
+        }
+        const observedReadyReceiptDigests = new Set();
         const journalDir = path.join(missionRoot, 'journals', adoptionKey);
-        if (!fs.existsSync(journalDir)) continue;
+        if (!fs.existsSync(journalDir)) {
+          if (enforce && expectedReadyReceiptDigests.size > 0) {
+            fail(
+              `current ready Mission state for ${adoptionKey} is missing its applied terminal journal`,
+              'MISSION_EVIDENCE_MISSING',
+            );
+          }
+          continue;
+        }
         let names;
         try {
           names = fs.readdirSync(journalDir).filter((n) => n.endsWith('.applied.json'));
@@ -705,10 +762,6 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
               continue;
             }
             if (graphNode && rec.graph_node_id !== graphNode) continue;
-            if (explicitTerminalReceipt
-                && rec.receipt_digest !== explicitTerminalReceipt.receipt_digest) {
-              continue;
-            }
             const valid = validateCampaignTerminalReceipt(rec, state);
             if (!valid.ok) {
               // Old applied attempts can coexist with a later current terminal;
@@ -729,6 +782,11 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
               continue;
             }
             if (rec.outcome !== 'ready') continue;
+            observedReadyReceiptDigests.add(rec.receipt_digest);
+            if (explicitTerminalReceipt
+                && rec.receipt_digest !== explicitTerminalReceipt.receipt_digest) {
+              continue;
+            }
             candidateTerminals.push({ receipt: rec, state, claim: valid.claim });
           } catch (error) {
             if (enforce) {
@@ -738,6 +796,14 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
               );
             }
           }
+        }
+        const missingReadyReceipt = [...expectedReadyReceiptDigests]
+          .find((digest) => !observedReadyReceiptDigests.has(digest));
+        if (missingReadyReceipt && enforce) {
+          fail(
+            `current ready Mission state for ${adoptionKey} is missing applied terminal receipt ${missingReadyReceipt}`,
+            'MISSION_EVIDENCE_MISSING',
+          );
         }
       }
       if (candidateTerminals.length > 1) {
@@ -749,6 +815,11 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
         }
       } else if (candidateTerminals.length === 1) {
         terminalReceipt = candidateTerminals[0].receipt;
+        terminalRolloverCertified = Boolean(rollover)
+          && Array.isArray(rollover.integrated_terminals)
+          && rollover.integrated_terminals.some(
+            (t) => isObj(t) && t.receipt_digest === candidateTerminals[0].receipt.receipt_digest,
+          );
         terminalState = candidateTerminals[0].state;
         terminalClaim = candidateTerminals[0].claim;
       }
@@ -791,7 +862,13 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
       // it was discovered from an explicit path or the ordinary registry.
       // Once that history exists, its exact controller Work Order is required:
       // treating a missing WO as "first run" would replay an effectful node.
-      if (!loaded.workOrder && enforce && isObj(terminalReceipt)) {
+      // The Work Order requirement exists to stop a missing WO being read as "first
+      // run", which would replay an effectful node. A rollover-certified terminal
+      // cannot be replayed: issuing it required proving observed_head is an ancestor
+      // of HEAD, i.e. the node's output is already in shipped history. That is a
+      // STRONGER guarantee than the WO provides, so it substitutes for it — and only
+      // for that exact terminal.
+      if (!loaded.workOrder && enforce && isObj(terminalReceipt) && !terminalRolloverCertified) {
         fail(
           'controller Work Order for Mission terminal evidence not found',
           'MISSION_EVIDENCE_MISSING',
@@ -827,6 +904,68 @@ function loadDurableMissionEvidence(repoRoot, options = {}) {
     allowTest,
     options,
   );
+}
+
+// A recorded rollover names which same-graph adoption is the integrated one and
+// retires the rest. It is validated to the same standard as the legacy disposition:
+// content-addressed, bound to this repository and this graph, and asserting that it
+// synthesized no Work Orders, mutated no receipts, and rewrote no history. A rollover
+// that fails any of those is IGNORED rather than trusted — the ambiguity it would
+// have resolved is the safer failure.
+function loadTerminalRollover(repoRoot, sealedGraph) {
+  if (!isStr(sealedGraph)) return null;
+  let commonDir;
+  try {
+    const { resolveGitCommonDir } = require('../src/engine/work-order');
+    commonDir = resolveGitCommonDir(repoRoot);
+  } catch { return null; }
+  if (!commonDir) return null;
+  const file = path.join(commonDir, 'autopilot', 'mission', 'terminal-rollovers.json');
+  if (!fs.existsSync(file)) return null;
+  let store;
+  try { store = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+  const artifact = store && store.rollovers && store.rollovers[sealedGraph];
+  if (!isObj(artifact)) return null;
+  const { rollover_digest: supplied, ...body } = artifact;
+  if (supplied !== sha256(canonicalJson(body))) return null;
+  if (artifact.artifact_type !== 'mission_terminal_rollover') return null;
+  if (artifact.repo_identity !== `git-common-dir:${commonDir}`) return null;
+  if (artifact.mission_graph_digest !== sealedGraph) return null;
+  if (artifact.synthesized_work_orders !== 0) return null;
+  if (artifact.mutated_receipts !== 0) return null;
+  if (artifact.history_rewritten !== false) return null;
+  if (!isStr(artifact.integrated_adoption_key)) return null;
+  if (!Array.isArray(artifact.superseded)) return null;
+  return artifact;
+}
+
+function requireExactLegacyTerminalDisposition(repoRoot, currentGraphDigest) {
+  const { resolveGitCommonDir } = require('../src/engine/work-order');
+  const { LEGACY, dispositionPath } = require('./mission-terminal-reconcile');
+  const commonDir = resolveGitCommonDir(repoRoot);
+  if (!commonDir) return;
+  const registryPath = path.join(commonDir, 'autopilot', 'mission', 'registry.json');
+  if (!fs.existsSync(registryPath)) return;
+  const registry = readJson(registryPath, 'Mission runtime registry');
+  const legacyEntry = registry.missions && registry.missions[LEGACY.adoption_key];
+  if (!legacyEntry) return;
+  const file = dispositionPath(commonDir);
+  if (!fs.existsSync(file)) fail('exact legacy B/C terminal disposition is missing', 'MISSION_LEGACY_DISPOSITION_MISSING');
+  const artifact = readJson(file, 'legacy B/C terminal disposition');
+  const { disposition_digest: supplied, ...body } = artifact;
+  const expected = LEGACY.terminals.map((item) => `${item.graph_node_id}:${item.receipt_digest}`).sort();
+  const observed = Array.isArray(artifact.dispositions)
+    ? artifact.dispositions.map((item) => `${item.graph_node_id}:${item.receipt_digest}`).sort() : [];
+  if (supplied !== sha256(canonicalJson(body))
+      || artifact.repo_identity !== `git-common-dir:${commonDir}`
+      || artifact.current_graph_digest !== currentGraphDigest
+      || artifact.legacy_adoption_key !== LEGACY.adoption_key
+      || artifact.synthesized_work_orders !== 0
+      || artifact.mutated_receipts !== 0
+      || artifact.history_rewritten !== false
+      || canonicalJson(observed) !== canonicalJson(expected)) {
+    fail('exact legacy B/C terminal disposition is invalid or belongs to another graph', 'MISSION_LEGACY_DISPOSITION_INVALID');
+  }
 }
 
 function finalizeMissionEvidence(
@@ -1004,6 +1143,7 @@ function admitMissionRouting(options = {}) {
       graph: artifacts.graph,
       sources: artifacts.sources,
     });
+    requireExactLegacyTerminalDisposition(repo.root, graphResult.graph_digest);
     if (graphResult.policy_digest !== policy.resolution.policy_digest) {
       fail(
         'authoritative Mission policy changed during admission',

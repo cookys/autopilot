@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "next-touch-debt-retirement-2026-08-03-glm-minimax-promptfix-20260804",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "7634ffd82a3285ed58e8d3ea964094abaf5cbbea6b788a159c81a74587bc7c34",
+      "disposition": "rejected",
+      "rationale": "Rejected after arithmetic cross-check: D1=4, D2=2, D3=1, D4=1, D5=3, D6=1, D7=1, D8=1, totaling 14, not 15. The raw GLM finding itself walks through the correct plan counts but reaches the wrong sum."
+    },
+    {
+      "fingerprint": "9f5ca044dec871a8d1ef8b4cf8ba6af7b3c0864cf234a773c63275226d7b1c8f",
+      "disposition": "rejected",
+      "rationale": "Rejected after direct enumeration: D1 through D8 is eight deliverables, not nine. The finding treats the inclusive label range D1..D8 as nine rows."
+    },
+    {
+      "fingerprint": "2cf6152198736dd208be0a9b8b9a03964fb307f573ad22d2cde9a5dc2d86f6fc",
+      "disposition": "accepted_blocker",
+      "rationale": "Accept: the plan says 14 headings are bound but does not provide one explicit ordered identity ledger tied to D1..D8. D3's contextual subcondition wording can be misread as a fifteenth source item, so the frozen plan needs an exact base-SHA heading list and one-to-one deliverable mapping."
+    },
+    {
+      "fingerprint": "661a54d1f6ab5b74a7d44520837b0c8433707b386eeb5448c596ef8c6b7a5931",
+      "disposition": "accepted_blocker",
+      "rationale": "Accept: the graph names cumulative sync/archive and the integrated verification/review as post-D8 nodes while the reservation calls out eight deliverables. The plan must explicitly classify those as bounded gates inside D8/integration, with no extra execution phase or unbudgeted allowance."
+    },
+    {
+      "fingerprint": "8766294d5fc89618530487637f7efba51651cd520949a2d11ccd3df18d7b58b0",
+      "disposition": "accepted_blocker",
+      "rationale": "Accept: the D3 command list does not itself prove a live Codex dispatch, the referenced D6 benchmark fixture is absent and thresholds are not concretely frozen, and D8 names a medium arm that is not reserved. These are executable-boundary gaps, not implementation details to defer."
+    },
+    {
+      "fingerprint": "4fa98ccddbd605f4e3af032bc2ada1e07157cc3ef3962c6390d8de49dabdd804",
+      "disposition": "accepted_blocker",
+      "rationale": "Accept: D8's 30-to-60-pair extension can consume up to 120 sessions, but the plan never states that this is the total ceiling or names a validator that rejects silent pair loss, imputation, or post-hoc sample changes."
+    },
+    {
+      "fingerprint": "4c97b56b75bf6815796a0f71705fb1f4086e53dea27a5d477f1c3f8b7b1d17f0",
+      "disposition": "accepted_blocker",
+      "rationale": "Accept: the current command order permits merge after reviewed_archived before the integrated-state advance, splitting the terminal predicate. The plan must make the integrated validator and exact 14-heading removal mechanically gate integration."
+    },
+    {
+      "fingerprint": "b80a47d8ef07b8b95ca12f1f6676a3993c490cb8afae6ab434c352c71b26bb4d",
+      "disposition": "accepted_blocker",
+      "rationale": "Accept: this finding consolidates unresolved execution ambiguity that is not fully covered by the other fingerprints: D2's three validator consumers are unnamed, D6 has no committed baseline fixture/thresholds, and D8's medium/high actor reservation is inconsistent. The repair must pin those decisions without adding compatibility paths."
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "autonomous-brain-integration-2026-08-17",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "987da8dbcd777f4a9b97a831dc37e7c92f26ca9fe147f4863a3f634339c54269",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: complete failure-shape coverage table added to §2 (F6/F7 mapped to shipped rails, F11 to P8 ambiguity→ask; promises-dont-survive named as the plans method)."
+    },
+    {
+      "fingerprint": "4bb8464038463c7976f37a703ad2c05085e6e801a737bad35152bec892146c21",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: file map gains a same-phase-caller column; SKILL.md touches split one slice per phase (P2/P3/P4/P6)."
+    },
+    {
+      "fingerprint": "427cb9f37d20f6a85f22dfddd1795c51709c44be98b6be12c818497135cb8af2",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: conformance gate split into pre-spend preflight on DECLARED intent (dispatch-hetero die_precondition rail) + post-round audit backstop; KR1 red case is pre-spawn refusal."
+    },
+    {
+      "fingerprint": "7ee3fe801765f0a5c62c02a766fd15780e9314fd8d14ffe99acafebe6d21d4a3",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: control-plane four-tuple member now digest-pins task-class/preference/roster configs, brain-read-only mid-campaign; edit = violation, change = re-freeze."
+    },
+    {
+      "fingerprint": "e973eae5ed39035915a47727192aa3adbedf3b5a09dc0008546b2e84c538593f",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: KR2 quiz is fixed-schema JSON {current_unit_id,four_tuple_digest,owned_pids,last3_decision_ids} graded by exact match vs disk truth."
+    },
+    {
+      "fingerprint": "a49e0a4e6a011b05989673be574422a14ed7074d042492f9cc1751e533d6583f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: bundle five-section layout with per-section caps and 20k total frozen (canonical in experience-audit appendix); truncation order specified; cap adopted, no open question."
+    },
+    {
+      "fingerprint": "1a10f4591dd8cb921b956e45541a3a1b68a9086907dffa2702a9f10f31986690",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: ask-first predicate machine-checkable (Effort L/H field, qc-gate protected paths, irreversible/outward action, board tag)."
+    },
+    {
+      "fingerprint": "5a95d7b4f0f7e7cd784f024c24e889806bbd30c3b5009eaf22b9472b2aec26bc",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: veto channel specified — decision-ledger.js veto <id>; preflight refuses rounds building on vetoed decisions; undo becomes a front-queued repair unit."
+    },
+    {
+      "fingerprint": "c38241c235efa2f43503bf11f08a4657b74aad68ecef28ebaf42561f1a53ee31",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: §5 red-case matrix names a fail-before/pass-after case per KR incl. KR2/KR5."
+    },
+    {
+      "fingerprint": "13d519a6bd1c5cd3f32525a650d3392e1ed1aff2d75f5ea63f6ebf45dd7d8a4f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: 4-place wiring + release gates are inside every shipping phases acceptance (§2.5 constraint + §5)."
+    },
+    {
+      "fingerprint": "6bdb4b0d07d2097a81c6180825520c9091ab7081f6518884d1887d52e995f2d9",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: complete failure-shape coverage table added to §2 (F6/F7 mapped to shipped rails, F11 to P8 ambiguity→ask; promises-dont-survive named as the plans method)."
+    },
+    {
+      "fingerprint": "5c1804f3b0830ddea9694d14253fb97ef16759dce2d78ce5db5f17c0231a7b39",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: control-plane four-tuple member now digest-pins task-class/preference/roster configs, brain-read-only mid-campaign; edit = violation, change = re-freeze."
+    },
+    {
+      "fingerprint": "3f384989dce793ae817a1a89618977b6460425ebf1e82f467a8c15954a7a8ec2",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: conformance gate split into pre-spend preflight on DECLARED intent (dispatch-hetero die_precondition rail) + post-round audit backstop; KR1 red case is pre-spawn refusal."
+    },
+    {
+      "fingerprint": "4f496a379e127e84e665832b62f3295a41f51a976a89123c50270e060a3c080b",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: bundle five-section layout with per-section caps and 20k total frozen (canonical in experience-audit appendix); truncation order specified; cap adopted, no open question."
+    },
+    {
+      "fingerprint": "45d3cfb0af06713552e67cff6af0453b183facd87aed73057cba976f15941c6d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: file-map responsibility for the critic names the machine-checkable/human-only split; human-only qualities route to the user in the report."
+    },
+    {
+      "fingerprint": "0e8c7bb38e733060bd0d29c7ee2ce01ecf4e36050c7cfe7850ba56430ace003a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Repaired: complete failure-shape coverage table added to §2 (F6/F7 mapped to shipped rails, F11 to P8 ambiguity→ask; promises-dont-survive named as the plans method)."
+    },
+    {
+      "fingerprint": "6e5f75b8d7618e7d73c9e7d73ecf730bafcbf848e5e7a51b99e6c5b4b66414a6",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: complete failure-shape coverage table added to §2 (F6/F7 mapped to shipped rails, F11 to P8 ambiguity→ask; promises-dont-survive named as the plans method)."
+    },
+    {
+      "fingerprint": "836a8ceefdab7de94a3096753bcf84b11e1917b674ab0176162eb25aa9031ffc",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: file map gains a same-phase-caller column; SKILL.md touches split one slice per phase (P2/P3/P4/P6)."
+    },
+    {
+      "fingerprint": "4cae5e7156c9429428114744625e30b2e5dfefdf23bc8f8d98507d302c8bf1bc",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: conformance gate split into pre-spend preflight on DECLARED intent (dispatch-hetero die_precondition rail) + post-round audit backstop; KR1 red case is pre-spawn refusal."
+    },
+    {
+      "fingerprint": "986ad9ba91bdec1409b24e2e15cf46795d537e94ab3bb7ccf4334f03ead02a21",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: re-freeze = STOP with zero spend while unfrozen, new digest, ledger transition record; resumed rounds validate only the new digest."
+    },
+    {
+      "fingerprint": "bee9d702b2cd50a6ce133e17adf6a900ffb0071cf76a2759bf59cb314538b63c",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: bundle five-section layout with per-section caps and 20k total frozen (canonical in experience-audit appendix); truncation order specified; cap adopted, no open question."
+    },
+    {
+      "fingerprint": "2ba980bdba1b697427453b8cfa2ad6bf94fb22d3625285f1b0d1038af223c71e",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: critic launches only from the post-merge hook (structurally cannot gate); KR5 red case proves a planted blocking marker is inert."
+    },
+    {
+      "fingerprint": "4005368cf9463e8aad5b133ef24f421d2555147a3c874dacf3a9cf48562e9864",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: pick is a pure function over (BACKLOG digest, preference digest, readiness snapshot) with total lexicographic tie-break; replay fixture in next-pick.test.sh."
+    },
+    {
+      "fingerprint": "ec1c43d18e5ac4308beac7596bd5e5482b5a310b64b2a77ca9c2260a736bf943",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: every phase acceptance is a concrete named test command in §4."
+    },
+    {
+      "fingerprint": "648976d025294d742207fb9508af0185ec82f953f63ff3c9ceb13460c5d8bbef",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: veto channel specified — decision-ledger.js veto <id>; preflight refuses rounds building on vetoed decisions; undo becomes a front-queued repair unit."
+    },
+    {
+      "fingerprint": "cc487ae156b2b6f00a81bae6d73d0a3cc9a8029463124fbee4455afa956b23f4",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: KR6 carries dual red cases — refusal without evidence/override, and preference-beats-ranking fixture."
+    },
+    {
+      "fingerprint": "6d4ed24d9b71ce40e4e4cc113d35d1552a988cb40308d1656ee5664faa49f30a",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: KR3 detection universe is independent of the ledger — audit cross-references dispatch manifests, run-ledger stages, git refs, contract digests."
+    },
+    {
+      "fingerprint": "5b236186f152b31a0bb7bbb38f410d9f5b8e9c7f2056d1f5affa73d8272416f7",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: 4-place wiring + release gates are inside every shipping phases acceptance (§2.5 constraint + §5)."
+    }
+  ]
+}

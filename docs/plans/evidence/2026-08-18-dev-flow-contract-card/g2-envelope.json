@@ -1,0 +1,299 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dev-flow-contract-card-20260818",
+  "logical_plan_id": "dev-flow-contract-card-2026-08-18",
+  "session_id": "dfcc-g2-20260818",
+  "session_key": "b6b793593f0a9f003e98ae90ca788304d43b21d7d0d7cb2ea6cf2f27ea27a2e3",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "5ce45779d4c227164e40b82c75fc3d4edca9150341c0a55d958c59dedb06e62c",
+  "manifest_sha256": "faa867a33bb17095fab42a7e77a7c5b05a91b42655bf433272d844f35b644cbb",
+  "plan_sha256": "47ba556f35f6f8aef72ce2cd8305d177ad0b46bd8109ed5fd5cb10074275b260",
+  "growth_ratio": {
+    "numerator": 25657,
+    "denominator": 21425
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.3",
+          "operation": "plan-review",
+          "request_digest": "00bc5cabbaf20f636bbaeb59a8a66ba3a49311db2cdde8c0a19515e2886fb620"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "94261a4ca4985d9b7f27278bff1bf34ea24e6b18a25c6b7ee36d392ecf7ba1ca",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-459ZtF",
+          "digest": "94261a4ca4985d9b7f27278bff1bf34ea24e6b18a25c6b7ee36d392ecf7ba1ca"
+        },
+        "receipt_digest": "27b9f5f29cc643c063a05aa4f5935ba74ff9c549419fb90f57b0ab22fff864b8"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "6413610036a8dd468790f0d693a202a360e9f7ae9616530ecbdda192f274e66e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "dc697f4efbb02f930019ef5d7dcf35fe390d396ce9b162b7f20d2da109eefc6e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-V5aioR",
+          "digest": "dc697f4efbb02f930019ef5d7dcf35fe390d396ce9b162b7f20d2da109eefc6e"
+        },
+        "receipt_digest": "ad73f67b0d3fd2777f6191b8b12cb75d8f33927b22f2ff10e93128a2ad96a4e9"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "6eeff376cf6abd462483d46ea9e8fbdd9b8fc5ae8714fb059eaa459027ab7113"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e0102a8df6f29229ba779686128e6115e3b05ca7edb22338b18f886ed42125aa",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ZC8Xkb",
+          "digest": "e0102a8df6f29229ba779686128e6115e3b05ca7edb22338b18f886ed42125aa"
+        },
+        "receipt_digest": "894d2417dd93a574821103a82824124803bf7bd71efae41a3ef3d8db919c882d"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "902e0856182454f3af7395f0fb531ff7a5628ba6e0e485d7f2f3ce4d090644ea"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "cb11f1edca90a49fb8d117c005802b8c0c0a5a4b9f5a7ad37e09e4eafbc906d0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-NiDuJZ",
+          "digest": "cb11f1edca90a49fb8d117c005802b8c0c0a5a4b9f5a7ad37e09e4eafbc906d0"
+        },
+        "receipt_digest": "e065f01631969ac54b37a08028a768fdb632981338ce744c6a829db5479ab9cc"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_adversarial_dissent",
+      "target_id": "sol_adversarial_dissent",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "4e74c5bd3818d6eb32f7e49e3271daffe6c7ed5787781c3ebcae008eb40812e3"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "688248202492c6c4fe6a397478dde7aff7251752c882625320ca7cabe71261cc"
+      },
+      "transport_status": "raw_binding_mismatch",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_adversarial_dissent",
+      "target_id": "sol_adversarial_dissent",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "76b5938be1234bfaff2d2f8b9d3b09fa8c60caf55cf57fd9b553dc8bd074223f"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "6d8fb69d90136b5fb5a90de2e92a3a7a1901d42f9d2582f8526a65112cea5770"
+      },
+      "transport_status": "raw_binding_mismatch",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "family": "minimax",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan §6 card disposition summary plus §7 successor guided-compatibility baseline design; downstream P4 migration machinery and P7 swap commit",
+      "claim": "The successor-baseline ontology has only two outcomes (verbatim relocation into the extended references/ universe, or explicit removed dispositions for truly deleted duplicates), but §6 also commits to KEEP-compressed transformations that are neither, so the P7 swap either fails its own superset gate or silently exempts reworded content from the relocation-not-loss proof.",
+      "evidence": "§7 itself states the constraint byte-level: deleting or rewording ANY of the pinned lines triggers PROFILE_GUIDED_COMPATIBILITY_DRIFT, and the immutable P0 snapshot covers 661 of the current 713 lines, so the compression targets (Phase-1 session-start prose, scope-creep indicators converted to a table, L-1 intent, L-4 per-phase, anti-patterns table with row trims) are almost certainly inside the required multiset; §6 marks only the S Session End CUT as requiring P4 and assigns no disposition class to compressed or trimmed rows, leaving the dominant-risk verification unable to either pass or prove anything about transformed content.",
+      "evidence_reference": "PLAN_UNDER_REVIEW_d5a8664ce38e45133ddaf201 §6 KEEP-compressed list and CUT note; §7 Approach paragraph ('Deleting or rewording ANY of those lines', 'Truly deleted duplicates get explicit removed dispositions')",
+      "repair": "Before P4, add a third migration-map disposition class for transformed rules (e.g. reworded or superseded-by) that names the surviving content and its preservation rationale, exclude only dispositioned rows from the successor required multiset, and extend the P4 red-case test to a reword mutation (rewording a NEW-baseline rule without a disposition still fails); alternatively constrain §6 compression to lines proven outside the extracted rule universe and record that proof in docs/plans/evidence/2026-08-18-dev-flow-contract-card/disposition.md.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "82a5e701b4d4b8964054b7b249bc3f51c4c1b50966e2aca6d20e8f834e0980ed"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P7 swap-commit manifest and the three canonical_rules test literals at codex-plugin-package.test.sh lines 245 and 254 and profile-context-isolation.test.sh line 276",
+      "claim": "The plan updates the three canonical_rules literals in the P4 commit but never names them in the P7 swap commit, so a swap that changes the rule count (the CUT and any dispositioned rewrites will) leaves hand-maintained test literals outside the single revertable commit.",
+      "evidence": "§7 places the literal plus baseline-pointer update in the P4 commit; §8 P7 lists only regenerated profiles artifacts and codex mirror resync, and the Risks rollback row lists same-commit profiles regen, mirror resync, and surface-lines.json refresh — the three pinned literals are edited test files, not regenerated artifacts, and §9 surface 4 verifies them only post-hoc, after the commit boundary is already set.",
+      "evidence_reference": "PLAN_UNDER_REVIEW_d5a8664ce38e45133ddaf201 §7 ('The 798 literals + baseline pointer update in the same commit'); §8 P7; Risks row Rollback; §9 surface 4",
+      "repair": "Add the three literal sites to the P7 swap-commit manifest so any canonical_rules change updates them inside the same commit, preserving clean git revert granularity; a one-line addition to §8 P7 and the rollback ritual, no phase reordering.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "12ff322a539a51cd2a0078c84ed058f0421fdd60fa113a14568d9c63ca544a43"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "12ff322a539a51cd2a0078c84ed058f0421fdd60fa113a14568d9c63ca544a43",
+      "rubric_id": "R5",
+      "affected_surface": "P7 swap-commit manifest and the three canonical_rules test literals at codex-plugin-package.test.sh lines 245 and 254 and profile-context-isolation.test.sh line 276",
+      "claim": "The plan updates the three canonical_rules literals in the P4 commit but never names them in the P7 swap commit, so a swap that changes the rule count (the CUT and any dispositioned rewrites will) leaves hand-maintained test literals outside the single revertable commit.",
+      "evidence_reference": "PLAN_UNDER_REVIEW_d5a8664ce38e45133ddaf201 §7 ('The 798 literals + baseline pointer update in the same commit'); §8 P7; Risks row Rollback; §9 surface 4",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-18T00:51:17.695Z"
+}

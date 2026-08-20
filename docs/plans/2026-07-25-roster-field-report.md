@@ -10,7 +10,7 @@
 ## 0. Context / thesis
 
 The owner-kernel P0 semantic inventory performed this audit **by hand, once**
-(`docs/projects/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md`). It recorded one roster
+(`docs/projects/_archive/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md`). It recorded one roster
 field, `spec_review`, as `unclear` — "defined and plumbed but appears to have no consuming gate" — wrote
 a manual resolution path as two shell commands, and set an outcome rule: a field emitted and
 schema-declared but read by nothing is dead contract surface, bound for the P3 deletion manifest.
@@ -193,7 +193,7 @@ modeled-zero bucket — which, by §1b, is not all of them. Blocking is §8 Q1.
 | `scripts/preflight-release.sh` | edit | Non-blocking invocation at release prep — prints the no-detected-match bucket, never changes that script's exit code |
 | `skills/l5/references/hetero-impl-loop.md` | edit | One capability-state surface rule covering the five fields |
 | `skills/l6/references/full-dispatch-pipeline.md` | edit | Delta pointing at the `/l5` rule |
-| `docs/projects/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md` | **deferred** | That file does not exist on `origin/develop`; it lives on the unmerged owner-kernel branch. The `spec_review` handoff edit must be made there or after that branch merges (§6 R8) |
+| `docs/projects/_archive/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md` | **deferred** | That file does not exist on `origin/develop`; it lives on the unmerged owner-kernel branch. The `spec_review` handoff edit must be made there or after that branch merges (§6 R8) |
 | `CLAUDE.md` | edit | Inventory row naming the script **and its owner** |
 | `docs/BACKLOG.md` | edit | §8 carry-overs |
 

@@ -1,0 +1,2 @@
+dispatch-hetero: grok/grok-4.5 (effort=high) may run for MANY minutes — ensure a high Bash-tool timeout (BASH_DEFAULT_TIMEOUT_MS); the 120s default SIGTERMs long runs.
+dispatch-hetero: run_id=hetero-1786907928-1822489-6a24 manifest=/tmp/autopilot-dispatch-runs/hetero-1786907928-1822489-6a24.manifest.json log=/tmp/hetero-qualify-impl-a2-20260817-log-hGDxvj (watch: scripts/dispatch-status.js --run hetero-1786907928-1822489-6a24)

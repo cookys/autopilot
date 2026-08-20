@@ -1,0 +1,545 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "dev-flow-contract-card-20260818",
+  "logical_plan_id": "dev-flow-contract-card-2026-08-18",
+  "session_id": "dfcc-g1-20260818",
+  "session_key": "b6b793593f0a9f003e98ae90ca788304d43b21d7d0d7cb2ea6cf2f27ea27a2e3",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "5ce45779d4c227164e40b82c75fc3d4edca9150341c0a55d958c59dedb06e62c",
+  "manifest_sha256": "faa867a33bb17095fab42a7e77a7c5b05a91b42655bf433272d844f35b644cbb",
+  "plan_sha256": "cbc2728a6fb05005384dccce3eb58150eb29b6110d89a8d07adad19cfab6bd30",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "GLM-5.3",
+          "operation": "plan-review",
+          "request_digest": "af01064b53c61d466aa544948cd4c343f4e057ea4ad156c6b15182eeaeecb557"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "102ac46cbcb5557e9863e02a4b33d7b0644e384f6fa0707c218f13bb90f5f4b5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-lsQot5",
+          "digest": "102ac46cbcb5557e9863e02a4b33d7b0644e384f6fa0707c218f13bb90f5f4b5"
+        },
+        "receipt_digest": "8e7ca83049369abe5f0f01a483bfa1fbd8054c59194d6981b616907648446460"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "b2ad43432206b0faf7708542d4c3f0a58d19986cc424f0f9d500a52442f1bf12"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "dc697f4efbb02f930019ef5d7dcf35fe390d396ce9b162b7f20d2da109eefc6e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-WrtCHp",
+          "digest": "dc697f4efbb02f930019ef5d7dcf35fe390d396ce9b162b7f20d2da109eefc6e"
+        },
+        "receipt_digest": "f4fc9b52ea3d10f5a78815801395620fd046c0fb2a5d0a41e5ca363c5436e964"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "0137563dbb985d86114d9ca54af761bff96970cec742ae3bcbeb414211b5daf3"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "52579d481cdcb70f31b04e78b873baaae6712b8f4399d23b10bb47b23a7d1453",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-32qmtC",
+          "digest": "52579d481cdcb70f31b04e78b873baaae6712b8f4399d23b10bb47b23a7d1453"
+        },
+        "receipt_digest": "ac16b584c35cdcbf39d0a6f6481982bf964e167306f3fcc15a47944b9e065cfb"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "b546221075d3c52d882e0915803f9594f13b45f819896f167dc9dd1b006d2d47"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "046b23b4849eeab1eb08e8ecfe51e5ea336d25c401445807bcbf2b8d88376750",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-wUYJHk",
+          "digest": "046b23b4849eeab1eb08e8ecfe51e5ea336d25c401445807bcbf2b8d88376750"
+        },
+        "receipt_digest": "7c43d4e4d67ac1606d374363df3a9b1f7f62b17a532a560122827bf251e30b31"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "sol_adversarial_dissent",
+      "target_id": "sol_adversarial_dissent",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "862bc3daf2b08230e286b652ad41741c0b4dfa3afaaebbf5288a2c70f4afbbbe"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "17a65f108f01050614cdb263d1ce7d8019f90b720d3eefa2892a63ab3158dfa4"
+      },
+      "transport_status": "raw_binding_mismatch",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "sol_adversarial_dissent",
+      "target_id": "sol_adversarial_dissent",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "ed49fe3fd6c2d1567eeea6131e1f7cbdb550a92d98febd40e69667f896c90a2f"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": null,
+        "receipt_digest": "0b1e0bf5d1936abe74399c0b52039bf5237ca3bcd54ecbab3435dd3c32f70e8a"
+      },
+      "transport_status": "raw_binding_mismatch",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "glm_architecture",
+      "target_id": "glm_architecture",
+      "family": "zhipu",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "minimax_operations_skeptic",
+      "target_id": "minimax_operations_skeptic",
+      "family": "minimax",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "grok_execution_redteam",
+      "target_id": "grok_execution_redteam",
+      "family": "xai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "evals/skill-onoff/ pre-registration: ordering of the §4 rules freeze relative to Phase-0 smoke (plan §8 P3 vs plan §11 Acceptance 2), plus reuse of smoke rows as matrix cells",
+      "claim": "The plan states opposite orderings for the rules freeze versus the first live smoke runs, so the R2 guarantee that V1/V2/V3 are frozen before the first live run is ambiguous, and the clause reusing smoke rows as matrix cells could admit pre-freeze observations into the gating dataset.",
+      "evidence": "Plan §8 P3 sequences 'rules freeze (§4) → Phase-0 live smoke ≤6 runs', while plan §11 Acceptance 2 demands the same smoke evidence 'before rules freeze'; plan §3 Run matrix adds 'Phase-0 smoke ≤6 live runs, reused as matrix cells via resume-by-cell'. Smoke runs are live runs by the plan's own wording, so one of the two orderings violates the frozen-before-first-live-run requirement, and under the §11 ordering reused smoke cells would be pre-freeze data.",
+      "evidence_reference": "PLAN §8 P3; PLAN §11 Acceptance criterion 2; PLAN §3 Run matrix; RUBRIC R2",
+      "repair": "Amend the plan to a single order: commit the §4 freeze (task set, markers.sh set, fixtures manifest digests, seeds, rules text) before any live run including Phase-0 smoke; reword Acceptance 2 to 'after rules freeze and before primary spend'; permit smoke rows to be reused as matrix cells only when executed post-freeze on the frozen artifacts; record the freeze commit SHA in the evidence dir before the first smoke run.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5889ee3df6cdc3ede747ac443f8ac25c8b19f0733a48db9fff733c0751dba50c"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Frozen §4 rules text and score-onoff.js counting for infra_fail cells that are recorded missing",
+      "claim": "The frozen counting rules leave threshold semantics undefined when one or two infra_fail cells exhaust the three re-run attempts and are recorded missing while staying under the arm-level invalidation trigger.",
+      "evidence": "Plan §4 Exclusions re-run infra_fail cells (max 3 attempts, then recorded missing) and invalidate only when more than 10% of an arm's cells end infra_fail; with 21 cells per arm, one or two missing cells proceed while thresholds stay keyed to nominal n (n=9, n=6, n=3) and V1 stays fixed at ≥ 14/21, with no rule for how a missing cell scores.",
+      "evidence_reference": "PLAN §4 Exclusions, V1, V2, V3 threshold text; RUBRIC R2",
+      "repair": "Add one sentence to the text frozen at P3: a recorded-missing cell counts as a failure for every family it touches and as a non-invocation toward V1's denominator of 21; no n rescaling and no re-runs beyond the three attempts, keeping the conservative reading mechanical.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "93eaf3acac983255fba19f42208e932246389638fe42c1a0ae2d56766ba7977b"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Task-prompt hygiene grep gate in evals/skill-onoff/ and its enforcing test",
+      "claim": "The leakage grep vocabulary is a hand-enumerated list, so marker literals can be omitted from the gate; several marker-bearing tokens are already absent from the listed vocabulary.",
+      "evidence": "Plan §3 gate list covers S-scope-gate, L-1.5, L-1.6, L-5, H-9, ongoing-maintenance, session-start-sha, dev-flow, quality-pipeline, finish-flow, blockedBy; but the markers include fix/* branches (d3, d7), ^hotfix/ branches (d4), and the 驗證合約 section exercised by d5, none of which the gate lists.",
+      "evidence_reference": "PLAN §3 Prompt-hygiene grep gate and task/marker table; RUBRIC R3",
+      "repair": "Derive the grep vocabulary mechanically at P3 from the frozen markers.sh literal set (every literal or regex source markers.sh tests) and enforce the derivation inside skill-onoff-markers.test.sh so adding a marker without its grep token turns the test red.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0019512ca8c0e755d9e2e379be524cfea35f0b1c1931bf8c8eb9293e8c13efec"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "profiles rule-migration map rows and the P4/P7 commit split for guided-compatibility baseline re-establishment",
+      "claim": "The plan does not name the commit that carries the migration map's removed and relocation disposition rows, although the only true deletion exists only once the card ships at P7.",
+      "evidence": "Plan §7 places disposition handling inside the P4 phase (P4 merges before P7 can) while plan §6 marks the sole CUT (S Session End 249-263) as requiring P4; plan §8 P7 defines the single swap commit as SKILL.md plus regenerated profiles artifacts plus codex mirror resync without naming rule-migration rows.",
+      "evidence_reference": "PLAN §7; PLAN §6 CUT row; PLAN §8 P4 and P7; RUBRIC R5",
+      "repair": "State explicitly that P4 ships the successor-baseline machinery over the pre-card universe and that the migration map's relocated and removed rows for the card disposition land inside the P7 swap commit, with the §7 red-case test and build-profile-payload.js catalog --check re-run against the post-swap state.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9e77538389255662979c902df55207c6cac3cd10bb33e8e6f3ecae22c214bbbf"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "docs/BACKLOG.md rows added by P0 and plan §9 surface 11",
+      "claim": "Two of the three deferred items that R8 requires as named BACKLOG rows, the quality-pipeline card and post-ship telemetry, have no named row-creation step.",
+      "evidence": "Plan §2 Decision 2 calls quality-pipeline a follow-up and §12 lists it as out of scope with no row; plan §9 surface 11 adds only the tier-A/B row and the post-ship observation row, with TaskCreate-compliance telemetry labeled documented-only as an honest gap; only the contract-density counter is explicitly tagged BACKLOG in §5 rule 4.",
+      "evidence_reference": "PLAN §2 Decision 2; PLAN §9 surface 11; PLAN §12; PLAN §5 rule 4; RUBRIC R8",
+      "repair": "Extend the P0 / surface-11 BACKLOG additions with a named quality-pipeline contract-card row (blocked on the validated instrument) and either a named telemetry row or explicit wording that the post-ship observation row owns telemetry as documented-only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "856902492d40e605e2e33e9f83d39dda5a4a08294c2ec58ba05a84b01af50655"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "references/skill-contract-card.md versus the CLAUDE.md:73 one-liner (single canonical home)",
+      "claim": "The new spec doc is styled as the canonical operational definition while CLAUDE.md keeps its one-liner, producing a second canonical statement of card shape unless the pointer relationship is made explicit.",
+      "evidence": "Plan §5 opens with 'Canonical operational definition of CLAUDE.md:73's one-liner' and cites the scaffold-tiers single-canonical-home precedent, yet no phase or ship surface edits CLAUDE.md:73 (plan §8 P1 and §9 surfaces omit it).",
+      "evidence_reference": "PLAN §5 opening; PLAN §8 P1; PLAN §9; RUBRIC R8",
+      "repair": "In P1, convert CLAUDE.md:73 into a pointer to references/skill-contract-card.md (or explicitly mark the spec doc as subordinate operational detail with the one-liner remaining the single canonical statement) and add that choice as a checkbox row in the §5 review checklist.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5a22fd7249588db3c8e61cbe39010fb851ebab9f6802b095b6ab01f3fae571d4"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Live-run budget interpretation in plan §2 Decision 3 and the P6 evidence-report spend ledger",
+      "claim": "The plan never pins which reading of the 60-90 figure governs, and the advisory haiku block is an allowance category the rubric's enumeration omits, so total-spend auditability rests on unstated arithmetic.",
+      "evidence": "Plan §2 Decision 3 sets 'Budget: 60-90 live runs' with pre-registered 63 primary + 21 advisory + ≤6 smoke (sum 90) and worst case +21 iteration, while the rubric phrase is 'approved 60-90 primary budget (+bounded smoke/iteration allowances)' with no advisory category.",
+      "evidence_reference": "PLAN §2 Decision 3; PLAN §3 Run matrix; RUBRIC R8",
+      "repair": "Add one sentence to §2 fixing the interpretation (60-90 = total live runs including advisory and smoke per settled decision 3, with the bounded +21 iteration excess on top) and require the P6 evidence report to ledger actual spend per category against it.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "glm_architecture",
+          "runner": "cc-shim",
+          "model": "GLM-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e64317e6831b662f1610ed13316087f7ec6c1f6dde0136796acad896f219a883"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "evals/skill-onoff/ pre-registration: §3 channel 2, §4 F2/V2 family counts, P3 freeze order",
+      "claim": "V1/V2/V3 cannot be frozen as written: Phase-0 already showed TaskCreate/task-store is unmeasurable, but the plan still freezes six families and V2 as 4-of-6, and it still sequences rules freeze before the smoke that its own acceptance criterion says must precede freeze.",
+      "evidence": "The 2026-08-18 Phase-0 probe on claude 2.1.234 found no TaskCreate tool in headless -p and no task JSON under the scratch home; it required dropping F2, naming TaskCreate as an unmeasured surface, and rescaling V2 after family count 6 to 5. The plan still lists task-store JSON plus blockedBy as marker channel 2, still scores F2 on d1/d2/d4 TaskCreates, and still states instrument VALID iff at least 4 of 6 families are load-bearing. P3 still says rules freeze then Phase-0 smoke; §11 criterion 2 says smoke before freeze. Remaining F3 cells (d3 merge to develop, d4 hotfix from main --no-ff to main) also assume named main/develop branches, but the reused orchestration temp-repo init only creates one frozen-base commit on the default branch.",
+      "evidence_reference": "docs/plans/evidence/2026-08-18-dev-flow-contract-card/phase0-probe.md:23-39; plan §3 marker channels and F2 rows; plan §4 V2 4-of-6; plan §8 P3; plan §11 item 2; evals/orchestration/run-orchestration-eval.sh:93-103",
+      "repair": "Before any P3-freeze or P5 cell: drop F2 from the live family set and name TaskCreate/task-store as an unmeasured gap beside multi-turn and Mission Routing Override; freeze a revised V2 threshold on the remaining families; pin d3/d4 fixture git topology so main and develop exist before the agent starts; rewrite P3 so freeze happens only after the already-run probe (and any leftover smoke) is folded; do not spend another live run to rediscover tool-absence.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_execution_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c28c4b6d39bdd43b64ceae6e58f453d2824f3db3ae213968060d3d260e129365"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "evals/skill-onoff/ synthetic plugin assembly and scratch CLI env",
+      "claim": "The three arms do not isolate only dev-flow presence/content: CARD relocated prose is not guaranteed to be on disk in the plugin, and the runner does not pin CLAUDE_CONFIG_DIR to scratch, so the operator's installed plugin can leak into OFF.",
+      "evidence": "The arm table varies only skills/dev-flow/SKILL.md and copies companion SKILL.md files. §6 MOVE relocates the L-Full Reference checklist and Context Health Check into skills/dev-flow/references/session-end.md and more prose into historical-rationale.md. The successful Phase-0 plugin copied only SKILL.md. If CARD's references tree is absent, CARD is content-ablated rather than a relocated card, which is a second variable and a straw-man risk. The runner text sets scratch HOME and says never point CLAUDE_CONFIG_DIR at the real ~/.claude, but does not export CLAUDE_CONFIG_DIR to the scratch tree; the working probe did. An unset CLAUDE_CONFIG_DIR can load the installed autopilot plugin and put real dev-flow into OFF.",
+      "evidence_reference": "plan §3 Arms table and runner flags; plan §6 MOVE bullets; docs/plans/evidence/2026-08-18-dev-flow-contract-card/phase0-probe.md:7-12",
+      "repair": "Specify that FULL and CARD copy the whole skills/dev-flow tree (SKILL.md plus the matching references/ tree, digest-pinned); companions copy their full trees identically across arms; OFF omits only skills/dev-flow/. Export both HOME and CLAUDE_CONFIG_DIR to the scratch tree, matching the Phase-0 probe. Add spend-free assertions: roster/references parity, no hooks, no extra plugins, description-byte-equality.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_execution_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "381ad0dc8b0084b9b94555ff3a295ddce146e494a3520fb876b6563786a98120"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P7 swap-commit rollback versus P8 --update-baseline after P1 per-skill check 8",
+      "claim": "P7 is not actually single-commit revert-safe once P1 adds a per-skill line-budget map and P8 runs --update-baseline after the card swap.",
+      "evidence": "Today docs/metrics/surface-lines.json has only version, prose=13800, and engine. P1 extends preflight check 8 with a skills map and a do-not-grow ratchet. P7 swaps SKILL.md plus regenerated profiles and the codex mirror. P8 then runs --update-baseline. After a card ship that update would record the ~440-470 line card as the cap. Reverting only the P7 commit restores the 713-line file against that lowered cap, so check 8 fails. The P7 revert ritual names profiles regen and mirror resync but not the per-skill baseline.",
+      "evidence_reference": "plan §8 P7-P8; plan §5 rule 4 and check-8 extension; plan §10 Rollback row; docs/metrics/surface-lines.json; scripts/preflight-release.sh:31-46 and check 8",
+      "repair": "Fold the per-skill surface-lines update into the P7 swap commit (or document that rollback reverts the P7+P8 pair). Keep P8 to preflight-release, INDEX, and archive. Do not let a post-swap --update-baseline be the only copy of the new per-skill cap.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_execution_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "85bccde73e85ff2540b0cfa077c79414e91157aa0b24946d269a46175861e2bd"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "93eaf3acac983255fba19f42208e932246389638fe42c1a0ae2d56766ba7977b",
+      "rubric_id": "R2",
+      "affected_surface": "Frozen §4 rules text and score-onoff.js counting for infra_fail cells that are recorded missing",
+      "claim": "The frozen counting rules leave threshold semantics undefined when one or two infra_fail cells exhaust the three re-run attempts and are recorded missing while staying under the arm-level invalidation trigger.",
+      "evidence_reference": "PLAN §4 Exclusions, V1, V2, V3 threshold text; RUBRIC R2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0019512ca8c0e755d9e2e379be524cfea35f0b1c1931bf8c8eb9293e8c13efec",
+      "rubric_id": "R3",
+      "affected_surface": "Task-prompt hygiene grep gate in evals/skill-onoff/ and its enforcing test",
+      "claim": "The leakage grep vocabulary is a hand-enumerated list, so marker literals can be omitted from the gate; several marker-bearing tokens are already absent from the listed vocabulary.",
+      "evidence_reference": "PLAN §3 Prompt-hygiene grep gate and task/marker table; RUBRIC R3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9e77538389255662979c902df55207c6cac3cd10bb33e8e6f3ecae22c214bbbf",
+      "rubric_id": "R5",
+      "affected_surface": "profiles rule-migration map rows and the P4/P7 commit split for guided-compatibility baseline re-establishment",
+      "claim": "The plan does not name the commit that carries the migration map's removed and relocation disposition rows, although the only true deletion exists only once the card ships at P7.",
+      "evidence_reference": "PLAN §7; PLAN §6 CUT row; PLAN §8 P4 and P7; RUBRIC R5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "856902492d40e605e2e33e9f83d39dda5a4a08294c2ec58ba05a84b01af50655",
+      "rubric_id": "R8",
+      "affected_surface": "docs/BACKLOG.md rows added by P0 and plan §9 surface 11",
+      "claim": "Two of the three deferred items that R8 requires as named BACKLOG rows, the quality-pipeline card and post-ship telemetry, have no named row-creation step.",
+      "evidence_reference": "PLAN §2 Decision 2; PLAN §9 surface 11; PLAN §12; PLAN §5 rule 4; RUBRIC R8",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5a22fd7249588db3c8e61cbe39010fb851ebab9f6802b095b6ab01f3fae571d4",
+      "rubric_id": "R8",
+      "affected_surface": "references/skill-contract-card.md versus the CLAUDE.md:73 one-liner (single canonical home)",
+      "claim": "The new spec doc is styled as the canonical operational definition while CLAUDE.md keeps its one-liner, producing a second canonical statement of card shape unless the pointer relationship is made explicit.",
+      "evidence_reference": "PLAN §5 opening; PLAN §8 P1; PLAN §9; RUBRIC R8",
+      "disposition": null
+    },
+    {
+      "fingerprint": "e64317e6831b662f1610ed13316087f7ec6c1f6dde0136796acad896f219a883",
+      "rubric_id": "R8",
+      "affected_surface": "Live-run budget interpretation in plan §2 Decision 3 and the P6 evidence-report spend ledger",
+      "claim": "The plan never pins which reading of the 60-90 figure governs, and the advisory haiku block is an allowance category the rubric's enumeration omits, so total-spend auditability rests on unstated arithmetic.",
+      "evidence_reference": "PLAN §2 Decision 3; PLAN §3 Run matrix; RUBRIC R8",
+      "disposition": null
+    },
+    {
+      "fingerprint": "85bccde73e85ff2540b0cfa077c79414e91157aa0b24946d269a46175861e2bd",
+      "rubric_id": "R7",
+      "affected_surface": "P7 swap-commit rollback versus P8 --update-baseline after P1 per-skill check 8",
+      "claim": "P7 is not actually single-commit revert-safe once P1 adds a per-skill line-budget map and P8 runs --update-baseline after the card swap.",
+      "evidence_reference": "plan §8 P7-P8; plan §5 rule 4 and check-8 extension; plan §10 Rollback row; docs/metrics/surface-lines.json; scripts/preflight-release.sh:31-46 and check 8",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-08-18T00:20:33.444Z"
+}

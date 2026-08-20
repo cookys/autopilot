@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-08-04-plan-review-codex-trusted-cwd-fix.md",
+      "rubric_path": "plans/2026-08-04-plan-review-codex-trusted-cwd-fix.rubric.md",
+      "plan_sha256": "00d268bdafe7be44639764783d2e4048cdccc821e50ef2979e509d5058ed9513",
+      "rubric_sha256": "515db466f6fb6acceffbb0ee88294586a7a32bf1d136f0f100f6c94b98c045f5"
+    }
+  ]
+}

@@ -78,6 +78,10 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
    **Active enforcement**: For L-size, this gate is backed by the L-1.6 TaskCreate
    parent task (see L Workflow → Task tracking). Reading this bullet is NOT enough —
    the TaskCreate is the forcing function that prevents skipping.
+   If TaskCreate is missing from your tool list (Claude 5-era models are gated off by
+   default since CC 2.1.233), warn the user once to set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`
+   via `.claude/settings.json` `env` and continue without it — advisory, never a blocker
+   (details: `references/multi-agent-portability.md`, task-persistence row).
 ```
 
 ### Branch Freshness Table
@@ -130,8 +134,8 @@ If the config file does not exist, proceed normally without it.
 
 ### Quality Gate Rule
 
-**Before committing or merging, invoke `autopilot:quality-pipeline`.**
-This is non-negotiable. The quality pipeline runs: test → scan → completeness → review.
+Stated at the step that runs it — S step 2 / Fix step 4 run the project-config gate (default lint + test; the
+optional finish-flow route runs the stricter `quality-pipeline --size S` at F.1); L / H run `autopilot:quality-pipeline` via finish-flow L-5.2 / H-9.2. Enforcer: `documented-only`.
 
 ### Session End Rule
 
@@ -512,8 +516,8 @@ TaskCreate: "H-9: Invoke autopilot:finish-flow"
 > H-9.6), not a standalone section you run yourself. Do not duplicate the checklist here —
 > `finish-flow` creates the discrete tasks and this section is their reference material.
 >
-> **S and Fix**: `finish-flow` is optional. You may either run the inline S-Lite below or
-> invoke `autopilot:finish-flow` for the same effect in TaskCreate form.
+> **S and Fix**: `finish-flow` is optional. You may either run the inline S-Lite below or invoke
+> `autopilot:finish-flow` in TaskCreate form — whose Fix-size F.1 runs `quality-pipeline --size S`, a stricter gate than step 4's, not the same one.
 
 ### S-Lite (S and Fix workflows, inline)
 

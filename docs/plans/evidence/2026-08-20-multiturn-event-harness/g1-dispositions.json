@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "multiturn-event-harness-2026-08-20",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "919736de20de4572b9cbb156eeba0e2343ed3c1427e1591f734fb833215d8f4a",
+      "disposition": "accepted_blocker",
+      "rationale": "Estimand narrowed and renamed per repair: R2 licenses only frozen count sentences; the 2x2 manipulation is not bought."
+    },
+    {
+      "fingerprint": "18a5c78ebf429083e5385581f2509a3e350e24a93202a021ed3bfb114672e49c",
+      "disposition": "accepted_blocker",
+      "rationale": "Hook channel removed from the campaign entirely (R2 Phase B is FS-residue only); the schema/bijection program belongs to a future plan with its own review."
+    },
+    {
+      "fingerprint": "106cb62749a8a732efc0cca1ecb49011f76a92537d26b79732089cd2e6068d17",
+      "disposition": "accepted_blocker",
+      "rationale": "R1 outcome table retired with the 2x2; R2 Phase B is descriptive counts only, so no verdict cells exist to contradict."
+    },
+    {
+      "fingerprint": "d0ce63488f333ef492721ec418743241f1ad182a248604050ddf85cfb4365fed",
+      "disposition": "accepted_blocker",
+      "rationale": "n=3 inferential separation conceded; R2 declares Phase B descriptive-only and records n~23/cell as the confirmatory price NOT bought."
+    },
+    {
+      "fingerprint": "51ad72398733efb2a18a5116b96e32a7d5f36e7ce65bfbbdddeb71a3ffa53447",
+      "disposition": "accepted_blocker",
+      "rationale": "R2 freezes Phase A query+rules and Phase B texts+hashes in pre-registration.md before execution; pilot data never feeds later cells (no later cells exist)."
+    },
+    {
+      "fingerprint": "268fb5d06ad4c091b8a0f6913931dbd83817bd88ad4cabf8090d1431a4476901",
+      "disposition": "accepted_blocker",
+      "rationale": "Pin-absent arm deleted with the F2 block; the deterministic pin probe ships as a separate Fix outside this plan."
+    },
+    {
+      "fingerprint": "7d3bb0adc9b08111dbbdf667a89c6fb64f1714879b4bd84c6864a16ecfdbd0ae",
+      "disposition": "accepted_blocker",
+      "rationale": "R2 freezes literal licensed result sentences bounded to corpus/runtime/dates; truncation-explains and skill-does-not-drive labels removed."
+    },
+    {
+      "fingerprint": "a4baa55aa97c81896ec6934fe2dc376dfa6ab9e9ce4bec0e56b42c49f5d05ec1",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Staged design adopted wholesale (Phase A archaeology first)."
+    },
+    {
+      "fingerprint": "8b6331c240e0fb36de49e6c55e0a20daaea0950d2770271a0dc3eb3e92d166f1",
+      "disposition": "accepted_blocker",
+      "rationale": "Scope-expansion mechanism claim retracted with the 2x2; Phase B turn texts frozen verbatim; no retroactive-setup mechanism is asserted."
+    },
+    {
+      "fingerprint": "4a38f01509fab45e54eb9e979f9e33a0acbac1f198c278b2434e8f7b4d49f657",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Moot in R2: no hooks this campaign."
+    },
+    {
+      "fingerprint": "29f4ccf4c06a9177472c68ce3c7c2dc5f8f169d66fb56ca70be0676066e97aef",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: Phase B declared descriptive; no rate-separation claim."
+    },
+    {
+      "fingerprint": "862bbe5ca4e4fe9dbf0c37c4131c7cd21e9a8e037934f3517d5c326a64585cef",
+      "disposition": "accepted_nonblocking",
+      "rationale": "R2 fixes a no-discretion selection rule (first two L-size d2 tasks of the predecessor frozen pack) + hashes."
+    },
+    {
+      "fingerprint": "fe91c4c9cf6f73654a47e20b83f04f2ecc56fefa59624799d394abb8bf78d918",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Archaeology is now Phase A with a frozen gate."
+    },
+    {
+      "fingerprint": "6862e6ee4ff550ecf7e587231e46f014020b5b939dd7c3c0b32f066d34646716",
+      "disposition": "accepted_blocker",
+      "rationale": "Removes-cue-interaction sentence retracted; Q1 re-frozen as count sentences at frozen cues; turn-3 wrap cue removed and wrap-cued session-end explicitly unlicensed."
+    },
+    {
+      "fingerprint": "f5612548a414f7f3bcd670775190e7331bc584b105f09254c9d0a30f5fa4cf47",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Moot in R2: hook channel and its liveness/non-reactivity program deferred to a future plan."
+    },
+    {
+      "fingerprint": "8d2e5e85ad56bd1fdf1e6bdddd06704cefe59f94f6b6d20f56839de4bc17af88",
+      "disposition": "accepted_blocker",
+      "rationale": "R1 cells retired; FULL@1 arm no longer exists; n=3 confirmatory framing conceded (descriptive only)."
+    },
+    {
+      "fingerprint": "3010e49a1fa4cec7cb3cef40775b4e299434abb88b52a10041f653298bbf48b8",
+      "disposition": "accepted_blocker",
+      "rationale": "Task+turn texts named and hashed pre-call; discarded sessions reported with the frozen re-run rule; no pilot-to-cell leakage possible (no cells)."
+    },
+    {
+      "fingerprint": "b51985bc1cea62b8d815fffbe7cc5fcc22ce09dfc0d179d69ca5b195c3b4487a",
+      "disposition": "accepted_blocker",
+      "rationale": "KR2 and the 15-call F2 block deleted; single-call pin probe decoupled as its own Fix."
+    },
+    {
+      "fingerprint": "dfc5627a03c9a4bc0774a95808f3946757694e4d66d59762b6abcdb1b9776746",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Frozen licensed sentences added (R2 section 5); no unlabeled Q1 sweep possible."
+    },
+    {
+      "fingerprint": "4af837248cbea03035192ad4659d25ecd6159e2a0bf3b81e3e20a0f7e93930f1",
+      "disposition": "accepted_blocker",
+      "rationale": "Bought exactly the proposed staging: zero-call archaeology, gated <=6-call FS-only FULL@3 pilot, nothing else; 80-call envelope withdrawn."
+    }
+  ]
+}

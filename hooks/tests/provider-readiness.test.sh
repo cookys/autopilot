@@ -572,6 +572,54 @@ assert.strictEqual(
   }),
   'malformed_response',
 );
+// The probe prompt is `Respond only with OK.` — a well-behaved provider may obey it
+// literally, full stop included (agy returns `OK.\n`), or wrap the token in quotes or
+// newlines. Those carry the same meaning, so the acceptance must not contradict the
+// prompt that elicits them. Tolerance stops at terminal punctuation / whitespace /
+// quoting: extra words, transport chrome, and empty output stay malformed, or the
+// probe stops proving the provider answered.
+for (const accepted of [
+  'OK',
+  'OK.',
+  'OK.\n',
+  ' OK \n',
+  'OK!',
+  '"OK"',
+  "'OK.'",
+  '  OK.  ',
+  '\n"OK."\n',
+]) {
+  assert.strictEqual(
+    classifyLiveProbeResult(tuple, {
+      transport_envelope: transport(tuple, 'success', accepted),
+      response_text: accepted,
+    }),
+    'success',
+    `live probe must accept ${JSON.stringify(accepted)}`,
+  );
+}
+for (const rejected of [
+  '',
+  '   \n',
+  'Sure, OK!',
+  'OK. Ready to help.',
+  'I cannot comply with that request.',
+  'NOT OK.',
+  'OK OK',
+  'ok',
+  'OK?',
+  'Script started on 2026-08-11 [COMMAND="run.sh"]\nOK.\nScript done on 2026-08-11\n',
+  `OK.${'\n'.repeat(300)}`,
+]) {
+  assert.strictEqual(
+    classifyLiveProbeResult(tuple, {
+      transport_envelope: transport(tuple, 'success', rejected),
+      response_text: rejected,
+    }),
+    'malformed_response',
+    `live probe must reject ${JSON.stringify(rejected)}`,
+  );
+}
 assert.throws(() => classifyLiveProbeResult(tuple, {
   transport_envelope: transport(tuple),
   response_text: 'different-output',

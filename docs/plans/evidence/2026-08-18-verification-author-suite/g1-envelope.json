@@ -1,0 +1,373 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "va-suite-20260818",
+  "logical_plan_id": "verification-author-suite-2026-08-18",
+  "session_id": "va-suite-g1",
+  "session_key": "4a7e0b4146aac6072d79f6904c1912fdc5afab98086ba2c3b9a632eb0a6b3ffd",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "accepted_blockers_authorize_generation_2",
+  "rubric_sha256": "e839ca17fce4d5620ac69f0491da2684882561de95ebfa9d1fc332ae419e4eb9",
+  "manifest_sha256": "0857af192b72d73a185991bada602cb6b25a0dd80a5b05cc3c161d9f46700bf5",
+  "plan_sha256": "ddc59c32cee6d3962bb27362cc8da61f9a3f0defac394c2f6fbc0629062e36ff",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "chair",
+      "target_id": "chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "01ab4d6ebb3fef74bc2c2c2e14f6d44ea7ed67206aff184f4bdc7786cf985937"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "20ce9b5dfd8f5b55d2883c74abd114822b5b61a7566a9202422590cc9ca73f89",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-Lqqpks/stdout",
+          "digest": "20ce9b5dfd8f5b55d2883c74abd114822b5b61a7566a9202422590cc9ca73f89"
+        },
+        "receipt_digest": "05ace186482d38bbd84484a29f33d37d025f7eba00c3dc8c0930cc98b86a2ec0"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "deep",
+      "target_id": "deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3",
+          "operation": "plan-review",
+          "request_digest": "6a523ccfac8e487b377dbceb775bc9adbfad48355795428016deee03839cba9c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b180c691a50bc6989772e02600a3e902a56dfe8171119907d48413f2ab4acea9",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-KT1X5X",
+          "digest": "b180c691a50bc6989772e02600a3e902a56dfe8171119907d48413f2ab4acea9"
+        },
+        "receipt_digest": "0e0dd23e0a2609dd09d9b08481183c967de5515de7e786265b060daff413422c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "chair",
+      "target_id": "chair",
+      "family": "legacy-gpt-5.6-sol",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "deep",
+      "target_id": "deep",
+      "family": "legacy-glm-5.3",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "VA1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Corpus semantics and construct-validity proof",
+      "claim": "The plan does not prove that every rendered specification unambiguously determines the clean behavior and planted defect, so divergence alone can reject a competent author or certify an invalid case.",
+      "evidence": "P1 proves only that the twins diverge on a probe call. Two incorrect twins can diverge, and renderer-generated prose can be ambiguous, while no independent requirements oracle validates clean conformance, defect nonconformance, or semantic equivalence across renderers.",
+      "evidence_reference": "Sections 2 and 4, P1 acceptance",
+      "repair": "Define a canonical requirements model and an independent behavioral oracle for every generated case. Require validation that each renderer preserves the model, the clean twin satisfies it, and the defect twin violates a requirement-derived discriminating input before the case enters the pinned corpus.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "9c3dc0d83ea160b6d69236daa4882455f735a15816da4b8c4c5bbf3c442509e5",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Host runner result protocol and module-execution attestation",
+      "claim": "Assertion failure versus infrastructure failure has no deterministic observable definition, and the grader has no host-trusted proof that the harness loaded and exercised the module under test.",
+      "evidence": "The harness is arbitrary CommonJS code, yet Section 3 derives defect_red from a nonzero assertion exit without defining structured events, reserved statuses, or trusted instrumentation. A syntax error, process exit, forged AssertionError, or unexecuted harness can therefore be misclassified depending on implementation choices.",
+      "evidence_reference": "Section 3 grading rules and Section 4 P2 and P4",
+      "repair": "Freeze an exhaustive runner state machine for successful completion, genuine assertion failure, malformed protocol, ordinary exception, signal, timeout, empty response, and oversize output. Require a host-generated, unforgeable module-load and behavioral-interaction receipt before an assertion can count as defect_red; every missing or conflicting receipt must fail the case closed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "6e54869cf7c391056e4ec484a9cf6e559b79e483abd48701eaf99a2576fc6076",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Visible-payload construction, deterministic serialization, renderer schedule, and leak scanning",
+      "claim": "Token and canary scanning does not establish that the complete candidate-visible envelope is free of implementation identity, defect-family hints, or twin-distinguishing artifacts.",
+      "evidence": "The plan mentions implementation-only tokens, a per-case canary, and an oracle-token projection, but does not define the full scanned envelope or cover case identifiers, filenames, paths, ordering, broker metadata, prompt scaffolding, and semantic or structural hints. Renderer count, seed-to-renderer assignment, and canonical byte serialization are also unspecified.",
+      "evidence_reference": "Success criterion 1, Section 2 anti-gaming notes, and P1 and P4 acceptance",
+      "repair": "Define one canonical visible-payload builder with canonical serialization, seed derivation, renderer rotation rules, and a strict visible-field allowlist. Scan the complete HTTP and CLI payloads plus provider prompt and metadata, and add seeded tests showing byte identity and rejection for leaks introduced through every visible field class.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "f593cf38c37ec53b2af93da4838c5f1c4c192b2a2004c5873e62b8ddf205c371",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Execution containment for arbitrary candidate code",
+      "claim": "The sandbox posture is not specified tightly enough to authorize host execution of arbitrary harnesses or prove parity with the existing witness runner.",
+      "evidence": "P2 lists networklessness, read-only module and harness mounts, wall time, and output caps, but identifies no exact reused runner entry point or invariant contract. It leaves host-root visibility, environment scrubbing, private writable storage, cross-run persistence, process and descriptor limits, memory and CPU limits, subprocess behavior, cleanup, and failure propagation undecided.",
+      "evidence_reference": "Success criterion 2 and Section 4 P2",
+      "repair": "Bind P2 to the exact existing proven witness-runner primitive and enumerate its inherited containment invariants and known gaps. Require a fresh sandbox per twin execution with no shared writable state, an environment allowlist, explicit resource limits, deterministic cleanup, and malicious fixtures for network, host-file access, persistence, process creation, timeout, and output exhaustion.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "aab32afd83cad80dfc43250ccbfc83bb63b06d7470d7483bc17c19c330b6d617",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Qualification chassis contracts and provider output contract",
+      "claim": "The plan asserts chassis parity without freezing the existing evidence kind, row schema, append semantics, transport envelope, or a single canonical authoring-output contract shared by the provider and grader.",
+      "evidence": "P3 names the role, evidence append, emit-row, and version-source, while P4 separately teaches an output contract. No authoritative existing contract or shared schema is named, and no acceptance matrix proves identical HTTP and CLI grading, hashes, evidence records, and scorecard rows.",
+      "evidence_reference": "Success criteria 3 and 4 and Section 4 P3 and P4",
+      "repair": "Map every VA field to the named canonical reviewer, owner, or brain chassis contract, including evidence kind, role, trial and subject fields, hash fields, append failure behavior, emitted row, and version source. Store the authoring contract once and derive both provider instructions and grader validation from it; test equivalent HTTP and CLI administrations against the same expected evidence record.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "2578e5606ef977e6993979a37fdb2209be14fac361413bda4ed779bac062b163",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Anti-gaming controls and residual-risk statement",
+      "claim": "The runtime-source-reading argument is incorrect, cross-case memorization is unaddressed, and the proposed controls do not prevent a harness from distinguishing twins without requirements-grounded behavioral assertions.",
+      "evidence": "The plan says source reading self-defeats, but it gives arbitrary code VA_MODULE_PATH and necessarily makes the JavaScript module readable. The harness can inspect source bytes, Function.prototype.toString output, metadata, run order, or persisted state and then return green for one twin and an assertion-shaped red for the other. A deterministic pinned corpus and finite renderer rotation also enable memorization, and no residual risks are named.",
+      "evidence_reference": "Section 2 anti-gaming notes and Sections 1 and 3",
+      "repair": "Make both invocations observationally identical except for behavior: use the same in-sandbox path and metadata, fresh storage and process state, scrubbed environment, and no variant-order signal. Prefer an opaque host-mediated behavioral capability that does not expose implementation source, require host-observed interactions, add source, path, order, persistence, renderer, and memorization attack fixtures, and explicitly list any attack that remains a residual risk while removing unsupported construct-guaranteed language.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "c17a100d4b211d1cd32944284cf64a7c54a7bb2e48caa563aa3d3d5ae2cba84c",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA8",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Acceptance matrix and negative controls",
+      "claim": "The acceptance suite does not exercise every stated fail-closed or anti-gaming path and does not yet prove both transports and all evidence folds against deviant implementations.",
+      "evidence": "P2 lists vacuous, over-strict, crashing, sleeping, and oversized harnesses, but omits empty and malformed candidate output, forged assertion status, no module execution, source or path discrimination, shared-state ordering, sandbox escape attempts, hash mismatch, partial subject success, one-trial-only success, and evidence-store failure. P3 names one scripted end-to-end candidate, and P5 dogfoods only HTTP.",
+      "evidence_reference": "Section 4 P1 through P5 and Section 5 verification contract",
+      "repair": "Add a rubric-mapped mutation matrix in which each failure class has a deviant candidate or chassis mutant and an asserted rejection reason. Include both transports, every runner terminal state, all three subjects across both trials, precondition-hash failures, append and emit-row behavior, sandbox attacks, leak surfaces, and an intentionally broken grader mutation that demonstrates the acceptance suite itself turns red.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "chair",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "0f550de5071dc77d015affffbd3b44bb9a40694acbbf798454d1a2da7925178b",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P2 grader (evals/va-eval-grader.js) red-green classification; §3 grading rules",
+      "claim": "The assertion-vs-infrastructure distinction is asserted to exist but no deterministic mechanism is specified for arbitrary candidate-authored CommonJS code.",
+      "evidence": "Section 3 says the runner 'distinguishes assertion exits from crash/timeout/infra errors' using 'dev-flow red-qualification semantics', but the candidate writes an unconstrained self-contained test file with its own assertion style (P4 only 'teaches' an assertion style — it does not require it). Without a pinned exit-code convention, a host-injected assertion shim, or a harness contract that maps assertion failure to a specific signal, a candidate harness that calls process.exit(7) on a caught assertion is indistinguishable from one that crashes with exit 7, so defect_red-vs-infra-fail classification is implementation-dependent rather than deterministic.",
+      "evidence_reference": "Section 3 'Grading per case' paragraph; Section 4 P2 acceptance line; Section 4 P4 output-contract bullet",
+      "repair": "Specify the mechanical classification in the plan: e.g., the harness contract requires assertion failures to surface as an uncaught-exception exit (Node deterministic nonzero signal) plus a marker on stderr, or the host injects a pinned assertion library via NODE_PATH whose failure uses a reserved exit code, with crash/timeout/oversize/empty mapped to infra-fail-closed; state that any other nonzero exit is fail-closed infra, and reflect it in the P2 mock matrix.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "deep",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "f439987fb1ac3abc146ef7acb1031e4cf9da2ca03db56f71e4eaea4db2c88b2d",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§1 success criterion 1 and §3 corpus determinism; qualification AND bar across 2 trials",
+      "claim": "Cross-case and cross-trial memorization is not countered and is not named as residual risk, and determinism ('same seed ⇒ byte-identical') implies both trials may administer the identical corpus, letting a candidate who fails trial 1 memorize answers and pass trial 2.",
+      "evidence": "Section 1 criterion 1 mandates byte-identical administration per seed; section 3 defines the corpus as seed-derived with fixed defect families; nothing in the plan states whether the two trials draw distinct seeds or renderings, and the anti-gaming notes counter runtime source-reading, public templates, and grammar matching but never address a candidate that has seen the corpus text (e.g., via a prior administration, a leaked payload, or the recorded P5 dogfood).",
+      "evidence_reference": "Section 1 success criterion 1; Section 3 corpus shape and 'Anti-gaming notes'; Section 4 P5 (recorded administration of the incumbent VA seat)",
+      "repair": "Decide now: either (a) trials are seeded independently (trial seed = admin-seed XOR trial-index) while keeping per-trial byte-determinism, and the leak/honesty scan forbids the provider prompt from carrying prior corpus content; or (b) keep identical trials and explicitly name cross-trial/cross-case memorization as residual risk in the plan, with the P5 recording scrubbed of corpus internals before any second administration.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "deep",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_blocker",
+      "fingerprint": "c1193c67ddb8d95073fed43c92c383bfc03e2e51b92c1f5a9eb53f05371d81fe",
+      "disposition_rationale": "legacy compatibility translation"
+    },
+    {
+      "rubric_id": "VA3",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "P1 generator leak-scan (evals/va-eval-generator.js)",
+      "claim": "Leak-scan coverage is specified as implementation-only tokens plus a per-case canary but the twin-distinguishing artifact channel (values visible only in one twin, not in the spec) is not explicitly listed as a scanned class.",
+      "evidence": "Section 2 and P1 describe leak-scanning 'implementation-only token' appearance and a per-case canary, but a rendered spec could carry a token that appears in the defect twin only (e.g., the fallback sentinel that distinguishes family 2/3), which is a twin-distinguishing artifact that a generic token scan keyed on the clean impl may miss.",
+      "evidence_reference": "Section 2 'Construct-guaranteed' bullet; Section 4 P1 bullet",
+      "repair": "Extend the P1 leak-scan definition to scan against the union of both twins' token sets (clean and defect), and add a red test case in hooks/tests/va-eval-generator.test.sh with a defect-only sentinel. No current change; follow-up only if the plan text is amended before implementation.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "deep",
+          "runner": "anthropic-compatible",
+          "model": "glm-5.3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": "accepted_nonblocking",
+      "fingerprint": "bcce93e02ce76087d9738dadaf29987e91c924cf8d8e3d232705d0f15d5930d0",
+      "disposition_rationale": "legacy compatibility translation"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "bcce93e02ce76087d9738dadaf29987e91c924cf8d8e3d232705d0f15d5930d0",
+      "rubric_id": "VA3",
+      "affected_surface": "P1 generator leak-scan (evals/va-eval-generator.js)",
+      "claim": "Leak-scan coverage is specified as implementation-only tokens plus a per-case canary but the twin-distinguishing artifact channel (values visible only in one twin, not in the spec) is not explicitly listed as a scanned class.",
+      "evidence_reference": "Section 2 'Construct-guaranteed' bullet; Section 4 P1 bullet",
+      "disposition": "accepted_nonblocking"
+    }
+  ],
+  "accepted_blocker_count": 9,
+  "repair_authorized": true,
+  "next_generation": 2,
+  "reviewed_at": "2026-08-17T17:19:00.079Z"
+}

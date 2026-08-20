@@ -100,11 +100,29 @@ function main() {
     process.exit(2);
   }
 
+  // The per-script DESCRIPTIONS live in docs/scripts-inventory.md; CLAUDE.md keeps
+  // only the grouped name list. Both need the membership check, and the second one
+  // is easy to forget: when the table moved out of CLAUDE.md this gate stayed
+  // behind, so for a while a script could be missing from the inventory entirely
+  // without failing anything.
+  const inventoryPath = path.join(REPO_ROOT, 'docs', 'scripts-inventory.md');
+  let inventoryText = null;
+  try {
+    inventoryText = fs.readFileSync(inventoryPath, 'utf8');
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      process.stderr.write(`cannot read docs/scripts-inventory.md: ${e.message}\n`);
+      process.exit(2);
+    }
+  }
+
   const scripts = collect();
   const missing = [];
+  const missingFromInventory = [];
   for (const rel of scripts) {
     const base = path.basename(rel);
     if (!text.includes(base)) missing.push(rel);
+    if (inventoryText !== null && !inventoryText.includes(base)) missingFromInventory.push(rel);
   }
 
   const totalBytes = Buffer.byteLength(text, 'utf8');
@@ -114,13 +132,16 @@ function main() {
     if (bytes > maxLineBytes) longLines.push({ line: idx + 1, bytes });
   });
 
-  const ok = missing.length === 0 && totalBytes <= maxTotalBytes && longLines.length === 0;
+  const ok = missing.length === 0 && missingFromInventory.length === 0
+    && totalBytes <= maxTotalBytes && longLines.length === 0;
 
   if (json) {
     process.stdout.write(JSON.stringify({
       ok,
       checked: scripts.length,
       missing,
+      missing_from_inventory: missingFromInventory,
+      inventory_present: inventoryText !== null,
       total_bytes: totalBytes,
       max_total_bytes: maxTotalBytes,
       long_lines: longLines,
@@ -134,7 +155,18 @@ function main() {
         `CLAUDE.md inventory drift: ${missing.length} script(s) not named in CLAUDE.md:\n`);
       for (const m of missing) process.stderr.write(`  - ${m}\n`);
       process.stderr.write(
-        'To fix: add a row (or inline mention) for each to the CLAUDE.md "Scripts inventory" table.\n');
+        'To fix: add each basename to the matching group in the CLAUDE.md "Scripts inventory" list.\n');
+    }
+    if (inventoryText === null) {
+      process.stderr.write('docs/scripts-inventory.md is absent — the description table is the canonical index.\n');
+    } else if (missingFromInventory.length === 0) {
+      process.stdout.write(`docs/scripts-inventory.md: all ${scripts.length} scripts described\n`);
+    } else {
+      process.stderr.write(
+        `docs/scripts-inventory.md drift: ${missingFromInventory.length} script(s) have no row:\n`);
+      for (const m of missingFromInventory) process.stderr.write(`  - ${m}\n`);
+      process.stderr.write(
+        'To fix: add a row (what it does / when to call it / pointer to its contract).\n');
     }
     if (totalBytes > maxTotalBytes) {
       process.stderr.write(

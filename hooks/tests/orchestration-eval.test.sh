@@ -523,6 +523,17 @@ INNER_EOF
 Acceptance: A3 fidelity (byte-identical extraction), A2 perturbation on the consumer.
 INNER_EOF
     ;;
+  timeout_t1)
+    echo "transport timed out" >&2
+    exit 124
+    ;;
+  auth_t1)
+    echo "Authentication failed: token expired" >&2
+    exit 1
+    ;;
+  empty_t1)
+    # Exit zero with no output and no repository effect: an empty-provider response.
+    ;;
 esac
 EOF
 chmod +x "$STUB_BIN"
@@ -555,6 +566,12 @@ echo "Running T2 Correct..."
 export STUB_MODE="correct_t2"
 bash "$EVAL_DIR/run-orchestration-eval.sh" --task t2-extract-verbatim --arm on --runner stub --model test-model --out "$TEST_OUT_DIR/run_d" >> "$RESULTS_FILE"
 
+# Infrastructure signatures must be classified without entering capability rates.
+for mode in timeout_t1 auth_t1 empty_t1; do
+  export STUB_MODE="$mode"
+  bash "$EVAL_DIR/run-orchestration-eval.sh" --task t1-fix-with-decoy --arm off --runner stub --model test-model --out "$TEST_OUT_DIR/run_$mode" >> "$RESULTS_FILE"
+done
+
 echo "=== Verifying results.jsonl contents ==="
 cat "$RESULTS_FILE"
 
@@ -579,6 +596,10 @@ if ! grep -q '"oracle_pass":false' <<< "$res_b"; then
   echo "Assertion failed: case b oracle_pass should be false" >&2
   exit 1
 fi
+if ! grep -q '"failure_class":"capability_fail"' <<< "$res_b"; then
+  echo "Assertion failed: case b should be a capability failure" >&2
+  exit 1
+fi
 
 echo "Verifying Case (c) assertions..."
 # case c (run_c): stub leaves no artifacts → adherence fields false, run still completes
@@ -597,8 +618,122 @@ res_t2=$(grep '"task_id":"t2-extract-verbatim"' "$RESULTS_FILE")
 if ! echo "$res_t2" | grep -q '"oracle_pass":true'; then echo "Assertion failed: T2 oracle_pass should be true" >&2; exit 1; fi
 if ! echo "$res_t2" | grep -q '"fidelity_ok":true'; then echo "Assertion failed: T2 fidelity_ok should be true" >&2; exit 1; fi
 
+for pair in "timeout_t1:runner_timeout" "auth_t1:authentication" "empty_t1:empty_output"; do
+  mode="${pair%%:*}"
+  cause="${pair#*:}"
+  infra_result="$(cat "$TEST_OUT_DIR/run_$mode/result.json")"
+  if ! grep -q '"failure_class":"infra_fail"' <<< "$infra_result" \
+      || ! grep -q '"failure_cause":"'"$cause"'"' <<< "$infra_result"; then
+    echo "Assertion failed: $mode should classify as infra_fail/$cause" >&2
+    exit 1
+  fi
+done
+
 echo "=== Running score.js on results ==="
-node "$EVAL_DIR/score.js" "$RESULTS_FILE"
+SCORE_OUT="$(node "$EVAL_DIR/score.js" "$RESULTS_FILE")"
+echo "$SCORE_OUT"
+if ! grep -q 'EXCLUDED INFRASTRUCTURE FAILURES' <<< "$SCORE_OUT" \
+    || ! grep -q 'runner_timeout' <<< "$SCORE_OUT" \
+    || ! grep -q 'authentication' <<< "$SCORE_OUT" \
+    || ! grep -q 'empty_output' <<< "$SCORE_OUT"; then
+  echo "Assertion failed: score report must loudly tally excluded infrastructure failures" >&2
+  exit 1
+fi
+
+# Infra failures remain visible in the excluded-cause tally but must not dilute
+# any capability or adherence denominator.
+cat > "$TEST_OUT_DIR/infra-adherence.jsonl" <<'JSONL'
+{"task_id":"infra-adherence","arm":"on","oracle_pass":true,"adjudication_valid":true,"patterns_named":true,"probe_evidence_present":true}
+{"task_id":"infra-adherence","arm":"on","oracle_pass":false,"failure_class":"infra_fail","failure_cause":"runner_timeout","adjudication_valid":false,"patterns_named":false,"probe_evidence_present":false}
+JSONL
+INFRA_ADHERENCE_OUT="$(node "$EVAL_DIR/score.js" "$TEST_OUT_DIR/infra-adherence.jsonl")"
+INFRA_ADHERENCE_SECTION="$(sed -n '/ADHERENCE REPORT/,/Honest footer/p' <<< "$INFRA_ADHERENCE_OUT")"
+if ! grep -Eq '^ON[[:space:]]*\|[[:space:]]*1[[:space:]]*\|[[:space:]]*100\.0% \(1/1\)[[:space:]]*\|[[:space:]]*100\.0% \(1/1\)[[:space:]]*\|[[:space:]]*100\.0% \(1/1\)' <<< "$INFRA_ADHERENCE_SECTION"; then
+  echo "Assertion failed: infra failure diluted the adherence denominator" >&2
+  echo "$INFRA_ADHERENCE_SECTION" >&2
+  exit 1
+fi
+if ! sed -n '/EXCLUDED INFRASTRUCTURE FAILURES/,/ADHERENCE REPORT/p' <<< "$INFRA_ADHERENCE_OUT" \
+    | grep -Eq '^ON[[:space:]]*\|[[:space:]]*runner_timeout[[:space:]]*\|[[:space:]]*1'; then
+  echo "Assertion failed: excluded infra failure disappeared from cause tally" >&2
+  exit 1
+fi
+
+# A5 negative controls: unexplained and unknown failed rows are rejected before scoring.
+printf '%s\n' '{"task_id":"bad","arm":"on","oracle_pass":false}' > "$TEST_OUT_DIR/unclassified.jsonl"
+if node "$EVAL_DIR/score.js" "$TEST_OUT_DIR/unclassified.jsonl" >"$TEST_OUT_DIR/unclassified.out" 2>&1; then
+  echo "Assertion failed: score accepted an unclassified failed row" >&2
+  exit 1
+fi
+grep -q 'invalid failure_class' "$TEST_OUT_DIR/unclassified.out" \
+  || { echo "Assertion failed: unclassified rejection was not diagnosed" >&2; exit 1; }
+printf '%s\n' '{"task_id":"bad","arm":"on","oracle_pass":false,"failure_class":"mystery"}' > "$TEST_OUT_DIR/unknown-class.jsonl"
+if node "$EVAL_DIR/score.js" "$TEST_OUT_DIR/unknown-class.jsonl" >/dev/null 2>&1; then
+  echo "Assertion failed: score accepted an unknown failure class" >&2
+  exit 1
+fi
+
+# Every row is validated before any denominator. Malformed JSON, non-object
+# rows, missing/invalid identity and oracle fields, unexplained failures,
+# stale success metadata, unknown causes, and non-boolean consumed fields all
+# fail closed. Diagnostics must not echo an untrusted cause value.
+if ! node - "$EVAL_DIR/score.js" "$TEST_OUT_DIR" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const cli = process.argv[2];
+const root = process.argv[3];
+const success = { task_id: 'bad', arm: 'on', oracle_pass: true };
+const failed = {
+  task_id: 'bad', arm: 'on', oracle_pass: false,
+  failure_class: 'capability_fail', failure_cause: 'oracle_rejected',
+};
+const cases = [
+  ['missing-oracle', { task_id: 'bad', arm: 'on' }],
+  ['null-oracle', { task_id: 'bad', arm: 'on', oracle_pass: null }],
+  ['string-oracle', { task_id: 'bad', arm: 'on', oracle_pass: 'false' }],
+  ['primitive-row', 42],
+  ['array-row', []],
+  ['missing-task-id', { arm: 'on', oracle_pass: true }],
+  ['numeric-task-id', { task_id: 7, arm: 'on', oracle_pass: true }],
+  ['blank-task-id', { task_id: '   ', arm: 'on', oracle_pass: true }],
+  ['invalid-arm', { task_id: 'bad', arm: 'ON', oracle_pass: true }],
+  ['missing-cause', { task_id: 'bad', arm: 'on', oracle_pass: false, failure_class: 'capability_fail' }],
+  ['unknown-cause', { ...failed, failure_cause: 'RAW_CORRUPT_CAUSE' }],
+  ['mismatched-capability-cause', { ...failed, failure_cause: 'runner_timeout' }],
+  ['mismatched-infra-cause', { ...failed, failure_class: 'infra_fail' }],
+  ['stale-success-class', { ...success, failure_class: 'capability_fail' }],
+  ['stale-success-cause', { ...success, failure_cause: 'oracle_rejected' }],
+  ...[
+    'decoy_respected',
+    'fidelity_ok',
+    'adjudication_valid',
+    'patterns_named',
+    'probe_evidence_present',
+  ].map((field) => [`invalid-${field}`, { ...success, [field]: 'true' }]),
+];
+const accepted = [];
+let leakedCause = false;
+for (const [name, value] of cases) {
+  const file = path.join(root, `invalid-${name}.jsonl`);
+  fs.writeFileSync(file, `${JSON.stringify(value)}\n`);
+  const result = spawnSync(process.execPath, [cli, file], { encoding: 'utf8' });
+  if (result.status === 0) accepted.push(name);
+  if (`${result.stdout}${result.stderr}`.includes('RAW_CORRUPT_CAUSE')) leakedCause = true;
+}
+const malformed = path.join(root, 'invalid-malformed.jsonl');
+fs.writeFileSync(malformed, '{"task_id":"bad"\n');
+const malformedResult = spawnSync(process.execPath, [cli, malformed], { encoding: 'utf8' });
+if (malformedResult.status === 0) accepted.push('malformed-json');
+if (accepted.length > 0 || leakedCause) {
+  process.stderr.write(`accepted=${accepted.join(',')} leakedCause=${leakedCause}\n`);
+  process.exit(1);
+}
+NODE
+then
+  echo "Assertion failed: score row-schema rejection matrix" >&2
+  exit 1
+fi
 
 # Clean up
 rm -rf "$TEST_OUT_DIR"

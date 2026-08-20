@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "four-layer-redesign-2026-08-16",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "e16d5bebe87e9e8a7b9639be2e3cb8065fe2132f7b2a2411b46cda418aba0d0d",
+      "disposition": "accepted_blocker",
+      "rationale": "Author contradiction confirmed; resolved: exec-boundary includes protected-ref force-push as deliberate defense-in-depth overlap with default-on branch-protection.js; KR2/D3/file-map now agree."
+    },
+    {
+      "fingerprint": "a54b27d001d6bb3fd50a26ddac42e285ac8a104f5e0b2cddcfc3d7790e760033",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: producer named — engine review-args assembly passes --prior-status on round N+1; risk/security triggers recognized as ALREADY escalating via the existing high-risk path (pinned by fixture), so only the prior-status trigger is new."
+    },
+    {
+      "fingerprint": "651682545eba3c5e44d79d8e639ab15c8587ab1017d2cb512d427f222813c0ae",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: --allow-narrative override recorded in the run manifest as well as stderr."
+    },
+    {
+      "fingerprint": "c87b929101239e709719f3f5f44bf2d95eb53c44938ea43d6df1cb7957a4ece4",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: a fixture pins existing risk-tier behavior (default --prior-status none is byte-identical to today)."
+    },
+    {
+      "fingerprint": "feffad67e2ef0de7eb066ce225a809491f175c9775ff97a500ad005b8abd8cfd",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: versioning cites CLAUDE.md semver bump rule explicitly."
+    },
+    {
+      "fingerprint": "c7cc7d1e65dc1ecd8488c680fcd967e830d4c03353da16740add75e68e51adbb",
+      "disposition": "accepted_blocker",
+      "rationale": "Rail semantics corrected per this evidence: escalation reuses the existing review_risk=high → required_review_families=2 + cross_family_required path by elevating computed risk on no_verdict|ambiguous; no new seat-selection mechanism invented."
+    },
+    {
+      "fingerprint": "9498c9af65b9e913fba7f9db8a9aae87fb4f5ef1c5267df028b86f8f4b68e38f",
+      "disposition": "duplicate",
+      "rationale": "Same force-push contradiction as GLM e16d5beb; resolved there."
+    },
+    {
+      "fingerprint": "0bc40f3fe1eb4d6914434baec88bd74c082c6c7a6228ddbfb4e9127ab09be44f",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: tier skeleton wraps the SHARED --prompt-file before per-runner branches; codex/agy/pi/qoder consume it identically to grok/cc-shim."
+    },
+    {
+      "fingerprint": "9289da58906b71e49183673fb476d49f3e2e8d439626b409c81cbd9c25957270",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: check-holdout-coverage.sh gains run (materializes SHA-stamped receipts from the probes stdout) and check subcommands; caller honestly described as a SKILL-directed deterministic gate on the completeness-scan precedent."
+    },
+    {
+      "fingerprint": "d09897759f4212cf3fc54bb318d08e94ec7771cc12e323f1f8d1da1198941b81",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded with baf9b963: lint target language rewritten around the laundering threat."
+    },
+    {
+      "fingerprint": "baf9b9636c13ec7072b8e79e221976250003f1a1ee7f993de084de2ee4e67817",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: the guarded threat is named — laundering implementer output through the orchestrator-composed spec; structural red case pins that no direct channel exists; distinct from the controller-direction suppression gate."
+    },
+    {
+      "fingerprint": "472def293919f0265b171f1fbfa93a845d35b9a9908a3e37f72bf03701a8e69a",
+      "disposition": "duplicate",
+      "rationale": "Same force-push contradiction as GLM e16d5beb; resolved there."
+    },
+    {
+      "fingerprint": "bfd54298987363544319c02620a53d5dc6a7859a2418ce6f40b2f3efa6c628ef",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: explicit --scaffold-tier may only ADD scaffolding relative to the resolved tier; requesting less is rejected."
+    },
+    {
+      "fingerprint": "05fc3162cfaff83fbfff285f0b2160a6922a18e435fa8bbb8a5f25e8a93d03bf",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: file-map row now says four-layer-design.md links to scaffold-tiers.md and never restates tier definitions."
+    },
+    {
+      "fingerprint": "236b6e8e0f70e5ac9912b41a159571c297750a0be94e4a32d56296db950fe990",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: receipts are SHA-bound to the current diff head and must record a passing result; absent/malformed/stale/failed all fail closed, each with a red case."
+    },
+    {
+      "fingerprint": "693457581c6ac030e62c54717c2d34a650cd08f57403b4f6e17b3db3f005ea00",
+      "disposition": "accepted_blocker",
+      "rationale": "Repaired: 2.6 enumerates the four behavior deltas with escape hatches (lint override to manifest, scaffold_tiers: off, no-verdict-path strengthening, holdout gate) and cites the CLAUDE.md versioning policy."
+    }
+  ]
+}

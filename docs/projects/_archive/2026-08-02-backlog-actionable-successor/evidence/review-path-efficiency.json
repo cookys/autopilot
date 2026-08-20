@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "artifact_type": "review_path_efficiency",
+  "status": "accepted_after_authoritative_qc",
+  "observed_at": "2026-08-03T10:00:00Z",
+  "implementation": {
+    "base": "e287704340c2d3afd3116d4b44a1bc3edfb5bdd8",
+    "scope": [
+      "scripts/diff-since-last-round.sh",
+      "scripts/dispatch-review.sh",
+      "scripts/dispatch-author.sh",
+      "scripts/verify-red-green.sh",
+      "src/engine/autopilot-engine.js",
+      "hooks/tests/review-path-efficiency.test.sh",
+      "hooks/tests/dispatch-review.test.sh",
+      "hooks/tests/dispatch-author.test.sh",
+      "hooks/tests/verify-red-green.test.sh"
+    ],
+    "contracts": [
+      "full-diff blind discovery remains authoritative",
+      "named remediation checker is non-authoritative and status-limited",
+      "red-before/green-after receipts bind exact commits, command, and assertion artifacts and require independent observation at shipping",
+      "remediation checker re-derives changed paths and patches from exact candidate commits",
+      "full-diff review remains authoritative on every repair generation",
+      "structural prompt echo fails closed while natural-language detector vocabulary remains valid"
+    ]
+  },
+  "verification": {
+    "focused": {
+      "hooks/tests/review-path-efficiency.test.sh": "pass (17 assertions)",
+      "hooks/tests/verify-red-green.test.sh": "pass (48 assertions)",
+      "hooks/tests/dispatch-review.test.sh": "pass (257 assertions)",
+      "hooks/tests/dispatch-author.test.sh": "pass (88 assertions)",
+      "hooks/tests/autopilot-engine.test.sh": "pass (469 assertions)"
+    },
+    "exact_commands": [
+      "bash -n scripts/dispatch-review.sh scripts/dispatch-author.sh scripts/diff-since-last-round.sh scripts/verify-red-green.sh",
+      "bash hooks/tests/review-path-efficiency.test.sh",
+      "bash hooks/tests/verify-red-green.test.sh",
+      "bash hooks/tests/dispatch-review.test.sh",
+      "bash hooks/tests/dispatch-author.test.sh",
+      "bash hooks/tests/autopilot-engine.test.sh",
+      "bash scripts/sync-all.sh --check",
+      "bash scripts/validate.sh",
+      "AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh"
+    ],
+    "authoritative_qc": "pass: final-panel-r7 plus depth-0 deterministic reconciliation; no verified unresolved Critical or Major finding",
+    "complete_suite": "261/262 in one run; sole unchanged-base retro fixture time-bomb repaired test-only and independently focused-pass at 140 assertions"
+  },
+  "receipt": {
+    "same_lineage": true,
+    "base_commit": "e287704340c2d3afd3116d4b44a1bc3edfb5bdd8",
+    "remediation_authority": "non_authoritative",
+    "polarity_authority": "machine_validated_receipt",
+    "rollback": "disable remediation use and return to full blind review; retain polarity gate"
+  }
+}

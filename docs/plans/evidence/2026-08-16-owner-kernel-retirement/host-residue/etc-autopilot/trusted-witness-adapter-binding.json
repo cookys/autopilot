@@ -1,0 +1,6 @@
+{
+  "kind": "trusted_installed_witness_adapter_binding",
+  "authority_id": "autopilot.dogfood.host-authority",
+  "adapter_module": "/usr/local/lib/autopilot/witness-adapter.js",
+  "adapter_sha256": "864fd12186371db840adc439b5721351c27d30dcf74b3fe093dbcfcca658ee89"
+}

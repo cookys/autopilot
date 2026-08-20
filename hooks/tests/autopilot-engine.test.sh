@@ -2337,6 +2337,7 @@ fs.writeFileSync(prompt, 'original implementation prompt');
 let implementationCalls = 0;
 let secondPromptText = '';
 let reviewCalls = 0;
+const reviewLaunches = [];
 
 const engine = new AutopilotEngine({
   implementationDispatcher(args) {
@@ -2367,8 +2368,9 @@ const engine = new AutopilotEngine({
       },
     };
   },
-  reviewDispatcher() {
+  reviewDispatcher(_args, options) {
     reviewCalls += 1;
+    reviewLaunches.push({ cwd: options && options.cwd, blind: options && options.blindDiscovery });
     return {
       error: null,
       status: 0,
@@ -2399,6 +2401,8 @@ const result = engine.runLegacyImplementationReviewLoop({
   promptFile: prompt,
   branch: 'repair-loop',
   base: '1111111111111111111111111111111111111111',
+  cwd: path.dirname(prompt),
+  reviewOptions: { cwd: '/tmp/not-the-loop-cwd', blindDiscovery: false },
   maxRounds: 2,
   roster: {
     reviewer_engine: 'test-review-model',
@@ -2416,6 +2420,7 @@ console.log(`status=${result.status}`);
 console.log(`implementation_calls=${implementationCalls}`);
 console.log(`repair_prompt_has_findings=${secondPromptText.includes('line 12 still calls the shell directly')}`);
 console.log(`repair_prompt_has_original=${secondPromptText.includes('original implementation prompt')}`);
+console.log(`review_launches_bound=${reviewLaunches.length === 2 && reviewLaunches.every((launch) => launch.cwd === path.dirname(prompt) && launch.blind === true)}`);
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "AutopilotEngine default repair prompt carries review findings"
@@ -2423,6 +2428,7 @@ assert_contains "$OUT" "status=converged" "AutopilotEngine default repair prompt
 assert_contains "$OUT" "implementation_calls=2" "AutopilotEngine default repair prompt triggers second implementation"
 assert_contains "$OUT" "repair_prompt_has_findings=true" "AutopilotEngine default repair prompt includes reviewer findings"
 assert_contains "$OUT" "repair_prompt_has_original=true" "AutopilotEngine default repair prompt preserves original task"
+assert_contains "$OUT" "review_launches_bound=true" "legacy repair and final convergence launches override caller cwd/blind negatives with loop-bound blind discovery"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP/verification-loop" <<'NODE'
 const fs = require('fs');
@@ -3437,7 +3443,7 @@ assert_contains "$OUT" "no_verify_first_key_signal_entries=absent" "AutopilotEng
 OUT="$(node - "$REPO_ROOT" <<'NODE'
 const path = require('path');
 const root = process.argv[2];
-const { validateReviewLoopConfig } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
+const { validateReviewLoopConfig, REVIEW_LOOP_FIELDS } = require(path.join(root, 'src', 'engine', 'resolve-review-loop'));
 
 function logPayloadCase(name, payload) {
   try {
@@ -3497,6 +3503,7 @@ const validPayload = {
   skill_mode_effective: 'selective',
   capability_warnings: ['warning 1'],
   reviewer_endpoint: '',
+  reviewer_family: 'unknown',
   implementer_endpoint: '',
   verification_author_present: false,
   verification_author_engine: '',
@@ -3513,7 +3520,23 @@ const validPayload = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  strict_l5_policy_override: '',
+  brain_seat: null,
 };
+
+// Drift guard (v2.34.20): this fixture is HAND-maintained on purpose — deriving it from
+// REVIEW_LOOP_FIELDS would make it a shadow of the very list the validator checks against,
+// so a dropped field could never be caught here. Instead, compare the two independent
+// artifacts and fail LOUDLY. Without this, adding a required field silently turns every
+// case below into the same "missing field" error — which is exactly what 8b443bf8 did:
+// 40 assertions reported wrong-reason failures, and the negative cases (nonstring_*,
+// invalid_primitive_type) stopped discriminating at all.
+// SIBLING: hooks/tests/review-loop-runner.test.sh carries 7 copies of the same payload
+// shape and breaks the same way — when this guard fires, update that file too.
+{
+  const missing = REVIEW_LOOP_FIELDS.filter((f) => !(f in validPayload));
+  console.log(`fixture_field_drift=${missing.length === 0 ? 'none' : missing.join(',')}`);
+}
 
 const validated = logPayloadCase('validated', validPayload);
 if (validated) {
@@ -3644,6 +3667,7 @@ if (presentTrue) {
 NODE
 )"; EXIT=$?
 assert_eq "0" "$EXIT" "validateReviewLoopConfig validates new fields process exits 0"
+assert_contains "$OUT" "fixture_field_drift=none" "validPayload fixture covers every REVIEW_LOOP_FIELDS entry (drift guard — see 8b443bf8)"
 assert_contains "$OUT" "validated=true" "validateReviewLoopConfig validates payload with new fields"
 assert_contains "$OUT" "capability_state_source=unknown" "validateReviewLoopConfig carries capability_state_source"
 assert_contains "$OUT" "quota_status=ok" "validateReviewLoopConfig carries quota_status"

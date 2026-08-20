@@ -17,12 +17,12 @@ If the task is about **how far to implement a cross-harness integration** or whe
 
 ## Current scope
 
-Reviewer and owner end-to-end qualification are shipped gate paths today.
+Reviewer, owner, and brain-seat end-to-end qualification are shipped gate paths today (`brain` = the 勤勞×公平×收斂 standing exam; one atomic `owner-brain-seat-v1` record on the owner role with forced `brain-seat` scope, no expiry, 3-strike revocation via `engine-capability-state.js brain-status`).
 
 - ✅ `stage-0 spike` and exact-scope `stage-1 reviewer/owner qualification` are implemented with separate repeated nonce-derived corpora, host oracles, and executable mutation controls.
 - ✅ Qualification evidence is keyed by exact role, task/domain/language/tool scope and deployment identity; legacy scorecard rows remain compatibility-only.
 - ✅ Canonical roles are `owner`, `implementer`, `reviewer`, `verification_author`, and `explorer`. Scorecard input aliases `planner`/`orchestrator` to `owner` and `verifier` to `reviewer`; stored and returned rows are canonical.
-- ⚠️ Implementer, verification-author, and explorer auto-qualification require their own role-specific eval suites before autonomous routing.
+- ⚠️ Implementer and explorer auto-qualification still require their own role-specific eval suites before autonomous routing; reviewer, owner, brain, and verification_author suites are shipped (`engine-qualify.sh <role>`).
 - ⚠️ Local OpenAI-compatible transport is available only after a deployment's semantic and operational identity can be bound. A configured label or API response alone is not qualification.
 
 ## Governing constraint (routing-axis evidence bar)
@@ -40,15 +40,16 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 
 | Script | Stage | Role in the runbook |
 |--------|-------|---------------------|
-| [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer/owner) | Runs at least two fresh role-specific known-bad + clean trials, independent host oracles, and a reversal control. Reviewer and owner corpora/methodologies are not interchangeable. CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
+| [`scripts/engine-qualify.sh`](../../scripts/engine-qualify.sh) | Stage 1 (reviewer/owner/brain) | Runs at least two fresh role-specific known-bad + clean trials, independent host oracles, and a reversal control. Reviewer/owner/brain corpora and methodologies are not interchangeable; `brain` drives 12 stateless rounds per trial and grades offline (evals/brain-eval-grader.js). CLI/JSON output is telemetry; the imported module can return a live session verifier capability. |
 | [`scripts/qualification-case-broker.js`](../../scripts/qualification-case-broker.js) | Remote qualification transport | Sends exactly one bounded case from a networkless sandbox over a per-case Unix socket while the host retains credentials, outbound access, timeout policy, and exact returned identity. |
+| [`scripts/qualification-review-provider.js`](../../scripts/qualification-review-provider.js) | Remote exam adapter | Host-side `--remote-provider-cmd` for reviewer AND brain exams. Transports: HTTP (Anthropic-compatible endpoints, creds via `--provider-env QRP_BASE_URL/QRP_AUTH_TOKEN/QRP_MODEL/QRP_PROVIDER`) or CLI (`QRP_TRANSPORT=cli`, `QRP_CLI_KIND=codex\|claude`; creds via `CODEX_HOME` / `CLAUDE_CONFIG_DIR` — ALWAYS a dedicated exam config dir seeded with `.credentials.json` only, never the real `~/.claude`: pointing at the live dir resets `.claude.json`). Prompt modes: reviewer (witness recipes, mechanical file/line anchoring) or brain rounds (`QRP_PROMPT_MODE=brain`; bundle semantics + governance contract). Neither prompt carries detection patterns. |
 | [`scripts/probe-local-engine.js`](../../scripts/probe-local-engine.js) | Local deployment probe | Reads the protected user-local roster, probes runtime identity/capacity, and reports `identity_verified`, `identity_unverifiable`, `degraded`, or `not_configured` without promoting any role. |
 | [`scripts/dispatch-local-openai.js`](../../scripts/dispatch-local-openai.js) | Local raw transport | Runs an allowlisted author/reviewer call only after exact egress, identity, one-slot lease, capacity, and assurance gates; hot swap or ambiguous cancellation quarantines the deployment. |
 | [`scripts/evaluate-profile-cutover.js`](../../scripts/evaluate-profile-cutover.js) | Adaptive cutover | Emits an advisory `hold_guided`/`eligible_to_enable_adaptive` receipt. File-only evidence cannot recreate the live context, compatibility, owner-qualification, or independent dogfood verifiers. |
 | [`scripts/import-aa-capabilities.js`](../../scripts/import-aa-capabilities.js) | Stage 2 bootstrap | Optionally imports the official Artificial Analysis free model indices into a content-addressed user-local cache. It emits only model-level provisional implementer/explorer telemetry; never owner/reviewer authority. |
 | [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2 | Records and reports historical evidence. Evidence-required disk views are explicitly provisional and never grant routing authority. |
 | [`scripts/engine-capability-state.js`](../../scripts/engine-capability-state.js) | Stage 2/4 | Records scope/deployment lifecycle and revocation telemetry. Stored `qualified` observations are projected as provisional. |
-| [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 compatibility | Fails closed on disk telemetry. It cannot replace the live Owner Kernel verifier capability. |
+| [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 compatibility | Fails closed on disk telemetry — weaker evidence than a live in-process qualification run. |
 
 ## Reference Methodology
 
@@ -165,17 +166,18 @@ untrusted telemetry because a same-UID model process can edit them.
 
 Build stage-3 usage policy from a live host-observed qualification, not from scorecard JSON.
 
-1. The trusted host imports `runQualification` and
-   `createSessionRoleCapabilityVerifier` from `scripts/engine-qualify.js`.
+1. The trusted host imports `runQualification` from `scripts/engine-qualify.js`.
 2. Run the exact role/scope/deployment evaluation in that process. The host verifies all static
    pins, generates and snapshots every nonce-derived case, executes the semantic invariants,
    isolates each panel process, parses every result, and creates a random run nonce.
-3. Pass the returned non-serializable verifier closure to Owner Kernel as
-   `roleCapabilityVerifier`. It is bound to the exact query, receipt set, and session nonce.
-4. Route only after Owner Kernel issues the shadow role grant. Re-resolve and re-run for every
-   fallback identity.
-5. A JSON roundtrip, process restart, scorecard row, or `current-evidence` output cannot recreate
-   the verifier. Without a live verifier, fail closed to guided/unqualified.
+3. The live in-process run is the strongest evidence tier; record its outcome to the scorecard
+   and reflect it in the review-loop roster. (The Owner Kernel grant machinery this stage once
+   routed through was retired 2026-08-16 — `docs/plans/2026-08-16-owner-kernel-retirement.md`;
+   routing authority is now the roster + capability state, with the epistemic rule below.)
+4. Re-resolve and re-run for every fallback identity.
+5. A JSON roundtrip, process restart, scorecard row, or `current-evidence` output is weaker
+   evidence than the live run that produced it. For an unproven role, fail closed to
+   guided/unqualified.
 
 No routing exception for phase/domain is allowed in this stage.
 
@@ -193,8 +195,8 @@ No routing exception for phase/domain is allowed in this stage.
 1. Stage 0 spike with role-scoped harness and identity capture.
 2. Stage 1 reviewer qualification (`scripts/engine-qualify.sh`); only move forward if reviewer passes.
 3. Stage 2 record telemetry to scorecard (`node scripts/engine-scorecard.js record`).
-4. Stage 3 keep the evaluator and Owner Kernel in one host process and inject the live session
-   verifier. Shell/JSON compatibility paths remain guided/unqualified.
+4. Stage 3 run the evaluator live and in-process; shell/JSON compatibility paths remain
+   guided/unqualified.
 5. Stage 4 set re-qualify expectation and TTL monitoring; restart onboarding when stale or model/version mismatch appears.
 
 Cross-process or cross-restart qualification reuse requires a separately trusted signer or

@@ -165,7 +165,7 @@ refactor has failed its simplification objective.
 #### P0 measurement (recorded 2026-07-20, run `owner-kernel-p0-1784543437001`)
 
 Method, per-class members, and exclusions:
-[`docs/projects/2026-07-20-owner-kernel-governance/p0/surface-baseline.md`](../projects/2026-07-20-owner-kernel-governance/p0/surface-baseline.md).
+[`docs/projects/_archive/2026-07-20-owner-kernel-governance/p0/surface-baseline.md`](../projects/_archive/2026-07-20-owner-kernel-governance/p0/surface-baseline.md).
 
 | Field | Value |
 |---|---:|
@@ -192,7 +192,7 @@ laundered."*
 Also recorded for KR8/KR9: the **mandatory model-review dispatch baseline is 6**, not the 28
 mandatory QC steps overall. Measuring "30% fewer" against 28 would mostly be measuring
 deterministic `verify` scripts this plan commits to preserving. See
-[`semantic-inventory.md`](../projects/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md).
+[`semantic-inventory.md`](../projects/_archive/2026-07-20-owner-kernel-governance/p0/semantic-inventory.md).
 
 ## 4. Phases
 
@@ -243,7 +243,7 @@ stop.
 
 > **P0 EXECUTION STATUS (run `owner-kernel-p0-1784543437001`, refreshed 2026-07-23): PASS FOR P1
 > FUNDING — 1 of 5 targets qualifies `partial`; P1 AUTHORIZED.** Evidence:
-> [`docs/projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md`](../projects/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md).
+> [`docs/projects/_archive/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md`](../projects/_archive/2026-07-20-owner-kernel-governance/p0/P0-FINDINGS.md).
 >
 > **Depth-0 Owner decision (reversible, exercised under steps 5-6)**: the eight named step-4 attacks
 > were executed against **frozen disposable no-core-code fixtures** rather than deferred. Every attack

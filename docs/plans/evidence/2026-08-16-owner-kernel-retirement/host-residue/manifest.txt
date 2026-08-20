@@ -1,0 +1,35 @@
+# Host-residue archive manifest — created 2026-08-16 (plan P1 step 2)
+
+## Original ownership / modes (stat -c '%U:%G %a %n')
+root:root 755 /etc/autopilot
+root:root 644 /etc/autopilot/trusted-installed-witness-authority.json
+root:root 644 /etc/autopilot/trusted-witness-adapter-binding.json
+root:root 755 /usr/local/lib/autopilot
+root:root 644 /usr/local/lib/autopilot/witness-adapter.js
+
+## sha256 of originals
+29abb0335a04aa17648328224c06e2251de14626f677ada771ba4b2474f4834a  /etc/autopilot/trusted-installed-witness-authority.json
+ca0506484f3c519ee06a20a663496bddfbdc430df6de3b48e65abd7138efddfa  /etc/autopilot/trusted-witness-adapter-binding.json
+864fd12186371db840adc439b5721351c27d30dcf74b3fe093dbcfcca658ee89  /usr/local/lib/autopilot/witness-adapter.js
+
+## Restore commands (content + metadata)
+# sudo mkdir -p /etc/autopilot /usr/local/lib/autopilot
+# sudo cp <evidence>/etc-autopilot/*.json /etc/autopilot/
+# sudo cp <evidence>/usr-local-lib-autopilot/* /usr/local/lib/autopilot/
+# then re-apply the stat lines above via: sudo chown <U:G> <path>; sudo chmod <mode> <path>
+
+## Restore test (2026-08-16): content restore verified
+MATCH trusted-installed-witness-authority.json
+MATCH trusted-witness-adapter-binding.json
+MATCH witness-adapter.js
+Ownership/mode restoration is command-documented above (root-owned targets; not exercised without sudo — plan §2.6 scope).
+
+
+## P5 removal receipt (2026-08-16T06:23:37Z)
+Removal executed via passwordless sudo in-session (user authorization: "你可以跑",
+after the user's own earlier attempt proved ineffective and a first premature
+receipt was retracted). Verification output read AFTER the removal:
+  ls /etc/autopilot           -> "No such file or directory"
+  ls /usr/local/lib/autopilot -> "No such file or directory"
+KR5 satisfied. The archives above (content copies + stat metadata + restore
+commands) remain the sole restoration source.

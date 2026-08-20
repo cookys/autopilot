@@ -30,6 +30,9 @@ const fs = require('fs');
 const root = process.argv[2];
 const tempRepo = process.argv[3];
 const ctrl = require(path.join(root, 'src', 'engine', 'controller-execution'));
+const {
+  adjudicateCampaignReview,
+} = require(path.join(root, 'src', 'engine', 'campaign-adjudication'));
 
 console.log("Starting independent verification tests for Controller Execution...");
 
@@ -106,6 +109,34 @@ console.log("Starting independent verification tests for Controller Execution...
       finishedAt: new Date().toISOString(),
     });
   }, (err) => err.code === 'INVALID_GATE_TIMING');
+
+  assert.throws(() => {
+    ctrl.recordGateEntry(journal, {
+      kind: 'full_diff_review',
+      owner: 'foreign-owner',
+      input: { ...gateInput, owner: 'depth-0' },
+      result: { success: true },
+      startedAt: '2026-07-30T11:58:00.000Z',
+      finishedAt: '2026-07-30T11:59:00.000Z',
+    });
+  }, (err) => err.code === 'INVALID_GATE_OWNER');
+
+  const ownerInput = { ...gateInput, owner: 'depth-0' };
+  const ownerBound = ctrl.recordGateEntry(journal, {
+    kind: 'focused_verification',
+    owner: 'depth-0',
+    input: ownerInput,
+    result: { success: true },
+    startedAt: '2026-07-30T11:58:00.000Z',
+    finishedAt: '2026-07-30T11:59:00.000Z',
+  }).journal;
+  const ownerTampered = JSON.parse(JSON.stringify(ownerBound));
+  ownerTampered.entries[0].owner = 'foreign-owner';
+  assert.strictEqual(
+    ctrl.findReusableGate(ownerTampered, 'focused_verification', ownerInput),
+    null,
+    'gate owner drift cannot reuse an otherwise matching result',
+  );
 
   // Positive: recordGateEntry succeeds and findReusableGate finds it
   const record1 = ctrl.recordGateEntry(journal, {
@@ -293,6 +324,15 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.strictEqual(dispRes2.status, 'hard_fail');
   assert.strictEqual(dispRes2.phase, 'adjudication');
   assert.strictEqual(dispRes2.resumable, false);
+
+  // Negative (D2 A05): missing findingsIdentityOk is fail-closed, never default-true
+  const dispRes3 = ctrl.classifyMissingDisposition({
+    findings,
+    dispositionAuthority: null,
+  });
+  assert.strictEqual(dispRes3.status, 'hard_fail');
+  assert.strictEqual(dispRes3.code, 'FINDING_IDENTITY_REQUIRED');
+  assert.strictEqual(dispRes3.resumable, false);
 }
 
 // Group 4: Repair budgets & axes
@@ -1161,6 +1201,21 @@ console.log("Starting independent verification tests for Controller Execution...
   });
   assert.strictEqual(conflict.status, 'reject');
   assert.strictEqual(conflict.reason_code, 'cas_conflict');
+  // Full-record digest is an additional CAS fence for authority-sensitive
+  // mutations such as orphan adoption.
+  const digestConflict = wo.createOrUpdateWorkOrder(common, {
+    ...updated.work_order,
+    controller: state,
+  }, {
+    expectedGeneration: updated.work_order.generation,
+    expectedWorkOrderDigest: '0'.repeat(64),
+    expectedCasToken: updated.work_order.cas_token,
+    expectedControllerDigest: updated.work_order.controller.controller_digest,
+    bindArtifacts: false,
+  });
+  assert.strictEqual(digestConflict.status, 'reject');
+  assert.strictEqual(digestConflict.reason_code, 'cas_conflict');
+  assert.match(digestConflict.reason, /work order digest/i);
   // Tamper refuse (digest CAS fails without omitting fields).
   const live = JSON.parse(fs.readFileSync(updated.path, 'utf8'));
   const priorDigest = live.controller.controller_digest;
@@ -1646,6 +1701,27 @@ console.log("Starting independent verification tests for Controller Execution...
   let focusedReviewCalls = 0;
   let fullSuiteCalls = 0;
   const fullSuiteCommandDigest = '7'.repeat(64);
+  const verificationArgvHash = '1'.repeat(64);
+  let verificationEnvFingerprint = '2'.repeat(64);
+  let reviewSpecDigest = '3'.repeat(64);
+  let reviewDiffDigest = '4'.repeat(64);
+  let reviewerModel = 'reviewer-a';
+  let focusedSupplementDigest = '9'.repeat(64);
+  let jointReviewRosterDigest = '5'.repeat(64);
+  const verificationRequestDigest = () => canonicalDigest({
+    tree_sha: tree,
+    argv_hash: verificationArgvHash,
+    env_fingerprint: verificationEnvFingerprint,
+  });
+  const gateMaterialInput = () => ({
+    fullSuiteCommandDigest,
+    verificationArgvHash,
+    verificationEnvFingerprint,
+    fullSuiteArgvHash: verificationArgvHash,
+    fullSuiteEnvFingerprint: verificationEnvFingerprint,
+    jointReviewRosterDigest,
+    requireGateMaterialAuthority: true,
+  });
   let preEffectCalls = 0;
   const preEffectWorktreeProjection = [];
   const promptPath = path.join(dir, 'prompt.md');
@@ -1684,8 +1760,36 @@ console.log("Starting independent verification tests for Controller Execution...
     scopeCheck: () => ({ passed: true }),
     verify: () => {
       verifyCalls += 1;
-      return { passed: true, receipt_digest: 'c'.repeat(64) };
+      return {
+        passed: true,
+        receipt_digest: 'c'.repeat(64),
+        tree_sha: tree,
+        argv_hash: verificationArgvHash,
+        env_fingerprint: verificationEnvFingerprint,
+        request_digest: verificationRequestDigest(),
+      };
     },
+    prepareReview: (reviewPayload) => ({
+      prepared: true,
+      authority: {
+        schema_version: 1,
+        artifact_type: 'controller_full_diff_review_input',
+        candidate_ref: reviewPayload.candidate.commit || reviewPayload.candidate.tree_sha,
+        candidate_tree_sha: reviewPayload.candidate.tree_sha,
+        base_sha: reviewPayload.candidate.base_sha,
+        diff_digest: reviewDiffDigest,
+        spec_digest: reviewSpecDigest,
+        review_input_digest: canonicalDigest(reviewPayload),
+        reviewer: {
+          runner: 'test-reviewer',
+          model: reviewerModel,
+          effort: 'high',
+          endpoint: null,
+        },
+      },
+      diff_file: null,
+      spec_file: promptPath,
+    }),
     review: () => {
       reviewCalls += 1;
       return {
@@ -1700,7 +1804,7 @@ console.log("Starting independent verification tests for Controller Execution...
         success: true,
         model_calls: 1,
         fresh_input_bytes: 7,
-        review_digest: '9'.repeat(64),
+        review_digest: focusedSupplementDigest,
       };
     },
     fullSuite: () => {
@@ -1711,19 +1815,23 @@ console.log("Starting independent verification tests for Controller Execution...
         model_calls: 0,
         fresh_input_bytes: 0,
         command_digest: fullSuiteCommandDigest,
+        candidate_tree_sha: tree,
+        argv_hash: verificationArgvHash,
+        env_fingerprint: verificationEnvFingerprint,
+        request_digest: verificationRequestDigest(),
         receipt_digest: '8'.repeat(64),
       };
     },
-    adjudicate: () => ({
-      registry_complete: true, repair_gate_passed: true, registry_digest: 'e'.repeat(64),
-      must_fix_now: [], follow_up: [], rejected: [],
-    }),
+    adjudicate: ({ review }) => adjudicateCampaignReview({ review }),
     convergence: () => ({ passed: true }),
     finalPanel: () => {
       panelCalls += 1;
       const s = seat();
       return {
         reviewed: true,
+        verdict: 'SHIP-AS-IS',
+        findings: '[]',
+        review_digest: 'f'.repeat(64),
         sealed_min_panel_size: 1,
         final_panel_count: 1,
         final_panel_seat_receipts: [s],
@@ -1744,7 +1852,7 @@ console.log("Starting independent verification tests for Controller Execution...
     includeControllerMeta: true,
     gitCwd: dir,
     baseSha: base,
-    fullSuiteCommandDigest,
+    ...gateMaterialInput(),
   }, adapters);
   assert.strictEqual(r1.status, 'ready', JSON.stringify(r1));
   const terminalBody = { ...r1 };
@@ -1922,6 +2030,16 @@ console.log("Starting independent verification tests for Controller Execution...
     'full_suite',
     'joint_review',
   ]);
+  const firstJointGate = r1.controller.gate_journal.entries.find((entry) => (
+    entry.kind === 'joint_review'
+    && entry.result
+    && entry.result.success === true
+    && !entry.invalidated
+  ));
+  assert.ok(firstJointGate, 'fixture requires one reusable joint-review gate');
+  assert.strictEqual(firstJointGate.result.verdict, 'SHIP-AS-IS');
+  assert.strictEqual(firstJointGate.result.findings, '[]');
+  assert.strictEqual(firstJointGate.result.review_digest, 'f'.repeat(64));
   const v1 = verifyCalls;
   const rev1 = reviewCalls;
   const p1 = panelCalls;
@@ -1938,7 +2056,7 @@ console.log("Starting independent verification tests for Controller Execution...
     includeControllerMeta: true,
     gitCwd: dir,
     baseSha: base,
-    fullSuiteCommandDigest,
+    ...gateMaterialInput(),
     resume: {
       phase: 'ADJUDICATING',
       repair_generation: 0,
@@ -1988,7 +2106,54 @@ console.log("Starting independent verification tests for Controller Execution...
       0: { success: true, review_digest: 'd'.repeat(64), candidate_ref: base, base_sha: base },
     },
   };
+  const incompleteJointController = JSON.parse(JSON.stringify(r1.controller));
+  const incompleteJointGate = incompleteJointController.gate_journal.entries.find((entry) => (
+    entry.kind === 'joint_review'
+    && entry.result
+    && entry.result.success === true
+    && !entry.invalidated
+  ));
+  assert.ok(incompleteJointGate, 'fixture requires a live joint-review gate');
+  delete incompleteJointGate.result.verdict;
+  delete incompleteJointGate.result.findings;
+  incompleteJointController.gate_journal.digest = ctrl.sha256Json({
+    schema_version: incompleteJointController.gate_journal.schema_version,
+    artifact_type: incompleteJointController.gate_journal.artifact_type,
+    entries: incompleteJointController.gate_journal.entries,
+  });
+  const panelCallsBeforeIncompleteReplay = panelCalls;
+  const incompleteJointReplay = runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: ctrl.emptyControllerState(incompleteJointController),
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+    ...gateMaterialInput(),
+    resume: exactResumeState,
+  }, adapters);
+  assert.strictEqual(incompleteJointReplay.status, 'ready', JSON.stringify(incompleteJointReplay));
+  assert.strictEqual(
+    panelCalls,
+    panelCallsBeforeIncompleteReplay + 1,
+    'joint gate without verdict/findings cannot reuse and reruns the panel',
+  );
+  const replacementJointGate = incompleteJointReplay.controller.gate_journal.entries.find(
+    (entry) => (
+      entry.kind === 'joint_review'
+      && entry.result
+      && entry.result.success === true
+      && !entry.invalidated
+    ),
+  );
+  assert.strictEqual(replacementJointGate.result.verdict, 'SHIP-AS-IS');
+  assert.strictEqual(replacementJointGate.result.findings, '[]');
+
   const fullSuiteCallsBeforeMissingInput = fullSuiteCalls;
+  const missingCommandMaterial = gateMaterialInput();
+  delete missingCommandMaterial.fullSuiteCommandDigest;
   const missingCommandInput = runCampaignComposition({
     maxRepairGenerations: 1,
     minPanelSize: 1,
@@ -1998,6 +2163,7 @@ console.log("Starting independent verification tests for Controller Execution...
     includeControllerMeta: true,
     gitCwd: dir,
     baseSha: base,
+    ...missingCommandMaterial,
     resume: exactResumeState,
   }, adapters);
   assert.strictEqual(missingCommandInput.status, 'blocked');
@@ -2038,7 +2204,7 @@ console.log("Starting independent verification tests for Controller Execution...
       includeControllerMeta: true,
       gitCwd: dir,
       baseSha: base,
-      fullSuiteCommandDigest,
+      ...gateMaterialInput(),
       resume: exactResumeState,
     }, adapters);
     assert.strictEqual(malformedReuse.status, 'ready', JSON.stringify(malformedReuse));
@@ -2060,6 +2226,85 @@ console.log("Starting independent verification tests for Controller Execution...
       'replacement live full-suite gate binds the sealed command digest',
     );
   }
+
+  // Material-input drift must invalidate the connected gate family before
+  // effects. Each case resumes the same baseline controller independently so
+  // the observed call deltas identify the exact gate(s) invalidated.
+  const replayBaseline = () => runCampaignComposition({
+    maxRepairGenerations: 1,
+    minPanelSize: 1,
+    promptFile: promptPath,
+    controller: ctrl.emptyControllerState(JSON.parse(JSON.stringify(r1.controller))),
+    frozenDenominator: frozen,
+    includeControllerMeta: true,
+    gitCwd: dir,
+    baseSha: base,
+    ...gateMaterialInput(),
+    resume: JSON.parse(JSON.stringify(exactResumeState)),
+  }, adapters);
+
+  const baselineEnvFingerprint = verificationEnvFingerprint;
+  let beforeVerify = verifyCalls;
+  let beforeReview = reviewCalls;
+  let beforeSuite = fullSuiteCalls;
+  let beforePanel = panelCalls;
+  verificationEnvFingerprint = 'a'.repeat(64);
+  const environmentDrift = replayBaseline();
+  assert.strictEqual(environmentDrift.status, 'ready', JSON.stringify(environmentDrift));
+  assert.strictEqual(verifyCalls, beforeVerify + 1, 'environment drift reruns focused verification');
+  assert.strictEqual(fullSuiteCalls, beforeSuite + 1, 'environment drift reruns full suite');
+  assert.strictEqual(reviewCalls, beforeReview + 1, 'verification authority drift reruns full diff');
+  assert.strictEqual(panelCalls, beforePanel + 1, 'verification authority drift reruns panel');
+  verificationEnvFingerprint = baselineEnvFingerprint;
+
+  const baselineSpecDigest = reviewSpecDigest;
+  const baselineReviewerModel = reviewerModel;
+  beforeVerify = verifyCalls;
+  beforeReview = reviewCalls;
+  beforeSuite = fullSuiteCalls;
+  beforePanel = panelCalls;
+  reviewSpecDigest = 'b'.repeat(64);
+  reviewerModel = 'reviewer-b';
+  const reviewAuthorityDrift = replayBaseline();
+  assert.strictEqual(
+    reviewAuthorityDrift.status,
+    'ready',
+    JSON.stringify(reviewAuthorityDrift),
+  );
+  assert.strictEqual(verifyCalls, beforeVerify, 'review authority drift reuses focused verification');
+  assert.strictEqual(fullSuiteCalls, beforeSuite, 'review authority drift reuses full suite');
+  assert.strictEqual(reviewCalls, beforeReview + 1, 'spec/reviewer drift reruns full diff');
+  assert.strictEqual(panelCalls, beforePanel + 1, 'new full-diff authority reruns panel');
+  reviewSpecDigest = baselineSpecDigest;
+  reviewerModel = baselineReviewerModel;
+
+  const baselineFocusedDigest = focusedSupplementDigest;
+  beforeVerify = verifyCalls;
+  beforeReview = reviewCalls;
+  beforeSuite = fullSuiteCalls;
+  beforePanel = panelCalls;
+  focusedSupplementDigest = '6'.repeat(64);
+  const focusedPayloadDrift = replayBaseline();
+  assert.strictEqual(focusedPayloadDrift.status, 'ready', JSON.stringify(focusedPayloadDrift));
+  assert.strictEqual(verifyCalls, beforeVerify, 'focused payload drift reuses verification');
+  assert.strictEqual(fullSuiteCalls, beforeSuite, 'focused payload drift reuses full suite');
+  assert.strictEqual(reviewCalls, beforeReview, 'focused payload drift reuses full diff');
+  assert.strictEqual(panelCalls, beforePanel + 1, 'focused payload drift reruns panel');
+  focusedSupplementDigest = baselineFocusedDigest;
+
+  const baselineRosterDigest = jointReviewRosterDigest;
+  beforeVerify = verifyCalls;
+  beforeReview = reviewCalls;
+  beforeSuite = fullSuiteCalls;
+  beforePanel = panelCalls;
+  jointReviewRosterDigest = '8'.repeat(64);
+  const rosterDrift = replayBaseline();
+  assert.strictEqual(rosterDrift.status, 'ready', JSON.stringify(rosterDrift));
+  assert.strictEqual(verifyCalls, beforeVerify, 'roster drift reuses verification');
+  assert.strictEqual(fullSuiteCalls, beforeSuite, 'roster drift reuses full suite');
+  assert.strictEqual(reviewCalls, beforeReview, 'roster drift reuses full diff');
+  assert.strictEqual(panelCalls, beforePanel + 1, 'reviewer roster drift reruns panel');
+  jointReviewRosterDigest = baselineRosterDigest;
 
   // Crash window: exercise the real composition → Engine → review provider
   // boundary. The controller must persist an authority-bound reservation
@@ -2200,8 +2445,15 @@ console.log("Starting independent verification tests for Controller Execution...
   assert.deepStrictEqual(
     pendingReservation.authority,
     prepareCrashReview({
-      candidate: pendingCandidate,
-      verification: { passed: true, receipt_digest: 'c'.repeat(64) },
+      candidate: { ...pendingCandidate, branch: null },
+      verification: {
+        passed: true,
+        receipt_digest: 'c'.repeat(64),
+        tree_sha: tree,
+        argv_hash: verificationArgvHash,
+        env_fingerprint: verificationEnvFingerprint,
+        request_digest: verificationRequestDigest(),
+      },
       repair_generation: 0,
       scope: 'full_diff',
       review_input_mode: 'full_diff_generation',
@@ -2752,14 +3004,52 @@ console.log("Starting independent verification tests for Controller Execution...
   fs.writeFileSync(aw.path, `${JSON.stringify(live, null, 2)}\n`);
   const leafBody = { committed: true, commit: leafTip, worktree: dir };
   const leaf = { ...leafBody, digest: ctrl.sha256Json(leafBody) };
-  const missingParentWo = {
-    ...live,
+  const writeAdoptionAuthority = ({
+    rootRunId,
+    owner = deadOwner,
+    controller = adoptState,
+    sealedScope = {
+      allow_paths: ['orphan.txt'],
+      max_files: 10,
+      max_diff_lines: 1000,
+    },
+    branch = 'orphan-leaf',
+    baseSha = base,
+    omitSealedScope = false,
+  }) => {
+    const fields = {
+      root_run_id: rootRunId,
+      graph_node: 'n1',
+      attempt: 1,
+      role: 'controller',
+      next_action: 'continue',
+      branch,
+      base_sha: baseSha,
+      worktree: dir,
+      owner,
+      paths: { checkpoint: path.join(dir, `${rootRunId}.json`) },
+      controller,
+    };
+    if (!omitSealedScope) fields.sealed_scope = sealedScope;
+    const writtenAuthority = woMod.createOrUpdateWorkOrder(
+      common,
+      fields,
+      { bindArtifacts: false, updateLifecycle: false },
+    );
+    assert.strictEqual(
+      writtenAuthority.status,
+      'written',
+      JSON.stringify(writtenAuthority),
+    );
+    return JSON.parse(fs.readFileSync(writtenAuthority.path, 'utf8'));
+  };
+  const missingParentWo = writeAdoptionAuthority({
+    rootRunId: 'adopt-missing-parent',
     controller: ctrl.emptyControllerState({
       ...live.controller,
       process_parentage: null,
     }),
-  };
-  missingParentWo.digest = woMod.workOrderDigest(missingParentWo);
+  });
   const missingParentAdopt = ctrl.adoptOrphanLeaf({
     gitCwd: dir,
     workOrder: missingParentWo,
@@ -2771,8 +3061,8 @@ console.log("Starting independent verification tests for Controller Execution...
   });
   assert.strictEqual(missingParentAdopt.ok, false);
   assert.strictEqual(missingParentAdopt.code, 'ADOPTION_PARENT_CHAIN_MISSING');
-  const badParentWo = {
-    ...live,
+  const badParentWo = writeAdoptionAuthority({
+    rootRunId: 'adopt-bad-parent',
     controller: ctrl.emptyControllerState({
       ...live.controller,
       process_parentage: {
@@ -2780,8 +3070,7 @@ console.log("Starting independent verification tests for Controller Execution...
         digest: '0'.repeat(64),
       },
     }),
-  };
-  badParentWo.digest = woMod.workOrderDigest(badParentWo);
+  });
   const badParentAdopt = ctrl.adoptOrphanLeaf({
     gitCwd: dir,
     workOrder: badParentWo,
@@ -2793,6 +3082,44 @@ console.log("Starting independent verification tests for Controller Execution...
   });
   assert.strictEqual(badParentAdopt.ok, false);
   assert.strictEqual(badParentAdopt.code, 'ADOPTION_PARENT_CHAIN_INVALID');
+  const callerScopeOverride = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: live,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: base,
+    sealedScope: { allow_paths: ['docs'], max_files: 10, max_diff_lines: 1000 },
+    leafWorktree: dir,
+  });
+  assert.strictEqual(callerScopeOverride.ok, false);
+  assert.strictEqual(callerScopeOverride.code, 'ADOPTION_SCOPE_OVERRIDE_REJECTED');
+
+  // A caller may recompute the public outer digest after changing sealed
+  // authority while retaining generation/CAS/controller values. The canonical
+  // persisted full-record digest must reject that self-consistent forgery and
+  // the live Work Order must remain byte-for-byte unchanged.
+  const forgedAuthority = JSON.parse(JSON.stringify(live));
+  forgedAuthority.base_sha = leafTip;
+  forgedAuthority.sealed_scope = {
+    allow_paths: ['orphan.txt', 'outside.txt'],
+    max_files: 100,
+    max_diff_lines: 10000,
+  };
+  forgedAuthority.digest = woMod.workOrderDigest(forgedAuthority);
+  const authorityBeforeForgery = fs.readFileSync(aw.path, 'utf8');
+  const forgedAdopt = ctrl.adoptOrphanLeaf({
+    gitCwd: dir,
+    workOrder: forgedAuthority,
+    leafResult: leaf,
+    branch: 'orphan-leaf',
+    baseSha: leafTip,
+    sealedScope: forgedAuthority.sealed_scope,
+    leafWorktree: dir,
+  });
+  assert.strictEqual(forgedAdopt.ok, false);
+  assert.strictEqual(forgedAdopt.code, 'ADOPTION_WO_SNAPSHOT_MISMATCH');
+  assert.strictEqual(fs.readFileSync(aw.path, 'utf8'), authorityBeforeForgery);
+
   const adopt1 = ctrl.adoptOrphanLeaf({
     gitCwd: dir,
     workOrder: live,
@@ -2821,24 +3148,24 @@ console.log("Starting independent verification tests for Controller Execution...
   // Negatives: live owner, missing base, path escape.
   const liveParentage = woMod.captureProcessParentage(process.pid);
   const liveOwner = liveParentage.owner;
-  const liveWo = {
-    ...live,
+  const liveWo = writeAdoptionAuthority({
+    rootRunId: 'adopt-live-owner',
     owner: liveOwner,
     controller: ctrl.emptyControllerState({
       ...adoptState,
       process_parentage: liveParentage,
     }),
-  };
-  liveWo.digest = woMod.workOrderDigest(liveWo);
+  });
   const liveAdopt = ctrl.adoptOrphanLeaf({
     gitCwd: dir, workOrder: liveWo, leafResult: leaf, branch: 'orphan-leaf', baseSha: base,
     sealedScope: live.sealed_scope, leafWorktree: dir,
   });
   assert.strictEqual(liveAdopt.ok, false);
   assert.ok(['CONTROLLER_NOT_PROVEN_DEAD', 'CONTROLLER_DEATH_UNKNOWN'].includes(liveAdopt.code));
-  const legacyUnscoped = { ...live };
-  delete legacyUnscoped.sealed_scope;
-  legacyUnscoped.digest = woMod.workOrderDigest(legacyUnscoped);
+  const legacyUnscoped = writeAdoptionAuthority({
+    rootRunId: 'adopt-unscoped',
+    omitSealedScope: true,
+  });
   const unscopedAdopt = ctrl.adoptOrphanLeaf({
     gitCwd: dir,
     workOrder: legacyUnscoped,
@@ -2862,17 +3189,6 @@ console.log("Starting independent verification tests for Controller Execution...
   });
   assert.strictEqual(tamperedScopeAdopt.ok, false);
   assert.strictEqual(tamperedScopeAdopt.code, 'work_order_digest_mismatch');
-  const callerScopeOverride = ctrl.adoptOrphanLeaf({
-    gitCwd: dir,
-    workOrder: live,
-    leafResult: leaf,
-    branch: 'orphan-leaf',
-    baseSha: base,
-    sealedScope: { allow_paths: ['docs'], max_files: 10, max_diff_lines: 1000 },
-    leafWorktree: dir,
-  });
-  assert.strictEqual(callerScopeOverride.ok, false);
-  assert.strictEqual(callerScopeOverride.code, 'ADOPTION_SCOPE_OVERRIDE_REJECTED');
 
   const rejectRealGitOrphan = ({
     rootRunId,
@@ -2892,19 +3208,11 @@ console.log("Starting independent verification tests for Controller Execution...
     const tip = execFileSync('git', ['-C', dir, 'rev-parse', 'HEAD'], {
       encoding: 'utf8',
     }).trim();
-    const negativeWorkOrder = woMod.buildWorkOrder({
-      root_run_id: rootRunId,
-      graph_node: 'n1',
-      attempt: 1,
-      role: 'controller',
-      next_action: 'continue',
+    const negativeWorkOrder = writeAdoptionAuthority({
+      rootRunId,
       branch,
-      base_sha: base,
-      worktree: dir,
-      owner: deadOwner,
-      controller: adoptState,
-      sealed_scope: sealedScope,
-    }, { bindArtifacts: false });
+      sealedScope,
+    });
     const negativeLeafBody = { committed: true, commit: tip, worktree: dir };
     const rejected = ctrl.adoptOrphanLeaf({
       gitCwd: dir,

@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "corpus_version": "va-declared-plan-v1",
+  "methodology_version": "va-declared-plan",
+  "budget": {
+    "trials_per_administration": 2,
+    "cases_per_family_per_trial": 2,
+    "steps_per_case": 12,
+    "plan_max_bytes": 262144,
+    "plan_max_json_depth": 16,
+    "runner_wall_ms_per_execution": 60000,
+    "runner_output_cap_bytes": 1048576
+  },
+  "families": [
+    "boundary-off-by-one",
+    "error-path-swallow",
+    "default-fallback-widening",
+    "state-residue",
+    "ordering-contract",
+    "precision-contract"
+  ],
+  "renderers": ["clause-imperative", "clause-tabular", "clause-narrative"],
+  "value_algebra": {
+    "numeric_domain": "integer",
+    "equality": "canonical-json-bytes",
+    "throw_identity": ["name", "message_token"],
+    "unsupported_values": ["undefined", "NaN", "-0", "function", "cycle"],
+    "unsupported_result": "never-matches"
+  },
+  "outcome_taxonomy": [
+    "pass",
+    "declared_mismatch",
+    "missed_defect",
+    "malformed_plan",
+    "budget_exceeded",
+    "infra_fail",
+    "transport_fail"
+  ],
+  "taxonomy_precedence": [
+    "infra_fail",
+    "transport_fail",
+    "malformed_plan",
+    "budget_exceeded",
+    "declared_mismatch",
+    "missed_defect",
+    "pass"
+  ],
+  "subjects": ["declared_accuracy", "sensitivity", "robustness"],
+  "thresholds": {
+    "min_trials": 2,
+    "max_declared_mismatches": 0,
+    "max_missed_defects": 0,
+    "max_robustness_violations": 0
+  }
+}

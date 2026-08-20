@@ -373,11 +373,99 @@ parse_args() {
   esac
 }
 
+parse_diff_git_header_paths() {
+  node - "$1" <<'NODE'
+const line = String(process.argv[2] || '');
+const prefix = 'diff --git ';
+if (!line.startsWith(prefix)) process.exit(1);
+const source = line.slice(prefix.length);
+let offset = 0;
+
+function pushLiteral(chunks) {
+  const codePoint = source.codePointAt(offset);
+  const value = String.fromCodePoint(codePoint);
+  chunks.push(Buffer.from(value, 'utf8'));
+  offset += value.length;
+}
+
+function readQuotedPath() {
+  if (source[offset] !== '"') return null;
+  offset += 1;
+  const chunks = [];
+  const escapes = {
+    a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13,
+    '"': 34, '\\': 92,
+  };
+
+  while (offset < source.length) {
+    if (source[offset] === '"') {
+      offset += 1;
+      return Buffer.concat(chunks).toString('utf8');
+    }
+    if (source[offset] !== '\\') {
+      pushLiteral(chunks);
+      continue;
+    }
+
+    offset += 1;
+    const octal = source.slice(offset).match(/^[0-7]{3}/);
+    if (octal) {
+      chunks.push(Buffer.from([parseInt(octal[0], 8)]));
+      offset += 3;
+      continue;
+    }
+    const escaped = source[offset];
+    if (escaped === undefined) return null;
+    chunks.push(Buffer.from([
+      Object.prototype.hasOwnProperty.call(escapes, escaped)
+        ? escapes[escaped]
+        : escaped.charCodeAt(0),
+    ]));
+    offset += 1;
+  }
+  return null;
+}
+
+let before;
+let after;
+if (source.startsWith('"')) {
+  before = readQuotedPath();
+  while (source[offset] === ' ') offset += 1;
+  after = readQuotedPath();
+  while (source[offset] === ' ') offset += 1;
+  if (before === null || after === null || offset !== source.length) process.exit(1);
+} else {
+  const candidates = [];
+  let separator = source.indexOf(' b/', 2);
+  while (separator >= 0) {
+    const candidateBefore = source.slice(0, separator);
+    const candidateAfter = source.slice(separator + 1);
+    if (candidateBefore.startsWith('a/')
+        && candidateAfter.startsWith('b/')
+        && candidateBefore.slice(2) === candidateAfter.slice(2)) {
+      candidates.push([candidateBefore, candidateAfter]);
+    }
+    separator = source.indexOf(' b/', separator + 1);
+  }
+  if (candidates.length !== 1) process.exit(1);
+  [before, after] = candidates[0];
+}
+
+process.stdout.write(Buffer.concat([
+  Buffer.from(before, 'utf8'),
+  Buffer.from([0]),
+  Buffer.from(after, 'utf8'),
+  Buffer.from([0]),
+]));
+NODE
+}
+
 collect_touched_paths() {
   local diff_file="$1"
   local -n paths_out="$2"
   local line=''
   local source=''
+  local -a header_paths=()
   paths_out=()
 
   collect_path() {
@@ -408,7 +496,14 @@ collect_touched_paths() {
   }
 
   while IFS= read -r line; do
-    if [[ "$line" == ---\ * ]]; then
+    if [[ "$line" == diff\ --git\ * ]]; then
+      header_paths=()
+      mapfile -d '' -t header_paths < <(parse_diff_git_header_paths "$line")
+      if [ "${#header_paths[@]}" -eq 2 ]; then
+        collect_path "${header_paths[0]}" a
+        collect_path "${header_paths[1]}" b
+      fi
+    elif [[ "$line" == ---\ * ]]; then
       source="${line#--- }"
       collect_path "$source" a
     elif [[ "$line" == +++\ * ]]; then

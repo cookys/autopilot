@@ -58,4 +58,4 @@ Tasks can specify a `turns/` directory containing sequential prompts (`01.md`, `
 property — cache-retained / decoys-untouched / inputs-unmutated). Unlike t1–t13
 (which ceiling on MiniMax-M3), a strong orchestrator that solves the primary task
 can still slip the second axis, giving the discrimination gradient headroom.
-Design + calibration harness: `docs/projects/2026-07-09-m3-band-tasks/`.
+Design + calibration harness: `docs/projects/_archive/2026-07-09-m3-band-tasks/`.

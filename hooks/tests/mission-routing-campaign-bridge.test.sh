@@ -2,6 +2,8 @@
 # Mission dual-identity + L6 marker→campaign admission bridge.
 # Proves ICC v1 leaf identity under Mission-v2 seal, marker digest equality,
 # zero-runner negatives, off/shadow compatibility, and terminal dual binding.
+unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
+  AUTOPILOT_SESSION_ID AUTOPILOT_SESSION_MODE_DIR CLAUDE_CODE_SESSION_ID
 . "$(dirname "$0")/lib.sh"
 enable_legacy_scorecard_test_projection
 
@@ -20,6 +22,11 @@ const { runMissionCli } = require(path.join(root, 'src', 'mission', 'cli'));
 const { runCampaignIntake } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine', 'autopilot-engine'));
 const { campaignIdFor } = require(path.join(root, 'src', 'engine', 'implementation-campaign'));
+const { createProviderReadinessReceipt } = require(path.join(root, 'src', 'readiness', 'receipt'));
+const {
+  createQualificationProvider,
+  qualifyExactRoleNow,
+} = require(path.join(root, 'src', 'readiness', 'qualification-provider'));
 const projection = require(path.join(root, 'src', 'engine', 'campaign-dispatch-projection'));
 const {
   verifyMissionRoutingProjection,
@@ -35,6 +42,58 @@ const sha = (value) => crypto.createHash('sha256').update(
 const writeJson = (file, value) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+};
+const readinessIssuedAt = '2026-07-28T00:00:00.000Z';
+const readinessPolicy = {
+  receipt_ttl_seconds: 600,
+  fallback_family_constraint: 'different',
+};
+const readinessTuples = [
+  { role: 'implementer', runner: 'codex', model: 'gpt-5.3-codex-spark', effort: 'high', endpoint: null },
+  { role: 'verification_author', runner: 'agy', model: 'gemini-2.5-pro', effort: 'high', endpoint: null },
+  { role: 'qc', runner: 'codex', model: 'gpt-5.5', effort: 'xhigh', endpoint: null },
+];
+const qualificationProvider = createQualificationProvider({ qualify: (tuple) => (
+  readinessTuples.some((candidate) => JSON.stringify(candidate) === JSON.stringify(tuple))
+) });
+const readinessObservation = (tuple, axis) => ({
+  schema_version: 1,
+  artifact_type: 'provider_axis_observation',
+  tuple,
+  axis,
+  status: 'ready',
+  observed_at: readinessIssuedAt,
+  ttl_seconds: 600,
+  evidence_class: 'fixture-probe',
+  reason: null,
+});
+const readinessRoster = readinessTuples.map((tuple) => ({
+  seat_id: tuple.role,
+  required: true,
+  family: tuple.runner === 'agy' ? 'google' : 'openai',
+  tuple,
+  observations: Object.fromEntries(
+    ['transport', 'live', 'qualification'].map((axis) => [
+      axis,
+      axis === 'qualification'
+        ? qualifyExactRoleNow(qualificationProvider, tuple, readinessIssuedAt, 600)
+        : readinessObservation(tuple, axis),
+    ]),
+  ),
+  fallbacks: [],
+}));
+const readinessReceipt = createProviderReadinessReceipt({
+  roster: readinessRoster,
+  policy: readinessPolicy,
+  now: readinessIssuedAt,
+});
+const readinessAdapters = {
+  providerReadiness: () => ({
+    receipt: readinessReceipt,
+    roster: readinessRoster,
+    policy: readinessPolicy,
+  }),
+  qualificationProvider,
 };
 
 // --- Temp repo with enforce Mission governance ---
@@ -272,6 +331,7 @@ const adapters = {
     mission_subject_digest: granted.payload.mission_subject_digest,
     campaign_id: missionCampaignId,
   }),
+  ...readinessAdapters,
   readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
   contextGate: () => ({ owner: 'context_window', status: 'ready' }),
   occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
@@ -586,6 +646,11 @@ function dispatch(extraEnv = {}) {
       ENGINE_SCORECARD_DIR: scores,
       ENGINE_CAPABILITY_DIR: caps,
       AUTOPILOT_SESSION_MODE_DIR: markerDir,
+      // Managed admission runs ahead of the bridge and needs a live level to
+      // compare the sealed marker against; the session id decides which single
+      // marker file it resolves.
+      AUTOPILOT_LEVEL: 'l6',
+      CLAUDE_CODE_SESSION_ID: BRIDGE_SESSION_ID,
       AUTOPILOT_DISPATCH_MANIFEST: '0',
       DISPATCH_QUIET: '1',
       AUTOPILOT_ROOT_RUN_ID: contract.mission_runtime.root_run_id,
@@ -605,10 +670,34 @@ function dispatch(extraEnv = {}) {
 
 const repoRootAbs = fs.realpathSync(repo);
 
+// Two gates guard this path and they do not see the same thing. Managed
+// admission runs first and resolves exactly one marker — <session id>.json —
+// while the bridge that runs after it scans every marker in the directory.
+// So a foreign stale marker is the bridge's alone to catch, and the negatives
+// below have to clear admission before the bridge is even reached.
+const BRIDGE_SESSION_ID = 'bridge-admission-sess';
+const validSessionMarker = () => ({
+  level: 'l6',
+  session_id: BRIDGE_SESSION_ID,
+  repo_root: repoRootAbs,
+  started_at: '2026-07-28T00:00:00.000Z',
+  expires_at: '2099-01-01T00:00:00.000Z',
+  entry_level: 'l6',
+  fallback_reason: 'none',
+  mission_routing: {
+    status: 'READY',
+    admitted: true,
+    would_block: false,
+    prior_marker_status: 'absent',
+    admission: matchingAdmission(),
+  },
+});
+
 // Negatives under enforce first (before positive creates a durable branch).
 // Each must be precondition_failed with zero runner effects.
 function negative(name, marker) {
   clearMarkers();
+  writeMarker(BRIDGE_SESSION_ID, validSessionMarker());
   writeMarker(name, marker);
   const result = dispatch();
   const ok = result.status === 2
@@ -714,23 +803,29 @@ negative('legacy_l3_fallback', {
   fallback_reason: 'precondition_failed',
 });
 
-// Positive path last: matching L6 marker → stub runner exactly once.
+// The session's own marker is admission's business, not the bridge's: a
+// mismatched one never reaches the bridge, and must still cost nothing.
 clearMarkers();
-writeMarker('l6-match', {
-  level: 'l6',
-  repo_root: repoRootAbs,
-  started_at: '2026-07-28T00:00:00.000Z',
-  expires_at: '2099-01-01T00:00:00.000Z',
-  entry_level: 'l6',
-  fallback_reason: 'none',
+writeMarker(BRIDGE_SESSION_ID, {
+  ...validSessionMarker(),
   mission_routing: {
     status: 'READY',
     admitted: true,
     would_block: false,
     prior_marker_status: 'absent',
-    admission: matchingAdmission(),
+    admission: matchingAdmission({ mission_graph_digest: 'c'.repeat(64) }),
   },
 });
+const sessionMismatch = dispatch();
+check('negative_session_marker_mismatch_zero_runner',
+  sessionMismatch.status === 2
+  && sessionMismatch.effects === 0
+  && /dev_flow_admission/.test(sessionMismatch.stdout)
+  && /Mission projection mismatch/.test(sessionMismatch.stdout));
+
+// Positive path last: matching L6 marker → stub runner exactly once.
+clearMarkers();
+writeMarker(BRIDGE_SESSION_ID, validSessionMarker());
 const positive = dispatch();
 check('positive_l6_marker_reaches_runner_once',
   positive.status === 0 && positive.effects === 1);
@@ -885,6 +980,7 @@ for key in \
   negative_graph_mismatch_zero_runner negative_policy_mismatch_zero_runner \
   negative_repo_mismatch_zero_runner negative_missing_admission_zero_runner \
   negative_malformed_admission_zero_runner negative_legacy_l3_fallback_zero_runner \
+  negative_session_marker_mismatch_zero_runner \
   off_mode_without_managed_marker_compatible; do
   assert_contains "$OUT" "${key}	PASS" "oracle proves $key"
 done

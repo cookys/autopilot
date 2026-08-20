@@ -1,0 +1,69 @@
+{
+  "model": "sonnet",
+  "runner_version": "2.1.234 (Claude Code)",
+  "excluded_pairs": [],
+  "families": {
+    "F1": {
+      "n": 9,
+      "full": 6,
+      "card": 4,
+      "off": 6,
+      "label": "sizing/workflow-selection",
+      "load_bearing": false
+    },
+    "F3": {
+      "n": 9,
+      "full": 9,
+      "card": 9,
+      "off": 0,
+      "label": "branch discipline",
+      "load_bearing": true
+    },
+    "F4": {
+      "n": 3,
+      "full": 0,
+      "card": 1,
+      "off": 0,
+      "label": "maintenance ledger",
+      "load_bearing": false
+    },
+    "F5": {
+      "n": 6,
+      "full": 5,
+      "card": 6,
+      "off": 5,
+      "label": "verification contract",
+      "load_bearing": false
+    },
+    "F6": {
+      "n": 9,
+      "full": 0,
+      "card": 2,
+      "off": 0,
+      "label": "quality gate",
+      "load_bearing": false
+    }
+  },
+  "v1": {
+    "full": {
+      "invoked": 18,
+      "eff": 21,
+      "pass": true
+    },
+    "card": {
+      "invoked": 18,
+      "eff": 21,
+      "pass": true
+    }
+  },
+  "v2": {
+    "load_bearing": [
+      "F3"
+    ],
+    "pass": false
+  },
+  "v3": {
+    "failed_families": []
+  },
+  "verdict": "INSTRUMENT-INVALID (V2: only 1/5 families load-bearing — vacuous)"
+}

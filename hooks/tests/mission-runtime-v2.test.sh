@@ -20,12 +20,85 @@ const mission = require(path.join(root, 'src', 'engine', 'mission-convergence'))
 const { runMissionCli } = require(path.join(root, 'src', 'mission', 'cli'));
 const { runCampaignIntake } = require(path.join(root, 'src', 'engine', 'campaign-intake'));
 const { AutopilotEngine } = require(path.join(root, 'src', 'engine', 'autopilot-engine'));
+const { createProviderReadinessReceipt } = require(path.join(root, 'src', 'readiness', 'receipt'));
+const {
+  createQualificationProvider,
+  qualifyExactRoleNow,
+} = require(path.join(root, 'src', 'readiness', 'qualification-provider'));
 
 const lines = [];
 const check = (id, value) => lines.push(`${id}\t${value ? 'PASS' : 'FAIL'}`);
+// Results are only written at the end, so an exception anywhere below used to
+// discard every invariant already proved — one broken fixture reported as a
+// suite-wide blackout, which says nothing about where the damage starts.
+// Flush what is known, then name the crash as its own failed invariant.
+let oracleFlushed = false;
+function flushOracle() {
+  if (oracleFlushed) return;
+  oracleFlushed = true;
+  for (const line of lines) console.log(line);
+}
+process.on('uncaughtException', (error) => {
+  lines.push('oracle-ran-to-completion\tFAIL');
+  flushOracle();
+  console.error(error && error.stack ? error.stack : String(error));
+  process.exit(1);
+});
 const sha = (value) => crypto.createHash('sha256').update(
   typeof value === 'string' ? value : mission.canonicalJson(value),
 ).digest('hex');
+const readinessIssuedAt = '2026-07-28T00:00:00.000Z';
+const readinessPolicy = {
+  receipt_ttl_seconds: 600,
+  fallback_family_constraint: 'different',
+};
+const readinessTuples = [
+  { role: 'implementer', runner: 'codex', model: 'gpt-5.3-codex-spark', effort: 'high', endpoint: null },
+  { role: 'verification_author', runner: 'agy', model: 'gemini-2.5-pro', effort: 'high', endpoint: null },
+  { role: 'qc', runner: 'codex', model: 'gpt-5.5', effort: 'xhigh', endpoint: null },
+];
+const qualificationProvider = createQualificationProvider({ qualify: (tuple) => (
+  readinessTuples.some((candidate) => JSON.stringify(candidate) === JSON.stringify(tuple))
+) });
+const readinessObservation = (tuple, axis) => ({
+  schema_version: 1,
+  artifact_type: 'provider_axis_observation',
+  tuple,
+  axis,
+  status: 'ready',
+  observed_at: readinessIssuedAt,
+  ttl_seconds: 600,
+  evidence_class: 'fixture-probe',
+  reason: null,
+});
+const readinessRoster = readinessTuples.map((tuple) => ({
+  seat_id: tuple.role,
+  required: true,
+  family: tuple.runner === 'agy' ? 'google' : 'openai',
+  tuple,
+  observations: Object.fromEntries(
+    ['transport', 'live', 'qualification'].map((axis) => [
+      axis,
+      axis === 'qualification'
+        ? qualifyExactRoleNow(qualificationProvider, tuple, readinessIssuedAt, 600)
+        : readinessObservation(tuple, axis),
+    ]),
+  ),
+  fallbacks: [],
+}));
+const readinessReceipt = createProviderReadinessReceipt({
+  roster: readinessRoster,
+  policy: readinessPolicy,
+  now: readinessIssuedAt,
+});
+const readinessAdapters = {
+  providerReadiness: () => ({
+    receipt: readinessReceipt,
+    roster: readinessRoster,
+    policy: readinessPolicy,
+  }),
+  qualificationProvider,
+};
 const repo = path.join(temp, 'repo');
 fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
 fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
@@ -151,6 +224,22 @@ const commonRaw = execFileSync('git', ['-C', repo, 'rev-parse', '--git-common-di
 }).trim();
 const common = fs.realpathSync(path.isAbsolute(commonRaw) ? commonRaw : path.join(repo, commonRaw));
 const repoIdentity = `git-common-dir:${common}`;
+
+// Every managed campaign loop passes through dev-flow admission, which wants a
+// sealed session marker whose Mission projection matches the contract in hand
+// and a live level to compare that marker against. Production supplies both;
+// without them the Engine blocks before it mints a controller Work Order.
+const { sealSessionMarker: sealMarkerFor } = require(path.join(
+  root, 'hooks', 'tests', 'lib', 'session-marker',
+));
+const sealSessionMarker = (contractPath) => sealMarkerFor({
+  root,
+  dir: path.join(temp, 'session-mode'),
+  repoRoot: repo,
+  contract: contractPath,
+  sessionId: 'mission-runtime-v2-sess',
+});
+
 const runtimeRoot = path.join(common, 'autopilot', 'mission');
 const registryPath = path.join(runtimeRoot, 'registry.json');
 const registryLock = path.join(runtimeRoot, 'registry.lock');
@@ -642,6 +731,7 @@ if (runtime) {
       mission_subject_digest: granted.payload.mission_subject_digest,
       campaign_id: granted.payload.mission_campaign_id,
     }),
+    ...readinessAdapters,
     readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
     contextGate: () => ({ owner: 'context_window', status: 'ready' }),
     occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
@@ -827,6 +917,7 @@ if (runtime) {
       },
     },
   };
+  sealSessionMarker(granted.payload.contract_path);
 
   const intentOnlyAppender = (input, events) => {
     if (events) events.push(input.eventType);
@@ -1077,6 +1168,174 @@ if (runtime) {
       'canonical_mission_state_claim',
     ));
 
+  // Production Codex boundary: official payload -> exact controller identity ->
+  // the existing host-neutral adapter. The hook itself writes no parallel state;
+  // only reconcilePostCompact's sealed receipt is durable.
+  const productionHook = path.join(
+    root,
+    'platforms',
+    'codex',
+    'plugin',
+    'hooks',
+    'post-compact.js',
+  );
+  const productionPluginRoot = path.join(root, 'platforms', 'codex', 'plugin');
+  const codexFixtureDir = path.join(temp, 'codex-version-fixture-bin');
+  const codexVersionFixture = path.join(codexFixtureDir, 'codex');
+  const codexVersionDriftFixture = path.join(codexFixtureDir, 'codex-version-drift');
+  fs.mkdirSync(codexFixtureDir, { recursive: true });
+  fs.writeFileSync(codexVersionFixture, [
+    '#!/usr/bin/env node',
+    "if (process.argv.length !== 3 || process.argv[2] !== '--version') process.exit(64);",
+    "process.stdout.write('codex-cli 0.146.0\\n');",
+    '',
+  ].join('\n'));
+  fs.writeFileSync(codexVersionDriftFixture, [
+    '#!/usr/bin/env node',
+    "if (process.argv.length !== 3 || process.argv[2] !== '--version') process.exit(64);",
+    "process.stdout.write('codex-cli 0.0.0\\n');",
+    '',
+  ].join('\n'));
+  fs.chmodSync(codexVersionFixture, 0o755);
+  fs.chmodSync(codexVersionDriftFixture, 0o755);
+  const runProductionHook = (payload, extraEnv = {}) => spawnSync(
+    process.execPath,
+    [productionHook],
+    {
+      cwd: controllerRecoveryWt,
+      encoding: 'utf8',
+      input: typeof payload === 'string' ? payload : JSON.stringify(payload),
+      env: {
+        ...process.env,
+        PATH: `${codexFixtureDir}${path.delimiter}${process.env.PATH || ''}`,
+        PLUGIN_ROOT: productionPluginRoot,
+        ...extraEnv,
+      },
+    },
+  );
+  const manualPayload = {
+    session_id: 'mission-runtime-session',
+    transcript_path: null,
+    cwd: controllerRecoveryWt,
+    hook_event_name: 'PostCompact',
+    model: 'gpt-5.6-sol',
+    turn_id: 'mission-runtime-manual-turn',
+    trigger: 'manual',
+  };
+  const productionManual = runProductionHook(manualPayload);
+  if (productionManual.status !== 0) {
+    console.error(`production PostCompact manual stderr: ${productionManual.stderr}`);
+  }
+  check('codex-production-postcompact-manual-ready',
+    productionManual.status === 0
+    && productionManual.stdout === '');
+  const productionReceiptPath = workOrder.reconcileReceiptPath(
+    common,
+    controllerRootRunId,
+  );
+  const productionReceipt = workOrder.readJsonIfPresent(productionReceiptPath);
+  check('codex-production-postcompact-persists-only-sealed-reconcile-receipt',
+    productionReceipt
+    && productionReceipt.artifact_type === workOrder.RECONCILE_ARTIFACT
+    && productionReceipt.hook_trigger === 'manual'
+    && /^[0-9a-f]{64}$/.test(productionReceipt.hook_invocation_digest)
+    && workOrder.validateReconcileReceipt(productionReceipt, {
+      root_run_id: controllerRootRunId,
+      commonDir: common,
+    }).ok === true
+    && !JSON.stringify(productionReceipt).includes(manualPayload.session_id)
+    && !JSON.stringify(productionReceipt).includes(manualPayload.turn_id));
+  const productionDuplicate = runProductionHook(manualPayload);
+  if (productionDuplicate.status !== 2) {
+    console.error(`production PostCompact duplicate stderr: ${productionDuplicate.stderr}`);
+  }
+  check('codex-production-postcompact-duplicate-blocks',
+    productionDuplicate.status === 2
+    && /reconcile_failed/.test(productionDuplicate.stderr));
+  const productionAuto = runProductionHook({
+    ...manualPayload,
+    turn_id: 'mission-runtime-auto-turn',
+    trigger: 'auto',
+  });
+  if (productionAuto.status !== 0) {
+    console.error(`production PostCompact auto stderr: ${productionAuto.stderr}`);
+  }
+  check('codex-production-postcompact-auto-ready',
+    productionAuto.status === 0
+    && workOrder.readJsonIfPresent(productionReceiptPath).hook_trigger === 'auto');
+  const invalidPayload = runProductionHook({ ...manualPayload, unsupported: true });
+  check('codex-production-postcompact-invalid-payload-blocks',
+    invalidPayload.status === 2
+    && /invalid_payload/.test(invalidPayload.stderr));
+  const identitylessRepo = path.join(temp, 'postcompact-no-identity');
+  fs.mkdirSync(identitylessRepo, { recursive: true });
+  execFileSync('git', ['-C', identitylessRepo, 'init', '-q']);
+  execFileSync('git', ['-C', identitylessRepo, 'config', 'user.email', 'test@example.com']);
+  execFileSync('git', ['-C', identitylessRepo, 'config', 'user.name', 'Test']);
+  fs.writeFileSync(path.join(identitylessRepo, 'README.md'), 'identityless\n');
+  execFileSync('git', ['-C', identitylessRepo, 'add', 'README.md']);
+  execFileSync('git', ['-C', identitylessRepo, 'commit', '-qm', 'identityless']);
+  const identityMissing = runProductionHook({
+    ...manualPayload,
+    cwd: identitylessRepo,
+    turn_id: 'identity-missing-turn',
+  });
+  check('codex-production-postcompact-missing-identity-blocks',
+    identityMissing.status === 2
+    && /controller_identity_missing/.test(identityMissing.stderr));
+  const driftReceiptPath = path.join(controllerRecoveryWt, '.invalid-d3-claims.json');
+  fs.writeFileSync(driftReceiptPath, '{}\n');
+  const claimDrift = runProductionHook(
+    { ...manualPayload, turn_id: 'claim-drift-turn' },
+    { AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT: driftReceiptPath },
+  );
+  check('codex-production-postcompact-claim-drift-blocks',
+    claimDrift.status === 2
+    && /d3_claim_validation_failed/.test(claimDrift.stderr));
+  fs.unlinkSync(driftReceiptPath);
+  const codexVersionDrift = runProductionHook(
+    { ...manualPayload, turn_id: 'codex-version-drift-turn' },
+    { AUTOPILOT_CODEX_BIN: codexVersionDriftFixture },
+  );
+  // Policy change (v2.34.20, owner decision 2026-08-18): a selected-binary version that
+  // differs from the recorded observation WARNS, it does not block. These CLIs self-update
+  // (agy moved 1.1.10 → 1.1.14 within one session), so blocking on drift made a vendor's
+  // auto-updater able to kill every dispatch. The drift must still be DETECTED and surfaced —
+  // that is what this now asserts, and it is why the assertion was rewritten rather than
+  // deleted. What still blocks: an unusable receipt, a contradicted contract, a binary that
+  // is genuinely absent (asserted by the neighbouring claim-drift and identity cases).
+  check('codex-production-postcompact-selected-codex-version-drift-warns-not-blocks',
+    codexVersionDrift.status === 0
+    && /current_version_drift/.test(codexVersionDrift.stderr)
+    && !/d3_claim_validation_failed/.test(codexVersionDrift.stderr));
+  const receiptBytes = fs.readFileSync(productionReceiptPath);
+  fs.appendFileSync(productionReceiptPath, '\ncorrupt prior receipt\n');
+  const corruptPriorReceipt = runProductionHook({
+    ...manualPayload,
+    turn_id: 'corrupt-prior-receipt-turn',
+  });
+  check('codex-production-postcompact-corrupt-prior-receipt-blocks',
+    corruptPriorReceipt.status === 2
+    && /reconcile_failed/.test(corruptPriorReceipt.stderr));
+  fs.writeFileSync(productionReceiptPath, receiptBytes);
+  const checkpointPath = exactControllerRecord.work_order.paths.checkpoint;
+  const checkpointBytes = fs.readFileSync(checkpointPath);
+  fs.appendFileSync(checkpointPath, '\ncorrupt adapter authority\n');
+  const brokenSentinel = path.join(controllerRecoveryWt, '.postcompact-broken-sentinel');
+  const brokenAdapter = runProductionHook({
+    ...manualPayload,
+    turn_id: 'broken-adapter-turn',
+  });
+  if (brokenAdapter.status !== 2) {
+    console.error(`production PostCompact broken stderr: ${brokenAdapter.stderr}`);
+  }
+  if (brokenAdapter.status === 0) fs.writeFileSync(brokenSentinel, 'forbidden\n');
+  check('codex-production-postcompact-broken-adapter-blocks-sentinel',
+    brokenAdapter.status === 2
+    && /reconcile_failed/.test(brokenAdapter.stderr)
+    && !fs.existsSync(brokenSentinel));
+  fs.writeFileSync(checkpointPath, checkpointBytes);
+
   // Real managed composition path: constructor-owned Mission store + default
   // releaseCampaignAdmission. Adapters are built exactly once at intake and
   // the same object is threaded into release (never rebuilt).
@@ -1205,6 +1464,7 @@ if (runtime) {
       mission_subject_digest: regranted.payload.mission_subject_digest,
       campaign_id: regranted.payload.mission_campaign_id,
     }),
+    ...readinessAdapters,
     readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
     contextGate: () => ({ owner: 'context_window', status: 'ready' }),
     occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
@@ -1336,6 +1596,8 @@ if (runtime) {
     cwd: successControllerWt,
     clock: () => successClock,
     missionCampaignStore: store,
+    providerReadinessAuthority: readinessAdapters.providerReadiness,
+    qualificationProvider,
     missionAdapterFactory: (options) => ({
       ...mission.createMissionCampaignAdapters(options),
       readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
@@ -1984,7 +2246,8 @@ fs.writeFileSync(outputPath, JSON.stringify(result));
 }
 
 const failed = lines.filter((line) => line.endsWith('\tFAIL'));
-for (const line of lines) console.log(line);
+lines.push('oracle-ran-to-completion\tPASS');
+flushOracle();
 if (failed.length > 0) {
   process.stderr.write(`mission-runtime-v2 failures:\n${failed.join('\n')}\n`);
   process.exitCode = 1;
@@ -2049,7 +2312,8 @@ for id in \
   terminal-acceptance-projection-is-exact terminal-requires-utc-observed-at \
   first-zero-delta-terminal-increments-stagnation second-zero-delta-terminal-blocks-mission \
   terminal-race-first-writer-wins terminal-race-recovers-journal-before-cas \
-  next-grant-rejects-after-stagnation
+  next-grant-rejects-after-stagnation \
+  oracle-ran-to-completion
 do
   assert_contains "$OUT" "$id	PASS" "Mission runtime v2 invariant $id"
 done

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "next-touch-debt-retirement-2026-08-03",
+  "minimum_distinct_families": 2,
+  "max_attempts_per_seat": 2,
+  "seats": [
+    {
+      "id": "architecture",
+      "runner": "codex",
+      "model": "gpt-5.6-sol",
+      "effort": "max",
+      "endpoint": "default",
+      "role": "architecture-contract",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    },
+    {
+      "id": "operations_skeptic",
+      "runner": "agy",
+      "model": "gemini-3.6-flash-high",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "operations-skeptic",
+      "family": "google",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    }
+  ]
+}

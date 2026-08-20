@@ -29,35 +29,7 @@ Hard rules:
   → admitted deliverables → finish-flow) still applies. Plan headings, modules, tests,
   reviewers, and retries remain coverage/gates inside those deliverables.
 
-### P3.0 shadow translation
-
-When the consuming project explicitly has `.claude/owner-kernel-governance.json` **and an
-explicit Autopilot source path**, it may resolve the read-only mapping before work. In this example,
-`<autopilot-source>` is a literal absolute source checkout or project-provided installed copy, not
-an assumed environment variable:
-
-```bash
-node <autopilot-source>/scripts/owner-kernel.js translate-level \
-  --config .claude/owner-kernel-governance.json --level l3 [--expand] [-x <red-line-csv>] --check
-```
-
-Treat the result as a frozen topology preference and red-line disclosure, never as an approval,
-action permit, or acceptance result. Do not fall back to Autopilot's own dogfood config when the
-consuming project has no config or no explicit source path. A host that provides
-`ShadowTranslationRuntime` may record the same mapping as a witnessed `translation_used` event; a
-shell/skill invocation cannot mint that event and must not claim telemetry when no host bridge is
-configured.
-
-P3.0 does not replace the existing `/l3` lifecycle, DOA, independent QC, or finish-flow rails.
-`/l4` through `/l6` remain on their present strict worktree/dispatch paths until the supervised
-engine bridge is complete.
-
-**Capability profile (shadow):** `/l3` fixes inline topology only. When the host supplies a current
-verified envelope/grant/profile payload, pass it through unchanged; never infer guidance density
-from the level or model name. A late mismatch requires a fresh-session handoff.
-Because `/l3` executes in the already-loaded inline session, it remains on the guided compatibility
-host until an independently witnessed adapter launches it; appending autonomous prose is not a switch.
-
 **MUST-READ**: [`../ceo-agent/references/level-front-door.md`](../ceo-agent/references/level-front-door.md)
 (front-door semantics) and [`../ceo-agent/SKILL.md`](../ceo-agent/SKILL.md) (DOA,
 Prime Directives, quality gates).
+

@@ -20,13 +20,20 @@
 //   dispatch-status.js --log <path> [--manifest <path>] [--stall-secs N]
 //   dispatch-status.js --log <path> --summary [--format F]    # parse-only, no liveness
 //   dispatch-status.js --log <path> --usage-only [--format F] # ONE line: usage object or `null`
+//   dispatch-status.js --log <path> --agy-envelope             # strict {response,usage}
 //   dispatch-status.js --list [--dir <manifest-dir>]
+//   dispatch-status.js --panels [--dir <manifest-dir>]        # plan-review PANEL progress (newest 10)
+//   dispatch-status.js --panel <file|prefix> [--dir <dir>]    # one panel's seat table
+//   --panels/--panel: renders panel-<key>-gN manifests written by dispatch-plan-review
+//   (v2.34.31): per-seat status/attempt, in-flight elapsed, deadline remaining, plus
+//   owner_alive (three-state: true/false/null=unknowable) — a dead owner downgrades
+//   in_flight seats to in_flight_stale. Read-only.
 //   dispatch-status.js --reap [--days N] [--dir <manifest-dir>] [--dry-run]
 //   --reap: retention reaper for the runs dir — deletes not-live manifests older than
 //   --days (default 7) and, ONLY on a definitive dead lock verdict + .autopilot-worktree
 //   marker + free worktree lock, the failure-kept worktree (then `git worktree prune`s
 //   the owner repo). A live run is never touched. See the reapRuns() header for policy.
-//   --format codex-chrome|jsonl|pi-rpc|plain|auto — the DISPATCHER-declared stream format
+//   --format codex-chrome|jsonl|pi-rpc|agy-json|plain|auto — the DISPATCHER-declared stream format
 //   (manifest `log_format` when reading via --run). Telemetry parsing trusts the
 //   declaration, never content sniffing: a worker's own output can contain JSON
 //   lines, and sniffing would promote that self-report into telemetry. 'auto'
@@ -45,7 +52,7 @@
 //   user/exec/codex/thinking; trailing "tokens used" + number — empirically
 //   captured from codex v0.144.0, see hooks/tests/fixtures/dispatch-status/),
 //   jsonl (≥1 parseable JSON line early — generic key scan, not vendor-schema
-//   specific), else plain (agy pseudo-TTY / cc-shim text → events/tokens null).
+//   specific), else plain (legacy/ad-hoc text and cc-shim → events/tokens null).
 //
 // LIVENESS (advisory ordering — lock is primary, pid weakest):
 //   lock  — flock(1) -n probe on the worktree lifetime lock (same contract as
@@ -248,6 +255,145 @@ function parsePiRpc(text) {
   };
 }
 
+function assertNoDuplicateJsonKeys(text) {
+  let index = 0;
+  const fail = (message) => { throw new Error(message); };
+  const whitespace = () => {
+    while (index < text.length && /[\u0009\u000a\u000d\u0020]/.test(text[index])) index += 1;
+  };
+  const stringToken = () => {
+    if (text[index] !== '"') fail('expected JSON string');
+    const start = index;
+    index += 1;
+    while (index < text.length) {
+      const ch = text[index++];
+      if (ch === '"') {
+        const raw = text.slice(start, index);
+        try { return JSON.parse(raw); } catch (_error) { fail('invalid JSON string'); }
+      }
+      if (ch === '\\') {
+        if (index >= text.length) fail('truncated JSON escape');
+        const escaped = text[index++];
+        if (escaped === 'u') {
+          if (!/^[0-9a-fA-F]{4}$/.test(text.slice(index, index + 4))) fail('invalid Unicode escape');
+          index += 4;
+        } else if (!'"\\/bfnrt'.includes(escaped)) {
+          fail('invalid JSON escape');
+        }
+      } else if (ch.charCodeAt(0) < 0x20) {
+        fail('unescaped JSON control character');
+      }
+    }
+    fail('unterminated JSON string');
+  };
+  const value = () => {
+    whitespace();
+    if (text[index] === '{') {
+      index += 1;
+      whitespace();
+      const keys = new Set();
+      if (text[index] === '}') { index += 1; return; }
+      while (index < text.length) {
+        const key = stringToken();
+        if (keys.has(key)) fail(`duplicate JSON key: ${key}`);
+        keys.add(key);
+        whitespace();
+        if (text[index++] !== ':') fail('expected JSON colon');
+        value();
+        whitespace();
+        if (text[index] === '}') { index += 1; return; }
+        if (text[index++] !== ',') fail('expected JSON object delimiter');
+        whitespace();
+      }
+      fail('unterminated JSON object');
+    }
+    if (text[index] === '[') {
+      index += 1;
+      whitespace();
+      if (text[index] === ']') { index += 1; return; }
+      while (index < text.length) {
+        value();
+        whitespace();
+        if (text[index] === ']') { index += 1; return; }
+        if (text[index++] !== ',') fail('expected JSON array delimiter');
+      }
+      fail('unterminated JSON array');
+    }
+    if (text[index] === '"') { stringToken(); return; }
+    const tail = text.slice(index);
+    const literal = /^(?:true|false|null)/.exec(tail);
+    if (literal) { index += literal[0].length; return; }
+    const number = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(tail);
+    if (number) { index += number[0].length; return; }
+    fail('invalid JSON value');
+  };
+  value();
+  whitespace();
+  if (index !== text.length) fail('trailing bytes after JSON envelope');
+}
+
+function exactObjectKeys(value, expected, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
+    throw new Error(`${label} fields must be exactly ${wanted.join(',')}`);
+  }
+}
+
+function safeNonnegativeInteger(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${label} must be a nonnegative safe integer`);
+  }
+}
+
+function parseAgyEnvelopeText(text) {
+  assertNoDuplicateJsonKeys(text);
+  let envelope;
+  try { envelope = JSON.parse(text); } catch (error) {
+    throw new Error(`invalid JSON: ${error.message}`);
+  }
+  exactObjectKeys(
+    envelope,
+    ['conversation_id', 'duration_seconds', 'num_turns', 'response', 'status', 'usage'],
+    'agy envelope',
+  );
+  if (typeof envelope.conversation_id !== 'string' || envelope.conversation_id.length === 0) {
+    throw new Error('agy envelope conversation_id must be a non-empty string');
+  }
+  if (typeof envelope.duration_seconds !== 'number'
+      || !Number.isFinite(envelope.duration_seconds) || envelope.duration_seconds < 0) {
+    throw new Error('agy envelope duration_seconds must be a nonnegative finite number');
+  }
+  safeNonnegativeInteger(envelope.num_turns, 'agy envelope num_turns');
+  if (typeof envelope.response !== 'string') throw new Error('agy envelope response must be a string');
+  if (envelope.status !== 'SUCCESS') throw new Error('agy envelope status must equal SUCCESS');
+  exactObjectKeys(
+    envelope.usage,
+    ['cache_read_tokens', 'input_tokens', 'output_tokens', 'thinking_tokens', 'total_tokens'],
+    'agy envelope usage',
+  );
+  for (const key of ['cache_read_tokens', 'input_tokens', 'output_tokens', 'thinking_tokens', 'total_tokens']) {
+    safeNonnegativeInteger(envelope.usage[key], `agy envelope usage.${key}`);
+  }
+  return {
+    response: envelope.response,
+    usage: {
+      total_tokens: envelope.usage.total_tokens,
+      input_tokens: envelope.usage.input_tokens,
+      output_tokens: envelope.usage.output_tokens,
+      cache_read_tokens: envelope.usage.cache_read_tokens,
+      source: 'agy-json',
+    },
+  };
+}
+
+function parseAgyEnvelopeFile(logPath) {
+  return parseAgyEnvelopeText(fs.readFileSync(logPath, 'utf8'));
+}
+
 function parseLog(logPath, declaredFormat) {
   // declaredFormat is the DISPATCHER's declaration of what stream format it invoked
   // (manifest log_format / --format): the dispatcher knows its own runner flags, so
@@ -268,7 +414,12 @@ function parseLog(logPath, declaredFormat) {
   if (format === 'codex-chrome') return { ...base, ...parseCodexChrome(text) };
   if (format === 'jsonl') return { ...base, ...parseJsonl(text) };
   if (format === 'pi-rpc') return { ...base, ...parsePiRpc(text) };
-  return base; // plain: honest nulls (agy pseudo-TTY / cc-shim text carry no usage)
+  if (format === 'agy-json') {
+    const derived = parseAgyEnvelopeText(text);
+    const { source, ...tokens } = derived.usage;
+    return { ...base, tokens, usage_source: source };
+  }
+  return base; // plain: honest nulls (legacy/ad-hoc text and cc-shim carry no usage)
 }
 
 // --- liveness probes ------------------------------------------------------------
@@ -545,7 +696,10 @@ function main(argv) {
     else if (a === '--stall-secs') { args.stallSecs = Number(argv[++i]); }
     else if (a === '--summary') { args.summary = true; }
     else if (a === '--usage-only') { args.usageOnly = true; }
+    else if (a === '--agy-envelope') { args.agyEnvelope = true; }
     else if (a === '--list') { args.list = true; }
+    else if (a === '--panels') { args.panels = true; }
+    else if (a === '--panel') { args.panel = argv[++i]; }
     else if (a === '--reap') { args.reap = true; }
     else if (a === '--days') { args.days = Number(argv[++i]); }
     else if (a === '--dry-run') { args.dryRun = true; }
@@ -564,11 +718,26 @@ function main(argv) {
     process.stderr.write('--stall-secs must be a positive number\n');
     return 2;
   }
-  if (args.format && !['codex-chrome', 'jsonl', 'pi-rpc', 'plain', 'auto'].includes(args.format)) {
+  if (args.format && !['codex-chrome', 'jsonl', 'pi-rpc', 'agy-json', 'plain', 'auto'].includes(args.format)) {
     // usage-only must still honor its never-fail discipline
     if (args.usageOnly) { process.stdout.write('null\n'); return 0; }
-    process.stderr.write('--format must be codex-chrome|jsonl|pi-rpc|plain|auto\n');
+    process.stderr.write('--format must be codex-chrome|jsonl|pi-rpc|agy-json|plain|auto\n');
     return 2;
+  }
+
+  if (args.agyEnvelope) {
+    if (!args.log || args.usageOnly || args.summary || args.run || args.manifest
+        || args.list || args.reap) {
+      process.stderr.write('--agy-envelope requires only --log <path>\n');
+      return 2;
+    }
+    try {
+      process.stdout.write(`${JSON.stringify(parseAgyEnvelopeFile(args.log))}\n`);
+      return 0;
+    } catch (error) {
+      process.stderr.write(`agy envelope invalid: ${error.message}\n`);
+      return 1;
+    }
   }
 
   if (args.usageOnly) {
@@ -586,11 +755,83 @@ function main(argv) {
     return 0;
   }
 
+  if (args.panels || args.panel) {
+    const dir = manifestDir(args.dir);
+    const nowMs = Date.now();
+    const summarize = (m, file) => {
+      const seats = (Array.isArray(m.seats) ? m.seats : []).map((s) => {
+        const seat = { ...s };
+        if (s.status === 'in_flight' && s.started_at) {
+          seat.elapsed_seconds = Math.max(0, Math.floor((nowMs - Date.parse(s.started_at)) / 1000));
+        }
+        return seat;
+      });
+      // A dead owner must not report a live seat: Ctrl-C / SIGKILL skips end(), and
+      // "seat in flight" about a process that died hours ago is exactly the false
+      // claim this feature exists to remove (review 2026-08-21, MUST-FIX 3).
+      const ownerProbe = Number.isInteger(m.pid) ? probePid(m.pid) : 'n/a';
+      const ownerAlive = m.ended_at || ownerProbe === 'n/a' ? null : ownerProbe === 'alive';
+      if (ownerAlive === false) {
+        for (const s of seats) { if (s.status === 'in_flight') s.status = 'in_flight_stale'; }
+      }
+      const inFlight = seats.find((s) => s.status === 'in_flight' || s.status === 'in_flight_stale') || null;
+      return {
+        file,
+        owner_alive: ownerAlive,
+        ticket: m.ticket,
+        logical_plan_id: m.logical_plan_id,
+        generation: m.generation,
+        verdict: m.verdict,
+        started_at: m.started_at,
+        updated_at: m.updated_at,
+        ended_at: m.ended_at,
+        deadline_remaining_seconds: m.ended_at || !m.deadline_at
+          ? null
+          : Math.floor((Date.parse(m.deadline_at) - nowMs) / 1000),
+        seats_done: seats.filter((s) => s.status === 'done').length,
+        seats_failed: seats.filter((s) => s.status === 'failed').length,
+        seats_pending: seats.filter((s) => s.status === 'pending').length,
+        in_flight: inFlight,
+        seats,
+      };
+    };
+    let files = [];
+    try {
+      files = fs.readdirSync(dir).filter((f) => f.startsWith('panel-') && f.endsWith('.manifest.json'));
+    } catch (_e) { /* empty runs dir */ }
+    if (args.panel) {
+      let target = null;
+      if (fs.existsSync(args.panel)) target = args.panel;
+      else {
+        const hits = files.filter((f) => f.startsWith(`panel-${args.panel}`) || f.startsWith(args.panel));
+        if (hits.length === 1) target = path.join(dir, hits[0]);
+        else {
+          process.stderr.write(`panel not found or ambiguous (${hits.length} matches) for: ${args.panel}\n`);
+          return 3;
+        }
+      }
+      let m;
+      try { m = readManifest(target); } catch (_e) {
+        process.stdout.write(`${JSON.stringify({ error: 'panel manifest unreadable', file: target })}\n`);
+        return 3;
+      }
+      process.stdout.write(`${JSON.stringify(summarize(m, target))}\n`);
+      return 0;
+    }
+    const out = [];
+    for (const f of files) {
+      try { out.push(summarize(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')), path.join(dir, f))); } catch (_e) { /* skip */ }
+    }
+    out.sort((a2v, b2v) => String(b2v.started_at || '').localeCompare(String(a2v.started_at || '')));
+    process.stdout.write(`${JSON.stringify(out.slice(0, 10))}\n`);
+    return 0;
+  }
+
   if (args.list) {
     const dir = manifestDir(args.dir);
     let entries = [];
     try {
-      entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json'));
+      entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json') && !f.startsWith('panel-'));
     } catch (_e) { /* absent dir → empty list */ }
     const out = [];
     for (const f of entries) {

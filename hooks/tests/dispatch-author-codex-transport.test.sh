@@ -988,4 +988,28 @@ assert_eq "$DISPATCH_RC" "2" "timeout notaduration: dispatcher exit 2"
 assert_eq "$DISPATCH_STATUS" "precondition_failed" "timeout notaduration: status"
 assert_eq "$(fake_run_count)" "0" "timeout notaduration: runner never starts"
 
+# ---------------------------------------------------------------------------
+# codex 必須帶 --skip-git-repo-check
+#
+# dispatch-author 在 mkdtemp 出來的臨時目錄執行（dispatch-plan-review.js 也是
+# `cwd: tempDir`），那不是 git repo。codex 不帶該旗標時直接拒跑：
+#     Not inside a trusted directory and --skip-git-repo-check was not specified.
+# 而它的輸出是 **stdout 0 bytes**，harness 仍會產出帶 verdict 的完整 artifact
+# ⇒ 只讀 verdict 的呼叫端會以為審查跑過了。
+#
+# ⚠️ `~/.codex/config.toml` 的 `[projects."/tmp"] trust_level="trusted"`
+#    **不繼承到子目錄**，所以「把 /tmp 設成 trusted」不是替代解。
+#
+# 2026-08-10 實測（PEACE A-2 計畫複審）：
+#   非 git 目錄 + 無旗標 → rc=1、stdout 0 bytes、Not inside a trusted directory
+#   同命令 + --skip-git-repo-check → rc=0、輸出正常
+# ---------------------------------------------------------------------------
+run_dispatch exact --runner codex --model gpt-5.5 --effort xhigh
+assert_authored "skip-git-repo-check: baseline authored"
+if [ -r "$FAKE_ARGV_LOG" ] && grep -qx -- '--skip-git-repo-check' "$FAKE_ARGV_LOG"; then
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+else
+  fail "codex argv must include --skip-git-repo-check (dispatch runs from a non-git mkdtemp cwd; without it codex refuses and emits zero bytes while the harness still reports a verdict)"
+fi
+
 finalize_test

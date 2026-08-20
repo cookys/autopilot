@@ -10,24 +10,32 @@ const { runStatusCli } = require('../src/status/cli');
 const { runCampaignCli } = require('../src/campaign/cli');
 const { runMergeCli } = require('../src/merge/cli');
 const {
+  createStrictL5ProviderBootstrap,
+} = require('../src/readiness/provider-bootstrap');
+const {
   AutopilotEngine,
   compileCampaignDispositionPolicy,
   compileCampaignDispositionProvider,
   loadCampaignDispositionAuthority,
 } = require('../src/engine');
+const {
+  devFlowAdmissionRejection,
+  validateManagedDevFlowAdmission,
+  campaignCarriesMissionProjection,
+} = require('../scripts/session-mode');
 
 function printHelp() {
   process.stdout.write(`Usage:
   node bin/autopilot.js dispatch review [dispatch-review args...]
   node bin/autopilot.js engine review-loop [resolve-review-loop args...]
-  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume]
+  node bin/autopilot.js engine implement-review --campaign-contract <file> [--campaign-seal <file>] [--campaign-ledger <file>] [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--lifecycle-receipt <file>] [--mission-prepared <receipt>] --prompt-file <file> --branch <branch> --base <sha> [--cwd <repo>] [--max-rounds N] [--verify-cmd <shell command>] [--no-verify-first] [--require-qualified-reviewer|--allow-unqualified-reviewer] [--no-review-spec] [--resume] [--prior-status none|no_verdict|ambiguous]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor> [--json]
   node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]
   node bin/autopilot.js status task --root-run-id <id> [--json]
   node bin/autopilot.js campaign <inspect|status|resume> --campaign-id <id> [--ledger <file>]
   node bin/autopilot.js merge execute --request <file> [--json]
-  node bin/autopilot.js mission <prepare|init|grant|consume|control|finalize-abort|check|receipt> [mission args...]
+  node bin/autopilot.js mission <prepare|successor|init|grant|consume|control|finalize-abort|check|receipt> [mission args...]
 
 Commands:
   dispatch review   Delegate to the read-only heterogeneous review dispatcher.
@@ -47,12 +55,14 @@ Commands:
                     Non-empty review findings require a separately supplied
                     depth-0 disposition authority; reviewer output cannot
                     self-authorize.
+                    AUTOPILOT_LEVEL=l5 additionally requires the compiled,
+                    host-owned exact-roster provider-readiness trust root.
   harness report    Emit read-only harness capability state and stale flags.
   endpoints         Manage endpoint credentials (list/which/set/doctor/init; --json).
   status            State overview or task DONE/NOT DONE from authoritative receipts.
   campaign          Inspect/status durable campaign state or determine whether it is resumable.
   merge             Execute only an explicitly sealed merge request and emit a receipt.
-  mission           Mission convergence control: prepare|init|grant|consume|control|
+  mission           Mission convergence control: prepare|successor|init|grant|consume|control|
                     finalize-abort|check|receipt over the canonical Mission runtime/reducer
                     (no task DONE/closeout authority; tokens are never printed or read from argv).
 
@@ -65,6 +75,7 @@ Exit codes:
 function parseImplementReviewArgs(rawArgs) {
   const output = {
     promptFile: null,
+    priorStatus: null,
     branch: null,
     base: null,
     cwd: null,
@@ -95,6 +106,15 @@ function parseImplementReviewArgs(rawArgs) {
         return { error: '--prompt-file requires a value' };
       }
       output.promptFile = value;
+      i += 2;
+      continue;
+    }
+    if (arg === '--prior-status') {
+      const value = rawArgs[i + 1];
+      if (!value || !['none', 'no_verdict', 'ambiguous'].includes(value)) {
+        return { error: '--prior-status must be none|no_verdict|ambiguous' };
+      }
+      output.priorStatus = value;
       i += 2;
       continue;
     }
@@ -358,6 +378,38 @@ if (args[0] === 'engine') {
         })}\n`);
         process.exit(1);
       }
+      if (!parsed.legacyUnmanaged
+          && campaignCarriesMissionProjection(
+            parsed.campaignContract, parsed.cwd || process.cwd(),
+          )) {
+        const admission = validateManagedDevFlowAdmission({
+          repoRoot: parsed.cwd || process.cwd(),
+          effectiveLevel: level,
+          campaignContract: parsed.campaignContract,
+        });
+        if (!admission.valid) {
+          process.stdout.write(`${JSON.stringify(devFlowAdmissionRejection(admission.reason))}\n`);
+          process.exit(1);
+        }
+      }
+      let strictL5Bootstrap = null;
+      if (level === 'l5') {
+        try {
+          strictL5Bootstrap = createStrictL5ProviderBootstrap({
+            cwd: parsed.cwd || process.cwd(),
+          });
+        } catch (error) {
+          process.stdout.write(`${JSON.stringify({
+            status: 'blocked',
+            phase: 'provider_readiness',
+            reason: error.message || String(error),
+            rejection_code: error.code || 'strict_l5_provider_bootstrap_invalid',
+            dispatcher_called: false,
+            model_calls: 0,
+          })}\n`);
+          process.exit(1);
+        }
+      }
       let campaignDispositionProvider = null;
       try {
         if (parsed.campaignDispositionAuthority) {
@@ -385,6 +437,10 @@ if (args[0] === 'engine') {
       const engineOptions = {
         cwd: parsed.cwd || process.cwd(),
         campaignDispositionProvider,
+        ...(strictL5Bootstrap ? {
+          providerReadinessAuthority: strictL5Bootstrap.providerReadinessAuthority,
+          qualificationProvider: strictL5Bootstrap.qualificationProvider,
+        } : {}),
       };
       if (parsed.missionPrepared) {
         engineOptions.missionPreparedReceiptPath = path.resolve(
@@ -393,7 +449,9 @@ if (args[0] === 'engine') {
         );
       }
       const result = new AutopilotEngine(engineOptions)
-        .runImplementationReviewLoop(parsed);
+        .runImplementationReviewLoop(strictL5Bootstrap
+          ? { ...parsed, roster: strictL5Bootstrap.roster }
+          : parsed);
       process.stdout.write(`${JSON.stringify(result)}\n`);
       process.exit(result.status === 'converged' ? 0 : 1);
     }

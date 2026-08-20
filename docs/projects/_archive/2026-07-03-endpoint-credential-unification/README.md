@@ -1,6 +1,6 @@
 # Endpoint Credential Unification + Declarative Invoke Infra
 
-- **Plan**: [`docs/plans/2026-07-03-endpoint-credential-unification.md`](../../plans/2026-07-03-endpoint-credential-unification.md)
+- **Plan**: [`docs/plans/2026-07-03-endpoint-credential-unification.md`](../../../plans/2026-07-03-endpoint-credential-unification.md)
 - **Branch**: `feat/v2.31.6-endpoint-credential-unification`
 - **Target version**: v2.31.6
 

@@ -1,5 +1,8 @@
 # Controller Execution Discipline
 
+Status: ✅ Shipped in v2.34.1 — final qualification repair merged as
+`86f202f007505ee44125e555011bf5ce82f76a41`
+
 ## Background
 
 The repair-lineage project closed the campaign-local branch, worktree, provider-session, and

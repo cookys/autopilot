@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mission_execution_graph",
+  "nodes": [
+    {
+      "id": "hook-test-harness-determinism",
+      "source_plan_ids": [
+        "plan-63569251ec70ea5c0693592d9367cc5ac3b4be93df9ddd2486b19e53d04ca237"
+      ],
+      "source_rubric_ids": [
+        "R100165811441289796346352074880098019760389831596837483907400159407916002829225",
+        "R15325615582390168565858046089726037507092244235125335508129908173280407469583",
+        "R20301074936712388212646380381285049028493224535732001274570712380998563989655",
+        "R4351135090090251627408516034920709435290562472596202719449760275725505189459",
+        "R53149989101976382919584120414739833456600916080644941127573741931784188140675",
+        "R83408782490328954365767098812821396986026016827065768248359999151742745210409",
+        "R8505261041960211171745267926595506375676990500691775856342330626869001824753",
+        "R94267627794829628630412122246208222891389674040530586564702556067583771170060"
+      ],
+      "dependencies": [],
+      "acceptance_ids": [
+        "base-red-qualified",
+        "semantic-quiescence-measurement",
+        "discriminating-timing-control",
+        "classification-preservation",
+        "stdin-eof-isolation",
+        "production-boundary-untouched",
+        "focused-and-repository-green",
+        "honest-lifecycle-closure"
+      ],
+      "verification_commands": [
+        "bash hooks/tests/dispatch-output-quiescence.test.sh",
+        "timeout 8s bash hooks/tests/session-start.test.sh < <(sleep 30)",
+        "AUTOPILOT_TEST_TIMING_FACTOR=3 bash hooks/tests/run.sh",
+        "bash scripts/validate.sh",
+        "node scripts/sync-version.js --check",
+        "node scripts/check-hook-inventory.js --check",
+        "bash scripts/sync-all.sh --check"
+      ],
+      "gate_attempt_budget": 3,
+      "reservation": {
+        "campaigns": 1,
+        "wall_seconds": 7200,
+        "tool_calls": 300,
+        "engine_attempts": 1,
+        "external_wait_seconds": 1800,
+        "canonical_changed_files": 7,
+        "output_bytes": 1000000
+      },
+      "campaign": {
+        "profile": "standard",
+        "allowed_path_prefixes": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-02-hook-test-harness-determinism.md",
+          "docs/plans/2026-08-02-hook-test-harness-determinism.rubric.md",
+          "docs/projects/2026-08-02-hook-test-harness-determinism",
+          "docs/projects/INDEX.md",
+          "hooks/tests"
+        ],
+        "max_changed_files": 7,
+        "baseline_churn": 400,
+        "max_growth_ratio": 1.5,
+        "max_extra_churn": 200,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "spec": {
+          "path": "docs/plans/2026-08-02-hook-test-harness-determinism.md",
+          "section": "Deliverable contract"
+        },
+        "required_paths": [
+          "docs/BACKLOG.md",
+          "docs/plans/2026-08-02-hook-test-harness-determinism.md",
+          "docs/plans/2026-08-02-hook-test-harness-determinism.rubric.md",
+          "docs/projects/2026-08-02-hook-test-harness-determinism/README.md",
+          "docs/projects/2026-08-02-hook-test-harness-determinism/dev-info.md",
+          "docs/projects/INDEX.md",
+          "hooks/tests/dispatch-output-quiescence.test.sh",
+          "hooks/tests/lib.sh",
+          "hooks/tests/run.sh",
+          "hooks/tests/session-start.test.sh"
+        ],
+        "output_paths": [
+          "docs/BACKLOG.md",
+          "docs/projects/2026-08-02-hook-test-harness-determinism/README.md",
+          "docs/projects/2026-08-02-hook-test-harness-determinism/dev-info.md",
+          "docs/projects/INDEX.md",
+          "hooks/tests/dispatch-output-quiescence.test.sh",
+          "hooks/tests/lib.sh",
+          "hooks/tests/session-start.test.sh"
+        ],
+        "required_change_paths": [
+          "docs/BACKLOG.md",
+          "docs/projects/2026-08-02-hook-test-harness-determinism/README.md",
+          "docs/projects/2026-08-02-hook-test-harness-determinism/dev-info.md",
+          "docs/projects/INDEX.md",
+          "hooks/tests/dispatch-output-quiescence.test.sh",
+          "hooks/tests/session-start.test.sh"
+        ]
+      }
+    }
+  ],
+  "calculated_depth": 1,
+  "calculated_batches": 1,
+  "graph_digest": "71426e3935c913266e6140334c12e0671ab1df86b9f95ea07b49d5c78050f087"
+}

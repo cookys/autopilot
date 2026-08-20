@@ -1,6 +1,6 @@
 # Dispatch Observability Phase 2 — Nudge / Directive Channel
 
-Status: in progress (foreman /l5 run `foreman-nudge-p2-1784048903`)
+Status: ✅ SHIPPED v2.32.33 — feature `0a8fb912`, merged as `229e3b5`
 Base: v2.32.32 (`6f7ba42`) — Phase 1 dispatch lineage present.
 Version target: v2.32.33 (PATCH).
 

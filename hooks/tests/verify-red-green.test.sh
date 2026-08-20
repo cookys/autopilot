@@ -20,12 +20,15 @@ create_test_repo() {
     $GIT init "$repo" >/dev/null 2>&1
 
     printf '%s\n' "$base_calc" > "$repo/calc.sh"
-    $GIT -C "$repo" add calc.sh >/dev/null 2>&1
+    printf '%s\n' '#!/usr/bin/env bash' "$test_content" > "$repo/calc.test.sh"
+    chmod +x "$repo/calc.test.sh"
+    $GIT -C "$repo" add calc.sh calc.test.sh >/dev/null 2>&1
     $GIT -C "$repo" commit -m base >/dev/null 2>&1
     local base_sha; base_sha=$($GIT -C "$repo" rev-parse HEAD)
 
     printf '%s\n' "$head_calc" > "$repo/calc.sh"
-    printf '%s\n' "$test_content" > "$repo/calc.test.sh"
+    printf '%s\n' '#!/usr/bin/env bash' "$test_content # head artifact" > "$repo/calc.test.sh"
+    chmod +x "$repo/calc.test.sh"
     $GIT -C "$repo" add calc.sh calc.test.sh >/dev/null 2>&1
     $GIT -C "$repo" commit -m "head with test" >/dev/null 2>&1
     local head_sha; head_sha=$($GIT -C "$repo" rev-parse HEAD)
@@ -54,13 +57,54 @@ json_field() { echo "$1" | grep -o "\"$2\": *\"[^\"]*\"" | head -1 | cut -d'"' -
 #    test applied on base => RED (3 != 5); head => GREEN.
 test_validated() {
     local repo="$TEST_TMP/repo_validated" vc="$TEST_TMP/verify_validated.sh"
+    local receipt="$TEST_TMP/receipt_validated.json"
     local shas; shas=$(create_test_repo "$repo" "echo 3" "echo 5" '[ "$(bash calc.sh)" = "5" ]')
     local base head; base=${shas%% *}; head=${shas##* }
     create_verify_cmd "$vc"
-    local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$vc" --repo "$repo" 2>&1); local ec=$?
+    local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$repo/calc.test.sh" --repo "$repo" --assertion-artifact calc.test.sh --receipt-out "$receipt" 2>&1); local ec=$?
     assert_eq "$ec" "0" "VALIDATED exits 0"
     assert_eq "$(json_field "$out" verdict)" "VALIDATED" "VALIDATED verdict"
     assert_contains "$out" '"red_green_validated": true' "VALIDATED sets red_green_validated true"
+    assert_file_exists "$receipt" "VALIDATED writes a polarity receipt"
+    assert_contains "$(cat "$receipt")" '"artifact_type": "red_green_polarity_receipt"' "receipt has polarity artifact type"
+    assert_contains "$(cat "$receipt")" '"expected_red_exit_class": "exact_exit_code"' "receipt binds exact assertion red exit class"
+    assert_contains "$(cat "$receipt")" '"expected_red_exit_code": 1' "receipt binds the expected assertion failure code"
+    local validated; validated=$("$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$repo/calc.test.sh" --assertion-artifact calc.test.sh 2>&1); ec=$?
+    assert_eq "$ec" "0" "matching polarity receipt validates"
+    assert_contains "$validated" '"status":"validated"' "matching polarity receipt returns validated status"
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --base "$head" --assertion-artifact calc.test.sh >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "1" "cross-base polarity receipt is rejected"
+    local other_vc="$TEST_TMP/verify_validated_other.sh"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$other_vc"
+    chmod +x "$other_vc"
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$other_vc" --assertion-artifact calc.test.sh >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "1" "cross-command polarity receipt is rejected"
+    "$SCRIPT" --validate --receipt "$receipt" --repo "$repo" --verify-cmd "$repo/calc.test.sh" --assertion-artifact calc.sh >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "1" "cross-assertion polarity receipt is rejected"
+
+    local unrelated="$TEST_TMP/unrelated-assertion.sh"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$unrelated"; chmod +x "$unrelated"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$unrelated" --repo "$repo" --assertion-artifact calc.test.sh >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "3" "named artifact not attested by unrelated command is inconclusive"
+    local mutate="$TEST_TMP/mutate-verify.sh"
+    printf '%s\n' '#!/usr/bin/env bash' 'printf x >> "$0"; exit 0' > "$mutate"; chmod +x "$mutate"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$mutate" --repo "$repo" >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "3" "verification command byte mutation is inconclusive"
+    local sentinel="$TEST_TMP/exit125-verify.sh"
+    printf '%s\n' '#!/usr/bin/env bash' 'grep -q "echo 5" "$1/calc.sh" && exit 0 || exit 125' > "$sentinel"; chmod +x "$sentinel"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "3" "base infrastructure exit 125 is inconclusive"
+    local infra
+    for infra in 124 126 127 137 139 143; do
+      printf '%s\n' '#!/usr/bin/env bash' 'grep -q "echo 5" "$1/calc.sh" && exit 0' "exit $infra" > "$sentinel"; chmod +x "$sentinel"
+      "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" >/dev/null 2>&1; ec=$?
+      assert_eq "$ec" "3" "base infrastructure exit $infra is inconclusive"
+    done
+    printf '%s\n' '#!/usr/bin/env bash' 'grep -q "echo 5" "$1/calc.sh" && exit 0 || exit 2' > "$sentinel"; chmod +x "$sentinel"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "3" "unexpected ordinary nonzero cannot satisfy exact assertion polarity"
+    "$SCRIPT" --range "$base..$head" --verify-cmd "$sentinel" --repo "$repo" --expected-red-exit-code 2 >/dev/null 2>&1; ec=$?
+    assert_eq "$ec" "0" "caller-declared exact ordinary assertion exit code validates"
 }
 
 # 1b. VALIDATED with test at a NESTED path (tests/unit_test.sh) — regression guard:
@@ -87,6 +131,75 @@ VC_EOF
     local out; out=$("$SCRIPT" --range "$base..$head" --verify-cmd "$vc" --repo "$repo" 2>&1); local ec=$?
     assert_eq "$ec" "0" "nested-path VALIDATED exits 0"
     assert_eq "$(json_field "$out" verdict)" "VALIDATED" "nested-path VALIDATED verdict"
+}
+
+# 1c. A repo-owned verify script must execute from the matching detached
+#     worktree. Reusing the caller checkout's HEAD script makes the base run
+#     inspect HEAD production code and falsely report NOT_RED_ON_BASE.
+test_repo_owned_verify_cmd_uses_worktree_copy() {
+    local repo="$TEST_TMP/repo_owned_verify"
+    $GIT init "$repo" >/dev/null 2>&1
+    mkdir -p "$repo/tests"
+    printf 'echo 3\n' > "$repo/calc.sh"
+    cat > "$repo/tests/repo-owned.test.sh" <<'TEST_EOF'
+#!/usr/bin/env bash
+repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
+[ "$(bash "$repo_dir/calc.sh")" = "3" ]
+TEST_EOF
+    chmod +x "$repo/tests/repo-owned.test.sh"
+    $GIT -C "$repo" add -A >/dev/null 2>&1
+    $GIT -C "$repo" commit -m base >/dev/null 2>&1
+    local base; base=$($GIT -C "$repo" rev-parse HEAD)
+
+    printf 'echo 5\n' > "$repo/calc.sh"
+    cat > "$repo/tests/repo-owned.test.sh" <<'TEST_EOF'
+#!/usr/bin/env bash
+repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
+[ "$(bash "$repo_dir/calc.sh")" = "5" ]
+TEST_EOF
+    chmod +x "$repo/tests/repo-owned.test.sh"
+    $GIT -C "$repo" add -A >/dev/null 2>&1
+    $GIT -C "$repo" commit -m head >/dev/null 2>&1
+    local head; head=$($GIT -C "$repo" rev-parse HEAD)
+
+    local out
+    out=$("$SCRIPT" --range "$base..$head" \
+        --verify-cmd "$repo/tests/repo-owned.test.sh" --repo "$repo" 2>&1)
+    local ec=$?
+    assert_eq "$ec" "0" "repo-owned verify-cmd VALIDATED exits 0"
+    assert_eq "$(json_field "$out" verdict)" "VALIDATED" "repo-owned verify-cmd runs from each worktree"
+    assert_contains "$out" '"tests/repo-owned.test.sh"' "repo-owned negative control is applied to base"
+}
+
+# 1d. A repo-owned verify executable introduced only at head is infrastructure,
+#     not valid RED evidence. The base worktree must report INCONCLUSIVE instead
+#     of treating command-not-found as a product/test failure.
+test_repo_owned_verify_cmd_missing_on_base_is_inconclusive() {
+    local repo="$TEST_TMP/repo_owned_verify_missing_base"
+    $GIT init "$repo" >/dev/null 2>&1
+    printf 'echo 3\n' > "$repo/calc.sh"
+    $GIT -C "$repo" add -A >/dev/null 2>&1
+    $GIT -C "$repo" commit -m base >/dev/null 2>&1
+    local base; base=$($GIT -C "$repo" rev-parse HEAD)
+
+    mkdir -p "$repo/tests" "$repo/tools"
+    printf '[ "$(bash calc.sh)" = "3" ]\n' > "$repo/tests/new.test.sh"
+    cat > "$repo/tools/new-verify.sh" <<'VERIFY_EOF'
+#!/usr/bin/env bash
+bash tests/new.test.sh
+VERIFY_EOF
+    chmod +x "$repo/tools/new-verify.sh"
+    $GIT -C "$repo" add -A >/dev/null 2>&1
+    $GIT -C "$repo" commit -m "head adds verify command" >/dev/null 2>&1
+    local head; head=$($GIT -C "$repo" rev-parse HEAD)
+
+    local out
+    out=$("$SCRIPT" --range "$base..$head" \
+        --verify-cmd "$repo/tools/new-verify.sh" --repo "$repo" 2>&1)
+    local ec=$?
+    assert_eq "$ec" "3" "base-missing repo-owned verify-cmd exits 3"
+    assert_eq "$(json_field "$out" verdict)" "INCONCLUSIVE" "base-missing repo-owned verify-cmd is inconclusive"
+    assert_contains "$out" 'base-verify-cmd-missing-or-not-executable' "base-missing reason names verify-cmd infrastructure"
 }
 
 # 2. NOT_RED_ON_BASE: test only checks file existence (true at base too) => base GREEN.
@@ -193,6 +306,8 @@ test_verify_cmd_dirname_plain_file() {
 
 test_validated
 test_validated_nested
+test_repo_owned_verify_cmd_uses_worktree_copy
+test_repo_owned_verify_cmd_missing_on_base_is_inconclusive
 test_not_red_on_base
 test_not_green_on_head
 test_inconclusive_no_test_files

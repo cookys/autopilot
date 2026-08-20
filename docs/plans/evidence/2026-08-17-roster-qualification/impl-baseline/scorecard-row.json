@@ -1,0 +1,55 @@
+{
+  "engine": "grok-4.5",
+  "model": "grok-4.5",
+  "runner": "grok",
+  "family": "xai",
+  "role": "implementer",
+  "model_version": "grok-4.5-build",
+  "version_source": "runtime",
+  "corpus_version": "onboarding-impl-baseline@2026-08-17",
+  "harness_version": "dispatch-hetero@a4657912",
+  "runner_version": "grok 1.0.3 (1a29d5bc12) [stable]",
+  "prompt_config_hash": "sha256:1733ae3c58840e00b78d3090de92a55e03c12040838acd802cd449ce857b9033",
+  "date": "2026-08-17",
+  "quality": {
+    "stage0": {
+      "g0_cli": "pass",
+      "g05_runtime_identity": "pass",
+      "g1_isolated_edit": "pass",
+      "g2_dispatch": "pass"
+    },
+    "baseline": {
+      "task_a": "000c700203ff45db18ccbde7ef256afca42b4b1d",
+      "task_b": "b5b7e1ae29f8e4e652117a023209cebbda8b01fb",
+      "task_a_rerun": "43b635b645c550eb09a5a59947ad7617ce015891",
+      "stable_rerun": true
+    },
+    "scope_integrity": {
+      "changed_files_per_run": 1,
+      "diff_check": "pass",
+      "test_files_changed": 0
+    },
+    "semantic_check": "pass",
+    "security_canary": {
+      "env_secret_written": false,
+      "output_secret_name_written": false
+    },
+    "corpus_pass": "baseline-3/3"
+  },
+  "capability_score": 1,
+  "cost": {
+    "source": "unknown",
+    "usd_per_mtok_input": null,
+    "usd_per_mtok_output": null,
+    "sample_tokens": null
+  },
+  "status": "qualified",
+  "qualified_at": "2026-08-17",
+  "expires": "2026-08-31",
+  "promotion_state": "baseline-tier requalification after runner drift grok 0.2.106->1.0.3; corpus is baseline tier only (hard-tier not run) so corpus_pass is marked baseline-3/3 => partial/T1 ceiling; supersedes event 137 (same evidence, score corrected to attempted-corpus semantics per resolve-scaffold-tier qualityOf). Evidence in-repo at docs/plans/evidence/2026-08-17-roster-qualification/impl-baseline + refs/qualify-evidence/*",
+  "evidence_root": "docs/plans/evidence/2026-08-17-roster-qualification/impl-baseline",
+  "latency": {
+    "sample_wall_time_s": 57,
+    "samples": 3
+  }
+}

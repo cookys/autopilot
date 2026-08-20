@@ -2,7 +2,7 @@
 
 > This project is **complete**. There is no in-flight state to hand off.
 > Canonical record: [`README.md`](./README.md) (goal, 6 success criteria, dogfood
-> results). Design rationale: [`../../plans/2026-06-22-ceo-fleet-autonomy.md`](../../plans/2026-06-22-ceo-fleet-autonomy.md).
+> results). Design rationale: [`../../plans/2026-06-22-ceo-fleet-autonomy.md`](../../../plans/2026-06-22-ceo-fleet-autonomy.md).
 
 ## Outcome
 

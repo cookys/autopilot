@@ -18,7 +18,7 @@ The v2.7.3 ship left a documented out-of-scope list. CEO applied focus-as-subtra
 | 5a | Antigravity empirical verify | ✅ **In scope** | `agy` 1.0.1 IS installed. `install-antigravity.sh` was written against a codelabs walkthrough and never run against real `agy` — exactly the "Spike before assert" gap. S. |
 | 3 | Manual SessionStart verify | 🚫 Human-only | Requires Claude Code restart; agents cannot. Low value — hooks reverted to b1ee7a6 known-good and preflight already verified both envelopes. Documented as a checkbox below. |
 | 5b | Codex empirical verify | 🚫 Blocked | `codex` not installed on this machine. |
-| 4 | Automated test infrastructure | ⏸ Separate L-track | L (~12hr); existing plan at [`docs/plans/2026-05-14-test-suite.md`](../../plans/2026-05-14-test-suite.md). An ocean, not a lake — bundling would blow scope. Stays independent. |
+| 4 | Automated test infrastructure | ⏸ Separate L-track | L (~12hr); existing plan at [`docs/plans/2026-05-14-test-suite.md`](../../../plans/2026-05-14-test-suite.md). An ocean, not a lake — bundling would blow scope. Stays independent. |
 
 **Scope decision**: this project = items **1 + 2 + 5a**. Confirmed by user as a Board Decision before execution.
 

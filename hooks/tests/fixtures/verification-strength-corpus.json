@@ -1,0 +1,916 @@
+{
+  "schema_version": 1,
+  "description": "D7 verification-strength calibration corpus",
+  "cases": [
+    {
+      "id": "case-001",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-002",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-003",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-004",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-005",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-006",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-007",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-008",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-009",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-010",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-011",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-012",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-013",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-014",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-015",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-016",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-017",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-018",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-019",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-020",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-021",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-022",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-023",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-024",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-025",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-026",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-027",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-028",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-029",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-030",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-031",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-032",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-033",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-034",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-035",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-036",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-037",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-038",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-039",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-040",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-041",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-042",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-043",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-044",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-045",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-046",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-047",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-048",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-049",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-050",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-051",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-052",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-053",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-054",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-055",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-056",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-057",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-058",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-059",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-060",
+      "strength": "strong",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.8,
+        "changed_line_coverage": 0.9,
+        "mutation_survival": 0.85,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-061",
+      "strength": "medium",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-062",
+      "strength": "medium",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-063",
+      "strength": "medium",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-064",
+      "strength": "medium",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-065",
+      "strength": "medium",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-066",
+      "strength": "weak",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-067",
+      "strength": "weak",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-068",
+      "strength": "weak",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-069",
+      "strength": "weak",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    },
+    {
+      "id": "case-070",
+      "strength": "weak",
+      "escaped": false,
+      "outcome": "caught",
+      "signals": {
+        "red_green": "VALIDATED",
+        "assertion_density": 0.3,
+        "changed_line_coverage": 0.5,
+        "mutation_survival": 0.5,
+        "oracle_present": true
+      }
+    }
+  ]
+}

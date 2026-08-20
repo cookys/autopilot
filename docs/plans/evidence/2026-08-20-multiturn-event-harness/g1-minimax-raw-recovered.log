@@ -1,0 +1,91 @@
+```json
+{
+  "verdict": "STOP",
+  "findings": [
+    {
+      "rubric_id": "MH1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Turn-script design and differencing argument (§4 P2 ceremony arm, §5 turn script, §5 verdict rules)",
+      "claim": "A 3-turn scripted session with turn text \"Continue.\" / \"Anything left before you finish? Wrap up.\" operationalizes \"the session has room,\" and identical arms across OFF@3 differencing eliminate ceremony cuing.",
+      "evidence": "Turn-2 \"Continue.\" is a generic continuation cue, not a session-start nudge. If the model skipped L-setup at session START (turn 1), a turn-2 continuation prompt gives no natural reason to revisit session-start work — the model has already passed the moment where setup was warranted. The \"session has room\" claim requires either (a) a turn-2 prompt that explicitly invites session-start ceremony (which would itself be a cue confounded with FULL-only priming) or (b) explicit acknowledgment that k=3 cannot measure L-setup at session START and the campaign is limited to mid-session ceremony. Additionally, the differencing argument is asymmetric: OFF@3 receiving identical turns removes the turn text as a marker cue, but turn structure (extra turns, \"Continue.\" cadence, \"Wrap up.\" close) is a metacognitive cue that interacts with the skill's session-shape rules. FULL@3 minus FULL@1 may measure prompt-compliance / extra-output-budget, not skill-driven ceremony.",
+      "evidence_reference": "§5 turn script and verdict rules; §1 Q1 ceremony hypothesis; §6 risk list (\"turn text that names the artifacts\")",
+      "repair": "Either (a) change turn-2 prompt to one that explicitly invites session-start ceremony and rely on FULL-vs-OFF differencing AT THE SAME prompt (FULL@3 minus OFF@3, not FULL@3 minus FULL@1) to remove the cue interaction, OR (b) narrow the campaign license to behaviors whose natural moment is mid-session (e.g., session-end wrap) and acknowledge L-setup at session START is not measurable with a turn-2 \"Continue.\" cue.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "MH2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Hook channel non-reactivity claim and P1 smoke design (§2.5, §4 P1, §6)",
+      "claim": "Zero-output hooks are non-reactive on this runtime; P1 planted-positive proves the channel works.",
+      "evidence": "Hook non-reactivity is asserted but not demonstrated — hooks can inject system-reminders, echo settings, or add per-event latency that is itself model-visible. The P1 smoke as written (\"planted-positive → all markers score 1; hook events present per turn\") does NOT prove hook-fired-per-turn: marker scoring is downstream of artifact existence (which can come from FS/git residue paths), not the hook channel. If the hook silently does not fire but the artifact appears via another path, the smoke still passes. The failure mode \"hook silent\" is indistinguishable from \"behavior absent\" in the events.jsonl-only channel.",
+      "evidence_reference": "§2.5 (\"Instrument hooks emit NOTHING to stdout/stderr (non-reactive)\"); §4 P1 description; §6 risk list",
+      "repair": "P1 smoke must (1) include explicit per-turn event-count assertion (events.jsonl line count equals turn count) BEFORE marker scoring, (2) run a hooked-vs-unhooked latency and system-reminder diff measurement at least once during smoke, (3) include a planted fixture with NO behavior that nonetheless produces hook events (proving hooks fire independent of behavior), (4) fail-fast if any planted-positive session has hook-event count less than turn count.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "MH3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Verdict-rule completeness and statistical separation (§5)",
+      "claim": "§5 covers all cells, skill-does-not-drive depends on F2 firing, and 3 reps separate ≥2/3 from ≤1/3.",
+      "evidence": "(a) F2 lives in a different task fixture than the ceremony markers. Its firing proves THAT fixture's multi-turn channel works, not the ceremony tasks' channels — the dependency is broken cross-fixture. (b) The outcome table is missing a cell: FULL@3 ≥ 2/3 AND OFF@3 ≥ 2/3 simultaneously (both arms show the marker) is not explicitly classified; the rule \"OFF@3 ≥ 2/3 → inadmissible\" subsumes it but the table does not make the FULL@3-vs-OFF@3 ordering explicit. (c) 3 reps with threshold ≥2/3 vs ≤1/3 gives zero margin: a 2/3 vs 1/3 split is not statistically distinguishable from 1/3 vs 0/3 by chance under any reasonable model — the predecessor's small-n lesson applies directly.",
+      "evidence_reference": "§5 verdict rules; §1 Q1/Q2 split; §4 P2 task structure",
+      "repair": "(a) Replace the F2 cross-fixture dependency with a per-fixture hook-channel liveness check (e.g., a planted hook event in each ceremony task fixture) so the dependency is per-task, not cross-task. (b) Outcome table needs the FULL@3 ≥ 2/3 AND OFF@3 ≥ 2/3 cell classified explicitly (probably \"inadmissible\" but verify ordering against the inadmissible rule). (c) Raise rep count to ≥5 with binomial confidence reporting, and document the predecessor small-n lesson as the explicit reason.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "MH4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Pre-registration sealing of fixture selection, fixture content, OQ1/OQ2, and red-rep count (§3, §4 P2, §8)",
+      "claim": "Smokes may repair the instrument and re-run but never count toward cells; §5 freezes at review-freeze; budget is a hard 80-call cap.",
+      "evidence": "Multiple discretionary leaks remain unsealed at review-freeze: (a) WHICH 2 d2-type tasks is not pinned — fixture content can be adjusted to \"help\" markers fire after smoke transcripts reveal behavior. (b) Task fixture seed (docs/ tree, .claude/ dir content) is authored in P0/P1 and can drift. (c) OQ1 (opus-5 spot block +8 calls) and OQ2 (k-sensitivity +6 calls) are explicitly deferred to Board AFTER data starts; either could grow the design mid-block under partial results. (d) Pin-absent planted-red rep count of 2 is unstated minimum — could be raised if red fails, converting a re-run into a guard change. (e) F2 red 2/2 threshold and green 2/3 threshold allow a single-rep flip to invert the verdict; the design does not freeze these as final.",
+      "evidence_reference": "§3 file-structure map; §4 P2 task structure; §8 open questions",
+      "repair": "Pre-register at review-freeze: exact task fixture file paths and content hashes for both d2-type tasks; explicit \"no post-freeze fixture edits\" clause with hash verification step; OQ1 and OQ2 resolved to a binary choice BEFORE P1 starts (not after data lands); pin-absent red rep count of 2 declared as a hard floor with no upward adjustment without re-freezing the plan; F2 thresholds frozen as final at 2/3 green and 2/2 red with no override path.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "MH5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "F2 block role, lifecycle, and coupling to the experimental harness (§1 Q2, §2 KR2, §4 P2, §5 F2 green/red)",
+      "claim": "F2 block yields a rerunnable red-green guard for the v2.34.23/24 env-pin fix.",
+      "evidence": "A 3-rep green / 2-rep red block costs roughly 15 live calls per rerun with non-trivial flake potential (model drift, hook flakiness, server-side gate state, env-pin propagation). Tying a production regression guard to an experimental multi-turn instrument couples two lifecycles: when this harness is retired (likely after this campaign), the guard goes with it. A production regression guard should be a single deterministic probe (1 call, fixed seed, fixed task, fixed assertion) runnable in CI on every PR.",
+      "evidence_reference": "§1 Q2 (F2 as rerunnable guard); §2 KR2; §4 P2 F2 block sizing; §5 F2 green/red thresholds",
+      "repair": "Decouple: move F2 guard out of this campaign into a separate single-call deterministic probe (fixed task fixture, fixed assertion, hash-pinned SKILL.md). This campaign reports F2 evidence as observational data only — not as a guard artifact. The 3-pin-present + 2-pin-absent calls become a measurement, not a rerunnable regression guard.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "MH6",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "Post-campaign decision routing if skill-does-not-drive lands; survivor-STOP threshold justification (§5, §7)",
+      "claim": "G1-B11 scope guard plus §7 out-of-scope firewall prevent skill-edit overreach; survivor STOP at <2/3 admissible is the right threshold.",
+      "evidence": "G1-B11 covers the measured-family scope correctly, but if skill-does-not-drive lands for all 3 markers, the natural next-step pressure is to rewrite dev-flow SKILL.md — and the §7 firewall is one line, easily ignored once data lands. The survivor-STOP threshold at <2/3 admissible is reasonable given 3 markers, but is not justified against the alternative of <1/3 or ≥3/3 ceilings. The plan does not pre-route the skill-does-not-drive → Board decision path.",
+      "evidence_reference": "§5 scope guard (G1-B11); §7 out-of-scope; §5 survivor STOP",
+      "repair": "No current change; follow-up only. Pre-route the skill-does-not-drive → Board decision path in a follow-on plan and explicitly justify the <2/3 survivor threshold against alternatives.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true
+    },
+    {
+      "rubric_id": "MH7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Campaign cost-vs-information; existence of cheaper designs before committing to 2×2×3×2 (§4 P2, §1 Q1)",
+      "claim": "The 2×2×3×2 block (48 calls) plus F2 (15) plus smokes (8) is the right size for Q1.",
+      "evidence": "A single FULL@3 pilot on one d2-type task (≤6 calls plus smoke) would establish whether ANY ceremony behaviors fire under multi-turn. If zero fire, the full 2×2 has no signal to measure and the budget is wasted. If they do fire, the 2×2 measures OFF@3 admissibility (cheaper to add later). Additionally: production transcripts from opus-5 sessions running dev-flow multi-turn before 2026-08-16 likely exist (the predecessor spike ran with hooks live); reading those for ceremony artifacts is essentially free and partially answers Q1 without any new calls. Transcript-only without hooks is also a cheaper design if artifacts alone are observable. Evidence that would change my mind: a pre-2026-08-16 transcript showing L-setup or session-end ceremony artifacts in any session that ran dev-flow multi-turn.",
+      "evidence_reference": "§4 P2 budget breakdown (48 + 15 + ~8 ≈ 71 calls); §1 Q1; evidence-base header (2026-08-18-skill-onoff-instrument-repair, 2026-08-20-interactive-cc-drivability-spike) implies prior multi-turn production sessions exist",
+      "repair": "Insert a Phase P1.5 single FULL@3 pilot (≤6 calls) before the full 2×2; if zero ceremony markers fire, downgrade to transcript-only analysis of pre-2026-08-16 production transcripts. Only commit to the full 2×2 after the pilot shows signal. Pilot signal that would change my mind: a pre-2026-08-16 transcript showing L-setup or session-end ceremony artifacts in any session that ran dev-flow multi-turn.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": false
+    }
+  ]
+}
+```

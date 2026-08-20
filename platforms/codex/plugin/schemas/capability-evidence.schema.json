@@ -55,7 +55,12 @@
     "methodology": { "$ref": "#/$defs/methodology" },
     "trials": {
       "type": "array",
-      "items": { "$ref": "#/$defs/trial" }
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/trial" },
+          { "$ref": "#/$defs/brain_trial" }
+        ]
+      }
     },
     "trial_set_hash": { "$ref": "#/$defs/sha256" },
     "revocation": {
@@ -81,7 +86,7 @@
         "source": { "const": "internal_eval" },
         "methodology": {
           "properties": {
-            "kind": { "const": "role_eval" }
+            "kind": { "enum": ["role_eval", "owner_brain_seat"] }
           }
         }
       }
@@ -225,6 +230,7 @@
         "kind": {
           "enum": [
             "role_eval",
+            "owner_brain_seat",
             "external_prior",
             "runtime_probe",
             "ordinary_receipt",
@@ -242,24 +248,49 @@
           "pattern": "^[a-f0-9]{64}$"
         },
         "thresholds": {
-          "type": ["object", "null"],
-          "additionalProperties": false,
-          "required": [
-            "min_trials",
-            "min_known_bad_cases",
-            "min_critical_cases",
-            "max_false_pass_critical",
-            "min_clean_cases",
-            "max_clean_false_positives"
-          ],
-          "properties": {
-            "min_trials": { "type": "integer", "minimum": 2 },
-            "min_known_bad_cases": { "type": "integer", "minimum": 1 },
-            "min_critical_cases": { "type": "integer", "minimum": 1 },
-            "max_false_pass_critical": { "type": "integer", "minimum": 0 },
-            "min_clean_cases": { "type": "integer", "minimum": 1 },
-            "max_clean_false_positives": { "type": "integer", "minimum": 0 }
-          }
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "min_trials",
+                "min_known_bad_cases",
+                "min_critical_cases",
+                "max_false_pass_critical",
+                "min_clean_cases",
+                "max_clean_false_positives"
+              ],
+              "properties": {
+                "min_trials": { "type": "integer", "minimum": 2 },
+                "min_known_bad_cases": { "type": "integer", "minimum": 1 },
+                "min_critical_cases": { "type": "integer", "minimum": 1 },
+                "max_false_pass_critical": { "type": "integer", "minimum": 0 },
+                "min_clean_cases": { "type": "integer", "minimum": 1 },
+                "max_clean_false_positives": { "type": "integer", "minimum": 0 }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "min_trials",
+                "min_plants_per_trial",
+                "max_clean_false_positives",
+                "max_critical_misses",
+                "max_pair_deltas",
+                "max_asks_on_legal_controls"
+              ],
+              "properties": {
+                "min_trials": { "type": "integer", "minimum": 2 },
+                "min_plants_per_trial": { "type": "integer", "minimum": 1 },
+                "max_clean_false_positives": { "type": "integer", "minimum": 0 },
+                "max_critical_misses": { "type": "integer", "minimum": 0 },
+                "max_pair_deltas": { "type": "integer", "minimum": 0 },
+                "max_asks_on_legal_controls": { "type": "integer", "minimum": 0 }
+              }
+            }
+          ]
         },
         "basis": {
           "type": ["object", "null"],
@@ -284,6 +315,15 @@
         {
           "properties": {
             "kind": { "const": "role_eval" },
+            "corpus_version": { "$ref": "#/$defs/token" },
+            "corpus_manifest_hash": { "$ref": "#/$defs/sha256" },
+            "thresholds": { "type": "object" },
+            "basis": { "type": "null" }
+          }
+        },
+        {
+          "properties": {
+            "kind": { "const": "owner_brain_seat" },
             "corpus_version": { "$ref": "#/$defs/token" },
             "corpus_manifest_hash": { "$ref": "#/$defs/sha256" },
             "thresholds": { "type": "object" },
@@ -392,6 +432,54 @@
             "oracle_rejected": { "type": "boolean" }
           }
         }
+      }
+    },
+    "brain_trial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trial_id",
+        "observed_at",
+        "stop_reason",
+        "construct_scope",
+        "plants_total",
+        "plants_caught",
+        "clean_false_positives",
+        "fairness_cases_total",
+        "fairness_correctness_failures",
+        "pair_delta_count",
+        "hard_fail_count",
+        "ask_floor_violations",
+        "convergence_terminal",
+        "economy_ok",
+        "verification_actions",
+        "findings_closed",
+        "spend_tokens",
+        "decision_trace_hash",
+        "round_stream_hash",
+        "corpus_manifest_hash"
+      ],
+      "properties": {
+        "trial_id": { "$ref": "#/$defs/token" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "stop_reason": { "enum": ["completed", "early_end", "malformed", "insufficient_budget"] },
+        "construct_scope": { "const": "per-round-exam.long-horizon-production-audit" },
+        "plants_total": { "type": "integer", "minimum": 0 },
+        "plants_caught": { "type": "integer", "minimum": 0 },
+        "clean_false_positives": { "type": "integer", "minimum": 0 },
+        "fairness_cases_total": { "type": "integer", "minimum": 0 },
+        "fairness_correctness_failures": { "type": "integer", "minimum": 0 },
+        "pair_delta_count": { "type": "integer", "minimum": 0 },
+        "hard_fail_count": { "type": "integer", "minimum": 0 },
+        "ask_floor_violations": { "type": "integer", "minimum": 0 },
+        "convergence_terminal": { "type": "boolean" },
+        "economy_ok": { "type": "boolean" },
+        "verification_actions": { "type": "integer", "minimum": 0 },
+        "findings_closed": { "type": "integer", "minimum": 0 },
+        "spend_tokens": { "type": "integer", "minimum": 0 },
+        "decision_trace_hash": { "$ref": "#/$defs/sha256" },
+        "round_stream_hash": { "$ref": "#/$defs/sha256" },
+        "corpus_manifest_hash": { "$ref": "#/$defs/sha256" }
       }
     }
   }

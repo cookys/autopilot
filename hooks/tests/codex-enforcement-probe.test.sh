@@ -46,7 +46,7 @@ assert_contains "$OUT" "request_action=shell_touch_exact" \
 assert_contains "$OUT" "target_created=false" "Blocked tool produced no filesystem effect"
 assert_contains "$OUT" "blocking_gate=warning" \
   "Capability stays below H4 despite the block-capable primitive"
-assert_contains "$OUT" "capability_checked=2026-07-27" "Capability record is fresh"
+assert_contains "$OUT" "capability_checked=2026-08-04T02:32:41.337Z" "Capability record is fresh"
 
 PROBE_SOURCE="$(cat "$PROBE")"
 assert_not_contains "$PROBE_SOURCE" "'--ignore-user-config'" \
@@ -91,5 +91,48 @@ assert_contains "$OUT" "without request-bound hook or effect evidence" \
   "Invalid probe explains the missing execution evidence"
 assert_contains "$(cat "$STUB_ARTIFACT")" '"preserve":"valid-prior-artifact"' \
   "Invalid retry preserves the prior valid disposition artifact"
+
+PORTABILITY="$(cat "$REPO_ROOT/references/multi-agent-portability.md")"
+assert_contains "$PORTABILITY" "codex-cli 0.146.0" "Codex native schema evidence is current"
+assert_contains "$PORTABILITY" 'task_name`, `message`, `fork_turns`, `model`, and `reasoning_effort' \
+  "Current native spawn schema records model and effort fields"
+assert_contains "$PORTABILITY" "interrupt survivors" \
+  "Native child teardown/disposition boundary is explicit"
+assert_not_contains "$PORTABILITY" "Default schema is 3 fields" \
+  "Stale Codex 0.144 locked-schema guidance is retired"
+ROUTING="$(cat "$REPO_ROOT/references/model-routing.md")"
+assert_contains "$ROUTING" "codex-cli 0.146.0" "Canonical routing guidance uses the current host version"
+assert_contains "$ROUTING" '`model`, and `reasoning_effort`' "Canonical routing records model/effort request fields"
+assert_contains "$ROUTING" "list/wait/interrupt" "Canonical routing records native lifecycle disposition"
+assert_contains "$PORTABILITY" \
+  'AUTOPILOT_CODEX_NATIVE_CHILD_PROBE=1 bash hooks/tests/codex-enforcement-probe.test.sh' \
+  "Portability guidance names the exact rerunnable native-child probe"
+
+# Opt-in live child probe: only a concrete spawn event, observed child identity,
+# and terminal lifecycle event satisfy the evidence. Prompt/self-report strings
+# are excluded mechanically by selecting tool-call/tool-result JSONL records.
+if [ "${AUTOPILOT_CODEX_NATIVE_CHILD_PROBE:-0}" = 1 ]; then
+  LIVE="$TEST_TMP/codex-native-child.jsonl"
+  set +e
+  timeout 180 codex exec --json -m "${AUTOPILOT_CODEX_PROBE_MODEL:-gpt-5.6-sol}" \
+    'Spawn one child with model gpt-5.6-terra and reasoning_effort low. Wait for it, report its observed identity, then list/interrupt only if it survived.' >"$LIVE" 2>&1
+  RC=$?
+  set -e
+  if [ "$RC" -ne 0 ] && grep -Eqi 'usage limit|quota|rate.limit|capacity' "$LIVE"; then
+    echo "SKIP [codex-native-child] live quota unavailable"
+  else
+    assert_eq "0" "$RC" "Codex native child probe exits cleanly"
+    CHILD_EVENT="$(jq -c 'select(.type == "item.completed") | .item
+      | select((.type == "tool_call" or .type == "function_call") and ((.name // "") | test("spawn_agent$")))
+      | select(((.arguments // .input // {}) | tostring) | contains("gpt-5.6-terra"))
+      | select(((.arguments // .input // {}) | tostring) | contains("reasoning_effort"))' "$LIVE" | head -n 1)"
+    [ -n "$CHILD_EVENT" ] && pass "Codex child spawn event binds requested model/effort" || fail "missing bound child spawn event"
+    LIFECYCLE_EVENT="$(jq -c 'select(.type == "item.completed") | .item
+      | select((.type == "tool_call" or .type == "function_call") and ((.name // "") | test("(wait_agent|list_agents|interrupt_agent)$")))' "$LIVE" | head -n 1)"
+    [ -n "$LIFECYCLE_EVENT" ] && pass "Codex child has a concrete lifecycle disposition event" || fail "missing child lifecycle event"
+  fi
+else
+  echo "SKIP [codex-native-child] set AUTOPILOT_CODEX_NATIVE_CHILD_PROBE=1 for live probe"
+fi
 
 finalize_test

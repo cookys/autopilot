@@ -3,8 +3,10 @@ name: retro
 description: >
   Engineering retrospective from git history — velocity, test ratio, focus score, commit patterns.
   Use when: "/retro", "retro on last N days", "how productive was this sprint", "analyze my commit
-  history", "work patterns", "session analysis", "回顧", "分析工作模式", "這週做了什麼". Not for:
-  viewing specific commit diffs, comparison audits, or debugging test coverage drops.
+  history", "work patterns", "session analysis", "回顧", "分析工作模式", "這週做了什麼". Note:
+  "session analysis" here means commit-window productivity (git history), not conversation-session
+  distillation (→ distill). Not for: viewing specific commit diffs, comparison audits, debugging
+  test coverage drops, or turning conversation history into skills (→ distill).
 ---
 
 # retro — Engineering Retrospective

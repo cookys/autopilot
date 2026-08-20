@@ -7,7 +7,7 @@
 ## Start here (in order)
 
 1. `git checkout feat/task-tree-engine` (exists on origin; tracks it).
-2. Read [`docs/plans/2026-06-12-task-tree-engine.md`](../../plans/2026-06-12-task-tree-engine.md) — **the R1 Amendments section is binding and overrides the phase text where they conflict** (esp. 1, 3, 5, 11).
+2. Read [`docs/plans/2026-06-12-task-tree-engine.md`](../../../plans/2026-06-12-task-tree-engine.md) — **the R1 Amendments section is binding and overrides the phase text where they conflict** (esp. 1, 3, 5, 11).
 3. Skim the spec only if rationale is needed: `docs/plans/2026-06-12-task-tree-engine-design-spec.md`.
 4. Invoke `autopilot:dev-flow` — this is L-size mid-flight: project dir + INDEX row exist; create the L-1.5 scope-audit, phase TaskCreates (P0–P7) and the L-5 finish-flow parent task before any code.
 

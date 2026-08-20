@@ -10,6 +10,8 @@ const { createRunnerTransportEnvelope } = require('../transport/runner-envelope'
 
 const RUNNER = 'kimi';
 const MODEL = 'kimi-code/k3';
+// 2026-08-19 Revival 使用者改派：kimi 席擴充到 kimi-code/k3-256k（probe PONG-K3-256K 通過）。
+const ALLOWED_MODELS = new Set([MODEL, 'kimi-code/k3-256k']);
 const REQUIRED_HELP_TOKENS = Object.freeze([
   '--model',
   '--prompt',
@@ -111,9 +113,10 @@ function writePrivateRawArtifact(rawRoot, stdout, stderr) {
 }
 
 function runKimiAuthor(input = {}, options = {}) {
-  if (input.model !== MODEL) {
+  if (!ALLOWED_MODELS.has(input.model)) {
     return publicFailure('precondition_failed', 'kimi_model_must_be_kimi-code_k3');
   }
+  const model = input.model;
   if (typeof input.prompt !== 'string' || input.prompt.length === 0) {
     return publicFailure('precondition_failed', 'kimi_prompt_required');
   }
@@ -136,7 +139,7 @@ function runKimiAuthor(input = {}, options = {}) {
   const scratch = fs.mkdtempSync(path.join(options.scratchRoot || os.tmpdir(), 'autopilot-kimi-cwd-'));
   fs.chmodSync(scratch, 0o700);
   const argv = [
-    '--model', MODEL,
+    '--model', model,
     '--prompt', input.prompt,
     '--output-format', 'text',
   ];
@@ -164,7 +167,7 @@ function runKimiAuthor(input = {}, options = {}) {
   const privateRawReference = writePrivateRawArtifact(options.rawRoot, stdout, stderr);
   const transportEnvelope = createRunnerTransportEnvelope({
     runner: RUNNER,
-    model: MODEL,
+    model,
     operation: 'author',
     argv,
     cwd: scratch,
@@ -200,7 +203,7 @@ function runKimiAuthor(input = {}, options = {}) {
   }
   return {
     runner: RUNNER,
-    model: MODEL,
+    model,
     status: 'authored',
     output_digest: sha256(stdout),
     private_raw_reference: privateRawReference,

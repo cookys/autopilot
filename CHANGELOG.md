@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.34.24 — onboard 鋪 env 釘住:消費端專案也拿回 forcing functions
+
+**Headline**: v2.34.23 只救了本 repo;消費端專案在 5 世代模型下 forcing functions 仍然
+靜默死亡。本版把官方復原桿接進 onboard 的機械 scaffolder,並在兩份 README 告知。
+全機層(`~/.claude/settings.json`)已於 owner 機器直接併入並以非 repo 目錄 live probe 驗證。
+
+### Changed
+- `scripts/scaffold-config.js` — 新增 `ensureSettingsEnvPin()`:merge-safe 地在
+  `<target>/.claude/settings.json` 釘 `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`。建檔或併鍵、
+  絕不覆蓋其他 key、**顯式既有值(含 opt-out "0")一律尊重**、無法 parse 的 JSON 警告後跳過;
+  另偵測 `.claude/settings.json` 被 gitignore 的陷阱(本 repo 自己就踩過——ignored 檔到不了
+  worktree foremen)並大聲警告。summary 增 `settings_env_pinned` 欄。
+- `hooks/tests/scaffold-config.test.sh` — 45 → 67 assertions:fresh pin、merge 保留既有
+  key、顯式 opt-out 尊重、壞 JSON 不碰、ignore 陷阱警告、dry-run 不落地。
+- `skills/onboard/SKILL.md`、`docs/scripts-inventory.md` — scaffolder row 同步(順帶修掉
+  過時的「9-file」計數)。
+- `README.md` / `README.zh-TW.md` — Install 節加 5 世代 gate 告知框(parity 檢查綠)。
+  prose-justification: dev-flow 713→717 為 v2.34.23 的 gate advisory(行動點自我防衛條款,
+  justification 見該節);本版未再增 skill prose。
 ## v2.34.23 — TaskCreate 平台斷供:5 世代模型被 gate;env 釘住 + advisory
 
 **Headline**: CC 2.1.233(2026-08-14 發布)起,TodoWrite + TaskCreate/Get/Update/List 在

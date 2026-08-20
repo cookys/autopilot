@@ -244,6 +244,28 @@ run by the person who will be holding the pager.**
 
 ---
 
+## 12. A file mtime is not a record timestamp — resumed sessions re-date old evidence
+
+**Incident (2026-08-20, interactive-CC drivability spike).** Archaeology for "does interactive CC
+still have TaskCreate?" grepped `~/.claude/projects/*/*.jsonl` and dated the hits by file mtime:
+"TaskCreate fired on 8/17 and 8/20 — the tool exists today." A live probe the same hour said the
+opposite (`NO_TASK_TOOL`, ToolSearch-backed). The contradiction was the dating method: **resuming a
+session touches the whole transcript file**, so a file whose newest mtime is today can carry records
+written only under an older CLI version. Per-record `timestamp` + `version` fields put every
+TaskCreate hit at ≤ 2026-08-16 / CC ≤ 2.1.232 — the tool family was removed at 2.1.233 and the
+mtime-dated "today" evidence was a ghost.
+
+The general form: **append-mostly stores date their container, not their contents.** Any conclusion
+of the shape "X was still happening at time T" drawn from a container timestamp (file mtime, dir
+mtime, branch tip date, log rotation stamp) inherits every process that touches the container
+without writing new content — resume, re-open, rsync, checkout, chmod.
+
+Rule: when the claim is about *when a record was produced*, date it from a field **inside the
+record**. If the store has no per-record timestamp, say so and downgrade the claim; do not let
+`ls -lt` stand in for one. Evidence: `docs/plans/evidence/2026-08-20-interactive-cc-drivability-spike/`.
+
+---
+
 ## The one question
 
 Before recording anything as verified:

@@ -32,7 +32,9 @@ __pycache__/
 .orphaned_at
 eval-repo-*/
 orch-eval-scratch-home-*/
-.claude/settings.json
+# .claude/settings.json is TRACKED since v2.34.23 (carries the CLAUDE_CODE_ENABLE_TODO_TOOLS
+# env pin that keeps dev-flow forcing functions alive on 5-era models — worktree foremen need
+# it in their checkout). Personal overrides go in .claude/settings.local.json (ignored below).
 
 # transient orchestration calibration run outputs (depth-0 runs these)
 docs/projects/_archive/2026-07-09-m3-band-tasks/runs/

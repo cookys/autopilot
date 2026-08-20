@@ -110,6 +110,10 @@ All gates must pass before any code changes begin. If any gate is blocked, surfa
    **Active enforcement**: For L-size, this gate is backed by the L-1.6 TaskCreate
    parent task (see L Workflow → Task tracking). Reading this bullet is NOT enough —
    the TaskCreate is the forcing function that prevents skipping.
+   If TaskCreate is missing from your tool list (Claude 5-era models are gated off by
+   default since CC 2.1.233), warn the user once to set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`
+   via `.claude/settings.json` `env` and continue without it — advisory, never a blocker
+   (details: `references/multi-agent-portability.md`, task-persistence row).
 ```
 
 ### Branch Freshness Table

@@ -1,5 +1,38 @@
 # Changelog
 
+## v2.34.23 — TaskCreate 平台斷供:5 世代模型被 gate;env 釘住 + advisory
+
+**Headline**: CC 2.1.233(2026-08-14 發布)起,TodoWrite + TaskCreate/Get/Update/List 在
+Opus ≥4.8 / Sonnet ≥5 / Fable ≥5 / Mythos ≥5 **預設關閉**(binary 內 statsig `tengu_rosy_wren`
+預設 false;changelog 未記載)。dev-flow 全部 forcing function(L-1.6 / L-5 / H-9 /
+S-scope-gate)、finish-flow 子任務、l3-l6/ceo-agent task tree 在生產環境**靜默 no-op**。
+官方復原桿:`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`(或 `allowedTools` 具名任一 task 工具)。
+同一發現順帶推翻 8/18 的「headless `-p` 無 task 工具」——那是模型世代 gate,不是 runtime
+缺席;env 之下 headless 全可觀測(對 option B harness 是重大簡化)。
+
+### Added
+- `.claude/settings.json`(新 committed 檔;`.gitignore` 原第 35 行的忽略一併移除——
+  worktree foremen 是全新 checkout,ignored 檔到不了它們手上;個人覆寫仍走
+  `settings.local.json`)— `env` 釘住 `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`。
+  repo dev sessions、派生 foremen、headless 子行程全繼承。三重驗證:互動 A/B(無 env →
+  ToolSearch 佐證 NO_TASK_TOOL;有 env → TaskCreate + task JSON 殘留)、寫檔瞬間本 session
+  熱重載長出四個 task 工具、headless `-p` 無顯式 env 仍開火。
+- `docs/plans/evidence/2026-08-20-interactive-cc-drivability-spike/` — 4 live calls(預算 8):
+  互動 CC 可駕駛性 GO(P1-P4:沙箱隔離、plugin arm、多回合驅動、transcript 收割)+ gate
+  逆向(binary 差分定位 2.1.233)+ A/B/C 三臂驗證 + headless env 探針。
+- `references/evidence-discipline.md` §12 — file mtime ≠ record timestamp:resume 會把整個
+  transcript 檔摸成今天,考古必須用記錄內欄位定年(本輪差點因此誤判)。
+
+### Changed
+- `skills/dev-flow/SKILL.md` — Active enforcement 塊(L-1.6 錨點)加 gate advisory:工具缺席時
+  提醒使用者設 env、照常繼續——**提醒不阻擋**。
+  prose-justification: +4 行(713→717)。點行動處的自我防衛條款:v2.34.19 已證明「指令離
+  行動點、行動點有更便宜替代」就會被繞過;把 gate 偵測放在 L-1.6 錨點以外的任何地方都會
+  重演同一缺陷。無可削減的等價替代。
+- `references/multi-agent-portability.md` task-persistence row — 2026-08-20 dated SUPERSEDED:
+  8/18 觀察正確、解讀過度概化;官方 opt-in 三桿 + `tengu_vellum_ash` 第二 kill-switch
+  (issue #80401)警示:釘 env,不信 server 預設。
+
 ## v2.34.22 — harness 衛生三件:每次派工都白燒 8 秒、併發假紅、零呼叫者的 reaper
 
 **Headline**: 三個累積的小缺陷,共同點是**都在暗處持續收稅**。最貴的一個在生產派工路徑上:

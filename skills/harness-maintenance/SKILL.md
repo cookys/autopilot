@@ -35,6 +35,7 @@ If any target harness is `stale`, `unverified`, `warning`, `unavailable`, or bel
 | [`scripts/probe-skill-frontmatter-portability.sh`](../../scripts/probe-skill-frontmatter-portability.sh) | Run disposable Claude Code/Codex skill-load probes and emit a version-bound pass/fail/inconclusive receipt before changing frontmatter metadata. |
 | [`scripts/probe-harness-capabilities.sh`](../../scripts/probe-harness-capabilities.sh) | Re-probe the exact platform surfaces consumed by the capability-trigger mission and delegate the closed aggregate receipt write to the canonical claim validator. |
 | [`scripts/platform-capability-claims.js`](../../scripts/platform-capability-claims.js) | Generate and immediately revalidate content-addressed capability claims plus the exact D2/D3/D4 consumer partition. Only this script emits validated claim IDs. |
+| [`scripts/probe-todo-tools-pin.js`](../../scripts/probe-todo-tools-pin.js) | Single live-call probe: do the task tools (TaskCreate family) reach a headless session from this directory's environment? Run after touching settings/env wiring; `--expect-absent` is the planted-red arm. Exit 0 met / 1 contradicted / 2 indeterminate. |
 
 ## Update Rules
 

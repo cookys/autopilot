@@ -290,22 +290,31 @@ function cmdSet(args) {
       admission: missionRouting.admission,
     };
     // Ordinary zero-spend no-op surface — sibling of mission_routing, not inside it.
-    const noopBody = {
-      schema_version: 1,
-      artifact_type: 'mission_noop_adoption_set',
-      admission_digest: missionRouting.admission.admission_digest,
-      noop_adoptions: Array.isArray(missionRouting.noop_adoptions)
-        ? missionRouting.noop_adoptions : [],
-      noop_short_circuit: missionRouting.noop_short_circuit === true,
-      dispatcher_called: missionRouting.dispatcher_called,
-      mutation_attempts: missionRouting.mutation_attempts,
-      gate_attempts: missionRouting.gate_attempts,
-      resources_created: missionRouting.resources_created,
-    };
-    marker.mission_noop = {
-      ...noopBody,
-      digest: canonicalDigest(noopBody),
-    };
+    // The no-op set is keyed by the admission digest, so it only exists when routing
+    // actually produced an admission. Incompletely wired Mission routing yields
+    // `admission: null`; emitting the surface anyway used to TypeError here and take
+    // EVERY `session-mode.js set` down with it (any level, Mission-enabled repo only).
+    // `mission_noop` is optional to verifyMissionRoutingProjection (hasOwnProperty
+    // guard), and a null admission is rejected there by its own exactKeys check —
+    // so omitting it is the shape the verifier already expects, not a silent downgrade.
+    if (missionRouting.admission && typeof missionRouting.admission === 'object') {
+      const noopBody = {
+        schema_version: 1,
+        artifact_type: 'mission_noop_adoption_set',
+        admission_digest: missionRouting.admission.admission_digest,
+        noop_adoptions: Array.isArray(missionRouting.noop_adoptions)
+          ? missionRouting.noop_adoptions : [],
+        noop_short_circuit: missionRouting.noop_short_circuit === true,
+        dispatcher_called: missionRouting.dispatcher_called,
+        mutation_attempts: missionRouting.mutation_attempts,
+        gate_attempts: missionRouting.gate_attempts,
+        resources_created: missionRouting.resources_created,
+      };
+      marker.mission_noop = {
+        ...noopBody,
+        digest: canonicalDigest(noopBody),
+      };
+    }
   }
   fs.mkdirSync(markerDir(), { recursive: true });
   const tmp = `${markerPath()}.tmp-${process.pid}`;

@@ -45,3 +45,13 @@ Every dev-flow behaviour scored against those four properties AND single-turn ob
 
 **Ceiling: four admissible families, one marginal.** That is the whole population, enumerated
 before any spend.
+
+
+---
+
+**Addendum 2026-08-20**: the ceremony hypothesis this taxonomy left untested was answered by
+production-transcript archaeology under the reviewed successor plan
+(`docs/plans/2026-08-20-multiturn-event-harness.md`, R2' frozen): in 3 eligible opus-5
+multi-turn dev-flow sessions the frozen predicates detected plan-doc / project-README /
+forcing-function-TaskCreate ceremony in 2/3 sessions each (session-sha 1/3, insufficient).
+The single-turn ~0 was harness scope, not skill inertness, for those three families.

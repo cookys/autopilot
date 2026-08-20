@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.34.28 — 資格考通過、然後被自己的 recorder 拒絕;身分 TOKEN 表達不了真實 model id
+## v2.34.29 — 資格考通過、然後被自己的 recorder 拒絕;身分 TOKEN 表達不了真實 model id
 
 兩個缺陷都是實際送考時撞到的,不是讀出來的。
 
@@ -43,6 +43,28 @@ agy 回 `Authentication required`、kimi 回 `Model ... is not configured`;HOME 
 agy rc=0。要解只有「那兩個 CLI 自己加 config-dir」或「動 broker 的 HOME 隔離」,
 後者是安全邊界,不為方便弄鬆。**登記為未解。**
 
+## v2.34.28 — pin 迴歸探針 + plan-review transport 兩修
+
+**Headline**: 2026-08-20 G1 transport 事故的三個承諾兌現:env 釘住有了常駐的單呼叫迴歸探針;
+timeout 死的席位不再偽裝成 `raw_binding_mismatch`;省略 `--timeout` 不再用 5m 預設砍死
+max/xhigh 席。
+
+### Added
+- `scripts/probe-todo-tools-pin.js` — 單 live-call 探針:task 工具(TaskCreate 家族)有沒有
+  真的到達從本目錄啟動的 headless session(5 世代模型 gate,CC ≥2.1.233)。動過 settings/env
+  接線後跑一次;`--expect-absent` 為植紅臂。exit 0 符合預期 / 1 相反 / 2 無法判定。
+  離線 stub 測試 6 assertions + 本 repo 真鏈驗證(exit 0)。MH5 裁決的獨立交付。
+- `scripts/lib/plan-review-timeout.js` — effort 分級的席位 timeout 預設(max/xhigh 20m、
+  high 10m、其餘 5m);顯式 `--timeout` 一律優先。
+
+### Changed
+- `scripts/lib/plan-review-normalize.js` — **exit-first 分類**:runner 失敗/超時先回報其
+  分類,binding 檢查只對宣稱 success 的 run 有意義。舊序把 0-byte stdout 的 timeout 席誤判
+  成 `raw_binding_mismatch`,掩蓋真因(G1 事故根因之二)。紅綠驗證:舊碼對新測試紅。
+- `scripts/dispatch-plan-review.js` — 席位 timeout 改經 `plan-review-timeout.js` 解析;
+  `--timeout` 未給時按席位 effort 取預設。
+  prose-justification: harness-maintenance 58→59(+1 行 scripts 表 row,新探針的
+  4-step wiring 強制項;無 prose 規則新增)。
 ## v2.34.27 — QRP 支援 agy 與 kimi:dispatch 層早有 adapter,考試層一直沒有
 
 `dispatch-review.sh` 支援 agy 與 kimi(kimi 的 `k3-256k` 是上游 `fa62c36a` 剛加的),

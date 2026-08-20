@@ -1,0 +1,691 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "multiturn-event-harness",
+  "logical_plan_id": "multiturn-event-harness-2026-08-20",
+  "session_id": "315de837-cf27-4e57-8bc5-2d5bc04aa3dd",
+  "session_key": "cc55855b770f8a7b4db87a6463ddd92e09a4d1f88ff5e05215c3125e55021150",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "e1d434ea01bc51168505ed4ffbe19973bef811897912a6f5f0a791aad72af26e",
+  "manifest_sha256": "a52be52a6f0a85caad91804a1d7c1623be4d33feb6d5bf6509152361e1ce566e",
+  "plan_sha256": "a792f71368b4e114e15566c9829f7c14042a1b1c238ae7a391cad8440835baa6",
+  "growth_ratio": {
+    "numerator": 9433,
+    "denominator": 7605
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_construct_validity",
+      "target_id": "sol_construct_validity",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "ea3d2b12c41146dd0de070acb194a58317cfc79850dfc00c503b536cf9a1ccff"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "853bb767eb731b239dcb5f7359d5813ba94620214b79be2489dd9fb314f6128e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-aAwBYc/stdout",
+          "digest": "853bb767eb731b239dcb5f7359d5813ba94620214b79be2489dd9fb314f6128e"
+        },
+        "receipt_digest": "bf9604e4ba45b8f37b14c64f82d03073b43172af729e21bd1be6c2815ceea23f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "minimax_measurement_skeptic",
+      "target_id": "minimax_measurement_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "8c750d4c842a92eaed903667d22198d08896c8d15035509a619e7d14b80a1aca"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "f97d1fda454d3770d450c5535540ba2c812cf493a57e29fe31edb7ddefe255c7",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-HPWegd",
+          "digest": "f97d1fda454d3770d450c5535540ba2c812cf493a57e29fe31edb7ddefe255c7"
+        },
+        "receipt_digest": "025d233891ccbf360a9ec114c4783e27b9ff15f206cf2a38b0c83066207cb790"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_budget_redteam",
+      "target_id": "grok_budget_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "8e756923bf49676109bd2b0103cc4dbc2614ad06ff2b98f89ec358021a2e3e6a"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "45ade59eee3583f8af902549112323b8a53eb4493f28caf3911685d907b14551",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-1p0Dw2",
+          "digest": "45ade59eee3583f8af902549112323b8a53eb4493f28caf3911685d907b14551"
+        },
+        "receipt_digest": "78590bbe6e6c24ea5a6cba7aef02c0a863728b49e27b8dc4568f1268f0c96909"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_construct_validity",
+      "target_id": "sol_construct_validity",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_measurement_skeptic",
+      "target_id": "minimax_measurement_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_budget_redteam",
+      "target_id": "grok_budget_redteam",
+      "family": "xai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "MH1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 1 and 5, Q1 estimand, turn script, and truncation-explains verdict",
+      "claim": "The three-turn treatment does not isolate session room or truncation, and identical follow-up prompts across FULL and OFF do not remove cue-by-skill interaction.",
+      "evidence": "Turn 1 contains no indication that later turns will occur, so the model cannot prospectively treat the session as having more room. Turn 2 makes tracking newly relevant and turn 3 explicitly cues closure. Because only FULL contains ceremony instructions, those prompts can selectively activate FULL. The pattern FULL@3 high, FULL@1 low, and OFF@3 low is therefore compatible with prompt-triggered skill compliance as well as truncation relief. Later turns also cannot retroactively test setup prescribed for session start.",
+      "evidence_reference": "Section 5 turn script and Primary differencing paragraph; Section 1 Q1; MH1",
+      "repair": "Before collecting data, either narrow the estimand and rename the outcome to FULL-specific emergence under these follow-ups, or redesign the manipulation so turn 1 prospectively establishes a staged session and neutral versus expansion or wrap cues are separately controlled in both FULL and OFF. Score start-only setup markers at turn 1 and do not interpret later creation as deferred setup without that control.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "919736de20de4572b9cbb156eeba0e2343ed3c1427e1591f734fb833215d8f4a"
+    },
+    {
+      "rubric_id": "MH2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 3 through 5, hook event schema, liveness checks, and hooked-versus-unhooked smoke",
+      "claim": "The proposed smoke neither defines an unambiguous per-turn hook-liveness invariant nor establishes that zero-output hooks are model-nonreactive.",
+      "evidence": "One events.jsonl contains PostToolUse, Stop, and SessionStart events, yet P1 requires its per-turn line count to equal the expected tool-use count; that equality is impossible without an unspecified event-type filter. The later rule accepts any one hook event per turn, so a Stop event could conceal a dead PostToolUse channel. A single stochastic hooked-versus-unhooked transcript pair has no frozen comparison fields, visibility positive control, latency equivalence bound, or rule for distinguishing ordinary model variation from a hook-derived trace.",
+      "evidence_reference": "Section 3 hook-event-log responsibility; Section 4 P1; Section 5 skill-does-not-drive liveness condition; MH2",
+      "repair": "Freeze an event schema carrying hook type, session ID, call index, and tool-use ID. Require exactly one correctly attributed Stop per driven call and a bijection between PostToolUse events and stream-json tool uses. Calibrate trace visibility with a sacrificial sentinel-output hook, then prove that the production zero-output hook contributes no captured model-visible envelope or reminder under a frozen structural comparison. If that cannot be observed directly, remove hooks and use stream-json plus per-turn filesystem snapshots.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "18a5c78ebf429083e5385581f2509a3e350e24a93202a021ed3bfb114672e49c"
+    },
+    {
+      "rubric_id": "MH3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 5 ceremony outcome table and failure-path adjudication",
+      "claim": "The nominally exhaustive verdict rule assigns at least one logically contradictory cell to skill-does-not-drive and leaves instrument-failure and cross-task outcomes unresolved.",
+      "evidence": "With OFF@3 low, FULL@3 low, and FULL@1 high, the current rule returns skill-does-not-drive because it ignores FULL@1. That cell instead demonstrates a single-turn FULL effect followed by multi-turn suppression or reversal. Separately, two liveness failures produce instrument-failure for a cell without a specified marker or campaign verdict. The rules are per marker and per task but do not say how conflicting outcomes across the two tasks answer Q1.",
+      "evidence_reference": "Section 5 rule order, skill-does-not-drive rule, Anything else rule, and per-marker-per-task scope; MH3",
+      "repair": "Publish the complete outcome table before data. Classify low FULL@3 with high FULL@1 as mixed or reversal, make unresolved liveness or insufficient valid denominators explicitly inadmissible or terminal STOP, and freeze whether cross-task disagreement is always mixed or remains reportable only as two separate task results.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "106cb62749a8a732efc0cca1ecb49011f76a92537d26b79732089cd2e6068d17"
+    },
+    {
+      "rubric_id": "MH3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 2, 4, and 5, three-replicate thresholds and mechanism verdicts",
+      "claim": "Three repetitions support a descriptive screen but not reliable separation of rates at or below one third from rates at or above two thirds.",
+      "evidence": "Under independent Bernoulli repetitions, a majority rule with n equal to 3 misclassifies p equal to one third as high with probability 7 divided by 27, and symmetrically misclassifies p equal to two thirds as low with the same probability, about 26 percent. The plan adjudicates each task separately, so the second task does not increase the per-task denominator. There is also no frozen error tolerance, independence argument, or multiplicity treatment for six marker-task judgments.",
+      "evidence_reference": "Section 4 P2 repetition counts; Section 5 thresholds; KR1; MH3",
+      "repair": "Freeze an inferential target and acceptable error rate. Under the simple independent one-third-versus-two-thirds boundary test with majority classification, the first odd sample size giving each one-sided misclassification probability below 5 percent is 23 per cell, before multiplicity adjustments. If the 80-call cap cannot support an adequate design, label the campaign exploratory and replace causal mechanism verdicts with observed-count summaries.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d0ce63488f333ef492721ec418743241f1ad182a248604050ddf85cfb4365fed"
+    },
+    {
+      "rubric_id": "MH4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 4, 5, and 8, treatment-material freeze, instrument freeze, and adaptive pilot",
+      "claim": "Important treatment materials remain outside the reviewed freeze, and the adaptive pilot lacks a complete unconditional reporting rule.",
+      "evidence": "The exact two d2 tasks and their turn-2 expansion texts are to be authored in P0 and hashed only afterward, with no eligible task universe or selection algorithm in the reviewed packet. P1 permits instrument repair and re-smoke, but the plan does not freeze hashes for the final driver, hooks, scorer, settings, and turn files before P1.5 begins. If both pilot repetitions are zero, the second task and the full outcome table are abandoned; if the pilot proceeds, those observations enter FULL@3. OQ1, OQ2, and the two unpinned repetitions are fixed, so those particular discretion points are sealed.",
+      "evidence_reference": "Section 4 P0, P1, and P1.5; Section 8 Fixture sealing; Section 2.5 review-freeze rule; MH4",
+      "repair": "Freeze the exact task texts, follow-up texts, eligible-task rationale, and hashes as part of the reviewed preregistration. After the last successful smoke, hash and lock the complete executable and scoring bundle before any signal pilot. Either keep pilot data outside confirmatory cells and rebalance the call budget, or publish a full sequential outcome table that treats pilot STOP as an analyzed campaign result rather than a re-plan escape.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "51ad72398733efb2a18a5116b96e32a7d5f36e7ce65bfbbdddeb71a3ffa53447"
+    },
+    {
+      "rubric_id": "MH5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 1, 2, 4, and 5, F2 red-green measurement and regression-guard boundary",
+      "claim": "Demoting F2 to observational evidence correctly avoids calling it a production guard, but the pin-removed arm is still mislabeled as a deterministic planted red.",
+      "evidence": "The global constraint says arm realization must not rely on inherited state or server flags, while the red arm removes the enabling environment pin and thereby leaves task-tool availability to uncontrolled runtime defaults or gates. Requiring zero matching TaskCreates then conflates tool exposure with model behavior. Three green and two red model sessions also remain sensitive to sampling variation and model drift, so they cannot supply stable regression semantics.",
+      "evidence_reference": "Section 2.5 environment-pin constraint; Section 4 F2 allocation; Section 5 F2 rule; Section 6 server-gate risk; MH5",
+      "repair": "Rename the unpinned arm as an uncontrolled observational comparison and remove the guaranteed red-green KR, or use an explicitly supported disable condition and verify the exposed tool schema before prompting. Keep the production guard separate and deterministic, such as a direct capability or protocol probe that does not depend on the model voluntarily choosing TaskCreate.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "268fb5d06ad4c091b8a0f6913931dbd83817bd88ad4cabf8090d1431a4476901"
+    },
+    {
+      "rubric_id": "MH6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 1 and 5, result labels, survivor STOP, aggregation, and scope guard",
+      "claim": "The scope guard blocks a skill rewrite, but the result labels and survivor threshold still license broader construct claims than the sampled tasks and markers support.",
+      "evidence": "Two authored tasks on one model and runtime, using three correlated file-creation markers, cannot establish that truncation generally explains dev-flow ceremony or that the skill generally does not drive it. Plan-file and project-README creation are closely related documentation behaviors, so two surviving markers do not establish independent family coverage. The phrase four measured families has no defined sampling frame, and no aggregate rule handles task disagreement. The separate-Board firewall for any skill edit is otherwise adequate.",
+      "evidence_reference": "Section 5 Truncation-explains, Skill-does-not-drive, Survivor STOP, and Scope guard; Section 1 Q1; MH6",
+      "repair": "Freeze literal result templates bounded to the named tasks, prompts, Sonnet runtime, skill version, and observation dates. Unless MH1 is redesigned, replace truncation-explains with FULL-specific multi-turn emergence and replace skill-does-not-drive with no FULL@3 emergence observed. Report per marker and task; permit an aggregate only after defining the construct domain and a defensible marker-sampling or weighting rule. Retain the separate-Board edit firewall.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7d3bb0adc9b08111dbbdf667a89c6fb64f1714879b4bd84c6864a16ecfdbd0ae"
+    },
+    {
+      "rubric_id": "MH7",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Sections 3 and 4, purchase sequence for archaeology, hooks, pilot, and full block",
+      "claim": "The plan has not exhausted a materially cheaper staged design before purchasing the hook instrument and full block.",
+      "evidence": "All three ceremony outcomes are filesystem residue, while stream-json already records tool actions; per-turn filesystem and git snapshots can usually supply timing without hooks. Zero-cost production-transcript archaeology is deferred until after as many as ten smoke calls and six pilot calls. Existing FULL production sessions cannot identify the skill counterfactual, but they can test ecological occurrence, identify natural turn timing, and determine whether k equal to 3 is plausible before live spending.",
+      "evidence_reference": "Section 3 observation sources; Section 4 P1 and P1.5 ordering; MH7",
+      "repair": "First freeze a production-corpus inclusion and coding rule and perform archaeology. If signal remains plausible, run a hookless matched FULL@3 versus OFF@3 pilot with per-turn snapshots on one task, then buy FULL@1 cells or hooks only for an inference those sources cannot answer. Evidence supporting the current purchase would be an unusable or noncomparable production corpus, a reproducible FULL-specific pilot signal, and a demonstrated required event that stream-json plus snapshots cannot observe.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a4baa55aa97c81896ec6934fe2dc376dfa6ab9e9ce4bec0e56b42c49f5d05ec1"
+    },
+    {
+      "rubric_id": "MH1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§5 turn script and truncation-explains rule",
+      "claim": "k=3 turn script gives room for dev-flow L-setup behaviours that dev-flow places at session START",
+      "evidence": "Plan §5 defines turn1=task prompt, turn2=SCOPE-EXPANSION, turn3=wrap. dev-flow places L-setup at session START; turn-1 already elapsed without setup in single-turn predecessor. Turn-2 scope-expansion does not naturally cause retroactive session-start setup — it surfaces a NEW trackable item, but the L-setup the skill drives is at session START, not at new-task arrival. If the model decides at turn-2 to backfill L-1 setup, that is a model choice, not skill-driven ceremony. P1.5 catches zero-fire empirically but cannot rescue a manipulation that systematically fails to elicit the behaviour; it only confirms or denies without diagnosing why.",
+      "evidence_reference": "§5 turn script; §5 truncation-explains logic; predecessor single-turn three-arms-0 baseline",
+      "repair": "Pre-register in pre-registration.md (before P1) the predicted mechanism by which turn-2 scope-expansion elicits retroactive L-setup at session start (e.g. 'dev-flow's setup reruns at every session START of every sub-task, so turn-2's new task restarts setup'). If no such mechanism is articulable, weaken KR1 to '1 marker admissible AND P1.5 shows ≥1 marker firing in pilot reps' so a single-pass signal is required before the 2x2 commits the remaining budget.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8b6331c240e0fb36de49e6c55e0a20daaea0950d2770271a0dc3eb3e92d166f1"
+    },
+    {
+      "rubric_id": "MH2",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P1(3) hooked-vs-unhooked pair smoke",
+      "claim": "Zero-output hooks are non-reactive on this runtime",
+      "evidence": "P1(3) measures diff latency and transcript for ANY model-visible trace. Pre-registered 'no trace' thresholds are not enumerated. Beyond latency, system-reminder count, settings.json echo equality, and transcript-side effects (e.g. tool-order perturbations) are not listed. §6 'Guaranteed failure: hooks that print' asserts non-reactivity but the empirical check is in P1(3), after P0 build. Planted-positive liveness check (events.jsonl line-count per turn == expected tool_use count) does cover hook-fired-per-turn, but only for the hooked side.",
+      "evidence_reference": "P1 instrument smoke (3); §6 Risks; §2.5 Instrument hooks emit NOTHING",
+      "repair": "Expand P1(3) to enumerate per-channel trace checks: latency, system-reminder count, settings.json echo equality, transcript diff (tools/turns). Pre-register a pass/fail threshold per channel before P1. No current change needed if P1(3) is expanded as written.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4a38f01509fab45e54eb9e979f9e33a0acbac1f198c278b2434e8f7b4d49f657"
+    },
+    {
+      "rubric_id": "MH3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§5 verdict rules and P2 block design",
+      "claim": "3 reps separate ≥2/3 from ≤1/3 given the predecessor's small-n lesson",
+      "evidence": "P(2/3 | true_p=0.7) ≈ 0.667; P(2/3 | true_p=0.3) ≈ 0.156. Signal separation exists but is borderline; the predecessor's small-n lesson was about marker count (3 arms collapsed), not reps per cell. Plan's mixed category and survivor STOP at <2/3 admissible markers absorb the n=3 limitation; per-marker reporting and aggregate-forbidden rules prevent false aggregation. Plan's design is internally consistent; F2 dependency on ceremony tasks' multi-turn channel is correctly handled via per-session hook-liveness, not cross-fixture.",
+      "evidence_reference": "§5 verdict rules; P2 budget allocation; §5 Skill-does-not-drive validity clause",
+      "repair": "No current change; follow-up only. Optional: add a per-cell confidence note in block-adjudication.md so future readers see the n=3 separation explicitly, alongside the existing per-marker reporting.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "29f4ccf4c06a9177472c68ce3c7c2dc5f8f169d66fb56ca70be0676066e97aef"
+    },
+    {
+      "rubric_id": "MH4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P0 fixture authoring + §8 Fixture sealing",
+      "claim": "The choice of WHICH 2 d2-type tasks is sealed pre-data with selection criteria",
+      "evidence": "§8 records that exact paths + sha256 are recorded BEFORE P1, sealing fixture content. But the d2-type taxonomy criteria (presumably from marker-shape-analysis.md) and the candidate pool of d2 tasks are not pinned in the plan text. Selection criteria (e.g. 'pick the 2 that best discriminate L-setup vs task-content markers') remain discretionary at P0; this is a real post-hoc discretion leak because fixture choice can move cell outcomes even with content sha256 sealed.",
+      "evidence_reference": "§8 Open Questions Fixture sealing clause; §3 file-structure map",
+      "repair": "Append to pre-registration.md BEFORE P0 starts: (a) d2-type criteria lifted verbatim from marker-shape-analysis.md, (b) the candidate pool of N d2 tasks with hashes, (c) the selection rule for picking exactly 2 (e.g. 'first 2 alphabetically from candidate pool N=4'). Cheapest seal: a one-page selection-rationale addendum frozen at P0 kickoff.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "862bbe5ca4e4fe9dbf0c37c4131c7cd21e9a8e037934f3517d5c326a64585cef"
+    },
+    {
+      "rubric_id": "MH7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P1.5 fallback + §8 OQ1 sonnet-only decision",
+      "claim": "A cheaper pre-campaign archaeology check on pre-2026-08-16 opus-5 transcripts was considered and ruled out",
+      "evidence": "P1.5 fallback to archaeology is referenced only AFTER the 2x2 zero-fires. If pre-2026-08-16 opus-5 multi-turn transcripts with dev-flow loaded and tools live exist in the evidence corpus, they may already answer Q1 at near-zero call cost. Plan does not pre-flight the corpus for that option; OQ1 commits sonnet-only before any archaeology cost check.",
+      "evidence_reference": "P1.5 fallback path; §8 OQ1",
+      "repair": "Pre-flight (pure filesystem inspection, 0 live calls): enumerate pre-2026-08-16 opus-5 multi-turn transcripts with dev-flow active in the evidence corpus. If dense enough to discriminate Q1, escalate to Board as option C before P0. Cheapest seal: a one-query grep/count in the evidence corpus before any harness build.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "fe91c4c9cf6f73654a47e20b83f04f2ecc56fefa59624799d394abb8bf78d918"
+    },
+    {
+      "rubric_id": "MH1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§5 turn script, primary-differencing paragraph, truncation-explains / skill-does-not-drive rules, and start-placed markers f1_session_sha, f1_plan_file, f1_project_readme",
+      "claim": "FULL@3 versus OFF@3 at identical prompts does not remove cue-skill interaction, and k=3 plus a turn-2 scope expansion does not operationalize room for session-START L-setup, so a FULL@3 hit can be wrap-cue compliance under FULL priming and a FULL@3 miss on start markers cannot license skill-does-not-drive.",
+      "evidence": "Section 5 freezes turn-3 as a wrap-up closer (anything left before you finish / wrap up) identical across arms, then asserts that primary differencing FULL@3 versus OFF@3 at the same prompts removes cue-skill interaction. That contrast only subtracts a cue main effect. A wrap cue that elicits ceremony only when the skill is loaded is the FULL-only priming path MH1 named, and the table would score it truncation-explains whenever FULL@3 is at least 2/3, FULL@1 is at most 1/3, and OFF@3 is at most 1/3. The same section demotes FULL@3 versus FULL@1 to descriptive because turn count cannot move turn-1 behavior, so FULL@3 is deferred setup plus wrap-turn session-end ceremony, while §1 Q1 asks whether L-setup and session-end ceremony appear when the session has room. Marker f1_session_sha is a session-start file; turn-2 only makes tracking newly relevant and gives no reason to retrofit a skipped start SHA. OQ2 freezes k=3, so extra turns cannot be added later to repair the start-ceremony gap.",
+      "evidence_reference": "PLAN §1 Q1; §5 turn script, primary-differencing sentence (removes cue-skill interaction), deferred-setup sentence, truncation-explains and skill-does-not-drive rules, marker list; §8 OQ2",
+      "repair": "Retract the removes-cue-skill-interaction sentence. Freeze Q1 as: at these cues, do the three FS markers appear more under FULL than OFF. Replace turn-3 with a closer that does not ask to wrap up, or pre-register wrap-cued session-end as the only licensed estimand. Exclude f1_session_sha from skill-does-not-drive (score it on turn-1 residue only, or drop it). Do not treat FULL@1 as descriptive-only while it remains in the truncation-explains formula.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6862e6ee4ff550ecf7e587231e46f014020b5b939dd7c3c0b32f066d34646716"
+    },
+    {
+      "rubric_id": "MH2",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P1 hooked-versus-unhooked pair; P2 skill-does-not-drive hook-liveness predicate versus P1 planted-positive line-count rule",
+      "claim": "P1 does separate planted-positive liveness from artifact-exists, but P2 then weakens liveness to at least one hook event per turn, and a single hooked-versus-unhooked pair cannot establish non-reactivity.",
+      "evidence": "P1 planted-positive requires events.jsonl line-count per turn equal to expected tool_use count before marker scoring, and planted-negative requires markers 0 with hook events still present. P2 skill-does-not-drive only requires at least one hook event per turn, with one re-run then instrument-failure. A hook that fires once per turn and drops Stop or PostToolUse passes P2 liveness while remaining silent on the dropped event class, which is the channel-dead versus behavior-absent collapse for any event-keyed predicate. P1 item 3 is one hooked-versus-unhooked pair diffing latency and transcript; n=1 cannot tell hook latency from session noise, and a settings/hook list injected only into the system preamble can be missed if the transcript diff is user-visible text only.",
+      "evidence_reference": "PLAN §4 P1 items 1-3; §5 skill-does-not-drive liveness clause; §2.5 zero-output hook constraint",
+      "repair": "No current change to campaign buy/no-buy; if any hook channel survives a redesign, freeze P2 liveness to the same per-turn expected-event-count as P1, pre-register that the unhooked contrast includes the system/settings preamble not only user text, and run at least two hooked-versus-unhooked pairs before claiming non-reactivity.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f5612548a414f7f3bcd670775190e7331bc584b105f09254c9d0a30f5fa4cf47"
+    },
+    {
+      "rubric_id": "MH3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§5 outcome table, KR1 confirmatory cliffs, FULL@1 role, unused OFF@1 cell",
+      "claim": "The outcome table assigns the cell where the skill drives at both k=1 and k=3 to mixed, contradicts itself on whether FULL@1 is descriptive, and treats a 2-versus-1 count at n=3 as a confirmatory 2/3 cliff.",
+      "evidence": "Rule order: OFF@3 at least 2/3 is inadmissible; truncation-explains is FULL@3 at least 2/3 AND FULL@1 at most 1/3 AND OFF@3 at most 1/3; skill-does-not-drive is FULL@3 at most 1/3 given per-session hook liveness; anything else is mixed with aggregate claim forbidden. The cell FULL@3 at least 2/3, FULL@1 at least 2/3, OFF@3 at most 1/3 is therefore mixed, even though that is the clean skill-drives-independent-of-truncation result, not an uninterpretable leftover. The differencing paragraph says FULL@3 versus FULL@1 is descriptive only, but truncation-explains requires the FULL@1 inequality, so the same plan both uses and discards FULL@1. KR1 forbids needs-more-data exits while n=3 makes 2/3 versus 1/3 a one-session swing. F2-in-another-fixture is no longer the liveness dependency (that hole is sealed). OFF@1 is in the 48-call ceremony cross but appears in no §5 predicate. Honest minimum for a confirmatory 2/3 versus 1/3 split is n at least 6 per cell, or drop confirmatory language and report raw counts.",
+      "evidence_reference": "PLAN §2 KR1; §4 P2 ceremony cross (FULL@1, FULL@3, OFF@1, OFF@3) x 3 reps; §5 rule order, truncation-explains, skill-does-not-drive, mixed, descriptive-only FULL@1 sentence",
+      "repair": "Name a skill-drives-at-k=1-and-k=3 cell for FULL@3 at least 2/3, FULL@1 at least 2/3, OFF@3 at most 1/3. Keep mixed for genuine conflicts only. Either use FULL@1 in truncation-explains without calling it descriptive, or drop FULL@1 from the formula. State n=3 2/3 cliffs as descriptive counts, not KR1 confirmatory verdicts, or fund n at least 6 by deleting OFF@1 and F2. Drop OFF@1 unless a frozen predicate is added.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8d2e5e85ad56bd1fdf1e6bdddd06704cefe59f94f6b6d20f56839de4bc17af88"
+    },
+    {
+      "rubric_id": "MH4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P0 fixture and turns-file sealing, P1.5 pilot-to-cell counting, P2 liveness re-runs under the 80-call cap",
+      "claim": "Post-hoc discretion still leaks through unnamed d2 tasks and turn-2 text at review-freeze, through counting peeked P1.5 reps toward KR1 cells, and through unregistered keep/replace and drop-order on re-runs.",
+      "evidence": "OQ1 and OQ2 are sealed and pin-absent is a hard floor of 2, which closes those named leaks. Fixtures are to be hashed in pre-registration.md before P1, which closes authoring after smoke transcripts. At this freeze the two d2-type tasks are still unnamed, and turn-2 is only an example scope-expansion sentence frozen per task, so which tasks and which cue strings can be chosen in P0 without a selection rule. Fixture sha256 is specified for the docs tree and .claude dir, not for the turns-file that actually holds turn-2/turn-3. P1.5 inspects 2 FULL@3 reps, stops the 2x2 only on zero markers, and if the block proceeds those reps count toward FULL@3 cells: the same peeked observations both decide continuation and fill the cell (optional stopping). Liveness failure excludes and re-runs once; there is no rule that the replacement is the sole occupant, and re-runs consume the hard 80-call cap with no pre-registered spend order or which cell is dropped on exhaust.",
+      "evidence_reference": "PLAN §4 P1.5 (pilot reps count toward FULL@3); §4 P2 ceremony/F2 counts; §5 liveness re-run clause and pin-absent hard floor; §8 OQ1/OQ2 and fixture sealing (paths plus content sha256 before P1); §2 KR3 80-call cap",
+      "repair": "Name both d2 tasks, both turn-2 strings, and the turns-file hash in this plan before any live call; freeze a no-discretion selection rule (predecessor L d2 tasks or first two from a frozen list). P1.5 never counts toward cells. Re-runs always discard the failed session; pre-register replacement as sole occupant and a spend-order plus drop list when the 80-call cap is hit. No scorer or predicate edits after P1 starts except declared instrument repair that forces a full re-smoke and does not touch §5.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3010e49a1fa4cec7cb3cef40775b4e299434abb88b52a10041f653298bbf48b8"
+    },
+    {
+      "rubric_id": "MH5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2, §4 P2 F2 15-call block, §5 F2 observational-versus-guard split",
+      "claim": "The 3-rep pin-present plus 2-rep pin-absent F2 block is not a rerunnable production guard, and keeping it inside this campaign still couples 15 live calls to an experimental instrument the plan itself says may be retired.",
+      "evidence": "Q2 and §5 already concede that this F2 block is observational, does not constitute the production regression guard, and that the rerunnable guard is a separate single-call deterministic probe outside this plan. KR2 and P2 still spend 9 FULL@3 pin-present plus 6 pin-absent calls (15 of the 80-call cap) to produce a 3-green/2-red measurement that is expensive to rerun, exposed to sonnet drift and flake, and hosted on the same multi-turn hook harness P1.5 may abandon after 6 calls. A 3-versus-2 observational contrast cannot be the v2.34.23/24 env-pin red-green guard. Paying for it here buys neither Q1 nor the guard.",
+      "evidence_reference": "PLAN §1 Q2; §2 KR2; §4 P2 F2 call counts; §5 F2 observational clause and separate single-call probe sentence",
+      "repair": "Delete KR2 and the P2 F2 15 calls from this campaign. Ship the single-call deterministic pin probe as a separate Fix. Do not treat 3/2 observational reps as a guard or as a prerequisite for ceremony adjudication.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b51985bc1cea62b8d815fffbe7cc5fcc22ce09dfc0d179d69ca5b195c3b4487a"
+    },
+    {
+      "rubric_id": "MH6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "§1 Q1 wording, §2 KR1, §5 scope guard G1-B11 and survivor STOP",
+      "claim": "Negative scope guards are present, but no positive licensed sentence is frozen, so a truncation-explains sweep will be reported as Q1 (dev-flow ceremony appears when the session has room) even though that is broader than the measured markers and cues.",
+      "evidence": "Q1 asks whether dev-flow L-setup / session-end ceremony behaviours appear when the session has room. KR1 freezes truncation-explains / skill-does-not-drive / inadmissible per marker. The scope guard only states negative prohibitions (no card reopen, no skill rewrite, no whole-skill claim, no verdict map beyond §5) and refers to four measured families while only three ceremony markers are named. skill-does-not-drive is correctly pre-routed to a Board decision with no SKILL.md edit. Survivor STOP at fewer than 2 of 3 admissible is justified as blocking family-versus-idiosyncratic confusion. The integrity gap is the missing allow-list: nothing pins truncation-explains to a marker-and-harness sentence instead of Q1-confirmed.",
+      "evidence_reference": "PLAN §1 Q1; §2 KR1; §5 scope guard G1-B11, survivor STOP justification, MH6 Board pre-route; §7 out of scope (no SKILL.md edit)",
+      "repair": "No current change to buy/no-buy beyond MH1 estimand freeze. Add three frozen allowed sentences (one per named verdict) scoped to these markers, this sonnet harness, and these cues; replace four measured families with the three named markers; restated Q1 must match that allow-list. Leave survivor STOP at fewer than 2 of 3 admissible.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dfc5627a03c9a4bc0774a95808f3946757694e4d66d59762b6abcdb1b9776746"
+    },
+    {
+      "rubric_id": "MH7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Campaign buy envelope: P0 hook channel, P1 hook smokes, P1.5 as a gate into a pre-committed 2x2, unused OFF@1, F2 block, archaeology-as-fallback",
+      "claim": "Do not buy this 80-call 2x2. A cheaper design answers Q1 first: zero-call archaeology, then at most a FS-only FULL@3 pilot, with no hook channel, no OFF@1, no F2, and no pre-committed P2.",
+      "evidence": "All three ceremony markers are FS residue (session-start-sha, plan file, project README). Headless resume plus FS/git scoring can answer Q1 without zero-output hooks, so P0 hook work and up to 10 P1 hook-smoke calls are not required for the ceremony hypothesis. Section 0 reports single-turn three arms near 0; P1.5 already admits the 2x2 may have zero signal after 2 FULL@3 reps, yet the plan still pre-commits 48 ceremony calls plus 15 F2 calls. OFF@1 is 6 of those 48 calls with no §5 predicate. F2 is 15 calls that §5 says do not constitute the guard. Pre-2026-08-16 opus-5 production multi-turn transcripts (task tools live) are listed only as a zero-cost fallback after a failed pilot, not as the first bound. Strongest case against buying: expected value of P2 is negative given the single-turn prior, construct holes in MH1, and confirmatory n=3 cliffs. Evidence that would change this mind: archaeology files missing or at the wrong skill version; a redesigned FULL@3 pilot with a non-ceremonial closer firing at least 2 of 3 markers; a named event-only marker that truly needs hooks; OFF@1 given a frozen predicate.",
+      "evidence_reference": "PLAN §0 single-turn three arms ~0; §1 Q1; §4 P0/P1/P1.5/P2 call envelopes and archaeology fallback; §5 marker list (FS paths), unused OFF@1 relative to verdict rules, F2-not-the-guard clause",
+      "repair": "Do not approve P2 or the 80-call envelope. Approve only: (1) zero-call archaeology of pre-2026-08-16 opus-5 multi-turn production transcripts; (2) if still needed, a FS-only FULL@3 pilot of at most 6 calls with MH1 cue repairs applied; (3) a new campaign for any 2x2 after that pilot, with OFF@1 and F2 deleted unless they gain frozen predicates. Any 2x2 that still uses wrap-cued turn-3 or counts peeked pilot reps remains unbuyable.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4af837248cbea03035192ad4659d25ecd6159e2a0bf3b81e3e20a0f7e93930f1"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "a4baa55aa97c81896ec6934fe2dc376dfa6ab9e9ce4bec0e56b42c49f5d05ec1",
+      "rubric_id": "MH7",
+      "affected_surface": "Sections 3 and 4, purchase sequence for archaeology, hooks, pilot, and full block",
+      "claim": "The plan has not exhausted a materially cheaper staged design before purchasing the hook instrument and full block.",
+      "evidence_reference": "Section 3 observation sources; Section 4 P1 and P1.5 ordering; MH7",
+      "disposition": null
+    },
+    {
+      "fingerprint": "4a38f01509fab45e54eb9e979f9e33a0acbac1f198c278b2434e8f7b4d49f657",
+      "rubric_id": "MH2",
+      "affected_surface": "P1(3) hooked-vs-unhooked pair smoke",
+      "claim": "Zero-output hooks are non-reactive on this runtime",
+      "evidence_reference": "P1 instrument smoke (3); §6 Risks; §2.5 Instrument hooks emit NOTHING",
+      "disposition": null
+    },
+    {
+      "fingerprint": "29f4ccf4c06a9177472c68ce3c7c2dc5f8f169d66fb56ca70be0676066e97aef",
+      "rubric_id": "MH3",
+      "affected_surface": "§5 verdict rules and P2 block design",
+      "claim": "3 reps separate ≥2/3 from ≤1/3 given the predecessor's small-n lesson",
+      "evidence_reference": "§5 verdict rules; P2 budget allocation; §5 Skill-does-not-drive validity clause",
+      "disposition": null
+    },
+    {
+      "fingerprint": "862bbe5ca4e4fe9dbf0c37c4131c7cd21e9a8e037934f3517d5c326a64585cef",
+      "rubric_id": "MH4",
+      "affected_surface": "P0 fixture authoring + §8 Fixture sealing",
+      "claim": "The choice of WHICH 2 d2-type tasks is sealed pre-data with selection criteria",
+      "evidence_reference": "§8 Open Questions Fixture sealing clause; §3 file-structure map",
+      "disposition": null
+    },
+    {
+      "fingerprint": "fe91c4c9cf6f73654a47e20b83f04f2ecc56fefa59624799d394abb8bf78d918",
+      "rubric_id": "MH7",
+      "affected_surface": "P1.5 fallback + §8 OQ1 sonnet-only decision",
+      "claim": "A cheaper pre-campaign archaeology check on pre-2026-08-16 opus-5 transcripts was considered and ruled out",
+      "evidence_reference": "P1.5 fallback path; §8 OQ1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f5612548a414f7f3bcd670775190e7331bc584b105f09254c9d0a30f5fa4cf47",
+      "rubric_id": "MH2",
+      "affected_surface": "P1 hooked-versus-unhooked pair; P2 skill-does-not-drive hook-liveness predicate versus P1 planted-positive line-count rule",
+      "claim": "P1 does separate planted-positive liveness from artifact-exists, but P2 then weakens liveness to at least one hook event per turn, and a single hooked-versus-unhooked pair cannot establish non-reactivity.",
+      "evidence_reference": "PLAN §4 P1 items 1-3; §5 skill-does-not-drive liveness clause; §2.5 zero-output hook constraint",
+      "disposition": null
+    },
+    {
+      "fingerprint": "dfc5627a03c9a4bc0774a95808f3946757694e4d66d59762b6abcdb1b9776746",
+      "rubric_id": "MH6",
+      "affected_surface": "§1 Q1 wording, §2 KR1, §5 scope guard G1-B11 and survivor STOP",
+      "claim": "Negative scope guards are present, but no positive licensed sentence is frozen, so a truncation-explains sweep will be reported as Q1 (dev-flow ceremony appears when the session has room) even though that is broader than the measured markers and cues.",
+      "evidence_reference": "PLAN §1 Q1; §2 KR1; §5 scope guard G1-B11, survivor STOP justification, MH6 Board pre-route; §7 out of scope (no SKILL.md edit)",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-08-20T10:29:01.891Z"
+}

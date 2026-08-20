@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "2.34.24",
+  "version": "2.34.25",
   "description": "Autopilot methodology skills for Codex with bundled support CLI/scripts and one production PostCompact recovery hook; no Codex-thread-bound direct-mutation enforcement is shipped (D4=NOT_READY/NO_SHIP).",
   "author": {
     "name": "TWGS Team"

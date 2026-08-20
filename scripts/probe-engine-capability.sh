@@ -201,6 +201,41 @@ case "$RUNNER" in
       RUNNER_VERSION="$(claude --version 2>&1 | head -n 1 || echo "unknown")"
     fi
     ;;
+  claude-native)
+    # Drives the local Claude Code CLI with its own ambient auth
+    # (dispatch-review.sh: CC_BIN="$(command -v "${BIN:-claude}")").
+    if command -v claude >/dev/null 2>&1; then
+      BINARY_FOUND=1
+      RUNNER_VERSION="$(claude --version 2>&1 | head -n 1 || echo "unknown")"
+    fi
+    ;;
+  kimi)
+    # Kimi Code CLI is routinely NOT on bare PATH. Mirror dispatch-review.sh's
+    # resolution order exactly (PATH, then the well-known install path) — a probe
+    # that resolves the binary differently from the dispatcher would report on a
+    # different tool than the one dispatch actually runs.
+    if command -v kimi >/dev/null 2>&1; then
+      KIMI_BIN="$(command -v kimi)"
+    elif [ -x "$HOME/.kimi-code/bin/kimi" ]; then
+      KIMI_BIN="$HOME/.kimi-code/bin/kimi"
+    else
+      KIMI_BIN=""
+    fi
+    if [ -n "$KIMI_BIN" ]; then
+      BINARY_FOUND=1
+      RUNNER_VERSION="$("$KIMI_BIN" --version 2>&1 | head -n 1 || echo "unknown")"
+    fi
+    ;;
+  anthropic-compatible)
+    # NOT a binary runner: dispatch-review.sh drives dispatch-anthropic-review.js
+    # over HTTP. Its real preconditions are `node` plus that script, so those are
+    # what presence means here. `command -v anthropic-compatible` can never
+    # succeed, and the generic branch below made this runner permanently unknown.
+    if command -v node >/dev/null 2>&1 && [ -r "$SELF_DIR/dispatch-anthropic-review.js" ]; then
+      BINARY_FOUND=1
+      RUNNER_VERSION="node $(node --version 2>&1 | head -n 1 || echo "unknown")"
+    fi
+    ;;
   *)
     # Custom/other runner
     if command -v "$RUNNER" >/dev/null 2>&1; then
@@ -246,19 +281,34 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
   fi
   # Exact tuple partitions authorize dispatch only when this runner actually
   # consumes the requested dimension.  Named endpoints are a verified
-  # cc-shim/Anthropic transport; exporting ANTHROPIC_* around Codex/Grok/Qoder
-  # does not observe their endpoint tuple.  Conversely cc-shim has no verified
-  # effort control, so an effort-bearing cc-shim tuple remains unknown.
+  # cc-shim/anthropic-compatible transport; exporting ANTHROPIC_* around
+  # Codex/Grok/Qoder does not observe their endpoint tuple.
+  #
+  # Effort: only codex / grok / qoderclicn consume it — verified by reading the
+  # dispatcher, not by assumption (dispatch-review.sh: codex `-c
+  # model_reasoning_effort`, grok `--reasoning-effort`, qoderclicn
+  # `--reasoning-effort`; agy/cc-shim/anthropic-compatible/claude-native/kimi
+  # never receive it, and dispatch-anthropic-review.js has no effort parameter
+  # at all).  An effort-bearing tuple on a non-consuming runner is unobserved,
+  # so it must stay non-authorizing rather than be stamped available.
+  case "$RUNNER" in
+    cc-shim|anthropic-compatible) _ENDPOINT_CONSUMER=1 ;;
+    *)                            _ENDPOINT_CONSUMER=0 ;;
+  esac
+  case "$RUNNER" in
+    codex|grok|qoderclicn) _EFFORT_CONSUMER=1 ;;
+    *)                     _EFFORT_CONSUMER=0 ;;
+  esac
   if [ "$ENDPOINT_SET" -eq 1 ] && [ "$ENDPOINT" != "@none" ] \
-      && [ "$RUNNER" != "cc-shim" ]; then
+      && [ "$_ENDPOINT_CONSUMER" -eq 0 ]; then
     PROBE_EXIT=1
     SKIP_LIVE_CMD=1
     echo "runner $RUNNER does not consume named endpoint tuples" >"$PROBE_ERR_FILE"
   fi
-  if [ -n "$EFFORT" ] && [ "$RUNNER" = "cc-shim" ]; then
+  if [ -n "$EFFORT" ] && [ "$_EFFORT_CONSUMER" -eq 0 ] && [ "$RUNNER" != "agy" ]; then
     PROBE_EXIT=1
     SKIP_LIVE_CMD=1
-    echo "cc-shim has no verified exact effort control" >"$PROBE_ERR_FILE"
+    echo "runner $RUNNER has no verified exact effort control" >"$PROBE_ERR_FILE"
   fi
   # shellcheck source=lib/grok-effort.sh
   . "$SELF_DIR/lib/grok-effort.sh" 2>/dev/null || true
@@ -313,7 +363,20 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       ;;
     agy)
       # NO --dangerously-skip-permissions (that would let it run tools / mutate files).
-      # agy has no verified exact effort CLI; exact effort requests stay non-authorizing.
+      # Exact effort requests stay non-authorizing — but NOT because the flag is absent.
+      # Probe-verified 2026-08-20 (agy 1.1.16), three different model families:
+      #   --effort low|medium|high  → "--effort is not supported for <model>"  (level valid,
+      #                                model refuses it)
+      #   --effort xhigh|max|bogus  → "invalid --effort \"xhigh\""              (level absent
+      #                                from the enum entirely)
+      # Every model in agy's roster carries its effort IN THE MODEL NAME
+      # ("Gemini 3.7 Flash (High)", "GPT-OSS 120B (Medium)", "Claude Sonnet 4.6 (Thinking)"),
+      # and each one rejects a separate --effort. Reproduce:
+      #   for e in low medium high xhigh max bogus_level; do \
+      #     agy -p ok --model "Gemini 3.7 Flash (High)" --effort "$e"; done
+      # ⇒ the effort partition for agy lives in $MODEL, not in a flag. If agy ever ships a
+      #   model that DOES accept --effort, this branch must pass it through rather than
+      #   refuse — re-probe before assuming either way.
       if [ -n "$EFFORT" ]; then
         PROBE_EXIT=1
         echo "agy cannot probe exact effort tuple; emit non-authorizing telemetry" >"$PROBE_ERR_FILE"
@@ -355,6 +418,48 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
         echo "cc-shim exact endpoint unobserved: ANTHROPIC_BASE_URL unset after resolve" >"$PROBE_ERR_FILE"
       else
         env -u ANTHROPIC_API_KEY claude -p "Respond only with OK" --model "$MODEL" --tools "" >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+      fi
+      ;;
+    claude-native)
+      # Local Claude Code CLI on its own ambient auth — unlike cc-shim, no ANTHROPIC_*
+      # override, so the ambient credential is exactly what dispatch would use.
+      claude -p "Respond only with OK" --model "$MODEL" --tools "" \
+        >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+      ;;
+    kimi)
+      # $KIMI_BIN resolved in the binary-presence case above (same order as the dispatcher).
+      # -p is the non-interactive path; no --auto/--plan (they cannot combine with -p).
+      ( cd "$PROBE_CWD" && "$KIMI_BIN" -m "$MODEL" -p "Respond only with OK" ) \
+        >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+      ;;
+    anthropic-compatible)
+      # HTTP transport, no CLI to spend through. The endpoint resolution above already
+      # exported ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN; a minimal /v1/messages POST is
+      # the smallest observation that proves this exact (endpoint, model) tuple is live.
+      # Without credentials there is nothing to observe — stay non-authorizing, never
+      # stamp available off the mere presence of node.
+      if [ -z "${ANTHROPIC_BASE_URL:-}" ] || [ -z "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
+        PROBE_EXIT=1
+        echo "anthropic-compatible exact endpoint unobserved: ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN unset after resolve" >"$PROBE_ERR_FILE"
+      else
+        MODEL="$MODEL" node -e '
+          const url = (process.env.ANTHROPIC_BASE_URL || "").replace(/\/+$/, "") + "/v1/messages";
+          const body = JSON.stringify({ model: process.env.MODEL, max_tokens: 16,
+            messages: [{ role: "user", content: "Respond only with OK" }] });
+          const ac = new AbortController();
+          const t = setTimeout(() => ac.abort(), 60000);
+          fetch(url, { method: "POST", signal: ac.signal, body, headers: {
+              "content-type": "application/json",
+              "anthropic-version": "2023-06-01",
+              "authorization": "Bearer " + process.env.ANTHROPIC_AUTH_TOKEN } })
+            .then(r => r.text().then(txt => {
+              clearTimeout(t);
+              // Redacted: status + a short body slice only; never the token or full payload.
+              process.stderr.write("HTTP " + r.status + " " + txt.slice(0, 200) + "\n");
+              process.exit(r.ok ? 0 : 1);
+            }))
+            .catch(e => { clearTimeout(t); process.stderr.write(String(e && e.message) + "\n"); process.exit(1); });
+        ' >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi
       ;;
     *)

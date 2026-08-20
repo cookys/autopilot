@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-21 | p6d-corrective-gates — 事故矯正三機械閘(contract-first 升級閘 / pre-commit manifest 閘 / repair ladder)+ planted negatives | v2.34.32 | feat/v2.34.32-p6d-corrective-gates |
 
 ## 已完成 (Completed)
 

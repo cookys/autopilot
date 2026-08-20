@@ -145,18 +145,23 @@ function normalizePlanReviewPayload({ envelope, raw, expected }) {
     };
   }
   const bytes = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw), 'utf8');
-  const reference = transport.private_raw_reference;
-  if (!reference || reference.digest !== sha256(bytes)) {
+  // Exit-first: a runner that failed or timed out reports THAT classification. The old
+  // order checked raw binding first, so a 5m-killed codex seat (0-byte stdout → null
+  // reference) surfaced as raw_binding_mismatch and hid the real cause (2026-08-20
+  // incident, multiturn-event-harness G1). Binding is only meaningful for a run that
+  // claims success.
+  if (transport.outcome.classification !== 'success') {
     return {
-      transport_status: 'raw_binding_mismatch',
+      transport_status: transport.outcome.classification,
       semantic_status: 'unavailable',
       parser_status: 'not_attempted',
       payload: null,
     };
   }
-  if (transport.outcome.classification !== 'success') {
+  const reference = transport.private_raw_reference;
+  if (!reference || reference.digest !== sha256(bytes)) {
     return {
-      transport_status: transport.outcome.classification,
+      transport_status: 'raw_binding_mismatch',
       semantic_status: 'unavailable',
       parser_status: 'not_attempted',
       payload: null,

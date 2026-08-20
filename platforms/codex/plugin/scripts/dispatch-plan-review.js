@@ -28,6 +28,7 @@ const {
   normalizeAndDedupeFindings,
   unresolvedCandidateFingerprints,
 } = require('./lib/plan-review-findings');
+const { effortSeatTimeoutSeconds } = require('./lib/plan-review-timeout');
 
 const SCRIPT_DIR = __dirname;
 const DISPATCH_AUTHOR = path.join(SCRIPT_DIR, 'dispatch-author.sh');
@@ -123,6 +124,7 @@ function parseArgs(argv) {
       throw new CliError(`${arg} requires a non-empty value`);
     }
     opts[key] = argv[++index];
+    if (key === 'timeout') opts.timeoutExplicit = true;
   }
   for (const key of ['repoRoot', 'planFile', 'rubricFile', 'ticket', 'sessionId', 'generation']) {
     if (!opts[key]) throw new CliError(`missing required option: ${key}`);
@@ -1005,6 +1007,7 @@ function reviewSeat({
   rubricBytes,
   rubricIds,
   timeoutSeconds,
+  timeoutExplicit,
   sequence,
   selectedTargets,
   deadlineMs,
@@ -1062,7 +1065,10 @@ function reviewSeat({
     }
     const bounded = {
       ...selected,
-      timeoutSeconds: Math.min(timeoutSeconds, remainingSeconds),
+      timeoutSeconds: Math.min(
+        effortSeatTimeoutSeconds(selected.effort, timeoutExplicit ? timeoutSeconds : null),
+        remainingSeconds,
+      ),
     };
     const legacyEnv = seat.id === 'chair'
       ? 'AUTOPILOT_PLAN_REVIEW_RESPONSE_FILE'
@@ -1523,6 +1529,7 @@ function main() {
         rubricBytes,
         rubricIds,
         timeoutSeconds: opts.timeoutSeconds,
+        timeoutExplicit: opts.timeoutExplicit === true,
         sequence,
         selectedTargets,
         deadlineMs,

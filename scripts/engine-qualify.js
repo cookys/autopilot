@@ -112,6 +112,22 @@ const EXPECTED_OWNER_GENERATOR_HASH =
 const QUALIFIER_PRODUCER = 'engine-qualify-v2';
 const SHA256 = /^[a-f0-9]{64}$/iu;
 const TOKEN = /^[A-Za-z0-9._:-]{1,128}$/u;
+// Vendor model ids are NOT our vocabulary — we do not get to choose their shape.
+// Real ones in this roster contain spaces, parentheses and slashes:
+// "Gemini 3.7 Flash (High)", "kimi-code/k3-256k". TOKEN rejected both, and the
+// receipt check (`receipt.model !== panelConfig.model`) makes an alias illegal by
+// design, so those engines were unqualifiable for a NAMING reason rather than a
+// capability one.
+//
+// Safe to widen HERE and only here: the model value never reaches a shell. It
+// travels as a discrete argv element (spawnSync with an argv array, no
+// `shell: true` anywhere in engine-qualify.js / qualification-case-broker.js /
+// qualification-review-provider.js) and as JSON. Still excluded: quotes,
+// backslash, `$`, backtick, newlines, control characters and the shell
+// metacharacters ; | & < > — a model id needs none of them, and keeping them out
+// means this stays safe even if a future caller does interpolate.
+// Leading/trailing whitespace is rejected so one model cannot have two spellings.
+const MODEL_ID = /^(?![\s])[A-Za-z0-9 ._:()/-]{1,128}(?<![\s])$/u;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const SANDBOX_DESTINATION = /^\/(?:panel|auth)(?:\/[A-Za-z0-9._-]+)+$/u;
 const WITNESS_PROTOCOL_VERSION = 'behavioral-call-v1';
@@ -203,6 +219,15 @@ function usage(code, message = null) {
 
 function token(value, label) {
   if (typeof value !== 'string' || !TOKEN.test(value)) usage(2, `${label} must be a protocol token`);
+  return value;
+}
+
+// Only for --model. Every other identity field is OUR vocabulary and stays on the
+// strict TOKEN set.
+function modelId(value, label) {
+  if (typeof value !== 'string' || !MODEL_ID.test(value)) {
+    usage(2, `${label} must be a vendor model id (letters, digits, space . _ : ( ) / -, no leading/trailing space)`);
+  }
   return value;
 }
 
@@ -315,7 +340,7 @@ function parseArgs(argv) {
     options[name] = [...new Set(options[name].map((value) => token(value, option)))].sort();
   }
   options.engine = token(options.engine, '--engine');
-  options.model = token(options.model, '--model');
+  options.model = modelId(options.model, '--model');
   options.modelVersion = token(options.modelVersion, '--model-version');
   options.runner = token(options.runner, '--runner');
   options.runnerVersion = token(options.runnerVersion, '--runner-version');

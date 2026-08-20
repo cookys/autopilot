@@ -22,6 +22,15 @@ const MAX_PROVIDER_OUTPUT_BYTES = 2 * 1024 * 1024;
 const MAX_SOCKET_MESSAGE_BYTES = MAX_DIFF_BYTES + 64 * 1024;
 const MAX_TIMEOUT_MS = 600_000;
 const TOKEN = /^[A-Za-z0-9._:-]{1,128}$/u;
+// Vendor model ids are not our vocabulary — real ones contain spaces, parentheses
+// and slashes ("Gemini 3.7 Flash (High)", "kimi-code/k3-256k"). MUST stay byte-for-byte
+// identical to MODEL_ID in scripts/engine-qualify.js: the broker compares the returned
+// model against the expected one, so a looser or tighter set on either side turns a
+// legitimate identity into `provider_identity_mismatch` — or, worse, lets two spellings
+// of one model both validate. Shell metacharacters, quotes, backslash and ambiguous
+// leading/trailing whitespace stay excluded; the value only ever travels as an argv
+// element (spawn with an argv array, no `shell: true` in this file).
+const MODEL_ID = /^(?![\s])[A-Za-z0-9 ._:()/-]{1,128}(?<![\s])$/u;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const FORBIDDEN_PROVIDER_ENV = new Set([
   'BASH_ENV',
@@ -128,6 +137,14 @@ function requireToken(value, label) {
   return value;
 }
 
+// Only for model ids. role/provider remain on the strict TOKEN set.
+function requireModelId(value, label) {
+  if (typeof value !== 'string' || !MODEL_ID.test(value)) {
+    throw new BrokerError(`${label} must be a bounded vendor model id`, 'invalid_argument');
+  }
+  return value;
+}
+
 function requireInteger(value, label, minimum, maximum) {
   if (!/^[0-9]+$/u.test(String(value))) {
     throw new BrokerError(`${label} must be an integer`, 'invalid_argument');
@@ -220,7 +237,7 @@ function normalizeOptions(raw) {
   return Object.freeze({
     role,
     provider: requireToken(raw.provider, 'provider'),
-    model: requireToken(raw.model, 'model'),
+    model: requireModelId(raw.model, 'model'),
     providerCmd,
     providerEnvironment,
     timeoutMs: requireInteger(
@@ -308,7 +325,7 @@ function parseProviderResponse(stdout, expected) {
     );
   }
   requireToken(value.provider, 'returned provider');
-  requireToken(value.model, 'returned model');
+  requireModelId(value.model, 'returned model');
   if (value.provider !== expected.provider || value.model !== expected.model) {
     const error = new BrokerError(
       'provider returned a different exact identity',

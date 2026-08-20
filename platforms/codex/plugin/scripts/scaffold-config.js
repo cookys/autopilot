@@ -278,6 +278,49 @@ function writeOrSkipFile(filePath, relativeName, content, state) {
   state.written.push(relativeName);
 }
 
+const SETTINGS_ENV_KEY = 'CLAUDE_CODE_ENABLE_TODO_TOOLS';
+
+// CC >= 2.1.233 disables the task tools (TaskCreate/Get/Update/List, TodoWrite) on
+// Opus >= 4.8 / Sonnet >= 5 / Fable >= 5 / Mythos >= 5 unless opted in — which silently
+// no-ops every dev-flow forcing function (L-1.6 / L-5 / H-9 / S-scope-gate). The pin keeps
+// them alive. Merge-safe: creates the file or adds the one env key; never clobbers other
+// keys; an EXPLICIT existing value (even "0") is the user's choice and is left alone.
+// Evidence: docs/plans/evidence/2026-08-20-interactive-cc-drivability-spike/ +
+// references/multi-agent-portability.md (task-persistence row).
+function ensureSettingsEnvPin(claudeDir, state) {
+  const rel = '.claude/settings.json';
+  const filePath = path.join(claudeDir, 'settings.json');
+  let current = null;
+  if (fs.existsSync(filePath)) {
+    try {
+      current = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch {
+      console.warn(
+        `${rel} WARNING: existing file is not valid JSON — left untouched. Add ` +
+        `"env": {"${SETTINGS_ENV_KEY}": "1"} by hand, or the task tools stay gated ` +
+        'off on 5-era models and dev-flow forcing functions silently no-op.'
+      );
+      state.skipped.push(rel);
+      return false;
+    }
+    if (current && typeof current === 'object' && !Array.isArray(current)
+        && current.env && typeof current.env === 'object'
+        && Object.prototype.hasOwnProperty.call(current.env, SETTINGS_ENV_KEY)) {
+      return false; // explicit user value — respected, even an opt-out
+    }
+  }
+  const next = current && typeof current === 'object' && !Array.isArray(current) ? current : {};
+  next.env = next.env && typeof next.env === 'object' && !Array.isArray(next.env) ? next.env : {};
+  next.env[SETTINGS_ENV_KEY] = '1';
+  if (!state.dryRun) {
+    fs.writeFileSync(filePath, `${JSON.stringify(next, null, 2)}\n`);
+  } else {
+    console.log(`${rel}: would write (env pin ${SETTINGS_ENV_KEY}=1)`);
+  }
+  state.written.push(rel);
+  return true;
+}
+
 // A pre-existing WHOLESALE `.claude/` ignore shadows the generated *-config.md, and
 // git CANNOT re-include a file under a fully-excluded parent (a `!.claude/*-config.md`
 // negation is silently inert — same gotcha as distill-sync-setup). Detect + warn; we
@@ -299,6 +342,13 @@ function updateGitignore(targetDir, dryRun) {
       'fully-excluded parent. Replace `.claude/` with the specific runtime-state paths ' +
       '(`.claude/tasks/`, `.claude/*-state.json`, `.claude/knowledge/`, `.claude/.qc/`) so ' +
       'the configs are tracked.'
+    );
+  }
+  if (current.split(/\r?\n/).some((l) => /^\/?\.claude\/settings\.json$/.test(l.trim()))) {
+    console.warn(
+      '.gitignore WARNING: `.claude/settings.json` is ignored — the env pin will not reach ' +
+      'fresh checkouts or worktree foremen. Track the file (personal overrides belong in ' +
+      '.claude/settings.local.json).'
     );
   }
   if (current.includes(GITIGNORE_MARKER)) {
@@ -382,6 +432,8 @@ function main() {
       writeOrSkipFile(path.join(claudeDir, name), rel, content, state);
     });
 
+    const settingsEnvPinned = ensureSettingsEnvPin(claudeDir, state);
+
     const gitignoreUpdated = updateGitignore(state.targetDir, state.dryRun);
     if (gitignoreUpdated) {
       console.log('.gitignore: runtime state block would be added');
@@ -391,6 +443,7 @@ function main() {
       written: state.written,
       skipped: state.skipped,
       gitignore_updated: gitignoreUpdated,
+      settings_env_pinned: settingsEnvPinned,
     }));
     process.exit(0);
   } catch (err) {

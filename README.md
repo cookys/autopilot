@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.34.23-E8A838?style=flat-square" alt="v2.34.23">
+  <img src="https://img.shields.io/badge/version-2.34.24-E8A838?style=flat-square" alt="v2.34.24">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-26-6B8E6B?style=flat-square" alt="26 Hooks">
@@ -194,6 +194,12 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 ## Install
 
 **Claude Code** (primary) — the two commands above. All 28 skills are available immediately as `autopilot:dev-flow`, `autopilot:survey`, etc.
+
+> **⚠️ Claude Code ≥ 2.1.233 + Claude 5-era models**: the task tools (`TaskCreate` family)
+> are gated **off** by default on Opus ≥ 4.8 / Sonnet ≥ 5 / Fable ≥ 5 — which silently
+> disables every dev-flow forcing function. Fix: keep `{"env": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"}}`
+> in your project's `.claude/settings.json` (tracked, so worktrees inherit it). `autopilot:onboard`
+> scaffolds this pin automatically; dev-flow warns once if the tools are still missing.
 
 ### Harness Support
 

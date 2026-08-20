@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-plugin-5A67D8?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code Plugin">
-  <img src="https://img.shields.io/badge/version-2.34.23-E8A838?style=flat-square" alt="v2.34.23">
+  <img src="https://img.shields.io/badge/version-2.34.24-E8A838?style=flat-square" alt="v2.34.24">
   <img src="https://img.shields.io/badge/skills-28-4A90D9?style=flat-square" alt="28 Skills">
   <img src="https://img.shields.io/badge/agents-3-7C9E8C?style=flat-square" alt="3 Methodology Agents">
   <img src="https://img.shields.io/badge/hooks-26-6B8E6B?style=flat-square" alt="26 Hooks">
@@ -194,6 +194,11 @@ local runtime 或 agentic local runner。
 ## Install
 
 **Claude Code**（主要）—— 上面那兩行指令。28 個 skill 立即可用，如 `autopilot:dev-flow`、`autopilot:survey` 等。
+
+> **⚠️ Claude Code ≥ 2.1.233 + Claude 5 世代模型**:task 工具(`TaskCreate` 家族)在
+> Opus ≥ 4.8 / Sonnet ≥ 5 / Fable ≥ 5 上**預設關閉**——dev-flow 全部 forcing function 會被
+> 靜默停用。修法:在專案 `.claude/settings.json` 保留 `{"env": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"}}`
+> (入版控,worktree 才繼承得到)。`autopilot:onboard` 會自動鋪好這個釘住;工具仍缺席時 dev-flow 會提醒一次。
 
 ### Harness 支援矩陣
 

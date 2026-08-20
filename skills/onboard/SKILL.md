@@ -29,7 +29,7 @@ domains, name security surfaces). The golden reference output is the hand-built 
 | Script | Role |
 |--------|------|
 | [`scripts/project-detect.js`](../../scripts/project-detect.js) | **Detect** (pure read → JSON): package manager, commands (+`lint_is_noop`), per-package coverage thresholds, doc convention (`doc/` vs `docs/`), workspace/packages, `default_branch`, protected-path candidates, project paths, installed plugins. Run it FIRST; it owns every mechanical fact. |
-| [`scripts/scaffold-config.js`](../../scripts/scaffold-config.js) | **Scaffold** (mechanical write): copies+fills the 9-file config set into `<target>/.claude/`, fills detected values, writes autopilot-only chains when `superpowers=false`, and updates `.gitignore` to exclude runtime state while KEEPING `*-config.md` tracked. Idempotent; `--force` to clobber a hand-edit; `--dry-run` to preview. |
+| [`scripts/scaffold-config.js`](../../scripts/scaffold-config.js) | **Scaffold** (mechanical write): copies+fills the config set into `<target>/.claude/`, fills detected values, writes autopilot-only chains when `superpowers=false`, merge-safely pins `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` into `.claude/settings.json` (task tools are gated off on 5-era models since CC 2.1.233 — without the pin every dev-flow forcing function silently no-ops; an explicit existing value is respected), and updates `.gitignore` to exclude runtime state while KEEPING `*-config.md` tracked. Idempotent; `--force` to clobber a hand-edit; `--dry-run` to preview. |
 
 ## Workflow
 

@@ -723,6 +723,7 @@ function vaRequest(content = VA_ENVELOPE) {
 {
   const examHome = path.join(tempRoot, 'exam-home');
   fs.mkdirSync(examHome, { recursive: true });
+  fs.writeFileSync(path.join(examHome, 'credential'), 'exam-seed');
   const { child, captured } = runProvider({
     request: reviewerRequest(),
     stubOutput: REVIEWER_MODEL_OUTPUT,
@@ -732,8 +733,13 @@ function vaRequest(content = VA_ENVELOPE) {
     },
   });
   check(captured !== null, `QRP_CLI_HOME run captured the child env (stderr: ${child.stderr})`);
-  equal(captured.env.HOME, examHome,
-    'the harness child receives QRP_CLI_HOME as its HOME');
+  // Contract changed in v2.34.31: the child gets a per-invocation CLONE of the
+  // template, never the template path itself (concurrent cases corrupted a shared
+  // one). What must hold is that HOME is redirected AND carries the seeded content.
+  check(captured.env.HOME !== examHome,
+    'the child gets a clone, not the QRP_CLI_HOME template path itself');
+  check(captured.env.HOME !== process.env.HOME && captured.env.HOME !== tempRoot,
+    'the redirected HOME is neither the ambient nor the broker-assigned home');
 }
 {
   // Negative control: with QRP_CLI_HOME unset the child must inherit the HOME this
@@ -745,6 +751,57 @@ function vaRequest(content = VA_ENVELOPE) {
   });
   equal(captured.env.HOME, tempRoot,
     'without QRP_CLI_HOME the child keeps the broker-assigned HOME');
+}
+
+// ── QRP_CLI_HOME is cloned PER INVOCATION, not shared ─────────────────────────
+// Why: agy writes $HOME/.gemini/config/* on every run. Four concurrent cases
+// against ONE QRP_CLI_HOME failed 2-3 of 4 with "permission check failed" /
+// "produced no output", and the exam scored those as MODEL misses — a dead
+// transport and a wrong answer are indistinguishable to the oracle. Private
+// clones took the same four to 4/4. It also stops the exam from mutating its own
+// template (one shared-HOME run grew a 16 KB seed to 23 MB).
+{
+  const template = path.join(tempRoot, 'clihome-template');
+  fs.mkdirSync(template, { recursive: true });
+  fs.writeFileSync(path.join(template, 'credential'), 'seed');
+  const homes = [];
+  for (let i = 0; i < 2; i += 1) {
+    const { captured } = runProvider({
+      request: reviewerRequest(),
+      stubOutput: REVIEWER_MODEL_OUTPUT,
+      env: {
+        QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+        QRP_CLI_HOME: template,
+      },
+    });
+    homes.push(captured.env.HOME);
+  }
+  check(homes[0] !== template && homes[1] !== template,
+    'the child never receives the template path itself');
+  check(homes[0] !== homes[1],
+    'two invocations sharing one QRP_CLI_HOME get separate cloned HOMEs');
+  check(fs.readdirSync(template).join(',') === 'credential',
+    'the template is not mutated by a run');
+  for (const h of homes) {
+    check(!fs.existsSync(h), `clone ${h} is removed after the call`);
+  }
+}
+{
+  // An oversized template means the operator pointed at a real home; refuse loudly
+  // rather than silently cloning hundreds of MB once per case.
+  const fat = path.join(tempRoot, 'clihome-fat');
+  fs.mkdirSync(fat, { recursive: true });
+  fs.writeFileSync(path.join(fat, 'blob'), Buffer.alloc(9 * 1024 * 1024));
+  const { child } = runProvider({
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_CLI_HOME: fat,
+    },
+  });
+  check(/template exceeds/.test(child.stdout + child.stderr),
+    'an oversized QRP_CLI_HOME template is refused with an actionable message');
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });

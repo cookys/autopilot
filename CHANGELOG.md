@@ -1,5 +1,43 @@
 # Changelog
 
+## v2.34.31 — QRP_CLI_HOME 要 per-invocation clone:共用一個會讓考試把傳輸故障記成模型失分
+
+agy 連兩次資格考卡在 `provider_process_failed`(2/4 輪)。我原本判它「傳輸不可靠」,
+**根因其實在我們這邊**。
+
+實測:共用 HOME、4 平行 → **2~3/4 成功**;各自 HOME、4 平行 → **4/4**。
+agy 每次執行都寫 `$HOME/.gemini/config/{config.json,mcp_config.json,projects/*}`,併發互踩;
+2/4 的失敗率正好吻合真實考試的 2/4 輪。
+
+**危害不只是失敗率**:exam 把傳輸死亡記成 `known-bad sensitivity miss` —— 從 oracle 的角度,
+「送不到」和「答錯」**長得一模一樣**。一個把基礎設施故障算進能力分數的考試,會產出
+**看似有證據的錯誤結論**:agy 先前那次 `0/21 抓到、19/19 全誤報` 看起來像爛透的 reviewer,
+實際上它一題都沒收到。
+
+修法:`QRP_CLI_HOME` 從「共用指標」改成「**每次呼叫 clone 一份**」,結束即刪。
+加 8MB 模板守衛(credential-only 種子約 16KB;指到真實 home 實測 589MB 會被明確拒絕,
+而非每題慢慢複製)。順帶擋掉共用模式的另一個害處 —— **agy 會把模板寫髒**(16KB → 23MB)。
+
+紅綠(真叫 agy,4 平行共用同一模板):RED **3/4** → GREEN **4/4**,模板維持 16KB 未污染、
+0 個 clone 殘留。修完重考 agy:**trial-1 21/21 FP0 / trial-2 21/21 FP0 / protocol failure 0
+→ qualified**。
+
+測試涵蓋 clone 隔離、模板不可變、clone 清理、超大模板拒絕;變異還原即精確轉紅;ratchet 118→125。
+⚠️ v2.34.30 加的 `captured.env.HOME === examHome` 這次紅了 —— 它釘的是舊契約,
+**更新成新契約而非刪除**:HOME 必須被重導且帶著種子,但絕不可是模板路徑本身。
+
+**同卷送考總結**(每輪 21 known-bad + 19 clean,各兩輪):
+
+| 引擎 | known-bad | clean 誤報 | 放過 Critical | 判定 |
+|---|---|---|---|---|
+| codex `gpt-5.6-sol` max | 42/42 | 0/38 | 0 | ✅ qualified |
+| agy `Gemini 3.7 Flash (High)` | 42/42 | 0/38 | 0 | ✅ qualified |
+| kimi `kimi-code/k3-256k` | 41/42 | 2/38 | 0 | ❌ degraded |
+| GLM `glm-5.3` | 40/42 | 3/38 | 1 | ❌ degraded |
+| MiniMax-M3 | 26/42 | 15/38 | 2 | ❌ degraded |
+
+四筆已 record(scorecard 34 → 38)。
+
 ## v2.34.30 — QRP_CLI_HOME:只吃 HOME 的 CLI 也能送考(推翻我自己的「不可考」)
 
 先前把 agy/kimi 判成不可考是錯的 —— 那個結論來自對 `--help` 的 grep,不是對可能性

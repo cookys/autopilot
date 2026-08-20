@@ -48,6 +48,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### Official qualification defaults — 官方考過的 roster 成績單,consumer 吃預設或自考
+- **Trigger**: 下一個 consuming repo 要啟用 hetero roster(dispatch/review/implement)而未自行考級時;或官方 roster 在 reviewer 之外完成第二個 role(planner/implementer/verification-author)的正式考級時 — 兩者先到即觸發。
+- **Context**: Board 提案 2026-08-21:四份考券 {planner, implementer, reviewer, verification-author} 由 autopilot 官方對常用引擎正式施測,結果以簽署的 scorecard 成績單隨 plugin 出貨為**預設值**;consuming user 啟用某 role 的 hetero 引擎時,由 onboard/engine-onboarding 問一次:「吃官方預設成績單,還是在自己的環境自考?」自考走既有 engine-qualify 流程覆蓋預設。設計要點:(1) 預設成績單要標注施測環境(CLI 版本、transport、日期)—— 官方環境 ≠ 用戶環境,差異披露不隱藏;(2) 降級一律走不信任投票累積,不用日曆(既決);(3) 目前官方已考:gpt-5.6-sol reviewer QUALIFIED(scorecard 141)、glm-5.3 FAILED、MiniMax spike 5/9、brain 兩坐 FAILED —— reviewer role 已有可出貨的第一筆預設;(4) 與「Roster qualification — remaining legs」條目相依:其他 role 的官方施測是該條目的工作,本條目管「預設值的出貨與 consumer 選擇 UX」。
+- **Effort**: L(成績單打包/簽署格式 + onboard 詢問流 + engine-onboarding 接線 + 環境差異披露)
+- **Source**: Board(user)proposal 2026-08-21;evidence `docs/plans/evidence/2026-08-17-roster-qualification/`。
+
 ### Contract-first escalation and local-repair gates — P6D incident follow-up
 - **Trigger**: An owner-approved corrective project is opened from the 2026-08-21 P6D incident record; before that project may claim completion, all three controls must have planted negative cases that demonstrate they can block (a) unjustified heavy dispatch for an acceptance-oracle task, (b) a staged manifest outside the declared allowlist, and (c) successor/pipeline escalation before one local artifact-repair attempt.
 - **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance. Its first candidate passed every functional verification but included two dependency symlinks; Codex then replaced a minute-scale amend with terminalization, successor adoption, governance churn, and full rerun. Fable 5 ruled this was two decision failures rather than a Git-only mistake. The corrective project should implement the smallest enforceable protocol from the incident: dispatch justification when a complete acceptance oracle already exists; pre-commit staged-manifest comparison against a machine-readable task allowlist; and a failure-response state machine that requires one local artifact repair before workflow-level expansion. Status-report budgeting is a controller interaction rule and must not be inflated into unrelated product machinery without separate evidence. Do not encode P6D's six paths or a blanket symlink ban as global policy.
@@ -67,7 +73,13 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: M（task-set repair + 63-run re-campaign）
 - **Source**: dev-flow-contract-card P6 adjudication（2026-08-18）.
 
-### Plan-review has no aggregate progress view (seats are observable, the panel is not)
+### Panel progress view — reviewer-cut cosmetic residuals (v2.34.31 round-1)
+- **Trigger**: An operator incident actually caused by one of these: misread an exit-4 run because a never-dispatched seat shows `transport_exhausted`; `--panels` truncation at 10 hides a panel someone was looking for; `.tmp-<pid>` residue accumulates measurably in the runs dir; `--panel`(缺值)的 exit-2 訊息造成真實誤導。
+- **Context**: 2026-08-21 review 判 CUT/FOLLOW-UP 的殘項(行為今日驗證正確,純回歸保護/污染防護):(1) never-dispatched seat 標籤應為 `not_dispatched`(`dispatch-plan-review.js` settle 分支);(2) `--panels` 輸出加 `total`/`truncated`;(3) panel lib flush catch 內 unlink tmp;(4) `--panel` 缺值時的用法訊息;(5) `--list` 的 panel 排除改以 `artifact_type` 判別而非檔名前綴(理論性:自產 run_id 不會撞 `panel-`)。全部單檔小改;證據與行號在 review 記錄(project archive)。另一獨立觀察(round-2):`preflight-release.sh` gate [3] 只比對版本字串,鏡像 **script 內容** 漂移不會被它抓 —— 測試套件是唯一 parity gate;若鏡像漂移再度逃到 develop,提升為獨立 Fix。
+- **Effort**: S(單項)
+- **Source**: autopilot:reviewer FIX-THEN-SHIP round-1, 2026-08-21;docs/projects/_archive/2026-08-21-panel-progress-view/
+
+### ~~Plan-review has no aggregate progress view~~ — RESOLVED v2.34.31 (panel manifest at every seat transition + `dispatch-status --panels/--panel`; concurrency question DECIDED sequential-with-rationale in docs/plans/2026-08-21-panel-progress-view.md §3)
 - **Trigger**: Next touch of `scripts/dispatch-plan-review.js`, or the next time a panel run has to be babysat by polling `ps`.
 - **Context**: v2.34.21 made each seat observable (`dispatch-author.sh` now emits a run manifest, and plan-review spawns one author per seat), but the PANEL layer still shows nothing: seats run **sequentially**, so wall time is the sum of seats, and the driver writes no output until every seat has returned. A 3-seat panel at 15 min/seat can look identical to a hang for 45 minutes. Measured 2026-08-18: a G1 run produced 0 bytes for ~20 minutes; the only way to tell it was progressing was `ps -eo etime` on the `timeout 900s` child. Wanted: a panel-level manifest (which seat is in flight, which are done, per-seat deadline remaining) that `dispatch-status.js` can render, plus a decision on whether independent seats should run concurrently rather than sequentially. Note the concurrency question is not free — seats share the endpoint env and quota.
 - **Effort**: M

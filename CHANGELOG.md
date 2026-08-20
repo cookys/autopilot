@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ## v2.34.31 — QRP_CLI_HOME 要 per-invocation clone:共用一個會讓考試把傳輸故障記成模型失分
 
 agy 連兩次資格考卡在 `provider_process_failed`(2/4 輪)。我原本判它「傳輸不可靠」,
@@ -37,6 +38,45 @@ agy 每次執行都寫 `$HOME/.gemini/config/{config.json,mcp_config.json,projec
 | MiniMax-M3 | 26/42 | 15/38 | 2 | ❌ degraded |
 
 四筆已 record(scorecard 34 → 38)。
+=======
+## v2.34.31 — plan-review PANEL 層可觀測性:哪席在飛、deadline 剩多少,一條指令
+
+**Headline**: v2.34.21 讓席位可觀測,但 PANEL 層仍是黑箱——循序三席 20m/席,驅動端到最後
+一席才輸出,一小時內與 hang 無法區分(2026-08-18 實測一次、08-20 三次盲等)。本版補齊:
+`dispatch-plan-review.js` 在每個席位轉換點寫 panel manifest,`dispatch-status.js --panels`
+即時渲染。BACKLOG「panel 聚合進度」條目收案;其「循序 vs 併發」決策條款以記錄裁決滿足
+(維持循序:席位共享 endpoint env 與配額,7200s wall 記帳假設串行;併發需自己的設計,
+見 plan §3)。
+
+### Added
+- `scripts/lib/plan-review-panel.js` — panel manifest 寫入器:run start / 每席 attempt
+  start / attempt settle / run end 四類轉換,atomic tmp+rename,**全部 best-effort**
+  (觀測性永不弄倒被觀測的 review)。retry 保持 in_flight 並遞增 attempt。
+- `scripts/dispatch-status.js` `--panels` / `--panel <file|prefix>` — 唯讀渲染:per-seat
+  status/attempt、in-flight elapsed、deadline 剩餘;結束面板 remaining=null;prefix 模糊
+  時 exit 3。
+- `hooks/tests/plan-review-panel-status.test.sh` — 32 assertions:lib 生命週期、seam 驅動
+  整合(紅綠驗證:stash 發射端後 8 紅,首紅於「panel manifest written」)、渲染 fixture、
+  review round-1 pins(best-effort 負控 + **突變驗證**:拔 try/catch 必紅、opt-out、
+  dead-owner 降級、--list 排除、scalar JSON 防護)。
+
+### Changed
+- `scripts/dispatch-plan-review.js` — 建立 panel handle 並穿線至 reviewSeat(seatStart 於
+  dispatchSeat 前、settle 於席位回返、end 於 artifact 落地後;controlled-error 路徑也
+  `end(null)` —— 失敗的 run 不得渲染成還剩兩小時的活面板)。
+- Review round-2(MUST-FIX 清空,cut items 中六項當場拿):owner 活性改**三態**
+  (probe 回 n/a → `owner_alive: null`,不 fail-open 成 true)、`--help` 補 `owner_alive`/
+  `in_flight_stale` 文件、dead-pid fixture 改用 > pid_max 的 4194305(確定性)、新增三 pin
+  (n/a 三態、ambiguous prefix exit 3、**error-path `panel.end(null)` 的 M5 突變殺死**)。
+  六個 MUST-FIX 至此全部有非空洞測試 pin(六突變全紅)。
+- Review round-1(FIX-THEN-SHIP → 6 MUST-FIX 全修):`--list` 排除 panel 檔(不再注入
+  `run_id:null` 幽靈列)、renderer 以 `probePid` 檢 owner 活性(死行程的 in_flight 降級
+  `in_flight_stale`,`owner_alive` 欄新增)、`--panel` 改走 `readManifest`(scalar JSON 不再
+  炸 stack trace)、panel lib 尊重 `AUTOPILOT_DISPATCH_MANIFEST=0`。
+  prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本之遺留
+  (dev-flow 713→717 = v2.34.23 gate advisory;harness-maintenance 58→59 = v2.34.28
+  probe row),justification 見各該版節。
+>>>>>>> origin/develop
 
 ## v2.34.30 — QRP_CLI_HOME:只吃 HOME 的 CLI 也能送考(推翻我自己的「不可考」)
 
@@ -4203,7 +4243,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 
 ### Added
 - `scripts/distill-consolidate.sh` (deterministic, no LLM): `normalize-slug <raw>` (lowercase + drop a tiny stopword set + **preserve token order** — converges naming divergence while keeping antonyms like `add-user`/`remove-user` distinct), `migrate [pack]` (one-time rename of existing dirs to normalized slugs; STOPs when two dirs collide on one slug — a real consolidation case), `compare <slug> [pack]` (proactive divergence check vs `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; requires a configured upstream, never guesses `origin/<branch>`).
-- `hooks/tests/distill-consolidate.test.sh` — 26 assertions: normalize convergence + antonym-safety + all-stopword fallback; migrate rename/idempotent/collision-STOP; compare all four statuses + no-upstream/non-git guards (bare+two-clone fixture).
+- `hooks/tests/distill-consolidate.test.sh` — 32 assertions: normalize convergence + antonym-safety + all-stopword fallback; migrate rename/idempotent/collision-STOP; compare all four statuses + no-upstream/non-git guards (bare+two-clone fixture).
 
 ### Changed
 - `skills/distill/SKILL.md`: Step 4 normalizes the pack slug; Step 5 replaces "STOP on conflict (deferred consolidate)" with the proactive `compare` → human-gated LLM-merge → normal commit flow + a one-time `migrate` note; the "Deferred" section is un-deferred. `references/sync-setup.md`: migration steps + a **fleet-rollback runbook** (`git revert` works because the consolidation is a normal commit, not a merge commit; documents the peer-re-consolidated descendant case).

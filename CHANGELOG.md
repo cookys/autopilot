@@ -1,5 +1,38 @@
 # Changelog
 
+## v2.34.26 — v2.34.25 的 hetero review 裁決：兩條成立、三條不成立
+
+用 v2.34.25 自己的 diff 當 Stage-0 spike 語料丟給三家異質引擎審。逐條裁決後只有兩條
+成立,兩條都修在這裡。
+
+**成立：**
+- **`r.text()` 無界緩衝**(codex 🟠)。anthropic-compatible live probe 把整個遠端回應
+  讀進記憶體;那個遠端正是這條 probe 裡最不該信任的一方。改成**有界讀取**:只取第一個
+  chunk 的前 200 字元當診斷、其餘 `reader.cancel()` 丟掉,讀取本身包在 try 裡,
+  **永遠不由它決定 verdict**。
+- **claude-native 註解自招誤讀**。舊註解引用 dispatcher 的 `command -v "${BIN:-claude}"`,
+  讀起來像 probe 沒尊重 override(codex 就是這樣讀的)。實際上 probe 沒有 `--bin` 輸入,
+  BIN 恆未設 ⇒ 兩者解析等價,且既有 cc-shim 分支同樣寫死 `claude`。註解改成把這個推理
+  講完,並註明「日後 probe 若加 --bin,兩處都要改」。
+
+**不成立(附證據,留紀錄以免下次重審)：**
+- 🔴 *測試檔不在 diff 裡*(GLM) —— **假陽性,是餵料造成的**:spike 用了 path-limited
+  `git show <sha> -- scripts/...`。`hooks/tests/probe-runner-coverage.test.sh` 確實在
+  `421f8fcf` 裡。GLM 的觀察對、也主動提示「或重送含它的 diff」。
+- 🔵 *auth header 可能該用 `x-api-key`*(GLM) —— dispatcher `dispatch-anthropic-review.js:483-484`
+  就是 `authorization: Bearer` + `anthropic-version: 2023-06-01`,probe 逐字相同,parity 正確。
+- 🔵 *global fetch 需 Node ≥18*(GLM+kimi) —— 本機 v18.19.1;且兩家都正確指出失敗方向安全。
+- codex 對 `r.text()` 的**另一半**(reflecting endpoint 洩 bearer token)也不成立:
+  失敗才印、印前過 secret-redaction sed、且 `EVIDENCE` 只存分類不存原文(:487-489 明寫
+  「NOT persisted」)。修的是無界緩衝那一半。
+
+紅綠:有界讀取後 `anthropic-compatible/glm-5.3 + endpoint GLM` 仍 `available`;負控制
+(不存在的 model / 不存在的 endpoint)維持 non-authorizing;kimi 與 claude-native 零回歸;
+`probe-runner-coverage` 19/19。
+
+⚠️ 過程中踩到:`this script's` 的撇號把 `node -e '...'` 的單引號字串提前關掉,
+`bash -n` 直接紅。外層語法過**不代表**嵌入的 node 跑得動 —— 這類改動一律實跑驗證。
+
 ## v2.34.25 — probe 只認得 dispatcher 八個 runner 裡的五個,而失效方式是靜音的
 
 `dispatch-review.sh` 支援 8 個 runner,`probe-engine-capability.sh` 只有 5 個分支。

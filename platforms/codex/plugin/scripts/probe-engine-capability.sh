@@ -202,8 +202,10 @@ case "$RUNNER" in
     fi
     ;;
   claude-native)
-    # Drives the local Claude Code CLI with its own ambient auth
-    # (dispatch-review.sh: CC_BIN="$(command -v "${BIN:-claude}")").
+    # Drives the local Claude Code CLI with its own ambient auth. The dispatcher resolves
+    # `command -v "${BIN:-claude}"`; this probe has no --bin input, so BIN is always unset
+    # here and the two resolutions are identical. Matches the cc-shim branch below, which
+    # invokes `claude` the same way. (If probe ever gains --bin, mirror it in BOTH places.)
     if command -v claude >/dev/null 2>&1; then
       BINARY_FOUND=1
       RUNNER_VERSION="$(claude --version 2>&1 | head -n 1 || echo "unknown")"
@@ -452,12 +454,27 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
               "content-type": "application/json",
               "anthropic-version": "2023-06-01",
               "authorization": "Bearer " + process.env.ANTHROPIC_AUTH_TOKEN } })
-            .then(r => r.text().then(txt => {
+            .then(async r => {
               clearTimeout(t);
-              // Redacted: status + a short body slice only; never the token or full payload.
-              process.stderr.write("HTTP " + r.status + " " + txt.slice(0, 200) + "\n");
+              // BOUNDED read: r.text() would buffer whatever the remote chooses to send.
+              // The peer here is the untrusted side of the probe, so read at most one small
+              // chunk for diagnostics and drop the rest. Body never reaches the persisted
+              // store (EVIDENCE keeps only the classification) and the operator-stderr path
+              // runs it through the secret-redaction sed below first.
+              let head = "";
+              try {
+                const reader = r.body && r.body.getReader ? r.body.getReader() : null;
+                if (reader) {
+                  const chunk = await reader.read();
+                  if (!chunk.done && chunk.value) {
+                    head = Buffer.from(chunk.value).toString("utf8").slice(0, 200);
+                  }
+                  await reader.cancel();
+                }
+              } catch { /* diagnostics only — never let the read decide the verdict */ }
+              process.stderr.write("HTTP " + r.status + " " + head + "\n");
               process.exit(r.ok ? 0 : 1);
-            }))
+            })
             .catch(e => { clearTimeout(t); process.stderr.write(String(e && e.message) + "\n"); process.exit(1); });
         ' >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi

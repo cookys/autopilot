@@ -1,5 +1,48 @@
 # Changelog
 
+## v2.34.28 — 資格考通過、然後被自己的 recorder 拒絕;身分 TOKEN 表達不了真實 model id
+
+兩個缺陷都是實際送考時撞到的,不是讀出來的。
+
+**詞彙不一致**:`engine-qualify --version-source` 收 `operator-asserted`,
+`engine-scorecard` 只收 `runtime|manual`;qualifier 的 `--effort` 收任意 token,
+scorecard 只收 `low..max`。⇒ **每一筆 CLI transport 的資格 row 都寫不進 scorecard**,
+而且沒有任何測試會紅 —— qualifier 驗自己的旗標、scorecard 驗自己的 row,
+**沒人問「一邊產得出的另一邊收不收」**。scorecard 加收 `operator-asserted`
+(保留 `manual`:34 筆歷史用它,改寫證據比留兩個拼法更糟)與 `effort=none`
+(真實且不同的狀態 —— 該 transport 沒有 effort 維度,與「省略=未知」不同)。
+
+**身分 TOKEN**:`[A-Za-z0-9._:-]` 擋掉 `Gemini 3.7 Flash (High)` 與 `kimi-code/k3-256k`,
+而 `engine-qualify.js:1443` 比對 `receipt.model` ⇒ 別名不是逃生口,那兩席因為**命名**
+而非能力永遠考不了。不放寬通用 TOKEN(那守我們自己的詞彙),給 model 單獨 `MODEL_ID`。
+前提驗過:三個相關檔 `shell:true` 皆 0,值只走 argv 陣列與 JSON。仍排除引號、反斜線、
+`$`、backtick、換行、`; | & < >` 與前後空白。
+
+⚠️ **這個 charset 有三份複本,是逐一被撞出來的**:`scripts/engine-qualify.js`(第一次修)
+→ `scripts/qualification-case-broker.js`(送考才撞到,送出側+回傳側)
+→ `src/engine/capability-evidence.js`(再送考又撞到 —— 它在 `src/` 不在 `scripts/`,
+`scripts/*.js` 的枚舉看不到)。三份現在逐字相同;broker 會比對回傳 model 是否等於預期,
+任何一份較窄都會讓合法身分在「最後檢查的那一跳」失敗。
+
+新增 `hooks/tests/qualify-scorecard-vocabulary.test.sh`(36 條)。兩側詞彙從各自原始碼
+枚舉後比對;**model-id charset 全樹枚舉(`scripts` + `src`)不寫死檔名** —— 正是因為寫死
+會漏掉第三份。變異四向全部精確命中。
+
+⚠️ **這份測試自己犯了三個錯**(全寫進註解):`set -o pipefail` + `if cmd | grep -q` 讓
+11 條負控制全報 ACCEPTED、4 條正控制也因同一 bug 才看起來對／heredoc 承載的尾端空格
+被剝掉使案例失效／broker 只回 error code 不回訊息,比對訊息文字等於沒比。
+
+送考結果(bwrap 0.9.0 + 專用 apparmor profile 就緒後):
+`codex gpt-5.6-sol` max **21/21 兩輪、FP 0、false-pass-critical 0 → qualified**;
+`GLM-5.3` 20/21 兩輪、FP 2 then 1、trial-1 放過 1 Critical → **degraded**。
+兩筆已 record(34→36),歷史完好。
+
+**agy 與 kimi 仍考不了,但原因換了** —— 不是命名也不是能力:exam broker 依設計重導 `HOME`,
+而這兩支 CLI 的憑證住在 HOME 且沒有 `CODEX_HOME` 那種轉發變數。實測 HOME 換掉後
+agy 回 `Authentication required`、kimi 回 `Model ... is not configured`;HOME 正常時
+agy rc=0。要解只有「那兩個 CLI 自己加 config-dir」或「動 broker 的 HOME 隔離」,
+後者是安全邊界,不為方便弄鬆。**登記為未解。**
+
 ## v2.34.27 — QRP 支援 agy 與 kimi:dispatch 層早有 adapter,考試層一直沒有
 
 `dispatch-review.sh` 支援 agy 與 kimi(kimi 的 `k3-256k` 是上游 `fa62c36a` 剛加的),

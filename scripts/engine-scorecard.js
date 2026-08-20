@@ -22,7 +22,14 @@ const {
 
 const VALID_ROLES = new Set(ROLE_IDS);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
-const VALID_VERSION_SOURCES = new Set(['runtime', 'manual']);
+// `manual` is the legacy spelling (all 34 pre-2026-08-20 rows use it) and stays
+// accepted so history keeps validating. `operator-asserted` is what
+// engine-qualify.sh's --version-source actually emits, and without it EVERY
+// CLI-transport qualification row was unrecordable: the qualifier passed, then
+// `engine-scorecard.js record` rejected its own emitted row. Two spellings for
+// one concept is not ideal — but rewriting evidence rows is worse. New rows
+// should use `operator-asserted`.
+const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted']);
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
 const TRANSCRIPT_PROVIDERS = new Set(['codex', 'grok', 'opencode', 'agy']);
@@ -232,9 +239,14 @@ function validateRecordRow(row) {
   // OPTIONAL effort (v2.32.25, family-conflict fallback): when present it names the
   // calibrated reasoning effort of this row's invocation tuple. Only codex-runner
   // consumers require it; absent = "not effort-calibrated" (ladder projects null).
+  // `none` is a real, distinct state — the transport has NO effort dimension at
+  // all (http /v1/messages, agy where effort is baked into the model name, kimi
+  // whose config exposes only `[thinking] enabled`). That is not the same as
+  // omitting the field, which means "unknown/unrecorded". Collapsing the two
+  // would lose the fact that the tuple was checked and found effort-less.
   if (row.effort !== undefined
-      && !['low', 'medium', 'high', 'xhigh', 'max'].includes(row.effort)) {
-    failValidation(`invalid effort '${row.effort}' (low|medium|high|xhigh|max or omit)`);
+      && !['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(row.effort)) {
+    failValidation(`invalid effort '${row.effort}' (none|low|medium|high|xhigh|max or omit)`);
   }
 
   // OPTIONAL model (v2.32.25): the exact --model string for this row's runner when

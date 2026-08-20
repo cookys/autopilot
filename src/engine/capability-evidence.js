@@ -121,6 +121,20 @@ function token(value, label) {
   return value;
 }
 
+// THIRD copy of the model-id charset (engine-qualify.js, qualification-case-broker.js,
+// here). MUST stay byte-identical to the other two: they hand the same value to each
+// other, so a narrower set anywhere kills a legitimate identity at whichever hop
+// happens to check last. Vendor ids really do contain spaces, parentheses and slashes
+// ("Gemini 3.7 Flash (High)", "kimi-code/k3-256k"). Shell metacharacters, quotes,
+// backslash and leading/trailing whitespace stay out.
+function modelId(value, label) {
+  if (typeof value !== 'string'
+      || !/^(?![\s])[A-Za-z0-9 ._:()/-]{1,128}(?<![\s])$/u.test(value)) {
+    evidenceError(`${label} must be a bounded vendor model id`);
+  }
+  return value;
+}
+
 function digest(value, label) {
   if (!isSha256(value)) evidenceError(`${label} must be a SHA-256 digest`);
   return value.toLowerCase();
@@ -202,8 +216,8 @@ function normalizeIdentity(raw) {
   onlyKeys(value, new Set(fields), 'capability identity');
   requiredKeys(value, fields, 'capability identity');
   return {
-    identity: token(value.identity, 'capability identity.identity'),
-    model_alias: token(value.model_alias, 'capability identity.model_alias'),
+    identity: modelId(value.identity, 'capability identity.identity'),
+    model_alias: modelId(value.model_alias, 'capability identity.model_alias'),
     model_version: token(value.model_version, 'capability identity.model_version'),
     family: token(value.family, 'capability identity.family'),
     runner: token(value.runner, 'capability identity.runner'),

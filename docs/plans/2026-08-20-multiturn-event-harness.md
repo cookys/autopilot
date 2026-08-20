@@ -128,3 +128,7 @@ None. (G1's OQ1/OQ2 resolved: sonnet-only; k=3 fixed — now Phase-B-only consta
   folds: eligibility decontaminated (TaskCreate disjunct removed), scanner planted-red/green
   validity gate + single pre-corpus freeze, total gate function, Phase B Board-gated (never
   auto-starts), zero = detection-claim semantics. FROZEN at R2'.
+- Phase A executed (scanner validity 4/4 → single freeze → one verbatim scan): 766 files,
+  3 eligible; m2/m3/m4 observed (2/3 each), m1 insufficient (1/3). Gate → Board.
+  **Board ruling 2026-08-20: campaign CLOSED on Phase A; Phase B lapsed unexercised.**
+  Spend: 0 live calls. `phase-a-adjudication.md` + `phase-a-report.json`.

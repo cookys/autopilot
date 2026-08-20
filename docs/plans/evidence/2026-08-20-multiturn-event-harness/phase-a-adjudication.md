@@ -24,3 +24,10 @@ exercisable ONLY on explicit owner go. Raw report: `phase-a-report.json`.
   detection claim.
 - The m4 disclosure in pre-registration.md applies (prior partial corpus exposure); m1-m3
   were unexposed.
+
+## Board ruling (2026-08-20): CLOSED on Phase A
+
+Owner exercised the gate: campaign closes on Phase A's licensed result. Phase B is NOT
+exercised; its frozen texts remain on record as a lapsed option (a future use = new plan +
+new review). Residual: m1_session_sha stays `insufficient` (1/3, n=3 corpus). The 6-call
+budget is returned unspent. Total campaign spend: 0 live calls.

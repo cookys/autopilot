@@ -22,6 +22,12 @@
 //   dispatch-status.js --log <path> --usage-only [--format F] # ONE line: usage object or `null`
 //   dispatch-status.js --log <path> --agy-envelope             # strict {response,usage}
 //   dispatch-status.js --list [--dir <manifest-dir>]
+//   dispatch-status.js --panels [--dir <manifest-dir>]        # plan-review PANEL progress (newest 10)
+//   dispatch-status.js --panel <file|prefix> [--dir <dir>]    # one panel's seat table
+//   --panels/--panel: renders panel-<key>-gN manifests written by dispatch-plan-review
+//   (v2.34.31): per-seat status/attempt, in-flight elapsed, deadline remaining, plus
+//   owner_alive (three-state: true/false/null=unknowable) — a dead owner downgrades
+//   in_flight seats to in_flight_stale. Read-only.
 //   dispatch-status.js --reap [--days N] [--dir <manifest-dir>] [--dry-run]
 //   --reap: retention reaper for the runs dir — deletes not-live manifests older than
 //   --days (default 7) and, ONLY on a definitive dead lock verdict + .autopilot-worktree
@@ -692,6 +698,8 @@ function main(argv) {
     else if (a === '--usage-only') { args.usageOnly = true; }
     else if (a === '--agy-envelope') { args.agyEnvelope = true; }
     else if (a === '--list') { args.list = true; }
+    else if (a === '--panels') { args.panels = true; }
+    else if (a === '--panel') { args.panel = argv[++i]; }
     else if (a === '--reap') { args.reap = true; }
     else if (a === '--days') { args.days = Number(argv[++i]); }
     else if (a === '--dry-run') { args.dryRun = true; }
@@ -747,11 +755,83 @@ function main(argv) {
     return 0;
   }
 
+  if (args.panels || args.panel) {
+    const dir = manifestDir(args.dir);
+    const nowMs = Date.now();
+    const summarize = (m, file) => {
+      const seats = (Array.isArray(m.seats) ? m.seats : []).map((s) => {
+        const seat = { ...s };
+        if (s.status === 'in_flight' && s.started_at) {
+          seat.elapsed_seconds = Math.max(0, Math.floor((nowMs - Date.parse(s.started_at)) / 1000));
+        }
+        return seat;
+      });
+      // A dead owner must not report a live seat: Ctrl-C / SIGKILL skips end(), and
+      // "seat in flight" about a process that died hours ago is exactly the false
+      // claim this feature exists to remove (review 2026-08-21, MUST-FIX 3).
+      const ownerProbe = Number.isInteger(m.pid) ? probePid(m.pid) : 'n/a';
+      const ownerAlive = m.ended_at || ownerProbe === 'n/a' ? null : ownerProbe === 'alive';
+      if (ownerAlive === false) {
+        for (const s of seats) { if (s.status === 'in_flight') s.status = 'in_flight_stale'; }
+      }
+      const inFlight = seats.find((s) => s.status === 'in_flight' || s.status === 'in_flight_stale') || null;
+      return {
+        file,
+        owner_alive: ownerAlive,
+        ticket: m.ticket,
+        logical_plan_id: m.logical_plan_id,
+        generation: m.generation,
+        verdict: m.verdict,
+        started_at: m.started_at,
+        updated_at: m.updated_at,
+        ended_at: m.ended_at,
+        deadline_remaining_seconds: m.ended_at || !m.deadline_at
+          ? null
+          : Math.floor((Date.parse(m.deadline_at) - nowMs) / 1000),
+        seats_done: seats.filter((s) => s.status === 'done').length,
+        seats_failed: seats.filter((s) => s.status === 'failed').length,
+        seats_pending: seats.filter((s) => s.status === 'pending').length,
+        in_flight: inFlight,
+        seats,
+      };
+    };
+    let files = [];
+    try {
+      files = fs.readdirSync(dir).filter((f) => f.startsWith('panel-') && f.endsWith('.manifest.json'));
+    } catch (_e) { /* empty runs dir */ }
+    if (args.panel) {
+      let target = null;
+      if (fs.existsSync(args.panel)) target = args.panel;
+      else {
+        const hits = files.filter((f) => f.startsWith(`panel-${args.panel}`) || f.startsWith(args.panel));
+        if (hits.length === 1) target = path.join(dir, hits[0]);
+        else {
+          process.stderr.write(`panel not found or ambiguous (${hits.length} matches) for: ${args.panel}\n`);
+          return 3;
+        }
+      }
+      let m;
+      try { m = readManifest(target); } catch (_e) {
+        process.stdout.write(`${JSON.stringify({ error: 'panel manifest unreadable', file: target })}\n`);
+        return 3;
+      }
+      process.stdout.write(`${JSON.stringify(summarize(m, target))}\n`);
+      return 0;
+    }
+    const out = [];
+    for (const f of files) {
+      try { out.push(summarize(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')), path.join(dir, f))); } catch (_e) { /* skip */ }
+    }
+    out.sort((a2v, b2v) => String(b2v.started_at || '').localeCompare(String(a2v.started_at || '')));
+    process.stdout.write(`${JSON.stringify(out.slice(0, 10))}\n`);
+    return 0;
+  }
+
   if (args.list) {
     const dir = manifestDir(args.dir);
     let entries = [];
     try {
-      entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json'));
+      entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json') && !f.startsWith('panel-'));
     } catch (_e) { /* absent dir → empty list */ }
     const out = [];
     for (const f of entries) {

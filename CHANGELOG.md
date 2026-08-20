@@ -1,5 +1,45 @@
 # Changelog
 
+## v2.34.25 — probe 只認得 dispatcher 八個 runner 裡的五個,而失效方式是靜音的
+
+`dispatch-review.sh` 支援 8 個 runner,`probe-engine-capability.sh` 只有 5 個分支。
+其餘三個(`anthropic-compatible` / `claude-native` / `kimi`)掉進 `command -v "$RUNNER"`
+這條通用後路 —— 對它們**永遠不可能成立**:`kimi` 慣例上不在 PATH(在
+`~/.kimi-code/bin/`,dispatcher 有 fallback、probe 沒有),`anthropic-compatible` 根本
+不是 binary(走 `dispatch-anthropic-review.js` 的 HTTP)。
+
+危害不在於少了功能,在於**它壞得像沒壞**:回的是 `unknown / Binary for runner X not
+found`,讀起來像「還沒量」而不是「這支 probe 看不見這個 runner」。新 runner 加在
+dispatcher(壞了很吵,dispatch 直接失敗),probe 是另一個檔(壞了只是多一筆 unknown),
+所以 8 vs 5 可以存在很久沒有任何測試轉紅。
+
+- **probe 補三個 runner**:binary presence + live-spend 各一條分支。`kimi` 的 binary
+  解析順序**逐字照抄 dispatcher**(PATH → `~/.kimi-code/bin/kimi`)—— probe 若用不同
+  順序解析,量到的就不是 dispatch 實際會跑的那支。`anthropic-compatible` 的「presence」
+  重新定義為它真正的前提(`node` + `dispatch-anthropic-review.js`),live 觀測是一次
+  最小的 `/v1/messages` POST;無憑證時維持 non-authorizing,絕不因為「node 在」就蓋
+  available。
+- **tuple 消費集合從讀 dispatcher 得出,不靠假設**:effort 只有 codex/grok/qoderclicn
+  真的收到(`-c model_reasoning_effort` / `--reasoning-effort` ×2);endpoint 只有
+  cc-shim/anthropic-compatible 消費。先前 endpoint 白名單只列 cc-shim,會把
+  anthropic-compatible 這個**以具名 endpoint 為主要憑證路徑**的 runner 擋掉。
+- **agy 註解改成 probe 實證,行為不動**:舊註解說「agy has no verified exact effort
+  CLI」。`agy --help` 其實有 `--effort`,但 2026-08-20 實測(agy 1.1.16,三個不同家族
+  的 model)全部拒絕 —— roster 內每個 model 都把 effort 烘在名字裡
+  (`Gemini 3.7 Flash (High)`)。`low|medium|high` 回「不支援此 model」、
+  `xhigh|max|bogus` 回「invalid --effort」,兩種錯誤訊息不同。結論(non-authorizing)
+  是對的,理由不精確;附上可重跑迴圈與「若哪天有 model 接受就要改成傳遞而非拒絕」。
+- **新增 `hooks/tests/probe-runner-coverage.test.sh`(19 條)** —— 這才是缺的那個紅。
+  roster **從 dispatcher 原始碼枚舉,不手寫**(手寫清單會用一樣的方式漂移)。變異驗證:
+  拿掉修法 → 11 passed / **8 failed**(精確落在三個 runner × 兩條分支 + 兩個消費集合);
+  只在 dispatcher 加第九個 runner → **2 failed** 指名它;把 case 行改形狀讓 parser 失手
+  → **大聲失敗** `0 passed / 1 failed`,不是假綠。
+
+紅綠(live,同一棵樹):修法前 `kimi` / `anthropic-compatible` / `claude-native` 三條
+皆 `unknown — Binary for runner X not found`;修法後三條皆 `available / confidence=high`。
+負控制不退化:不存在的 model、不存在的 endpoint、無憑證、以及非消費維度的 tuple
+(kimi+`--effort`、claude-native+`--endpoint`)一律維持 non-authorizing。
+
 ## v2.34.24 — onboard 鋪 env 釘住:消費端專案也拿回 forcing functions
 
 **Headline**: v2.34.23 只救了本 repo;消費端專案在 5 世代模型下 forcing functions 仍然

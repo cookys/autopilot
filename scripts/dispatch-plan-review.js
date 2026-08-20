@@ -29,6 +29,7 @@ const {
   unresolvedCandidateFingerprints,
 } = require('./lib/plan-review-findings');
 const { effortSeatTimeoutSeconds } = require('./lib/plan-review-timeout');
+const { createPanelManifest } = require('./lib/plan-review-panel');
 
 const SCRIPT_DIR = __dirname;
 const DISPATCH_AUTHOR = path.join(SCRIPT_DIR, 'dispatch-author.sh');
@@ -1008,6 +1009,7 @@ function reviewSeat({
   rubricIds,
   timeoutSeconds,
   timeoutExplicit,
+  panel,
   sequence,
   selectedTargets,
   deadlineMs,
@@ -1075,6 +1077,7 @@ function reviewSeat({
       : seat.id === 'deep'
         ? 'AUTOPILOT_PLAN_REVIEW_DEEP_RESPONSE_FILE'
         : `AUTOPILOT_PLAN_REVIEW_${seat.id.toUpperCase()}_RESPONSE_FILE`;
+    if (panel) panel.seatStart(seat.id, selected.id, attempt);
     const dispatched = dispatchSeat(
       bounded,
       buildPrompt(bounded, planBytes, rubricBytes, rubricIds),
@@ -1515,13 +1518,25 @@ function main() {
     }
   }
 
+  let panel = null;
   try {
     const deadlineMs = Date.parse(state.deadline_at);
     const sequence = testSequence();
     const selectedTargets = new Map(manifest.seats.map((seat) => [seat.id, seat]));
+    panel = createPanelManifest({
+      ticket: opts.ticket,
+      logicalPlanId: manifest.logical_plan_id,
+      generation: opts.generation,
+      sessionKey,
+      startedAt: state.started_at,
+      deadlineAt: state.deadline_at,
+      seats: manifest.seats,
+      now: clock.now,
+    });
     const seatReviews = [];
     for (const seat of manifest.seats) {
       const seatReview = reviewSeat({
+        panel,
         manifest,
         seat,
         repoRoot: opts.repoRoot,
@@ -1535,6 +1550,9 @@ function main() {
         deadlineMs,
         clockNow: clock.now,
       });
+      panel.seatSettle(seat.id, seatReview.exhausted
+        ? { status: 'failed', transportStatus: seatReview.deadline_exhausted ? 'deadline_exhausted' : 'transport_exhausted' }
+        : { status: 'done', transportStatus: 'success' });
       seatReviews.push(seatReview);
       if (seatReview.exhausted) selectedTargets.set(seat.id, null);
     }
@@ -1694,6 +1712,7 @@ function main() {
       }
       const outPath = artifactPath(sessionDir, opts.generation);
       atomicWriteJson(outPath, artifact);
+      panel.end(artifact.verdict);
       state.active_claim = null;
       state.artifacts.push(outPath);
       const claim = state.claims.find((item) => item.claim_id === claimId);
@@ -1716,6 +1735,10 @@ function main() {
     });
     finish(artifact, artifactExitCode(artifact));
   } catch (error) {
+    // A failed run must not render as a live panel with hours remaining
+    // (review 2026-08-21, MUST-FIX 2). Best-effort; SIGKILL is covered by the
+    // renderer's owner-liveness probe instead.
+    if (panel) panel.end(null);
     if (error instanceof CliError || error instanceof TypeError) {
       abortInFlightClaim(sessionDir, statePath, claimId, error.message);
       exitControlledError(error);

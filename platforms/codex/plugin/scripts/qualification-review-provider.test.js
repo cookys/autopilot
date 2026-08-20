@@ -714,5 +714,38 @@ function vaRequest(content = VA_ENVELOPE) {
     'the answer arrives byte-complete after the deadline deferred to flush');
 }
 
+// ── QRP_CLI_HOME redirects ONLY the harness child's HOME ───────────────────────
+// Why: agy keeps credentials under $HOME/.gemini/ and exposes no config-dir
+// variable, while the case broker sets HOME to a providerRoot it owns. Without a
+// redirect the CLI hits "Authentication required" on every case and the exam
+// grades a TRANSPORT failure as a MODEL failure. Same posture as CODEX_HOME /
+// KIMI_CODE_HOME: a dedicated exam dir, host home still invisible.
+{
+  const examHome = path.join(tempRoot, 'exam-home');
+  fs.mkdirSync(examHome, { recursive: true });
+  const { child, captured } = runProvider({
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_CLI_HOME: examHome,
+    },
+  });
+  check(captured !== null, `QRP_CLI_HOME run captured the child env (stderr: ${child.stderr})`);
+  equal(captured.env.HOME, examHome,
+    'the harness child receives QRP_CLI_HOME as its HOME');
+}
+{
+  // Negative control: with QRP_CLI_HOME unset the child must inherit the HOME this
+  // process was given (the broker's providerRoot) — never silently reach elsewhere.
+  const { captured } = runProvider({
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude },
+  });
+  equal(captured.env.HOME, tempRoot,
+    'without QRP_CLI_HOME the child keeps the broker-assigned HOME');
+}
+
 fs.rmSync(tempRoot, { recursive: true, force: true });
 process.stdout.write(`${assertions} assertions passed\n`);

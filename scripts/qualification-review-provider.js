@@ -59,6 +59,16 @@
  *   QRP_MAX_TOKENS  http: optional completion budget (default 8192)
  *   QRP_TRANSPORT   http | cli (default http)
  *   QRP_CLI_KIND    cli: codex | claude | agy | kimi
+ *   QRP_CLI_HOME    cli: HOME for the harness child. Needed by CLIs that keep
+ *                   credentials under $HOME and expose NO config-dir variable of
+ *                   their own — agy reads $HOME/.gemini/antigravity-cli/. The
+ *                   broker sets HOME to a fresh providerRoot it owns, so without
+ *                   this those CLIs hit "Authentication required" on every case
+ *                   and the exam grades a transport failure as a model failure.
+ *                   Same posture as CODEX_HOME / KIMI_CODE_HOME: point it at a
+ *                   DEDICATED exam dir holding credentials only. The host home
+ *                   stays invisible either way — this does not widen the sandbox,
+ *                   it just gives HOME-only CLIs the redirect the others have.
  *   QRP_CLI_BIN     cli: optional absolute binary override (default = the kind name)
  *   QRP_CLI_EFFORT  cli/codex: optional model_reasoning_effort override
  *   QRP_PROMPT_MODE reviewer | brain (default reviewer)
@@ -490,8 +500,16 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     args = ['-p', '--model', model,
       '--setting-sources', '', '--strict-mcp-config', '--tools', ''];
   }
+  // QRP_CLI_HOME redirects only the harness child's HOME; this process keeps the
+  // broker-assigned one. Never fall back to the ambient HOME if unset — an exam
+  // that silently reads the host home is not the exam we claim to be running.
+  const childEnv = process.env.QRP_CLI_HOME
+    ? { ...process.env, HOME: process.env.QRP_CLI_HOME }
+    : process.env;
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(bin, args, {
+      detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv,
+    });
     const stdout = [];
     const stderr = [];
     let settled = false;

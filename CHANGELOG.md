@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.34.30 — QRP_CLI_HOME:只吃 HOME 的 CLI 也能送考(推翻我自己的「不可考」)
+
+先前把 agy/kimi 判成不可考是錯的 —— 那個結論來自對 `--help` 的 grep,不是對可能性
+空間的檢查。從 binary strings 撈出來的實情:
+
+- **kimi 有 `KIMI_CODE_HOME`**(等同 `CODEX_HOME` 的原生變數)⇒ **不需要改任何 code**,
+  只要 `--provider-env KIMI_CODE_HOME`。實測 HOME 換掉 + 指向只放憑證的考試目錄 → rc=0,
+  真實 `~/.kimi-code` 未被改動。
+- **agy 沒有原生變數**,憑證是 `$HOME/.gemini/antigravity-cli/`,只吃 HOME;而 broker
+  依設計把 HOME 設成自建的 `providerRoot` ⇒ 每個 case 都 `Authentication required`,
+  **考試把傳輸失敗當成模型失敗來評分**。
+
+修法:`QRP_CLI_HOME` 只把 HOME 套到 harness 子程序,本進程仍用 broker 指派的;
+未設定時**絕不回退到環境裡的 HOME**(會偷讀 host home 的考試不是我們宣稱在跑的考試)。
+安全姿態與 `CODEX_HOME`/`KIMI_CODE_HOME` 相同 —— 專用考試目錄、host home 依舊不可見。
+**不是把沙箱弄鬆,是補上只有 HOME 的 CLI 缺的那條轉發管道。**
+
+紅綠(真叫 agy):RED `authentication required` → GREEN 正確的 path-traversal 判決。
+測試加正控制 + 負控制,變異拿掉實作即精確轉紅;外層斷言 ratchet 115 → 118。
+
+順帶更正:`PATH` 預設就由 broker 轉發,先前 `--provider-env PATH` 被拒是**重複**不是不可得。
+
+送考(兩輪 full corpus):`kimi k3-256k` trial-1 21/21 FP0 / trial-2 20/21 FP2 → **degraded(能力)**;
+`agy 3.7 High` trial-1 21/21 FP0 / trial-2 20/21 FP0 但唯一失分是 `known-bad-08` 的
+**panel protocol failure(傳輸,不是判錯)**→ 重跑中。判準先寫死免得刷分:protocol failure
+代表那題沒量到模型、該 trial 無效可重跑;**若重跑仍出現,即判傳輸不可靠,一樣不給過**。
+
 ## v2.34.29 — 資格考通過、然後被自己的 recorder 拒絕;身分 TOKEN 表達不了真實 model id
 
 兩個缺陷都是實際送考時撞到的,不是讀出來的。

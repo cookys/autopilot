@@ -1,5 +1,38 @@
 # Changelog
 
+## v2.34.27 — QRP 支援 agy 與 kimi:dispatch 層早有 adapter,考試層一直沒有
+
+`dispatch-review.sh` 支援 agy 與 kimi(kimi 的 `k3-256k` 是上游 `fa62c36a` 剛加的),
+但 `qualification-review-provider.js` 只認 `http` 與 `cli(codex|claude)`。結果是這兩席
+**可以被派去審 code、卻永遠無法取得 reviewer 資格** —— 能用但不可信任,是最尷尬的狀態。
+
+- `CLI_KINDS` 單一清單同時餵驗證訊息與 dispatch switch,兩者不可能再各說各話。
+- 新增 **`promptViaArgv` 維度**:codex/claude 走 stdin,agy/kimi 走 argv
+  (`agy -p <prompt> --model` / `kimi -m <model> -p <prompt>`)。這是 harness 契約的一部分,
+  所以做成 per-kind 屬性而非呼叫端特例;argv 模式下 stdin 立刻關閉,避免等 stdin 的 CLI
+  把考試掛到 timeout。
+- **512KB argv 守衛**:超過以明確訊息失敗,不讓它變成 opaque 的 spawn `E2BIG` ——
+  考試中的傳輸層失敗會被讀成模型失敗,那會**誤判候選人**。
+- `resolveCliBin()`:kimi 慣例不在 PATH,解析順序**逐字照抄 dispatcher**
+  (`QRP_CLI_BIN` → PATH → `~/.kimi-code/bin/kimi`)。考試若解析到與 dispatcher 不同的安裝,
+  評的就不是會出貨的那一支。
+- agy/kimi 明確**忽略** `QRP_CLI_EFFORT`,檔頭附 probe 證據:agy 1.1.16 三個 model 家族
+  全部拒絕 `--effort`(`low|medium|high` 回「此 model 不支援」、`xhigh|max` 回「invalid」),
+  effort 烘在 model 名字裡;kimi 只有 `[thinking] enabled` 開關。傳過去會讓每個 case 硬失敗。
+
+紅綠(直接驅動 QRP、真的叫模型):紅=base 版對兩者皆回「requires codex or claude」;
+綠=植入 path-traversal 的 case,兩家都回正確 `rule_id`/`severity`/`file`/`witness`。
+負控制:乾淨 diff 兩家皆回 `{"verdict":"pass","findings":[]}`(有鑑別力,非恆 fail)／
+bogus kind 仍被擋且列出完整清單／600KB case 回明確的 argv 上限訊息而非 `E2BIG`／
+codex kind(effort=max)零回歸。
+
+⚠️ **環境限制(非本次造成)**:`engine-qualify.test.sh` 在本機紅,原因是
+`qualification precondition failed: required reviewer sandbox is unavailable: /usr/bin/bwrap`
+—— bubblewrap 未安裝且無免密碼 sudo。base 同樣紅。⇒ 本次只驗到 QRP 這一層,
+完整 Stage-1 資格認證待 bwrap 就緒。這也說明先前記錄的「base 12 支紅」裡至少兩支
+(engine-qualify 44 條斷言 + qualification-case-broker 的 sandbox 整合)是**同一個缺套件**,
+不是十二個獨立缺陷。
+
 ## v2.34.26 — v2.34.25 的 hetero review 裁決：兩條成立、三條不成立
 
 用 v2.34.25 自己的 diff 當 Stage-0 spike 語料丟給三家異質引擎審。逐條裁決後只有兩條

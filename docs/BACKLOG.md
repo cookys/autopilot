@@ -48,6 +48,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### Contract-first escalation and local-repair gates — P6D incident follow-up
+- **Trigger**: An owner-approved corrective project is opened from the 2026-08-21 P6D incident record; before that project may claim completion, all three controls must have planted negative cases that demonstrate they can block (a) unjustified heavy dispatch for an acceptance-oracle task, (b) a staged manifest outside the declared allowlist, and (c) successor/pipeline escalation before one local artifact-repair attempt.
+- **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance. Its first candidate passed every functional verification but included two dependency symlinks; Codex then replaced a minute-scale amend with terminalization, successor adoption, governance churn, and full rerun. Fable 5 ruled this was two decision failures rather than a Git-only mistake. The corrective project should implement the smallest enforceable protocol from the incident: dispatch justification when a complete acceptance oracle already exists; pre-commit staged-manifest comparison against a machine-readable task allowlist; and a failure-response state machine that requires one local artifact repair before workflow-level expansion. Status-report budgeting is a controller interaction rule and must not be inflated into unrelated product machinery without separate evidence. Do not encode P6D's six paths or a blanket symlink ban as global policy.
+- **Effort**: L (dispatch admission + commit manifest gate + failure-response transition contract + negative controls)
+- **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/2026-08-21-p6d-orchestration-incident/README.md), including the quoted Fable 5 independent judgment.
+
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
 - **Status**: dev-flow leg RESOLVED-NO-SWAP（2026-08-18,[plan](plans/2026-08-18-dev-flow-contract-card.md)）— 儀器（evals/skill-onoff）、規格（references/skill-contract-card.md）、P4 baseline 機制已出貨;primary block 63 runs 機械裁決 **INSTRUMENT-INVALID（V2 vacuous,1/5 家族承重）**,card 不出貨（見下方「dev-flow card re-attempt」row）。quality-pipeline leg 留本 row,前置改為:skill-onoff 儀器修復並通過 V2。
 - **Trigger**: 四層 redesign 的 Policy 層設計定案,且目標 skill 有 eval ON/OFF 證據（成績單前置）

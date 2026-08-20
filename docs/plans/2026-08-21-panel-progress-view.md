@@ -1,5 +1,7 @@
 # Plan-review panel progress view (BACKLOG M, triggers fired 2026-08-20 ×2)
 
+> 狀態: ✅ Shipped in v2.34.30 — merged as f9aecfca
+
 ## 0. Context
 v2.34.21 made SEATS observable (dispatch-author run manifests). The PANEL layer is still
 blind: seats run sequentially, the driver prints nothing until the last seat returns — a

@@ -2758,6 +2758,13 @@ function verifyPinnedImplEvaluationAssets() {
 // Maps a runner name to dispatch-hetero's per-runner binary override flag, so a
 // live-rail smoke can substitute ONLY the paid engine (--runner-bin) while the
 // real rail argv/status/worktree/classify path runs unchanged.
+// The full-corpus case count — the ONLY denominator a scorecard row may carry
+// (round-2 review: an observed denominator lets a truncated run read as N/N).
+function implExpectedTotal() {
+  const budget = implGrader.CORPUS.budget;
+  return budget.trials_per_administration * budget.families * budget.cases_per_family_per_trial;
+}
+
 function implRunnerBinFlag(runner) {
   switch (runner) {
     case 'grok': return '--grok-bin';
@@ -3030,7 +3037,14 @@ function runImplQualification(options) {
     effort: options.effort,
     date: issuedAt.slice(0, 10),
     quality: {
-      corpus_pass: folded.corpus_pass,
+      // A truncated administration must never look complete to a downstream
+      // consumer (round-2 review, Major): the OBSERVED denominator on a
+      // truncated run yields e.g. "16/16" + score 1.0, which
+      // resolve-scaffold-tier's qualityOf reads as a complete N/N → T0. Use
+      // the FULL corpus denominator whenever the fold is incomplete.
+      corpus_pass: folded.complete
+        ? folded.corpus_pass
+        : `${folded.passed}/${implExpectedTotal()}`,
       false_pass_critical: folded.counts.integrity_violations
         + folded.counts.fabricated_changes,
       integrity_violations: folded.counts.integrity_violations,
@@ -3039,7 +3053,7 @@ function runImplQualification(options) {
       oracle_misses: folded.counts.oracle_misses,
       repeated_trials: options.trials,
     },
-    capability_score: folded.total === 0 ? 0 : folded.passed / folded.total,
+    capability_score: folded.passed / implExpectedTotal(),
     cost: {
       source: 'unknown',
       usd_per_mtok_input: 0,
@@ -3152,8 +3166,12 @@ function runImplCase(context) {
     // stall AFTER the receipt boundary and must stay consumed as
     // contract_violation, never an uncharged engine_unavailable abort
     // (pre-merge review round 1, Major; plan §4 step 3 / §5).
-    const spawnFailed = Boolean(run.error)
-      && ['ENOENT', 'EACCES', 'EPERM'].includes(run.error.code);
+    // Round-2 review: derive from the timeout, not an errno allowlist — an
+    // allowlist misses pre-exec failures (EAGAIN/ENOMEM/E2BIG) and would
+    // charge the seat for a process that never started, while ETIMEDOUT is
+    // the one spawnSync error that PROVES the process ran (it was killed).
+    const timedOut = Boolean(run.error) && run.error.code === 'ETIMEDOUT';
+    const spawnFailed = Boolean(run.error) && !timedOut;
     ledgerRow.dispatcher_called = !spawnFailed;
     observation.dispatcher_called = ledgerRow.dispatcher_called;
     let dispatchJson = null;
@@ -3170,8 +3188,10 @@ function runImplCase(context) {
     // engine_unavailable administration cap (G2-F9): honest scarcity aborts the
     // administration (no verdict) rather than scoring a FAIL against the seat.
     // Harness-owned evidence = spawn failure or the rail's own precondition
-    // exit (2). A timeout kill is NOT harness-owned — the candidate stalled.
-    const harnessOwned = spawnFailed || run.status === 2;
+    // exit (2). A timeout kill is NOT harness-owned even when the killed
+    // child's TERM trap exits 2 (dispatch-hetero's abort_dispatch does) —
+    // the candidate stalled; the check must not rest on that coincidence.
+    const harnessOwned = spawnFailed || (run.status === 2 && !timedOut);
     const collectionResult = gradeLiveCase({ caseSpec, repoDir, baseSha, dispatchJson, canaryToken });
     ledgerRow.scored_sha = collectionResult.collection && collectionResult.collection.scored_sha;
     const outcome = implGrader.classifyCase(caseSpec, {
@@ -3194,6 +3214,7 @@ function runImplCase(context) {
     return { outcome };
   } catch (error) {
     ledgerRow.outcome = 'infra_fail';
+    ledgerRow.error = String(error && error.message);
     ledger.push(ledgerRow);
     return { outcome: 'infra_fail', administration_abort: 'infra_abort' };
   } finally {

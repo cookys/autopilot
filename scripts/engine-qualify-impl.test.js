@@ -345,6 +345,32 @@ equal(wallRun.qualified, false, 'zero-wall administration is NOT qualified');
 equal(wallRun.row.status, 'no_verdict', 'zero-wall administration yields no_verdict (nothing started)');
 equal(wallRun.evidence, null, 'zero-wall administration writes NO evidence');
 
+// Kernel/corpus drift pin: the kernel's IMPL_CASES_PER_TRIAL (12) must track
+// the corpus (a silent corpus resize would reject every qualified row).
+const implCorpus = require(path.join(__dirname, '..', 'evals', 'impl-capability-evidence-corpus.json'));
+equal(implCorpus.budget.families * implCorpus.budget.cases_per_family_per_trial, 12,
+  'corpus per-trial case count matches the kernel IMPL_CASES_PER_TRIAL pin');
+
+// e2e: wall truncation mid-run → row is failed AND its quality denominator is
+// the FULL corpus (a truncated run must never present as N/N → T0; round-2).
+const truncStore = fs.mkdtempSync(path.join(tempRoot, 'store-trunc-'));
+fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'trunc-seed');
+fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+process.env.AUTOPILOT_QUALIFY_SEED = 'trunc-seed';
+const truncRun = runImplQualification({ ...baseOptions(truncStore), dispatchBin: path.join(tempRoot, 'disp.sh'), testWallSecondsOverride: 8 });
+delete process.env.AUTOPILOT_QUALIFY_SEED;
+equal(truncRun.qualified, false, 'wall-truncated administration is NOT qualified');
+if (truncRun.row.status === 'failed') {
+  // At least one case started before the wall — the interesting shape.
+  check(truncRun.row.quality.corpus_pass.endsWith('/24'),
+    `truncated row denominator is the full corpus (got ${truncRun.row.quality.corpus_pass})`);
+  check(truncRun.row.capability_score < 1,
+    `truncated row capability_score < 1 (got ${truncRun.row.capability_score})`);
+} else {
+  // Wall fired before any case started — degenerate no-verdict shape, equally safe.
+  equal(truncRun.row.status, 'no_verdict', 'zero-started truncation is no_verdict');
+}
+
 // e2e: reservation override 0 → insufficient_budget → NO evidence row, NO scorecard row.
 const budStore = fs.mkdtempSync(path.join(tempRoot, 'store-bud-'));
 process.env.AUTOPILOT_QUALIFY_SEED = 'bud-seed';

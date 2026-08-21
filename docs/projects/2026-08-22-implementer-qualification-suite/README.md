@@ -57,14 +57,14 @@ Repo 無 `.claude/skill-routing.md`;CLAUDE.md 無 per-code-area skill 條目。�
 | L-1 admission + branch + tracking | ✅ 2026-08-22 | Mission admission READY(deliverable_count=1, l3 inline);branch 建立 |
 | D1 plan doc + rubric freeze | ✅ 2026-08-22 | R2 FROZEN(21384B,ratio 1.269)|
 | D1 兩代 hetero plan review | ✅ 2026-08-22 | G1:20 findings 全收(sol+grok STOP×2);G2 terminal:14/14 adopted、3 項 scoped rejection 入 backlog;`g2-adjudication.md` 終局 |
-| D2 generator + corpus | ⬜ | |
-| D3 grader | ⬜ | |
-| D4 engine-qualify 接線 | ⬜ | |
-| D5 capability-evidence 擴充 | ⬜ | |
-| D6 測試(紅案+mutation control) | ⬜ | |
-| D7 codex 鏡像 | ⬜ | |
+| D2 generator + corpus | ✅ 2026-08-22 | impl-eval-generator + corpus;self-check 24/24 bwrap × 3 seeds |
+| D3 grader | ✅ 2026-08-22 | shared collection+grading module + bwrap oracle driver |
+| D4 engine-qualify 接線 | ✅ 2026-08-22 | runImplQualification;role/router/XOR-bypass/TTL-cap;pinned hashes |
+| D5 capability-evidence 擴充 | ✅ 2026-08-22 | impl_dispatch methodology + normalize/enforce;capability-evidence 102 綠 |
+| D6 測試(紅案+mutation control) | ✅ 2026-08-22 | engine-qualify-impl 26 assertions;manifest-gate mutation control;codex-package 112 |
+| D7 codex 鏡像 | ✅ 2026-08-22 | 4 impl assets 入 sync list;package test sandbox 同步種子 |
 | D8 dogfood grok-4.5 / agy-flash | ⬜ | agy 場前置 Stage-0 探針 |
-| D9 docs + CHANGELOG + bump | ⬜ | |
+| D9 docs + CHANGELOG + bump | ✅ 2026-08-22 | engine-onboarding R2→R3;CHANGELOG;v2.34.34(26h/28s)|
 | L-5 finish-flow | ⬜ | |
 
 ## Decision log

@@ -1,5 +1,7 @@
 # P6D corrective gates — the repair ladder, alone (R2', terminal-frozen)
 
+> 狀態: ✅ Shipped in v2.34.32 — merged as cd66b62a(無狀態終形;durable lock 重入條件在 BACKLOG)
+
 Status: R2' FROZEN (G2 terminal adjudicated — see g2-adjudication.md). Campaign ships ONE
 control (KR3); KR2 is a pre-authorized option behind a GO checkpoint; KR1 is DROPPED. Source: the
 2026-08-21 P6D incident record + its BACKLOG entry (trigger fired by owner approval).

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "implementer-qualification-suite-2026-08-22",
+  "minimum_distinct_families": 2,
+  "max_attempts_per_seat": 2,
+  "seats": [
+    {
+      "id": "sol_adversarial_soundness",
+      "runner": "codex",
+      "model": "gpt-5.6-sol",
+      "effort": "max",
+      "endpoint": "default",
+      "role": "adversarial-soundness",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": ["anthropic"],
+      "fallbacks": []
+    },
+    {
+      "id": "grok_boundary_redteam",
+      "runner": "grok",
+      "model": "grok-4.6",
+      "effort": "xhigh",
+      "endpoint": "default",
+      "role": "boundary-redteam",
+      "family": "xai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": ["anthropic"],
+      "fallbacks": []
+    }
+  ]
+}

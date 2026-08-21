@@ -266,6 +266,24 @@ record**. If the store has no per-record timestamp, say so and downgrade the cla
 
 ---
 
+## 13. A fixture anchored to a non-production shape certifies a dead gate — pin bidirectionally
+
+**Incident (2026-08-21, p6d-corrective-gates R2 review).** A gate's precondition read
+`campaignControl.resume_candidate` at top level; production attaches it to the generation-claim
+object. The unit test built its fixture in the SAME wrong shape — so the planted red fired, the
+greens passed, mutations of the predicate went red, and the suite certified a gate that never
+fires in production. The reviewer proved it with a REVERSE mutation: correcting the code made
+the test go red — a test that fails when the code is fixed is anchored to a phantom shape.
+
+Rule: when a test feeds a hand-built object into a unit that production feeds from elsewhere,
+(a) derive the fixture shape from the PRODUCER's write site (cite it in the test), and
+(b) pin BIDIRECTIONALLY — the production shape must trigger, and the plausible-wrong shape
+must NOT ("reverse pin"). Forward mutation (neuter the gate → red) catches dead logic;
+only the reverse pin catches dead WIRING. Evidence:
+`docs/projects/_archive/2026-08-21-p6d-corrective-gates/` (R2/R3 reviewer reports).
+
+---
+
 ## The one question
 
 Before recording anything as verified:

@@ -55,8 +55,8 @@ Repo 無 `.claude/skill-routing.md`;CLAUDE.md 無 per-code-area skill 條目。�
 | Step | Status | Notes |
 |------|--------|-------|
 | L-1 admission + branch + tracking | ✅ 2026-08-22 | Mission admission READY(deliverable_count=1, l3 inline);branch 建立 |
-| D1 plan doc + rubric freeze | 🔄 | |
-| D1 兩代 hetero plan review | ⬜ | dispatch-plan-review,≤2 generations,depth-0 terminal adjudication |
+| D1 plan doc + rubric freeze | ✅ 2026-08-22 | R2 FROZEN(21384B,ratio 1.269)|
+| D1 兩代 hetero plan review | ✅ 2026-08-22 | G1:20 findings 全收(sol+grok STOP×2);G2 terminal:14/14 adopted、3 項 scoped rejection 入 backlog;`g2-adjudication.md` 終局 |
 | D2 generator + corpus | ⬜ | |
 | D3 grader | ⬜ | |
 | D4 engine-qualify 接線 | ⬜ | |

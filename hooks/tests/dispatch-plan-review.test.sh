@@ -1345,4 +1345,133 @@ assert_eq "$(json_length "$OUT" attempts)" "0" \
   "generation-2 zero-accept does not dispatch reviewer attempts"
 assert_artifact_schema "$OUT" "generation-2 zero-accept gate artifact matches schema"
 
+# ── verdict-bytes preservation (v2.34.33): unratified salvage carry + aggregation
+# retention. Frozen rules: plan R3 §3 + g2-adjudication #0/#4 — authority surfaces
+# (semantic_verdict, exit 4, verdict CONDITIONAL) byte-identical; salvage lands only
+# in attempts records and the non-semantic unratified_observations field. ──
+VBP_STOP="$TEST_TMP/vbp-stop.json";   printf '{"verdict":"STOP","findings":[]}'  > "$VBP_STOP"
+VBP_READY="$TEST_TMP/vbp-ready.json"; printf '{"verdict":"READY","findings":[]}' > "$VBP_READY"
+VBP_EMPTY="$TEST_TMP/vbp-empty.raw";  : > "$VBP_EMPTY"
+
+vbp_sequence() {
+  node -e '
+const [stopF, secondF, ready, secondClass] = process.argv.slice(1);
+process.stdout.write(JSON.stringify({
+  architect: [
+    { file: stopF, classification: "timeout" },
+    { file: secondF, classification: secondClass || "timeout" },
+  ],
+  operations: [ready], skeptic: [ready], product: [ready],
+}));' "$@"
+}
+
+# Fixtures H+J: attempt-1 salvages STOP, attempt-2 empty (no salvage) → seat summary
+# carries the single distinct payload; completed seats retained in the artifact.
+VBP_MANIFEST="$TEST_TMP/vbp-manifest.json"
+copy_manifest vbp-carry-plan "$VBP_MANIFEST"
+OUT="$(run_manifest vbp-carry 1 "$VBP_MANIFEST" "$(vbp_sequence "$VBP_STOP" "$VBP_EMPTY" "$READY")")"; EXIT=$?
+assert_exit_code "$EXIT" "4" "H/J: required-seat exhaustion still exits 4"
+assert_eq "$(json_field "$OUT" transport_status)" "transport_exhausted" "H/J: transport exhaustion unchanged"
+assert_eq "$(json_field "$OUT" semantic_verdict)" "null" "H/J: salvage never creates a semantic verdict"
+assert_eq "$(json_field "$OUT" verdict)" "CONDITIONAL" "H/J: public verdict unchanged"
+assert_eq "$(json_field "$OUT" attempts.0.unratified_semantic_status)" "available" \
+  "H/J: attempt-1 salvage recorded available"
+assert_eq "$(json_field "$OUT" attempts.0.unratified.payload.verdict)" "STOP" \
+  "H/J: attempt-1 salvaged payload is the STOP"
+assert_eq "$(json_field "$OUT" attempts.1.unratified_semantic_status)" "unavailable" \
+  "H/J: empty attempt-2 capture salvages nothing"
+VBP_OBS="$(json_field "$OUT" unratified_observations)"
+assert_eq "$(node -e 'const o=JSON.parse(process.argv[1]);console.log(o.filter(x=>x.kind==="completed_seat_review").length)' "$VBP_OBS")" "3" \
+  "H: three completed seats retained in unratified_observations"
+assert_eq "$(node -e 'const o=JSON.parse(process.argv[1]);const s=o.find(x=>x.kind==="salvaged_payload");console.log(s?`${s.payload.verdict}:${s.attempt}:${s.parser_status}`:"none")' "$VBP_OBS")" "STOP:1:strict" \
+  "J: seat summary carries the single distinct salvage with attempt-1 provenance"
+assert_artifact_schema "$OUT" "H/J: exhaustion artifact with observations matches schema"
+
+# Fixture I: two DISTINCT valid salvages → explicit conflict, no salvaged summary.
+VBP_MANIFEST_I="$TEST_TMP/vbp-manifest-i.json"
+copy_manifest vbp-conflict-plan "$VBP_MANIFEST_I"
+OUT="$(run_manifest vbp-conflict 1 "$VBP_MANIFEST_I" "$(vbp_sequence "$VBP_STOP" "$VBP_READY" "$READY")")"; EXIT=$?
+assert_exit_code "$EXIT" "4" "I: conflict still exits 4"
+VBP_OBS="$(json_field "$OUT" unratified_observations)"
+assert_eq "$(node -e 'const o=JSON.parse(process.argv[1]);console.log(o.some(x=>x.kind==="salvaged_payload"))' "$VBP_OBS")" "false" \
+  "I: conflicting distinct payloads never produce a seat summary"
+assert_eq "$(node -e 'const o=JSON.parse(process.argv[1]);const c=o.find(x=>x.kind==="salvage_conflict");console.log(c?c.distinct_count:"none")' "$VBP_OBS")" "2" \
+  "I: conflict is explicit with the distinct count"
+assert_artifact_schema "$OUT" "I: conflict artifact matches schema"
+
+# Fixture L: attempt-2 reuses attempt-1's capture locator → stale bytes never salvage
+# for attempt-2 (fresh-exclusive capture rule), while attempt-1's salvage still carries.
+VBP_MANIFEST_L="$TEST_TMP/vbp-manifest-l.json"
+copy_manifest vbp-stale-plan "$VBP_MANIFEST_L"
+OUT="$(run_manifest vbp-stale 1 "$VBP_MANIFEST_L" "$(vbp_sequence "$VBP_STOP" "$VBP_STOP" "$READY")")"; EXIT=$?
+assert_exit_code "$EXIT" "4" "L: stale-capture run still exits 4"
+assert_eq "$(json_field "$OUT" attempts.0.unratified_semantic_status)" "available" \
+  "L: attempt-1 fresh capture salvages"
+assert_eq "$(json_field "$OUT" attempts.1.unratified_semantic_status)" "unavailable" \
+  "L: attempt-2 reused locator is refused despite valid bytes"
+VBP_OBS="$(json_field "$OUT" unratified_observations)"
+assert_eq "$(node -e 'const o=JSON.parse(process.argv[1]);const s=o.find(x=>x.kind==="salvaged_payload");console.log(s?s.attempt:"none")' "$VBP_OBS")" "1" \
+  "L: carry provenance is the fresh attempt"
+assert_artifact_schema "$OUT" "L: stale-capture artifact matches schema"
+
+# Panel manifest marker: the exhausted seat row records unratified availability;
+# dispatch-status --panel surfaces it (display-only).
+VBP_PANEL_DIR="$TEST_TMP/vbp-panels"
+mkdir -p "$VBP_PANEL_DIR"
+VBP_MANIFEST_P="$TEST_TMP/vbp-manifest-p.json"
+copy_manifest vbp-panel-plan "$VBP_MANIFEST_P"
+AUTOPILOT_DISPATCH_RUNS_DIR="$VBP_PANEL_DIR" \
+OUT="$(AUTOPILOT_DISPATCH_RUNS_DIR="$VBP_PANEL_DIR" run_manifest vbp-panel 1 "$VBP_MANIFEST_P" "$(vbp_sequence "$VBP_STOP" "$VBP_EMPTY" "$READY")")" || true
+VBP_PANEL_FILE="$(ls "$VBP_PANEL_DIR"/panel-*.manifest.json 2>/dev/null | head -1)"
+assert_neq "$VBP_PANEL_FILE" "" "panel manifest was written to the overridden runs dir"
+assert_eq "$(node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const s=m.seats.find(x=>x.seat_id==="architect");console.log(s.unratified_available)' "$VBP_PANEL_FILE")" "true" \
+  "panel manifest marks the exhausted seat's salvage availability"
+STATUS_OUT="$(AUTOPILOT_DISPATCH_RUNS_DIR="$VBP_PANEL_DIR" node "$REPO_ROOT/scripts/dispatch-status.js" --panel "$VBP_PANEL_FILE")"
+assert_contains "$STATUS_OUT" '"unratified_available":true' \
+  "dispatch-status --panel surfaces the salvage marker"
+assert_contains "$STATUS_OUT" '"seats_unratified":1' \
+  "dispatch-status --panel counts salvage-bearing seats"
+
+# Production-path fixture (C-complete-timeout, g2-adjudication #1): a REAL
+# dispatch-author spawn whose PATH-stubbed runner flushes one complete payload then
+# hangs; the author's own timeout kills it (runner exited 124 → author rc 3,
+# status runner_failed WITH raw_log). Frozen truth: this classifies exit_failure —
+# the salvageable production class is author-survives/runner-killed. Provenance:
+# docs/plans/evidence/2026-08-21-verdict-bytes-preservation/fixtures/.
+VBP_STUB_DIR="$TEST_TMP/vbp-stub-bin"
+mkdir -p "$VBP_STUB_DIR"
+cat > "$VBP_STUB_DIR/grok" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' '{"verdict":"STOP","findings":[]}'
+sleep 300
+STUB
+chmod +x "$VBP_STUB_DIR/grok"
+VBP_MANIFEST_PROD="$TEST_TMP/vbp-manifest-prod.json"
+copy_manifest vbp-prod-plan "$VBP_MANIFEST_PROD"
+node - "$VBP_MANIFEST_PROD" <<'NODE'
+const fs = require('fs');
+const m = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+m.seats[0].runner = 'grok';
+m.seats[0].model = 'grok-fixture';
+fs.writeFileSync(process.argv[2], `${JSON.stringify(m, null, 2)}\n`);
+NODE
+VBP_PROD_SEQ="$(node -e '
+const ready = process.argv[1];
+process.stdout.write(JSON.stringify({ operations: [ready], skeptic: [ready], product: [ready] }));' "$READY")"
+OUT="$(PATH="$VBP_STUB_DIR:$PATH" AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+  AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="$VBP_PROD_SEQ" \
+  node "$SCRIPT" \
+    --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
+    --ticket vbp-prod --session-id session-prod --generation 1 \
+    --manifest-file "$VBP_MANIFEST_PROD" --state-dir "$STATE_DIR" --timeout 3s)"; EXIT=$?
+assert_exit_code "$EXIT" "4" "prod: killed-runner seat exhausts, exit 4 unchanged"
+assert_eq "$(json_field "$OUT" attempts.0.transport_status)" "exit_failure" \
+  "prod: author-survives/runner-killed classifies exit_failure (frozen truth)"
+assert_eq "$(json_field "$OUT" attempts.0.unratified_semantic_status)" "available" \
+  "prod: flushed payload salvages through the REAL author path"
+VBP_OBS="$(json_field "$OUT" unratified_observations)"
+assert_eq "$(node -e 'const o=JSON.parse(process.argv[1]);const s=o.find(x=>x.kind==="salvaged_payload");console.log(s?s.payload.verdict:"none")' "$VBP_OBS")" "STOP" \
+  "prod: production-path salvage carries the STOP payload"
+assert_artifact_schema "$OUT" "prod: production-path artifact matches schema"
+
 finalize_test

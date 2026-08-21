@@ -48,6 +48,16 @@ assert_eq "$RC" "0" "deletion of an allowed path passes"
 RC=$(corpus_case "deny-hit" bash -c "printf 'e\n' >> '$CORPUS/secret/k.txt'")
 assert_neq "0" "$RC" "deny hit fails (both views)"
 
+# intent-to-add: `git add -N outside.txt` hides content from plain --cached diff;
+# --ita-visible-in-index makes the staged view agree with the post-commit view
+# (review 2026-08-21 MUST-FIX 7).
+git -C "$CORPUS" reset -q --hard "$BASE"; git -C "$CORPUS" clean -qfd
+printf 'x\n' > "$CORPUS/outside.txt"
+git -C "$CORPUS" add -N outside.txt
+"$CDJ" validate --staged --repo "$CORPUS" --no-default-deny --allow-file "$ALLOW" --deny-file "$DENY" >/dev/null 2>&1
+assert_neq "0" "$?" "intent-to-add outside allowlist is visible to the staged view"
+git -C "$CORPUS" reset -q --hard "$BASE"; git -C "$CORPUS" clean -qfd
+
 # ── part 2: in-situ wrapper interception ──
 ENGINE_SCORES_DIR="$TEST_TMP/engine-scores"; ENGINE_CAPS_DIR="$TEST_TMP/engine-caps"
 mkdir -p "$ENGINE_SCORES_DIR" "$ENGINE_CAPS_DIR"

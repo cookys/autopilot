@@ -20,8 +20,15 @@
 //   * Bypass = ENGINE-DERIVED terminal evidence only (closed enum below).
 //     Controller-supplied reasons/free text NEVER satisfy the predicate; they
 //     may attach for audit.
-//   * No P6D constants. Without a boundary (no lock, no rejected phase) every
-//     helper is a no-op — zero behavior change for unaffected flows.
+//   * No P6D constants. Without a boundary every helper is a no-op — zero
+//     behavior change for unaffected flows.
+//   * STATELESS by ruling of the 2026-08-21 pre-merge review: the durable
+//     claim-bound lock variant shipped here first and was killed as a 🔴 —
+//     its release path was unreachable in production, making the lock a
+//     permanent Mission deadlock ("a lock with no reachable unlock is a worse
+//     failure mode than the expansion it prevents"). The refusal at the
+//     terminalization edge carries the whole gate; re-introducing durable
+//     state requires the release-path design first (BACKLOG).
 
 const ENGINE_TERMINAL_BYPASS = Object.freeze(new Set([
   'wall_budget_exhausted',
@@ -44,11 +51,17 @@ function extractBoundaryEvidence(initialState) {
     : null;
   const candidateRef = (boundary && (boundary.candidate_ref || boundary.commit)) || null;
   if (!isStr(candidateRef)) return null; // nothing repairable preserved
+  // Field mapping follows the DURABLE state shape the reducer actually writes
+  // ({reason, candidate_ref, receipt_digest} — implementation-campaign.js):
+  // reason → boundary_reason, receipt_digest → failure_output_sha256. The
+  // named-extras strict-shrink branch stays future-only until the slice-2
+  // structured-extras spine lands (fields absent today → branch inert).
   return Object.freeze({
     candidate_ref: candidateRef,
-    boundary_code: (boundary && boundary.boundary_code) || 'scope_or_budget_boundary',
-    boundary_reason: (boundary && boundary.boundary_reason) || null,
-    failure_output_sha256: (boundary && boundary.failure_output_sha256) || null,
+    boundary_code: (boundary && (boundary.boundary_code || boundary.code)) || 'scope_or_budget_boundary',
+    boundary_reason: (boundary && (boundary.boundary_reason || boundary.reason)) || null,
+    failure_output_sha256: (boundary
+      && (boundary.failure_output_sha256 || boundary.receipt_digest)) || null,
     named_extras: Array.isArray(boundary && boundary.named_extras)
       ? Object.freeze([...boundary.named_extras].sort())
       : null,
@@ -109,42 +122,8 @@ function evaluateRepairLadder({ boundary, rerun = null, terminalEvidence = null,
   return refusal(boundary, context);
 }
 
-// Claim-bound lock persisted into Mission state by the engine bridge when a
-// conversion attempt is refused; read by successor/abort/drain backstops.
-function buildRepairLock({ boundary, iccCampaignId = null, lockedAt }) {
-  if (!isObj(boundary)) throw new Error('repair lock requires boundary evidence');
-  return Object.freeze({
-    schema_version: 1,
-    artifact_type: 'mission_repair_lock',
-    candidate_ref: boundary.candidate_ref,
-    boundary_code: boundary.boundary_code,
-    failure_output_sha256: boundary.failure_output_sha256 || null,
-    named_extras: boundary.named_extras || null,
-    icc_campaign_id: iccCampaignId,
-    locked_at: lockedAt,
-  });
-}
-
-function claimRepairLock(claim) {
-  return isObj(claim) && isObj(claim.repair_lock) && claim.released !== true
-    ? claim.repair_lock
-    : null;
-}
-
-function anyUnreleasedRepairLock(state) {
-  if (!isObj(state) || !isObj(state.claims)) return null;
-  for (const claim of Object.values(state.claims)) {
-    const lock = claimRepairLock(claim);
-    if (lock) return Object.freeze({ claim_id: claim.claim_id, lock });
-  }
-  return null;
-}
-
 module.exports = {
   ENGINE_TERMINAL_BYPASS,
-  anyUnreleasedRepairLock,
-  buildRepairLock,
-  claimRepairLock,
   evaluateRepairLadder,
   extractBoundaryEvidence,
 };

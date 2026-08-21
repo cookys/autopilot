@@ -312,7 +312,7 @@ git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || err_usage "not a git repos
 # input for wrapper-owned staging (dispatch-hetero edit-only capture).
 NAME_ONLY=""
 if [ "$STAGED" -eq 1 ]; then
-  NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --cached --name-only)"
+  NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --cached --ita-visible-in-index --name-only)"
 else
 case "$RANGE" in
   *..*)

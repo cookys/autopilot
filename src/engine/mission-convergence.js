@@ -1007,9 +1007,6 @@ function stateHash(state) {
           terminal: !!v.terminal,
           released: !!v.released,
           reconciled: !!v.reconciled,
-          // Repair-ladder lock (KR3): hashed only when present so pre-existing
-          // states keep their exact hashes.
-          ...(v.repair_lock ? { repair_lock: deepClone(v.repair_lock) } : {}),
           reservation: deepClone(v.reservation),
           actual: v.actual ? deepClone(v.actual) : null,
           event_digest: v.event_digest,
@@ -2389,28 +2386,1256 @@ function handleAbortFinalized(state, event, _payload) {
       },
     };
   }
-  // Repair ladder (KR3): a claim holding an unreleased repair lock means a
-  // boundary-rejected candidate is awaiting its cheap local repair; canonical
-  // abort finalization would bury it. Refuse until the lock drains through a
-  // changed-verdict rerun (applyMissionCampaignReceipt) or the claim releases.
-  const lockedClaim = Object.values(state.claims || {}).find((claim) => (
-    claim && claim.repair_lock && claim.released !== true
-  ));
-  if (lockedClaim) {
+  const drain = abortDrainPreconditions(state);
+  if (!drain.ok) {
+    return { ok: false, reason: drain.reason };
+  }
+  return { ok: true, reason: null };
+}
+
+function reduceMissionState(state, event) {
+  // Validate state before accessing state.terminal — a malformed state is
+  // a reducer error, not a transient condition.
+  validateMissionState(state);
+  const { eventType, sequence, payload } = validateEventShape(event);
+  // Terminal gate: only abort_finalized may enter a legacy ABORTING marker
+  // that carries a non-null terminal object. All other non-null terminals
+  // remain irreducible.
+  if (state.terminal) {
+    if (!(eventType === 'abort_finalized' && isLegacyAbortingTerminal(state))) {
+      fail('cannot reduce a terminal Mission state', 'MISSION_STATE_TERMINAL');
+    }
+  } else if (TERMINAL_STATES.has(state.state)) {
+    fail('cannot reduce a terminal Mission state', 'MISSION_STATE_TERMINAL');
+  }
+  if (state.state === 'ABORTING' && !ABORTING_ALLOWED_EVENTS.has(eventType)) {
+    fail(
+      `event_type "${eventType}" is not accepted while ABORTING`,
+      'MISSION_ABORTING_EVENT_REJECTED',
+    );
+  }
+  if (event.mission_lineage_id !== state.mission_lineage_id) {
+    fail('event.mission_lineage_id does not match state.mission_lineage_id');
+  }
+  if (sequence !== state.events.length + 1) {
+    fail(`event.sequence ${sequence} must equal ${state.events.length + 1}`);
+  }
+  // Authenticated control events must be the exact frozen canonical object
+  // minted by an AuthenticatedControlAdapter.acceptEvent() call. The narrow
+  // consume function (module-private WeakSet keyed by object identity):
+  //   1. checks the registry,
+  //   2. atomically removes the entry (single-use), and
+  //   3. returns a sanitized deep-frozen snapshot to use in digest, state,
+  //      receipts, and projections.
+  // Any attempt to authenticate a copied, JSON-roundtripped, or
+  // previously-consumed event fails closed: the WeakSet entry is gone
+  // (or was never there), and consume returns unauthenticated.
+  let sanitizedControlEvent = null;
+  if (eventType === 'control_event' || eventType === 'ceiling_adjust') {
+    if (!payload || payload.event === undefined) {
+      fail('control_event requires an adapter-produced event payload', 'MISSION_CONTROL_UNAUTHENTICATED');
+    }
+    const ownKeys = Reflect.ownKeys(payload);
+    if (ownKeys.length !== 1 || ownKeys[0] !== 'event') {
+      fail('control_event payload must be a closed shape containing exactly the "event" property', 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED');
+    }
+    const eventDesc = Object.getOwnPropertyDescriptor(payload, 'event');
+    if (!eventDesc || !eventDesc.enumerable || typeof eventDesc.get === 'function' || typeof eventDesc.set === 'function') {
+      fail('control_event payload "event" must be an enumerable data property', 'MISSION_CONTROL_PAYLOAD_NOT_CLOSED');
+    }
+    const consume = consumeAuthenticatedControlEvent(payload.event);
+    if (!consume || consume.ok !== true || !consume.event) {
+      fail('control_event must be produced by an AuthenticatedControlAdapter instance', 'MISSION_CONTROL_UNAUTHENTICATED');
+    }
+    sanitizedControlEvent = consume.event;
+  }
+  let digestPayload;
+  if (sanitizedControlEvent) {
+    digestPayload = { event: sanitizedControlEvent };
+  } else {
+    digestPayload = payload;
+  }
+  const eventWithDigest = Object.freeze({
+    ...event,
+    payload: digestPayload,
+    event_digest: eventDigestFor({ event_type: eventType, sequence, mission_lineage_id: event.mission_lineage_id, payload: digestPayload }),
+  });
+
+  const handlers = {
+    grant_claimed: handleGrantClaimed,
+    grant_resumed: handleGrantResumed,
+    no_effect_release: handleNoEffectRelease,
+    reconciliation: handleReconciliation,
+    ceiling_adjust: handleCeilingAdjust,
+    control_event: handleControlEvent,
+    stagnation_observation: handleStagnationObservation,
+    acceptance_satisfied: handleAcceptanceSatisfied,
+    closure_evaluated: handleClosureEvaluated,
+    successor_inherited: handleSuccessorInherited,
+    abort_finalized: handleAbortFinalized,
+  };
+  const result = handlers[eventType](state, eventWithDigest, payload, sanitizedControlEvent);
+  // Deep-freeze the entire returned state and receipt so neither caller
+  // mutation nor nested reservation/actual/payload objects can mutate reducer
+  // state. Every contract-derived and reducer-derived value is immutable.
+  return {
+    state: deepFreeze(result.state),
+    receipt: deepFreeze(result.receipt),
+  };
+}
+
+function appendEvent(state, eventWithDigest) {
+  // Deep-clone the appended event so the reducer owns an isolated copy of the
+  // caller's payload — a later mutation of the caller's input object cannot
+  // mutate the recorded event log. The clone is frozen; prior events are
+  // already-frozen shared references.
+  return {
+    ...state,
+    events: Object.freeze([...state.events, deepClone(eventWithDigest)]),
+  };
+}
+
+function setTerminal(state, terminalState, reason) {
+  return Object.freeze({
+    ...state,
+    state: terminalState,
+    terminal: Object.freeze({ state: terminalState, reason, at_event: state.events.length }),
+  });
+}
+
+function withReceipt(state, receipt) {
+  const receipts = { ...state.receipts, [receipt.artifact_type || receipt.event_type]: receipt };
+  return {
+    ...appendEvent(state, receipt.source_event),
+    receipts: Object.freeze(receipts),
+    state: receipt.next_state || state.state,
+  };
+}
+
+// ─── Handlers ──────────────────────────────────────────────────────────────
+
+function checkBindings(state, payload) {
+  const bindings = state.config.grant_contract.bindings;
+  for (const binding of bindings) {
+    if (binding === 'mission_lineage_id') {
+      if (payload[binding] !== state.mission_lineage_id) return 'binding_mismatch';
+      continue;
+    }
+    if (binding === 'task_authority_id') {
+      if (payload[binding] !== state.task_authority_id) return 'binding_mismatch';
+      continue;
+    }
+    if (!(binding in payload)) return 'binding_mismatch';
+  }
+  // v2 subject identity requires explicit identity_scheme. Partial v2 fields
+  // without the scheme are binding mismatches (no silent promotion).
+  if (payload.identity_scheme === IDENTITY_SCHEME_V2) {
+    if (typeof payload.mission_subject_digest !== 'string'
+        || !/^[0-9a-f]{64}$/.test(payload.mission_subject_digest)) {
+      return 'binding_mismatch';
+    }
+    if (typeof payload.task_authority_id !== 'string'
+        || !/^[0-9a-f]{64}$/.test(payload.task_authority_id)) {
+      return 'binding_mismatch';
+    }
+    if (typeof payload.campaign_id !== 'string'
+        || !/^campaign-v2-[0-9a-f]{64}$/.test(payload.campaign_id)) {
+      return 'binding_mismatch';
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'campaign_contract_digest')
+        && payload.campaign_contract_digest !== undefined
+        && payload.campaign_contract_digest !== null
+        && payload.campaign_contract_digest !== payload.mission_subject_digest) {
+      return 'binding_mismatch';
+    }
+    if (payload.graph_node_id !== undefined) {
+      if (typeof payload.graph_node_id !== 'string' || payload.graph_node_id.length === 0
+          || !Number.isSafeInteger(payload.graph_attempt) || payload.graph_attempt < 1
+          || !Array.isArray(payload.acceptance_hashes)
+          || payload.acceptance_hashes.some((hash) => (
+            typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)
+          ))
+          || !isPlainObject(payload.campaign_contract_draft)) {
+        return 'binding_mismatch';
+      }
+      let projectedSubject;
+      try {
+        projectedSubject = missionSubjectDigest(payload.campaign_contract_draft);
+      } catch (_error) {
+        return 'binding_mismatch';
+      }
+      if (projectedSubject !== payload.mission_subject_digest) return 'binding_mismatch';
+    }
+  } else if (typeof payload.mission_subject_digest === 'string'
+      && payload.mission_subject_digest.length > 0
+      && payload.identity_scheme !== IDENTITY_SCHEME_V2) {
+    // Subject digest without explicit v2 scheme is not a valid promotion path.
+    return 'binding_mismatch';
+  }
+  return null;
+}
+
+function reservationFor(payload, label = 'reservation', options = {}) {
+  const { requireComplete = true } = options;
+  const reservationObj = isPlainObject(payload.reservation) ? payload.reservation : {};
+  const perAxis = Array.isArray(reservationObj.per_axis) ? reservationObj.per_axis : [];
+  if (perAxis.length === 0) {
+    fail(`${label}.per_axis must be a non-empty array`);
+  }
+  const seen = new Set();
+  const reservation = {};
+  for (const usage of perAxis) {
+    if (!isPlainObject(usage)) fail(`${label}.per_axis entry must be an object`);
+    if (seen.has(usage.axis)) {
+      fail(`${label}.per_axis has duplicate axis "${usage.axis}"`);
+    }
+    if (!AXIS_SET.has(usage.axis)) {
+      fail(`${label}.per_axis has unknown axis "${usage.axis}"`);
+    }
+    seen.add(usage.axis);
+    const axis = requireEnum(usage.axis, AXIS_SET, `${label}.per_axis.axis`);
+    requireInteger(usage.authorized_ceiling, `${label}.per_axis[${axis}].authorized_ceiling`, 0);
+    requireInteger(usage.reserved_active, `${label}.per_axis[${axis}].reserved_active`, 0);
+    requireInteger(usage.durable_consumed, `${label}.per_axis[${axis}].durable_consumed`, 0);
+    requireBoolean(usage.known, `${label}.per_axis[${axis}].known`);
+    reservation[axis] = {
+      axis,
+      authorized_ceiling: usage.authorized_ceiling,
+      reserved_active: usage.reserved_active,
+      durable_consumed: usage.durable_consumed,
+      known: usage.known,
+    };
+  }
+  if (requireComplete) {
+    // The reservation must cover every supported axis. Missing, duplicate, or
+    // unknown entries fail closed; an empty/partial reservation creates no
+    // reservation at all.
+    for (const axisName of SUPPORTED_AXES) {
+      if (!(axisName in reservation)) {
+        fail(`${label}.per_axis is missing required axis "${axisName}"`);
+      }
+    }
+    // The campaigns axis must actually reserve a campaign unit — a zero on
+    // `campaigns` is a no-op reservation that would let a grant bypass
+    // aggregate ceiling enforcement.
+    if (reservation.campaigns.reserved_active < 1) {
+      fail(`${label}.per_axis[campaigns].reserved_active must be >= 1 (must reserve at least one campaign unit)`);
+    }
+  }
+  return reservation;
+}
+
+function bindingDigest(payload) {
+  // The logical grant binding the reducer treats as single-use. Acceptance
+  // IDs are sorted to make the digest stable across input ordering.
+  const acceptance = Array.isArray(payload.acceptance_ids)
+    ? [...payload.acceptance_ids].sort()
+    : [];
+  if (payload.identity_scheme === IDENTITY_SCHEME_V2) {
+    // v2 binds subject (not raw final-byte digest) so grant-ref insertion is
+    // non-circular. campaign_contract_digest may alias subject only.
+    // task_authority_id is part of the binding tuple so later verification can
+    // compare exact stored lineage + authority without reopening identity.
+    return sha256({
+      identity_scheme: IDENTITY_SCHEME_V2,
+      mission_lineage_id: payload.mission_lineage_id,
+      task_authority_id: payload.task_authority_id,
+      campaign_id: payload.campaign_id,
+      mission_subject_digest: payload.mission_subject_digest,
+      base_sha: payload.base_sha,
+      acceptance_ids: acceptance,
+      graph_node_id: payload.graph_node_id || null,
+      graph_attempt: payload.graph_attempt || null,
+      acceptance_hashes: Array.isArray(payload.acceptance_hashes)
+        ? [...payload.acceptance_hashes].sort()
+        : [],
+    });
+  }
+  // v1 / legacy: campaign_contract_digest remains the binding field.
+  return sha256({
+    mission_lineage_id: payload.mission_lineage_id,
+    campaign_id: payload.campaign_id,
+    campaign_contract_digest: payload.campaign_contract_digest,
+    base_sha: payload.base_sha,
+    acceptance_ids: acceptance,
+  });
+}
+
+function findClaimByBinding(state, bindingHash) {
+  for (const claim of Object.values(state.claims)) {
+    if (claim.binding_digest === bindingHash) return claim;
+  }
+  return null;
+}
+
+function graphGrantContext(state, payload) {
+  if (payload.graph_node_id === undefined) return { node: null, progress: null, error: null };
+  const graph = state.execution_graph;
+  const nodes = graph && Array.isArray(graph.nodes) ? graph.nodes : [];
+  const node = nodes.find((entry) => entry.id === payload.graph_node_id);
+  const progress = state.graph_progress && state.graph_progress[payload.graph_node_id];
+  if (!node || !progress) return { node: null, progress: null, error: 'binding_mismatch' };
+  const replayClaimId = claimIdFor(state.mission_lineage_id, payload.idempotency_key);
+  const replayClaim = state.claims && state.claims[replayClaimId];
+  const consumedGateAttempts = Object.values(state.claims || {}).filter((claim) => (
+    claim.graph_node_id === payload.graph_node_id
+      && claim.released !== true
+      && !(replayClaim
+        && replayClaim.released !== true
+        && replayClaim.terminal !== true
+        && replayClaim.claim_id === claim.claim_id)
+  )).length;
+  if (consumedGateAttempts >= node.gate_attempt_budget) {
+    return { node, progress, error: 'grant_already_claimed' };
+  }
+  const acceptance = Array.isArray(payload.acceptance_ids)
+    ? [...payload.acceptance_ids].sort()
+    : [];
+  if (canonicalJson(acceptance) !== canonicalJson([...node.acceptance_ids].sort())) {
+    return { node, progress, error: 'binding_mismatch' };
+  }
+  for (const dependency of node.dependencies || []) {
+    const dependencyProgress = state.graph_progress[dependency];
+    if (!dependencyProgress || dependencyProgress.status !== 'ready') {
+      return { node, progress, error: 'binding_mismatch' };
+    }
+  }
+  const draft = payload.campaign_contract_draft;
+  const expectedRuntime = {
+    schema_version: 1,
+    root_run_id: state.root_run_id,
+    mission_lineage_id: state.mission_lineage_id,
+    mission_policy_digest: state.mission_policy_digest || state.policy_hash,
+    mission_graph_digest: state.mission_graph_digest,
+    graph_node_id: node.id,
+    graph_node_digest: sha256(canonicalJson(node)),
+  };
+  const expectedDispatch = {
+    schema_version: 1,
+    spec: node.campaign.spec,
+    required_paths: node.campaign.required_paths,
+    output_paths: node.campaign.output_paths,
+    allowed_path_prefixes: node.campaign.allowed_path_prefixes,
+    budget: {
+      max_changed_files: node.campaign.max_changed_files,
+      max_wall_seconds: node.campaign.max_wall_seconds,
+      max_output_bytes: node.reservation.output_bytes,
+      max_tool_calls: node.reservation.tool_calls,
+      max_engine_attempts: node.reservation.engine_attempts,
+    },
+    verification_commands: node.verification_commands,
+  };
+  if (Array.isArray(node.campaign.authorized_creates)
+      && node.campaign.authorized_creates.length > 0) {
+    expectedDispatch.authorized_creates = node.campaign.authorized_creates;
+  }
+  if (Array.isArray(node.campaign.version_mirror_paths)
+      && node.campaign.version_mirror_paths.length > 0) {
+    expectedDispatch.version_mirror_paths = node.campaign.version_mirror_paths;
+    expectedDispatch.version_mirror_generator = node.campaign.version_mirror_generator;
+  }
+  if (!draft
+      || canonicalJson(draft.mission_runtime) !== canonicalJson(expectedRuntime)
+      || canonicalJson(draft.strict_dispatch) !== canonicalJson(expectedDispatch)) {
+    return { node, progress, error: 'binding_mismatch' };
+  }
+  return { node, progress, error: null };
+}
+
+function handleGrantClaimed(state, event, payload) {
+  const idempotencyKey = requireString(payload.idempotency_key, 'payload.idempotency_key', 1, 256);
+  if (state.state !== 'DRAFT' && state.state !== 'ACTIVE') {
+    return rejection(state, event, 'effect_class_not_allowlisted');
+  }
+  if (state.stagnant_campaigns >= state.max_stagnant_campaigns) {
+    return rejection(state, event, 'stagnation');
+  }
+  const bindingError = checkBindings(state, payload);
+  if (bindingError) return rejection(state, event, bindingError);
+  const graphGrant = graphGrantContext(state, payload);
+  if (graphGrant.error) return rejection(state, event, graphGrant.error);
+  // Validate the reservation shape BEFORE reserving. Empty/partial
+  // reservations fail closed and create no reservation.
+  let reservation;
+  try {
+    reservation = reservationFor(payload, 'payload');
+  } catch (error) {
+    return rejection(state, event, 'binding_mismatch');
+  }
+  const bindingHash = bindingDigest(payload);
+  // Single-use admission: a different idempotency_key for the same
+  // logical grant binding (lineage + campaign_id + contract digest +
+  // base SHA + acceptance IDs) must reject without reserving again.
+  const bindingClaim = findClaimByBinding(state, bindingHash);
+  if (bindingClaim && bindingClaim.idempotency_key !== idempotencyKey) {
+    return rejection(state, event, 'grant_already_claimed');
+  }
+  const claimId = claimIdFor(state.mission_lineage_id, idempotencyKey);
+  const existing = state.claims[claimId];
+  if (existing) {
+    if (existing.terminal) {
+      return rejection(state, event, 'grant_already_claimed');
+    }
+    // Reusing the same idempotency_key with a changed binding or
+    // reservation must reject (caller is asserting something different).
+    if (existing.binding_digest !== bindingHash) {
+      return rejection(state, event, 'binding_mismatch');
+    }
+    if (!sameReservation(existing.reservation, reservation)) {
+      return rejection(state, event, 'binding_mismatch');
+    }
+    return idempotentResume(state, event, existing);
+  }
+  if (graphGrant.progress) {
+    if (graphGrant.progress.status === 'ready' || graphGrant.progress.status === 'active') {
+      return rejection(state, event, 'grant_already_claimed');
+    }
+    if (payload.graph_attempt !== (graphGrant.progress.attempts || 0) + 1) {
+      return rejection(state, event, 'binding_mismatch');
+    }
+  }
+  // Check ceilings against current state axes.
+  for (const axis of SUPPORTED_AXES) {
+    const req = reservation[axis];
+    const cur = state.axes[axis];
+    if (req.authorized_ceiling !== cur.authorized_ceiling) {
+      return rejection(state, event, 'resource_ceiling');
+    }
+    if (req.durable_consumed !== cur.durable_consumed) {
+      return rejection(state, event, 'resource_ceiling');
+    }
+    const newReserved = cur.reserved_active + req.reserved_active;
+    const newRemaining = cur.authorized_ceiling - cur.durable_consumed - newReserved;
+    if (newRemaining < 0) {
+      const remainingBefore = cur.authorized_ceiling - cur.durable_consumed - cur.reserved_active;
+      return shadowOrBlock(state, event, 'resource_ceiling', {
+        axis,
+        requested: req.reserved_active,
+        remaining_before: remainingBefore,
+        remaining_after: newRemaining,
+      }, { claimId, idempotencyKey, bindingHash, reservation });
+    }
+  }
+  // Apply the reservation.
+  return applyGrantClaim(state, event, payload, {
+    claimId,
+    idempotencyKey,
+    bindingHash,
+    reservation,
+  });
+}
+
+function applyGrantClaim(state, event, payload, grant) {
+  const { claimId, idempotencyKey, bindingHash, reservation } = grant;
+  const newAxes = {};
+  for (const axisName of SUPPORTED_AXES) {
+    const cur = state.axes[axisName];
+    const req = reservation[axisName];
+    const newReserved = cur.reserved_active + req.reserved_active;
+    newAxes[axisName] = computeAxisBudget({
+      authorized_ceiling: cur.authorized_ceiling,
+      reserved_active: newReserved,
+      durable_consumed: cur.durable_consumed,
+      active_actual: cur.active_actual,
+      known: cur.known,
+      enforced: cur.enforced,
+    });
+  }
+  const subjectDigest = payload.identity_scheme === IDENTITY_SCHEME_V2
+    ? payload.mission_subject_digest
+    : null;
+  // v2: campaign_contract_digest is a compatibility alias of the subject only.
+  const contractDigestField = payload.identity_scheme === IDENTITY_SCHEME_V2
+    ? (payload.campaign_contract_digest != null
+      ? payload.campaign_contract_digest
+      : subjectDigest)
+    : payload.campaign_contract_digest;
+  const claim = {
+    claim_id: claimId,
+    idempotency_key: idempotencyKey,
+    binding_digest: bindingHash,
+    identity_scheme: payload.identity_scheme === IDENTITY_SCHEME_V2
+      ? IDENTITY_SCHEME_V2
+      : (payload.identity_scheme || null),
+    mission_lineage_id: payload.mission_lineage_id,
+    task_authority_id: payload.task_authority_id,
+    campaign_id: payload.campaign_id,
+    campaign_contract_digest: contractDigestField,
+    mission_subject_digest: subjectDigest,
+    base_sha: payload.base_sha,
+    acceptance_ids: [...(payload.acceptance_ids || [])].sort(),
+    acceptance_hashes: [...(payload.acceptance_hashes || [])].sort(),
+    graph_node_id: payload.graph_node_id || null,
+    graph_attempt: payload.graph_attempt || null,
+    campaign_contract_draft: payload.campaign_contract_draft
+      ? deepClone(payload.campaign_contract_draft)
+      : null,
+    control_sequence: payload.control_sequence || state.control_sequence,
+    reservation,
+    issued_at: payload.issued_at,
+    expires_at: payload.expires_at,
+    terminal: false,
+    released: false,
+    reconciled: false,
+    event_digest: event.event_digest,
+  };
+  const graphProgress = state.graph_progress && claim.graph_node_id
+    ? Object.freeze({
+      ...state.graph_progress,
+      [claim.graph_node_id]: Object.freeze({
+        ...(state.graph_progress[claim.graph_node_id] || {}),
+        status: 'active',
+        attempts: claim.graph_attempt,
+        active_claim_id: claimId,
+      }),
+    })
+    : state.graph_progress;
+  const next = Object.freeze({
+    ...appendEvent(state, event),
+    state: 'ACTIVE',
+    axes: Object.freeze({
+      campaigns: Object.freeze(newAxes.campaigns),
+      wall_seconds: Object.freeze(newAxes.wall_seconds),
+      tool_calls: Object.freeze(newAxes.tool_calls),
+      engine_attempts: Object.freeze(newAxes.engine_attempts),
+      external_wait_seconds: Object.freeze(newAxes.external_wait_seconds),
+      canonical_changed_files: Object.freeze(newAxes.canonical_changed_files),
+      output_bytes: Object.freeze(newAxes.output_bytes),
+    }),
+    claims: Object.freeze({ ...state.claims, [claimId]: Object.freeze(claim) }),
+    claim_idempotency_index: Object.freeze({
+      ...state.claim_idempotency_index,
+      [idempotencyKey]: claimId,
+    }),
+    graph_progress: graphProgress,
+  });
+  const receipt = {
+    artifact_type: 'mission_campaign_grant_claimed',
+    event_type: 'grant_claimed',
+    claim_id: claimId,
+    idempotency_key: idempotencyKey,
+    mission_lineage_id: state.mission_lineage_id,
+    task_authority_id: state.task_authority_id,
+    source_event: event,
+    next_state: 'ACTIVE',
+    reservation_consumed: reservation,
+    binding_digest: bindingHash,
+    identity_scheme: claim.identity_scheme,
+    mission_subject_digest: subjectDigest,
+    receipt_digest: sha256({
+      kind: 'mission_campaign_grant_claimed',
+      claim_id: claimId,
+      idempotency_key: idempotencyKey,
+      mission_lineage_id: state.mission_lineage_id,
+      event_digest: event.event_digest,
+    }),
+  };
+  return { state: next, receipt };
+}
+
+function sameReservation(a, b) {
+  const axes = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (axes.length !== bKeys.length) return false;
+  for (let i = 0; i < axes.length; i += 1) {
+    if (axes[i] !== bKeys[i]) return false;
+  }
+  for (const axis of axes) {
+    const left = a[axis];
+    const right = b[axis];
+    if (left.axis !== right.axis) return false;
+    if (left.authorized_ceiling !== right.authorized_ceiling) return false;
+    if (left.reserved_active !== right.reserved_active) return false;
+    if (left.durable_consumed !== right.durable_consumed) return false;
+    if (left.known !== right.known) return false;
+  }
+  return true;
+}
+
+function shadowOrBlock(state, event, reason, evidence = {}, grant = null) {
+  if (state.enforcement_mode === 'shadow') {
+    // In shadow mode, would-block admission must NOT terminalize Mission, but
+    // it MUST durably represent the represented grant: the claim is created,
+    // its full requested reservation is applied to state.axes (even above
+    // the configured ceiling — computeAxisBudget reports `remaining=0` and
+    // `overspend=true` rather than refusing), and a `would_block` evidence
+    // receipt is recorded for operator review. Repeated shadow admissions are
+    // auditable and cumulative: each evidence receipt is stored under its own
+    // event-digest key so prior evidence is never overwritten.
+    const shadowSubject = event.payload.identity_scheme === IDENTITY_SCHEME_V2
+      ? event.payload.mission_subject_digest
+      : null;
+    const shadowContractDigest = event.payload.identity_scheme === IDENTITY_SCHEME_V2
+      ? (event.payload.campaign_contract_digest != null
+        ? event.payload.campaign_contract_digest
+        : shadowSubject)
+      : event.payload.campaign_contract_digest;
+    const claim = {
+      claim_id: grant.claimId,
+      idempotency_key: grant.idempotencyKey,
+      binding_digest: grant.bindingHash,
+      identity_scheme: event.payload.identity_scheme === IDENTITY_SCHEME_V2
+        ? IDENTITY_SCHEME_V2
+        : (event.payload.identity_scheme || null),
+      mission_lineage_id: event.payload.mission_lineage_id,
+      task_authority_id: event.payload.task_authority_id,
+      campaign_id: event.payload.campaign_id,
+      campaign_contract_digest: shadowContractDigest,
+      mission_subject_digest: shadowSubject,
+      base_sha: event.payload.base_sha,
+      acceptance_ids: [...(event.payload.acceptance_ids || [])].sort(),
+      control_sequence: event.payload.control_sequence || state.control_sequence,
+      reservation: grant.reservation,
+      issued_at: event.payload.issued_at,
+      expires_at: event.payload.expires_at,
+      terminal: false,
+      released: false,
+      reconciled: false,
+      shadow_would_block: true,
+      event_digest: event.event_digest,
+    };
+    // Apply the FULL requested reservation to state.axes. computeAxisBudget
+    // clamps `remaining` to 0 and reports `overspend=true` when the
+    // reservation exceeds the ceiling; the `reserved_active` itself
+    // reflects the actual bookkeeping so a later release/reconciliation can
+    // clear it without negative counters.
+    const newAxes = {};
+    for (const axisName of SUPPORTED_AXES) {
+      const cur = state.axes[axisName];
+      const req = grant.reservation[axisName];
+      if (!req) {
+        newAxes[axisName] = cloneAxis(cur);
+        continue;
+      }
+      const newReserved = cur.reserved_active + req.reserved_active;
+      newAxes[axisName] = computeAxisBudget({
+        authorized_ceiling: cur.authorized_ceiling,
+        reserved_active: newReserved,
+        durable_consumed: cur.durable_consumed,
+        active_actual: cur.active_actual,
+        known: cur.known,
+        enforced: cur.enforced,
+      });
+    }
+    const evidenceReceipt = {
+      artifact_type: 'mission_would_block_evidence',
+      event_type: event.event_type,
+      reason,
+      would_block: true,
+      enforcement_mode: 'shadow',
+      evidence,
+      claim_id: grant.claimId,
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: state.state,
+      receipt_digest: sha256({
+        kind: 'mission_would_block_evidence',
+        reason,
+        event_digest: event.event_digest,
+        mission_lineage_id: state.mission_lineage_id,
+      }),
+    };
+    const evidenceKey = `mission_would_block_evidence:${event.event_digest}`;
+    const durableState = Object.freeze({
+      ...appendEvent(state, event),
+      axes: Object.freeze({
+        campaigns: Object.freeze(newAxes.campaigns),
+        wall_seconds: Object.freeze(newAxes.wall_seconds),
+        tool_calls: Object.freeze(newAxes.tool_calls),
+        engine_attempts: Object.freeze(newAxes.engine_attempts),
+        external_wait_seconds: Object.freeze(newAxes.external_wait_seconds),
+        canonical_changed_files: Object.freeze(newAxes.canonical_changed_files),
+        output_bytes: Object.freeze(newAxes.output_bytes),
+      }),
+      claims: Object.freeze({ ...state.claims, [grant.claimId]: Object.freeze(claim) }),
+      claim_idempotency_index: Object.freeze({
+        ...state.claim_idempotency_index,
+        [grant.idempotencyKey]: grant.claimId,
+      }),
+      receipts: Object.freeze({
+        ...state.receipts,
+        mission_would_block_evidence: evidenceReceipt,
+        [evidenceKey]: evidenceReceipt,
+      }),
+    });
+    return {
+      state: durableState,
+      receipt: evidenceReceipt,
+    };
+  }
+  // Enforce mode rejects the same input that shadow would have recorded.
+  return rejection(state, event, reason);
+}
+
+function idempotentResume(state, event, existing) {
+  return {
+    state: appendEvent(state, event),
+    receipt: {
+      artifact_type: 'mission_campaign_grant_claimed',
+      event_type: 'grant_resumed',
+      claim_id: existing.claim_id,
+      idempotency_key: existing.idempotency_key,
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: state.state,
+      receipt_digest: sha256({
+        kind: 'mission_campaign_grant_claimed',
+        claim_id: existing.claim_id,
+        idempotency_key: existing.idempotency_key,
+        mission_lineage_id: state.mission_lineage_id,
+        event_digest: event.event_digest,
+      }),
+    },
+  };
+}
+
+function handleGrantResumed(state, event, payload) {
+  const idempotencyKey = requireString(payload.idempotency_key, 'payload.idempotency_key', 1, 256);
+  const claimId = state.claim_idempotency_index[idempotencyKey] || claimIdFor(state.mission_lineage_id, idempotencyKey);
+  const existing = state.claims[claimId];
+  if (!existing) return rejection(state, event, 'binding_mismatch');
+  if (existing.terminal) return rejection(state, event, 'grant_already_claimed');
+  if (existing.released) {
+    return {
+      state: appendEvent(state, event),
+      receipt: {
+        artifact_type: 'mission_campaign_grant_resumed',
+        event_type: 'grant_resumed',
+        claim_id: existing.claim_id,
+        idempotency_key: existing.idempotency_key,
+        reservations: 0,
+        same_claim: true,
+        mission_lineage_id: state.mission_lineage_id,
+        source_event: event,
+        next_state: state.state,
+        receipt_digest: sha256({
+          kind: 'mission_campaign_grant_resumed',
+          claim_id: existing.claim_id,
+          idempotency_key: existing.idempotency_key,
+          released: true,
+          mission_lineage_id: state.mission_lineage_id,
+          event_digest: event.event_digest,
+        }),
+      },
+    };
+  }
+  return {
+    state: appendEvent(state, event),
+    receipt: {
+      artifact_type: 'mission_campaign_grant_resumed',
+      event_type: 'grant_resumed',
+      claim_id: existing.claim_id,
+      idempotency_key: existing.idempotency_key,
+      reservations: 1,
+      same_claim: true,
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: state.state,
+      receipt_digest: sha256({
+        kind: 'mission_campaign_grant_resumed',
+        claim_id: existing.claim_id,
+        idempotency_key: existing.idempotency_key,
+        released: false,
+        mission_lineage_id: state.mission_lineage_id,
+        event_digest: event.event_digest,
+      }),
+    },
+  };
+}
+
+function handleNoEffectRelease(state, event, payload) {
+  const claimId = requireClaimId(payload.claim_id, 'payload.claim_id');
+  const claim = state.claims[claimId];
+  if (!claim) return rejection(state, event, 'binding_mismatch');
+  if (claim.released) return rejection(state, event, 'grant_already_claimed');
+  if (claim.reconciled) return rejection(state, event, 'accounting_breach');
+  // Free the entire reservation, durable_consumed stays at zero. The
+  // subtraction is clamped to 0 so a release after a partial reclaim
+  // (e.g. due to overspend reconciliation) cannot drive reserved_active
+  // negative. Under normal single-claim flow the bookkeeping is exact;
+  // the clamp is a defensive invariant.
+  const newAxes = {};
+  for (const axisName of SUPPORTED_AXES) {
+    const cur = state.axes[axisName];
+    const resv = claim.reservation[axisName];
+    if (resv && resv.reserved_active > 0) {
+      const candidate = cur.reserved_active - resv.reserved_active;
+      newAxes[axisName] = computeAxisBudget({
+        authorized_ceiling: cur.authorized_ceiling,
+        reserved_active: candidate < 0 ? 0 : candidate,
+        durable_consumed: cur.durable_consumed,
+        active_actual: cur.active_actual,
+        known: cur.known,
+        enforced: cur.enforced,
+      });
+    } else {
+      newAxes[axisName] = cloneAxis(cur);
+    }
+  }
+  const releasedClaim = {
+    ...claim,
+    released: true,
+    terminal: true,
+    actual: Object.fromEntries(
+      Object.entries(claim.reservation).map(([axis]) => [axis, {
+        axis,
+        authorized_ceiling: state.axes[axis].authorized_ceiling,
+        reserved_active: 0,
+        durable_consumed: state.axes[axis].durable_consumed,
+        known: state.axes[axis].known,
+      }]),
+    ),
+  };
+  // Free the graph node claim: clear active_claim_id and restore pending so
+  // the next graph attempt can re-grant. Attempt count is retained (already
+  // spent for this failed attempt), not unspent; stagnation is not incremented.
+  let graphProgress = state.graph_progress;
+  if (claim.graph_node_id
+      && state.graph_progress
+      && state.graph_progress[claim.graph_node_id]) {
+    const priorProgress = state.graph_progress[claim.graph_node_id];
+    graphProgress = Object.freeze({
+      ...state.graph_progress,
+      [claim.graph_node_id]: Object.freeze({
+        ...priorProgress,
+        status: 'pending',
+        active_claim_id: null,
+        attempts: priorProgress.attempts || 0,
+      }),
+    });
+  }
+  const next = Object.freeze({
+    ...appendEvent(state, event),
+    axes: Object.freeze({
+      campaigns: Object.freeze(newAxes.campaigns),
+      wall_seconds: Object.freeze(newAxes.wall_seconds),
+      tool_calls: Object.freeze(newAxes.tool_calls),
+      engine_attempts: Object.freeze(newAxes.engine_attempts),
+      external_wait_seconds: Object.freeze(newAxes.external_wait_seconds),
+      canonical_changed_files: Object.freeze(newAxes.canonical_changed_files),
+      output_bytes: Object.freeze(newAxes.output_bytes),
+    }),
+    claims: Object.freeze({ ...state.claims, [claimId]: Object.freeze(releasedClaim) }),
+    graph_progress: graphProgress,
+  });
+  return {
+    state: next,
+    receipt: {
+      artifact_type: 'mission_no_effect_release',
+      event_type: 'no_effect_release',
+      claim_id: claimId,
+      actual_usage: releasedClaim.actual,
+      reservation: claim.reservation,
+      released_at: event.issued_at || null,
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: state.state,
+      receipt_digest: sha256({
+        kind: 'mission_no_effect_release',
+        claim_id: claimId,
+        mission_lineage_id: state.mission_lineage_id,
+        event_digest: event.event_digest,
+      }),
+    },
+  };
+}
+
+function handleReconciliation(state, event, payload) {
+  const claimId = requireClaimId(payload.claim_id, 'payload.claim_id');
+  const claim = state.claims[claimId];
+  if (!claim) return rejection(state, event, 'binding_mismatch');
+  if (claim.released) return rejection(state, event, 'accounting_breach');
+  if (claim.reconciled) {
+    // Replay: same event re-applied must be idempotent — no second charge
+    // and no second release. Return the original receipt verbatim.
+    const previousReceiptKey = `mission_reconciliation:${claimId}`;
+    const previousReceipt = state.receipts[previousReceiptKey];
+    if (previousReceipt) {
+      const replayReceipt = {
+        ...previousReceipt,
+        event_type: 'reconciliation',
+        replay: 'replay_noop',
+        source_event: event,
+        receipt_digest: sha256({
+          kind: 'mission_reconciliation',
+          replay: 'replay_noop',
+          claim_id: claimId,
+          mission_lineage_id: state.mission_lineage_id,
+          event_digest: event.event_digest,
+        }),
+      };
+      const receipts = { ...state.receipts, [previousReceiptKey]: replayReceipt };
+      return {
+        state: Object.freeze({
+          ...appendEvent(state, event),
+          receipts: Object.freeze(receipts),
+        }),
+        receipt: replayReceipt,
+      };
+    }
+    return rejection(state, event, 'accounting_breach');
+  }
+  let actual;
+  try {
+    actual = reservationFor(
+      { reservation: payload.actual_usage },
+      'payload.actual_usage',
+      { requireComplete: false },
+    );
+  } catch (error) {
+    return rejection(state, event, 'binding_mismatch');
+  }
+  // Unknown or missing exact usage is never silently converted to a known
+  // zero. Enforce mode conservatively charges the frozen reservation; shadow
+  // mode preserves an explicit unknown observation without charging it.
+  const mergedActual = {};
+  for (const axisName of SUPPORTED_AXES) {
+    const resv = claim.reservation[axisName];
+    if (!resv) continue;
+    const observed = actual[axisName];
+    const known = !!(observed && observed.known === true);
+    const durableConsumed = known
+      ? observed.reserved_active
+      : (state.enforcement_mode === 'enforce' ? resv.reserved_active : 0);
+    mergedActual[axisName] = {
+      axis: axisName,
+      authorized_ceiling: resv.authorized_ceiling,
+      reserved_active: 0,
+      durable_consumed: durableConsumed,
+      known,
+    };
+  }
+  // Detect overspend: any observed actual exceeds the reserved budget for
+  // that axis. The reducer still clears the reservation atomically and
+  // conservatively adds the full observed usage once (even above the
+  // authorized ceiling), then BLOCKED/accounting_breach.
+  let overspendAxis = null;
+  let overspendObserved = 0;
+  let overspendReserved = 0;
+  for (const axisName of SUPPORTED_AXES) {
+    const resv = claim.reservation[axisName];
+    if (!resv) continue;
+    const observed = mergedActual[axisName].durable_consumed;
+    const reservedAmount = resv.reserved_active;
+    if (observed > reservedAmount) {
+      overspendAxis = axisName;
+      overspendObserved = observed;
+      overspendReserved = reservedAmount;
+      break;
+    }
+  }
+  if (overspendAxis !== null) {
+    const newAxes = {};
+    for (const axisName of SUPPORTED_AXES) {
+      const cur = state.axes[axisName];
+      const resv = claim.reservation[axisName];
+      if (!resv) {
+        newAxes[axisName] = cloneAxis(cur);
+        continue;
+      }
+      const observed = mergedActual[axisName].durable_consumed;
+      // Overspend: clear the reservation (clamped to 0 so partial
+      // reclaims never produce negative counters), conservatively add
+      // the FULL observed actual once (even above the authorized ceiling).
+      const candidateReserved = cur.reserved_active - resv.reserved_active;
+      const newConsumed = cur.durable_consumed + observed;
+      newAxes[axisName] = computeAxisBudget({
+        authorized_ceiling: cur.authorized_ceiling,
+        reserved_active: candidateReserved < 0 ? 0 : candidateReserved,
+        durable_consumed: newConsumed,
+        active_actual: cur.active_actual,
+        known: cur.known && mergedActual[axisName].known,
+        enforced: cur.enforced,
+      });
+    }
+    const terminalClaim = {
+      ...claim,
+      reconciled: true,
+      terminal: true,
+      actual: mergedActual,
+      accounting_breach: true,
+    };
+    const overspendReceipt = {
+      artifact_type: 'mission_reconciliation',
+      event_type: 'reconciliation',
+      claim_id: claimId,
+      overspend_axis: overspendAxis,
+      overspend_observed: overspendObserved,
+      overspend_reserved: overspendReserved,
+      actual_usage: mergedActual,
+      reservation_consumed: claim.reservation,
+      reservation_freed: Object.fromEntries(
+        Object.keys(claim.reservation).map((a) => [a, {
+          axis: a,
+          authorized_ceiling: state.axes[a].authorized_ceiling,
+          reserved_active: 0,
+          durable_consumed: mergedActual[a].durable_consumed,
+          known: state.axes[a].known,
+        }]),
+      ),
+      replay: 'overspend',
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: 'BLOCKED',
+      receipt_digest: sha256({
+        kind: 'mission_reconciliation',
+        claim_id: claimId,
+        replay: 'overspend',
+        mission_lineage_id: state.mission_lineage_id,
+        event_digest: event.event_digest,
+      }),
+    };
+    const blocked = setTerminal(
+      Object.freeze({
+        ...appendEvent(state, event),
+        axes: Object.freeze({
+          campaigns: Object.freeze(newAxes.campaigns),
+          wall_seconds: Object.freeze(newAxes.wall_seconds),
+          tool_calls: Object.freeze(newAxes.tool_calls),
+          engine_attempts: Object.freeze(newAxes.engine_attempts),
+          external_wait_seconds: Object.freeze(newAxes.external_wait_seconds),
+          canonical_changed_files: Object.freeze(newAxes.canonical_changed_files),
+          output_bytes: Object.freeze(newAxes.output_bytes),
+        }),
+        claims: Object.freeze({ ...state.claims, [claimId]: Object.freeze(terminalClaim) }),
+        receipts: Object.freeze({
+          ...state.receipts,
+          [`mission_reconciliation:${claimId}`]: overspendReceipt,
+        }),
+      }),
+      'BLOCKED',
+      'accounting_breach',
+    );
+    return { state: blocked, receipt: overspendReceipt };
+  }
+  // Normal reconcile: clear the entire original reservation, add actual
+  // usage to durable_consumed, mark claim terminal+reconciled. Receipt
+  // data satisfies actual + freed = original for normal reconciliation.
+  const newAxes = {};
+  const reservationConsumed = {};
+  const reservationFreed = {};
+  for (const axisName of SUPPORTED_AXES) {
+    const cur = state.axes[axisName];
+    const resv = claim.reservation[axisName];
+    if (!resv) {
+      newAxes[axisName] = cloneAxis(cur);
+      continue;
+    }
+    const observed = mergedActual[axisName].durable_consumed;
+    const candidateReserved = cur.reserved_active - resv.reserved_active;
+    const newConsumed = cur.durable_consumed + observed;
+    newAxes[axisName] = computeAxisBudget({
+      authorized_ceiling: cur.authorized_ceiling,
+      reserved_active: candidateReserved < 0 ? 0 : candidateReserved,
+      durable_consumed: newConsumed,
+      active_actual: cur.active_actual,
+      known: cur.known && mergedActual[axisName].known,
+      enforced: cur.enforced,
+    });
+    reservationConsumed[axisName] = {
+      axis: axisName,
+      authorized_ceiling: resv.authorized_ceiling,
+      reserved_active: observed,
+      durable_consumed: 0,
+      known: mergedActual[axisName].known,
+    };
+    reservationFreed[axisName] = {
+      axis: axisName,
+      authorized_ceiling: resv.authorized_ceiling,
+      reserved_active: resv.reserved_active - observed,
+      durable_consumed: 0,
+      known: mergedActual[axisName].known,
+    };
+  }
+  const reconciledClaim = {
+    ...claim,
+    reconciled: true,
+    terminal: true,
+    actual: mergedActual,
+  };
+  const nextReceipt = {
+    artifact_type: 'mission_reconciliation',
+    event_type: 'reconciliation',
+    claim_id: claimId,
+    actual_usage: mergedActual,
+    reservation_consumed: reservationConsumed,
+    reservation_freed: reservationFreed,
+    replay: 'idempotent',
+    mission_lineage_id: state.mission_lineage_id,
+    source_event: event,
+    next_state: state.state,
+    receipt_digest: sha256({
+      kind: 'mission_reconciliation',
+      claim_id: claimId,
+      replay: 'idempotent',
+      mission_lineage_id: state.mission_lineage_id,
+      event_digest: event.event_digest,
+    }),
+  };
+  const receipts = { ...state.receipts, [`mission_reconciliation:${claimId}`]: nextReceipt };
+  const next = Object.freeze({
+    ...appendEvent(state, event),
+    axes: Object.freeze({
+      campaigns: Object.freeze(newAxes.campaigns),
+      wall_seconds: Object.freeze(newAxes.wall_seconds),
+      tool_calls: Object.freeze(newAxes.tool_calls),
+      engine_attempts: Object.freeze(newAxes.engine_attempts),
+      external_wait_seconds: Object.freeze(newAxes.external_wait_seconds),
+      canonical_changed_files: Object.freeze(newAxes.canonical_changed_files),
+      output_bytes: Object.freeze(newAxes.output_bytes),
+    }),
+    claims: Object.freeze({ ...state.claims, [claimId]: Object.freeze(reconciledClaim) }),
+    receipts: Object.freeze(receipts),
+  });
+  return {
+    state: next,
+    receipt: nextReceipt,
+  };
+}
+
+function handleCeilingAdjust(state, event, payload, sanitizedControlEvent) {
+  // payload is a normalized control event
+  const ce = sanitizedControlEvent || payload.event || event; // tolerate both
+  const semantic = authorizeCeilingAdjust(ce);
+  if (!semantic.ok) {
+    return rejection(state, event, semantic.reason);
+  }
+  const axisName = ce.ceiling_after.axis;
+  if (!AXIS_SET.has(axisName)) return rejection(state, event, 'resource_ceiling');
+  const cur = state.axes[axisName];
+  const newAuthorized = ce.ceiling_after.authorized_ceiling;
+  if (newAuthorized < cur.durable_consumed + cur.reserved_active) {
+    return rejection(state, event, 'resource_ceiling');
+  }
+  const next = Object.freeze({
+    ...appendEvent(state, event),
+    axes: Object.freeze({
+      ...state.axes,
+      [axisName]: Object.freeze(computeAxisBudget({
+        authorized_ceiling: newAuthorized,
+        reserved_active: cur.reserved_active,
+        durable_consumed: cur.durable_consumed,
+        active_actual: cur.active_actual,
+        known: cur.known,
+        enforced: cur.enforced,
+      })),
+    }),
+    control_sequence: Math.max(state.control_sequence, ce.sequence),
+  });
+  return {
+    state: next,
+    receipt: {
+      artifact_type: 'mission_authenticated_control',
+      event_type: 'ceiling_adjust',
+      mission_lineage_id: state.mission_lineage_id,
+      axis: axisName,
+      authorized_before: ce.ceiling_before.authorized_ceiling,
+      authorized_after: newAuthorized,
+      authority: ce.authority,
+      source_event: event,
+      next_state: state.state,
+      receipt_digest: sha256({
+        kind: 'mission_authenticated_control',
+        axis: axisName,
+        authorized_after: newAuthorized,
+        mission_lineage_id: state.mission_lineage_id,
+        event_digest: event.event_digest,
+      }),
+    },
+  };
+}
+
+function handleControlEvent(state, event, payload, sanitizedControlEvent) {
+  const ce = sanitizedControlEvent || payload.event || event;
+  if (!CONTROL_ACTION_SET.has(ce.action)) {
+    return rejection(state, event, 'effect_class_not_allowlisted');
+  }
+  const seqCheck = verifySequence(ce, { currentSequence: state.control_sequence });
+  if (!seqCheck.ok) {
+    const closing = Object.freeze({
+      ...appendEvent(state, event),
+      state: 'CLOSING',
+      control_sequence: Math.max(state.control_sequence, ce.sequence),
+    });
+    return {
+      state: closing,
+      receipt: {
+        artifact_type: 'mission_authenticated_control',
+        event_type: 'control_event',
+        action: ce.action,
+        sequence: ce.sequence,
+        authority: ce.authority,
+        reason: seqCheck.reason,
+        mission_lineage_id: state.mission_lineage_id,
+        source_event: event,
+        next_state: 'CLOSING',
+        receipt_digest: sha256({
+          kind: 'mission_authenticated_control',
+          action: ce.action,
+          sequence: ce.sequence,
+          reason: seqCheck.reason,
+          mission_lineage_id: state.mission_lineage_id,
+          event_digest: event.event_digest,
+        }),
+      },
+    };
+  }
+  let nextState = state;
+  if (ce.action === 'finish_requested') {
+    nextState = Object.freeze({ ...appendEvent(state, event), state: 'CLOSING', control_sequence: ce.sequence });
+  } else if (ce.action === 'abort_requested') {
+    // ABORTING is an intermediate control state, not a TERMINAL_STATES member.
+    // Do not set terminal here — that permanently blocked abort finalization.
+    // Advance control_sequence exactly once to the accepted control event.
+    nextState = Object.freeze({
+      ...appendEvent(state, event),
+      state: 'ABORTING',
+      control_sequence: ce.sequence,
+    });
+  } else if (ce.action === 'scope_frozen') {
+    nextState = Object.freeze({ ...appendEvent(state, event), state: 'CLOSING', control_sequence: ce.sequence });
+  } else if (ce.action === 'ceiling_adjust') {
+    // Delegate to ceiling adjust semantics
+    return handleCeilingAdjust(state, event, payload, sanitizedControlEvent);
+  }
+  return {
+    state: nextState,
+    receipt: {
+      artifact_type: 'mission_authenticated_control',
+      event_type: 'control_event',
+      action: ce.action,
+      sequence: ce.sequence,
+      authority: ce.authority,
+      mission_lineage_id: state.mission_lineage_id,
+      source_event: event,
+      next_state: nextState.state,
+      receipt_digest: sha256({
+        kind: 'mission_authenticated_control',
+        action: ce.action,
+        sequence: ce.sequence,
+        mission_lineage_id: state.mission_lineage_id,
+        event_digest: event.event_digest,
+      }),
+    },
+  };
+}
+
+function handleAbortFinalized(state, event, _payload) {
+  // Canonical ABORTING → ABORTED transition. Abort is not successful closure:
+  // this path never claims acceptance, completion, or task closeout.
+  if (state.state !== 'ABORTING') {
     return {
       state,
       receipt: {
         artifact_type: 'mission_abort_rejected',
         event_type: 'abort_finalized',
-        reason: 'mission_repair_required',
-        claim_id: lockedClaim.claim_id,
+        reason: 'not_aborting',
         mission_lineage_id: state.mission_lineage_id,
         source_event: event,
         next_state: state.state,
         receipt_digest: sha256({
           kind: 'mission_abort_rejected',
-          reason: 'mission_repair_required',
-          claim_id: lockedClaim.claim_id,
+          reason: 'not_aborting',
           mission_lineage_id: state.mission_lineage_id,
           event_digest: event.event_digest,
         }),
@@ -4078,25 +5303,6 @@ function applyMissionCampaignReceipt(state, receipt) {
       return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
     }
   }
-  // Repair ladder (KR3): a claim carrying an unreleased repair lock may only
-  // drain through a rerun whose verdict CHANGED (ready/follow_up — the
-  // engine-derived form of repair evidence). Draining it as blocked/abort/
-  // unknown would convert the repairable rejection into a terminal — exactly
-  // the P6D expansion this gate exists to refuse.
-  if (claim.repair_lock) {
-    const reranVerdictChanged = missionV2Receipt
-      && (receipt.outcome === 'ready' || receipt.outcome === 'follow_up');
-    if (!reranVerdictChanged) {
-      return Object.freeze({
-        status: 'rejected',
-        reason: 'mission_repair_required',
-        remedy: 'resume the SAME campaign (durable-wait resume preserves the '
-          + 'candidate), repair the artifact, rerun the failed gate; this claim '
-          + 'drains only on a changed-verdict rerun',
-        state,
-      });
-    }
-  }
   // Fail closed on a malformed/partial per-axis usage shape, but feed the
   // reducer the original {per_axis} payload it expects: reservationFor returns
   // an axis-keyed map, which handleReconciliation cannot re-parse.
@@ -4123,16 +5329,6 @@ function applyMissionCampaignReceipt(state, receipt) {
     return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
   }
   let next = result.state;
-  // Changed-verdict rerun releases the repair lock together with the drain.
-  if (claim.repair_lock && next.claims && next.claims[claim.claim_id]
-      && next.claims[claim.claim_id].repair_lock) {
-    const releasedClaim = { ...next.claims[claim.claim_id] };
-    delete releasedClaim.repair_lock;
-    next = Object.freeze({
-      ...next,
-      claims: Object.freeze({ ...next.claims, [claim.claim_id]: Object.freeze(releasedClaim) }),
-    });
-  }
   if (missionV2Receipt && claim.graph_node_id && next.graph_progress) {
     const priorProgress = next.graph_progress[claim.graph_node_id] || {};
     next = Object.freeze({

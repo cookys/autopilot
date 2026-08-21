@@ -1,37 +1,37 @@
 # Changelog
 
-## v2.34.32 — P6D 矯正:repair ladder 出貨、manifest 閘提前到 staging 點
+## v2.34.32 — P6D 矯正:repair ladder(無狀態形)+ manifest 閘提前到 staging 點
 
-**Headline**: P6D 事故(2026-08-21)的機械矯正,經兩代 hetero review(G1 3×STOP 24 blockers
-→ G2 terminal 17 findings)三連縮小後的終形:**三閘變一閘半** —— (c) repair ladder 全出貨、
-(b) manifest 閘以「重用比對器 + wrapper staging 點」出貨、(a) contract-first 閘連 shadow 都
-不出(述詞被三席否證,BACKLOG 留殘餘觸發)。
+**Headline**: P6D 事故的機械矯正,經兩代 hetero plan review(G1 3×STOP → G2 terminal)+
+一輪 pre-merge review 共**四次縮小**後的終形:三閘 → 一閘半 → **無狀態一閘半**。pre-merge
+review 的兩枚 🔴 殺掉了 durable claim-lock 變體 —— 解鎖路在生產不可達 = 永久 Mission 死鎖,
+「比它防的擴張更糟的失效模式」;這正是 P6D 病(用流程武裝流程)的鏡像,在出貨前被自家
+review 抓住。鎖機器退場,拒絕本身扛起整個閘。
 
 ### Added
-- `src/engine/repair-ladder.js` — 單一述詞:boundary-rejected 候選在「同閘重跑且 verdict
-  變更(ready/follow_up)或 named extras 嚴格縮減且綁 prior failure hash」前,不得工作流
-  擴張;bypass 僅限 engine-derived 終局(closed enum:wall_budget/deadline/timeout/
-  unavailable/interrupted),controller 文字永不 bypass。無 boundary = no-op。
-- `terminalizeManagedCampaignFailure` 首擊守衛:BOUNDARY_REJECTED 進場的 campaign 不得無修
-  復轉終局;拒絕時 best-effort 將 claim-bound repair lock CAS 寫入 Mission state(hash 投影
-  **條件式**攜帶 —— 無鎖狀態 hash 逐位元組不變)。
-- Mission 四後盾:receipt drain(鎖住的 claim 只准 changed-verdict 排水,同時解鎖)、
-  abort_finalized reducer、`finalize-abort` CLI(exit 1 且不寫 --out)、successor 準備。
-- `check-disjointness.sh --staged` — 同一 matcher 讀 staged index;`dispatch-hetero.sh`
-  edit-only 捕獲路徑在 `git add -A` 與 capture commit 之間執行 staged precheck:越界 →
-  boundary_rejected、**commit 不創建**、worktree 保留 staged 供就地修復。自 commit 引擎
-  維持 post-commit 閘為權威後盾。
-- 測試:`p6d-gates-repair-ladder.test.sh`(19 node + 5 shell;M1/M2/M3 突變全紅)、
-  `p6d-gates-manifest.test.sh`(12;六案等價 corpus staged≡post-commit + 真 dispatch-hetero
-  in-situ 攔截;dead-gate 突變 8 紅)。
-- 設計諮詢:sol via dispatch-explore(Option D;用 repo 事實駁倒 campaign-intake 案 ——
-  campaign durable root 是 campaign-v1 鍵,successor 換 ticket 找不到被拒 root)。
-  prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本遺留(dev-flow
-  713→717 = v2.34.23;harness-maintenance 58→59 = v2.34.28),justification 見各該版節。
+- `src/engine/repair-ladder.js` — 無狀態述詞:BOUNDARY_REJECTED 進場且候選 **git 可驗證**
+  (intake 綁定 resume_candidate)的 campaign,無修復證據不得轉終局;無可驗證候選則放行
+  (拒絕只會鎖死合法死路 campaign —— reviewer 逐環追出的 reachable trace)。bypass 僅限
+  engine-derived closed enum;controller 文字永不。欄位對映採 reducer 真實 durable 形狀
+  (reason/receipt_digest),named-extras 縮減分支明示 future-only。
+- `terminalizeManagedCampaignFailure` 首擊守衛(無狀態)+ 兩個呼叫點的 reason/remedy 透傳
+  (拒絕必須 explanation-first,不得被 generic resume 訊息吃掉)。
+- `check-disjointness.sh --staged`(**含 `--ita-visible-in-index`** —— intent-to-add 在
+  staged 視圖可見,corpus 第七案釘住)+ `dispatch-hetero.sh` wrapper staging 攔截
+  (mktemp 失敗 fail-closed,與 postcheck 同律)。
+- 測試:`p6d-gates-repair-ladder.test.sh`(21 node + 2 shell,含「無候選→放行」反死鎖
+  case 與 repo 級無鎖不變量)、`p6d-gates-manifest.test.sh`(13;七案等價 corpus + 真
+  dispatch-hetero in-situ)。突變:述詞恆真 / 無狀態守衛拔除 / staged 閘拔除各自紅
+  (staged 閘 dead-gate = **4 紅**,前版記錄誤植 8,已更正)。
+- 設計佐證:sol dispatch-explore 諮詢(Option D)+ pre-merge reviewer 的可達性反證
+  (evidence dir 兩份)。
 
 ### Changed
-- `docs/BACKLOG.md` — P6D 條目誠實更新:2/3 classes shipped;class (a) 留殘餘觸發
-  (有效述詞存在前 KR1 不得出貨,含 shadow)。
+- `docs/BACKLOG.md` — P6D 條目:2/3 classes shipped(皆 planted negative);class (a) 留
+  觸發;新增 **durable repair-lock 設計**條目(解鎖路徑 + legacy receipts + projection
+  roundtrip 攜帶 + no_effect_release 封口 + finalize-abort 冪等,reviewer 證據全引)。
+  prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本遺留(dev-flow
+  713→717 = v2.34.23;harness-maintenance 58→59 = v2.34.28),justification 見各該版節。
 
 ## v2.34.31 — plan-review PANEL 層可觀測性:哪席在飛、deadline 剩多少,一條指令
 

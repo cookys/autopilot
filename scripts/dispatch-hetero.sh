@@ -3150,13 +3150,24 @@ run_strict_staged_precheck() {
   if [ "${#STRICT_SCOPE_ALLOW_PATHS[@]}" -eq 0 ] && [ "${#STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}" -eq 0 ]; then
     return 0 # no declared manifest → postcheck will fail it authoritatively
   fi
-  allow_file="$(mktemp -t "hetero-staged-allow-XXXXXX")" || return 0
+  allow_file="$(mktemp -t "hetero-staged-allow-XXXXXX")" || {
+    STRICT_PRECOMMIT_REJECTED=1
+    STRICT_POSTCHECK_STATUS="boundary_rejected"
+    STRICT_POSTCHECK_ERROR="boundary_rejected: failed to allocate staged-precheck allow temp file"
+    return 1
+  }
   for out_dir in "${STRICT_SCOPE_ALLOW_PATHS[@]}" "${STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}"; do
     [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$allow_file"
   done
   deny_file=""
   if [ "${#STRICT_SCOPE_DENY_PATHS[@]}" -gt 0 ]; then
-    deny_file="$(mktemp -t "hetero-staged-deny-XXXXXX")" || { rm -f "$allow_file"; return 0; }
+    deny_file="$(mktemp -t "hetero-staged-deny-XXXXXX")" || {
+      rm -f "$allow_file"
+      STRICT_PRECOMMIT_REJECTED=1
+      STRICT_POSTCHECK_STATUS="boundary_rejected"
+      STRICT_POSTCHECK_ERROR="boundary_rejected: failed to allocate staged-precheck deny temp file"
+      return 1
+    }
     for out_dir in "${STRICT_SCOPE_DENY_PATHS[@]}"; do
       [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$deny_file"
     done

@@ -2662,41 +2662,6 @@ class AutopilotEngine {
     };
   }
 
-  // Best-effort claim-bound lock write so Mission-side backstops (successor /
-  // finalize-abort / drain) refuse independently even if this process dies.
-  // Lock write failure never masks the refusal itself.
-  persistMissionRepairLock({ campaignControl, boundary, cwd }) {
-    try {
-      const claim = campaignControl && campaignControl.mission_claim;
-      const store = this.missionCampaignStore;
-      if (!claim || !store
-          || typeof store.load !== 'function' || typeof store.save !== 'function') {
-        return false;
-      }
-      const state = store.load();
-      if (!state || !state.claims || !state.claims[claim.claim_id]) return false;
-      const existing = state.claims[claim.claim_id];
-      if (existing.repair_lock) return true;
-      const next = {
-        ...state,
-        claims: {
-          ...state.claims,
-          [claim.claim_id]: {
-            ...existing,
-            repair_lock: repairLadder.buildRepairLock({
-              boundary,
-              iccCampaignId: campaignControl.campaign_id || null,
-              lockedAt: this.now(),
-            }),
-          },
-        },
-      };
-      return store.save(state, next) === true;
-    } catch (_error) {
-      return false;
-    }
-  }
-
   terminalizeManagedCampaignFailure({
     campaignControl,
     reason,
@@ -2715,14 +2680,23 @@ class AutopilotEngine {
       || state.phase !== CAMPAIGN_STATES.PREPARED
       || state.live_lease !== null;
     if (!possiblyEffectful) return { status: 'no_effect' };
-    // Repair ladder (KR3, plan R2' 2026-08-21): a campaign ADMITTED in
-    // BOUNDARY_REJECTED with a preserved candidate is repairable; converting it
-    // to a terminal without a repair attempt is the P6D failure class. First
-    // observations are untouched (a fresh run that fails arrives here with
-    // initial_state.phase != BOUNDARY_REJECTED). Controller-supplied reasons
-    // never bypass; engine-derived terminal evidence may (closed enum).
+    // Repair ladder (KR3, plan R2' 2026-08-21; STATELESS form after the
+    // 2026-08-21 pre-merge review killed the durable-lock variant — a lock
+    // with no reachable release is a worse failure mode than the expansion it
+    // prevents). A campaign ADMITTED in BOUNDARY_REJECTED whose candidate is
+    // GIT-VERIFIABLE (intake bound resume_candidate) is repairable in place;
+    // converting it to a terminal without a repair attempt is the P6D failure
+    // class and is refused, explanation-first. When intake could NOT bind a
+    // verifiable candidate (e.g. a scope rejection that journaled no git
+    // artifact), local repair is structurally impossible and terminalization
+    // proceeds — refusing would deadlock a legitimately dead campaign.
+    // First observations are untouched (fresh failures arrive here with
+    // initial_state.phase != BOUNDARY_REJECTED).
     const ladderBoundary = repairLadder.extractBoundaryEvidence(state);
-    if (ladderBoundary) {
+    const ladderRepairable = Boolean(campaignControl.resume_candidate
+      || (campaignControl.resume_durable_wait
+        && campaignControl.resume_durable_wait.candidate_ref));
+    if (ladderBoundary && ladderRepairable) {
       const ladder = repairLadder.evaluateRepairLadder({
         boundary: ladderBoundary,
         rerun: campaignControl.repair_rerun || null,
@@ -2730,7 +2704,6 @@ class AutopilotEngine {
         context: 'campaign failure terminalization',
       });
       if (!ladder.ok) {
-        this.persistMissionRepairLock({ campaignControl, boundary: ladderBoundary, cwd });
         return {
           status: 'rejected',
           code: ladder.code,
@@ -7727,6 +7700,21 @@ class AutopilotEngine {
           repairLineage,
         });
         campaignControl.terminal_failure = failure;
+        if (failure.status === 'rejected') {
+          return {
+            status: 'blocked',
+            phase: 'campaign_repair_required',
+            reason: failure.reason,
+            remedy: failure.remedy || null,
+            rounds: implementationChain.length,
+            roster,
+            resolveResult,
+            implementationChain,
+            reviewChain,
+            campaign_receipt: composition,
+            ledger,
+          };
+        }
         if (failure.status === 'no_effect') {
           const release = releaseCampaignNoEffect(buildCampaignPreSpendRejection({
             owner: 'campaign_composition',
@@ -8958,6 +8946,11 @@ class AutopilotEngine {
         cwd: loopCwd,
       });
       campaignControl.terminal_failure = terminalFailure;
+      if (terminalFailure.status === 'rejected') {
+        rejection.code = terminalFailure.code || rejection.code;
+        rejection.reason = terminalFailure.reason;
+        rejection.remedy = terminalFailure.remedy || null;
+      }
       if (new Set(['no_effect', 'not_applicable']).has(terminalFailure.status)) {
         releaseCampaignNoEffect(rejection);
       }

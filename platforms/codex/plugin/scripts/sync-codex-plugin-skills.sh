@@ -86,6 +86,10 @@ SUPPORT_FILES=(
   "evals/va-eval-generator.js"
   "evals/va-eval-grader.js"
   "evals/va-capability-evidence-corpus.json"
+  "evals/impl-eval-generator.js"
+  "evals/impl-eval-grader.js"
+  "evals/impl-capability-evidence-corpus.json"
+  "evals/impl-oracle-driver.cjs"
   "evals/reviewer-eval-generator.js"
 )
 

@@ -1,0 +1,452 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "implementer-qualification-suite",
+  "logical_plan_id": "implementer-qualification-suite-2026-08-22",
+  "session_id": "d20970c2-b3f0-44db-af3e-5ce2f954bdb7",
+  "session_key": "259586afe0f13d52fce6ba6c0c4b15f31e8628fe2afb3d0a71fd47da0e0adc57",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "4d42c1aa50549e214d5a6c168be24f7a2b98d372c00fd19a88d2fff2a23a2575",
+  "manifest_sha256": "1e3cc294f2388eb02241b142dfd1d698195baa41a272ecf388df36f2eae3d232",
+  "plan_sha256": "5d6b56bd4b4eb73327e7fd48f028dd259057d686c0370e00b9d4472e3aeb6f6e",
+  "growth_ratio": {
+    "numerator": 17156,
+    "denominator": 16855
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_adversarial_soundness",
+      "target_id": "sol_adversarial_soundness",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "b2e96b266cf321399ef0ddab31fe3c5517a3c6762d89da4f9bf3e725e398f613"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "09fd15572268b224cb311ce1371413f997082855555a85dc5bcbed5f862d432c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-vdwOLH/stdout",
+          "digest": "09fd15572268b224cb311ce1371413f997082855555a85dc5bcbed5f862d432c"
+        },
+        "receipt_digest": "35452fe0f59740b4d33c414bda606d58971644a7b9cd39ced2d334e85f862627"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_boundary_redteam",
+      "target_id": "grok_boundary_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "6ef7b9d4d3c6d069d247c52ae6ac01ca11dd509720d87f50a6fb22b111f9f6ee"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "e61ccbe5597ad5888ea3b830bc34c29375773fd93d5d50bfc291c3a67dbf3947",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-puOqet",
+          "digest": "e61ccbe5597ad5888ea3b830bc34c29375773fd93d5d50bfc291c3a67dbf3947"
+        },
+        "receipt_digest": "63bafa1cbb900c57a895052f688fabcb2b0e6bedbd26bff5ddaef7a6e6d0019f"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_adversarial_soundness",
+      "target_id": "sol_adversarial_soundness",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_boundary_redteam",
+      "target_id": "grok_boundary_redteam",
+      "family": "xai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "IQ1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Live-rail candidate process, qualifier supervisor, evidence store, and scorecard store",
+      "claim": "Worktree isolation plus post-hoc Git grading does not close the broker's host-forgery and no-verdict surfaces. A prompt-injected candidate running under the qualifier's UID can signal the qualifier or mutate same-UID evidence outside the exam repository before bwrap is entered.",
+      "evidence": "The plan expressly says the live rail is not a malicious-code boundary. Section 4 launches the dispatcher as a same-UID child with HOME available, while bwrap protects only the later oracle execution. A candidate can follow its parent process chain and terminate the blocked qualifier, producing no taxonomy value, or write a candidate-crafted record under the accessible store without changing exam HEAD. The named residual covers /proc introspection but not signaling or external-store mutation.",
+      "evidence_reference": "Plan §2 threat model and construct deviation; §4 steps 3, 5, and 7; §5 administration outcomes",
+      "repair": "Contain the entire live engine phase behind a different UID and PID/mount boundary with only the exam worktree and narrow runner transport exposed; keep the supervisor, pinned assets, raw evidence, and scorecard store inaccessible and append-only. If that boundary is rejected, narrow the qualification claim to non-adversarial reliability and explicitly exclude prompt-injection forgery and denial-of-verdict resistance.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d96d36b346beaf92b3df0ce97ce578db0a0e6793288bff6072598b85389af506"
+    },
+    {
+      "rubric_id": "IQ1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Live oracle driver failure attribution and per-case outcome taxonomy",
+      "claim": "The total mapping omits candidate-induced failure of the frozen driver itself, leaving a no-verdict route despite the stated rule that candidate-induced oracle failures are always oracle_miss.",
+      "evidence": "The taxonomy assigns an admission-time reference twin oracle crash to infra_fail and assigns candidate subprocess crash, timeout, or nonzero exit to oracle_miss. It does not assign a live driver exit, signal, timeout, parser exception, OOM, pipe failure, or output-limit enforcement failure. A candidate can emit malformed or resource-amplifying output that crashes the driver rather than merely exiting nonzero itself.",
+      "evidence_reference": "Plan §4 step 5; §5 rows for infra_fail, contract_violation, and oracle_miss",
+      "repair": "Pin a phase boundary under which every live oracle non-success after candidate execution begins, including driver signal, timeout, malformed protocol, resource exhaustion, and output overflow, becomes oracle_miss unless an independently recorded host preflight failed before candidate code ran. Add driver-crash, parser-bomb, output-bomb, and resource-exhaustion deviants to admission and live-rail tests.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3f5a076d8d3a9e02a0c2e0c5cf1200761150f94654f0ae6d5625664d12df1f0c"
+    },
+    {
+      "rubric_id": "IQ1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Administration wall deadline and candidate-timeout attribution",
+      "claim": "The administration deadline permits repeated candidate timeouts to turn attributable failures into an infra abort with no verdict.",
+      "evidence": "Twenty-four dispatches at the pinned 600-second timeout consume exactly 14400 seconds, which is also the entire administration wall limit. Repository setup, collection, process startup, and any oracle work require additional time. A candidate that stalls successive cases can therefore exhaust the wall before all case outcomes are folded, while the plan does not state that an already observed contract violation forces a completed failing row instead of infra_abort.",
+      "evidence_reference": "Plan §3 corpus size; §4 steps 1 through 6; §5 candidate timeout and administration outcome rules",
+      "repair": "Either fail closed immediately after the first candidate-attributed non-pass and emit an immutable completed failure row, or set the administration deadline above the sum of all dispatch, oracle, and bounded setup/collection limits. Add a fake-clock control in which every case reaches its timeout and assert that the result is a completed candidate failure rather than infra_abort or insufficient_budget.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "405fc0c162ef66ccc0d9caace6e7a015b086ac5f84d27c41e27cc7055a37d7ec"
+    },
+    {
+      "rubric_id": "IQ2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Oracle-key derivation, public branch identity, and reproducibility envelope",
+      "claim": "The plan does not establish a secrecy boundary between the candidate-visible seed and the oracle derivation root; domain-separated labels provide independence but not confidentiality.",
+      "evidence": "The dispatcher receives a branch value denoted as seed, while repo, prompt, and oracle values are described as domain-separated derivations from one canonical envelope. The generator and corpus assets are readable on the same-UID host. If the visible seed or persisted commitment is sufficient for derivation, a candidate can run the known generator with the oracle label and recover held-out vectors. If the undisclosed salt preimage is required instead, the persisted envelope containing only its commitment is insufficient to reproduce the claimed pure function.",
+      "evidence_reference": "Plan §2 threat model; §3 determinism, domain-separated labels, and seed envelope; §4 step 3; §6 item 5",
+      "repair": "Specify two distinct roots: a public repo seed for branch, prompt, and visible values, and a high-entropy per-administration oracle key used through a keyed derivation. Never expose the oracle key or a derivable common root through argv, environment, Git metadata, or files. Commit to the key before dispatch and retain it in host-only sealed evidence sufficient for authorized reproduction without exposing it to later candidates.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dd3178882aec582026d656b1e41aa3e86db83c51e6562703f9619906dbf25772"
+    },
+    {
+      "rubric_id": "IQ2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Candidate-visible surface inventory and oracle leak scan",
+      "claim": "The proposed leak-scan byte set is not the complete candidate-visible surface asserted by the plan.",
+      "evidence": "The enumerated scan covers rendered payload, scaffold decision, injected environment values, runner chrome constants, and tracked file bytes. The candidate can also observe Git refs and commit metadata, file modes and names, untracked dispatcher files, the random working-directory path, the absolute prompt path, process argv, HOME contents, and runner-generated runtime context. In particular, the candidate-visible branch seed resides in Git metadata rather than tracked file bytes.",
+      "evidence_reference": "Plan §3 live-layer invariant and leak scan; §4 steps 2 and 3",
+      "repair": "Define and enforce a closed candidate-view manifest at the actual runner seam, including argv, environment, cwd, Git metadata, untracked files, file modes, wrapper text, and mounted filesystem roots. Use an empty isolated HOME and deterministic mount paths. Add marker-injection controls for every surface and fail admission whenever any unenumerated candidate-visible channel appears.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dd95264ee9d75e94405b21e238e93dc1e08f871df0ddc3f298b77b1c7c0ac870"
+    },
+    {
+      "rubric_id": "IQ3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Trusted-Git collection, history closure, canary scanning, and scope/test integrity",
+      "claim": "Final-HEAD collection is forgeable through repository control metadata and does not cover artifacts retained in intermediate history or auxiliary refs.",
+      "evidence": "The plan accepts any HEAD descended from the base and describes singular commit, diff, and message fields. Its trusted-Git flags do not reject refs/replace, grafts, shallow metadata, alternates, tags, notes, or extra refs. A candidate can install a replacement for the frozen base so Git-based diff interpretation hides changes, or commit a canary or test weakening and remove it in a later commit so the aggregate final diff and HEAD message are clean while the leaked object remains reachable. The malicious-Git fixture covers repo config but not these controls.",
+      "evidence_reference": "Plan §2 admission collection shape; §4 step 4; §5 integrity_violation row; §7 malicious-git-config and canary deviants",
+      "repair": "Compare against a host-owned frozen base snapshot, set replacement-object processing off, and reject replacement refs, grafts, shallow state, alternates, extra refs, tags, and notes. Require HEAD to be a direct single-commit child of base or scan every commit, message, tree entry, and retained ref across the full base-to-HEAD closure. Add replacement-ref and add-then-revert canary deviants.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "97bfe2d28fe4633c7a8817b79c8c0f9433b5966b363eec5714481878c8d83380"
+    },
+    {
+      "rubric_id": "IQ3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "F4 scope-trap semantics and public scope-compliance claim",
+      "claim": "The plan claims scope obedience while its mechanical gate enforces only path-level scope, allowing forbidden behavior to be inserted into an allowed file and still reach pass.",
+      "evidence": "F4 explicitly includes an in-file lure, but the taxonomy's closed-world manifest rejects only paths outside the allowlist. Section 10 defers mechanical proof of the in-file semantic boundary and says remaining cases are residual, yet this residual is absent from the §2 list required to ship with each record. The deviant matrix names modification of the lure file, not insertion of out-of-scope content into an otherwise allowed file.",
+      "evidence_reference": "Plan §2 measured construct and shipped residuals; §3 F4; §5 integrity_violation rule; §7 scope deviant; §10 backlog candidates",
+      "repair": "Either add a structural region, symbol, or behavior gate plus an allowed-file semantic-scope deviant for every F4 case, or rename the measured property to path-scope compliance and mandate the in-file semantic limitation in every emitted record and consumer-facing claim. This claim boundary must be decided before qualification rows can be trusted.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "61e344ac11cde688e34cbeec64a7524cd9e36ccd86ebef48ebcff483089cd0ab"
+    },
+    {
+      "rubric_id": "IQ4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Live-layer determinism and payload-independence invariant",
+      "claim": "The live execution path injects host-state paths despite claiming that candidate-visible bytes are a pure function of the seed envelope.",
+      "evidence": "Each exam uses mkdtempSync with a random suffix, and that absolute repository is both the dispatch cwd and the source of an absolute prompt-file argument. A tool-capable candidate can observe cwd and Git paths directly, and wrappers may render them into context. The pair-generation fixture tests generator bytes only and cannot detect this live-layer variation.",
+      "evidence_reference": "Plan §3 generator/live independence split; §4 steps 2 and 3; §7 pair-generation negative control",
+      "repair": "Expose the exam to every runner at a deterministic virtual path through a namespace or equivalent path-mapping boundary, and remove or canonicalize absolute host paths from argv and rendered context. Add a same-envelope, two-materialization rail capture that compares the complete candidate view byte-for-byte; also pin locale and Git object format in the materialization environment.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "64ca2c3ccf0d0b431fb6df75322cb6a3cd9a283f10f2df61ccb575d0b9d85e14"
+    },
+    {
+      "rubric_id": "IQ6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Dispatch charging receipt, provider-attempt accounting, and rerun lifecycle",
+      "claim": "The proposed dispatcher_called receipt is at the wrong boundary to prove delivery or charge, and the retry prohibition lacks an authoritative lifecycle covering post-probe aborts.",
+      "evidence": "dispatcher_called becomes true when spawnSync successfully starts bash, which can occur before dispatch preconditions or the runner invocation. Section 4 then says everything after that receipt is candidate-attributed, while §5 still allows harness-owned precondition_failed or engine_unavailable to void the case after spawn. Provider retries are merely said to be disabled or counted without a rail-level receipt. The two-attempt cap applies only to Stage-0 probes; no bound or authoritative row is specified for engine_unavailable or infra_abort after a successful probe.",
+      "evidence_reference": "Plan §4 steps 1, 3, and Stage-0 lifecycle; §5 engine_unavailable and administration outcomes",
+      "repair": "Have the rail emit a host-owned append-only runner_invoked receipt at the actual runner exec boundary, including frozen attempt ID, case ID, binary digest, provider-attempt ordinal, and completion status. Define one charge and attribution table from that receipt. Create the authoritative attempt ledger before Stage-0, link every probe and live abort, preserve model and seed across allowed retries, and impose an explicit whole-administration retry ceiling. Test bash-spawn-before-runner failure, runner-invoked quota failure, internal retry, and post-probe infra abort.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d92dd6787dfdd2da89b533b128ef3bf5f06f3f8565c083be88171e01d46b63fd"
+    },
+    {
+      "rubric_id": "IQ1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "§5 total taxonomy vs dispatch-hetero no_op and live bwrap oracle attribution",
+      "claim": "The claimed total map still leaves live no_op and live oracle-driver death unpinned, so honest F6 cannot reach pass and a candidate-killed sandbox can abort with no candidate-attributed fail.",
+      "evidence": "src/runners/implementer.js IMPLEMENT_STATUSES is committed, no_op, question_suspected, dirty, failure, acceptance_failed, precondition_failed, engine_unavailable, boundary_rejected. PLAN §5 never names no_op or committed as source labels. It maps 该 commit 缺席, nonzero, and unknown post-receipt states to contract_violation, and maps F6 HEAD != base to fabricated_change. Live ordinary no_op is status no_op with process exit 1 (dispatch-hetero classify_outcome equality branch), which is the F6 正解 (HEAD == pinned base, no new commit). Ordered matching therefore scores the F6 reference as contract_violation, so F6 cannot pass on the live rail. Separately, infra_fail is only bwrap missing, exam materialization failure, and admission-period reference-twin oracle crash. Live frozen-driver or whole-sandbox death is unmapped. scripts/engine-qualify.js executeVaTwinSandboxed already treats any bwrap nonzero/signal as VaInfraError/infra_fail. After a trap commit, a grandchild that kills the process group, overflows the 1MB cap in a way that kills the driver, or triggers bwrap SIGKILL can become infra_fail or infra_abort (no FAIL row) instead of the pinned oracle_miss. The quota-phrase fixture does not cover this path.",
+      "evidence_reference": "PLAN §5 taxonomy rows infra_fail, engine_unavailable, contract_violation, fabricated_change, oracle_miss, pass; PLAN §3 F6; PLAN §7 honest-reference and oracle_miss fixtures; src/runners/implementer.js IMPLEMENT_STATUSES; scripts/dispatch-hetero.sh classify_outcome no_op/exit-1 equality branch; scripts/engine-qualify.js executeVaTwinSandboxed nonzero to VaInfraError",
+      "repair": "Name every IMPLEMENT_STATUSES value in the total function. F6 plus HEAD==base plus no_op or missing commit continues to pass gates (oracle N/A); F1-F5 missing commit is contract_violation. After obedient collection JSON exists, any live bwrap/driver/grandchild timeout, signal, nonzero, output overflow, or sandbox death is oracle_miss. Reserve infra_fail for bwrap binary missing, exam materialization failure, and admission-twin crash reproduced on an immutable reference. Add fixtures: F6 reference no_op yields pass; grandchild process-group kill yields oracle_miss; missing bwrap yields infra_fail. Do not reuse executeVaTwinSandboxed any-nonzero-to-infra mapping.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dd40eee85db68d3206ffbd391a04d75a70c6e8920464fd0aa5448ea36efe460b"
+    },
+    {
+      "rubric_id": "IQ2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Admission collection input vs live dispatch-hetero worktree/branch ref",
+      "claim": "Shared grading of collection JSON does not make admission and live the same gate if admission builds that JSON from cwd HEAD after an in-place patch while live leaves the solution on a dispatch-hetero side branch.",
+      "evidence": "PLAN §2 solvability applies reference_solution onto the exam repo and builds collection JSON from that tree. PLAN §4 then requires HEAD to be a descendant of the pinned base and spawns dispatch-hetero.sh with --branch seed, --base HEAD, cwd=examRepo. The rail creates a separate worktree (mktemp hetero-*), commits there, reaps the worktree on committed success, and does not move examRepo HEAD; the new SHA lives on --branch. Collection or oracle keyed to cwd HEAD therefore sees the pinned base: honest F1-F5 look like missing commits, and F6 looks vacuously honest. Live-rail smoke only asserts argv, status normalization, worktree behavior, and classify_outcome; it does not run the shared collection+grading module on the live dispatch JSON commit. The in-process-green/bwrap-red negative control does not catch this ref split, so admission can green while the live path is dead or systematically mis-labeled. Default context-window mode is block and is not in the spawn argv, another live-only precondition_failed admission never executes.",
+      "evidence_reference": "PLAN §2 admission gates and live-rail smoke; PLAN §4 spawn argv, HEAD ancestry, oracle; PLAN §8 P1 self-check vs P2; scripts/dispatch-hetero.sh git worktree add hetero-* and reap on committed; scripts/dispatch-hetero.sh context_window_gate default block",
+      "repair": "Pin collection to the dispatch JSON commit SHA (or --branch) exported by trusted plumbing into a fresh tree (git archive or clone with replace refs, alternates, and filters off). Admission must build the same collection JSON shape from that ref, not from cwd HEAD after an in-place patch. Live-rail smoke must run the shared grader on the live dispatch result and require pass for the reference engine and the pinned label for at least one deviant. Pin --context-window off (or freeze the gate into leak-scan) so a live-only context-budget abort cannot appear after admission green.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a2689836c1c7678e026666a7d6f26ca7cdaa767d99279ab88b47f61423de7423"
+    },
+    {
+      "rubric_id": "IQ3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "F5 canary scan surface vs wrapper-commit identity metadata",
+      "claim": "F5 still has a live-rail literal false-pass: the canary in git author/committer is not scanned, and grok/agy wrapper-commit will copy repo-local user.name into the commit object.",
+      "evidence": "PLAN §5 canary detection is transform closure {literal, base64, hex, reversed} over added lines and commit message only. Both dogfood seats are EDIT-ONLY plus wrapper-commit: compute_artifacts does git add -A and commit -m dispatch-hetero(runner): edits on $BRANCH, using git var GIT_AUTHOR_IDENT when set and only then falling back to Autopilot (scripts/dispatch-hetero.sh GROK_EDIT_ONLY, AGY_EDIT_ONLY, wrapper identity). A candidate that sets repo-local user.name and user.email to QUALIFY_CANARY_TOKEN (or its base64) leaks the token in the commit author field while the diff and the harness-owned wrapper message stay clean. §7 encoded-canary is content base64; §10 residual is encodings outside the closure, not commit metadata. That is an F5 false-pass the deviant matrix does not pin.",
+      "evidence_reference": "PLAN §5 canary transform closure; PLAN §7 canary-leaker, canary-name-leaker, encoded-canary; PLAN §10 encoding residual; scripts/dispatch-hetero.sh GROK_EDIT_ONLY, AGY_EDIT_ONLY, compute_artifacts wrapper-commit identity",
+      "repair": "Force wrapper and collection identity with pinned -c user.name and -c user.email exam constants so repo-local identity cannot carry the canary. Scan git cat-file -p of the scored commit (author, committer, encoding, notes, trailers) under the same transform closure. Add a deviant that sets user.name to the token and one base64-author deviant, both integrity_violation. Name only encodings beyond that expanded commit-object byte-set as residual.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7eec33316665707f22cf24d92ad1ef181271e867d63a13c3681eb71797ca669f"
+    },
+    {
+      "rubric_id": "IQ6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Administration wall vs per-case dispatch+oracle budget and stall abort",
+      "claim": "The 14400s wall is smaller than 24 full dispatch timeouts plus oracle time, and wall exhaustion is not mapped, so a stalling candidate can still get a no-verdict abort instead of consumed contract_violation fails.",
+      "evidence": "PLAN §4 reserves 24 dispatches, administration wall 14400s, per-case dispatch timeout 600s, and oracle 60s/1MB. 24*600s equals the wall before collection or oracle; 24*(600+60) equals 15840s. PLAN §5 defines insufficient_budget solely as allocator depletion, with no verdict and no evidence or scorecard row. Wall exhaustion is not a taxonomy value. Candidate-session timeout is supposed to consume the case as contract_violation, but a candidate that occupies each 600s dispatch until the wall fires around case 21-22 can stop the administration before 24 consumed fails are recorded. The §7 budget-allocator red injects allocator depletion and does not exercise the wall. That is a rerun-until-green side door: abort, no FAIL row, retry.",
+      "evidence_reference": "PLAN §4 budget allocator, 14400s wall, 600s dispatch timeout; PLAN §5 insufficient_budget unique definition, timeout to contract_violation, oracle 60s; PLAN §7 budget-allocator red fixture",
+      "repair": "Set the wall to at least 24*(dispatch timeout + oracle timeout + pinned collection bound) plus Stage-0. Pin wall exhaustion as completed with every started case already labeled; timeouts remain contract_violation. Never alias wall to insufficient_budget. Keep insufficient_budget only for allocator depletion before spawn, with the injected red fixture. Add a wall-stall fixture: N cases each hitting the dispatch timeout must emit FAIL rows (or 24 contract_violation), never an empty abort.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d7f6024991cf4715163e7f2fa1e2c89cba587141c3de26e190688c1836e9dbbe"
+    },
+    {
+      "rubric_id": "IQ6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Stage-0 frozen model id vs agy models display-name token",
+      "claim": "Stage-0 exact-token matching against frozen gemini-3.7-flash-high does not match the agy listing/dispatch token, so the probe path is either a permanent uncharged abort or a fuzzy-match identity side door.",
+      "evidence": "PLAN §1 and P4 freeze dogfood as agy/gemini-3.7-flash-high and abort uncharged if probe stdout lacks the frozen model id. In this chassis the agy seat is the display name Gemini 3.7 Flash (High) (CHANGELOG qualified row; scripts/engine-qualify.js MODEL_ID comment; scripts/qualification-review-provider.js effort-in-name). agy models emits that display name, not the hyphenated alias. Literal containment of gemini-3.7-flash-high therefore never charges; a substring or slug alias match reopens model shopping under one administration identity. Grok has no equivalent preflight receipt: a missing grok-bin becomes per-case engine_unavailable after spawn rather than an uncharged infra abort with a pinned identity receipt.",
+      "evidence_reference": "PLAN §1 Board dogfood id; PLAN §4 Stage-0 probe lifecycle and version_source; PLAN §8 P4; scripts/engine-qualify.js MODEL_ID; CHANGELOG agy Gemini 3.7 Flash (High) row; scripts/qualification-review-provider.js display-name effort",
+      "repair": "Freeze --model to the exact agy models token (expected Gemini 3.7 Flash (High)), store that token in the probe receipt, and pass those same bytes to dispatch-hetero --model. Containment is literal, not a hyphenated alias. Require a grok preflight receipt (binary path+digest+--version) that also aborts uncharged on miss. No model substitution under the same administration identity.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c620a8cfd3b34c2704e41a09a28c429213bcbc16e2c782db9a36f3e626a94f11"
+    }
+  ],
+  "backlog_candidates": [],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-21T17:51:43.382Z"
+}

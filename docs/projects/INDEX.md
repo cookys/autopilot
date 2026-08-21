@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-22 | [implementer-qualification-suite](2026-08-22-implementer-qualification-suite/README.md) — implementer role 的正式考券(live-rail 真派工:6 families×2 cases×2 trials 走真 dispatch-hetero,零漏放 bar + deviant matrix + 兩場 dogfood grok-4.5/agy-flash) | v2.34.34 | `feat/v2.34.34-implementer-qualification-suite` |
 
 ## 已完成 (Completed)
 

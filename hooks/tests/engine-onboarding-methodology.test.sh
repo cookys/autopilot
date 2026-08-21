@@ -15,7 +15,7 @@ assert_contains "$SKILL_BODY" 'Canonical roles are `owner`, `implementer`, `revi
 assert_contains "$SKILL_BODY" "stored and returned rows are canonical" "engine-onboarding separates legacy aliases from canonical evidence"
 assert_contains "$SKILL_BODY" 'Disk-backed `report`/`ladder` never returns a qualified routing candidate' "engine-onboarding blocks disk-backed ladder authority"
 assert_contains "$SKILL_BODY" "Reviewer, owner, and brain-seat end-to-end qualification are shipped gate paths today" "engine-onboarding records implemented protected-role gates"
-assert_contains "$SKILL_BODY" "Implementer and explorer auto-qualification still require their own role-specific eval suites" "engine-onboarding records remaining unimplemented-role routing caveat"
+assert_contains "$SKILL_BODY" "Explorer auto-qualification still requires its own role-specific eval suite" "engine-onboarding records remaining unimplemented-role routing caveat (explorer only since v2.34.34 shipped the implementer suite)"
 
 for level in H0 H1 H2 H3 H4 H5; do
   assert_contains "$REF_BODY" "$level" "governance reference includes harness level $level"

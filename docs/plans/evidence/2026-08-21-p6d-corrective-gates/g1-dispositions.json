@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "p6d-corrective-gates-2026-08-21",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "655fa5bce74f2a8e7ceee5e3d3d77f73396e7d7d90fefc71a375912051ef1471",
+      "disposition": "accepted_blocker",
+      "rationale": "R1 names the live caller per gate + caller-side in-situ test as phase acceptance; standalone scripts removed from file map unless a caller-side test proves them live."
+    },
+    {
+      "fingerprint": "82b2221eff1a45f12fd48b3907d289b7e66ff369c0ff44cf43e51558b811b037",
+      "disposition": "accepted_blocker",
+      "rationale": "KR1 demoted to SHADOW (would_block + explanation, exit 0); predicate replacement candidates recorded for a future enforce campaign."
+    },
+    {
+      "fingerprint": "9da2449cb72bc103ec2aa8b9ff82791f6310ce12fe42a2bcd0c4da4d3fdcf48b",
+      "disposition": "accepted_blocker",
+      "rationale": "Free-text justification abolished; future enforce requires closed-enum unverifiable-property justification."
+    },
+    {
+      "fingerprint": "dc872eda58d27207a1f298294eee3700d7a02d992bad727cce197c26ef558c23",
+      "disposition": "accepted_blocker",
+      "rationale": "Manifest semantics frozen: SUBSET as extra-path detector; rename/delete/mode-only defined; single relation shared with the existing scope gate."
+    },
+    {
+      "fingerprint": "0f26d766af384a2d62dc4b1249a12806e1039169db1e7426a32a972a79b95f75",
+      "disposition": "accepted_blocker",
+      "rationale": "Coexistence decided: inline check is early-warning at the action point, post-commit scopeCheck stays as backstop, both caller-side tested (backstop must still trip on churn under a legal subset)."
+    },
+    {
+      "fingerprint": "8f38efbfc5dc704df6947d6e03cb57a2d512152a7bf494269c502601a328dc65",
+      "disposition": "accepted_blocker",
+      "rationale": "Receipt redefined: delta = change to the failed gate SUBJECT (staged path set; named extras shrink), keyed campaign_id+candidate_ref+gate_id, worktree-portable."
+    },
+    {
+      "fingerprint": "1c21f30f6f46927500631393aadbc36b6631a1214c81534a70e6ab8144ef0a37",
+      "disposition": "accepted_blocker",
+      "rationale": "Ladder scoped to gate-fail-against-candidate transitions only; deadline/owner-abort/infra-death terminals enumerated and ungated."
+    },
+    {
+      "fingerprint": "ea41b29011606281c4239bea03e686a8c88ff0f18011d6257de04253dd27cfeb",
+      "disposition": "accepted_blocker",
+      "rationale": "Posture split by family (CG5 repair adopted verbatim): KR2 enforce inline, KR3 enforce on the scoped transition, KR1 shadow."
+    },
+    {
+      "fingerprint": "bf5040651b322d3d0caa11714f6489714b12c4fe4d06506c23ccbbff535df56b",
+      "disposition": "accepted_blocker",
+      "rationale": "OQ1 closed: override is a closed-enum bypass from the legitimate-terminal list; free text attaches for audit but never satisfies the predicate."
+    },
+    {
+      "fingerprint": "06198c61bd1cf9e93e3e655136660b856fb46d22aaeab00431a46e3aeb2d1ab9",
+      "disposition": "accepted_blocker",
+      "rationale": "Cheapest-form adopted: first slice = KR3 core + inline extra-path check reusing existing scope-gate comparison; KR1 not enforced."
+    },
+    {
+      "fingerprint": "705dea9932c913d07b2b19d5498ac523c29473fd9fa45d0c370e39fa94700281",
+      "disposition": "accepted_blocker",
+      "rationale": "KR2 wiring point fixed to the engine compute_artifacts/commit step with an in-situ caller test."
+    },
+    {
+      "fingerprint": "bc91a319d46448639423c94b71a14585c8f2199a16793edd849ad47ed3b37ef2",
+      "disposition": "accepted_blocker",
+      "rationale": "Same fold as 82b2221e/9da2449c."
+    },
+    {
+      "fingerprint": "7b55f9d1dbf615f611809628d7ff3272a22c2f01da53bbd038bf4d587a4b63e8",
+      "disposition": "accepted_blocker",
+      "rationale": "Same fold as dc872eda/0f26d766; P1 green includes 6-of-6 AND 4-of-6 subset cases."
+    },
+    {
+      "fingerprint": "0104c165f4624d5723ecca73fe0557f198a53ecb3acbf3ae2fd6af8990dccbd0",
+      "disposition": "accepted_blocker",
+      "rationale": "Same fold as 8f38efbf/1c21f30f; legitimate-terminal enum written into the plan."
+    },
+    {
+      "fingerprint": "74db87933f0511a9759e4f2b553cf22aa61042231e313d079a77e9fa76de4fd3",
+      "disposition": "accepted_blocker",
+      "rationale": "Same fold as ea41b290 \u2014 per-gate family classification now explicit in the plan."
+    },
+    {
+      "fingerprint": "eb65b0e44bddbdc5d13263984d2589ce51c78cc220bc2d49ca062e35393326da",
+      "disposition": "accepted_blocker",
+      "rationale": "Same fold as bf504065 \u2014 OQ1 resolved in-plan, not deferred."
+    },
+    {
+      "fingerprint": "fad4443c2cc8421b1b3746892ef055df6f40d82d77b4e5dbd838936b986b3cd3",
+      "disposition": "accepted_blocker",
+      "rationale": "Same fold as 06198c61 \u2014 single-gate-first ordering adopted (KR3 then KR2; KR1 shadow)."
+    },
+    {
+      "fingerprint": "71177bffa5ea32474aef0902aa6c630c61cafc9fae384d9cd55546fad70c76e5",
+      "disposition": "accepted_blocker",
+      "rationale": "Same fold as 655fa5bc \u2014 every gate names its caller and ships an in-situ test."
+    },
+    {
+      "fingerprint": "6c598e5d3b906614c7b0a23918241ba85dfebdaf4c0ebedc449c6ea0a35f9f0c",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted in full: predicate is the universal contract shape; KR1 cannot enforce on it. Shadow + replacement candidates (required_change_paths equality / opt-in complete_deliverable + closed enum)."
+    },
+    {
+      "fingerprint": "62c28a29f42510b7e9cdc0cf44f90cb06dd171a8e3cf5304ecf41c17d49abd74",
+      "disposition": "accepted_blocker",
+      "rationale": "Repair adopted verbatim (subset relation, rename/delete semantics, backstop caller test, 4-of-6 green)."
+    },
+    {
+      "fingerprint": "3dd88950a207d247120b1347b6a037989d36e9db9afa8ebb9f675fedf7a34ce6",
+      "disposition": "accepted_blocker",
+      "rationale": "Repair adopted verbatim (subject-delta receipt, keyed identity, scoped transition list)."
+    },
+    {
+      "fingerprint": "2f66f88f84c63812fe280f1848223ee4a142970dfef1a75b90de88b5c91f139b",
+      "disposition": "accepted_blocker",
+      "rationale": "Repair adopted verbatim (posture split; section-6 blanket claim retracted)."
+    },
+    {
+      "fingerprint": "60207bd0e4838e82ba013c01615fd789186b04ed42d788a920f6ba05834369d1",
+      "disposition": "accepted_blocker",
+      "rationale": "Repair adopted verbatim (closed-enum bypass; problem (a) explicitly remains covered by KR1-shadow so it is not silently dropped)."
+    },
+    {
+      "fingerprint": "2b4d2cd742b8fb0a3b4027514e536cd08e0435b07c00b090bee08c1157d7caf5",
+      "disposition": "accepted_blocker",
+      "rationale": "Repair adopted: P0-P2 collapsed to ladder-first + inline check; new standalone scripts removed unless proven live by caller-side test; KR1 unenforced this campaign."
+    }
+  ]
+}

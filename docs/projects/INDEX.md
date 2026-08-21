@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-21 | p6d-corrective-gates — 事故矯正(G2 終形:repair ladder + wrapper-staging manifest 閘;class (a) 留 BACKLOG)| v2.34.32 | feat/v2.34.32-p6d-corrective-gates |
 
 ## 已完成 (Completed)
 

@@ -58,6 +58,7 @@ const {
   campaignIdFor,
   repairLineageCleanupId,
 } = require('./implementation-campaign');
+const repairLadder = require('./repair-ladder');
 const {
   missionCampaignIdFor,
   missionSubjectDigest,
@@ -2679,6 +2680,44 @@ class AutopilotEngine {
       || state.phase !== CAMPAIGN_STATES.PREPARED
       || state.live_lease !== null;
     if (!possiblyEffectful) return { status: 'no_effect' };
+    // Repair ladder (KR3, plan R2' 2026-08-21; STATELESS form after the
+    // 2026-08-21 pre-merge review killed the durable-lock variant — a lock
+    // with no reachable release is a worse failure mode than the expansion it
+    // prevents). A campaign ADMITTED in BOUNDARY_REJECTED whose candidate is
+    // GIT-VERIFIABLE (intake bound resume_candidate) is repairable in place;
+    // converting it to a terminal without a repair attempt is the P6D failure
+    // class and is refused, explanation-first. When intake could NOT bind a
+    // verifiable candidate (e.g. a scope rejection that journaled no git
+    // artifact), local repair is structurally impossible and terminalization
+    // proceeds — refusing would deadlock a legitimately dead campaign.
+    // First observations are untouched (fresh failures arrive here with
+    // initial_state.phase != BOUNDARY_REJECTED).
+    const ladderBoundary = repairLadder.extractBoundaryEvidence(state);
+    // Production shape: intake attaches resume bindings to the GENERATION-CLAIM
+    // object (campaign-intake.js — surfaced as campaignControl.generation_claim),
+    // the same path every other engine reader uses. Only the GIT-BOUND
+    // resume_candidate counts: resume_durable_wait.candidate_ref is a recorded
+    // reducer string (boundary.candidate_ref first, git commit only third) and
+    // admitting it would reinstate the no-git-object livelock the R2 review
+    // traced. Recorded-ref-without-git-object therefore terminalizes freely.
+    const ladderRepairable = Boolean(campaignControl.generation_claim
+      && campaignControl.generation_claim.resume_candidate);
+    if (ladderBoundary && ladderRepairable) {
+      const ladder = repairLadder.evaluateRepairLadder({
+        boundary: ladderBoundary,
+        rerun: campaignControl.repair_rerun || null,
+        terminalEvidence: campaignControl.engine_terminal_evidence || null,
+        context: 'campaign failure terminalization',
+      });
+      if (!ladder.ok) {
+        return {
+          status: 'rejected',
+          code: ladder.code,
+          reason: ladder.reason,
+          remedy: ladder.remedy,
+        };
+      }
+    }
     const terminalAt = observedAt || this.now();
     const terminalReason = typeof reason === 'string' && reason.trim().length > 0
       ? reason
@@ -7667,6 +7706,21 @@ class AutopilotEngine {
           repairLineage,
         });
         campaignControl.terminal_failure = failure;
+        if (failure.status === 'rejected') {
+          return {
+            status: 'blocked',
+            phase: 'campaign_repair_required',
+            reason: failure.reason,
+            remedy: failure.remedy || null,
+            rounds: implementationChain.length,
+            roster,
+            resolveResult,
+            implementationChain,
+            reviewChain,
+            campaign_receipt: composition,
+            ledger,
+          };
+        }
         if (failure.status === 'no_effect') {
           const release = releaseCampaignNoEffect(buildCampaignPreSpendRejection({
             owner: 'campaign_composition',
@@ -8898,15 +8952,23 @@ class AutopilotEngine {
         cwd: loopCwd,
       });
       campaignControl.terminal_failure = terminalFailure;
+      if (terminalFailure.status === 'rejected') {
+        rejection.code = terminalFailure.code || rejection.code;
+        rejection.reason = terminalFailure.reason;
+        rejection.remedy = terminalFailure.remedy || null;
+      }
       if (new Set(['no_effect', 'not_applicable']).has(terminalFailure.status)) {
         releaseCampaignNoEffect(rejection);
       }
       return finish({
         status: 'blocked',
-        phase: terminalFailure.status === 'blocked'
-          ? terminalFailure.phase : 'campaign_resume',
+        phase: terminalFailure.status === 'rejected'
+          ? 'campaign_repair_required'
+          : (terminalFailure.status === 'blocked'
+            ? terminalFailure.phase : 'campaign_resume'),
         reason: terminalFailure.status === 'blocked'
           ? terminalFailure.reason : rejection.reason,
+        remedy: rejection.remedy || null,
         rounds: 0,
         verdict: null,
         roster,

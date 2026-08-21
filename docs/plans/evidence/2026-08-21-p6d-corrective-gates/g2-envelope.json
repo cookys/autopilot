@@ -1,0 +1,595 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "p6d-corrective-gates",
+  "logical_plan_id": "p6d-corrective-gates-2026-08-21",
+  "session_id": "7155a94d-7e59-47e6-ba94-d7e65c79987d",
+  "session_key": "da3ef1fd580a9707a7e76ca4e19466be8afe31aa28e8d3a0233678443dcef54a",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "74903009a7620e560ff8348db80bc702122fcf425e6ea5c42d87b614e651dcc0",
+  "manifest_sha256": "f653b6c90fbea3fe585efcc8afa9257a8611dfb6b57b5c280134afd23bf70d81",
+  "plan_sha256": "a53ee95db27faaaca0d3ff1fe6f2a9429465a167b3b85f4e1063661048b73acd",
+  "growth_ratio": {
+    "numerator": 3546,
+    "denominator": 3385
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_construct_validity",
+      "target_id": "sol_construct_validity",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "1ed2e32582e940c4f36f1153328edc5925e48d99166838661676676f2ed42b05"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "4ec076754d25fbcf1f1a27652608f07aab0375f166c5accad2b641a43d10b54e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-QqPO7Y/stdout",
+          "digest": "4ec076754d25fbcf1f1a27652608f07aab0375f166c5accad2b641a43d10b54e"
+        },
+        "receipt_digest": "4b0446dd2cd93b36ea6a368e34a3d61d7375f14b7279ace04dd27bb40d826986"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "minimax_measurement_skeptic",
+      "target_id": "minimax_measurement_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "47329cb332bc543a6d8f697e84e4c548b513e055112113e073a58f738f25e7c4"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2b6d5ecb6132adc861c268bd07e960fa41ec2101fea7f1a5ca17b8cd2b991f9d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-vR7L54",
+          "digest": "2b6d5ecb6132adc861c268bd07e960fa41ec2101fea7f1a5ca17b8cd2b991f9d"
+        },
+        "receipt_digest": "15526cc59baf3acce599dec78fc92b5c4c0352c32d77754340c449357c9137c5"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_budget_redteam",
+      "target_id": "grok_budget_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "6c14a4d66a91274ff9db20a79e00c85aedb14b0e2aedfe503d98e3b8667bb90c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "78f7b5f443ad919c63c5ee4d10a8823b4c0b908130a972c8af7d0ff1e6fda501",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-kH6QfU",
+          "digest": "78f7b5f443ad919c63c5ee4d10a8823b4c0b908130a972c8af7d0ff1e6fda501"
+        },
+        "receipt_digest": "f84dc7d3c63505d57a6d2cd565ee80fb71438752a81f2d10b8f056c1b2fe1e94"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_construct_validity",
+      "target_id": "sol_construct_validity",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_measurement_skeptic",
+      "target_id": "minimax_measurement_skeptic",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_budget_redteam",
+      "target_id": "grok_budget_redteam",
+      "family": "xai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "CG1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1 l5/l6 admission, KR2 compute_artifacts/commit, KR3 successor and terminalize entrypoints, and their caller-side tests",
+      "claim": "The plan does not freeze a route-by-route caller-test matrix, so its generic one-test-per-gate requirement can certify partial wiring while another real entrypoint bypasses the gate.",
+      "evidence": "KR5 requires an in-situ test per gate, but P0 names only a zero-delta successor attempt and P2 names only one planted would-block case. The file map also leaves KR3 at bin/autopilot.js plus an unspecified owning module. Nothing explicitly requires execution through both successor and terminalize or through both l5 and l6 admission paths.",
+      "evidence_reference": "Plan sections 2 KR1, KR3, and KR5; section 3 File-structure map; section 4 P0-P2.",
+      "repair": "Freeze a caller-route matrix requiring mutation-killed tests through l5 admission, l6 admission, the real compute_artifacts/commit caller, successor, and terminalize. Each test must invoke the public flow rather than the predicate or helper directly.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6d117e432255488bf6cc3ceb1b65d13022cd9bd7a2058f8c46e93b5c5ac2fc52"
+    },
+    {
+      "rubric_id": "CG2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1 shadow annotation and P3 closure of failure class (a)",
+      "claim": "KR1 measures a construct the plan already declares invalid, then treats that shadow result as satisfying the failure class.",
+      "evidence": "The plan says output_paths plus verify commands is a G1-refuted predicate matching every Mission contract's shape, yet P2 still emits would_block from it and P3 says KR1 satisfies class (a) in shadow form. Such a schema-shape detector has no discriminant validity: discovery-heavy work can list candidate paths and deterministic broad tests without possessing a complete oracle, while deterministic generated-output work can have a complete golden comparison without enumerable paths.",
+      "evidence_reference": "Plan section 1 class (a), section 2 KR1, section 4 P2-P3, and section 6 Guaranteed failure.",
+      "repair": "Remove the KR1 would_block annotation from this patch and leave class (a) open. Record predicate research separately; do not claim closure until a re-derived predicate has explicit positive and counterexample contracts and independently constrains any escalation justification.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8ad5ba76e7d1e88ff9c91b7cc92067461f18b6e685dce1970b20ee65f9eb0b3d"
+    },
+    {
+      "rubric_id": "CG3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2 staged-path comparator and output_paths contract",
+      "claim": "Subset is the correct relation for an allowlist, but the frozen rename rule is unsound and directory or glob matching remains undefined.",
+      "evidence": "KR2 says a rename is extra only when the new path is outside output_paths. A rename from an unallowed source into an allowed destination also deletes or mutates the unallowed source and would escape that rule. The plan additionally promises reuse of existing semantics without stating whether output_paths entries are exact files, directories, or globs, leaving the new gate's contract ambiguous.",
+      "evidence_reference": "Plan section 2 KR2 and frozen rubric CG3.",
+      "repair": "Define one canonical repo-relative matcher shared with the existing scope gate. For renames, classify both source and destination; every affected path must be allowed. Specify exact-file, directory, and glob behavior and test outside-to-inside and inside-to-outside renames, allowed and unallowed deletions, mode-only changes, and symlinks.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4a2c5b4ff556d9d31ca97ff293bd32252cec85876a3a832bc257b484c4b985c4"
+    },
+    {
+      "rubric_id": "CG4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR3 durable repair-receipt state machine",
+      "claim": "The proposed receipt proves only that something changed, not that the failed gate was rerun successfully or that the defect was repaired.",
+      "evidence": "For a manifest failure, changing the path set and shrinking named extras qualifies even if one or more extras remain. For other failures, SUBJECT changed has no gate-specific definition and can be satisfied by irrelevant or whitespace-only churn. The only planted red checks zero delta; the plan never requires a successful same-gate rerun. It also does not define whether candidate_ref is a stable logical identity or a revision hash that changes during repair.",
+      "evidence_reference": "Plan section 2 KR3, section 4 P0, and section 5 Test / validation.",
+      "repair": "Make a receipt originate only from rerunning the same gate after a canonical artifact delta. Bind it to a stable candidate identity, the prior failure event, before and after revision digests, and the rerun result. Only a passing rerun may unlock promotion; a failed rerun must become the latest failure and remain locked.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "31a6b414f8f48da99150fef340c4b32d347e4dca6646d84fbe8f96a322c1ee05"
+    },
+    {
+      "rubric_id": "CG4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR3 terminalization and successor bypass semantics",
+      "claim": "The bypass contract conflates successor and terminalization and is not mapped to the engine's complete terminal-outcome vocabulary.",
+      "evidence": "KR3 applies to successor/terminalize transitions and then supplies one bypass list of deadline_exhausted, owner_abort, infra_death/transport_exhausted, and wall_clock. The slash makes the purported closed enum ambiguous, no exhaustive mapping to actual terminal reasons is provided, and the text does not prohibit a terminal excuse from authorizing a successor. Conversely, an omitted legitimate failure reason could prevent truthful terminalization.",
+      "evidence_reference": "Plan section 2 KR3 and frozen rubric CG4.",
+      "repair": "Enumerate the engine's actual terminal outcomes and reasons. Never allow a bypass to create a successor. Require a passing repair receipt for successor and successful completion, while permitting audited failed, cancelled, deadline, owner-abort, and infrastructure terminalization through exact closed-enum values; reject unknown values and test every branch.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1111e67b2891cc1230b78f7c525618cb640671e36427b1a09831d0f054db8af1"
+    },
+    {
+      "rubric_id": "CG5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "KR2 default-on rollout",
+      "claim": "Immediate enforcement still needs evidence that the new staged-index view is behaviorally equivalent to the proven post-commit scope comparator.",
+      "evidence": "The incident shows the existing scope gate caught class (b), while the proposed earlier gate observes a different lifecycle state. Reusing comparator code does not by itself prove equivalent inputs or classifications, and the listed examples do not form a differential parity test.",
+      "evidence_reference": "Plan section 1 class (b), section 2 KR2, and section 6 Risks + inversion.",
+      "repair": "Before enabling KR2 by default, run a differential fixture corpus through both classifiers and require identical allowed and extra path sets for exact paths, directories, globs, renames, deletions, mode changes, and symlinks. Keep the early check in shadow if parity is not demonstrated.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c838420b24228c32ef4c40cd64d0eea89da860bfb2116b802246f4b41044765f"
+    },
+    {
+      "rubric_id": "CG7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Overall P0-P2 delivery scope",
+      "claim": "The plan's own incident evidence supports shipping only KR3 first, but the plan still mandates two additional controls without a stop or go decision after that slice.",
+      "evidence": "The problem table calls workflow expansion the only uncaught failure, states that the existing scope gate caught the manifest violation, and admits the oracle predicate is refuted. Thus KR3 has demonstrated preventive value, KR2 mainly advances an already-effective detection point, and KR1 currently produces invalid telemetry. Reordering the phases does not prevent the governance growth because P1 and P2 remain mandatory.",
+      "evidence_reference": "Plan sections 1, 4, and Review log; frozen rubric CG7.",
+      "repair": "Make KR3 the current corrective patch and add a terminal evaluation after P0. Defer KR2 until its incremental benefit and comparator parity are demonstrated, and remove KR1 until a valid oracle construct exists. If P1 or P2 remains mandatory, add evidence-based entry criteria that justify each beyond the already-caught and refuted failure classes.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_construct_validity",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b5642d3a9f8829462c40ef191eb931f9657a72c9cafc03bbbafa126e419c439c"
+    },
+    {
+      "rubric_id": "CG4",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "KR3 receipt storage mechanism",
+      "claim": "The plan keys receipts by campaign_id + candidate_ref + gate_id (worktree-portable) but does not specify how the receipt stores the prior artifact state (e.g., the prior path set for manifest failures) for cross-worktree comparison.",
+      "evidence": "Plan section 2 KR3 definition states 'keyed campaign_id + candidate_ref + gate_id (worktree-portable)' without specifying the durable storage location or the comparison protocol for the 'staged/BASE..HEAD path set changed AND the named extras shrank' predicate.",
+      "evidence_reference": "Plan section 2, KR3 first slice definition",
+      "repair": "Specify the receipt storage mechanism (e.g., campaign-scoped ledger or durable artifact directory) and the comparison protocol that supports zero-delta detection across worktrees.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6192a9fbbc2682b3d38a6b508269d8df1069bc5f60131ba8e7073e214357cbaa"
+    },
+    {
+      "rubric_id": "CG5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Default posture for KR2 and KR3",
+      "claim": "The plan classifies KR1 as shadow (predicate refuted) but does not explicitly argue the strongest case AGAINST making KR2 or KR3 shadow first, given the expiry incident's lesson that fail-closed gates on the wrong predicate can kill rails.",
+      "evidence": "Plan section 1 table classifies KR3 as 'enforce, scoped to gate-fail→successor/terminalize transitions only' and KR2 as 'enforce when output_paths present', but the rationale for choosing enforce over shadow for KR2/KR3 is implicit (inherits from existing scope-gate semantics) rather than explicit against the expiry incident risk.",
+      "evidence_reference": "Plan section 1, CG5 family split table",
+      "repair": "Add an explicit argument for why KR2 and KR3 should be enforce rather than shadow, addressing the expiry incident and explaining why the predicates are sufficiently validated to skip the shadow phase.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "10cdc58fb49dd9d59e1ec43c8f3a557a438bf6c56e93f3476e344d6d1aad0037"
+    },
+    {
+      "rubric_id": "CG7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Phase ordering and gate selection rationale",
+      "claim": "The plan reorders phases (ladder first) and claims 'R1 ships the cheapest forms', but does not explicitly argue the strongest case AGAINST building all three gates or against governance growth of the kind Fable 5 warned about.",
+      "evidence": "Plan section 4 (Phases) reorders to 'ladder first; manifest check by reuse' but does not explicitly state which single gate would ship if only one, nor argue against the governance cost of the three-gate ensemble.",
+      "evidence_reference": "Plan section 4, Phases",
+      "repair": "Add an explicit statement of which single gate ships first if only one (KR3 / repair ladder), and a brief argument against the governance growth of the three-gate ensemble.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_measurement_skeptic",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5175b076b54b83c97193ff2fdb0da5229bc540017f75b51919d983a4816657bf"
+    },
+    {
+      "rubric_id": "CG1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2 scripts/dispatch-hetero.sh compute_artifacts; KR3 mission successor and terminalizeManagedCampaignFailure; KR1 session-mode set versus engine implement-review",
+      "claim": "R1 still does not freeze the three production call edges the P6D flow actually passed through, so the promised in-situ tests can pass while the incident path never hits a gate.",
+      "evidence": "KR2 is assigned to the engines compute_artifacts/commit step, but that function exists only in scripts/dispatch-hetero.sh (and its Codex plugin mirror). It commits only when HEAD equals BASE and the tree is dirty, then uses git commit with hooks disabled; if the worker already moved HEAD, the wrapper is a no-op and a staged-only check never sees the extras. KR3 is still assigned to bin/autopilot.js plus owning src module: that binary has no terminalize subcommand. The incident path is mission successor after BOUNDARY_REJECTED returns durable_wait with terminalize false; engine implement-review is the L5 spend edge and is unnamed. KR1 stays on mission-routing-admission.js, whose session-mode caller passes repoRoot and level only. Section 5 still mutation-checks by disabling the predicate rather than by removing the production call edge, and the file map still permits scripts/check-repair-ladder.js if a caller-side test proves it live, which a test that invokes the script can do.",
+      "evidence_reference": "plan sections 3-5 KR2/KR3/KR5; scripts/dispatch-hetero.sh:2994-3027; platforms/codex/plugin/scripts/dispatch-hetero.sh:2994-3027; bin/autopilot.js:38-67; src/mission/cli.js:166-201; src/engine/campaign-composition.js:237-250,1508-1513; src/engine/autopilot-engine.js:7511-7583; scripts/session-mode.js:416-422; skills/l5/SKILL.md:20-38",
+      "repair": "Name and test one live caller per gate in the same phase: KR2 inline in scripts/dispatch-hetero.sh compute_artifacts after git add -A, and again on BASE..HEAD whenever HEAD already moved, mirrored in the Codex plugin copy, never as a skipped hook; KR3 on mission successor plus any workflow-expand after BOUNDARY_REJECTED, not a fictional bin/autopilot.js terminalize; KR1 only if kept at engine implement-review intake that actually holds the campaign contract. Each planted red must fail when that call edge is deleted, not when a helper predicate is stubbed. Drop the standalone-script hedge.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "957cbf310b7a442974a7252ed52c669ca4eafec8d5d93eb941b8a42b269323d9"
+    },
+    {
+      "rubric_id": "CG2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1 shadow annotation in scripts/mission-routing-admission.js",
+      "claim": "KR1 shadow still treats the G1-refuted universal Mission shape as a complete-oracle detector, so the planted would-block cannot distinguish class (a) and remaining justification talk is still a stamp.",
+      "evidence": "Every Mission graph node already requires output_paths and a non-empty verification_commands list, and every strict_dispatch campaign requires the same pair. Annotating complete oracle detected from that pair therefore marks ordinary L5 cost-arbitrage nodes, including the documented purpose of /l5. The recorded future predicates (required_change_paths equality, or opt-in complete_deliverable plus closed-enum unverifiable-property) are not what P2 ships. P2 still plants a would-block case on the refuted shape. A controller that later needs enforce can keep writing needs review against a detector that is identically true, which is the rubber stamp CG2 asked to kill.",
+      "evidence_reference": "plan KR1 and P2; src/engine/mission-execution-graph.js:99-113,177-178,273-288; scripts/implementation-campaign-check.js:384-392,447-452; skills/l5/SKILL.md:12-17",
+      "repair": "Do not annotate would_block from output_paths plus verify commands. Either cut KR1 from this campaign, or P2 must use a non-vacuous trigger already named (required_change_paths equal to output_paths, or an explicit complete_deliverable flag default false) and plant a green ordinary L5 node that must not would_block. Keep any unverifiable-property list as a closed enum that excludes rigor, needs review, and family decorrelation. Do not start an enforce campaign on the current AND.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7e2888b7878dd108dfd44f263ba4c043e677eb4904d8cd32b1b3a5082ee3881f"
+    },
+    {
+      "rubric_id": "CG3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2 extra-path check versus existing checkCampaignScope / check-repair-scope",
+      "claim": "R1 tells implementers to reuse the existing scope-gate comparison while also requiring named extras against output_paths; those are different predicates, and a naive staged-name subset would block the legitimate local repair of the incident.",
+      "evidence": "Live scopeCheck builds allowed_new_paths as each allowed_path_prefixes entry plus /** and trips on prefix, churn, and max_changed_files. It does not compare to output_paths and does not name extras. The P6D .venv and node_modules paths sit inside a lab prefix and would pass the prefix glob; the incident catch was an eight-path commit against a file cap, after the commit existed. Reusing that comparator therefore cannot satisfy planted red 6 allowed plus 2 staged symlinks, block naming the 2. Separately, git diff --cached --name-only lists deletions. After extras are already on HEAD, the cheap repair is to remove those two paths. If KR2 is staged-set not-subset-of output_paths, those deletion names are extras and the amend is refused. R1 defines deletion of an allowed path as allowed and is silent on deletion of a previously extra path. Glob/dir forms are already rejected by boundedPath, so that part is closed; the remaining hole is the false reuse identity plus deletion-repair.",
+      "evidence_reference": "plan KR2; src/engine/autopilot-engine.js:1472-1490,1698-1730,6928-6931; scripts/check-repair-scope.js:51-57; src/engine/mission-execution-graph.js:133-139,177-178; docs/projects/2026-08-21-p6d-orchestration-incident/README.md:108-111,159-161",
+      "repair": "Stop saying reuse of existing comparison semantics. KR2 is a new extra-path detector against output_paths: added or modified (including rename destination and mode-only) paths not in output_paths are extras and must be named; deletions are never extras. Keep post-commit prefix/churn/cap scopeCheck as a backstop with a caller-side test that it still trips on churn under a legal output_paths subset. Add greens for 4-of-6, allowed deletion, extra deletion repair, and rename destination outside output_paths. Do not implement KR2 by calling evaluateRepairScope.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0a62a21656bdc2ed428fc685f075941d6b0f182b38b08a98cadbb727c001cbc1"
+    },
+    {
+      "rubric_id": "CG4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR3 successor/terminalize refusal, closed-enum bypass, subject-delta receipt",
+      "claim": "The ladder still cannot be implemented without either trapping legitimate post-reject terminals or letting the controller expand workflow without a falsifiable repair.",
+      "evidence": "R1 applies one closed enum {deadline_exhausted, owner_abort, infra_death/transport_exhausted, wall_clock} to both successor and terminalize. The incident needed terminal recording after LEASE_FENCED, which is not in the enum, then expanded via successor; occupancy, sealed_zero_diff, churn/changed_files exhaustion, and repair_ceiling are also live engine terminals and are unnamed. Owner_abort is listed as an automatic bypass of successor even though abort is not a workflow-expand. Receipt = path set changed AND named extras shrank still accepts remove one extra and add three new extras. Whitespace-only amends are refused (good) but extra-swap is not. Keying campaign_id + candidate_ref + gate_id is worktree-portable (good) only if successor cannot mint a new candidate_ref to vacate the key, which a clean successor worktree does.",
+      "evidence_reference": "plan KR3; docs/projects/2026-08-21-p6d-orchestration-incident/README.md:115-121; src/engine/implementation-campaign.js:742; src/engine/campaign-composition.js:237-250; src/engine/autopilot-engine.js:1463-1468,7511-7573; src/mission/cli.js:438-441",
+      "repair": "Split the matrix. After a gate-fail against a candidate, successor (and any new managed implement-review that discards that candidate_ref) requires a receipt; truthful terminal recording does not. Receipt extra-path set must be a strict subset of the extras named on the failing event, with no new extras. Closed terminal-only bypass: LEASE_FENCED, occupancy, sealed_zero_diff, wall/churn/changed_files exhaustion, infra_death/transport_exhausted, repair_ceiling, and owner-authenticated abort. Successor has no owner_abort bypass. Planted reds: extra-swap refused; LEASE_FENCED after scope fail still terminalizes; successor after scope fail with a new empty worktree still refused.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "62c94f7ab764325c1f03aafc1f010992cc8df94dbf0b11b5e8d3f2a739370080"
+    },
+    {
+      "rubric_id": "CG5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1 shadow would_block field on mission routing admission and session marker",
+      "claim": "KR1 advertised as exit-0 shadow is fail-closed on the live admission object, so it belongs to the expiry-incident family and would take L5 down if P2 ships as written.",
+      "evidence": "R1 family-split is right for KR2 (action-point artifact check, default-on) and for KR3 (default-on only on gate-fail to expand). KR1 is not shadow relative to its chosen surface. admitMissionRouting already uses would_block for SHADOW policy failures. session-mode copies that field onto the marker. verifyMissionRoutingProjection rejects unless status is READY, admitted is true, and would_block is false. Codex pre-effect then fails the session as mission_mismatch. Setting would_block true while exiting 0 therefore does not annotate; it makes an L5 marker unusable. That is the same fail-closed-wrong-predicate kill as Date.parse(observed_at)+ttl, not a v2.34.19 action-point rule. Existing-suite greenness will not catch it if tests only inspect a new p6d-gates file and never session-mode set --level l5 plus pre-effect.",
+      "evidence_reference": "plan section 1 KR1 posture, KR1, P2; scripts/mission-routing-admission.js:1123-1233; scripts/session-mode.js:43-47,149-151,447-450; platforms/codex/hooks/pre-effect.js:174-191; hooks/tests/session-mode.test.sh:163-168",
+      "repair": "If KR1 remains, emit a new non-blocking field such as oracle_note or complete_oracle_would_block that is outside ROUTING_KEYS and is ignored by verifyMissionRoutingProjection. Never set would_block true on an admitted READY route. Require a caller-side test that session-mode set --level l5 still writes a marker that pre-effect accepts. Strongest shadow-first case remains: do not ship KR1 in this campaign at all.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "11f2100ff8fd3f613ca18bde0cb2507436252007e8430dc82399968d5723eda9"
+    },
+    {
+      "rubric_id": "CG6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "P3 BACKLOG closure; KR3 owner_abort bypass; mission finalize-abort",
+      "claim": "P3 rewrites the BACKLOG so class (a) is closed by a non-blocking annotation, and owner_abort in the KR3 enum is still a controller-minted override of the expanding transition, which reconstitutes the P6D recovery and neuters KR3.",
+      "evidence": "BACKLOG completion requires planted negatives that demonstrate the controls can block (a) unjustified heavy dispatch, (b) extra staged paths, and (c) successor before local repair. R1 P3 closes that entry by noting KR1 satisfies (a) in SHADOW form. Shadow exit 0 cannot block (a). That is a completion-condition rewrite, not a scope cut. OQ1 closed free text, but owner_abort remains in the bypass enum for successor/terminalize. mission finalize-abort takes only --state and --out; there is no owner token. The incident controller was Codex depth 0 and would select owner_abort or call finalize-abort the same way it selected successor. Status-report budget and P6D six-path/symlink specifics stay out of product (held). The verdict map still includes KR1 as a delivered class (a) control.",
+      "evidence_reference": "plan P3, KR3, section 8; docs/BACKLOG.md:57-61; src/mission/cli.js:438-441; docs/projects/2026-08-21-p6d-orchestration-incident/README.md:74-86,115-121,190-199",
+      "repair": "Do not close the BACKLOG (a) clause until a control can refuse heavy dispatch on a non-vacuous predicate. Leave (a) open as a follow-up campaign. Remove owner_abort as a successor bypass; if abort must exist, require an owner-authenticated signal that depth-0 cannot mint, and allow it only to record a terminal, never to prepare a successor. Keep free text audit-only.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "27fae96e801d3b5b7ca643b14371ce4774457f16bad3e2c42175807c5e1ac8e1"
+    },
+    {
+      "rubric_id": "CG7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "campaign scope P0-P2 versus existing scopeCheck plus BOUNDARY_REJECTED wait",
+      "claim": "R1 reordered the slices but still spends on two gates the incident did not need; the cheapest remaining product is KR3 only, with KR2 optional after CG3 is closed and KR1 out of this campaign.",
+      "evidence": "R1 header concedes the only uncaught failure was the wrong recovery unit and that the manifest violation was already caught post-commit. Engine already returns BOUNDARY_REJECTED with terminalize false and next_action await_boundary_disposition; Codex ignored that and called successor. KR2 as currently specified is either a false reuse of the prefix/cap gate (misses named extras) or a new pre-commit detector that can block the deletion amend and miss self-commits. KR1 is a shadow annotation on a refuted, field-colliding predicate. That is the governance growth Fable 5 rejected when it threw out a seven-point prose checklist. Existing incident record plus scopeCheck already changed class (b) detection; they did not change class (c). If only one gate ships: KR3, because a pre-commit refuse is still a gate fail the same controller can escalate.",
+      "evidence_reference": "plan header, sections 1, 4, 7; docs/projects/2026-08-21-p6d-orchestration-incident/README.md:144-165,184-199; src/engine/campaign-composition.js:237-250,1508-1513; docs/BACKLOG.md:57-60",
+      "repair": "Cut P2/KR1 from this campaign. Make P0 the only required product slice: successor refuse after gate-fail-against-candidate with a strict-subset extras receipt and terminal-only bypass list (CG4). Promote KR2 to P1 only after CG1 dual-path wiring and CG3 extra-versus-deletion rules are written into the plan; otherwise defer KR2. Reorder BACKLOG completion so this project closes (c), optionally (b), and never (a).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_budget_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5fe6924cc186725adb5857eebf2f867703ea038ec748b18339e85497fba72797"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "c838420b24228c32ef4c40cd64d0eea89da860bfb2116b802246f4b41044765f",
+      "rubric_id": "CG5",
+      "affected_surface": "KR2 default-on rollout",
+      "claim": "Immediate enforcement still needs evidence that the new staged-index view is behaviorally equivalent to the proven post-commit scope comparator.",
+      "evidence_reference": "Plan section 1 class (b), section 2 KR2, and section 6 Risks + inversion.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6192a9fbbc2682b3d38a6b508269d8df1069bc5f60131ba8e7073e214357cbaa",
+      "rubric_id": "CG4",
+      "affected_surface": "KR3 receipt storage mechanism",
+      "claim": "The plan keys receipts by campaign_id + candidate_ref + gate_id (worktree-portable) but does not specify how the receipt stores the prior artifact state (e.g., the prior path set for manifest failures) for cross-worktree comparison.",
+      "evidence_reference": "Plan section 2, KR3 first slice definition",
+      "disposition": null
+    },
+    {
+      "fingerprint": "10cdc58fb49dd9d59e1ec43c8f3a557a438bf6c56e93f3476e344d6d1aad0037",
+      "rubric_id": "CG5",
+      "affected_surface": "Default posture for KR2 and KR3",
+      "claim": "The plan classifies KR1 as shadow (predicate refuted) but does not explicitly argue the strongest case AGAINST making KR2 or KR3 shadow first, given the expiry incident's lesson that fail-closed gates on the wrong predicate can kill rails.",
+      "evidence_reference": "Plan section 1, CG5 family split table",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5175b076b54b83c97193ff2fdb0da5229bc540017f75b51919d983a4816657bf",
+      "rubric_id": "CG7",
+      "affected_surface": "Phase ordering and gate selection rationale",
+      "claim": "The plan reorders phases (ladder first) and claims 'R1 ships the cheapest forms', but does not explicitly argue the strongest case AGAINST building all three gates or against governance growth of the kind Fable 5 warned about.",
+      "evidence_reference": "Plan section 4, Phases",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-20T22:15:39.441Z"
+}

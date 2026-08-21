@@ -1,5 +1,41 @@
 # Changelog
 
+=======
+## v2.34.32 — P6D 矯正:repair ladder(無狀態形)+ manifest 閘提前到 staging 點
+
+**Headline**: P6D 事故的機械矯正,經兩代 hetero plan review(G1 3×STOP → G2 terminal)+
+一輪 pre-merge review 共**四次縮小**後的終形:三閘 → 一閘半 → **無狀態一閘半**。pre-merge
+review 的兩枚 🔴 殺掉了 durable claim-lock 變體 —— 解鎖路在生產不可達 = 永久 Mission 死鎖,
+「比它防的擴張更糟的失效模式」;這正是 P6D 病(用流程武裝流程)的鏡像,在出貨前被自家
+review 抓住。鎖機器退場,拒絕本身扛起整個閘。
+
+### Added
+- `src/engine/repair-ladder.js` — 無狀態述詞:BOUNDARY_REJECTED 進場且 **generation-claim
+  綁有 git-bound `resume_candidate`**(intake 的實際掛載點;R2 review 抓到首版讀錯物件層 =
+  死閘,反向突變雙向釘死)的 campaign,無修復證據不得轉終局;recorded-ref(durable-wait
+  字串)或無候選一律放行(R2 裁決:收 recorded-ref 會重演 no-git-object livelock)。bypass 僅限
+  engine-derived closed enum;controller 文字永不。欄位對映採 reducer 真實 durable 形狀
+  (reason/receipt_digest),named-extras 縮減分支明示 future-only。
+- `terminalizeManagedCampaignFailure` 首擊守衛(無狀態)+ 兩個呼叫點的 reason/remedy 透傳
+  (拒絕必須 explanation-first,不得被 generic resume 訊息吃掉)。
+- `check-disjointness.sh --staged`(**含 `--ita-visible-in-index`** —— intent-to-add 在
+  staged 視圖可見,corpus 第七案釘住)+ `dispatch-hetero.sh` wrapper staging 攔截
+  (mktemp 失敗 fail-closed,與 postcheck 同律)。
+- 測試:`p6d-gates-repair-ladder.test.sh`(21 node + 2 shell,含反死鎖、recorded-ref 放行、**非生產形狀反向 pin**
+  case 與 repo 級無鎖不變量)、`p6d-gates-manifest.test.sh`(13;七案等價 corpus + 真
+  dispatch-hetero in-situ)。突變:述詞恆真 / 無狀態守衛拔除 / staged 閘拔除各自紅
+  (staged 閘 dead-gate = **4 紅**,前版記錄誤植 8,已更正)。
+- 設計佐證:sol dispatch-explore 諮詢(Option D)+ pre-merge reviewer 的可達性反證
+  (evidence dir 兩份)。
+
+### Changed
+- `docs/BACKLOG.md` — P6D 條目:2/3 classes shipped(皆 planted negative);class (a) 留
+  觸發;新增 **durable repair-lock 設計**條目(解鎖路徑 + legacy receipts + projection
+  roundtrip 攜帶 + no_effect_release 封口 + finalize-abort 冪等,reviewer 證據全引)。
+  prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本遺留(dev-flow
+  713→717 = v2.34.23;harness-maintenance 58→59 = v2.34.28),justification 見各該版節。
+
+
 <<<<<<< HEAD
 ## v2.34.31 — QRP_CLI_HOME 要 per-invocation clone:共用一個會讓考試把傳輸故障記成模型失分
 
@@ -38,7 +74,6 @@ agy 每次執行都寫 `$HOME/.gemini/config/{config.json,mcp_config.json,projec
 | MiniMax-M3 | 26/42 | 15/38 | 2 | ❌ degraded |
 
 四筆已 record(scorecard 34 → 38)。
-=======
 ## v2.34.31 — plan-review PANEL 層可觀測性:哪席在飛、deadline 剩多少,一條指令
 
 **Headline**: v2.34.21 讓席位可觀測,但 PANEL 層仍是黑箱——循序三席 20m/席,驅動端到最後

@@ -361,6 +361,16 @@ for extra in brain-capability-evidence-corpus.json va-capability-evidence-corpus
   printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/$extra"
   cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
 done
+# implementer live-rail suite joined the sync list in v2.34.34 (the packaged
+# engine-qualify.js requires the generator/grader/corpus at load time and the
+# grader spawns the oracle driver .cjs).
+for extra in impl-eval-generator.js impl-eval-grader.js impl-oracle-driver.cjs; do
+  printf "'use strict';\n" > "$SYNC_SANDBOX/evals/$extra"
+  cp "$SYNC_SANDBOX/evals/$extra" "$SYNC_SANDBOX/platforms/codex/plugin/evals/$extra"
+done
+printf '{"schema_version":1}\n' > "$SYNC_SANDBOX/evals/impl-capability-evidence-corpus.json"
+cp "$SYNC_SANDBOX/evals/impl-capability-evidence-corpus.json" \
+  "$SYNC_SANDBOX/platforms/codex/plugin/evals/impl-capability-evidence-corpus.json"
 mkdir -p "$SYNC_SANDBOX/skills/example" "$SYNC_SANDBOX/platforms/codex/plugin/skills/example" \
   "$SYNC_SANDBOX/platforms/codex/skill-adapters"
 printf -- '---\nname: example\ndescription: sandbox skill\n---\n# Example\n' > "$SYNC_SANDBOX/skills/example/SKILL.md"

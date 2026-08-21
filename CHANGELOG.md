@@ -48,6 +48,10 @@ reader 集合由 canonical-invariants 的 closed allowlist 機械封閉。兩代
   `docs/plans/evidence/2026-08-21-verdict-bytes-preservation/dead-gate-mutations.md`;
   fixtures 凍結 bytes + provenance 同目錄。Plan R3 FROZEN + G1/G2 dispositions 同目錄。
 
+prose-justification: 本版零 skill prose 變動(`git diff --stat` 對 `skills/` 為空);ratchet
+差額為既往版本遺留(dev-flow 713→717 = v2.34.23 L-1.6 錨點;harness-maintenance 58→59 =
+v2.34.28)。
+
 ## v2.34.32 — P6D 矯正:repair ladder(無狀態形)+ manifest 閘提前到 staging 點
 
 **Headline**: P6D 事故的機械矯正,經兩代 hetero plan review(G1 3×STOP → G2 terminal)+

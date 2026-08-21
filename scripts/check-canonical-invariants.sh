@@ -300,8 +300,11 @@ check_reference "code-review→blind-dispatch/VerifierIsolation" \
   "references/blind-dispatch.md" "## Verifier isolation — artifacts only, never the implementer's self-report (EVERY dispatch)"
 
 # reader-allowlist #1 — the unratified_* salvage columns. Producers, schemas,
-# display-only projections, the pass-through validator, platform mirrors (kept
-# byte-equal by their own parity gates), tests, and docs. Everything else that
+# display-only projections, the pass-through validator, the codex PLUGIN mirror
+# subtree (kept byte-equal to canonical by sync-codex-plugin-skills --check — the
+# narrower seed is deliberate: platform-NATIVE sources like platforms/codex/hooks/*
+# have no canonical counterpart and no parity gate, so they stay OUTSIDE the
+# allowlist; round-1 review 2026-08-21), tests, and docs. Everything else that
 # mentions the token is a rogue consumer.
 check_reader_allowlist "unratified-columns" \
   "unratified" \
@@ -313,7 +316,7 @@ check_reader_allowlist "unratified-columns" \
   "scripts/check-canonical-invariants.sh" \
   "src/runners/review.js" \
   "schemas/*" \
-  "platforms/*" \
+  "platforms/codex/plugin/*" \
   "hooks/tests/*" \
   "docs/*" \
   "CHANGELOG.md" \

@@ -490,6 +490,7 @@ validate_review_block() {
 # (g2-adjudication #3).
 SALVAGE_CAPTURE=""
 UNRATIFIED_VERDICT="null"
+SALVAGE_BLOCK="" # registered in the EXIT trap: a signal between mktemp and rm must not leak
 salvage_unratified_verdict() {
   local capture="$1" begin="$2" end="$3"
   UNRATIFIED_VERDICT="null"
@@ -500,6 +501,7 @@ salvage_unratified_verdict() {
   [ "${begin_count:-0}" -eq 1 ] || return 0
   local salvage_block
   salvage_block="$(mktemp -t dispatch-review-salvage-XXXXXX)"
+  SALVAGE_BLOCK="$salvage_block"
   if ! awk -v begin="$begin" -v end="$end" '
       BEGIN { started = 0; ended = 0 }
       { sub(/\r$/, "", $0) }
@@ -508,13 +510,13 @@ salvage_unratified_verdict() {
       { print }
       END { exit (started && ended) ? 0 : 1 }
     ' "$capture" > "$salvage_block"; then
-    rm -f "$salvage_block"
+    rm -f "$salvage_block"; SALVAGE_BLOCK=""
     return 0
   fi
   if validate_review_block "$salvage_block"; then
     UNRATIFIED_VERDICT="\"$BATTERY_VERDICT\""
   fi
-  rm -f "$salvage_block"
+  rm -f "$salvage_block"; SALVAGE_BLOCK=""
   return 0
 }
 
@@ -582,6 +584,7 @@ cleanup() {
   [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
   [ -n "$AGY_SALVAGE" ] && rm -f "$AGY_SALVAGE"
+  [ -n "$SALVAGE_BLOCK" ] && rm -f "$SALVAGE_BLOCK"
   # Observability: stamp ended_at + final_status (from the exit code, the one source
   # every emit path already honors) so dispatch-status.js reports phase:"exited" with
   # the outcome on every exit path. declare -F guard: the trap is armed a few lines
@@ -957,14 +960,13 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   cat "$KIMI_OUT" > "$RAW_LOG"
   printf '\n--- kimi stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$KIMI_ERR" >> "$RAW_LOG"
-  if [ "$KIMI_RC" -ne 0 ]; then
-    printf '\n[dispatch-review: kimi exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
-      "$KIMI_RC" "$([ "$KIMI_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
-    SALVAGE_CAPTURE="$KIMI_OUT"
-    emit_no_verdict "kimi exited non-zero (rc=$KIMI_RC) — fail-closed, partial output not parsed"
-  fi
   # kimi-code often prefixes a thinking bullet ("• ") before the nonce block; extract
   # the first AUTOPILOT-REVIEW…END span so the shared parser sees a clean start.
+  # Runs BEFORE the rc check (pre-merge review round-1 MUST-FIX, 2026-08-21): the
+  # salvage funnel matches the derived BEGIN by exact line, so pointing it at the
+  # pre-normalization bytes made the kimi rail's salvage inert for exactly the
+  # bullet-prefixed shape this comment documents as common. RAW_LOG keeps the raw
+  # pre-normalization bytes (written above) for humans.
   if ! awk 'NR==1 && $0 ~ /^<<<AUTOPILOT-REVIEW-/' "$KIMI_OUT" | grep -q .; then
     KIMI_CLEAN="$(mktemp -t dispatch-review-kimi-clean-XXXXXX)"
     awk '
@@ -983,6 +985,12 @@ elif [[ "$RUNNER" = "kimi" ]]; then
     fi
     rm -f "$KIMI_CLEAN"
     KIMI_CLEAN=""
+  fi
+  if [ "$KIMI_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: kimi exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$KIMI_RC" "$([ "$KIMI_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    SALVAGE_CAPTURE="$KIMI_OUT"
+    emit_no_verdict "kimi exited non-zero (rc=$KIMI_RC) — fail-closed, partial output not parsed"
   fi
   PARSE_INPUT="$KIMI_OUT"
 elif [[ "$RUNNER" = "cc-shim" ]]; then

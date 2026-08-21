@@ -235,6 +235,14 @@ case "$MODE" in
     echo "$END"
     exit 7
     ;;
+  vbp_kimi_bullet_then_die)
+    # The documented-common kimi shape: thinking bullet ahead of the nonce block.
+    echo "• $BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    exit 7
+    ;;
   trailing)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
@@ -1266,6 +1274,17 @@ assert_contains "$OUT" '"unratified_verdict": null' "F: two blocks are ambiguous
 # Fixture G: tautological SHIP proof → full-battery parity → null.
 OUT="$(vbp_json vbp_ship_tautology_then_die)"
 assert_contains "$OUT" '"unratified_verdict": null' "G: tautology blacklist applies to salvage"
+
+# Kimi rail (pre-merge review round-1 MUST-FIX): the bullet-prefix normalization now
+# runs BEFORE the rc check, so the documented-common "• <BEGIN>" shape salvages on a
+# runner death. Red evidence for the inert pre-fix shape is the reviewer's recorded
+# two-sided probe (bullet → null / unprefixed → salvaged) in the round-1 report.
+OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 STUB_MODE=vbp_kimi_bullet_then_die \
+  "$SCRIPT" --runner kimi --model kimi-code/k3 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>/dev/null)"; EXIT=$?
+assert_eq "$EXIT" "1" "kimi: runner death still exits 1"
+assert_contains "$OUT" '"status": "no_verdict"' "kimi: runner death stays no_verdict"
+assert_contains "$OUT" '"unratified_verdict": "FIX-THEN-SHIP"' \
+  "kimi: bullet-prefixed block before death is salvaged (normalized capture)"
 
 # Reviewed path stays byte-identical: the key is NOT emitted on success (g2 #7)...
 OUT="$(vbp_json pass)"; EXIT=$?

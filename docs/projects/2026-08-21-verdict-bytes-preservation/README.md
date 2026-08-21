@@ -7,7 +7,7 @@
 > 1. Fixture A(8/8 chrome-prepend 形)與 C(8/20 timeout-with-payload 形)產出 unratified 欄位,且 `status`/`transport_status`/exit code 與 base 逐字節相同(測試斷言)。
 > 2. Fixture B/D/E/F(partial / tamper-suspect / echo / ambiguous)unratified 一律 null(負控制)。
 > 3. Dead-gate 突變:revert salvage call → A/C 斷言轉紅(記錄於 evidence)。
-> 4. Authority pinning:resolve-review-loop cascade、qc-panel skip、plan-review exit-4 各一條斷言,餵 no_verdict-with-unratified artifact 仍 fail-closed。
+> 4. Authority pinning:qc-panel skip 與 plan-review exit-4 各有餵 unratified artifact 仍 fail-closed 的斷言;resolve-review-loop 介面只消費 status 字串、從不讀 review artifact(round-1 review 實證),其 pin = dispatch-review exit-code 斷言 + 既有 no_verdict cascade 測試(artifact 級斷言對它不可實作,如實改述)。
 > 5. 全套件綠 + preflight 8/8(v2.34.33)。
 > **Scope boundary**: 含 — dispatch-review.sh 失敗漏斗、plan-review-normalize.js、dispatch-plan-review.js 席位紀錄、dispatch-status --panel 顯示、fixtures/tests、CHANGELOG/version/mirrors、BACKLOG row 收束。不含 — 權威路徑 parser 放鬆(禁止)、unratified 自動升級為權威(policy change,需獨立 review)、歷史 artifact 回溯重分類、新 script。
 

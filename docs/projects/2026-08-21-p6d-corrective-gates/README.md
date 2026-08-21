@@ -43,3 +43,8 @@ P0(b) 殘餘:mission↔campaign identity 連結(`mission-campaign-identity.js`)�
   rename=delete+add;比對器既有行為,零新語意。
 - **自 commit 引擎**:不經 wrapper staging → post-commit 閘維持其權威後盾(corpus 同時
   釘住其行為)。
+
+## P0(a) 矩陣處置附記(2026-08-21,R2/R3 後)
+successor/abort 邊與 mission 後盾佈線隨 durable lock 一併退場(pre-merge review 兩枚 🔴:
+解鎖路不可達 = 永久死鎖)。KR3 現為 terminalize 邊單點無狀態拒絕;矩陣保留為凍結稽核
+工件,不回寫。lock 重入條件見 BACKLOG「Durable repair-lock」。

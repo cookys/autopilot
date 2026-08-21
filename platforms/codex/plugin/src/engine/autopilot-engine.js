@@ -2693,9 +2693,15 @@ class AutopilotEngine {
     // First observations are untouched (fresh failures arrive here with
     // initial_state.phase != BOUNDARY_REJECTED).
     const ladderBoundary = repairLadder.extractBoundaryEvidence(state);
-    const ladderRepairable = Boolean(campaignControl.resume_candidate
-      || (campaignControl.resume_durable_wait
-        && campaignControl.resume_durable_wait.candidate_ref));
+    // Production shape: intake attaches resume bindings to the GENERATION-CLAIM
+    // object (campaign-intake.js — surfaced as campaignControl.generation_claim),
+    // the same path every other engine reader uses. Only the GIT-BOUND
+    // resume_candidate counts: resume_durable_wait.candidate_ref is a recorded
+    // reducer string (boundary.candidate_ref first, git commit only third) and
+    // admitting it would reinstate the no-git-object livelock the R2 review
+    // traced. Recorded-ref-without-git-object therefore terminalizes freely.
+    const ladderRepairable = Boolean(campaignControl.generation_claim
+      && campaignControl.generation_claim.resume_candidate);
     if (ladderBoundary && ladderRepairable) {
       const ladder = repairLadder.evaluateRepairLadder({
         boundary: ladderBoundary,
@@ -8956,10 +8962,13 @@ class AutopilotEngine {
       }
       return finish({
         status: 'blocked',
-        phase: terminalFailure.status === 'blocked'
-          ? terminalFailure.phase : 'campaign_resume',
+        phase: terminalFailure.status === 'rejected'
+          ? 'campaign_repair_required'
+          : (terminalFailure.status === 'blocked'
+            ? terminalFailure.phase : 'campaign_resume'),
         reason: terminalFailure.status === 'blocked'
           ? terminalFailure.reason : rejection.reason,
+        remedy: rejection.remedy || null,
         rounds: 0,
         verdict: null,
         roster,

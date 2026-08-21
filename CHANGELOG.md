@@ -9,9 +9,10 @@ review 的兩枚 🔴 殺掉了 durable claim-lock 變體 —— 解鎖路在生
 review 抓住。鎖機器退場,拒絕本身扛起整個閘。
 
 ### Added
-- `src/engine/repair-ladder.js` — 無狀態述詞:BOUNDARY_REJECTED 進場且候選 **git 可驗證**
-  (intake 綁定 resume_candidate)的 campaign,無修復證據不得轉終局;無可驗證候選則放行
-  (拒絕只會鎖死合法死路 campaign —— reviewer 逐環追出的 reachable trace)。bypass 僅限
+- `src/engine/repair-ladder.js` — 無狀態述詞:BOUNDARY_REJECTED 進場且 **generation-claim
+  綁有 git-bound `resume_candidate`**(intake 的實際掛載點;R2 review 抓到首版讀錯物件層 =
+  死閘,反向突變雙向釘死)的 campaign,無修復證據不得轉終局;recorded-ref(durable-wait
+  字串)或無候選一律放行(R2 裁決:收 recorded-ref 會重演 no-git-object livelock)。bypass 僅限
   engine-derived closed enum;controller 文字永不。欄位對映採 reducer 真實 durable 形狀
   (reason/receipt_digest),named-extras 縮減分支明示 future-only。
 - `terminalizeManagedCampaignFailure` 首擊守衛(無狀態)+ 兩個呼叫點的 reason/remedy 透傳
@@ -19,7 +20,7 @@ review 抓住。鎖機器退場,拒絕本身扛起整個閘。
 - `check-disjointness.sh --staged`(**含 `--ita-visible-in-index`** —— intent-to-add 在
   staged 視圖可見,corpus 第七案釘住)+ `dispatch-hetero.sh` wrapper staging 攔截
   (mktemp 失敗 fail-closed,與 postcheck 同律)。
-- 測試:`p6d-gates-repair-ladder.test.sh`(21 node + 2 shell,含「無候選→放行」反死鎖
+- 測試:`p6d-gates-repair-ladder.test.sh`(21 node + 2 shell,含反死鎖、recorded-ref 放行、**非生產形狀反向 pin**
   case 與 repo 級無鎖不變量)、`p6d-gates-manifest.test.sh`(13;七案等價 corpus + 真
   dispatch-hetero in-situ)。突變:述詞恆真 / 無狀態守衛拔除 / staged 閘拔除各自紅
   (staged 閘 dead-gate = **4 紅**,前版記錄誤植 8,已更正)。

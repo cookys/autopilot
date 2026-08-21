@@ -52,11 +52,14 @@ check('named-extras shrink branch stays bound to prior hash',
 
 // ── layer 2: engine edge (frozen call edge's method; stateless) ──
 const method = AutopilotEngine.prototype.terminalizeManagedCampaignFailure;
-const mkControl = (phase, extra = {}) => ({
+// PRODUCTION SHAPE (R2 review 🔴): intake attaches resume bindings to the
+// generation-claim object. `claimExtra` spreads INSIDE generation_claim —
+// fixtures must never re-grow the top-level shape the gate wrongly read once.
+const mkControl = (phase, claimExtra = {}, extra = {}) => ({
   status: 'admitted',
   campaign_id: 'campaign-v1-' + 'd'.repeat(64),
   contract_digest: 'e'.repeat(64),
-  generation_claim: { durable_journal: true },
+  generation_claim: { durable_journal: true, ...claimExtra },
   initial_state: {
     phase,
     event_count: 3,
@@ -68,31 +71,53 @@ const mkControl = (phase, extra = {}) => ({
   },
   ...extra,
 });
+const GIT_CAND = { resume_candidate: { kind: 'git_candidate', commit: 'f'.repeat(40) } };
 const thisStub = { now: () => '2026-08-21T00:00:00.000Z' };
 
-// planted red: verifiable candidate + zero delta → refused
+// planted red: git-bound candidate on the GENERATION CLAIM + zero delta → refused
 const guardRed = method.call(thisStub, {
-  campaignControl: mkControl('BOUNDARY_REJECTED', { resume_candidate: { kind: 'git_candidate', commit: 'f'.repeat(40) } }),
+  campaignControl: mkControl('BOUNDARY_REJECTED', GIT_CAND),
   reason: 'x', phase: 'y', cwd: '/tmp',
 });
-check('refuses converting a REPAIRABLE rejection to terminal',
+check('refuses converting a REPAIRABLE rejection to terminal (production shape)',
   guardRed.status === 'rejected' && guardRed.code === 'MISSION_REPAIR_REQUIRED');
 check('refusal carries remedy', /resume the SAME campaign/.test(guardRed.remedy));
 
-// deadlock-avoidance green: boundary but NO verifiable candidate → proceeds
+// deadlock-avoidance green: boundary, NO git-bound candidate → proceeds
 const guardDead = method.call(thisStub, {
   campaignControl: mkControl('BOUNDARY_REJECTED'),
   reason: 'x', phase: 'y', cwd: '/tmp',
 });
-check('NO verifiable candidate → terminalization proceeds (no deadlock on dead campaigns)',
+check('NO verifiable candidate → terminalization proceeds (no deadlock)',
   !(guardDead.status === 'rejected' && guardDead.code === 'MISSION_REPAIR_REQUIRED'));
+
+// R2-adjudicated planted case: RECORDED candidate_ref (durable-wait string,
+// no git object bound) must NOT trigger the gate — admitting it reinstates
+// the no-git-object livelock trace.
+const guardRecorded = method.call(thisStub, {
+  campaignControl: mkControl('BOUNDARY_REJECTED',
+    { resume_durable_wait: { candidate_ref: 'f'.repeat(40), no_op: true } }),
+  reason: 'x', phase: 'y', cwd: '/tmp',
+});
+check('recorded-ref-without-git-object terminalizes freely (livelock guard)',
+  !(guardRecorded.status === 'rejected' && guardRecorded.code === 'MISSION_REPAIR_REQUIRED'));
+
+// reverse-shape pin (R2 review): the TOP-LEVEL shape production never emits
+// must NOT trigger the gate — a fixture anchored there certifies a dead gate.
+const guardTopLevel = method.call(thisStub, {
+  campaignControl: {
+    ...mkControl('BOUNDARY_REJECTED'),
+    resume_candidate: { kind: 'git_candidate', commit: 'f'.repeat(40) },
+  },
+  reason: 'x', phase: 'y', cwd: '/tmp',
+});
+check('top-level resume_candidate (non-production shape) does NOT trigger',
+  !(guardTopLevel.status === 'rejected' && guardTopLevel.code === 'MISSION_REPAIR_REQUIRED'));
 
 // bypass green
 const guardBypass = method.call(thisStub, {
-  campaignControl: mkControl('BOUNDARY_REJECTED', {
-    resume_candidate: { kind: 'git_candidate', commit: 'f'.repeat(40) },
-    engine_terminal_evidence: { source: 'engine', classification: 'wall_budget_exhausted' },
-  }),
+  campaignControl: mkControl('BOUNDARY_REJECTED', GIT_CAND,
+    { engine_terminal_evidence: { source: 'engine', classification: 'wall_budget_exhausted' } }),
   reason: 'x', phase: 'y', cwd: '/tmp',
 });
 check('engine-derived terminal evidence bypasses',
@@ -100,10 +125,7 @@ check('engine-derived terminal evidence bypasses',
 
 // repaired green
 const guardRepaired = method.call(thisStub, {
-  campaignControl: mkControl('BOUNDARY_REJECTED', {
-    resume_candidate: { kind: 'git_candidate', commit: 'f'.repeat(40) },
-    repair_rerun: { outcome: 'ready' },
-  }),
+  campaignControl: mkControl('BOUNDARY_REJECTED', GIT_CAND, { repair_rerun: { outcome: 'ready' } }),
   reason: 'x', phase: 'y', cwd: '/tmp',
 });
 check('changed-verdict rerun unlocks',

@@ -63,11 +63,13 @@ Repo 無 `.claude/skill-routing.md`;CLAUDE.md 無 per-code-area skill 條目。�
 | D5 capability-evidence 擴充 | ✅ 2026-08-22 | impl_dispatch methodology + normalize/enforce;capability-evidence 102 綠 |
 | D6 測試(紅案+mutation control) | ✅ 2026-08-22 | engine-qualify-impl 26 assertions;manifest-gate mutation control;codex-package 112 |
 | D7 codex 鏡像 | ✅ 2026-08-22 | 4 impl assets 入 sync list;package test sandbox 同步種子 |
-| D8 dogfood grok-4.5 / agy-flash | ⬜ | agy 場前置 Stage-0 探針 |
+| D8 dogfood grok-4.5 / agy-flash | ✅ 2026-08-22 | grok-4.5 **QUALIFIED 24/24**(event 143,expires 11-19,90d ceiling 首用);agy/gemini-3.7-flash-high **FAILED 18/24**(event 144,誠實常駐;6 案全為建新檔任務、raw log 證 agy envelope invalid → transport 歸因,pair 如實計)|
 | D9 docs + CHANGELOG + bump | ✅ 2026-08-22 | engine-onboarding R2→R3;CHANGELOG;v2.34.34(26h/28s)|
 | L-5 finish-flow | ⬜ | |
 
 ## Decision log
 
 - 2026-08-22:construct = live-rail(Board,AskUserQuestion);理由:broker 單發單字串無重試裝不下 worktree 編輯迴圈,且下游 gate(dispatch-contract GO/NO-GO、density scaling、dev-flow 連言)消費的是合約服從構念非 patch 合成力。VA v3 pure-data 的動機(候選碼不進 host)以反向手段滿足:候選碼在自己的 dispatched process 跑,host 只離線評 git artifacts,oracle 在 bwrap 子進程執行候選碼(t15/t17 教訓)。
-- 2026-08-22:dogfood = grok-4.5 + agy/gemini-3.7-flash-high(Board custom 選擇;2026-08-22 識別更正:原指定 4.7 不存在,`agy models` probe 後 Board 改選現行最新 flash;codex-spark 留 follow-up)。
+- 2026-08-22:dogfood = grok-4.5 + agy/gemini-3.7-flash-high(Board custom 選擇;識別更正:原指定 4.7 不存在,`agy models` probe 後 Board 改選現行最新 flash;codex-spark 留 follow-up)。
+- 2026-08-22(施測後):grok QUALIFIED 24/24、agy-flash FAILED 18/24。agy 失敗歸因 = 建新檔回應的 agy 輸出信封壞損(`agy native JSON envelope invalid`),非證實的模型違約;依凍結 total map 記 pair 的 contract_violation,FAIL append-only。同 seed 家族 grok 全過 = instrument 對 pair 有鑑別力。
+- 兩次 pre-administration usage-error 反彈(--runner-version/--harness-version 非 TOKEN 字元)零派工零計費,非 rerun-until-green 情境。

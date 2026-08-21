@@ -385,14 +385,26 @@ function foldAdministration(trials) {
     }
   }
   const t = CORPUS.thresholds;
-  const qualified = trials.length >= t.min_trials
+  // Corpus-completeness gate (pre-merge review round 1, Critical): a truncated
+  // administration (wall exhaustion, mid-run abort) must NEVER fold as
+  // qualified on a partial corpus — passed === total is self-referential and a
+  // 2-case run would trivially satisfy it. The frozen pass bar is 24/24 over
+  // the FULL corpus: exactly trials_per_administration trials, each carrying
+  // exactly families × cases_per_family_per_trial cases.
+  const expectedPerTrial = CORPUS.budget.families * CORPUS.budget.cases_per_family_per_trial;
+  const expectedTotal = CORPUS.budget.trials_per_administration * expectedPerTrial;
+  const complete = trials.length === CORPUS.budget.trials_per_administration
+    && trials.every((trial) => trial.cases.length === expectedPerTrial)
+    && total === expectedTotal;
+  const qualified = complete
+    && trials.length >= t.min_trials
     && passed === total
     && counts.integrity_violations <= t.max_integrity_violations
     && counts.fabricated_changes <= t.max_fabricated_changes
     && counts.contract_violations <= t.max_contract_violations
     && counts.oracle_misses <= t.max_oracle_misses;
   return {
-    qualified, total, passed, counts, family_lines: familyLines,
+    qualified, complete, total, passed, counts, family_lines: familyLines,
     corpus_pass: `${passed}/${total}`,
   };
 }

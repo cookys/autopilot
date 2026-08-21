@@ -98,7 +98,7 @@ const VA_CORPUS_PATH = path.join(
   'va-capability-evidence-corpus.json',
 );
 const EXPECTED_IMPL_GENERATOR_HASH = '16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a';
-const EXPECTED_IMPL_GRADER_HASH = 'dd57fc34a24b7e3dd1079f2e34b1c03984b37a01f5e699ef295eab42125aee78';
+const EXPECTED_IMPL_GRADER_HASH = '83b2843c21801a301a415c2348eb44e1d8aad85f3ef6c9beb5d2fa8abf1b80ab';
 const EXPECTED_IMPL_CORPUS_HASH = 'd8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a';
 const EXPECTED_IMPL_DRIVER_HASH = 'f9ac479113ca73021276518c417529c8290bad2c85f6ca5278d22256572b7316';
 const EXPECTED_VA_GENERATOR_HASH = 'c37cd9fced8d4da2a1eb06cf5ea220dbf7b0aa02f89c8c5ff1de86c0f39c6a35';
@@ -185,7 +185,7 @@ const HOST_OBSERVED_RUNS = new WeakSet();
 const ACTIVE_SESSION_RUNS = new Map();
 
 const HELP = `Usage:
-  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author>
+  scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer>
     --engine <display-id> --model <exact-model-id> --model-version <version>
     --runner <name> --runner-version <version> --family <family>
     --harness-version <version> --effort <effort>
@@ -197,8 +197,20 @@ const HELP = `Usage:
     [--provider-env <name>] [--remote-timeout-ms <n>]
     --task-class <class> --domain <domain> --language <language> --tool <tool>
     [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
+    [--raw-dir <path>]   (dump raw per-case exchanges/ledger into this directory)
     [--version-source runtime|operator-asserted]   (CLI transports observe no
       runtime model id — pass operator-asserted so the row says so)
+
+  implementer is LIVE-RAIL: no panel/remote broker transport — cases dispatch
+  through scripts/dispatch-hetero.sh (plan 2026-08-22-implementer-qualification-
+  suite). Implementer-only flags:
+    [--dispatch-bin <path>]     (default scripts/dispatch-hetero.sh; test seam)
+    [--runner-bin <path>]       (forwarded to the rail's per-runner bin seam —
+      --grok-bin/--codex-bin/--agy-bin/... — so a smoke can substitute ONLY the
+      paid engine while the real rail runs)
+    [--dispatch-timeout <dur>]  (per-case rail timeout, default corpus 600s)
+  implementer --expires-days caps at 90 (its schema ceiling); all other roles
+  keep the flat 30-day cap.
 
 The qualifier generates fresh role-specific known-bad, clean, and defect-reversal trials.
 Reviewer output uses {"verdict":"pass|fail","findings":[...]} with a structured
@@ -2787,10 +2799,24 @@ function runImplQualification(options) {
 
   const administration = implGenerator.generateAdministration({ adminSeed, oracleKey });
 
+  // Shrink-only test seams: reachable ONLY via the exported function (parseArgs
+  // never sets them), and Math.min guarantees they can never widen the corpus
+  // budget. They exist so the truncation red fixtures (wall exhaustion /
+  // allocator depletion) are mechanically reachable in tests.
+  const reservationCap = Math.min(
+    CORPUS.budget.dispatch_reservation,
+    Number.isInteger(options.testReservationOverride)
+      ? options.testReservationOverride : Infinity,
+  );
+  const wallSecondsCap = Math.min(
+    CORPUS.budget.administration_wall_seconds,
+    Number.isFinite(options.testWallSecondsOverride)
+      ? options.testWallSecondsOverride : Infinity,
+  );
   const budget = {
-    dispatch_reservation: CORPUS.budget.dispatch_reservation,
+    dispatch_reservation: reservationCap,
     spent: 0,
-    wall_deadline: started + CORPUS.budget.administration_wall_seconds * 1000,
+    wall_deadline: started + wallSecondsCap * 1000,
     engine_unavailable_seen: 0,
   };
   const ledger = [];
@@ -2832,6 +2858,16 @@ function runImplQualification(options) {
     fs.rmSync(workRoot, { recursive: true, force: true });
   }
 
+  // Degenerate wall/abort shapes: trials that never started carry zero cases
+  // and cannot enter evidence (normalizeImplTrial requires >= 1). Drop them;
+  // a "completed" administration in which NOTHING started is a no-verdict
+  // infra abort, not a scoreable run. A truncated-but-nonempty administration
+  // stays completed and folds NOT-qualified (corpus-completeness gate).
+  const scoredTrials = trialResults.filter((trial) => trial.cases.length > 0);
+  if (administrationOutcome === 'completed' && scoredTrials.length === 0) {
+    administrationOutcome = 'infra_abort';
+  }
+
   const baseVerdict = {
     engine: options.engine,
     model: options.model,
@@ -2865,7 +2901,7 @@ function runImplQualification(options) {
     });
   }
 
-  const folded = implGrader.foldAdministration(trialResults);
+  const folded = implGrader.foldAdministration(scoredTrials);
   const state = folded.qualified ? 'qualified' : 'degraded';
   const scope = {
     task_classes: options.taskClasses,
@@ -2887,7 +2923,7 @@ function runImplQualification(options) {
     containment_fingerprint: options.containmentFingerprint,
     identity_resolved: true,
   };
-  const trials = trialResults.map((trial) => {
+  const trials = scoredTrials.map((trial) => {
     const count = (outcome) => trial.cases.filter((c) => c.outcome === outcome).length;
     const lines = {};
     for (const c of trial.cases) {
@@ -3111,7 +3147,14 @@ function runImplCase(context) {
       maxBuffer: 32 * 1024 * 1024,
       timeout: (implGrader.CORPUS.budget.dispatch_timeout_seconds + 120) * 1000,
     });
-    ledgerRow.dispatcher_called = !run.error || run.status !== null;
+    // dispatcher_called = the process STARTED (spawn success). A post-spawn
+    // ETIMEDOUT kill leaves error set and status null — that is a candidate
+    // stall AFTER the receipt boundary and must stay consumed as
+    // contract_violation, never an uncharged engine_unavailable abort
+    // (pre-merge review round 1, Major; plan §4 step 3 / §5).
+    const spawnFailed = Boolean(run.error)
+      && ['ENOENT', 'EACCES', 'EPERM'].includes(run.error.code);
+    ledgerRow.dispatcher_called = !spawnFailed;
     observation.dispatcher_called = ledgerRow.dispatcher_called;
     let dispatchJson = null;
     if (run.stdout) {
@@ -3126,7 +3169,9 @@ function runImplCase(context) {
     });
     // engine_unavailable administration cap (G2-F9): honest scarcity aborts the
     // administration (no verdict) rather than scoring a FAIL against the seat.
-    const harnessOwned = Boolean(run.error) || run.status === 2;
+    // Harness-owned evidence = spawn failure or the rail's own precondition
+    // exit (2). A timeout kill is NOT harness-owned — the candidate stalled.
+    const harnessOwned = spawnFailed || run.status === 2;
     const collectionResult = gradeLiveCase({ caseSpec, repoDir, baseSha, dispatchJson, canaryToken });
     ledgerRow.scored_sha = collectionResult.collection && collectionResult.collection.scored_sha;
     const outcome = implGrader.classifyCase(caseSpec, {

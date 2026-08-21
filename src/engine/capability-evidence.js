@@ -839,6 +839,13 @@ function enforceVaPromotion(record) {
   }
 }
 
+// Kernel invariant (mirrors the brain forced-scope precedent): the
+// impl-live-rail-v1 corpus is 6 families × 2 cases per trial. A qualified row
+// whose trials carry fewer cases is a truncated administration laundered into
+// authority — the qualifier's foldAdministration guards this too, but the
+// kernel must not trust the producer (pre-merge review round 1, Critical).
+const IMPL_CASES_PER_TRIAL = 12;
+
 function enforceImplPromotion(record) {
   if (record.role !== 'implementer') {
     evidenceError('impl_dispatch evidence must ride the implementer role', 'EVIDENCE_PROMOTION_DENIED');
@@ -846,6 +853,11 @@ function enforceImplPromotion(record) {
   const thresholds = record.methodology.thresholds;
   if (record.trials.length < thresholds.min_trials || record.trials.length < 2) {
     evidenceError('qualified implementer evidence requires repeated trials', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  for (const trial of record.trials) {
+    if (trial.cases_total !== IMPL_CASES_PER_TRIAL) {
+      evidenceError('qualified implementer evidence requires the full per-trial corpus', 'EVIDENCE_PROMOTION_DENIED');
+    }
   }
   for (const trial of record.trials) {
     if (trial.integrity_violations > thresholds.max_integrity_violations) {

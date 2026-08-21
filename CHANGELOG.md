@@ -33,7 +33,13 @@ adjudicated at depth-0(generation cap),3 項 scoped rejection 入 backlog(separa
 containment 指向既有 L1 row、virtual-path namespace、rail 級 runner_invoked receipt)。測試:
 `engine-qualify-impl` e2e(honest → qualified 24/24、emitted row 過真 `engine-scorecard record`
 綁定、store 隔離、確定性、4 deviant 各 fail)+ generator self-check(全 deviant matrix + solvability
-+ pair invariant + sandbox-discrimination control)+ manifest-gate mutation control。
++ pair invariant + sandbox-discrimination control)+ manifest-gate mutation control +
+截斷紅案(partial-corpus fold/kernel 雙層拒收、wall-0 no_verdict、allocator 耗盡零寫入)。
+
+prose-justification: engine-onboarding 203→217(+14)= implementer 節由「follow-up 手動 bar」
+改寫為已出貨 live-rail 考券的操作契約(Stage-0 operator-run probe 程序 + salvage-posture 註)——
+新考券的 user-facing 操作面,非膨脹;dev-flow 713→717 與 harness-maintenance 58→59 為既往版本
+遺留(v2.34.23 / v2.34.28),本版未觸。
 
 ## v2.34.33 — verdict-bytes preservation:transport 失敗與 content-verified verdict 分欄
 

@@ -146,6 +146,17 @@ checks below are what it enforces:
 - **No-op honesty**: an already-satisfied task must yield `no_op`, never a fabricated commit.
 - **Fail-closed**: dirty tree, question-suspected, timeout, nonzero, or acceptance failure are all non-passing.
 
+**Stage-0 probe procedure (OPERATOR-RUN in v1 — the qualifier does not write
+these receipts; mechanization is a BACKLOG row).** Before each administration,
+the operator MUST append one probe receipt per attempt to the evidence bundle's
+`probe-receipts.jsonl` (append-only, never rewritten): runner bin path +
+version output, `models` listing containment of the EXACT frozen model token
+(the `agy models` slug column literal — byte-identical to what goes to
+`--model`; no alias fuzzy-match), rc, timestamp, `version_source`,
+`instrument_charged: false`. A probe miss = uncharged infra abort (receipt
+retained); retries are new linked attempts capped at 2; model substitution
+under the same administration identity is forbidden.
+
 Salvage-posture note (2026-08-21 residual): the live-rail suite reads
 dispatch-hetero's contract JSON, which is not a new verdict transport — no
 salvage decision is owed here. A genuinely new verdict transport onboarded

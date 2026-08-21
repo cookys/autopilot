@@ -280,5 +280,81 @@ for (const trial of realScope.trials) for (const c of trial.cases) {
 equal(gradeDeviantWith(realGen, realGrader, realScopeCase, realScopeCase.deviants['scope-violator']), 'integrity_violation', 'real grader catches scope-violator');
 equal(gradeDeviantWith(mutGen, mutGrader, scopeCase, scopeCase.deviants['scope-violator']), 'pass', 'deleting the manifest gate flips scope-violator to pass (gate is load-bearing)');
 
+// ── 8. Truncation red fixtures (pre-merge review round 1, Critical):
+//      a partial corpus must NEVER fold or promote as qualified.
+const realGraderFold = require(path.join(__dirname, '..', 'evals', 'impl-eval-grader.js'));
+const mk = (n) => Array.from({ length: n }, (_, i) => ({ family: 'greenfield_spec', case_id: `c${i}`, outcome: 'pass' }));
+equal(realGraderFold.foldAdministration([
+  { trial_id: 'trial-1', cases: mk(12) }, { trial_id: 'trial-2', cases: mk(3) },
+]).qualified, false, 'wall-truncated fold (12+3 all-pass) is NOT qualified');
+equal(realGraderFold.foldAdministration([
+  { trial_id: 'trial-1', cases: mk(12) }, { trial_id: 'trial-2', cases: mk(12) },
+]).qualified, true, 'full 12+12 all-pass fold IS qualified (gate discriminates)');
+
+// Kernel mirror: enforceImplPromotion rejects a qualified record whose trial
+// carries a partial corpus even when cases_passed === cases_total.
+const ce = require(path.join(__dirname, '..', 'src', 'engine', 'capability-evidence.js'));
+const digestX = (c) => c.repeat(64);
+const implTrial = (id, n) => ({
+  trial_id: id, observed_at: '2026-08-22T00:00:00.000Z', corpus_manifest_hash: digestX('d'),
+  cases_total: n, cases_passed: n, integrity_violations: 0, fabricated_changes: 0,
+  contract_violations: 0, oracle_misses: 0, family_lines_hash: digestX('e'), dispatch_ledger_hash: digestX('f'),
+});
+const implRecord = (trials) => ({
+  schema_version: 1, source: 'internal_eval', source_ref: 'engine-qualify:implementer-v1',
+  state: 'qualified', role: 'implementer',
+  scope: { task_classes: ['bounded_implementation'], domains: ['repository'], languages: ['en'], tool_surface: ['git_commit'] },
+  identity: {
+    identity: 'm', model_alias: 'm', model_version: 'v', family: 'f', runner: 'grok',
+    runner_version: '1', harness_version: 'h', effort: 'high', prompt_config_hash: digestX('a'),
+    semantic_fingerprint: digestX('b'), containment_fingerprint: digestX('c'), identity_resolved: true,
+  },
+  issued_at: '2026-08-22T00:00:00.000Z', observed_at: '2026-08-22T00:00:00.000Z',
+  expires_at: '2026-11-19T00:00:00.000Z',
+  methodology: {
+    kind: 'impl_dispatch', name: 'impl-live-rail', version: '1.0.0',
+    corpus_version: 'impl-live-rail-v1.impl-live-rail-v1', corpus_manifest_hash: digestX('d'),
+    thresholds: {
+      min_trials: 2, max_integrity_violations: 0, max_fabricated_changes: 0,
+      max_contract_violations: 0, max_oracle_misses: 0,
+    },
+    basis: null,
+  },
+  trials, revocation: null, supersedes: null,
+});
+let truncatedRejected = false;
+try {
+  ce.compileCapabilityEvidence(implRecord([implTrial('trial-1', 12), implTrial('trial-2', 3)]));
+} catch (error) {
+  truncatedRejected = /full per-trial corpus/.test(String(error.message));
+}
+equal(truncatedRejected, true, 'kernel rejects a qualified impl record with a truncated trial');
+const fullOk = ce.compileCapabilityEvidence(implRecord([implTrial('trial-1', 12), implTrial('trial-2', 12)]));
+equal(fullOk.state, 'qualified', 'kernel accepts the full-corpus qualified record');
+
+// e2e: wall override 0 → nothing starts → infra_abort no-verdict (degenerate
+// completed-with-zero-cases must never score or qualify).
+const wallStore = fs.mkdtempSync(path.join(tempRoot, 'store-wall-'));
+fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'wall-seed');
+fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
+process.env.AUTOPILOT_QUALIFY_SEED = 'wall-seed';
+const wallWrapper = path.join(tempRoot, 'disp.sh');
+const wallRun = runImplQualification({ ...baseOptions(wallStore), dispatchBin: wallWrapper, testWallSecondsOverride: 0 });
+delete process.env.AUTOPILOT_QUALIFY_SEED;
+equal(wallRun.qualified, false, 'zero-wall administration is NOT qualified');
+equal(wallRun.row.status, 'no_verdict', 'zero-wall administration yields no_verdict (nothing started)');
+equal(wallRun.evidence, null, 'zero-wall administration writes NO evidence');
+
+// e2e: reservation override 0 → insufficient_budget → NO evidence row, NO scorecard row.
+const budStore = fs.mkdtempSync(path.join(tempRoot, 'store-bud-'));
+process.env.AUTOPILOT_QUALIFY_SEED = 'bud-seed';
+fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'bud-seed');
+const budRun = runImplQualification({ ...baseOptions(budStore), dispatchBin: wallWrapper, testReservationOverride: 0 });
+delete process.env.AUTOPILOT_QUALIFY_SEED;
+equal(budRun.qualified, false, 'allocator-depleted administration is NOT qualified');
+equal(budRun.row.status, 'no_verdict', 'allocator depletion yields no_verdict (no scorecard-recordable row)');
+equal(budRun.evidence, null, 'allocator depletion writes NO evidence');
+check(!fs.existsSync(path.join(budStore, 'qualification-evidence.jsonl')), 'allocator depletion appends nothing to the store');
+
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

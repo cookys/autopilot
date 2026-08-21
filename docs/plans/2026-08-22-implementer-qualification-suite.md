@@ -16,7 +16,7 @@ dev-flow 驗證合約的三連言(紅綠 ∧ implementer scorecard-qualified ∧
 
 **Board 裁決(2026-08-22,構念先裁——VA v2→v3 前例)**:
 1. 考場 = **live-rail 真派工**(`scripts/dispatch-hetero.sh`),非 broker 單發 patch-as-data。
-2. dogfood = **grok-4.5**(requalify)+ **agy / gemini-flash-4.7(effort high)**。
+2. dogfood = **grok-4.5**(requalify)+ **agy / gemini-3.7-flash-high**(Board 2026-08-22 席位更正:原指定「gemini-flash-4.7」不存在於 agy 1.1.14 `agy models` 清單,Board 改選現行最新 flash;probe 記錄進 evidence bundle)。
 
 ## §2 Construct(窄名 + honesty clause)
 
@@ -144,7 +144,7 @@ Schema 變更 additive:既有 rows(含 grok events 137/138 與全部 reviewer/VA
 | P2 | D3 grader + taxonomy | grader 純函數測試:同輸入同 bytes;precedence 全序覆蓋 |
 | P3 | D4/D5 engine-qualify 接線 + evidence schema | fake-dispatcher e2e:`--emit-row` 出 row 過 `validateRecordRow`;既有 rows 雙向 revalidate |
 | P4 | D6 測試 + D7 鏡像 | §7 matrix 全綠;`codex-plugin-package` 綠;全套 run.sh 綠 |
-| P5 | D8 dogfood ×2(grok-4.5;agy/gemini-flash-4.7 high 前置 Stage-0 探針)| evidence bundles + 實 store rows,任何結果誠實記錄 |
+| P5 | D8 dogfood ×2(grok-4.5;agy/gemini-3.7-flash-high 前置 Stage-0 探針)| evidence bundles + 實 store rows,任何結果誠實記錄 |
 | P6 | D9 docs/CHANGELOG/bump + closeout | preflight-release 8/8;Official-defaults trigger surface 給 Board |
 
 ## §9 Verification contract

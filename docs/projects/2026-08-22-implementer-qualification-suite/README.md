@@ -7,7 +7,7 @@
 
 ## Project Goal
 
-> **Final goal**: dev-flow 驗證合約引用的「`engine-qualify.sh` known-bad 零漏放 bar」對 implementer role 真實存在——`engine-qualify.sh implementer` 端到端出考、評分、入庫,並以兩場真實施測(grok-4.5、agy/gemini-flash-4.7 high)產出第一批正式 implementer 成績單。
+> **Final goal**: dev-flow 驗證合約引用的「`engine-qualify.sh` known-bad 零漏放 bar」對 implementer role 真實存在——`engine-qualify.sh implementer` 端到端出考、評分、入庫,並以兩場真實施測(grok-4.5、agy/gemini-3.7-flash-high)產出第一批正式 implementer 成績單。
 > **Success criteria**:
 > 1. `engine-qualify.sh implementer … --emit-row` e2e 產出 evidence + scorecard row,且通過 `engine-scorecard.js` `validateRecordRow` 11 項綁定(機械驗證:record 不拒)。
 > 2. ≥6 個 deviant 作弊形 fixture 各自釘死一個非 qualified taxonomy 值;≥1 個 discriminating mutation control(沙盒副本刪 gate → deviant 翻 qualified)證明 gate 有辨別力。
@@ -20,7 +20,7 @@
 ## Board 裁決(2026-08-22)
 
 1. 考場 = **live-rail 真派工**(dispatch-hetero.sh,非 broker 單發 patch-as-data)——考下游 gate 實際消費的構念(scope/test-integrity/canary/fail-closed 的合約服從)。
-2. dogfood 對象 = **grok-4.5**(requalify 到期 events 137/138)+ **agy/gemini-flash-4.7 effort high**。
+2. dogfood 對象 = **grok-4.5**(requalify 到期 events 137/138)+ **agy/gemini-3.7-flash-high**(識別更正:4.7 不存在於 agy 1.1.14 清單)。
 
 ## L-1.5 Scope Completeness Audit(dimensions coverage)
 
@@ -44,7 +44,7 @@
 |---|---|
 | 「Roster qualification — implementer suite: 設計 implementer 正式考券並施測」(/next 確認) | D1-D7(設計+實作)、D8(施測) |
 | 考場軌道=「Live-rail 真派工」(AskUserQuestion 裁決) | Construct、D2/D4 |
-| dogfood=「grok-4.5 + agy gemini-flash-4.7 high」(AskUserQuestion 裁決,custom) | D8 兩場 |
+| dogfood=「grok-4.5 + agy gemini-flash-4.7 high」(AskUserQuestion 裁決,custom;後續更正為 gemini-3.7-flash-high) | D8 兩場 |
 
 ## L-1.6 Skill routing
 
@@ -70,4 +70,4 @@ Repo 無 `.claude/skill-routing.md`;CLAUDE.md 無 per-code-area skill 條目。�
 ## Decision log
 
 - 2026-08-22:construct = live-rail(Board,AskUserQuestion);理由:broker 單發單字串無重試裝不下 worktree 編輯迴圈,且下游 gate(dispatch-contract GO/NO-GO、density scaling、dev-flow 連言)消費的是合約服從構念非 patch 合成力。VA v3 pure-data 的動機(候選碼不進 host)以反向手段滿足:候選碼在自己的 dispatched process 跑,host 只離線評 git artifacts,oracle 在 bwrap 子進程執行候選碼(t15/t17 教訓)。
-- 2026-08-22:dogfood = grok-4.5 + agy/gemini-flash-4.7 high(Board custom 選擇;codex-spark 留 follow-up)。
+- 2026-08-22:dogfood = grok-4.5 + agy/gemini-3.7-flash-high(Board custom 選擇;2026-08-22 識別更正:原指定 4.7 不存在,`agy models` probe 後 Board 改選現行最新 flash;codex-spark 留 follow-up)。

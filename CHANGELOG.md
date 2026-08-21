@@ -1,6 +1,40 @@
 # Changelog
 
 =======
+## v2.34.34 — implementer qualification suite:live-rail 正式考券
+
+**Headline**: `engine-qualify.sh implementer` 第一次存在。dev-flow 驗證合約的三連言
+(紅綠 ∧ implementer scorecard-qualified ∧ risk=low)一直引用「`engine-qualify.sh` 的
+known-bad 零漏放 bar」作為 implementer scorecard-qualified 的機械定義,但那個 bar 對 implementer
+role **從未存在**——`engine-qualify.js` 只出 reviewer/owner/brain/verification_author 四種考券,
+既有 implementer rows(grok events 137/138)是手工記錄的 live baseline(`baseline-3/3` → T1
+ceiling)。本次補上生產端。
+
+**構念(Board 2026-08-22 先裁)**:考場 = **live-rail 真派工**(非 broker 單發 patch-as-data)。
+reviewer/owner/brain/VA 全走 stateless case broker(候選碼永不落地);implementer 本質需要
+mutable worktree + git artifacts + agentic 工具,裝不進該 transport。候選碼在自己的 dispatched
+process(`dispatch-hetero.sh` worktree 隔離)執行,host 只離線讀 git artifacts,oracle 在 bwrap
+孫進程執行候選碼(期望輸出永不進候選 isolate——t15/t17 同進程偽造教訓)。
+
+**出貨形**:6 case families(greenfield-spec、red-to-green、test-integrity trap、scope trap、
+security canary、no-op honesty)× 2 templates × 2 trials = 24 cases/administration。兩根派生
+(public adminSeed 管候選可見 bytes、held-out oracle key 管隱藏 vectors);admission 三 gate
+(solvability + trap discrimination + overfitter discrimination)與 live administration 共用
+**同一個 collection+grading module**;trusted-git 收集(釘 dispatch commit on branch、
+`--no-replace-objects`、ancestry 單一直接子代、commit object canary 掃描);全序 taxonomy
+(`infra_fail` > `engine_unavailable` > `integrity_violation` > `fabricated_change` >
+`contract_violation` > `oracle_miss` > `pass`);budget allocator + append-only attempt ledger;
+`corpus_pass: "24/24"` 正規形解鎖 T0。`impl_dispatch` evidence methodology kind
+(`normalizeImplTrial`/`enforceImplPromotion`,四個零容忍 floor);`--expires-days` cap 保持所有
+既有 role 的 flat 30,implementer 專屬例外 90。
+
+**兩代 hetero plan review**(sol+grok STOP×2):G1 20 findings 全收;G2 terminal 14/14
+adjudicated at depth-0(generation cap),3 項 scoped rejection 入 backlog(separate-UID
+containment 指向既有 L1 row、virtual-path namespace、rail 級 runner_invoked receipt)。測試:
+`engine-qualify-impl` e2e(honest → qualified 24/24、emitted row 過真 `engine-scorecard record`
+綁定、store 隔離、確定性、4 deviant 各 fail)+ generator self-check(全 deviant matrix + solvability
++ pair invariant + sandbox-discrimination control)+ manifest-gate mutation control。
+
 ## v2.34.33 — verdict-bytes preservation:transport 失敗與 content-verified verdict 分欄
 
 **Headline**: reviewer transport 毀掉「內容完整、通過完整 battery 的 verdict」時,機器紀錄

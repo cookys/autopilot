@@ -1,6 +1,53 @@
 # Changelog
 
 =======
+## v2.34.33 — verdict-bytes preservation:transport 失敗與 content-verified verdict 分欄
+
+**Headline**: reviewer transport 毀掉「內容完整、通過完整 battery 的 verdict」時,機器紀錄
+第一次留下痕跡。兩次事故背書(2026-08-08 cc-shim chrome 吃掉 SHIP-AS-IS;2026-08-20 成功席
+的 STOP 死於**另一席**的 transport exhaustion——aggregation 層毀損點在
+`dispatch-plan-review.js` 實證後修復)。原則:搶救 battery = 權威 battery 的**抽取**而非子集
+重列;只放寬「塊在開頭」(→ 唯一 BEGIN + 第一個 END)與「exit 0」兩件事;`status`/
+`verdict`/exit code/所有 fail-closed 決策面逐字節不變;unratified 欄位**只供人工裁決**,
+reader 集合由 canonical-invariants 的 closed allowlist 機械封閉。兩代 plan review(sol+grok
+雙 STOP ×2,G1 15 + G2 9 findings 全數 depth-0 裁決;anti-balloon 1.598× 超停損後壓縮至
+1.495× 帶 warning 過)。
+
+### Added
+- **Shell rail salvage**(`dispatch-review.sh`):八個 runner 的 no_verdict 排出全部收斂進
+  `emit_no_verdict` funnel(六個 inline printf 站點退役,各自的 error 文字/usage/
+  passive-capture/exit code 逐字保留);funnel 以 runner 專屬 capture(CODEX_OUT/QODER_OUT/
+  KIMI_OUT/RAW_LOG/agy 萃取)跑**同一顆** `validate_review_block` battery(尺寸帽、leak
+  scan、單一錨定 VERDICT、FINDINGS、fence-aware proof、tautology 黑名單),全過才寫入
+  additive 欄位 `unratified_verdict`。Fixture A 的 chrome bytes 是 **live 重現**(CC 2.1.238
+  真 notice,SHA-256 凍結;stderr 流向誠實揭露於 evidence)。
+- **Envelope rail salvage**(`plan-review-normalize.js` + `dispatch-plan-review.js`):凍結
+  admission matrix(interrupted/unavailable 僅 strict;timeout/exit_failure/quota 另收
+  clean-scan-tail 的唯一 extracted object;digest 綁定必要;raw_binding_mismatch/
+  identity_mismatch 永不);attempt 級 controller-side provenance + fresh-exclusive capture
+  規則(locator 重用即拒);席位 carry 凍結規則(0 → null、≥2 distinct → 顯式
+  `unratified_conflict`、1 → 最後產出 attempt 的 provenance);**aggregation 保存**:
+  `required_seat_transport_exhausted`/`panel_family_diversity_exhausted` artifact 以非語意
+  `unratified_observations` 保留完成席的 verdict+findings 與搶救 payload(semantic_verdict
+  null、exit 4 不變)。C-complete-timeout fixture 走**真 dispatch-author 生產路徑**產生
+  (author-survives/runner-killed → exit_failure 帶 raw_log,真相凍結於 evidence)。
+- **可觀測性**:panel manifest 席位列 `unratified_available` + `dispatch-status --panel(s)`
+  `seats_unratified` 計數(display-only)。
+- **Reader allowlist guard**(`check-canonical-invariants.sh` 新 `reader-allowlist` 模式):
+  提及 `unratified` 的檔案必須在 closed allowlist(producers/schemas/display/validator/
+  mirrors/tests/docs);synthetic authority-consumer 紅證為常駐測試案例。
+
+### Changed
+- `schemas/review-result.schema.json`(+codex 鏡像):`unratified_verdict` optional nullable
+  enum,oneOf 三分支(reviewed 路徑禁非 null);`src/runners/review.js` 拆 required/optional
+  欄位集,runtime 斷言非 null ⇒ status no_verdict,且永不複製進 verdict/status。
+- `schemas/plan-review-artifact.schema.json`(+codex 鏡像):optional `unratified_observations`。
+
+### Evidence
+- 兩軌 dead-gate 突變記錄(shell 3 紅/normalize 6 紅,負控制全綠):
+  `docs/plans/evidence/2026-08-21-verdict-bytes-preservation/dead-gate-mutations.md`;
+  fixtures 凍結 bytes + provenance 同目錄。Plan R3 FROZEN + G1/G2 dispositions 同目錄。
+
 ## v2.34.32 — P6D 矯正:repair ladder(無狀態形)+ manifest 閘提前到 staging 點
 
 **Headline**: P6D 事故的機械矯正,經兩代 hetero plan review(G1 3×STOP → G2 terminal)+

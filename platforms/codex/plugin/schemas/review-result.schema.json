@@ -42,6 +42,10 @@
         "cache_read_tokens": { "type": ["integer", "null"], "minimum": 0 },
         "source": { "type": "string", "minLength": 1 }
       }
+    },
+    "unratified_verdict": {
+      "type": ["string", "null"],
+      "enum": ["SHIP-AS-IS", "FIX-THEN-SHIP", null]
     }
   },
   "oneOf": [
@@ -52,12 +56,20 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^checked=.+;\\s*evidence=.+;\\s*conclusion=.+$"
-        }
+        },
+        "unratified_verdict": { "type": "null" }
       }
     },
     {
       "properties": {
-        "verdict": { "enum": ["FIX-THEN-SHIP", null] },
+        "verdict": { "const": "FIX-THEN-SHIP" },
+        "no_finding_proof": { "type": "null" },
+        "unratified_verdict": { "type": "null" }
+      }
+    },
+    {
+      "properties": {
+        "verdict": { "type": "null" },
         "no_finding_proof": { "type": "null" }
       }
     }

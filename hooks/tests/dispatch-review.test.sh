@@ -178,6 +178,63 @@ case "$MODE" in
     echo "FINDINGS: this valid finding discusses prompt, diff, marker, Diff under review:, diff --git, @@ -1 +1 @@, and <one finding per line> as vocabulary"
     echo "$END"
     ;;
+  vbp_chrome_then_block)
+    # Fixture A: frozen unknown-model notice bytes ahead of an intact valid block, rc=0.
+    cat "${VBP_NOTICE_FILE:?VBP_NOTICE_FILE required for vbp_chrome_then_block}"
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  vbp_block_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_ship_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff and supplied acceptance criteria; evidence=target slice was traced; conclusion=current requirements have no concrete blocking failure"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_truncated_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    exit 7
+    ;;
+  vbp_leak_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS:"
+    echo "diff --git a/x b/x"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_two_blocks_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: none"
+    echo "$END"
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff; evidence=trace; conclusion=nothing blocks"
+    echo "$END"
+    exit 7
+    ;;
+  vbp_ship_tautology_then_die)
+    echo "$BEGIN"
+    echo "VERDICT: SHIP-AS-IS"
+    echo "FINDINGS: none"
+    echo "NO-FINDING-PROOF: checked=diff; evidence=none; conclusion=looks good"
+    echo "$END"
+    exit 7
+    ;;
   trailing)
     echo "$BEGIN"
     echo "VERDICT: FIX-THEN-SHIP"
@@ -1150,5 +1207,94 @@ BE_ERR="$(bash "$SCRIPT" --runner cc-shim --model MiniMax-M3 --endpoint minimax 
   --diff-file "$BE_DIFF" --spec-file "$BE_SPEC" --allow-narrative "fixture override test" 2>&1 >/dev/null | head -20)"
 assert_contains "$BE_ERR" "BLIND-EVIDENCE OVERRIDE" \
   "--allow-narrative admits the payload with a loud stderr override record"
+
+# ── verdict-bytes preservation (v2.34.33): unratified_verdict salvage column ──
+# Frozen rules (plan R3 §2/§3 + g2-adjudication #6/#7/#8): salvage runs the FULL
+# authoritative content battery over the runner-specific capture; only the positional
+# start-anchor (→ unique BEGIN + first END) and the exit-0 requirement are dropped.
+# status/verdict/exit stay fail-closed on every path; the field is display/adjudication
+# data, never authority.
+VBP_NOTICE="$REPO_ROOT/docs/plans/evidence/2026-08-21-verdict-bytes-preservation/fixtures/unknown-model-notice.cc-2.1.238.txt"
+SCHEMA_CHECK_JS="$REPO_ROOT/scripts/validate-json-schema.js"
+RESULT_SCHEMA="$REPO_ROOT/schemas/review-result.schema.json"
+vbp_json() {  # capture STDOUT ONLY (pure JSON) — stderr chrome would break schema checks
+  DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 STUB_MODE="$1" \
+    "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>/dev/null
+}
+vbp_schema_ok() {
+  local doc="$TEST_TMP/vbp-result-$RANDOM.json"
+  printf '%s\n' "$1" > "$doc"
+  node "$SCHEMA_CHECK_JS" --schema "$RESULT_SCHEMA" --document "$doc" >/dev/null 2>&1
+}
+
+# Fixture A: chrome-prepend, rc=0 → no_verdict (unchanged) + salvaged FIX-THEN-SHIP.
+OUT="$(VBP_NOTICE_FILE="$VBP_NOTICE" vbp_json vbp_chrome_then_block)"; EXIT=$?
+assert_eq "$EXIT" "1" "A: chrome-prepend still exits 1 (fail-closed)"
+assert_contains "$OUT" '"status": "no_verdict"' "A: chrome-prepend stays no_verdict"
+assert_contains "$OUT" '"verdict": null' "A: authoritative verdict stays null"
+assert_contains "$OUT" '"unratified_verdict": "FIX-THEN-SHIP"' \
+  "A: intact block behind frozen notice bytes is salvaged"
+vbp_schema_ok "$OUT" || fail "A: no_verdict artifact with unratified_verdict fails the result schema"
+
+# Fixture B: complete block then runner dies rc=7 → salvaged, exit 1 unchanged.
+OUT="$(vbp_json vbp_block_then_die)"; EXIT=$?
+assert_eq "$EXIT" "1" "B: runner death still exits 1"
+assert_contains "$OUT" '"status": "no_verdict"' "B: runner death stays no_verdict"
+assert_contains "$OUT" '"unratified_verdict": "FIX-THEN-SHIP"' \
+  "B: complete block before non-zero exit is salvaged"
+
+# SHIP with a VALID proof then death → salvaged SHIP-AS-IS (proof battery passes).
+OUT="$(vbp_json vbp_ship_then_die)"
+assert_contains "$OUT" '"unratified_verdict": "SHIP-AS-IS"' \
+  "B-ship: valid-proof SHIP block before death is salvaged"
+assert_contains "$OUT" '"no_finding_proof": null' \
+  "B-ship: authoritative proof column stays null on no_verdict"
+vbp_schema_ok "$OUT" || fail "B-ship: salvaged SHIP artifact fails the result schema"
+
+# Fixture B2: truncated block (no END) → never salvaged.
+OUT="$(vbp_json vbp_truncated_then_die)"
+assert_contains "$OUT" '"unratified_verdict": null' "B2: truncated block is never salvaged"
+
+# Fixture E: leak line inside the block → battery parity → null.
+OUT="$(vbp_json vbp_leak_then_die)"
+assert_contains "$OUT" '"unratified_verdict": null' "E: leak scan applies to salvage"
+
+# Fixture F: two BEGIN blocks → ambiguous → null.
+OUT="$(vbp_json vbp_two_blocks_then_die)"
+assert_contains "$OUT" '"unratified_verdict": null' "F: two blocks are ambiguous, never salvaged"
+
+# Fixture G: tautological SHIP proof → full-battery parity → null.
+OUT="$(vbp_json vbp_ship_tautology_then_die)"
+assert_contains "$OUT" '"unratified_verdict": null' "G: tautology blacklist applies to salvage"
+
+# Reviewed path stays byte-identical: the key is NOT emitted on success (g2 #7)...
+OUT="$(vbp_json pass)"; EXIT=$?
+assert_eq "$EXIT" "0" "reviewed path still exits 0"
+assert_not_contains "$OUT" 'unratified_verdict' "reviewed emit is byte-identical (no salvage key)"
+vbp_schema_ok "$OUT" || fail "reviewed artifact without the optional key fails the result schema"
+
+# ...and the strict JS consumer admits the key on no_verdict without granting authority,
+# while still rejecting arbitrary unknown keys (closed-contract pin).
+NODE_PIN="$(node -e '
+const { parseReviewOutput } = require(process.argv[1] + "/src/runners/review");
+const base = { runner: "codex", model: "m", status: "no_verdict", verdict: null,
+  findings: "", no_finding_proof: null, raw_log: "/tmp/x", error: "died", usage: null };
+const out = {};
+const withKey = { ...base, unratified_verdict: "SHIP-AS-IS" };
+try { const p = parseReviewOutput(JSON.stringify(withKey));
+  out.admitted = true; out.verdict_stays = p.verdict === null; out.status_stays = p.status === "no_verdict";
+} catch (e) { out.admitted = false; }
+try { parseReviewOutput(JSON.stringify({ ...base, totally_unknown: 1 })); out.unknown_rejected = false; }
+catch (e) { out.unknown_rejected = true; }
+try { parseReviewOutput(JSON.stringify({ ...base, status: "reviewed", verdict: "FIX-THEN-SHIP", unratified_verdict: "SHIP-AS-IS" })); out.reviewed_nonnull_rejected = false; }
+catch (e) { out.reviewed_nonnull_rejected = true; }
+console.log(JSON.stringify(out));
+' "$REPO_ROOT")"
+assert_contains "$NODE_PIN" '"admitted":true' "runner contract admits unratified_verdict on no_verdict"
+assert_contains "$NODE_PIN" '"verdict_stays":true' "unratified_verdict is never copied into verdict"
+assert_contains "$NODE_PIN" '"status_stays":true' "unratified_verdict never changes status"
+assert_contains "$NODE_PIN" '"unknown_rejected":true' "arbitrary unknown keys still fail closed"
+assert_contains "$NODE_PIN" '"reviewed_nonnull_rejected":true' \
+  "non-null unratified_verdict outside no_verdict is rejected"
 
 finalize_test

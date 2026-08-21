@@ -34,11 +34,14 @@ User-stated requirements ledger:CEO 授權下無逐字需求;來源為 BACKLOG e
 |---|---|---|
 | 2026-08-21 | Mission admission READY(l3 inline,1 deliverable)| done |
 | 2026-08-21 | Plan drafted(docs/plans/2026-08-21-verdict-bytes-preservation.md)| done |
-| 2026-08-21 | G1 plan review | pending |
-| | KR2 plan-review rail salvage | |
-| | KR1 dispatch-review.sh salvage | |
-| | KR3 fixtures + bidirectional pinning | |
-| | docs/version/finish-flow | |
+| 2026-08-21 | G1 plan review(sol+grok 雙 STOP,15 findings 全裁決,2 子修法拒絕附理由)| done |
+| 2026-08-21 | G2 plan review(terminal,9 findings 全 accept;plan R3 FROZEN)| done(`5fa224da`)|
+| 2026-08-21 | Fixture 前置:notice bytes live 重現凍結(CC 2.1.238,stderr 流向誠實揭露)+ C-complete-timeout 走真 author 路徑凍結(exit_failure 真相)| done |
+| 2026-08-21 | KR2 envelope rail salvage(normalize 矩陣 + seat carry + aggregation 保存 + panel/status 標記;266 assertions 綠)| done(`345d40ec`)|
+| 2026-08-21 | KR1 shell rail salvage(red 10 → battery 抽取 + 六站點 funnel 收斂 + schema/validator 原子更新 → green 316,既有 306 全保留)| done |
+| 2026-08-21 | KR3:reader-allowlist guard(canonical-invariants 新模式 + synthetic-consumer 紅證常駐)+ 兩軌 dead-gate 突變記錄(shell 3 紅/normalize 6 紅,負控制全綠)| done |
+| 2026-08-21 | docs:CHANGELOG v2.34.33 + version sync(grep 殘留零)+ BACKLOG row 收束(附新 residual trigger)| done |
+| | 全套件 + preflight + finish-flow(L-5)| in progress |
 
 ## Links
 

@@ -1,0 +1,1 @@
+{"attempt":1,"runner":"grok","model":"grok-composer-2.5-fast","bin":"/home/cookys/.grok/bin/grok","bin_version":"grok 1.0.5 (5115b46bc9) [stable]","version_source":"runtime","probe_rc":1,"note":"probe failed - uncharged infra abort","instrument_charged":false,"probed_at":"2026-08-21T21:54:37Z"}

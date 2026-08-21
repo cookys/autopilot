@@ -3011,12 +3011,18 @@ if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
   _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"
   git -C "$WT" add -A
+  if ! run_strict_staged_precheck; then
+    # Staged manifest violation: leave the worktree staged for in-place repair;
+    # classify_outcome surfaces boundary_rejected on the equality branch.
+    :
+  else
   _identity_args=()
   if ! git -C "$WT" var GIT_AUTHOR_IDENT >/dev/null 2>&1 \
      || ! git -C "$WT" var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
     _identity_args=(-c user.email=autopilot@example.invalid -c user.name=Autopilot)
   fi
   git -C "$WT" -c commit.gpgsign=false "${_identity_args[@]}" commit --no-verify -q -m "dispatch-hetero($_runner_label): edits on $BRANCH" >/dev/null 2>&1
+  fi
 fi
 
 # --- verify by artifacts, never by self-report ---
@@ -3125,6 +3131,62 @@ process.exit(0);
   fi
 
   STRICT_POSTCHECK_STATUS="ok"
+  return 0
+}
+
+# Pre-commit manifest gate (P6D KR2, plan R2' 2026-08-21; GO checkpoint scoped
+# to WRAPPER-OWNED staging). The P6D incident's broad `git add -A` swept two
+# dependency symlinks into an otherwise-green candidate; the post-commit
+# boundary gate caught it only after the commit existed. This precheck runs the
+# SAME comparator (check-disjointness --staged) between the wrapper's `add -A`
+# and its capture commit: a violation leaves the worktree staged-but-uncommitted
+# (repairable in place) and the run classifies boundary_rejected. Engines that
+# self-commit never pass through here — the post-commit gate remains their
+# authoritative (and tested) backstop.
+STRICT_PRECOMMIT_REJECTED=0
+run_strict_staged_precheck() {
+  local allow_file deny_file staged_out staged_rc out_dir temp_path
+  [ "$STRICT_CONTRACT" -eq 1 ] || return 0
+  if [ "${#STRICT_SCOPE_ALLOW_PATHS[@]}" -eq 0 ] && [ "${#STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}" -eq 0 ]; then
+    return 0 # no declared manifest → postcheck will fail it authoritatively
+  fi
+  allow_file="$(mktemp -t "hetero-staged-allow-XXXXXX")" || return 0
+  for out_dir in "${STRICT_SCOPE_ALLOW_PATHS[@]}" "${STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS[@]}"; do
+    [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$allow_file"
+  done
+  deny_file=""
+  if [ "${#STRICT_SCOPE_DENY_PATHS[@]}" -gt 0 ]; then
+    deny_file="$(mktemp -t "hetero-staged-deny-XXXXXX")" || { rm -f "$allow_file"; return 0; }
+    for out_dir in "${STRICT_SCOPE_DENY_PATHS[@]}"; do
+      [ -n "$out_dir" ] && printf '%s\n' "$out_dir" >> "$deny_file"
+    done
+  fi
+  if [ -n "$deny_file" ]; then
+    staged_out="$( "$SELF_DIR/check-disjointness.sh" validate --staged --repo "$WT" --no-default-deny --allow-file "$allow_file" --deny-file "$deny_file" 2>&1 )" && staged_rc=0 || staged_rc=$?
+  else
+    staged_out="$( "$SELF_DIR/check-disjointness.sh" validate --staged --repo "$WT" --no-default-deny --allow-file "$allow_file" 2>&1 )" && staged_rc=0 || staged_rc=$?
+  fi
+  rm -f "$allow_file"; [ -n "$deny_file" ] && rm -f "$deny_file"
+  if [ "$staged_rc" -ne 0 ]; then
+    local undeclared_touches deny_hits_json
+    undeclared_touches="$(printf '%s' "$staged_out" | extract_json_value undeclared_touches 2>/dev/null || true)"
+    deny_hits_json="$(printf '%s' "$staged_out" | extract_json_value denylist_hits 2>/dev/null || true)"
+    if [ -n "$deny_hits_json" ] && [ "$deny_hits_json" != "null" ]; then
+      temp_path="$(printf '%s' "$deny_hits_json" | json_array_first)"
+    elif [ -n "$undeclared_touches" ] && [ "$undeclared_touches" != "null" ]; then
+      temp_path="$(printf '%s' "$undeclared_touches" | json_array_first)"
+    else
+      temp_path=""
+    fi
+    STRICT_PRECOMMIT_REJECTED=1
+    STRICT_POSTCHECK_STATUS="boundary_rejected"
+    if [ -n "$temp_path" ]; then
+      STRICT_POSTCHECK_ERROR="boundary_rejected: staged path violates scope '${temp_path}' (pre-commit manifest gate; commit NOT created; unstage/remove the extra paths and rerun)"
+    else
+      STRICT_POSTCHECK_ERROR="boundary_rejected: staged paths violate scope (pre-commit manifest gate; commit NOT created); ${staged_out}"
+    fi
+    return 1
+  fi
   return 0
 }
 
@@ -3440,7 +3502,14 @@ classify_outcome() {
     # HEAD!=BASE strict postcheck path). Valid receipt → explicit successful
     # no-op with dispatcher_called:false semantics. Missing/forged/stale/foreign
     # receipt remains ordinary no_op/failure.
-    if [ -n "$DIRTY" ]; then
+    if [ "${STRICT_PRECOMMIT_REJECTED:-0}" -eq 1 ]; then
+      # Pre-commit manifest gate refusal (KR2): staged extras named, commit never
+      # created, worktree kept staged for the cheap in-place repair (KR3 ladder
+      # points here). Authoritative boundary_rejected, same family as postcheck.
+      passive_capture "failure"
+      OUTCOME_STATUS="boundary_rejected"; OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT="$WT"
+      OUTCOME_ERR="$STRICT_POSTCHECK_ERROR"; OUTCOME_EXIT=1
+    elif [ -n "$DIRTY" ]; then
       # edits exist but were never committed — e.g. the agy wrapper-commit above failed,
       # or the worker hand-edited without committing. Surface it (don't mis-score no_op).
       passive_capture "dirty"

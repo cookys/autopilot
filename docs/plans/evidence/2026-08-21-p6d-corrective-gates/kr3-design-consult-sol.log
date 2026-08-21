@@ -1,0 +1,63 @@
+READ-PROBE: READPROBE-3462157-9e469dae58ab0ce70becf531d9757ed9
+
+Choose D: an A-style Mission-carried repair lock, with an engine-side guard at terminal reconciliation. Mission successor/finalize remain the authoritative backstops; the engine guard catches the incident’s first wrong move and preserves the live claim needed for same-campaign repair.
+
+Why not C: the identity premise does not hold in the current implementation. Mission uses `campaign-v2`, but campaign durable state is keyed by `campaign-v1(repo_identity, ticket, raw_contract_sha256)` in [campaign-intake.js](/home/cookys/projects/autopilot/src/engine/campaign-intake.js:1665). Successor grants change adoption-key-derived ticket and branch in [runtime.js](/home/cookys/projects/autopilot/src/mission/runtime.js:1258), and the raw contract also contains a new `mission_grant_ref`. A successor is therefore not guaranteed to find the rejected durable root. C also leaves terminalization itself ungated.
+
+Exact insertion points:
+
+- [dispatch-hetero.sh](/home/cookys/projects/autopilot/scripts/dispatch-hetero.sh:3131), `run_strict_boundary_postcheck`: emit structured `gate_id`, sorted `named_extras`, verdict, and exact output SHA-256 for every run.
+- [implementer.js](/home/cookys/projects/autopilot/src/runners/implementer.js:58), `validateImplementationResult`: validate and retain those fields.
+- [controller-execution.js](/home/cookys/projects/autopilot/src/engine/controller-execution.js:719), `classifyBoundaryRejected`: carry them without parsing prose.
+- [campaign-composition.js](/home/cookys/projects/autopilot/src/engine/campaign-composition.js:422), `runCampaignComposition`: mint the failure receipt and subsequent rerun receipt from actual gate invocations.
+- [implementation-campaign.js](/home/cookys/projects/autopilot/src/engine/implementation-campaign.js:883), `reduceCampaignState`: durably project the pending lock and repair receipt. `RESUMED` is transparent—the predicate uses the latest durable gate outcome, so a no-op resume cannot erase the rejection.
+- New `src/engine/repair-ladder.js`: one shared validator/predicate; no P6D constants.
+- [mission-convergence.js](/home/cookys/projects/autopilot/src/engine/mission-convergence.js:3961): add a claim-bound repair-ladder observation event and include it in state hashing. Gate `applyMissionCampaignReceipt` before it can drain/terminalize the claim; also gate `handleAbortFinalized`.
+- [runtime.js](/home/cookys/projects/autopilot/src/mission/runtime.js:888), `prepareMissionRuntimeSuccessor`: evaluate the carried lock immediately after validating the predecessor, before registry or state writes.
+- [autopilot-engine.js](/home/cookys/projects/autopilot/src/engine/autopilot-engine.js:2560), `reconcileManagedMissionTerminal`: apply the same predicate before terminal reconciliation. This is the first-hit guard.
+- [cli.js](/home/cookys/projects/autopilot/src/mission/cli.js:301), `cmdConsume`, and [cli.js](/home/cookys/projects/autopilot/src/mission/cli.js:438), `cmdFinalizeAbort`: refuse drain/finalize with `MISSION_REPAIR_REQUIRED` and do not write `--out`.
+
+The predicate’s inputs are:
+
+```text
+policy_enabled
+campaign_id                  # rejected ICC campaign-v1 identity
+mission_campaign_id          # claim-bound campaign-v2 identity
+claim_id / graph_node_id
+failed_candidate_ref
+gate_id
+failure_verdict
+failure_named_extras[]       # canonical sorted unique exact names
+failure_output_sha256
+latest_gate_event_count/digest
+
+optional rerun:
+  prior_failure_output_sha256
+  rerun_candidate_ref
+  rerun_verdict
+  rerun_named_extras[]
+  rerun_output_sha256
+
+optional engine terminal evidence:
+  mechanically validated terminal source
+  closed terminal classification
+```
+
+Refuse when the projected phase remains `BOUNDARY_REJECTED` against a candidate and there is neither:
+
+- A genuine rerun bound to the same campaign, failed candidate, gate, and prior failure hash where the verdict changed or `rerun_named_extras` is a strict subset; nor
+- Engine-produced terminal evidence from the closed enum. I would admit only mechanically validated wall-budget exhaustion and validated transport classifications `timeout`, `unavailable`, or `interrupted`. Generic `failed`, `aborted`, free text, quota, or a controller-provided boolean must not bypass it.
+
+Malformed, missing, stale, or unreachable evidence means “unrepaired.” Without an enabling campaign/Mission policy, the predicate is a no-op.
+
+The planted red belongs in a new `hooks/tests/p6d-gates-repair-ladder.test.sh`, registered in `hooks/tests/run.sh`:
+
+1. Create a real temporary Mission runtime and claim.
+2. Drive the real campaign caller through `BOUNDARY_REJECTED` with candidate `C`, gate `G`, extras `{x,y}`, and output hash `H`.
+3. Persist the claim-bound Mission repair lock through the engine bridge.
+4. Invoke the real `mission successor` CLI with the same predecessor and the next generation but no rerun receipt.
+5. Assert exit nonzero, `MISSION_REPAIR_REQUIRED`, no successor registry/state/output creation, and explanation naming same-campaign resume plus rerun of `G`.
+6. Add greens for changed verdict, strict `{x}` shrink with `prior_failure_output_sha256=H`, valid engine terminal evidence, and no-policy behavior.
+7. Mutation control: disable the successor call-site guard and confirm the planted red wrongly succeeds.
+
+Under this design, the incident would first have stopped at `reconcileManagedMissionTerminal`: the attempted formal terminalization after the scope rejection could not consume the live Mission claim. The existing durable-wait resume in [campaign-intake.js](/home/cookys/projects/autopilot/src/engine/campaign-intake.js:767) would remain available as the repair route. `finalize-abort` and successor would be unreachable normally, but still independently refuse if another path or pre-existing state reached them.

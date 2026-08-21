@@ -27,3 +27,19 @@ Plan: ../../plans/2026-08-21-p6d-corrective-gates.md
 | **Terminal 詞彙** | `CAMPAIGN_STATES`(implementation-campaign.js:8)、terminalStatus {success, failed, aborted, terminal_follow_up}、mission `TERMINAL_STATES` | bypass enum 對映基底 |
 
 P0(b) 殘餘:mission↔campaign identity 連結(`mission-campaign-identity.js`)確認 successor/abort 邊上可讀 campaign durable state → 述詞函式 + 兩邊佈線 + planted red/green/bypass + in-situ caller tests。
+
+## P1 — KR2 GO checkpoint(2026-08-21,CEO 依 R2' 記錄)
+
+**裁決:GO,範圍鎖定 wrapper-owned staging。**
+
+- **可達性事實**(推翻 NO-GO 傾向的關鍵):staging 動作屬 hetero 引擎自主行程,原以為
+  行動點不可達;但 `dispatch-hetero.sh` 的 edit-only 捕獲路徑自己 `git add -A`(:3013)——
+  正是 P6D「broad staging」的形狀,且 `STRICT_SCOPE_ALLOW_PATHS` 同作用域。
+- **等價性(G2 CG3 入場條件)**:不造第二個比對器 —— `check-disjointness.sh` 增 `--staged`
+  輸入模式(同一 matcher,兩種輸入),corpus 六案(全子集/部分子集/P6D 雙 symlink/rename
+  出界/允許刪除/deny hit)staged vs post-commit verdict 全一致
+  (`hooks/tests/p6d-gates-manifest.test.sh` part 1)。
+- **rename 語意**:`git diff --name-only` 天然 collapse 至新路徑 = R2' 凍結的
+  rename=delete+add;比對器既有行為,零新語意。
+- **自 commit 引擎**:不經 wrapper staging → post-commit 閘維持其權威後盾(corpus 同時
+  釘住其行為)。

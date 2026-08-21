@@ -1007,6 +1007,9 @@ function stateHash(state) {
           terminal: !!v.terminal,
           released: !!v.released,
           reconciled: !!v.reconciled,
+          // Repair-ladder lock (KR3): hashed only when present so pre-existing
+          // states keep their exact hashes.
+          ...(v.repair_lock ? { repair_lock: deepClone(v.repair_lock) } : {}),
           reservation: deepClone(v.reservation),
           actual: v.actual ? deepClone(v.actual) : null,
           event_digest: v.event_digest,
@@ -2380,6 +2383,34 @@ function handleAbortFinalized(state, event, _payload) {
         receipt_digest: sha256({
           kind: 'mission_abort_rejected',
           reason: 'not_aborting',
+          mission_lineage_id: state.mission_lineage_id,
+          event_digest: event.event_digest,
+        }),
+      },
+    };
+  }
+  // Repair ladder (KR3): a claim holding an unreleased repair lock means a
+  // boundary-rejected candidate is awaiting its cheap local repair; canonical
+  // abort finalization would bury it. Refuse until the lock drains through a
+  // changed-verdict rerun (applyMissionCampaignReceipt) or the claim releases.
+  const lockedClaim = Object.values(state.claims || {}).find((claim) => (
+    claim && claim.repair_lock && claim.released !== true
+  ));
+  if (lockedClaim) {
+    return {
+      state,
+      receipt: {
+        artifact_type: 'mission_abort_rejected',
+        event_type: 'abort_finalized',
+        reason: 'mission_repair_required',
+        claim_id: lockedClaim.claim_id,
+        mission_lineage_id: state.mission_lineage_id,
+        source_event: event,
+        next_state: state.state,
+        receipt_digest: sha256({
+          kind: 'mission_abort_rejected',
+          reason: 'mission_repair_required',
+          claim_id: lockedClaim.claim_id,
           mission_lineage_id: state.mission_lineage_id,
           event_digest: event.event_digest,
         }),
@@ -4047,6 +4078,25 @@ function applyMissionCampaignReceipt(state, receipt) {
       return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
     }
   }
+  // Repair ladder (KR3): a claim carrying an unreleased repair lock may only
+  // drain through a rerun whose verdict CHANGED (ready/follow_up — the
+  // engine-derived form of repair evidence). Draining it as blocked/abort/
+  // unknown would convert the repairable rejection into a terminal — exactly
+  // the P6D expansion this gate exists to refuse.
+  if (claim.repair_lock) {
+    const reranVerdictChanged = missionV2Receipt
+      && (receipt.outcome === 'ready' || receipt.outcome === 'follow_up');
+    if (!reranVerdictChanged) {
+      return Object.freeze({
+        status: 'rejected',
+        reason: 'mission_repair_required',
+        remedy: 'resume the SAME campaign (durable-wait resume preserves the '
+          + 'candidate), repair the artifact, rerun the failed gate; this claim '
+          + 'drains only on a changed-verdict rerun',
+        state,
+      });
+    }
+  }
   // Fail closed on a malformed/partial per-axis usage shape, but feed the
   // reducer the original {per_axis} payload it expects: reservationFor returns
   // an axis-keyed map, which handleReconciliation cannot re-parse.
@@ -4073,6 +4123,16 @@ function applyMissionCampaignReceipt(state, receipt) {
     return Object.freeze({ status: 'rejected', reason: 'binding_mismatch', state });
   }
   let next = result.state;
+  // Changed-verdict rerun releases the repair lock together with the drain.
+  if (claim.repair_lock && next.claims && next.claims[claim.claim_id]
+      && next.claims[claim.claim_id].repair_lock) {
+    const releasedClaim = { ...next.claims[claim.claim_id] };
+    delete releasedClaim.repair_lock;
+    next = Object.freeze({
+      ...next,
+      claims: Object.freeze({ ...next.claims, [claim.claim_id]: Object.freeze(releasedClaim) }),
+    });
+  }
   if (missionV2Receipt && claim.graph_node_id && next.graph_progress) {
     const priorProgress = next.graph_progress[claim.graph_node_id] || {};
     next = Object.freeze({

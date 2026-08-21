@@ -95,6 +95,7 @@ DEFAULT_DENY=(
 
 MODE=""
 RANGE=""
+STAGED=0
 REPO="."
 NO_DEFAULT_DENY=0
 declare -a ALLOW=()
@@ -176,6 +177,7 @@ esac
 while [ $# -gt 0 ]; do
   case "$1" in
     --range) RANGE="${2:-}"; shift 2 ;;
+    --staged) STAGED=1; shift ;;
     --allow) ALLOW+=("${2:-}"); shift 2 ;;
     --allow-file)
       [ -r "${2:-}" ] || err_usage "allow-file not readable: ${2:-}"
@@ -293,14 +295,25 @@ fi
 
 # ── validate mode (AUTHORITATIVE) ─────────────────────────────────────────────
 [ "${#ALLOW[@]}" -ge 1 ] || err_usage "validate requires at least one --allow / --allow-file glob"
-[ -n "$RANGE" ] || err_usage "validate requires --range <base>..<head> or a commit SHA"
+if [ "$STAGED" -eq 1 ] && [ -n "$RANGE" ]; then
+  err_usage "--staged and --range are mutually exclusive"
+fi
+[ -n "$RANGE" ] || [ "$STAGED" -eq 1 ] || err_usage "validate requires --range <base>..<head>, a commit SHA, or --staged"
 git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || err_usage "not a git repository: $REPO"
 
 # Resolve the diff. Two accepted shapes:
 #   * a range "A..B" (or "A...B") → diff that range
 #   * a single commit SHA → diff against its parent; root commit (no parent) →
 #     diff against the empty tree so the full initial set is reported.
+# --staged (P6D KR2, plan R2\' 2026-08-21): the SAME matcher over the staged
+# index instead of a committed range — equivalence with the post-commit gate is
+# by construction (one comparator, two input sources), pinned by the corpus in
+# hooks/tests/p6d-gates-manifest.test.sh. This is the pre-commit manifest gate
+# input for wrapper-owned staging (dispatch-hetero edit-only capture).
 NAME_ONLY=""
+if [ "$STAGED" -eq 1 ]; then
+  NAME_ONLY="$(git -C "$REPO" -c core.quotepath=false diff --cached --name-only)"
+else
 case "$RANGE" in
   *..*)
     git -C "$REPO" rev-parse --verify --quiet "${RANGE%%..*}" >/dev/null \
@@ -328,6 +341,7 @@ case "$RANGE" in
     fi
     ;;
 esac
+fi
 
 # Compute undeclared touches + denylist hits over the ACTUAL touched files.
 undeclared=""

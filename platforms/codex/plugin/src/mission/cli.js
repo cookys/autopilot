@@ -25,6 +25,7 @@
 const fs = require('fs');
 const path = require('path');
 const mission = require('../engine/mission-convergence');
+const repairLadder = require('../engine/repair-ladder');
 const runtime = require('./runtime');
 
 const DEFAULT_NOW = '2026-07-27T00:00:00.000Z';
@@ -439,6 +440,25 @@ function cmdFinalizeAbort(flags) {
   rejectUnknownFlags(flags, new Set(['state', 'out']), 'finalize-abort');
   const state = loadState(requireFlag(flags, 'state'));
   const outPath = requireFlag(flags, 'out');
+
+  // Repair ladder (KR3): refuse finalization outright — and write nothing to
+  // --out — while any claim holds an unreleased repair lock. The reducer
+  // refuses too; this pre-check keeps the CLI's no-write contract explicit.
+  {
+    const locked = repairLadder.anyUnreleasedRepairLock(state);
+    if (locked) {
+      emit({
+        status: 'rejected',
+        code: 'MISSION_REPAIR_REQUIRED',
+        reason: `claim ${locked.claim_id} holds an unreleased repair lock `
+          + `(candidate ${locked.lock.candidate_ref})`,
+        remedy: 'resume the SAME campaign, repair the artifact, rerun the failed '
+          + 'gate; finalize-abort unlocks after a changed-verdict rerun drains the claim',
+        state_hash: mission.stateHash(state),
+      });
+      return 1;
+    }
+  }
 
   // Idempotent success only for reducer-owned canonical ABORTED that is fully
   // drained. A truthy terminal marker alone must not bypass drain provenance.

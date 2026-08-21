@@ -6,6 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const mission = require('../engine/mission-convergence');
+const repairLadder = require('../engine/repair-ladder');
 const {
   missionCampaignIdFor,
   missionSubjectDigest,
@@ -917,6 +918,21 @@ function prepareMissionRuntimeSuccessor(input = {}) {
       'MISSION_SUCCESSOR_INHERIT_DISABLED',
       'successor source does not permit durable usage inheritance',
     );
+  }
+  // Repair ladder (KR3): defense-in-depth — abort finalization already refuses
+  // while a repair lock is unreleased, so a terminal predecessor should never
+  // carry one; if another path produced such a state, the successor is the
+  // P6D workflow expansion and must refuse the same way.
+  {
+    const locked = repairLadder.anyUnreleasedRepairLock(predecessorState);
+    if (locked) {
+      fail(
+        'MISSION_REPAIR_REQUIRED',
+        `predecessor claim ${locked.claim_id} holds an unreleased repair lock `
+        + `(candidate ${locked.lock.candidate_ref}); repair and rerun the failed `
+        + 'gate in the SAME campaign before any successor',
+      );
+    }
   }
   const generation = input.generation;
   if (!Number.isSafeInteger(generation) || generation < 1) {

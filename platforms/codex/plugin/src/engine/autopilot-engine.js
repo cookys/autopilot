@@ -58,6 +58,7 @@ const {
   campaignIdFor,
   repairLineageCleanupId,
 } = require('./implementation-campaign');
+const repairLadder = require('./repair-ladder');
 const {
   missionCampaignIdFor,
   missionSubjectDigest,
@@ -2661,6 +2662,41 @@ class AutopilotEngine {
     };
   }
 
+  // Best-effort claim-bound lock write so Mission-side backstops (successor /
+  // finalize-abort / drain) refuse independently even if this process dies.
+  // Lock write failure never masks the refusal itself.
+  persistMissionRepairLock({ campaignControl, boundary, cwd }) {
+    try {
+      const claim = campaignControl && campaignControl.mission_claim;
+      const store = this.missionCampaignStore;
+      if (!claim || !store
+          || typeof store.load !== 'function' || typeof store.save !== 'function') {
+        return false;
+      }
+      const state = store.load();
+      if (!state || !state.claims || !state.claims[claim.claim_id]) return false;
+      const existing = state.claims[claim.claim_id];
+      if (existing.repair_lock) return true;
+      const next = {
+        ...state,
+        claims: {
+          ...state.claims,
+          [claim.claim_id]: {
+            ...existing,
+            repair_lock: repairLadder.buildRepairLock({
+              boundary,
+              iccCampaignId: campaignControl.campaign_id || null,
+              lockedAt: this.now(),
+            }),
+          },
+        },
+      };
+      return store.save(state, next) === true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   terminalizeManagedCampaignFailure({
     campaignControl,
     reason,
@@ -2679,6 +2715,30 @@ class AutopilotEngine {
       || state.phase !== CAMPAIGN_STATES.PREPARED
       || state.live_lease !== null;
     if (!possiblyEffectful) return { status: 'no_effect' };
+    // Repair ladder (KR3, plan R2' 2026-08-21): a campaign ADMITTED in
+    // BOUNDARY_REJECTED with a preserved candidate is repairable; converting it
+    // to a terminal without a repair attempt is the P6D failure class. First
+    // observations are untouched (a fresh run that fails arrives here with
+    // initial_state.phase != BOUNDARY_REJECTED). Controller-supplied reasons
+    // never bypass; engine-derived terminal evidence may (closed enum).
+    const ladderBoundary = repairLadder.extractBoundaryEvidence(state);
+    if (ladderBoundary) {
+      const ladder = repairLadder.evaluateRepairLadder({
+        boundary: ladderBoundary,
+        rerun: campaignControl.repair_rerun || null,
+        terminalEvidence: campaignControl.engine_terminal_evidence || null,
+        context: 'campaign failure terminalization',
+      });
+      if (!ladder.ok) {
+        this.persistMissionRepairLock({ campaignControl, boundary: ladderBoundary, cwd });
+        return {
+          status: 'rejected',
+          code: ladder.code,
+          reason: ladder.reason,
+          remedy: ladder.remedy,
+        };
+      }
+    }
     const terminalAt = observedAt || this.now();
     const terminalReason = typeof reason === 'string' && reason.trim().length > 0
       ? reason

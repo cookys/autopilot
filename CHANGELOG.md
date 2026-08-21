@@ -1,5 +1,38 @@
 # Changelog
 
+## v2.34.32 — P6D 矯正:repair ladder 出貨、manifest 閘提前到 staging 點
+
+**Headline**: P6D 事故(2026-08-21)的機械矯正,經兩代 hetero review(G1 3×STOP 24 blockers
+→ G2 terminal 17 findings)三連縮小後的終形:**三閘變一閘半** —— (c) repair ladder 全出貨、
+(b) manifest 閘以「重用比對器 + wrapper staging 點」出貨、(a) contract-first 閘連 shadow 都
+不出(述詞被三席否證,BACKLOG 留殘餘觸發)。
+
+### Added
+- `src/engine/repair-ladder.js` — 單一述詞:boundary-rejected 候選在「同閘重跑且 verdict
+  變更(ready/follow_up)或 named extras 嚴格縮減且綁 prior failure hash」前,不得工作流
+  擴張;bypass 僅限 engine-derived 終局(closed enum:wall_budget/deadline/timeout/
+  unavailable/interrupted),controller 文字永不 bypass。無 boundary = no-op。
+- `terminalizeManagedCampaignFailure` 首擊守衛:BOUNDARY_REJECTED 進場的 campaign 不得無修
+  復轉終局;拒絕時 best-effort 將 claim-bound repair lock CAS 寫入 Mission state(hash 投影
+  **條件式**攜帶 —— 無鎖狀態 hash 逐位元組不變)。
+- Mission 四後盾:receipt drain(鎖住的 claim 只准 changed-verdict 排水,同時解鎖)、
+  abort_finalized reducer、`finalize-abort` CLI(exit 1 且不寫 --out)、successor 準備。
+- `check-disjointness.sh --staged` — 同一 matcher 讀 staged index;`dispatch-hetero.sh`
+  edit-only 捕獲路徑在 `git add -A` 與 capture commit 之間執行 staged precheck:越界 →
+  boundary_rejected、**commit 不創建**、worktree 保留 staged 供就地修復。自 commit 引擎
+  維持 post-commit 閘為權威後盾。
+- 測試:`p6d-gates-repair-ladder.test.sh`(19 node + 5 shell;M1/M2/M3 突變全紅)、
+  `p6d-gates-manifest.test.sh`(12;六案等價 corpus staged≡post-commit + 真 dispatch-hetero
+  in-situ 攔截;dead-gate 突變 8 紅)。
+- 設計諮詢:sol via dispatch-explore(Option D;用 repo 事實駁倒 campaign-intake 案 ——
+  campaign durable root 是 campaign-v1 鍵,successor 換 ticket 找不到被拒 root)。
+  prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本遺留(dev-flow
+  713→717 = v2.34.23;harness-maintenance 58→59 = v2.34.28),justification 見各該版節。
+
+### Changed
+- `docs/BACKLOG.md` — P6D 條目誠實更新:2/3 classes shipped;class (a) 留殘餘觸發
+  (有效述詞存在前 KR1 不得出貨,含 shadow)。
+
 ## v2.34.31 — plan-review PANEL 層可觀測性:哪席在飛、deadline 剩多少,一條指令
 
 **Headline**: v2.34.21 讓席位可觀測,但 PANEL 層仍是黑箱——循序三席 20m/席,驅動端到最後

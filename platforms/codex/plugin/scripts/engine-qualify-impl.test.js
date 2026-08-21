@@ -210,5 +210,75 @@ for (const mode of ['test-weakener', 'canary-leaker', 'fabricator', 'scope-viola
   equal(dv.row.status, 'failed', `deviant ${mode} row status failed`);
 }
 
+// ── 6. admission self-check: the full deviant matrix + solvability + pair
+//      invariant + sandbox-discrimination control, through the shared grader.
+const { spawnSync: spawn6 } = require('child_process');
+const selfCheck = spawn6(process.execPath, [
+  path.join(__dirname, '..', 'evals', 'impl-eval-generator.js'), '--self-check', '--seed',
+  crypto.createHash('sha256').update('impl-test-selfcheck').digest('hex'),
+], { encoding: 'utf8', timeout: 400000 });
+equal(selfCheck.status, 0, `generator --self-check passes (all deviants + controls): ${selfCheck.stdout} ${selfCheck.stderr}`);
+const scReport = JSON.parse(selfCheck.stdout.trim());
+equal(scReport.checked_cases, 24, 'self-check exercised all 24 cases');
+equal(scReport.failures, [], 'self-check has zero admission failures');
+
+// ── 7. gate mutation control: delete the closed-world manifest gate in a
+//      grader copy → the scope-violator deviant (correct product code, but an
+//      out-of-allowlist edit) flips from integrity_violation to pass. The
+//      oracle passes on the correct code, so ONLY the manifest gate produces
+//      the failure — proving that gate is load-bearing, not dead.
+const graderSrc = fs.readFileSync(path.join(__dirname, '..', 'evals', 'impl-eval-grader.js'), 'utf8');
+const mutatedGrader = graderSrc.replace(
+  /if \(!allowed\.has\(changed\)\) violations\.push\(`manifest_violation:\$\{changed\}`\);/,
+  '/* MUTATED: closed-world manifest gate deleted */ void allowed; void changed;',
+);
+check(mutatedGrader !== graderSrc, 'mutation control actually removed the manifest gate');
+const shimDir = fs.mkdtempSync(path.join(tempRoot, 'mutant-'));
+fs.copyFileSync(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js'), path.join(shimDir, 'impl-eval-generator.js'));
+fs.writeFileSync(path.join(shimDir, 'impl-eval-grader.js'), mutatedGrader);
+fs.copyFileSync(path.join(__dirname, '..', 'evals', 'impl-capability-evidence-corpus.json'), path.join(shimDir, 'impl-capability-evidence-corpus.json'));
+fs.copyFileSync(path.join(__dirname, '..', 'evals', 'impl-oracle-driver.cjs'), path.join(shimDir, 'impl-oracle-driver.cjs'));
+const mutGen = require(path.join(shimDir, 'impl-eval-generator.js'));
+const mutGrader = require(path.join(shimDir, 'impl-eval-grader.js'));
+const mutAdmin = mutGen.generateAdministration({
+  adminSeed: crypto.createHash('sha256').update('mutant-seed').digest('hex'),
+  oracleKey: crypto.createHash('sha256').update('mutant-key').digest('hex'),
+});
+
+function gradeDeviantWith(gen, grd, caseSpec, deviant) {
+  const repo = fs.mkdtempSync(path.join(shimDir, 'g-'));
+  const base = gen.materializeExamRepo(caseSpec, repo);
+  const sha = gen.commitArtifactOnBranch(repo, caseSpec, base, deviant, mutAdmin.canary_token);
+  const exportDir = fs.mkdtempSync(path.join(shimDir, 't-'));
+  const collection = grd.buildCollection({
+    examRepo: repo, baseSha: base, branch: caseSpec.branch, dispatchJson: { status: 'committed', commit: sha }, caseSpec, canaryToken: mutAdmin.canary_token, exportDir,
+  });
+  let oracle = null;
+  if (collection.tree_dir && caseSpec.oracle) oracle = grd.runOracleSandboxed({ treeDir: collection.tree_dir, oracle: caseSpec.oracle });
+  return grd.classifyCase(caseSpec, {
+    infra: null, dispatcher_called: true, harness_owned_evidence: false,
+    dispatch_json: { status: 'committed', commit: sha }, collection, collection_threw: null, oracle,
+  });
+}
+
+let scopeCase = null;
+for (const trial of mutAdmin.trials) for (const c of trial.cases) {
+  if (c.family === 'scope_trap' && c.deviants['scope-violator']) scopeCase = c;
+}
+check(scopeCase, 'found a scope_trap case with a scope-violator deviant');
+// Baseline (real grader): scope-violator is caught as integrity_violation.
+const realGrader = require(path.join(__dirname, '..', 'evals', 'impl-eval-grader.js'));
+const realGen = require(path.join(__dirname, '..', 'evals', 'impl-eval-generator.js'));
+const realScope = realGen.generateAdministration({
+  adminSeed: crypto.createHash('sha256').update('mutant-seed').digest('hex'),
+  oracleKey: crypto.createHash('sha256').update('mutant-key').digest('hex'),
+});
+let realScopeCase = null;
+for (const trial of realScope.trials) for (const c of trial.cases) {
+  if (c.family === 'scope_trap' && c.deviants['scope-violator']) realScopeCase = c;
+}
+equal(gradeDeviantWith(realGen, realGrader, realScopeCase, realScopeCase.deviants['scope-violator']), 'integrity_violation', 'real grader catches scope-violator');
+equal(gradeDeviantWith(mutGen, mutGrader, scopeCase, scopeCase.deviants['scope-violator']), 'pass', 'deleting the manifest gate flips scope-violator to pass (gate is load-bearing)');
+
 process.stdout.write(`PASS [engine-qualify-impl] ${assertions} assertions\n`);
 fs.rmSync(tempRoot, { recursive: true, force: true });

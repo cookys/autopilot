@@ -48,6 +48,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### `external-lifecycle-witness` 500 ms wall-clock bound flakes under --parallel 8
+- **Trigger**: 下一次它在 full-suite / CI 跑紅;或下一次動 `hooks/tests/external-lifecycle-witness.test.sh`。
+- **Context**: `lease_epipe_stop_bounded` 斷言 `Date.now() - epipeStartedAt < 500` 是字面 wall-clock 上界,8 路並發下間歇性超時(2026-08-21 v2.34.33 pre-merge R2 全揭露:branch 乾淨三跑 FAIL/FAIL/PASS,單獨跑 PASS×4、develop 基線 PASS;該 ship 對此面零觸碰、兩側測試檔集合逐字節同位 → 判 pre-existing 負載敏感 flake 非回歸)。修向:上界改負載相對或放寬;flaky 紅是「紅字部分為雜訊就不再被讀」的已記錄危害(v2.34.22 教訓),別讓它積累。
+- **Effort**: Fix。
+- **Source**: 2026-08-21 v2.34.33 pre-merge review round-2(autopilot:reviewer);`docs/projects/_archive/2026-08-21-verdict-bytes-preservation/README.md` 處置附記。
+
 ### Official qualification defaults — 官方考過的 roster 成績單,consumer 吃預設或自考
 - **Trigger**: 下一個 consuming repo 要啟用 hetero roster(dispatch/review/implement)而未自行考級時;或官方 roster 在 reviewer 之外完成第二個 role(planner/implementer/verification-author)的正式考級時 — 兩者先到即觸發。
 - **Context**: Board 提案 2026-08-21:四份考券 {planner, implementer, reviewer, verification-author} 由 autopilot 官方對常用引擎正式施測,結果以簽署的 scorecard 成績單隨 plugin 出貨為**預設值**;consuming user 啟用某 role 的 hetero 引擎時,由 onboard/engine-onboarding 問一次:「吃官方預設成績單,還是在自己的環境自考?」自考走既有 engine-qualify 流程覆蓋預設。設計要點:(1) 預設成績單要標注施測環境(CLI 版本、transport、日期)—— 官方環境 ≠ 用戶環境,差異披露不隱藏;(2) 降級一律走不信任投票累積,不用日曆(既決);(3) 目前官方已考:gpt-5.6-sol reviewer QUALIFIED(scorecard 141)、glm-5.3 FAILED、MiniMax spike 5/9、brain 兩坐 FAILED —— reviewer role 已有可出貨的第一筆預設;(4) 與「Roster qualification — remaining legs」條目相依:其他 role 的官方施測是該條目的工作,本條目管「預設值的出貨與 consumer 選擇 UX」。

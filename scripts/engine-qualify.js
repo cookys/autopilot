@@ -51,6 +51,8 @@ const {
   InfraError: VaInfraError,
   gradeAdministration: gradeVaAdministration,
 } = require('../evals/va-eval-grader');
+const implGenerator = require('../evals/impl-eval-generator');
+const implGrader = require('../evals/impl-eval-grader');
 const {
   expandTilde,
 } = require('./lib/jsonl-store');
@@ -95,6 +97,10 @@ const VA_CORPUS_PATH = path.join(
   'evals',
   'va-capability-evidence-corpus.json',
 );
+const EXPECTED_IMPL_GENERATOR_HASH = '16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a';
+const EXPECTED_IMPL_GRADER_HASH = 'dd57fc34a24b7e3dd1079f2e34b1c03984b37a01f5e699ef295eab42125aee78';
+const EXPECTED_IMPL_CORPUS_HASH = 'd8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a';
+const EXPECTED_IMPL_DRIVER_HASH = 'f9ac479113ca73021276518c417529c8290bad2c85f6ca5278d22256572b7316';
 const EXPECTED_VA_GENERATOR_HASH = 'c37cd9fced8d4da2a1eb06cf5ea220dbf7b0aa02f89c8c5ff1de86c0f39c6a35';
 const EXPECTED_VA_GRADER_HASH = 'dedaea5cf11072b2e6f40490c3e02ec88e80ba756d44c2e5d1ca5891337128a3';
 const EXPECTED_VA_CORPUS_HASH = '85ede154ce11f89ceca3af3c9f895c9fa94e7bc0a84ffd8dc0da391535ccd9b8';
@@ -252,7 +258,7 @@ function positiveInteger(value, label, minimum = 1) {
 function parseArgs(argv) {
   if (argv.length === 0) usage(2);
   if (['-h', '--help', 'help'].includes(argv[0])) usage(0);
-  if (!['reviewer', 'owner', 'brain', 'verification_author'].includes(argv[0])) {
+  if (!['reviewer', 'owner', 'brain', 'verification_author', 'implementer'].includes(argv[0])) {
     usage(2, `unknown subcommand: ${argv[0]}`);
   }
   const options = {
@@ -290,6 +296,10 @@ function parseArgs(argv) {
     ['--expires-days', 'expiresDays'],
     ['--store', 'store'],
     ['--version-source', 'versionSource'],
+    // implementer live-rail only (plan 2026-08-22): no broker transport.
+    ['--dispatch-bin', 'dispatchBin'],
+    ['--runner-bin', 'runnerBin'],
+    ['--dispatch-timeout', 'dispatchTimeout'],
   ]);
   const repeated = new Map([
     ['--task-class', 'taskClasses'],
@@ -380,8 +390,44 @@ function parseArgs(argv) {
   }
   options.trials = positiveInteger(options.trials, '--trials', 2);
   options.expiresDays = positiveInteger(options.expiresDays, '--expires-days');
-  if (options.expiresDays > 30) {
-    usage(2, `${options.role} --expires-days cannot exceed 30`);
+  // TTL cap stays at the flat 30 for every existing role (behavior-preserving,
+  // G1-F9/G2-F19). Only the implementer live-rail exam claims its schema
+  // ceiling (90); VA/brain/reviewer/owner are untouched — no undefined-key uncap.
+  const IMPL_EXPIRES_CAP = 90;
+  const expiresCap = options.role === 'implementer' ? IMPL_EXPIRES_CAP : 30;
+  if (options.expiresDays > expiresCap) {
+    usage(2, `${options.role} --expires-days cannot exceed ${expiresCap}`);
+  }
+  if (options.role === 'implementer') {
+    // Live-rail transport: no broker XOR. Reject broker-only flags outright so
+    // a mis-invocation fails loud instead of being silently ignored.
+    for (const [flag, value] of [
+      ['--panel-cmd', options.panelCmd],
+      ['--remote-provider-cmd', options.remoteProviderCmd],
+      ['--remote-provider', options.remoteProvider],
+    ]) {
+      if (value !== undefined) usage(2, `implementer does not use ${flag} (live-rail dispatch only)`);
+    }
+    if (options.panelReadOnlyBinds.length > 0 || options.panelEnvironment.length > 0
+        || options.providerEnvironment.length > 0 || options.remoteTimeoutMs !== undefined) {
+      usage(2, 'implementer does not use broker panel/provider transport options');
+    }
+    options.dispatchBin = options.dispatchBin
+      || path.join(__dirname, 'dispatch-hetero.sh');
+    if (options.dispatchTimeout !== undefined) {
+      options.dispatchTimeout = token(options.dispatchTimeout, '--dispatch-timeout');
+    }
+    if (options.runnerBin !== undefined) {
+      options.runnerBin = String(options.runnerBin);
+      if (!path.isAbsolute(options.runnerBin) && options.runnerBin.includes('/')) {
+        options.runnerBin = path.resolve(options.runnerBin);
+      }
+    }
+    return options;
+  }
+  if (options.dispatchBin !== undefined || options.runnerBin !== undefined
+      || options.dispatchTimeout !== undefined) {
+    usage(2, '--dispatch-bin/--runner-bin/--dispatch-timeout are implementer-only');
   }
   const localTransport = Boolean(options.panelCmd);
   const remoteTransport = Boolean(options.remoteProviderCmd || options.remoteProvider);
@@ -2674,10 +2720,468 @@ function runBrainQualification(options) {
   });
 }
 
+const IMPL_GENERATOR_PATH = path.join(REPO_ROOT, 'evals', 'impl-eval-generator.js');
+const IMPL_GRADER_PATH = path.join(REPO_ROOT, 'evals', 'impl-eval-grader.js');
+const IMPL_CORPUS_PATH = path.join(REPO_ROOT, 'evals', 'impl-capability-evidence-corpus.json');
+const IMPL_DRIVER_PATH = path.join(REPO_ROOT, 'evals', 'impl-oracle-driver.cjs');
+
+function verifyPinnedImplEvaluationAssets() {
+  const pins = [
+    [IMPL_GENERATOR_PATH, EXPECTED_IMPL_GENERATOR_HASH, 'generator'],
+    [IMPL_GRADER_PATH, EXPECTED_IMPL_GRADER_HASH, 'grader'],
+    [IMPL_CORPUS_PATH, EXPECTED_IMPL_CORPUS_HASH, 'corpus'],
+    [IMPL_DRIVER_PATH, EXPECTED_IMPL_DRIVER_HASH, 'driver'],
+  ];
+  const result = {};
+  for (const [assetPath, expected, key] of pins) {
+    const actual = byteHash(fs.readFileSync(assetPath));
+    if (actual !== expected) {
+      throw new Error(`impl evaluation ${key} drifted from its pinned hash`);
+    }
+    result[`${key}_hash`] = actual;
+  }
+  return result;
+}
+
+// Maps a runner name to dispatch-hetero's per-runner binary override flag, so a
+// live-rail smoke can substitute ONLY the paid engine (--runner-bin) while the
+// real rail argv/status/worktree/classify path runs unchanged.
+function implRunnerBinFlag(runner) {
+  switch (runner) {
+    case 'grok': return '--grok-bin';
+    case 'codex': return '--codex-bin';
+    case 'agy': return '--agy-bin';
+    case 'pi': return '--pi-bin';
+    case 'qoderclicn': return '--qoder-bin';
+    default: return null;
+  }
+}
+
+// runImplQualification — live-rail implementer exam (plan 2026-08-22, R2
+// FROZEN). Deliberately does NOT use the case broker: candidate code runs in
+// its own dispatch-hetero worktree; the host only reads git artifacts and runs
+// the frozen oracle over an exported tree in bwrap. Two derivation roots
+// (public adminSeed vs held-out oracleKey) and a budget allocator + append-only
+// attempt ledger are established BEFORE any dispatch.
+function runImplQualification(options) {
+  const staticAssets = verifyPinnedImplEvaluationAssets();
+  const preflight = implGrader.oraclePreflight();
+  if (!preflight.ok) {
+    throw new Error(`oracle preflight failed: ${preflight.problems.join(',')}`);
+  }
+  const CORPUS = implGrader.CORPUS;
+  const started = Date.now();
+  const issuedAt = timestamp();
+  const runNonce = process.env.AUTOPILOT_QUALIFY_SEED
+    ? byteHash(`impl-seed:${process.env.AUTOPILOT_QUALIFY_SEED}`)
+    : crypto.randomBytes(32).toString('hex');
+  // Two roots (G2-F4): the admin seed drives every candidate-visible byte; the
+  // oracle key (a distinct high-entropy derivation) drives held-out vectors
+  // only. The key never enters argv/env/git during dispatch; its commitment is
+  // persisted here and the key itself is disclosed only into the returned
+  // record for post-hoc reproduction.
+  const adminSeed = byteHash(`impl-admin:${runNonce}:${staticAssets.generator_hash}`);
+  const oracleKey = byteHash(`impl-oracle-key:${runNonce}:${staticAssets.corpus_hash}`);
+  const dispatchTimeout = options.dispatchTimeout
+    || `${CORPUS.budget.dispatch_timeout_seconds}s`;
+
+  const administration = implGenerator.generateAdministration({ adminSeed, oracleKey });
+
+  const budget = {
+    dispatch_reservation: CORPUS.budget.dispatch_reservation,
+    spent: 0,
+    wall_deadline: started + CORPUS.budget.administration_wall_seconds * 1000,
+    engine_unavailable_seen: 0,
+  };
+  const ledger = [];
+  const rawExchanges = [];
+
+  const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-qualify-live-'));
+  let administrationOutcome = 'completed';
+  const trialResults = [];
+  try {
+    for (const trial of administration.trials) {
+      const cases = [];
+      for (const caseSpec of trial.cases) {
+        if (budget.spent >= budget.dispatch_reservation) {
+          administrationOutcome = 'insufficient_budget';
+          break;
+        }
+        if (Date.now() >= budget.wall_deadline) {
+          // Wall exhaustion is COMPLETED with started cases already labeled
+          // (G2-F3/F13): remaining unstarted cases are simply absent, never a
+          // no-verdict abort. Fail-closed: an unrun capability case cannot pass.
+          administrationOutcome = 'completed';
+          break;
+        }
+        const observation = runImplCase({
+          caseSpec, options, dispatchTimeout, workRoot,
+          canaryToken: administration.canary_token, budget, ledger, rawExchanges,
+        });
+        if (observation.administration_abort) {
+          administrationOutcome = observation.administration_abort;
+          cases.push({ family: caseSpec.family, case_id: caseSpec.case_id, outcome: observation.outcome });
+          break;
+        }
+        cases.push({ family: caseSpec.family, case_id: caseSpec.case_id, outcome: observation.outcome });
+      }
+      trialResults.push({ trial_id: `trial-${trial.trial_id}`, cases });
+      if (administrationOutcome !== 'completed') break;
+    }
+  } finally {
+    fs.rmSync(workRoot, { recursive: true, force: true });
+  }
+
+  const baseVerdict = {
+    engine: options.engine,
+    model: options.model,
+    runner: options.runner,
+    role: 'implementer',
+  };
+  const oracleMeta = {
+    methodology_version: `${CORPUS.corpus_version}.${implGenerator.GENERATOR_VERSION}`,
+    corpus_manifest_hash: staticAssets.corpus_hash,
+    generator_hash: staticAssets.generator_hash,
+    driver_hash: staticAssets.driver_hash,
+    transport: 'live-rail',
+  };
+
+  if (administrationOutcome !== 'completed') {
+    // No-verdict administration outcome: no evidence, no scorecard row.
+    return deepFreeze({
+      schema_version: 1,
+      run_nonce: runNonce,
+      oracle: oracleMeta,
+      qualified: false,
+      evidence: null,
+      row: { status: 'no_verdict', administration_outcome: administrationOutcome, evidence: null },
+      verdict: {
+        ...baseVerdict,
+        administration_outcome: administrationOutcome,
+        reason: `administration ended ${administrationOutcome} — no verdict`,
+        oracle_key: oracleKey,
+        dispatch_ledger: ledger,
+      },
+    });
+  }
+
+  const folded = implGrader.foldAdministration(trialResults);
+  const state = folded.qualified ? 'qualified' : 'degraded';
+  const scope = {
+    task_classes: options.taskClasses,
+    domains: options.domains,
+    languages: options.languages,
+    tool_surface: options.tools,
+  };
+  const identity = {
+    identity: options.model,
+    model_alias: options.engine,
+    model_version: options.modelVersion,
+    family: options.family,
+    runner: options.runner,
+    runner_version: options.runnerVersion,
+    harness_version: options.harnessVersion,
+    effort: options.effort,
+    prompt_config_hash: options.promptConfigHash,
+    semantic_fingerprint: options.semanticFingerprint,
+    containment_fingerprint: options.containmentFingerprint,
+    identity_resolved: true,
+  };
+  const trials = trialResults.map((trial) => {
+    const count = (outcome) => trial.cases.filter((c) => c.outcome === outcome).length;
+    const lines = {};
+    for (const c of trial.cases) {
+      const line = lines[c.family] || { cases: 0, passes: 0 };
+      line.cases += 1;
+      if (c.outcome === 'pass') line.passes += 1;
+      lines[c.family] = line;
+    }
+    return {
+      trial_id: trial.trial_id,
+      observed_at: issuedAt,
+      corpus_manifest_hash: staticAssets.corpus_hash,
+      cases_total: trial.cases.length,
+      cases_passed: count('pass'),
+      integrity_violations: count('integrity_violation'),
+      fabricated_changes: count('fabricated_change'),
+      contract_violations: count('contract_violation'),
+      oracle_misses: count('oracle_miss'),
+      family_lines_hash: byteHash(implGenerator.canonicalJson(lines)),
+      dispatch_ledger_hash: byteHash(implGenerator.canonicalJson(
+        ledger.filter((row) => row.trial_id === trial.trial_id),
+      )),
+    };
+  });
+  const expiresAt = new Date(
+    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
+  ).toISOString();
+  const methodology = {
+    kind: 'impl_dispatch',
+    name: 'impl-live-rail',
+    version: '1.0.0',
+    corpus_version: `${CORPUS.corpus_version}.${implGenerator.GENERATOR_VERSION}`,
+    corpus_manifest_hash: staticAssets.corpus_hash,
+    thresholds: {
+      min_trials: CORPUS.thresholds.min_trials,
+      max_integrity_violations: CORPUS.thresholds.max_integrity_violations,
+      max_fabricated_changes: CORPUS.thresholds.max_fabricated_changes,
+      max_contract_violations: CORPUS.thresholds.max_contract_violations,
+      max_oracle_misses: CORPUS.thresholds.max_oracle_misses,
+    },
+    basis: null,
+  };
+  const evidence = compileCapabilityEvidence({
+    schema_version: 1,
+    source: 'internal_eval',
+    source_ref: 'engine-qualify:implementer-v1',
+    state,
+    role: 'implementer',
+    scope,
+    identity,
+    issued_at: issuedAt,
+    observed_at: issuedAt,
+    expires_at: expiresAt,
+    methodology,
+    trials,
+    revocation: null,
+    supersedes: null,
+  });
+  const storeConfig = resolveEvidenceStore(options.store);
+  let evidenceStoreRecord;
+  try {
+    evidenceStoreRecord = appendQualifierEvidence(storeConfig, evidence);
+  } catch (error) {
+    throw new Error(`cannot persist qualifier evidence: ${error.message}`);
+  }
+
+  if (options.rawDir) {
+    fs.mkdirSync(options.rawDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(options.rawDir, 'impl-dispatch-ledger.jsonl'),
+      `${ledger.map((row) => JSON.stringify(row)).join('\n')}\n`,
+    );
+    fs.writeFileSync(
+      path.join(options.rawDir, 'impl-exchanges.jsonl'),
+      `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+    );
+    fs.writeFileSync(
+      path.join(options.rawDir, 'impl-seed-envelope.json'),
+      `${JSON.stringify({
+        run_nonce: runNonce,
+        admin_seed: adminSeed,
+        oracle_key: oracleKey,
+        oracle_key_commitment: administration.oracle_key_commitment,
+        generator_hash: staticAssets.generator_hash,
+        corpus_hash: staticAssets.corpus_hash,
+        driver_hash: staticAssets.driver_hash,
+      }, null, 2)}\n`,
+    );
+  }
+
+  const qualified = folded.qualified;
+  const row = {
+    engine: options.engine,
+    model: options.model,
+    runner: options.runner,
+    family: options.family,
+    role: 'implementer',
+    model_version: options.modelVersion,
+    version_source: options.versionSource,
+    corpus_version: methodology.corpus_version,
+    harness_version: options.harnessVersion,
+    runner_version: options.runnerVersion,
+    prompt_config_hash: options.promptConfigHash,
+    effort: options.effort,
+    date: issuedAt.slice(0, 10),
+    quality: {
+      corpus_pass: folded.corpus_pass,
+      false_pass_critical: folded.counts.integrity_violations
+        + folded.counts.fabricated_changes,
+      integrity_violations: folded.counts.integrity_violations,
+      fabricated_changes: folded.counts.fabricated_changes,
+      contract_violations: folded.counts.contract_violations,
+      oracle_misses: folded.counts.oracle_misses,
+      repeated_trials: options.trials,
+    },
+    capability_score: folded.total === 0 ? 0 : folded.passed / folded.total,
+    cost: {
+      source: 'unknown',
+      usd_per_mtok_input: 0,
+      usd_per_mtok_output: 0,
+      sample_tokens: 0,
+    },
+    latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
+    status: qualified ? 'qualified' : 'failed',
+    qualified_at: issuedAt.slice(0, 10),
+    expires: expiresAt.slice(0, 10),
+    evidence_store: {
+      event_id: evidenceStoreRecord.event_id,
+      producer: evidenceStoreRecord.producer,
+      transcript_hash: evidenceStoreRecord.transcript_hash,
+    },
+    evidence,
+  };
+  const failures = [];
+  for (const trial of trialResults) {
+    for (const c of trial.cases) {
+      if (c.outcome !== 'pass') failures.push(`${trial.trial_id}: ${c.case_id} ${c.outcome}`);
+    }
+  }
+  const verdict = {
+    ...baseVerdict,
+    administration_outcome: 'completed',
+    corpus_pass: folded.corpus_pass,
+    qualified,
+    evidence_id: evidence.evidence_id,
+    evidence_state: evidence.state,
+    scope_hash: evidence.scope_hash,
+    identity_hash: evidence.identity_hash,
+    trial_set_hash: evidence.trial_set_hash,
+    evidence_store_event_id: evidenceStoreRecord.event_id,
+    evidence_store_transcript_hash: evidenceStoreRecord.transcript_hash,
+    reason: qualified ? 'passed' : failures.join('; '),
+  };
+  return deepFreeze({
+    schema_version: 1,
+    run_nonce: runNonce,
+    oracle: oracleMeta,
+    qualified,
+    evidence,
+    row,
+    verdict,
+  });
+}
+
+// runImplCase — one live-rail case: materialize the exam repo, dispatch, then
+// grade through the SHARED collection+grading module. Records an append-only
+// ledger row (G2-F9). Returns { outcome, administration_abort? }.
+function runImplCase(context) {
+  const {
+    caseSpec, options, dispatchTimeout, workRoot, canaryToken, budget, ledger, rawExchanges,
+  } = context;
+  const repoDir = fs.mkdtempSync(path.join(workRoot, `impl-live-${caseSpec.case_id}-`));
+  const ledgerRow = {
+    trial_id: `trial-${caseSpec.trial}`,
+    case_id: caseSpec.case_id,
+    family: caseSpec.family,
+    dispatcher_called: false,
+    dispatch_status: null,
+    scored_sha: null,
+    outcome: null,
+  };
+  let observation = { infra: null, dispatcher_called: false };
+  try {
+    const baseSha = implGenerator.materializeExamRepo(caseSpec, repoDir);
+    const promptDir = path.join(repoDir, '.impl-exam');
+    fs.mkdirSync(promptDir, { recursive: true });
+    const promptPath = path.join(promptDir, `prompt-${caseSpec.case_id}.txt`);
+    fs.writeFileSync(promptPath, caseSpec.prompt_text);
+
+    const argv = [
+      options.dispatchBin,
+      '--branch', caseSpec.branch,
+      '--prompt-file', promptPath,
+      '--runner', options.runner,
+      '--model', options.model,
+      '--effort', options.effort,
+      '--base', 'HEAD',
+      '--timeout', dispatchTimeout,
+      '--scaffold-tier', 'off',
+    ];
+    if (options.runnerBin) {
+      const flag = implRunnerBinFlag(options.runner);
+      if (flag) argv.push(flag, options.runnerBin);
+    }
+    // Constructed allowlist env — NOT inherited-minus-N (G1-F3). The canary is
+    // the sole intentional secret; session/mission markers never enter.
+    const env = {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      DISPATCH_QUIET: '1',
+      [implGrader.CORPUS.canary_env_name]: canaryToken,
+    };
+    for (const passthrough of ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'XAI_API_KEY', 'CODEX_HOME', 'GEMINI_API_KEY']) {
+      if (process.env[passthrough] !== undefined) env[passthrough] = process.env[passthrough];
+    }
+    budget.spent += 1;
+    const run = spawnSync('bash', argv, {
+      cwd: repoDir,
+      env,
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+      timeout: (implGrader.CORPUS.budget.dispatch_timeout_seconds + 120) * 1000,
+    });
+    ledgerRow.dispatcher_called = !run.error || run.status !== null;
+    observation.dispatcher_called = ledgerRow.dispatcher_called;
+    let dispatchJson = null;
+    if (run.stdout) {
+      try { dispatchJson = JSON.parse(run.stdout.trim().split('\n').filter(Boolean).pop()); } catch { dispatchJson = null; }
+    }
+    ledgerRow.dispatch_status = dispatchJson ? dispatchJson.status : null;
+    rawExchanges.push({
+      trial_id: ledgerRow.trial_id,
+      case_id: caseSpec.case_id,
+      dispatch_status: ledgerRow.dispatch_status,
+      spawn_error: run.error ? String(run.error.message) : null,
+    });
+    // engine_unavailable administration cap (G2-F9): honest scarcity aborts the
+    // administration (no verdict) rather than scoring a FAIL against the seat.
+    const harnessOwned = Boolean(run.error) || run.status === 2;
+    const collectionResult = gradeLiveCase({ caseSpec, repoDir, baseSha, dispatchJson, canaryToken });
+    ledgerRow.scored_sha = collectionResult.collection && collectionResult.collection.scored_sha;
+    const outcome = implGrader.classifyCase(caseSpec, {
+      infra: null,
+      dispatcher_called: observation.dispatcher_called,
+      harness_owned_evidence: harnessOwned,
+      dispatch_json: dispatchJson,
+      collection: collectionResult.collection,
+      collection_threw: collectionResult.collection_threw,
+      oracle: collectionResult.oracle,
+    });
+    ledgerRow.outcome = outcome;
+    ledger.push(ledgerRow);
+    if (outcome === 'engine_unavailable') {
+      budget.engine_unavailable_seen += 1;
+      if (budget.engine_unavailable_seen >= implGrader.CORPUS.budget.engine_unavailable_cap) {
+        return { outcome, administration_abort: 'infra_abort' };
+      }
+    }
+    return { outcome };
+  } catch (error) {
+    ledgerRow.outcome = 'infra_fail';
+    ledger.push(ledgerRow);
+    return { outcome: 'infra_fail', administration_abort: 'infra_abort' };
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+}
+
+// gradeLiveCase — collection + oracle through the shared module (the SAME code
+// admission uses). Kept tiny: the real logic is in impl-eval-grader.js.
+function gradeLiveCase({ caseSpec, repoDir, baseSha, dispatchJson, canaryToken }) {
+  const exportDir = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-live-tree-'));
+  let collection = null;
+  let collectionThrew = null;
+  try {
+    collection = implGrader.buildCollection({
+      examRepo: repoDir, baseSha, branch: caseSpec.branch, dispatchJson, caseSpec, canaryToken, exportDir,
+    });
+  } catch (error) {
+    collectionThrew = String(error && error.message);
+  }
+  let oracle = null;
+  if (!collectionThrew && collection && collection.tree_dir && caseSpec.oracle) {
+    oracle = implGrader.runOracleSandboxed({ treeDir: collection.tree_dir, oracle: caseSpec.oracle });
+  }
+  fs.rmSync(exportDir, { recursive: true, force: true });
+  return { collection, collection_threw: collectionThrew, oracle };
+}
+
 function runQualification(options) {
   const role = options.role || 'reviewer';
   if (role === 'brain') return runBrainQualification(options);
   if (role === 'verification_author') return runVaQualification(options);
+  if (role === 'implementer') return runImplQualification(options);
   if (!['reviewer', 'owner'].includes(role)) {
     throw new Error(`unsupported qualification role: ${role}`);
   }
@@ -3068,12 +3572,14 @@ module.exports = {
   createSessionRoleCapabilityVerifier,
   ownerRuleViolations,
   runBrainQualification,
+  runImplQualification,
   runQualification,
   runVaQualification,
   sandboxArguments,
   vaSandboxArguments,
   verifyPinnedBrainEvaluationAssets,
   verifyPinnedEvaluationAssets,
+  verifyPinnedImplEvaluationAssets,
   verifyPinnedOwnerEvaluationAssets,
   verifySandboxRuntime,
 };

@@ -58,6 +58,7 @@ const METHODOLOGY_KINDS = new Set([
   'role_eval',
   'owner_brain_seat',
   'va_declared_plan',
+  'impl_dispatch',
   'external_prior',
   'runtime_probe',
   'ordinary_receipt',
@@ -69,7 +70,7 @@ const SOURCE_METHODOLOGY_KINDS = Object.freeze({
   external_prior: new Set(['external_prior']),
   self_report: new Set(['self_report']),
   ordinary_receipt: new Set(['ordinary_receipt']),
-  internal_eval: new Set(['role_eval', 'owner_brain_seat', 'va_declared_plan']),
+  internal_eval: new Set(['role_eval', 'owner_brain_seat', 'va_declared_plan', 'impl_dispatch']),
   runtime_probe: new Set(['runtime_probe']),
 });
 // Board 2026-08-17: brain-seat qualification is STANDING — expires_at stays a
@@ -79,6 +80,10 @@ const BRAIN_METHODOLOGY_KIND = 'owner_brain_seat';
 // Verification-author declared-plan exam (va_declared_plan,
 // plan 2026-08-18-verification-author-suite-v3).
 const VA_METHODOLOGY_KIND = 'va_declared_plan';
+// Implementer live-rail dispatch exam (impl_dispatch,
+// plan 2026-08-22-implementer-qualification-suite). Rides the implementer role;
+// each trial folds live-rail case outcomes into the four zero-tolerance counters.
+const IMPL_METHODOLOGY_KIND = 'impl_dispatch';
 const BRAIN_CONSTRUCT_SCOPE = 'per-round-exam.long-horizon-production-audit';
 const BRAIN_STOP_REASONS = new Set(['completed', 'early_end', 'malformed', 'insufficient_budget']);
 
@@ -329,6 +334,27 @@ function normalizeVaThresholds(raw) {
   };
 }
 
+function normalizeImplThresholds(raw) {
+  const label = 'evidence methodology.thresholds';
+  const value = plainObject(raw, label);
+  const fields = [
+    'min_trials',
+    'max_integrity_violations',
+    'max_fabricated_changes',
+    'max_contract_violations',
+    'max_oracle_misses',
+  ];
+  onlyKeys(value, new Set(fields), label);
+  requiredKeys(value, fields, label);
+  return {
+    min_trials: integer(value.min_trials, `${label}.min_trials`, 2),
+    max_integrity_violations: integer(value.max_integrity_violations, `${label}.max_integrity_violations`),
+    max_fabricated_changes: integer(value.max_fabricated_changes, `${label}.max_fabricated_changes`),
+    max_contract_violations: integer(value.max_contract_violations, `${label}.max_contract_violations`),
+    max_oracle_misses: integer(value.max_oracle_misses, `${label}.max_oracle_misses`),
+  };
+}
+
 function normalizeMethodologyBasis(raw) {
   if (raw === null) return null;
   const value = plainObject(raw, 'evidence methodology.basis');
@@ -398,10 +424,13 @@ function normalizeMethodology(raw) {
         ? normalizeBrainThresholds(value.thresholds)
         : (kind === VA_METHODOLOGY_KIND
           ? normalizeVaThresholds(value.thresholds)
-          : normalizeThresholds(value.thresholds))),
+          : (kind === IMPL_METHODOLOGY_KIND
+            ? normalizeImplThresholds(value.thresholds)
+            : normalizeThresholds(value.thresholds)))),
     basis: normalizeMethodologyBasis(value.basis),
   };
-  if (kind === 'role_eval' || kind === BRAIN_METHODOLOGY_KIND || kind === VA_METHODOLOGY_KIND) {
+  if (kind === 'role_eval' || kind === BRAIN_METHODOLOGY_KIND || kind === VA_METHODOLOGY_KIND
+      || kind === IMPL_METHODOLOGY_KIND) {
     if (methodology.corpus_version === null
         || methodology.corpus_manifest_hash === null
         || methodology.thresholds === null
@@ -579,6 +608,44 @@ function normalizeVaTrial(raw, index, methodology) {
   return trial;
 }
 
+function normalizeImplTrial(raw, index, methodology) {
+  const label = `evidence trials[${index}]`;
+  const value = plainObject(raw, label);
+  const fields = [
+    'trial_id',
+    'observed_at',
+    'corpus_manifest_hash',
+    'cases_total',
+    'cases_passed',
+    'integrity_violations',
+    'fabricated_changes',
+    'contract_violations',
+    'oracle_misses',
+    'family_lines_hash',
+    'dispatch_ledger_hash',
+  ];
+  onlyKeys(value, new Set(fields), label);
+  requiredKeys(value, fields, label);
+  const trial = {
+    trial_id: token(value.trial_id, `${label}.trial_id`),
+    observed_at: timestamp(value.observed_at, `${label}.observed_at`),
+    corpus_manifest_hash: digest(value.corpus_manifest_hash, `${label}.corpus_manifest_hash`),
+    cases_total: integer(value.cases_total, `${label}.cases_total`, 1),
+    cases_passed: integer(value.cases_passed, `${label}.cases_passed`),
+    integrity_violations: integer(value.integrity_violations, `${label}.integrity_violations`),
+    fabricated_changes: integer(value.fabricated_changes, `${label}.fabricated_changes`),
+    contract_violations: integer(value.contract_violations, `${label}.contract_violations`),
+    oracle_misses: integer(value.oracle_misses, `${label}.oracle_misses`),
+    family_lines_hash: digest(value.family_lines_hash, `${label}.family_lines_hash`),
+    dispatch_ledger_hash: digest(value.dispatch_ledger_hash, `${label}.dispatch_ledger_hash`),
+  };
+  if (methodology.corpus_manifest_hash !== null
+      && trial.corpus_manifest_hash !== methodology.corpus_manifest_hash) {
+    evidenceError(`${label} corpus hash differs from the methodology manifest`);
+  }
+  return trial;
+}
+
 function normalizeBrainTrial(raw, index, methodology) {
   const label = `evidence trials[${index}]`;
   const value = plainObject(raw, label);
@@ -649,17 +716,19 @@ function normalizeBrainTrial(raw, index, methodology) {
 function normalizeTrials(raw, methodology) {
   if (!Array.isArray(raw)) evidenceError('evidence trials must be an array');
   if (methodology.kind !== 'role_eval' && methodology.kind !== BRAIN_METHODOLOGY_KIND
-      && methodology.kind !== VA_METHODOLOGY_KIND) {
+      && methodology.kind !== VA_METHODOLOGY_KIND && methodology.kind !== IMPL_METHODOLOGY_KIND) {
     if (raw.length !== 0) {
       evidenceError(`${methodology.kind} methodology cannot carry reviewer eval trials`);
     }
     return [];
   }
-  const trials = raw.map((entry, index) => (methodology.kind === VA_METHODOLOGY_KIND
-    ? normalizeVaTrial(entry, index, methodology)
-    : (methodology.kind === BRAIN_METHODOLOGY_KIND
-      ? normalizeBrainTrial(entry, index, methodology)
-      : normalizeTrial(entry, index, methodology))));
+  const trials = raw.map((entry, index) => (methodology.kind === IMPL_METHODOLOGY_KIND
+    ? normalizeImplTrial(entry, index, methodology)
+    : (methodology.kind === VA_METHODOLOGY_KIND
+      ? normalizeVaTrial(entry, index, methodology)
+      : (methodology.kind === BRAIN_METHODOLOGY_KIND
+        ? normalizeBrainTrial(entry, index, methodology)
+        : normalizeTrial(entry, index, methodology)))));
   const ids = trials.map((trial) => trial.trial_id);
   if (new Set(ids).size !== ids.length) evidenceError('evidence trials must have unique ids');
   return trials.sort((left, right) => left.trial_id.localeCompare(right.trial_id));
@@ -698,9 +767,10 @@ function enforcePromotion(record) {
   }
   if (record.methodology.kind !== 'role_eval'
       && record.methodology.kind !== BRAIN_METHODOLOGY_KIND
-      && record.methodology.kind !== VA_METHODOLOGY_KIND) {
+      && record.methodology.kind !== VA_METHODOLOGY_KIND
+      && record.methodology.kind !== IMPL_METHODOLOGY_KIND) {
     evidenceError(
-      'qualified evidence requires a role_eval, owner_brain_seat, or va_declared_plan methodology',
+      'qualified evidence requires a role_eval, owner_brain_seat, va_declared_plan, or impl_dispatch methodology',
       'EVIDENCE_PROMOTION_DENIED',
     );
   }
@@ -710,6 +780,10 @@ function enforcePromotion(record) {
   }
   if (record.methodology.kind === VA_METHODOLOGY_KIND) {
     enforceVaPromotion(record);
+    return;
+  }
+  if (record.methodology.kind === IMPL_METHODOLOGY_KIND) {
+    enforceImplPromotion(record);
     return;
   }
   const thresholds = record.methodology.thresholds;
@@ -761,6 +835,33 @@ function enforceVaPromotion(record) {
     }
     if (trial.cases_passed !== trial.cases_total) {
       evidenceError('qualified verification-author evidence requires every case to pass', 'EVIDENCE_PROMOTION_DENIED');
+    }
+  }
+}
+
+function enforceImplPromotion(record) {
+  if (record.role !== 'implementer') {
+    evidenceError('impl_dispatch evidence must ride the implementer role', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  const thresholds = record.methodology.thresholds;
+  if (record.trials.length < thresholds.min_trials || record.trials.length < 2) {
+    evidenceError('qualified implementer evidence requires repeated trials', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  for (const trial of record.trials) {
+    if (trial.integrity_violations > thresholds.max_integrity_violations) {
+      evidenceError('implementer integrity floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.fabricated_changes > thresholds.max_fabricated_changes) {
+      evidenceError('implementer fabrication floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.contract_violations > thresholds.max_contract_violations) {
+      evidenceError('implementer contract floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.oracle_misses > thresholds.max_oracle_misses) {
+      evidenceError('implementer oracle floor was not met', 'EVIDENCE_PROMOTION_DENIED');
+    }
+    if (trial.cases_passed !== trial.cases_total) {
+      evidenceError('qualified implementer evidence requires every case to pass', 'EVIDENCE_PROMOTION_DENIED');
     }
   }
 }

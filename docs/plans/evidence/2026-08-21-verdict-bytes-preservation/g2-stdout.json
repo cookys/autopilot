@@ -1,0 +1,347 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "verdict-bytes-preservation",
+  "logical_plan_id": "verdict-bytes-preservation-2026-08-21",
+  "session_id": "8c64189c-a1d8-4a41-8879-c2314e226a8b",
+  "session_key": "80bdc9c6cb5d1e72d4907d2a4a9540272dd2be4bda2fe476fb6edf088c87cba9",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "eb39500a6aaaef2f035f350507897bf98762db2be2b399cf579c4c8b2f384c1c",
+  "manifest_sha256": "bd2e78f8a26e966e0e3c6c499fecd3522e7cc64d026d0cd18039f54a99ecbdb5",
+  "plan_sha256": "354fdd0cf5b6e5038377a5f08d920a0c945790ee0ae9973f35c33fe0ff416196",
+  "growth_ratio": {
+    "numerator": 2591,
+    "denominator": 1733
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_adversarial_soundness",
+      "target_id": "sol_adversarial_soundness",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "791560d8187ec1ee552d69dde83a6bf2c98190d4ba19c4adc6807b88a6a4bace"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "976d1c575a3c538ba85cd253cb3838486efb2a19f1c29335fcd00366f609630c",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-R5aQzf/stdout",
+          "digest": "976d1c575a3c538ba85cd253cb3838486efb2a19f1c29335fcd00366f609630c"
+        },
+        "receipt_digest": "4af0b458a93972b3aac5ca94d964dbb1ab015972fff297d3809261373236a610"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_boundary_redteam",
+      "target_id": "grok_boundary_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "e8301b0bc186ff8bfd6aaa7eda7442cc7844c8c90caf0e8ea138b0cc9034cccb"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "cb17da6862d297e9dd19e17f33f84533158f29fb11ba18809b0cdca5824ff870",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-nhzE6x",
+          "digest": "cb17da6862d297e9dd19e17f33f84533158f29fb11ba18809b0cdca5824ff870"
+        },
+        "receipt_digest": "932de9216a24390573992037021bceffd0a49b86e781d9176308aa7750e371fd"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_adversarial_soundness",
+      "target_id": "sol_adversarial_soundness",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_boundary_redteam",
+      "target_id": "grok_boundary_redteam",
+      "family": "xai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "VB3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2 attempt provenance and salvage admission for timeout, quota, unavailable, and interrupted classifications",
+      "claim": "A matching raw digest plus metadata attached by the current controller does not prove that the bytes were produced by the current attempt or request; a stale or reused capture can therefore become a valid-but-wrong-generation unratified payload.",
+      "evidence": "The plan records attempt, target, family, request digest, and raw digest after parsing, while explicitly rejecting in-band binding. It does not require a controller-created, fresh, exclusive capture path or file handle per attempt. Consequently, bytes left by an earlier attempt can match their own reference digest and then be labeled with the later attempt's request digest. The unique-payload carry rule would preserve that stale payload when the later attempt contributes none.",
+      "evidence_reference": "Section 2, No salvage from contradicted or unbindable evidence; Section 3, KR2 seat-loop provenance and multi-attempt carry rule",
+      "repair": "Require each attempt to use a controller-allocated, newly created exclusive capture object bound to that attempt before dispatch; reject pre-existing, reused, redirected, or out-of-attempt references. Admit unavailable only when the controller proves that the current attempt actually started and wrote the capture. Add a test where attempt one leaves a valid payload and attempt two returns timeout or unavailable while referencing the stale capture; salvage for attempt two must remain null.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "00e12f6a39fd95614f39a1fad166bf5642746689e497b69a28e43b27a8e0dca6"
+    },
+    {
+      "rubric_id": "VB4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Fixture C-complete-timeout and the envelope salvage integration boundary",
+      "claim": "The positive timeout fixture is a constructed normalizer shape rather than evidence from the real timeout and capture pipeline, so it can pass while an actually killed seat still produces no usable raw reference or produces a differently framed capture.",
+      "evidence": "C-incident freezes the real killed-seat result as zero-byte stdout with no raw reference. C-complete-timeout is separately labeled CONSTRUCTED, and the plan does not require launching a helper that writes a complete payload, remains alive, is killed by the actual dispatcher, and then supplies the resulting envelope, reference, digest, and bytes to normalization.",
+      "evidence_reference": "Section 1, destruction point 2; Section 3, KR3 fixtures C-incident and C-complete-timeout",
+      "repair": "Create the positive fixture through the production timeout path using a deterministic helper seat that writes and flushes one complete payload before hanging. Freeze the actual resulting envelope, capture bytes, reference, digest, and provenance before implementing salvage, and require the test to fail if any layer substitutes a synthetic normalizer input.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d34a2871b9a1dd6876c4bebf822e9c36f147aa08669bd58be01f47c5f909ffb6"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2 attempt records, exhausted-seat artifacts, aggregation observations, panel manifests, and their strict readers",
+      "claim": "Compatibility coverage is explicit for the shell review-result contract but not for the several additive KR2 artifact shapes, leaving strict plan-review or panel consumers capable of rejecting the new keys.",
+      "evidence": "KR1 names review-result.schema.json, REVIEW_RESULT_FIELDS, unknown-key tests, and a schema validator. KR2 adds data to normalize results, every attempt record, exhausted-seat results, aggregate artifacts, and the panel manifest, but does not name their exact new keys, governing schemas, or complete reader set. A generic artifact round-trip and one dispatch-status rendering assertion do not establish compatibility with every strict loader or exact-key validator.",
+      "evidence_reference": "Section 3, KR1 contract surfaces; Section 3, KR2 seat loop and aggregation preservation; Section 6, frozen rail inventory",
+      "repair": "Freeze every KR2 field name and shape, perform and record a one-time repository-wide inventory of schemas and readers for each affected artifact, update every strict validator atomically, and add old-artifact plus new-artifact compatibility tests for each strict consumer. Record concrete evidence if a surface has no strict schema rather than assuming tolerant parsing.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "47400de82a98f1dae1a976ac280deb341361754ae814c5409b1aeb95a3267a3b"
+    },
+    {
+      "rubric_id": "VB3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "KR1 unified no_verdict funnel on early shell-runner failures",
+      "claim": "The shell salvage contract does not explicitly define a harmless null result when the capture is absent, empty, unreadable, or nonce-derived markers have not yet been initialized.",
+      "evidence": "The KR2 matrix explicitly rejects empty and unreadable captures, while KR1 only requires each former inline emitter to pass a capture path. Fixture B2 covers a truncated block but no fixture covers a missing file, unreadable file, empty capture, or an emission reached before marker initialization. Those cases can change legacy error text or exit behavior if the shared salvage function fails under strict shell settings.",
+      "evidence_reference": "Section 3, KR1 unified emissions; Section 3, KR2 admission matrix; Section 3, KR3 fixture table",
+      "repair": "During implementation, make salvage a total no-op unless the capture is readable and non-empty and both derived markers are available. Pass marker values explicitly rather than reading potentially unset globals, and add negative tests for all four precondition failures while asserting unchanged status, error text, usage JSON, and exit code.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cdaddd649df29968131fbfe5e9f466616729ea32e3235f3d94ad9f305d7351cc"
+    },
+    {
+      "rubric_id": "VB3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2 seat-level unratified summary carry rule (dispatch-plan-review attempt aggregation) and fixture I",
+      "claim": "The folded carry rule is two contradictory rules in one sentence, so the exact multi-attempt case the rubric asked about (earlier attempt salvages, later attempt does not) is unspecified and unfixtured.",
+      "evidence": "KR2 says the exhausted-seat summary is emitted only when exactly ONE distinct payload exists across attempts (carry latest strict); conflicting payloads become unratified_conflict. That parenthetical collides with the body: if attempt-1 salvages STOP and attempt-2 does not salvage, 'one distinct payload' promotes STOP while 'carry latest strict, else null' (G1 disposition c4c51ec4) yields null. If attempt-1 is extracted STOP and attempt-2 is strict READY, 'one distinct payload' is false (conflict) while 'latest strict' is READY. G1 disposition 65ee0504 promised fixtures for both earlier-valid/later-invalid AND STOP-vs-READY; the folded table only has I (both valid). Implementers cannot code the summary without guessing, and C-complete-timeout extracted salvage may never promote if 'latest strict' wins.",
+      "evidence_reference": "docs/plans/2026-08-21-verdict-bytes-preservation.md KR2 seat-loop paragraph and fixture table row I; docs/plans/evidence/2026-08-21-verdict-bytes-preservation/g1-dispositions.json fingerprints 65ee0504bc1569d89473a3275bc850239802e2119efefc90fd166876439d85cf and c4c51ec489998547f1f9c8a12b81f6f8aec445e9ca5f49e7808e2e0517929c2f",
+      "repair": "Delete the parenthetical mash. Freeze one rule: per-attempt records keep every admitted salvage; seat summary is null if zero salvages, unratified_conflict if two or more distinct payloads (canonical verdict+findings), else that single payload with provenance of the latest attempt that produced it. Do not require parser_status=strict for promotion. Add fixture J: attempt-1 STOP salvaged, attempt-2 empty/no salvage, assert seat summary is STOP. Keep fixture I as the two-valid conflict.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "afc29fa0706d07ee2e5898c5b66a56ae92aa46274353bb2f1ec83ddb9d860d25"
+    },
+    {
+      "rubric_id": "VB3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2 normalizePlanReviewPayload salvage admission for timeout/exit_failure/quota unique-extract",
+      "claim": "Admitting objectCandidates unique-extract on timeout makes a valid-but-wrong unratified payload from a mid-flush capture, which is the untrustworthy class the plan already forbids on interrupted, and timeout is the classification the kill path actually uses.",
+      "evidence": "classifyOutcome returns timeout when timedOut is true or the child error is ETIMEDOUT, before the child.signal branch that would return interrupted (src/transport/runner-envelope.js). dispatchSeat timeout seams set timedOut:true and do not set SIGTERM. A timeout capture of a complete READY object plus a truncated STOP object yields exactly one complete purpose-bound object: objectCandidates returns that READY, parser_status extracted, and the KR2 timeout row admits it. The success parser never sees those bytes because classification is not success (not_attempted today). interrupted/unavailable are strict-only specifically for mid-flush truncation risk; the common GNU-timeout/SIGTERM kill is not in that bucket. Empty C-incident remains a negative control and does not cover this bytes-exist mid-flush shape.",
+      "evidence_reference": "src/transport/runner-envelope.js:167-176; scripts/dispatch-plan-review.js:890-907; scripts/lib/plan-review-normalize.js:74-132 and 152-158; docs/plans/2026-08-21-verdict-bytes-preservation.md KR2 admission matrix timeout row; hooks/tests/plan-review-transport-fixes.test.sh:15-25",
+      "repair": "Keep timeout classification unchanged. Admit extracted salvage on timeout/exit_failure/quota only when objectCandidates finds exactly one complete valid object AND the scan ends at depth 0 (no unclosed brace remainder). A complete READY object followed by a truncated STOP object must yield unratified null. Alternatively make timeout match interrupted (strict parse only); then C-complete-timeout must be an exact JSON payload that strict-parses, not chrome-wrapped extract. Fixture the READY-plus-truncated-STOP byte shape as a negative control.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "226802a7ae474726d38bf68c7b3f730fa7cd0d7c3b05a1a3527172585e6a1b86"
+    },
+    {
+      "rubric_id": "VB4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR3 Fixture A chrome-prepend provenance and dead-gate green path",
+      "claim": "Fixture A still claims 2026-08-08 incident chrome provenance from in-tree v2.34.7 tests that do not contain the notice bytes, so a constructed one-line prefix can go green while the real Claude Code notice still fails salvage.",
+      "evidence": "The 8/8 path is documented as a multi-line unknown-model context-window notice prepended to stdout. hooks/tests/dispatch-review.test.sh:1125-1136 only asserts that dispatch-review.sh contains CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1; CHANGELOG v2.34.7 describes the notice in prose and never quotes it. No stored raw log or fixture file in-tree holds those bytes. The plan's hedge 'else CONSTRUCTED-labeled' is therefore the actual path, but row A is still written as the chrome-prepend incident shape whose expected result is unratified_verdict present. A simplified 'NOTICE: unknown model' prefix skips leading-blank and start-anchor the same way any prefix does, and would not detect a real notice that shares a line with the BEGIN marker, uses CR, or contains the English word VERDICT. That is the phantom-shape failure the rubric names. C-incident is honestly frozen (0-byte, no reference). A is not.",
+      "evidence_reference": "hooks/tests/dispatch-review.test.sh:1125-1136; CHANGELOG.md v2.34.7 section 'cc-shim no longer loses a completed verdict to CLI chrome'; scripts/dispatch-review.sh:857-867 and 1012-1037; docs/plans/2026-08-21-verdict-bytes-preservation.md KR3 fixture table row A",
+      "repair": "Remove the false 'recovered from v2.34.7 suppression code/tests' provenance. Before KR1 code, either reproduce the notice (claude -p with a non-Anthropic model and the env unset), freeze the exact prefix bytes plus SHA-256 under docs/plans/evidence/2026-08-21-verdict-bytes-preservation/, and build A from those bytes; or relabel A as CONSTRUCTED, freeze a multi-line prefix that includes blank lines and 'context window'/'unknown model' wording, and stop calling it the 8/8 incident shape. Dead-gate green for A must run against that frozen file, not against a prefix invented after salvage exists.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "32618379fbe62013a2b00583be5cea93601cf57412d1f912b834e38fef979ca9"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "schemas/review-result.schema.json, src/runners/review.js validateReviewResult, schemas/plan-review-artifact.schema.json and Codex mirrors",
+      "claim": "The additive-JSON compatibility claim is not yet specified against the strict consumers that will actually parse these artifacts: optional unratified_verdict cannot be appended onto the required REVIEW_RESULT_FIELDS list without breaking byte-identical success JSON, and KR2 never names the additionalProperties:false plan-review artifact schema as an atomic contract surface.",
+      "evidence": "validateReviewResult requires every key in REVIEW_RESULT_FIELDS (src/runners/review.js:85-88) and rejects any unknown key (90-93). Success emit at dispatch-review.sh:1180 is a nine-field object. The frozen invariant demands that object stay byte-identical. KR1 simultaneously says unratified_verdict is an OPTIONAL schema property and that REVIEW_RESULT_FIELDS is extended to admit it. Naive append makes every reviewed artifact fail parse (missing field) unless emitters add unratified_verdict:null, which is not byte-identical. Schema required stays the nine-field list (review-result.schema.json:6) with additionalProperties false, so the JS required-list and the schema optional-property must be split on purpose. Separately, KR2 adds an explicitly non-semantic field on required_seat_transport_exhausted artifacts. plan-review-artifact.schema.json:5 is additionalProperties false; hooks/tests/dispatch-plan-review.test.sh:6-7 and 90-94 validate every artifact against it; hooks/tests/plan-review-routing.test.sh:59-61 pins a Codex byte-identical mirror. KR1 names review-result.schema.json; KR2 does not name plan-review-artifact.schema.json. Putting observations only on unconstrained attempts[].items (type:object) would dodge the schema and hide them from a named non-semantic field. check-contract-schema.js is correctly out of scope (review-loop contract header).",
+      "evidence_reference": "src/runners/review.js:12-22 and 81-94; scripts/dispatch-review.sh:356-361 and 1180-1184; schemas/review-result.schema.json:5-66; schemas/plan-review-artifact.schema.json:5-90; hooks/tests/dispatch-plan-review.test.sh:6-7,90-94; hooks/tests/plan-review-routing.test.sh:59-61; hooks/tests/review-runner.test.sh:284-285; scripts/check-contract-schema.js:1-17; docs/plans/2026-08-21-verdict-bytes-preservation.md KR1 contract paragraph, KR2 aggregation paragraph, section 2 byte-identical invariant",
+      "repair": "Split the shell result contract: required field set stays the current nine keys; unratified_verdict is allowed-if-present, nullable, and schema-optional, with a runtime assertion that it is non-null only when status is no_verdict. Do not emit the key on reviewed or precondition_failed paths. Pin a reviewed artifact without the key still passing validateReviewResult and validate-json-schema.js, and a no_verdict artifact with the key passing both. For KR2, add the named non-semantic observation field to schemas/plan-review-artifact.schema.json and its Codex mirror in the same commit as the emitter; keep it optional so historical artifacts still validate; do not stuff it into unconstrained attempts items to dodge additionalProperties.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "22d44080a890c065a212092f60e6052105f19c8487e036541a4b950f9c604d3d"
+    },
+    {
+      "rubric_id": "VB1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "KR1 salvage block locator (BEGIN uniqueness vs BEGIN/END uniqueness)",
+      "claim": "Section 2 and KR1 disagree on whether END must be unique in the capture, which decides whether a content-valid block followed by a prompt-tail END echo is salvaged or dropped; that is positional weakening, not a planted-content hole, but it is still an unfixed locator rule.",
+      "evidence": "Section 2 admits replacing start-anchor with BEGIN/END-uniqueness-in-capture. KR1 locates the block by exactly one BEGIN occurrence; two BEGINs are ambiguous=null; END uniqueness is not stated. The prompt writer appends the derived END after the diff fence (dispatch-review.sh:620-625). A capture of one valid block plus an echo of that prompt tail contains one BEGIN and two ENDs. Unique-END salvage returns null; unique-BEGIN plus first subsequent exact END returns the interior and then the shared content battery. The latter matches the admitted positional weakening (trailing non-whitespace is main-parser exit 6). Shared content checks (leak scan, 16 KB, anchored VERDICT, FINDINGS, fence-aware proof, tautology list) still reject the instruction-template echo, whose VERDICT line is 'SHIP-AS-IS or FIX-THEN-SHIP' and whose FINDINGS line matches the leak pattern. No static-diff plant of the derived markers is feasible: nonce is regenerated until it is absent from the diff, and markers are SHA-256 of a prefix plus that nonce. This is a locator-spec gap, not a demonstrated content plant.",
+      "evidence_reference": "docs/plans/2026-08-21-verdict-bytes-preservation.md section 2 salvage-battery bullet and KR1 uniqueness bullet; scripts/dispatch-review.sh:536-555, 620-625, 1003-1037, 1045-1161",
+      "repair": "Specify the locator as: exactly one exact-line derived BEGIN in the runner-specific capture; take the first exact-line derived END after it; if END is missing, unratified_verdict is null. Do not require a unique END. Align section 2 wording with that rule. Keep fixture F as two BEGIN blocks.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8ea65fa948f961ff91fc2b69b0874b25b850ed2477a93ad4f60235603379bb9f"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "cdaddd649df29968131fbfe5e9f466616729ea32e3235f3d94ad9f305d7351cc",
+      "rubric_id": "VB3",
+      "affected_surface": "KR1 unified no_verdict funnel on early shell-runner failures",
+      "claim": "The shell salvage contract does not explicitly define a harmless null result when the capture is absent, empty, unreadable, or nonce-derived markers have not yet been initialized.",
+      "evidence_reference": "Section 3, KR1 unified emissions; Section 3, KR2 admission matrix; Section 3, KR3 fixture table",
+      "disposition": null
+    },
+    {
+      "fingerprint": "8ea65fa948f961ff91fc2b69b0874b25b850ed2477a93ad4f60235603379bb9f",
+      "rubric_id": "VB1",
+      "affected_surface": "KR1 salvage block locator (BEGIN uniqueness vs BEGIN/END uniqueness)",
+      "claim": "Section 2 and KR1 disagree on whether END must be unique in the capture, which decides whether a content-valid block followed by a prompt-tail END echo is salvaged or dropped; that is positional weakening, not a planted-content hole, but it is still an unfixed locator rule.",
+      "evidence_reference": "docs/plans/2026-08-21-verdict-bytes-preservation.md section 2 salvage-battery bullet and KR1 uniqueness bullet; scripts/dispatch-review.sh:536-555, 620-625, 1003-1037, 1045-1161",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-08-21T10:56:48.749Z"
+}

@@ -791,6 +791,7 @@ function main(argv) {
         seats_done: seats.filter((s) => s.status === 'done').length,
         seats_failed: seats.filter((s) => s.status === 'failed').length,
         seats_pending: seats.filter((s) => s.status === 'pending').length,
+        seats_unratified: seats.filter((s) => s.unratified_available === true).length,
         in_flight: inFlight,
         seats,
       };

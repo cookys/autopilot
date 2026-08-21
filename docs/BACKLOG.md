@@ -278,7 +278,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: M
 - **Source**: 2026-07-10 L6-r2 WS-A campaign;MiniMax R2 的「reviewer-circular 標注」警告實證。
 
-### Reviewer transport exits can erase an otherwise valid fail-closed verdict
+### ~~Reviewer transport exits can erase an otherwise valid fail-closed verdict~~ — RESOLVED v2.34.33 (verdict-bytes preservation: full-battery salvage → non-authoritative `unratified_verdict`/`unratified_observations` columns on both rails + aggregation retention; parser NOT relaxed; reader set closed by canonical-invariants allowlist. Plan `docs/plans/2026-08-21-verdict-bytes-preservation.md` R3 + two-generation review + dead-gate mutation record)
 - **Trigger**: Grok／GLM／Kimi／Qwen／Codex reviewer transport 再出現「內容可解析、process exit 或 framing 使 verdict 遺失」。
 - **Context**: 為仍支援的 runner 建 exact residual fixtures；保留 process truth，但將已驗證的 verdict bytes 與 transport failure 分欄，禁止把 no-verdict 誤報成 review pass。
 - **Effort**: M。
@@ -286,8 +286,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **2026-08-08 reproduced**: cc-shim/MiniMax-M3 returned a complete `VERDICT: SHIP-AS-IS` inside an
   intact nonce block, discarded as `no_verdict` because Claude Code prepended an unknown-model
   context-window notice to stdout. Fixed at source for cc-shim in v2.34.7 by suppressing that
-  notice; the general problem stands — any transport that prepends chrome still loses the verdict,
-  and relaxing the parser is NOT the fix (it reopens the prompt-echo hole the suite pins).
+  notice; the general problem stood until v2.34.33 — relaxing the parser was never the fix
+  (it reopens the prompt-echo hole the suite pins); the shipped shape re-runs the SAME battery.
+- **Residual (new trigger, 2026-08-21)**: a NEW verdict transport onboarded outside
+  `dispatch-review.sh`/plan-review rails (see plan §6 rail inventory) must decide its
+  salvage posture at engine-onboarding time; the reader-allowlist guard catches new
+  unratified consumers but not a new producer's missing salvage.
 
 ### Domain-aware routing — consume the `work_domain` telemetry to route reviewer/implementer by diff domain
 - **Trigger**: ALL remaining prerequisites are met (telemetry alone is NOT a trigger): (1) a **two-pass resolve** in `resolve-review-loop.sh` without breaking the single-shot JSON contract; (2) a **pre-impl planned-scope signal** for implementer routing; (3) **per-project per-domain calibration with n≥30** real samples; (4) an **inner-reviewer-family field** distinct from panel-only `cross_family_*` semantics.

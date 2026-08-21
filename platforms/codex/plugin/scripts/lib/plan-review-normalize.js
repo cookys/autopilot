@@ -71,7 +71,7 @@ function validateResponse(value) {
   return { verdict: value.verdict, findings };
 }
 
-function objectCandidates(text) {
+function objectCandidatesWithTail(text) {
   const candidates = [];
   let start = -1;
   let depth = 0;
@@ -100,7 +100,15 @@ function objectCandidates(text) {
       }
     }
   }
-  return candidates;
+  // clean_tail: the scan must not end inside a string or an unclosed object — a
+  // mid-flush kill (timeout IS the kill classification) can leave a complete wrong
+  // object plus a truncated right one; extract salvage must refuse that capture
+  // (g2-adjudication #5). Trailing PROSE is fine; a trailing open brace is not.
+  return { candidates, clean_tail: depth === 0 && !inString && start === -1 };
+}
+
+function objectCandidates(text) {
+  return objectCandidatesWithTail(text).candidates;
 }
 
 function parsePurposeBoundPayload(raw) {
@@ -132,6 +140,52 @@ function parsePurposeBoundPayload(raw) {
   }
 }
 
+// Salvage admission matrix (verdict-bytes preservation, plan R3 §3 + g2-adjudication
+// #0/#3/#5). "Unratified" = content-verified, transport-unratified: the SAME
+// purpose-bound parse, recorded in a non-authoritative observation for human
+// adjudication. NO authoritative field changes on any path. raw_binding_mismatch /
+// identity_mismatch never salvage (contradicted evidence); interrupted/unavailable
+// admit strict parse only (mid-flush truncation risk); timeout/exit_failure/quota
+// additionally admit a unique extracted object IFF the scan tail is clean.
+const SALVAGE_EXTRACT = new Set(['timeout', 'exit_failure', 'quota']);
+const SALVAGE_STRICT_ONLY = new Set(['interrupted', 'unavailable']);
+
+function salvageUnratifiedPayload(transport, bytes) {
+  const classification = transport.outcome.classification;
+  const extractAllowed = SALVAGE_EXTRACT.has(classification);
+  if (!extractAllowed && !SALVAGE_STRICT_ONLY.has(classification)) return null;
+  const reference = transport.private_raw_reference;
+  // Salvage requires the same identity binding success demands: a reference whose
+  // digest matches the captured bytes. A failed run with no reference (the frozen
+  // 2026-08-20 0-byte incident shape) has nothing bindable to salvage.
+  if (!reference || reference.digest !== sha256(bytes)) return null;
+  if (!bytes || bytes.length === 0) return null;
+  const normalized = String(bytes)
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter((line) => !/^Script (started|done) on /.test(line))
+    .join('\n')
+    .trim();
+  if (!normalized) return null;
+  try {
+    return { payload: validateResponse(JSON.parse(normalized)), parser_status: 'strict' };
+  } catch (strictError) {
+    if (!extractAllowed) return null;
+  }
+  const scan = objectCandidatesWithTail(normalized);
+  if (!scan.clean_tail) return null;
+  const valid = [];
+  for (const candidate of scan.candidates) {
+    try {
+      valid.push(validateResponse(JSON.parse(candidate)));
+    } catch (error) {
+      // Only complete objects matching this purpose-bound contract count.
+    }
+  }
+  if (valid.length === 1) return { payload: valid[0], parser_status: 'extracted' };
+  return null;
+}
+
 function normalizePlanReviewPayload({ envelope, raw, expected }) {
   const transport = validateRunnerTransportEnvelope(envelope);
   if (transport.request_binding.operation !== 'plan-review'
@@ -142,6 +196,7 @@ function normalizePlanReviewPayload({ envelope, raw, expected }) {
       semantic_status: 'unavailable',
       parser_status: 'not_attempted',
       payload: null,
+      unratified: null,
     };
   }
   const bytes = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw), 'utf8');
@@ -156,6 +211,7 @@ function normalizePlanReviewPayload({ envelope, raw, expected }) {
       semantic_status: 'unavailable',
       parser_status: 'not_attempted',
       payload: null,
+      unratified: salvageUnratifiedPayload(transport, bytes),
     };
   }
   const reference = transport.private_raw_reference;
@@ -165,6 +221,7 @@ function normalizePlanReviewPayload({ envelope, raw, expected }) {
       semantic_status: 'unavailable',
       parser_status: 'not_attempted',
       payload: null,
+      unratified: null,
     };
   }
   const parsed = parsePurposeBoundPayload(bytes.toString('utf8'));
@@ -174,6 +231,7 @@ function normalizePlanReviewPayload({ envelope, raw, expected }) {
     parser_status: parsed.parser_status,
     payload: parsed.payload,
     error: parsed.error || null,
+    unratified: null,
   };
 }
 
@@ -188,7 +246,9 @@ function readBoundRaw(envelope) {
 module.exports = {
   normalizePlanReviewPayload,
   objectCandidates,
+  objectCandidatesWithTail,
   parsePurposeBoundPayload,
   readBoundRaw,
+  salvageUnratifiedPayload,
   validateResponse,
 };

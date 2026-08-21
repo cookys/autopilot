@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "verdict-bytes-preservation-2026-08-21",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "2162610231157b0e2a573a6177fb9f35cf3e5dec4a90ef4aa2be71cbc8de93a1",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted: closed reader-allowlist guard added to check-canonical-invariants.sh — files may reference unratified only if they are producers, schemas, display-only projections (dispatch-status), the pass-through validator, tests, or docs; guard proven mutable-to-red by a synthetic authority-reader fixture."
+    },
+    {
+      "fingerprint": "4fb018fe76c6fbd6385c9fcdc51d0de71ce4b6495462e1f088266cf03d330ac0",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted for the envelope rail: salvage precondition = private_raw_reference present AND digest equals captured bytes, on every admitted failure classification; timeout-with-digest-mismatch fixture pins unratified:null with timeout classification preserved. Shell rail documented as digest-free by construction (dispatcher writes its own capture; no claim/verify split exists to contradict)."
+    },
+    {
+      "fingerprint": "65ee0504bc1569d89473a3275bc850239802e2119efefc90fd166876439d85cf",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted with modification: every valid salvage observation is retained per-attempt with CONTROLLER-side binding (attempt, target_id, family, request digest, raw digest — recorded by the code that parsed those exact bytes); seat-level summary emitted only when exactly one distinct payload exists, else an explicit unratified_conflict marker. In-band payload-contract attempt binding is NOT adopted: it adds a model-compliance failure mode while controller-side binding is mechanical and sufficient because each attempt's bytes are parsed in isolation. Earlier-valid/later-invalid and STOP-vs-READY conflict cases get fixtures."
+    },
+    {
+      "fingerprint": "659b24ddc96e221b1cb1f968001469cd068daf2cfecebdff6a72e8d03c194b13",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted: Fixture C was a phantom shape — the recorded 2026-08-20 in-tree incident is 0-byte stdout with NO raw reference (plan-review-transport-fixes.test.sh comment is the frozen source). Split into C-incident (0-byte, no reference → unratified null, negative control) and C-complete-timeout (explicitly labeled CONSTRUCTED, digest-bound raw with exact STOP payload → unratified present). Fixture bytes frozen with provenance + SHA-256; the aggregation destruction point is handled under the durable-storage finding. One recorded dead-gate mutation per rail with evidence paths."
+    },
+    {
+      "fingerprint": "f41c1736ca6e211be73e4d621ada63b68f7d7dfeeb36126fc7dfab45434cdfd2",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted (matches the depth-0 self-finding logged before G1 returned): field presence/nullability defined per status; shell emitters + validateReviewResult + schemas/review-result.schema.json + codex mirror + tests updated atomically in one commit; round-trip assertion proves a no_verdict artifact retains unratified_verdict while status/verdict stay fail-closed."
+    },
+    {
+      "fingerprint": "77d5af59de89f21fa94125e04fe7c66b8aee24a2889766c573f758862b8954fd",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted: all no_verdict paths route through one funnel receiving the human raw_log AND the runner-specific salvage capture path explicitly (capture topology differs per runner: PARSE_INPUT vs RAW_LOG vs KIMI_CLEAN vs AGY_PARSED); each branch keeps its exact error text, usage, passive-capture, status, exit code. Per-topology tests: one nonzero-with-complete-block and one truncated-block."
+    },
+    {
+      "fingerprint": "eecfa8b81ad3bb270eac5d0f7c051df9873921d3670511b62fe3be2b61f9aa00",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted — claim verified true at dispatch-plan-review.js:1584-1591: the required_seat_transport_exhausted artifact omits reviewer_verdicts AND findings, destroying completed seats. Repair: exhaustion artifacts retain completed-seat observations (seat, target, attempt, transport provenance, parser status, verdict, findings) in an explicitly non-semantic field; semantic_verdict stays null, exit stays 4; panel manifest gains a boolean observation marker; dispatch-status renders it; artifact round-trip test."
+    },
+    {
+      "fingerprint": "0d48d49284fd8c38c931be73013a1f18a660f4d4d224a81b0545a52a718ffb70",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted with modification: plan gains a frozen rail inventory naming each verdict producer and its destruction boundary — engine implement-review transitively in scope via the shared result contract; qc-panel (own verdict.txt contract), qualification-review-provider (own purpose-bound JSON), adjudicate-findings (post-verdict intake, non-transport) out of scope with those reasons. The standing acceptance-search binding is NOT adopted this slice — the closed reader-allowlist guard already fails a new consumer of unratified fields, and a new verdict TRANSPORT is an engine-onboarding event; recorded as a BACKLOG trigger instead."
+    },
+    {
+      "fingerprint": "759e97ef73d32e74ec74b68d039b4deede37e52fdcd90031aee71fb1c6df9b7c",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted: salvage is the EXTRACTED authoritative battery itself (shared function over BLOCK_FILE: leak scan, 16 KB cap, single anchored VERDICT, FINDINGS, fence-aware NO-FINDING-PROOF count, field-structure regex, tautology blacklist) — never a re-listed subset; only the start-anchor is replaced by BEGIN/END uniqueness and the exit-code requirement dropped. Fixture: tautological SHIP proof interior → unratified null."
+    },
+    {
+      "fingerprint": "6d7fb3b4e00a98356ec20cb8adcfc1c69da933c5542c0a4890838ab678aa0bfa",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted, merged with the check-canonical-invariants guard finding: closed reader allowlist (emit sites, dispatch-status display, tests, schema, pass-through validator); src/runners/review.js pinned to accept the key without copying into verdict/status (assertion); synthetic consumer that reads unratified_verdict as verdict turns the gate red (recorded mutation); separate from the salvage-presence dead-gate."
+    },
+    {
+      "fingerprint": "c4c51ec489998547f1f9c8a12b81f6f8aec445e9ca5f49e7808e2e0517929c2f",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted admission matrix verbatim: interrupted/unavailable salvage only when parser_status is strict AND private_raw_reference present; timeout/exit_failure/quota admit extracted only when objectCandidates finds exactly one complete object in that attempt's bytes; carry latest attempt whose salvage is strict, else null; empty/unreadable capture null; raw_binding_mismatch and identity_mismatch stay null; 0-byte 8/20 shape fixed as negative control."
+    },
+    {
+      "fingerprint": "7c8d3fecf0e91cbba3f958a4accc83c77b90f9f12eedd6be548a65735fe5dd0b",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted: fixture bytes frozen from producer artifacts BEFORE coding where recoverable — the cc-shim notice text recovered from the v2.34.7 suppression code/tests in-tree, the 8/18-style raw-log chrome cited by path if a stored log exists; any shape not recoverable from a stored artifact is explicitly labeled CONSTRUCTED, never presented as incident bytes. C split per the sibling finding. Dead-gate mutations named per call site with evidence paths under docs/plans/evidence/2026-08-21-verdict-bytes-preservation/."
+    },
+    {
+      "fingerprint": "05694078cb551f7edf64c05828412d1240dd5446f33d4930997d5a10a44e72bb",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted: unratified_verdict enters the schema as an OPTIONAL nullable enum admitted non-null on no_verdict only; REVIEW_RESULT_FIELDS extended with a never-copied-into-verdict/status pin; review-runner tests keep unknown-keys-fail while admitting this key; mirrors via sync-all; check-contract-schema.js explicitly out of scope (it reconciles the review-loop contract, not review-result — verified by reading its header)."
+    },
+    {
+      "fingerprint": "6820a6e38f3ed6b91e2af0de2c481411815e13509f8e020cb269ffaaf803d592",
+      "disposition": "accepted_blocker",
+      "rationale": "Adopted (same repair as the funnel finding, both seats converged): the six inline printf no_verdict sites (codex :662, grok :702, qoder :749, cc-shim :880, claude-native :908, anthropic-compatible :932) route through the salvage-capable funnel; fixture with intact nonce block + non-zero rc on at least one currently-inline runner asserts unratified_verdict present, status no_verdict, exit 1."
+    },
+    {
+      "fingerprint": "536b6b3f4aade460d15d2cf1f26c487f6dc1f832eb67b928e336462abea7c92e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Adopted as the plan's out-of-scope inventory bullet with the seat's own reasons: qc-panel judges (different verdict.txt contract), qualification-review-provider (own purpose-bound JSON), adjudicate-findings (post-verdict intake), engine implement-review (KR1 consumer under schema pinning, not a producer). No producer change for those rails this slice."
+    }
+  ]
+}

@@ -134,6 +134,28 @@ for c in dev-flow quality-pipeline survey think-tank; do
   cp "$REPO_ROOT/references/model-routing.md" "$SBX/skills/$c/references/model-routing.md"
 done
 
+# 5b. reader-allowlist (verdict-bytes preservation): a synthetic consumer that reads
+# unratified_verdict as authority, placed OUTSIDE the closed allowlist → exit 1
+# naming the rogue file (the g1-disposition red proof for the guard itself).
+mkdir -p "$SBX/src/engine"
+cat > "$SBX/src/engine/rogue-consumer.js" <<'ROGUE'
+// synthetic authority leak: promotes salvage data to a verdict
+const verdict = result.unratified_verdict || result.verdict;
+ROGUE
+OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "rogue unratified consumer exit code"
+assert_contains "$OUT" "reader-allowlist[unratified-columns]" "rogue consumer names the invariant"
+assert_contains "$OUT" "src/engine/rogue-consumer.js" "rogue consumer names the offending file"
+rm "$SBX/src/engine/rogue-consumer.js"
+
+# 5c. the same content under an allowlisted location (tests) → exit 0 (closed set,
+# not a blanket token ban).
+mkdir -p "$SBX/hooks/tests"
+printf '%s\n' 'assert unratified_verdict fixture' > "$SBX/hooks/tests/vbp-fixture-note.txt"
+OUT="$("$SCRIPT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "allowlisted unratified mention passes"
+rm "$SBX/hooks/tests/vbp-fixture-note.txt"
+
 # 6. environment error: a seeded path missing → exit 2 (distinct from a broken invariant)
 rm "$SBX/agents/reviewer.md"
 OUT="$("$SCRIPT" 2>&1)"; EXIT=$?

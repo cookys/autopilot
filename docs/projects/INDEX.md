@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-21 | [verdict-bytes-preservation](2026-08-21-verdict-bytes-preservation/README.md) — reviewer transport 失敗時保存 content-verified verdict bytes 於非權威 unratified 欄位;process truth 不變、no-verdict 恆 fail-closed | v2.34.33 | `feat/v2.34.33-verdict-bytes-preservation` |
 
 ## 已完成 (Completed)
 

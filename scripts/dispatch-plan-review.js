@@ -1016,6 +1016,7 @@ function reviewSeat({
   clockNow,
 }) {
   const attempts = [];
+  const seenLocators = new Set();
   let selected = seat;
   let substitution = null;
   for (let attempt = 1; attempt <= manifest.max_attempts_per_seat; attempt += 1) {
@@ -1092,6 +1093,17 @@ function reviewSeat({
       raw: dispatched.raw,
       expected: bounded,
     });
+    // Unratified salvage carry (verdict-bytes preservation, plan R3 §3). Controller-side
+    // binding: provenance is recorded by the code that parsed those exact bytes.
+    // g2-adjudication #0: a reused/out-of-attempt capture locator is never salvage-
+    // eligible — stale bytes can carry a valid-but-wrong-generation payload.
+    const reference = dispatched.envelope && dispatched.envelope.private_raw_reference
+      ? dispatched.envelope.private_raw_reference
+      : null;
+    const locator = reference ? reference.locator : null;
+    let unratified = normalized.unratified || null;
+    if (unratified && (locator === null || seenLocators.has(locator))) unratified = null;
+    if (locator) seenLocators.add(locator);
     attempts.push({
       seat_id: seat.id,
       target_id: selected.id,
@@ -1100,6 +1112,18 @@ function reviewSeat({
       transport_status: normalized.transport_status,
       parser_status: normalized.parser_status,
       semantic_status: normalized.semantic_status,
+      unratified_semantic_status: unratified ? 'available' : 'unavailable',
+      ...(unratified ? {
+        unratified: {
+          payload: unratified.payload,
+          parser_status: unratified.parser_status,
+          attempt,
+          target_id: selected.id,
+          family: selected.family,
+          request_digest: dispatched.envelope.request_binding.request_digest,
+          raw_digest: reference.digest,
+        },
+      } : {}),
     });
     if (normalized.payload) {
       return {
@@ -1115,6 +1139,20 @@ function reviewSeat({
       };
     }
   }
+  // Carry rule (g2-adjudication #4, frozen): per-attempt records keep every admitted
+  // salvage; the seat summary is null on zero salvages, an explicit conflict on ≥2
+  // DISTINCT payloads, else the single payload with the provenance of the latest
+  // attempt that produced it. No strict-only promotion. Authority unchanged:
+  // verdict stays null, exhausted stays true.
+  const salvages = attempts.filter((record) => record.unratified)
+    .map((record) => record.unratified);
+  const distinct = new Map();
+  for (const salvage of salvages) {
+    distinct.set(
+      JSON.stringify({ verdict: salvage.payload.verdict, findings: salvage.payload.findings }),
+      salvage,
+    );
+  }
   return {
     seat_id: seat.id,
     target_id: selected ? selected.id : seat.id,
@@ -1126,6 +1164,9 @@ function reviewSeat({
     attempts,
     substitution,
     exhausted: true,
+    unratified: distinct.size === 1 ? [...distinct.values()][0] : null,
+    unratified_conflict: distinct.size >= 2,
+    unratified_distinct_count: distinct.size,
   };
 }
 
@@ -1551,7 +1592,11 @@ function main() {
         clockNow: clock.now,
       });
       panel.seatSettle(seat.id, seatReview.exhausted
-        ? { status: 'failed', transportStatus: seatReview.deadline_exhausted ? 'deadline_exhausted' : 'transport_exhausted' }
+        ? {
+          status: 'failed',
+          transportStatus: seatReview.deadline_exhausted ? 'deadline_exhausted' : 'transport_exhausted',
+          unratifiedAvailable: Boolean(seatReview.unratified),
+        }
         : { status: 'done', transportStatus: 'success' });
       seatReviews.push(seatReview);
       if (seatReview.exhausted) selectedTargets.set(seat.id, null);
@@ -1566,6 +1611,39 @@ function main() {
       return seat.exhausted && policy.required;
     });
     const familyCount = new Set(completedReviews.map((seat) => seat.family)).size;
+    // Aggregation preservation (verdict-bytes preservation; destruction point verified
+    // at the required_seat_transport_exhausted branch, which previously destroyed
+    // COMPLETED seats' verdicts+findings when a DIFFERENT required seat died —
+    // the 2026-08-20 incident class). Explicitly non-semantic: no consumer may derive
+    // authority from it; semantic_verdict/exit codes unchanged.
+    const unratifiedObservations = [
+      ...completedReviews.map((seat) => ({
+        kind: 'completed_seat_review',
+        seat_id: seat.seat_id,
+        target_id: seat.target_id,
+        family: seat.family,
+        verdict: seat.verdict,
+        findings: seat.findings,
+      })),
+      ...seatReviews.filter((seat) => seat.exhausted && seat.unratified).map((seat) => ({
+        kind: 'salvaged_payload',
+        seat_id: seat.seat_id,
+        target_id: seat.target_id,
+        family: seat.family,
+        attempt: seat.unratified.attempt,
+        parser_status: seat.unratified.parser_status,
+        request_digest: seat.unratified.request_digest,
+        raw_digest: seat.unratified.raw_digest,
+        payload: seat.unratified.payload,
+      })),
+      ...seatReviews.filter((seat) => seat.exhausted && seat.unratified_conflict).map((seat) => ({
+        kind: 'salvage_conflict',
+        seat_id: seat.seat_id,
+        target_id: seat.target_id,
+        family: seat.family,
+        distinct_count: seat.unratified_distinct_count,
+      })),
+    ];
     context.now = new Date(clock.now());
     let artifact;
     if (clock.now() >= deadlineMs || seatReviews.some((seat) => seat.deadline_exhausted)) {
@@ -1588,6 +1666,7 @@ function main() {
         transport_status: 'transport_exhausted',
         attempts,
         substitutions,
+        ...(unratifiedObservations.length ? { unratified_observations: unratifiedObservations } : {}),
       };
     } else if (familyCount < manifest.minimum_distinct_families) {
       artifact = {
@@ -1605,6 +1684,7 @@ function main() {
           family: seat.family,
           verdict: seat.verdict,
         })),
+        ...(unratifiedObservations.length ? { unratified_observations: unratifiedObservations } : {}),
       };
     } else {
       let findings = normalizeAndDedupeFindings(completedReviews, rubricIds);

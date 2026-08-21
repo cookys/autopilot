@@ -1,0 +1,1 @@
+{ "runner": "grok", "model": "grok-fixture", "status": "runner_failed", "raw_log": "/tmp/dispatch-author-log-n6Kqie", "error": "runner exited 124", "selection_source": "explicit_cli", "selection_path": null, "verification_author": null }

@@ -1,7 +1,8 @@
 # Verdict-bytes preservation — transport failure vs verified verdict bytes 分欄
 
-> **Status**: R3 FROZEN (G1 15 + G2 9 findings all dispositioned at depth 0; G2 terminal at the
-> two-generation cap — `evidence/.../g2-adjudication.md` is final plan authority)
+> **Status**: ✅ Shipped in v2.34.33 — merged as `f98c7ea0` (was R3 FROZEN: G1 15 + G2 9
+> findings all dispositioned at depth 0; G2 terminal at the two-generation cap —
+> `evidence/.../g2-adjudication.md` is final plan authority)
 > **Target version**: v2.34.33 (PATCH — hardening of existing rails, no new user-facing surface)
 > **Size**: L-flow, M effort (BACKLOG「Reviewer transport exits can erase an otherwise valid fail-closed verdict」)
 > **Branch**: `feat/v2.34.33-verdict-bytes-preservation`

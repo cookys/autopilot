@@ -1,0 +1,483 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "verdict-bytes-preservation",
+  "logical_plan_id": "verdict-bytes-preservation-2026-08-21",
+  "session_id": "8c64189c-a1d8-4a41-8879-c2314e226a8b",
+  "session_key": "80bdc9c6cb5d1e72d4907d2a4a9540272dd2be4bda2fe476fb6edf088c87cba9",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "eb39500a6aaaef2f035f350507897bf98762db2be2b399cf579c4c8b2f384c1c",
+  "manifest_sha256": "bd2e78f8a26e966e0e3c6c499fecd3522e7cc64d026d0cd18039f54a99ecbdb5",
+  "plan_sha256": "3b157bcf5b50edd36dea9962908d7cbf26a0c18cf1987614e91f694db7631c4e",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_adversarial_soundness",
+      "target_id": "sol_adversarial_soundness",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-5.6-sol",
+          "operation": "plan-review",
+          "request_digest": "d864515eac7935f88a33e22993ee57d13140695035894497968b0dbb54d455b5"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "1db596193feb9655986f3f6518c562dd7caf75ef0dddc9c5fc9c371538005651",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-CWaVvN/stdout",
+          "digest": "1db596193feb9655986f3f6518c562dd7caf75ef0dddc9c5fc9c371538005651"
+        },
+        "receipt_digest": "fff633e49d6398203b66b825a6ff860123e6799c88dcbc90983b48c880ce2a00"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available"
+    },
+    {
+      "seat_id": "grok_boundary_redteam",
+      "target_id": "grok_boundary_redteam",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "70d8dd8854e1b5aba97ecc0c89c199a1b47e802a0780efd72c833eeff09585db"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a02898f676113603b27dfafd3261b2ef8438456a521ef8b64edd9549a4aee82f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-AjzbNx",
+          "digest": "a02898f676113603b27dfafd3261b2ef8438456a521ef8b64edd9549a4aee82f"
+        },
+        "receipt_digest": "a80b2684e88fa4b11e0d24996235bad3d1f6b36b7971d9877eb6b54945428635"
+      },
+      "transport_status": "success",
+      "parser_status": "extracted",
+      "semantic_status": "available"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_adversarial_soundness",
+      "target_id": "sol_adversarial_soundness",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_boundary_redteam",
+      "target_id": "grok_boundary_redteam",
+      "family": "xai",
+      "verdict": "STOP"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "VB2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR3 authority pinning and every production consumer of review artifacts",
+      "claim": "The three named fail-closed assertions do not mechanically prevent a future consumer from treating an unratified field as authority.",
+      "evidence": "KR3 tests only resolve-review-loop, qc-panel, and plan-review exit behavior. No closed authority projection or forbidden-use allowlist would fail when a new module reads unratified_verdict or unratified.payload.verdict. Review objects already flow from src/runners/review.js into src/engine/autopilot-engine.js, leaving a direct future fallback-read surface.",
+      "evidence_reference": "Plan section 3 KR3 Authority pinning; src/runners/review.js:213-269; src/engine/autopilot-engine.js:2401-2405 and 3300",
+      "repair": "Add a forbidden-use allowlist to an existing invariant gate such as check-canonical-invariants.sh, permitting unratified references only in producers, schemas, display-only projections, and tests. Mutation-test the guard with a temporary authority fallback read, and strip unratified fields before objects enter decision modules.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2162610231157b0e2a573a6177fb9f35cf3e5dec4a90ef4aa2be71cbc8de93a1"
+    },
+    {
+      "rubric_id": "VB3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Failure-classification salvage in normalizePlanReviewPayload",
+      "claim": "The promised no-salvage rule for contradicted raw evidence is unreachable for non-success outcomes unless salvage performs an independent digest check.",
+      "evidence": "normalizePlanReviewPayload currently returns for every non-success classification at lines 153-159, before the private_raw_reference digest comparison at lines 161-168. Under the proposed parse-in-that-branch logic, a timeout envelope bound to bytes X plus supplied bytes Y containing a valid payload yields unratified content even though Y contradicts the envelope. Fixture D covers only a claimed-success mismatch.",
+      "evidence_reference": "Plan sections 2 and 3 KR2; scripts/lib/plan-review-normalize.js:135-170; KR3 Fixture D",
+      "repair": "Keep the original failure transport_status, but require a private raw reference whose digest and output stdout digest both equal the captured bytes before invoking the salvage parser. Add a timeout-with-digest-mismatch fixture that preserves timeout classification while requiring unratified to remain null.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4fb018fe76c6fbd6385c9fcdc51d0de71ce4b6495462e1f088266cf03d330ac0"
+    },
+    {
+      "rubric_id": "VB3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan-review attempt binding and multi-attempt carry semantics",
+      "claim": "Selecting the latest valid payload silently chooses among potentially conflicting attempts, while the payload contract contains no current-attempt or generation binding.",
+      "evidence": "validateResponse admits only verdict and findings, and the nonce in buildPrompt delimits input sections but is not echoed in the response. KR2 selects the latest valid attempt without cross-attempt uniqueness. Two individually valid captures, such as an earlier STOP and later READY from different targets, therefore collapse to the later value and hide the conflict and provenance.",
+      "evidence_reference": "Plan section 3 KR2; scripts/lib/plan-review-normalize.js:21-71 and 106-131; scripts/dispatch-plan-review.js:811-840 and 1095-1129",
+      "repair": "Add a controller-generated attempt binding to the internal response contract, validate and strip it before exposing the public verdict/findings payload, and retain every valid unratified observation with attempt, target, family, request digest, and raw digest. Emit a single summary only when exactly one distinct bound payload exists; otherwise mark an explicit unratified conflict. Test earlier-valid/later-invalid and STOP-versus-READY cases.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "65ee0504bc1569d89473a3275bc850239802e2119efefc90fd166876439d85cf"
+    },
+    {
+      "rubric_id": "VB4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR3 incident fixtures A and C and the dead-gate mutation evidence",
+      "claim": "The fixture descriptions are paraphrases, and Fixture C contradicts the recorded 2026-08-20 incident shape.",
+      "evidence": "The incident record says the MiniMax seat completed successfully in about three minutes and its full verdict was recovered; other required seats exhausted. Fixture C instead invents a timeout envelope whose own raw contains that complete payload. Fixture A does not bind the available literal unrecognized_model chrome line or any residual hash. The singular instruction to revert the salvage call also does not identify separate KR1 and KR2 mutations.",
+      "evidence_reference": "docs/plans/evidence/2026-08-20-multiturn-event-harness/g1-transport-incident.md; docs/plans/evidence/2026-08-18-dev-flow-contract-card/p1-review-raw.log:1-6; Plan section 3 KR3",
+      "repair": "Freeze checked-in residual bytes or byte-exact builders with source paths and SHA-256 values, including stream boundaries, exit status, signal, envelope, and raw bytes. Replace Fixture C with the real panel shape: one successful MiniMax STOP seat plus required-seat exhaustion, with exit 4 unchanged. Treat timeout-with-complete-output as a separate fixture only if backed by a real residual. Specify and record one dead-gate mutation per rail with the exact failing assertion.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "659b24ddc96e221b1cb1f968001469cd068daf2cfecebdff6a72e8d03c194b13"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Review-result JSON contract, JS wrapper, schemas, and Codex mirrors",
+      "claim": "The additive-JSON compatibility claim is false for existing strict consumers.",
+      "evidence": "src/runners/review.js defines an exact nine-field REVIEW_RESULT_FIELDS list and rejects every unknown field. schemas/review-result.schema.json has additionalProperties false and no unratified_verdict property. Consequently dispatchReviewJson converts a salvaged shell result into result null with a parseError, so the observation is destroyed before engine consumers see it. Codex package mirrors have the same closed contracts.",
+      "evidence_reference": "Plan section 3 KR1 compatibility claim; src/runners/review.js:12-24 and 81-93; schemas/review-result.schema.json:1-65; platforms/codex/plugin/src/runners/review.js; platforms/codex/plugin/schemas/review-result.schema.json",
+      "repair": "Define field presence and nullability for every review status, then update all shell emitters, validateReviewResult, review-result.schema.json, Codex mirrors, and schema/runner tests atomically. Add a dispatchReviewJson round-trip assertion proving a no_verdict artifact retains unratified_verdict while status and verdict remain fail-closed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f41c1736ca6e211be73e4d621ada63b68f7d7dfeeb36126fc7dfab45434cdfd2"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "All no_verdict emission paths in dispatch-review.sh",
+      "claim": "emit_no_verdict is not the canonical transport-failure funnel, so changing it alone leaves most supported runners unsalvaged.",
+      "evidence": "Codex, Grok, Qoder, cc-shim, claude-native, and anthropic-compatible each print no_verdict JSON and exit inline. Only Kimi, selected agy failures, and shared parser failures call emit_no_verdict. The plan neither migrates those inline branches nor defines the per-runner response capture to validate, including stdout-only runners whose raw_log also contains stderr chrome.",
+      "evidence_reference": "Plan section 3 KR1; scripts/dispatch-review.sh:654-666, 694-706, 742-753, 874-883, 902-912, 926-936, and 974-986",
+      "repair": "Route every supported no_verdict path through one emitter that receives both the human raw_log and the exact runner-specific response capture used for salvage. Preserve each branch's existing error, usage, passive-capture behavior, status, and exit code. Add one nonzero complete-block and one truncated-block test for every distinct capture topology.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "77d5af59de89f21fa94125e04fe7c66b8aee24a2889766c573f758862b8954fd"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan-review aggregation, durable artifact, panel manifest, and dispatch-status display",
+      "claim": "The design still drops the relevant payload before durable storage and does not fix the actual successful-seat-plus-panel-exhaustion destruction point.",
+      "evidence": "KR2 adds only unratified_semantic_status to attempts and keeps the payload on an ephemeral exhausted-seat result. The final artifact flattens attempts and does not serialize seat results. More importantly, the requiredExhausted branch omits completedReviews entirely, matching the recorded incident where MiniMax succeeded but another required seat exhausted. plan-review-panel.js seatSettle stores only status and transport_status, so dispatch-status --panel has no marker or payload source.",
+      "evidence_reference": "Plan section 3 KR2; scripts/dispatch-plan-review.js:1095-1129 and 1559-1608; scripts/lib/plan-review-panel.js:45-53 and 78-84; scripts/dispatch-status.js:758-819; schemas/plan-review-artifact.schema.json:5-90",
+      "repair": "Persist every content-valid but panel-unratified seat observation in the generation artifact with seat, target, attempt, transport provenance, parser status, and payload. Preserve successful completed seats when any required seat exhausts, while keeping semantic_verdict null and exit 4. Update and mirror the artifact schema, pass a boolean observation marker into the panel manifest, and test artifact round-trip plus dispatch-status rendering.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eecfa8b81ad3bb270eac5d0f7c051df9873921d3670511b62fe3be2b61f9aa00"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Verdict-producing rail inventory and scope boundary",
+      "claim": "The two-rail assertion is unsupported because other verdict transports are neither covered nor explicitly excluded with contract-specific reasons.",
+      "evidence": "scripts/qc-panel.js directly spawns judge and synthesizer models and has its own output-loss and deterministic-fallback behavior. scripts/qualification-review-provider.js independently transports and parses reviewer outputs. engine implement-review is transitively covered only through dispatchReviewJson, while adjudicate-findings is an input consumer rather than a transport. None of these classifications appears in section 6.",
+      "evidence_reference": "Plan sections 3 and 6; scripts/qc-panel.js:258-295, 342-390, and 628-718; scripts/qualification-review-provider.js:5-75; src/engine/autopilot-engine.js:2401-2405",
+      "repair": "Add a frozen rail inventory naming each verdict producer and destruction boundary. Mark engine implement-review as transitively in scope through dispatchReviewJson; classify qc-panel and qualification-review-provider as in scope or explicitly out with their differing contracts and residual evidence; classify adjudicate-findings as non-transport. Bind the inventory to an acceptance search so a newly added verdict transport cannot silently escape scope.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_adversarial_soundness",
+          "runner": "codex",
+          "model": "gpt-5.6-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0d48d49284fd8c38c931be73013a1f18a660f4d4d224a81b0545a52a718ffb70"
+    },
+    {
+      "rubric_id": "VB1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1 salvage battery in scripts/dispatch-review.sh (emit_no_verdict helper vs authoritative content checks)",
+      "claim": "The salvage battery the plan enumerates is content-weaker than the authoritative parser, so a planted SHIP-AS-IS can become a non-null unratified_verdict that the main rail would have rejected for a content reason.",
+      "evidence": "Plan KR1 keeps uniqueness of one BEGIN, 16 KB, leak scan, one anchored VERDICT, FINDINGS present, and SHIP requiring one NO-FINDING-PROOF line. The live rail after those checks still rejects SHIP on field structure and tautology (dispatch-review.sh:1148-1159) and counts NO-FINDING-PROOF only outside fences (dispatch-review.sh:1112-1117). Concrete capture: a chrome line, then the nonce-derived BEGIN, then VERDICT: SHIP-AS-IS, FINDINGS: none, NO-FINDING-PROOF: checked=diff; evidence=none; conclusion=looks good, then END. Unique BEGIN plus the enumerated checks pass; the main rail would emit_no_verdict for tautological proof. Prompt injection that tells the model to fill the published markers with that SHIP block is enough; static diff cannot forge the derived markers, but it does not need to. Section 3 intro says same content battery, then the bullet list drops those checks; an implementer following the bullets ships an unsound column.",
+      "evidence_reference": "docs/plans/2026-08-21-verdict-bytes-preservation.md KR1 unchanged-list; scripts/dispatch-review.sh:1112-1159 (fence-aware proof count, checked/evidence/conclusion, tautology blacklist including the cited diff/none/looks good triple)",
+      "repair": "Freeze salvage as a helper that runs every content check currently applied to BLOCK_FILE, including leak scan, 16 KB, VERDICT exactness, FINDINGS, fence-aware NO-FINDING-PROOF count, field-structure regex, and tautology blacklist. Uniqueness of BEGIN/END replaces only the start-anchor. Do not re-list a subset. Add a fixture whose interior is the tautological SHIP proof above and assert unratified_verdict is null.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "759e97ef73d32e74ec74b68d039b4deede37e52fdcd90031aee71fb1c6df9b7c"
+    },
+    {
+      "rubric_id": "VB2",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Authority pinning for unratified_verdict/unratified consumers (resolve-review-loop, qc-panel skip, plan-review exit-4, src/runners/review.js, future readers)",
+      "claim": "No consumer may derive authority from unratified fields is not mechanically enforceable as specified: the pin set is the wrong closed set, it is not red when a consumer starts reading the field, and nothing catches a next-month reader of unratified_verdict as verdict.",
+      "evidence": "KR3 pins only resolve-review-loop --prior-status cascade, qc-panel null-verdict skip, and plan-review exit 4. Those stay green if a new reader does verdict = unratified_verdict or parsed.verdict. Dead-gate mutation reverts the salvage call, which proves the column is produced, not that it is non-authoritative. The engine path that actually parses dispatch-review JSON is src/runners/review.js validateReviewResult (REVIEW_RESULT_FIELDS closed set; unknown field throws) consumed by autopilot-engine reviewResultBlocked; it is absent from the pin set. Field name unratified_verdict is self-describing only to a session that already distrusts it; it will not stop a helpful fallback. This repo already uses consumer-allowlist greps for roster fields; omitting one here leaves the invariant as documentation.",
+      "evidence_reference": "docs/plans/2026-08-21-verdict-bytes-preservation.md KR3 Authority pinning paragraph; src/runners/review.js:12-22 and :90-93; src/engine/autopilot-engine.js:555-564 reviewResultBlocked; scripts/qc-panel.js:171-172 skipped_reason null-verdict",
+      "repair": "Treat unratified_* as a closed reader allowlist: emit sites, dispatch-status display, and tests. Pin src/runners/review.js to accept the additive key without copying it into result.verdict or status. Add a red fixture that a synthetic consumer using unratified_verdict as the verdict fails CI. Dead-gate for salvage presence stays separate. A grep-shaped guard is required, not over-engineering, because the field exists only to be ignored for authority.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6d7fb3b4e00a98356ec20cb8adcfc1c69da933c5542c0a4890838ab678aa0bfa"
+    },
+    {
+      "rubric_id": "VB3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR2 salvage admission on interrupted/timeout/unavailable via parsePurposeBoundPayload unique-extract and latest-attempt carry",
+      "claim": "Admitting unique-extracted salvage on interrupted (and carrying the latest unique valid payload) makes a VALID-but-wrong-generation unratified payload feasible; the 8/20 in-tree incident shape is 0-byte with no raw reference, so timeout-with-payload is a different class.",
+      "evidence": "KR2 runs unchanged parsePurposeBoundPayload on whatever bytes exist for exit_failure|timeout|quota|unavailable|interrupted. That parser, after strict JSON fails, returns the unique objectCandidates hit that validates (plan-review-normalize.js:113-124). Capture of two JSON values where the first is complete READY with empty findings and the second is a truncated STOP object yields parser_status extracted and payload READY. Interrupted mid-flush is exactly that shape; success-path runs usually finish both objects and go ambiguous. unavailable is admitted even though the runner may never have written this attempt. Carry rule latest attempt with a unique valid payload then prefers a later interrupted draft over an earlier complete timeout payload. Conversely, excluding raw_binding_mismatch is sound: production hashes the same in-memory buffer it later parses, so mismatch is not a recoverable transport class. The recorded 8/20 fixture is timeout-killed, nonzero exit, 0-byte stdout, NO raw reference (plan-review-transport-fixes.test.sh:15-17); salvage on those bytes is always null.",
+      "evidence_reference": "scripts/lib/plan-review-normalize.js:106-132 parsePurposeBoundPayload; scripts/lib/plan-review-normalize.js:153-158 skip parse on non-success; hooks/tests/plan-review-transport-fixes.test.sh:15-17 incident shape comment and Buffer.alloc(0); docs/plans/2026-08-21-verdict-bytes-preservation.md KR2 latest-attempt carry",
+      "repair": "Do not unique-extract on interrupted or unavailable; salvage those only when parser_status is strict and private_raw_reference is present. For timeout/exit_failure/quota, salvage extracted only if objectCandidates finds exactly one complete object in that attempt's bytes. Carry the latest attempt whose salvage is strict; if none, unratified is null. Empty or unreadable capture stays null. Keep raw_binding_mismatch and identity_mismatch at null. Fixture the 0-byte 8/20 shape as a negative control, not as timeout-with-payload.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c4c51ec489998547f1f9c8a12b81f6f8aec445e9ca5f49e7808e2e0517929c2f"
+    },
+    {
+      "rubric_id": "VB4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR3 fixtures A-F and dead-gate mutation recording",
+      "claim": "Fixtures A and C are paraphrases that would pass even if the real incident byte-shapes still fail, and the dead-gate mutation is not an executable recorded procedure.",
+      "evidence": "Fixture A is chrome line(s) prepended. The still-reproducible cc-shim chrome in-tree is the exact first line of docs/plans/evidence/2026-08-18-dev-flow-contract-card/p1-review-raw.log: [claude-code:unrecognized_model] {model:MiniMax-M3, query_source:generate_session_title} ahead of an intact SHIP block. The 8/8 notice is described only as a multi-line context-window notice in CHANGELOG v2.34.7 and dispatch-review.sh:857-867; those bytes are not frozen. A one-line dummy chrome fixture certifies uniqueness without proving production chrome. Fixture C is labeled the 8/20 incident but specifies timeout plus raw containing a complete valid payload. The in-tree 8/20 residual is 0-byte stdout and null raw reference (plan-review-transport-fixes.test.sh:15-16). That is evidence-discipline section 13: a hand-built producer-wrong shape makes A/C green while the incident stays unsalvaged. Dead-gate is revert the salvage call, A/C turn red, record in evidence, with no command, no file path, and no split between KR1 and KR2 call sites. Expected outcomes are written from the design table, not from cited producer writes.",
+      "evidence_reference": "docs/plans/2026-08-21-verdict-bytes-preservation.md KR3 fixture table A and C; docs/plans/evidence/2026-08-18-dev-flow-contract-card/p1-review-raw.log:1; hooks/tests/plan-review-transport-fixes.test.sh:15-16; references/evidence-discipline.md section 13; scripts/dispatch-review.sh:857-867",
+      "repair": "Freeze fixture bytes from producer artifacts before coding: A copies the 8/18 raw-log chrome plus intact block (cite the log path); add A2 only if 8/8 notice text can be recovered from a stored log, else drop the 8/8 paraphrase. Split C into C-incident (0-byte, no reference, unratified null) and C-complete-timeout (envelope timeout, digest-bound raw that is an exact STOP payload, unratified present). Name the dead-gate as a recorded mutation of each salvage call site with an evidence path under docs/plans/evidence/2026-08-21-verdict-bytes-preservation/. Do not author expected unratified values from the implementation under test.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7c8d3fecf0e91cbba3f958a4accc83c77b90f9f12eedd6be548a65735fe5dd0b"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "KR1 additive JSON vs closed review-result contract (schemas/review-result.schema.json, src/runners/review.js, review-runner tests, engine implement-review)",
+      "claim": "The additive-JSON compatibility claim is false for every strict consumer of dispatch-review output; shipping unratified_verdict without opening those contracts breaks parse of no_verdict artifacts.",
+      "evidence": "schemas/review-result.schema.json sets additionalProperties false and required closed fields with no unratified_verdict. src/runners/review.js REVIEW_RESULT_FIELDS is the same closed list; unknown keys throw review output JSON has unknown field. hooks/tests/review-runner.test.sh pins that extra is rejected. dispatch-review.sh:434-436 documents the final JSON contract as unchanged additionalProperties false. Plan KR1 cites only jq .status // empty in dispatch-hetero.sh and qc-panel named-field reads. Engine implement-review consumes dispatchReviewJson: if JSON.parse succeeds and validateReviewResult throws, parseReviewOutput falls through and rethrows, so result is null with parseError. no_verdict already exits 1 so reviewResultBlocked still blocks, but the closed-schema tests and any validate-json-schema check of the artifact go red. check-contract-schema.js is the review-loop SSOT gate, not this schema; the relevant strict gates are review-result.schema.json and validateReviewResult. plan-review-artifact.schema.json is additionalProperties false at top level; nested attempts items are open objects, so seat-level unratified is schema-ok only if it is never added at the generation root. The plan never names these updates.",
+      "evidence_reference": "schemas/review-result.schema.json:6-10 and :65 additionalProperties false; src/runners/review.js:12-22 and :81-93 and :135-165 parseReviewOutput; hooks/tests/review-runner.test.sh:284-285; scripts/dispatch-review.sh:434-436; schemas/plan-review-artifact.schema.json:6 and :70-74 attempts items",
+      "repair": "Add unratified_verdict to schemas/review-result.schema.json (nullable enum, not required) and to REVIEW_RESULT_FIELDS with a pin that it is never copied into verdict or status. Update hooks/tests/review-runner.test.sh: extra unknown keys still fail; this one key is admitted on no_verdict only. Mirror via sync-all. State that check-contract-schema.js is out of scope because it does not parse review-result. If plan-review unratified is seat-level only, say so and keep the generation artifact schema closed; if it is top-level, extend plan-review-artifact.schema.json in the same slice.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "05694078cb551f7edf64c05828412d1240dd5446f33d4930997d5a10a44e72bb"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "dispatch-review.sh no_verdict emitters that bypass emit_no_verdict (codex, grok, qoder, cc-shim, claude-native, anthropic-compatible)",
+      "claim": "KR1 places salvage only in emit_no_verdict, but most transport-exit destroy sites inline no_verdict JSON and never call it, so dropping runner exit 0 does not salvage the BACKLOG process-exit class.",
+      "evidence": "emit_no_verdict is at dispatch-review.sh:356-361 and is used by kimi, agy, and parser failures. Non-zero paths that printf the no_verdict object and exit 1 without that function: codex :662, grok :702, qoder :749, cc-shim :880, claude-native :908, anthropic-compatible :932. Those are the process-exit sites the BACKLOG row names. Fixture A is chrome plus rc=0 (parser then emit_no_verdict). Fixture B is partial plus rc not 0 expecting null. There is no complete-block plus rc not 0 positive control, so implementing salvage only inside emit_no_verdict keeps A-F green while a timed-out grok/codex/cc-shim review with an intact block still has no unratified_verdict. Parser-start-anchor salvage would still cover 8/8-class chrome at rc=0 only.",
+      "evidence_reference": "scripts/dispatch-review.sh:356-361 emit_no_verdict; :662 codex; :702 grok; :749 qoder; :880 cc-shim; :908 claude-native; :932 anthropic-compatible; docs/BACKLOG.md Reviewer transport exits row (process exit or framing); docs/plans/2026-08-21-verdict-bytes-preservation.md KR1 emit_no_verdict bullet and fixture B",
+      "repair": "Route every no_verdict emitter through one helper that attempts salvage when capture is readable and markers are defined, including the six inline runner-exit printf sites. Add a fixture of an intact nonce block plus non-zero runner rc on at least one currently-inline runner and assert unratified_verdict is present while status stays no_verdict and exit stays 1.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6820a6e38f3ed6b91e2af0de2c481411815e13509f8e020cb269ffaaf803d592"
+    },
+    {
+      "rubric_id": "VB5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Unnamed third rails: qc-panel judge seats, qualification-review-provider, adjudicate-findings input, engine implement-review verify path",
+      "claim": "The plan names dispatch-review.sh and the plan-review rail as the work but does not place the other transport-destroyed verdict surfaces in scope or out of scope with a reason.",
+      "evidence": "qc-panel judges write verdict.txt under a DONE protocol (qc-panel.js:312-372), not nonce-wrapped SHIP-AS-IS; a killed judge drops a vote rather than a dispatch-review verdict. qualification-review-provider emits its own pass/fail JSON, not review-result. adjudicate-findings ingests findings after a verdict exists. engine implement-review is a consumer of dispatch-review JSON (in scope as compatibility, not as a third producer). None of these are in section 6 Out of scope. Leaving them unnamed lets a later slice assume this plan already covered them.",
+      "evidence_reference": "docs/plans/2026-08-21-verdict-bytes-preservation.md section 6 Out of scope; scripts/qc-panel.js:312-372 judge verdict.txt; scripts/qualification-review-provider.js finding-shape / verdict pass-fail contract; src/engine/autopilot-engine.js:3300 dispatchReviewJson consumer",
+      "repair": "Add an out-of-scope bullet with reasons: qc-panel judges use a different verdict.txt contract; qualification-review-provider has its own purpose-bound JSON; adjudicate-findings is post-verdict intake; engine implement-review is a KR1 consumer handled under schema pinning, not a third producer. No current producer change in this slice for those rails.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_boundary_redteam",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "536b6b3f4aade460d15d2cf1f26c487f6dc1f832eb67b928e336462abea7c92e"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "536b6b3f4aade460d15d2cf1f26c487f6dc1f832eb67b928e336462abea7c92e",
+      "rubric_id": "VB5",
+      "affected_surface": "Unnamed third rails: qc-panel judge seats, qualification-review-provider, adjudicate-findings input, engine implement-review verify path",
+      "claim": "The plan names dispatch-review.sh and the plan-review rail as the work but does not place the other transport-destroyed verdict surfaces in scope or out of scope with a reason.",
+      "evidence_reference": "docs/plans/2026-08-21-verdict-bytes-preservation.md section 6 Out of scope; scripts/qc-panel.js:312-372 judge verdict.txt; scripts/qualification-review-provider.js finding-shape / verdict pass-fail contract; src/engine/autopilot-engine.js:3300 dispatchReviewJson consumer",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-08-21T10:33:59.586Z"
+}

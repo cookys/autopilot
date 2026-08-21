@@ -1,6 +1,6 @@
 # Implementer qualification suite — live-rail 正式考券 (v2.34.34)
 
-Status: **R2 FROZEN** — G1 20/20 accepted(`g1-dispositions.json`);G2 terminal 14/14 adjudicated at depth-0(`g2-adjudication.md`,generation cap)
+Status: ✅ **Shipped in v2.34.34** — merged as `92bc6939`(R2 FROZEN;G1 20/20 accepted、G2 terminal 14/14 adjudicated;兩輪 pre-merge review 修復入 `docs/BACKLOG.md` cut-list row)
 Project: `docs/projects/2026-08-22-implementer-qualification-suite/README.md`
 
 ## §1 Problem and lineage

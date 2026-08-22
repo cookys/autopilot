@@ -19,6 +19,21 @@ case "$ENGINE_SCORECARD_DIR" in
   "$TEST_TMP"/*) : ;;
   *) fail "isolation: ENGINE_SCORECARD_DIR ($ENGINE_SCORECARD_DIR) is not inside TEST_TMP ($TEST_TMP)" ;;
 esac
+# ENGINE_CAPABILITY_DIR matters MORE here than the scorecard var: this file does
+# a destructive, non-append fs.writeFileSync into
+# $ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl when it builds its fixture
+# capability store. Guarding only the var we read and not the one we overwrite
+# is how ~/.autopilot/engine-capability/*.test-residue-quarantined-* got made.
+case "$ENGINE_CAPABILITY_DIR" in
+  "$TEST_TMP"/*) : ;;
+  *) fail "isolation: ENGINE_CAPABILITY_DIR ($ENGINE_CAPABILITY_DIR) is not inside TEST_TMP ($TEST_TMP)" ;;
+esac
+# Byte-fingerprint the real user-local stores; re-checked at the end of the run.
+REAL_SCORECARD="$HOME/.autopilot/engine-scorecard/scorecard.jsonl"
+REAL_CAPABILITY="$HOME/.autopilot/engine-capability/qualification-evidence.jsonl"
+fingerprint() { if [ -f "$1" ]; then wc -c <"$1" | tr -d " "; else echo absent; fi; }
+REAL_SCORECARD_BEFORE=$(fingerprint "$REAL_SCORECARD")
+REAL_CAPABILITY_BEFORE=$(fingerprint "$REAL_CAPABILITY")
 
 # --- Fixture store -----------------------------------------------------------
 # 4 real rows lifted verbatim out of the committed artifact's defaults[].row
@@ -309,5 +324,11 @@ process.stdin.on("end", () => {
 else
   fail "seat_hash parity: not every checked seat agreed across artifact / independent derivation / engine-scorecard.js seat-status ($PARITY_OUT)"
 fi
+
+# --- the real user-local stores were never touched ---------------------------
+assert_eq "$(fingerprint "$REAL_SCORECARD")" "$REAL_SCORECARD_BEFORE" \
+  "isolation: the real scorecard store is byte-unchanged"
+assert_eq "$(fingerprint "$REAL_CAPABILITY")" "$REAL_CAPABILITY_BEFORE" \
+  "isolation: the real capability evidence store is byte-unchanged"
 
 finalize_test

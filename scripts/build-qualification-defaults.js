@@ -137,9 +137,22 @@ function sha256(text) {
 }
 
 // Re-derived locally from the identical two-line algorithm in
-// scripts/engine-scorecard.js (seatHash) — never shelled out cross-script, per
-// the note at that call site. A seat_hash mismatch between the two would break
-// strike accrual on adopted rows, so hooks/tests assert the two agree.
+// scripts/engine-scorecard.js (seatIdentityHash) — never shelled out
+// cross-script, per the note at that call site.
+//
+// What is actually pinned, stated precisely (a first-pass reviewer caught the
+// earlier over-claim here by mutating this function and watching both suites
+// stay green): hooks/tests/qualification-defaults.test.sh §7 pins the
+// COMMITTED ARTIFACT's seat_hash three ways — against an independent inline
+// derivation and against what `engine-scorecard.js seat-status` prints. It
+// does not call this function, so a drift here is caught on the NEXT suite run
+// after a regeneration is committed, not at the moment the drift is written.
+//
+// The blast radius of a drift is correspondingly small: the artifact's
+// seat_hash is DISCLOSURE only. engine-scorecard.js re-derives seat identity
+// live from {engine, runner, role} at read time, so strike accrual on an
+// adopted row does not depend on this value being right — a drift ships a
+// wrong ADVERTISED hash, not a broken fold.
 function seatHash(engine, runner, role) {
   return sha256(canonicalJson({ engine: String(engine), runner: String(runner), role: String(role) }));
 }
@@ -417,16 +430,21 @@ function parseArgs(argv) {
 // keyword is evaluated. Our artifact carries verbatim `capability_score`
 // floats, which are the ONLY non-integer numbers anywhere in it (asserted in
 // hooks/tests/qualification-defaults.test.sh). So the document handed to the
-// validator has those floats normalized to 0. The schema types
-// `capability_score` as number-or-null, so the normalization changes no
-// verdict this schema can reach — and it touches nothing in the disclosure
-// block, which is the contract the schema exists to enforce. The validator's
+// validator has those floats normalized to 0. The schema places NO constraint
+// on `capability_score` at all (empty subschema — it is verbatim scorecard
+// data), so the normalization changes no verdict this schema could reach on
+// that field either way — and it touches nothing in the disclosure block,
+// which is the contract the schema exists to enforce. The validator's
 // integer-only restriction is filed as a BACKLOG row, not worked around
 // silently.
 function validateAgainstSchema(derived, opts) {
   const schemaPath = path.join(opts.repoRoot, 'schemas', 'official-qualification-defaults.schema.json');
   const validator = path.join(SCRIPT_DIR, 'validate-json-schema.js');
-  if (!fs.existsSync(schemaPath) || !fs.existsSync(validator)) return;
+  // Fail closed, not silently open: a gate that disables itself when its own
+  // schema goes missing is the "script exists but is switched off" failure
+  // (references/evidence-discipline.md §1).
+  if (!fs.existsSync(schemaPath)) fail(`schema missing, cannot validate the derived artifact: ${schemaPath}`);
+  if (!fs.existsSync(validator)) fail(`validator missing, cannot validate the derived artifact: ${validator}`);
   const normalized = derived.replace(/("capability_score": )-?[0-9]+\.[0-9]+/g, '$10');
   const tmp = `${os.tmpdir()}/qualification-defaults-schemacheck-${process.pid}.json`;
   fs.writeFileSync(tmp, normalized);

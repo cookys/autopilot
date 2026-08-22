@@ -181,6 +181,30 @@ assert_eq "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).admission
 assert_not_contains "$SELF_ENFORCED" "ADOPTED OFFICIAL DEFAULT" \
   "a self-qualified seat gets NO adoption remedy — the branch is conditional"
 
+# --- 8b. the `kind` discriminator itself is load-bearing ---------------------
+# §8 above only proves the branch is off when provenance is ABSENT. That leaves
+# `kind === 'official-default'` unpinned: replacing it with `true` survives §8.
+# A row carrying some OTHER provenance kind must also get no adoption remedy —
+# otherwise a future provenance shape inherits a message asserting it routes on
+# an official default it has never heard of.
+OTHER_STORE="$TEST_TMP/other-provenance-store"
+mkdir -p "$OTHER_STORE"
+node -e '
+  const fs = require("fs");
+  const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const e = a.defaults.find((d) => d.seat.engine === process.argv[3] && d.seat.runner === process.argv[4]);
+  const row = { ...e.row };
+  row.provenance = { kind: "some-future-provenance-shape", note: "not an official default" };
+  row.event_id = 1;
+  fs.writeFileSync(process.argv[2], JSON.stringify(row) + "\n");
+' "$ARTIFACT" "$OTHER_STORE/scorecard.jsonl" "$SEAT_ENGINE" "$SEAT_RUNNER"
+OTHER_ENFORCED=$(ENGINE_SCORECARD_DIR="$OTHER_STORE" AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$SCORECARD" seat-status \
+  --engine "$SEAT_ENGINE" --runner "$SEAT_RUNNER" --role "$SEAT_ROLE" --now "$NOW")
+assert_eq "$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).admission_status)' "$OTHER_ENFORCED")" \
+  "requalify_required" "a non-official-default provenance seat is blocked identically"
+assert_not_contains "$OTHER_ENFORCED" "ADOPTED OFFICIAL DEFAULT" \
+  "the kind discriminator is load-bearing — a different provenance kind gets NO adoption remedy"
+
 # --- 9. a local row on the same seat is never silently shadowed --------------
 COLLIDE=$(node "$ADOPT" adopt --seat "$SEAT_ENGINE:$SEAT_RUNNER" --role "$SEAT_ROLE" \
   --artifact "$ARTIFACT" --store "$STORE" 2>&1)

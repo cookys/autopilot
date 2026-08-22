@@ -101,7 +101,8 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ### Same-UTC-day evidence receipt reads as not-yet-valid — three QUALIFIED implementer rows have no baseline on administration day
 - **Trigger**: 下一次動 `engine-scorecard.js` 的 `deriveStatus`/`findSeatBaseline`/`nowArgToMs` 任一;或有人回報「剛考過的 seat 卻是 `no_record`」。
 - **Context**: `nowArgToMs` 預設 `todayMsUtc()`(UTC 午夜截斷)。一列 evidence receipt 的 `issued_at` 若落在同一個 UTC 日的午夜之後(例如 `2026-08-22T08:56Z`),`deriveStatus` 對它算出的 receipt state 不是 `qualified`/`stale`,`findSeatBaseline` 因此挑不到 baseline,`seat-status` 回 `no_record` —— 儘管 store 裡就有一列 QUALIFIED。實測(2026-08-22,真 store,唯讀):events **153 (gpt-5.6-luna)、154 (claude-sonnet-5)、155 (claude-opus-5)** 三列 `seat-status` = `no_record`,同一列加 `--now 2026-08-24` 立刻變 `qualified` / `baseline_event_id=155`;同 corpus 的 143-151(日期較早)全部正常。效果是暫時的(次日 UTC 午夜自癒),但當天的 strike fold 與 `remedy` 路徑等於整段失效。發現於 v2.34.36 official-defaults 施工,**未修**:動的是 admission 語意,超出該 ship 範圍。
-- **Effort**: Fix(`nowArgToMs` 對 receipt 比較改用真實 now 而非 UTC 午夜,或 baseline 比較放寬到日粒度;要帶 planted negative:一列 `issued_at` 在今天稍晚的 row 必須 qualified)。
+- **同一截斷還讓「當日 strike」變成無聲 no-op**(v2.34.36 first-pass reviewer 實測,比原條目更利):不帶 `--now` 時 `nowMs` 是 UTC 午夜,`foldSeatStrikes` 的 `observedMs <= nowMs` 因此**拒收今天稍晚寫進去的每一筆 strike**。實測:19:49Z 對已採用席位寫三筆 → 預設時鐘 `rejected_strikes: 3 / strikes_since_pass: 0`,同一列 `--now 2026-09-01` → `rejected_strikes: 0 / requalify_required`。`dispatch-contract.js` 從不傳 `--now`,所以 strike 執法在最多 24 小時內靜默失效。兩份新測試都釘 `--now`,因此都沒踩到。修的時候兩面一起修。
+- **Effort**: Fix(`nowArgToMs` 對 receipt 比較改用真實 now 而非 UTC 午夜,或 baseline 比較放寬到日粒度;要帶 planted negative:一列 `issued_at` 在今天稍晚的 row 必須 qualified,以及一筆今天稍晚的 strike 必須被計入)。
 - **Source**: 2026-08-23 official-qualification-defaults 施工實測(run `official-defaults-l4`)。
 
 ### Durable repair-lock — 解鎖路徑先行,鎖才准回來(P6D KR3 的第二階段)

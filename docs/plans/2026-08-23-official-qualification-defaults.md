@@ -265,4 +265,24 @@ plan's §7 puts out of scope.
 ## Review log
 
 - **R0 author**: depth-1 foreman, run `official-defaults-l4`, 2026-08-23.
+- **R1 first-pass pre-merge review** (autopilot:reviewer, opus, 2026-08-23) — 0 🔴, 2 🟠, 5 🟡, 5 🔵.
+  The three headline claims held under direct execution: the adoption round-trip is end-to-end
+  through an unmodified `dispatch-contract.js` (verdict GO on an adopted row); the artifact
+  re-derives byte-identically from the real store under hostile TZ/locale; the schema gate has teeth
+  (dropping a disclosure field fails the build closed). ADR-0001 boundary verified clean — both
+  sha256 values are written-and-never-read.
+  Two of the reviewer's five mutations SURVIVED, and that was the sharpest result: the generator's
+  duplicated `seatHash` and the `provenance.kind === 'official-default'` discriminator were
+  asserted-but-unpinned, so KR5 was not actually met. Both are now fixed — the `kind` mutation was
+  re-run after the fix and goes red (`43 passed, 1 failed`), restored green at 44.
+  Dispositions: all 7 MUST-FIX applied (undeclared `.opencode` dependency bump reverted to base;
+  sweep roster `role` fail-closed to `implementer` because the seats×25 consent warning is
+  implementer-shaped and would understate a reviewer sweep's real spend by ~72%; over-claiming
+  test-pin comment corrected to state what §7 actually pins; `kind` negative control added; the
+  generator test now guards `ENGINE_CAPABILITY_DIR` — the var it destructively writes — and
+  byte-fingerprints the real stores; schema misstatement corrected in two places; dangling fixture
+  path fixed). Cut items 8–12 recorded as follow-ups; the sweep retry-semantics header drift (8) and
+  the `validateAgainstSchema` silent self-disable (11) were fixed in-line rather than deferred.
+  Widened the same-UTC-day BACKLOG row with the reviewer's sharper finding: the truncation also
+  makes same-day STRIKE accrual a silent no-op (3 strikes at 19:49Z ⇒ `rejected_strikes: 3`).
 - Depth-0 holds the authoritative qc verdict; this run performs first-pass qc only per its brief.

@@ -19,9 +19,13 @@
 # path + version output, containment of the EXACT frozen model token, rc,
 # timestamp, version_source, instrument_charged:false. A probe miss is an
 # UNCHARGED infra abort (receipt retained, no administration attempted);
-# retries are new linked attempts capped at 2; model substitution under one
-# administration identity is forbidden. This script's --execute mode is that
-# operator procedure, mechanized.
+# model substitution under one administration identity is forbidden. This
+# script's --execute mode is that operator procedure, mechanized — with ONE
+# part of the procedure NOT mechanized: the SKILL's "retries are new linked
+# attempts capped at 2" is not implemented here. --execute probes each seat
+# exactly once and skips on a miss; the `attempt` field in the receipt is
+# always 1. Re-attempting is an operator decision, made by re-running the
+# sweep with a roster narrowed to the missed seats.
 #
 # USAGE:
 #   scripts/qualification-sweep.sh --roster <file> [--plan]
@@ -59,8 +63,8 @@
 #              --execute refuses to proceed non-interactively without --yes,
 #              and prints the seats*25 dispatch-count warning first either way.
 #
-# ROSTER FILE (JSON; see hooks/tests/fixtures/qualification-sweep-roster.json
-# for a worked example the test suite uses):
+# ROSTER FILE (JSON; the test suite builds a worked example inline — see
+# hooks/tests/qualification-sweep.test.sh:15):
 #   {
 #     "corpus": {
 #       "prompt_config_hash": "<sha256 hex>",
@@ -189,6 +193,20 @@ function req(obj, keys, label) {
   }
 }
 req(data, ['evidence_root', 'role'], 'roster');
+// FAIL CLOSED on any role but implementer. Two things in this script are
+// implementer-shaped and would silently lie for another role:
+//   1. the --execute consent warning computes seats*25 from the implementer
+//      corpus (1 probe + 24 cases). The reviewer corpus is 42 cases, so a
+//      reviewer roster would understate real money spent by ~72% — and that
+//      warning is the ONLY informed-consent gate before --yes.
+//   2. --task-class/--domain/--language/--tool are hardcoded to the
+//      implementer suite's scope tuple below.
+// Deriving per-role case counts is the right generalization; until then this
+// refuses rather than mis-quotes a spend.
+if (data.role !== 'implementer') {
+  console.error(`qualification-sweep.sh: roster role '${data.role}' is not supported — this sweep is implementer-only (its cost warning and scope tuple are the implementer suite's). ${rosterPath}`);
+  process.exit(1);
+}
 req(data.corpus, [
   'prompt_config_hash', 'semantic_fingerprint', 'containment_fingerprint',
   'harness_version', 'expires_days',

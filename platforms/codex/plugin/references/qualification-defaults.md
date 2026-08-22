@@ -172,9 +172,10 @@ node scripts/validate-json-schema.js \
 > schema keyword is evaluated. This artifact carries verbatim `capability_score` fractions (e.g.
 > `0.9166666666666666` = 11/12), which are the **only** non-integer numbers anywhere in it —
 > asserted mechanically in `hooks/tests/qualification-defaults.test.sh`. So `build` validates a copy
-> with those normalized to `0`; the schema types `capability_score` as number-or-null, so no verdict
-> the schema can reach changes, and nothing in the disclosure block — the contract the schema exists
-> to enforce — is touched. The validator's integer-only restriction is filed as a BACKLOG row.
+> with those normalized to `0`. The schema places **no constraint at all** on `capability_score`
+> (`schemas/official-qualification-defaults.schema.json` gives it an empty subschema, because it is
+> verbatim scorecard data), so there is no verdict the schema could reach on that field either way,
+> and nothing in the disclosure block — the contract the schema exists to enforce — is touched. The validator's integer-only restriction is filed as a BACKLOG row.
 > Running the validator directly against the committed artifact exits 2, and that is expected.
 
 `--check` is the anti-rot gate, and it is the reason the artifact carries no timestamp: a wall-clock

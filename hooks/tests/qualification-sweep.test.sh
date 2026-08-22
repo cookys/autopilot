@@ -133,4 +133,22 @@ assert_file_absent "$EVIDENCE_BUNDLE_ROOT" "no evidence bundle directory created
 "$SCRIPT" --roster "$ROSTER" --plan --totally-bogus-flag > /dev/null 2>&1
 assert_exit_code "$?" "2" "unknown flag exit code"
 
+# 7. Role fail-closed: the --execute cost warning (seats*25) and the hardcoded
+#    scope tuple are BOTH implementer-shaped. A reviewer roster would understate
+#    real money spent (that corpus is 42 cases, not 24), and the cost warning is
+#    the only informed-consent gate before --yes. So a non-implementer role must
+#    be refused outright rather than mis-quoted.
+NON_IMPL_ROSTER="$TEST_TMP/roster-reviewer.json"
+node -e '
+  const fs = require("fs");
+  const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  r.role = "reviewer";
+  fs.writeFileSync(process.argv[2], JSON.stringify(r, null, 2));
+' "$ROSTER" "$NON_IMPL_ROSTER"
+NON_IMPL_OUT=$("$SCRIPT" --roster "$NON_IMPL_ROSTER" --plan 2>&1)
+NON_IMPL_EXIT=$?
+assert_exit_code "$NON_IMPL_EXIT" "1" "a non-implementer roster role is refused (fail closed, not mis-quoted)"
+assert_contains "$NON_IMPL_OUT" "implementer-only" "the refusal says why the sweep is implementer-only"
+assert_not_contains "$NON_IMPL_OUT" "engine-qualify.js reviewer" "no reviewer plan is emitted"
+
 finalize_test

@@ -3184,6 +3184,11 @@ function runImplCase(context) {
       case_id: caseSpec.case_id,
       dispatch_status: ledgerRow.dispatch_status,
       spawn_error: run.error ? String(run.error.message) : null,
+      // Efficiency telemetry (2026-08-22): persist what the rail reports so
+      // per-case wall/tokens survive the administration (manifests carry wall
+      // but never usage; runner logs are runner-specific and pruned).
+      wall_secs: dispatchJson && Number.isFinite(dispatchJson.wall_secs) ? dispatchJson.wall_secs : null,
+      usage: dispatchJson && dispatchJson.usage ? dispatchJson.usage : null,
     });
     // engine_unavailable administration cap (G2-F9): honest scarcity aborts the
     // administration (no verdict) rather than scoring a FAIL against the seat.

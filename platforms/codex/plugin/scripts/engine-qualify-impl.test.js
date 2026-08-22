@@ -351,25 +351,53 @@ const implCorpus = require(path.join(__dirname, '..', 'evals', 'impl-capability-
 equal(implCorpus.budget.families * implCorpus.budget.cases_per_family_per_trial, 12,
   'corpus per-trial case count matches the kernel IMPL_CASES_PER_TRIAL pin');
 
-// e2e: wall truncation mid-run → row is failed AND its quality denominator is
-// the FULL corpus (a truncated run must never present as N/N → T0; round-2).
+// e2e: truncation mid-run → row is failed AND its quality denominator is the
+// FULL corpus (a truncated run must never present as N/N → T0; round-2).
+//
+// This fixture used to pass `testWallSecondsOverride: 8` and then assert
+// `truncRun.qualified === false` — i.e. it ASSUMED the corpus could not finish
+// in 8 seconds. That is a statement about the host, not about this code: green
+// on a contended machine, RED on an idle one (2026-08-23: PASS under 8-way
+// parallelism with a second suite running, FAIL on the less-contended rerun,
+// FAIL solo; `verify-preexisting.sh ... --base 754df354` => PRE_EXISTING).
+//
+// Now the truncation is TRIGGERED deterministically by case count
+// (`testTruncateAfterCases`, the same shrink-only seam family, reaching the
+// identical branch) and ASSERTED on the kernel's own observable fact
+// (`wall_truncated`) rather than inferred from a clock. Both halves of the
+// original flake are gone: the trigger no longer depends on machine speed, and
+// the assertion no longer uses elapsed time as a proxy for "was truncated".
 const truncStore = fs.mkdtempSync(path.join(tempRoot, 'store-trunc-'));
 fs.writeFileSync(path.join(tempRoot, 'fake-seed.txt'), 'trunc-seed');
 fs.writeFileSync(path.join(tempRoot, 'fake-mode.txt'), 'honest');
 process.env.AUTOPILOT_QUALIFY_SEED = 'trunc-seed';
-const truncRun = runImplQualification({ ...baseOptions(truncStore), dispatchBin: path.join(tempRoot, 'disp.sh'), testWallSecondsOverride: 8 });
+const truncRun = runImplQualification({ ...baseOptions(truncStore), dispatchBin: path.join(tempRoot, 'disp.sh'), testTruncateAfterCases: 6 });
 delete process.env.AUTOPILOT_QUALIFY_SEED;
-equal(truncRun.qualified, false, 'wall-truncated administration is NOT qualified');
-if (truncRun.row.status === 'failed') {
-  // At least one case started before the wall — the interesting shape.
-  check(truncRun.row.quality.corpus_pass.endsWith('/24'),
-    `truncated row denominator is the full corpus (got ${truncRun.row.quality.corpus_pass})`);
-  check(truncRun.row.capability_score < 1,
-    `truncated row capability_score < 1 (got ${truncRun.row.capability_score})`);
-} else {
-  // Wall fired before any case started — degenerate no-verdict shape, equally safe.
-  equal(truncRun.row.status, 'no_verdict', 'zero-started truncation is no_verdict');
-}
+equal(truncRun.wall_truncated, true, 'truncated administration reports wall_truncated');
+equal(truncRun.started_cases, 6, 'truncation fires after exactly the seam\'s case count');
+equal(truncRun.qualified, false, 'truncated administration is NOT qualified');
+equal(truncRun.row.status, 'failed', 'a truncated administration with started cases is a failed row');
+check(truncRun.row.quality.corpus_pass.endsWith('/24'),
+  `truncated row denominator is the full corpus (got ${truncRun.row.quality.corpus_pass})`);
+check(truncRun.row.capability_score < 1,
+  `truncated row capability_score < 1 (got ${truncRun.row.capability_score})`);
+
+// The degenerate shape — truncation before ANY case starts — is no_verdict, and
+// is now reachable deterministically too (it used to ride on the same clock).
+const trunc0Store = fs.mkdtempSync(path.join(tempRoot, 'store-trunc0-'));
+process.env.AUTOPILOT_QUALIFY_SEED = 'trunc-seed';
+const trunc0Run = runImplQualification({ ...baseOptions(trunc0Store), dispatchBin: path.join(tempRoot, 'disp.sh'), testTruncateAfterCases: 0 });
+delete process.env.AUTOPILOT_QUALIFY_SEED;
+equal(trunc0Run.wall_truncated, true, 'zero-started truncation reports wall_truncated');
+equal(trunc0Run.started_cases, 0, 'zero-started truncation started no cases');
+equal(trunc0Run.qualified, false, 'zero-started truncation is NOT qualified');
+equal(trunc0Run.row.status, 'no_verdict', 'zero-started truncation is no_verdict');
+equal(trunc0Run.evidence, null, 'zero-started truncation writes NO evidence');
+
+// A run that is NOT truncated must report so — otherwise `wall_truncated` could
+// be hard-wired true and both assertions above would still pass.
+equal(honest.wall_truncated, false, 'an untruncated administration reports wall_truncated=false');
+equal(honest.started_cases, 24, 'an untruncated administration starts the full corpus');
 
 // e2e: reservation override 0 → insufficient_budget → NO evidence row, NO scorecard row.
 const budStore = fs.mkdtempSync(path.join(tempRoot, 'store-bud-'));

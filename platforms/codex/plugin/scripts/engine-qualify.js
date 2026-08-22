@@ -2820,6 +2820,21 @@ function runImplQualification(options) {
     Number.isFinite(options.testWallSecondsOverride)
       ? options.testWallSecondsOverride : Infinity,
   );
+  // Third shrink-only seam, same family as the two above: stop the
+  // administration after exactly N STARTED cases, reaching the identical
+  // truncation branch as wall exhaustion.
+  //
+  // Why it exists: a wall deadline is a CLOCK, and a clock is not a fixture.
+  // `testWallSecondsOverride: 8` was standing in for "this run will not finish
+  // in time", which is a claim about the HOST, not about this code — green when
+  // the machine was busy, red when it was idle (BACKLOG 2026-08-23; also
+  // PRE_EXISTING per verify-preexisting.sh against 754df354). Counting started
+  // cases truncates deterministically on every machine, at the same branch,
+  // with the same downstream shape.
+  const truncateAfterCases = Number.isInteger(options.testTruncateAfterCases)
+    && options.testTruncateAfterCases >= 0
+    ? options.testTruncateAfterCases
+    : null;
   const budget = {
     dispatch_reservation: reservationCap,
     spent: 0,
@@ -2831,6 +2846,11 @@ function runImplQualification(options) {
 
   const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-qualify-live-'));
   let administrationOutcome = 'completed';
+  // Whether the administration stopped early because it ran out of wall budget.
+  // Reported on the returned run (`wall_truncated`) so a caller can ASSERT on
+  // the fact instead of inferring it from elapsed time.
+  let wallTruncated = false;
+  let startedCases = 0;
   const trialResults = [];
   try {
     for (const trial of administration.trials) {
@@ -2840,13 +2860,16 @@ function runImplQualification(options) {
           administrationOutcome = 'insufficient_budget';
           break;
         }
-        if (Date.now() >= budget.wall_deadline) {
+        if (Date.now() >= budget.wall_deadline
+            || (truncateAfterCases !== null && startedCases >= truncateAfterCases)) {
           // Wall exhaustion is COMPLETED with started cases already labeled
           // (G2-F3/F13): remaining unstarted cases are simply absent, never a
           // no-verdict abort. Fail-closed: an unrun capability case cannot pass.
           administrationOutcome = 'completed';
+          wallTruncated = true;
           break;
         }
+        startedCases += 1;
         const observation = runImplCase({
           caseSpec, options, dispatchTimeout, workRoot,
           canaryToken: administration.canary_token, budget, ledger, rawExchanges,
@@ -2896,6 +2919,8 @@ function runImplQualification(options) {
       run_nonce: runNonce,
       oracle: oracleMeta,
       qualified: false,
+      wall_truncated: wallTruncated,
+      started_cases: startedCases,
       evidence: null,
       row: { status: 'no_verdict', administration_outcome: administrationOutcome, evidence: null },
       verdict: {
@@ -3096,6 +3121,11 @@ function runImplQualification(options) {
     run_nonce: runNonce,
     oracle: oracleMeta,
     qualified,
+    // Observable truncation fact (v2.34.37). `wall_truncated` is what the
+    // truncation fixture asserts on; it used to assert `qualified === false`
+    // and hope 8 seconds were not enough to finish the corpus.
+    wall_truncated: wallTruncated,
+    started_cases: startedCases,
     evidence,
     row,
     verdict,

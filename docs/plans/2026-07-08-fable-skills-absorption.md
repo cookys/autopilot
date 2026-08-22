@@ -1,6 +1,6 @@
 # Plan - fable-skills absorption
 
-> Status: R0 authored; implementation gated and triaged to `docs/BACKLOG.md` for an explicit Board decision (2026-07-31).
+> Status: CLOSED-NOT-PURSUED (Board CEO-delegated ruling 2026-08-23) — largely superseded by evidence-discipline promotion, skill-contract-card, and review checklists; residual value does not clear 成績單前置 with zero demand signal. Re-entry: an incident an unabsorbed guardrail would have prevented. Original: R0 authored 2026-07-08, triaged 2026-07-31.
 > Owner: pending Board decision.
 > Branch: develop.
 > Frame: absorb useful methodology from `DizzyMii/fable-skills` without vendoring the package.

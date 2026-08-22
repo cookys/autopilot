@@ -241,8 +241,8 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S。
 - **Source**: v2.34.13 KR5 dogfood(2026-08-17);critic run bvxubvq39。
 
-### Fable skills absorption plan — Board triage
-- **Status**: UNDECIDED — genuine orphan plan found during exhaustive 111-plan audit。
+### ~~Fable skills absorption plan — Board triage~~ — RESOLVED-NOT-PURSUED 2026-08-23 (Board CEO-delegated)
+- **Status**: CLOSED — the plan (R0, 2026-07-08) is largely superseded by what shipped since: evidence discipline promoted to `references/evidence-discipline.md`, skill-contract-card + per-skill ratchet (its KR1/KR2/KR4 territory), and review checklists own KR3's surface. The residual novel value (native-code style checklist, per-skill rationalization tables) does not justify an L campaign under 成績單前置 with zero demand signal in 46 days. Plan stays in docs/plans/ with a status stamp, not deleted. Re-entry: a concrete incident that one of its unabsorbed guardrails would have prevented.
 - **Trigger**: Before implementing any of its P1–P4 methodology changes, or when selecting the next behavior-rule improvement。
 - **Context**: Do not silently archive or imply approval. Recommended order if reopened: P2 scope-rationalization checklist → P4 written/runs/verified claim ladder → P3 native-code review；P1 pressure-scenario guidance overlaps existing trigger-gated work。
 - **Effort**: Board decision (then S per selected slice)。
@@ -381,8 +381,8 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S (wire existing rails) — only if the trigger fires.
 - **Source**: 2026-06-23 `docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md` scope-cut + Phase L ship (`577ba8d`).
 
-### Tree-engine graduation Board review
-- **Status**: TRIGGERED/OVERDUE — 30-day deadline passed with only 2 samples；Board must extend or abort。
+### ~~Tree-engine graduation Board review~~ — RESOLVED-ABORT 2026-08-23 (Board CEO-delegated)
+- **Status**: ABORTED — 2/50 samples in 72 days, agreement 0/2; the sample-accrual rate proves the shadow instrument cannot reach graduation criteria on this repo's workflow. `board_signoff {decision: abort, active: false}` recorded in `docs/projects/_archive/2026-06-12-task-tree-engine/tree/events.jsonl`; P6 adapter stays inactive. Re-entry: a fresh calibration campaign IF reviewer-baseline sampling ever becomes routine (e.g. qc-panel shadow rows accumulating), with a sample-rate feasibility check BEFORE arming any deadline.
 - **Trigger**: `~/.autopilot/calibration/samples.jsonl` reaches 50 reviewer-baseline samples OR 30 days after the first shadow run (2026-06-12), whichever comes first.
 - **Context**: Amendment 6 — Board decides graduate / extend / abort based on `scripts/calibration.sh report` output. Silence is NOT extension. P6 adapter post-signoff activation is blocked on a `board_signoff` event recorded in the project tree (see `references/tree-contracts.md` §3.12 and `scripts/tree.js board-status`).
 - **Effort**: Fix (Board review meeting; not a code task)

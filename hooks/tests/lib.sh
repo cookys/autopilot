@@ -48,6 +48,27 @@ mkdir -p "$HOOK_TMPDIR"
 # different TMPDIR can still export its own after sourcing lib.sh.
 export TMPDIR="$HOOK_TMPDIR"
 
+# Same class of leak, one layer up (2026-08-22 incident). HOOK_HOME above exists
+# precisely because "~/.autopilot/* writes must be isolated", but HOME is only
+# handed to hook children — a test that invokes scripts/*.sh directly still lets
+# the SCRIPT resolve its store from the real os.homedir(). That is how
+# dispatch-hetero.sh's seat_strike_capture wrote 46 fixture strike rows into the
+# operator's ~/.autopilot/engine-capability/strikes.jsonl across three separate
+# suites (dispatch-hetero, and the dispatch-lineage family found only on a second
+# sweep). Patching suites one at a time kept missing one, so isolate the stores
+# GLOBALLY here — the same reasoning, and the same fix, that TMPDIR got above.
+# A suite needing a different store can still export its own after sourcing lib.sh
+# (several do, for case-specific fixtures).
+#
+# Note this is a floor, not a substitute for asserting: a store env var that is set
+# but never checked is indistinguishable from one that is ignored. Suites that
+# actually dispatch also assert the real store's size is unchanged.
+HOOK_ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"
+HOOK_ENGINE_SCORECARD_DIR="$TEST_TMP/engine-scorecard"
+mkdir -p "$HOOK_ENGINE_CAPABILITY_DIR" "$HOOK_ENGINE_SCORECARD_DIR"
+export ENGINE_CAPABILITY_DIR="$HOOK_ENGINE_CAPABILITY_DIR"
+export ENGINE_SCORECARD_DIR="$HOOK_ENGINE_SCORECARD_DIR"
+
 write_mission_governance() {
   local target="$1"
   local mode="$2"

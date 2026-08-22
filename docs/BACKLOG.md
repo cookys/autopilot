@@ -48,7 +48,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
-### North-star per-skill ratchet is red on develop — three SKILL.md grew past baseline without justification
+### ~~North-star per-skill ratchet is red on develop~~ — RESOLVED v2.34.35 post-merge (prose-justification with per-release attribution added to CHANGELOG v2.34.35 §; baseline refreshed via --update-baseline; preflight 8/8)
 - **Trigger**: 下一次任何 release 想要 preflight 8/8;或下一次動這三個 SKILL.md 任一時捎帶。
 - **Context**: preflight-release gate [8] 自 v2.34.35 起紅:`skills/dev-flow/SKILL.md` 713→717、`skills/engine-onboarding/SKILL.md` 203→228、`skills/harness-maintenance/SKILL.md` 58→59 超過 recorded baseline,且對應版段無 `prose-justification:` 行。v2.34.35 ship(strike-decay)驗證於 base `ab10bf08` 同樣紅、該 range 未觸 skills/ —— 兩輪 foreman 均拒絕代人 refresh baseline(「justifying growth I did not cause would launder someone else's drift through my gate」),依證據紀律改立此顯式債務 row。修向:trim 回 baseline,或在成長版本的 CHANGELOG 段補 justification 後 refresh baseline。
 - **Effort**: Fix。

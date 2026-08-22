@@ -3,6 +3,8 @@
 =======
 ## v2.34.35 — 不信任累積取代日曆授權:資格降級第一次有機械依據
 
+prose-justification: per-skill ratchet catch-up for growth shipped by EARLIER releases, attributed precisely (not this cut's drift — v2.34.35 touches no skills/ path): `skills/engine-onboarding/SKILL.md` 203→228 (+25, v2.34.34 round-1 review MUST-FIX — Stage-0 probe operator-run procedure made explicit in-skill); `skills/dev-flow/SKILL.md` 713→717 (+4, 2026-08-18 P7 fix `0f7568fc` — the quality-gate rule contradicted itself, size-scoped rule replaced it); `skills/harness-maintenance/SKILL.md` 58→59 (+1, `61a545b4` — TaskCreate gated off for 5-era models since CC 2.1.233, anchor advisory). Baseline refreshed at this release per the gate's normal flow.
+
 **Headline**: 資格再也不會因為「日期到了」而失效。三根日曆牙齒同一刀拔掉
 (`engine-scorecard.js deriveStatus`、`resolve-review-loop.sh` tier、`dispatch-contract.js`
 admission),取而代之的是 **seat-scoped 機械 strike 累積**:自上次通過施測以來累積 N=3 個

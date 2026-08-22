@@ -66,8 +66,9 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: Fix(重現+定位)/ 上游依賴。
 - **Source**: `docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify/README.md`。
 
-### `external-lifecycle-witness` 500 ms wall-clock bound flakes under --parallel 8
-- **Trigger**: 下一次它在 full-suite / CI 跑紅;或下一次動 `hooks/tests/external-lifecycle-witness.test.sh`。
+### ~~`external-lifecycle-witness` 500 ms wall-clock bound flakes under --parallel 8~~ — RESOLVED v2.34.37
+- **Status**: RESOLVED v2.34.37 (2026-08-23). 機制:上界改**負載相對**,斷言沒被刪。新的 `measureBoundedStop(stopFn, boundMs)` 在同一瞬間同時起兩件事——關機本身,與一個名目 500 ms 的 `sleep`——兩者跑在**同一條被餓死的 event loop** 上;通過條件是關機先於那個並發計時器完成。原本的 `Date.now() - startedAt < 500` 是絕對牆鐘上界:關機贏了 race 仍可能量到 >500 ms,因為 loop 在「resolve」與「取時間戳」之間被搶走。同一構造的姊妹斷言 `stop_bounded`(同檔 :424)一併改用同一個 helper —— 同一個缺陷、同一個檔、同一族斷言,只修一半等於留著下次再觸發。兩條都額外吐出 `*_bound_measurement=<elapsed>/<baseline>` 診斷行(每跑必印,綠紅皆印),下次轉紅時自帶數字而不是一句 `not found in output`。**修前重現**:64 個背景 CPU burner 下連跑 5 次 → 3 紅,每一紅都恰好落在 `lease_epipe_stop_bounded`。**修後**:同樣 64 burner 5 跑 → 0 紅;單獨 3 跑全綠(elapsed 18-20 ms / baseline 500-501 ms)。**Planted negative**:把該關機延遲成 3000 ms → 該條照樣轉紅(52 passed, 1 failed),證明保護沒被放掉。
+- **Trigger**(已觸發並完成): 下一次它在 full-suite / CI 跑紅;或下一次動 `hooks/tests/external-lifecycle-witness.test.sh`。
 - **Context**: `lease_epipe_stop_bounded` 斷言 `Date.now() - epipeStartedAt < 500` 是字面 wall-clock 上界,8 路並發下間歇性超時(2026-08-21 v2.34.33 pre-merge R2 全揭露:branch 乾淨三跑 FAIL/FAIL/PASS,單獨跑 PASS×4、develop 基線 PASS;該 ship 對此面零觸碰、兩側測試檔集合逐字節同位 → 判 pre-existing 負載敏感 flake 非回歸)。修向:上界改負載相對或放寬;flaky 紅是「紅字部分為雜訊就不再被讀」的已記錄危害(v2.34.22 教訓),別讓它積累。
 - **Effort**: Fix。
 - **Source**: 2026-08-21 v2.34.33 pre-merge review round-2(autopilot:reviewer);`docs/projects/_archive/2026-08-21-verdict-bytes-preservation/README.md` 處置附記。

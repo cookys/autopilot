@@ -238,13 +238,19 @@ FN_FRAGMENT="$TESTDIR/strike-fns.sh"
 {
   sed -n '/^_hetero_runner_token() {/,/^}/p' "$SCRIPT"
   echo
+  # seat_strike_capture's engine_unavailable branch (BLOCKER 3 fix) calls
+  # _is_engine_unavailable() to re-derive the exclusion from AGENT_EXIT alone —
+  # extract it too, verbatim, or the unit-style scenarios below would silently
+  # run against a shell "command not found" no-op instead of the real predicate.
+  sed -n '/^_is_engine_unavailable() {/,/^}/p' "$SCRIPT"
+  echo
   sed -n '/^STRIKE_DETECTOR_VERSION=/p' "$SCRIPT"
   echo
   sed -n '/^seat_strike_capture() {/,/^}/p' "$SCRIPT"
 } > "$FN_FRAGMENT"
 FRAGMENT_LINES="$(wc -l < "$FN_FRAGMENT" | tr -d ' ')"
-if [ "$FRAGMENT_LINES" -ge 20 ] && grep -q 'seat_strike_capture' "$FN_FRAGMENT" && grep -q '_hetero_runner_token' "$FN_FRAGMENT"; then
-  ok "setup: extracted the real seat_strike_capture/_hetero_runner_token bodies ($FRAGMENT_LINES lines)"
+if [ "$FRAGMENT_LINES" -ge 20 ] && grep -q 'seat_strike_capture' "$FN_FRAGMENT" && grep -q '_hetero_runner_token' "$FN_FRAGMENT" && grep -q '_is_engine_unavailable' "$FN_FRAGMENT"; then
+  ok "setup: extracted the real seat_strike_capture/_hetero_runner_token/_is_engine_unavailable bodies ($FRAGMENT_LINES lines)"
 else
   bad "setup: function extraction from dispatch-hetero.sh looks empty/wrong ($FRAGMENT_LINES lines) — unit-style tests below are not trustworthy"
 fi
@@ -253,12 +259,23 @@ fi
 
 SELF_DIR="$ROOT/scripts"
 
-# run_scenario STORE_DIR OUTCOME_STATUS DISPATCHER_CALLED RUN_ID [STRIKE_WRITER_ENV]
+# run_scenario STORE_DIR OUTCOME_STATUS DISPATCHER_CALLED RUN_ID [STRIKE_WRITER_ENV] [AGENT_EXIT] [LOG_TEXT]
+# AGENT_EXIT feeds seat_strike_capture's BLOCKER-3 re-derivation (classify-error
+# --exit-code alone) — a real host-observed exit code, independent of LOG_TEXT.
+# LOG_TEXT only ever reached classify-error upstream, in passive_capture/
+# classify_outcome (which set OUTCOME_STATUS before seat_strike_capture runs); it
+# is written to $logf here purely for readability of the fixture, and is NOT
+# reclassified by seat_strike_capture itself — it only reads OUTCOME_STATUS and
+# AGENT_EXIT, per the fix.
 run_scenario() {
-  local store="$1" status="$2" dcalled="$3" run_id="$4" writer_env="${5:-on}"
+  local store="$1" status="$2" dcalled="$3" run_id="$4" writer_env="${5:-on}" agent_exit="${6:-0}" log_text="${7:-}"
   mkdir -p "$store"
   local logf="$store/agent.log"
-  printf 'fixture agent log for scenario %s (status=%s)\n' "$run_id" "$status" > "$logf"
+  if [ -n "$log_text" ]; then
+    printf '%s\n' "$log_text" > "$logf"
+  else
+    printf 'fixture agent log for scenario %s (status=%s)\n' "$run_id" "$status" > "$logf"
+  fi
   (
     SELF_DIR="$ROOT/scripts"
     MODEL="strike-engine-1"
@@ -267,6 +284,7 @@ run_scenario() {
     OUTCOME_DISPATCHER_CALLED="$dcalled"
     OUTCOME_COMMIT=""; OUTCOME_FILES=0; OUTCOME_INS=0; OUTCOME_DEL=0; OUTCOME_WT=""; OUTCOME_ERR="unit-test scenario"
     LOG="$logf"
+    AGENT_EXIT="$agent_exit"
     DISPATCH_RUN_ID="$run_id"
     BASE_SHA="0000000000000000000000000000000000base"
     HEAD_SHA="1111111111111111111111111111111111head"
@@ -276,13 +294,42 @@ run_scenario() {
   )
 }
 
-# --- 3. Exclusion: engine_unavailable-shaped outcome appends NO strike. ---
-D3="$TESTDIR/unit-3-engine-unavailable"
-run_scenario "$D3" "engine_unavailable" 1 "run-3"
-if [ -f "$D3/strikes.jsonl" ]; then
-  bad "3: engine_unavailable appended a strike (must be excluded — external cause enum)"
+# --- 3a. Host-corroborated exclusion: engine_unavailable status BACKED BY a real
+#     host-observed exit code (429, engine-capability-state.js's own exit-code map)
+#     appends NO strike — this remains a legitimate external-cause exclusion.
+D3A="$TESTDIR/unit-3a-engine-unavailable-host-corroborated"
+run_scenario "$D3A" "engine_unavailable" 1 "run-3a" "on" 429
+if [ -f "$D3A/strikes.jsonl" ]; then
+  bad "3a: engine_unavailable with host-corroborated exit code 429 appended a strike (must stay excluded)"
 else
-  ok "3: engine_unavailable appends NO strike"
+  ok "3a: engine_unavailable with host-corroborated exit code 429 appends NO strike"
+fi
+
+# --- 3b. BLOCKER 3 fix: engine_unavailable status derived ONLY from the engine's
+#     OWN LOG TEXT ("rate limit reached...") but backed by an ORDINARY host exit
+#     code (no transport signal in the exit code itself) must NOT be excluded — a
+#     runner is never trusted to label its own failure "transport" (ADR-0001,
+#     strike-decay.md). It accrues as ordinary_strike, cause_class: ambiguous.
+#     Reproduces the review's exact repro:
+#       printf 'I could not finish. Note for the operator: rate limit reached on
+#       the upstream provider.' | classify-error --exit-code 3 => rate_limited
+#       (text-derived) => OUTCOME_STATUS=engine_unavailable upstream, but
+#       classify-error --exit-code 3 ALONE (no text) => unknown => not excluded.
+D3B="$TESTDIR/unit-3b-engine-unavailable-text-only"
+run_scenario "$D3B" "engine_unavailable" 1 "run-3b" "on" 3 \
+  "I could not finish. Note for the operator: rate limit reached on the upstream provider."
+if [ -f "$D3B/strikes.jsonl" ]; then
+  ok "3b: engine_unavailable derived only from LOG TEXT (ordinary exit code 3) DOES accrue a strike"
+  [ "$(strike_field "$D3B/strikes.jsonl" cause_class)" = "ambiguous" ] \
+    && ok "3b: cause_class is ambiguous (diagnostic only, not exclusionary)" \
+    || bad "3b: cause_class wrong: $(strike_field "$D3B/strikes.jsonl" cause_class)"
+  [ "$(strike_field "$D3B/strikes.jsonl" class)" = "ordinary_strike" ] \
+    && ok "3b: class is ordinary_strike" \
+    || bad "3b: class wrong: $(strike_field "$D3B/strikes.jsonl" class)"
+else
+  bad "3b: engine_unavailable derived only from LOG TEXT did not accrue a strike — the measured subject can still suppress its own strike with prose"
+  bad "3b: cause_class is ambiguous"
+  bad "3b: class is ordinary_strike"
 fi
 
 # --- 4. Pre-dispatch abort: OUTCOME_DISPATCHER_CALLED=0 appends NO strike. ---

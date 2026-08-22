@@ -56,6 +56,14 @@ const CRITICAL_REEXAM_PREDICATES = new Set([
 const ORDINARY_STRIKE_THRESHOLD = 3;
 const STRIKE_POLICY_VERSION = 2;
 const SEAT_TOKEN_RE = /^[A-Za-z0-9._@:-]+$/;
+// Engine token uses the CANONICAL vendor model-id charset (src/engine/capability-evidence.js
+// `modelId`, :129-141) — NOT the narrower SEAT_TOKEN_RE below. Real vendor ids contain
+// spaces, parens and slashes ("Gemini 3.5 Flash (High)", "kimi-code/k3-256k"); runner and
+// role stay internal enumerations and keep the narrower charset. Both engine-scorecard.js
+// (read side) and engine-capability-state.js (write side, `seat-hash`) MUST apply this same
+// regex to the engine field so both sides hash the identical set — a divergence here
+// silently orphans strikes from their projection.
+const ENGINE_TOKEN_RE = /^(?![\s])[A-Za-z0-9 ._:()/-]{1,128}(?<![\s])$/u;
 const HEX64_RE = /^[0-9a-f]{64}$/i;
 const TRANSCRIPT_PROVIDERS = new Set(['codex', 'grok', 'opencode', 'agy']);
 const TRANSCRIPT_EXTENSIONS = new Set(['.json', '.jsonl', '.ndjson']);
@@ -1402,6 +1410,11 @@ function seatToken(value) {
   return typeof value === 'string' && SEAT_TOKEN_RE.test(value.trim()) ? value.trim() : null;
 }
 
+// Engine field only: canonical vendor model-id charset, see ENGINE_TOKEN_RE comment above.
+function engineToken(value) {
+  return typeof value === 'string' && ENGINE_TOKEN_RE.test(value.trim()) ? value.trim() : null;
+}
+
 // Two independent call sites derive the same seat_hash (this file's read-time
 // projection, and engine-capability-state.js's `seat-hash` write-time helper)
 // from the identical two-line algorithm and the identical canonicalJson/sha256
@@ -1414,6 +1427,43 @@ function seatIdentityHash(engine, runner, role) {
 function computeExpiryWarning(expiresValue, nowMs) {
   const ms = toDateMs(expiresValue);
   return ms !== null && ms < nowMs;
+}
+
+// End-of-day instant for a DATE-ONLY string (qualified_at is pinned date-only, :342).
+// Used only as the fold threshold fallback below — never for row selection/sorting,
+// which stays date-granular via toDateMs (start-of-day) so ties resolve by event_id.
+function endOfDayMs(dateValue) {
+  if (typeof dateValue !== 'string' || dateValue.length < 10) return null;
+  // `qualified_at` is contractually date-only (:342), but rows recorded without
+  // an `evidence` field (manual/legacy) are not schema-bound to that shape at
+  // write time — take only the date portion so a stray full timestamp here
+  // still yields the intended end of its calendar day, not an invalid string.
+  const datePart = dateValue.slice(0, 10);
+  const ms = Date.parse(`${datePart}T23:59:59.999Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// BLOCKER 5 fix (2026-08-22 review repair): the fold threshold must be an INSTANT,
+// not a date. `qualified_at` is date-only (:342), but a `critical_reexam_trigger` (or
+// any strike) can be stamped same-day, after the pass, with a full timestamp — and the
+// fold compares observedMs > baselineMs (foldSeatStrikes). Using date-only start-of-day
+// as the threshold left every same-day-after-pass strike still counting against a seat
+// whose administration just passed, defeating the operator's only remedy.
+//
+// Fix: when the row carries a full-timestamp evidence receipt, use its exact
+// `issued_at` instant as the baseline — this ALSO preserves the pinned pass-instant
+// tiebreak (brainSeatStatus): a strike stamped at exactly that instant still fails
+// `observedMs > baselineMs` (strict), because it is the same value, not a looser day
+// bucket. When there is no full-timestamp evidence (legacy qualified/manual rows),
+// fall back to END of the pass date — so a same-day-after-pass strike (any instant that
+// day) is treated as pre-pass and cleared, matching the fix's intent without a
+// timestamp to be strict about.
+function baselineInstantMs(row, evidence) {
+  if (evidence && typeof evidence.issued_at === 'string') {
+    const ms = Date.parse(evidence.issued_at);
+    if (Number.isFinite(ms)) return ms;
+  }
+  return endOfDayMs(row.qualified_at);
 }
 
 // Baseline = the newest scorecard row for this seat (engine+runner+role, NOT
@@ -1444,7 +1494,15 @@ function findSeatBaseline(engine, runner, role, nowMs, allRows) {
     if (qMs === null) continue;
     const eid = toEventId(row.event_id) || 0;
     if (!best || qMs > best.qMs || (qMs === best.qMs && eid > best.eid)) {
-      best = { qMs, eid, qualified_at: row.qualified_at, event_id: eid, expires: row.expires };
+      const instantMs = baselineInstantMs(row, evidence);
+      best = {
+        qMs,
+        eid,
+        qualified_at: row.qualified_at,
+        event_id: eid,
+        expires: row.expires,
+        instantMs: instantMs === null ? qMs : instantMs,
+      };
     }
   }
   return best;
@@ -1576,7 +1634,7 @@ function computeSeatProjection(engine, runner, role, nowMs) {
   };
 
   if (baseline) {
-    const fold = foldSeatStrikes(seatHashValue, baseline.qMs, nowMs);
+    const fold = foldSeatStrikes(seatHashValue, baseline.instantMs, nowMs);
     projection.strikes_since_pass = fold.strikesSincePass;
     projection.critical_trigger = fold.criticalTrigger;
     projection.rejected_strikes = fold.rejected;
@@ -1685,8 +1743,8 @@ function parseSeatStatusArgs(args) {
   if (!runner) failUsage('--runner is required');
   if (!role) failUsage('--role is required');
 
-  const engineToken = seatToken(engine);
-  if (!engineToken) failUsage(`invalid --engine token '${engine}'`);
+  const engineTok = engineToken(engine);
+  if (!engineTok) failUsage(`invalid --engine token '${engine}'`);
   const runnerToken = seatToken(runner);
   if (!runnerToken) failUsage(`invalid --runner token '${runner}'`);
 
@@ -1698,7 +1756,7 @@ function parseSeatStatusArgs(args) {
 
   const nowMs = nowArgToMs(now);
 
-  return { engine: engineToken, runner: runnerToken, role: roleToken, nowMs };
+  return { engine: engineTok, runner: runnerToken, role: roleToken, nowMs };
 }
 
 function cmdSeatStatus(args) {
@@ -1795,7 +1853,7 @@ function cmdLadder(args) {
   process.stdout.write(`${JSON.stringify(ladder)}\n`);
 }
 
-(function main() {
+function main() {
   const argv = process.argv.slice(2);
 
   if (argv.length === 0) usage(2);
@@ -1811,4 +1869,23 @@ function cmdLadder(args) {
   else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);
   else if (command === 'seat-status') cmdSeatStatus(commandArgs);
   else failUsage(`unknown subcommand '${command}'`);
-})();
+}
+
+if (require.main === module) {
+  main();
+}
+
+// BLOCKER 2 (2026-08-22 review repair): resolve-scaffold-tier.js needs the SAME
+// admission projection this file computes (strike-decay.md's only admission
+// authority) rather than a third hand-rolled copy of the fold. Exported for that
+// reuse — SCORECARD_DIR/CAPABILITY_DIR are resolved once at require time from
+// ENGINE_SCORECARD_DIR/ENGINE_CAPABILITY_DIR, so a caller that wants a specific
+// store must set those env vars BEFORE requiring this module (see
+// resolve-scaffold-tier.js's own comment at its require site).
+module.exports = {
+  computeSeatProjection,
+  seatIdentityHash,
+  engineToken,
+  seatToken,
+  normalizeRole,
+};

@@ -710,6 +710,20 @@ function validateStrikeV1Shape(row) {
 
 const SEAT_TOKEN_RE = /^[A-Za-z0-9._@:-]+$/;
 
+// FOURTH copy of the model-id charset (src/engine/capability-evidence.js `modelId`,
+// plus engine-qualify.js and qualification-case-broker.js — see that file's comment
+// at capability-evidence.js:129-141). MUST stay byte-identical to the other three:
+// they hand the same value to each other, so a narrower set anywhere kills a
+// legitimate identity at whichever hop happens to check last. This is what BLOCKER 1
+// of the 2026-08-22 review repair exists to fix — the old SEAT_TOKEN_RE above
+// rejected real vendor engine ids ("Gemini 3.5 Flash (High)", "kimi-code/k3-256k"),
+// which made dispatch-hetero.sh's default seat's strike writer silently inert
+// (fail-soft wrapper swallowed the ERROR). Applied to the `engine` token ONLY:
+// `runner` and `role` are internal enumerations (agy/codex/grok/cc-shim/pi/
+// qoderclicn; implementer/reviewer/...), not vendor-controlled strings, so they
+// keep the narrower SEAT_TOKEN_RE deliberately.
+const ENGINE_TOKEN_RE = /^(?![\s])[A-Za-z0-9 ._:()/-]{1,128}(?<![\s])$/u;
+
 // Closed registries — exact names/values frozen by the plan §2.7.3. Exported for
 // P1 (engine-scorecard.js projection) and any other consumer to import rather than
 // re-declare.
@@ -736,6 +750,12 @@ function isValidSeatToken(value) {
   return typeof value === 'string' && value.length > 0 && SEAT_TOKEN_RE.test(value);
 }
 
+// The engine token is a vendor model id, not an internal enumeration — it gets the
+// wide ENGINE_TOKEN_RE (BLOCKER 1). runner/role stay on isValidSeatToken/SEAT_TOKEN_RE.
+function isValidEngineToken(value) {
+  return typeof value === 'string' && value.length > 0 && ENGINE_TOKEN_RE.test(value);
+}
+
 function normalizeSeatToken(raw, label) {
   if (typeof raw !== 'string') throw new Error(`${label} must be a string`);
   const trimmed = raw.trim();
@@ -744,10 +764,20 @@ function normalizeSeatToken(raw, label) {
   return trimmed;
 }
 
+function normalizeEngineToken(raw, label) {
+  if (typeof raw !== 'string') throw new Error(`${label} must be a string`);
+  // Vendor ids may legitimately contain internal spaces/parens/slashes but not
+  // leading/trailing whitespace — trim only outer whitespace, same as normalizeSeatToken.
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) throw new Error(`${label} must be non-empty`);
+  if (!ENGINE_TOKEN_RE.test(trimmed)) throw new Error(`${label} must match ${ENGINE_TOKEN_RE}`);
+  return trimmed;
+}
+
 // Seat identity §2.7.1: engine+runner+role, NOT effort/model_version/endpoint.
 function normalizeSeatIdentity({ engine, runner, role }) {
   return {
-    engine: normalizeSeatToken(engine, 'engine'),
+    engine: normalizeEngineToken(engine, 'engine'),
     runner: normalizeSeatToken(runner, 'runner'),
     role: normalizeSeatToken(role, 'role'),
   };
@@ -773,7 +803,7 @@ function validateStrikeV2Shape(row) {
   if (toEventId(row.event_id) === null) throw new Error('invalid strike row shape: event_id');
   if (!STRIKE_KINDS.includes(row.kind)) throw new Error('invalid strike row shape: kind');
   if (!isSha256(row.seat_hash)) throw new Error('invalid strike row shape: seat_hash');
-  if (!isValidSeatToken(row.engine) || !isValidSeatToken(row.runner) || !isValidSeatToken(row.role)) {
+  if (!isValidEngineToken(row.engine) || !isValidSeatToken(row.runner) || !isValidSeatToken(row.role)) {
     throw new Error('invalid strike row shape: engine/runner/role');
   }
   if (!STRIKE_CLASSES.includes(row.class)) throw new Error('invalid strike row shape: class');
@@ -854,6 +884,63 @@ function readStrikeRows(strikesFile) {
   return rows;
 }
 
+// BLOCKER 6 fix: readStrikeRows (above) is STRICT — any invalid line throws — which
+// is correct for a hand-authored / newly-written row, but production callers
+// (append paths, brain-status) must not be permanently bricked by ONE prior corrupt
+// line, since the throw was previously swallowed by dispatch-hetero.sh's fail-soft
+// wrapper with no operator signal, disabling strike writing for EVERY seat. This
+// reader skips-and-warns invalid lines (stderr, naming the line number) instead of
+// throwing, while still deriving a correct, monotonic next event_id.
+//
+// Monotonicity under a corrupt/unreadable line: the strikes file is append-only and
+// every append computes its event_id from a scan of the file at that instant, so
+// rows land in the file in strictly increasing event_id order. A corrupt line
+// therefore can only ever be "between" two readable event_ids that already bound it
+// (any later readable row already has a higher event_id), UNLESS the corrupt line is
+// the last line in the file with nothing after it to bound it. To cover that case too,
+// this reader salvages `event_id` from any line that is valid JSON (even if the rest
+// of the row fails shape validation, e.g. missing required keys) — that is the common
+// real-world corruption shape (a partially-written or hand-edited row) and is exactly
+// what BLOCKER 6's repro line `{"schema_version":2,"event_id":99,"kind":"strike"}`
+// looks like. Only a line that is not even valid JSON (rare — mid-write torn line)
+// cannot contribute an event_id; that residual risk is accepted and documented rather
+// than silently ignored — the WARN names the exact line for an operator to inspect.
+function readStrikeRowsLenient(strikesFile) {
+  const lines = readTextLines(strikesFile);
+  const rows = [];
+  let maxSeenEventId = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    let raw;
+    try {
+      raw = JSON.parse(lines[index]);
+    } catch (error) {
+      process.stderr.write(`WARN: skipping unparseable strike line ${index + 1}: ${error.message}\n`);
+      continue;
+    }
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const salvagedId = toEventId(raw.event_id);
+      if (salvagedId !== null && salvagedId > maxSeenEventId) maxSeenEventId = salvagedId;
+    }
+    try {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new Error('invalid strike row shape');
+      }
+      if (raw.schema_version === 1) {
+        validateStrikeV1Shape(raw);
+      } else if (raw.schema_version === 2) {
+        validateStrikeV2Shape(raw);
+      } else {
+        throw new Error('unsupported schema_version');
+      }
+    } catch (error) {
+      process.stderr.write(`WARN: skipping malformed strike line ${index + 1}: ${error.message}\n`);
+      continue;
+    }
+    rows.push(raw);
+  }
+  return { rows, maxSeenEventId };
+}
+
 function appendStrikeRecord(config, { identity, source, receiptRef, observedAt }) {
   if (!STRIKE_SOURCES.has(source)) {
     throw new Error(`strike source must be one of ${[...STRIKE_SOURCES].join('|')}`);
@@ -869,10 +956,10 @@ function appendStrikeRecord(config, { identity, source, receiptRef, observedAt }
     lockFile: config.lockFile,
     name: 'capability strikes',
   }, () => {
-    const rows = readStrikeRows(config.strikesFile);
+    const { maxSeenEventId } = readStrikeRowsLenient(config.strikesFile);
     const row = {
       schema_version: 1,
-      event_id: maxEventId(rows) + 1,
+      event_id: maxSeenEventId + 1,
       identity_hash: identityHash,
       source,
       observed_at: observed,
@@ -972,17 +1059,23 @@ function appendStrikeSeatRecord(config, input) {
     lockFile: config.lockFile,
     name: 'capability strikes',
   }, () => {
-    const rows = readStrikeRows(config.strikesFile);
+    const { rows, maxSeenEventId } = readStrikeRowsLenient(config.strikesFile);
+    // Dedup key is (seat_hash, dedup_key, class) — BLOCKER 4 fix. Matching on
+    // (seat_hash, dedup_key) alone was class-blind: an ordinary_strike already
+    // holding a dedup_key silently swallowed a later critical_reexam_trigger
+    // sharing that key, dropping the one class that ENFORCES today. A true
+    // repeat of the SAME class still dedups to one line.
     const existing = rows.find((row) => row.schema_version === 2
       && row.kind === 'strike'
       && row.seat_hash === seatHash
-      && row.dedup_key === dedupKey);
+      && row.dedup_key === dedupKey
+      && row.class === klass);
     if (existing) {
       return { row: existing, deduplicated: true };
     }
     const row = {
       schema_version: 2,
-      event_id: maxEventId(rows) + 1,
+      event_id: maxSeenEventId + 1,
       kind: 'strike',
       seat_hash: seatHash,
       engine: seatIdentity.engine,
@@ -1036,7 +1129,7 @@ function appendStrikeInvalidation(config, input) {
     lockFile: config.lockFile,
     name: 'capability strikes',
   }, () => {
-    const rows = readStrikeRows(config.strikesFile);
+    const { rows, maxSeenEventId } = readStrikeRowsLenient(config.strikesFile);
     const target = rows.find((row) => row.schema_version === 2
       && row.kind === 'strike'
       && row.seat_hash === seatHash
@@ -1046,7 +1139,7 @@ function appendStrikeInvalidation(config, input) {
     }
     const row = {
       schema_version: 2,
-      event_id: maxEventId(rows) + 1,
+      event_id: maxSeenEventId + 1,
       kind: 'strike_invalidated',
       seat_hash: seatHash,
       engine: seatIdentity.engine,
@@ -1104,7 +1197,7 @@ function brainSeatStatus(config, rawIdentity, nowIso) {
   // the administration that issued the pass is still concluding at that timestamp,
   // so pass-instant strikes are pre-pass by construction (strictly-greater fold;
   // behavior pinned by test, QC 2026-08-17 sol strike-store-order adjudication).
-  const strikes = readStrikeRows(config.strikesFile).filter((row) => {
+  const strikes = readStrikeRowsLenient(config.strikesFile).rows.filter((row) => {
     // v2 seat-strike rows (§2.7.2) are a separate ledger entry shape and must never
     // leak into the brain-seat fold — explicit schema_version gate, not reliance on
     // v2 rows lacking identity_hash.
@@ -2163,6 +2256,7 @@ module.exports = {
   brainSeatStatus,
   readEvidenceRows,
   readStrikeRows,
+  readStrikeRowsLenient,
   resolveStoreConfig,
   seatHashOf,
   normalizeSeatIdentity,

@@ -42,6 +42,22 @@ strike** —— 否則這就是重建 attestation。rerun-until-green 禁止:重
 紅→綠,非空測);production writer 配 delete-the-wiring 負控制 —— 拆掉接線測試必須轉紅
 (`references/evidence-discipline.md` §1「有 caller 才算存在」)。
 
+**first-pass review 抓到的六個 blocker(全數修復,列出來因為教訓比修法值錢)**:
+(1) 🔴 seat token 的字元集自己新造了第五份拷貝,把 `"Gemini 3.5 Flash (High)"`(dispatch-hetero
+的**預設** MODEL)判為非法 —— 於是這整個專案存在的理由(一個真的會累積的計數器)對預設席位
+**一次都不會累積**,而且錯誤被 writer 的 fail-soft 包裝吞掉、delete-the-wiring 負控制照樣過。
+v2.34.28 修過同一件事並在 `src/engine/capability-evidence.js:129-141` 留了字條;測試用合成
+id `strike-engine-1` 而非生產形狀,所以沒抓到 —— fixture 釘在非生產形狀就是缺陷本身。
+(2) 🟠 **第四根日曆牙齒** `resolve-scaffold-tier.js isFresh` 仍在每次派工的路徑上按日期降級,
+而契約測試只掃三個檔案 —— 契約測試的保證只有掃描集那麼寬,文件當時把它寫成了普遍命題。
+(3) 🟠 排除列舉靠 `classify-error` 對**引擎自己 stdout** 的子字串比對,等於受測者能用散文
+(「rate limit reached」)豁免自己的 strike —— 正是 synthesis「絕不讓 runner 自己標記自己的失敗」
+禁止的那條;改為只採信 host 端 exit-code 訊號,log 文字推導的 quota 一律照常累積為 `ambiguous`。
+(4) 🟠 write-side 去重不看 `class`,一個 ordinary strike 佔住 dedup_key 就能讓**立即生效**的
+critical trigger 靜默消失且 exit 0。(5) 🟠 epoch re-baseline 用日期粒度而 strike 用時間戳粒度,
+通過重考後同日稍晚的 strike 清不掉 —— 對唯一會 enforce 的那一類,操作者的補救手段是壞的。
+(6) 🟠 一行壞資料讓 writer 對**所有**席位永久失效,而且因為 fail-soft 沒有任何訊號。
+
 **契約**: [`references/strike-decay.md`](references/strike-decay.md)。
 **計畫**: `docs/plans/2026-08-22-no-confidence-decay.md`。
 **刻意未做**(全部進 BACKLOG 附理由,非遺漏):detector 異常隔離、fleet circuit breaker、

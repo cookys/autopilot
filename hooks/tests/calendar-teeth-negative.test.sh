@@ -23,6 +23,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ESC="$ROOT/scripts/engine-scorecard.js"
 RRL="$ROOT/scripts/resolve-review-loop.sh"
 DC="$ROOT/scripts/dispatch-contract.js"
+# BLOCKER 2 (2026-08-22 review repair): the fourth calendar tooth — resolve-scaffold-
+# tier.js's isFresh() used to compare `now` against the row's own `expires` on this
+# SAME scorecard.jsonl store. Added to the P3 admission-source scan set below.
+RST="$ROOT/scripts/resolve-scaffold-tier.js"
 
 PASS=0; FAIL=0
 TESTDIR="$(mktemp -d)"
@@ -320,6 +324,36 @@ sp_e=$(echo "$SS_E" | jq_get strikes_since_pass)
   || bad "tie1: strikes_since_pass=$sp_e (want 0)"
 
 # =============================================================================
+# BLOCKER 5 fix (2026-08-22 review repair): epoch re-baselining is INSTANT-
+# granular, not date-granular. `qualified_at` is pinned DATE-ONLY, but the fold
+# used to compare a strike's full-timestamp `observed_at` against that
+# date-only baseline at START of day — so a critical_reexam_trigger stamped
+# LATER THE SAME DAY as a passing administration still counted against it,
+# leaving `admission_status: requalify_required` with no remedy (strike-decay.md
+# ll.99-103: a fresh passing administration re-baselines and clears prior
+# strikes). Reproduced against git HEAD's scripts/engine-scorecard.js before
+# this fix landed:
+#   record BLK5/codex/reviewer qualified_at=2026-08-20
+#   strike observed_at=2026-08-20T09:00:00Z (critical_reexam_trigger, same day)
+#   seat-status --now 2026-08-22
+#   => {"admission_status":"requalify_required", ..., "critical_trigger":true}
+# (pasted verbatim in the repair session's report). Fixed: the baseline
+# threshold is now an INSTANT — the row's full-timestamp evidence.issued_at
+# when present, else END OF the pass date for a date-only qualified_at — so a
+# same-day-after-pass strike is treated as pre-pass and cleared.
+# =============================================================================
+reset_stores
+echo "$(score_row H codex reviewer 2026-08-20 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
+SH_H=$(seat_hash H codex reviewer)
+strike_line "$SH_H" H codex reviewer critical_reexam_trigger security_canary_disclosure fuse "rcpt-blk5" "inc-blk5:det-1" "2026-08-20T09:00:00Z" 1 > "$STRIKES_FILE"
+SS_H=$(node "$ESC" seat-status --engine H --runner codex --role reviewer --now 2026-08-22)
+adm_h=$(echo "$SS_H" | jq_get admission_status)
+ct_h=$(echo "$SS_H" | jq_get critical_trigger)
+[ "$adm_h" = "qualified" ] && [ "$ct_h" = "false" ] \
+  && ok "epoch2: a critical strike stamped LATER THE SAME DAY as the pass is cleared by epoch re-baselining (admission_status=qualified)" \
+  || bad "epoch2: admission_status=$adm_h critical_trigger=$ct_h (want qualified/false — same-day-after-pass must clear)"
+
+# =============================================================================
 # Writer allowlist: a hand-written row with writer "operator" is excluded and
 # tallied into rejected_strikes.
 # =============================================================================
@@ -398,7 +432,7 @@ h=$(p3_no_expired_literal_in_admission_branch "$ESC_ADMISSION_REGION")
 [ -n "$h" ] && P3_HITS="$P3_HITS
 $ESC (admission region, from deriveStatus):
 $h"
-for f in "$RRL" "$DC"; do
+for f in "$RRL" "$DC" "$RST"; do
   h=$(p3_no_expired_literal_in_admission_branch "$f")
   [ -n "$h" ] && P3_HITS="$P3_HITS
 $f:
@@ -410,6 +444,34 @@ if [ -z "$P3_HITS" ]; then
 else
   bad "p3_1: found expired-literal admission branch(es):$P3_HITS"
 fi
+
+# BLOCKER 2's actual bug never used the literal string 'expired' anywhere — isFresh()
+# just returned `Date.parse(row.expires) > now` as a bare boolean, so p3_1's literal-
+# token scan above would NOT have caught it. resolve-scaffold-tier.js has no legitimate
+# now-vs-expiry carve-out at all (unlike engine-scorecard.js's computeExpiryWarning,
+# which produces an advisory-only expiry_warning field) — it must have ZERO now-vs-
+# expires comparisons anywhere in the file, full stop. A single-line awk scan (like
+# p3_2's EW_HITS) is VACUOUS here: the real tooth reads
+#   const t = Date.parse(row.expires || ''); return Number.isFinite(t) && t > now;
+# — "now" and "expir" never share ONE line, so a per-line grep never sees them
+# together. Comments are stripped, remaining lines joined with spaces, then scanned
+# for "now"/"expir" co-occurring within 80 chars of a comparison operator — proven
+# non-vacuous below by re-planting exactly this tooth (git-diff-and-revert, not left
+# mutating the shipped file) and observing this assertion flip red, then green again.
+p3_now_expiry_comparison_anywhere() {
+  node -e '
+    const fs = require("fs");
+    const src = fs.readFileSync(process.argv[1], "utf8");
+    const stripped = src.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join(" ");
+    const flat = stripped.replace(/\s+/g, " ");
+    const re = /now[\s\S]{0,80}?[<>][\s\S]{0,80}?expir|expir[\s\S]{0,80}?[<>][\s\S]{0,80}?now/i;
+    const m = flat.match(re);
+    process.stdout.write(m ? m[0] : "");
+  ' "$1"
+}
+RST_HIT=$(p3_now_expiry_comparison_anywhere "$RST")
+[ -z "$RST_HIT" ] && ok "p3_3: resolve-scaffold-tier.js has zero now-vs-expires comparisons anywhere (no expiry_warning carve-out exists here)" \
+  || bad "p3_3: found a now-vs-expires comparison in resolve-scaffold-tier.js: $RST_HIT"
 
 # The permitted now-vs-expires comparison must live ONLY inside
 # computeExpiryWarning and assign only into a warning-named result — never

@@ -26,6 +26,14 @@ jq_get() { node -e "let d=JSON.parse(require('fs').readFileSync(0,'utf8'));let v
 reset_strikes() { rm -f "$TESTDIR/strikes.jsonl" "$TESTDIR/.lock"; }
 sha_of() { printf '%s' "$1" | sha256sum | cut -d' ' -f1; }
 
+# Snapshot the operator's REAL store BEFORE this suite touches anything, so the
+# isolation assertions below are a real before/after comparison, not a tautology
+# that only passes because the file happens not to exist on this host
+# (evidence-discipline §5 / §9 — mirrors hooks/tests/calendar-teeth-negative.test.sh
+# and hooks/tests/strike-writer-wiring.test.sh).
+REAL_STRIKES="$HOME/.autopilot/engine-capability/strikes.jsonl"
+REAL_STRIKES_SIZE_BEFORE=$( [ -f "$REAL_STRIKES" ] && stat -c%s "$REAL_STRIKES" 2>/dev/null || echo 0 )
+
 SHA_A="$(sha_of a)"
 SHA_B="$(sha_of b)"
 SHA_C="$(sha_of c)"
@@ -93,9 +101,10 @@ if [ "$RC" = "0" ] && [ "$LINES" = "1" ] && [ "$ROW_KIND" = "strike" ] && [ "$RO
 else
   bad "2: rc=$RC lines=$LINES kind=$ROW_KIND schema=$ROW_SCHEMA seat=$ROW_SEATHASH class=$ROW_CLASS pred=$ROW_PREDICATE cause=$ROW_CAUSE writer=$ROW_WRITER dedup=$ROW_DEDUP det=$ROW_DETID/$ROW_DETVER art=$ROW_ART receipt=$ROW_RECEIPT obs=$ROW_OBS inv=$ROW_INV proofart=$ROW_PROOFART proofdet=$ROW_PROOFDET"
 fi
-[ ! -e "$HOME/.autopilot/engine-capability/strikes.jsonl" ] \
-  && ok "2b: real ~/.autopilot/engine-capability store was NOT written" \
-  || bad "2b: real store was written — isolation leaked"
+REAL_STRIKES_SIZE_2B=$( [ -f "$REAL_STRIKES" ] && stat -c%s "$REAL_STRIKES" 2>/dev/null || echo 0 )
+[ "$REAL_STRIKES_SIZE_2B" = "$REAL_STRIKES_SIZE_BEFORE" ] \
+  && ok "2b: real ~/.autopilot/engine-capability store was NOT written (size unchanged: $REAL_STRIKES_SIZE_BEFORE)" \
+  || bad "2b: real store size changed ($REAL_STRIKES_SIZE_BEFORE -> $REAL_STRIKES_SIZE_2B) — isolation leaked"
 
 # ── 3: closed-key rejection (extra key hand-appended, then read back) ────────
 reset_strikes
@@ -352,9 +361,106 @@ LINES="$(wc -l < "$TESTDIR/strikes.jsonl")"
 [ "$RC" = "0" ] && [ "$LINES" = "1" ] \
   && ok "13: appendStrikeRecord (v1 module export, used by check-stall-fuse.js / check-blueprint-conformance.js) still works" \
   || bad "13: rc=$RC lines=$LINES"
-[ ! -e "$HOME/.autopilot/engine-capability/strikes.jsonl" ] \
-  && ok "13b: module-path append did NOT write the real ~/.autopilot/engine-capability store" \
-  || bad "13b: real store was written — isolation leaked"
+REAL_STRIKES_SIZE_13B=$( [ -f "$REAL_STRIKES" ] && stat -c%s "$REAL_STRIKES" 2>/dev/null || echo 0 )
+[ "$REAL_STRIKES_SIZE_13B" = "$REAL_STRIKES_SIZE_BEFORE" ] \
+  && ok "13b: module-path append did NOT write the real ~/.autopilot/engine-capability store (size unchanged: $REAL_STRIKES_SIZE_BEFORE)" \
+  || bad "13b: real store size changed ($REAL_STRIKES_SIZE_BEFORE -> $REAL_STRIKES_SIZE_13B) — isolation leaked"
+
+# ── 14: production-shaped vendor engine ids round-trip (BLOCKER 1) ────────────
+# Real vendor model ids contain spaces and parentheses ("Gemini 3.5 Flash (High)")
+# or slashes ("kimi-code/k3-256k") — dispatch-hetero.sh's DEFAULT seat uses exactly
+# the first shape. A fixture anchored only to the synthetic "gpt-5"/"strike-engine-1"
+# token would never have caught SEAT_TOKEN_RE rejecting these (evidence-discipline §13).
+reset_strikes
+ENGINE_SPACE="Gemini 3.5 Flash (High)"
+HASH_SPACE_1="$(node "$CLI" seat-hash --engine "$ENGINE_SPACE" --runner agy --role implementer | jq_get seat_hash)"
+HASH_SPACE_2="$(node "$CLI" seat-hash --engine "$ENGINE_SPACE" --runner agy --role implementer | jq_get seat_hash)"
+OUT_SPACE="$(node "$CLI" strike-seat --engine "$ENGINE_SPACE" --runner agy --role implementer \
+  --class ordinary_strike --cause-class ambiguous --writer dispatch_hetero_failclosed \
+  --dedup-key prod-space-1 --detector-id d --detector-version 1 --artifact-sha256 "$SHA_A" \
+  --receipt-ref r-space --now 2026-08-22T00:00:00Z)"
+RC_SPACE=$?
+ENGINE_OUT_SPACE="$(echo "$OUT_SPACE" | jq_get engine)"
+SEATHASH_OUT_SPACE="$(echo "$OUT_SPACE" | jq_get seat_hash)"
+
+ENGINE_SLASH="kimi-code/k3-256k"
+OUT_SLASH="$(node "$CLI" strike-seat --engine "$ENGINE_SLASH" --runner agy --role implementer \
+  --class ordinary_strike --cause-class ambiguous --writer dispatch_hetero_failclosed \
+  --dedup-key prod-slash-1 --detector-id d --detector-version 1 --artifact-sha256 "$SHA_A" \
+  --receipt-ref r-slash --now 2026-08-22T00:00:01Z)"
+RC_SLASH=$?
+ENGINE_OUT_SLASH="$(echo "$OUT_SLASH" | jq_get engine)"
+
+LINES_14="$(wc -l < "$TESTDIR/strikes.jsonl")"
+if [ -n "$HASH_SPACE_1" ] && [ "$HASH_SPACE_1" = "$HASH_SPACE_2" ] && [ "${#HASH_SPACE_1}" = "64" ] \
+  && [ "$RC_SPACE" = "0" ] && [ "$ENGINE_OUT_SPACE" = "$ENGINE_SPACE" ] && [ "$SEATHASH_OUT_SPACE" = "$HASH_SPACE_1" ] \
+  && [ "$RC_SLASH" = "0" ] && [ "$ENGINE_OUT_SLASH" = "$ENGINE_SLASH" ] \
+  && [ "$LINES_14" = "2" ]; then
+  ok "14: production-shaped vendor engine ids (space+parens, slash) round-trip through seat-hash and strike-seat"
+else
+  bad "14: hash1=$HASH_SPACE_1 hash2=$HASH_SPACE_2 rc_space=$RC_SPACE engine_space=$ENGINE_OUT_SPACE seathash_space=$SEATHASH_OUT_SPACE rc_slash=$RC_SLASH engine_slash=$ENGINE_OUT_SLASH lines=$LINES_14"
+fi
+
+# ── 15: dedup is class-aware — a critical trigger is NOT swallowed by an ordinary
+# strike sharing a dedup_key, and a true same-class repeat still dedups (BLOCKER 4) ─
+reset_strikes
+strike_seat gpt-5 codex implementer ordinary_strike '' engine_output fuse cls-k1 det1 v1 "$SHA_A" r-cls-1 >/dev/null
+CRIT_OUT="$(strike_seat gpt-5 codex implementer critical_reexam_trigger security_canary_disclosure engine_output fuse cls-k1 det1 v1 "$SHA_A" r-cls-2)"
+CRIT_CLASS="$(echo "$CRIT_OUT" | jq_get class)"
+CRIT_DEDUP_FLAG="$(echo "$CRIT_OUT" | jq_get deduplicated)"
+CRIT_EVENT_ID="$(echo "$CRIT_OUT" | jq_get event_id)"
+LINES_15A="$(wc -l < "$TESTDIR/strikes.jsonl")"
+# A true repeat of the SAME class (ordinary_strike, same dedup_key) still dedups.
+REPEAT_OUT="$(strike_seat gpt-5 codex implementer ordinary_strike '' engine_output fuse cls-k1 det1 v1 "$SHA_A" r-cls-3)"
+REPEAT_DEDUP_FLAG="$(echo "$REPEAT_OUT" | jq_get deduplicated)"
+LINES_15B="$(wc -l < "$TESTDIR/strikes.jsonl")"
+if [ "$CRIT_CLASS" = "critical_reexam_trigger" ] && [ "$CRIT_DEDUP_FLAG" != "true" ] && [ "$CRIT_EVENT_ID" = "2" ] \
+  && [ "$LINES_15A" = "2" ] && [ "$REPEAT_DEDUP_FLAG" = "true" ] && [ "$LINES_15B" = "2" ]; then
+  ok "15: dedup is (seat_hash, dedup_key, class) — critical trigger not swallowed by ordinary strike sharing a key; same-class repeat still dedups"
+else
+  bad "15: crit_class=$CRIT_CLASS crit_dedup=$CRIT_DEDUP_FLAG crit_eid=$CRIT_EVENT_ID lines_a=$LINES_15A repeat_dedup=$REPEAT_DEDUP_FLAG lines_b=$LINES_15B"
+fi
+
+# ── 16: one malformed line does not brick the writer, and event_id monotonicity
+# survives it (BLOCKER 6) ──────────────────────────────────────────────────────
+reset_strikes
+strike_seat gpt-5 codex implementer ordinary_strike '' engine_output fuse corrupt-base det1 v1 "$SHA_A" r-corrupt-base >/dev/null
+echo '{"schema_version":2,"event_id":99,"kind":"strike"}' >> "$TESTDIR/strikes.jsonl"
+WARN_OUT="$(node "$CLI" strike-seat --engine gpt-5 --runner codex --role implementer \
+  --class ordinary_strike --cause-class engine_output --writer fuse --dedup-key corrupt-after \
+  --detector-id det1 --detector-version v1 --artifact-sha256 "$SHA_A" --receipt-ref r-corrupt-after 2>&1 1>/dev/null)"
+AFTER_OUT="$(node "$CLI" strike-seat --engine gpt-5 --runner codex --role implementer \
+  --class ordinary_strike --cause-class engine_output --writer fuse --dedup-key corrupt-after \
+  --detector-id det1 --detector-version v1 --artifact-sha256 "$SHA_A" --receipt-ref r-corrupt-after 2>/dev/null)"
+AFTER_RC=$?
+AFTER_EVENT_ID="$(echo "$AFTER_OUT" | jq_get event_id)"
+LINES_16="$(wc -l < "$TESTDIR/strikes.jsonl")"
+if [ "$AFTER_RC" = "0" ] && [ "$AFTER_EVENT_ID" = "100" ] && [ "$LINES_16" = "3" ] \
+  && echo "$WARN_OUT" | grep -q 'malformed strike line 2'; then
+  ok "16: a malformed line is skipped-and-warned (not thrown), writer keeps working, and event_id stays monotonic (salvaged from the corrupt line's own event_id, 99+1=100)"
+else
+  bad "16: rc=$AFTER_RC event_id=$AFTER_EVENT_ID lines=$LINES_16 warn=$WARN_OUT"
+fi
+
+# ── 17: brainSeatStatus keeps working over a strikes.jsonl containing a corrupt
+# line (BLOCKER 6) — must not throw, must still exit 0 ─────────────────────────
+rm -f "$TESTDIR/qualification-evidence.jsonl"
+node -e '
+const fs = require("fs");
+fs.writeFileSync(process.argv[1], JSON.stringify({
+  identity: "brain-model-exact", model_alias: "brain-engine", model_version: "1",
+  family: "test-family", runner: "brain-harness", runner_version: "1.0.0",
+  harness_version: "h1", effort: "high",
+  prompt_config_hash: "a".repeat(64), semantic_fingerprint: "b".repeat(64),
+  containment_fingerprint: "c".repeat(64), identity_resolved: true,
+}));
+' "$TESTDIR/identity.json"
+BRAIN_STATUS_OUT="$(node "$CLI" brain-status --identity-file "$TESTDIR/identity.json" 2>/dev/null)"
+BRAIN_STATUS_RC=$?
+BRAIN_STATUS_FIELD="$(echo "$BRAIN_STATUS_OUT" | jq_get status)"
+[ "$BRAIN_STATUS_RC" = "0" ] && [ "$BRAIN_STATUS_FIELD" = "no_record" ] \
+  && ok "17: brainSeatStatus tolerates a corrupt strike line in the same file and still exits 0" \
+  || bad "17: rc=$BRAIN_STATUS_RC status=$BRAIN_STATUS_FIELD out=$BRAIN_STATUS_OUT"
 
 echo "----"
 echo "strike-decay unit tests: $PASS passed, $FAIL failed"

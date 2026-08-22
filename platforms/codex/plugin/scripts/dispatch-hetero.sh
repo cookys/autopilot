@@ -3509,8 +3509,27 @@ seat_strike_capture() {
     # mechanically attribute fault to engine vs runner from that signal alone.
     failure|dirty)
       cause_class="ambiguous" ;;
-    # everything else — committed / no_op / question_suspected / engine_unavailable / any
-    # status not in the fail-closed set — is not a strike.
+    # BLOCKER 3 fix (2026-08-22 review repair): OUTCOME_STATUS=engine_unavailable is set
+    # in classify_outcome from CLASSIFIED_ERROR, which is classify-error's LOG-TEXT match
+    # FIRST, exit code only as a fallback when text is unknown — i.e. it can be driven
+    # entirely by prose the measured engine itself wrote to its own stdout. "A runner is
+    # never trusted to label its own failure 'transport'" (strike-decay.md), so the STRIKE
+    # EXCLUSION may not ride on that text-tainted classification. Re-derive independently
+    # from the EXIT CODE ALONE (no --string/--file — engine-capability-state.js's
+    # classify-error then exercises only its host-observed exit-code map, :2132-2143 as of
+    # the review) and only honor the exclusion if THAT reclassification also names a
+    # transport signal. A text-only "engine_unavailable" (ordinary host exit code) is not
+    # host-corroborated, so it falls through and accrues, diagnostically ambiguous — this
+    # changes only what the strike writer treats as excluded, never OUTCOME_STATUS/stdout.
+    engine_unavailable)
+      local __exit_only_class=""
+      __exit_only_class="$("$SELF_DIR/engine-capability-state.js" classify-error --exit-code "${AGENT_EXIT:-0}" 2>/dev/null)" || __exit_only_class=""
+      if _is_engine_unavailable "$__exit_only_class"; then
+        return 0
+      fi
+      cause_class="ambiguous" ;;
+    # everything else — committed / no_op / question_suspected / any status not in the
+    # fail-closed set — is not a strike.
     *)
       return 0 ;;
   esac
@@ -3542,12 +3561,15 @@ seat_strike_capture() {
     fi
     [ -z "$artifact_sha" ] && exit 0
 
-    # dedup_key: stable per ROOT INCIDENT (DISPATCH_RUN_ID is the caller-supplied --run-id
-    # when given — a retry that reuses the same run-id collides on purpose — or else a
-    # per-process id already unique by construction), bound to base/head sha + the outcome
-    # status. No timestamp, no bare $$: retrying the SAME root incident dedups; two
-    # genuinely different dispatches (different run id and/or different shas) do not.
-    local dedup_key="${DISPATCH_RUN_ID:-unknown}:${BASE_SHA:-unknown}:${HEAD_SHA:-unknown}:${status}"
+    # dedup_key: frozen contract §2.7.2 — "<non-empty: root-incident id + detector id>".
+    # Root-incident id (DISPATCH_RUN_ID is the caller-supplied --run-id when given — a
+    # retry that reuses the same run-id collides on purpose — or else a per-process id
+    # already unique by construction), bound to base/head sha + the outcome status, PLUS
+    # the detector id (same value passed as --detector-id below) so the key composition
+    # matches the contract literally, not just in spirit. No timestamp, no bare $$:
+    # retrying the SAME root incident dedups; two genuinely different dispatches
+    # (different run id and/or different shas) do not.
+    local dedup_key="${DISPATCH_RUN_ID:-unknown}:${BASE_SHA:-unknown}:${HEAD_SHA:-unknown}:${status}:dispatch_hetero_classify_outcome"
     local receipt_ref="log=${LOG:-none} commit=${HEAD_SHA:-none}"
 
     local strike_args=(

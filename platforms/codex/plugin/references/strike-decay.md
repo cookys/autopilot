@@ -21,10 +21,19 @@ appears in an admission decision. Three consumers used to flip on it and no long
 | `engine-scorecard.js` `deriveStatus` | `expires < now` ⇒ status `expired` | derives `qualified`, sets `expiry_warning` |
 | `resolve-review-loop.sh` density scaling | status `expired` ⇒ capability tier `low` | tier follows `admission_status` |
 | `dispatch-contract.js` admission | an `expired` row is never admissible ⇒ NO-GO | NO-GO on `admission_status === 'requalify_required'` |
+| `resolve-scaffold-tier.js` `isFresh` | `expires < now` ⇒ stale ⇒ tier `T2` | freshness follows `admission_status` |
+
+The fourth was found by the first-pass reviewer AFTER the first three were pulled, on a
+production path (`dispatch-hetero.sh` calls it on every dispatch under the default
+`--scaffold-tier auto`) that the original contract test did not scan. That is the honest shape
+of this section: **the list is the set of teeth we have found and scanned for, not a proof that
+no other exists.**
 
 `hooks/tests/calendar-teeth-negative.test.sh` carries a planted negative per tooth plus a
-contract assertion that **no admission path compares `now` against `expires`**. Re-introducing a
-fourth tooth turns it red.
+contract assertion that no admission path compares `now` against `expires`. Its guarantee is
+**exactly as wide as its scan set** — the four files in the table above. Re-introducing a tooth
+in one of those turns it red; a tooth in a file outside the set does not. When you add a consumer
+that reads a scorecard row, add it to the scan set in the same commit.
 
 What a past-expiry date *does* buy, per the panel's §6: it is a reason to look harder — escalate
 mechanical QC sampling for that seat, so real drift arrives as strikes through the normal channel.
@@ -142,7 +151,9 @@ indistinguishable from a module never written, and its own unit tests pass in bo
 ## Reading the state
 
 ```bash
-# projection for one seat
+# projection for one seat — an OPERATOR-FACING CLI. Nothing in the product calls it;
+# the consumers read the projection off `current` rows instead (see below). Do not
+# read its existence as evidence the fold is wired — the wiring is `currentRowsForRole`.
 node scripts/engine-scorecard.js seat-status --engine <model> --runner <runner> --role <role>
 
 # every current row for a role, each carrying admission_status + expiry_warning

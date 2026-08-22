@@ -1,6 +1,55 @@
 # Changelog
 
 =======
+## v2.34.35 — 不信任累積取代日曆授權:資格降級第一次有機械依據
+
+**Headline**: 資格再也不會因為「日期到了」而失效。三根日曆牙齒同一刀拔掉
+(`engine-scorecard.js deriveStatus`、`resolve-review-loop.sh` tier、`dispatch-contract.js`
+admission),取而代之的是 **seat-scoped 機械 strike 累積**:自上次通過施測以來累積 N=3 個
+ordinary strike ⇒ `requalify_required`(強制重考,append-only)。Owner 2026-08-18 裁示
+(「同一個模型不需要日期授權;降級授權應該用不信任投票累積而不是時間」)的建設性另一半,
+v2.34.20 只做了 advisory 化,這次補上真正驅動降級的那一半。
+
+**構念(七席異質 panel 2026-08-22 凍結,七席全判 `sound-with-changes`,無一席主張保留任何日曆牙齒)**:
+不是新建,是 **generalize** —— v2.34.14 brain-seat KR3b 的 strike fold(identity_hash-keyed、
+receipt 必要、strictly-greater pass-rebaseline、零日曆)推廣到 seat 身分
+`sha256({engine,runner,role})`。Panel 推翻了 v0 草案的兩個核心機制:
+(a) **transport exclusion 死亡**(4/4 board 席):engine+runner 這個 pair 就是被派工的席位,
+delivery 是它合約的一部分;只排除一個封閉的、host 端推導的外部原因列舉
+(`quota|user_abort|infra_outage|pre_dispatch_host_abort`),絕不讓 runner 自己標記自己的失敗
+為「傳輸問題」。`cause_class` 降級為純診斷 metadata,永不抑制累積。pair-scoped 計數表示換配對
+即重新開始,這一條同時關掉兩個鏡像失敗場景(壞 runner 永遠可路由 / engine 故障穿傳輸外衣)。
+(b) **sliding work-volume window 死亡**:strike-only ledger 算不出分母,而 success-aging 會讓
+簡單任務洗掉困難任務的失敗。改用既有 fold 語義:**自上次通過施測以來的 N 個 strike**。
+
+**出貨形**:兩個 incident class,零權重 —— `ordinary_strike`(單一根因去重、receipt = 可重播的
+artifact hash + detector 版本,非 log 路徑)與 `critical_reexam_trigger`(**預先宣告的確定性
+predicate registry**,立即 `requalify_required`)。Shadow-first:ordinary threshold 走 SHADOW
+(記錄 + 投影 `would_requalify`,不設閘),critical registry **立即生效**(確定性 predicate 不需
+校準,3 席 board 同意);扳手是單一環境變數 `AUTOPILOT_STRIKE_ENFORCEMENT`,投影時讀取。
+Guards:`(seat_hash, dedup_key)` 冪等去重;`strike_invalidated` 僅在帶機械證明時可採信;
+**投影在讀取時重驗 writer allowlist 與 receipt** —— append-only 本身不做身分認證,未列名的 writer
+永遠無法灌水(被排除並計入 `rejected_strikes`)。epoch 語義取代計數歸零:通過新施測即
+re-baseline,磁碟上一行都不改。
+
+**ADR-0001 硬線**:strike 必須有 host 端重新推導的機械紅燈(重跑測試/oracle/canary 轉紅、gate
+非零離開、contract predicate 為假)。LLM reviewer 的 REJECT 散文可以退回交付物,**永遠不能投下
+strike** —— 否則這就是重建 attestation。rerun-until-green 禁止:重考失敗 append 後席位維持封鎖,
+只由之後一次全新的通過施測解封。
+
+**證據紀律**:每根拔掉的牙齒配一個 planted negative(過期 row 仍以正常 tier 路由並拿到 GO);
+契約測試機械保證「沒有任何 admission 路徑比較 now 與 expires」,重新引入該牙齒即轉紅(已實證
+紅→綠,非空測);production writer 配 delete-the-wiring 負控制 —— 拆掉接線測試必須轉紅
+(`references/evidence-discipline.md` §1「有 caller 才算存在」)。
+
+**契約**: [`references/strike-decay.md`](references/strike-decay.md)。
+**計畫**: `docs/plans/2026-08-22-no-confidence-decay.md`。
+**刻意未做**(全部進 BACKLOG 附理由,非遺漏):detector 異常隔離、fleet circuit breaker、
+rate-based window(需要不存在的 dispatch ledger)、重考排程自動化、liveness-probe stale tax、
+以及 panel 最想要的後續 —— 過期席位的 QC 抽樣加嚴 + detector coverage telemetry
+(日曆只改變「我們看多用力」,永不決定「它能不能路由」)。`provider_readiness_receipt_ttl_seconds`
+與 capability-claim TTL **本刀未轉換**,今日仍為 advisory。
+
 ## v2.34.34 — implementer qualification suite:live-rail 正式考券
 
 **Headline**: `engine-qualify.sh implementer` 第一次存在。dev-flow 驗證合約的三連言

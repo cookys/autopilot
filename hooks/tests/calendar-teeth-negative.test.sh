@@ -580,6 +580,155 @@ EW_HITS=$(awk -v s="$CEW_START" -v e="$CEW_END" '
   || bad "p3_2: an expiry-vs-now comparison exists outside computeExpiryWarning: $EW_HITS"
 
 # =============================================================================
+# v2.34.37 — THE DEFAULT CLOCK IS AN INSTANT, NOT UTC MIDNIGHT.
+#
+# `nowArgToMs` used to default to the start of the current UTC day, and every
+# instant comparison in the projection inherited that truncation. Both halves
+# below are the BACKLOG row's own reproductions, run with NO `--now` — which is
+# exactly how production reaches this code (`dispatch-contract.js` never passes
+# one). Neither can be satisfied by a truncating clock, so re-introducing the
+# truncation turns both red (evidence-discipline §2).
+#
+# Pre-fix output, verbatim, from this worktree before the change landed:
+#   (b) default clock : {"admission_status":"qualified", ...,
+#         "strikes_since_pass":0, "rejected_strikes":3, ...}
+#       explicit --now 2026-09-01 : {..., "strikes_since_pass":3,
+#         "would_requalify":true, "rejected_strikes":0, ...}
+#   (a) default clock : {"admission_status":"no_record", ...,
+#         "baseline_event_id":null, ...}
+#       --now <next day> : {"admission_status":"qualified", ...,
+#         "baseline_event_id":1, ...}
+#
+# Both fixtures stamp their instant at `max(UTC-midnight + 1 ms, now - 60 s)`, so
+# they stay strictly inside "later today" at EVERY hour of the day — including a
+# run that starts at 00:00:00Z, where a naive "now" would coincide with the
+# truncated clock and the assertion would pass vacuously.
+# =============================================================================
+LATER_TODAY_TS=$(node -e '
+  const now = Date.now();
+  const midnight = Date.parse(`${new Date(now).toISOString().slice(0, 10)}T00:00:00.000Z`);
+  process.stdout.write(new Date(Math.max(midnight + 1, now - 60000)).toISOString());
+')
+TODAY_UTC=$(node -e 'process.stdout.write(new Date().toISOString().slice(0, 10))')
+
+# (a) An evidence receipt issued later the SAME UTC day must read as qualified
+# and supply a baseline. Under the truncated clock the receipt was not yet valid
+# at evaluation_time, deriveStatus refused it, findSeatBaseline found nothing,
+# and seat-status answered `no_record` for a seat with a QUALIFIED row on disk.
+#
+# The evidence blob is re-stamped from a REAL shipped administration
+# (references/official-qualification-defaults.json) through
+# capability-evidence.js's own compiler, and its qualifier-store anchor is
+# rebuilt with capabilityEvidenceProducerHash — so `record` admits it by the
+# same path a live `engine-qualify` administration takes, not a hand-waved one.
+reset_stores
+RECEIPT_OUT=$(node - "$ROOT" "$SCORECARD_DIR" "$CAPABILITY_DIR" "$LATER_TODAY_TS" "$TODAY_UTC" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const [root, scDir, capDir, issued, today] = process.argv.slice(2);
+const {
+  compileCapabilityEvidence,
+  capabilityEvidenceProducerHash,
+} = require(path.join(root, 'src/engine/capability-evidence.js'));
+
+const artifact = JSON.parse(fs.readFileSync(
+  path.join(root, 'references/official-qualification-defaults.json'), 'utf8',
+));
+const src = artifact.defaults.find((d) => d.row && d.row.evidence
+  && d.row.status === 'qualified' && d.capability_evidence);
+if (!src) { process.stdout.write('NO_FIXTURE'); process.exit(0); }
+
+const expires = new Date(Date.parse(issued) + 60 * 86400000).toISOString();
+const raw = JSON.parse(JSON.stringify(src.row.evidence));
+for (const derived of ['evidence_id', 'evidence_hash', 'scope_hash', 'identity_hash',
+  'grant_identity_hash', 'trial_set_hash']) delete raw[derived];
+raw.issued_at = issued;
+raw.observed_at = issued;
+raw.expires_at = expires;
+for (const trial of raw.trials || []) { if (trial.observed_at) trial.observed_at = issued; }
+const evidence = compileCapabilityEvidence(raw);
+
+const producer = src.capability_evidence.producer;
+const transcriptHash = capabilityEvidenceProducerHash(evidence, producer);
+fs.mkdirSync(capDir, { recursive: true });
+fs.writeFileSync(path.join(capDir, 'qualification-evidence.jsonl'),
+  `${JSON.stringify({ ...src.capability_evidence, event_id: 1, evidence, transcript_hash: transcriptHash })}\n`);
+
+const row = JSON.parse(JSON.stringify(src.row));
+row.date = today;
+row.qualified_at = today;
+row.expires = expires.slice(0, 10);
+row.evidence = evidence;
+row.evidence_store = { event_id: 1, producer, transcript_hash: transcriptHash };
+const rowFile = path.join(capDir, 'receipt-row.json');
+fs.writeFileSync(rowFile, `${JSON.stringify(row)}\n`);
+
+const env = { ...process.env, ENGINE_SCORECARD_DIR: scDir, ENGINE_CAPABILITY_DIR: capDir };
+const ESC = path.join(root, 'scripts/engine-scorecard.js');
+try {
+  execFileSync('node', [ESC, 'record', '--file', rowFile], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+} catch (err) {
+  process.stdout.write(`RECORD_FAILED:${String(err.stderr || err.stdout || err.message).trim()}`);
+  process.exit(0);
+}
+// NO --now: this is the production default clock.
+const out = execFileSync('node', [ESC, 'seat-status',
+  '--engine', row.engine, '--runner', row.runner, '--role', row.role], { env, encoding: 'utf8' });
+const projection = JSON.parse(out);
+process.stdout.write(`${projection.admission_status}:${projection.baseline_event_id}`);
+NODE
+)
+[ "$RECEIPT_OUT" = "qualified:1" ] \
+  && ok "instant2: an evidence receipt issued later TODAY reads qualified with a baseline under the DEFAULT clock (was no_record / baseline null)" \
+  || bad "instant2: expected 'qualified:1', got '$RECEIPT_OUT'"
+
+# (b) A strike written later the SAME UTC day as the read must COUNT. Under the
+# truncated clock foldSeatStrikes' `observedMs <= nowMs` window ended at
+# midnight, so it landed in `rejected_strikes` and enforcement was a silent
+# no-op for up to 24h after every midnight.
+reset_stores
+echo "$(score_row SAMEDAY codex reviewer 2026-01-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
+SH_SD=$(seat_hash SAMEDAY codex reviewer)
+{
+  strike_line "$SH_SD" SAMEDAY codex reviewer ordinary_strike null fuse "rcpt-sd-1" "inc-sd-1:det-1" "$LATER_TODAY_TS" 1
+  strike_line "$SH_SD" SAMEDAY codex reviewer ordinary_strike null fuse "rcpt-sd-2" "inc-sd-2:det-1" "$LATER_TODAY_TS" 2
+  strike_line "$SH_SD" SAMEDAY codex reviewer ordinary_strike null fuse "rcpt-sd-3" "inc-sd-3:det-1" "$LATER_TODAY_TS" 3
+} > "$STRIKES_FILE"
+SS_SD=$(node "$ESC" seat-status --engine SAMEDAY --runner codex --role reviewer)
+sp_sd=$(echo "$SS_SD" | jq_get strikes_since_pass)
+rej_sd=$(echo "$SS_SD" | jq_get rejected_strikes)
+wr_sd=$(echo "$SS_SD" | jq_get would_requalify)
+[ "$sp_sd" = "3" ] && [ "$rej_sd" = "0" ] && [ "$wr_sd" = "true" ] \
+  && ok "instant1: three strikes stamped later TODAY count under the DEFAULT clock (strikes_since_pass=3, rejected_strikes=0, would_requalify)" \
+  || bad "instant1: strikes_since_pass=$sp_sd rejected_strikes=$rej_sd would_requalify=$wr_sd out=$SS_SD"
+
+# The default clock must not be re-truncated. `todayMsUtc` (the removed helper)
+# is banned from the WHOLE file — it lived in the argument parsers (nowArgToMs
+# and the three parse*Args sites), which sit ABOVE the deriveStatus admission
+# region this suite otherwise scans, so $ESC_ADMISSION_REGION would miss it and
+# this assertion would be vacuous. The one surviving start-of-day floor,
+# startOfUtcDayMsOf, is confined to computeExpiryWarning, whose right-hand side
+# (`expires`) is contractually date-only and stays a date-vs-date comparison —
+# and p3_2 above already pins that comparison to that function.
+TRUNC_HITS=$(awk '
+  /^[[:space:]]*(\/\/|\*|\/\*)/ { next }
+  /todayMsUtc\(\)/ { print NR": "$0 }
+' "$ESC")
+[ -z "$TRUNC_HITS" ] \
+  && ok "instant3: no UTC-midnight-truncated default clock remains anywhere in engine-scorecard.js" \
+  || bad "instant3: a truncated default clock is back: $TRUNC_HITS"
+
+# ...and the same must hold for the shipped Codex mirror, which is a byte copy.
+TRUNC_HITS_MIRROR=$(awk '
+  /^[[:space:]]*(\/\/|\*|\/\*)/ { next }
+  /todayMsUtc\(\)/ { print NR": "$0 }
+' "$ROOT/platforms/codex/plugin/scripts/engine-scorecard.js" 2>/dev/null)
+[ -z "$TRUNC_HITS_MIRROR" ] \
+  && ok "instant4: the Codex mirror of engine-scorecard.js carries the same instant clock" \
+  || bad "instant4: truncated default clock present in the Codex mirror: $TRUNC_HITS_MIRROR"
+
+# =============================================================================
 # Landing assertion (evidence-discipline §9): rows landed in the isolated
 # dirs, and the operator's real ~/.autopilot stores were never touched by
 # this suite.

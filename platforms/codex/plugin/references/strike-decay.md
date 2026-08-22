@@ -111,6 +111,20 @@ logically clears prior strikes without mutating one line on disk. History stays 
 A failed re-exam appends and the seat stays blocked. **rerun-until-green is forbidden** — the seat
 is unblocked by a later fresh administration that passes, not by retrying the failed one.
 
+### Adopted official defaults are ordinary strike targets
+
+A row copied in from the shipped official defaults
+([`qualification-defaults.md`](qualification-defaults.md)) is **not privileged here**. Its
+`seat_hash` comes from the same `{engine, runner, role}` derivation, its strikes accrue through the
+same allowlisted writers, and the same N=3 fold applies. Nothing in `provenance` is read by the
+projection's admission logic.
+
+The one adopted-specific addition is advisory: when a `requalify_required` seat's baseline row
+carries `provenance.kind === "official-default"`, `seat-status` and `current` add a `remedy` string.
+It exists because the epoch rule above lands differently on an imported baseline — **re-adopting the
+same default cannot re-baseline it**, since it is the same administration, not a new one. Only a
+passing *fresh local* administration does. `remedy` gates nothing.
+
 ### Corrections
 
 The only correction is an append-only `strike_invalidated` event, admissible **only** with

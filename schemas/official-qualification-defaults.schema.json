@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/official-qualification-defaults.schema.json",
+  "title": "OfficialQualificationDefaults",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_type",
+    "recipe_version",
+    "generated_by",
+    "disclosure_notice",
+    "adr_0001_notice",
+    "downgrade_notice",
+    "role_summary",
+    "store_projection_sha256",
+    "defaults"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "artifact_type": {
+      "type": "string",
+      "const": "official_qualification_defaults"
+    },
+    "recipe_version": {
+      "type": ["string", "null"]
+    },
+    "generated_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "disclosure_notice": {
+      "type": "string",
+      "minLength": 1
+    },
+    "adr_0001_notice": {
+      "type": "string",
+      "minLength": 1
+    },
+    "downgrade_notice": {
+      "type": "string",
+      "minLength": 1
+    },
+    "role_summary": {
+      "type": "object"
+    },
+    "store_projection_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "defaults": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/default_entry"
+      }
+    }
+  },
+  "$defs": {
+    "default_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default_id",
+        "role",
+        "status",
+        "seat",
+        "seat_hash",
+        "administration",
+        "quality",
+        "capability_score",
+        "evidence_pointers",
+        "row",
+        "capability_evidence"
+      ],
+      "properties": {
+        "default_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "$ref": "#/$defs/role"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["qualified", "failed", "expired"]
+        },
+        "seat": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["engine", "runner", "role"],
+          "properties": {
+            "engine": {
+              "type": "string",
+              "minLength": 1
+            },
+            "runner": {
+              "type": "string",
+              "minLength": 1
+            },
+            "role": {
+              "$ref": "#/$defs/role"
+            }
+          }
+        },
+        "seat_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "administration": {
+          "$ref": "#/$defs/administration"
+        },
+        "quality": {
+          "type": ["object", "null"]
+        },
+        "capability_score": {},
+        "evidence_pointers": {
+          "$ref": "#/$defs/evidence_pointers"
+        },
+        "row": {
+          "type": "object"
+        },
+        "capability_evidence": {
+          "type": ["object", "null"]
+        }
+      }
+    },
+    "role": {
+      "type": "string",
+      "enum": ["implementer", "reviewer", "verification_author", "owner", "explorer"]
+    },
+    "administration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "model",
+        "model_version",
+        "version_source",
+        "runner",
+        "runner_version",
+        "family",
+        "harness_version",
+        "corpus_version",
+        "prompt_config_hash",
+        "effort",
+        "date",
+        "qualified_at",
+        "expires"
+      ],
+      "properties": {
+        "engine": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "model_version": { "type": ["string", "null"] },
+        "version_source": { "type": ["string", "null"] },
+        "runner": { "type": ["string", "null"] },
+        "runner_version": { "type": ["string", "null"] },
+        "family": { "type": ["string", "null"] },
+        "harness_version": { "type": ["string", "null"] },
+        "corpus_version": { "type": ["string", "null"] },
+        "prompt_config_hash": { "type": ["string", "null"] },
+        "effort": { "type": ["string", "null"] },
+        "date": { "type": ["string", "null"] },
+        "qualified_at": { "type": ["string", "null"] },
+        "expires": { "type": ["string", "null"] }
+      }
+    },
+    "evidence_pointers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["official_event_id", "evidence_bundle", "evidence_store", "evidence_id"],
+      "properties": {
+        "official_event_id": {
+          "type": "integer"
+        },
+        "evidence_bundle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_store": {
+          "type": ["object", "null"]
+        },
+        "evidence_id": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

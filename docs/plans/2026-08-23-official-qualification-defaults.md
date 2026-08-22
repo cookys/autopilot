@@ -285,4 +285,38 @@ plan's §7 puts out of scope.
   the `validateAgainstSchema` silent self-disable (11) were fixed in-line rather than deferred.
   Widened the same-UTC-day BACKLOG row with the reviewer's sharper finding: the truncation also
   makes same-day STRIKE accrual a silent no-op (3 strikes at 19:49Z ⇒ `rejected_strikes: 3`).
+- **R2 depth-0 authoritative panel** (sol@max + GLM-5.2 + MiniMax-M3, 2026-08-23) — **FIX-THEN-SHIP**
+  from all three seats. One 🔴 from sol ("official-artifact-missing") was ruled a FALSE POSITIVE by
+  depth-0: the generated JSON had been excluded from that seat's review diff for context budget.
+  Six findings accepted, all fixed on this branch:
+  - **F1 🔴 dead trust machinery** — `store_projection_sha256` and `defaults_artifact_sha256` were
+    written and read by nothing. Both removed (generator, schema, adopt, docs, assertions).
+    `--check` already byte-compares the whole file, which is strictly stronger; a
+    written-but-never-read hash reads as trust machinery to the next person. Behavior-neutral.
+  - **F2 🔴 local-evidence precedence** — the collision rule compared dates and `--force` bypassed
+    it. Depth-0 extended the finding to its worst shape: a local **FAILED** row has no
+    `qualified_at`, so `'' >= '2026-08-21'` was false, no collision fired at all, and an official
+    QUALIFIED default landed silently on top of local honest failure. Rule is now identity-based,
+    not date-based: ANY local non-adopted row refuses the seat, and `--force` cannot override it
+    (it may only replace a previous adoption). Three planted negatives.
+  - **F3 🟠 hollow schema gate** — the build validated a copy with fractional scores replaced by 0,
+    and the test asserted the validator's exit 2 on the real artifact as green. `capability_score`
+    now ships as a lossless decimal string; the committed bytes validate directly, `readArtifact`
+    validates on the consumer side too, and the zero-substitution hack and exit-2-as-green
+    assertions are gone.
+  - **F4 🟠 sweep false success** — qualify/record failures were logged and swallowed. They now
+    increment a failure counter, log `QUALIFY-FAIL`/`RECORD-FAIL`/`PROBE-FAIL`, and exit nonzero.
+    A recorded FAILED verdict deliberately stays a success (that is the instrument working).
+  - **F5 🟠 asserted-not-executed admission** — the test mirrored
+    `isAdmissibleScorecardRow` by hand. It now drives the REAL `dispatch-contract.js check` on a
+    real contract + repo (adopted seat ⇒ `"verdict":"GO"`, empty store ⇒ NO-GO control) and the
+    REAL `resolve-review-loop.sh --check-scorecard`. The mirror is kept as a secondary signal.
+    `dispatch-contract.js` was NOT given an export seam: it ends in an unconditional IIFE, so
+    `require()` would execute it — driving the CLI is the correct seam.
+  - **F6 🟠 version_source stamp** — adopted rows now carry `version_source: official-default`, with
+    the administration's original value preserved as
+    `provenance.administration_version_source`. The enum was widened deliberately in
+    `engine-scorecard.js`; `qualify-scorecard-vocabulary.test.sh` still holds (it requires the
+    accepting side to be a superset).
+  Artifact regenerated (F1/F3 change its bytes): 17 entries, 201964 → new size, `--check` clean.
 - Depth-0 holds the authoritative qc verdict; this run performs first-pass qc only per its brief.

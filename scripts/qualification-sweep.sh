@@ -359,7 +359,8 @@ run_seat() { # slug runner model family vsrc endpoint effort
     probe_receipt "$bundle" "$runner" "$model" "$vsrc" 0 "probe committed"
   else
     probe_receipt "$bundle" "$runner" "$model" "$vsrc" 1 "probe failed - uncharged infra abort"
-    log "SEAT $slug PROBE-FAIL (uncharged, skipped)"
+    SEAT_FAILURES=$(( SEAT_FAILURES + 1 ))
+    log "SEAT $slug PROBE-FAIL (uncharged, skipped) - seat NOT administered"
     [ "$endpoint" != "-" ] && export ANTHROPIC_BASE_URL="$saved_base" ANTHROPIC_AUTH_TOKEN="$saved_tok"
     return
   fi
@@ -382,21 +383,39 @@ run_seat() { # slug runner model family vsrc endpoint effort
   local qexit=$?
   echo "QUALIFY_EXIT=$qexit" >> "$bundle/qualify-err.log"
   local summary="no-row"
+  # OPERATIONAL failure vs HONEST VERDICT (depth-0 panel F4). A recorded FAILED
+  # administration is a successful sweep step - that is the instrument working.
+  # An administration that produced no row, or a record call that refused the
+  # row, is an OPERATIONAL failure: nothing landed in the store, and a sweep
+  # that prints COMPLETE and exits 0 over it tells the operator a lie they will
+  # act on. Those two cases set SEAT_FAILURES; honest FAILED verdicts do not.
   if [ -s "$bundle/qualify-out.json" ] && head -c1 "$bundle/qualify-out.json" | grep -q '{'; then
     node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$bundle/qualify-out.json" \
       > "$bundle/record-out.json" 2> "$bundle/record-err.log"
-    echo "RECORD_EXIT=$?" >> "$bundle/record-err.log"
+    local rexit=$?
+    echo "RECORD_EXIT=$rexit" >> "$bundle/record-err.log"
+    if [ "$rexit" -ne 0 ]; then
+      SEAT_FAILURES=$(( SEAT_FAILURES + 1 ))
+      log "SEAT $slug RECORD-FAIL (exit $rexit) - administration ran but its row was NOT recorded; see $bundle/record-err.log"
+      [ "$endpoint" != "-" ] && export ANTHROPIC_BASE_URL="$saved_base" ANTHROPIC_AUTH_TOKEN="$saved_tok"
+      return
+    fi
     summary=$(node -e "
       const r=require(process.argv[1]);
       let ev=''; try{ev=require(process.argv[2]).event_id}catch(e){}
       console.log(r.status+' '+r.quality.corpus_pass+' score='+Number(r.capability_score).toFixed(3)+' wall='+r.latency.sample_wall_time_s+'s event='+ev);
     " "$PWD/$bundle/qualify-out.json" "$PWD/$bundle/record-out.json" 2>/dev/null || echo "row-parse-error")
   else
-    summary="no_verdict/usage (exit $qexit)"
+    SEAT_FAILURES=$(( SEAT_FAILURES + 1 ))
+    log "SEAT $slug QUALIFY-FAIL (exit $qexit) - no verdict row emitted; see $bundle/qualify-err.log"
+    [ "$endpoint" != "-" ] && export ANTHROPIC_BASE_URL="$saved_base" ANTHROPIC_AUTH_TOKEN="$saved_tok"
+    return
   fi
   [ "$endpoint" != "-" ] && export ANTHROPIC_BASE_URL="$saved_base" ANTHROPIC_AUTH_TOKEN="$saved_tok"
   log "SEAT $slug DONE: $summary"
 }
+
+SEAT_FAILURES=0
 
 execute_sweep() {
   local n_seats=${#SEAT_LINES[@]}
@@ -421,6 +440,10 @@ execute_sweep() {
     IFS=$'\t' read -r _tag slug runner model family vsrc endpoint effort <<< "$seat_line"
     run_seat "$slug" "$runner" "$model" "$family" "$vsrc" "$endpoint" "$effort"
   done
+  if [ "$SEAT_FAILURES" -gt 0 ]; then
+    log "QUALIFICATION-SWEEP INCOMPLETE $(date -u +%H:%M:%SZ) - $SEAT_FAILURES of $n_seats seat(s) did not land a recorded administration (see PROBE-FAIL / QUALIFY-FAIL / RECORD-FAIL lines above)"
+    exit 1
+  fi
   log "QUALIFICATION-SWEEP COMPLETE $(date -u +%H:%M:%SZ)"
 }
 

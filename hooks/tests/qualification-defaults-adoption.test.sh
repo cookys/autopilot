@@ -91,8 +91,17 @@ assert_contains "$ADOPTED_ROW" '"official_event_id":143' "provenance points back
 assert_contains "$ADOPTED_ROW" '"self_qualify_command"' "provenance names the self-qualify remedy"
 # version_source is a closed enum in engine-scorecard.js; the provenance marker
 # must never have been smuggled into it.
+# F6 (depth-0 panel): an adopted row's version_source names HOW IT GOT HERE.
 VS=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).version_source)' "$ADOPTED_ROW")
-assert_neq "$VS" "official-default" "provenance did NOT overwrite the closed version_source enum"
+assert_eq "$VS" "official-default" "adopted row is stamped version_source=official-default"
+AVS=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).provenance.administration_version_source))' "$ADOPTED_ROW")
+assert_eq "$AVS" "runtime" "the ORIGINAL administration version_source is preserved in provenance disclosure"
+# The stamp must be a value engine-scorecard.js actually accepts, or every
+# adopted row would be unrecordable — record() already proved that by accepting
+# this row, but pin the enum too so a future narrowing goes red here.
+grep -q "'official-default'" "$REPO_ROOT/scripts/engine-scorecard.js" \
+  && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) \
+  || fail "engine-scorecard.js VALID_VERSION_SOURCES no longer admits 'official-default'"
 
 # --- 4. the adopted row is admissible through the UNCHANGED admission path ---
 CUR=$(ENGINE_SCORECARD_DIR="$STORE" node "$SCORECARD" current --role implementer --now "$NOW" 2>&1)
@@ -208,15 +217,177 @@ assert_not_contains "$OTHER_ENFORCED" "ADOPTED OFFICIAL DEFAULT" \
 # --- 9. a local row on the same seat is never silently shadowed --------------
 COLLIDE=$(node "$ADOPT" adopt --seat "$SEAT_ENGINE:$SEAT_RUNNER" --role "$SEAT_ROLE" \
   --artifact "$ARTIFACT" --store "$STORE" 2>&1)
-assert_exit_code "$?" "1" "re-adopting over an existing row is refused"
-assert_contains "$COLLIDE" "refused_seat_collision" "the refusal is explicit"
-assert_contains "$COLLIDE" "never the other way round" "the refusal states the override direction"
+assert_exit_code "$?" "1" "re-adopting over an existing adoption is refused"
+assert_contains "$COLLIDE" "refused_already_adopted" "the refusal names the already-adopted case"
+
+# --- 9b. LOCAL EVIDENCE IS UNCONDITIONALLY PROTECTED (depth-0 panel F2) ------
+# The old rule compared dates and let --force through. Its worst shape: a local
+# FAILED row has no `qualified_at`, so localAt was '' and the `localAt >=
+# defaultAt` compare was FALSE — no collision at all, and an official QUALIFIED
+# default landed silently on top of a local honest FAILURE.
+FAILED_STORE="$TEST_TMP/local-failed-store"
+mkdir -p "$FAILED_STORE"
+node -e '
+  const fs = require("fs");
+  const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const e = a.defaults.find((d) => d.seat.engine === process.argv[3] && d.seat.runner === process.argv[4]);
+  const row = { ...e.row };
+  delete row.provenance;
+  delete row.qualified_at;          // exactly the shape that slipped through
+  row.status = "failed";
+  row.capability_score = 0.5;
+  row.event_id = 1;
+  fs.writeFileSync(process.argv[2], JSON.stringify(row) + "\n");
+' "$ARTIFACT" "$FAILED_STORE/scorecard.jsonl" "$SEAT_ENGINE" "$SEAT_RUNNER"
+
+LOCALFAIL_OUT=$(node "$ADOPT" adopt --seat "$SEAT_ENGINE:$SEAT_RUNNER" --role "$SEAT_ROLE" \
+  --artifact "$ARTIFACT" --store "$FAILED_STORE" --capability-store "$TEST_TMP/local-failed-cap" 2>&1)
+assert_exit_code "$?" "1" "a local FAILED row (no qualified_at) blocks adoption"
+assert_contains "$LOCALFAIL_OUT" "refused_local_evidence_present" "the refusal names local evidence"
+assert_eq "$(wc -l < "$FAILED_STORE/scorecard.jsonl")" "1" "the local FAILED row was not overwritten"
+
+# --force must NOT be an escape hatch over local evidence.
+FORCE_OUT=$(node "$ADOPT" adopt --seat "$SEAT_ENGINE:$SEAT_RUNNER" --role "$SEAT_ROLE" --force \
+  --artifact "$ARTIFACT" --store "$FAILED_STORE" --capability-store "$TEST_TMP/local-failed-cap" 2>&1)
+assert_exit_code "$?" "1" "--force cannot clobber local evidence"
+assert_contains "$FORCE_OUT" "refused_local_evidence_present" "--force still refuses on local evidence"
+assert_eq "$(wc -l < "$FAILED_STORE/scorecard.jsonl")" "1" "--force left the local FAILED row intact"
+
+# A local self-qualified QUALIFIED row is protected regardless of dates too —
+# including when the official default is NEWER (the old date compare's other hole).
+OLDER_STORE="$TEST_TMP/local-older-store"
+mkdir -p "$OLDER_STORE"
+node -e '
+  const fs = require("fs");
+  const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const e = a.defaults.find((d) => d.seat.engine === process.argv[3] && d.seat.runner === process.argv[4]);
+  const row = { ...e.row };
+  delete row.provenance;
+  row.qualified_at = "2020-01-01";   // much older than the official default
+  row.capability_score = 0.9;
+  row.event_id = 1;
+  fs.writeFileSync(process.argv[2], JSON.stringify(row) + "\n");
+' "$ARTIFACT" "$OLDER_STORE/scorecard.jsonl" "$SEAT_ENGINE" "$SEAT_RUNNER"
+OLDER_OUT=$(node "$ADOPT" adopt --seat "$SEAT_ENGINE:$SEAT_RUNNER" --role "$SEAT_ROLE" \
+  --artifact "$ARTIFACT" --store "$OLDER_STORE" --capability-store "$TEST_TMP/local-older-cap" 2>&1)
+assert_exit_code "$?" "1" "an OLDER local self-qualified row still beats a newer official default"
+assert_contains "$OLDER_OUT" "refused_local_evidence_present" "date order is irrelevant to the rule"
 
 # --- 10. usage teeth ---------------------------------------------------------
 node "$ADOPT" adopt --artifact "$ARTIFACT" --store "$TEST_TMP/nowhere" >/dev/null 2>&1
 assert_exit_code "$?" "2" "adopt without a selector is a usage error"
 node "$ADOPT" --bogus-flag >/dev/null 2>&1
 assert_exit_code "$?" "2" "an unknown flag is a usage error"
+
+# --- 11b. EXECUTE the real admission path, don't mirror it -------------------
+# §4 above evaluates a HAND-COPY of dispatch-contract.js's isAdmissibleScorecardRow.
+# A mirror drifts silently: change the real predicate and the mirror still says GO.
+# So run the real binaries against the real adopted row. The mirror stays as a
+# secondary signal; these two are the load-bearing ones.
+#
+# dispatch-contract.js has no export seam (it ends in an unconditional IIFE, so
+# require() would execute it), which is exactly why it must be driven through its
+# real `check` CLI on a real contract + repo.
+
+CONTRACT_REPO="$TEST_TMP/contract-repo"
+mkdir -p "$CONTRACT_REPO/src" "$CONTRACT_REPO/specs/feat" "$CONTRACT_REPO/.claude" "$CONTRACT_REPO/tools"
+git -C "$CONTRACT_REPO" init -q -b main
+git -C "$CONTRACT_REPO" config user.email t@t.invalid
+git -C "$CONTRACT_REPO" config user.name t
+printf 'package main\n\nfunc main() {}\n' > "$CONTRACT_REPO/src/main.go"
+printf '# API\n\nspec body\n' > "$CONTRACT_REPO/specs/feat/core.md"
+printf 'touch red.marker\n' > "$CONTRACT_REPO/tools/red.sh"
+printf 'touch run.marker\n' > "$CONTRACT_REPO/tools/runner.sh"
+# The resolved implementer seat comes from this config — point it at the seat we
+# adopted, so a GO here is a statement about the ADOPTED row.
+{
+  printf '# Review Loop Config\n'
+  printf -- '- implementer_engine: %s\n' "$SEAT_ENGINE"
+  printf -- '- implementer_runner: %s\n' "$SEAT_RUNNER"
+} > "$CONTRACT_REPO/.claude/review-loop-config.md"
+git -C "$CONTRACT_REPO" add -A
+git -C "$CONTRACT_REPO" commit -q -m base
+CONTRACT_BASE_SHA=$(git -C "$CONTRACT_REPO" rev-parse HEAD)
+CONTRACT_SPEC_SHA=$(node -e 'const c=require("crypto"),f=require("fs");process.stdout.write(c.createHash("sha256").update(f.readFileSync(process.argv[1])).digest("hex"));' "$CONTRACT_REPO/specs/feat/core.md")
+
+CONTRACT_FILE="$TEST_TMP/adopted-seat-contract.json"
+node -e '
+  const fs = require("fs");
+  const [, out, baseSha] = process.argv;
+  fs.writeFileSync(out, JSON.stringify({
+    schema: 1,
+    unit_id: "adopted-seat-unit",
+    role: "implementer",
+    goal: "prove the adopted default is admissible through the real contract checker",
+    spec: { path: "specs/feat/core.md", section: "API" },
+    base_sha: baseSha,
+    depends_on: [],
+    scope: { allow_paths: ["src/"], deny_paths: ["vendor/"], max_files: 10, max_diff_lines: 100 },
+    go: { required_paths: ["src/main.go"], required_engine_role: "implementer", required_red_command: ["tools/red.sh"] },
+    no_go: {
+      on_missing_spec: "stop", on_dirty_base: "stop", on_unknown_engine: "stop",
+      on_quota_unavailable: "stop", on_scope_violation: "stop", on_budget_exceeded: "stop",
+      on_clarification_needed: "stop",
+      forbidden_actions: ["push", "merge", "network", "dependency-change"],
+    },
+    output: { kind: "diff", paths: ["src/"] },
+    acceptance: [{ argv: ["tools/runner.sh"], exit: 0 }],
+    budget: { wall_seconds: 60, max_attempts: 1, max_context_files: 5 },
+  }, null, 2) + "\n");
+' "$CONTRACT_FILE" "$CONTRACT_BASE_SHA" "$CONTRACT_SPEC_SHA"
+
+# dispatch-contract also gates on quota, which is orthogonal to the scorecard
+# axis under test. Record quota-available for this exact tuple so a NO-GO here
+# can only be about admission, not about an unrelated environmental gate.
+# The tuple must match exactly (effort/endpoint included) or the lookup misses.
+CAP_EVENT="$TEST_TMP/adopted-seat-quota.json"
+node -e '
+  const fs = require("fs");
+  const [, out, engine, runner, effort] = process.argv;
+  fs.writeFileSync(out, JSON.stringify({
+    schema_version: 1,
+    observed_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    runner, model: engine, role: "implementer",
+    effort: effort === "null" ? null : effort,
+    endpoint: null,
+    runner_version: "test",
+    capability: { quota: { status: "available", confidence: "high", ttl_seconds: 3600, reset_at: null, evidence: "test" } },
+  }) + "\n");
+' "$CAP_EVENT" "$SEAT_ENGINE" "$SEAT_RUNNER" "$(node -e '
+  const fs = require("fs");
+  const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const e = a.defaults.find((d) => d.seat.engine === process.argv[2] && d.seat.runner === process.argv[3]);
+  process.stdout.write(String(e.administration.effort));
+' "$ARTIFACT" "$SEAT_ENGINE" "$SEAT_RUNNER")"
+mkdir -p "$TEST_TMP/consumer-cap"
+ENGINE_CAPABILITY_DIR="$TEST_TMP/consumer-cap" node "$REPO_ROOT/scripts/engine-capability-state.js" \
+  record --file "$CAP_EVENT" > /dev/null 2>&1 \
+  || fail "setup: could not record quota-available for the adopted seat"
+
+# GO case: the adopted row is in $STORE.
+CONTRACT_OUT=$(cd "$CONTRACT_REPO" && ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$TEST_TMP/consumer-cap" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_FILE" --repo "$CONTRACT_REPO" --json 2>&1)
+assert_contains "$CONTRACT_OUT" '"verdict":"GO"' \
+  "the REAL dispatch-contract.js admits the adopted default (out: $CONTRACT_OUT)"
+
+# NO-GO control: same contract, empty store ⇒ the GO above is about the adopted
+# row, not about the checker being permissive.
+EMPTY_STORE="$TEST_TMP/empty-store"
+mkdir -p "$EMPTY_STORE"
+CONTRACT_OUT_EMPTY=$(cd "$CONTRACT_REPO" && ENGINE_SCORECARD_DIR="$EMPTY_STORE" ENGINE_CAPABILITY_DIR="$TEST_TMP/empty-cap" \
+  node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_FILE" --repo "$CONTRACT_REPO" --json 2>&1)
+assert_contains "$CONTRACT_OUT_EMPTY" "NO-GO" \
+  "control: with no adopted row the REAL checker NO-GOes (out: $CONTRACT_OUT_EMPTY)"
+
+# --- 11c. resolve-review-loop.sh capability-tier read on the adopted seat -----
+RRL_OUT=$(cd "$CONTRACT_REPO" && ENGINE_SCORECARD_DIR="$STORE" ENGINE_CAPABILITY_DIR="$TEST_TMP/consumer-cap" \
+  bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --check-scorecard 2>/dev/null)
+assert_not_contains "$RRL_OUT" "implementer seat ($SEAT_ENGINE/$SEAT_RUNNER) is not admissible" \
+  "the REAL resolve-review-loop.sh reads the adopted seat as admissible"
+RRL_OUT_EMPTY=$(cd "$CONTRACT_REPO" && ENGINE_SCORECARD_DIR="$EMPTY_STORE" ENGINE_CAPABILITY_DIR="$TEST_TMP/empty-cap" \
+  bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --check-scorecard 2>/dev/null)
+assert_contains "$RRL_OUT_EMPTY" "not admissible" \
+  "control: resolve-review-loop.sh warns when the seat has no row"
 
 # --- 11. the real user-local stores were never touched ----------------------
 assert_eq "$(fingerprint "$REAL_SCORECARD")" "$REAL_SCORECARD_BEFORE" \

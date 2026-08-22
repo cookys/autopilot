@@ -81,7 +81,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: Board(user)proposal 2026-08-21;evidence `docs/plans/evidence/2026-08-17-roster-qualification/`。
 
 ### `engine-qualify-impl.test.js` wall-truncation 斷言是負載敏感 flake —— 機器夠快就轉紅
-- **Trigger**: 下一次它在 full-suite / CI 跑紅;或下一次動 `scripts/engine-qualify-impl.js` 的 wall 截斷路徑。
+- **Trigger**: 下一次它在 full-suite / CI 跑紅;或下一次動 `scripts/engine-qualify.js` 的 wall 截斷路徑(`testWallSecondsOverride`)。
 - **Context**: `scripts/engine-qualify-impl.test.js:361` 用 `testWallSecondsOverride: 8` 跑一次施測,然後斷言 `truncRun.qualified === false` —— 也就是**假設 8 秒內跑不完**。負載夠重時整份 corpus 真的被截斷 ⇒ 綠;機器閒著跑得完 ⇒ `qualified === true` ⇒ 紅。2026-08-23 實測:8 路並行且另有一份 suite 同時在跑 → PASS(275/275);並行競爭較輕的第二次 → FAIL;單獨 `node --test` 跑 → FAIL。`scripts/verify-preexisting.sh 'node --test scripts/engine-qualify-impl.test.js' --base 754df354` 判 **`{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}`** —— 與 v2.34.36 無關,該 ship 對 `engine-qualify-impl.{js,test.js}` 與 `evals/` 零觸碰。修向:把「有被截斷」變成可觀測事實再斷言(例如讓 kernel 回報 `truncated: true`),而不是拿 wall-clock 當代理;和 `lease_epipe_stop_bounded` 同一族 —— 「紅字部分為雜訊就不再被讀」是已記錄危害(v2.34.22 教訓),別讓它積累。
 - **Effort**: Fix。
 - **Source**: 2026-08-23 official-qualification-defaults full-gate(run `official-defaults-l4`);同時由 first-pass 施工與 leaf worker 兩次獨立觀察到。

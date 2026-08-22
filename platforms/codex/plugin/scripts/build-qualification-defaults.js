@@ -12,11 +12,13 @@
 //
 // ADR-0001 (docs/adr/0001-verification-over-attestation.md) is binding here.
 // This artifact is DISCLOSURE, not attestation. It carries no hash chain, no
-// signature, no witness receipt and no trust root. The `store_projection_sha256`
-// it records exists so the artifact can be RE-DERIVED — re-run this script over
-// the same store and compare — exactly as references/strike-decay.md justifies a
-// strike's `artifact_sha256`. It proves nothing about tampering, and it gates
-// nothing. The consumer's real verification path is re-derivation in their own
+// signature, no witness receipt, no trust root — and, since the depth-0 panel,
+// no digest fields either. An earlier cut recorded a `store_projection_sha256`
+// "for re-derivation"; nothing ever read it, and `--check` already re-derives
+// the artifact and byte-compares the whole file, which is a strictly stronger
+// check than any digest it could have carried. A written-but-never-read hash is
+// indistinguishable from trust machinery to the next reader, so it is gone.
+// The consumer's real verification path is re-derivation in their own
 // environment: self-qualify.
 //
 // Usage:
@@ -130,6 +132,26 @@ function canonicalize(value) {
 
 function canonicalJson(value) {
   return JSON.stringify(canonicalize(value));
+}
+
+// F3 (depth-0 panel): scripts/validate-json-schema.js preflights its document
+// and rejects EVERY non-integer numeric literal before any schema keyword runs.
+// `capability_score` is the only fractional number the store produces
+// (cases_passed/cases_total), and an earlier cut "handled" that by validating a
+// COPY with those scores replaced by 0 — a gate that never saw the shipped
+// bytes. Instead the artifact now carries the score as a lossless DECIMAL
+// STRING: String(0.9166666666666666) round-trips exactly through Number(), so
+// nothing is lost, the committed bytes validate as-is, and adoption converts
+// back to a number before `record` sees the row.
+//
+// Fail closed on a non-finite score rather than emitting null: capability_score
+// is in engine-scorecard.js REQUIRED_FIELDS, so a row without one is malformed
+// at the source and must not be packaged as an official default.
+function decimalString(value, label) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    fail(`${label} is not a finite number (${JSON.stringify(value)}) — refusing to package a default with no usable capability_score`);
+  }
+  return String(value);
 }
 
 function sha256(text) {
@@ -263,6 +285,9 @@ function buildEntry(row, recipeEntry, repoRoot, capabilityRows) {
   // validation still passes on the other side.
   const shippedRow = { ...row };
   delete shippedRow.event_id;
+  shippedRow.capability_score = decimalString(
+    row.capability_score, `event ${eventId} row.capability_score`,
+  );
 
   // The qualifier-store anchor. `engine-scorecard.js record` refuses any
   // internal_eval row whose `evidence_store` triple does not resolve to a
@@ -295,7 +320,7 @@ function buildEntry(row, recipeEntry, repoRoot, capabilityRows) {
     seat_hash: seatHash(row.engine, row.runner, row.role),
     administration: disclosure,
     quality: row.quality === undefined ? null : row.quality,
-    capability_score: row.capability_score === undefined ? null : row.capability_score,
+    capability_score: decimalString(row.capability_score, `event ${eventId} capability_score`),
     evidence_pointers: {
       official_event_id: eventId,
       evidence_bundle: bundleRel,
@@ -362,9 +387,6 @@ function deriveArtifact(opts) {
     adr_0001_notice: 'DISCLOSURE, NOT ATTESTATION. Nothing here is signed, hash-chained, or witnessed, and no field is tamper-evidence (ADR-0001). Adopting these defaults is an informed choice to reuse someone else\'s evidence; the only verification path is re-derivation — self-qualify in your own environment via the engine-qualify flow, which overrides a default on the same seat identity.',
     downgrade_notice: 'An adopted default is a seat-scoped strike target exactly like a self-qualified row (references/strike-decay.md). Authority is withdrawn by accumulated mechanical no-confidence, never because a date passed: `expires` is advisory here too.',
     role_summary: roleCounts,
-    // Re-derivation aid, never a trust claim: re-run this script over the same
-    // store and the same digest must come back. It gates nothing.
-    store_projection_sha256: sha256(canonicalJson(entries)),
     defaults: entries,
   };
 
@@ -424,19 +446,15 @@ function parseArgs(argv) {
 // Validate the derived artifact against the committed schema BEFORE it is
 // written, so a shape regression cannot reach the repo in the first place.
 //
-// One documented wrinkle: scripts/validate-json-schema.js preflights its
-// document and rejects EVERY non-integer numeric literal
-// (UNSUPPORTED_JSON_NUMBER, validate-json-schema.js:161) before any schema
-// keyword is evaluated. Our artifact carries verbatim `capability_score`
-// floats, which are the ONLY non-integer numbers anywhere in it (asserted in
-// hooks/tests/qualification-defaults.test.sh). So the document handed to the
-// validator has those floats normalized to 0. The schema places NO constraint
-// on `capability_score` at all (empty subschema — it is verbatim scorecard
-// data), so the normalization changes no verdict this schema could reach on
-// that field either way — and it touches nothing in the disclosure block,
-// which is the contract the schema exists to enforce. The validator's
-// integer-only restriction is filed as a BACKLOG row, not worked around
-// silently.
+// These are the EXACT bytes that get written and committed — no normalized
+// copy. An earlier cut handed the validator a document with fractional
+// capability_score values replaced by 0, because
+// scripts/validate-json-schema.js rejects every non-integer numeric literal in
+// its document preflight. That made the gate hollow: it never saw the shipped
+// artifact. The scores are decimal STRINGS now (see decimalString above), so
+// the committed bytes contain no non-integer numeric literal and validate
+// directly. If a future field reintroduces one, this gate goes red instead of
+// quietly validating something else.
 function validateAgainstSchema(derived, opts) {
   const schemaPath = path.join(opts.repoRoot, 'schemas', 'official-qualification-defaults.schema.json');
   const validator = path.join(SCRIPT_DIR, 'validate-json-schema.js');
@@ -445,9 +463,8 @@ function validateAgainstSchema(derived, opts) {
   // (references/evidence-discipline.md §1).
   if (!fs.existsSync(schemaPath)) fail(`schema missing, cannot validate the derived artifact: ${schemaPath}`);
   if (!fs.existsSync(validator)) fail(`validator missing, cannot validate the derived artifact: ${validator}`);
-  const normalized = derived.replace(/("capability_score": )-?[0-9]+\.[0-9]+/g, '$10');
   const tmp = `${os.tmpdir()}/qualification-defaults-schemacheck-${process.pid}.json`;
-  fs.writeFileSync(tmp, normalized);
+  fs.writeFileSync(tmp, derived);
   try {
     const res = spawnSync(process.execPath, [validator, '--schema', schemaPath, '--document', tmp], { encoding: 'utf8' });
     if (res.status !== 0) {

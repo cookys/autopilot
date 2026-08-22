@@ -16,10 +16,11 @@
 // happened is routing information regardless of whose machine produced it.
 //
 // ADR-0001: this is DISCLOSURE, not attestation. Adoption copies rows; it does
-// not import a trust claim. Nothing here is signed or witnessed, and the
-// `defaults_artifact_sha256` stamped into an adopted row's provenance exists so
-// the adoption can be RE-DERIVED (re-run build-qualification-defaults.js and
-// compare), never so it can be proven un-tampered.
+// not import a trust claim. Nothing here is signed, witnessed, or digested. An
+// earlier cut stamped a `defaults_artifact_sha256` into provenance "for
+// re-derivation"; no code ever read it, so it was removed by the depth-0 panel
+// ruling. Re-derivation is `build-qualification-defaults.js --check`, which
+// byte-compares the whole artifact.
 //
 // An adopted row is a fully ordinary scorecard row: same seat identity, same
 // seat_hash, same strike accrual, same admission path. It is NOT privileged and
@@ -43,8 +44,8 @@
 //   --role      restrict to one role (implementer|reviewer|verification_author|owner|explorer).
 //   --seat      restrict to one engine:runner pair.
 //   --dry-run   print what would be written; write nothing.
-//   --force     overwrite the seat-collision refusal (see below). Use only when
-//               you know the local row is stale.
+//   --force     re-adopt over a PREVIOUS official-default adoption. It cannot
+//               override local evidence - see the seat-collision rule below.
 //   --store     destination scorecard store DIRECTORY.
 //               Default: $ENGINE_SCORECARD_DIR, else ~/.autopilot/engine-scorecard.
 //   --capability-store  destination capability store DIRECTORY. The row's
@@ -64,7 +65,8 @@
 //
 // Exit codes:
 //   0 = success (rows adopted, or nothing to do, or dry-run printed)
-//   1 = refusal / validation failure (seat collision, artifact mismatch)
+//   1 = refusal / validation failure (local evidence present, already adopted,
+//       schema-invalid artifact)
 //   2 = usage error
 
 const fs = require('fs');
@@ -93,10 +95,6 @@ function expandTilde(p) {
   return p;
 }
 
-function sha256(text) {
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
-}
-
 function readArtifact(file) {
   let raw;
   try {
@@ -116,7 +114,22 @@ function readArtifact(file) {
   if (!Array.isArray(parsed.defaults) || parsed.defaults.length === 0) {
     fail(`defaults artifact holds no defaults[]: ${file}`);
   }
-  return { artifact: parsed, sha256: sha256(raw) };
+  // F3 (depth-0 panel): schema-validate the artifact bytes on the CONSUMER side
+  // too, before anything is listed or adopted. The generator validates what it
+  // writes, but a consumer reads a file that shipped through a package, a
+  // mirror, and someone's disk; "the producer checked it once" is not a
+  // property of the bytes in front of us. Validating here is what makes the
+  // schema a gate on the adoption path rather than a build-time formality.
+  // Fail closed if the schema or validator is missing.
+  const schemaPath = path.join(REPO_ROOT, 'schemas', 'official-qualification-defaults.schema.json');
+  const validator = path.join(SCRIPT_DIR, 'validate-json-schema.js');
+  if (!fs.existsSync(schemaPath)) fail(`schema missing, cannot validate the defaults artifact: ${schemaPath}`);
+  if (!fs.existsSync(validator)) fail(`validator missing, cannot validate the defaults artifact: ${validator}`);
+  const res = spawnSync(process.execPath, [validator, '--schema', schemaPath, '--document', file], { encoding: 'utf8' });
+  if (res.status !== 0) {
+    fail(`defaults artifact does not satisfy schemas/official-qualification-defaults.schema.json (validator exit ${res.status}): ${(res.stdout || '').trim()} ${(res.stderr || '').trim()}`);
+  }
+  return { artifact: parsed };
 }
 
 function readStoreRows(storeDir) {
@@ -278,7 +291,7 @@ function recordRow(storeDir, capabilityDir, row) {
 }
 
 function cmdAdopt(opts) {
-  const { artifact, sha256: artifactSha } = readArtifact(opts.artifact);
+  const { artifact } = readArtifact(opts.artifact);
   if (!opts.all && !opts.role && !opts.seat) {
     failUsage('adopt requires one of --all, --role <role>, or --seat <engine>:<runner>');
   }
@@ -289,30 +302,59 @@ function cmdAdopt(opts) {
   }
 
   const existing = readStoreRows(opts.storeDir);
+
+  // LOCAL EVIDENCE ALWAYS WINS (depth-0 panel F2).
+  //
+  // The previous rule compared dates (`localAt >= defaultAt`) and let --force
+  // through. Both were wrong, and the date compare failed hardest exactly where
+  // it mattered most: a local FAILED row has no `qualified_at`, so localAt was
+  // '' and '' >= '2026-08-21' is false — no collision was recorded at all, and
+  // an official QUALIFIED default landed silently on top of a local honest
+  // FAILURE. A newer official default could also supersede an older local
+  // self-qualification.
+  //
+  // The rule now has nothing to do with dates: if this seat has ANY local row
+  // that is not itself a previously-adopted official default, adoption of that
+  // seat is refused. Locally-derived evidence — pass or fail — is the stronger
+  // tier (engine-onboarding Stage 3) and an import must never overwrite it.
   const collisions = [];
   for (const entry of entries) {
     for (const row of existing) {
       if (row.engine !== entry.seat.engine || row.runner !== entry.seat.runner || row.role !== entry.role) continue;
-      const localAt = String(row.qualified_at || '');
-      const defaultAt = String(entry.administration.qualified_at || '');
-      if (localAt >= defaultAt) {
-        collisions.push({
-          default_id: entry.default_id,
-          local_event_id: row.event_id,
-          local_qualified_at: localAt,
-          default_qualified_at: defaultAt,
-          local_provenance: (row.provenance && row.provenance.kind) || 'self-qualified',
-        });
-        break;
-      }
+      const localKind = (row.provenance && row.provenance.kind) || 'self-qualified';
+      collisions.push({
+        default_id: entry.default_id,
+        local_event_id: row.event_id,
+        local_status: row.status,
+        local_qualified_at: String(row.qualified_at || ''),
+        default_qualified_at: String(entry.administration.qualified_at || ''),
+        local_provenance: localKind,
+        local_is_official_default: localKind === 'official-default',
+      });
+      break;
     }
   }
-  if (collisions.length > 0 && !opts.force) {
+  const localEvidenceCollisions = collisions.filter((c) => !c.local_is_official_default);
+  const readoptCollisions = collisions.filter((c) => c.local_is_official_default);
+
+  // Never overridable, --force included.
+  if (localEvidenceCollisions.length > 0) {
     process.stderr.write(`${JSON.stringify({
-      status: 'refused_seat_collision',
-      reason: 'the destination store already holds an equally-recent-or-newer row for these seats. A local self-qualification overrides an official default on the same seat identity — never the other way round.',
-      collisions,
-      remedy: 'drop the filter to the seats you actually want, or pass --force if you know the local row is stale.',
+      status: 'refused_local_evidence_present',
+      reason: "these seats already carry LOCAL evidence (self-qualified rows, pass or fail). A local administration always beats an imported default on the same seat identity, regardless of dates - and --force cannot override this, because there is no situation in which someone else's administration should silently replace your own.",
+      collisions: localEvidenceCollisions,
+      remedy: 'narrow --seat/--role to the seats that have no local evidence. To replace a local row, run a fresh LOCAL administration (self-qualify); its result supersedes on the same seat.',
+    }, null, 2)}\n`);
+    process.exit(1);
+  }
+  // Re-adopting over a previous official-default adoption is the only case
+  // --force covers.
+  if (readoptCollisions.length > 0 && !opts.force) {
+    process.stderr.write(`${JSON.stringify({
+      status: 'refused_already_adopted',
+      reason: 'these seats already hold a previously-adopted official default.',
+      collisions: readoptCollisions,
+      remedy: 'pass --force to re-adopt over a previous official-default adoption, or narrow the filter.',
     }, null, 2)}\n`);
     process.exit(1);
   }
@@ -320,16 +362,27 @@ function cmdAdopt(opts) {
   const adopted = [];
   for (const entry of entries) {
     const row = { ...entry.row };
+    // F3: the artifact carries capability_score as a lossless decimal STRING so
+    // its committed bytes clear validate-json-schema.js's integer-only numeric
+    // preflight. The store's own contract is numeric, so convert back here -
+    // String(x) -> Number(x) round-trips exactly.
+    if (typeof row.capability_score === 'string') {
+      const n = Number(row.capability_score);
+      if (!Number.isFinite(n)) fail(`${entry.default_id}: capability_score '${row.capability_score}' is not a number`);
+      row.capability_score = n;
+    }
+    // F6: an adopted row's version_source names HOW THIS ROW GOT HERE, and it
+    // got here by adoption. The original administration's value is preserved in
+    // provenance disclosure below, so nothing is lost.
+    const administrationVersionSource = row.version_source;
+    row.version_source = 'official-default';
     row.provenance = {
       kind: 'official-default',
+      administration_version_source: administrationVersionSource,
       official_event_id: entry.evidence_pointers.official_event_id,
       default_id: entry.default_id,
       defaults_schema_version: artifact.schema_version,
       defaults_recipe_version: artifact.recipe_version,
-      // Re-derivation aid, NOT tamper-evidence (ADR-0001): re-run
-      // scripts/build-qualification-defaults.js --check and this digest must
-      // come back. It gates nothing.
-      defaults_artifact_sha256: artifactSha,
       evidence_bundle: entry.evidence_pointers.evidence_bundle,
       adopted_at: new Date().toISOString(),
       self_qualify_command: selfQualifyCommand(entry),

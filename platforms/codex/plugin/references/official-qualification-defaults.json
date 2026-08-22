@@ -113,7 +113,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "6d0bc9187cc07ca50a35dc7bd26616be47f3f0887bc82b9f1c44a0c52c427338"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:grok-4.5:grok:143",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/grok-qualify",
@@ -136,7 +136,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -385,7 +385,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "8913f87b8b45c282b1e90285c4d674da7001d6473460041addd757d51227ccc3"
       },
-      "capability_score": 0.75,
+      "capability_score": "0.75",
       "default_id": "official:implementer:gemini-3.7-flash-high:agy:144",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify",
@@ -408,7 +408,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 0.75,
+        "capability_score": "0.75",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -657,7 +657,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "64170066878b36d801391810d01eef984fa357a638ebb87f1bdcaf3dc75bd42d"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:gpt-5.3-codex-spark:codex:145",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/codex-spark-qualify",
@@ -680,7 +680,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -929,7 +929,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "6f654e2b990c399d35993557b4ebc7a9fb9ead2c46a0a6fbabc139f418c49366"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:gpt-5.6-sol:codex:146",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/sol-qualify",
@@ -952,7 +952,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -1201,7 +1201,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "59858733e192fa93bcb08c5b59152815f87cc2030415a252fbce6326e41690f7"
       },
-      "capability_score": 0.9166666666666666,
+      "capability_score": "0.9166666666666666",
       "default_id": "official:implementer:gemini-3.1-pro-high:agy:147",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-pro-qualify",
@@ -1224,7 +1224,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 0.9166666666666666,
+        "capability_score": "0.9166666666666666",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -1473,7 +1473,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "84e7a01f454812e56edf0072349369fa3496982ee62abc0063b7e6549b6b8b94"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:Qwen3.8-Max:qoderclicn:148",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/qoder-qualify",
@@ -1496,7 +1496,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -1745,7 +1745,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "0d0c54ecfa009c956377ba8d5afdc2c104016660464ecb01174468a72d41a9a0"
       },
-      "capability_score": 0.9583333333333334,
+      "capability_score": "0.9583333333333334",
       "default_id": "official:implementer:grok-4.6:grok:149",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/grok46-qualify",
@@ -1768,7 +1768,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 0.9583333333333334,
+        "capability_score": "0.9583333333333334",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -2017,7 +2017,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "d5029d93741100d38292c1ce59eb28c2a4ec779a056ea86f1831eb638dc6dbc9"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:GLM-5.3:cc-shim:150",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/glm-qualify",
@@ -2040,7 +2040,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -2289,7 +2289,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "802827aa7f6e07e94d4853f5244c973cc630900508996f84a79555da0d75faf6"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:MiniMax-M3:cc-shim:151",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/minimax-qualify",
@@ -2312,7 +2312,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -2561,7 +2561,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "348def78b90dbd101d25b0921da8d45d6e18fb1382329c4748eb3da209e05b3d"
       },
-      "capability_score": 0.6666666666666666,
+      "capability_score": "0.6666666666666666",
       "default_id": "official:implementer:gemini-3.7-flash-medium:agy:152",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/flash-medium-qualify",
@@ -2584,7 +2584,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 0.6666666666666666,
+        "capability_score": "0.6666666666666666",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -2833,7 +2833,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "0abcfe2a51a4ef047a8039f8065f1610db38e37ddde76fca46e71f35374e09a5"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:gpt-5.6-luna:codex:153",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/luna-qualify",
@@ -2856,7 +2856,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -3105,7 +3105,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "4a460d22da4012f0aff1aca6aa6ac95e9231151997a7a75d04bd0f919295d0eb"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:claude-sonnet-5:cc-shim:154",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/sonnet5-qualify",
@@ -3128,7 +3128,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -3377,7 +3377,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "3b342d390a26f244e6ce3a4771deae1fd9ec55085bcac8f34e4b3f5e1700acf4"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:implementer:claude-opus-5:cc-shim:155",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/opus5-qualify",
@@ -3400,7 +3400,7 @@
       },
       "role": "implementer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
         "cost": {
           "sample_tokens": 0,
@@ -3676,7 +3676,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "8fe3bffa4a2dbb15893e2b89aa18ec6ef149fa1a1e78e1fc1fbd3fb67a01b57e"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:reviewer:GLM-5.2:anthropic-compatible:139",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/glm-qualify",
@@ -3696,7 +3696,7 @@
       },
       "role": "reviewer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v4",
         "cost": {
           "sample_tokens": 0,
@@ -3996,7 +3996,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "fb8a30acd9d478c1d01a73ea6120f99db238337150a5bb5fd73c367915ced5ec"
       },
-      "capability_score": 0.9761904761904762,
+      "capability_score": "0.9761904761904762",
       "default_id": "official:reviewer:GLM-5.3:anthropic-compatible:140",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/glm53-qualify",
@@ -4016,7 +4016,7 @@
       },
       "role": "reviewer",
       "row": {
-        "capability_score": 0.9761904761904762,
+        "capability_score": "0.9761904761904762",
         "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v4",
         "cost": {
           "sample_tokens": 0,
@@ -4316,7 +4316,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "6c14c00a74c54683a014b76061b36bc56736005298e53eb9cc3b9b5aeedeba64"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:reviewer:gpt-5.6-sol:codex-cli:141",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-17-roster-qualification/sol-codex-qualify",
@@ -4336,7 +4336,7 @@
       },
       "role": "reviewer",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v4",
         "cost": {
           "sample_tokens": 0,
@@ -4616,7 +4616,7 @@
         "producer": "engine-qualify-v2",
         "transcript_hash": "c4a0d90ae031689a31c4d876dad4dd27ca04ab4f9500bbcddad276bfd0a491ac"
       },
-      "capability_score": 1,
+      "capability_score": "1",
       "default_id": "official:verification_author:GLM-5.3:anthropic-compatible:142",
       "evidence_pointers": {
         "evidence_bundle": "docs/plans/evidence/2026-08-18-verification-author-suite/dogfood",
@@ -4636,7 +4636,7 @@
       },
       "role": "verification_author",
       "row": {
-        "capability_score": 1,
+        "capability_score": "1",
         "corpus_version": "va-declared-plan-v1.va-declared-plan-v1",
         "cost": {
           "sample_tokens": 0,
@@ -4800,6 +4800,5 @@
       "qualified": 1
     }
   },
-  "schema_version": 1,
-  "store_projection_sha256": "9f3b0b5316abe5e619690b8938d081612dc7a45895519a902a0dc81062d57250"
+  "schema_version": 1
 }

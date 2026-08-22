@@ -67,7 +67,14 @@ officialEventIds.forEach((officialEventId, index) => {
   if (!entry) {
     throw new Error(`fixture setup: no default entry for official_event_id ${officialEventId}`);
   }
-  scorecardRows.push({ ...entry.row, event_id: syntheticIds[index] });
+  // The artifact ships capability_score as a lossless decimal STRING (see §1);
+  // a real scorecard store holds a NUMBER. Convert back exactly as
+  // adopt-qualification-defaults.js does, so this fixture is a faithful store.
+  scorecardRows.push({
+    ...entry.row,
+    capability_score: Number(entry.row.capability_score),
+    event_id: syntheticIds[index],
+  });
   if (entry.capability_evidence) capabilityRows.push(entry.capability_evidence);
 });
 fs.writeFileSync(scorecardOut, `${scorecardRows.map((row) => JSON.stringify(row)).join('\n')}\n`);
@@ -89,43 +96,60 @@ cat > "$FIXTURE_RECIPE" <<'JSON'
 }
 JSON
 
-# --- 1. committed artifact vs committed schema --------------------------------
-# The committed artifact carries `capability_score` as a plain float fraction
-# on every FAILED/degraded row (e.g. 0.75, 0.9166666666666666 — cases_passed /
-# cases_total from engine-scorecard.js, shipped verbatim). validate-json-schema.js
-# preflights its *document* argument (preflightJsonSource → parseNumber) and
-# unconditionally rejects ANY numeric literal containing '.' or 'e'/'E' as an
-# "unsupported lossy numeric literal" — before schema evaluation runs at all,
-# for ANY schema. Verified directly: `node scripts/validate-json-schema.js
-# --schema schemas/official-qualification-defaults.schema.json --document
-# references/official-qualification-defaults.json` exits 2 with
-# UNSUPPORTED_JSON_NUMBER on "0.75", regardless of what the schema says. This
-# is a genuine, pre-existing incompatibility between the generator's numeric
-# output and the validator's numeric-literal support (also reproducible against
-# schemas/hook-event.schema.json, whose own `description` keys the SAME
-# validator rejects as UNSUPPORTED_JSON_SCHEMA) — not a defect in this schema,
-# and both scripts are out of scope for this task. Locking in the CURRENT,
-# verified behavior rather than asserting a false green.
+# --- 1. the REAL committed bytes validate against the committed schema --------
+# No sanitized copy, no substitution: this is the artifact as shipped.
+#
+# History (depth-0 panel F3): an earlier cut asserted that the validator exits 2
+# (UNSUPPORTED_JSON_NUMBER) on the real artifact and called that green, while the
+# build validated a COPY with fractional capability_score values replaced by 0.
+# The gate therefore never saw the shipped bytes. validate-json-schema.js
+# rejects EVERY non-integer numeric literal in its document preflight, before any
+# schema keyword runs — that restriction is deliberate (lossless round-trip), so
+# the artifact changed instead of the validator: capability_score now ships as a
+# lossless decimal STRING and adoption converts it back with Number().
 REAL_OUT=$(node "$VALIDATOR" --schema "$SCHEMA" --document "$ARTIFACT" 2>&1)
 REAL_EXIT=$?
-assert_exit_code "$REAL_EXIT" 2 "validator on the real committed artifact currently exits 2 (numeric preflight), not 0 — see comment above"
-assert_contains "$REAL_OUT" "UNSUPPORTED_JSON_NUMBER" "expected the numeric-preflight rejection on the real artifact"
+assert_exit_code "$REAL_EXIT" 0 "the REAL committed artifact bytes validate against the committed schema: $REAL_OUT"
 
-# Proving the SCHEMA itself is sound against the artifact's actual shape: an
-# integer-sanitized copy — capability_score is the ONLY field anywhere in the
-# artifact that ever carries a non-integer literal (verified: `grep -noE
-# '"[a-zA-Z_]+": -?[0-9]+\.[0-9]+' references/official-qualification-defaults.json`
-# only ever matches "capability_score") — validates cleanly.
-SANITIZED="$TEST_TMP/artifact-int-safe.json"
-node - "$ARTIFACT" "$SANITIZED" <<'NODE'
-const fs = require('fs');
-const [, , src, dst] = process.argv;
-const raw = fs.readFileSync(src, 'utf8');
-fs.writeFileSync(dst, raw.replace(/("capability_score": )-?[0-9]+\.[0-9]+/g, '$10'));
-NODE
-SANITIZED_OUT=$(node "$VALIDATOR" --schema "$SCHEMA" --document "$SANITIZED" 2>&1)
-SANITIZED_EXIT=$?
-assert_exit_code "$SANITIZED_EXIT" 0 "the committed schema must validate the (float-sanitized) committed artifact: $SANITIZED_OUT"
+# The property that keeps it that way: not one non-integer numeric literal
+# anywhere in the shipped artifact. If a future field reintroduces one, this
+# goes red here rather than silently re-hollowing the gate.
+NONINT=$(node -e '
+  const fs = require("fs");
+  const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  const bad = [];
+  (function walk(v, p) {
+    if (typeof v === "number") { if (!Number.isSafeInteger(v)) bad.push(p + "=" + v); return; }
+    if (v && typeof v === "object") for (const k of Object.keys(v)) walk(v[k], p + "/" + k);
+  })(doc, "");
+  process.stdout.write(String(bad.length) + (bad.length ? " " + bad.slice(0, 3).join(" ") : ""));
+' "$ARTIFACT")
+assert_eq "$NONINT" "0" "the shipped artifact contains no non-integer numeric literal"
+
+# And the string form is lossless: every score round-trips through Number()
+# back to cases_passed/cases_total exactly.
+ROUNDTRIP=$(node -e '
+  const fs = require("fs");
+  const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  let bad = 0;
+  for (const e of a.defaults) {
+    if (typeof e.capability_score !== "string") { bad += 1; continue; }
+    if (String(Number(e.capability_score)) !== e.capability_score) bad += 1;
+    if (e.row.capability_score !== e.capability_score) bad += 1;
+  }
+  process.stdout.write(String(bad));
+' "$ARTIFACT")
+assert_eq "$ROUNDTRIP" "0" "every capability_score is a lossless decimal string, mirrored in row"
+
+# F1 (depth-0 panel): the dead digest field is gone and must not come back.
+HAS_DIGEST=$(node -e '
+  const fs = require("fs");
+  const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(String("store_projection_sha256" in a));
+' "$ARTIFACT")
+assert_eq "$HAS_DIGEST" "false" "no store_projection_sha256 (written-and-never-read digest, ADR-0001)"
+
+SANITIZED="$ARTIFACT"
 
 # --- 2. schema teeth: planted negative on the disclosure contract ------------
 # The whole point of `administration`'s required-list is the Board-fixed
@@ -171,7 +195,7 @@ node - "$TEST_TMP/a.json" <<'NODE'
 const fs = require('fs');
 const file = process.argv[2];
 const text = fs.readFileSync(file, 'utf8');
-const marker = '"store_projection_sha256": "';
+const marker = '"seat_hash": "';
 const start = text.indexOf(marker);
 if (start === -1) throw new Error('marker not found');
 const digitIndex = start + marker.length;

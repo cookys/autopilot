@@ -13,7 +13,6 @@
     "adr_0001_notice",
     "downgrade_notice",
     "role_summary",
-    "store_projection_sha256",
     "defaults"
   ],
   "properties": {
@@ -46,10 +45,6 @@
     },
     "role_summary": {
       "type": "object"
-    },
-    "store_projection_sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
     },
     "defaults": {
       "type": "array",
@@ -116,7 +111,10 @@
         "quality": {
           "type": ["object", "null"]
         },
-        "capability_score": {},
+        "capability_score": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        },
         "evidence_pointers": {
           "$ref": "#/$defs/evidence_pointers"
         },

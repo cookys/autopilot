@@ -33,7 +33,13 @@ const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
 // `engine-scorecard.js record` rejected its own emitted row. Two spellings for
 // one concept is not ideal — but rewriting evidence rows is worse. New rows
 // should use `operator-asserted`.
-const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted']);
+// `official-default` (v2.34.36) marks a row that arrived by ADOPTION of the
+// shipped official qualification defaults rather than by a local
+// administration. It says how the row got into THIS store; the original
+// administration's own version_source is preserved under
+// row.provenance.administration_version_source. It is disclosure, not
+// authority — no admission path branches on it.
+const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted', 'official-default']);
 // `expired` stays a legal INPUT status (rows written before the 2026-08-22
 // no-confidence-decay cut may still legitimately carry it on disk) but the
 // projection (deriveStatus, below) never PRODUCES it any more — a stale/

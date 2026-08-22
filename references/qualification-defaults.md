@@ -46,12 +46,13 @@ So「簽署」is implemented as **disclosure**:
 - `list` prints the disclosure block *with* the verdict, always. There is deliberately no view that
   shows you `QUALIFIED` without showing you the environment it was measured in.
 
-Two `sha256` values appear in this system (`store_projection_sha256` on the artifact,
-`defaults_artifact_sha256` in an adopted row's provenance). Neither is tamper-evidence and neither
-gates anything. They exist so an adoption can be **replayed** — re-run the generator over the same
-store and the digest comes back — which is the identical justification `strike-decay.md` gives a
-strike's `artifact_sha256`. If you ever find yourself checking one of them to decide whether to
-*trust* a row, you have re-invented the thing ADR-0001 forbids.
+**There are no digest fields at all.** An earlier cut carried two (`store_projection_sha256` on the
+artifact, `defaults_artifact_sha256` in an adopted row's provenance), justified as "re-derivation
+aids". A depth-0 panel killed both: nothing ever read them, and `build-qualification-defaults.js
+--check` already re-derives the artifact and byte-compares the *whole file*, which is strictly
+stronger than any digest they could have carried. A hash that is written and never read is
+indistinguishable from trust machinery to the next reader — it invites exactly the "is this row
+authentic?" question ADR-0001 exists to refuse. Re-derivation is the check; the digest was theatre.
 
 **The consumer's real verification path is re-derivation: run the administration yourself.**
 
@@ -103,33 +104,51 @@ The adopted row then gains one extra object, `provenance`:
 ```json
 "provenance": {
   "kind": "official-default",
+  "administration_version_source": "runtime",
   "official_event_id": 143,
   "default_id": "official:implementer:grok-4.5:grok:143",
-  "defaults_artifact_sha256": "…",
   "evidence_bundle": "docs/plans/evidence/2026-08-22-implementer-qualification-suite/grok-qualify",
   "adopted_at": "…",
   "self_qualify_command": "…"
 }
 ```
 
+The adopted row's own `version_source` is set to `official-default` — it names **how this row got
+into this store**, which was by adoption, not by a local administration. The original
+administration's value is preserved as `provenance.administration_version_source`, so nothing is
+lost. `engine-scorecard.js` accepts the value; no admission path branches on it.
+
 `provenance` is **disclosure only**. No admission path reads it. `dispatch-contract.js` still gates
 on `admission_status`, exactly as before, and an adopted row is admissible or not for exactly the
 same reasons a self-qualified one would be.
 
-> The marker deliberately does **not** live in `version_source`. That is a closed enum
-> (`runtime | manual | operator-asserted`) and `record` rejects anything else — writing
-> `official-default` into it would have made every adopted row unrecordable.
+> `version_source` is a closed enum, so carrying the adoption marker there required **widening the
+> enum deliberately** rather than smuggling a value past it: `engine-scorecard.js`
+> `VALID_VERSION_SOURCES` now admits `official-default` alongside
+> `runtime | manual | operator-asserted`. `hooks/tests/qualify-scorecard-vocabulary.test.sh` still
+> holds — it asserts the qualifier's emittable values are a subset of what the scorecard accepts,
+> and widening the accepting side keeps that direction satisfied.
 
 ## Self-qualification always overrides
 
-Adoption **refuses** a seat when the destination store already holds a row for the same
-`{engine, runner, role}` whose `qualified_at` is equal to or newer than the default's. A local
-administration beats an imported one on the same seat identity; silently shadowing local evidence
-with someone else's would invert the entire evidence hierarchy (`engine-onboarding` Stage 3: a
-live, locally-observed run is the strongest tier, a stored row the weakest).
+Adoption **refuses** a seat whenever the destination store holds **any** local row for the same
+`{engine, runner, role}` that is not itself a previously-adopted official default. Not "a newer
+row" — *any* row, pass or fail, regardless of dates. A local administration beats an imported one
+on the same seat identity; silently shadowing local evidence with someone else's would invert the
+entire evidence hierarchy (`engine-onboarding` Stage 3: a live, locally-observed run is the
+strongest tier, a stored row the weakest).
 
-`--force` exists for the case where you know the local row is stale, and it prints exactly what it
-overrode.
+**`--force` cannot override this.** Its only job is replacing a *previous official-default
+adoption*. There is no situation in which someone else's administration should silently replace
+your own, so no flag offers one. To supersede a local row, run a fresh local administration; its
+result wins on the same seat.
+
+> The date-based version of this rule shipped in an earlier cut and a depth-0 panel found the hole:
+> a local **FAILED** row has no `qualified_at`, so the comparison `'' >= '2026-08-21'` was false, no
+> collision was detected at all, and an official QUALIFIED default landed silently on top of a local
+> honest failure — the single most damaging direction this rule could fail in. `hooks/tests/
+> qualification-defaults-adoption.test.sh` §9b plants exactly that row, plus an older-local-row case
+> and a `--force` attempt, and asserts all three are refused with the store left byte-intact.
 
 ## Strike interplay — an adopted default is not privileged
 
@@ -164,19 +183,22 @@ node scripts/build-qualification-defaults.js build          # re-derive from the
 node scripts/build-qualification-defaults.js --check        # must exit 0 on the committed file
 node scripts/validate-json-schema.js \
   --schema schemas/official-qualification-defaults.schema.json \
-  --document references/official-qualification-defaults.json
+  --document references/official-qualification-defaults.json   # exits 0 on the real bytes
 ```
 
-> **Known limitation, stated rather than papered over.** `validate-json-schema.js` preflights its
-> *document* and rejects every non-integer numeric literal (`UNSUPPORTED_JSON_NUMBER`) before any
-> schema keyword is evaluated. This artifact carries verbatim `capability_score` fractions (e.g.
-> `0.9166666666666666` = 11/12), which are the **only** non-integer numbers anywhere in it —
-> asserted mechanically in `hooks/tests/qualification-defaults.test.sh`. So `build` validates a copy
-> with those normalized to `0`. The schema places **no constraint at all** on `capability_score`
-> (`schemas/official-qualification-defaults.schema.json` gives it an empty subschema, because it is
-> verbatim scorecard data), so there is no verdict the schema could reach on that field either way,
-> and nothing in the disclosure block — the contract the schema exists to enforce — is touched. The validator's integer-only restriction is filed as a BACKLOG row.
-> Running the validator directly against the committed artifact exits 2, and that is expected.
+> **Why `capability_score` is a string.** `validate-json-schema.js` preflights its *document* and
+> rejects every non-integer numeric literal (`UNSUPPORTED_JSON_NUMBER`) before any schema keyword is
+> evaluated — a deliberate lossless-round-trip restriction, not a bug to fork around. Scores are
+> `cases_passed / cases_total`, so they are fractional (`0.9166666666666666` = 11/12). The artifact
+> therefore carries each score as a **lossless decimal string**, in both the entry and its `row`;
+> `String(x)` → `Number(x)` round-trips exactly, and adoption converts back before the store sees
+> the row. The committed bytes validate as-is — `build` validates exactly what it writes, and
+> `readArtifact` validates again on the consumer side before anything is listed or adopted.
+>
+> An earlier cut instead validated a *copy* with those scores replaced by `0`, so the gate never saw
+> the shipped artifact. The test now asserts the real bytes validate, that the artifact contains
+> **zero** non-integer numeric literals, and that every score round-trips — so reintroducing a raw
+> float goes red instead of quietly re-hollowing the gate.
 
 `--check` is the anti-rot gate, and it is the reason the artifact carries no timestamp: a wall-clock
 field would make byte-identical regeneration impossible and would be a claim about the generator

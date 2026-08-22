@@ -80,6 +80,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: L(成績單打包/簽署格式 + onboard 詢問流 + engine-onboarding 接線 + 環境差異披露)
 - **Source**: Board(user)proposal 2026-08-21;evidence `docs/plans/evidence/2026-08-17-roster-qualification/`。
 
+### `engine-qualify-impl.test.js` wall-truncation 斷言是負載敏感 flake —— 機器夠快就轉紅
+- **Trigger**: 下一次它在 full-suite / CI 跑紅;或下一次動 `scripts/engine-qualify-impl.js` 的 wall 截斷路徑。
+- **Context**: `scripts/engine-qualify-impl.test.js:361` 用 `testWallSecondsOverride: 8` 跑一次施測,然後斷言 `truncRun.qualified === false` —— 也就是**假設 8 秒內跑不完**。負載夠重時整份 corpus 真的被截斷 ⇒ 綠;機器閒著跑得完 ⇒ `qualified === true` ⇒ 紅。2026-08-23 實測:8 路並行且另有一份 suite 同時在跑 → PASS(275/275);並行競爭較輕的第二次 → FAIL;單獨 `node --test` 跑 → FAIL。`scripts/verify-preexisting.sh 'node --test scripts/engine-qualify-impl.test.js' --base 754df354` 判 **`{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}`** —— 與 v2.34.36 無關,該 ship 對 `engine-qualify-impl.{js,test.js}` 與 `evals/` 零觸碰。修向:把「有被截斷」變成可觀測事實再斷言(例如讓 kernel 回報 `truncated: true`),而不是拿 wall-clock 當代理;和 `lease_epipe_stop_bounded` 同一族 —— 「紅字部分為雜訊就不再被讀」是已記錄危害(v2.34.22 教訓),別讓它積累。
+- **Effort**: Fix。
+- **Source**: 2026-08-23 official-qualification-defaults full-gate(run `official-defaults-l4`);同時由 first-pass 施工與 leaf worker 兩次獨立觀察到。
+
 ### `validate-json-schema.js` 拒絕所有非整數數字 —— 任何帶小數的 JSON 文件都驗不了
 - **Trigger**: 下一個要 schema 驗證的 artifact 帶浮點數;或下一次動 `scripts/validate-json-schema.js` 的 `parseNumber`/`assertJsonValue`。
 - **Context**: `parseNumber`(`validate-json-schema.js:161`)在 **schema 求值之前**的 document preflight 就把任何含 `.`/`e`/`E` 的數字字面量判為 `UNSUPPORTED_JSON_NUMBER`(exit 2),與 schema 內容無關;`assertJsonValue:71` 同樣要求 `Number.isSafeInteger`。這是刻意的 lossless round-trip 保守設計,但代價是**任何帶比例、分數、機率的 artifact 都無法被這支 validator 驗證**。v2.34.36 撞上:`references/official-qualification-defaults.json` 的 `capability_score` 是 `cases_passed/cases_total`(0.75、0.9166666666666666、0.9583333333333334、0.6666666666666666、0.9761904761904762 五筆,經機械掃描確認是整份 artifact 唯一的非整數)。當前作法是 `build-qualification-defaults.js` 把那些欄位正規化成 0 之後才送驗(schema 對該欄位只約束 number-or-null,披露區塊完全不受影響),並在 `references/qualification-defaults.md` 明寫這道限制 —— 不是修好,是**明說**。順帶發現:`schemas/hook-event.schema.json` 自己也不通過這支 validator(它用了不在 `SUPPORTED_KEYWORDS` 裡的 `description`)。

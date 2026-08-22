@@ -48,6 +48,12 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### North-star per-skill ratchet is red on develop — three SKILL.md grew past baseline without justification
+- **Trigger**: 下一次任何 release 想要 preflight 8/8;或下一次動這三個 SKILL.md 任一時捎帶。
+- **Context**: preflight-release gate [8] 自 v2.34.35 起紅:`skills/dev-flow/SKILL.md` 713→717、`skills/engine-onboarding/SKILL.md` 203→228、`skills/harness-maintenance/SKILL.md` 58→59 超過 recorded baseline,且對應版段無 `prose-justification:` 行。v2.34.35 ship(strike-decay)驗證於 base `ab10bf08` 同樣紅、該 range 未觸 skills/ —— 兩輪 foreman 均拒絕代人 refresh baseline(「justifying growth I did not cause would launder someone else's drift through my gate」),依證據紀律改立此顯式債務 row。修向:trim 回 baseline,或在成長版本的 CHANGELOG 段補 justification 後 refresh baseline。
+- **Effort**: Fix。
+- **Source**: v2.34.35 pre-integration gates(2026-08-22,run nocon-decay-l4);preflight-release.sh gate [8]。
+
 ### Implementer suite hardening backlog (pre-merge review round-1 cut list)
 - **Trigger**: 下一次動 `evals/impl-eval-*`/`runImplQualification` 時捎帶;或第三場正式施測之前(屆時 Stage-0 機械化與 live-rail smoke 應先落);或 reviewer 再報同類。
 - **Context**: v2.34.34 round-1 review 裁 CUT 的殘項(五個 MUST-FIX 已修:partial-corpus fail-open 雙層拒收、preflight prose-justification、dispatcher_called ETIMEDOUT 歸因、HELP、Stage-0 明文 operator-run):(1) **Stage-0 probe 機械化**(qualifier 內建 receipt writer + frozen-token literal containment + attempt cap 消費;現為 operator-run,程序在 engine-onboarding SKILL.md);(2) §7 未落 fixture 列:runner-config-editor、malicious-git-config(現為 neutralized-not-labeled——`repoHygieneViolations` 不掃 repo-local config)、replacement-ref、add-then-revert canary、dirty-worktree、question-staller、quota-phrase+exit1、parser/output-bomb、runner-crash;(3) §2 live-rail smoke(真 rail + `--runner-bin` deterministic engine + 兩紅控);(4) §6 consumer matrix (b)-(f)(凍結舊 validator 拒新 row 的負向、qualityOf T0 斷言、dispatch-contract/review-loop 分支、非 N/N 控制);(5) capability-evidence.test.sh 的 impl_dispatch 單元覆蓋;(6) TTL 30/31/90/91 邊界測試;(7) `--trials` 精確斷言;(8) cosmetics:`corpus_version` 重複字面(已凍進 event 143 rows)、dead `wrapDispatchBin`、no_verdict stub 上 stdout。

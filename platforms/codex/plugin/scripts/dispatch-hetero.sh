@@ -3391,6 +3391,19 @@ run_strict_contract_postchecks() {
   return 0
 }
 
+# _hetero_runner_token — the single derivation of "which runner is this dispatch using"
+# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER flags, shared by passive_capture and
+# seat_strike_capture (factored out rather than copy-pasted, per repo convention).
+_hetero_runner_token() {
+  local runner="agy"
+  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  printf '%s' "$runner"
+}
+
 passive_capture() {
   local status="${1:-}"
   CLASSIFIED_ERROR=""
@@ -3404,12 +3417,7 @@ passive_capture() {
           quota_exhausted) quota_status="exhausted"; confidence="high" ;;
           rate_limited)    quota_status="limited"; confidence="medium" ;;
         esac
-        local runner="agy"
-        [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
-        [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
-        [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
-        [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
-        [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+        local runner; runner="$(_hetero_runner_token)"
         local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         # Exact effort/endpoint tuple — null endpoint means explicit no-endpoint wallet.
         local _ep_key="${ENDPOINT:-}"
@@ -3454,6 +3462,113 @@ _is_engine_unavailable() {
     quota_exhausted|rate_limited|auth_failed|overloaded) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Detector identity for seat_strike_capture's strikes (references/strike-decay.md).
+# Bump this literal whenever the classification logic below materially changes.
+STRIKE_DETECTOR_VERSION="1"
+
+# seat_strike_capture — the FIRST REAL PRODUCTION WRITER of seat-scoped no-confidence
+# strikes (references/strike-decay.md, scripts/engine-capability-state.js `strike-seat`).
+# Fires ONLY on a post-dispatcher_called fail-closed OUTCOME_STATUS: the pair was routed
+# and did not deliver. Always fail-soft — never changes this script's own exit code,
+# stdout bytes, or OUTCOME_* state (wrapped exactly like passive_capture: subshell,
+# output to /dev/null, `|| true`).
+#
+# THE CLOSED EXCLUSION LIST — read this comment, don't trace control flow, to know what
+# never strikes:
+#   1. AUTOPILOT_STRIKE_WRITER=off          — operator escape hatch so debugging the rail
+#                                             can never poison the store. Default is ON.
+#   2. OUTCOME_DISPATCHER_CALLED = 0        — pre-dispatch host abort; nothing was routed.
+#   3. OUTCOME_STATUS = engine_unavailable  — the closed external-cause enum in practice:
+#                                             quota_exhausted | rate_limited | auth_failed |
+#                                             overloaded, per _is_engine_unavailable().
+#   4. OUTCOME_STATUS in {committed, no_op, question_suspected} — success, or not a
+#                                             fail-closed delivery outcome.
+# Everything else that reaches here with dispatcher_called=1 is strike-eligible.
+seat_strike_capture() {
+  [ "${AUTOPILOT_STRIKE_WRITER:-on}" = "off" ] && return 0
+  [ "${OUTCOME_DISPATCHER_CALLED:-1}" -eq 0 ] && return 0
+
+  local status="${OUTCOME_STATUS:-}"
+  local cause_class=""
+  # cause_class mapping — derived ONLY from the host's own classification of OUTCOME_STATUS,
+  # never from anything the runner said about itself (ADR-0001). Diagnostic only; never
+  # suppresses accrual (references/strike-decay.md § The seat is the pair).
+  case "$status" in
+    # strict-contract boundary/acceptance rejections: the host mechanically re-derived a
+    # false predicate against what the engine produced — engine-attributable.
+    acceptance_failed|boundary_rejected)
+      cause_class="engine_output" ;;
+    # an envelope/transport-shaped failure the host detected (unparseable result, not a
+    # content judgment) — delivery is part of the pair's contract (strike-decay.md), so
+    # this STILL ACCRUES; cause_class only steers remedy at threshold.
+    no_verdict)
+      cause_class="runner_delivery" ;;
+    # generic fail-closed outcomes (nonzero exit, dirty tree) where the host cannot
+    # mechanically attribute fault to engine vs runner from that signal alone.
+    failure|dirty)
+      cause_class="ambiguous" ;;
+    # everything else — committed / no_op / question_suspected / engine_unavailable / any
+    # status not in the fail-closed set — is not a strike.
+    *)
+      return 0 ;;
+  esac
+
+  (
+    local runner; runner="$(_hetero_runner_token)"
+    local artifact_sha=""
+    if [ -n "${LOG:-}" ] && [ -r "${LOG:-}" ]; then
+      artifact_sha="$(sha256sum "$LOG" 2>/dev/null | awk '{print $1}')"
+    fi
+    if [ -z "$artifact_sha" ]; then
+      # $LOG unreadable — fall back to the sha256 of the outcome JSON (a real digest of
+      # a real artifact, never a placeholder). Built directly from OUTCOME_* env vars —
+      # deliberately NOT calling emit() here, which has real side effects (git-identity
+      # restore) this fail-soft path must never trigger twice.
+      local outcome_json
+      outcome_json="$(OUTCOME_STATUS="${OUTCOME_STATUS:-}" OUTCOME_COMMIT="${OUTCOME_COMMIT:-}" \
+        OUTCOME_FILES="${OUTCOME_FILES:-0}" OUTCOME_INS="${OUTCOME_INS:-0}" \
+        OUTCOME_DEL="${OUTCOME_DEL:-0}" OUTCOME_WT="${OUTCOME_WT:-}" \
+        OUTCOME_ERR="${OUTCOME_ERR:-}" node -e '
+          const p = process.env;
+          process.stdout.write(JSON.stringify({
+            status: p.OUTCOME_STATUS, commit: p.OUTCOME_COMMIT,
+            files: Number(p.OUTCOME_FILES), ins: Number(p.OUTCOME_INS), del: Number(p.OUTCOME_DEL),
+            worktree: p.OUTCOME_WT, error: p.OUTCOME_ERR
+          }));
+        ' 2>/dev/null)" || outcome_json=""
+      artifact_sha="$(printf '%s' "$outcome_json" | sha256sum 2>/dev/null | awk '{print $1}')"
+    fi
+    [ -z "$artifact_sha" ] && exit 0
+
+    # dedup_key: stable per ROOT INCIDENT (DISPATCH_RUN_ID is the caller-supplied --run-id
+    # when given — a retry that reuses the same run-id collides on purpose — or else a
+    # per-process id already unique by construction), bound to base/head sha + the outcome
+    # status. No timestamp, no bare $$: retrying the SAME root incident dedups; two
+    # genuinely different dispatches (different run id and/or different shas) do not.
+    local dedup_key="${DISPATCH_RUN_ID:-unknown}:${BASE_SHA:-unknown}:${HEAD_SHA:-unknown}:${status}"
+    local receipt_ref="log=${LOG:-none} commit=${HEAD_SHA:-none}"
+
+    local strike_args=(
+      strike-seat
+      --engine "$MODEL"
+      --runner "$runner"
+      --role implementer
+      --class ordinary_strike
+      --cause-class "$cause_class"
+      --writer dispatch_hetero_failclosed
+      --dedup-key "$dedup_key"
+      --detector-id dispatch_hetero_classify_outcome
+      --detector-version "${STRIKE_DETECTOR_VERSION:-1}"
+      --artifact-sha256 "$artifact_sha"
+      --receipt-ref "$receipt_ref"
+    )
+    if [ -n "${ENGINE_CAPABILITY_DIR:-}" ]; then
+      strike_args+=(--store "$ENGINE_CAPABILITY_DIR")
+    fi
+    node "$SELF_DIR/engine-capability-state.js" "${strike_args[@]}" >/dev/null 2>&1
+  ) || true
 }
 
 # classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the
@@ -3599,6 +3714,9 @@ classify_outcome() {
   # Observability: stamp the manifest so post-mortem status reads phase:"exited" with the
   # final status even after processes/locks are gone (both inline and detached paths).
   manifest_finalize "$OUTCOME_STATUS"
+  # Seat strike writer (P4, references/strike-decay.md) — fail-soft, never mutates
+  # OUTCOME_* or this function's already-decided status/exit.
+  seat_strike_capture
 }
 
 # ============================ R1 DETACH (setsid kill-survival) ============================
@@ -3720,8 +3838,9 @@ dispatch_detached_run() {
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
+    declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
-      _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks \
+      _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

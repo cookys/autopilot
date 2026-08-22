@@ -894,7 +894,10 @@ out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/failed_impl" ENGINE_
 assert_eq "$rc" "3"
 assert_nogo_json "$out" "qualified"
 
-echo "--- Case 10.3: expired implementer remains NO-GO under native projection ---"
+echo "--- Case 10.3: past-expires implementer GOes under native projection (calendar tooth pulled 2026-08-22) ---"
+# KR2 at the dispatch-contract layer: expires is advisory-only and never
+# blocks admission. Pre-cut this row NO-GOed as "expired"; now it GOes with
+# assurance=provisional exactly like Case 10.1 (observed_status=qualified).
 setup_qualified_store "$STORE_BASE/expired_impl"
 cat > "$STORE_BASE/expired_impl/score.json" <<'EOF'
 {"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2020-01-01","expires":"2020-01-02"}
@@ -904,8 +907,11 @@ env ENGINE_SCORECARD_DIR="$STORE_BASE/expired_impl" node "$REPO_ROOT/scripts/eng
 }
 out=$(env NODE_OPTIONS="" ENGINE_SCORECARD_DIR="$STORE_BASE/expired_impl" ENGINE_CAPABILITY_DIR="$STORE_BASE/expired_impl" \
   node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --json 2>&1); rc=$?
-assert_eq "$rc" "3"
-assert_nogo_json "$out" "qualified"
+assert_eq "$rc" "0" "past-expires implementer row GOes (rc=0)"
+field=$(json_get "$out" "verdict") || fail "past-expires implementer verdict extraction failed"
+assert_eq "$field" "GO"
+field=$(json_get "$out" "assurance") || fail "past-expires implementer assurance extraction failed"
+assert_eq "$field" "provisional"
 
 echo "--- Case 10.4: identity-mismatched implementer remains NO-GO ---"
 # Capability for the resolved engine only — scorecard row intentionally wrong model.

@@ -513,7 +513,11 @@ mkdir -p "$IMPLMISS_DIR"
 IMPLMISS_OUT="$(ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
 assert_contains "$(json_get "$IMPLMISS_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: no scorecard row" \
   "missing implementer row surfaces a capability warning under --check-scorecard"
-# 20b. Expired row → loud warning naming the status
+# 20b. Calendar tooth pulled 2026-08-22 (no-confidence-decay P1/P2): a
+# past-expires qualified row is now admissible (status=provisional,
+# observed_status=qualified) — expires is advisory-only and never downgrades
+# admissibility here either. No implementer warning; was "loud warning naming
+# the expired status" pre-cut.
 IMPLEXP_DIR="$TEST_TMP/impl-expired"
 mkdir -p "$IMPLEXP_DIR"
 cat > "$IMPLEXP_DIR/rec.json" <<'JSON'
@@ -521,8 +525,8 @@ cat > "$IMPLEXP_DIR/rec.json" <<'JSON'
 JSON
 ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$IMPLEXP_DIR/rec.json" > /dev/null
 IMPLEXP_OUT="$(ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
-assert_contains "$(json_get "$IMPLEXP_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: scorecard row status=expired" \
-  "expired implementer row surfaces a status-named capability warning"
+assert_not_contains "$(json_get "$IMPLEXP_OUT" capability_warnings)" "implementer seat" \
+  "past-expires implementer row is admissible (calendar tooth pulled), no implementer warning"
 # 20c. Admissible (fresh) row → NO implementer warning; warning absent without --check-scorecard
 IMPLOK_DIR="$TEST_TMP/impl-ok"
 mkdir -p "$IMPLOK_DIR"

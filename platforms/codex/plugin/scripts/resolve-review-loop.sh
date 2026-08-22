@@ -680,12 +680,18 @@ if (!Array.isArray(rows)) process.exit(0);
 let found = false;
 for (const row of rows) {
   if (row && String(row.engine) === String(engine) && (String(runner) === "auto" || String(row.runner) === String(runner)) && typeof row.status === "string") {
-    if (row.status === "qualified"
+    // Calendar tooth (b) pulled 2026-08-22 (no-confidence-decay P2): the tier
+    // decision keys on the strike-decay projection admission_status, never
+    // on a calendar date or the legacy TTL-derived status literal. expiry
+    // warning (advisory-only) never changes the tier.
+    if (row.admission_status === "requalify_required") {
+      process.stdout.write("low");
+    } else if (row.status === "failed") {
+      process.stdout.write("low");
+    } else if (row.status === "qualified"
         && row.authority_status === "session_local"
         && row.admissible === true) {
       process.stdout.write("high");
-    } else if (row.status === "failed" || row.status === "expired") {
-      process.stdout.write("low");
     } else {
       process.stdout.write("unknown");
     }

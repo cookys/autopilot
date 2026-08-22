@@ -19,6 +19,10 @@ const {
 const {
   validateEvidenceProducer,
 } = require('./engine-capability-state');
+const {
+  canonicalJson,
+  sha256,
+} = require('../src/engine/owner-kernel/canonical');
 
 const VALID_ROLES = new Set(ROLE_IDS);
 const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
@@ -30,8 +34,29 @@ const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
 // one concept is not ideal — but rewriting evidence rows is worse. New rows
 // should use `operator-asserted`.
 const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted']);
+// `expired` stays a legal INPUT status (rows written before the 2026-08-22
+// no-confidence-decay cut may still legitimately carry it on disk) but the
+// projection (deriveStatus, below) never PRODUCES it any more — a stale/
+// past-expires row now derives `qualified` with `expiry_warning: true`
+// instead. Calendar dates are advisory-only everywhere; see
+// references/strike-decay.md.
 const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
+// --- strike-decay projection (2026-08-22 no-confidence-decay P1) ------------------
+// Closed registries, frozen contract §2.7.3. The strike STORE (write path,
+// validation-at-write, dedup-idempotent append, invalidation) is owned by
+// engine-capability-state.js; this file owns the read-time PROJECTION only —
+// it never writes strikes.jsonl.
+const STRIKE_WRITER_ALLOWLIST = new Set([
+  'fuse', 'conformance_audit', 'dispatch_hetero_failclosed', 'qualification_admin',
+]);
+const CRITICAL_REEXAM_PREDICATES = new Set([
+  'security_canary_disclosure', 'protected_test_tampering', 'evidence_hash_manipulation',
+]);
+const ORDINARY_STRIKE_THRESHOLD = 3;
+const STRIKE_POLICY_VERSION = 2;
+const SEAT_TOKEN_RE = /^[A-Za-z0-9._@:-]+$/;
+const HEX64_RE = /^[0-9a-f]{64}$/i;
 const TRANSCRIPT_PROVIDERS = new Set(['codex', 'grok', 'opencode', 'agy']);
 const TRANSCRIPT_EXTENSIONS = new Set(['.json', '.jsonl', '.ndjson']);
 const MAX_TRANSCRIPT_FILES = 10000;
@@ -74,10 +99,11 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js report --role <role> [--key capability|cost] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
+  node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--now <ISO-date>]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
-  --role is required for current/report/ladder.\n\
+  --role is required for current/report/ladder/seat-status.\n\
   --key accepts capability (default) or cost.\n\
-  --now accepts ISO date; used by current/report/ladder for deterministic TTL checks.\n\
+  --now accepts ISO date; used by current/report/ladder/seat-status for deterministic TTL checks.\n\
   All disk-backed views are untrusted telemetry: stored qualified rows are projected\n\
     as provisional and report/ladder cannot produce a routing candidate.\n\
   --require-evidence additionally excludes legacy rows and requires --scope-file.\n\
@@ -86,6 +112,11 @@ const HELP_TEXT = `Usage:\n\
   verification_author/explorer rows are evidence-only in v1; use current/report, not ladder.\n\
   import-transcripts requires explicit roots and emits aggregate-only, untrusted telemetry;\n\
     it never appends scorecard rows. --output atomically writes the same JSON printed to stdout.\n\
+  seat-status prints the §2.7.5 admission projection for one engine+runner+role seat:\n\
+    admission_status/expiry_warning/strikes_since_pass/critical_trigger/would_requalify/\n\
+    strike_threshold/strike_policy_version/rejected_strikes, plus seat_hash and the\n\
+    baseline (baseline_event_id/baseline_qualified_at). Calendar dates never gate admission;\n\
+    AUTOPILOT_STRIKE_ENFORCEMENT=enforce arms ordinary-strike requalification (shadow by default).\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -297,9 +328,17 @@ function validateRecordRow(row) {
         failValidation(`scorecard ${field} does not match capability evidence`);
       }
     }
-    const evidenceStatus = evidence.state === 'qualified'
-      ? 'qualified' : evidence.state === 'stale' ? 'expired' : 'failed';
-    if (row.status !== evidenceStatus) {
+    // Calendar tooth (a) pulled 2026-08-22: a `stale` evidence receipt is
+    // advisory-only (surfaced as expiry_warning at read time), never an
+    // admission downgrade — so a stale-receipt row now expects `qualified`.
+    // Rows recorded before this cut may still legitimately carry the literal
+    // `expired` string for a stale receipt; accepted on input for replay
+    // idempotency, never produced by the projection going forward.
+    const evidenceStatus = evidence.state === 'qualified' || evidence.state === 'stale'
+      ? 'qualified' : 'failed';
+    const evidenceStatusOk = row.status === evidenceStatus
+      || (evidence.state === 'stale' && row.status === 'expired');
+    if (!evidenceStatusOk) {
       failValidation(`scorecard status does not match capability evidence state '${evidence.state}'`);
     }
     if (row.qualified_at !== evidence.issued_at.slice(0, 10)
@@ -1283,6 +1322,10 @@ function currentRowsForRole(role, nowMs, options = {}) {
       ? { ...evidenceReceipt, state: 'provisional' }
       : evidenceReceipt;
 
+    // Strike-decay projection (frozen contract §2.7.5): pair-scoped to this
+    // row's own engine+runner+role seat — the only admission authority.
+    const seatProjection = computeSeatProjection(row.engine, row.runner, row.role, nowMs).projection;
+
     output.push({
       engine: row.engine,
       runner: row.runner,
@@ -1307,6 +1350,16 @@ function currentRowsForRole(role, nowMs, options = {}) {
       admissible: false,
       observed_status: evidenceBackedStatus,
       event_id: toEventId(row.event_id) || 0,
+      // §2.7.5 projection fields. expiry_warning is THIS row's own `expires`
+      // (advisory-only, never gates admission_status).
+      admission_status: seatProjection.admission_status,
+      expiry_warning: computeExpiryWarning(row.expires, nowMs),
+      strikes_since_pass: seatProjection.strikes_since_pass,
+      critical_trigger: seatProjection.critical_trigger,
+      would_requalify: seatProjection.would_requalify,
+      strike_threshold: seatProjection.strike_threshold,
+      strike_policy_version: seatProjection.strike_policy_version,
+      rejected_strikes: seatProjection.rejected_strikes,
     });
   }
 
@@ -1326,13 +1379,220 @@ function deriveStatus(row, nowMs, resolvedEvidenceReceipt = null) {
       evaluation_time: new Date(nowMs).toISOString(),
     });
     if (receipt.state === 'qualified') return 'qualified';
-    if (receipt.state === 'stale') return 'expired';
+    // Calendar tooth (a) pulled 2026-08-22 (no-confidence-decay P1): a stale
+    // evidence receipt is advisory-only — surfaced as `expiry_warning` in the
+    // projection, never a downgrade to `expired`. See references/strike-decay.md.
+    if (receipt.state === 'stale') return 'qualified';
     return 'failed';
   }
   if (row.status !== 'qualified') return row.status;
-  const expiresMs = toDateMs(row.expires);
-  if (expiresMs === null) return row.status;
-  return expiresMs < nowMs ? 'expired' : row.status;
+  // Calendar tooth (a) pulled 2026-08-22: `expires` never flips a qualified
+  // row to `expired` here. It is surfaced separately as `expiry_warning`
+  // (computeExpiryWarning, below) and plays no part in admission.
+  return row.status;
+}
+
+// --- strike-decay projection helpers (frozen contract §2.7) -----------------------
+
+function isHex64(value) {
+  return typeof value === 'string' && HEX64_RE.test(value);
+}
+
+function seatToken(value) {
+  return typeof value === 'string' && SEAT_TOKEN_RE.test(value.trim()) ? value.trim() : null;
+}
+
+// Two independent call sites derive the same seat_hash (this file's read-time
+// projection, and engine-capability-state.js's `seat-hash` write-time helper)
+// from the identical two-line algorithm and the identical canonicalJson/sha256
+// primitives — never by shelling out cross-script. A seat_hash mismatch
+// between the two would silently orphan every strike from its projection.
+function seatIdentityHash(engine, runner, role) {
+  return sha256(canonicalJson({ engine: String(engine), runner: String(runner), role: String(role) }));
+}
+
+function computeExpiryWarning(expiresValue, nowMs) {
+  const ms = toDateMs(expiresValue);
+  return ms !== null && ms < nowMs;
+}
+
+// Baseline = the newest scorecard row for this seat (engine+runner+role, NOT
+// full configured identity) whose derived status is `qualified` — calendar
+// plays no part (deriveStatus above never emits `expired`) — ordered by
+// qualified_at then event_id. Scans the RAW store (not the current/latest-per-
+// identity collapse) because a seat's true qualification history spans every
+// configured-identity variant (corpus/harness/runner_version churn) that ever
+// passed under this engine+runner+role.
+function findSeatBaseline(engine, runner, role, nowMs, allRows) {
+  let best = null;
+  for (const row of allRows) {
+    if (!row || typeof row !== 'object') continue;
+    if (row.engine !== engine || row.runner !== runner) continue;
+    const storedRole = normalizeRole(row.role, { allowLegacy: true });
+    if (storedRole !== role) continue;
+    let evidence = row.evidence;
+    if (evidence !== undefined) {
+      try {
+        evidence = compileCapabilityEvidence(evidence);
+      } catch {
+        continue;
+      }
+    }
+    const status = deriveStatus({ ...row, evidence }, nowMs);
+    if (status !== 'qualified') continue;
+    const qMs = toDateMs(row.qualified_at);
+    if (qMs === null) continue;
+    const eid = toEventId(row.event_id) || 0;
+    if (!best || qMs > best.qMs || (qMs === best.qMs && eid > best.eid)) {
+      best = { qMs, eid, qualified_at: row.qualified_at, event_id: eid, expires: row.expires };
+    }
+  }
+  return best;
+}
+
+// Fold, in the frozen-contract order (§2.7.5, plan 2026-08-22-no-confidence-decay):
+// countable-strike validation -> invalidation subtraction -> dedup -> tallies.
+// `schema_version: 1` rows (legacy brain-seat strikes) are ignored entirely —
+// they feed brainSeatStatus in engine-capability-state.js only.
+function foldSeatStrikes(seatHashValue, baselineQMs, nowMs) {
+  const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
+  const lines = fs.existsSync(strikesFile)
+    ? fs.readFileSync(strikesFile, 'utf8').split(/\r?\n/).filter((l) => l.trim().length > 0)
+    : [];
+
+  let rejected = 0;
+  const parsedRows = [];
+  for (const line of lines) {
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      // Unparseable JSON is a rejected strike, not a crash — we cannot tell
+      // whether it targeted this seat, so it counts against every seat query
+      // (evidence-discipline §4: corrupt rows never silently vanish).
+      rejected += 1;
+      continue;
+    }
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      rejected += 1;
+      continue;
+    }
+    if (row.schema_version !== 2) continue; // legacy v1 or unrecognized — ignored entirely
+    if (row.seat_hash !== seatHashValue) continue; // not this seat's row
+    parsedRows.push(row);
+  }
+
+  // Countable-strike validation (contract step 2). An unauthorised writer,
+  // missing receipt, malformed artifact hash, invalid class/predicate, or a
+  // timestamp outside the (baseline, now] window can never inflate the count
+  // — every such row is EXCLUDED and tallied into rejected_strikes.
+  const countable = new Map(); // event_id -> { class, dedup_key }
+  for (const row of parsedRows) {
+    if (row.kind !== 'strike') continue;
+    const eid = toEventId(row.event_id);
+    const validClass = row.class === 'ordinary_strike' || row.class === 'critical_reexam_trigger';
+    const validPredicate = row.class === 'critical_reexam_trigger'
+      ? CRITICAL_REEXAM_PREDICATES.has(row.predicate_id)
+      : (row.predicate_id === null || row.predicate_id === undefined);
+    const validWriter = typeof row.writer === 'string' && STRIKE_WRITER_ALLOWLIST.has(row.writer);
+    const validReceipt = typeof row.receipt_ref === 'string' && row.receipt_ref.length > 0;
+    const validArtifact = isHex64(row.artifact_sha256);
+    const validDedup = typeof row.dedup_key === 'string' && row.dedup_key.length > 0;
+    const observedMs = Date.parse(row.observed_at);
+    // PINNED tiebreak (brainSeatStatus, engine-capability-state.js): a strike
+    // stamped at EXACTLY the pass instant does not count — strictly-greater.
+    const validObserved = Number.isFinite(observedMs)
+      && observedMs > baselineQMs
+      && observedMs <= nowMs;
+
+    if (eid === null || !validClass || !validPredicate || !validWriter
+        || !validReceipt || !validArtifact || !validDedup || !validObserved) {
+      rejected += 1;
+      continue;
+    }
+    countable.set(eid, { class: row.class, dedup_key: row.dedup_key });
+  }
+
+  // Invalidation subtraction (contract step 3): only an allowlisted writer
+  // with all three mechanical proof fields well-formed may remove exactly one
+  // countable strike, matched by event_id on the same seat. A structurally
+  // invalid invalidation removes nothing and is itself rejected.
+  for (const row of parsedRows) {
+    if (row.kind !== 'strike_invalidated') continue;
+    const validWriter = typeof row.writer === 'string' && STRIKE_WRITER_ALLOWLIST.has(row.writer);
+    const validProofArtifact = isHex64(row.proof_artifact_sha256);
+    const validProofDetector = typeof row.proof_detector_id === 'string'
+      && SEAT_TOKEN_RE.test(row.proof_detector_id.trim());
+    const targetEventId = toEventId(row.invalidates_event_id);
+    const validTarget = targetEventId !== null;
+
+    if (!validWriter || !validProofArtifact || !validProofDetector || !validTarget) {
+      rejected += 1;
+      continue;
+    }
+    countable.delete(targetEventId);
+  }
+
+  // Dedup (contract step 4): rows sharing dedup_key (already scoped to this
+  // seat_hash by the filter above) count once — lowest event_id wins.
+  const lowestByDedupKey = new Map();
+  for (const [eid, info] of countable.entries()) {
+    const existing = lowestByDedupKey.get(info.dedup_key);
+    if (existing === undefined || eid < existing) lowestByDedupKey.set(info.dedup_key, eid);
+  }
+  const keepIds = new Set(lowestByDedupKey.values());
+
+  let strikesSincePass = 0;
+  let criticalTrigger = false;
+  for (const [eid, info] of countable.entries()) {
+    if (!keepIds.has(eid)) continue;
+    if (info.class === 'critical_reexam_trigger') criticalTrigger = true;
+    else if (info.class === 'ordinary_strike') strikesSincePass += 1;
+  }
+
+  return { strikesSincePass, criticalTrigger, rejected };
+}
+
+function strikeEnforcementMode() {
+  return process.env.AUTOPILOT_STRIKE_ENFORCEMENT === 'enforce' ? 'enforce' : 'shadow';
+}
+
+// The ONLY admission authority (frozen contract §2.7.5). Computed fresh at
+// read time from the append-only stores — never mutates a stored row.
+function computeSeatProjection(engine, runner, role, nowMs) {
+  const seatHashValue = seatIdentityHash(engine, runner, role);
+  const allRows = readStoreRows(true);
+  const baseline = findSeatBaseline(engine, runner, role, nowMs, allRows);
+
+  const projection = {
+    admission_status: baseline ? 'qualified' : 'no_record',
+    expiry_warning: baseline ? computeExpiryWarning(baseline.expires, nowMs) : false,
+    strikes_since_pass: 0,
+    critical_trigger: false,
+    would_requalify: false,
+    strike_threshold: ORDINARY_STRIKE_THRESHOLD,
+    strike_policy_version: STRIKE_POLICY_VERSION,
+    rejected_strikes: 0,
+  };
+
+  if (baseline) {
+    const fold = foldSeatStrikes(seatHashValue, baseline.qMs, nowMs);
+    projection.strikes_since_pass = fold.strikesSincePass;
+    projection.critical_trigger = fold.criticalTrigger;
+    projection.rejected_strikes = fold.rejected;
+    projection.would_requalify = projection.strikes_since_pass >= ORDINARY_STRIKE_THRESHOLD;
+    if (projection.critical_trigger
+        || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {
+      projection.admission_status = 'requalify_required';
+    }
+  }
+
+  return {
+    seat_hash: seatHashValue,
+    baseline_event_id: baseline ? baseline.event_id : null,
+    baseline_qualified_at: baseline ? baseline.qualified_at : null,
+    projection,
+  };
 }
 
 function sortByCapability(a, b) {
@@ -1386,6 +1646,70 @@ function cmdRecord(args) {
   });
 
   process.stdout.write(`${JSON.stringify(writtenRow)}\n`);
+}
+
+function parseSeatStatusArgs(args) {
+  let engine = null;
+  let runner = null;
+  let role = null;
+  let now;
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (isHelpToken(arg)) usage(0);
+
+    if (arg === '--engine') {
+      if (i + 1 >= args.length) failUsage('--engine requires a value');
+      engine = args[++i];
+      continue;
+    }
+    if (arg === '--runner') {
+      if (i + 1 >= args.length) failUsage('--runner requires a value');
+      runner = args[++i];
+      continue;
+    }
+    if (arg === '--role') {
+      if (i + 1 >= args.length) failUsage('--role requires a value');
+      role = args[++i];
+      continue;
+    }
+    if (arg === '--now') {
+      if (i + 1 >= args.length) failUsage('--now requires a value');
+      now = args[++i];
+      continue;
+    }
+    failUsage(`unknown option: ${arg}`);
+  }
+
+  if (!engine) failUsage('--engine is required');
+  if (!runner) failUsage('--runner is required');
+  if (!role) failUsage('--role is required');
+
+  const engineToken = seatToken(engine);
+  if (!engineToken) failUsage(`invalid --engine token '${engine}'`);
+  const runnerToken = seatToken(runner);
+  if (!runnerToken) failUsage(`invalid --runner token '${runner}'`);
+
+  const requestedRole = role;
+  const canonicalRole = normalizeRole(role, { allowLegacy: true });
+  if (!canonicalRole) failUsage(`invalid role '${requestedRole}'`);
+  const roleToken = seatToken(canonicalRole);
+  if (!roleToken) failUsage(`invalid --role token '${canonicalRole}'`);
+
+  const nowMs = nowArgToMs(now);
+
+  return { engine: engineToken, runner: runnerToken, role: roleToken, nowMs };
+}
+
+function cmdSeatStatus(args) {
+  const { engine, runner, role, nowMs } = parseSeatStatusArgs(args);
+  const result = computeSeatProjection(engine, runner, role, nowMs);
+  process.stdout.write(`${JSON.stringify({
+    ...result.projection,
+    seat_hash: result.seat_hash,
+    baseline_event_id: result.baseline_event_id,
+    baseline_qualified_at: result.baseline_qualified_at,
+  })}\n`);
 }
 
 function cmdCurrent(args) {
@@ -1485,5 +1809,6 @@ function cmdLadder(args) {
   else if (command === 'report') cmdReport(commandArgs);
   else if (command === 'ladder') cmdLadder(commandArgs);
   else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);
+  else if (command === 'seat-status') cmdSeatStatus(commandArgs);
   else failUsage(`unknown subcommand '${command}'`);
 })();

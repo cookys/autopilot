@@ -39,6 +39,9 @@ const HELP_TEXT = `Usage:
   node scripts/engine-capability-state.js classify-error [--string <text>] [--file <path>] [--exit-code <code>]
   node scripts/engine-capability-state.js strike --identity-file <path> --source <fuse|conformance_audit> --receipt-ref <token> [--now <ISO-date>] [--store <path>]
   node scripts/engine-capability-state.js brain-status --identity-file <path> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js strike-seat --engine <token> --runner <token> --role <token> --class ordinary_strike|critical_reexam_trigger [--predicate-id <id>] --cause-class engine_output|runner_delivery|ambiguous --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js invalidate-strike --engine <token> --runner <token> --role <token> --invalidates-event-id <int> --proof-artifact-sha256 <64hex> --proof-detector-id <token> --writer <allowlisted> --dedup-key <string> --detector-id <token> --detector-version <token> --artifact-sha256 <64hex> --receipt-ref <string> [--now <ISO-date>] [--store <path>]
+  node scripts/engine-capability-state.js seat-hash --engine <token> --runner <token> --role <token>
 
 Options:
   --file <path>        Read event JSON from file (for record) or classify error from file.
@@ -57,6 +60,18 @@ Options:
   --observation-file <path>  Read an optional revocation observation into telemetry.
   --string <text>      String to classify for classify-error.
   --exit-code <code>   Exit code to classify for classify-error.
+  --engine <token>     Seat identity engine token (strike-seat / invalidate-strike / seat-hash).
+  --class <name>       ordinary_strike | critical_reexam_trigger (strike-seat).
+  --predicate-id <id>  Required iff --class critical_reexam_trigger; must be a registered predicate.
+  --cause-class <name> engine_output | runner_delivery | ambiguous (strike-seat).
+  --writer <id>        Allowlisted writer id (strike-seat / invalidate-strike).
+  --dedup-key <string> Root-incident-scoped idempotency key (strike-seat / invalidate-strike).
+  --detector-id <token>       Detector identity (strike-seat / invalidate-strike).
+  --detector-version <token>  Detector version (strike-seat / invalidate-strike).
+  --artifact-sha256 <hex>     sha256 of the detecting artifact (strike-seat / invalidate-strike).
+  --invalidates-event-id <n>  event_id of the v2 strike row being invalidated (invalidate-strike).
+  --proof-artifact-sha256 <hex>  sha256 of the mechanical proof of detector defect (invalidate-strike).
+  --proof-detector-id <token>    Detector that produced the proof (invalidate-strike).
 
 Exit codes:
   0 = success
@@ -673,6 +688,143 @@ function identityHashOf(rawIdentity) {
   return sha256(canonicalJson(normalizeIdentity(rawIdentity)));
 }
 
+function validateStrikeV1Shape(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)
+      || row.schema_version !== 1
+      || toEventId(row.event_id) === null
+      || !isSha256(row.identity_hash)
+      || !STRIKE_SOURCES.has(row.source)
+      || typeof row.observed_at !== 'string' || Number.isNaN(Date.parse(row.observed_at))
+      || typeof row.receipt_ref !== 'string' || row.receipt_ref.length === 0
+      || Object.keys(row).some((key) => !STRIKE_FIELDS.has(key))) {
+    throw new Error('invalid strike row shape');
+  }
+  return row;
+}
+
+// --- strike STORE v2 (plan 2026-08-22-no-confidence-decay §2.7, P0) ---------------
+// Pair-scoped (engine+runner+role) seat strikes, closed registries, dedup-idempotent
+// append, mechanically-proven invalidation. v1 rows above are untouched and keep
+// feeding brainSeatStatus ONLY; v2 rows never enter that fold. event_id stays
+// monotonic across BOTH schemas in the same file (readStrikeRows returns both).
+
+const SEAT_TOKEN_RE = /^[A-Za-z0-9._@:-]+$/;
+
+// Closed registries — exact names/values frozen by the plan §2.7.3. Exported for
+// P1 (engine-scorecard.js projection) and any other consumer to import rather than
+// re-declare.
+const STRIKE_WRITER_ALLOWLIST = Object.freeze(['fuse', 'conformance_audit', 'dispatch_hetero_failclosed', 'qualification_admin']);
+const CRITICAL_REEXAM_PREDICATES = Object.freeze(['security_canary_disclosure', 'protected_test_tampering', 'evidence_hash_manipulation']);
+const EXTERNAL_CAUSE_EXCLUSIONS = Object.freeze(['quota', 'user_abort', 'infra_outage', 'pre_dispatch_host_abort']);
+const ORDINARY_STRIKE_THRESHOLD = 3;
+const STRIKE_POLICY_VERSION = 2;
+
+// Not a closed exclusion registry (that's EXTERNAL_CAUSE_EXCLUSIONS, writer-side,
+// used by dispatch-hetero.sh in P4) — this is just the row-schema enum for `cause_class`.
+const STRIKE_CAUSE_CLASSES = Object.freeze(['engine_output', 'runner_delivery', 'ambiguous']);
+const STRIKE_CLASSES = Object.freeze(['ordinary_strike', 'critical_reexam_trigger']);
+const STRIKE_KINDS = Object.freeze(['strike', 'strike_invalidated']);
+
+const STRIKE_FIELDS_V2 = new Set([
+  'schema_version', 'event_id', 'kind', 'seat_hash', 'engine', 'runner', 'role',
+  'class', 'predicate_id', 'cause_class', 'writer', 'dedup_key',
+  'detector_id', 'detector_version', 'artifact_sha256', 'receipt_ref', 'observed_at',
+  'invalidates_event_id', 'proof_artifact_sha256', 'proof_detector_id',
+]);
+
+function isValidSeatToken(value) {
+  return typeof value === 'string' && value.length > 0 && SEAT_TOKEN_RE.test(value);
+}
+
+function normalizeSeatToken(raw, label) {
+  if (typeof raw !== 'string') throw new Error(`${label} must be a string`);
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) throw new Error(`${label} must be non-empty`);
+  if (!SEAT_TOKEN_RE.test(trimmed)) throw new Error(`${label} must match ${SEAT_TOKEN_RE}`);
+  return trimmed;
+}
+
+// Seat identity §2.7.1: engine+runner+role, NOT effort/model_version/endpoint.
+function normalizeSeatIdentity({ engine, runner, role }) {
+  return {
+    engine: normalizeSeatToken(engine, 'engine'),
+    runner: normalizeSeatToken(runner, 'runner'),
+    role: normalizeSeatToken(role, 'role'),
+  };
+}
+
+function seatHashOf(seatIdentity) {
+  return sha256(canonicalJson(normalizeSeatIdentity(seatIdentity)));
+}
+
+function validateStrikeV2Shape(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    throw new Error('invalid strike row shape');
+  }
+  if (Object.keys(row).some((key) => !STRIKE_FIELDS_V2.has(key))) {
+    throw new Error('invalid strike row shape: unexpected key');
+  }
+  for (const key of STRIKE_FIELDS_V2) {
+    if (!Object.prototype.hasOwnProperty.call(row, key)) {
+      throw new Error(`invalid strike row shape: missing key ${key}`);
+    }
+  }
+  if (row.schema_version !== 2) throw new Error('invalid strike row shape: schema_version');
+  if (toEventId(row.event_id) === null) throw new Error('invalid strike row shape: event_id');
+  if (!STRIKE_KINDS.includes(row.kind)) throw new Error('invalid strike row shape: kind');
+  if (!isSha256(row.seat_hash)) throw new Error('invalid strike row shape: seat_hash');
+  if (!isValidSeatToken(row.engine) || !isValidSeatToken(row.runner) || !isValidSeatToken(row.role)) {
+    throw new Error('invalid strike row shape: engine/runner/role');
+  }
+  if (!STRIKE_CLASSES.includes(row.class)) throw new Error('invalid strike row shape: class');
+  if (row.class === 'critical_reexam_trigger') {
+    if (typeof row.predicate_id !== 'string' || !CRITICAL_REEXAM_PREDICATES.includes(row.predicate_id)) {
+      throw new Error('invalid strike row shape: predicate_id must be a registered predicate for critical_reexam_trigger');
+    }
+  } else if (row.predicate_id !== null) {
+    throw new Error('invalid strike row shape: predicate_id must be null unless class is critical_reexam_trigger');
+  }
+  if (!STRIKE_CAUSE_CLASSES.includes(row.cause_class)) {
+    throw new Error('invalid strike row shape: cause_class');
+  }
+  if (!isValidSeatToken(row.writer)) throw new Error('invalid strike row shape: writer');
+  if (typeof row.dedup_key !== 'string' || row.dedup_key.length === 0) {
+    throw new Error('invalid strike row shape: dedup_key');
+  }
+  if (!isValidSeatToken(row.detector_id) || !isValidSeatToken(row.detector_version)) {
+    throw new Error('invalid strike row shape: detector_id/detector_version');
+  }
+  if (!isSha256(row.artifact_sha256)) throw new Error('invalid strike row shape: artifact_sha256');
+  if (typeof row.receipt_ref !== 'string' || row.receipt_ref.length === 0) {
+    throw new Error('invalid strike row shape: receipt_ref');
+  }
+  if (typeof row.observed_at !== 'string' || Number.isNaN(Date.parse(row.observed_at))) {
+    throw new Error('invalid strike row shape: observed_at');
+  }
+  if (row.kind === 'strike_invalidated') {
+    if (toEventId(row.invalidates_event_id) === null) {
+      throw new Error('invalid strike row shape: invalidates_event_id required for strike_invalidated');
+    }
+    if (!isSha256(row.proof_artifact_sha256)) {
+      throw new Error('invalid strike row shape: proof_artifact_sha256 required for strike_invalidated');
+    }
+    if (!isValidSeatToken(row.proof_detector_id)) {
+      throw new Error('invalid strike row shape: proof_detector_id required for strike_invalidated');
+    }
+  } else {
+    if (row.invalidates_event_id !== null) {
+      throw new Error('invalid strike row shape: invalidates_event_id must be null for kind strike');
+    }
+    if (row.proof_artifact_sha256 !== null) {
+      throw new Error('invalid strike row shape: proof_artifact_sha256 must be null for kind strike');
+    }
+    if (row.proof_detector_id !== null) {
+      throw new Error('invalid strike row shape: proof_detector_id must be null for kind strike');
+    }
+  }
+  return row;
+}
+
 function readStrikeRows(strikesFile) {
   const lines = readTextLines(strikesFile);
   const rows = [];
@@ -683,15 +835,19 @@ function readStrikeRows(strikesFile) {
     } catch (error) {
       throw new Error(`malformed strike line ${index + 1}: ${error.message}`);
     }
-    if (!row || typeof row !== 'object' || Array.isArray(row)
-        || row.schema_version !== 1
-        || toEventId(row.event_id) === null
-        || !isSha256(row.identity_hash)
-        || !STRIKE_SOURCES.has(row.source)
-        || typeof row.observed_at !== 'string' || Number.isNaN(Date.parse(row.observed_at))
-        || typeof row.receipt_ref !== 'string' || row.receipt_ref.length === 0
-        || Object.keys(row).some((key) => !STRIKE_FIELDS.has(key))) {
-      throw new Error(`malformed strike line ${index + 1}: invalid strike row shape`);
+    try {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        throw new Error('invalid strike row shape');
+      }
+      if (row.schema_version === 1) {
+        validateStrikeV1Shape(row);
+      } else if (row.schema_version === 2) {
+        validateStrikeV2Shape(row);
+      } else {
+        throw new Error('unsupported schema_version');
+      }
+    } catch (error) {
+      throw new Error(`malformed strike line ${index + 1}: ${error.message}`);
     }
     rows.push(row);
   }
@@ -722,6 +878,195 @@ function appendStrikeRecord(config, { identity, source, receiptRef, observedAt }
       observed_at: observed,
       receipt_ref: receiptRef.trim(),
     };
+    appendRow(config.strikesFile, row);
+    return row;
+  });
+}
+
+// --- strike STORE v2 append/invalidate ---------------------------------------------
+
+function normalizeStrikeClass(raw) {
+  if (!STRIKE_CLASSES.includes(raw)) {
+    throw new Error(`class must be one of ${STRIKE_CLASSES.join('|')}`);
+  }
+  return raw;
+}
+
+function normalizeCauseClass(raw) {
+  if (!STRIKE_CAUSE_CLASSES.includes(raw)) {
+    throw new Error(`cause_class must be one of ${STRIKE_CAUSE_CLASSES.join('|')}`);
+  }
+  return raw;
+}
+
+function normalizePredicateId(raw, klass) {
+  if (klass === 'critical_reexam_trigger') {
+    if (typeof raw !== 'string' || !CRITICAL_REEXAM_PREDICATES.includes(raw)) {
+      throw new Error(`predicate_id must be one of ${CRITICAL_REEXAM_PREDICATES.join('|')} when class is critical_reexam_trigger`);
+    }
+    return raw;
+  }
+  if (raw !== null && raw !== undefined && raw !== '') {
+    throw new Error('predicate_id must be omitted unless class is critical_reexam_trigger');
+  }
+  return null;
+}
+
+// `requireAllowlisted` is always true for both v2 append paths in this cut (P0
+// enforces the allowlist at write time for strike AND strike_invalidated); a
+// hand-written row bypassing the CLI can still land an un-allowlisted writer,
+// which is why readStrikeRows/validateStrikeV2Shape do NOT re-check membership —
+// that exclusion is the P1 projection's job (rejected_strikes), not a shape error.
+function normalizeWriter(raw) {
+  const token = normalizeSeatToken(raw, 'writer');
+  if (!STRIKE_WRITER_ALLOWLIST.includes(token)) {
+    throw new Error(`writer must be one of ${STRIKE_WRITER_ALLOWLIST.join('|')}`);
+  }
+  return token;
+}
+
+function normalizeNonEmptyString(raw, label) {
+  if (typeof raw !== 'string' || raw.length === 0) throw new Error(`${label} is required`);
+  return raw;
+}
+
+function normalizeStrikeSha256(raw, label) {
+  if (!isSha256(raw)) throw new Error(`${label} must be a 64-character hex sha256`);
+  return raw.toLowerCase();
+}
+
+function normalizeStrikeObservedAt(raw) {
+  const observed = raw || new Date().toISOString();
+  if (typeof observed !== 'string' || Number.isNaN(Date.parse(observed))) {
+    throw new Error('observed_at must be ISO-8601');
+  }
+  return observed;
+}
+
+function normalizeEventIdRef(raw, label) {
+  const n = toEventId(raw);
+  if (n === null || n < 1) throw new Error(`${label} must be a positive integer event id`);
+  return n;
+}
+
+// Dedup-idempotent v2 strike append (§2.7.5 step 3 / plan §3 P0 bullet 1): a second
+// append sharing (seat_hash, dedup_key) with an existing kind:'strike' row does NOT
+// write a second line — it returns the existing row with `deduplicated: true` added
+// only to the return value (never persisted).
+function appendStrikeSeatRecord(config, input) {
+  const seatIdentity = normalizeSeatIdentity(input);
+  const seatHash = seatHashOf(seatIdentity);
+  const klass = normalizeStrikeClass(input.klass);
+  const predicateId = normalizePredicateId(input.predicateId, klass);
+  const causeClass = normalizeCauseClass(input.causeClass);
+  const writer = normalizeWriter(input.writer);
+  const dedupKey = normalizeNonEmptyString(input.dedupKey, 'dedup_key');
+  const detectorId = normalizeSeatToken(input.detectorId, 'detector_id');
+  const detectorVersion = normalizeSeatToken(input.detectorVersion, 'detector_version');
+  const artifactSha256 = normalizeStrikeSha256(input.artifactSha256, 'artifact_sha256');
+  const receiptRef = normalizeNonEmptyString(input.receiptRef, 'receipt_ref');
+  const observedAt = normalizeStrikeObservedAt(input.observedAt);
+
+  return withWriteLock({
+    storeDir: config.storeDir,
+    lockFile: config.lockFile,
+    name: 'capability strikes',
+  }, () => {
+    const rows = readStrikeRows(config.strikesFile);
+    const existing = rows.find((row) => row.schema_version === 2
+      && row.kind === 'strike'
+      && row.seat_hash === seatHash
+      && row.dedup_key === dedupKey);
+    if (existing) {
+      return { row: existing, deduplicated: true };
+    }
+    const row = {
+      schema_version: 2,
+      event_id: maxEventId(rows) + 1,
+      kind: 'strike',
+      seat_hash: seatHash,
+      engine: seatIdentity.engine,
+      runner: seatIdentity.runner,
+      role: seatIdentity.role,
+      class: klass,
+      predicate_id: predicateId,
+      cause_class: causeClass,
+      writer,
+      dedup_key: dedupKey,
+      detector_id: detectorId,
+      detector_version: detectorVersion,
+      artifact_sha256: artifactSha256,
+      receipt_ref: receiptRef,
+      observed_at: observedAt,
+      invalidates_event_id: null,
+      proof_artifact_sha256: null,
+      proof_detector_id: null,
+    };
+    validateStrikeV2Shape(row);
+    appendRow(config.strikesFile, row);
+    return { row, deduplicated: false };
+  });
+}
+
+// `strike_invalidated` requires mechanical proof of detector defect (ADR-0001; no
+// free-form rescind) and is rejected unless `invalidates_event_id` names an existing
+// v2 kind:'strike' row for the SAME seat_hash. Its own class/predicate_id/cause_class
+// are not independently supplied by the CLI (the frozen contract's invalidate-strike
+// surface carries no --class/--predicate-id/--cause-class flags) — this cut copies
+// them from the strike being invalidated, since the invalidation is a correction of
+// that judgment, not an independent new one. Documented deviation: the frozen
+// contract shows these keys on every v2 row but is silent on their source for a
+// strike_invalidated row.
+function appendStrikeInvalidation(config, input) {
+  const seatIdentity = normalizeSeatIdentity(input);
+  const seatHash = seatHashOf(seatIdentity);
+  const invalidatesEventId = normalizeEventIdRef(input.invalidatesEventId, 'invalidates_event_id');
+  const proofArtifactSha256 = normalizeStrikeSha256(input.proofArtifactSha256, 'proof_artifact_sha256');
+  const proofDetectorId = normalizeSeatToken(input.proofDetectorId, 'proof_detector_id');
+  const writer = normalizeWriter(input.writer);
+  const dedupKey = normalizeNonEmptyString(input.dedupKey, 'dedup_key');
+  const detectorId = normalizeSeatToken(input.detectorId, 'detector_id');
+  const detectorVersion = normalizeSeatToken(input.detectorVersion, 'detector_version');
+  const artifactSha256 = normalizeStrikeSha256(input.artifactSha256, 'artifact_sha256');
+  const receiptRef = normalizeNonEmptyString(input.receiptRef, 'receipt_ref');
+  const observedAt = normalizeStrikeObservedAt(input.observedAt);
+
+  return withWriteLock({
+    storeDir: config.storeDir,
+    lockFile: config.lockFile,
+    name: 'capability strikes',
+  }, () => {
+    const rows = readStrikeRows(config.strikesFile);
+    const target = rows.find((row) => row.schema_version === 2
+      && row.kind === 'strike'
+      && row.seat_hash === seatHash
+      && toEventId(row.event_id) === invalidatesEventId);
+    if (!target) {
+      throw new Error(`invalidates_event_id ${invalidatesEventId} does not refer to an existing v2 strike row for this seat`);
+    }
+    const row = {
+      schema_version: 2,
+      event_id: maxEventId(rows) + 1,
+      kind: 'strike_invalidated',
+      seat_hash: seatHash,
+      engine: seatIdentity.engine,
+      runner: seatIdentity.runner,
+      role: seatIdentity.role,
+      class: target.class,
+      predicate_id: target.predicate_id,
+      cause_class: target.cause_class,
+      writer,
+      dedup_key: dedupKey,
+      detector_id: detectorId,
+      detector_version: detectorVersion,
+      artifact_sha256: artifactSha256,
+      receipt_ref: receiptRef,
+      observed_at: observedAt,
+      invalidates_event_id: invalidatesEventId,
+      proof_artifact_sha256: proofArtifactSha256,
+      proof_detector_id: proofDetectorId,
+    };
+    validateStrikeV2Shape(row);
     appendRow(config.strikesFile, row);
     return row;
   });
@@ -760,6 +1105,10 @@ function brainSeatStatus(config, rawIdentity, nowIso) {
   // so pass-instant strikes are pre-pass by construction (strictly-greater fold;
   // behavior pinned by test, QC 2026-08-17 sol strike-store-order adjudication).
   const strikes = readStrikeRows(config.strikesFile).filter((row) => {
+    // v2 seat-strike rows (§2.7.2) are a separate ledger entry shape and must never
+    // leak into the brain-seat fold — explicit schema_version gate, not reliance on
+    // v2 rows lacking identity_hash.
+    if (row.schema_version !== 1) return false;
     if (row.identity_hash !== identityHash) return false;
     if (nowIso && Date.parse(row.observed_at) > Date.parse(nowIso)) return false;
     return baseline ? Date.parse(row.observed_at) > Date.parse(baseline.evidence.observed_at) : true;
@@ -1167,6 +1516,18 @@ function parseCommandLineArgs(argv) {
     ['classify-error', new Set(['string', 'file', 'exit-code'])],
     ['strike', new Set(['identity-file', 'source', 'receipt-ref', 'now', 'store'])],
     ['brain-status', new Set(['identity-file', 'now', 'store'])],
+    ['strike-seat', new Set([
+      'engine', 'runner', 'role', 'class', 'predicate-id', 'cause-class', 'writer',
+      'dedup-key', 'detector-id', 'detector-version', 'artifact-sha256', 'receipt-ref',
+      'now', 'store',
+    ])],
+    ['invalidate-strike', new Set([
+      'engine', 'runner', 'role', 'invalidates-event-id',
+      'proof-artifact-sha256', 'proof-detector-id',
+      'writer', 'dedup-key', 'detector-id', 'detector-version',
+      'artifact-sha256', 'receipt-ref', 'now', 'store',
+    ])],
+    ['seat-hash', new Set(['engine', 'runner', 'role'])],
   ]);
   const allowed = commandOptions.get(command);
   if (!allowed) return { command, options: {} };
@@ -1400,6 +1761,81 @@ function main() {
       failValidation(`brain-status: ${error.message}`);
     }
     process.stdout.write(`${JSON.stringify(status)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'strike-seat') {
+    const required = ['engine', 'runner', 'role', 'class', 'cause-class', 'writer', 'dedup-key', 'detector-id', 'detector-version', 'artifact-sha256', 'receipt-ref'];
+    for (const key of required) {
+      if (!options[key]) failUsage(`strike-seat requires --${key}`);
+    }
+    const config = resolveStoreConfig(options);
+    let result;
+    try {
+      result = appendStrikeSeatRecord(config, {
+        engine: options.engine,
+        runner: options.runner,
+        role: options.role,
+        klass: options.class,
+        predicateId: Object.prototype.hasOwnProperty.call(options, 'predicate-id') ? options['predicate-id'] : null,
+        causeClass: options['cause-class'],
+        writer: options.writer,
+        dedupKey: options['dedup-key'],
+        detectorId: options['detector-id'],
+        detectorVersion: options['detector-version'],
+        artifactSha256: options['artifact-sha256'],
+        receiptRef: options['receipt-ref'],
+        observedAt: options.now,
+      });
+    } catch (error) {
+      failValidation(`strike-seat: ${error.message}`);
+    }
+    const output = result.deduplicated ? { ...result.row, deduplicated: true } : result.row;
+    process.stdout.write(`${JSON.stringify(output)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'invalidate-strike') {
+    const required = ['engine', 'runner', 'role', 'invalidates-event-id', 'proof-artifact-sha256', 'proof-detector-id', 'writer', 'dedup-key', 'detector-id', 'detector-version', 'artifact-sha256', 'receipt-ref'];
+    for (const key of required) {
+      if (!options[key]) failUsage(`invalidate-strike requires --${key}`);
+    }
+    const config = resolveStoreConfig(options);
+    let row;
+    try {
+      row = appendStrikeInvalidation(config, {
+        engine: options.engine,
+        runner: options.runner,
+        role: options.role,
+        invalidatesEventId: options['invalidates-event-id'],
+        proofArtifactSha256: options['proof-artifact-sha256'],
+        proofDetectorId: options['proof-detector-id'],
+        writer: options.writer,
+        dedupKey: options['dedup-key'],
+        detectorId: options['detector-id'],
+        detectorVersion: options['detector-version'],
+        artifactSha256: options['artifact-sha256'],
+        receiptRef: options['receipt-ref'],
+        observedAt: options.now,
+      });
+    } catch (error) {
+      failValidation(`invalidate-strike: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify(row)}\n`);
+    process.exit(0);
+  }
+
+  if (command === 'seat-hash') {
+    if (!options.engine || !options.runner || !options.role) {
+      failUsage('seat-hash requires --engine, --runner, and --role');
+    }
+    let hash;
+    try {
+      hash = seatHashOf({ engine: options.engine, runner: options.runner, role: options.role });
+    } catch (error) {
+      failValidation(`seat-hash: ${error.message}`);
+    }
+    process.stdout.write(`${JSON.stringify({ seat_hash: hash })}\n`);
     process.exit(0);
   }
 
@@ -1722,9 +2158,19 @@ module.exports = {
   appendEvidenceRecord,
   appendEvidenceRecords,
   appendStrikeRecord,
+  appendStrikeSeatRecord,
+  appendStrikeInvalidation,
   brainSeatStatus,
   readEvidenceRows,
   readStrikeRows,
   resolveStoreConfig,
+  seatHashOf,
+  normalizeSeatIdentity,
+  validateStrikeV2Shape,
   validateEvidenceProducer,
+  STRIKE_WRITER_ALLOWLIST,
+  CRITICAL_REEXAM_PREDICATES,
+  EXTERNAL_CAUSE_EXCLUSIONS,
+  ORDINARY_STRIKE_THRESHOLD,
+  STRIKE_POLICY_VERSION,
 };

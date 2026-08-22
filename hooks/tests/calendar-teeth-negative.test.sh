@@ -337,10 +337,25 @@ sp_e=$(echo "$SS_E" | jq_get strikes_since_pass)
 #   strike observed_at=2026-08-20T09:00:00Z (critical_reexam_trigger, same day)
 #   seat-status --now 2026-08-22
 #   => {"admission_status":"requalify_required", ..., "critical_trigger":true}
-# (pasted verbatim in the repair session's report). Fixed: the baseline
-# threshold is now an INSTANT — the row's full-timestamp evidence.issued_at
-# when present, else END OF the pass date for a date-only qualified_at — so a
-# same-day-after-pass strike is treated as pre-pass and cleared.
+# (pasted verbatim in the repair session's report). BLOCKER 5's own fix then
+# fell back to END of the pass date for a legacy date-only `qualified_at` —
+# which made the SAME-day-after-pass strike above (and the fixture below) fall
+# INSIDE the baseline window and be treated as pre-pass and cleared. That is
+# fail-OPEN on the one class that enforces regardless of the shadow flag:
+# record a same-day pass, then let a critical strike land later that day, and
+# the seat comes back "qualified" with the critical trigger silently gone.
+#
+# FINDING 2 fix (2026-08-22 second review repair): the legacy date-only
+# fallback must fail CLOSED — START of day, not END — so a same-day-after-pass
+# strike counts. Every modern administration carries `evidence.issued_at` (an
+# exact instant, preferred first and unaffected by this fallback); only a
+# legacy date-only row with no `issued_at` reaches this fallback, and for
+# those rows the safe direction is to keep the strike, not clear it. This
+# fixture (score_row has no `evidence` field, so it always takes the
+# fallback) now expects the strike to COUNT: admission_status
+# 'requalify_required', critical_trigger true. The PINNED pass-instant
+# tiebreak (a strike stamped at EXACTLY the baseline instant does not count)
+# is unaffected and still covered by "tie1" above.
 # =============================================================================
 reset_stores
 echo "$(score_row H codex reviewer 2026-08-20 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
@@ -349,9 +364,9 @@ strike_line "$SH_H" H codex reviewer critical_reexam_trigger security_canary_dis
 SS_H=$(node "$ESC" seat-status --engine H --runner codex --role reviewer --now 2026-08-22)
 adm_h=$(echo "$SS_H" | jq_get admission_status)
 ct_h=$(echo "$SS_H" | jq_get critical_trigger)
-[ "$adm_h" = "qualified" ] && [ "$ct_h" = "false" ] \
-  && ok "epoch2: a critical strike stamped LATER THE SAME DAY as the pass is cleared by epoch re-baselining (admission_status=qualified)" \
-  || bad "epoch2: admission_status=$adm_h critical_trigger=$ct_h (want qualified/false — same-day-after-pass must clear)"
+[ "$adm_h" = "requalify_required" ] && [ "$ct_h" = "true" ] \
+  && ok "epoch2: a critical strike stamped LATER THE SAME DAY as the pass COUNTS (fail-closed legacy date-only fallback, admission_status=requalify_required)" \
+  || bad "epoch2: admission_status=$adm_h critical_trigger=$ct_h (want requalify_required/true — same-day-after-pass must count, fail-closed)"
 
 # =============================================================================
 # Writer allowlist: a hand-written row with writer "operator" is excluded and
@@ -383,6 +398,77 @@ SS_G=$(node "$ESC" seat-status --engine G --runner codex --role reviewer --now 2
 sp_g=$(echo "$SS_G" | jq_get strikes_since_pass)
 [ "$sp_g" = "1" ] && ok "invalidate1: strike_invalidated with full proof removes exactly one strike (2 -> 1)" \
   || bad "invalidate1: strikes_since_pass=$sp_g (want 1)"
+
+# =============================================================================
+# FINDING 1 fix (2026-08-22 review repair): the PROJECTION's dedup must be
+# CLASS-AWARE, matching the write side (engine-capability-state.js
+# `appendStrike`, "BLOCKER 4 fix": dedup key is (seat_hash, dedup_key, class)).
+# Deduping on dedup_key ALONE at read time was class-blind: an ordinary_strike
+# sharing a dedup_key with a LATER critical_reexam_trigger hid the critical
+# row behind the lower event_id — silently disappearing the one class that
+# ENFORCES regardless of the shadow flag. Named regression (panel, mandatory):
+# an ordinary_strike at event_id N and a critical_reexam_trigger at event_id
+# N+1 sharing one dedup_key => critical_trigger true and admission_status
+# 'requalify_required' under the DEFAULT (shadow) flag — no --enforce needed,
+# because critical_reexam_trigger enforces unconditionally.
+# =============================================================================
+unset AUTOPILOT_STRIKE_ENFORCEMENT
+reset_stores
+echo "$(score_row I codex reviewer 2026-06-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
+SH_I=$(seat_hash I codex reviewer)
+{
+  strike_line "$SH_I" I codex reviewer ordinary_strike null fuse "rcpt-f1-1" "shared-dedup-1" "2026-06-02T00:00:00Z" 1
+  strike_line "$SH_I" I codex reviewer critical_reexam_trigger security_canary_disclosure fuse "rcpt-f1-2" "shared-dedup-1" "2026-06-03T00:00:00Z" 2
+} > "$STRIKES_FILE"
+SS_I=$(node "$ESC" seat-status --engine I --runner codex --role reviewer --now 2026-06-30)
+adm_i=$(echo "$SS_I" | jq_get admission_status)
+ct_i=$(echo "$SS_I" | jq_get critical_trigger)
+sp_i=$(echo "$SS_I" | jq_get strikes_since_pass)
+[ "$adm_i" = "requalify_required" ] && [ "$ct_i" = "true" ] \
+  && ok "dedup1: ordinary_strike(N) + critical_reexam_trigger(N+1) sharing one dedup_key => critical NOT hidden, admission_status=requalify_required under default shadow" \
+  || bad "dedup1: admission_status=$adm_i critical_trigger=$ct_i strikes_since_pass=$sp_i (want requalify_required/true)"
+
+# =============================================================================
+# FINDING 3 fix (2026-08-22 review repair): invalidation read-validation gains
+# two more conditions before an invalidation is honoured — (1) observed_at
+# well-formed AND within (baseline, now], (2) invalidates_event_id strictly
+# less than the invalidation row's OWN event_id (cannot invalidate a strike
+# that does not exist yet). Cross-seat deletion is already impossible via
+# countable's seat_hash-scoped parsedRows filter — deliberately untouched.
+# =============================================================================
+reset_stores
+echo "$(score_row J codex reviewer 2026-06-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
+SH_J=$(seat_hash J codex reviewer)
+{
+  strike_line "$SH_J" J codex reviewer ordinary_strike null fuse "rcpt-f3a-1" "inc-f3a-1:det-1" "2026-06-02T00:00:00Z" 1
+  strike_line "$SH_J" J codex reviewer ordinary_strike null fuse "rcpt-f3a-2" "inc-f3a-2:det-1" "2026-06-03T00:00:00Z" 2
+  # observed_at is BEFORE the seat's baseline (2026-05-01 < 2026-06-01) — out
+  # of the (baseline, now] window — so this invalidation must be refused.
+  invalidation_line "$SH_J" fuse 1 "2026-05-01T00:00:00Z" 3
+} > "$STRIKES_FILE"
+SS_J=$(node "$ESC" seat-status --engine J --runner codex --role reviewer --now 2026-06-30)
+sp_j=$(echo "$SS_J" | jq_get strikes_since_pass)
+rej_j=$(echo "$SS_J" | jq_get rejected_strikes)
+[ "$sp_j" = "2" ] && [ "$rej_j" = "1" ] \
+  && ok "invalidate2: invalidation with out-of-window observed_at is refused (both strikes still count, invalidation tallied into rejected_strikes)" \
+  || bad "invalidate2: strikes_since_pass=$sp_j rejected_strikes=$rej_j (want 2/1)"
+
+reset_stores
+echo "$(score_row K codex reviewer 2026-06-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
+SH_K=$(seat_hash K codex reviewer)
+{
+  strike_line "$SH_K" K codex reviewer ordinary_strike null fuse "rcpt-f3b-1" "inc-f3b-1:det-1" "2026-06-02T00:00:00Z" 1
+  # invalidates_event_id (2) is NOT strictly less than this invalidation row's
+  # own event_id (2, self-reference) — a strike cannot be invalidated before
+  # it exists — so this invalidation must be refused.
+  invalidation_line "$SH_K" fuse 2 "2026-06-03T00:00:00Z" 2
+} > "$STRIKES_FILE"
+SS_K=$(node "$ESC" seat-status --engine K --runner codex --role reviewer --now 2026-06-30)
+sp_k=$(echo "$SS_K" | jq_get strikes_since_pass)
+rej_k=$(echo "$SS_K" | jq_get rejected_strikes)
+[ "$sp_k" = "1" ] && [ "$rej_k" = "1" ] \
+  && ok "invalidate3: invalidation with invalidates_event_id >= its own event_id is refused (strike still counts, invalidation tallied into rejected_strikes)" \
+  || bad "invalidate3: strikes_since_pass=$sp_k rejected_strikes=$rej_k (want 1/1)"
 
 # =============================================================================
 # P3: no admission path compares `now` against `expires`. Grep-able negative

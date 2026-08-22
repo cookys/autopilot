@@ -1429,17 +1429,17 @@ function computeExpiryWarning(expiresValue, nowMs) {
   return ms !== null && ms < nowMs;
 }
 
-// End-of-day instant for a DATE-ONLY string (qualified_at is pinned date-only, :342).
-// Used only as the fold threshold fallback below — never for row selection/sorting,
-// which stays date-granular via toDateMs (start-of-day) so ties resolve by event_id.
-function endOfDayMs(dateValue) {
+// Start-of-day instant for a DATE-ONLY string (qualified_at is pinned date-only, :342).
+// Used only as the fold threshold fallback below — matches toDateMs (start-of-day),
+// the same granularity row selection/sorting already uses, so ties resolve by event_id.
+function startOfDayMs(dateValue) {
   if (typeof dateValue !== 'string' || dateValue.length < 10) return null;
   // `qualified_at` is contractually date-only (:342), but rows recorded without
   // an `evidence` field (manual/legacy) are not schema-bound to that shape at
   // write time — take only the date portion so a stray full timestamp here
-  // still yields the intended end of its calendar day, not an invalid string.
+  // still yields the intended start of its calendar day, not an invalid string.
   const datePart = dateValue.slice(0, 10);
-  const ms = Date.parse(`${datePart}T23:59:59.999Z`);
+  const ms = Date.parse(`${datePart}T00:00:00.000Z`);
   return Number.isFinite(ms) ? ms : null;
 }
 
@@ -1450,20 +1450,27 @@ function endOfDayMs(dateValue) {
 // as the threshold left every same-day-after-pass strike still counting against a seat
 // whose administration just passed, defeating the operator's only remedy.
 //
-// Fix: when the row carries a full-timestamp evidence receipt, use its exact
-// `issued_at` instant as the baseline — this ALSO preserves the pinned pass-instant
-// tiebreak (brainSeatStatus): a strike stamped at exactly that instant still fails
-// `observedMs > baselineMs` (strict), because it is the same value, not a looser day
-// bucket. When there is no full-timestamp evidence (legacy qualified/manual rows),
-// fall back to END of the pass date — so a same-day-after-pass strike (any instant that
-// day) is treated as pre-pass and cleared, matching the fix's intent without a
-// timestamp to be strict about.
+// FINDING 2 fix (2026-08-22 second review repair): the first cut of this fallback
+// used END of the pass date, which is FAIL-OPEN — a critical strike recorded later
+// that same day, after a same-day pass, fell inside the [start, end] window and was
+// silently treated as pre-pass and cleared. That is exactly backwards for the ONE
+// class that enforces regardless of the shadow flag. Every modern administration
+// carries `evidence.issued_at` (an exact instant, preferred above and unaffected by
+// this fallback); only legacy DATE-ONLY rows (no evidence, or evidence without
+// issued_at) reach this fallback, and for those the safe direction is to count the
+// strike, not clear it. Fix: fall back to START of the pass date instead — any
+// same-day strike (any instant that day, at or after 00:00:00.000Z) is treated as
+// AFTER the baseline and counts. This still preserves the pinned pass-instant
+// tiebreak (brainSeatStatus / :1580 validObserved): a strike stamped at exactly the
+// `issued_at` instant on the full-timestamp path still fails `observedMs >
+// baselineMs` (strict) — that tiebreak is unaffected by this fallback, which only
+// ever engages when there is no `issued_at` to be strict about.
 function baselineInstantMs(row, evidence) {
   if (evidence && typeof evidence.issued_at === 'string') {
     const ms = Date.parse(evidence.issued_at);
     if (Number.isFinite(ms)) return ms;
   }
-  return endOfDayMs(row.qualified_at);
+  return startOfDayMs(row.qualified_at);
 }
 
 // Baseline = the newest scorecard row for this seat (engine+runner+role, NOT
@@ -1583,20 +1590,47 @@ function foldSeatStrikes(seatHashValue, baselineQMs, nowMs) {
       && SEAT_TOKEN_RE.test(row.proof_detector_id.trim());
     const targetEventId = toEventId(row.invalidates_event_id);
     const validTarget = targetEventId !== null;
+    // FINDING 3 fix (2026-08-22 review repair): two additional read-validation
+    // conditions before an invalidation is honoured. Cross-seat deletion is
+    // already impossible via the seat_hash-scoped parsedRows filter above —
+    // deliberately not touched here (panel: do not "improve" it).
+    const ownEventId = toEventId(row.event_id);
+    // 1. observed_at must be well-formed AND within (baseline, now] — same
+    //    window discipline as a countable strike; an invalidation stamped
+    //    before the current baseline or in the future is not honoured.
+    const observedMs = Date.parse(row.observed_at);
+    const validObserved = Number.isFinite(observedMs)
+      && observedMs > baselineQMs
+      && observedMs <= nowMs;
+    // 2. invalidates_event_id must be strictly less than the invalidation
+    //    row's own event_id — a strike cannot be invalidated before it exists.
+    const validOrder = ownEventId !== null && validTarget && targetEventId < ownEventId;
 
-    if (!validWriter || !validProofArtifact || !validProofDetector || !validTarget) {
+    if (!validWriter || !validProofArtifact || !validProofDetector || !validTarget
+        || !validObserved || !validOrder) {
       rejected += 1;
       continue;
     }
     countable.delete(targetEventId);
   }
 
-  // Dedup (contract step 4): rows sharing dedup_key (already scoped to this
-  // seat_hash by the filter above) count once — lowest event_id wins.
+  // Dedup (contract step 4 — FINDING 1 fix, 2026-08-22 review repair): the key
+  // is (seat_hash, dedup_key, class), matching the write side exactly
+  // (engine-capability-state.js `appendStrike`, "BLOCKER 4 fix" comment).
+  // seat_hash is already the filter scope above, so here the composite is
+  // (dedup_key, class). Deduping on dedup_key ALONE was class-blind: an
+  // ordinary_strike that reached the store first (lower event_id) would
+  // silently hide a later critical_reexam_trigger sharing the same
+  // dedup_key — exactly the one class that ENFORCES regardless of the
+  // shadow flag. Two rows of the SAME class sharing a dedup_key still
+  // collapse to one (retry idempotency preserved); two rows of DIFFERENT
+  // classes sharing a dedup_key are independent root incidents and both
+  // survive dedup.
   const lowestByDedupKey = new Map();
   for (const [eid, info] of countable.entries()) {
-    const existing = lowestByDedupKey.get(info.dedup_key);
-    if (existing === undefined || eid < existing) lowestByDedupKey.set(info.dedup_key, eid);
+    const key = JSON.stringify([info.class, info.dedup_key]);
+    const existing = lowestByDedupKey.get(key);
+    if (existing === undefined || eid < existing) lowestByDedupKey.set(key, eid);
   }
   const keepIds = new Set(lowestByDedupKey.values());
 

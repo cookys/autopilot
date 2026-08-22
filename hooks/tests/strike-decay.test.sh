@@ -462,6 +462,64 @@ BRAIN_STATUS_FIELD="$(echo "$BRAIN_STATUS_OUT" | jq_get status)"
   && ok "17: brainSeatStatus tolerates a corrupt strike line in the same file and still exits 0" \
   || bad "17: rc=$BRAIN_STATUS_RC status=$BRAIN_STATUS_FIELD out=$BRAIN_STATUS_OUT"
 
+# ── 18: FINDING 4 (dedup POISONING, 2026-08-22 review repair) — a hand-written,
+# structurally-valid but NON-ALLOWLISTED row must not reserve a dedup key and
+# suppress the legitimate strike. Mandatory planted negative named by the
+# depth-0 panel. Also re-asserts the pre-existing true-dedup behavior still
+# holds for a repeat from an allowlisted writer.
+reset_strikes
+SCORECARD_TESTDIR="$TESTDIR/scorecard-f4"
+mkdir -p "$SCORECARD_TESTDIR"
+ESC="$ROOT/scripts/engine-scorecard.js"
+F4_ENGINE="gpt-5"; F4_RUNNER="codex"; F4_ROLE="implementer"
+F4_SEAT_HASH="$(node "$CLI" seat-hash --engine "$F4_ENGINE" --runner "$F4_RUNNER" --role "$F4_ROLE" | jq_get seat_hash)"
+# A structurally-valid v2 row (passes validateStrikeV2Shape) whose writer
+# "operator" is NOT in STRIKE_WRITER_ALLOWLIST — never countable at read
+# time, so it must never be able to reserve the dedup key either.
+node -e '
+const fs = require("fs");
+const row = {
+  schema_version: 2, event_id: 1, kind: "strike",
+  seat_hash: process.argv[1], engine: process.argv[2], runner: process.argv[3], role: process.argv[4],
+  class: "ordinary_strike", predicate_id: null, cause_class: "engine_output",
+  writer: "operator", dedup_key: "f4-shared-key", detector_id: "det1", detector_version: "v1",
+  artifact_sha256: "'"$SHA_A"'", receipt_ref: "r-poison", observed_at: "2026-08-01T00:00:00Z",
+  invalidates_event_id: null, proof_artifact_sha256: null, proof_detector_id: null,
+};
+fs.writeFileSync(process.argv[5], JSON.stringify(row) + "\n");
+' "$F4_SEAT_HASH" "$F4_ENGINE" "$F4_RUNNER" "$F4_ROLE" "$TESTDIR/strikes.jsonl"
+# The REAL writer (allowlisted: fuse) strikes the same (seat_hash, dedup_key, class)
+# triple. It must be APPENDED (not deduplicated away by the poisoned row).
+REAL_OUT="$(strike_seat "$F4_ENGINE" "$F4_RUNNER" "$F4_ROLE" ordinary_strike '' engine_output fuse f4-shared-key det1 v1 "$SHA_A" r-real 2026-08-02T00:00:00Z)"
+REAL_RC=$?
+REAL_DEDUP_FLAG="$(echo "$REAL_OUT" | jq_get deduplicated)"
+REAL_EVENT_ID="$(echo "$REAL_OUT" | jq_get event_id)"
+LINES_18A="$(wc -l < "$TESTDIR/strikes.jsonl")"
+# Pre-existing true-dedup behavior must still hold: a REPEAT from the SAME
+# allowlisted writer with the same triple still collapses to one line.
+REPEAT_OUT="$(strike_seat "$F4_ENGINE" "$F4_RUNNER" "$F4_ROLE" ordinary_strike '' engine_output fuse f4-shared-key det1 v1 "$SHA_A" r-real-again 2026-08-03T00:00:00Z)"
+REPEAT_RC=$?
+REPEAT_DEDUP_FLAG="$(echo "$REPEAT_OUT" | jq_get deduplicated)"
+LINES_18B="$(wc -l < "$TESTDIR/strikes.jsonl")"
+[ "$REAL_RC" = "0" ] && [ "$REAL_DEDUP_FLAG" != "true" ] && [ "$REAL_EVENT_ID" = "2" ] && [ "$LINES_18A" = "2" ] \
+  && [ "$REPEAT_RC" = "0" ] && [ "$REPEAT_DEDUP_FLAG" = "true" ] && [ "$LINES_18B" = "2" ] \
+  && ok "18a: a non-allowlisted hand-written row cannot reserve a dedup key — the legitimate strike is appended, not swallowed; a true repeat from the allowlisted writer still dedups to one line" \
+  || bad "18a: real_rc=$REAL_RC real_dedup=$REAL_DEDUP_FLAG real_eid=$REAL_EVENT_ID lines_a=$LINES_18A repeat_rc=$REPEAT_RC repeat_dedup=$REPEAT_DEDUP_FLAG lines_b=$LINES_18B"
+
+# 18b: the projection (engine-scorecard.js, independently-owned read-side)
+# counts exactly ONE strike from this file for this seat — the poisoned row
+# was excluded from admission all along (rejected_strikes), and the fix above
+# just stopped it from blocking the real one at write time.
+cat <<JSON | ENGINE_SCORECARD_DIR="$SCORECARD_TESTDIR" node "$ESC" record >/dev/null 2>&1
+{"engine":"$F4_ENGINE","runner":"$F4_RUNNER","family":"f","role":"$F4_ROLE","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-07-01","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-07-01","expires":"2099-01-01"}
+JSON
+SS_18="$(ENGINE_SCORECARD_DIR="$SCORECARD_TESTDIR" ENGINE_CAPABILITY_DIR="$TESTDIR" node "$ESC" seat-status --engine "$F4_ENGINE" --runner "$F4_RUNNER" --role "$F4_ROLE" --now 2026-08-22)"
+SS_18_SP="$(echo "$SS_18" | jq_get strikes_since_pass)"
+SS_18_REJ="$(echo "$SS_18" | jq_get rejected_strikes)"
+[ "$SS_18_SP" = "1" ] && [ "$SS_18_REJ" = "1" ] \
+  && ok "18b: projection counts exactly ONE strike (the real one) and rejects the poisoned hand-written row" \
+  || bad "18b: strikes_since_pass=$SS_18_SP rejected_strikes=$SS_18_REJ out=$SS_18"
+
 echo "----"
 echo "strike-decay unit tests: $PASS passed, $FAIL failed"
 [ "$FAIL" = "0" ]

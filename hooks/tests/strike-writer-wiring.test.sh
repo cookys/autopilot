@@ -480,6 +480,79 @@ else
 fi
 
 # =========================================================================
+# 11. FINDING 6 (2026-08-22 review repair) — AUTOPILOT_STRIKE_WRITER=off must be
+#     LOUD, not a silent kill-switch. End-to-end, real script, real manifest
+#     sidecar (never this script's own stdout/exit code — those stay unchanged,
+#     asserted below).
+# =========================================================================
+E11_MANIFEST_DIR="$TESTDIR/e2e-11-manifests"
+E11_OFF_STORE="$TESTDIR/e2e-11-off-store"
+E11_ON_STORE="$TESTDIR/e2e-11-on-store"
+mkdir -p "$E11_MANIFEST_DIR" "$E11_OFF_STORE" "$E11_ON_STORE"
+
+manifest_field() { # manifest_dir run_id field
+  local mf="$1/${2}.manifest.json"
+  [ -f "$mf" ] || { echo "__missing__"; return; }
+  node -e '
+    const fs = require("fs");
+    let d;
+    try { d = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch (e) { process.stdout.write("__unparseable__"); process.exit(0); }
+    const v = d[process.argv[2]];
+    process.stdout.write(v === undefined ? "__absent__" : String(v));
+  ' "$mf" "$3"
+}
+
+# 11a: hatch OFF + a fail-closed outcome ⇒ NO strike row, but the manifest
+# DOES carry the suppression marker naming the seat. AUTOPILOT_DISPATCH_RUNS_DIR
+# must be set on the WRITING invocation (write_manifest reads it at run time),
+# not just on the later read.
+OUT11_OFF="$(cd "$SBX" && AUTOPILOT_DISPATCH_RUNS_DIR="$E11_MANIFEST_DIR" AUTOPILOT_STRIKE_WRITER=off "$SCRIPT" --branch feat/strike-e2e-11-off --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_FAIL" --model "strike-engine-1" --runner agy --store "$E11_OFF_STORE" \
+  --run-id strike-e2e-11-off-run 2>&1)"
+EXIT11_OFF=$?
+WT11OFF="$(printf '%s' "$OUT11_OFF" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+[ -n "$WT11OFF" ] && git -C "$SBX" worktree remove --force "$WT11OFF" >/dev/null 2>&1 || true
+
+if [ -f "$E11_OFF_STORE/strikes.jsonl" ]; then
+  bad "11a: AUTOPILOT_STRIKE_WRITER=off still wrote a strike row (hatch not honored)"
+else
+  ok "11a: AUTOPILOT_STRIKE_WRITER=off writes NO strike row"
+fi
+
+SUPP_FLAG="$(manifest_field "$E11_MANIFEST_DIR" "strike-e2e-11-off-run" strike_writer_suppressed)"
+SUPP_SEAT="$(manifest_field "$E11_MANIFEST_DIR" "strike-e2e-11-off-run" strike_writer_suppressed_seat)"
+[ "$SUPP_FLAG" = "true" ] \
+  && ok "11c: hatch OFF stamps strike_writer_suppressed:true into the manifest sidecar" \
+  || bad "11c: strike_writer_suppressed=$SUPP_FLAG (expected true) — suppression is silent"
+[ "$SUPP_SEAT" = "strike-engine-1/agy/implementer" ] \
+  && ok "11d: manifest names the suppressed seat (strike-engine-1/agy/implementer)" \
+  || bad "11d: strike_writer_suppressed_seat=$SUPP_SEAT (expected strike-engine-1/agy/implementer)"
+
+# 11b: same scenario, hatch ON (default) ⇒ one strike row lands, and the
+# manifest carries NO suppression marker at all (field absent, not false).
+OUT11_ON="$(cd "$SBX" && AUTOPILOT_DISPATCH_RUNS_DIR="$E11_MANIFEST_DIR" "$SCRIPT" --branch feat/strike-e2e-11-on --prompt-file "$PROMPT" \
+  --agy-bin "$STUB_FAIL" --model "strike-engine-1" --runner agy --store "$E11_ON_STORE" \
+  --run-id strike-e2e-11-on-run 2>&1)"
+EXIT11_ON=$?
+WT11ON="$(printf '%s' "$OUT11_ON" | grep -o '"worktree": "[^"]*"' | cut -d'"' -f4)"
+[ -n "$WT11ON" ] && git -C "$SBX" worktree remove --force "$WT11ON" >/dev/null 2>&1 || true
+
+[ -f "$E11_ON_STORE/strikes.jsonl" ] && [ "$(strike_count "$E11_ON_STORE/strikes.jsonl")" = "1" ] \
+  && ok "11b: hatch ON (default) writes exactly one strike row (control)" \
+  || bad "11b: expected exactly one strike row with the hatch on, got $([ -f "$E11_ON_STORE/strikes.jsonl" ] && strike_count "$E11_ON_STORE/strikes.jsonl" || echo missing)"
+
+ON_SUPP_FLAG="$(manifest_field "$E11_MANIFEST_DIR" "strike-e2e-11-on-run" strike_writer_suppressed)"
+[ "$ON_SUPP_FLAG" = "__absent__" ] \
+  && ok "11e: hatch ON (default) — manifest has NO strike_writer_suppressed field at all" \
+  || bad "11e: strike_writer_suppressed field present/wrong with hatch on: $ON_SUPP_FLAG"
+
+# 11f: the hatch's suppression NEVER changes this script's own exit code —
+# same fail-closed exit (1) as the wired-on control, only the strike write differs.
+[ "$EXIT11_OFF" = "$EXIT11_ON" ] \
+  && ok "11f: exit code identical regardless of the hatch (off=$EXIT11_OFF on=$EXIT11_ON)" \
+  || bad "11f: exit code differs by hatch state — off=$EXIT11_OFF on=$EXIT11_ON"
+
+# =========================================================================
 printf '\n%s: %d passed, %d failed\n' "strike-writer-wiring" "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
 exit 0

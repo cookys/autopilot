@@ -1234,29 +1234,45 @@ function checkPolicy(contract, repo, contractSha, resolvedEngine, options = {}) 
       : null;
 
     if (!matched) {
-      // P7/KR6: the operator's explicit per-invocation override is the only
-      // evidence-free admission; absent both evidence and override → refusal.
-      const override = loadQualificationOverride(
-        options.overridePath, storeRole, resolvedEngine, reasons,
-      );
-      if (override) {
-        engineAssurance = 'operator-override';
-        qualificationOverride = {
-          reason: override.reason,
-          operator: override.operator,
-          expires: override.expires,
-        };
+      // A matching-seat row that failed admission specifically because of
+      // strike-decay (§2.7) gets a reason that NAMES the strike cause, so a
+      // strike NO-GO reads differently from a "no qualified row at all" one.
+      const strikeRow = Array.isArray(scoreRows)
+        ? scoreRows.find((row) => scorecardRowMatchesEngine(row, storeRole, resolvedEngine)
+          && row.admission_status === 'requalify_required')
+        : null;
+
+      if (strikeRow) {
+        // FINDING 5 fix (2026-08-22 review repair, Board ruling): strike-blocked
+        // MUST be detected before the operator override is even consulted. An
+        // evidence-free override bypassing a `requalify_required` seat is exactly
+        // the rerun-until-green / talk-your-way-out escape strike-decay forbids
+        // (references/strike-decay.md) — the only exit from a strike block is a
+        // fresh PASSING administration that re-baselines admission_status back to
+        // 'qualified', never an override. loadQualificationOverride is
+        // deliberately never called on this branch, so a strike-blocked seat can
+        // never reach engineAssurance = 'operator-override'.
+        reasons.push(strikeReasonMessage(strikeRow));
       } else {
-        // A matching-seat row that failed admission specifically because of
-        // strike-decay (§2.7) gets a reason that NAMES the strike cause, so a
-        // strike NO-GO reads differently from a "no qualified row at all" one.
-        const strikeRow = Array.isArray(scoreRows)
-          ? scoreRows.find((row) => scorecardRowMatchesEngine(row, storeRole, resolvedEngine)
-            && row.admission_status === 'requalify_required')
-          : null;
-        reasons.push(strikeRow
-          ? strikeReasonMessage(strikeRow)
-          : 'engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
+        // P7/KR6: the operator's explicit per-invocation override is the only
+        // evidence-free admission; absent both evidence and override → refusal.
+        // Reaches here only for a seat with NO matching scorecard row at all, or
+        // one whose row is `provisional`-but-inadmissible-for-this-output-kind —
+        // never a strike-blocked seat (excluded above) — so the override's
+        // legitimate uses are unaffected.
+        const override = loadQualificationOverride(
+          options.overridePath, storeRole, resolvedEngine, reasons,
+        );
+        if (override) {
+          engineAssurance = 'operator-override';
+          qualificationOverride = {
+            reason: override.reason,
+            operator: override.operator,
+            expires: override.expires,
+          };
+        } else {
+          reasons.push('engine: no qualified scorecard row for configured role/engine/runner (per-invocation --qualification-override is the only evidence-free path)');
+        }
       }
     } else if (matched.status === 'provisional') {
       // Explicit provisional assurance for bounded labor only (implementer commit

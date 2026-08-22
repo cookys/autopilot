@@ -381,6 +381,17 @@ OUTCOME_GATE_ATTEMPTS=0
 OUTCOME_RESOURCES_CREATED=0
 OUTCOME_ZERO_DIFF_RECEIPT_DIGEST=""
 CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome); read by classify_outcome
+# FINDING 6 fix (2026-08-22 review repair): AUTOPILOT_STRIKE_WRITER=off is a debug
+# escape hatch that suppresses seat_strike_capture's write. Left silent, a suppressed
+# strike is indistinguishable from "nothing was strike-eligible" — the exact
+# "existing is not evidence it is running" failure family (CLAUDE.md /
+# evidence-discipline.md §1). These two vars are set ONLY when a strike WOULD have
+# been written and the hatch suppressed it; write_manifest emits them into the
+# manifest sidecar (never into this script's own stdout/exit code) so a suppressed
+# strike is visible in the run's artifacts. Empty/unset = not suppressed = no
+# marker in the manifest at all (default-on behavior stays byte-identical).
+STRIKE_WRITER_SUPPRESSED=""
+STRIKE_WRITER_SUPPRESSED_SEAT=""
 # shellcheck source=/dev/null
 . "$SELF_DIR/lib/worktree-reap.sh"
 # When dispatch_new claims a Work Order, terminal finalizer must fail closed (never swallow).
@@ -1463,13 +1474,20 @@ write_manifest() {
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
   fi
+  # FINDING 6 fix: only present when seat_strike_capture actually suppressed a
+  # would-have-fired strike under AUTOPILOT_STRIKE_WRITER=off — absent (not just
+  # false) in the default-on case, so the field's mere presence is the signal.
+  local strike_suppressed_fields=""
+  if [ "${STRIKE_WRITER_SUPPRESSED:-}" = "1" ]; then
+    strike_suppressed_fields=", \"strike_writer_suppressed\": true, \"strike_writer_suppressed_seat\": \"$(_flat_json_escape "$STRIKE_WRITER_SUPPRESSED_SEAT")\""
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s%s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" "$strike_suppressed_fields" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -3486,8 +3504,15 @@ STRIKE_DETECTOR_VERSION="1"
 #   4. OUTCOME_STATUS in {committed, no_op, question_suspected} — success, or not a
 #                                             fail-closed delivery outcome.
 # Everything else that reaches here with dispatcher_called=1 is strike-eligible.
+#
+# FINDING 6 fix (2026-08-22 review repair): exclusion #1 (AUTOPILOT_STRIKE_WRITER=off)
+# is now evaluated LAST, after strike-eligibility (exclusions #2-#4) is already
+# decided — so we know whether this run WOULD have struck before deciding whether the
+# hatch suppresses it. A suppressed strike is never silent: STRIKE_WRITER_SUPPRESSED
+# is set and write_manifest is called again so the run's manifest sidecar carries
+# `strike_writer_suppressed: true` + the seat. This never touches OUTCOME_*, this
+# script's stdout, or its exit code — same fail-soft contract as before.
 seat_strike_capture() {
-  [ "${AUTOPILOT_STRIKE_WRITER:-on}" = "off" ] && return 0
   [ "${OUTCOME_DISPATCHER_CALLED:-1}" -eq 0 ] && return 0
 
   local status="${OUTCOME_STATUS:-}"
@@ -3533,6 +3558,17 @@ seat_strike_capture() {
     *)
       return 0 ;;
   esac
+
+  # A strike WOULD be written from this point on — every exclusion has already
+  # returned. Only now does the debug hatch get to suppress it, and only LOUDLY:
+  # set outside the write subshell (subshell vars don't survive back to this
+  # function) so write_manifest can stamp the manifest sidecar before we return.
+  if [ "${AUTOPILOT_STRIKE_WRITER:-on}" = "off" ]; then
+    STRIKE_WRITER_SUPPRESSED="1"
+    STRIKE_WRITER_SUPPRESSED_SEAT="$MODEL/$(_hetero_runner_token)/implementer"
+    write_manifest 2>/dev/null || true
+    return 0
+  fi
 
   (
     local runner; runner="$(_hetero_runner_token)"

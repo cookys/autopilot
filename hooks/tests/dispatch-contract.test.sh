@@ -531,6 +531,43 @@ assert_eq "$rc" "3"
 assert_nogo_json "$out" "quota"
 assert_not_contains "$out" "fallback"
 
+echo "--- Case 3.5: FINDING 5 fix (2026-08-22 review repair) — operator override MUST NOT bypass a strike block ---"
+# Board ruling: the evidence-free per-invocation --qualification-override is
+# NOT a valid exit from admission_status: 'requalify_required'. The only exit
+# from a strike block is a fresh PASSING administration (strike-decay.md);
+# an override bypassing it would be exactly the rerun-until-green /
+# talk-your-way-out escape the design forbids. Named regression (panel,
+# mandatory): override file present + a requalify_required row => NO-GO.
+mkdir -p "$STORE_BASE/strike_override"
+env ENGINE_SCORECARD_DIR="$STORE_BASE/strike_override" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/valid/score.json" > /dev/null 2>&1 || {
+  echo "FATAL: engine-scorecard.js failed setup (strike_override)"; exit 1
+}
+env ENGINE_CAPABILITY_DIR="$STORE_BASE/strike_override" node "$REPO_ROOT/scripts/engine-capability-state.js" record --file "$STORE_BASE/valid/cap.json" > /dev/null 2>&1 || {
+  echo "FATAL: engine-capability-state.js failed setup (strike_override, quota)"; exit 1
+}
+# A single critical_reexam_trigger strike is enough — it ENFORCES regardless
+# of AUTOPILOT_STRIKE_ENFORCEMENT (shadow is the ambient default here), unlike
+# ordinary_strike which needs 3 + --enforce. Registered predicate, allowlisted
+# writer, well-formed artifact hash — a countable strike per §2.7.
+env ENGINE_CAPABILITY_DIR="$STORE_BASE/strike_override" node "$REPO_ROOT/scripts/engine-capability-state.js" strike-seat \
+  --engine gpt-5.3-codex-spark --runner codex --role implementer \
+  --class critical_reexam_trigger --predicate-id security_canary_disclosure \
+  --cause-class engine_output --writer fuse --dedup-key "f5-inc-1:det-1" \
+  --detector-id det-1 --detector-version v1 \
+  --artifact-sha256 "$(printf 'a%.0s' $(seq 1 64))" --receipt-ref "rcpt-f5-1" \
+  --now "2026-07-01T00:00:00Z" \
+  > /dev/null 2>&1 || {
+  echo "FATAL: engine-capability-state.js strike-seat failed setup (strike_override)"; exit 1
+}
+cat > "$TEST_TMP/override-f5.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"gpt-5.3-codex-spark","runner":"codex","role":"implementer","reason":"operator accepts risk","operator":"cookys","expires":"2099-01-01"}]}
+JSON
+out=$(env ENGINE_SCORECARD_DIR="$STORE_BASE/strike_override" ENGINE_CAPABILITY_DIR="$STORE_BASE/strike_override" node "$REPO_ROOT/scripts/dispatch-contract.js" check --contract "$CONTRACT_DIR/valid.json" --repo "$MINI_REPO" --qualification-override "$TEST_TMP/override-f5.json" --json 2>&1); rc=$?
+assert_eq "$rc" "3"
+assert_nogo_json "$out" "requalification"
+assert_not_contains "$out" "operator-override"
+assert_contains "$out" "critical_reexam_trigger" "the NO-GO reason names the strike cause, distinguishing it from a plain no-record NO-GO"
+
 assert_red_green_clean "$MINI_REPO"
 
 # === CASE 4: Correct Rejection Class (Exit 2 for schema, 3 for policy) ===

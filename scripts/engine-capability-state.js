@@ -1040,6 +1040,42 @@ function normalizeEventIdRef(raw, label) {
 // append sharing (seat_hash, dedup_key) with an existing kind:'strike' row does NOT
 // write a second line — it returns the existing row with `deduplicated: true` added
 // only to the return value (never persisted).
+// FINDING 4 fix (2026-08-22 review repair, dedup POISONING): only a row that
+// would be COUNTABLE at read time is allowed to reserve a dedup key. Without
+// this, a structurally-valid but non-allowlisted hand-written row (e.g.
+// writer: "operator") could sit in the file, be excluded by the projection's
+// read-time validation (rejected_strikes), and STILL match the write-side
+// dedup lookup below — silently swallowing the real writer's legitimate
+// strike as a no-op. A row that would not count must not be able to block
+// one that would.
+//
+// Re-derives (does NOT import — same discipline as the model-id charset
+// coupling documented at capability-evidence.js:129-141) the subset of
+// scripts/engine-scorecard.js `foldSeatStrikes`' countable-strike predicate
+// (P1, ~L1541-1550: validWriter / validReceipt / validArtifact) that a
+// write-time row can evaluate WITHOUT the baseline/now window a read-time
+// fold has and a write does not (no `validObserved` check here — this
+// function only decides dedup-key eligibility, not final admission). The
+// remaining projection checks (validClass, validPredicate, validDedup, valid
+// event_id, and overall row shape) are already guaranteed for every row this
+// function sees, because `rows` comes from readStrikeRowsLenient, which only
+// yields rows that already passed validateStrikeV2Shape — a row failing
+// those could not appear in `rows` at all.
+//
+// Fields validated here, exactly matching foldSeatStrikes' local names:
+//   - writer         -> must be in STRIKE_WRITER_ALLOWLIST     (validWriter)
+//   - receipt_ref     -> non-empty string                       (validReceipt)
+//   - artifact_sha256 -> well-formed 64-hex sha256               (validArtifact)
+//
+// MUST stay in sync with foldSeatStrikes' validWriter/validReceipt/
+// validArtifact checks in scripts/engine-scorecard.js: if that predicate
+// changes, update this one in the same commit.
+function isReadTimeCountableStrikeRow(row) {
+  return typeof row.writer === 'string' && STRIKE_WRITER_ALLOWLIST.includes(row.writer)
+    && typeof row.receipt_ref === 'string' && row.receipt_ref.length > 0
+    && isSha256(row.artifact_sha256);
+}
+
 function appendStrikeSeatRecord(config, input) {
   const seatIdentity = normalizeSeatIdentity(input);
   const seatHash = seatHashOf(seatIdentity);
@@ -1065,11 +1101,17 @@ function appendStrikeSeatRecord(config, input) {
     // holding a dedup_key silently swallowed a later critical_reexam_trigger
     // sharing that key, dropping the one class that ENFORCES today. A true
     // repeat of the SAME class still dedups to one line.
+    //
+    // FINDING 4 fix: the match ALSO requires the existing row to be
+    // read-time-countable (isReadTimeCountableStrikeRow, above) — a
+    // non-allowlisted or otherwise never-counted row must not be able to
+    // reserve the key and suppress the legitimate strike.
     const existing = rows.find((row) => row.schema_version === 2
       && row.kind === 'strike'
       && row.seat_hash === seatHash
       && row.dedup_key === dedupKey
-      && row.class === klass);
+      && row.class === klass
+      && isReadTimeCountableStrikeRow(row));
     if (existing) {
       return { row: existing, deduplicated: true };
     }

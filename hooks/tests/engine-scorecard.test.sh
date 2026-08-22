@@ -55,12 +55,21 @@ echo "$(row A r2 f reviewer c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI
 cnt=$(node "$CLI" current --role reviewer --now 2026-06-30 | arrlen)
 [ "$cnt" = "2" ] && ok "4: differing runner => 2 identities" || bad "4: cnt=$cnt want 2"
 
-# 5: TTL expiry derived at read time, no store mutation
+# 5: past-expires is advisory-only (calendar tooth pulled 2026-08-22), never
+# derived as expired; no store mutation. Disk-backed projection maps the
+# observed-qualified state to status=provisional (untrusted telemetry) while
+# observed_status/admission_status carry the real (never-expired) truth.
 reset
 echo "$(row A r f reviewer c@1 0.9 manual 0 qualified 2026-01-01)" | node "$CLI" record >/dev/null 2>&1
-st=$(node "$CLI" current --role reviewer --now 2026-06-30 | jq_get 0.status)
+out=$(node "$CLI" current --role reviewer --now 2026-06-30)
+st=$(echo "$out" | jq_get 0.status)
+obs=$(echo "$out" | jq_get 0.observed_status)
+adm=$(echo "$out" | jq_get 0.admission_status)
+ew=$(echo "$out" | jq_get 0.expiry_warning)
 stored=$(grep -o '"status":"[a-z]*"' "$TESTDIR/scorecard.jsonl" | head -1)
-[ "$st" = "expired" ] && [ "$stored" = '"status":"qualified"' ] && ok "5: past-expires => expired at read, store unmutated" || bad "5: derived=$st stored=$stored"
+[ "$st" = "provisional" ] && [ "$obs" = "qualified" ] && [ "$adm" = "qualified" ] && [ "$ew" = "true" ] && [ "$stored" = '"status":"qualified"' ] \
+  && ok "5: past-expires => qualified+expiry_warning at read, store unmutated" \
+  || bad "5: status=$st observed_status=$obs admission_status=$adm expiry_warning=$ew stored=$stored"
 
 # 6: disk-only report cannot surface a qualified candidate, regardless of cost.
 reset

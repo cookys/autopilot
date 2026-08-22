@@ -381,6 +381,17 @@ OUTCOME_GATE_ATTEMPTS=0
 OUTCOME_RESOURCES_CREATED=0
 OUTCOME_ZERO_DIFF_RECEIPT_DIGEST=""
 CLASSIFIED_ERROR=""   # set by passive_capture (classify-error once per outcome); read by classify_outcome
+# FINDING 6 fix (2026-08-22 review repair): AUTOPILOT_STRIKE_WRITER=off is a debug
+# escape hatch that suppresses seat_strike_capture's write. Left silent, a suppressed
+# strike is indistinguishable from "nothing was strike-eligible" — the exact
+# "existing is not evidence it is running" failure family (CLAUDE.md /
+# evidence-discipline.md §1). These two vars are set ONLY when a strike WOULD have
+# been written and the hatch suppressed it; write_manifest emits them into the
+# manifest sidecar (never into this script's own stdout/exit code) so a suppressed
+# strike is visible in the run's artifacts. Empty/unset = not suppressed = no
+# marker in the manifest at all (default-on behavior stays byte-identical).
+STRIKE_WRITER_SUPPRESSED=""
+STRIKE_WRITER_SUPPRESSED_SEAT=""
 # shellcheck source=/dev/null
 . "$SELF_DIR/lib/worktree-reap.sh"
 # When dispatch_new claims a Work Order, terminal finalizer must fail closed (never swallow).
@@ -1463,13 +1474,20 @@ write_manifest() {
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_manifest_fields=", \"unit_id\": \"$(_flat_json_escape "$STRICT_UNIT_ID")\", \"contract_sha256\": \"$(_flat_json_escape "$STRICT_CONTRACT_SHA")\", \"go\": \"$(_flat_json_escape "$STRICT_GO")\""
   fi
+  # FINDING 6 fix: only present when seat_strike_capture actually suppressed a
+  # would-have-fired strike under AUTOPILOT_STRIKE_WRITER=off — absent (not just
+  # false) in the default-on case, so the field's mere presence is the signal.
+  local strike_suppressed_fields=""
+  if [ "${STRIKE_WRITER_SUPPRESSED:-}" = "1" ]; then
+    strike_suppressed_fields=", \"strike_writer_suppressed\": true, \"strike_writer_suppressed_seat\": \"$(_flat_json_escape "$STRIKE_WRITER_SUPPRESSED_SEAT")\""
+  fi
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s%s%s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
-      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" > "$tmp"
+      "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" "$strict_manifest_fields" "$strike_suppressed_fields" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
   return 0
 }
@@ -3391,6 +3409,19 @@ run_strict_contract_postchecks() {
   return 0
 }
 
+# _hetero_runner_token — the single derivation of "which runner is this dispatch using"
+# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER flags, shared by passive_capture and
+# seat_strike_capture (factored out rather than copy-pasted, per repo convention).
+_hetero_runner_token() {
+  local runner="agy"
+  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
+  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  printf '%s' "$runner"
+}
+
 passive_capture() {
   local status="${1:-}"
   CLASSIFIED_ERROR=""
@@ -3404,12 +3435,7 @@ passive_capture() {
           quota_exhausted) quota_status="exhausted"; confidence="high" ;;
           rate_limited)    quota_status="limited"; confidence="medium" ;;
         esac
-        local runner="agy"
-        [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
-        [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
-        [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
-        [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
-        [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+        local runner; runner="$(_hetero_runner_token)"
         local observed_at; observed_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         # Exact effort/endpoint tuple — null endpoint means explicit no-endpoint wallet.
         local _ep_key="${ENDPOINT:-}"
@@ -3454,6 +3480,153 @@ _is_engine_unavailable() {
     quota_exhausted|rate_limited|auth_failed|overloaded) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Detector identity for seat_strike_capture's strikes (references/strike-decay.md).
+# Bump this literal whenever the classification logic below materially changes.
+STRIKE_DETECTOR_VERSION="1"
+
+# seat_strike_capture — the FIRST REAL PRODUCTION WRITER of seat-scoped no-confidence
+# strikes (references/strike-decay.md, scripts/engine-capability-state.js `strike-seat`).
+# Fires ONLY on a post-dispatcher_called fail-closed OUTCOME_STATUS: the pair was routed
+# and did not deliver. Always fail-soft — never changes this script's own exit code,
+# stdout bytes, or OUTCOME_* state (wrapped exactly like passive_capture: subshell,
+# output to /dev/null, `|| true`).
+#
+# THE CLOSED EXCLUSION LIST — read this comment, don't trace control flow, to know what
+# never strikes:
+#   1. AUTOPILOT_STRIKE_WRITER=off          — operator escape hatch so debugging the rail
+#                                             can never poison the store. Default is ON.
+#   2. OUTCOME_DISPATCHER_CALLED = 0        — pre-dispatch host abort; nothing was routed.
+#   3. OUTCOME_STATUS = engine_unavailable  — the closed external-cause enum in practice:
+#                                             quota_exhausted | rate_limited | auth_failed |
+#                                             overloaded, per _is_engine_unavailable().
+#   4. OUTCOME_STATUS in {committed, no_op, question_suspected} — success, or not a
+#                                             fail-closed delivery outcome.
+# Everything else that reaches here with dispatcher_called=1 is strike-eligible.
+#
+# FINDING 6 fix (2026-08-22 review repair): exclusion #1 (AUTOPILOT_STRIKE_WRITER=off)
+# is now evaluated LAST, after strike-eligibility (exclusions #2-#4) is already
+# decided — so we know whether this run WOULD have struck before deciding whether the
+# hatch suppresses it. A suppressed strike is never silent: STRIKE_WRITER_SUPPRESSED
+# is set and write_manifest is called again so the run's manifest sidecar carries
+# `strike_writer_suppressed: true` + the seat. This never touches OUTCOME_*, this
+# script's stdout, or its exit code — same fail-soft contract as before.
+seat_strike_capture() {
+  [ "${OUTCOME_DISPATCHER_CALLED:-1}" -eq 0 ] && return 0
+
+  local status="${OUTCOME_STATUS:-}"
+  local cause_class=""
+  # cause_class mapping — derived ONLY from the host's own classification of OUTCOME_STATUS,
+  # never from anything the runner said about itself (ADR-0001). Diagnostic only; never
+  # suppresses accrual (references/strike-decay.md § The seat is the pair).
+  case "$status" in
+    # strict-contract boundary/acceptance rejections: the host mechanically re-derived a
+    # false predicate against what the engine produced — engine-attributable.
+    acceptance_failed|boundary_rejected)
+      cause_class="engine_output" ;;
+    # an envelope/transport-shaped failure the host detected (unparseable result, not a
+    # content judgment) — delivery is part of the pair's contract (strike-decay.md), so
+    # this STILL ACCRUES; cause_class only steers remedy at threshold.
+    no_verdict)
+      cause_class="runner_delivery" ;;
+    # generic fail-closed outcomes (nonzero exit, dirty tree) where the host cannot
+    # mechanically attribute fault to engine vs runner from that signal alone.
+    failure|dirty)
+      cause_class="ambiguous" ;;
+    # BLOCKER 3 fix (2026-08-22 review repair): OUTCOME_STATUS=engine_unavailable is set
+    # in classify_outcome from CLASSIFIED_ERROR, which is classify-error's LOG-TEXT match
+    # FIRST, exit code only as a fallback when text is unknown — i.e. it can be driven
+    # entirely by prose the measured engine itself wrote to its own stdout. "A runner is
+    # never trusted to label its own failure 'transport'" (strike-decay.md), so the STRIKE
+    # EXCLUSION may not ride on that text-tainted classification. Re-derive independently
+    # from the EXIT CODE ALONE (no --string/--file — engine-capability-state.js's
+    # classify-error then exercises only its host-observed exit-code map, :2132-2143 as of
+    # the review) and only honor the exclusion if THAT reclassification also names a
+    # transport signal. A text-only "engine_unavailable" (ordinary host exit code) is not
+    # host-corroborated, so it falls through and accrues, diagnostically ambiguous — this
+    # changes only what the strike writer treats as excluded, never OUTCOME_STATUS/stdout.
+    engine_unavailable)
+      local __exit_only_class=""
+      __exit_only_class="$("$SELF_DIR/engine-capability-state.js" classify-error --exit-code "${AGENT_EXIT:-0}" 2>/dev/null)" || __exit_only_class=""
+      if _is_engine_unavailable "$__exit_only_class"; then
+        return 0
+      fi
+      cause_class="ambiguous" ;;
+    # everything else — committed / no_op / question_suspected / any status not in the
+    # fail-closed set — is not a strike.
+    *)
+      return 0 ;;
+  esac
+
+  # A strike WOULD be written from this point on — every exclusion has already
+  # returned. Only now does the debug hatch get to suppress it, and only LOUDLY:
+  # set outside the write subshell (subshell vars don't survive back to this
+  # function) so write_manifest can stamp the manifest sidecar before we return.
+  if [ "${AUTOPILOT_STRIKE_WRITER:-on}" = "off" ]; then
+    STRIKE_WRITER_SUPPRESSED="1"
+    STRIKE_WRITER_SUPPRESSED_SEAT="$MODEL/$(_hetero_runner_token)/implementer"
+    write_manifest 2>/dev/null || true
+    return 0
+  fi
+
+  (
+    local runner; runner="$(_hetero_runner_token)"
+    local artifact_sha=""
+    if [ -n "${LOG:-}" ] && [ -r "${LOG:-}" ]; then
+      artifact_sha="$(sha256sum "$LOG" 2>/dev/null | awk '{print $1}')"
+    fi
+    if [ -z "$artifact_sha" ]; then
+      # $LOG unreadable — fall back to the sha256 of the outcome JSON (a real digest of
+      # a real artifact, never a placeholder). Built directly from OUTCOME_* env vars —
+      # deliberately NOT calling emit() here, which has real side effects (git-identity
+      # restore) this fail-soft path must never trigger twice.
+      local outcome_json
+      outcome_json="$(OUTCOME_STATUS="${OUTCOME_STATUS:-}" OUTCOME_COMMIT="${OUTCOME_COMMIT:-}" \
+        OUTCOME_FILES="${OUTCOME_FILES:-0}" OUTCOME_INS="${OUTCOME_INS:-0}" \
+        OUTCOME_DEL="${OUTCOME_DEL:-0}" OUTCOME_WT="${OUTCOME_WT:-}" \
+        OUTCOME_ERR="${OUTCOME_ERR:-}" node -e '
+          const p = process.env;
+          process.stdout.write(JSON.stringify({
+            status: p.OUTCOME_STATUS, commit: p.OUTCOME_COMMIT,
+            files: Number(p.OUTCOME_FILES), ins: Number(p.OUTCOME_INS), del: Number(p.OUTCOME_DEL),
+            worktree: p.OUTCOME_WT, error: p.OUTCOME_ERR
+          }));
+        ' 2>/dev/null)" || outcome_json=""
+      artifact_sha="$(printf '%s' "$outcome_json" | sha256sum 2>/dev/null | awk '{print $1}')"
+    fi
+    [ -z "$artifact_sha" ] && exit 0
+
+    # dedup_key: frozen contract §2.7.2 — "<non-empty: root-incident id + detector id>".
+    # Root-incident id (DISPATCH_RUN_ID is the caller-supplied --run-id when given — a
+    # retry that reuses the same run-id collides on purpose — or else a per-process id
+    # already unique by construction), bound to base/head sha + the outcome status, PLUS
+    # the detector id (same value passed as --detector-id below) so the key composition
+    # matches the contract literally, not just in spirit. No timestamp, no bare $$:
+    # retrying the SAME root incident dedups; two genuinely different dispatches
+    # (different run id and/or different shas) do not.
+    local dedup_key="${DISPATCH_RUN_ID:-unknown}:${BASE_SHA:-unknown}:${HEAD_SHA:-unknown}:${status}:dispatch_hetero_classify_outcome"
+    local receipt_ref="log=${LOG:-none} commit=${HEAD_SHA:-none}"
+
+    local strike_args=(
+      strike-seat
+      --engine "$MODEL"
+      --runner "$runner"
+      --role implementer
+      --class ordinary_strike
+      --cause-class "$cause_class"
+      --writer dispatch_hetero_failclosed
+      --dedup-key "$dedup_key"
+      --detector-id dispatch_hetero_classify_outcome
+      --detector-version "${STRIKE_DETECTOR_VERSION:-1}"
+      --artifact-sha256 "$artifact_sha"
+      --receipt-ref "$receipt_ref"
+    )
+    if [ -n "${ENGINE_CAPABILITY_DIR:-}" ]; then
+      strike_args+=(--store "$ENGINE_CAPABILITY_DIR")
+    fi
+    node "$SELF_DIR/engine-capability-state.js" "${strike_args[@]}" >/dev/null 2>&1
+  ) || true
 }
 
 # classify_outcome — the SINGLE source of truth for status/exit/JSON-fields, shared by the
@@ -3599,6 +3772,9 @@ classify_outcome() {
   # Observability: stamp the manifest so post-mortem status reads phase:"exited" with the
   # final status even after processes/locks are gone (both inline and detached paths).
   manifest_finalize "$OUTCOME_STATUS"
+  # Seat strike writer (P4, references/strike-decay.md) — fail-soft, never mutates
+  # OUTCOME_* or this function's already-decided status/exit.
+  seat_strike_capture
 }
 
 # ============================ R1 DETACH (setsid kill-survival) ============================
@@ -3720,8 +3896,9 @@ dispatch_detached_run() {
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.
     declare -p PI_RPC_DIRECTIVE_POLL_SECS PI_RPC_STALL_PROBE_SECS PI_RPC_MAX_SECS PI_RPC_PROVIDER PI_MODELS_JSON 2>/dev/null || true
+    declare -p STRIKE_DETECTOR_VERSION 2>/dev/null || true
     declare -f json_escape _flat_json_escape extract_json_value json_array_first emit grok_effort_clamp grok_effort_note reap_container prepare_managed_codex_home cleanup_managed_codex_home run_worker run_agent compute_artifacts passive_capture \
-      _is_engine_unavailable classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks \
+      _is_engine_unavailable _hetero_runner_token seat_strike_capture classify_outcome heartbeat_loop detached_main write_manifest manifest_finalize run_strict_contract_postchecks run_strict_boundary_postcheck run_strict_staged_precheck run_strict_acceptance_checks \
       _cont_terminal_on_exit _cont_finalize_or_die \
       reap_worktree reap_worktree_minimal _wt_append_orphan_path _wt_open_lock_fd _wt_ensure_config _wt_validate_path _wt_git_worktree_remove \
       _wt_has_control_chars _wt_resolve_repo_root _wt_read_marker_created_at _wt_json_escape _wt_is_live \

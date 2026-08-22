@@ -20,6 +20,16 @@
 #  10. autopilot status runs --tree folds parent→child + synthetic (external) root
 . "$(dirname "$0")/lib.sh"
 
+# This suite dispatches through the hetero wrapper, so it can reach
+# seat_strike_capture — and it DID, leaking 11 strike rows into the operator's
+# real store on 2026-08-22 (found only after two other suites were fixed).
+# lib.sh now isolates the stores globally; this snapshot is the assertion that
+# proves the isolation actually held, because a store env var that is set but
+# never checked is indistinguishable from one that is ignored.
+REAL_CAP_STRIKES="$HOME/.autopilot/engine-capability/strikes.jsonl"
+REAL_CAP_STRIKES_SIZE_BEFORE=0
+[ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_BEFORE=$(wc -c < "$REAL_CAP_STRIKES")
+
 HETERO="$REPO_ROOT/scripts/dispatch-hetero.sh"
 REVIEW="$REPO_ROOT/scripts/dispatch-review.sh"
 STATUS="$REPO_ROOT/scripts/dispatch-status.js"
@@ -296,5 +306,10 @@ M_CTL="$RUNS/ctlparent.manifest.json"
 assert_file_exists "$M_CTL" "control-char parent manifest written"
 CTL_PARENT="$(node -e 'const m=require(process.argv[1]);process.stdout.write(String(m.parent_run_id))' "$M_CTL" 2>/dev/null)"
 assert_eq "evil-id" "$CTL_PARENT" "tab in parent id sanitized (manifest parses as valid JSON)"
+
+REAL_CAP_STRIKES_SIZE_AFTER=0
+[ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_AFTER=$(wc -c < "$REAL_CAP_STRIKES")
+assert_eq "$REAL_CAP_STRIKES_SIZE_AFTER" "$REAL_CAP_STRIKES_SIZE_BEFORE" \
+  "real ~/.autopilot/engine-capability/strikes.jsonl not written by this suite"
 
 finalize_test

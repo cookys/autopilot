@@ -15,6 +15,23 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
 
 SCRIPT="$REPO_ROOT/scripts/dispatch-hetero.sh"
 
+# --- store isolation, FROM THE TOP (evidence-discipline §9) -------------------
+# dispatch-hetero.sh's seat_strike_capture writes seat strikes via
+# engine-capability-state.js. This suite drives REAL dispatches, so without this
+# export every fail-closed case appends a strike row to the OPERATOR'S store at
+# ~/.autopilot/engine-capability/strikes.jsonl. That is exactly the §9 trap: a
+# test's ASSERTIONS are checked every run, its WRITES are checked never — and it
+# really happened on 2026-08-22 (31 residue rows, quarantined as
+# strikes.jsonl.test-residue-quarantined-20260822). Two later blocks re-export
+# this to case-specific dirs; the point here is that NO dispatch runs before an
+# isolated store exists.
+DEFAULT_CAP_ISOLATION_DIR="$TEST_TMP/engine-capability-default"
+mkdir -p "$DEFAULT_CAP_ISOLATION_DIR"
+export ENGINE_CAPABILITY_DIR="$DEFAULT_CAP_ISOLATION_DIR"
+REAL_CAP_STRIKES="$HOME/.autopilot/engine-capability/strikes.jsonl"
+REAL_CAP_STRIKES_SIZE_BEFORE=0
+[ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_BEFORE=$(wc -c < "$REAL_CAP_STRIKES")
+
 # --- sandbox git repo (never touch the real repo with worktrees/branches) ---
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX"
@@ -1947,5 +1964,14 @@ assert_contains "$REQ_MATRIX_OUT" '"sealed_noop_substitutions_rejected":true' \
   "forged, stale, and foreign no-op receipts reject cleanly"
 assert_contains "$REQ_MATRIX_OUT" '"engine_caller_zero_diff_forbidden":true' \
   "Engine rejects caller-minted zero-diff authority before dispatch"
+
+# --- landing assertion: the operator's real strike store was NOT written ------
+# The §9 lesson: isolation you never assert is isolation you cannot trust. This
+# suite runs REAL fail-closed dispatches, which are exactly the outcomes that
+# make seat_strike_capture fire, so it is the suite most able to leak.
+REAL_CAP_STRIKES_SIZE_AFTER=0
+[ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_AFTER=$(wc -c < "$REAL_CAP_STRIKES")
+assert_eq "$REAL_CAP_STRIKES_SIZE_AFTER" "$REAL_CAP_STRIKES_SIZE_BEFORE" \
+  "real ~/.autopilot/engine-capability/strikes.jsonl not written by this suite"
 
 finalize_test

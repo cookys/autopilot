@@ -2,6 +2,18 @@
 # Tests for dispatch-hetero.sh --gc (stale worktree reaper)
 . "$(dirname "$0")/lib.sh"
 
+# --- store isolation (evidence-discipline §9) ---------------------------------
+# This suite drives real dispatch-hetero.sh runs, whose seat_strike_capture writes
+# seat strikes through engine-capability-state.js. Without this the writes land in
+# the OPERATOR's ~/.autopilot/engine-capability/strikes.jsonl — the 2026-08-22
+# residue incident. Isolate, then ASSERT the real store was untouched at the end.
+GC_CAP_ISOLATION_DIR="$TEST_TMP/engine-capability-gc"
+mkdir -p "$GC_CAP_ISOLATION_DIR"
+export ENGINE_CAPABILITY_DIR="$GC_CAP_ISOLATION_DIR"
+REAL_CAP_STRIKES="$HOME/.autopilot/engine-capability/strikes.jsonl"
+REAL_CAP_STRIKES_SIZE_BEFORE=0
+[ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_BEFORE=$(wc -c < "$REAL_CAP_STRIKES")
+
 private_orphan_state_dir() {
     printf '%s/autopilot-%s' "$TMPDIR" "${UID:-$(id -u)}"
 }
@@ -626,5 +638,10 @@ test_orphan_state_dir_is_private_and_rejects_symlink() {
 }
 
 test_orphan_state_dir_is_private_and_rejects_symlink
+
+REAL_CAP_STRIKES_SIZE_AFTER=0
+[ -f "$REAL_CAP_STRIKES" ] && REAL_CAP_STRIKES_SIZE_AFTER=$(wc -c < "$REAL_CAP_STRIKES")
+assert_eq "$REAL_CAP_STRIKES_SIZE_AFTER" "$REAL_CAP_STRIKES_SIZE_BEFORE" \
+  "real ~/.autopilot/engine-capability/strikes.jsonl not written by this suite"
 
 finalize_test

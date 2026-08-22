@@ -90,6 +90,22 @@ pick it up declaratively. Prefer a subscription/coding-plan token over a metered
 runners (codex/agy/grok/qoderclicn) need no token. Full guide: `docs/installation.md` §
 "Heterogeneous engine credentials".
 
+### 5.6 Qualification defaults — ask ONCE (only if a hetero role was enabled in 5.5)
+Skip entirely if no hetero role is configured. Otherwise ask the user exactly once, per role:
+
+> Autopilot ships the officially-administered scorecards for this role as defaults. Adopt them, or
+> self-qualify in this environment?
+
+Show them the evidence first — `node scripts/adopt-qualification-defaults.js list --role <role>`
+prints each administration WITH the environment it was measured in (runner CLI version, harness
+commit, corpus, prompt-config hash, effort, date). Official environment ≠ theirs; that block is the
+decision, not decoration.
+- **Adopt** → `node scripts/adopt-qualification-defaults.js adopt --role <role>` (or `--seat
+  <engine>:<runner>`). Copies the rows into their stores as ordinary, strike-able rows.
+- **Self-qualify** → the existing `engine-qualify` flow; it overrides a default on the same seat
+  identity, and adoption refuses to shadow a local row.
+Contract, ADR-0001 posture, and strike interplay: [`references/qualification-defaults.md`](../../references/qualification-defaults.md).
+
 ### 6. Verify
 - `ls <target>/.claude/` shows the 9 configs; `<target>/.gitignore` excludes runtime state but NOT
   `*-config.md` (they must stay tracked — `git -C <target> check-ignore .claude/dispatch-config.md` returns

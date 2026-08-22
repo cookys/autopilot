@@ -33,7 +33,13 @@ const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
 // `engine-scorecard.js record` rejected its own emitted row. Two spellings for
 // one concept is not ideal — but rewriting evidence rows is worse. New rows
 // should use `operator-asserted`.
-const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted']);
+// `official-default` (v2.34.36) marks a row that arrived by ADOPTION of the
+// shipped official qualification defaults rather than by a local
+// administration. It says how the row got into THIS store; the original
+// administration's own version_source is preserved under
+// row.provenance.administration_version_source. It is disclosure, not
+// authority — no admission path branches on it.
+const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted', 'official-default']);
 // `expired` stays a legal INPUT status (rows written before the 2026-08-22
 // no-confidence-decay cut may still legitimately carry it on disk) but the
 // projection (deriveStatus, below) never PRODUCES it any more — a stale/
@@ -1368,6 +1374,10 @@ function currentRowsForRole(role, nowMs, options = {}) {
       strike_threshold: seatProjection.strike_threshold,
       strike_policy_version: seatProjection.strike_policy_version,
       rejected_strikes: seatProjection.rejected_strikes,
+      // Present only when this seat's baseline is an adopted official default
+      // AND the seat is requalify_required. Advisory operator guidance; no
+      // consumer gates on it (dispatch-contract.js reads admission_status).
+      ...(seatProjection.remedy === undefined ? {} : { remedy: seatProjection.remedy }),
     });
   }
 
@@ -1509,6 +1519,14 @@ function findSeatBaseline(engine, runner, role, nowMs, allRows) {
         event_id: eid,
         expires: row.expires,
         instantMs: instantMs === null ? qMs : instantMs,
+        // Adoption provenance (v2.34.36). Present only on rows copied in from
+        // the shipped official defaults by scripts/adopt-qualification-defaults.js.
+        // It is DISCLOSURE, never authority: nothing here participates in the
+        // admission decision — it only lets a requalify_required verdict name
+        // the operator's remedy (references/qualification-defaults.md).
+        provenance: (row.provenance && typeof row.provenance === 'object' && !Array.isArray(row.provenance))
+          ? row.provenance
+          : null,
       };
     }
   }
@@ -1676,6 +1694,22 @@ function computeSeatProjection(engine, runner, role, nowMs) {
     if (projection.critical_trigger
         || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {
       projection.admission_status = 'requalify_required';
+    }
+    // An ADOPTED OFFICIAL DEFAULT that has accumulated no-confidence must tell
+    // the operator the way out, because the way out is different from a
+    // self-qualified seat's: re-adopting the same default changes nothing (it
+    // is the same administration), so the only re-baseline is a fresh LOCAL
+    // administration. Additive and advisory — admission_status is untouched.
+    if (projection.admission_status === 'requalify_required'
+        && baseline.provenance
+        && baseline.provenance.kind === 'official-default') {
+      const cmd = typeof baseline.provenance.self_qualify_command === 'string'
+        && baseline.provenance.self_qualify_command.length > 0
+        ? baseline.provenance.self_qualify_command
+        : `scripts/engine-qualify.sh ${role} --engine ${engine} --runner ${runner}`;
+      projection.remedy = `This seat routes on an ADOPTED OFFICIAL DEFAULT (official event ${
+        baseline.provenance.official_event_id === undefined ? 'unknown' : baseline.provenance.official_event_id
+      }), which has now accumulated mechanical no-confidence in YOUR environment. Re-adopting the same default cannot clear it — it is the same administration. Re-baseline with a fresh local administration: ${cmd}`;
     }
   }
 

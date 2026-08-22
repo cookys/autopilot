@@ -47,6 +47,9 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 | [`scripts/dispatch-local-openai.js`](../../scripts/dispatch-local-openai.js) | Local raw transport | Runs an allowlisted author/reviewer call only after exact egress, identity, one-slot lease, capacity, and assurance gates; hot swap or ambiguous cancellation quarantines the deployment. |
 | [`scripts/evaluate-profile-cutover.js`](../../scripts/evaluate-profile-cutover.js) | Adaptive cutover | Emits an advisory `hold_guided`/`eligible_to_enable_adaptive` receipt. File-only evidence cannot recreate the live context, compatibility, owner-qualification, or independent dogfood verifiers. |
 | [`scripts/import-aa-capabilities.js`](../../scripts/import-aa-capabilities.js) | Stage 2 bootstrap | Optionally imports the official Artificial Analysis free model indices into a content-addressed user-local cache. It emits only model-level provisional implementer/explorer telemetry; never owner/reviewer authority. |
+| [`scripts/adopt-qualification-defaults.js`](../../scripts/adopt-qualification-defaults.js) | Stage 0.5 | Consumer side of the shipped defaults: `list` prints each official administration WITH its environment disclosure; `adopt` copies chosen rows into the local stores through `engine-scorecard.js record`. Refuses to shadow a newer local row. |
+| [`scripts/build-qualification-defaults.js`](../../scripts/build-qualification-defaults.js) | Maintainer | Derives the shipped defaults artifact from a scorecard + capability store and a selection recipe. `--check` re-derives and byte-compares — run it after any re-administration. |
+| [`scripts/qualification-sweep.sh`](../../scripts/qualification-sweep.sh) | Administration | Roster-driven sweep: Stage-0 probe receipts → administration → scorecard record → evidence bundle, per seat. `--plan` is free and deterministic; `--execute` spends real dispatches. |
 | [`scripts/engine-scorecard.js`](../../scripts/engine-scorecard.js) | Stage 2 | Records and reports historical evidence. Evidence-required disk views are explicitly provisional and never grant routing authority. |
 | [`scripts/engine-capability-state.js`](../../scripts/engine-capability-state.js) | Stage 2/4 | Records scope/deployment lifecycle and revocation telemetry. Stored `qualified` observations are projected as provisional. |
 | [`scripts/resolve-review-loop.sh --check-scorecard`](../../scripts/resolve-review-loop.sh) | Stage 3 compatibility | Fails closed on disk telemetry — weaker evidence than a live in-process qualification run. |
@@ -56,6 +59,24 @@ Do not transfer a score across scopes or pick a model from reputation alone.
 | Reference | Use when |
 |-----------|----------|
 | [role-and-harness-governance.md](references/role-and-harness-governance.md) | Decide harness implementation level; qualify planner/implementer/verifier/reviewer/orchestrator roles; decide when survey evidence is enough versus when a runnable probe/eval/scorecard row is required. |
+
+## Stage 0.5 — adopt or self-qualify (ask ONCE, before spending anything)
+
+A consuming repo enabling a role does not always have to run Stage 1 itself. Autopilot ships the
+officially-administered rows as defaults (`references/official-qualification-defaults.json`).
+Ask once, per role, then take one of two paths:
+
+- **Adopt** — `node scripts/adopt-qualification-defaults.js list --role <role>` shows every shipped
+  administration with the environment it was measured in; `… adopt --role <role>` copies the rows
+  into the local scorecard + capability stores as ordinary rows. Cheap, and honest about being
+  someone else's evidence.
+- **Self-qualify** — Stages 0→4 below. Stronger evidence, and it OVERRIDES a default on the same
+  seat identity (adoption refuses to shadow a local row).
+
+Adopted rows are not privileged: same `seat_hash`, same strike accrual, same admission path. This
+is DISCLOSURE, not attestation (ADR-0001) — nothing is signed and the verification path is
+re-derivation. Contract: [`../../references/qualification-defaults.md`](../../references/qualification-defaults.md).
+Re-administering the roster: `scripts/qualification-sweep.sh --plan` (free) / `--execute` (spends).
 
 ## Stage 0 — spike (3-gate)
 

@@ -1,6 +1,65 @@
 # Changelog
 
 =======
+## v2.34.36 — 官方施測結果隨 plugin 出貨:consumer 吃預設,或在自己的環境自考
+
+prose-justification: this cut's own skill growth, attributed precisely — `skills/engine-onboarding/SKILL.md` 228→249 (+21: a new「Stage 0.5 — adopt or self-qualify」step, which is the user-facing decision this release exists to create, plus three rows in the existing Available-Scripts table for the three new scripts) and `skills/onboard/SKILL.md` 109→125 (+16: §5.6, the one-time adopt-vs-self-qualify question, placed behind the existing §5.5 hetero-credential gate so a repo with no hetero role never reads it). Both are the shipped surface itself: a defaults artifact nobody is told to consult is `evidence-discipline.md` §1's dead-but-documented module. No prose was added anywhere else in skills/.
+
+**Headline**: autopilot 對常用引擎的正式施測結果,第一次隨 plugin 出貨當**預設值**。17 筆
+administration —— implementer 九過四敗(events 143-155)、reviewer 一過兩敗(139/140/141)、
+verification_author 一過(142) —— 打包進 `references/official-qualification-defaults.json`。
+consuming repo 啟用某個 hetero role 時被問**一次**:吃官方預設,還是在自己的環境自考?
+
+**「簽署」的實作是披露,不是背書**: BACKLOG 原文寫「以簽署的 scorecard 成績單出貨」,而
+[ADR-0001](docs/adr/0001-verification-over-attestation.md) 明文禁止信任機械。所以這裡沒有簽章、
+沒有 hash chain、沒有 witness receipt。取而代之的是**逐列環境披露**:engine / model_version /
+version_source / runner / **runner CLI 版本** / family / **harness commit** / corpus_version /
+prompt_config_hash / effort / 施測日期 / qualified_at / expires,加上 evidence pointer(官方
+event id、capability-evidence anchor、`docs/plans/evidence/` 底下的證據 bundle 路徑)。schema 把
+這整塊列為 required —— 少一個欄位就驗不過,披露不能被悄悄砍掉。`list` 永遠把環境和判定一起印,
+刻意沒有「只看到 QUALIFIED、看不到它是在什麼環境量出來的」那種視圖。全系統只有兩個 sha256
+(`store_projection_sha256`、採用列的 `defaults_artifact_sha256`),兩個都只為 **re-derivation**
+(重跑產生器比對),不擋任何事 —— 和 `references/strike-decay.md` 給 strike `artifact_sha256` 的
+理由完全同一個。**consumer 真正的驗證路徑是重新推導:自考。**
+
+**FAILED 列照樣出貨**: agy flash 18/24、agy pro 22/24、flash-medium 16/24、**grok-4.6 23/24
+(security-canary 陷阱)**、reviewer 的 GLM-5.2/5.3 —— 一次誠實的落榜是 routing information,是
+「還沒試過這個席位」和「試過了,它洩漏了 canary」之間的差別。濾掉失敗會把誠實紀錄變成宣傳頁,
+還會讓已知壞掉的席位被誤試。recipe 的 `excluded[]` 逐條記下每一列刻意不打包的理由(legacy
+pre-schema 列、被取代的 corpus、brain-seat sittings)。
+
+**出貨形**: 產生是腳本不是手抄 —— `scripts/build-qualification-defaults.js` 從 scorecard store +
+capability store + selection recipe 推導出 artifact,輸出**零 wall-clock**(時間戳會讓
+byte-identical 重生不可能,而且那是關於產生器那次執行的宣稱,不是關於施測的),`--check` 重新
+推導後逐位元比對 —— 手改 artifact 一定紅。採用是 `scripts/adopt-qualification-defaults.js`:
+`list` 印披露、`adopt` **經 `engine-scorecard.js record`** 寫入(不是裸 append —— record 才擁有
+寫鎖、event_id 指派,以及那道 capability-evidence identity binding 驗證)。採用列多一個
+`provenance` 物件,純披露,沒有任何 admission 路徑會讀它 —— `dispatch-contract.js` 一如既往只看
+`admission_status`。標記刻意**不**寫進 `version_source`(那是封閉列舉,寫進去每一列都會被 record
+拒收)。
+
+**採用列沒有特權**: 同一個 `seat_hash = sha256({engine,runner,role})`、同一批 allowlisted strike
+writer、同一個 N=3 fold、`expires` 一樣只是 advisory。唯一新增的是 advisory 的:當
+`requalify_required` 席位的 baseline 帶 `provenance.kind === "official-default"` 時,`seat-status`
+與 `current` 多一個 `remedy` 字串,說明**重新採用同一份預設清不掉** —— 那是同一次施測,不是新的
+一次;只有本地一次通過的新施測能 re-baseline。`remedy` 不擋任何事。
+
+**證據紀律**: 兩個施工中的發現都立成 BACKLOG 條目而非吞掉。(1) **scorecard 列不能單獨旅行** ——
+`engine-scorecard.js record` 會拒絕任何 `evidence_store` anchor 在目的地 capability store 解析不到
+的 internal_eval 列(`verifyEvidenceStoreAnchor`)。第一次採用 round-trip 就死在這裡;artifact 因此
+連 qualifier-store anchor wrapper 一起打包,採用時把它編到一個空的本地槽位、同步改 scorecard 列的
+`evidence_store.event_id`。這是「artifact 存在」和「流程真的會動」的差別
+(`references/evidence-discipline.md` §1)—— 跑 round-trip 抓到的,不是讀 code 讀出來的。
+(2) **pre-existing、本刀未修**:`nowArgToMs` 截到 UTC 午夜,同一個 UTC 日稍晚簽發的 evidence
+receipt 會讀成尚未生效 —— events 153/154/155 今天 `seat-status` 回 `no_record`,同一列加
+`--now 2026-08-24` 立刻 `qualified`。動它就是動 admission 語意,超出本刀範圍,附實測重現存進 BACKLOG。
+
+**施測工具形式化**: 2026-08-22 全 roster sweep 用的五支 session-local `sweep*.sh`(五支只差三處:
+seat 清單、凍結 corpus 常數、scratchpad 路徑)收斂成 `scripts/qualification-sweep.sh` —— roster
+檔驅動,`--plan` 決定性且不花錢(測試覆蓋的就是這個模式),`--execute` 會花真錢所以要 `--yes`,
+且 header 明說它**沒有被測試覆蓋**。順帶補上 `engine-onboarding` SKILL 記載的 Stage-0 probe
+receipt 缺口。
+
 ## v2.34.35 — 不信任累積取代日曆授權:資格降級第一次有機械依據
 
 prose-justification: per-skill ratchet catch-up for growth shipped by EARLIER releases, attributed precisely (not this cut's drift — v2.34.35 touches no skills/ path): `skills/engine-onboarding/SKILL.md` 203→228 (+25, v2.34.34 round-1 review MUST-FIX — Stage-0 probe operator-run procedure made explicit in-skill); `skills/dev-flow/SKILL.md` 713→717 (+4, 2026-08-18 P7 fix `0f7568fc` — the quality-gate rule contradicted itself, size-scoped rule replaced it); `skills/harness-maintenance/SKILL.md` 58→59 (+1, `61a545b4` — TaskCreate gated off for 5-era models since CC 2.1.233, anchor advisory). Baseline refreshed at this release per the gate's normal flow.

@@ -110,6 +110,67 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Bounded-shutdown probe with a LOAD-RELATIVE ceiling.
+//
+// The two `*_stop_bounded` assertions used to read
+//     stopped && Date.now() - startedAt < 500
+// where `stopped` came from `Promise.race([stop(), sleep(500) => false])`. The
+// literal 500 ms is an ABSOLUTE wall-clock bound on a machine whose event loop
+// this suite does not own: under `--parallel 8` (and worse, a loaded host) the
+// shutdown can win its race and still measure >500 ms of wall time, because the
+// loop was starved between the resolution and the timestamp. That made
+// `lease_epipe_stop_bounded` an intermittent red — disclosed in full at v2.34.33
+// pre-merge R2 (clean branch: FAIL/FAIL/PASS; solo PASS x4; develop baseline
+// PASS; both sides' test files byte-identical => pre-existing load-sensitive
+// flake, not a regression) and filed in docs/BACKLOG.md. Reproduced here before
+// the change with 64 background CPU burners: 3 of 5 suite runs RED, every red on
+// exactly this assertion.
+//
+// The assertion is NOT deleted — bounded shutdown is a real guarantee and a hang
+// must still fail. It is re-expressed against a baseline measured on the SAME
+// starved event loop: a nominal `sleep(boundMs)` armed at the same instant as
+// the shutdown. `stop()` beating that concurrent timer is exactly the property
+// "shutdown is bounded, it does not wait out the request timeout", and it stays
+// true no matter how far the whole loop slips. If `stop()` hangs, the timer wins
+// and `stopped` is false, so the guard still fires.
+//
+// Returns the measurements too, so a failure reports numbers rather than a bare
+// `false`.
+async function measureBoundedStop(stopFn, boundMs) {
+  const startedAt = Date.now();
+  let baselineMs = null;
+  const baseline = sleep(boundMs).then(() => {
+    baselineMs = Date.now() - startedAt;
+    return false;
+  });
+  const stopped = await Promise.race([stopFn().then(() => true), baseline]);
+  const elapsedMs = Date.now() - startedAt;
+  // Always settle the baseline timer so `baselineMs` is a real measurement of
+  // this run's timer slip, never null.
+  await baseline;
+  return {
+    stopped,
+    elapsedMs,
+    baselineMs,
+    // `stopped` IS the ceiling: it is true only when the shutdown settled the
+    // race BEFORE the concurrent nominal-`boundMs` timer callback ran.
+    //
+    // The first cut of this helper also wrote `&& elapsedMs <= baselineMs`. That
+    // conjunct is DEAD, and a clause that can never fail is decoration, not a
+    // guard: `elapsedMs` is sampled in the microtask that resumes this function
+    // right after the race settles, and microtasks drain before any timer
+    // callback — so whenever `stopped` is true, `baselineMs` is necessarily
+    // sampled later and the comparison holds by construction. (Confirmed by the
+    // first-pass reviewer probing this helper directly across fast / hung /
+    // 2 s-starved / 499 ms-near-race scenarios: every `stopped:true` case was
+    // also `bounded:true`; the only `bounded:false` case was the hung one, where
+    // `stopped` was already false.) The measurements stay in the return value —
+    // they are reported on every run — but the verdict rests on the one
+    // comparison that can actually fail.
+    bounded: stopped,
+  };
+}
+
 async function startDaemonEventually(config, label) {
   let lastError = null;
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -361,20 +422,23 @@ async function exerciseConnectionBoundaries() {
     const stopChatter = setInterval(() => {
       if (!stopSocket.destroyed && stopSocket.writable) stopSocket.write('x');
     }, 15);
-    const stopStartedAt = Date.now();
-    const firstStop = stopDaemon.stop();
-    const secondStop = stopDaemon.stop();
-    const stopCompleted = await Promise.race([
-      Promise.all([firstStop, secondStop]).then(() => true),
-      sleep(500).then(() => false),
-    ]);
+    // Same load-relative ceiling as lease_epipe_stop_bounded below — the two
+    // assertions are the identical construct and would flake identically.
+    let firstStop = null;
+    let secondStop = null;
+    const stopProbe = await measureBoundedStop(() => {
+      firstStop = stopDaemon.stop();
+      secondStop = stopDaemon.stop();
+      return Promise.all([firstStop, secondStop]);
+    }, 500);
     clearInterval(stopChatter);
     if (!stopSocket.destroyed) stopSocket.destroy();
-    if (!stopCompleted) await Promise.all([firstStop, secondStop]);
+    if (!stopProbe.stopped) await Promise.all([firstStop, secondStop]);
     return {
       absolute_deadline_bounded: deadlineBounded,
-      stop_bounded: stopCompleted && Date.now() - stopStartedAt < 500,
-      concurrent_stop_resolved: stopCompleted,
+      stop_bounded: stopProbe.bounded,
+      stop_bound_measurement: `${stopProbe.elapsedMs}/${stopProbe.baselineMs}`,
+      concurrent_stop_resolved: stopProbe.stopped,
     };
   } finally {
     if (deadlineSocket && !deadlineSocket.destroyed) deadlineSocket.destroy();
@@ -422,11 +486,7 @@ async function exerciseLeaseAndReuse() {
         epipeLease.child.stdin.emit('error', error);
       });
     };
-    const epipeStartedAt = Date.now();
-    const epipeStopped = await Promise.race([
-      epipeDaemon.stop().then(() => true),
-      sleep(500).then(() => false),
-    ]);
+    const epipeProbe = await measureBoundedStop(() => epipeDaemon.stop(), 500);
     epipeLease.child.stdin.end = originalEnd;
 
     const reusable = new ExternalLifecycleWitnessDaemon({
@@ -443,7 +503,8 @@ async function exerciseLeaseAndReuse() {
     await reusable.stop();
     return {
       unexpected_lease_fail_stop: unhealthy && rejected,
-      lease_epipe_stop_bounded: epipeStopped && Date.now() - epipeStartedAt < 500,
+      lease_epipe_stop_bounded: epipeProbe.bounded,
+      lease_epipe_bound_measurement: `${epipeProbe.elapsedMs}/${epipeProbe.baselineMs}`,
       same_instance_restart: true,
     };
   } finally {
@@ -873,6 +934,12 @@ assert_contains "$OUT" "stop_bounded=true" "daemon stop destroys an active slow 
 assert_contains "$OUT" "concurrent_stop_resolved=true" "concurrent stop callers share one bounded shutdown"
 assert_contains "$OUT" "unexpected_lease_fail_stop=true" "unexpected flock holder exit fail-stops requests"
 assert_contains "$OUT" "lease_epipe_stop_bounded=true" "lease pipe EPIPE falls back to a bounded shutdown"
+# Both bounded-shutdown ceilings are load-relative (see measureBoundedStop):
+# `<shutdown elapsed>/<concurrent 500 ms timer's actual elapsed>`. Echoed on
+# every run, green or red, so a future red carries its own numbers instead of a
+# bare "not found in output".
+printf '%s\n' "$OUT" | grep -E '^(stop|lease_epipe)_bound_measurement=' \
+  | sed 's/^/  bound measurement (elapsed\/baseline ms): /'
 assert_contains "$OUT" "same_instance_restart=true" "same daemon instance can stop and replay on restart"
 assert_contains "$OUT" "unavailable_rejected=true" "missing private socket is rejected before request delivery"
 assert_contains "$OUT" "unavailable_fd_bounded=true" "unavailable direct requests do not leak directory descriptors"

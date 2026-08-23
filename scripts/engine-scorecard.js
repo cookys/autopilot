@@ -224,14 +224,48 @@ function toDateMs(value) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function todayMsUtc() {
-  return toDateMs(new Date().toISOString().slice(0, 10)) || Date.now();
+// Start of the UTC day containing `ms`. Used ONLY by computeExpiryWarning, whose
+// right-hand side (`expires`) is contractually DATE-ONLY (:342) — a date-vs-date
+// comparison must not become time-of-day sensitive. It is deliberately NOT the
+// default clock: see nowArgToMs.
+function startOfUtcDayMsOf(ms) {
+  if (!Number.isFinite(ms)) return ms;
+  const iso = new Date(ms).toISOString().slice(0, 10);
+  const floor = Date.parse(`${iso}T00:00:00.000Z`);
+  return Number.isFinite(floor) ? floor : ms;
 }
 
+// v2.34.37: the DEFAULT clock is the real instant, not UTC midnight.
+//
+// It used to be `todayMsUtc()` — Date.now() truncated to the start of the current
+// UTC day — and every instant comparison downstream inherited that truncation,
+// which made the projection read the *past* for up to 24h after every midnight:
+//
+//   (a) an evidence receipt issued later the same UTC day (issued_at
+//       2026-08-22T20:00Z, evaluation_time 2026-08-22T00:00Z) is not yet valid,
+//       so deriveStatus refuses it, findSeatBaseline picks no baseline, and
+//       `seat-status` answers `no_record` for a seat that has a QUALIFIED row on
+//       disk (reproduced: scorecard events 153/154/155 on their administration
+//       day; `--now <next day>` flipped the same rows to `qualified`).
+//   (b) foldSeatStrikes' countable window is `observedMs <= nowMs`, so every
+//       strike written later the same UTC day was REJECTED — strike enforcement
+//       was a silent no-op for up to 24h after each midnight. Reproduced: three
+//       strikes stamped at the wall instant projected
+//       `rejected_strikes: 3 / strikes_since_pass: 0` under the default clock and
+//       `strikes_since_pass: 3 / would_requalify: true` under an explicit future
+//       `--now`. `dispatch-contract.js` never passes `--now`, so this was the
+//       production path.
+//
+// An EXPLICIT `--now` is still honoured verbatim: a date-only value keeps meaning
+// start-of-that-day (toDateMs), a full timestamp keeps meaning that instant. Only
+// the default changed. The pinned pass-instant tiebreak (a strike stamped at
+// exactly the baseline instant does not count — `observedMs > baselineMs` is
+// strict; calendar-teeth-negative "tie1") is untouched: this function never
+// participates in that comparison's right-hand side.
 function nowArgToMs(value, required = false) {
   const ms = toDateMs(value);
   if (value === undefined || value === null || value === '') {
-    return required ? failValidation('missing --now value') : todayMsUtc();
+    return required ? failValidation('missing --now value') : Date.now();
   }
   if (ms === null) failUsage(`invalid --now date: ${value}`);
   return ms;
@@ -485,9 +519,9 @@ function parseCurrentArgs(args) {
     failUsage('--require-evidence or --identity-file requires --scope-file');
   }
 
-  const nowMs = now === undefined
-    ? (requireEvidence ? Date.now() : todayMsUtc())
-    : nowArgToMs(now, false);
+  // Default clock = real instant for every command (v2.34.37, was UTC-midnight
+  // truncated unless --require-evidence). See nowArgToMs.
+  const nowMs = nowArgToMs(now, false);
 
   return { role, nowMs, requireEvidence, scope, identity };
 }
@@ -545,9 +579,9 @@ function parseReportArgs(args) {
     failUsage('--require-evidence or --identity-file requires --scope-file');
   }
 
-  const nowMs = now === undefined
-    ? (requireEvidence ? Date.now() : todayMsUtc())
-    : nowArgToMs(now, false);
+  // Default clock = real instant for every command (v2.34.37, was UTC-midnight
+  // truncated unless --require-evidence). See nowArgToMs.
+  const nowMs = nowArgToMs(now, false);
   return {
     role,
     key,
@@ -616,9 +650,9 @@ function parseLadderArgs(args) {
   return {
     role,
     implementerFamily,
-    nowMs: now === undefined
-      ? (requireEvidence ? Date.now() : todayMsUtc())
-      : nowArgToMs(now, false),
+    // Default clock = real instant for every command (v2.34.37, was UTC-midnight
+    // truncated unless --require-evidence). See nowArgToMs.
+    nowMs: nowArgToMs(now, false),
     requireEvidence,
     scope,
     identity,
@@ -1434,9 +1468,16 @@ function seatIdentityHash(engine, runner, role) {
   return sha256(canonicalJson({ engine: String(engine), runner: String(runner), role: String(role) }));
 }
 
+// `expires` is a DATE, not an instant — so this stays a date-vs-date comparison.
+// The default clock became the real instant in v2.34.37 (nowArgToMs); without the
+// floor here, an advisory-only warning would newly fire on the expiry date itself
+// (00:00:00.001Z onward) rather than the day after, and would answer differently
+// for `--now 2026-08-24` vs `--now 2026-08-24T10:00:00Z`. Neither is a defect the
+// clock fix set out to change, and expiry is advisory-only either way
+// (references/strike-decay.md: calendar tooth (a) is pulled).
 function computeExpiryWarning(expiresValue, nowMs) {
   const ms = toDateMs(expiresValue);
-  return ms !== null && ms < nowMs;
+  return ms !== null && ms < startOfUtcDayMsOf(nowMs);
 }
 
 // Start-of-day instant for a DATE-ONLY string (qualified_at is pinned date-only, :342).

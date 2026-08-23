@@ -1,6 +1,66 @@
 # Changelog
 
-=======
+## v2.34.37 — 三個「觸發器已經響了」的修:一個靜默失效的執法路徑,兩個把主機當斷言的測試
+
+prose-justification: 這一刀沒有動任何 `skills/` 檔案。三筆都是 shipped code 與其測試的修復,
+沒有新表面、沒有新 prose。
+
+**Headline**: 三筆各自獨立的 Fix,共同點是**觸發條件都已經發生過**。第一筆是真缺陷:strike
+執法在每個 UTC 午夜之後最多 24 小時內是無聲的 no-op。另外兩筆是同一族的測試病——把「這台機器
+跑得多快」寫成斷言,於是紅字的意義隨負載飄移,而「紅字部分為雜訊就不再被讀」是本 repo 已經
+記錄過的危害(v2.34.22 教訓)。
+
+**(1) `engine-scorecard.js` 的預設時鐘不再截到 UTC 午夜。** `nowArgToMs` 原本預設
+`todayMsUtc()`(`Date.now()` 截到當日 UTC 午夜),而 strike-decay projection 裡每一個 instant
+比較都繼承了那個截斷,結果是每個午夜之後最多 24 小時,projection 讀到的是**過去**:
+
+- 同一個 UTC 日稍晚簽發的 evidence receipt 在 `evaluation_time` 上「尚未生效」,`deriveStatus`
+  拒收它,`findSeatBaseline` 因此挑不到 baseline,`seat-status` 對一個 store 裡明明有 QUALIFIED
+  列的 seat 回 `no_record`(events 153/154/155 在它們自己的施測當日就是這樣)。
+- `foldSeatStrikes` 的可計數視窗是 `observedMs <= nowMs`,所以**今天稍晚寫進去的每一筆 strike
+  都被拒收**。`dispatch-contract.js` 從不傳 `--now`,所以這就是生產路徑。修前實測:三筆 strike
+  在預設時鐘下 `rejected_strikes: 3 / strikes_since_pass: 0`,同一列給一個未來的 `--now` 立刻
+  變成 `strikes_since_pass: 3 / would_requalify: true`。
+
+修法是預設值改成 `Date.now()`,`todayMsUtc()` 整支移除。**顯式 `--now` 的解析逐字不變**:
+date-only 仍是該日午夜,full timestamp 仍是該 instant,`nowMs` 的值一模一樣。唯一刻意保留日粒度
+的是 `computeExpiryWarning`——它的右手邊 `expires` 契約上就是 date-only,因此用新的
+`startOfUtcDayMsOf` 把**左右兩邊**都留在日粒度。這一項的**輸出對帶時間戳的 `--now` 確實變了**,
+不能說成完全不變:以 `expires: 2026-08-24` 的列為例,`--now 2026-08-24T10:00:00Z` 修前
+`expiry_warning=true`(午夜 < 10:00Z)、修後 `false`,與 `--now 2026-08-24` 一致。方向是**消除**
+date-only 與 full-timestamp 兩種 `--now` 原本就存在的分歧,而不是製造分歧;該欄位依
+`references/strike-decay.md` 為 advisory-only,不參與 admission。
+釘住的 pass-instant tiebreak(`observedMs > baselineMs` 嚴格大於)未被觸碰。覆蓋:
+`hooks/tests/calendar-teeth-negative.test.sh` 的 `instant1`-`instant4`,四條全部**不帶 `--now`**,
+因為那才是生產路徑;fixture 的 instant 取 `max(UTC 午夜 + 1ms, now - 60s)`,所以任何時刻跑都不會
+退化成 vacuous。Planted negative:把截斷改回去,`instant1/2/3` 三條同時轉紅。
+
+**(2) `external-lifecycle-witness` 的 bounded-shutdown 上界改成負載相對。**
+`lease_epipe_stop_bounded` 斷言 `Date.now() - startedAt < 500` —— 一個絕對牆鐘上界,跑在一條這份
+suite 並不擁有的 event loop 上。負載一重,關機贏了 race 卻仍量到 >500 ms,因為 loop 在「resolve」
+與「取時間戳」之間被搶走。修前實測:64 個背景 CPU burner,連跑 5 次 suite → 3 紅,每一紅都恰好
+落在這一條。斷言**沒有被刪** —— bounded shutdown 是真的保證。新的 `measureBoundedStop` 在同一瞬間
+起關機與一個名目 500 ms 的 `sleep`,兩者跑在同一條被餓死的 loop 上,通過條件是關機先於那個並發
+計時器完成。同構造的姊妹斷言 `stop_bounded` 一併改用同一個 helper(同缺陷同檔,只修一半等於留著
+下次再觸發)。兩條都吐 `*_bound_measurement=<elapsed>/<baseline>` 診斷行,每跑必印。修後:同樣
+64 burner 5 跑 0 紅,單獨 3 跑全綠(18-20 ms / 500-501 ms)。Planted negative:把關機延遲成
+3000 ms → 照樣紅。
+
+**(3) `engine-qualify` 的截斷變成可觀測事實,不再拿 wall-clock 當代理。**
+`engine-qualify-impl.test.js` 的截斷 fixture 原本傳 `testWallSecondsOverride: 8` 然後斷
+`qualified === false` —— 等於假設「24 案的 corpus 8 秒跑不完」,那是關於**主機**的斷言。機器忙就綠、
+閒就紅(2026-08-23 實測:8 路並行且另有一份 suite 同時跑 → PASS;競爭較輕的第二次 → FAIL;單獨跑
+→ FAIL;`verify-preexisting.sh --base 754df354` 判 PRE_EXISTING)。兩端一起修:**觸發**端新增第三個
+shrink-only test seam `testTruncateAfterCases: N`(與既有兩個同族:只能縮不能放,只有 exported
+function 進得去),命中同一個截斷分支但用「起跑了幾個 case」計數,任何機器上都確定觸發;**斷言**端
+kernel 現在在兩條 return path 都回報 `wall_truncated` 與 `started_cases`,測試直接斷那個事實。
+另補退化形(`testTruncateAfterCases: 0` → no_verdict、無 evidence)與一條反向釘:未截斷的 honest 跑
+必須 `wall_truncated=false` / `started_cases=24`,否則把旗標寫死 true 也會綠。Planted negative 兩枚:
+截斷列改回 observed 分母(`6/6` + score 1.0,正是 `resolve-scaffold-tier` 會讀成完整 N/N 的形狀)→ 紅;
+`wall_truncated` 寫死 false → 紅。穩定性:單獨 `node --test` 連跑 3 次全綠。
+
+三筆各自一個 commit,對應的 `docs/BACKLOG.md` 條目都已標 RESOLVED 並寫明機制。Codex 鏡像同步。
+
 ## v2.34.36 — 官方施測結果隨 plugin 出貨:consumer 吃預設,或在自己的環境自考
 
 prose-justification: this cut's own skill growth, attributed precisely — `skills/engine-onboarding/SKILL.md` 228→249 (+21: a new「Stage 0.5 — adopt or self-qualify」step, which is the user-facing decision this release exists to create, plus three rows in the existing Available-Scripts table for the three new scripts) and `skills/onboard/SKILL.md` 109→125 (+16: §5.6, the one-time adopt-vs-self-qualify question, placed behind the existing §5.5 hetero-credential gate so a repo with no hetero role never reads it). Both are the shipped surface itself: a defaults artifact nobody is told to consult is `evidence-discipline.md` §1's dead-but-documented module. No prose was added anywhere else in skills/.

@@ -38,10 +38,10 @@
 1. **`/next` 重掃**。目前 backlog **58 條全部未觸發**——無事可撿是正常態,不是漏看。
    最近可能點燃的:`validate-json-schema` 拒絕小數(下個帶浮點的 artifact)、
    `engine-qualify-impl` 不明紅的歸因半件(下次它跑紅,證據這次會在)。
-2. **未歸檔的專案目錄**(project-lifecycle 收尾漏做):`docs/projects/` 下
-   `2026-08-22-no-confidence-decay`、`2026-08-23-official-qualification-defaults`、
-   `2026-08-23-test-integrity-coverage` 三個已 merge 的專案仍在 active 區,應歸檔進
-   `_archive/` 並更新 INDEX。(`2026-08-21-p6d-orchestration-incident` 是舊的,另判。)
+2. ~~未歸檔的專案目錄~~ — **已於 `a1aae042` 完成**。四個(含 `2026-08-21-p6d-orchestration-incident`,
+   判定歸檔:矯正專案已歸檔、殘餘工作是有 trigger 的 BACKLOG 條目)全部移入 `_archive/`,
+   INDEX 進行中表清空、零 orphan;live 參照(BACKLOG／CHANGELOG／test-integrity 設定與測試註解)
+   重指、被移動 README 的相對連結重算深度;凍結的 plan doc 依慣例保留原路徑。
 3. **日期覆審**:ordinary-strike 上牙門檻 row **2026-11-22 前必須重讀**,即使什麼都沒發生。
 
 ## 驗證方式

@@ -1,6 +1,6 @@
 # Plan — Autopilot Host Conformance: build the gate before building another harness
 
-> **Status:** R1 REPAIRED — four attack reviews converged; R2 closure pending
+> **Status:** R2 SHIP-AS-IS — ready to implement the conformance tool; runtime redesign remains unauthorized
 > **Owner:** Board (`cookys`); depth-0 owns the final architecture decision
 > **Branch:** `docs/2026-08-23-coding-harness-consolidation-decision`
 > **Scope:** Autopilot coding only. CodeForge/Mnemos remain unchanged at the transcript/context boundary. Fuchikoma, Hangar, hangar-bridge, and fleet design are out of scope.
@@ -30,6 +30,7 @@ Review evidence:
 - `.../r1-skeptic-product.md`
 - `.../r1-eval-verifier.md`
 - consolidated dispositions: `.../review-summary.md`
+- closure verdict: `.../reviews/r2-closure.md`
 
 ---
 
@@ -362,23 +363,17 @@ Before merge, run the normal repository preflight/test gate required by the chan
 
 Four independent attack reviews plus `review-summary.md` produced this repaired plan.
 
-### R2 — closure only
+### R2 — complete
 
-One reviewer receives this plan and the disposition table. It may only:
+`reviews/r2-closure.md` returned `SHIP-AS-IS` with zero unresolved Critical/Major findings. It verified all R1 dispositions and the corrected executable command shapes.
 
-1. verify closure of each R1 finding;
-2. identify a regression introduced by this repair;
-3. return `SHIP-AS-IS` or `BLOCKED/BOARD`.
-
-It may not open unrelated improvements or expand scope.
-
-**Hard cap:** R1 + one repair + R2. There is no third review generation. R2 failure stops at Board.
+**Hard cap enforced:** R1 + one repair + R2. No third review generation is permitted.
 
 ---
 
 ## 10. Acceptance
 
-R2 must confirm:
+R2 confirmed:
 
 1. the deliverable is a useful conformance tool, not another runtime;
 2. generator-owned reports prevent a second projection truth source;

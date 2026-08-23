@@ -1,503 +1,464 @@
-# Plan — Autopilot coding-harness consolidation: prove the smallest architecture that removes host duplication
+# Plan — Autopilot Host Conformance: build the gate before building another harness
 
-> **Status:** DRAFT R0 — architecture decision + bounded spikes; **no production migration is authorized**
-> **Owner:** Board (`cookys`); depth-0 owns the final decision after review convergence
+> **Status:** R1 REPAIRED — four attack reviews converged; one closure review remains
+> **Owner:** Board (`cookys`); depth-0 owns the final architecture decision
 > **Branch:** `docs/2026-08-23-coding-harness-consolidation-decision`
-> **Frame:** challenge the current plugin-first shape without assuming that a daemon, bridge layer, Pi-based product, or DSH distribution is the answer
-> **Scope lock:** Autopilot's **coding** surface only. CodeForge/Mnemos are unchanged consumers/providers at the transcript/context boundary. Fuchikoma, Hangar, hangar-bridge, and fleet-level orchestration are out of scope.
+> **Scope lock:** Autopilot coding only. CodeForge/Mnemos remain unchanged at the transcript/context boundary. Fuchikoma, Hangar, hangar-bridge, fleet scheduling, and broader organ design are out of scope.
+> **Production authority:** this plan authorizes only a deterministic conformance tool and tests. It does **not** authorize a daemon, RPC service, bridge architecture, standalone Pi/DSH runtime, or host-default migration.
 
 ---
 
-## 0. Context / thesis
+## 0. Decision after R1 attack review
 
-Autopilot currently ships through several host surfaces:
+The first draft over-focused on choosing among architectures. Four independent reviews converged on a smaller and more useful product:
 
-- Claude Code plugin as the original full product surface;
-- a committed Codex package under `platforms/codex/plugin/`;
-- an OpenCode wrapper under `.opencode/`;
-- heterogeneous leaf dispatch through `dispatch-hetero.sh` and related runners;
-- a host-neutral engine and durable Mission/runtime code under `src/`;
-- a live-proven Pi RPC path for duplex leaf workers.
+> **Build an Autopilot Host Conformance Harness that proves what is shared, what is generated, what is host-specific, and whether recovery remains fail-closed. Do not build another coding harness until this tool demonstrates a real missing capability.**
 
-The portability pain is real, but the proposed cure can easily be worse than the disease. In particular, a design with:
+Current repository evidence already shows:
+
+- `bin/autopilot.js` exposes host-neutral CLI entry points for engine, Mission, Campaign, merge, status, review, and harness reporting;
+- `src/engine/`, `src/mission/`, and `src/runners/` already own most reusable coding mechanics;
+- `scripts/sync-codex-plugin-skills.sh` mechanically projects canonical source into the Codex package;
+- `scripts/sync-opencode-plugin.sh` owns the OpenCode package projection;
+- OpenCode currently has a narrower lifecycle/intent surface and must not be advertised as a full `/l3`–`/l6` front door without proof;
+- Pi RPC already exists as a duplex **worker** path in substance.
+
+Therefore the active decision is only:
 
 ```text
-central Autopilot process
-+ one bridge per host
-+ one worker integration per host
-+ a new RPC protocol
-+ a new standalone UI/runtime
+Option 0 — current canonical core + generated distributions, now conformance-gated
+Option A — extract a specifically proven manually duplicated semantic into root core
 ```
 
-may merely duplicate responsibilities already handled by host plugins, generated packages, the root CLI, Mission state, and existing dispatch adapters.
-
-A load-bearing current fact is that much of the apparent Codex duplication is **generated distribution payload**, not independently maintained logic. `scripts/sync-codex-plugin-skills.sh` materializes canonical `skills/`, `bin/`, `src/`, `profiles/`, `schemas/`, `references/`, `scripts/`, and other support files because the Codex package cannot consume the source tree through symlinks. Generated copies cost repository size and release work, but they are not automatically evidence that Autopilot needs a second runtime or daemon.
-
-Likewise, `src/engine/` already claims a host-neutral DI boundary, `src/mission/` already owns durable coding-work state, and `scripts/dispatch-hetero.sh` plus Pi RPC already form worker integrations in substance. Renaming these as a new bridge/worker architecture without deleting real complexity would be architectural churn.
-
-### Thesis
-
-> **The default prior is the smallest change: retain host-native entry points, strengthen one canonical core, and continue generated packaging where a host requires it. A central supervisor process or standalone Pi/DSH-based harness is justified only by measured workflows that the smaller design cannot satisfy.**
-
-This plan therefore treats “Autopilot should become its own harness” as a hypothesis, not a conclusion.
+Options B/C are not active implementation phases. They survive only as explicit re-entry conditions in §9.
 
 ---
 
-## 1. Problem decomposition
+## 1. Problem to solve
 
-Four different problems have been mixed together. They must be measured independently because they may require different solutions.
+The actual problem is not “Autopilot lacks enough abstraction.” It is that today there is no single executable answer to:
 
-| Problem | Concrete question | Does it inherently require a new runtime? |
-|---|---|---:|
-| **P1 — distribution duplication** | How much code is manually maintained more than once versus generated into platform packages? | No |
-| **P2 — host capability differences** | Which lifecycle/tool/hook semantics truly differ between Claude Code, Codex, OpenCode, Pi, and other runners? | No |
-| **P3 — controller ownership** | Must a coding Mission continue when the interactive host session dies, and must another host attach live to it? | Maybe |
-| **P4 — worker control** | Which leaf workers need typed events, steer, abort, resume, usage, and reconcile? | No; existing runner adapters may suffice |
+1. Which coding capabilities are honestly supported by each installed host package?
+2. Which copied files are generated projections versus manually maintained semantic forks?
+3. Does a packaged host execute the same authoritative Mission/QC/fail-closed behavior as the canonical root core?
+4. Can a Mission resume after a settled worker/Git effect without repeating that effect?
+5. Which workers support duplex control, and which are intentionally one-shot?
 
-A design is invalid if it solves P1 by introducing unnecessary P3/P4 machinery, or solves one host limitation by forcing every host through a new process boundary.
+A new runtime is not justified merely by committed duplicate bytes, a nicer component diagram, or substrate features.
 
 ---
 
-## 2. Decision to make
+## 2. State ownership invariant
 
-Choose the **minimum architecture** that gives Autopilot one maintainable coding implementation across supported hosts while preserving:
+The conformance report must pin exactly one owner per state class.
 
-- `/l3`–`/l6`, Mission/Campaign, review/QC, Git/worktree, repair, merge, and cleanup semantics;
-- host-native user entry where it remains useful;
-- exact runner/model/harness identity and qualification;
-- raw harness transcripts plus run/artifact provenance for the existing CodeForge → Mnemos and transcript → eval paths;
-- fail-closed recovery and independent verification;
-- current install/update paths until a replacement proves lower lifecycle cost.
+| State class | Canonical owner | Conformance rule |
+|---|---|---|
+| Interactive conversation/context | Current host harness | Disposable; never authoritative Mission progress |
+| Mission/Campaign lifecycle | Autopilot durable state/reducer | Root and packaged surfaces must agree semantically |
+| Worker process/tool stream | Native runner log + existing normalized observations | Preserve raw transcript; no second session owner |
+| Git effects | Repository refs plus Autopilot receipts | Resume must reconcile before repeating an effect |
+| QC/acceptance | Autopilot engine/depth-0 policy + independent artifact review | Worker self-report is never acceptance authority |
+| Long-term transcript export | Existing Autopilot/CodeForge boundary | Unchanged by this plan |
 
-The decision is among the following options.
+Any proposed implementation that introduces a competing owner fails without further review.
 
-### Option 0 — Generated distribution, hardened
+---
+
+## 3. Deliverable: Autopilot Host Conformance
+
+### 3.1 Files
 
 ```text
-canonical root source
-  ├─ Claude Code loads root plugin
-  ├─ sync script generates Codex package
-  ├─ OpenCode wrapper calls root/core surfaces
-  └─ leaf runners remain external process adapters
+scripts/host-conformance.js
+schemas/host-conformance.schema.json
+evals/host-conformance/surfaces.json
+hooks/tests/host-conformance.test.sh
+docs/projects/2026-08-23-coding-harness-consolidation/evidence/host-conformance.json
 ```
 
-Changes are limited to stronger generation, drift checks, host adapters, and documentation. No new daemon, RPC service, or standalone harness.
+Normal wiring updates are also required:
 
-### Option A — Portable core + host-native front doors
+- `CLAUDE.md` and `docs/scripts-inventory.md` for the new script;
+- `scripts/sync-manifest.json` only if a new check ritual is selected;
+- generated Codex/OpenCode payloads through existing generators, never hand edits.
+
+### 3.2 Lifecycle budget
+
+The first implementation is constrained to:
 
 ```text
-Claude / Codex / OpenCode front door
-              │
-              ▼
-      shared Autopilot CLI/core
- Mission + engine + QC + Git + runners
+new long-lived processes: 0
+new protocols or sockets: 0
+new state stores: 0
+new runtime dependencies: 0
+new production packages: 0
 ```
 
-Each host remains the interactive front door, but it calls one shared core/CLI contract. Platform packages may still contain generated payloads when installation constraints require them. Durable files, not the host conversation, are authoritative for Mission state. No permanently running supervisor process.
+Node built-ins only. The tool is read-only except for explicit output paths and temporary test fixtures.
 
-### Option B — Local Autopilot supervisor service
+### 3.3 CLI contract
+
+```bash
+# Classify platform paths and current capabilities.
+node scripts/host-conformance.js inventory --json
+
+# Run every credential-free fixture and write a typed report.
+node scripts/host-conformance.js check \
+  --output /tmp/autopilot-host-conformance.json
+
+# Validate an existing report, its schema, and referenced local evidence.
+node scripts/host-conformance.js verify \
+  --report /tmp/autopilot-host-conformance.json
+```
+
+Optional focused mode:
+
+```bash
+node scripts/host-conformance.js check --fixture F2 --surface root
+node scripts/host-conformance.js check --fixture F3 --surface codex-package
+```
+
+Unknown surface/fixture is usage error. A requested unsupported combination returns a typed `unsupported_by_design` result, not a fabricated pass.
+
+### 3.4 Report contract
+
+```json
+{
+  "schema": "autopilot.host-conformance.v1",
+  "canonical_commit": "<full sha>",
+  "generated_at": "<explicit or source-derived timestamp>",
+  "surfaces": [
+    {
+      "id": "root|codex-package|opencode-plugin|pi-worker",
+      "capabilities": {
+        "interactive_lifecycle": "supported|degraded|unsupported_by_design",
+        "mission_commands": "supported|degraded|unsupported_by_design",
+        "leaf_worker": "supported|degraded|unsupported_by_design",
+        "duplex_control": "supported|degraded|unsupported_by_design"
+      },
+      "evidence": []
+    }
+  ],
+  "projection_inventory": {
+    "canonical": [],
+    "mechanically_generated": [],
+    "intentional_projection": [],
+    "host_specific": [],
+    "manual_duplicate": [],
+    "orphan_or_residue": []
+  },
+  "state_owners": {},
+  "fixtures": [],
+  "decision": "keep-option-0|extract-option-a|insufficient-evidence"
+}
+```
+
+`generated_at` must be supplied explicitly or derived deterministically from the source commit; normal tests may not depend on wall-clock time.
+
+---
+
+## 4. Deterministic fixtures
+
+Every normal fixture runs without model credentials, network access, or subscription quota. Existing dependency-injection seams and fake runners are mandatory starting points.
+
+### F1 — Projection parity plus planted drift
+
+**Purpose:** distinguish generated distribution from a manually maintained fork.
+
+Procedure:
+
+1. Run existing projection checks:
+
+   ```bash
+   bash scripts/sync-codex-plugin-skills.sh --check
+   bash scripts/sync-opencode-plugin.sh --check
+   ```
+
+2. Consume `scripts/sync-manifest.json` and generator declarations to classify paths.
+3. Copy one generated file to a temp projection and alter one authoritative field.
+4. Run the conformance checker against that temp projection.
+
+Oracle:
+
+- clean repository passes;
+- planted mutation fails and names exact source/destination;
+- generated byte/path totals are separate from manual edit-owner totals;
+- no generated projection is reported as a second architecture owner.
+
+### F2 — Four-boundary Mission resume matrix
+
+**Purpose:** prove crash/restart safety without a daemon.
+
+Use a temporary Git repository plus fake implementation, review, merge, and cleanup functions with durable call counters. Inject process termination or equivalent controlled interruption at exactly:
+
+1. before implementation dispatch;
+2. after implementation commit/receipt, before review;
+3. after reviewed verdict, before merge receipt;
+4. after merge receipt, before cleanup/closeout.
+
+Required resume assertions:
+
+| Boundary | Settled effect that must not repeat | Required next action |
+|---|---|---|
+| 1 | none | implementation exactly once |
+| 2 | implementation commit/receipt | review/verify, implementation call count stays 1 |
+| 3 | reviewed verdict | merge decision/execution only, review not silently repeated unless policy explicitly requires revalidation |
+| 4 | merge receipt | cleanup/closeout only, merge call count stays 1 |
+
+Global oracle:
 
 ```text
-host clients ── RPC ──> local Autopilot supervisor
-                         Mission owner + worker control
+immutable base SHA unchanged
+candidate/merged SHAs have expected ancestry
+no duplicate commits
+no duplicate merge effect
+terminal state follows receipts/Git truth, not worker narration
 ```
 
-A long-lived local process becomes the canonical Mission owner. Host plugins become clients only where live attach/reconnect is required. Existing worker runners remain underneath it. This option adds process lifecycle, version negotiation, authentication/local trust, reconnect, duplicate-command handling, logs, install/update, and failure recovery.
+### F3 — Fail-closed semantic parity
 
-### Option C — Standalone Pi- or DSH-based Autopilot coding harness
+**Purpose:** prove package projection does not weaken authoritative behavior.
+
+Fake reviewer returns empty or malformed output. Run the same canonical command through:
+
+- root `bin/autopilot.js`;
+- generated `platforms/codex/plugin/bin/autopilot.js`.
+
+Required semantic parity:
 
 ```text
-Autopilot CLI/TUI/runtime becomes primary front door
-Claude/Codex/OpenCode become optional clients and/or leaf workers
+status = blocked/no_verdict
+same authoritative phase/reason class
+public exit-code semantics agree
+merge calls = 0
+successful closeout claims = 0
 ```
 
-Autopilot adopts an external harness substrate for its primary session/tool/runtime. Pi and DSH are separate candidates and must not be layered as two canonical session owners. This is the highest-migration option and is considered only if Options 0/A/B cannot meet required workflows or if measured maintenance reduction clearly exceeds the migration cost.
+The comparison is semantic JSON/exit parity, not raw stderr byte identity where host wrappers intentionally add context.
 
-### Important terminology rule
+### F4 — Pi duplex worker boundary
 
-“Bridge” and “worker integration” are **not goals** and do not exist by default:
+**Purpose:** prove live intervention belongs at the worker integration rather than forcing every host through a central bridge.
 
-- A **bridge** is justified only when a host is a client of an external canonical supervisor (Options B/C).
-- A **worker integration** exists only when Autopilot launches that harness as a bounded leaf worker. The existing `dispatch-hetero.sh`, runner wrappers, and Pi RPC driver already count as worker integrations; do not rewrite them merely to rename the layer.
-- Under Options 0/A, host plugins are simply platform adapters/front doors, not bridges.
+Use a fake Pi RPC child that emits the expected typed event sequence and records input.
 
----
-
-## 3. Pre-registered decision rules
-
-The review and spikes must apply these rules before implementation preference or substrate enthusiasm.
-
-### R0 — Generated payload is not counted as independent architecture
-
-Byte-identical or mechanically projected files under `platforms/codex/plugin/` are classified as generated distribution. They count toward repository/release cost, but not as a second manually maintained core.
-
-### R1 — Stop at Option 0 when generation is the dominant pain
-
-Choose Option 0 when all of the following hold:
-
-1. at least 80% of duplicated non-host-specific bytes/paths are generated or mechanically projected;
-2. drift is already detectable or can be made fail-closed with bounded changes;
-3. the three representative workflows in §6 do not require a long-lived owner outside the current CLI/process invocation.
-
-### R2 — Choose Option A before adding a daemon
-
-Choose Option A when shared core invocation and durable Mission state solve cross-host reuse, even if host packages remain different. A daemon is not justified merely because multiple hosts call the same core.
-
-### R3 — Option B requires two independently real live-ownership needs
-
-A local supervisor service is allowed only if **at least two** representative workflows require all of:
-
-- work continues after the front-door process/session dies;
-- a later or different front door must attach while the Mission is still active;
-- durable files + a resumed CLI invocation cannot satisfy the need without unsafe duplicate effects;
-- the service removes more lifecycle owners or host-specific state machines than it adds.
-
-One attractive demo is insufficient.
-
-### R4 — Option C requires measured product superiority
-
-A Pi- or DSH-based primary harness is allowed only when a same-task comparison shows:
-
-- no regression in artifact correctness, independent review, Git isolation, or recovery;
-- materially lower manually maintained host-specific code and release work;
-- transcript/event completeness at least as good as current host-native paths;
-- installation/update/debugging cost no worse for the actual operator workflow;
-- at least one required capability that Options 0/A/B cannot provide cleanly.
-
-“More elegant,” “more modern,” or “everything is a plugin” is not evidence.
-
-### R5 — Reject any option that only moves duplication
-
-A design fails when it replaces generated files with:
-
-- duplicated bridge + worker adapters for the same host;
-- two canonical session/event stores;
-- a new RPC schema mirroring existing Mission/runner schemas;
-- a daemon that shells back into the same scripts without removing a lifecycle owner;
-- a standalone UI plus continued full host plugins, with both remaining first-class indefinitely.
-
----
-
-## 4. Objective and key results
-
-### Objective
-
-Reach an evidence-backed architecture decision for Autopilot's coding harness surface, with an explicit **NO-GO / keep-current** result treated as success.
-
-### Key results
-
-| KR | Measurement |
-|---|---|
-| **KR1 — duplication truth** | Every duplicated path is classified as canonical, generated projection, host-specific adapter, compatibility residue, or accidental fork; bytes/LOC and update owner are reported. |
-| **KR2 — ownership truth** | The three representative workflows have one diagram each showing who owns user interaction, Mission state, worker process, Git effects, QC, transcript, and recovery today. |
-| **KR3 — option cost** | Options 0/A/B/C each have estimated new/removed packages, processes, protocols, state stores, install steps, and failure modes. |
-| **KR4 — bounded evidence** | The smallest sufficient spike is executed first; larger spikes run only when their entry rule fires. |
-| **KR5 — decision** | `decision.md` applies R0–R5 and selects one option, or records `NO-GO` with re-entry triggers. |
-| **KR6 — review convergence** | Architect, Maintainer/Ops, and Skeptic reviews converge; final cross-family review returns `SHIP-AS-IS` or only Board-deferred questions. |
-
----
-
-## 5. Global constraints
-
-These constraints are copied verbatim into every implementation or review dispatch for this plan.
-
-1. **Autopilot coding only.** No Mnemos, CodeForge, Fuchikoma, Hangar, hangar-bridge, fleet scheduler, or broader organ-map redesign.
-2. **Preserve the existing memory/eval boundary.** Raw native transcript + stable Autopilot run/provenance reference must remain available; downstream systems are not redesigned here.
-3. **No daemon before R3 passes.** Do not create a service, socket, RPC protocol, process manager, or bridge package in P0/P1/P2.
-4. **No abstraction without two consumers.** A new interface must be exercised by at least two concrete host/runner implementations in the same phase, or remain local to the first implementation.
-5. **Reuse before rewrite.** Existing `src/engine`, `src/mission`, `src/runners`, Git artifact rails, `dispatch-hetero.sh`, `dispatch-review.sh`, capability evidence, and Pi RPC code are the starting point.
-6. **Generated copies are allowed.** Repository duplication is not automatically architectural duplication when one source and a deterministic drift gate exist.
-7. **No production default flip.** This branch and its decision spikes do not replace the Claude, Codex, or OpenCode entry path.
-8. **Pi/DSH neutrality.** Neither substrate is selected in advance; they are measured only if R4's entry conditions become reachable.
-9. **One canonical owner per state class.** Conversation state, Mission state, Git effects, and long-term transcript export must not gain competing owners.
-10. **Deletion must be named.** Every new package/process/protocol proposal lists the existing code or lifecycle responsibility it removes. “Future flexibility” is not a deletion.
-
----
-
-## 6. Representative workflows
-
-The decision is evaluated against exactly these workflows; do not expand the set during the first pass.
-
-### W1 — interactive `/l5` implement-review
-
-A user enters through a supported host, Autopilot dispatches an isolated implementer, independently reviews the artifact, repairs if needed, and returns a candidate/terminal result.
-
-Questions:
-
-- What host-specific logic is truly required?
-- Is the current root CLI/engine already the shared core?
-- Would a bridge merely forward to the same scripts?
-
-### W2 — crash/compact/restart recovery
-
-The depth-0/front-door context disappears after at least one worker effect. Recovery must determine whether implementation, review, merge, or cleanup is next without duplicating effects.
-
-Questions:
-
-- Can existing Mission state + rehydration + reconcile handle this through a resumed CLI invocation?
-- Is a continuously running process actually necessary?
-
-### W3 — user intervention in a live worker
-
-A user asks to stop, steer, or change constraints while a supported worker is active.
-
-Questions:
-
-- Which workers genuinely support duplex control?
-- Does the existing Pi RPC/directive channel solve the worker side?
-- Must another host attach, or is intervention through the owning front door sufficient?
-
----
-
-## 7. Expected execution artifacts
-
-Implementation of this plan creates a project directory, not production architecture by default:
+Oracle:
 
 ```text
-docs/projects/2026-08-23-coding-harness-consolidation/
-  p0-duplication-inventory.md
-  p0-ownership-map.md
-  p1-option-matrix.md
-  p2-minimal-spike-evidence.md
-  p3-supervisor-spike-evidence.md      # only if R3 entry fires
-  p4-substrate-comparison.md           # only if R4 entry fires
-  review-summary.md
-  decision.md
+steer receipt correlates to active run
+abort is idempotent
+a terminal event is observed after abort
+usage/tool events retain their declared aggregation semantics
+non-duplex runners report unsupported_by_design rather than emulating steer
 ```
 
-A deterministic inventory helper may be added if manual counting would be error-prone:
-
-```text
-scripts/audit-platform-projections.js
-```
-
-It may only classify/count paths and compare content/projection rules; it must not alter package generation.
-
-No production source file is changed until `decision.md` selects an option and a separate implementation plan is approved.
+An opt-in live Pi smoke may reuse existing capability receipts, but it is not part of the normal gate.
 
 ---
 
-## 8. Phases and gates
+## 5. Implementation phases
 
-### P0 — Current-state and duplication audit
+The source-plan headings below are the complete deliverable DAG. Review/test/repair are gates inside these deliverables, not extra phases.
 
-1. Inventory root surfaces and all platform packages/wrappers.
-2. For each duplicate path, record:
-   - source path;
-   - destination path;
-   - generated/projection mechanism;
-   - byte identity or intentional transform;
-   - human edit owner;
-   - drift gate;
-   - current consumers.
-3. Trace W1–W3 and identify current lifecycle/state owners.
-4. Identify concrete incidents or recurring work caused by cross-host divergence; do not infer pain from file count alone.
+### P0 — Contract and generated inventory
 
-**Gate P0:** If no manually maintained architectural fork or unsatisfied workflow is found, stop with Option 0 / `NO-GO` for further redesign.
+Implement:
 
-### P1 — Option matrix and deletion accounting
+- `schemas/host-conformance.schema.json`;
+- `evals/host-conformance/surfaces.json` with evidence-backed current claims;
+- `host-conformance.js inventory` using `sync-manifest.json` and existing projection definitions.
 
-For Options 0/A/B/C, produce:
+Acceptance:
 
-- component diagram;
-- state-owner table;
-- package/process/protocol count;
-- install/update path;
-- failure/recovery path;
-- code/lifecycle responsibilities added;
-- code/lifecycle responsibilities deleted;
-- migration and rollback path;
-- unresolved host limitations.
+```bash
+node scripts/validate-json-schema.js \
+  schemas/host-conformance.schema.json \
+  <synthetic-valid-report>
+node scripts/host-conformance.js inventory --json
+```
 
-**Gate P1:** Select the smallest option that could satisfy all observed requirements. Only that option advances to a spike. A more complex option cannot spike “for completeness” unless its entry rule is already met.
+Negative: unknown category, duplicate owner, or missing evidence pointer fails.
 
-### P2 — Minimal shared-core spike
+### P1 — F1 projection gate
 
-Default candidate: Option A, unless P0 selected Option 0.
+Implement projection classification and planted-drift fixture. Reuse existing generators; do not create another package manifest.
 
-Exercise W1–W3 using existing root CLI/core, durable Mission state, generated packaging, and current runners. The spike should prefer adapters or generated launchers over new protocols.
+Acceptance:
 
-Measure:
+```bash
+bash scripts/sync-codex-plugin-skills.sh --check
+bash scripts/sync-opencode-plugin.sh --check
+bash hooks/tests/run.sh host-conformance
+```
 
-- manually maintained duplicated code before/after;
-- number of state/lifecycle owners;
-- restart/reconcile behavior;
-- host-specific code required;
-- transcript/provenance completeness;
-- install/update/debug steps.
+Negative: one temp-copy mutation makes F1 fail with exact path pair.
 
-**Gate P2:** If Option A meets the workflows, stop. Do not proceed to a service or standalone substrate.
+### P2 — F2 recovery matrix
 
-### P3 — Supervisor-service spike, conditionally executed
+Extend existing `AutopilotEngine`/Mission tests using injected fakes and a temporary Git repo. Do not add a process service.
 
-Run only if R3 passes after P2 evidence.
+Acceptance: all four boundaries satisfy call-count and Git ancestry assertions. At least one planted broken reconciler must produce RED before the product repair is accepted.
 
-The spike is deliberately narrow:
+### P3 — F3/F4 surface behavior
 
-- one local supervisor process wrapping existing Mission/runtime behavior;
-- two front-door clients from different hosts;
-- one existing leaf worker provider;
-- attach/reconnect, duplicate-command, process-death, and ambiguous-effect tests;
-- no new Git/QC/routing implementation.
+Implement root/Codex semantic parity and fake Pi RPC directive tests. OpenCode is checked only for capabilities it currently claims; unsupported lifecycle commands stay typed unsupported.
 
-**Gate P3:** Adopt Option B only if it removes more concrete lifecycle duplication than it adds and both required live-ownership workflows pass. Otherwise record `NO-GO` and return to Option A.
+Acceptance:
 
-### P4 — Pi/DSH primary-runtime comparison, conditionally executed
+```bash
+node scripts/host-conformance.js check \
+  --output /tmp/autopilot-host-conformance.json
+node scripts/host-conformance.js verify \
+  --report /tmp/autopilot-host-conformance.json
+```
 
-Run only if R4's prerequisite is satisfied by an unresolved required capability after P3.
+### P4 — Decision and cleanup
 
-Compare one candidate at a time against the selected smaller option with fixed task/model/tool/acceptance footing. Do not stack Pi and DSH as nested canonical session owners.
+Commit the reproducible report under the project evidence directory, apply §8 rules, and write `decision.md`.
 
-**Gate P4:** Option C wins only under R4. A technically successful demo that fails maintenance or migration criteria is rejected.
+The decision must name:
 
-### P5 — Decision and follow-up boundary
+- selected Option 0 or A;
+- any manually duplicated semantic and the exact code a later extraction removes;
+- current unsupported capabilities;
+- rejected larger options and re-entry evidence;
+- rollback (remove the conformance addition if necessary; no production path changed yet).
 
-Write `decision.md` with:
-
-- selected option or `NO-GO`;
-- exact evidence and R0–R5 application;
-- rejected alternatives and re-entry triggers;
-- what code/process/protocol will be deleted;
-- migration/rollback outline;
-- a separate follow-up implementation plan if any production change is selected.
-
-This plan never silently turns its spike into production architecture.
+If Option A is selected, production extraction requires a separate implementation plan and review.
 
 ---
 
-## 9. Review loop
+## 6. Exact local validation
 
-### Round 1 — three independent perspectives
-
-Reviewers receive this plan only, plus links to current architecture and projection scripts. They do not receive one another's reviews before submitting.
-
-#### Architect
-
-Focus:
-
-- state ownership and dependency direction;
-- whether Options B/C create a second control/session plane;
-- whether existing engine/Mission/runner boundaries already solve the proposed problem;
-- whether “bridge” and “worker integration” are redundant wrappers.
-
-Mandatory answer: **What is the smallest defensible architecture, and what specific requirement prevents the next-smaller option?**
-
-#### Maintainer / Ops
-
-Focus:
-
-- install, update, packaging, generated payloads, version drift, process supervision;
-- crash/restart/debug behavior;
-- cross-platform support and dependency churn;
-- what becomes harder for a single operator maintaining the repo.
-
-Mandatory answer: **Does the proposal reduce total lifecycle complexity, not merely source-tree duplication?**
-
-#### Skeptic / Product
-
-Focus:
-
-- whether the problem is proven;
-- whether a central runtime provides user-visible value;
-- migration tax and indefinite dual-path risk;
-- simplest alternatives and stop conditions.
-
-Mandatory answer: **Is this redesign architectural leverage or “脫褲子放屁”? Name the first phase that should be deleted if it is the latter.**
-
-### Verdict/output contract
-
-Each review must end with:
-
-```text
-VERDICT: SHIP-AS-IS | FIX-THEN-SHIP | NO-GO
-FINDINGS:
-- 🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion
-SMALLEST SUFFICIENT OPTION: 0 | A | B | C
-MISSING EVIDENCE:
-DELETION ACCOUNTING:
+```bash
+bash scripts/sync-codex-plugin-skills.sh --check
+bash scripts/sync-opencode-plugin.sh --check
+bash hooks/tests/run.sh host-conformance
+node scripts/host-conformance.js check \
+  --output /tmp/autopilot-host-conformance.json
+node scripts/host-conformance.js verify \
+  --report /tmp/autopilot-host-conformance.json
+node scripts/sync-all.sh --check
 ```
 
-### Consolidation
+Before final merge, run the repository's normal preflight/test gate appropriate to the changed paths. Live model calls are not required for acceptance.
 
-Depth-0 unions verified findings, rejects unsupported preferences, revises the plan, and records a mapping from each finding to its disposition.
+---
 
-### Round 2 — decorrelated final review
+## 7. Review and repair discipline
 
-A cross-family reviewer receives the revised plan and the finding-disposition table, not raw prior deliberation. It must verify:
+### R1 — completed
 
-- no unresolved 🔴/🟠 finding;
-- decision rules remain pre-registered and non-circular;
-- smaller options cannot be skipped;
-- no scope leak into Mnemos/CodeForge/Fuchikoma/fleet architecture;
-- `NO-GO` remains an acceptable terminal result.
+Independent reviews:
 
-Loop cap: three repair rounds. Hitting the cap without convergence escalates to Board; it does not authorize implementation.
+- `reviews/r1-architect.md`;
+- `reviews/r1-maintainer-ops.md`;
+- `reviews/r1-skeptic-product.md`;
+- `reviews/r1-eval-verifier.md`.
+
+Consolidation: `review-summary.md`.
+
+### R2 — closure only
+
+One closure reviewer receives this repaired plan plus the finding-disposition table. It may only:
+
+1. verify each R1 finding is closed;
+2. identify a regression introduced by the repair;
+3. return `SHIP-AS-IS` or `BLOCKED/BOARD`.
+
+It may not open unrelated enhancements, rename components for style, or expand scope.
+
+**Hard cap:** R1 + one repair + R2. No third review generation. R2 failure ends the plan at Board rather than spawning another repair loop.
+
+---
+
+## 8. Decision rules
+
+### Select Option 0 and stop when
+
+- F1–F4 pass;
+- canonical semantics have no manually maintained duplicate, or every remaining host-specific path is genuinely required by the host API;
+- durable Mission resume handles all four boundaries without repeated effects;
+- supported/degraded/unsupported claims are honest and evidence-backed.
+
+Option 0 still ships the conformance tool and report; it is not a null result.
+
+### Select bounded Option A when
+
+- the report identifies a specific manually maintained host path that reimplements canonical semantics;
+- moving that semantic into root core lets the later implementation delete the named host copy/branch;
+- generated packages can project the new root source without another protocol or state owner.
+
+Option A extraction is a separate approved change.
+
+### Insufficient evidence
+
+Return `insufficient-evidence` when a required fixture cannot run deterministically or current host claims are not provable. Do not infer a larger architecture from missing evidence.
+
+---
+
+## 9. Re-entry conditions for larger architectures
+
+### Local supervisor service (former Option B)
+
+A separate service proposal may reopen only after **two recorded real incidents** demonstrate all of:
+
+- front-door death occurred after an external effect;
+- resumed CLI plus durable state could not reconcile safely;
+- another active front door had to attach before work could continue;
+- a service would remove more lifecycle/state owners than it adds.
+
+Each incident must include run ID, receipts/Git evidence, and failed recovery path.
+
+### Pi- or DSH-based primary runtime (former Option C)
+
+A substrate comparison may reopen only when the conformance report names a required capability that Option 0/A cannot implement cleanly. A later fixed-footing comparison must prove correctness, recovery, transcript completeness, maintenance reduction, install/update cost, and which existing component is deleted.
+
+Pi and DSH remain separate candidates; they may not both own the same canonical session.
 
 ---
 
 ## 10. Acceptance criteria
 
-This plan is review-ready when:
+The plan is implementation-ready only when R2 confirms:
 
-1. it does not assume Autopilot needs a standalone harness or daemon;
-2. generated Codex/package projections are distinguished from manually maintained forks;
-3. Options 0/A/B/C have explicit entry/stop rules;
-4. bridge/worker vocabulary is conditional rather than mandatory architecture;
-5. W1–W3 are sufficient to test the claimed need;
-6. existing engine/Mission/runner/Pi RPC code is the mandated starting point;
-7. downstream transcript → CodeForge → Mnemos behavior is preserved without modifying those projects;
-8. the review loop can return `NO-GO` without being treated as failure;
-9. every more-complex option names what it deletes;
-10. final implementation, if any, requires a separate approved plan.
+1. the first deliverable is a working conformance tool, not another runtime;
+2. normal tests require no live model, network, or credentials;
+3. F1 contains a planted drift negative;
+4. F2 contains four precise recovery boundaries and effect call counters;
+5. F3 compares root and generated Codex semantics fail-closed;
+6. F4 tests Pi duplex behavior at the worker boundary;
+7. OpenCode unsupported features are not falsely advertised;
+8. initial lifecycle budget remains zero processes/protocols/stores/dependencies/packages;
+9. Option 0 produces a useful operational artifact;
+10. Options B/C are evidence-gated re-entry paths only;
+11. the review loop ends after R2.
 
 ---
 
-## 11. Risks and inversion
+## 11. Risks and guards
 
 | Risk | Guard |
 |---|---|
-| **Generated copies misread as multiple cores** | R0 + P0 classification by source/projection/drift owner |
-| **Architecture-by-vocabulary** — invent bridge/provider/protocol types before a second consumer exists | Constraint 4; terminology rule in §2 |
-| **Daemon cargo cult** — service wraps the same shell scripts and adds lifecycle without deleting one | R3/R5 deletion accounting |
-| **Substrate fashion** — Pi or DSH chosen because its design is attractive | R4 fixed-footing evidence gate |
-| **Dual-path forever** — standalone runtime ships while full host plugins remain equal first-class products | R4 migration/deletion requirement |
-| **Two session owners** | Constraint 9; one canonical owner per state class |
-| **Repository-size optimization mistaken for maintainability** | Measure manual edit owners and release work, not only LOC |
-| **Spike becomes production by inertia** | P5 separate implementation-plan boundary |
-| **Scope explosion into the ecosystem** | Constraint 1 + Round-2 scope audit |
-| **False simplicity** — Option 0/A hides a real cross-session recovery failure | W2 effect ambiguity and reconcile test |
-
-### Inversion question
-
-What design would guarantee failure?
-
-> Add a local daemon, three host bridges, three worker adapters, a new event protocol, and a standalone UI while retaining the existing full plugins, generated packages, shell dispatchers, and Mission stores. That maximizes owners and migration surface without proving a new user workflow. Any option trending toward this shape must stop under R5.
+| Generated bytes mistaken for a second core | Inventory derives from existing generator truth |
+| Conformance script becomes another policy owner | It observes/tests only; existing core remains authority |
+| False universal parity | Typed supported/degraded/unsupported results |
+| Recovery test passes vacuously | Durable call counters, Git ancestry, and planted broken reconciler |
+| New abstraction grows before need | Zero-lifecycle budget and no new generic protocol |
+| Option 0 becomes “do nothing” | Typed report and regression gate are mandatory output |
+| Substrate enthusiasm reopens scope | Explicit incident/capability re-entry gates |
+| Review never converges | One repair and one closure review only |
 
 ---
 
 ## 12. Out of scope
 
-- Mnemos storage, retrieval, memory governance, or API changes.
-- CodeForge ingest/dream/ship/cite changes.
-- Fuchikoma authority, portfolio, or autonomy design.
-- Hangar/hangar-bridge fleet transport or scheduler design.
-- llm-playground/model-dyno architecture changes; they may be used later as measurement infrastructure.
-- New model-routing policy or qualification semantics.
-- Rewriting skills into code merely for stylistic purity.
-- A new public repository or package split.
-- Production CLI/TUI/daemon implementation.
-- Removing existing host support before a selected replacement passes parity and rollback gates.
-
----
-
-## 13. Open questions for review
-
-1. Which concrete recurring maintenance incidents are caused by manually maintained host forks, rather than generated payload size?
-2. Does any current coding Mission truly need to outlive its front-door process while continuing autonomous effects?
-3. Is cross-host live attach a real operator workflow or a hypothetical convenience?
-4. Can existing durable Mission state plus a resumed root CLI satisfy W2 without a daemon?
-5. Which current host-specific logic should be deleted under Option A, and which must remain by nature?
-6. Does the existing Pi RPC/directive path already satisfy W3 for the only worker that needs duplex control?
-7. What exact component would DSH or Pi replace, rather than sit beside?
-
-Until these questions have evidence-backed answers, the architecture prior remains **Option 0/A**.
+- New daemon, socket, service manager, RPC or bridge protocol.
+- Standalone Autopilot CLI/TUI product migration.
+- Pi/DSH primary-runtime implementation or benchmark in this plan.
+- Mnemos, CodeForge, Fuchikoma, Hangar, hangar-bridge, or model-dyno redesign.
+- New routing/qualification policy.
+- Rewriting skills into code for stylistic reasons.
+- Removing existing host support.
+- New repository/package split.

@@ -152,9 +152,22 @@ async function measureBoundedStop(stopFn, boundMs) {
     stopped,
     elapsedMs,
     baselineMs,
-    // `stopped` already means "resolved before the concurrent baseline timer";
-    // the explicit comparison keeps the ceiling visible and reported.
-    bounded: stopped && elapsedMs <= baselineMs,
+    // `stopped` IS the ceiling: it is true only when the shutdown settled the
+    // race BEFORE the concurrent nominal-`boundMs` timer callback ran.
+    //
+    // The first cut of this helper also wrote `&& elapsedMs <= baselineMs`. That
+    // conjunct is DEAD, and a clause that can never fail is decoration, not a
+    // guard: `elapsedMs` is sampled in the microtask that resumes this function
+    // right after the race settles, and microtasks drain before any timer
+    // callback — so whenever `stopped` is true, `baselineMs` is necessarily
+    // sampled later and the comparison holds by construction. (Confirmed by the
+    // first-pass reviewer probing this helper directly across fast / hung /
+    // 2 s-starved / 499 ms-near-race scenarios: every `stopped:true` case was
+    // also `bounded:true`; the only `bounded:false` case was the hung one, where
+    // `stopped` was already false.) The measurements stay in the return value —
+    // they are reported on every run — but the verdict rests on the one
+    // comparison that can actually fail.
+    bounded: stopped,
   };
 }
 

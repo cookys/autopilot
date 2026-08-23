@@ -1,6 +1,5 @@
 # Changelog
 
-=======
 ## v2.34.37 — 三個「觸發器已經響了」的修:一個靜默失效的執法路徑,兩個把主機當斷言的測試
 
 prose-justification: 這一刀沒有動任何 `skills/` 檔案。三筆都是 shipped code 與其測試的修復,
@@ -23,10 +22,14 @@ prose-justification: 這一刀沒有動任何 `skills/` 檔案。三筆都是 sh
   在預設時鐘下 `rejected_strikes: 3 / strikes_since_pass: 0`,同一列給一個未來的 `--now` 立刻
   變成 `strikes_since_pass: 3 / would_requalify: true`。
 
-修法是預設值改成 `Date.now()`,`todayMsUtc()` 整支移除。**顯式 `--now` 語義逐字不變**:
-date-only 仍是該日午夜,full timestamp 仍是該 instant。唯一刻意保留日粒度的是
-`computeExpiryWarning`——它的右手邊 `expires` 契約上就是 date-only,因此用新的
-`startOfUtcDayMsOf` 把比較留在日粒度,免得這刀順手改掉一個 advisory-only 欄位開始示警的日子。
+修法是預設值改成 `Date.now()`,`todayMsUtc()` 整支移除。**顯式 `--now` 的解析逐字不變**:
+date-only 仍是該日午夜,full timestamp 仍是該 instant,`nowMs` 的值一模一樣。唯一刻意保留日粒度
+的是 `computeExpiryWarning`——它的右手邊 `expires` 契約上就是 date-only,因此用新的
+`startOfUtcDayMsOf` 把**左右兩邊**都留在日粒度。這一項的**輸出對帶時間戳的 `--now` 確實變了**,
+不能說成完全不變:以 `expires: 2026-08-24` 的列為例,`--now 2026-08-24T10:00:00Z` 修前
+`expiry_warning=true`(午夜 < 10:00Z)、修後 `false`,與 `--now 2026-08-24` 一致。方向是**消除**
+date-only 與 full-timestamp 兩種 `--now` 原本就存在的分歧,而不是製造分歧;該欄位依
+`references/strike-decay.md` 為 advisory-only,不參與 admission。
 釘住的 pass-instant tiebreak(`observedMs > baselineMs` 嚴格大於)未被觸碰。覆蓋:
 `hooks/tests/calendar-teeth-negative.test.sh` 的 `instant1`-`instant4`,四條全部**不帶 `--now`**,
 因為那才是生產路徑;fixture 的 instant 取 `max(UTC 午夜 + 1ms, now - 60s)`,所以任何時刻跑都不會
@@ -58,7 +61,6 @@ kernel 現在在兩條 return path 都回報 `wall_truncated` 與 `started_cases
 
 三筆各自一個 commit,對應的 `docs/BACKLOG.md` 條目都已標 RESOLVED 並寫明機制。Codex 鏡像同步。
 
-=======
 ## v2.34.36 — 官方施測結果隨 plugin 出貨:consumer 吃預設,或在自己的環境自考
 
 prose-justification: this cut's own skill growth, attributed precisely — `skills/engine-onboarding/SKILL.md` 228→249 (+21: a new「Stage 0.5 — adopt or self-qualify」step, which is the user-facing decision this release exists to create, plus three rows in the existing Available-Scripts table for the three new scripts) and `skills/onboard/SKILL.md` 109→125 (+16: §5.6, the one-time adopt-vs-self-qualify question, placed behind the existing §5.5 hetero-credential gate so a repo with no hetero role never reads it). Both are the shipped surface itself: a defaults artifact nobody is told to consult is `evidence-discipline.md` §1's dead-but-documented module. No prose was added anywhere else in skills/.

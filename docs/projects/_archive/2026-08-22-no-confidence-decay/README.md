@@ -1,8 +1,8 @@
 # no-confidence qualification decay — replace the calendar
 
 > **Target version**: v2.34.35
-> **Plan**: [docs/plans/2026-08-22-no-confidence-decay.md](../../plans/2026-08-22-no-confidence-decay.md)
-> **Contract**: [references/strike-decay.md](../../../references/strike-decay.md)
+> **Plan**: [docs/plans/2026-08-22-no-confidence-decay.md](../../../plans/2026-08-22-no-confidence-decay.md)
+> **Contract**: [references/strike-decay.md](../../../../references/strike-decay.md)
 > **Run**: `nocon-decay-l4` (depth-1 foreman, worktree-isolated; depth-0 owns merge)
 
 ## Project Goal

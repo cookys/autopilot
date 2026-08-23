@@ -1,7 +1,7 @@
 # Official qualification defaults — ship the administrations, ask the consumer once
 
-Target version: **v2.34.36** · Plan: [`docs/plans/2026-08-23-official-qualification-defaults.md`](../../plans/2026-08-23-official-qualification-defaults.md)
-Contract: [`references/qualification-defaults.md`](../../../references/qualification-defaults.md)
+Target version: **v2.34.36** · Plan: [`docs/plans/2026-08-23-official-qualification-defaults.md`](../../../plans/2026-08-23-official-qualification-defaults.md)
+Contract: [`references/qualification-defaults.md`](../../../../references/qualification-defaults.md)
 
 ## Project Goal
 

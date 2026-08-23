@@ -82,7 +82,7 @@ mode: warn
 #    a suite that WRITES a skip into a fixture from being read as one that skips.
 #
 # Everything else in the shell grammar is enumerated and covered; the full
-# enumeration is in docs/projects/2026-08-23-test-integrity-coverage/README.md.
+# enumeration is in docs/projects/_archive/2026-08-23-test-integrity-coverage/README.md.
 
 ## Integrity Surface Paths
 # Files that DEFINE what the suites can detect. Editing one of these changes

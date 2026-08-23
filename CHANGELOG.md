@@ -65,7 +65,7 @@ README 表、設定檔註解、BACKLOG 三處同步。
 把它關掉——那正是它當初瞎掉的路徑。要不要升 block 需要「違規流準確到可以擋」的實證,那個實證
 現在不存在,已立 BACKLOG。
 
-**證據(這一批真正的交付物)**: `docs/projects/2026-08-23-test-integrity-coverage/evidence/negative-controls.sh`
+**證據(這一批真正的交付物)**: `docs/projects/_archive/2026-08-23-test-integrity-coverage/evidence/negative-controls.sh`
 是可重跑的 reproducer,在 `$TMPDIR` 的拋棄式 repo 裡對四個 gaming 動作各跑三次——BEFORE
 (origin/develop 工具鏈 + template 設定)、AFTER(本支 + 新設定,warn)、BLOCK(同設定 mode 翻
 block)。四條全部 BEFORE `matched=0 / violations=[] / exit 0`,AFTER 逐條命中,BLOCK 逐條

@@ -131,7 +131,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Trigger**(殘餘,class (a) 專屬): a mechanically valid oracle-completeness predicate exists — G1/G2 review refuted the R0 predicate ("output_paths+verify cmds" is EVERY Mission contract's shape); candidates recorded in plan §1: `required_change_paths` equality, or opt-in `complete_deliverable` flag + closed-enum unverifiable-property justification. KR1 must NOT ship (even as shadow) until then.
 - **Context**: 原三控制中兩個已出貨且各有 planted negative + dead-gate mutation kill:(c) repair ladder(`src/engine/repair-ladder.js`,無狀態形:terminalize 邊單點拒絕;零 delta 轉終局被拒)與 (b) pre-commit manifest gate(`check-disjointness --staged` + dispatch-hetero wrapper staging 攔截;P6D 雙 symlink planted red)。(a) unjustified heavy dispatch 未出貨——G2 terminal 裁決 KR1 連 shadow 都砍(對已否證述詞做 shadow 產生不可解讀資料)。report budget 依事故記錄邊界維持非產品。
 - **Effort**: M(class (a) 述詞設計 + enforce campaign,需新 plan + review)
-- **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/2026-08-21-p6d-orchestration-incident/README.md);plan `docs/plans/2026-08-21-p6d-corrective-gates.md`(R2' FROZEN)+ 兩代 review 證據。
+- **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026-08-21-p6d-orchestration-incident/README.md);plan `docs/plans/2026-08-21-p6d-corrective-gates.md`(R2' FROZEN)+ 兩代 review 證據。
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
 - **Status**: dev-flow leg RESOLVED-NO-SWAP（2026-08-18,[plan](plans/2026-08-18-dev-flow-contract-card.md)）— 儀器（evals/skill-onoff）、規格（references/skill-contract-card.md）、P4 baseline 機制已出貨;primary block 63 runs 機械裁決 **INSTRUMENT-INVALID（V2 vacuous,1/5 家族承重）**,card 不出貨（見下方「dev-flow card re-attempt」row）。quality-pipeline leg 留本 row,前置改為:skill-onoff 儀器修復並通過 V2。
 - **Trigger**: 四層 redesign 的 Policy 層設計定案,且目標 skill 有 eval ON/OFF 證據（成績單前置）
@@ -296,7 +296,7 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: 2026-08-08 CI triage（11/273 → 1/273）三起獨立成因的共同模式；本檔另有三條各自的條目。
 
 ### ~~`check-test-integrity.sh` does not cover this repo's main test surface~~ — RESOLVED v2.34.38
-- **Status**: RESOLVED 2026-08-23 (`docs/projects/2026-08-23-test-integrity-coverage/`)。機制有兩層,不是一層:
+- **Status**: RESOLVED 2026-08-23 (`docs/projects/_archive/2026-08-23-test-integrity-coverage/`)。機制有兩層,不是一層:
   (1) 新增 `.claude/test-integrity-config.md`,`test_paths` = `**/*.test.{sh,js,mjs,cjs,ts}`,涵蓋
   `git ls-files '*.test.sh' '*.test.js'` 的 **300/300**;`surface paths` = `hooks/tests/lib.sh`(斷言庫本體)、
   `hooks/tests/lib/**`、`hooks/tests/run.sh`、`hooks/tests/fixtures/**`、eval task fixture repo 與凍結

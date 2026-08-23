@@ -611,7 +611,7 @@ cd "$repo"
 # shape (bash *.test.sh). Before .claude/test-integrity-config.md existed, the
 # template globs matched none of these paths and the gate reported ok with
 # test_paths_matched: 0. The reproducer with recorded BEFORE/AFTER output is
-# docs/projects/2026-08-23-test-integrity-coverage/evidence/negative-controls.sh.
+# docs/projects/_archive/2026-08-23-test-integrity-coverage/evidence/negative-controls.sh.
 shell_cfg() { # shell_cfg <mode>
   reset_repo
   mkdir -p .claude hooks/tests
@@ -663,7 +663,7 @@ assert_not_contains "$__OUTPUT" '"kind": "deleted_line"' "added skip: nothing wa
 # shell grammar, and so are these controls: they cover each CLASS, including
 # the classes that are deliberately excluded and the ones that stay uncovered.
 # The full enumeration (with the uncovered classes named) is in
-# docs/projects/2026-08-23-test-integrity-coverage/README.md.
+# docs/projects/_archive/2026-08-23-test-integrity-coverage/README.md.
 #
 # Add a class here before adding a pattern there.
 

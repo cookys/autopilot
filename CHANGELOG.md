@@ -1,5 +1,115 @@
 # Changelog
 
+## v2.34.38 — anti-gaming 閘第一次看得見這個 repo 的測試面(以及它的設定表面從來沒能用過)
+
+prose-justification: 沒有動任何 `skills/` 檔案。一個新的 `.claude/` 專案設定、一個 parser bug
+修復、一組 shell 語意、以及把四條負控制立成常駐迴歸。
+
+**Headline**: `check-test-integrity.sh` 是擋 delegated implementer「刪測試／弱化斷言／加 skip」
+的閘。在這個 repo 上它**一個測試檔都沒看過**——對一個改了 `hooks/tests/run.sh` 的 range 回
+`{ "ok": true, "test_paths_matched": 0, "source": "template" }`。修的過程挖出兩層,不是一層:
+
+**(1) 表層:autopilot 沒有自己的 `.claude/test-integrity-config.md`。** 於是引擎退回
+`project-config-template/test-integrity-config.md`,而那份的 `test_paths` 是通用生態慣例
+(`**/*_test.go`、`tests/**`、`**/*.test.js` …)。這個 repo 的測試主力是 **260 個
+`*.test.sh` shell 套件加 40 個 `*.test.js`**,住在 `hooks/tests/`、`hooks/`、`scripts/`、
+`scripts/tests/`、`platforms/codex/plugin/scripts/`、`evals/`——template 的 glob 一個都不match。
+
+**(2) 底層,而且比較嚴重:那份設定的 `test_paths` 欄位從來就不能用。** `parse_config` 把
+`line.startswith("#")` 排在 `line.startswith("##")` **之前**,所以每一個 section heading 都被
+當成註解吞掉,`section` 永遠是 `None`,任何 `- <glob>` 行都以 "Unrecognized config line" 被
+判 malformed。也就是說:**任何專案**寫 `test_paths` / `surface_paths` 都無效,一律靜默退回內建
+預設,而且沒有任何一條既有測試碰過那條路徑(510 行的 acceptance 套件只設定過 `mode:`)。
+拿新設定去餵 `origin/develop` 的引擎,回的是 `malformed_config` + `test_paths_matched: 0`——
+這條就是證據。`##` 的判斷現在排在 `#` 之前;`mode:` 語意逐字不變。
+
+**(3) L0 引擎現在懂 shell 套件的 skip 語意。** `get_lang_key` 原本對 `.sh` 回 `None`,所以
+「新增一個 skip」這條 gaming vector 在 bash 套件上完全無聲(`deleted_line` 本來就與語言無關,
+刪除／弱化那兩條一直是看得到的,只要路徑 match)。校準方式是**真的去跑閘**而不是把它的 regex
+再抄一份到檢查器裡(`evidence/skip-calibration.sh`:把每個 `*.test.sh` 當全新檔案放進拋棄式
+repo,於是每一行都以「新增行」進入引擎):260 個套件、**7** 條命中——5 條在
+`mission-terminal-rollover.test.sh`(全是真正的條件式 skip),另外 2 條在
+`check-test-integrity.test.sh` 自己身上,是 §11c-bis 用來把 skip 種進 fixture 的 `sed` payload。
+後面這兩條是**真實但無害的假陽性類別,選擇記錄而不是調掉**:一個「把 skip 寫進 fixture」的套件,
+逐字看起來就和「自己 skip」的套件一模一樣——行層偵測器沒有「這串是資料」的概念。這個類別很窄
+(要在測試撰寫行裡出現字面 skip token),在 `warn` 下不花任何成本,但翻到 `block` 就會擋住對這個
+測試檔本身的編輯——這正是升 block 需要先有準確度紀錄的又一個理由。
+
+**這條規則被繞過三次,所以第三次不再補 regex。** first-pass review 抓到兩條(`&& skip` 只錨行首、
+shell 借用 python 註解剝除導致 `${#…}` 把整行截掉);depth-0 三席權威 panel(sol@max FIX-THEN-SHIP
+3🔴、MiniMax-M3 FIX-THEN-SHIP 2🟠、GLM-5.2 SHIP-AS-IS)又抓到三條並在真引擎上逐條重現:`skip;`
+(裸形式的尾巴只認空白或行尾)、`printf ' #' && skip "r"`(**引號內**的 `#` 仍被當註解截斷)、
+`( skip "r" )`(`(` 不在命令位置集合)。
+
+**改法是把 shell 文法列舉出來,不是再打三個補丁。** `strip_trailing_comment` 的 shell 分支換成
+真正的掃描器 `shell_code_view`——逐字元追蹤引號與跳脫,`#` 只有在詞邊界且未被引號包住時才是註解;
+偵測改由列舉出來的**命令位置**(行首、`;` `&` `|` `(` `{` `!` 反引號、`then/else/elif/do`、
+`NAME=value` 前綴)與**尾巴**類別(空白+引數、行尾、`;` `&` `|` `)`)驅動。`(` 在所有尾巴類別中
+排除,所以 `skip()` / `skip ()` 仍是**定義**;`}` 排除,所以 `${skip}` 仍是**展開**;`case` 的
+`in skip)` 是 pattern 不是命令,明確不納入。完整列舉(含刻意排除與具名未涵蓋)寫在 project README。
+
+**引號段在偵測前收斂成 `Q` 佔位符**,這一刀把 DATA 和 CODE 分開:一個「把 skip 寫進 fixture」的
+套件(這個 repo 的 `check-test-integrity.test.sh` 自己就是)不再被讀成「自己 skip」。校準因此從
+7 條回到 **5 條**——先前那 2 條自我指涉假陽性是真的消失了,不是被容忍。代價具名:`eval "skip"`
+與 heredoc 內文的 skip 因此看不見。
+
+**具名未涵蓋類別(五條,逐條有斷言釘住當前邊界)**:A14 `time`/`coproc` 前綴、A16 前置重導向、
+B9 heredoc 內文、D2 eval 字串、D3 heredoc 內的 skip。補上任何一條都會讓對應斷言轉紅,強迫
+README 表、設定檔註解、BACKLOG 三處同步。
+
+**violation 現在引用原始行而不是剝除後的投影**——否則讀者看到的是 `skip Q`,拿不到 reason 文字。
+
+**mode 刻意是 `warn`,不是 `block`,而且理由寫在設定檔裡。** L0 對 match 到的測試檔**每一行
+刪除**都記一條 `deleted_line`;在這個 repo 日常的測試維護(改個 case 名、修 `assert_eq` 參數
+順序、收緊一個界)天天在刪行。block 會擋掉幾乎每一個誠實的 commit,而接下來發生的事必然是有人
+把它關掉——那正是它當初瞎掉的路徑。要不要升 block 需要「違規流準確到可以擋」的實證,那個實證
+現在不存在,已立 BACKLOG。
+
+**證據(這一批真正的交付物)**: `docs/projects/2026-08-23-test-integrity-coverage/evidence/negative-controls.sh`
+是可重跑的 reproducer,在 `$TMPDIR` 的拋棄式 repo 裡對四個 gaming 動作各跑三次——BEFORE
+(origin/develop 工具鏈 + template 設定)、AFTER(本支 + 新設定,warn)、BLOCK(同設定 mode 翻
+block)。四條全部 BEFORE `matched=0 / violations=[] / exit 0`,AFTER 逐條命中,BLOCK 逐條
+`exit 1`。另有 `evidence/real-range-before-after.sh` 在**真實歷史 range**(`687f9e56`,38 檔其中
+10 個 `*.test.sh`)上重跑同一組對照:BEFORE `matched=0 violations=0`,AFTER `matched=10`、
+**22 條 `deleted_line` 分佈在 4 個套件**,外加 `hooks/tests/lib.sh` 正確被列為 `surface_touch`。
+
+負控制連同 coverage meta-test 一起進了 `hooks/tests/check-test-integrity.test.sh`
+(**70 → 101 assertions**;基線是把 `git archive origin/develop` 拆到 scratch clone 實測出來的,
+不是估的),並經**六向**突變驗證會精確轉紅:退回 parser 修復 → **19** 紅;拔掉 shell lang_key →
+**8** 紅(全部且僅有 skip 相關);刪掉設定檔 → **2** 紅;從設定拿掉 `**/*.test.js` → **1** 紅
+(coverage `300 → 260`);把 shell 註解規則退回 python 版 → **2** 紅;把 skip 錨點縮回行首 →
+**6** 紅。還原後 101 全綠。
+
+**coverage 斷言不寫死數字**: 測試在拋棄式 repo 裡放上 `git ls-files '*.test.sh' '*.test.js'`
+的**真實**清單,套上**真實**的 `.claude/test-integrity-config.md`,要求 `test_paths_matched`
+等於檔案數(今天 300/300)。用一個沒被涵蓋的命名慣例新增套件,這條就紅——這是唯一能阻止它再
+瞎一次的東西。附 floor guard(枚舉回 0 時直接判紅),免得 `0 == 0` 假綠。
+
+**誠實留下的缺口**: 塞進套件中段的 `exit 0` / `return 0` **抓不到**,而且是刻意不抓——line-level
+regex 分不出它和本 repo 既有的正當 bail-out。實測 260 個 `*.test.sh`:**19** 個有 top-level
+`exit 0`、41 個有任意縮排的、只有 **2** 個把它放在最後一行,也就是說多數是 guard clause,正是
+gaming early-exit 的形狀;要分開需要 L0 沒有攜帶的檔案位置資訊(「這個 exit 後面還有沒有斷言」)。
+這條缺口在設定檔註解、引擎註解、BACKLOG 各寫一次,並且被一條**會在缺口被補上時轉紅**的斷言釘住。
+(先前這裡寫的「36 個套件結尾」在任何一種量法下都對不上,已依實測更正。)
+
+**誠實性修正(depth-0 panel F2/F3)**:README 宣稱 early-exit 缺口「寫在設定檔、引擎、BACKLOG
+三處」,但 `.claude/test-integrity-config.md` 裡**根本沒有**那段——已補上,並一併寫入三條具名
+未涵蓋類別;`docs/projects/INDEX.md` 仍留著被自己 review 推翻的「36 個套件結尾」,改成實測值
+(19 top-level / 41 任意縮排 / 2 在最後一行)。**說有記錄卻沒記錄,比沒記錄更糟。**
+另外 README / BACKLOG / INDEX 三處把 `package.json` 列為已設定的 surface path,但設定檔刻意沒有
+這一條(理由正確)——三處散文改成與檔案一致。
+
+**設定檔的兩個小修正**(同樣來自 first-pass review):`- 'package.json'` 拿掉了——不含 `/` 的
+pattern 會對每個路徑片段比對,等於掃進 `website/`、`.opencode/`、`platforms/opencode/` 與 eval
+fixture 共 13 個檔,而本 repo 根本沒有 root `package.json`;另外「兩種形狀都由 run.sh 列舉」改成
+精確敘述:300 個檔裡 `run.sh` 實際執行 275 個,其餘 25 個是 codex 鏡像、`scripts/tests/`、
+`evals/skill-transport/test/` 與三個 eval fixture。
+
+**注意(給 reviewer)**: 這個 range 自己會觸發 `protected_path_touch`——它動了
+`scripts/lib/test-integrity-l1.py` 和新增了 `.claude/test-integrity-config.md`,兩者都在閘的
+protected 清單上,而該類 violation 不可 waive、且無視 mode 一律 `ok: false`。這是設計如此:
+動閘本身必須走結構性審查。
+
 ## v2.34.37 — 三個「觸發器已經響了」的修:一個靜默失效的執法路徑,兩個把主機當斷言的測試
 
 prose-justification: 這一刀沒有動任何 `skills/` 檔案。三筆都是 shipped code 與其測試的修復,

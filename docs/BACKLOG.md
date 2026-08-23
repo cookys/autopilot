@@ -291,14 +291,62 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 ### Every gate needs a negative control — the caution needs a routine behind it
 - **Trigger**: 下一次新增或修改任何「閘」（release gate、drift gate、anti-gaming scan、admission check、hook）時；或再抓到一個閘存在卻沒在擋東西。
 - **Context**: CLAUDE.md 已經寫著「腳本存在不是它在運作的證據」，但 2026-08-08 一天之內出現三次同一種形狀，全部通過既有 CI 而沒被發現——(1) managed dev-flow admission 對 bounded 非 Mission campaign **永遠 deny**，沒有任何呼叫端或 fixture 能滿足；(2) `resolve-worktree-teardown` 的 template-tier 斷言被 repo 自身 dogfood 設定遮蔽，測的不是它宣稱在測的東西；(3) `check-test-integrity.sh` 對 263 個 shell 測試檔一個都沒看，回 exit 0。三者的共通點是 **exit 0 被當成「有在保護」**，而沒有人證明過它能變紅。警語擋不住這個，因為警語要人想起來才會啟動。可能的形狀：閘的測試必須含一個 negative control 案例（刻意違反 → 斷言變紅），並讓某個 meta-gate 檢查每個閘都有這樣一條；或讓閘在「零輸入匹配」時回非零而不是 0。先決定要哪一種，不要三種都做。
+- **Progress**: 三個實例裡的 (3) 在 v2.34.38 補上了負控制——四條 gaming 動作各有 BEFORE/AFTER/BLOCK 記錄,並立成常駐迴歸(`hooks/tests/check-test-integrity.test.sh` §11),外加一條 coverage meta-test 把「閘看得到的檔案數」綁在 `git ls-files` 的真實清單上。**這條 row 本身不因此結案**:缺的是那個 meta-gate——沒有任何機制檢查「每個閘都有一條負控制」,(1) 與 (2) 也還沒有。v2.34.38 提供的是一個可抄的形狀,不是那個機制。
 - **Effort**: M。
 - **Source**: 2026-08-08 CI triage（11/273 → 1/273）三起獨立成因的共同模式；本檔另有三條各自的條目。
 
-### `check-test-integrity.sh` does not cover this repo's main test surface
-- **Trigger**: 立刻——每一次對 `hooks/tests/*.test.sh` 的改動，anti-gaming 閘目前都是空轉的；或下一次要靠它擋 delegated／`/l5` hetero dispatch 交回的測試改動時。
-- **Context**: 2026-08-08 對一個改了 6 個 `hooks/tests/*.test.sh` 的 range 執行 `validate --range`，回 exit 0 並附 `"warning": "possible misconfiguration: zero test paths matched the diff"`——它一個檔都沒看。這個 repo 的測試主力就是 shell 套件（263 個 `*.test.sh`），所以「刪測試／跳過測試／弱化斷言」這條防線在最常改的檔案上不存在。當次改動改用手動補驗過關（八個套件斷言數 base vs head 只增不減；三處表面刪除是 `assert_eq` 參數順序修正且各有對應新增；無新增 skip／xfail／`.only`）——但手動不是閘。修法要先確認新覆蓋真的會在 negative control 下變紅，不要只是讓 warning 消失。
+### ~~`check-test-integrity.sh` does not cover this repo's main test surface~~ — RESOLVED v2.34.38
+- **Status**: RESOLVED 2026-08-23 (`docs/projects/2026-08-23-test-integrity-coverage/`)。機制有兩層,不是一層:
+  (1) 新增 `.claude/test-integrity-config.md`,`test_paths` = `**/*.test.{sh,js,mjs,cjs,ts}`,涵蓋
+  `git ls-files '*.test.sh' '*.test.js'` 的 **300/300**;`surface paths` = `hooks/tests/lib.sh`(斷言庫本體)、
+  `hooks/tests/lib/**`、`hooks/tests/run.sh`、`hooks/tests/fixtures/**`、eval task fixture repo 與凍結
+  oracle 期望值、`.github/workflows/**`。(**不含** `package.json`:不帶 `/` 的 pattern 會對每個
+  路徑片段比對,會掃進 13 個無關檔案,而本 repo 沒有 root `package.json`。)
+  (2) 修復 `scripts/lib/test-integrity-l1.py` 的 `parse_config`:`#` 註解判斷排在 `##` heading **之前**,
+  於是 section heading 全被吞掉、`test_paths` / `surface_paths` 對**任何專案**都不可設定,一律靜默退回內建
+  預設——這條沒有任何既有測試碰過。單修 (1) 不夠:新設定餵給舊引擎回的是 `malformed_config` + `matched: 0`。
+  另補 `shell` lang_key,讓 `.sh` 套件的 skip 語意可見(`deleted_line` 本來就與語言無關)。
+- **Mode 是 `warn` 不是 `block`**,理由寫在設定檔註解:L0 對 match 到的測試檔每一行刪除都記
+  `deleted_line`,block 會擋掉幾乎每個誠實的測試維護 commit。升 block 是獨立的後續條目。
+- **不是「讓 warning 消失」**:`evidence/negative-controls.sh` 對四個 gaming 動作(刪斷言／弱化斷言／
+  加 skip／刪整個測試檔)各跑 BEFORE(develop 工具鏈+template 設定)/ AFTER(warn)/ BLOCK 三次,
+  BEFORE 全部 `matched=0 violations=[] exit 0`,AFTER 逐條命中,BLOCK 逐條 `exit 1`。四條連同一條
+  coverage meta-test 進了 `hooks/tests/check-test-integrity.test.sh`(70 → 101 assertions),六向突變
+  精確轉紅(19 / 8 / 2 / 1 / 2 / 6 紅,還原後 101 綠)。
+- **Source**: 2026-08-08 v2.34.8 pre-push QC;2026-08-23 v2.34.38 修復。
+
+### Test-integrity L0 cannot see an early `exit 0` spliced into a shell suite
+- **Trigger**: 下一次有人想把這個閘升到 `block`,或再抓到一個 bash 套件「綠得太安靜」時。
+- **Context**: v2.34.38 讓 `*.test.sh` 進入閘的視野,但三條 gaming vector 裡只有兩條半是機械可見的。
+  刪除與弱化走語言無關的 `deleted_line`;新增 skip 走新的 `shell` skip 規則;**塞在套件中段的
+  `exit 0` / `return 0` 抓不到**——它沒有刪任何一行、沒有任何 skip token,而 line-level regex 分不出
+  它和本 repo 既有的正當 bail-out:260 個 `*.test.sh` 裡 **19 個**有 top-level `exit 0`、41 個有
+  任意縮排的、只有 2 個是放在最後一行,也就是說多數是 guard clause——正是 gaming early-exit 的形狀。
+  要分開需要 L0 沒有攜帶的檔案位置資訊
+  (「這個 exit 後面還有沒有斷言」),那是 AST/位置層的工作,不是加一條 regex。真要補,候選形狀是:
+  比較 base/head 兩側的**斷言計數**(`assert_*` / `PASS [` 出現次數只增不減),那是檔案層而不是行層的
+  不變量,也順帶涵蓋刪除與弱化。這條缺口目前在三個地方各寫一次(設定檔註解、引擎註解、本條),並被
+  `check-test-integrity.test.sh` §11e 一條**會在缺口被補上時轉紅**的斷言釘住——修好它記得同步這三處。
+  **注意這條缺口是目前唯一一條**:first-pass review 抓到的另外兩條(`${#…}` 截斷、line-start
+  錨點漏掉 `&& skip` 與裸 `skip`)都比這條便宜,已在 v2.34.38 內修掉並各配常駐負控制。
+  另有一個**已記錄的假陽性類別**:把 skip 寫進 fixture 的套件(例如
+  `check-test-integrity.test.sh` §11c-bis 自己的 `sed` payload)逐字等同於自己 skip 的套件,
+  行層偵測器分不出資料與程式碼;`warn` 下無成本,但翻 block 會擋住對該測試檔的編輯。
 - **Effort**: M。
-- **Source**: 2026-08-08 v2.34.8 pre-push QC。與同日另兩起同類：admission gate 對某類 campaign 永遠 deny、reaper 閾值被 repo 自身 dogfood 設定遮蔽——皆為 CLAUDE.md「腳本存在不是它在運作的證據」的實例。
+- **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
+
+### `check-test-integrity.sh` warn → block needs an accuracy record first
+- **Trigger**: 累積夠多真實 range 的 violation 輸出,足以判斷「違規流是否準確到可以擋」時;或有人主動
+  提議把 `.claude/test-integrity-config.md` 的 `mode` 翻成 `block`。
+- **Context**: v2.34.38 刻意停在 `warn`。原因不是保守,是 L0 的判準粒度:它對 match 到的測試檔**每一行
+  刪除**記一條 `deleted_line`,而這個 repo 的日常測試維護(改 case 名、修 `assert_eq` 參數順序、收緊
+  一個界)天天在刪行 —— block 會擋掉幾乎每個誠實的 commit,然後有人就會把它關掉,而那正是它當初瞎掉的
+  路徑(`references/evidence-discipline.md` §1)。block 另外會把每個 `surface_touch` 升成 violation,而本
+  repo 的測試本來就會正當地改 `hooks/tests/lib.sh` 與 fixtures。要升 block,先要有記錄:實際 range 上
+  violation 的真陽性/假陽性比例,以及 `.qc/<sha>.verdict.json` waiver 路徑在真實工作流下的成本。**沒有
+  那份記錄之前不要翻**,翻了就是把一個會報告的閘換成一個會被關掉的閘。
+- **Effort**: M。
+- **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
 
 ### Engine and CLI have no session-mode fallback for bounded non-Mission campaigns
 - **Trigger**: 要把 session-marker 紀律擴到非 Mission 的 managed campaign 時；或 threat model 升級為「同一 host 上未經 /l3–/l6 進入的呼叫端不得驅動 managed loop」。單純誠實使用者不觸發。

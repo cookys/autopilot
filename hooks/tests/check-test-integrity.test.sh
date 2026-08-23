@@ -507,4 +507,279 @@ run_integrity
 assert_exit_code "$__EXIT_CODE" 1 "deleted test with space path is parsed correctly"
 assert_contains "$__OUTPUT" '"file": "tests/test file space_test.py"' "space path preserved in violation"
 
+# ── 9. Configurable test_paths / surface_paths ──────────────────────────────
+# Regression for the defect that left this repo's whole test surface invisible:
+# parse_config tested `line.startswith("#")` BEFORE `line.startswith("##")`, so
+# every section heading was swallowed as a comment, `section` never left None,
+# and any `- <glob>` line was rejected as an unrecognized config line. Net
+# effect: `test_paths` / `surface_paths` could not be configured by ANY project,
+# and every repo silently ran on the built-in ecosystem defaults.
+reset_repo
+mkdir -p .claude
+cat > .claude/test-integrity-config.md <<'CFG'
+# leading comment must not swallow the headings below
+## Mode
+mode: block
+
+## Test Paths
+- '**/*.suite.sh'
+
+## Integrity Surface Paths
+- 'harness/**'
+CFG
+git add .claude/test-integrity-config.md
+git commit -qm "config with custom test and surface paths"
+
+mkdir -p harness
+printf 'check() { [ "$1" = "$2" ]; }\n' > harness/lib.sh
+printf 'check a a\ncheck b b\n' > custom.suite.sh
+git add harness/lib.sh custom.suite.sh
+git commit -qm "add custom-convention suite"
+
+run_integrity
+assert_contains "$__OUTPUT" '"test_paths_matched": 1' "custom test_paths glob is honored"
+assert_not_contains "$__OUTPUT" '"kind": "malformed_config"' "a config declaring test_paths is not malformed"
+assert_contains "$__OUTPUT" '"kind": "surface_touch"' "custom surface_paths glob is honored"
+assert_contains "$__OUTPUT" 'harness/lib.sh' "surface touch names the harness file"
+
+# A heading the parser does not recognize still must not corrupt the config.
+reset_repo
+mkdir -p .claude
+cat > .claude/test-integrity-config.md <<'CFG'
+## Mode
+mode: warn
+
+## Notes
+# free-form section the parser ignores
+
+## Test Paths
+- '**/*.suite.sh'
+CFG
+git add .claude/test-integrity-config.md
+git commit -qm "config with an unrecognized heading"
+printf 'check a a\n' > custom.suite.sh
+git add custom.suite.sh
+git commit -qm "add suite"
+run_integrity
+assert_contains "$__OUTPUT" '"mode": "warn"' "unrecognized heading does not force block mode"
+assert_not_contains "$__OUTPUT" '"kind": "malformed_config"' "unrecognized heading is not malformed"
+
+# ── 10. autopilot's own config sees autopilot's own test surface ────────────
+# The BACKLOG defect in one assertion: run the REAL .claude/test-integrity-config.md
+# against the REAL list of suites in this repo and require that it matches every
+# one of them. Add a suite under a naming convention the config does not cover
+# and this goes red — which is the only thing that stops the gate going blind
+# again the way it did with the generic template globs.
+surface_repo="$(mkrepo real-surface)"
+cd "$surface_repo"
+mkdir -p .claude
+assert_file_exists "$REPO_ROOT/.claude/test-integrity-config.md" "autopilot ships its own test-integrity config"
+cp "$REPO_ROOT/.claude/test-integrity-config.md" .claude/test-integrity-config.md
+git add .claude/test-integrity-config.md
+git commit -qm "adopt the real autopilot config"
+
+# Enumerate the real suites. Both shapes are what hooks/tests/run.sh executes.
+REAL_SUITES="$TEST_TMP/real-suites.txt"
+git -C "$REPO_ROOT" ls-files '*.test.sh' '*.test.js' > "$REAL_SUITES"
+REAL_COUNT="$(wc -l < "$REAL_SUITES" | tr -d ' ')"
+# Floor guard: if the enumeration ever returns nothing, `matched == expected`
+# would be 0 == 0 and this whole test would pass while measuring nothing.
+if [ "$REAL_COUNT" -lt 200 ]; then
+  fail "real suite enumeration returned only $REAL_COUNT files — enumeration is broken, not the config"
+fi
+
+while IFS= read -r rel; do
+  [ -n "$rel" ] || continue
+  mkdir -p "$(dirname "$rel")"
+  printf '# placeholder for %s\n' "$rel" > "$rel"
+done < "$REAL_SUITES"
+git add -A
+git commit -qm "every real suite path as a placeholder"
+
+__STDOUT_FILE="$TEST_TMP/stdout.json"
+__EXIT_CODE=0
+bash "$S" validate --no-l1 --range HEAD~1..HEAD --repo "$surface_repo" >"$__STDOUT_FILE" 2>/dev/null || __EXIT_CODE=$?
+__OUTPUT="$(cat "$__STDOUT_FILE")"
+MATCHED="$(sed -n 's/.*"test_paths_matched": \([0-9]*\).*/\1/p' "$__STDOUT_FILE")"
+assert_eq "$MATCHED" "$REAL_COUNT" "the real config matches every real *.test.sh / *.test.js suite ($REAL_COUNT)"
+assert_not_contains "$__OUTPUT" '"warning": "possible misconfiguration' "no zero-match warning on the real surface"
+
+cd "$repo"
+
+# ── 11. Negative controls on a shell suite ──────────────────────────────────
+# Four moves a gaming implementer would make against this repo's dominant test
+# shape (bash *.test.sh). Before .claude/test-integrity-config.md existed, the
+# template globs matched none of these paths and the gate reported ok with
+# test_paths_matched: 0. The reproducer with recorded BEFORE/AFTER output is
+# docs/projects/2026-08-23-test-integrity-coverage/evidence/negative-controls.sh.
+shell_cfg() { # shell_cfg <mode>
+  reset_repo
+  mkdir -p .claude hooks/tests
+  printf "## Mode\nmode: %s\n\n## Test Paths\n- '**/*.test.sh'\n" "$1" > .claude/test-integrity-config.md
+  cat > hooks/tests/example.test.sh <<'SUITE'
+#!/usr/bin/env bash
+out="alpha beta"
+assert_eq "$out" "alpha beta" "payload verbatim"
+assert_contains "$out" "alpha" "alpha token present"
+assert_eq "2" "2" "counter increments"
+SUITE
+  git add .claude/test-integrity-config.md hooks/tests/example.test.sh
+  git commit -qm "base with shell suite and shell-aware config"
+}
+
+# 11a. deleting assertions from a *.test.sh suite
+shell_cfg warn
+grep -v 'assert_contains' hooks/tests/example.test.sh > "$TEST_TMP/s" && mv "$TEST_TMP/s" hooks/tests/example.test.sh
+git add -u; git commit -qm "delete an assertion"
+run_integrity
+assert_contains "$__OUTPUT" '"test_paths_matched": 1' "deleted assertion: shell suite is seen"
+assert_contains "$__OUTPUT" '"kind": "deleted_line"' "deleted assertion: reported"
+assert_contains "$__OUTPUT" 'assert_contains' "deleted assertion: the removed line is named"
+
+# 11b. weakening an assertion
+shell_cfg block
+sed -i 's|^assert_eq "\$out" "alpha beta".*$|true|' hooks/tests/example.test.sh
+git add -u; git commit -qm "weaken an assertion"
+run_integrity
+assert_exit_code "$__EXIT_CODE" 1 "weakened assertion: block mode goes red"
+assert_contains "$__OUTPUT" '"kind": "deleted_line"' "weakened assertion: reported"
+
+# 11c. adding a skip to a shell suite — pure addition, no deleted lines, so this
+# isolates the shell skip heuristic from the language-agnostic deletion check.
+shell_cfg block
+sed -i '1a skip "flaky on CI"' hooks/tests/example.test.sh
+git add -u; git commit -qm "add a skip"
+run_integrity
+assert_exit_code "$__EXIT_CODE" 1 "added skip: block mode goes red"
+assert_contains "$__OUTPUT" '"kind": "skip_marker"' "added skip: shell skip marker detected"
+assert_not_contains "$__OUTPUT" '"kind": "deleted_line"' "added skip: nothing was deleted, so only the skip fires"
+
+# 11c-bis. THE SHELL SKIP GRAMMAR — one control per grammar class.
+#
+# History: three separate rounds of first-pass/panel review each found a
+# one-token evasion of this heuristic (`&& skip`, a `${#...}`-erased line,
+# then `skip;` / `( skip )` / a quoted `#`). Patching per bug moved the hole
+# three times. The detector is now driven by an explicit enumeration of the
+# shell grammar, and so are these controls: they cover each CLASS, including
+# the classes that are deliberately excluded and the ones that stay uncovered.
+# The full enumeration (with the uncovered classes named) is in
+# docs/projects/2026-08-23-test-integrity-coverage/README.md.
+#
+# Add a class here before adding a pattern there.
+
+shell_probe() { # shell_probe <line> <CATCH|CLEAN> <label>
+  local line="$1" want="$2" label="$3"
+  shell_cfg block
+  printf '%s\n' "$line" >> hooks/tests/example.test.sh
+  git add -u >/dev/null; git commit -qm "probe: $label" >/dev/null
+  run_integrity
+  case "$want" in
+    CATCH) assert_contains    "$__OUTPUT" '"kind": "skip_marker"' "grammar $label: detected" ;;
+    CLEAN) assert_not_contains "$__OUTPUT" '"kind": "skip_marker"' "grammar $label: not a skip" ;;
+  esac
+}
+
+# ── A. command position: every way shell starts a simple command ────────────
+shell_probe 'skip "r"'                        CATCH "A1 line start"
+shell_probe 'true; skip "r"'                  CATCH "A2 after ;"
+shell_probe 'true && skip "r"'                CATCH "A3 after &&"
+shell_probe 'false || skip "r"'               CATCH "A4 after ||"
+shell_probe 'echo x | skip'                   CATCH "A5 after pipe"
+shell_probe 'true & skip "r"'                 CATCH "A6 after &"
+shell_probe '( skip "r" )'                    CATCH "A7 subshell"
+shell_probe '{ skip "r"; }'                   CATCH "A8 group"
+shell_probe 'if true; then skip "r"; fi'      CATCH "A9 then"
+shell_probe 'if false; then :; else skip; fi' CATCH "A9 else"
+shell_probe 'for i in 1; do skip "r"; done'   CATCH "A9 do"
+shell_probe '! skip "r"'                      CATCH "A10 negation"
+shell_probe 'x=$( skip "r" )'                 CATCH "A12 command substitution"
+shell_probe 'x=`skip "r"`'                    CATCH "A13 backtick"
+shell_probe 'FOO=bar skip "r"'                CATCH "A15 assignment prefix"
+
+# Deliberately excluded: a `case` arm pattern is not a command position.
+shell_probe 'case $x in skip) :;; esac'       CLEAN "A17 case pattern excluded"
+# Named-uncovered classes. These assertions document the CURRENT boundary; if
+# one flips to CATCH the boundary moved, and the README enumeration plus the
+# BACKLOG row must move with it.
+shell_probe 'time skip "r"'                   CLEAN "A14 time prefix (uncovered)"
+shell_probe '>/dev/null skip "r"'             CLEAN "A16 redirection prefix (uncovered)"
+
+# ── B. a `#` that is not a comment must not erase the line ──────────────────
+shell_probe '[ "${#XS[@]}" -eq 0 ] && skip "r"' CATCH "B1 brace-hash length"
+shell_probe '[ $# -eq 0 ] && skip "r"'          CATCH "B2 dollar-hash argc"
+shell_probe 'printf " #" && skip "r"'           CATCH "B3 hash in double quotes"
+shell_probe "printf ' #' && skip \"r\""          CATCH "B4 hash in single quotes"
+shell_probe 'printf \# && skip "r"'             CATCH "B5 escaped hash"
+shell_probe 'echo a#b && skip "r"'              CATCH "B6 mid-word hash"
+
+# ...while real comments are still removed.
+shell_probe 'echo hi   # skip "r"'            CLEAN "B real trailing comment"
+shell_probe '# skip "r"'                      CLEAN "B real full-line comment"
+shell_probe 'true ;# skip "r"'                CLEAN "B comment after delimiter"
+
+# ── C. the tail after the `skip` word ───────────────────────────────────────
+shell_probe 'skip'                            CATCH "C2 bare, end of line"
+shell_probe 'skip;'                           CATCH "C3 semicolon tail"
+shell_probe 'skip &'                          CATCH "C4 ampersand tail"
+shell_probe 'skip | cat'                      CATCH "C5 pipe tail"
+shell_probe '( skip )'                        CATCH "C6 close-paren tail"
+shell_probe 'echo "${skip}"'                  CLEAN "C7 brace expansion excluded"
+shell_probe 'skip() { :; }'                   CLEAN "C8 function definition"
+shell_probe 'skip () { :; }'                  CLEAN "C8 definition with space"
+shell_probe 'skip=1'                          CLEAN "C9 assignment"
+shell_probe 'skipped=1'                       CLEAN "C10 word continuation"
+
+# ── D. data vs code ─────────────────────────────────────────────────────────
+# A suite that WRITES a skip into a fixture is not a suite that skips. This is
+# why quoted spans are blanked before detection — and it is what removed the
+# self-referential false positives this very file used to produce.
+shell_probe "sed -i '1a skip \"x\"' f"          CLEAN "D1 skip inside single quotes"
+shell_probe 'echo "skip here"'                CLEAN "D1 skip inside double quotes"
+shell_probe 'eval "skip"'                     CLEAN "D2 eval-string (uncovered)"
+
+# The violation must quote the SOURCE line, not the stripped projection: the
+# reader needs the reason text, and `skip Q` would not give it to them.
+shell_cfg block
+printf '%s\n' 'skip "why this suite bailed"' >> hooks/tests/example.test.sh
+git add -u >/dev/null; git commit -qm "probe: detail text" >/dev/null
+run_integrity
+assert_contains "$__OUTPUT" 'why this suite bailed' "violation detail quotes the source line, not the stripped view"
+
+# A comment mentioning skip must not fire (the shell comment stripper).
+shell_cfg block
+sed -i '1a echo hi  # skip this note' hooks/tests/example.test.sh
+git add -u; git commit -qm "add a comment mentioning skip"
+run_integrity
+assert_not_contains "$__OUTPUT" '"kind": "skip_marker"' "shell trailing comment mentioning skip is not a violation"
+
+# Defining the skip helper is not itself a skip.
+shell_cfg block
+sed -i '1a skip() { printf "SKIP: %s\\n" "$1"; }' hooks/tests/example.test.sh
+git add -u; git commit -qm "define a skip helper"
+run_integrity
+assert_not_contains "$__OUTPUT" '"kind": "skip_marker"' "defining skip() is not a skip invocation"
+
+# 11d. deleting an entire test file
+shell_cfg block
+git rm -q hooks/tests/example.test.sh
+git commit -qm "delete the whole suite"
+run_integrity
+assert_exit_code "$__EXIT_CODE" 1 "deleted suite: block mode goes red"
+assert_contains "$__OUTPUT" '"kind": "deleted_line"' "deleted suite: reported"
+assert_contains "$__OUTPUT" 'hooks/tests/example.test.sh' "deleted suite: the file is named"
+
+# 11e. THE DOCUMENTED GAP, pinned so it cannot become a silent one.
+# An early `exit 0` spliced into a bash suite neuters it with no deletions and
+# no skip token, and the L0 layer cannot tell it apart from the legitimate
+# terminating `exit 0` that most suites in this repo end with. If this
+# assertion ever fails, the gap was closed — update the comment in
+# .claude/test-integrity-config.md, the note in scripts/lib/test-integrity-l1.py,
+# and the BACKLOG row, then flip this to assert detection.
+shell_cfg block
+sed -i '1a exit 0' hooks/tests/example.test.sh
+git add -u; git commit -qm "splice an early exit"
+run_integrity
+assert_contains "$__OUTPUT" '"test_paths_matched": 1' "early exit: the suite is still seen"
+assert_exit_code "$__EXIT_CODE" 0 "KNOWN GAP: a spliced early exit is not detected (see config comments)"
+
 finalize_test

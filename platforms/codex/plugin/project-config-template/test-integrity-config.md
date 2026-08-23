@@ -19,6 +19,18 @@ mode: warn
 
 ## Test Paths
 # Glob patterns matching test files. If specified, these override the built-in defaults.
+#
+# HOW TO SET THESE: uncomment a line (drop the leading `# `) so it reads `- <glob>`,
+# or add your own. An uncommented `- <glob>` under this heading is what the engine
+# reads; the commented lines below are the built-in defaults, shown for reference.
+# Quoting is optional (`- '**/*.test.sh'` and `- **/*.test.sh` are equivalent).
+#
+# CHECK YOUR GLOBS ACTUALLY MATCH. Run the gate over a range that touches a test
+# file and read `test_paths_matched`. A zero there with a non-empty diff means the
+# gate is inspecting nothing — it will report `ok: true` forever. That exact failure
+# is why autopilot now ships its own `.claude/test-integrity-config.md`: the generic
+# conventions below match none of its 300 `*.test.sh` / `*.test.js` suites.
+#
 # Default conventions:
 # - **/*_test.go
 # - **/*_test.py

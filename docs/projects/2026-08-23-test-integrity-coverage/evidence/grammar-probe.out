@@ -1,0 +1,51 @@
+=== A: command position ===
+  ok    CATCH    A1  line start                                 
+  ok    CATCH    A2  after ;                                    
+  ok    CATCH    A3  after &&                                   
+  ok    CATCH    A4  after ||                                   
+  ok    CATCH    A5  after pipe                                 
+  ok    CATCH    A6  after &                                    
+  ok    CATCH    A7  subshell (                                 
+  ok    CATCH    A8  group {                                    
+  ok    CATCH    A9  then                                       
+  ok    CATCH    A9  else                                       
+  ok    CATCH    A9  elif                                       
+  ok    CATCH    A9  do                                         
+  ok    CATCH    A10 negation !                                 
+  ok    CATCH    A12 cmd subst                                  
+  ok    CATCH    A13 backtick                                   
+  ok    CATCH    A15 assignment prefix                          
+  ok    CATCH    A15 two assignments                            
+=== A: deliberately excluded / named-uncovered ===
+  ok    CLEAN    A17 case pattern (excl)                        
+  ok    CLEAN    A14 time prefix (unc)                          
+  ok    CLEAN    A16 redirect pfx (unc)                         
+=== B: non-comment hash must survive the scanner ===
+  ok    CATCH    B1  brace-hash length                          
+  ok    CATCH    B2  dollar-hash argc                           
+  ok    CATCH    B3  dquote hash                                
+  ok    CATCH    B4  squote hash                                
+  ok    CATCH    B5  escaped hash                               
+  ok    CATCH    B6  mid-word hash                              
+  ok    CATCH    B7  ANSI-C quote                               
+=== B: real comments still removed ===
+  ok    CLEAN    real trailing comment                          
+  ok    CLEAN    real full-line comment                         
+  ok    CLEAN    comment after ;                                
+=== C: tails ===
+  ok    CATCH    C1  blank + arg                                
+  ok    CATCH    C2  EOL bare                                   
+  ok    CATCH    C3  semicolon                                  
+  ok    CATCH    C4  ampersand                                  
+  ok    CATCH    C5  pipe                                       
+  ok    CATCH    C6  close paren                                
+  ok    CLEAN    C7  brace (excluded)                           
+  ok    CLEAN    C8  definition ()                              
+  ok    CLEAN    C8  definition sp ()                           
+  ok    CLEAN    C9  assignment                                 
+  ok    CLEAN    C10 word continuation                          
+  ok    CLEAN    C10 skipping word                              
+=== D: data vs code ===
+  ok    CLEAN    D1  skip inside squote                         
+  ok    CLEAN    D1  skip inside dquote                         
+  ok    CLEAN    D2  eval string (unc)                          

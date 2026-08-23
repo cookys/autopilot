@@ -1,0 +1,8 @@
+suites presented as pure additions: 260
+test_paths_matched: 260
+violation kinds: {'skip_marker': 5}
+  skip_marker hooks/tests/mission-terminal-rollover.test.sh:41  skip "no Mission registry in this clone — rollover has nothing to act on"
+  skip_marker hooks/tests/mission-terminal-rollover.test.sh:87  skip "no graph with multiple COMPLETE adoptions and integration evidence — nothing to roll
+  skip_marker hooks/tests/mission-terminal-rollover.test.sh:103  skip "no second COMPLETE adoption to test refusal against"
+  skip_marker hooks/tests/mission-terminal-rollover.test.sh:145  skip "could not locate lifecycle evidence for the ancestry case"
+  skip_marker hooks/tests/mission-terminal-rollover.test.sh:181  skip "no rollover store to tamper with"

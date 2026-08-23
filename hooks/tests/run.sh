@@ -129,9 +129,16 @@ else
   fi
   if [ "${#UNIT_FILES[@]}" -gt 0 ]; then
     TOTAL=$((TOTAL + ${#UNIT_FILES[@]}))
-    if ! node --test "${UNIT_FILES[@]}"; then
+    # Preserve the FULL L1 output on failure (BACKLOG: engine-qualify-impl had an
+    # unattributed 1/24 red whose AssertionError was lost because only the summary
+    # line was read). Kept only when red; deleted on green to avoid /tmp residue.
+    L1_LOG="$(mktemp "${TMPDIR:-/tmp}/autopilot-l1-unit.XXXXXX")"
+    if ! node --test "${UNIT_FILES[@]}" 2>&1 | tee "$L1_LOG"; then
       FAILED=$((FAILED + 1))
       FAILED_TESTS+=("L1 unit suite")
+      echo "L1 full output preserved for attribution: $L1_LOG"
+    else
+      rm -f "$L1_LOG"
     fi
   else
     # Filter matched nothing — neutral

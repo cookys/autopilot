@@ -1,4 +1,4 @@
-<!-- last-verified: 2026-07-24 -->
+<!-- last-verified: 2026-08-23 -->
 # Git Ref Lifecycle Race Lessons
 
 **Date**: 2026-07-16 | **Context**: Autopilot dispatch-branch lifecycle recovery, preserve-first reaping, and final QC race review.

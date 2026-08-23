@@ -1,4 +1,4 @@
-<!-- last-verified: 2026-08-02 -->
+<!-- last-verified: 2026-08-23 -->
 # Architecture Lessons
 
 ## Close deterministic mirrors before freezing mission output paths

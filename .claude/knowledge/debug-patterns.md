@@ -1,4 +1,4 @@
-<!-- last-verified: 2026-07-29 -->
+<!-- last-verified: 2026-08-23 -->
 # Debug Patterns
 
 ## Kimi non-interactive prompt cannot be combined with interactive plan mode
@@ -6,7 +6,7 @@
 **Problem**: Kimi Code CLI 0.28.0 advertises both `--prompt` and `--plan`, but the options are mutually exclusive. `src/runners/kimi.js` passed both, so surface probing succeeded while every real author call failed immediately with `Cannot combine --prompt with --plan.` The hermetic test encoded the same invalid argv and therefore stayed green.
 **Solution**: Distinguish option presence from option compatibility. For the one-off read-only review, invoke non-interactive `--prompt` without `--plan` from a mode-0700 empty scratch cwd with no repository context. Product follow-up must remove the incompatible flag (or use a separately probed compatible read-only mode), correct the fixture, and add an opt-in live non-empty-output smoke.
 **Failed attempts**: Treating `--help` token presence as a valid option-combination contract; retrying the shipped adapter unchanged.
-**Related**: `docs/BACKLOG.md` entry “Native Kimi author adapter passes mutually exclusive `--prompt` and `--plan`”.
+**Related**: `docs/BACKLOG.md` entry “Native Kimi author adapter passes mutually exclusive `--prompt` and `--plan`”. *(2026-08-23 re-verify: `src/runners/kimi.js` no longer passes `--plan` — the product follow-up shipped.)*
 
 ## Silent-retry 假死：Claude CLI × z.ai 確定性 529
 **Date**: 2026-07-16 | **Context**: C1 verification-author 連續失敗（529 ×2、exit-124 零位元組 ×2），五家族 15+ 次 author 全滅

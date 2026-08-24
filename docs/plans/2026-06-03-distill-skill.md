@@ -1,5 +1,13 @@
 # Plan v3 — `distill` skill (recurring procedures → user-level skills, fleet-synced via a path CC already reads)
 
+> **SUPERSEDED IN PART — 2026-08-24 (v2.34.39).** This plan's identifier-lint design is historical.
+> The deny-list (`~/.autopilot/distill/identifiers.deny`) was **rejected and removed** under
+> [ADR-0001](../adr/0001-verification-over-attestation.md): a deny-list silently passes every name it
+> was never told and then emits a "lint-clean" label, which attests that a list was consulted rather
+> than that the text is clean. The lint now lives in `scripts/identifier-scan.js` (the `--lint` flag
+> named below never shipped; `distill-scan.js` exposes `--path`). Current contract:
+> [`references/knowledge-routing.md`](../../references/knowledge-routing.md) §5.
+
 > **Status**: ✅ Shipped in v2.9.0 — merged as `ef1f542` (2026-06-03). Flat MVP built (scan + review→pack/project write); consumption verified end-to-end on a fresh session; multi-machine consolidate deferred (§0.3.1). All Board decisions resolved (§11); spiked & verified (§0.1).
 > **Owner**: cookys (participatory). **Branch**: `feat/distill-skill` (not cut). **Created**: 2026-06-03 · **Revised**: 2026-06-03 (post R1, R2).
 > **Frame**: [[project-methodology-sync-frame]]; self-use-first ([[feedback-solve-real-problem-not-artifact]]). Name `distill` working (§11-A).

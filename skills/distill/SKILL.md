@@ -108,7 +108,14 @@ user did not tick.
 **Step 3 的機械前置**:對每份 draft `SKILL.md` 跑
 [`scripts/identifier-scan.js`](../../scripts/identifier-scan.js)(僅偵測結構化 token:email / IPv4 /
 `/home/<user>/` / FQDN / key 形狀 —— 覆蓋範圍以該腳本的 test fixtures
-`hooks/tests/fixtures/identifier-scan/` 為準,不以本段文字為準)。exit 1 ⇒ 有命中,該 candidate 退出批次。
+`hooks/tests/fixtures/identifier-scan/` 為準,不以本段文字為準)。
+
+**exit 1 的意思是「這些請分類」,不是「這個 candidate 不合格」。** 命中的 token 逐一攤給使用者看,
+由使用者判定或參數化;清掉之後該 candidate 照常進入可選集。**不要**因為 exit 1 就靜默把 candidate
+踢出批次 —— 這支 scanner 偵測的是**形狀**,而好幾種形狀本來就可以公開:廠商域名(`z.ai`、
+`example.com`)會命中 `fqdn`,合成 fixture 身分(`bot@test.local`)會命中 `email`。實測本 repo 已公開的
+四份 knowledge 檔:5 個命中,**5 個都是該公開的**。把這類命中當成不合格,只會訓練出「看到紅燈就跳過」
+的習慣,而那個習慣正是真 token 溜過去的路徑。
 
 **非結構化識別字(bare hostname、client 名、pane 位址、endpoint alias)沒有任何機械偵測 —— 唯一防線
 是本步的人審**。人審時必須假設 scanner 對這類東西什麼都沒看到:clean exit 的意思是「沒有結構化 token

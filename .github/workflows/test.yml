@@ -103,6 +103,6 @@ jobs:
 
       - name: Cross-agent portability gate
         # preflight-portability self-skips OpenCode checks when the binary
-        # isn't on PATH, which it won't be in CI. The other 9 checks still
+        # isn't on PATH, which it won't be in CI. The remaining checks still
         # exercise hooks, symlinks, validate.sh, and sync-version --check.
         run: bash scripts/preflight-portability.sh

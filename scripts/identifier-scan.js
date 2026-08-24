@@ -25,9 +25,16 @@
  * never told about, and the run still emits a "clean" label. That label attests that a
  * list was consulted, not that the text is clean — it is attestation, which
  * docs/adr/0001-verification-over-attestation.md forbids, and it is worse than no
- * lint at all because it manufactures false confidence. ~/.autopilot/distill/identifiers.deny
- * has never existed on this machine, so removing it regresses nothing. There is
- * deliberately no allow/deny mechanism here to replace it.
+ * lint at all because it manufactures false confidence. Any pre-existing
+ * ~/.autopilot/distill/identifiers.deny is now IGNORED — an intentional removal of a
+ * previously-documented optional config surface, not an oversight. There is deliberately
+ * no allow/deny mechanism here to replace it.
+ *
+ * FALSE POSITIVES ARE EXPECTED: these are shape detectors, and several shapes are
+ * publishable. A vendor domain (z.ai, example.com) matches fqdn; a synthetic fixture
+ * identity (bot@test.local) matches email. A finding is a prompt to CLASSIFY, not a
+ * verdict — see references/knowledge-routing.md §5. Callers must NOT auto-reject on
+ * exit 1; route the hits to the human category check.
  *
  * See references/knowledge-routing.md for the disclosure policy this scanner
  * mechanises (what may leave the machine vs. what needs human review first).

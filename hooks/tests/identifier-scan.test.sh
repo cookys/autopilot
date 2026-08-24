@@ -117,4 +117,22 @@ for fname in "${!KIND_FOR_FILE[@]}"; do
   assert_eq "$line" "4" "$fname: reports line 4"
 done
 
+# 8. Known FALSE-POSITIVE class is pinned, not tuned away.
+# z.ai is listed in the PUBLISHABLE column of references/knowledge-routing.md §2, and
+# bot@test.local is a synthetic fixture identity — yet both match the shape detectors.
+# This is asserted deliberately: it is the evidence for "a finding is a prompt to
+# classify, not a verdict". If someone narrows the patterns so a publishable vendor
+# domain stops firing, this goes red and forces them to update that wording in
+# knowledge-routing.md §5, skills/distill/SKILL.md Step 3, and the scanner header
+# together, rather than letting doc and mechanism drift apart.
+echo "Testing the pinned vendor-domain false-positive class..."
+run_scan --json "$DIRTY/vendor-domain-overlap.md" || true
+assert_exit_code "$__SCAN_EXIT" 1 "vendor-domain-overlap fixture still produces findings"
+fp_kinds=$(node -e "
+  const d = JSON.parse(process.argv[1]);
+  const k = [...new Set(d.findings.map(f => f.kind))].sort().join(',');
+  process.stdout.write(k);
+" "$__SCAN_OUT")
+assert_eq "$fp_kinds" "email,fqdn" "vendor-domain-overlap fires exactly the email+fqdn shapes"
+
 finalize_test

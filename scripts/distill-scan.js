@@ -63,10 +63,22 @@ const LINT_PATH = (() => { const i = args.indexOf('--path'); return i >= 0 && ar
 // The implementation now lives in scripts/identifier-scan.js (canonical, single
 // copy of the pattern set — see its header for the negative-scope disclosure and
 // why the old optional deny-list was removed rather than kept). This is a thin
-// delegation that preserves the --path CLI's output shape and exit codes.
+// delegation. It preserves the --path CLI's output shape and its 0/1/2 exit codes.
+// Two deliberate deltas from the pre-extraction inline lint, recorded rather than hidden:
+//   (1) an unreadable file used to be skipped silently (exit 0); it now reports and exits 2
+//       (usage error) rather than being counted as "no findings". Silence about a file you
+//       could not read is the wrong default for a disclosure gate.
+//   (2) finding.file stays absolute (path.resolve on the root), matching the old walk().
 function runIdentifierLint(rootDir) {
   const { scanPaths } = require('./identifier-scan.js');
-  return scanPaths([rootDir]).map((f) => ({ file: f.file, kind: f.kind, match: f.match }));
+  let findings;
+  try {
+    findings = scanPaths([path.resolve(rootDir)]);
+  } catch (e) {
+    process.stderr.write(`distill-scan --path: ${e.message}\n`);
+    process.exit(2);
+  }
+  return findings.map((f) => ({ file: f.file, kind: f.kind, match: f.match }));
 }
 
 if (LINT_PATH) {

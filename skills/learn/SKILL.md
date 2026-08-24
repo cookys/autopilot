@@ -36,15 +36,20 @@ Record reusable knowledge so future sessions avoid the same mistakes.
    | **Yes** — a publishable fact or gotcha | `.claude/knowledge/` | **Promotion** (below). Steps 1–5 apply. |
    | **Yes**, and it binds *other skills* rather than being looked up | `references/` | Normal review path — see the Categories table. |
 
-   `.claude/knowledge/` is **deliberately gitignored** (`.gitignore` line 6 — the `.claude` dir is
-   local state, fail-closed so scratch never leaks into this public repo). A write there is therefore
-   not a save. Completing it means finishing the promotion contract in one motion:
+   `.claude/knowledge/` is **deliberately gitignored** (the `.claude/knowledge/` entry in
+   `.gitignore` — the `.claude` dir is local state, fail-closed so scratch never leaks into this
+   public repo). A write there is therefore not a save. Completing it means finishing the promotion
+   contract in one motion:
 
    ```bash
    git add -f .claude/knowledge/<file>.md .claude/knowledge/INDEX.md
    git diff --cached .claude/knowledge/   # show the user — this is the disclosure gate
-   git commit -m "docs(knowledge): <one-line summary>"
+   git commit -m "docs(knowledge): <one-line summary>" -- .claude/knowledge/
    ```
+
+   The trailing pathspec is required: `learn` is often invoked mid-task with unrelated files already
+   staged, and an unscoped commit would sweep them in under a `docs(knowledge):` message — leaving
+   the user having approved a strict subset of what actually landed.
 
    > **不 commit 就等於沒寫.** An uncommitted file there is invisible to `git status` (ignored), to
    > every other clone, and to CI — one `git clean -xdf` or worktree teardown from gone. Precedent:

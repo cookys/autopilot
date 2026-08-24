@@ -2,7 +2,9 @@
 
 > Canonical home for two decisions that were previously unwritten: **which sink a piece of knowledge
 > belongs in**, and **what this public repository may disclose**. Consumed by `skills/learn`,
-> `skills/handoff`, and `skills/distill`; none of them restates the policy — they cite this file.
+> `skills/handoff`, and `skills/distill`. Each carries an operational excerpt sized for its own flow;
+> **this file is canonical on any conflict** — when an excerpt and this file disagree, the excerpt is
+> the stale one and gets repaired here first.
 >
 > Origin: 2026-08-24 design review of two orthogonal defects — knowledge written into layers that
 > evaporate, and a disclosure line that existed only in the habits of whoever authored the three
@@ -21,7 +23,7 @@ The second defect is durability. Knowledge was being written into layers that ev
 
 - `HANDOFF.md` — whose own Resume-Mode step 5 instructs the next session to **delete it**.
 - `~/.claude/projects/<slug>/memory/` — machine-local; invisible to every other machine and to CI.
-- `.claude/knowledge/` — **gitignored** (`.gitignore` line 6), so a write there produces an untracked
+- `.claude/knowledge/` — **gitignored** (the `.claude/knowledge/` entry in `.gitignore`), so a write there produces an untracked
   file that no clone, no reviewer, and no future worktree will ever see.
 
 That is not hypothetical. The last row of [`../.claude/knowledge/INDEX.md`](../.claude/knowledge/INDEX.md)
@@ -66,10 +68,15 @@ Verified 2026-08-24 against the four tracked files (`INDEX.md`, `architecture.md
   Gemini, worktree-shared `.git/config` identity bleed.
 - They carry **zero** host names, **zero** tmux pane addresses, **zero** `/home/<user>/` paths, and
   **zero** credentials.
-- One honest exception, recorded rather than hidden: `INDEX.md` names a personal GitHub repo
-  (`cookys/TWGameProject`) in its cross-repo mirror section. That is a repo handle, not a fleet
-  token, and it is already public — but it is the closest thing to a boundary case in the corpus, so
-  a future reader should see it classified rather than discover it and doubt the whole table.
+- Two honest exceptions, recorded rather than hidden, because a future reader should see them
+  classified rather than discover them and doubt the whole table:
+  1. `INDEX.md` names a personal GitHub repo (`cookys/TWGameProject`) in its cross-repo mirror
+     section. A repo handle, not a fleet token, and already public.
+  2. `debug-patterns.md` contains the literal address `bot@test.local` — the fabricated Test Bot
+     identity from the 2026-07-16 worktree-identity incident. It is `@`-shaped, and therefore the
+     nearest thing in the corpus to the not-publishable column, but it is a synthetic fixture value
+     that is *part of the incident narrative*: deleting it would remove what the reader needs to
+     recognise the same bleed. A fabricated identity is not a credential.
 
 The table above is not aspirational. It is a description of a corpus that already obeys it.
 
@@ -93,9 +100,12 @@ discipline belongs in `references/` where a skill can cite it by path.
 
 ## 4. The promotion contract — 不 commit 就等於沒寫
 
-`.claude/knowledge/` is gitignored on purpose. `.gitignore` line 6 was added 2026-04-12 alongside
-`settings.local.json`, `next-state.json` and `worktrees/` — a deliberate "the `.claude` dir is local
-state" decision, and it is **fail-closed by design**: local scratch never leaks into a public repo by
+`.claude/knowledge/` is gitignored on purpose. The `.claude/knowledge/` entry in `.gitignore` was
+added 2026-04-12 (`8314ca11c`, in the same commit as `.claude/session-start-sha`); the explanatory
+comment above it was added 2026-08-24 by this policy's own commit. Sibling `.claude/*` ignores
+accreted later — `settings.local.json` 2026-05-14, `next-state.json` 2026-05-18, `agents/` 2026-06-22,
+`worktrees/` 2026-06-24 — the same "the `.claude` dir is local state" decision applied repeatedly. It
+is **fail-closed by design**: local scratch never leaks into a public repo by
 accident. Each of the four tracked knowledge files got there through an explicit `git add -f` in a
 `docs(knowledge):` commit.
 
@@ -116,8 +126,14 @@ The three steps are one motion, not three optional steps:
 git add -f .claude/knowledge/<file>.md .claude/knowledge/INDEX.md
 # 3. show the user what is about to become public, then commit
 git diff --cached .claude/knowledge/
-git commit -m "docs(knowledge): <one-line summary>"
+git commit -m "docs(knowledge): <one-line summary>" -- .claude/knowledge/
 ```
+
+The trailing `-- .claude/knowledge/` is load-bearing: **the commit must be scoped to exactly what the
+diff showed.** `learn` is routinely invoked mid-task (handoff's step 3.5 calls it during in-flight
+work), so unrelated staged files may already be sitting in the index. An unscoped `git commit` would
+sweep them in under a `docs(knowledge):` message — and the user would have approved a strict subset of
+what actually landed. A disclosure gate that displays less than it commits is not a gate.
 
 Step 3's diff is not ceremony. It is the **human disclosure gate** — the only point at which a person
 sees the exact bytes before they become public, and the only defense against the identifier classes

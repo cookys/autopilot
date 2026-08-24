@@ -67,11 +67,13 @@ Every MUST/MANDATORY row in a card names its enforcer:
 - [ ] Pinned literals survive — `bash scripts/check-canonical-invariants.sh`.
 - [ ] Profiles accounting closes — `node scripts/build-profile-payload.js catalog --check`.
 - [ ] Every MUST/MANDATORY row names its enforcer class or carries `documented-only`.
-- [ ] **Every asserted mechanism names its executable path.** A card may not say "the lint" / "the
-      scanner" / "the gate" — it says `scripts/<name>.<ext>`. An unnamed mechanism is
+- [ ] **Every asserted mechanism names its executable path** (`documented-only` — this row itself has
+      no scripted counter; it depends on the reviewer applying it). A card may not say "the lint" /
+      "the scanner" / "the gate" — it says `scripts/<name>.<ext>`. An unnamed mechanism is
       undereferenceable by construction, so no gate can ever check whether it exists; naming it is
-      what lets `doc-drift-gate.js`'s `script-refs` check dereference it. Prose and mechanism ship in
-      the same commit. See [`evidence-discipline.md`](evidence-discipline.md) §14 and
+      what lets `doc-drift-gate.js`'s `script-refs` check dereference it — that second half (the gate
+      itself) IS mechanised, but this writing-rule row is not. Prose and mechanism ship in the same
+      commit. See [`evidence-discipline.md`](evidence-discipline.md) §14 and
       [`knowledge-routing.md`](knowledge-routing.md) §6.
 - [ ] Relocated prose is reachable — each pointer target exists (`bash scripts/validate.sh`).
 - [ ] Line budget respected — `preflight-release.sh` check 8 per-skill block passes.

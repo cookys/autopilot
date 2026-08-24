@@ -26,8 +26,9 @@ The second defect is durability. Knowledge was being written into layers that ev
 - `.claude/knowledge/` — **gitignored** (the `.claude/knowledge/` entry in `.gitignore`), so a write there produces an untracked
   file that no clone, no reviewer, and no future worktree will ever see.
 
-That is not hypothetical. The last row of [`../.claude/knowledge/INDEX.md`](../.claude/knowledge/INDEX.md)
-records `claude-code-plugin-dogfood-lessons.md` (2026-05-14, five dogfood lessons) as
+That is not hypothetical. The ⚠️ row for `claude-code-plugin-dogfood-lessons.md` in
+[`../.claude/knowledge/INDEX.md`](../.claude/knowledge/INDEX.md)
+records it (2026-05-14, five dogfood lessons) as
 **從未 commit 進本 repo** — discovered missing by a doc-sync sweep on 2026-07-16, and never recovered.
 It was written. It was indexed. It is gone. That row is the precedent every skill in this family cites.
 
@@ -118,14 +119,36 @@ An uncommitted file there is not "saved pending review". It is invisible to `git
 invisible to every other clone, invisible to CI, and one `git clean -xdf` — or one worktree teardown —
 from gone. `claude-code-plugin-dogfood-lessons.md` is what that looks like three months later.
 
-The three steps are one motion, not three optional steps:
+This is three steps, with a **mandatory stop** between step 2 and step 3 — not one motion. The stop
+exists because `git diff` only displays; it does not ask, block, or wait. An agent that runs all three
+in one tool call publishes to a **public repository** with no human decision point in between, and the
+low-context handoff path (`handoff` step 3.5 calls `learn`) is exactly the path most likely to run
+everything in one shot.
+
+**Step 1 — write, mechanically pre-filter, and show the diff:**
 
 ```bash
 # 1. write the file
 # 2. force it past the ignore rule
 git add -f .claude/knowledge/<file>.md .claude/knowledge/INDEX.md
-# 3. show the user what is about to become public, then commit
+# 3. Layer 1 — mechanical pre-filter for structured shapes (see §5). exit 1 means
+#    "classify these", not "abort" — do not treat a nonzero exit as a reason to skip
+#    the human gate below; route flagged tokens into the classification the gate does.
+node scripts/identifier-scan.js .claude/knowledge/<file>.md
+# 4. show the user what is about to become public
 git diff --cached .claude/knowledge/
+```
+
+**Step 2 — the human disclosure gate (mandatory, blocking):** ask via `AskUserQuestion` — approve /
+edit / cancel — using the diff above as what the question shows. **STOP on anything but approve.**
+This is the Layer 2 gate: the scanner in step 1 catches structured shapes so the person reviewing can
+spend their attention on the unstructured class it cannot see at all (bare hostnames, client names,
+pane addresses, endpoint aliases — §5). Match the gating style of `skills/distill/SKILL.md` Step 3,
+which names `AskUserQuestion` and gates per-candidate the same way.
+
+**Step 3 — only after explicit approval, in a separate tool call:**
+
+```bash
 git commit -m "docs(knowledge): <one-line summary>" -- .claude/knowledge/
 ```
 
@@ -135,18 +158,27 @@ work), so unrelated staged files may already be sitting in the index. An unscope
 sweep them in under a `docs(knowledge):` message — and the user would have approved a strict subset of
 what actually landed. A disclosure gate that displays less than it commits is not a gate.
 
-Step 3's diff is not ceremony. It is the **human disclosure gate** — the only point at which a person
-sees the exact bytes before they become public, and the only defense against the identifier classes
-that no scanner can see (§5).
+The `git diff` in step 1 is not the gate itself — it only displays. The **`AskUserQuestion` blocking
+step is the human disclosure gate**: the only point at which a person must act before the bytes become
+public, and (together with the Layer 1 scanner) the only defense against the identifier classes that
+no scanner can see (§5).
 
 ---
 
 ## 5. Mechanism vs. gate — what the scanner cannot see
 
 [`scripts/identifier-scan.js`](../scripts/identifier-scan.js) detects **structured tokens only**:
-email, IPv4, `/home/<user>/` paths, FQDN, key shapes. Its covered set is pinned by
+email, IPv4, `/home/<user>/` paths, hostnames ending in one of eight hardcoded suffixes
+(`com net org io dev ai local internal` — not a general FQDN pattern; `.edu`, `.uk`, `.tech`, `.co.jp`
+and any suffix outside that list are silently uncovered), key shapes. Its covered set is pinned by
 `hooks/tests/fixtures/identifier-scan/` — those fixtures, not this paragraph, are the referent for any
 claim about what it catches.
+
+There are **two blind spots, not one**, and they are different in kind. The negative scope below is
+the load-bearing half — a whole *class* of identifier the scanner cannot see at all. The suffix list
+above is a second, narrower blind spot *inside* the structured class it does claim to cover: a
+hostname it should plausibly catch but doesn't, because its TLD isn't in the eight-item list. Both are
+deliberate, not TODOs — see the negative test fixtures listed just below.
 
 Its **negative scope is the load-bearing half**: bare hostnames, client and company names, tmux pane
 addresses and endpoint aliases have **no mechanical detection whatsoever**. A clean exit means "no
@@ -192,12 +224,17 @@ reader — human or model — inherits a belief in a defense that is not running
 script there is nothing to go inspect. See [`evidence-discipline.md`](evidence-discipline.md) §14 for
 the incident and the enforcer.
 
-Two obligations follow, and both are mechanised:
+Two obligations follow. **Only the second is mechanised; the first is `documented-only` and depends
+on the reviewer:**
 
 1. **Name the path.** An asserted mechanism states its executable path (`scripts/<name>.<ext>`), not
    a description of one ("the lint", "the scanner"). An unnamed mechanism is undereferenceable by
    construction — no gate can check it. Checklist row:
-   [`skill-contract-card.md`](skill-contract-card.md) § Review checklist.
+   [`skill-contract-card.md`](skill-contract-card.md) § Review checklist, tagged `documented-only` —
+   it is the only row in that checklist whose siblings all name a real enforcing command; this one
+   has none. A SKILL.md that says "the lint reliably catches structured tokens" with no path passes
+   `doc-drift-gate.js` silently, because there is nothing for it to dereference.
 2. **The path must resolve.** `scripts/doc-drift-gate.js`'s `script-refs` check dereferences every
    `scripts/<name>.<ext>` reference in `skills/**` and `references/*.md` and fails on any that does
-   not exist. Rule 1 is what gives rule 2 something to bite on.
+   not exist. Rule 1 is what gives rule 2 something to bite on — but rule 1 itself has no enforcer of
+   its own; it is upheld by review, or it is not upheld at all.

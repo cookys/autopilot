@@ -289,8 +289,9 @@ only the reverse pin catches dead WIRING. Evidence:
 **Incident (found 2026-08-24, knowledge-routing review).** `skills/distill/SKILL.md` asserted, in two
 places, that "the lint **reliably catches** structured tokens (email / IPv4 / `/home/<user>/` / FQDN /
 key-shapes); bare hostnames and client names are the **gate's** job", and twice instructed the reader
-to configure `~/.autopilot/distill/identifiers.deny`. That deny-list has never existed on this
-machine. The lint itself *did* exist — buried as an undocumented `--path` mode inside
+to configure `~/.autopilot/distill/identifiers.deny` — a file **no code has ever read into a
+decision**: nothing in the repo created it, no test fixture supplied it, and its only consumer was an
+optional read that silently fell back to empty. The lint itself *did* exist — buried as an undocumented `--path` mode inside
 `distill-scan.js`, a script whose every other line and whose entire inventory row describe a
 conversation-history frequency scanner. Neither sentence named a path. So a reader following the skill
 had no way to tell which half was real, and **no gate could tell either**.
@@ -316,7 +317,8 @@ The enforcer pair, both required because either alone is inert:
    dereference; the ghost lint slipped through precisely by never naming one.
 2. **The gate** — `scripts/doc-drift-gate.js`'s `script-refs` check dereferences every
    `scripts/<name>.<ext>` reference in `skills/**` and `references/*.md` and fails on any that does
-   not resolve (run by `preflight-portability.sh` check 17).
+   not resolve (run by the doc-drift gate check in `preflight-portability.sh` — `check_doc_drift`,
+   labeled "doc-drift gate: internal links resolve + code-fences balance").
 
 **Check**: for every sentence in a skill that promises a mechanical defense, ask *what is its path?*
 If the sentence cannot answer, the defense is unverifiable — and per §"The one question", the working

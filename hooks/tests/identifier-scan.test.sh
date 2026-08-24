@@ -125,6 +125,13 @@ done
 # domain stops firing, this goes red and forces them to update that wording in
 # knowledge-routing.md §5, skills/distill/SKILL.md Step 3, and the scanner header
 # together, rather than letting doc and mechanism drift apart.
+#
+# The kind-set assertion alone is NOT a real pin: bot@test.local alone supplies both
+# 'email' and 'fqdn' kinds, so narrowing/removing the z.ai-matching half of the fqdn
+# pattern leaves the kind set at "email,fqdn" unchanged (verified: deleting `ai` from
+# the TLD alternation keeps this suite green while the real corpus drops 5 findings to
+# 2 — see the DoD proof). Assert on the actual MATCH STRINGS so both halves are pinned
+# independently.
 echo "Testing the pinned vendor-domain false-positive class..."
 run_scan --json "$DIRTY/vendor-domain-overlap.md" || true
 assert_exit_code "$__SCAN_EXIT" 1 "vendor-domain-overlap fixture still produces findings"
@@ -134,5 +141,46 @@ fp_kinds=$(node -e "
   process.stdout.write(k);
 " "$__SCAN_OUT")
 assert_eq "$fp_kinds" "email,fqdn" "vendor-domain-overlap fires exactly the email+fqdn shapes"
+has_zai_fqdn=$(node -e "
+  const d = JSON.parse(process.argv[1]);
+  process.stdout.write(d.findings.some(f => f.kind === 'fqdn' && f.match === 'z.ai') ? 'yes' : 'no');
+" "$__SCAN_OUT")
+assert_eq "$has_zai_fqdn" "yes" "vendor-domain-overlap findings include {kind:'fqdn', match:'z.ai'}"
+has_bot_email=$(node -e "
+  const d = JSON.parse(process.argv[1]);
+  process.stdout.write(d.findings.some(f => f.kind === 'email' && f.match === 'bot@test.local') ? 'yes' : 'no');
+" "$__SCAN_OUT")
+assert_eq "$has_bot_email" "yes" "vendor-domain-overlap findings include {kind:'email', match:'bot@test.local'}"
+
+# 9. The fqdn pattern's suffix boundary is pinned too — a second, narrower blind spot
+# INSIDE the structured class (as distinct from test 3's whole unstructured class). If
+# someone widens or narrows the eight-suffix list without updating the prose that
+# describes it (knowledge-routing.md §5, distill SKILL.md Step 3, scripts-inventory.md,
+# this script's own header/--help), this goes red.
+echo "Testing uncovered-tld.md fixture is silently clean (pinned suffix boundary)..."
+run_scan "$CLEAN/uncovered-tld.md"
+assert_exit_code "$__SCAN_EXIT" 0 "uncovered-tld.md alone exits 0 (pinned suffix boundary)"
+
+# 10. Unreadable stdin must exit 2 ("usage error"), never 0 ("clean") — a disclosure
+# gate that fails open on unreadable input is the same class already repaired on the
+# file path (scanPaths). Redirect stdin from a directory to genuinely reproduce
+# EISDIR on read (verified: this platform's fs.readFileSync(0, ...) throws EISDIR
+# reading a directory fd, so this is not a vacuous pin).
+echo "Testing unreadable stdin exits 2, not 0..."
+__SCAN_EXIT=0
+__SCAN_OUT=$(node "$SCAN_JS" - < "$FIXTURES" 2>&1) || __SCAN_EXIT=$?
+assert_exit_code "$__SCAN_EXIT" 2 "unreadable (directory) stdin exits 2, not silently 0"
+
+# 11. PATTERNS coverage is pinned in the OTHER direction too: adding a sixth pattern
+# with no matching dirty/ fixture must go red. Compare the exported PATTERNS id list
+# against the kind set derived from the dirty/ fixture filenames (test 1's map) —
+# every shipped pattern id must have a dirty fixture asserting it fires.
+echo "Testing PATTERNS id set matches the dirty/ fixture coverage (pinned both directions)..."
+expected_kinds=$(printf '%s\n' "${KIND_FOR_FILE[@]}" | sort -u | paste -sd, -)
+actual_pattern_ids=$(node -e "
+  const { PATTERNS } = require(process.argv[1]);
+  process.stdout.write(PATTERNS.map(p => p.id).slice().sort().join(','));
+" "$SCAN_JS")
+assert_eq "$actual_pattern_ids" "$expected_kinds" "PATTERNS ids exactly match the dirty/ fixture-covered kinds"
 
 finalize_test

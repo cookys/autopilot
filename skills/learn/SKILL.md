@@ -39,11 +39,32 @@ Record reusable knowledge so future sessions avoid the same mistakes.
    `.claude/knowledge/` is **deliberately gitignored** (the `.claude/knowledge/` entry in
    `.gitignore` — the `.claude` dir is local state, fail-closed so scratch never leaks into this
    public repo). A write there is therefore not a save. Completing it means finishing the promotion
-   contract in one motion:
+   contract in **three steps, with a mandatory stop between step 2 and step 3** — not one motion.
+   `git diff` only displays; it does not ask, block, or wait, and `learn` is routinely invoked from
+   the low-context `handoff` step 3.5 path, which is exactly the path most likely to run everything
+   in one shot with no human decision point.
+
+   **Step 1 — write, mechanically pre-filter, and show the diff:**
 
    ```bash
    git add -f .claude/knowledge/<file>.md .claude/knowledge/INDEX.md
-   git diff --cached .claude/knowledge/   # show the user — this is the disclosure gate
+   # Layer 1 — mechanical pre-filter for structured shapes. exit 1 means "classify
+   # these", not "abort" — do not skip the human gate below because of it.
+   node scripts/identifier-scan.js .claude/knowledge/<file>.md
+   git diff --cached .claude/knowledge/
+   ```
+
+   **Step 2 — the human disclosure gate (mandatory, blocking):** ask via `AskUserQuestion` — approve
+   / edit / cancel — showing the diff above. **STOP on anything but approve.** This is the Layer 2
+   gate: the scanner in step 1 catches structured shapes so the person reviewing can spend their
+   attention on the unstructured class it cannot see at all (bare hostnames, client names, pane
+   addresses, endpoint aliases — routing doc §5). Match the gating style of
+   `skills/distill/SKILL.md` Step 3, which names `AskUserQuestion` and gates per-candidate the same
+   way.
+
+   **Step 3 — only after explicit approval, in a separate tool call:**
+
+   ```bash
    git commit -m "docs(knowledge): <one-line summary>" -- .claude/knowledge/
    ```
 
@@ -53,13 +74,13 @@ Record reusable knowledge so future sessions avoid the same mistakes.
 
    > **不 commit 就等於沒寫.** An uncommitted file there is invisible to `git status` (ignored), to
    > every other clone, and to CI — one `git clean -xdf` or worktree teardown from gone. Precedent:
-   > the last row of `.claude/knowledge/INDEX.md` records `claude-code-plugin-dogfood-lessons.md`
+   > the ⚠️ row for `claude-code-plugin-dogfood-lessons.md` in `.claude/knowledge/INDEX.md` records it
    > (2026-05-14) as 從未 commit 進本 repo, found missing by a doc-sync sweep 2026-07-16 and never
    > recovered. It was written; it was indexed; it is gone.
 
-   The `git diff --cached` step is the **human disclosure gate**, not ceremony:
-   `scripts/identifier-scan.js` sees structured tokens only and is blind to bare hostnames, client
-   names, pane addresses and endpoint aliases (routing doc §5).
+   The `git diff --cached` in step 1 only displays. The **`AskUserQuestion` blocking step in step 2 is
+   the human disclosure gate**, not ceremony: `scripts/identifier-scan.js` sees structured tokens only
+   and is blind to bare hostnames, client names, pane addresses and endpoint aliases (routing doc §5).
 
 1. **Dedup check** — search existing knowledge before writing:
    ```bash

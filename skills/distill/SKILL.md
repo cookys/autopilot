@@ -107,8 +107,9 @@ user did not tick.
 
 **Step 3 的機械前置**:對每份 draft `SKILL.md` 跑
 [`scripts/identifier-scan.js`](../../scripts/identifier-scan.js)(僅偵測結構化 token:email / IPv4 /
-`/home/<user>/` / FQDN / key 形狀 —— 覆蓋範圍以該腳本的 test fixtures
-`hooks/tests/fixtures/identifier-scan/` 為準,不以本段文字為準)。
+`/home/<user>/` / 以 `com`/`net`/`org`/`io`/`dev`/`ai`/`local`/`internal` 結尾的 hostname(**不是**通用
+FQDN pattern —— `.edu`/`.uk`/`.tech`/`.co.jp` 等後綴不在覆蓋範圍內)/ key 形狀 —— 覆蓋範圍以該腳本的
+test fixtures `hooks/tests/fixtures/identifier-scan/` 為準,不以本段文字為準)。
 
 **exit 1 的意思是「這些請分類」,不是「這個 candidate 不合格」。** 命中的 token 逐一攤給使用者看,
 由使用者判定或參數化;清掉之後該 candidate 照常進入可選集。**不要**因為 exit 1 就靜默把 candidate
@@ -262,6 +263,6 @@ design and the two dialectic rounds behind it.
 | Script | Purpose |
 |--------|---------|
 | [`scripts/distill-scan.js`](../../scripts/distill-scan.js) | Deterministic history scanner → frequency atoms (two buckets). `--real-only`, `--json`, `--top N`. **Cursor:** `--incremental` reuses cached per-session atoms (only re-reads new/changed jsonl; totals identical to full scan); `--new-only` reports only candidates risen since last run. State in `~/.autopilot/distill/scan-state.json`. No LLM in the count path. |
-| [`scripts/identifier-scan.js`](../../scripts/identifier-scan.js) | Structured-identifier scanner for the Step 3 gate (file / dir / stdin; `--json`; exit 1 ⇒ findings, 2 ⇒ usage). Covers email / IPv4 / `/home/<user>/` / FQDN / key shapes — covered set pinned by `hooks/tests/fixtures/identifier-scan/`. **Zero coverage of bare hostnames, client names, pane addresses, endpoint aliases** — that class is the human gate's job (`references/knowledge-routing.md` §5). |
+| [`scripts/identifier-scan.js`](../../scripts/identifier-scan.js) | Structured-identifier scanner for the Step 3 gate (file / dir / stdin; `--json`; exit 1 ⇒ findings, 2 ⇒ usage). Covers email / IPv4 / `/home/<user>/` / hostnames ending in `com`/`net`/`org`/`io`/`dev`/`ai`/`local`/`internal` (not a general FQDN pattern) / key shapes — covered set pinned by `hooks/tests/fixtures/identifier-scan/`. **Zero coverage of bare hostnames, client names, pane addresses, endpoint aliases** — that class is the human gate's job (`references/knowledge-routing.md` §5). |
 | [`scripts/distill-sync-setup.sh`](../../scripts/distill-sync-setup.sh) | Onboarding plumbing for pack sync: `status` / `init-remote <url>` / `enroll <url>` / `fix-gitignore [repo]`. Idempotent; emits the **correct** `.claude/*` + `!.claude/skills/` negation (the obvious `.claude/` form is silently broken). Drives Step 5 first-run setup. |
 | [`scripts/distill-consolidate.sh`](../../scripts/distill-consolidate.sh) | Cross-machine consolidation plumbing (deterministic, no LLM): `normalize-slug <raw>` (machine-stable slug — lowercase + drop tiny stopword set + preserve order), `migrate [pack]` (one-time: rename existing dirs to normalized slugs **and rewrite each frontmatter `name:`** — a skill's identity is its `name:`, so both must converge; STOPs on collision), `compare <slug> [pack]` (**proactive** divergence check against `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; no merge-conflict state). The human-gated LLM merge lives in Step 5, not the script. |

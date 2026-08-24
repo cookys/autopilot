@@ -7,6 +7,7 @@ purpose — they are the human reviewer's job, not this scanner's:
 - A bare hostname with no dotted TLD suffix this scanner recognizes: gizmo-node-7
 - A client/company name mentioned in prose: Acme Rockets Inc.
 - A tmux pane address: agy-session-3:2.1
+- An endpoint alias: prod-gateway-primary
 
 If a future change makes this scanner start flagging any of the above, this
 fixture (and the test that asserts silence on it) must go red — that is the

@@ -22,7 +22,7 @@ R2 (Architect/Ops/Skeptic, verified firsthand) confirmed v2 fixed scrub-theater 
 | 🔴 **Doesn't reduce toil** — v2 = scan→approve→install→sync-setup loop | Loop collapses: `scan`→`review`(approve) **writes the skill into `~/.claude/skills/`**; that dir is the sync sink; machine B auto-discovers. The only irreducible manual step is the one-time privacy approval; sync setup is one-time per machine. |
 | 🔴 **Complexity grew; P-dogfood proved the opposite** (release ritual already codified in `finish-flow` + `preflight-release.sh`) | Verbs cut 4→3; `install`-renderer **removed** (writing the skill file *is* install, since the dir is consumed); `kind: sop/checklist` **removed** (the consumable unit is a *skill*); hooks **out of scope** (so the release ritual is a *separate hand-written hook*, not a distill "discovery"). |
 | 🔴/🟠 **Hook-install clobbers `core.hooksPath`** (live: already `=.githooks`) | Distill no longer emits hooks. The release-ritual hook is a separate deliverable (§8 companion), hand-written, wired per `install-hooks.sh` convention. Clobber risk gone from distill. |
-| 🟠 **Lint theater for bare hostnames / client names** | §5: lint claims **honestly split** into "reliably catches" (ipv4/email/`/home/<user>/`/FQDN/key-shapes) vs "cannot — gate's job". Add a **per-machine deny-list** (`~/.autopilot/distill/identifiers.deny`) → exact-match the hostnames/clients regex can't infer. |
+| 🟠 **Lint theater for bare hostnames / client names** | §5: lint claims **honestly split** into "reliably catches" (ipv4/email/`/home/<user>/`/FQDN/key-shapes) vs "cannot — gate's job". Add a **per-machine deny-list** (`~/.autopilot/distill/identifiers.deny`) → exact-match the hostnames/clients regex can't infer. (REMOVED 2026-08-24 — see banner) |
 | 🟠 **Gate UX unbounded → rubber-stamp** | `scan` emits **top-K (≤7) by frequency** per run; review must be exhaustible in one sitting. Friction escalates when sink is shared (proper-noun tokens visually segregated). |
 | 🟠 **Slug merge wrong-split + new clobber** | Merge key = **content-derived** (`<slug>-<shorthash(sorted atoms)>`): same procedure→same key (no split), different→different (no clobber). Human slug is display-only. |
 | 🟠 **Privacy test non-deterministic** (LLM in assert path) | §6 splits: **deterministic CI gate** = lint flags seeded literals; **non-gating eval** = abstraction stripping-rate as a quality metric, never red/green. |
@@ -116,7 +116,7 @@ No `install` (writing the SKILL.md is install). No `sync` verb (R7: git on the p
 ### 4.2 scan pipeline
 1. **Scan (deterministic)** — `scripts/distill-scan.js` iterates all `~/.claude/projects/*/*.jsonl`; per-line robust parse (own copy of line-cap/`\r\n`/try-catch). Tallies normalized-command n-grams, slash/skill frequency, adjacent-event n-grams, a fixed documented bilingual friction-phrase hit list (lexical proxy, per R1-A3). Project attribution from the in-line `cwd` field (never dir-name encoding — [[project-hook-transcript-pivot]]). Emits a frequency-atom JSON.
 2. **Propose (LLM, from atoms only)** — top-K≤7 recurring procedures, **abstracted to generic steps**. If a procedure can't be generic without losing its value (inherently-specific class — a deploy keyed to one host), **refuse to emit it** and flag "manual-author only" (Architect R2-B1). Output = candidate SKILL.md drafts, `status: candidate`, staged locally.
-3. **Lint + deny-list (deterministic)** — `scripts/distill-scan.js --lint` flags structured identifiers (ipv4/email/`/home/<user>/`/dotted-FQDN/key-shapes) **and** exact matches from `~/.autopilot/distill/identifiers.deny` (user's real hostnames/client names). Flags shown at review.
+3. **Lint + deny-list (deterministic)** — `scripts/distill-scan.js --lint` flags structured identifiers (ipv4/email/`/home/<user>/`/dotted-FQDN/key-shapes) **and** exact matches from `~/.autopilot/distill/identifiers.deny` (user's real hostnames/client names). Flags shown at review. (REMOVED 2026-08-24 — see banner)
 
 ### 4.3 review → write (staged) → consolidate
 Human approves/edits each candidate. Key = `<slug>-<shorthash(sorted atoms)>` (same procedure → same key across machines; distinct → distinct). On approval, write a well-formed SKILL.md (`name`+`description` so `validate.sh` passes; body = generic procedure) to the **staged, per-host** location:
@@ -133,7 +133,7 @@ Human approves/edits each candidate. Key = `<slug>-<shorthash(sorted atoms)>` (s
 ### 4.5 Config `~/.autopilot/distill/config`
 ```
 TOPK=7
-DENYLIST=~/.autopilot/distill/identifiers.deny   # user's real hostnames/client names, one per line
+DENYLIST=~/.autopilot/distill/identifiers.deny   # user's real hostnames/client names, one per line (REMOVED 2026-08-24 — see banner)
 ```
 
 ## 5. Privacy model (re-ranked per R2-B1)

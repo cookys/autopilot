@@ -20,8 +20,8 @@ step 5 就叫下一個 session 刪掉它)、machine-local memory、以及 **giti
 寫下披露線 —— 可公開的是廠商名/版號/事故敘事/repo 內路徑/錯誤訊息,不可公開的是主機名/fleet handle/
 `/home/<user>/`/pane 位址/endpoint alias/任何憑證形狀;唯一判準是
 **「把所有 fleet-specific token 刪掉後,這段還能教人嗎?」**。三個 sink 各自帶 write contract,其中
-`.claude/knowledge/` 的是 **promotion**:`git add -f` → 給使用者看 diff → 同一動作裡 commit。
-**不 commit 就等於沒寫。**`.gitignore` 第 6 行現在自己說明這個 fail-closed 選擇是刻意的。
+`.claude/knowledge/` 的是 **promotion**,而且刻意**不是**一個動作:`git add -f` → 跑 `identifier-scan.js` 做 Layer 1 機械前篩 → 給使用者看 diff → **`AskUserQuestion` 阻塞閘(Layer 2,非 approve 一律 STOP)** → 核准後才 commit。`git diff` 只會顯示,它不會問、不會擋、不會等 —— 而 `handoff` step 3.5 呼叫 `learn` 的正是 context 快用完的那條路徑,最容易一次跑完全部。
+**不 commit 就等於沒寫。**`.gitignore` 裡 `.claude/knowledge/` 那條 ignore 規則,現在自己上方的註解說明這個 fail-closed 選擇是刻意的。
 `CLAUDE.md` 的「Where context lives」多一列指向 `.claude/knowledge/` —— B4(沒有任何東西會自動載入它)
 的完整修法,不需要新 hook:`CLAUDE.md` 是唯一會被自動注入的 in-repo 檔案,一列指標就讓下一個 agent
 的發現路徑存在。
@@ -45,7 +45,7 @@ not evidence it is running」,`references/evidence-discipline.md` 就是為了�
 §1 的 dead script 至少可以打開來看、grep 它的呼叫者;沒有位址的機制連檢查對象都沒有。
 **命名一個失效類別不會產生防禦,閘才會。** 執法是一對,缺一則空轉:寫作規則(`skill-contract-card.md`
 review checklist —— 被斷言的機制必須指出可執行檔路徑)讓閘有東西可以解參照;閘
-(`doc-drift-gate.js` 的 `script-refs`,由 `preflight-portability.sh` check 17 執行)則把不存在的
+(`doc-drift-gate.js` 的 `script-refs`,由 `preflight-portability.sh` 的 doc-drift gate check 執行)則把不存在的
 路徑打紅。幽靈 lint 正是靠著從不具名而躲過去的。
 
 **發現的、與設計簡報相左的三件事**(記在此處以免下一個 session 重踩):(1) lint 不是幽靈,是**沒有位址

@@ -69,7 +69,20 @@ const LINT_PATH = (() => { const i = args.indexOf('--path'); return i >= 0 && ar
 //       (usage error) rather than being counted as "no findings". Silence about a file you
 //       could not read is the wrong default for a disclosure gate.
 //   (2) finding.file stays absolute (path.resolve on the root), matching the old walk().
+// A machine that followed the previously-documented setup may have created
+// ~/.autopilot/distill/identifiers.deny before the deny-list was removed (ADR-0001,
+// see references/knowledge-routing.md §5). That file is now silently ignored by
+// identifier-scan.js — warn on stderr ONLY, so a stale file doesn't produce a
+// quietly-weakened lint with no signal. Never alters exit code or stdout.
+function warnIfStaleDenylistExists() {
+  const denyPath = path.join(os.homedir(), '.autopilot', 'distill', 'identifiers.deny');
+  if (fs.existsSync(denyPath)) {
+    process.stderr.write('identifiers.deny is now ignored (ADR-0001); see references/knowledge-routing.md §5\n');
+  }
+}
+
 function runIdentifierLint(rootDir) {
+  warnIfStaleDenylistExists();
   const { scanPaths } = require('./identifier-scan.js');
   let findings;
   try {

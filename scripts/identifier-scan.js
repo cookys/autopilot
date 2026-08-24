@@ -4,8 +4,10 @@
  * identifier-scan.js — structured-identifier-token lint (canonical implementation).
  *
  * WHAT IT DOES: detects STRUCTURED identifier tokens only — email addresses, IPv4
- * literals, /home/<user>/ paths, FQDNs, and common API-key shapes. Five fixed regexes,
- * no LLM, no learned model.
+ * literals, /home/<user>/ paths, hostnames ending in one of eight hardcoded suffixes
+ * (com/net/org/io/dev/ai/local/internal — NOT a general FQDN pattern; .edu, .uk, .tech,
+ * .co.jp and any suffix outside that list are silently uncovered), and common API-key
+ * shapes. Five fixed regexes, no LLM, no learned model.
  *
  * NEGATIVE SCOPE (the most important line in this file): this scanner has ZERO
  * coverage of UNSTRUCTURED identifiers — bare hostnames, client/company names, tmux
@@ -163,6 +165,11 @@ function printHelp(stream) {
     'tmux pane addresses, or endpoint aliases — those are the human reviewer\'s job. A clean',
     'exit means "no structured token matched", never "this text is safe to publish".',
     '',
+    'The fqdn pattern is NOT a general FQDN matcher: it covers only hostnames ending in',
+    'com/net/org/io/dev/ai/local/internal. .edu, .uk, .tech, .co.jp, and any suffix outside',
+    'that list are silently uncovered — a second, narrower blind spot inside the structured',
+    'class this scanner does claim to cover.',
+    '',
     'Usage:',
     '  node identifier-scan.js <path> [<path> ...]   scan files and/or directories',
     '  node identifier-scan.js -                     read stdin',
@@ -184,7 +191,12 @@ function readStdin() {
   try {
     return fs.readFileSync(0, 'utf8');
   } catch (e) {
-    return '';
+    // A disclosure gate that silently treats unreadable input as "clean" is the
+    // exact class already repaired on the file path in scanPaths (see the header's
+    // "two deliberate deltas" note in distill-scan.js's delegation comment): silence
+    // about text you could not read is the wrong default. Propagate as a usage error
+    // so the caller exits 2, not 0.
+    throw Object.assign(new Error(`cannot read stdin (${e.message})`), { usageError: true });
   }
 }
 

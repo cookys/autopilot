@@ -284,6 +284,48 @@ only the reverse pin catches dead WIRING. Evidence:
 
 ---
 
+## 14. A named mechanism with no resolvable referent is worse than a dead script
+
+**Incident (found 2026-08-24, knowledge-routing review).** `skills/distill/SKILL.md` asserted, in two
+places, that "the lint **reliably catches** structured tokens (email / IPv4 / `/home/<user>/` / FQDN /
+key-shapes); bare hostnames and client names are the **gate's** job", and twice instructed the reader
+to configure `~/.autopilot/distill/identifiers.deny` — a file **no code has ever read into a
+decision**: nothing in the repo created it, no test fixture supplied it, and its only consumer was an
+optional read that silently fell back to empty. The lint itself *did* exist — buried as an undocumented `--path` mode inside
+`distill-scan.js`, a script whose every other line and whose entire inventory row describe a
+conversation-history frequency scanner. Neither sentence named a path. So a reader following the skill
+had no way to tell which half was real, and **no gate could tell either**.
+
+> **Prose 具名的機制沒有可解參照的實作,等同從未寫過 —— 而且它比 dead script 更毒,因為連「去檢查它
+> 有沒有在跑」的對象都不存在。**
+
+§1's dead script is at least inspectable: you can open it, grep its callers, and discover it is inert.
+An unnamed mechanism offers nothing to inspect. The reader inherits a belief in a defense with no
+address, and the belief propagates — a reviewer reads "the lint reliably catches", concludes the
+structured-token class is handled, and spends their attention elsewhere. The false confidence is the
+damage, and it is the same shape as §8: a label standing in for a property.
+
+**This family was already named.** `CLAUDE.md` recorded the 2026-08-06 caution — *a script existing is
+not evidence it is running* — and this very file collected the family around it. The distill sentence
+was written afterwards and survived every subsequent review. **Naming a failure class does not defend
+against it; only a gate does.** Three weeks, in a repo whose CLAUDE.md carries the warning in bold.
+
+The enforcer pair, both required because either alone is inert:
+
+1. **The writing rule** — an asserted mechanism must name its executable path
+   (`references/skill-contract-card.md` § Review checklist). Without this the gate has nothing to
+   dereference; the ghost lint slipped through precisely by never naming one.
+2. **The gate** — `scripts/doc-drift-gate.js`'s `script-refs` check dereferences every
+   `scripts/<name>.<ext>` reference in `skills/**` and `references/*.md` and fails on any that does
+   not resolve (run by the doc-drift gate check in `preflight-portability.sh` — `check_doc_drift`,
+   labeled "doc-drift gate: internal links resolve + code-fences balance").
+
+**Check**: for every sentence in a skill that promises a mechanical defense, ask *what is its path?*
+If the sentence cannot answer, the defense is unverifiable — and per §"The one question", the working
+case and the broken case look identical from where you are standing.
+
+---
+
 ## The one question
 
 Before recording anything as verified:

@@ -1,5 +1,80 @@
 # Changelog
 
+## v2.34.39 — 知識寫進了會蒸發的層,而「什麼可以公開」從來只活在一個人的習慣裡
+
+prose-justification: `skills/learn`、`skills/handoff`、`skills/distill` 三份 SKILL.md 都長了。
+learn 多了 step 0(目的地判定 + promotion contract),handoff 多了 3.5(把耐久內容路由出去),
+distill 的 Step 3 從一句沒有位址的承諾換成一段有腳本路徑、有負向範圍的合約。三處都是把先前
+**不存在於 repo 內**的規則搬進來,不是加註解;政策本體收在 `references/knowledge-routing.md`,
+三份 skill 都只引用不複述。
+
+**Headline**: 兩個正交的缺陷。**耐久性** —— 知識被寫進會蒸發的層:`HANDOFF.md`(它自己的 Resume
+step 5 就叫下一個 session 刪掉它)、machine-local memory、以及 **gitignore 掉的
+`.claude/knowledge/`**。證據不是假設:`.claude/knowledge/INDEX.md` 最後一列記著
+`claude-code-plugin-dogfood-lessons.md`(2026-05-14,五條 dogfood 教訓)**從未 commit 進本 repo**,
+2026-07-16 被 doc-sync sweep 發現不見,至今沒救回。寫了、編了索引、沒了。
+**披露控制** —— 這個 repo 是公開的,而「什麼可以公開」這條線從來沒被寫下來,它只存在於寫那三個
+`docs(knowledge):` commit 的人的習慣裡。習慣不是政策:交不出去,也沒有任何 skill 引用得到。
+
+新增 [`references/knowledge-routing.md`](references/knowledge-routing.md):以**類別**(而非實例清單)
+寫下披露線 —— 可公開的是廠商名/版號/事故敘事/repo 內路徑/錯誤訊息,不可公開的是主機名/fleet handle/
+`/home/<user>/`/pane 位址/endpoint alias/任何憑證形狀;唯一判準是
+**「把所有 fleet-specific token 刪掉後,這段還能教人嗎?」**。三個 sink 各自帶 write contract,其中
+`.claude/knowledge/` 的是 **promotion**,而且刻意**不是**一個動作:`git add -f` → 跑 `identifier-scan.js` 做 Layer 1 機械前篩 → 給使用者看 diff → **`AskUserQuestion` 阻塞閘(Layer 2,非 approve 一律 STOP)** → 核准後才 commit。`git diff` 只會顯示,它不會問、不會擋、不會等 —— 而 `handoff` step 3.5 呼叫 `learn` 的正是 context 快用完的那條路徑,最容易一次跑完全部。
+**不 commit 就等於沒寫。**`.gitignore` 裡 `.claude/knowledge/` 那條 ignore 規則,現在自己上方的註解說明這個 fail-closed 選擇是刻意的。
+`CLAUDE.md` 的「Where context lives」多一列指向 `.claude/knowledge/` —— B4(沒有任何東西會自動載入它)
+的完整修法,不需要新 hook:`CLAUDE.md` 是唯一會被自動注入的 in-repo 檔案,一列指標就讓下一個 agent
+的發現路徑存在。
+
+**以及一條被具名了三週卻沒人擋下的假機制。** `skills/distill/SKILL.md` 兩處斷言「the lint
+**reliably catches** structured tokens」,並兩處要求設定 `~/.autopilot/distill/identifiers.deny`
+—— 那份 deny-list **從來不存在**。lint 本身倒是存在,只是埋成 `distill-scan.js` 一個沒有文件的
+`--path` 模式,而那支腳本從頭到尾(連 inventory 列)都在講 conversation-history 頻率掃描。
+兩句話**都沒有指出路徑**,所以讀者無從分辨哪一半是真的 —— **任何閘也無從分辨**。
+`identifier-scan.js` 現在是唯一的實作(`distill-scan.js --path` 改為委派,deny-list 整組移除),
+標頭第一段就寫負向範圍:**bare hostname / client 名 / pane 位址 / endpoint alias 零覆蓋**,
+clean exit 的意思是「沒有結構化 token 命中」,永遠不是「可以公開」。覆蓋範圍以
+`hooks/tests/fixtures/identifier-scan/` 為準,而不是以任何一段散文為準。
+deny-list 依 ADR-0001 否決並記錄理由:它會靜默放行每一個沒被告知過的名字,然後掛上 "lint-clean"
+標籤 —— 那個標籤證明的是查過一份清單,不是文字乾淨,比沒有 lint 更毒,因為它製造出結束人審的信心。
+
+**這一族早就被命名過了,而它三週內復發。** `CLAUDE.md` 2026-08-06 就用粗體寫著「a script existing is
+not evidence it is running」,`references/evidence-discipline.md` 就是為了收集這一族而寫的。distill
+那句話是**之後**才寫的,並且通過了後續每一次 review。§14 新增這個成員:**prose 具名的機制沒有可解參照
+的實作,等同從未寫過 —— 而且它比 dead script 更毒,因為連「去檢查它有沒有在跑」的對象都不存在。**
+§1 的 dead script 至少可以打開來看、grep 它的呼叫者;沒有位址的機制連檢查對象都沒有。
+**命名一個失效類別不會產生防禦,閘才會。** 執法是一對,缺一則空轉:寫作規則(`skill-contract-card.md`
+review checklist —— 被斷言的機制必須指出可執行檔路徑)讓閘有東西可以解參照;閘
+(`doc-drift-gate.js` 的 `script-refs`,由 `preflight-portability.sh` 的 doc-drift gate check 執行)則把不存在的
+路徑打紅。幽靈 lint 正是靠著從不具名而躲過去的。
+
+**發現的、與設計簡報相左的三件事**(記在此處以免下一個 session 重踩):(1) lint 不是幽靈,是**沒有位址
+的真實實作** —— 所以修法是抽出並具名,不是新寫一支競品;(2) referent-resolution 閘**早就存在**
+(`checkScriptRefs`),缺的從來是寫作規則那一半;(3) `identifiers.deny` 有**第三處**引用,在
+`skills/distill/references/sync-setup.md`,簡報只知道兩處 —— 留一處活著就是留一條活的假參照。
+
+**升級注意(移除一個設定面)**:`~/.autopilot/distill/identifiers.deny` 從此**被忽略**。它先前是
+`skills/distill/references/sync-setup.md` 記載的選用設定,現在整組拿掉,理由如上(ADR-0001)。
+本機從未有過這個檔,但別台機器可能照文件建過 —— 那是刻意的移除,不是疏漏:唯一的替代是 Step 3 的人審,
+因為那正是這類識別字唯一擋得住的地方。版號仍走 PATCH:沒有任何 consumer 的行為依賴那份清單存在
+(它從頭到尾都是 optional 且靜默 fallback 為空)。
+
+**first-pass review 之後修的四條**(depth-0 panel 之前):(1) 三處用「`.gitignore` 第 6 行」指涉 ignore
+規則 —— 而這個 commit 自己插進去的註解把規則推到第 12 行,連帶 2026-04-12 的沿革也標錯(那天加的是
+`session-start-sha` 和 `knowledge/`,`settings.local.json` 是 5/14)。**行號指涉在自己會改的檔案上,
+定義上就不可解**,改成用 pattern 指涉;這正是本次要立的 §14 那條規則落在自己頭上。
+(2) promotion contract 的 `git commit` 沒有 pathspec,但給使用者看的 `git diff --cached` 有 ——
+learn 常在有其他檔案已 staged 時被叫用,於是**披露閘顯示的比它 commit 的少**。commit 補上
+`-- .claude/knowledge/`。(3) scanner 會命中 `z.ai` —— 而 `z.ai` 正是路由表 Publishable 欄自己舉的例。
+distill Step 3 原本寫「exit 1 ⇒ 退出批次」,那會把合法 candidate 踢掉,並訓練出「看到紅燈就跳過」的
+習慣。改成:**exit 1 的意思是「這些請分類」,不是「不合格」**,並加一份 `vendor-domain-overlap.md`
+fixture 把這個假陽性類別釘住(有人把 pattern 調窄讓它不再命中,測試就轉紅,逼他同步改三處文字)。
+(4) 委派後 unreadable file 從靜默跳過變成拋例外 + exit 1(在 `--path` 契約裡是「有命中」);
+改為 exit 2 並在標頭誠實記下與抽出前的兩個行為差異。
+
+BACKLOG 多一列(n=1,只記錄不動工):autopilot 沒有「外部實戰經驗回饋進 autopilot 自己」的路徑 ——
+`learn` 記事實不記 skill,`distill` 明確不以 autopilot 為目標。
+
 ## v2.34.38 — anti-gaming 閘第一次看得見這個 repo 的測試面(以及它的設定表面從來沒能用過)
 
 prose-justification: 沒有動任何 `skills/` 檔案。一個新的 `.claude/` 專案設定、一個 parser bug

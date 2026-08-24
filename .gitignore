@@ -3,6 +3,12 @@
 *~
 node_modules/
 .claude/session-start-sha
+# .claude/knowledge/ is ignored ON PURPOSE (fail-closed): this repo is PUBLIC, and the
+# .claude dir is local state, so nothing lands here by accident. A knowledge file becomes
+# real only via the promotion contract — git add -f + show the user the diff + commit in
+# the same motion. 不 commit 就等於沒寫: an uncommitted file here is invisible to
+# git status, to every clone, and to CI. Policy + the disclosure line:
+# references/knowledge-routing.md
 .claude/knowledge/
 .claude/settings.local.json
 .claude/next-state.json

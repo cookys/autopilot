@@ -60,54 +60,38 @@ const TOP = (() => { const i = args.indexOf('--top'); return i >= 0 ? parseInt(a
 const LINT_PATH = (() => { const i = args.indexOf('--path'); return i >= 0 && args[i + 1] ? args[i + 1] : null; })();
 
 // D5 A11 — shared identifier lint for skill packs (standalone --path <dir>).
-// Patterns: email / IPv4 / /home/<user>/ / FQDN / common key-shapes + optional deny list.
-function runIdentifierLint(rootDir) {
-  const denyFile = path.join(os.homedir(), '.autopilot', 'distill', 'identifiers.deny');
-  const deny = [];
-  try {
-    const raw = fs.readFileSync(denyFile, 'utf8');
-    for (const line of raw.split(/\r?\n/)) {
-      const t = line.trim();
-      if (t && !t.startsWith('#')) deny.push(t.toLowerCase());
-    }
-  } catch (_e) { /* optional */ }
-  const patterns = [
-    { id: 'email', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
-    { id: 'ipv4', re: /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b/g },
-    { id: 'home_path', re: /\/home\/[A-Za-z0-9._-]+\//g },
-    { id: 'fqdn', re: /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|dev|ai|local|internal)\b/gi },
-    { id: 'key_shape', re: /\b(?:sk|pk|api)[-_]?[A-Za-z0-9]{16,}\b/g },
-  ];
-  const findings = [];
-  function walk(dir) {
-    let ents;
-    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-    for (const e of ents) {
-      const full = path.join(dir, e.name);
-      if (e.isDirectory()) {
-        if (e.name === 'node_modules' || e.name === '.git') continue;
-        walk(full);
-      } else if (e.isFile() && /\.(md|txt|json|ya?ml)$/i.test(e.name)) {
-        let text;
-        try { text = fs.readFileSync(full, 'utf8'); } catch { continue; }
-        for (const p of patterns) {
-          p.re.lastIndex = 0;
-          let m;
-          while ((m = p.re.exec(text)) !== null) {
-            findings.push({ file: full, kind: p.id, match: m[0] });
-          }
-        }
-        const lower = text.toLowerCase();
-        for (const d of deny) {
-          if (d && lower.includes(d)) {
-            findings.push({ file: full, kind: 'deny_list', match: d });
-          }
-        }
-      }
-    }
+// The implementation now lives in scripts/identifier-scan.js (canonical, single
+// copy of the pattern set — see its header for the negative-scope disclosure and
+// why the old optional deny-list was removed rather than kept). This is a thin
+// delegation. It preserves the --path CLI's output shape and its 0/1/2 exit codes.
+// Two deliberate deltas from the pre-extraction inline lint, recorded rather than hidden:
+//   (1) an unreadable file used to be skipped silently (exit 0); it now reports and exits 2
+//       (usage error) rather than being counted as "no findings". Silence about a file you
+//       could not read is the wrong default for a disclosure gate.
+//   (2) finding.file stays absolute (path.resolve on the root), matching the old walk().
+// A machine that followed the previously-documented setup may have created
+// ~/.autopilot/distill/identifiers.deny before the deny-list was removed (ADR-0001,
+// see references/knowledge-routing.md §5). That file is now silently ignored by
+// identifier-scan.js — warn on stderr ONLY, so a stale file doesn't produce a
+// quietly-weakened lint with no signal. Never alters exit code or stdout.
+function warnIfStaleDenylistExists() {
+  const denyPath = path.join(os.homedir(), '.autopilot', 'distill', 'identifiers.deny');
+  if (fs.existsSync(denyPath)) {
+    process.stderr.write('identifiers.deny is now ignored (ADR-0001); see references/knowledge-routing.md §5\n');
   }
-  walk(path.resolve(rootDir));
-  return findings;
+}
+
+function runIdentifierLint(rootDir) {
+  warnIfStaleDenylistExists();
+  const { scanPaths } = require('./identifier-scan.js');
+  let findings;
+  try {
+    findings = scanPaths([path.resolve(rootDir)]);
+  } catch (e) {
+    process.stderr.write(`distill-scan --path: ${e.message}\n`);
+    process.exit(2);
+  }
+  return findings.map((f) => ({ file: f.file, kind: f.kind, match: f.match }));
 }
 
 if (LINT_PATH) {

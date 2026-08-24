@@ -137,6 +137,18 @@ addresses and endpoint aliases have **no mechanical detection whatsoever**. A cl
 structured token matched". It never means "safe to publish". The human review step in §4 is not a
 second opinion on the scanner — for that entire class it is the *only* opinion.
 
+**A finding is a prompt to classify, not a verdict.** These are *shape* detectors, and several
+shapes are publishable by §2's table. Run against the four tracked knowledge files today, the scanner
+returns 5 findings and **all 5 are correct to publish**: `z.ai` ×3 (a vendor name — the FQDN pattern
+cannot distinguish a vendor's domain from a host name) and `bot@test.local` / `test.local` (synthetic
+fixture identities from the worktree-identity incident narrative). Expect this class; it is not a bug
+to be tuned away. What matters is that an unannounced false-positive class is corrosive in exactly
+the way §5's opening warns about, only inverted — a scanner that cries wolf on every vendor domain
+trains its readers to dismiss it, and the dismissal habit is what carries a real token through.
+
+So: **exit 1 means "classify these", exit 0 means "I found no shapes"**. Neither is a publish
+decision. The publish decision is §2's category question, made by a person, every time.
+
 **Why there is no deny-list.** The obvious patch is a file of the machine's real hostnames and client
 names for the scanner to grep. It is rejected on
 [ADR-0001](../docs/adr/0001-verification-over-attestation.md) grounds, and the reasoning is recorded

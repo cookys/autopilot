@@ -62,6 +62,31 @@ Triggered by "寫 handoff", "寫 handover", "ctx 太滿", "context 快滿", "cle
    - [Gotchas discovered this session that would burn the next session]
    ```
 
+3.5. **Route the durable content out** (a handoff is a snapshot and gets deleted — Resume Mode step 5.
+   Anything left only in it is scheduled for destruction):
+
+   Walk the document you just wrote **段-by-段** and ask of each one:
+
+   > **「這條超出本次交接嗎?」**
+
+   A 段 that is only true of this interruption (current branch, in-flight diff, the next command)
+   stays in HANDOFF.md and dies with it — correct. A 段 that would still be worth knowing on a
+   *different* task is durable content sitting in a temporary file, and must be routed **now**, per
+   the destination table in
+   [`references/knowledge-routing.md`](../../references/knowledge-routing.md) §3:
+
+   | Durable content | Route to |
+   |---|---|
+   | A fact or gotcha (typically from `## 陷阱`) | `learn` skill |
+   | A reusable multi-step procedure | `distill` skill |
+   | A repo-level rule binding other skills | `references/` — the `evidence-discipline.md` family |
+
+   Call those skills; **do not implement routing logic here.** Handoff's job is to notice that a 段 is
+   durable, not to decide where it lands — that decision is the routing doc's, and the write contract
+   (including `.claude/knowledge/`'s `git add -f` promotion) is `learn`'s.
+
+   Report what you routed in step 4 so the user can see what outlived the handoff.
+
 4. **Response to User**:
    Reply with the file path, the paste-ready line: `read <path> 接續`, and a reminder that the machine-snapshot hook complement exists (`handoff_inject`, see hooks/README.md) if they want auto-capture on `/clear`.
 
@@ -78,7 +103,7 @@ Triggered by "read ...HANDOFF.md 接續" or "接手上個 session" or "resume fr
    If reality has drifted from "現況", report the drift to the user first before proceeding.
 3. Treat `已決事項(不重議)` as settled; do not reopen or litigate them.
 4. Execute `下一步` item 1 immediately; do not re-plan unless verification fails.
-5. When the work later completes, delete the consumed `HANDOFF.md` file as part of session-end cleanup (a handoff is a snapshot; a stale one misleads the next session).
+5. When the work later completes, delete the consumed `HANDOFF.md` file as part of session-end cleanup (a handoff is a snapshot; a stale one misleads the next session). Deletion is only safe because Write Mode step 3.5 already routed the durable 段 out; if this handoff predates that step, run 3.5's walk over it **before** deleting.
 
 ## Proactive Offer Rule
 

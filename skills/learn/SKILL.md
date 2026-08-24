@@ -26,6 +26,36 @@ Record reusable knowledge so future sessions avoid the same mistakes.
 
 ## Flow
 
+0. **Decide the destination** — before writing anything, apply the one question from
+   [`references/knowledge-routing.md`](../../references/knowledge-routing.md) §2:
+   **「把所有 fleet-specific token 刪掉後,這段還能教人嗎?」**
+
+   | Answer | Destination | Write contract |
+   |---|---|---|
+   | **No** — the identifiers were the content | `~/.claude/projects/<slug>/memory/` | Default sink. Write directly; done. |
+   | **Yes** — a publishable fact or gotcha | `.claude/knowledge/` | **Promotion** (below). Steps 1–5 apply. |
+   | **Yes**, and it binds *other skills* rather than being looked up | `references/` | Normal review path — see the Categories table. |
+
+   `.claude/knowledge/` is **deliberately gitignored** (`.gitignore` line 6 — the `.claude` dir is
+   local state, fail-closed so scratch never leaks into this public repo). A write there is therefore
+   not a save. Completing it means finishing the promotion contract in one motion:
+
+   ```bash
+   git add -f .claude/knowledge/<file>.md .claude/knowledge/INDEX.md
+   git diff --cached .claude/knowledge/   # show the user — this is the disclosure gate
+   git commit -m "docs(knowledge): <one-line summary>"
+   ```
+
+   > **不 commit 就等於沒寫.** An uncommitted file there is invisible to `git status` (ignored), to
+   > every other clone, and to CI — one `git clean -xdf` or worktree teardown from gone. Precedent:
+   > the last row of `.claude/knowledge/INDEX.md` records `claude-code-plugin-dogfood-lessons.md`
+   > (2026-05-14) as 從未 commit 進本 repo, found missing by a doc-sync sweep 2026-07-16 and never
+   > recovered. It was written; it was indexed; it is gone.
+
+   The `git diff --cached` step is the **human disclosure gate**, not ceremony:
+   `scripts/identifier-scan.js` sees structured tokens only and is blind to bare hostnames, client
+   names, pane addresses and endpoint aliases (routing doc §5).
+
 1. **Dedup check** — search existing knowledge before writing:
    ```bash
    grep -ri "<keyword>" .claude/knowledge/*.md
@@ -64,6 +94,10 @@ Record reusable knowledge so future sessions avoid the same mistakes.
 | `arch` | `architecture.md` | Design decisions, pitfalls |
 | `env` | `environment.md` | Paths, Docker, config |
 | `api` | (in relevant file) | API misuse patterns |
+| `discipline` | `references/` (typically the `evidence-discipline.md` family) | Repo-level rule binding **other** skills — not a fact to look up but a rule to follow. Normal review path, never `git add -f`. |
+
+Destination for every category above is decided by step 0, not by this table: a `debug` lesson that
+only makes sense on one machine still goes to `memory/`.
 
 ## Invocation
 

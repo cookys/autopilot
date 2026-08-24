@@ -60,54 +60,13 @@ const TOP = (() => { const i = args.indexOf('--top'); return i >= 0 ? parseInt(a
 const LINT_PATH = (() => { const i = args.indexOf('--path'); return i >= 0 && args[i + 1] ? args[i + 1] : null; })();
 
 // D5 A11 — shared identifier lint for skill packs (standalone --path <dir>).
-// Patterns: email / IPv4 / /home/<user>/ / FQDN / common key-shapes + optional deny list.
+// The implementation now lives in scripts/identifier-scan.js (canonical, single
+// copy of the pattern set — see its header for the negative-scope disclosure and
+// why the old optional deny-list was removed rather than kept). This is a thin
+// delegation that preserves the --path CLI's output shape and exit codes.
 function runIdentifierLint(rootDir) {
-  const denyFile = path.join(os.homedir(), '.autopilot', 'distill', 'identifiers.deny');
-  const deny = [];
-  try {
-    const raw = fs.readFileSync(denyFile, 'utf8');
-    for (const line of raw.split(/\r?\n/)) {
-      const t = line.trim();
-      if (t && !t.startsWith('#')) deny.push(t.toLowerCase());
-    }
-  } catch (_e) { /* optional */ }
-  const patterns = [
-    { id: 'email', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
-    { id: 'ipv4', re: /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b/g },
-    { id: 'home_path', re: /\/home\/[A-Za-z0-9._-]+\//g },
-    { id: 'fqdn', re: /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|dev|ai|local|internal)\b/gi },
-    { id: 'key_shape', re: /\b(?:sk|pk|api)[-_]?[A-Za-z0-9]{16,}\b/g },
-  ];
-  const findings = [];
-  function walk(dir) {
-    let ents;
-    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-    for (const e of ents) {
-      const full = path.join(dir, e.name);
-      if (e.isDirectory()) {
-        if (e.name === 'node_modules' || e.name === '.git') continue;
-        walk(full);
-      } else if (e.isFile() && /\.(md|txt|json|ya?ml)$/i.test(e.name)) {
-        let text;
-        try { text = fs.readFileSync(full, 'utf8'); } catch { continue; }
-        for (const p of patterns) {
-          p.re.lastIndex = 0;
-          let m;
-          while ((m = p.re.exec(text)) !== null) {
-            findings.push({ file: full, kind: p.id, match: m[0] });
-          }
-        }
-        const lower = text.toLowerCase();
-        for (const d of deny) {
-          if (d && lower.includes(d)) {
-            findings.push({ file: full, kind: 'deny_list', match: d });
-          }
-        }
-      }
-    }
-  }
-  walk(path.resolve(rootDir));
-  return findings;
+  const { scanPaths } = require('./identifier-scan.js');
+  return scanPaths([rootDir]).map((f) => ({ file: f.file, kind: f.kind, match: f.match }));
 }
 
 if (LINT_PATH) {

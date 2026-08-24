@@ -105,10 +105,19 @@ user pick which to accept in a single `AskUserQuestion` (`multiSelect: true`) in
 yes/no per candidate. Approval is still **explicit and per-candidate** — nothing is written that the
 user did not tick.
 
-**The lint runs first, per candidate, and gates the batch.** Run the identifier lint + the user's
-deny-list (`~/.autopilot/distill/identifiers.deny`, one real hostname/client name per line) on every
-draft `SKILL.md`. The lint reliably catches structured tokens (email / IPv4 / `/home/<user>/` / FQDN /
-key-shapes); bare hostnames and client names are the **gate's** job.
+**Step 3 的機械前置**:對每份 draft `SKILL.md` 跑
+[`scripts/identifier-scan.js`](../../scripts/identifier-scan.js)(僅偵測結構化 token:email / IPv4 /
+`/home/<user>/` / FQDN / key 形狀 —— 覆蓋範圍以該腳本的 test fixtures
+`hooks/tests/fixtures/identifier-scan/` 為準,不以本段文字為準)。exit 1 ⇒ 有命中,該 candidate 退出批次。
+
+**非結構化識別字(bare hostname、client 名、pane 位址、endpoint alias)沒有任何機械偵測 —— 唯一防線
+是本步的人審**。人審時必須假設 scanner 對這類東西什麼都沒看到:clean exit 的意思是「沒有結構化 token
+命中」,永遠不是「可以公開」。逐 draft 對照
+[`references/knowledge-routing.md`](../../references/knowledge-routing.md) §2 的類別 checklist。
+
+(不設 deny-list:一份已知主機名清單會靜默放行它沒被告知過的每個名字,然後掛上 "lint-clean" 標籤 ——
+那個標籤證明的是「查過一份清單」,不是「這段文字乾淨」。ADR-0001 判此為 attestation,且比沒有 lint 更
+毒,因為它製造出結束人審的信心。理由記在 knowledge-routing.md §5。)
 - **Clean candidates** → offered together in the multi-select. Ticking = approval.
 - **Lint-flagged candidates** → do NOT put them in the batch silently. Surface each flagged token to
   the user individually first; only after they clear/parameterize it does that candidate join the
@@ -168,7 +177,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/distill-consolidate.sh compare <slug>   # JSON: id
      clearer wording, preserve `name:`/`description:`. **If the two variants are not recognizably the
      same procedure, STOP** and hand to the user — do not merge unrelated content (the normalizer can,
      rarely, over-collapse two distinct procedures; this is the backstop).
-  3. **Lint the merged draft** (identifier lint + deny-list, Step 3) — a merge can surface an identifier
+  3. **Lint the merged draft** (`scripts/identifier-scan.js` + the human category check, Step 3) — a merge can surface an identifier
      neither half flagged alone. Then **human-gate** it (`AskUserQuestion`: approve / edit / reject).
   4. On approve → overwrite the working-tree `skills/<slug>/SKILL.md` with the canonical, `git add`,
      `git commit -m "consolidate: <slug>"`. On reject → leave yours; STOP/handoff that slug.
@@ -246,5 +255,6 @@ design and the two dialectic rounds behind it.
 | Script | Purpose |
 |--------|---------|
 | [`scripts/distill-scan.js`](../../scripts/distill-scan.js) | Deterministic history scanner → frequency atoms (two buckets). `--real-only`, `--json`, `--top N`. **Cursor:** `--incremental` reuses cached per-session atoms (only re-reads new/changed jsonl; totals identical to full scan); `--new-only` reports only candidates risen since last run. State in `~/.autopilot/distill/scan-state.json`. No LLM in the count path. |
+| [`scripts/identifier-scan.js`](../../scripts/identifier-scan.js) | Structured-identifier scanner for the Step 3 gate (file / dir / stdin; `--json`; exit 1 ⇒ findings, 2 ⇒ usage). Covers email / IPv4 / `/home/<user>/` / FQDN / key shapes — covered set pinned by `hooks/tests/fixtures/identifier-scan/`. **Zero coverage of bare hostnames, client names, pane addresses, endpoint aliases** — that class is the human gate's job (`references/knowledge-routing.md` §5). |
 | [`scripts/distill-sync-setup.sh`](../../scripts/distill-sync-setup.sh) | Onboarding plumbing for pack sync: `status` / `init-remote <url>` / `enroll <url>` / `fix-gitignore [repo]`. Idempotent; emits the **correct** `.claude/*` + `!.claude/skills/` negation (the obvious `.claude/` form is silently broken). Drives Step 5 first-run setup. |
 | [`scripts/distill-consolidate.sh`](../../scripts/distill-consolidate.sh) | Cross-machine consolidation plumbing (deterministic, no LLM): `normalize-slug <raw>` (machine-stable slug — lowercase + drop tiny stopword set + preserve order), `migrate [pack]` (one-time: rename existing dirs to normalized slugs **and rewrite each frontmatter `name:`** — a skill's identity is its `name:`, so both must converge; STOPs on collision), `compare <slug> [pack]` (**proactive** divergence check against `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; no merge-conflict state). The human-gated LLM merge lives in Step 5, not the script. |

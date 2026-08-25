@@ -34,7 +34,10 @@ test('CLI attaches, lists and sends through the selected adapter', async () => {
     },
   };
   assert.equal(await runCli(['attach', '--name', 'rw3d-codex', '--harness', 'codex', '--tmux-pane', '%1'], { stdout, stderr, registry, adapters, tmux }), 0);
-  assert.equal(await runCli(['send', 'rw3d-codex', 'hello', '--from', 'rw3d-claude', '--json'], { stdout, stderr, registry, adapters, tmux }), 0);
+  assert.equal(await runCli(['send', 'rw3d-codex', 'hello', '--json'], {
+    stdout, stderr, registry, adapters, tmux,
+    env: { ...process.env, AGENT_CALL_NAME: 'rw3d-claude' },
+  }), 0);
   assert.equal(deliveries.length, 1);
   assert.equal(deliveries[0].envelope.authority, 'peer');
   assert.equal(deliveries[0].envelope.from, 'rw3d-claude');
@@ -70,4 +73,32 @@ test('CLI receive is the stable future Hangar edge boundary', async () => {
   }
   assert.equal(received.origin, 'hangar-edge');
   assert.equal(received.authority, 'peer');
+});
+
+
+test('CLI receive rejects a non-Hangar origin', async () => {
+  const stdout = memoryStream();
+  const stderr = memoryStream();
+  const registry = fakeRegistry();
+  const payload = JSON.stringify({
+    schema: 'agent-call.message.v1',
+    id: 'ac_00000000-0000-4000-8000-000000000000',
+    from: 'rw3d-claude', to: 'rw3d-codex', authority: 'peer', origin: 'local-cli',
+    content: 'not remote', sent_at: '2026-08-25T00:00:00.000Z',
+  });
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const file = path.join(os.tmpdir(), `agent-call-stdin-invalid-${process.pid}-${Date.now()}`);
+  fs.writeFileSync(file, payload);
+  const fd = fs.openSync(file, 'r');
+  try {
+    assert.equal(await runCli(['receive', '--stdin', '--json'], {
+      stdout, stderr, registry, adapters: {}, stdinFd: fd,
+    }), 2);
+  } finally {
+    fs.closeSync(fd);
+    fs.unlinkSync(file);
+  }
+  assert.match(stdout.text(), /origin_invalid/);
 });

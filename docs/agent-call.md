@@ -65,3 +65,8 @@ Only sessions deliberately registered by `agent-call attach` or a Channel subpro
 ## Security posture
 
 Same-user processes are not isolated from each other. Agent-call therefore does not make sender labels authorization-bearing. All content is framed as untrusted peer input, and the envelope schema rejects authority escalation.
+
+
+## Claude session binding
+
+The project MCP entry is name-neutral. A persistent Claude launch binds its local identity through `AGENT_CALL_PERSISTENT=1` and `AGENT_CALL_NAME=<name>`. Other Claude sessions may load the same MCP entry for outbound tools but are not registered as inbound peers, preventing fixed-name collisions when several Claude sessions share one checkout.

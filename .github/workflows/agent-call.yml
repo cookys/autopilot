@@ -39,6 +39,9 @@ jobs:
           node-version: '22'
       - name: Install official MCP SDK
         run: npm install --prefix packages/agent-call --ignore-scripts
+      - name: Official MCP SDK import smoke
+        run: |
+          node -e "Promise.all([import('./packages/agent-call/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js'), import('./packages/agent-call/node_modules/@modelcontextprotocol/sdk/dist/esm/server/stdio.js'), import('./packages/agent-call/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js')]).then(([a,b,c]) => { if (!a.Server || !b.StdioServerTransport || !c.ListToolsRequestSchema) process.exit(1) })"
       - name: Package and negative tests
         run: bash hooks/tests/agent-call-package.test.sh
       - name: Dependency audit

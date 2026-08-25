@@ -45,3 +45,9 @@ test('tmux read captures bounded console history', () => {
   assert.deepEqual(calls[1], ['capture-pane', '-p', '-J', '-t', '%17', '-S', '-20']);
   assert.throws(() => adapter.read(descriptor(), { lines: 1001 }), /1 to 1000/);
 });
+
+
+test('tmux adapter rejects a settle delay that can re-enter paste-burst mode', () => {
+  assert.throws(() => new TmuxConsoleAdapter({ settleMs: 0 }), /150 to 5000/);
+  assert.throws(() => new TmuxConsoleAdapter({ settleMs: 99999 }), /150 to 5000/);
+});

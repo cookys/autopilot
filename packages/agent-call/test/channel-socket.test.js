@@ -8,7 +8,7 @@ const { tempEnv } = require('./helpers');
 const { Registry } = require('../src/registry');
 const { createEnvelope } = require('../src/message');
 const { ClaudeChannelAdapter, requestChannel } = require('../src/adapters/claude-channel');
-const { startChannelServer } = require('../src/channel/server');
+const { startChannelServer, startToolServer } = require('../src/channel/server');
 
 function rawRequest(socketPath, payload) {
   return new Promise((resolve, reject) => {
@@ -89,4 +89,22 @@ test('Claude channel reports not-ready rather than falsely acknowledging', async
   const descriptor = registry.require('rw3d-claude');
   const envelope = createEnvelope({ from: 'rw3d-codex', to: 'rw3d-claude', content: 'hello' });
   await assert.rejects(() => requestChannel(descriptor, { op: 'deliver', envelope }), /not ready/);
+});
+
+
+test('unmarked Claude sessions get outbound tools without registering an inbound peer', async (t) => {
+  const fixture = tempEnv();
+  t.after(fixture.cleanup);
+  const registry = new Registry({ env: fixture.env, pidAlive: () => true });
+  let closed = false;
+  const result = await startToolServer({
+    name: 'local-claude',
+    env: fixture.env,
+    registry,
+    mcp: { ready: true, async close() { closed = true; } },
+    stderr: { write() {} },
+  });
+  assert.deepEqual(registry.list(), []);
+  await result.close();
+  assert.equal(closed, true);
 });

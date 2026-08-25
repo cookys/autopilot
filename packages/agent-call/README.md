@@ -19,11 +19,13 @@ npm install --prefix packages/agent-call
 npm install -g ./packages/agent-call
 ```
 
-Node.js 22 or newer is required. `tmux` is required only for tmux-attached targets.
+Node.js 22 or newer on Linux, macOS, or WSL is required. `tmux` is required only for tmux-attached targets. Native Windows named-pipe support is not part of Foundation 0.1.
 
 ## Quick start
 
 ### Attach an existing tmux-hosted session
+
+Run this from the pane or supply its pane ID explicitly:
 
 ```bash
 agent-call attach \
@@ -40,10 +42,11 @@ From the project directory:
 
 ```bash
 agent-call setup claude --name rw3d-claude
-claude --dangerously-load-development-channels server:agent-call-rw3d-claude
+AGENT_CALL_PERSISTENT=1 AGENT_CALL_NAME=rw3d-claude \
+  claude --dangerously-load-development-channels server:agent-call-local
 ```
 
-The setup command merges one MCP entry into `.mcp.json`; it does not overwrite unrelated entries. During the Claude Code Channels research preview, custom channels require the development-channel flag shown above.
+The setup command merges one **name-neutral** MCP entry into `.mcp.json`; it does not overwrite unrelated entries. The environment variables bind the identity to that one Claude launch, so multiple Claude sessions in the same project do not collide. Sessions launched without `AGENT_CALL_PERSISTENT=1` keep the outbound tools but do not register an inbound peer. During the Claude Code Channels research preview, custom channels require the development-channel flag shown above.
 
 ### List, send, and read
 
@@ -77,7 +80,7 @@ All participants run as the same OS user. This is a convenience and coordination
 
 ## Runtime contract
 
-Descriptors use `agent-call.session.v1`; messages use `agent-call.message.v1`. The stable remote edge boundary is:
+Descriptors use `agent-call.session.v1`; messages use `agent-call.message.v1`. The public library exports validation and delivery helpers. The stable remote edge boundary is:
 
 ```bash
 agent-call receive --stdin

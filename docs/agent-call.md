@@ -22,7 +22,7 @@ source agent / user
 ephemeral descriptor lookup
         │
         ├─ Claude Channel → notifications/claude/channel
-        └─ tmux console   → literal paste, delay, C-m
+        └─ tmux console   → private bracketed paste, delay, C-m
 ```
 
 There is no local daemon. Claude's Channel MCP subprocess is session-scoped and exists only because Claude Code spawned that persistent session's MCP server.
@@ -65,7 +65,6 @@ Only sessions deliberately registered by `agent-call attach` or a Channel subpro
 ## Security posture
 
 Same-user processes are not isolated from each other. Agent-call therefore does not make sender labels authorization-bearing. All content is framed as untrusted peer input, and the envelope schema rejects authority escalation.
-
 
 ## Claude session binding
 

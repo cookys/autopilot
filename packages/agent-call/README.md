@@ -65,7 +65,7 @@ agent-call doctor
 | Adapter | Reported status | Meaning |
 |---|---|---|
 | Claude Channel | `channel_accepted` | The Channel MCP transport accepted the notification; the protocol does not acknowledge model observation. |
-| tmux | `injected_unverified` | tmux accepted literal keystrokes and a separate submit key; the model may still not have observed them. |
+| tmux | `injected_unverified` | tmux accepted a private bracketed paste and a separate submit key; the model may still not have observed it. |
 
 The tool never upgrades either result to `delivered` or `completed`.
 

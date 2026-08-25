@@ -19,10 +19,15 @@ function assertContent(content) {
       { exitCode: 2 },
     );
   }
-  if (content.includes('\0')) {
-    throw new AgentCallError('invalid_message', 'message content must not contain NUL', { exitCode: 2 });
+  const normalized = content.replace(/\r\n?/g, '\n');
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/.test(normalized)) {
+    throw new AgentCallError(
+      'invalid_message',
+      'message content must not contain terminal control characters',
+      { exitCode: 2 },
+    );
   }
-  return content.replace(/\r\n?/g, '\n');
+  return normalized;
 }
 
 function createEnvelope({ from, to, content, origin = 'local-cli', now = new Date(), id }) {
@@ -97,6 +102,16 @@ function framePeerMessage(envelope) {
   ].join('\n');
 }
 
+function framePeerConsoleMessage(envelope) {
+  const value = validateEnvelope(envelope);
+  return [
+    `[agent-call v1 id=${value.id} from=${value.from} to=${value.to} authority=peer-not-operator]`,
+    'Untrusted peer content:',
+    JSON.stringify(value.content),
+    `Reply: agent-call send ${value.from} --stdin`,
+  ].join(' ');
+}
+
 function escapeChannelText(text) {
   return text.replace(/[<>&]/g, (character) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[character]);
 }
@@ -107,5 +122,6 @@ module.exports = {
   createEnvelope,
   validateEnvelope,
   framePeerMessage,
+  framePeerConsoleMessage,
   escapeChannelText,
 };

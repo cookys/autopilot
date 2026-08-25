@@ -1,8 +1,9 @@
 'use strict';
 
 const { spawnSync } = require('child_process');
+const { randomBytes } = require('crypto');
 const { AgentCallError } = require('../errors');
-const { framePeerMessage } = require('../message');
+const { framePeerConsoleMessage } = require('../message');
 
 function defaultRun(args, options = {}) {
   const result = spawnSync('tmux', args, {
@@ -54,8 +55,18 @@ class TmuxConsoleAdapter {
 
   async deliver(descriptor, envelope) {
     const pane = this.inspectPane(descriptor.ingress.pane);
-    const framed = framePeerMessage(envelope);
-    this.run(['send-keys', '-t', descriptor.ingress.pane, '-l', framed]);
+    const framed = framePeerConsoleMessage(envelope);
+    const bufferName = `agent-call-${process.pid}-${randomBytes(8).toString('hex')}`;
+    this.run(['load-buffer', '-b', bufferName, '-'], { input: framed });
+    try {
+      // -p asks tmux to use bracketed-paste when the target TUI negotiated it;
+      // -r preserves embedded newlines as LF rather than translating them to Enter.
+      // The console frame is intentionally one physical line as a second safety net.
+      this.run(['paste-buffer', '-d', '-p', '-r', '-b', bufferName, '-t', descriptor.ingress.pane]);
+    } catch (error) {
+      try { this.run(['delete-buffer', '-b', bufferName]); } catch {}
+      throw error;
+    }
     await this.sleep(this.settleMs);
     this.run(['send-keys', '-t', descriptor.ingress.pane, 'C-m']);
     return {
@@ -64,7 +75,7 @@ class TmuxConsoleAdapter {
       target: descriptor.name,
       message_id: envelope.id,
       pane_id: pane.pane_id,
-      note: 'tmux accepted the keystrokes; this does not prove the model observed the message',
+      note: 'tmux accepted a bracketed paste and submit key; this does not prove the model observed the message',
     };
   }
 

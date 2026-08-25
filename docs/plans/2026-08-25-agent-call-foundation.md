@@ -23,10 +23,11 @@ Let explicitly persistent coding-agent sessions owned by one OS user communicate
 - Registry is private, ephemeral, validates live PID, rejects live name collision, and quarantines corrupt descriptors.
 - Runtime paths fail closed on symlinks, foreign ownership, or group/world access.
 - Claude Channel uses authenticated private local socket delivery and emits `notifications/claude/channel` only after validating target and envelope.
-- tmux sends literal text, waits beyond paste-burst detection, then sends `C-m` separately.
+- tmux uses a private bracketed-paste buffer, waits beyond paste-burst detection, then sends `C-m` separately.
 - Console capture is bounded.
+- Terminal control characters are rejected before any adapter sees peer content.
 - All peer content is visibly framed as non-operator input.
-- Unit and negative tests cover token forgery, target mismatch, not-ready Channel, authority escalation, stale registry, symlink runtime path, and tmux's unverified receipt.
+- Unit and negative tests cover token forgery, target mismatch, not-ready Channel, authority escalation, stale registry, symlink runtime path, paste-buffer cleanup, and tmux's unverified receipt.
 
 ## Explicit non-goals
 

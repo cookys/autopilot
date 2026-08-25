@@ -27,7 +27,9 @@ test('message rejects authority escalation and unknown fields', () => {
   assert.throws(() => validateEnvelope({ ...envelope, permission: 'allow' }), /unknown field/);
 });
 
-test('message enforces byte limit and NUL rejection', () => {
+test('message enforces byte limit and terminal-control rejection', () => {
   assert.throws(() => createEnvelope({ ...fixed, content: 'x'.repeat(MAX_MESSAGE_BYTES + 1) }), /exceeds/);
-  assert.throws(() => createEnvelope({ ...fixed, content: 'x\0y' }), /NUL/);
+  assert.throws(() => createEnvelope({ ...fixed, content: 'x\0y' }), /control characters/);
+  assert.throws(() => createEnvelope({ ...fixed, content: '\u001b[2Jwipe' }), /control characters/);
+  assert.doesNotThrow(() => createEnvelope({ ...fixed, content: 'line one\nline two\tvalue' }));
 });

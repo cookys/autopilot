@@ -10,19 +10,19 @@ const { createEnvelope, validateEnvelope } = require('./message');
 const { createAdapters, deliverToDescriptor, readFromDescriptor, doctorDescriptor } = require('./adapters');
 const { TmuxConsoleAdapter } = require('./adapters/tmux-console');
 const { setupClaude } = require('./setup');
-const { startChannelServer } = require('./channel/server');
+const { startChannelServer, startToolServer } = require('./channel/server');
 
 function printHelp(stdout) {
   stdout.write(`Usage:
   agent-call attach --name NAME --harness HARNESS --tmux-pane PANE [--replace] [--json]
   agent-call detach NAME [--json]
   agent-call list [--json]
-  agent-call send TARGET MESSAGE... [--from NAME] [--json]
-  agent-call send TARGET --stdin [--from NAME] [--json]
+  agent-call send TARGET MESSAGE... [--json]
+  agent-call send TARGET --stdin [--json]
   agent-call read TARGET [--lines N] [--json]
   agent-call doctor [TARGET] [--json]
-  agent-call setup claude --name NAME [--config PATH] [--cwd PATH] [--force] [--json]
-  agent-call channel --name NAME [--harness claude] [--cwd PATH]
+  agent-call setup claude --name NAME [--config PATH] [--force] [--json]
+  agent-call channel (--name NAME|--name-env ENV_KEY) [--harness claude] [--cwd PATH]
   agent-call receive --stdin [--json]
 
 Scope:
@@ -110,7 +110,7 @@ async function runCli(args, dependencies = {}) {
     if (command === 'attach') {
       const { positionals, options } = parseOptions(
         args.slice(1),
-        new Set(['--name', '--harness', '--tmux-pane', '--cwd', '--pid']),
+        new Set(['--name', '--harness', '--tmux-pane', '--cwd']),
         new Set(['--replace', '--json']),
       );
       if (positionals.length) throw new AgentCallError('usage', 'attach accepts only named options', { exitCode: 2 });
@@ -118,11 +118,10 @@ async function runCli(args, dependencies = {}) {
       const harness = validateHarness(options.harness);
       if (!options['tmux-pane']) throw new AgentCallError('usage', '--tmux-pane is required', { exitCode: 2 });
       const pane = tmux.inspectPane(options['tmux-pane']);
-      const pid = options.pid ? Number(options.pid) : pane.pid;
       const descriptor = makeDescriptor({
         name,
         harness,
-        pid,
+        pid: pane.pid,
         cwd: path.resolve(options.cwd ?? pane.cwd),
         ingress: { kind: 'tmux', pane: options['tmux-pane'] },
         capabilities: { context_injection: true, wake_idle: true, console_read: true },
@@ -139,14 +138,14 @@ async function runCli(args, dependencies = {}) {
       return 0;
     }
     if (command === 'send') {
-      const { positionals, options } = parseOptions(args.slice(1), new Set(['--from']), new Set(['--stdin', '--json']));
+      const { positionals, options } = parseOptions(args.slice(1), new Set(), new Set(['--stdin', '--json']));
       if (positionals.length < 1) throw new AgentCallError('usage', 'send requires TARGET', { exitCode: 2 });
       const target = validateName(positionals.shift(), 'target name');
       const content = options.stdin ? readStdin(dependencies.stdinFd) : positionals.join(' ');
       if (options.stdin && positionals.length) throw new AgentCallError('usage', '--stdin cannot be combined with MESSAGE arguments', { exitCode: 2 });
       const descriptor = registry.require(target);
       const envelope = createEnvelope({
-        from: options.from ? validateName(options.from, 'sender name') : defaultSender(env),
+        from: defaultSender(env),
         to: descriptor.name,
         content,
         origin: 'local-cli',
@@ -171,10 +170,7 @@ async function runCli(args, dependencies = {}) {
         const results = [];
         for (const descriptor of registry.list()) {
           try { results.push(await doctorDescriptor(descriptor, adapters)); }
-          catch (error) {
-            const value = asAgentCallError(error);
-            results.push({ ok: false, target: descriptor.name, error: value.code, message: value.message });
-          }
+          catch (error) { results.push({ ok: false, target: descriptor.name, error: asAgentCallError(error).code, message: asAgentCallError(error).message }); }
         }
         writeResult(stdout, { ok: results.every((item) => item.ok), agents: results }, options.json);
         return results.every((item) => item.ok) ? 0 : 1;
@@ -187,16 +183,16 @@ async function runCli(args, dependencies = {}) {
       if (args[1] !== 'claude') throw new AgentCallError('usage', 'setup currently supports only: setup claude', { exitCode: 2 });
       const { positionals, options } = parseOptions(
         args.slice(2),
-        new Set(['--name', '--config', '--cwd']),
+        new Set(['--name', '--config']),
         new Set(['--force', '--json']),
       );
       if (positionals.length) throw new AgentCallError('usage', 'setup claude accepts only named options', { exitCode: 2 });
       const result = setupClaude({
         name: options.name,
         configPath: options.config,
-        cwd: options.cwd,
         force: options.force,
         binPath,
+        env,
       });
       writeResult(stdout, result, options.json);
       return 0;
@@ -204,12 +200,28 @@ async function runCli(args, dependencies = {}) {
     if (command === 'channel') {
       const { positionals, options } = parseOptions(
         args.slice(1),
-        new Set(['--name', '--harness', '--cwd']),
+        new Set(['--name', '--name-env', '--harness', '--cwd']),
         new Set(),
       );
       if (positionals.length) throw new AgentCallError('usage', 'channel accepts only named options', { exitCode: 2 });
+      if (options.name && options['name-env']) {
+        throw new AgentCallError('usage', '--name and --name-env cannot be combined', { exitCode: 2 });
+      }
+      const envName = options['name-env'] ? env[options['name-env']] : undefined;
+      const name = options.name ?? envName;
+      const persistent = Boolean(options.name) || (env.AGENT_CALL_PERSISTENT === '1' && Boolean(envName));
+      if (!persistent) {
+        await startToolServer({
+          name: envName || 'local-claude',
+          env,
+          registry,
+          adapters,
+          stderr,
+        });
+        return 0;
+      }
       await startChannelServer({
-        name: options.name,
+        name,
         harness: options.harness ?? 'claude',
         cwd: options.cwd,
         env,
@@ -225,6 +237,9 @@ async function runCli(args, dependencies = {}) {
       const { positionals, options } = parseOptions(args.slice(1), new Set(), new Set(['--stdin', '--json']));
       if (positionals.length || !options.stdin) throw new AgentCallError('usage', 'receive requires --stdin and no positional arguments', { exitCode: 2 });
       const envelope = validateEnvelope(JSON.parse(readStdin(dependencies.stdinFd)));
+      if (envelope.origin !== 'hangar-edge') {
+        throw new AgentCallError('origin_invalid', 'receive accepts only origin=hangar-edge', { exitCode: 2 });
+      }
       const descriptor = registry.require(envelope.to);
       writeResult(stdout, await deliverToDescriptor(descriptor, envelope, adapters), options.json);
       return 0;

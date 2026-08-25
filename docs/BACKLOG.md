@@ -585,3 +585,54 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
   `references/knowledge-routing.md` was written to close for the disclosure line.
 - **Effort**: S (a `references/` row in `learn` may already be enough; a new skill is not justified at n=1)
 - **Source**: knowledge-routing fix set, foreman first-pass review (2026-08-24)
+
+### `peer-coordination` skill — ruled in, blocked on a spike sweep
+- **Trigger**: The R5 spike list below comes back with dated, per-machine results. Do not author the
+  skill before that — its whole subject is harness capability, and shipping unverified capability
+  claims is the defect `references/knowledge-routing.md` §6 exists to stop.
+- **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
+  no entry for a **peer** — an agent this session did not dispatch, does not control, and that may
+  not be Claude. Two heterogeneous seats over two rounds ruled: a thin skill (routing entry only) plus
+  **two** references — `peer-channels.md` (capability matrix, audience = local session) and
+  `peer-contract.md` (the fill-in division-of-labour template, audience = the peer or its operator,
+  and the only artifact handed across the boundary). `references/` cannot be selected by skill
+  routing, which is why a skill is needed at all. Route key must be the authority relationship, never
+  brand or tool names — `grok`/`tmux`/`ListAgents` as triggers collide with `team`, `l3`–`l6` and
+  `engine-onboarding`. Ruling detail is in machine-local memory (`peer-coordination-skill-ruling`).
+- **Spike list (none of these may be asserted without a dated result)**: which harness versions expose
+  the native peer enumeration; whether every enumerated target is actually reachable by the paired
+  send tool; whether reported pane addresses survive a peer restart; what the MCP relay lane provides
+  that the native lane does not; `pgrep` identification accuracy per non-Claude CLI; whether file-drop
+  is really reachable by "any agent" (pickup convention, atomic write, cross-worktree visibility).
+- **Design constraint discovered while drafting**: reach is a property of the **environment**, not of
+  the channel — the same enumeration lists 38 targets on one machine and local-only on another. Every
+  matrix row therefore needs a **verified-on-machine** column beside its verified-date, or the next
+  reader will take one host's topology for a channel capability.
+- **Effort**: M (skill is thin; the two references and the spike sweep are the work)
+- **Source**: cross-repo request via peer relay, 2026-08-24/25; ruled by two-round heterogeneous panel
+
+### `/l4` watcher reports `owner_absent` for every healthy CC-native foreman
+- **Trigger**: Next time a `/l4`/`/l5`/`/l6` run's stage events are read by a human or a gate.
+- **Context**: `run-ledger.sh stage-acquire` records the PID of the shell that ran it, and that shell
+  exits immediately, so `watch-foreman.js` emits `CONDITION ... dead reason=owner_absent` seconds
+  after every healthy `stage-acquire`. Observed on all three stages of the v2.34.39 run while the
+  foreman was demonstrably progressing (commits landing, worktree live). The reference does carry an
+  HONEST BOUNDARY note about CC-native foremen, but it is attached to **watch-tree lineage coverage**,
+  not to **stage-lease liveness**, so the false positive is undocumented where a reader meets it.
+- **Effort**: S (either bind the lease to a durable identity, or document the false positive on the
+  liveness condition itself — the second is honest and cheap)
+- **Source**: v2.34.39 `/l4` depth-0 run (2026-08-24)
+
+### Depth-0's exclusive ownership of the execution oracle is prose, not a lock
+- **Trigger**: Any run where more than one participant could plausibly start the full suite.
+- **Context**: The `/l4` protocol assigns the independent execution oracle to depth-0 so an
+  implementer never verifies its own work. During v2.34.39 a returned foreman armed its own full-suite
+  run — out of diligence, to close a gap it had honestly disclosed — while depth-0 was already running
+  one; `pgrep` found 15 matching processes including orphaned earlier attempts. Concurrent runs share
+  temp state, so every result in that window was uninterpretable in both directions. Worse, the
+  orphans' waiters were `pgrep` loops keyed on the **command name**, so they would have reported
+  depth-0's result as the implementer's. Fix shape: a lock keyed on the action (not the runner), and
+  waiters keyed on a run identity. Recorded as knowledge in `.claude/knowledge/architecture.md`
+  ("A protocol sentence does not stop a process"); this row is the mechanisation half.
+- **Effort**: S–M
+- **Source**: v2.34.39 `/l4` depth-0 run (2026-08-24)

@@ -1,0 +1,31 @@
+name: agent-call package export
+
+on:
+  push:
+    branches:
+      - feat/agent-call-foundation
+    paths:
+      - 'packages/agent-call/**'
+      - '.github/workflows/agent-call-export.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage standalone package
+        run: |
+          mkdir -p export
+          cp -a packages/agent-call/. export/
+          find export -type f -print0 | xargs -0 grep -IlE '(cookys-cuda|cookys-gentoo|revival\.3d|TWGameProject|hangar-bridge|autopilot|internal|private)' || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-call-standalone-source
+          path: export
+          if-no-files-found: error
+          retention-days: 1

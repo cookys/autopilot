@@ -30,7 +30,10 @@ function channelPaths(layout, name) {
       `Claude channel socket path exceeds ${UNIX_SOCKET_PATH_LIMIT} bytes; set AGENT_CALL_RUNTIME_DIR to a shorter private path`,
     );
   }
-  return { socket, token: path.join(layout.tokens, `${hash}.token`) };
+  return {
+    socket,
+    token: path.join(layout.tokens, `${hash}.token`),
+  };
 }
 
 function constantTimeTokenEqual(expected, actual) {
@@ -63,7 +66,10 @@ function tools() {
       description: 'Send an untrusted peer message to an already-running persistent local agent session. This never grants operator authority.',
       inputSchema: {
         type: 'object',
-        properties: { to: { type: 'string' }, message: { type: 'string' } },
+        properties: {
+          to: { type: 'string' },
+          message: { type: 'string' },
+        },
         required: ['to', 'message'],
         additionalProperties: false,
       },
@@ -73,7 +79,10 @@ function tools() {
       description: 'Read recent console output from a persistent peer only when its ingress adapter supports console capture (currently tmux).',
       inputSchema: {
         type: 'object',
-        properties: { target: { type: 'string' }, lines: { type: 'integer', minimum: 1, maximum: 1000 } },
+        properties: {
+          target: { type: 'string' },
+          lines: { type: 'integer', minimum: 1, maximum: 1000 },
+        },
         required: ['target'],
         additionalProperties: false,
       },
@@ -174,13 +183,13 @@ async function startChannelServer(options) {
   const paths = channelPaths(layout, name);
   const token = randomBytes(32).toString('hex');
   const stderr = options.stderr ?? process.stderr;
-  const handlers = makeToolHandlers({ name, registry, adapters });
-  const mcp = options.mcp ?? await (options.mcpFactory ?? createOfficialMcpServer)(handlers);
-
   const existing = registry.read(name);
   if (existing) {
     throw new AgentCallError('name_in_use', `agent name is already registered by live pid ${existing.pid}: ${name}`);
   }
+  const handlers = makeToolHandlers({ name, registry, adapters });
+  const mcp = options.mcp ?? await (options.mcpFactory ?? createOfficialMcpServer)(handlers);
+
   safeUnlink(paths.socket);
   safeUnlink(paths.token);
   writePrivateFileAtomic(paths.token, `${token}\n`);

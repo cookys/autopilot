@@ -122,3 +122,75 @@ role ban on a model.
 **Related**: `scripts/adjudicate-findings.js`, `scripts/check-repair-scope.js`,
 `skills/quality-pipeline/references/code-review.md`,
 `docs/plans/2026-07-26-review-scope-stop-loss.md`.
+
+## Verify a map by redrawing it, not by checking its sentences
+
+**Date**: 2026-08-25 | **Context**: A peer-authored skill documenting "how to reach another agent
+working the same repo" was reviewed for adoption. Two heterogeneous seats and the dispatching
+session all reviewed it claim-by-claim.
+
+**Problem**: Every sentence in its channel table was true, and the table was still wrong — it
+enumerated three transports and omitted an entire fourth that the harness provides natively. A
+bottom-up review cannot surface an omission: there is no sentence to check. All three reviewers
+passed it, and one of them justified a design decision on the premise that "only one transport is
+in hand" — a premise that was already false, because nobody had independently enumerated the
+transports before reasoning about them. The defect class is *incompleteness*, not inaccuracy, and
+verifying claims is structurally blind to it.
+
+**Solution**: For any document that claims to describe an environment, the first review action is
+to **independently re-derive the environment and diff it against the document** — enumerate the
+surface from the tool/API descriptions, the MCP list, and the hooks that emit events, then compare.
+Only after that diff is clean does checking individual sentences mean anything. Until the diff is
+run, treat every line as *engagement-specific* rather than general. The same rule applies to a
+document's own scope note: a stated boundary ("this covers X") is a claim about a set, and a set
+claim is checked by enumerating the set, never by reading the boundary.
+
+**Related**: `references/evidence-discipline.md` §14 (the sibling defect — a named mechanism with
+no resolvable referent), `references/knowledge-routing.md` §6.
+
+## Reading an assertion is not testing it — mutate, then count
+
+**Date**: 2026-08-25 | **Context**: v2.34.39 depth-0 QC panel, 4 seats / 2 families, reviewing a
+change that shipped a disclosure scanner and its test suite.
+
+**Problem**: A test carried the comment "if someone narrows the patterns so a publishable vendor
+domain stops firing, this goes red." One panelist read the assertion, reasoned that it pinned the
+vendor domain, and recorded it under **Verified Clean**. Another panelist mutated the scanner —
+removed one suffix from its pattern — and found the suite still fully green, while the real corpus
+dropped from 5 findings to 2. The assertion compared a *kind set*, and a second token in the same
+fixture supplied both kinds by itself, so the pinned example was never pinned. The reasoning was
+sound and the conclusion was false; only the mutation separated them.
+
+**Solution**: Two rules, both load-bearing. (1) A claim that a test pins something is verified by
+**breaking the subject and observing the suite go red** — never by reading the assertion, however
+plainly it is written. Capture the real exit code; a `| tail` pipeline reports the pipe's status,
+not the suite's. (2) Panel synthesis must stay `union-on-verified-critical`, never a majority vote:
+here 2 seats read it clean and 1 measured it broken, so a majority would have suppressed the true
+finding. A blind-spot catch is visible to exactly one track — that is what decorrelation is for,
+and averaging destroys it.
+
+**Related**: `references/blind-dispatch.md`, `skills/quality-pipeline/references/code-review.md`
+§ "Panel aggregation", `references/evidence-discipline.md` §13 (bidirectional pinning).
+
+## A protocol sentence does not stop a process
+
+**Date**: 2026-08-25 | **Context**: An `/l4` run whose protocol assigns the independent execution
+oracle to depth-0 explicitly, so that an implementer never verifies its own work.
+
+**Problem**: The foreman had honestly reported the full suite as UNVERIFIED. When it was later
+resumed, it armed its own run of that suite — out of diligence, to close the gap it had disclosed.
+Depth-0 was already running one. `pgrep` found **15** matching processes, including orphans from
+the foreman's earlier attempts whose waiters were `pgrep` loops keyed on the suite name, so they
+would have reported depth-0's result as the implementer's. Concurrent full-suite runs share temp
+state, so every result in that window was uninterpretable in both directions — a red could be
+interference, a green could be one run reading another's artifacts. The protocol prohibiting this
+was correct, published, and completely inert: prose does not intercept a process spawn.
+
+**Solution**: Kill all of them, including your own, and restart exactly one — a cheap re-run beats
+an unreadable verdict. Structurally: when a rule assigns exclusive ownership of an expensive,
+state-sharing action, either mechanise the exclusion (a lock keyed on the action, not on the
+runner) or expect it to be violated by a well-intentioned participant. Also: a liveness waiter must
+key on a run identity, never on a command-line pattern that any concurrent run would match.
+
+**Related**: `skills/ceo-agent/references/level-front-door.md` § "Depth-0 control loop",
+`references/evidence-discipline.md` §7 (a pipeline's exit code is the pipe's, not the suite's).

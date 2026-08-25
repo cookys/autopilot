@@ -1,0 +1,31 @@
+{
+  "name": "@cookys/agent-call",
+  "version": "0.1.0",
+  "description": "Local, same-user messaging for persistent coding-agent sessions.",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "agent-call": "bin/agent-call.js",
+    "claude-call": "bin/agent-call.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./protocol": "./src/message.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check bin/agent-call.js && find src test -name '*.js' -print0 | xargs -0 -n1 node --check"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  }
+}

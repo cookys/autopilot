@@ -1,6 +1,7 @@
 'use strict';
 
 const { Registry } = require('./registry');
+const { AgentCallError } = require('./errors');
 const { createEnvelope, validateEnvelope } = require('./message');
 const { createAdapters, deliverToDescriptor, readFromDescriptor, doctorDescriptor } = require('./adapters');
 
@@ -12,6 +13,9 @@ async function sendMessage({ registry = new Registry(), adapters = createAdapter
 
 async function receiveEnvelope({ registry = new Registry(), adapters = createAdapters(), envelope }) {
   const value = validateEnvelope(envelope);
+  if (value.origin !== 'hangar-edge') {
+    throw new AgentCallError('origin_invalid', 'receiveEnvelope accepts only origin=hangar-edge', { exitCode: 2 });
+  }
   const descriptor = registry.require(value.to);
   return { envelope: value, result: await deliverToDescriptor(descriptor, value, adapters) };
 }

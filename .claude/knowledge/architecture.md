@@ -148,6 +148,27 @@ claim is checked by enumerating the set, never by reading the boundary.
 **Related**: `references/evidence-discipline.md` §14 (the sibling defect — a named mechanism with
 no resolvable referent), `references/knowledge-routing.md` §6.
 
+**Strengthened 2026-08-25, from an independent instance on another host.** The rule is not only
+that a document may be incomplete — it is that **the enumeration tool bounds the hypothesis space**.
+An agent built its picture of "who else is working here" from a terminal pane listing, and so every
+hypothesis it could form about a contended resource was confined to what a pane listing can show. It
+spent a day attributing repeated failures first to a peer it could see, then to the device itself,
+and never once to *an actor it did not know existed* — because its map had no cell for one. Calling
+the harness's own peer enumeration surfaced three sessions it had never heard of, one of them busy
+for 23 hours on exactly the contended resource. The defect was not a missing line; it was a missing
+**class of hypothesis**, and no amount of care applied inside the wrong enumeration would have
+produced it.
+
+The same shape appeared the same day in a measurement, which is worth recording because it shows the
+class is not specific to agents or documents: a criterion asked "were there events near this
+boundary", passed every discipline the repo requires (pre-registered, denominator on the same row,
+reverse-tested, n≥3), returned a consistent "no" across three arms — and was wrong, because the
+instrument had stopped sampling for 20.9s around that boundary. It asserted a fact about *events*
+and never asserted the precondition about *sampling*. The repair is the same one: **"not measured"
+must be a distinct answer from "zero", and it must be removed from the denominator rather than
+counted as a negative.** Whenever a check reports an absence, ask what would have to be true for the
+absence to be observable, and assert that separately.
+
 ## Reading an assertion is not testing it — mutate, then count
 
 **Date**: 2026-08-25 | **Context**: v2.34.39 depth-0 QC panel, 4 seats / 2 families, reviewing a

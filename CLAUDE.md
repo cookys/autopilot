@@ -98,6 +98,18 @@ Rationale: a new script/hook/reference is real work but it is **not** a new user
 
 Mechanics: bump via `scripts/sync-version.js --version <V> --hook-count <N> --skill-count <M>` (opt-in/disabled counts are preserved from canonical when omitted). A version bump triggers the finish-flow L-5.5 release gate (`scripts/preflight-release.sh`: CHANGELOG entry + INDEX row + mirror parity).
 
+**Concurrent-session PATCH collisions**: two sessions working this repo in parallel occasionally pick
+the same next PATCH number — version-mirror files with identical values merge silently with no git
+conflict, so nothing warns you. Before pushing a version bump, check `git show
+origin/develop:.claude-plugin/plugin.json` for the real canonical version. Convention (established
+both directions, 2026-08-21): **whoever pushes to `origin` second yields the number** — rebase onto
+`origin/develop`; a CHANGELOG collision resolves as two sections (own section moves to the new number,
+on top); re-run `sync-version.js` with the freed number; re-stamp every reference to the old number in
+files YOU changed (CHANGELOG heading, INDEX row, plan/README status lines, in-code `(vX.Y.Z)`
+comments, test-file headers, and your branch name if it embeds the version). Grep for stragglers only
+within your own changed files — another session's already-shipped old-number references are history,
+not drift.
+
 ## Coexistence with superpowers
 
 Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`docs/coexistence.md`](docs/coexistence.md).

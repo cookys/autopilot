@@ -8,6 +8,36 @@
  * runner, model, process, cwd, or session change cannot open another budget.
  * Width: 1-4 frozen seats in one generation. Each seat gets at most two
  * transport/parser attempts. Generation 2 is the hard semantic terminal cap.
+ *
+ * Non-obvious contracts (each has burned a real dispatch round):
+ *  - Rubric IDs must match `- R1: [label] ...` (id directly followed by `:` or
+ *    punctuation, no intervening space/paren) or the rubric parses as having
+ *    "no stable IDs" and the whole review round is worthless.
+ *  - A disposition file's `generation` field is THE GENERATION IT ADJUDICATED,
+ *    not the generation about to be dispatched. A generation-2 dispatch that
+ *    consumes a disposition file from round 1 must write generation: 1 in that
+ *    file, or the loader rejects it as "disposition file identity or shape is
+ *    invalid".
+ *  - Swapping the panel mid-run (editing the manifest) requires clearing this
+ *    logical plan's sealed state first (find it: `grep -l <logical_plan_id>
+ *    ~/.autopilot/plan-review/*/state.json`) or every subsequent call fails
+ *    with "frozen rubric/manifest seal mismatch". Clearing state before any
+ *    seat has actually consumed review content is a legitimate reset — record
+ *    it in the plan's Review log for audit.
+ *  - Default `--timeout` (5m) starves a `max`/`xhigh`-effort seat before it can
+ *    respond — pass `--timeout 20m` explicitly for any non-default effort. A
+ *    timed-out seat with an empty stdout capture gets misclassified as a
+ *    binding mismatch (empty raw -> null reference) rather than a timeout;
+ *    check the scratch dir's stderr for a bare prompt echo before trusting
+ *    that classification.
+ *  - A `plan_growth_hard_stop` rejection dispatches ZERO seats and reaches no
+ *    semantic verdict, but still writes a terminal lock that blocks resubmission.
+ *    The fix is shrinking the plan (never raising the growth ratio) and then a
+ *    state operation: set `terminal:false, terminal_verdict:null` in
+ *    `~/.autopilot/plan-review/<session_key>/state.json` and rename the
+ *    `terminal-plan_growth_hard_stop.json` artifact aside for the record. This
+ *    is safe specifically because a policy-stop round consumed zero seats — a
+ *    round that reached a real semantic verdict must not be reopened this way.
  */
 
 const crypto = require('crypto');

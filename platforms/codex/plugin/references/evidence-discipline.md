@@ -369,6 +369,40 @@ genuine behavior-layer claim unaddressed, if there was one riding along in the s
 
 ---
 
+## 16. A blind gate usually has two layers — fixing one leaves it blind
+
+**Incident (2026-08-23, v2.34.38).** `check-test-integrity` was blind to all 300 test suites in this
+repo. The visible layer looked like a missing config: autopilot had no
+`.claude/test-integrity-config.md`, so the check fell back to a generic template glob. Fixing that
+alone would have changed nothing, because the real layer underneath was that `parse_config` tested
+`#` before `##` — `test_paths` had never been settable for **any** project, on any repo, ever. Worse,
+supplying a `test_paths` value didn't fail loudly; it silently tripped `malformed_config` and fell
+back to the same broken default, so the 510-line acceptance suite had never once exercised that code
+path. Three documents claimed the config gap was already noted; none of them was true — an undocumented
+gap is bad, but a gap **three docs claim is documented** is worse, because a reader stops looking.
+
+A second layer in the same incident: the same "one bad regex" bypass reappeared three separate times
+across a hardening round (`skip;`, a `#` truncated inside quotes, `( skip )` in a subshell) — each a
+different one-character evasion of the same detection regex. Patching regexes one bypass at a time
+never converges, because the bypass space is a grammar, not a finite list of known-bad strings. What
+converged it was replacing the regex with a quote/escape-aware scanner driven by an enumerated grammar
+of command-position/tail classes (45 probe classes) — and **naming the five classes it still does not
+cover** (a time/coproc prefix, a leading redirect, a heredoc body, `eval`, a heredoc-form skip), each
+pinned with its own boundary assertion so a future reader knows exactly where the blind spots are
+rather than discovering them by incident.
+
+> **Check**: when a gate reports "nothing to check" or "all clean" on a domain it should obviously see
+> activity in, do not stop at the first explanation that fits. Ask whether the absence has a second,
+> independent cause underneath the first, and whether any existing documentation claiming the gap is
+> known is itself unverified. Verify a repaired detection gate by planting an adversarial bypass
+> yourself — never accept a self-report that "it now catches X" — and prefer enumerating the class of
+> evasions over patching each observed instance, because the difference is the gap between "one bug
+> fixed" and "no further bug in this shape ships silently."
+
+**Related**: `scripts/check-test-integrity.sh`, `scripts/lib/test-integrity-l1.py`.
+
+---
+
 ## The one question
 
 Before recording anything as verified:

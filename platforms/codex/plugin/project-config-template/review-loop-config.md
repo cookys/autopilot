@@ -268,6 +268,33 @@ this with `independent_harness: on` running the **FULL** suite, not just touched
   `independent_harness: on` so depth-0 builds adversarial cases the implementer
   didn't write (this is what caught vitest-blind / go multi-pkg build-fail / the
   override forgeability the implementer's green missed).
+- **`--endpoint <name>` vs. hand-exporting `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`.** When a
+  named endpoint is configured (`resolve-endpoint.sh`, creds from `~/.autopilot/endpoints.env`,
+  `AUTOPILOT_ENDPOINT_<NAME>_*`), pass `--endpoint <name>` to `dispatch-review.sh`/`dispatch-hetero.sh`
+  — do NOT also hand-export `ANTHROPIC_BASE_URL` first. The dispatcher clears that variable to an
+  empty string before resolving the named endpoint, so a manual export is silently overwritten and
+  produces confusing "it worked with export but not with --endpoint" reports. Also:
+  `load-endpoints-env.sh` is a bash script (source it from bash, not zsh — zsh chokes on its
+  arithmetic/substitution syntax) and only DEFINES a function; you still have to call
+  `autopilot_load_endpoints_env` afterward.
+- **`--timeout` default (5m) is too short for a large diff at a high effort level** — a ~166 KB diff
+  at `codex effort=max` has hit `rc=124` (timeout). A timeout is FAIL-CLOSED to `no_verdict`: the
+  review is lost, not merely slow. Size the timeout to the diff — 15–20m for anything large.
+- **Diagnose every `no_verdict` from the `raw_log`, never from file size alone.** A large raw log can
+  be a prompt echo with zero real response. `rc=124` = timeout; `rc=1` is commonly a quota exhaustion;
+  `"did not start with the expected wrapped block"` means the response framing was corrupted by
+  harness chrome — chrome sometimes lands BEFORE a fully intact wrapped block (e.g. a session-title
+  generator's own prefix), and that block can be adopted directly from the raw log — but ONLY if its
+  markers are the derived nonce hash, not the raw nonce (`dispatch-review.sh` derives the accepted
+  marker as `SHA256("autopilot-review-v1:" || nonce)`, so a bare echo of the visible nonce value
+  cannot forge one), the opening and closing markers match each other exactly, and the block contains
+  no leaked prompt/instruction text. A block merely resembling a verdict (visible VERDICT/FINDINGS
+  text with no matching derived markers) is NOT safe to adopt — it may be the model echoing the
+  prompt's own output-format example back at you.
+- **When the primary reviewer's provider has a sustained outage** (repeated 529s), don't retry
+  indefinitely — reroute the review to a qualified reviewer on a different provider (e.g. `--runner
+  codex` against an OpenAI-hosted model) rather than burning rounds against a dead endpoint. This is
+  exactly the situation the decorrelated roster exists for.
 
 ## Capability-state advisory (v2.31.2 — emitted fields, not config keys)
 

@@ -184,6 +184,16 @@ const WITNESS_RUNNER_SOURCE = [
 const HOST_OBSERVED_RUNS = new WeakSet();
 const ACTIVE_SESSION_RUNS = new Map();
 
+// GOTCHA: every identity field below except --model is a STRICT TOKEN
+// (/^[A-Za-z0-9._:-]{1,128}$/ — see TOKEN above): no spaces, no parens. A raw
+// CLI --version banner like "grok 1.0.5 (5115b46bc9) [stable]" is REJECTED —
+// tokenize it first, e.g. "grok-1.0.5-5115b46bc9-stable". --harness-version
+// uses a colon separator (e.g. "dispatch-hetero:003d7975"), never "@". A
+// rejected identity token fails at the CLI-parsing layer before anything is
+// dispatched or billed, but it still costs a wasted qualification attempt —
+// before a real administration, copy the exact flag set from the most recent
+// same-role bundle's README (docs/plans/evidence/<date>-*-qualification-*/*/README.md)
+// and edit only the seat identity, rather than reconstructing flags from memory.
 const HELP = `Usage:
   scripts/engine-qualify.sh <reviewer|owner|brain|verification_author|implementer>
     --engine <display-id> --model <exact-model-id> --model-version <version>

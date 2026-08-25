@@ -66,6 +66,16 @@
 #   ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN and does NOT redirect HOME (native session
 #   credentials commonly live under the real HOME). Reuses the same canonical PROMPT_FILE
 #   every other runner reads — no second prompt-assembly source.
+#   NEVER point CLAUDE_CONFIG_DIR at the real ~/.claude for a fresh-HOME child process
+#   (headless exam/dispatch use case): a `claude -p` subprocess whose CLAUDE_CONFIG_DIR
+#   resolves to a real, already-populated ~/.claude treats it as needing initialization and
+#   RESETS .claude.json in place (verified on claude CLI 2.1.233: 88k -> 36k, every project
+#   entry / mcpServer / onboarding flag gone) — plus there is a live-session write race if a
+#   real session has that file open. If native OAuth is genuinely needed for a headless/exam
+#   dispatch, point CLAUDE_CONFIG_DIR at a DEDICATED empty directory (mode 0700) seeded with
+#   only .credentials.json (mode 0600) copied from the real one — never the real directory
+#   itself. A CLI restore backup lands at ~/.claude/backups/.claude.json.backup.<ts> if this
+#   is hit by accident.
 #   anthropic-compatible runner: direct HTTP POST to an Anthropic-compatible /v1/messages
 #   endpoint (MiniMax-M3, GLM-*, …) via dispatch-anthropic-review.js — NOT claude/cc-shim.
 #   Auth from env only: MINIMAX_API_KEY for minimax.io; ANTHROPIC_COMPATIBLE_AUTH_TOKEN

@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.34.40 — L5 qualification override finally reaches strict dispatch
+
+`dispatch-contract.js` already supported the Board-approved, explicit per-invocation
+`--qualification-override` rail, and `resolve-review-loop.sh` already advertised
+`AUTOPILOT_QUALIFICATION_OVERRIDE`. The final `dispatch-hetero.sh` strict preflight silently
+dropped that environment binding, so an operator could supply the documented evidence-free
+first-use authority and L5 would still reject it before model spend.
+
+The strict dispatcher now forwards the exact override path as an argv element and emits
+`engine_assurance: "operator-override"`. Missing, malformed, mismatched, expired, or operator-less
+overrides remain fail-closed. Isolated regressions remove the implementer scorecard row, prove the
+override is required, then prove detached dispatch preserves the loud assurance marker. Canonical
+and Codex package mirrors remain identical.
+
+prose-justification: this release changes no skill prose. Any per-skill growth reported by the
+release gate is carried from earlier releases; this patch changes only engine dispatch, validation,
+tests, mirrors, and release records.
+
 ## v2.34.39 — 知識寫進了會蒸發的層,而「什麼可以公開」從來只活在一個人的習慣裡
 
 prose-justification: `skills/learn`、`skills/handoff`、`skills/distill` 三份 SKILL.md 都長了。

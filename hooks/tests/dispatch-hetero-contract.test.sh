@@ -268,6 +268,39 @@ assert_eq "$SPEC_SHA" "$EXPECTED_SPEC_SHA"
 
 assert_file_exists "$RUN_MARKER_PATH"
 
+echo "--- R3b: Strict GO forwards an explicit qualification override ---"
+EMPTY_ENGINE_SCORES_DIR="$TEST_TMP/empty-engine-scores"
+QUALIFICATION_OVERRIDE="$TEST_TMP/qualification-override.json"
+mkdir -p "$EMPTY_ENGINE_SCORES_DIR"
+cat > "$QUALIFICATION_OVERRIDE" <<'EOF_OVERRIDE'
+{
+  "schema": 1,
+  "overrides": [
+    {
+      "engine": "gpt-5.3-codex-spark",
+      "runner": "codex",
+      "role": "implementer",
+      "reason": "bounded operator-authorized first use",
+      "operator": "dispatch-hetero-contract-test",
+      "expires": "2099-01-01"
+    }
+  ]
+}
+EOF_OVERRIDE
+CASE_TMP="$TEST_TMP/case-r3b"
+mkdir -p "$CASE_TMP"
+rm -f "$RUN_MARKER_PATH"
+out=$(ENGINE_SCORES_DIR="$EMPTY_ENGINE_SCORES_DIR" \
+  ENGINE_SCORECARD_DIR="$EMPTY_ENGINE_SCORES_DIR" \
+  AUTOPILOT_QUALIFICATION_OVERRIDE="$QUALIFICATION_OVERRIDE" \
+  run_dispatch "t4b" --strict-contract --contract-file "$VALID_CONTRACT")
+rc=$?
+assert_eq "$rc" 0
+json=$(get_last_json "$out")
+assert_contains "$json" '"status": "committed"'
+assert_contains "$json" '"engine_assurance": "operator-override"'
+assert_file_exists "$RUN_MARKER_PATH"
+
 
 echo "--- R4: Disagreement on --base ---"
 CASE_TMP="$TEST_TMP/case-r4a"

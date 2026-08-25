@@ -549,6 +549,20 @@ assert_contains "$(json_get "$IMPLOVR_OUT" capability_warnings)" "EVIDENCE-FREE 
   "override file flips the warning to a loud evidence-free notice"
 assert_contains "$(json_get "$IMPLOVR_OUT" capability_warnings)" "first-use audition" \
   "override reason surfaces in the warning"
+cat > "$TEST_TMP/qual-override-malformed.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"grok-4.5","runner":"grok","role":"implementer","reason":"malformed expiry","operator":"cookys","expires":"forever"}]}
+JSON
+IMPLOVR_BAD_OUT="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$TEST_TMP/qual-override-malformed.json" ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_not_contains "$(json_get "$IMPLOVR_BAD_OUT" capability_warnings)" "EVIDENCE-FREE operator override" \
+  "malformed override expiry never advertises admission"
+assert_contains "$(json_get "$IMPLOVR_BAD_OUT" capability_warnings)" "no scorecard row" \
+  "malformed override expiry preserves refusal guidance"
+cat > "$TEST_TMP/qual-override-no-operator.json" <<'JSON'
+{"schema":1,"overrides":[{"engine":"grok-4.5","runner":"grok","role":"implementer","reason":"missing operator","expires":"2099-01-01"}]}
+JSON
+IMPLOVR_NO_OPERATOR_OUT="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$TEST_TMP/qual-override-no-operator.json" ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
+assert_not_contains "$(json_get "$IMPLOVR_NO_OPERATOR_OUT" capability_warnings)" "EVIDENCE-FREE operator override" \
+  "override without operator never advertises admission"
 
 EXPDIR="$TEST_TMP/check-expired"
 mkdir -p "$EXPDIR"

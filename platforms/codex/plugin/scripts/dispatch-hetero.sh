@@ -206,6 +206,7 @@ STRICT_UNIT_ID=""
 STRICT_CONTRACT_SHA=""
 STRICT_SPEC_SHA=""
 STRICT_GO=""
+STRICT_ENGINE_ASSURANCE=""
 STRICT_SCOPE_ALLOW_PATHS=()
 STRICT_SCOPE_DENY_PATHS=()
 STRICT_SCOPE_GENERATED_MIRROR_ALLOW_PATHS=()
@@ -744,6 +745,9 @@ emit() { # status commit files ins del worktree error
   local strict_fields=""
   if [ "${STRICT_CONTRACT_RESULT_FIELDS:-0}" -eq 1 ]; then
     strict_fields=", \"unit_id\": $strict_unit_json, \"contract_sha256\": $strict_contract_sha_json, \"spec_sha256\": $strict_spec_sha_json, \"go\": $strict_go_json"
+    if [ -n "${STRICT_ENGINE_ASSURANCE:-}" ]; then
+      strict_fields+=", \"engine_assurance\": \"$(_flat_json_escape "$STRICT_ENGINE_ASSURANCE")\""
+    fi
   fi
   local campaign_fields=""
   if [ "${CAMPAIGN_PROJECTION_BOUND:-0}" -eq 1 ]; then
@@ -864,6 +868,7 @@ run_strict_contract_preflight() {
   local normalized_timeout caller_timeout
   local tmp_json
   local rc
+  local -a contract_check_args
 
   [ "$STRICT_CONTRACT" -eq 1 ] || return 0
   [ "$CONTRACT_FILE_SUPPLIED" -eq 1 ] || die_precondition "--strict-contract requires --contract-file"
@@ -872,7 +877,16 @@ run_strict_contract_preflight() {
   CONSUMING_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ -n "$CONSUMING_REPO_ROOT" ] || die_precondition "not inside a git repository"
 
-  contract_check_out="$(node "$SELF_DIR/dispatch-contract.js" check --contract "$CONTRACT_FILE" --repo "$CONSUMING_REPO_ROOT" --json 2>&1)"
+  contract_check_args=(
+    check
+    --contract "$CONTRACT_FILE"
+    --repo "$CONSUMING_REPO_ROOT"
+    --json
+  )
+  if [ -n "${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" ]; then
+    contract_check_args+=(--qualification-override "$AUTOPILOT_QUALIFICATION_OVERRIDE")
+  fi
+  contract_check_out="$(node "$SELF_DIR/dispatch-contract.js" "${contract_check_args[@]}" 2>&1)"
   rc=$?
 
   contract_check_json="$(printf '%s' "$contract_check_out" | extract_last_json)"
@@ -909,6 +923,7 @@ run_strict_contract_preflight() {
   STRICT_UNIT_ID="$(extract_json_value "$contract_check_json" unit_id 2>/dev/null || true)"
   STRICT_CONTRACT_SHA="$(extract_json_value "$contract_check_json" contract_sha256 2>/dev/null || true)"
   STRICT_SPEC_SHA="$(extract_json_value "$contract_check_json" spec_sha256 2>/dev/null || true)"
+  STRICT_ENGINE_ASSURANCE="$(extract_json_value "$contract_check_json" assurance 2>/dev/null || true)"
   strict_model="$(extract_json_value "$contract_check_json" resolved_engine.model 2>/dev/null || true)"
   strict_runner="$(extract_json_value "$contract_check_json" resolved_engine.runner 2>/dev/null || true)"
   STRICT_GO="$verdict"
@@ -3881,7 +3896,7 @@ dispatch_detached_run() {
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
-      STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
+      STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \
       CAMPAIGN_CONTRACT_SHA256 CAMPAIGN_ID CAMPAIGN_MISSION_MODE CAMPAIGN_STRICT_AUTHORITY CAMPAIGN_PROJECTION_BOUND \
       OUTCOME_STATUS OUTCOME_COMMIT OUTCOME_FILES OUTCOME_INS OUTCOME_DEL OUTCOME_WT OUTCOME_ERR OUTCOME_EXIT \
       OUTCOME_DISPATCHER_CALLED OUTCOME_MODEL_CALLS OUTCOME_MUTATION_ATTEMPTS OUTCOME_GATE_ATTEMPTS OUTCOME_RESOURCES_CREATED OUTCOME_ZERO_DIFF_RECEIPT_DIGEST \

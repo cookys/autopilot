@@ -1264,12 +1264,17 @@ process.stdin.on("data", (d) => (s += d)).on("end", () => {
     try {
       const doc = JSON.parse(fs.readFileSync(overrideFile, "utf8"));
       const today = new Date().toISOString().slice(0, 10);
+      const isCalendarDate = (value) => typeof value === "string"
+        && /^\d{4}-\d{2}-\d{2}$/.test(value)
+        && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))
+        && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
       const match = doc && doc.schema === 1 && Array.isArray(doc.overrides)
         ? doc.overrides.find((o) => o && o.engine === engine
           && (runner === "auto" || o.runner === runner)
           && o.role === "implementer"
           && typeof o.reason === "string" && o.reason.trim()
-          && typeof o.expires === "string" && o.expires >= today)
+          && typeof o.operator === "string" && o.operator.trim()
+          && isCalendarDate(o.expires) && o.expires >= today)
         : null;
       if (match) {
         process.stdout.write(

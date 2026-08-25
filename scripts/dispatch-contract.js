@@ -1381,13 +1381,17 @@ function loadQualificationOverride(overridePath, storeRole, resolvedEngine, reas
     return null;
   }
   const today = new Date().toISOString().slice(0, 10);
+  const isCalendarDate = (value) => typeof value === 'string'
+    && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))
+    && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
   const match = doc.overrides.find((row) => row
     && row.engine === resolvedEngine.model
     && row.runner === resolvedEngine.runner
     && normalizeStoreRole(row.role) === storeRole
     && typeof row.reason === 'string' && row.reason.trim().length > 0
     && typeof row.operator === 'string' && row.operator.trim().length > 0
-    && typeof row.expires === 'string' && row.expires >= today);
+    && isCalendarDate(row.expires) && row.expires >= today);
   return match || null;
 }
 

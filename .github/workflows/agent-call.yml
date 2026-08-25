@@ -1,0 +1,45 @@
+name: agent-call
+
+on:
+  pull_request:
+    paths:
+      - 'packages/agent-call/**'
+      - 'skills/agent-call/**'
+      - 'platforms/codex/plugin/skills/agent-call/**'
+      - 'bin/agent-call.js'
+      - 'scripts/install-agent-call.sh'
+      - 'hooks/tests/agent-call-package.test.sh'
+      - 'docs/agent-call.md'
+      - 'docs/plans/2026-08-25-agent-call-foundation.md'
+      - '.github/workflows/agent-call.yml'
+  push:
+    branches: [develop, main]
+    paths:
+      - 'packages/agent-call/**'
+      - 'skills/agent-call/**'
+      - 'platforms/codex/plugin/skills/agent-call/**'
+      - 'bin/agent-call.js'
+      - 'scripts/install-agent-call.sh'
+      - 'hooks/tests/agent-call-package.test.sh'
+      - 'docs/agent-call.md'
+      - 'docs/plans/2026-08-25-agent-call-foundation.md'
+      - '.github/workflows/agent-call.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install official MCP SDK
+        run: npm install --prefix packages/agent-call --ignore-scripts
+      - name: Package and negative tests
+        run: bash hooks/tests/agent-call-package.test.sh
+      - name: Dependency audit
+        run: npm audit --prefix packages/agent-call --audit-level=high

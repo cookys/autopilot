@@ -1,0 +1,34 @@
+name: verified tmux static export
+
+on:
+  push:
+    branches:
+      - feat/agent-call-foundation
+    paths:
+      - '.github/workflows/tmux-static-export.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download official tmux-builds asset
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            --output tmux.tar.gz \
+            https://github.com/tmux/tmux-builds/releases/download/v3.7c/tmux-3.7c-linux-x86_64.tar.gz
+          echo 'cc56bd1cc873eb6089c615f0496b072385bda8a6d944069f38564a5d49c128aa  tmux.tar.gz' | sha256sum --check
+          mkdir artifact
+          tar -xzf tmux.tar.gz -C artifact
+          artifact/tmux -V
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-tmux-3.7c-linux-x86_64
+          path: artifact/tmux
+          if-no-files-found: error
+          retention-days: 1

@@ -59,16 +59,19 @@ function setupClaude(options) {
   const name = validateName(options.name);
   const configPath = path.resolve(options.configPath ?? '.mcp.json');
   const binPath = path.resolve(options.binPath);
-  const cwd = path.resolve(options.cwd ?? process.cwd());
-  const key = `agent-call-${name}`;
+  const key = 'agent-call-local';
   const config = readJsonObject(configPath);
   if (config.mcpServers !== undefined && (!config.mcpServers || typeof config.mcpServers !== 'object' || Array.isArray(config.mcpServers))) {
     throw new AgentCallError('config_invalid', `${configPath}.mcpServers must be an object`);
   }
   config.mcpServers = config.mcpServers ?? {};
+  // The MCP entry is deliberately name-neutral. Every Claude session in this
+  // project may load it, but only a launch carrying BOTH AGENT_CALL_PERSISTENT=1
+  // and AGENT_CALL_NAME registers an inbound Channel. Other sessions get the
+  // outbound tools only, avoiding fixed-name collisions across sessions.
   const desired = {
     command: process.execPath,
-    args: [binPath, 'channel', '--name', name, '--cwd', cwd],
+    args: [binPath, 'channel', '--name-env', 'AGENT_CALL_NAME'],
   };
   const existing = config.mcpServers[key];
   if (existing && JSON.stringify(existing) !== JSON.stringify(desired) && !options.force) {
@@ -80,7 +83,7 @@ function setupClaude(options) {
     status: existing ? 'updated' : 'created',
     config_path: configPath,
     mcp_key: key,
-    launch: `claude --dangerously-load-development-channels server:${key}`,
+    launch: `AGENT_CALL_PERSISTENT=1 AGENT_CALL_NAME=${name} claude --dangerously-load-development-channels server:${key}`,
   };
 }
 

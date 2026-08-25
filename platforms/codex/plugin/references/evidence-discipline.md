@@ -326,6 +326,49 @@ case and the broken case look identical from where you are standing.
 
 ---
 
+## 15. A claim's layer decides its evidence class — get the layer wrong and no amount of evidence saves it
+
+**Incident (2026-08-25, peer-coordination spike for the `docs/BACKLOG.md` peer-coordination-skill
+item).** A message sent to a peer's machine landed on the wrong session on that machine — the receiving
+protocol addresses a *machine* (one identifier shared by every session on it), not a *session*. The
+first report called this "misdelivery" and proposed logging a failure rate. That was wrong: the
+message reached the machine it was addressed to. The protocol never promised to select a session — it
+has no field for one — so nothing failed at the transport layer; the outcome there is a documented
+fact about the interface, not a rate to be measured. A same-day correction swung the other way and
+called the whole thing "not a failure, session-selection is merely undefined" — which was *closer* but
+still wrong, because it silently discarded a real failure one layer up: **the intended recipient may
+never see the message, and that layer carries no receipt at all.** Three tellings, three different
+claims, and every one of them was backed by real observation. What changed between them was never the
+evidence — it was which layer the sentence was actually about.
+
+Split the claim before asking what would verify it:
+
+| Layer | What the evidence would need to show | Evidence class |
+|---|---|---|
+| Transport (reaches the addressed identifier) | Delivery per the interface's own contract | **Interface fact** — the type signature already proves it; verified once, by reading the schema |
+| Addressing (selects among multiple valid targets sharing that identifier) | Whether the interface has a field for this at all | **Interface fact** — same: read the schema, do not infer it from a sample of outcomes |
+| Recipient (the intended party actually observes it) | Whether delivery in fact occurred, this time, for this message | **Behavior observation** — needs a repro count, a machine, a date; a single instance proves only that a single instance happened |
+
+An interface fact needs exactly one dereference — reading the type signature, the enum, the schema —
+and no amount of repeating that dereference on other machines strengthens it, because the object under
+test is the definition, not an environment. A behavior observation is the opposite: one instance never
+generalizes, and reporting it as a rate (`n/n`) implies a denominator the incident does not support
+unless the trial was actually repeated **and** every leg of it was pinned to the same layer.
+
+The two errors above are the same root cause pointing in different directions. Reading a schema and
+mistaking what it enumerates for a promise about behavior converts an interface fact into a false rate
+(§"the working case and the broken case look identical" from below — here the confusion is not that
+the outcomes look alike, but that a *fact about the type* and a *claim about an event* look alike once
+both are phrased as prose). And correcting that error by re-deriving the interface fact still leaves a
+genuine behavior-layer claim unaddressed, if there was one riding along in the same sentence.
+
+> **Check**: before asking what evidence a claim needs, ask what *layer* it is a claim about. A
+> sentence that mixes layers — "X failed" when X is actually "Y is undefined and Z has no receipt" —
+> will pass any evidence-quality check aimed at the wrong layer, because the check was never aimed at
+> what the sentence actually asserts.
+
+---
+
 ## The one question
 
 Before recording anything as verified:

@@ -29,7 +29,14 @@ class TmuxConsoleAdapter {
   constructor(options = {}) {
     this.run = options.run ?? defaultRun;
     this.sleep = options.sleep ?? sleep;
-    this.settleMs = options.settleMs ?? Number(process.env.AGENT_CALL_TMUX_SETTLE_MS || 350);
+    const settleMs = options.settleMs ?? Number(process.env.AGENT_CALL_TMUX_SETTLE_MS || 350);
+    if (!Number.isSafeInteger(settleMs) || settleMs < 150 || settleMs > 5000) {
+      throw new AgentCallError(
+        'invalid_tmux_settle',
+        'tmux settle delay must be an integer from 150 to 5000 milliseconds',
+      );
+    }
+    this.settleMs = settleMs;
   }
 
   inspectPane(pane) {

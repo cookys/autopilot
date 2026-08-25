@@ -1,0 +1,35 @@
+name: verified MCP SDK export
+
+on:
+  push:
+    branches:
+      - feat/agent-call-foundation
+    paths:
+      - '.github/workflows/agent-call-sdk-export.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install exact optional dependency
+        working-directory: packages/agent-call
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          node -e "Promise.all([import('@modelcontextprotocol/sdk/server/index.js'), import('@modelcontextprotocol/sdk/server/stdio.js'), import('@modelcontextprotocol/sdk/types.js')]).then(([a,b,c]) => { if (!a.Server || !b.StdioServerTransport || !c.ListToolsRequestSchema) process.exit(1) })"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-agent-call-node-modules
+          path: packages/agent-call/node_modules
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1

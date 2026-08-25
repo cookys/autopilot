@@ -146,12 +146,13 @@ async function createOfficialMcpServer(options) {
     );
   }
   const [{ Server }, { StdioServerTransport }, { ListToolsRequestSchema, CallToolRequestSchema }] = modules;
+  const capabilities = { tools: {} };
+  if (options.channelEnabled !== false) {
+    capabilities.experimental = { 'claude/channel': {} };
+  }
   const server = new Server(
     { name: 'agent-call', version: '0.1.0' },
-    {
-      capabilities: { experimental: { 'claude/channel': {} }, tools: {} },
-      instructions: CHANNEL_INSTRUCTIONS,
-    },
+    { capabilities, instructions: CHANNEL_INSTRUCTIONS },
   );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: await options.listTools() }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => options.callTool(request.params ?? {}));
@@ -170,6 +171,23 @@ function createSocketResponder(socket) {
     done = true;
     socket.end(`${JSON.stringify(payload)}\n`);
   };
+}
+
+async function startToolServer(options) {
+  const name = validateName(options.name ?? 'local-claude');
+  const env = options.env ?? process.env;
+  const layout = options.layout ?? ensureRuntimeLayout(env);
+  const registry = options.registry ?? new Registry({ env, layout });
+  const adapters = options.adapters ?? createAdapters(options.adapterOptions);
+  const handlers = makeToolHandlers({ name, registry, adapters });
+  const mcp = options.mcp ?? await (options.mcpFactory ?? createOfficialMcpServer)({
+    ...handlers,
+    channelEnabled: false,
+  });
+  (options.stderr ?? process.stderr).write(
+    '[agent-call] outbound tools active; this Claude session is not registered as a persistent inbound peer\n',
+  );
+  return { mcp, close: async () => mcp.close?.() };
 }
 
 async function startChannelServer(options) {
@@ -309,6 +327,7 @@ module.exports = {
   constantTimeTokenEqual,
   makeToolHandlers,
   createOfficialMcpServer,
+  startToolServer,
   startChannelServer,
   tools,
 };

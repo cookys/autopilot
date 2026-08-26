@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-08-26 | plan-review comment terminator（無 project dir、無 plan doc）— `scripts/dispatch-plan-review.js` 與 codex 鏡像自 v2.34.39 起**整支 parse 不了**:header 區塊註解裡的復原指令含 shell glob `~/.autopilot/plan-review/*/state.json`,其中的 `*/` 直接終止 `/** … */`,其後全部當 code 解析,`--help` 即 `SyntaxError: Invalid left-hand side expression in postfix operation`,整條 bounded plan-review rail 不可用。改為 `grep -rl --include=state.json <logical_plan_id> ~/.autopilot/plan-review/`(`/state.json` 前不需 glob),並在註解內就地寫明那兩個字元的後果。**值得照實記的是發現路徑**:破壞它的 commit 自述「comment-only or prose-only — no executable logic changed」、帶兩席 cross-family hetero review 的 `QC-Verdict: PASS`,沒有人跑過 `node --check`;它是在本次要用這條 rail 送 plan 審查時才被撞見的。同 `references/evidence-discipline.md` 家族:存在、有文件、被審過、不會跑。repo-wide `node --check` sweep 閘列為 follow-up | v2.34.41 | (depth-0 owns merge) | (無 plan doc) |
 
 ## 已完成 (Completed)
 

@@ -19,9 +19,13 @@
  *    file, or the loader rejects it as "disposition file identity or shape is
  *    invalid".
  *  - Swapping the panel mid-run (editing the manifest) requires clearing this
- *    logical plan's sealed state first (find it: `grep -l <logical_plan_id>
- *    ~/.autopilot/plan-review/*/state.json`) or every subsequent call fails
- *    with "frozen rubric/manifest seal mismatch". Clearing state before any
+ *    logical plan's sealed state first (find it: `grep -rl
+ *    --include=state.json <logical_plan_id> ~/.autopilot/plan-review/`) or
+ *    every subsequent call fails with "frozen rubric/manifest seal mismatch".
+ *    (That recipe deliberately avoids a `*` glob before `/state.json`: the
+ *    literal two-character sequence would close this block comment and make
+ *    the whole file unparseable — it did, from 74bd15bc to the fix.)
+ *    Clearing state before any
  *    seat has actually consumed review content is a legitimate reset — record
  *    it in the plan's Review log for audit.
  *  - Default `--timeout` (5m) starves a `max`/`xhigh`-effort seat before it can

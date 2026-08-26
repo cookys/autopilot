@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.34.41 — a comment closed itself and took the plan-review rail down with it
+
+`scripts/dispatch-plan-review.js` and its codex mirror stopped parsing entirely at v2.34.39.
+A header block comment documenting the sealed-state recovery recipe contained the shell glob
+`~/.autopilot/plan-review/*/state.json` — and the `*/` in that path terminated the `/** … */`
+comment. Everything after it parsed as code, so `node scripts/dispatch-plan-review.js --help`
+died with `SyntaxError: Invalid left-hand side expression in postfix operation` and every
+bounded plan review on the rail was unrunnable.
+
+The recipe is now `grep -rl --include=state.json <logical_plan_id> ~/.autopilot/plan-review/`,
+which needs no glob before `/state.json`, and the comment carries an inline warning about the
+two-character sequence so the next editor does not reintroduce it.
+
+Worth recording plainly: the commit that broke it described itself as "comment-only or
+prose-only — no executable logic changed" and carried `QC-Verdict: PASS` from two cross-family
+heterogeneous review seats. Nobody ran `node --check`. This is the same family as the incidents
+in `references/evidence-discipline.md` — a shipped artifact that exists, is documented, is
+reviewed, and does not run. A repo-wide `node --check` gate is the mechanizable follow-up.
+
+prose-justification: this release adds ZERO lines under `skills/` or `references/` — measured
+14921 both here and at `origin/develop`. The +741 (5%) over the v2.34.35 baseline was already on
+develop, shipped by the v2.34.39 knowledge-promotion work (`references/knowledge-routing.md` plus
+the evidence-discipline additions) without a baseline refresh or a justification line. Recording
+it rather than resetting the baseline: the delta is not this fix's to erase.
+
 ## v2.34.40 — L5 qualification override finally reaches strict dispatch
 
 `dispatch-contract.js` already supported the Board-approved, explicit per-invocation

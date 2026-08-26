@@ -185,6 +185,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 [ -r "$SELF_DIR/lib/context-window.sh" ] && . "$SELF_DIR/lib/context-window.sh" || true
 CONTEXT_WINDOW_GATE=""     # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
 IS_CODEX=0            # set in runner-selection; init early so emit/die before that are -u-safe
+RUNNER_RESOLVED=0     # 1 only after set_runner_flags completes; die_precondition uses this to
+                       # distinguish "agy selected" from "resolution never happened" (FINDING 1)
 IS_GROK=0
 IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compatible endpoint
 IS_PI=0
@@ -1389,13 +1391,23 @@ NODE
 }
 
 die_precondition() {
-  local runner="agy"
-  [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
-  [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
-  [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
-  [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
-  [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
-  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  # agy is the DEFAULT rail — it has no IS_AGY flag, it is the else-case. So "no IS_*
+  # set" is ambiguous between "agy was selected" and "resolution has not happened yet".
+  # RUNNER_RESOLVED disambiguates: only trust the else-case "agy" once set_runner_flags
+  # has actually completed (FINDING 1). Before that, emit the sentinel "unresolved" —
+  # not "agy", not "auto" (the latter is also a valid --runner INPUT value, so a caller
+  # who passed --runner grok and failed an early precondition must never see "auto" in
+  # the output despite never saying it).
+  local runner="unresolved"
+  if [ "${RUNNER_RESOLVED:-0}" -eq 1 ]; then
+    runner="agy"
+    [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
+    [ "${IS_GROK:-0}" -eq 1 ] && runner="grok"
+    [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
+    [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
+    [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+    [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
+  fi
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
@@ -1729,6 +1741,10 @@ set_runner_flags() {
       ;;
     *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor (got: $RUNNER)" ;;
   esac
+  # Only reached if resolution actually completed (no die_precondition fired above,
+  # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED
+  # init comment and die_precondition (FINDING 1).
+  RUNNER_RESOLVED=1
 }
 
 D2_AGY_RESPONSE_CLAIM="cap-v1-2ed283539393bd31ecd5012719b95aecf3eb5e146cafb6393494224d0eaf52f4"
@@ -3992,7 +4008,7 @@ dispatch_detached_run() {
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
   declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR RUNNER_RESOLVED CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
       WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \

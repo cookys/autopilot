@@ -76,15 +76,18 @@ no_sentinels_tripped() {
 # (codex.invoked included). Previously this tolerated a codex.invoked sentinel
 # on the premise that case 3b (auto + gpt-5.2, below) "legitimately dispatches
 # to codex" and leaves that sentinel as expected residue. That premise was
-# FALSE: case 3b deliberately runs under a PLAIN PATH (PATH=/usr/bin:/bin, NOT
-# $POISON_PATH) specifically so the real `codex` binary is genuinely absent —
-# it asserts "codex binary not found" and dies at the precondition, never
-# reaching exec. The codex STUB in $POISON_DIR is therefore never on PATH
-# during 3b, so it is IMPOSSIBLE for 3b to produce a codex.invoked sentinel.
-# No legitimate codex.invoked sentinel can ever exist in this suite, so no
-# tolerance is warranted: any codex.invoked sentinel found here means some
-# OTHER case in this file actually dispatched to (poisoned) codex instead of
-# refusing — exactly the failure mode this oracle exists to catch.
+# FALSE: case 3b runs under $POISON_PATH (so a system-installed codex is never
+# reachable either — codex must be unreachable BY CONSTRUCTION, not by an
+# assumption about what happens to be on this host's PATH) AND passes an
+# explicit, unresolvable NAME-form --codex-bin, which `command -v` fails to
+# resolve — it asserts "codex binary not found: <name>" and dies at the
+# precondition, never reaching exec. Since the unresolvable name is not
+# "codex", the codex STUB in $POISON_DIR is never looked up by 3b either, so
+# it is IMPOSSIBLE for 3b to produce a codex.invoked sentinel. No legitimate
+# codex.invoked sentinel can ever exist in this suite, so no tolerance is
+# warranted: any codex.invoked sentinel found here means some OTHER case in
+# this file actually dispatched to (poisoned) codex instead of refusing —
+# exactly the failure mode this oracle exists to catch.
 no_cursor_rail_sentinels_tripped() {
   [ ! -e "$SENTINEL_DIR/cursor-agent.invoked" ] \
     && [ ! -e "$SENTINEL_DIR/grok.invoked" ] \
@@ -150,6 +153,44 @@ assert_eq "2" "$EXIT" "auto + out-of-table cursor-grok-4.5-high → exit 2 (pref
 assert_contains "$OUT" "--runner cursor" "out-of-table cursor id names --runner cursor"
 
 # ---------------------------------------------------------------------------
+# 2b. 🟠 FINDING 1 — the refusal must emit TRUE runner provenance, not a false
+# "agy" (agy is the else-case with no IS_AGY flag, so "no IS_* set" is
+# ambiguous between "agy selected" and "resolution never happened" unless
+# RUNNER_RESOLVED disambiguates it). A guard refusal fires INSIDE
+# set_runner_flags, before RUNNER_RESOLVED is ever set to 1, so its emitted
+# JSON must report "runner": "unresolved" — never "agy". Checked for BOTH
+# guard arms: a cursor-prefixed id (prefix-open) and an enabled non-prefixed
+# id (table-closed).
+# ---------------------------------------------------------------------------
+OUT="$(run_guard_case "provenance-prefix-open" "cursor-grok-4.6-high")"; EXIT=$?
+printf '%s\n' "$OUT" >> "$FULL_LOG"
+assert_eq "2" "$EXIT" "auto + cursor-grok-4.6-high (prefix-open) → exit 2"
+assert_contains "$OUT" '"runner": "unresolved"' \
+  "cursor auto-guard refusal (prefix-open) emits runner: unresolved"
+assert_not_contains "$OUT" '"runner": "agy"' \
+  "cursor auto-guard refusal (prefix-open) does NOT emit runner: agy"
+
+OUT="$(run_guard_case "provenance-table-closed" "gpt-5.3-codex-low")"; EXIT=$?
+printf '%s\n' "$OUT" >> "$FULL_LOG"
+assert_eq "2" "$EXIT" "auto + gpt-5.3-codex-low (table-closed) → exit 2"
+assert_contains "$OUT" '"runner": "unresolved"' \
+  "cursor auto-guard refusal (table-closed) emits runner: unresolved"
+assert_not_contains "$OUT" '"runner": "agy"' \
+  "cursor auto-guard refusal (table-closed) does NOT emit runner: agy"
+
+# General case (NOT cursor-specific): an early precondition failure raised
+# BEFORE runner resolution — here, a missing --branch — must ALSO emit
+# runner: unresolved. Proves the fix is general, not cursor-special-cased.
+OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --prompt-file "$PROMPT" --runner auto --model gpt-5.3-codex-low 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "missing --branch → exit 2"
+assert_contains "$OUT" "--branch is required" "missing --branch precondition message"
+assert_contains "$OUT" '"runner": "unresolved"' \
+  "missing --branch (pre-runner-resolution) emits runner: unresolved — general case, not cursor-special-cased"
+assert_not_contains "$OUT" '"runner": "agy"' \
+  "missing --branch does NOT emit runner: agy"
+
+# ---------------------------------------------------------------------------
 # 3a. 🔴 PROCESS-LEVEL ORACLE (guard-refusal cases only): across the enumeration
 # plus the out-of-table case above, NO rail binary was ever invoked — including
 # cursor-agent's own. An exit-2-with-message assertion alone would pass an
@@ -166,23 +207,29 @@ fi
 # ---------------------------------------------------------------------------
 # 3b. NON-OVER-CAPTURE: a bare non-prefixed, non-table id (gpt-5.2) must still
 # route to codex as before — proving the guard does NOT swallow every
-# gpt-shaped id, only the ones the table actually enables. Deliberately run
-# WITHOUT the poison stubs (plain PATH, codex genuinely absent) — same
-# convention as dispatch-hetero.test.sh's existing codex/qoder auto-routing
-# cases — so this is excluded from the process-level oracle above: routing to
-# codex here is the CORRECT, expected behavior, not a guard violation.
+# gpt-shaped id, only the ones the table actually enables. Codex must be
+# unreachable BY CONSTRUCTION, not by host assumption: run under $POISON_PATH
+# (so no real rail binary is reachable at all — including a system-installed
+# codex, which would make this case invoke a REAL agent on such a host) AND
+# pass an explicit, unresolvable NAME-form --codex-bin (no "/", so it falls
+# through the path-form feature-detection at ~1937-1949 straight to
+# `command -v`, which dies with "codex binary not found: <name>" — the same
+# assertion shape as before, and it names OUR bin, proving the run really
+# went down the codex branch instead of tripping the cursor guard).
 # ---------------------------------------------------------------------------
 if cursor_is_enabled_id "gpt-5.2"; then
   fail "test fixture invalid: gpt-5.2 must NOT be in cursor_enabled_ids"
 else
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 fi
-OUT="$(cd "$SBX" && PATH=/usr/bin:/bin AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+UNRESOLVABLE_CODEX_BIN="codex-definitely-not-installed-9f3c7a1b"
+OUT="$(cd "$SBX" && PATH="$POISON_PATH" AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
   "$SCRIPT" --branch t-cursor-guard-non-over-capture --prompt-file "$PROMPT" \
-  --runner auto --model gpt-5.2 2>&1)"; EXIT=$?
+  --runner auto --model gpt-5.2 --codex-bin "$UNRESOLVABLE_CODEX_BIN" 2>&1)"; EXIT=$?
 printf '%s\n' "$OUT" >> "$FULL_LOG"
 assert_eq "2" "$EXIT" "auto + gpt-5.2 → exit 2 (codex precondition, not the cursor guard)"
-assert_contains "$OUT" "codex binary not found" "gpt-5.2 routes to codex (not swallowed by the cursor guard)"
+assert_contains "$OUT" "codex binary not found: $UNRESOLVABLE_CODEX_BIN" \
+  "gpt-5.2 routes to codex (not swallowed by the cursor guard); codex unreachable by construction"
 assert_not_contains "$OUT" "auto-routing refuses" "gpt-5.2 does not trip the cursor guard at all"
 
 # ---------------------------------------------------------------------------
@@ -197,11 +244,12 @@ assert_not_contains "$(cat "$FULL_LOG")" '"runner": "cursor"' \
 
 # ---------------------------------------------------------------------------
 # 5. Re-affirm the process-level oracle after the non-over-capture case: 3b
-# ran on a PLAIN PATH (PATH=/usr/bin:/bin), not $POISON_PATH, so the codex
-# STUB was never on PATH during that run and cannot have touched
-# $SENTINEL_DIR/codex.invoked — the real `codex` binary is genuinely absent
-# there too (that is precisely why 3b dies at "codex binary not found"
-# instead of executing). No sentinel, including codex's, should exist here.
+# ran under $POISON_PATH with an explicit, unresolvable NAME-form
+# --codex-bin, so `command -v` never resolves to the "codex" stub in
+# $POISON_DIR and cannot have touched $SENTINEL_DIR/codex.invoked — codex is
+# unreachable there BY CONSTRUCTION (that is precisely why 3b dies at "codex
+# binary not found: <name>" instead of executing). No sentinel, including
+# codex's, should exist here.
 # ---------------------------------------------------------------------------
 if no_cursor_rail_sentinels_tripped; then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))

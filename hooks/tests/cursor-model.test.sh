@@ -224,10 +224,13 @@ assert_file_absent "$SENTINEL" "purity: cursor_enabled_ids / cursor_is_enabled_i
 # which isn't available/portable across the target platforms). So this is a
 # SOURCE-LEVEL LINT, not a runtime oracle: it extracts the literal source
 # text of each hot-path function from cursor-model.sh and asserts that text
-# contains none of `$(`, a backtick, or `<(` — the three bash constructs
-# that fork a subshell. It is honestly named as such so nobody mistakes it
-# for proof about runtime behavior; it is a static proxy that happens to be
-# exact here because these functions are wholly local.
+# contains none of `$(`, a backtick, or `<(`. SCOPE, stated honestly: those
+# are three fork-inducing constructs, NOT all of them — a pipeline, a bare
+# `( )` subshell and a trailing `&` also fork and are NOT detected here. They
+# are the three these functions could plausibly regress into (the pre-repair
+# code used `$(` and `<(`), so the lint is calibrated to the real regression,
+# not to the general problem. It is named a source-level lint so nobody
+# mistakes it for proof about runtime behavior.
 # ---------------------------------------------------------------------------
 
 # _extract_fn_body <file> <fn-name> — print the source lines of a `name() {

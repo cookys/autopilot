@@ -171,7 +171,7 @@ function scanTokenKeys(obj, acc) {
     if (typeof v !== 'number') continue;
     if (k === 'input_tokens' || k === 'prompt_tokens' || k === 'inputTokens') acc.input = v;
     else if (k === 'output_tokens' || k === 'completion_tokens' || k === 'outputTokens') acc.output = v;
-    else if (k === 'cache_read_input_tokens' || k === 'cached_tokens' || k === 'cacheReadInputTokens') acc.cache = v;
+    else if (k === 'cache_read_input_tokens' || k === 'cached_tokens' || k === 'cacheReadInputTokens' || k === 'cacheReadTokens') acc.cache = v;
     else if (k === 'total_tokens' || k === 'totalTokens') acc.total = v;
   }
 }

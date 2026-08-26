@@ -35,9 +35,18 @@
 #   (default `https://api.minimax.io/anthropic`). (`--effort` is accepted but unused.)
 #   Response cap: `--max-tokens ${AUTOPILOT_AUTHOR_MAX_TOKENS:-30000}` (authoring payloads
 #   exceed the JS's 4096 review default; a truncated response fail-closes in the JS).
+#   cursor runner: drives the Cursor CLI (`cursor-agent`, NOT `cursor`). EDIT-ONLY posture via
+#   `--mode ask` from a scratch cwd, prompt on STDIN (P7), `--trust` mandatory headlessly (P3),
+#   `--output-format text` (P13: clean prose on stdout, empty stderr). `--model` MUST be a full
+#   cursor-agent model id (`cursor-agent --list-models`); there is no default and no
+#   family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
+#   lib/cursor-model.sh) — a missing or bare-alias --model is a precondition failure. No
+#   --reasoning-effort/--effort: effort is encoded in the model id (P12); cursor-agent rejects
+#   both flags with "error: unknown option". A non-zero cursor-agent exit is a precondition
+#   failure here (never salvaged from stderr), never a coerced authored result.
 #
 # USAGE:
-#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn --model <name> --prompt-file <file>
+#   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor --model <name> --prompt-file <file>
 #       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
@@ -68,7 +77,7 @@
 #
 # OUTPUT: one JSON object on stdout:
 #   {
-#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn",
+#     "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor",
 #     "model": "...",
 #     "status": "authored|empty_output|precondition_failed|runner_failed",
 #     "raw_log": "<path>",
@@ -678,9 +687,16 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
   VERIFICATION_AUTHOR_FAMILY="$verification_author_family"
 fi
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn)"
-case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, or qoderclicn (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor)"
+case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, qoderclicn, or cursor (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
+if [[ "$RUNNER" = "cursor" ]]; then
+  # No family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
+  # lib/cursor-model.sh) — --model must already be a full cursor-agent model id.
+  case "$MODEL" in
+    grok46|codex53) die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models" ;;
+  esac
+fi
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
 
@@ -870,12 +886,16 @@ CCSHIM_CWD=""
 AGY_CWD=""
 QODER_CWD=""
 CNATIVE_CWD=""
+CURSOR_CWD=""
+CURSOR_ERR=""
 cleanup() {
   [ -n "$GROK_CWD" ] && rm -rf "$GROK_CWD" || true
   [ -n "$CCSHIM_CWD" ] && rm -rf "$CCSHIM_CWD" || true
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD" || true
   [ -n "$QODER_CWD" ] && rm -rf "$QODER_CWD" || true
   [ -n "$CNATIVE_CWD" ] && rm -rf "$CNATIVE_CWD" || true
+  [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD" || true
+  [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR" || true
   # Codex private run artifacts are retained for raw_log consumers (not deleted).
   # Stamp the manifest terminal so a watcher can tell "finished" from "hung" — the
   # whole point of emitting it. Runs last so it records the real end of the process.
@@ -964,6 +984,33 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
   RUNNER_EXIT=$?
   set -e
   rm -rf "$QODER_CWD"; QODER_CWD=""
+elif [[ "$RUNNER" = "cursor" ]]; then
+  BIN="${BIN:-cursor-agent}"
+  command -v "$BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $BIN (Cursor CLI — cursor-agent, not cursor)"
+  # EDIT-ONLY authoring, grok/qoder-shaped: scratch cwd, `--mode ask` (P9), prompt via STDIN
+  # (P7); `--trust` is MANDATORY headlessly (P3) or the run aborts on workspace trust; the
+  # agent never commits/pushes/opens a PR here — the wrapper commits and a separate review
+  # verifies (same contract as grok/qoderclicn). Enforced `timeout` is the hang backstop
+  # (cursor has no print-timeout flag). `--output-format text` (P13) is bound so the authored
+  # text lands as clean prose on stdout with empty stderr. STDOUT and STDERR are captured to
+  # SEPARATE temp files — STDOUT is the sole authored-text source ($RAW_LOG); STDERR is chrome
+  # only, never salvaged into an authored result. No --reasoning-effort/--effort: effort is
+  # encoded in the model id (P12) — cursor-agent rejects both with "error: unknown option".
+  # A non-zero exit here is a PRECONDITION failure (not runner_failed) — a fail-closed cursor
+  # run never reaches the shared authored/empty_output content checks below.
+  CURSOR_CWD="$(mktemp -d -t dispatch-author-cursorcwd-XXXXXX)"
+  CURSOR_ERR="$(mktemp -t dispatch-author-cursor-err-XXXXXX)"
+  set +e
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
+    --output-format text < "$4"' \
+    _ "$CURSOR_CWD" "$BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2> "$CURSOR_ERR"
+  CURSOR_RC=$?
+  set -e
+  rm -rf "$CURSOR_CWD"; CURSOR_CWD=""
+  if [ "$CURSOR_RC" -ne 0 ]; then
+    die_precondition "cursor exited non-zero (rc=$CURSOR_RC$([ "$CURSOR_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")) — fail-closed, no salvage from stderr"
+  fi
+  RUNNER_EXIT=0
 elif [[ "$RUNNER" = "kimi" ]]; then
   # The transport lives in `src/runners/kimi.js` (contract-pinned by
   # hooks/tests/dispatch-author-kimi.test.sh); this branch only supplies the

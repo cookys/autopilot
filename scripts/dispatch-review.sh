@@ -30,13 +30,13 @@
 # (union-on-verified-critical) stays at depth 0; this only obtains ONE panelist's verdict.
 #
 # USAGE:
-#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi --model <name> --diff-file <file>
+#   scripts/dispatch-review.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor --model <name> --diff-file <file>
 #       [--spec-file <file>]    # trusted dispatcher-authored task spec (baseline)
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # WALL-CLOCK CAP FOR EVERY RUNNER, not just agy (default 5m).
 #                               #   agy: passed as --print-timeout
-#                               #   codex / grok / qoder: enforced via an external `timeout`
+#                               #   codex / grok / qoder / cursor: enforced via an external `timeout`
 #                               # Exceeding it is a NON-ZERO EXIT, which is fail-closed to
 #                               # status:no_verdict — the review is lost, not merely slow. A
 #                               # large diff at a high effort routinely needs more than 5m
@@ -91,9 +91,18 @@
 #   documented levers: --setting-sources project + --strict-mcp-config + --tools "" (all tools off) +
 #   HOME=<scratch> + scratch cwd + no --dangerously-skip-permissions; STDIN prompt; env -u
 #   ANTHROPIC_API_KEY.
+#   cursor runner: drives the Cursor CLI (`cursor-agent`, NOT `cursor`). READ-ONLY posture via
+#   `--mode ask` (P9: refused to write in the S2a spike) from a scratch cwd, prompt on STDIN
+#   (P7), `--trust` mandatory headlessly (P3), `--output-format text` (P13: clean prose on
+#   stdout, empty stderr — feeds the SAME plain VERDICT: parser every other runner uses).
+#   `--model` MUST be a full cursor-agent model id (`cursor-agent --list-models`); there is no
+#   default and no family-alias resolution on this rail (that lives only in
+#   dispatch-hetero.sh's lib/cursor-model.sh) — a missing or bare-alias --model is a
+#   precondition failure. No --reasoning-effort/--effort: effort is encoded in the model id
+#   (P12); cursor-agent rejects both flags with "error: unknown option".
 #
 # OUTPUT: one JSON object on stdout:
-#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
+#   { "runner": "codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor", "model": "...", "status": "reviewed|no_verdict|precondition_failed",
 #     "verdict": "SHIP-AS-IS|FIX-THEN-SHIP|null", "findings": "...",
 #     "no_finding_proof": "...|null", "raw_log": "<path>", "error": "...",
 #     "usage": { ... }|null }
@@ -198,8 +207,8 @@ validate_d2_agy_claims() {
     || die_precondition "D2 capability claim validation failed"
 }
 
-[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi)"
-case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, or kimi (got: $RUNNER)" ;; esac
+[[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor)"
+case "$RUNNER" in codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, cc-shim, anthropic-compatible, claude-native, qoderclicn, kimi, or cursor (got: $RUNNER)" ;; esac
 if [ "${AUTOPILOT_BLIND_DISCOVERY:-0}" = "1" ]; then
   case "$RUNNER" in
     qoderclicn|cc-shim|claude-native|anthropic-compatible) ;;
@@ -218,6 +227,13 @@ if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
   esac
 fi
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
+if [[ "$RUNNER" = "cursor" ]]; then
+  # No family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
+  # lib/cursor-model.sh) — --model must already be a full cursor-agent model id.
+  case "$MODEL" in
+    grok46|codex53) die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models" ;;
+  esac
+fi
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 if [[ -n "$SPEC_FILE" ]]; then
   [[ -f "$SPEC_FILE" && -r "$SPEC_FILE" ]] || die_precondition "--spec-file must be a readable regular file"
@@ -566,6 +582,9 @@ KIMI_CWD=""   # set only on the kimi path; same trap-reap rationale
 KIMI_OUT=""   # kimi reviewer stdout; reaped on EXIT after parser
 KIMI_ERR=""   # kimi stderr chrome
 KIMI_CLEAN="" # normalized kimi stdout; reaped on EXIT if interrupted
+CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
+CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
+CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
 AGY_CWD=""
 AGY_OUT=""
 AGY_ERR=""
@@ -589,6 +608,9 @@ cleanup() {
   [ -n "$KIMI_OUT" ] && rm -f "$KIMI_OUT"
   [ -n "$KIMI_ERR" ] && rm -f "$KIMI_ERR"
   [ -n "$KIMI_CLEAN" ] && rm -f "$KIMI_CLEAN"
+  [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD"
+  [ -n "$CURSOR_OUT" ] && rm -f "$CURSOR_OUT"
+  [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
   [ -n "$AGY_CWD" ] && rm -rf "$AGY_CWD"
   [ -n "$AGY_OUT" ] && rm -f "$AGY_OUT"
   [ -n "$AGY_ERR" ] && rm -f "$AGY_ERR"
@@ -930,6 +952,44 @@ elif [[ "$RUNNER" = "qoderclicn" ]]; then
     emit_no_verdict "qoder exited non-zero (rc=$QODER_RC) — fail-closed, partial output not parsed"
   fi
   PARSE_INPUT="$QODER_OUT"
+elif [[ "$RUNNER" = "cursor" ]]; then
+  BIN="${BIN:-cursor-agent}"
+  command -v "$BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $BIN (Cursor CLI — cursor-agent, not cursor)"
+  # READ-ONLY review of an UNTRUSTED diff, same posture as grok/qoder: scratch cwd (never the
+  # repo); `--mode ask` (P9: refused to write in the S2a spike — this plan does not rely on it
+  # against an adversarial prompt, only against a cooperative one, so cursor stays OUT of the
+  # blind-review allowlist above); enforced `timeout` (cursor has no print-timeout flag) as the
+  # hang backstop; FAIL-CLOSED before the shared parser on any non-zero exit; no --force.
+  # P3: --trust is MANDATORY headlessly — without it the run aborts on workspace trust.
+  # P7: -p reads the prompt from STDIN (same rail as qoder — a large diff as one argv arg can
+  # hit ARG_MAX).
+  # P13: --output-format text returns clean assistant prose on stdout with EMPTY stderr, so the
+  # SAME plain VERDICT: parser every other runner uses consumes stdout unchanged (never
+  # stream-json).
+  # P12: effort is encoded in the MODEL ID (…-low/-low-fast/-high-fast), NOT a flag —
+  # cursor-agent rejects --reasoning-effort/--effort with "error: unknown option". Do NOT add
+  # either here.
+  # SPLIT STREAMS (same rail as qoder/codex): parse STDOUT only, keep STDERR as chrome; never
+  # salvage from stderr.
+  CURSOR_OUT="$(mktemp -t dispatch-review-cursor-out-XXXXXX)"
+  CURSOR_ERR="$(mktemp -t dispatch-review-cursor-err-XXXXXX)"
+  CURSOR_CWD="$(mktemp -d -t dispatch-review-cursorcwd-XXXXXX)"
+  timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
+      --output-format text < "$4"' \
+      _ "$CURSOR_CWD" "$BIN" "$MODEL" "$PROMPT_FILE" > "$CURSOR_OUT" 2> "$CURSOR_ERR"
+  CURSOR_RC=$?   # no set -e in this script (top is `set -uo pipefail`) — capturing $? is safe
+  wait_output_quiescent "$CURSOR_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  rm -rf "$CURSOR_CWD"; CURSOR_CWD=""   # clear so the EXIT trap doesn't rm the path a 2nd time
+  cat "$CURSOR_OUT" > "$RAW_LOG"
+  printf '\n--- cursor stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
+  cat "$CURSOR_ERR" >> "$RAW_LOG"
+  if [ "$CURSOR_RC" -ne 0 ]; then
+    printf '\n[dispatch-review: cursor exited non-zero (rc=%s%s) — partial output NOT parsed]\n' \
+      "$CURSOR_RC" "$([ "$CURSOR_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")" >> "$RAW_LOG"
+    SALVAGE_CAPTURE="$CURSOR_OUT"
+    emit_no_verdict "cursor exited non-zero (rc=$CURSOR_RC) — fail-closed, partial output not parsed"
+  fi
+  PARSE_INPUT="$CURSOR_OUT"
 elif [[ "$RUNNER" = "kimi" ]]; then
   # Kimi Code CLI (Moonshot) — Revival review seat for kimi-code/k3 (user 2026-07-28).
   # Binary: `kimi` from PATH (typical: ~/.kimi-code/bin/kimi). Model alias e.g. kimi-code/k3.

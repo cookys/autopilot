@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "cursor-cli-adaptor-2026-08-26-r3",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "6eb4f860327f36a847fa3ec4d8184d49999a72cf2fcc9ff91a29267233fb822b",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: the generation-2 repair added the prefix-open rule but left the older out-of-scope sentence standing beside it, so the two read as mutually exclusive. The stale sentence is deleted; the section 3a match row is now the only statement of guard scope."
+    },
+    {
+      "fingerprint": "4000431d6b7184cac5aaa15c52456dff1b0d891cf10e1c83ce04eace38d77490",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and a real silent-no-op: on the full-id path the mapper is bypassed, so --cursor-fast would be parsed and ignored. It is now a die_precondition to pass --cursor-fast with a full --model id, with the message telling the caller to pass the -fast id directly."
+    },
+    {
+      "fingerprint": "b6c014a4505e2e7ba3d842e40a854adfbfa5666ae25448359d4521753c39d37d",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: the wrappers had no stated MODEL contract while the argv always passed --model. Frozen: both wrappers require an explicit full model id for --runner cursor, with no cursor default and no alias resolution (the mapper and --cursor-fast stay dispatch-hetero-only); a missing or alias --model is a die_precondition, and both acceptance commands carry --model."
+    },
+    {
+      "fingerprint": "3a17a1dcc7888be0d8cf3b11b0f143cb3afbeaa712d407e3945642edfc342133",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: a bare enum widening cannot express implementer-only, because the tuple validation is shared. Section 3b now carries an explicit admission matrix and Phase 3 specifies a role-aware guard - cursor accepted for the implementer role, rejected for every reviewer-class role and for dual occupancy - each with a negative test."
+    },
+    {
+      "fingerprint": "e4b05e0011fd3f7df964e3bd56e36bed6602188cd089fe2c19253686055d6e5f",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: the six schema enum sites are what make cursor a routable review-loop role rather than a base-dispatch receipt field, so validating them in Phase 2 left that phase contract-inconsistent - a roster the schema accepts and no wrapper can run. The enum moves to Phase 3; Phase 2 keeps only the readiness maps."
+    },
+    {
+      "fingerprint": "c8dd47836a400a962c6b9b6c61cd7e51177b8756fae87c7890413db43c6df3b1",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and closed with a receipt rather than a promise: --list-models was load-bearing in Global Constraint 5, Phase 1, and the Phase 5 receipt list, yet had no probe row. Now P14 - rc 0, 208 stdout lines, stderr empty, header plus blank plus 204 entries of the form <id> - <display name> - with the parser specified against that observed shape."
+    },
+    {
+      "fingerprint": "b675f2295f3c97d4cb10bcc0af2a47c5df368038bc6e72e5255ab3073e7a2746",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, independently reached and correctly framed as a violation of this plan's own thesis: an unverified flag was carrying the stale-table guarantee. P14 records the probe and its output shape, and the Phase 1 parser and Phase 5 receipt check are specified against it."
+    },
+    {
+      "fingerprint": "502367cc80a3a5d606fc3af01569de11fd9b740159298eb1a7f7b41aaed3e97f",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and the single sharpest finding of the round. Containment is genuinely unsound here and the probe proves it: in the real P14 output, grep -c 'cursor-grok-4.6-low' returns 2 while the anchored form returns 1, so a removed non-fast id would validate against its own -fast variant and the fail-closed guarantee would be void. The check is now parse-into-a-set plus string equality, recorded as hazard P15, with a Phase 1 acceptance case that stubs an inventory missing the non-fast id but retaining the fast one and requires it to fail."
+    },
+    {
+      "fingerprint": "30ffea5886a3bd6b0326d68e16751fe908cb4c275a26cd9e7132570b0210c3cc",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and it caught the plan violating the very rule it invokes: Phase 3 admitted cursor to the implementer roster two phases before Stage 1 ran, so a rail that failed or never ran qualification would have remained assignable. Admission moves to Phase 5 and is conditional on the recorded outcome - the entry exists iff the outcome is a pass. Two ordered rules are now stated: admission must not precede executability, and admission must not precede qualification."
+    }
+  ]
+}

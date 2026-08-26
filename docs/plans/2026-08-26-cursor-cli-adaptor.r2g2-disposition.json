@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "cursor-cli-adaptor-2026-08-26-r2",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "de41551af9ba8b533cb3fad4a06fb47b7fd344803491626bf1295b7c6dd29ae1",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted on both halves. The test file is now a first-class row in the section 5 table, named identically in Phase 2 acceptance, section 5 prose, and the file map. And the oracle point is the sharper one: exit 2 plus the right string would pass against an implementation that dispatched first and failed afterwards, so the test now shadows grok, codex and agy with recording stubs on PATH and asserts no rail binary was invoked at all."
+    },
+    {
+      "fingerprint": "bf416d3fb09dd8c34ab946e6ddbb306d15b71287a893b53fd426154ce6609d71",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: the generation-2 repair fixed the Phase 2 side and left the Phase 3 preamble asserting the opposite. Phase 3 owns the resolver allowlists, stated once in each header, with resolve-review-loop.sh added to Phase 3's itemized list and the resolver-to-dispatcher executability check attached to Phase 3 acceptance."
+    },
+    {
+      "fingerprint": "5892537d063e8ee0c2282feb42457bf9e4e6be39eda71c967add3aa37b9a6e72",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: KR2 named both rails and only the review rail had a checkable criterion. Phase 3 acceptance now carries a live dispatch-author.sh --runner cursor case asserting non-empty authored stdout and the success status, plus a forced-failure case asserting the documented precondition_failed mapping, with receipts retained for both."
+    },
+    {
+      "fingerprint": "126b385e2267ff4427faaec7cb27e5a50245e2cc881bc972f7258494a66d8c15",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: leaving dual-seat occupancy to a Board question while admitting cursor to resolver roles left a load-bearing routing contract open. It is now a frozen present-tense rule - a roster placing cursor in both an implementer and a reviewer-class seat is rejected, with a negative test in Phase 3 - so it cannot silently become permitted the day a reviewer qualification lands. Q2 remains as a widening request, defaulting closed."
+    },
+    {
+      "fingerprint": "dc0eb06e04f901c7c353fce29792e0bc8037107aa3523bacf15cf7211f68ee2c",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted - the match scope really was stated three ways, and the out-of-table cursor-grok-4.5-high case fell through all of them. One semantics now, defined once in the section 3a match row and quoted rather than restated elsewhere: class (a) prefix-open (every cursor-* id fails closed, in or out of the table), class (b) table-closed via cursor_is_enabled_id. The asymmetry is deliberate and stated: a cursor- prefix is unambiguous, a bare gpt-5.3-codex-* id is a real native-codex family and must not be over-captured - so the test also carries a gpt-5.2 case proving the guard does not over-capture."
+    },
+    {
+      "fingerprint": "addbf2181146861fc43d5eb6e61b0cd600b19efb18e11cb00f997c9aa97a84a2",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted - the same ownership contradiction reached independently, and this statement of it is the more complete one because it also caught that Phase 3's itemized list omitted the file entirely. Resolved the same way: Phase 3 owns it, both headers agree, the file is in the itemized list with its codex mirror."
+    },
+    {
+      "fingerprint": "13115cb729d9a0eb0028adf9530f2caab72f99858af5e97f337cef3bb0f2d26e",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and this is the most valuable finding of the round. Framing a missing entry as a defect did read as add-to-all-four, and admitting cursor to the verification_author or plan_reviewer allowlists would have made those seats assignable to a rail with no such qualification - wiring treated as authority to route, the exact thing engine-onboarding forbids, and it would have quietly pre-decided Q2. The admission set is now pinned to the panel/implementer tuples only, with the other three explicitly staying closed and the reason recorded."
+    }
+  ]
+}

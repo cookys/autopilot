@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "cursor-cli-adaptor-2026-08-26",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "fea66b6348a00a56ec6c799700c867a60dbecf2def48ee117e10bc100d2c9f39",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct and load-bearing. Global Constraint 4 said the auto branch is untouched while KR1 promised a fail-closed exit on it; those cannot both hold. The constraint is rewritten: auto must never SELECT cursor, and a cursor- prefix reaching that branch is now a die_precondition with an implementing site added to the 3a map at line ~1679, placed before the *grok*/*gpt* tests."
+    },
+    {
+      "fingerprint": "2bc17b499c092c784f862f4710ff896fcd9434ab1d36ae35e332cbbb6de61c5a",
+      "disposition": "accepted_blocker",
+      "rationale": "Verified against the tree before accepting. status.js:42-49 is resolveConfiguredRunner, a model-family to native-runner map, so that site was spurious and is removed. resolve-review-loop.sh 263-266/344-349/538-581, probe-engine-capability.sh, and dispatch-status.js 172-174 cacheReadTokens were genuinely missing and are added. The transcript adapter is cut from this plan entirely: retro-review-loop.js accepts only --claude-root/--codex-root, so it had no transcript source."
+    },
+    {
+      "fingerprint": "1c0dd34c845813cd6d7ef4f816243a2740fbb7e06c7905779cc85a500ba60fea",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct: the mapper had no call site and the fast input had no origin. Phase 1 now names its consumer (the post-parse effort-resolution site in dispatch-hetero.sh, added to the 3a map) and the origin of fast (a new --cursor-fast argv seam, default 0)."
+    },
+    {
+      "fingerprint": "c7d9cd83b2a1f6bc2700a03e482f261da0fca953e87c10f0d6867a9499fb88de",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct that the transport was left undecided. Resolved with evidence already in hand rather than a new spike: the S2a probe ran --output-format text and returned clean assistant prose on stdout with empty stderr, now recorded as P13. Phase 3 binds both rails to --output-format text with exact argv, stdout/stderr separation, and fail-closed no_verdict conditions."
+    },
+    {
+      "fingerprint": "777863fa19fae752060a26b3e411f5846826d92bc33b534166ce7a5cbd512bc9",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct that these were scope decisions wearing Board clothing. Q1 is decided in-plan (non-fast default, Global Constraint 6) and demoted to a later flip. Q3 is removed by cutting the node --check gate out of this plan into its own follow-up PATCH; R-5's mitigation now points there instead of at a section 5 row."
+    },
+    {
+      "fingerprint": "77ac897381f573fcb0aa4566a978d4f3539495fe8d5a5c32b0a7a4b846e2decc",
+      "disposition": "accepted_blocker",
+      "rationale": "The same defect as the sol R2 finding, independently reached, and the sharper statement of it: the promised exit-2 had no implementing site anywhere in the 3a map. Site added at ~1679; KR1 and the Phase 2 acceptance now name that guard explicitly."
+    },
+    {
+      "fingerprint": "3c465cefffe52d95a5bd715ec809bc8a1f887a3780a1978f1d0c57f5927f84c6",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct: 6 families read as model families next to a two-family Phase 1 and a five-vendor section 0. It means the qualifier's 6 CASE families; the phase now names them and says so, and freezes the exact model id (cursor-grok-4.6-high-fast) with a stated reason and an explicit note that the evidence does not transfer to another suffix."
+    },
+    {
+      "fingerprint": "621401710eff0626bb1312706aa57cc760be23f618233c931415d12230c68843",
+      "disposition": "accepted_blocker",
+      "rationale": "The same defect as the sol R4 finding, with the dependency-map consequence made explicit. Resolved the same way, and the plan takes this finding's own repair suggestion: the interim default is stated in-plan as non-fast, so Q1 becomes a later default flip rather than an open dependency of Phase 1."
+    },
+    {
+      "fingerprint": "38ec03eb934b909947bfcf0d17a6375128eb190acdb5b2bce82ada28d080695d",
+      "disposition": "accepted_blocker",
+      "rationale": "Independently reached the same Phase 5 ambiguity from the qualification-binding angle, and is the reason the frozen id is now written into the phase rather than left as a mechanism. Resolved by the same repair."
+    },
+    {
+      "fingerprint": "ce50e722c7e2d1a84bd3d2f46e2e5d09f2fa3ba8989cfb8ca5889d47d4edc97d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Fixed: Phase 5 now states the frozen model id (cursor-grok-4.6-high-fast) instead of only the mechanism, with its selection reason and a non-transfer note."
+    },
+    {
+      "fingerprint": "9a2f3688cbac5221c40fb12418038de07e2f638b275d3501045e630cd4589e9a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Partly fixed: the --model flag now has probe coverage via the new P13 row and the section 6.1 runs. The bracket-override syntax remains --help-sourced and is not relied on by any phase."
+    },
+    {
+      "fingerprint": "2955be61a33aa2ee1167b88eb502c28f8cc4d60a0a14133dcd5bbb29ea921372",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Real documentation defect, fixed: the throughput table is section 6.1 and the cross-references in section 0 and R-6 said 5.3."
+    },
+    {
+      "fingerprint": "c7cdf40284cd81388c88337e974670e59be1d41eae8c0c612ef23ec9671a43c2",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Resolved by removal: the node --check sweep is cut from this plan into a follow-up PATCH, so section 5, the Phase 4 acceptance list, and R-5 no longer disagree."
+    },
+    {
+      "fingerprint": "ce2a1af37eaf9169f3d3211d06e98e97b413c1baa02be0a7d8ba36211dff3a76",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Correct: the negative control cannot live in the mapper unit test. Section 5 now names a separate hooks/tests/dispatch-hetero-cursor-routing.test.sh that asserts exit 2 on --runner auto --model cursor-grok-4.6-low."
+    }
+  ]
+}

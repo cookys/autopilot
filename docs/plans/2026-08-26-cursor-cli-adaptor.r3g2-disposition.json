@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "cursor-cli-adaptor-2026-08-26-r3",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "8fa121979e958e58b3bf2706fa3cf491fc185e19a6dfb6d1ed782576990dc0b5",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and correct against the plan's own non-transfer note: a runner-scoped entry would let cursor-grok-4.6-low take an implementer seat on evidence earned by cursor-grok-4.6-high-fast. Phase 5 now admits the pair (runner cursor, model cursor-grok-4.6-high-fast), and any implementer seat naming a different cursor model id is rejected until separately qualified."
+    },
+    {
+      "fingerprint": "17749ac821d48831bcbd3fd43c806f40b8562016c8b2c931380bc332af9f33ba",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted on both halves, and the first half is a genuine design error: the auto guard runs on every dispatch-hetero.sh invocation, so a binary argument or subprocess in the membership predicate would put a live --list-models call and its failure modes on the path of every unrelated dispatch. cursor_enabled_ids and cursor_is_enabled_id are now pure table operations with no binary argument; live inventory access belongs to cursor_model_for alone. The oracle also shadows cursor-agent now - the guard must refuse without dispatching anywhere, including to cursor."
+    },
+    {
+      "fingerprint": "a1a04583c240653108174d3e71cd72a9f4015f9a588b72f90c24e2a2627beb0d",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: Phase 2's prose said the enum moves to Phase 3 while the file map still read as Phase 2. One owner now - the 3b row states Phase 3 and the reason, and Phase 3's itemized list carries the six sites."
+    },
+    {
+      "fingerprint": "7e8732343f6b9a69244c12c86d43fe3498e2ead830e8d937ecd6851c6cde3e11",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: a single admission test cannot express a contract whose correct behavior differs by recorded outcome. Section 5 now carries an outcome-split matrix in its own test file - before qualification and after a recorded fail, cursor is rejected as implementer; after a recorded pass, only the frozen model is accepted and every other cursor id still rejected; reviewer-class roles and dual occupancy rejected in all three."
+    },
+    {
+      "fingerprint": "e3bb746d1b9ffc97c6e250296b5bf2bff157df95428ada91fad82c5a71830216",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: Phase 4 ran the release gates and Phase 5 could then change shipped resolver code with no gate behind it. The two exit paths are now stated separately - on a recorded fail Phase 4's release is final and Phase 5 adds only evidence; on a recorded pass Phase 5 re-runs CHANGELOG, version bump, mirror parity, contract check, and preflight because it touched code after the previous release."
+    },
+    {
+      "fingerprint": "6f9a8e6c44044a04248eb49d9c2d826fccbab6324db8e8dab33ea47d97dd65df",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted - the same model-versus-runner binding gap reached independently, and it is the reason the admitted entry is now a pinned pair rather than a bare runner. Same repair."
+    },
+    {
+      "fingerprint": "d9612fca9ac254db23ecdde96b4baee43be73bb41bbe807cc71f377c4a902a1a",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted, and checked rather than asserted: at cd3f5f85 engine-scorecard.js's only runner-shaped enum is TRANSCRIPT_PROVIDERS (line 74), used by import-transcripts and not by the KR4 record path, and engine-qualify.sh carries no runner enum at all. The 3b map now records that both were checked and why it matters - the recording step runs after the live spend, where a late rejection would be the most expensive kind."
+    }
+  ]
+}

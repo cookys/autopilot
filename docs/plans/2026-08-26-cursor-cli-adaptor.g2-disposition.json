@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "cursor-cli-adaptor-2026-08-26",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "c4954d5a878231574156d97dc1f516be8ee6e79bb6101564f7f5dee6f59e59d4",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: section 3b named the review and author files but not what has to be built inside each. Phase 3 now enumerates the per-rail responsibilities (binary init, the existing --bin override, command precondition, invocation, stdout/stderr capture, failure mapping into each script's existing classifier, and the codex mirror)."
+    },
+    {
+      "fingerprint": "cc5a18d5b270c9297159d9a454ce549d43d1fa91b1aeb34cb77bad36b9f0de9d",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: --cursor-fast was added as a seam without appearing in the user-facing usage surfaces. It is now on the header usage sites and is runner-scoped - passing it with a non-cursor runner is a die_precondition, the same posture --endpoint already has for non-cc-shim runners."
+    },
+    {
+      "fingerprint": "ccc1292a9fcdc6a764c529e69ef7a5b2047d33ad734f9d30fbe95c57fb84593b",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted and materially improves the design: validating against a different binary than the one that runs is exactly the class of bug --cursor-bin exists to make testable. The resolved binary is now an explicit first argument to cursor_model_for, so --list-models validation, execution, and the test seam all target the same binary."
+    },
+    {
+      "fingerprint": "c14d8cd2909db557290a9ce90b2219d6e87313d5e6f57c218f11c940663d6a9c",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted: Phase 2 would have shipped a cursor runner that resolve-review-loop.sh rejects with exit 3. The contract enums base dispatch depends on (schema runner enum, readiness maps, the four roster allowlists, codex mirrors) move into Phase 2 with check-contract-schema.js and check-canonical-invariants.sh attached to that phase's acceptance; Phase 3 keeps only review/author-specific work."
+    },
+    {
+      "fingerprint": "0447e1c87208d84cc2f63cd15dba0899a34249e903a2904dfad8817100193e40",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted - the same over-claim flagged in this session before dispatch and not fully removed. Priority lane, not a faster decoder was a mechanism claim n=3 cannot support. Restated as observation: the fast variants showed higher throughput and markedly less variable time-to-first-flush in this sample; a queueing explanation fits but is not established, and billing remains unknown."
+    },
+    {
+      "fingerprint": "3a94fbe0b34460d8324d8d96961dc6451c5bb15d982dfa1762c919a96d271a18",
+      "disposition": "accepted_blocker",
+      "rationale": "Correct, and the sharpest finding of either generation: the generation-1 repair closed only the cursor- prefixed mis-route while section 1 names two, so gpt-5.3-codex-low still reached the codex rail untested. The guard now matches two classes - any cursor-* id, and any exact id in the Phase 1 table - and the negative-control test iterates the whole table, prefixed and non-prefixed. Ids outside that table stay out of scope with the reason recorded, so the guard is closed-world over what this plan enables."
+    }
+  ]
+}

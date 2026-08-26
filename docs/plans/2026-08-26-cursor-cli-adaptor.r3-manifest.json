@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "cursor-cli-adaptor-2026-08-26-r3",
+  "minimum_distinct_families": 2,
+  "max_attempts_per_seat": 2,
+  "seats": [
+    {
+      "id": "sol_architecture_contract",
+      "runner": "codex",
+      "model": "gpt-5.6-sol",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "architecture-contract",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [
+        "xai"
+      ],
+      "fallbacks": []
+    },
+    {
+      "id": "glm_operations_skeptic",
+      "runner": "cc-shim",
+      "model": "GLM-5.2",
+      "effort": "high",
+      "endpoint": "glm",
+      "role": "operations-skeptic",
+      "family": "zhipu",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [
+        "xai"
+      ],
+      "fallbacks": []
+    },
+    {
+      "id": "minimax_evidence_skeptic",
+      "runner": "cc-shim",
+      "model": "MiniMax-M3",
+      "effort": "high",
+      "endpoint": "minimax",
+      "role": "evidence-skeptic",
+      "family": "minimax",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [
+        "xai"
+      ],
+      "fallbacks": []
+    }
+  ]
+}

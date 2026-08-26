@@ -68,30 +68,35 @@ _AUTOPILOT_CURSOR_MODEL_SH=1
 # each family's `xhigh` ceiling (not a distinct table row).
 # ---------------------------------------------------------------------------
 
-# _cursor_model_base <family> <effort> → base (non-fast) id on stdout.
-# Returns 2 for an unknown family, 1 for an unknown effort within a known
-# family (both are caller-facing "fail closed", but kept distinct so a
-# future caller can tell "no such family" from "no such level").
+# _cursor_model_base <family> <effort> → assigns the resolved base
+# (non-fast) id into the global _CURSOR_BASE_OUT (no command substitution,
+# no subshell — a plain function call). Returns 2 for an unknown family, 1
+# for an unknown effort within a known family (both are caller-facing "fail
+# closed", but kept distinct so a future caller can tell "no such family"
+# from "no such level"). Callers that still want stdout (cursor_model_for)
+# read _CURSOR_BASE_OUT after a successful call.
+_CURSOR_BASE_OUT=''
 _cursor_model_base() {
   local family="$1" effort="$2"
+  _CURSOR_BASE_OUT=''
   case "$family" in
     grok46)
       case "$effort" in
-        low)    printf 'cursor-grok-4.6-low' ;;
-        medium) printf 'cursor-grok-4.6-medium' ;;
-        high)   printf 'cursor-grok-4.6-high' ;;
-        xhigh)  printf 'cursor-grok-4.6-xhigh' ;;
-        max)    printf 'cursor-grok-4.6-xhigh' ;;   # ceiling, see header
+        low)    _CURSOR_BASE_OUT='cursor-grok-4.6-low' ;;
+        medium) _CURSOR_BASE_OUT='cursor-grok-4.6-medium' ;;
+        high)   _CURSOR_BASE_OUT='cursor-grok-4.6-high' ;;
+        xhigh)  _CURSOR_BASE_OUT='cursor-grok-4.6-xhigh' ;;
+        max)    _CURSOR_BASE_OUT='cursor-grok-4.6-xhigh' ;;   # ceiling, see header
         *)      return 1 ;;
       esac
       ;;
     codex53)
       case "$effort" in
-        low)    printf 'gpt-5.3-codex-low' ;;
-        medium) printf 'gpt-5.3-codex' ;;
-        high)   printf 'gpt-5.3-codex-high' ;;
-        xhigh)  printf 'gpt-5.3-codex-xhigh' ;;
-        max)    printf 'gpt-5.3-codex-xhigh' ;;     # ceiling, see header
+        low)    _CURSOR_BASE_OUT='gpt-5.3-codex-low' ;;
+        medium) _CURSOR_BASE_OUT='gpt-5.3-codex' ;;
+        high)   _CURSOR_BASE_OUT='gpt-5.3-codex-high' ;;
+        xhigh)  _CURSOR_BASE_OUT='gpt-5.3-codex-xhigh' ;;
+        max)    _CURSOR_BASE_OUT='gpt-5.3-codex-xhigh' ;;     # ceiling, see header
         *)      return 1 ;;
       esac
       ;;
@@ -101,35 +106,49 @@ _cursor_model_base() {
   esac
 }
 
-# _cursor_families / _cursor_efforts — enumeration primitives shared by
-# cursor_enabled_ids and cursor_model_for's clamp-note logic. Genuine levels
-# only (excludes `max`, which is a caller-facing alias for `xhigh`, not a
-# distinct id-producing row — including it would double-count xhigh).
-_cursor_families() { printf 'grok46\ncodex53\n'; }
-_cursor_efforts()  { printf 'low\nmedium\nhigh\nxhigh\n'; }
+# _CURSOR_FAMILIES / _CURSOR_EFFORTS — enumeration primitives shared by
+# cursor_enabled_ids and cursor_model_for's clamp-note logic. Plain
+# space-separated string variables (not functions returning via stdout) so
+# callers can `for f in $_CURSOR_FAMILIES` — unquoted word-splitting over a
+# builtin, no fork. Genuine levels only (excludes `max`, which is a
+# caller-facing alias for `xhigh`, not a distinct id-producing row —
+# including it would double-count xhigh).
+_CURSOR_FAMILIES='grok46 codex53'
+_CURSOR_EFFORTS='low medium high xhigh'
 
 # cursor_enabled_ids — every id the table can produce, closed under `fast`.
-# PURE: no binary argument, no subprocess, no network call. See header.
+# PURE: no binary argument, no subprocess, no network call, no command
+# substitution, no process substitution — shell builtins and a function
+# call (_cursor_model_base, via its _CURSOR_BASE_OUT out-variable) only.
+# See header.
 cursor_enabled_ids() {
-  local family effort base
-  while IFS= read -r family; do
-    while IFS= read -r effort; do
-      base="$(_cursor_model_base "$family" "$effort")" || continue
-      printf '%s\n' "$base"
-      printf '%s-fast\n' "$base"
-    done < <(_cursor_efforts)
-  done < <(_cursor_families)
+  local family effort
+  for family in $_CURSOR_FAMILIES; do
+    for effort in $_CURSOR_EFFORTS; do
+      _cursor_model_base "$family" "$effort" || continue
+      printf '%s\n' "$_CURSOR_BASE_OUT"
+      printf '%s-fast\n' "$_CURSOR_BASE_OUT"
+    done
+  done
 }
 
-# cursor_is_enabled_id <id> — exact-match membership predicate over
-# cursor_enabled_ids. PURE: no binary argument, no subprocess, no network
-# call. Full-line equality only (never substring) — same P15 discipline as
-# the live-inventory check in cursor_model_for.
+# cursor_is_enabled_id <id> — exact-match membership predicate over the
+# same table cursor_enabled_ids walks. PURE: no binary argument, no
+# subprocess, no network call, no command/process substitution — loops
+# with builtins over _CURSOR_FAMILIES/_CURSOR_EFFORTS directly (does not
+# call cursor_enabled_ids, which would still be pure but this avoids
+# building the full list just to test membership). Full-string equality
+# only (never substring) — same P15 discipline as the live-inventory check
+# in cursor_model_for.
 cursor_is_enabled_id() {
-  local id="$1" line
-  while IFS= read -r line; do
-    [ "$line" = "$id" ] && return 0
-  done < <(cursor_enabled_ids)
+  local id="$1" family effort
+  for family in $_CURSOR_FAMILIES; do
+    for effort in $_CURSOR_EFFORTS; do
+      _cursor_model_base "$family" "$effort" || continue
+      [ "$_CURSOR_BASE_OUT" = "$id" ] && return 0
+      [ "${_CURSOR_BASE_OUT}-fast" = "$id" ] && return 0
+    done
+  done
   return 1
 }
 
@@ -210,10 +229,11 @@ cursor_model_for() {
   local bin="$1" family="$2" effort="$3" fast="${4:-0}"
   local base id
 
-  if ! base="$(_cursor_model_base "$family" "$effort")"; then
+  if ! _cursor_model_base "$family" "$effort"; then
     printf 'cursor-model: unknown family "%s" (expected grok46|codex53)\n' "$family" >&2
     return 2
   fi
+  base="$_CURSOR_BASE_OUT"
 
   _cursor_clamp_note "$effort" "cursor-model"
 

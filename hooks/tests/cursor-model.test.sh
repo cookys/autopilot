@@ -209,4 +209,55 @@ chmod +x "$POISON_DIR/cursor-agent"
 ( PATH="$POISON_DIR:$PATH" cursor_is_enabled_id "gpt-5.3-codex-low-fast" >/dev/null )
 assert_file_absent "$SENTINEL" "purity: cursor_enabled_ids / cursor_is_enabled_id never invoke cursor-agent, even with it on PATH"
 
+# ---------------------------------------------------------------------------
+# 12. purity (source-level lint): the hot-path functions contain no fork
+# construct at all — not just "never happens to invoke cursor-agent" (test
+# 11, a PATH sentinel) but "cannot fork a subshell, period". Test 11 alone
+# would still pass if these functions forked a subshell that did nothing
+# observable (a bare `$(true)`, a `< <(:)`) — a subprocess that just never
+# happens to touch PATH. This is the "suite that passes when you delete the
+# gate it tests" failure mode named in references/evidence-discipline.md,
+# applied to the "no subprocess" contract in the header of cursor-model.sh.
+#
+# There is no portable pure-bash runtime oracle for "did this shell function
+# fork a subshell" observable from outside the function (short of strace,
+# which isn't available/portable across the target platforms). So this is a
+# SOURCE-LEVEL LINT, not a runtime oracle: it extracts the literal source
+# text of each hot-path function from cursor-model.sh and asserts that text
+# contains none of `$(`, a backtick, or `<(` — the three bash constructs
+# that fork a subshell. It is honestly named as such so nobody mistakes it
+# for proof about runtime behavior; it is a static proxy that happens to be
+# exact here because these functions are wholly local.
+# ---------------------------------------------------------------------------
+
+# _extract_fn_body <file> <fn-name> — print the source lines of a `name() {
+# ... }` function definition (opening brace on the def line, closing brace
+# alone on its own line — matches this file's own style). Pure awk, no
+# subprocess fork inside the *test's* own hot path (irrelevant here — the
+# test itself is allowed to fork; only the library functions under test are
+# constrained).
+_extract_fn_body() {
+  awk -v fn="$2" '
+    $0 ~ "^" fn "\\(\\) \\{" { grab=1; next }
+    grab && /^}/ { grab=0; next }
+    grab { print }
+  ' "$1"
+}
+
+_assert_source_fork_free() {
+  local fn="$1" body
+  body="$(_extract_fn_body "$LIB" "$fn")"
+  [ -n "$body" ] || fail "purity (source-level lint): could not locate function body for $fn in $LIB — extraction pattern is stale"
+  case "$body" in
+    *'$('*)  fail "purity (source-level lint): $fn contains a command substitution \$( ) — forks a subshell" ;;
+    *'`'*)   fail "purity (source-level lint): $fn contains a backtick command substitution — forks a subshell" ;;
+    *'<('*)  fail "purity (source-level lint): $fn contains a process substitution <( ) — forks a subshell" ;;
+    *)       __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  esac
+}
+
+for fn in cursor_enabled_ids cursor_is_enabled_id _cursor_model_base; do
+  _assert_source_fork_free "$fn"
+done
+
 finalize_test

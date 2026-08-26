@@ -57,6 +57,7 @@ const BINARY_BY_RUNNER = Object.freeze({
   agy: 'agy',
   grok: 'grok',
   qoderclicn: 'qoderclicn',
+  cursor: 'cursor-agent',
   'cc-shim': 'claude',
   'anthropic-compatible': 'claude',
   'claude-native': 'claude',

@@ -18,7 +18,7 @@
 # USAGE:
 #   scripts/dispatch-hetero.sh --branch <name> --prompt-file <file>
 #       [--model "Gemini 3.5 Flash (High)"]   # default; names: `agy models` / `grok models`
-#       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn] # default auto: *gpt*/*codex*→codex,
+#       [--runner auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor] # default auto: *gpt*/*codex*→codex,
 #                                              #   *grok*/*composer*→grok, *qwen*/*qwq*→qoderclicn, else agy.
 #                                              #   Explicit wins (don't rely on name luck).
 #                                              #   grok models: grok-4.5 (ex-grok-build), grok-composer-2.5-fast
@@ -29,6 +29,13 @@
 #                                              #   pi (EXPLICIT only): pi coding agent over RPC
 #                                              #   (duplex supervisor scripts/lib/pi-rpc-run.js;
 #                                              #   provider default minimax via PI_RPC_PROVIDER).
+#                                              #   cursor (EXPLICIT only, never auto — every cursor
+#                                              #   model id contains grok/gpt/codex/claude, so
+#                                              #   auto-selection cannot disambiguate vendor-hosted
+#                                              #   from vendor-native): Cursor CLI (cursor-agent),
+#                                              #   one OAuth login over ~60 models. --model names a
+#                                              #   family alias (grok46|codex53) resolved by
+#                                              #   lib/cursor-model.sh, or a full model id verbatim.
 #       [--effort xhigh]                       # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--endpoint <name>]                    # cc-shim only: resolve creds via
 #                                              #   resolve-endpoint.sh (AUTOPILOT_ENDPOINT_<NAME>_*)
@@ -50,6 +57,13 @@
 #                                              #   stale codex earlier in PATH lacking the flag)
 #       [--pi-bin pi]                          # alternate/pinned pi executable (test seam)
 #       [--qoder-bin qoderclicn]               # alternate/pinned Qoder CLI CN (test seam)
+#       [--cursor-bin cursor-agent]            # alternate/pinned Cursor CLI (test seam)
+#       [--cursor-fast]                        # cursor: opt into the `-fast` model-id lane
+#                                              #   (default non-fast). Runner-scoped: any other
+#                                              #   --runner is a die_precondition, same posture as
+#                                              #   --endpoint with a non-cc-shim runner. Also a
+#                                              #   die_precondition together with a --model that
+#                                              #   already names a full id (mapper bypassed there).
 #       [--campaign-contract <path>]            # sealed ICC boundary, prepended to prompt
 #       [--campaign-contract-sha256 <digest>]    # intake-bound digest for private snapshot
 #       [--campaign-seal <path>]                # intake-validated seal, rechecked at leaf admission
@@ -74,7 +88,7 @@
 # stdout — keeps the JSON parseable):
 #   { "status": "committed" | "no_op" | "question_suspected" | "dirty"
 #               | "failure" | "precondition_failed",
-#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"qoderclicn", "model": "...",   # engine provenance (model = --model)
+#     "runner": "codex"|"agy"|"grok"|"cc-shim"|"pi"|"qoderclicn"|"cursor", "model": "...",   # engine provenance (model = --model)
 #     "containment": "...", "contained": true|false,  # teardown-hygiene provenance
 #     "branch": "...", "base": "...", "commit": "...|null",
 #     "files_changed": N, "insertions": N, "deletions": N,
@@ -121,6 +135,7 @@ CODEX_BIN="codex"    # test seam / explicit pin — resolve a specific codex (PA
                      # stale codex earlier in PATH lacks --dangerously-bypass-hook-trust)
 MANAGED_CODEX_HOME="" # per-run child home: credentials only, never controller plugins/config
 QODER_BIN="qoderclicn"  # Qoder CLI CN runner (Qwen3.8-Max-Preview etc.); test seam via --qoder-bin
+CURSOR_BIN="cursor-agent"  # Cursor CLI runner; test seam via --cursor-bin
 KEEP=0
 RETENTION_OWNER=""
 RETENTION_REASON=""
@@ -177,6 +192,8 @@ PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
 QODER_PROMPT_FILE=""  # qoder combined prompt temp; init early so it is SET for the detach declare -p
+CURSOR_PROMPT_FILE=""  # cursor combined prompt temp; init early so it is SET for the detach declare -p
+CURSOR_FAST=0          # --cursor-fast opt-in (default non-fast); runner-scoped, see usage above
 SCAFFOLD_TIER_ARG="auto"      # --scaffold-tier auto|T0|T1|T2 (explicit may only ADD scaffolding)
 SCAFFOLD_TIER_EFFECTIVE="off" # recorded in the run manifest
 SCAFFOLD_PROMPT_FILE=""       # tier-envelope temp; init early for trap reap
@@ -464,6 +481,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 . "$SELF_DIR/lib/json-emit.sh"
 # shellcheck source=lib/grok-effort.sh
 . "$SELF_DIR/lib/grok-effort.sh"
+# shellcheck source=lib/cursor-model.sh
+. "$SELF_DIR/lib/cursor-model.sh"
 # Class A: flatten newlines before shared RFC escape (flatten stays VISIBLE here).
 _flat_json_escape() { json_escape "$(printf '%s' "$1" | tr '\n' ' ')"; }
 
@@ -705,6 +724,7 @@ emit() { # status commit files ins del worktree error
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   local contained_json="false"; [ "${CONTAINED:-0}" -eq 1 ] && contained_json="true"
   # --- observability fields (ADDITIVE; consumers tolerate unknown fields — implementer.js
   # validates required-field presence, not a closed set). usage is parsed from the HARNESS
@@ -724,13 +744,14 @@ emit() { # status commit files ins del worktree error
     # the tail is worker-controlled → usage stays null (honest, not fabricated).
     if [ "${IS_CODEX:-0}" -eq 0 ] && [ "${IS_GROK:-0}" -eq 0 ] \
        && [ "${IS_CCSHIM:-0}" -eq 0 ] && [ "${IS_PI:-0}" -eq 0 ] \
-       && [ "${IS_QODER:-0}" -eq 0 ]; then
+       && [ "${IS_QODER:-0}" -eq 0 ] && [ "${IS_CURSOR:-0}" -eq 0 ]; then
       usage_json="${AGY_USAGE_JSON:-null}"
     else
       local log_format="plain"
       [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
       [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
       [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
+      [ "${IS_CURSOR:-0}" -eq 1 ] && log_format="jsonl"
       usage_json="$(node "$SELF_DIR/dispatch-status.js" --log "$LOG" --format "$log_format" --usage-only 2>/dev/null)" || usage_json="null"
     fi
     case "$usage_json" in
@@ -1374,6 +1395,7 @@ die_precondition() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   local run_id_json="null"
   [ -n "${DISPATCH_RUN_ID:-}" ] && run_id_json="\"$(_flat_json_escape "$DISPATCH_RUN_ID")\""
   local duplex_json="null"
@@ -1437,6 +1459,7 @@ die_resource_budget() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   printf '{ "status": "precondition_failed", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "commit": null, "files_changed": 0, "insertions": 0, "deletions": 0, "worktree": null, "agent_log": null, "error": "resource_budget exhausted", "dispatcher_called": false, "model_calls": 0, "mutation_attempts": 0, "gate_attempts": 0, "resources_created": 0, "zero_diff_receipt_digest": null, "resource_budget": { "resource": "leaf_worktrees", "root_run_id": "%s", "count": %s, "limit": %s }, "skill_mode_effective": "%s", "skills_injected": %s, "run_id": "%s", "duplex": null, "usage": null }\n' \
     "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" \
     "$(_flat_json_escape "$BASE")" "$(_flat_json_escape "$WORKTREE_ROOT_RUN_ID")" \
@@ -1463,6 +1486,7 @@ write_manifest() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   # log_format = dispatcher-DECLARED stream format (see emit(): codex chrome text /
   # grok --output-format json / agy response-only plain log with a separate private
   # native envelope / cc-shim plain).
@@ -1472,6 +1496,7 @@ write_manifest() {
   [ "${IS_CODEX:-0}" -eq 1 ] && log_format="codex-chrome"
   [ "${IS_GROK:-0}" -eq 1 ] && log_format="jsonl"
   [ "${IS_PI:-0}" -eq 1 ] && log_format="pi-rpc"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && log_format="jsonl"
   local duplex_json="null"
   [ "${IS_PI:-0}" -eq 1 ] && duplex_json="\"rpc\""
   local scope_json="null"; [ -n "${MANIFEST_SCOPE_UNIT:-}" ] && scope_json="\"$(_flat_json_escape "$MANIFEST_SCOPE_UNIT")\""
@@ -1537,6 +1562,8 @@ while [ $# -gt 0 ]; do
     --pi-bin) PI_BIN="${2:-}"; shift 2 ;;
     --codex-bin) CODEX_BIN="${2:-}"; shift 2 ;;
     --qoder-bin) QODER_BIN="${2:-}"; shift 2 ;;
+    --cursor-bin) CURSOR_BIN="${2:-}"; shift 2 ;;
+    --cursor-fast) CURSOR_FAST=1; shift ;;
     --strict-contract) STRICT_CONTRACT=1; shift ;;
     --contract-file) CONTRACT_FILE="${2:-}"; CONTRACT_FILE_SUPPLIED=1; shift 2 ;;
     --conformance-intent) CONFORMANCE_INTENT_FILE="${2:-}"; shift 2 ;;
@@ -1658,6 +1685,7 @@ set_runner_flags() {
   IS_CCSHIM=0
   IS_PI=0
   IS_QODER=0
+  IS_CURSOR=0
   case "$RUNNER" in
     codex)   IS_CODEX=1 ;;
     agy)     ;;
@@ -1665,13 +1693,33 @@ set_runner_flags() {
     cc-shim) IS_CCSHIM=1 ;;   # EXPLICIT only (never auto) — it needs ANTHROPIC_BASE_URL set
     pi)      IS_PI=1 ;;        # EXPLICIT only (never auto) — it requires v0.80.6 + models.json
     qoderclicn) IS_QODER=1 ;;  # Qoder CLI CN (Qwen); honors -w/--cwd + edit-only (grok-shaped rail)
+    cursor)  IS_CURSOR=1 ;;    # Cursor CLI (cursor-agent). EXPLICIT only, never auto — see the
+                               # auto-branch fail-closed guard below (R-1).
     auto)
       # case-insensitive family match: gpt*/...codex* → codex; grok*/composer* → grok
       # (composer-2.5 ships inside the grok CLI on the Grok Build plan); else agy.
       # cc-shim is never auto-selected: it is a base-url shim that requires env vars, so
       # a bare model name must NOT silently route there.
       model_lc="$(printf '%s' "$MODEL" | tr '[:upper:]' '[:lower:]')"
-      if [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
+      # 🔴 auto MUST NEVER SELECT cursor. This is a REFUSAL, not a route — placed before
+      # the *grok*/*gpt* tests below on purpose. Every cursor model id contains grok, gpt,
+      # codex, or claude (R-1, docs/plans/2026-08-26-cursor-cli-adaptor.md §6), so
+      # auto-selection cannot disambiguate a vendor-hosted (Cursor) id from a vendor-native
+      # one. Match semantics defined ONCE here (§3a):
+      #   (a) prefix-open: ANY "cursor-" prefixed id fails closed, in or out of the Phase 1
+      #       table (cursor-grok-4.5-high must NOT reach the *grok* branch either) — the
+      #       prefix is unambiguous, so it can be closed openly. Names --runner cursor only.
+      #   (b) table-closed: a NON-prefixed id fails closed IFF cursor_is_enabled_id "$MODEL"
+      #       — a bare gpt-5.3-codex-* id is ALSO a real native-codex family and must not be
+      #       over-captured, so this arm names BOTH --runner codex and --runner cursor and
+      #       lets the caller choose. No id list of its own: it calls cursor_is_enabled_id,
+      #       the single source of truth in lib/cursor-model.sh — three hand-maintained
+      #       copies would drift while the test stayed green.
+      if [[ "$model_lc" == cursor-* ]]; then
+        die_precondition "auto-routing refuses Cursor-hosted model id '$MODEL' (cursor- prefix) — pass --runner cursor explicitly"
+      elif cursor_is_enabled_id "$MODEL"; then
+        die_precondition "auto-routing refuses ambiguous model id '$MODEL' (also a Cursor-hosted id) — pass --runner codex or --runner cursor explicitly"
+      elif [[ "$model_lc" == *gpt* || "$model_lc" == *codex* ]]; then
         IS_CODEX=1
       elif [[ "$model_lc" == *grok* || "$model_lc" == *composer* ]]; then
         IS_GROK=1
@@ -1679,7 +1727,7 @@ set_runner_flags() {
         IS_QODER=1
       fi
       ;;
-    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn (got: $RUNNER)" ;;
+    *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor (got: $RUNNER)" ;;
   esac
 }
 
@@ -1782,8 +1830,30 @@ if [ "$MISSION_NOOP_SHORT_CIRCUIT" -eq 1 ]; then
 fi
 set_runner_flags
 
+# --- --cursor-fast: runner-scoped, never a silent no-op (§3a, Global Constraint 5). ---
+if [ "$CURSOR_FAST" -eq 1 ]; then
+  [ "$IS_CURSOR" -eq 1 ] || die_precondition "--cursor-fast applies only to --runner cursor (got runner: $RUNNER)"
+fi
+
+# --- cursor effort resolution (post-parse): a family alias (grok46|codex53) is resolved
+# to a full model id via lib/cursor-model.sh; a full id already supplied passes through
+# untouched, and --cursor-fast against a full id is a die_precondition (the mapper is
+# bypassed on that path, so the flag would otherwise be silently ignored). ---
+if [ "$IS_CURSOR" -eq 1 ]; then
+  case "$MODEL" in
+    grok46|codex53)
+      MODEL="$(cursor_model_for "$CURSOR_BIN" "$MODEL" "$EFFORT" "$CURSOR_FAST")" \
+        || die_precondition "cursor model resolution failed for family '$MODEL' effort '$EFFORT'"
+      ;;
+    *)
+      [ "$CURSOR_FAST" -eq 1 ] \
+        && die_precondition "--cursor-fast applies only when --model names a family alias; pass the -fast id directly"
+      ;;
+  esac
+fi
+
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN"
   validate_d2_agy_claims
 fi
@@ -1804,7 +1874,7 @@ normalize_agy_model() {
 }
 
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
-   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ]; then
+   && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ]; then
   MODEL="$(normalize_agy_model "$MODEL")"
 fi
 
@@ -1893,6 +1963,8 @@ elif [ "$IS_GROK" -eq 1 ]; then
   command -v "$GROK_BIN" >/dev/null 2>&1 || die_precondition "grok binary not found: $GROK_BIN (install xAI Grok Build CLI or pass --grok-bin)"
 elif [ "$IS_QODER" -eq 1 ]; then
   command -v "$QODER_BIN" >/dev/null 2>&1 || die_precondition "qoder binary not found: $QODER_BIN (install Qoder CLI CN or pass --qoder-bin)"
+elif [ "$IS_CURSOR" -eq 1 ]; then
+  command -v "$CURSOR_BIN" >/dev/null 2>&1 || die_precondition "cursor binary not found: $CURSOR_BIN (install Cursor CLI or pass --cursor-bin)"
 else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
 fi
@@ -2112,6 +2184,7 @@ if [[ "$SKILL_MODE" != "off" ]]; then
   [ "${IS_CCSHIM:-0}" -eq 1 ] && local_runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && local_runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && local_runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && local_runner="cursor"
 
   if [[ "$SKILL_MODE" == "auto" ]]; then
     cap_state="$(node "$SELF_DIR/engine-capability-state.js" current --runner "$local_runner" --model "$MODEL" --role implementer 2>/dev/null)"
@@ -2758,6 +2831,7 @@ abort_dispatch() {
   [ -n "$GROK_PROMPT_FILE" ] && rm -f "$GROK_PROMPT_FILE"
   [ -n "$CCSHIM_PROMPT_FILE" ] && rm -f "$CCSHIM_PROMPT_FILE"
   [ -n "$QODER_PROMPT_FILE" ] && rm -f "$QODER_PROMPT_FILE"
+  [ -n "$CURSOR_PROMPT_FILE" ] && rm -f "$CURSOR_PROMPT_FILE"
   [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
   [ -n "$AGY_STDERR" ] && rm -f "$AGY_STDERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
@@ -2948,6 +3022,30 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       --reasoning-effort "$5" --dangerously-skip-permissions --no-session-persistence < "$3"' \
       _ "$WT" "$QODER_BIN" "$QODER_PROMPT_FILE" "$MODEL" "$EFFORT"
   rm -f "$QODER_PROMPT_FILE"
+elif [ "$IS_CURSOR" -eq 1 ]; then
+  # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see
+  # docs/plans/2026-08-26-cursor-cli-adaptor.md §0.1:
+  #   P4/P5 cwd AND --workspace anchor edits → no agy-style absolute-path anchor.
+  #   P6 edit-only by default → wrapper commits, same rail as grok/qoderclicn.
+  #   P3 --trust is MANDATORY headlessly. P8 -f auto-approves tools. P7 -p reads stdin.
+  #   P12 effort is the MODEL ID, not a flag — do NOT add --reasoning-effort.
+  CURSOR_EDIT_ONLY="=== HARNESS DIRECTIVE (overrides any conflicting instruction in the task) ===
+Make ONLY the file edits the task requires, in the current working directory. Do NOT
+git commit, git push, or open a PR — the harness commits your edits and a separate review
+verifies them. Ignore any instruction in the task below to commit, push, or open a PR.
+===
+
+"
+  # Feed the prompt via STDIN (P7), NOT a positional argv arg: a large task prompt as one
+  # arg can hit ARG_MAX before cursor-agent runs. --workspace anchors edits at the real
+  # worktree (P4/P5), so no agy-style absolute-path anchor is needed. Same edit-only +
+  # wrapper-commit rail as grok/qoderclicn.
+  CURSOR_PROMPT_FILE="$(mktemp -t dispatch-hetero-cursor-prompt-XXXXXX)"
+  printf '%s' "${CURSOR_EDIT_ONLY}$(cat "$PROMPT_FILE")" > "$CURSOR_PROMPT_FILE"
+  run_worker bash -c 'cd "$1" && exec "$2" -p --trust --force --workspace "$1" \
+      --model "$4" --output-format stream-json < "$3"' \
+      _ "$WT" "$CURSOR_BIN" "$CURSOR_PROMPT_FILE" "$MODEL"
+  rm -f "$CURSOR_PROMPT_FILE"
 elif [ "$IS_PI" -eq 1 ]; then
   # Directive channel (Phase 2): forward the R0 ledger coords to the supervisor so a
   # depth-0 `directive-send` actually DELIVERS mid-run on the production pi path (the
@@ -3042,7 +3140,7 @@ compute_artifacts() {
 # must not trigger the hook at all. (Root cause of the 2026-06-30 agy/cc-shim `status:dirty` runs.)
 if [ "$(git -C "$WT" rev-parse HEAD)" = "$BASE_SHA" ] \
    && [ -n "$(git -C "$WT" status --porcelain)" ]; then
-  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"
+  _runner_label="agy"; [ "$IS_CODEX" -eq 1 ] && _runner_label="codex"; [ "$IS_GROK" -eq 1 ] && _runner_label="grok"; [ "$IS_CCSHIM" -eq 1 ] && _runner_label="cc-shim"; [ "$IS_PI" -eq 1 ] && _runner_label="pi"; [ "$IS_QODER" -eq 1 ] && _runner_label="qoderclicn"; [ "$IS_CURSOR" -eq 1 ] && _runner_label="cursor"
   git -C "$WT" add -A
   if ! run_strict_staged_precheck; then
     # Staged manifest violation: leave the worktree staged for in-place repair;
@@ -3425,8 +3523,9 @@ run_strict_contract_postchecks() {
 }
 
 # _hetero_runner_token — the single derivation of "which runner is this dispatch using"
-# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER flags, shared by passive_capture and
-# seat_strike_capture (factored out rather than copy-pasted, per repo convention).
+# from the IS_CODEX/IS_GROK/IS_CCSHIM/IS_PI/IS_QODER/IS_CURSOR flags, shared by
+# passive_capture and seat_strike_capture (factored out rather than copy-pasted, per repo
+# convention).
 _hetero_runner_token() {
   local runner="agy"
   [ "${IS_CODEX:-0}" -eq 1 ] && runner="codex"
@@ -3434,6 +3533,7 @@ _hetero_runner_token() {
   [ "${IS_CCSHIM:-0}" -eq 1 ] && runner="cc-shim"
   [ "${IS_PI:-0}" -eq 1 ] && runner="pi"
   [ "${IS_QODER:-0}" -eq 1 ] && runner="qoderclicn"
+  [ "${IS_CURSOR:-0}" -eq 1 ] && runner="cursor"
   printf '%s' "$runner"
 }
 
@@ -3891,9 +3991,9 @@ dispatch_detached_run() {
   rm -f "$RESULT_FILE" "$EXIT_FILE"
   local state_file; state_file="$(mktemp -t hetero-detach-state-XXXXXX)"
   {
-  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
-      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
-      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE \
+  declare -p MODEL BASE TIMEOUT AGY_BIN GROK_BIN CODEX_BIN QODER_BIN CURSOR_BIN KEEP RETENTION_OWNER RETENTION_REASON RETENTION_REASON_SHA256 RETENTION_EXPIRES_AT REUSE_WORKTREE RESUME_SESSION_ID PROVIDER_SESSION_ID PROVIDER_SESSION_REUSED WORKTREE_REUSED BRANCH PROMPT_FILE RUNNER EFFORT \
+      SELF_DIR IS_CODEX IS_GROK IS_CCSHIM IS_PI IS_QODER IS_CURSOR CURSOR_FAST PI_BIN MANAGED_CODEX_HOME CONTAINMENT CONTAINED IDENTITY_DRIFT IDENTITY_PRE_NAME IDENTITY_PRE_EMAIL IDENTITY_REPO_ROOT EFFECTIVE_SKILL_MODE SKILLS_INJECTED_JSON \
+      WT LOG BASE_SHA HAVE_CGROUP HAVE_SETSID SCOPE_UNIT WORKER_SID GROK_PROMPT_FILE CCSHIM_PROMPT_FILE QODER_PROMPT_FILE CURSOR_PROMPT_FILE \
       AGY_ENVELOPE AGY_STDERR AGY_PARSED AGY_USAGE_JSON \
       PACKED_PROMPT_TEMP LEDGER RUN_ID STAGE RESULTS_DIR RESULT_FILE EXIT_FILE HEARTBEAT_SECS \
       STRICT_CONTRACT STRICT_CONTRACT_RESULT_FIELDS STRICT_UNIT_ID STRICT_CONTRACT_SHA STRICT_SPEC_SHA STRICT_GO STRICT_ENGINE_ASSURANCE CONSUMING_REPO_ROOT CONTRACT_FILE_SUPPLIED CONTRACT_FILE \

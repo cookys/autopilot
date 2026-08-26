@@ -421,13 +421,13 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       fi
       ;;
     cursor)
-      # scratch --cwd (never the repo). --trust is required or the run aborts on
-      # workspace trust. No --reasoning-effort: cursor-agent has no such flag —
-      # effort lives in the model-id suffix, so an effort-bearing tuple never
-      # reaches this branch (see the _EFFORT_CONSUMER gate above; cursor is
-      # deliberately NOT in that list).
-      printf 'Respond only with OK' | cursor-agent -p --cwd "$PROBE_CWD" --model "$MODEL" \
-        --trust --mode ask --output-format text \
+      # scratch --workspace (never the repo; cursor-agent has no --cwd). --trust
+      # is required or the run aborts on workspace trust. No --reasoning-effort:
+      # cursor-agent has no such flag — effort lives in the model-id suffix, so
+      # an effort-bearing tuple never reaches this branch (see the
+      # _EFFORT_CONSUMER gate above; cursor is deliberately NOT in that list).
+      ( cd "$PROBE_CWD" && printf 'Respond only with OK' | cursor-agent -p --trust --mode ask \
+        --workspace "$PROBE_CWD" --model "$MODEL" --output-format text ) \
         >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       ;;
     cc-shim)

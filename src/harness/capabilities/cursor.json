@@ -1,0 +1,32 @@
+{
+  "id": "cursor",
+  "display_name": "Cursor CLI (cursor-agent)",
+  "kind": "cli",
+  "status": "unverified",
+  "harness_level": "H0",
+  "last_checked_at": "2026-08-26T11:14:13.000Z",
+  "evidence": {
+    "source": "local-probe",
+    "command": "cursor-agent --version; cursor-agent --list-models",
+    "result": "cursor-agent 2026.08.11-e8db854; --list-models returned 208 stdout lines (rc 0, stderr empty): a 2-line header, 204 lines of the exact form `<id> - <display name>`, a blank separator, and a closing Tip line; all 16 ids of the enabled fast-closure present by exact `^<id> - ` match, none missing or duplicated"
+  },
+  "capabilities": {
+    "read_only_dispatch": "unverified",
+    "headless_usage": "unverified",
+    "mutation_dispatch": "unverified",
+    "skills": "unverified",
+    "agents": "unverified",
+    "hooks": "unverified",
+    "plugin_install": "unverified",
+    "blocking_gate": "unverified"
+  },
+  "notes": [
+    "Binary is `cursor-agent`, not `cursor` — do not conflate with any other CLI named cursor.",
+    "The dispatch rail (dispatch-hetero.sh / dispatch-review.sh / dispatch-author.sh) is shipped and executable, but UNQUALIFIED and UNROUTED: this record certifies nothing about live model behavior.",
+    "No live cursor-agent model call was made to produce this record — only `--version` and `--list-models` were re-derived. Every capability field above stays `unverified` for that reason (ADR-0001: verification is independent re-derivation, never a restated claim).",
+    "`resolve-review-loop.sh` has no cursor entry: no roster seat can assign this runner today.",
+    "`--runner auto` refuses cursor ids by design (prefix-open / table-closed fail-closed guard) — auto will never select cursor regardless of this record's status.",
+    "Stage-1 implementer qualification (plan Phase 5, `docs/plans/2026-08-26-cursor-cli-adaptor.md`) has not been run, so KR1/KR2/KR4 live receipts are outstanding.",
+    "Do not promote status/harness_level/any capability field above without a receipt from an actual qualification or probe run — copying grok.json's verified shape here would misstate what happened."
+  ]
+}

@@ -1,5 +1,49 @@
 # Changelog
 
+## v2.34.42 — a cursor runner rail, shipped and deliberately unrouted
+
+A new `cursor` runner reaches `dispatch-hetero.sh`, `dispatch-review.sh`, and `dispatch-author.sh`:
+edit-only, wrapper-commits the same as `grok`/`qoderclicn` — no absolute-worktree anchor, honors
+process cwd AND `--workspace`. `scripts/lib/cursor-model.sh` is the single executable source for
+the enabled model-id set (`cursor_model_for`, `cursor_enabled_ids`, `cursor_is_enabled_id`), and it
+validates against a live `cursor-agent --list-models` by **exact string equality, never
+containment** — `cursor-grok-4.6-low` is a strict prefix of `cursor-grok-4.6-low-fast`, so a
+containment check would silently void the fail-closed guarantee the whole rail depends on. Effort
+is the model-id suffix, not a flag: there is no `--reasoning-effort` on this CLI. The default lane
+is non-fast; `-fast` is opt-in only via `--cursor-fast`, which never silently no-ops.
+
+The one deliberate `auto` behavior change: `--runner auto --model cursor-grok-4.6-low` used to
+route silently to the xAI `grok` CLI, and `gpt-5.3-codex-low` silently to the OpenAI `codex`
+CLI — neither of those CLIs serves those ids. Both now **fail closed with exit 2**, naming the
+explicit runner the caller needs (`--runner cursor`). Every other `--runner` value is unchanged.
+`dispatch-status.js` also now reads Cursor's `cacheReadTokens` field — cache accounting on this
+rail previously read null.
+
+State plainly what did **not** land in this release: the review-loop contract schema's `runner`
+enum and `resolve-review-loop.sh`'s admission tables were left untouched — they're deferred to
+Phase 5 alongside Stage-1 implementer qualification. This is a **deliberate deviation from the
+plan's literal Phase 3 text**, which said to add `cursor` to all six schema enum sites. That
+instruction turned out to be internally unsatisfiable: only `reviewer_runner` and
+`implementer_runner` are `x-shell-validated`, so adding `cursor` there breaks
+`check-contract-schema.js` against a resolver the same plan freezes until Phase 5 — and on a
+Phase 5 *recorded fail* the resolver stays closed permanently, so the gate would never go green
+again. Four of the six sites are reviewer-class roles the plan's own admission matrix says get
+`cursor` **never** in this plan. The schema enum is what makes a runner *assignable*, so it
+belongs with admission, not with executability. Adjudicated by a heterogeneous consult
+(`codex`/`gpt-5.6-sol`, effort high), which returned the same conclusion independently.
+Cursor is shipped and executable but
+**deliberately unrouted**: no roster seat can assign it, `auto` refuses it by design, and no live
+`cursor-agent` model call was made anywhere in this release — only `--version` and
+`--list-models` were re-derived. The plan's live KR1/KR2/KR4 receipts are still outstanding.
+Cursor is also deliberately excluded from the blind-review allowlist pending an adversarial
+`--mode ask` probe.
+
+prose-justification: `references/hetero-dispatch.md` grew by three edits (the max-tokens
+Unsupported row, the `auto`-fail-closed prose, and a new `cursor` runner-table row) to document
+the rail this release ships; `docs/scripts-inventory.md` gained one index row for
+`scripts/lib/cursor-model.sh`. The rest of the +5% baseline carry-forward reported here is
+inherited from the v2.34.39/v2.34.41 growth already on `develop`, not reset by this patch.
+
 ## v2.34.41 — a comment closed itself and took the plan-review rail down with it
 
 `scripts/dispatch-plan-review.js` and its codex mirror stopped parsing entirely at v2.34.39.

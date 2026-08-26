@@ -72,16 +72,25 @@ no_sentinels_tripped() {
   return 0
 }
 
-# no_cursor_rail_sentinels_tripped — same oracle, but tolerant of the codex
-# sentinel: once case 3b legitimately dispatches to codex (proving the guard
-# does NOT over-capture), a codex.invoked sentinel is EXPECTED to exist for
-# the remainder of the suite. cursor-agent/grok/agy/qoderclicn must still
-# never be touched by anything in this file.
+# no_cursor_rail_sentinels_tripped — SAME strict oracle as no_sentinels_tripped
+# (codex.invoked included). Previously this tolerated a codex.invoked sentinel
+# on the premise that case 3b (auto + gpt-5.2, below) "legitimately dispatches
+# to codex" and leaves that sentinel as expected residue. That premise was
+# FALSE: case 3b deliberately runs under a PLAIN PATH (PATH=/usr/bin:/bin, NOT
+# $POISON_PATH) specifically so the real `codex` binary is genuinely absent —
+# it asserts "codex binary not found" and dies at the precondition, never
+# reaching exec. The codex STUB in $POISON_DIR is therefore never on PATH
+# during 3b, so it is IMPOSSIBLE for 3b to produce a codex.invoked sentinel.
+# No legitimate codex.invoked sentinel can ever exist in this suite, so no
+# tolerance is warranted: any codex.invoked sentinel found here means some
+# OTHER case in this file actually dispatched to (poisoned) codex instead of
+# refusing — exactly the failure mode this oracle exists to catch.
 no_cursor_rail_sentinels_tripped() {
   [ ! -e "$SENTINEL_DIR/cursor-agent.invoked" ] \
     && [ ! -e "$SENTINEL_DIR/grok.invoked" ] \
     && [ ! -e "$SENTINEL_DIR/agy.invoked" ] \
-    && [ ! -e "$SENTINEL_DIR/qoderclicn.invoked" ]
+    && [ ! -e "$SENTINEL_DIR/qoderclicn.invoked" ] \
+    && [ ! -e "$SENTINEL_DIR/codex.invoked" ]
 }
 
 run_guard_case() {
@@ -187,11 +196,12 @@ assert_not_contains "$(cat "$FULL_LOG")" '"runner": "cursor"' \
   "--runner auto never produces runner: cursor across every guard case"
 
 # ---------------------------------------------------------------------------
-# 5. Re-affirm the process-level oracle after the non-over-capture case: the
-# codex sentinel from 3b is EXPECTED to exist now (that run legitimately used
-# a plain PATH, not the poison one — no cursor-agent/grok/agy/qoderclicn
-# sentinel should exist regardless, since nothing in this suite ever selects
-# those rails for gpt-5.2 either).
+# 5. Re-affirm the process-level oracle after the non-over-capture case: 3b
+# ran on a PLAIN PATH (PATH=/usr/bin:/bin), not $POISON_PATH, so the codex
+# STUB was never on PATH during that run and cannot have touched
+# $SENTINEL_DIR/codex.invoked — the real `codex` binary is genuinely absent
+# there too (that is precisely why 3b dies at "codex binary not found"
+# instead of executing). No sentinel, including codex's, should exist here.
 # ---------------------------------------------------------------------------
 if no_cursor_rail_sentinels_tripped; then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
@@ -202,10 +212,14 @@ fi
 # ---------------------------------------------------------------------------
 # 6. cursor rejected in an EXPLICIT reviewer-class-shaped call too: not
 # applicable to dispatch-hetero.sh (implementer-only dispatcher, no
-# reviewer-class role concept) — covered instead by Phase 3's
-# dispatch-review.sh / dispatch-author.sh allowlist tests per the plan's
-# admission matrix. Left as a documented boundary, not a gap: this suite is
-# scoped to base-dispatch auto-routing only (§3a / Phase 2 acceptance).
+# reviewer-class role concept). Covered instead by a NAMED, EXISTING artifact:
+# hooks/tests/dispatch-review-author-cursor.test.sh — alias rejection, missing
+# --model, fail-closed on non-zero exit and on empty stdout, the no-stderr-
+# salvage case, and the argv shape, for both wrappers. Cite the file so this
+# claim is checkable: an earlier revision asserted this coverage while no such
+# test existed, which is worse than an admitted gap because it stops the next
+# reader looking. This suite stays scoped to base-dispatch auto-routing only
+# (§3a / Phase 2 acceptance).
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -230,11 +244,121 @@ assert_contains "$OUT" "--cursor-fast applies only when --model names a family a
   "--cursor-fast + full-id die_precondition message"
 
 # Sentinel check must still hold after the two negative-control cases above
-# (codex.invoked is tolerated — it is the expected residue of case 3b).
+# (both run on $POISON_PATH; no rail binary, including codex, should ever be
+# touched — codex.invoked is NOT tolerated, see no_cursor_rail_sentinels_tripped
+# above for why no legitimate codex.invoked sentinel can ever exist here).
 if no_cursor_rail_sentinels_tripped; then
   __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
 else
   fail "process-level oracle (post --cursor-fast negatives): a rail binary was invoked: $(ls "$SENTINEL_DIR" 2>/dev/null | tr '\n' ' ')"
 fi
+
+# ---------------------------------------------------------------------------
+# 9. 🔴 STUB END-TO-END COMMITTED DISPATCH (docs/projects/INDEX.md claims the
+# rail was stub-verified end-to-end as {"status":"committed","runner":"cursor"}
+# — this section is the artifact that backs that claim). Ordered AFTER every
+# guard-refusal oracle check above: this section DOES invoke a cursor stub on
+# purpose, so it must not share sentinel state with the refusal cases. It uses
+# a purpose-built stub via --cursor-bin (an absolute path, NOT a PATH lookup)
+# on a completely separate, freshly-created stub dir — never $POISON_DIR,
+# whose stubs deliberately fail — so it cannot touch $SENTINEL_DIR at all and
+# the guard-refusal guarantees above are unaffected. PATH is left at its
+# ambient value (unrestricted) so `node`, `git`, and friends resolve
+# normally — dispatch-hetero.sh needs node on PATH for its own preconditions.
+#
+# The stub: serves a P14-shaped `--list-models` (header, blank line, 16
+# `<id> - <display name>` rows — same fixture as hooks/tests/cursor-model.test.sh)
+# so lib/cursor-model.sh's live-inventory validation passes; otherwise it
+# records the `--model` argv value it actually received (proving what the
+# mapper handed to exec, independent of what the emitted JSON claims), writes
+# a real file into its cwd (the worktree — an actual edit for the wrapper's
+# edit-only-commit path to pick up), drains stdin (the prompt file content),
+# and exits 0.
+# ---------------------------------------------------------------------------
+CURSOR_E2E_BIN_DIR="$TEST_TMP/cursor-e2e-bin"
+mkdir -p "$CURSOR_E2E_BIN_DIR"
+CURSOR_E2E_STUB="$CURSOR_E2E_BIN_DIR/cursor-agent"
+cat > "$CURSOR_E2E_STUB" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--list-models" ]; then
+  cat <<'EOF'
+Available models
+
+cursor-grok-4.6-low - Grok 4.6 (low)
+cursor-grok-4.6-low-fast - Grok 4.6 (low, fast)
+cursor-grok-4.6-medium - Grok 4.6 (medium)
+cursor-grok-4.6-medium-fast - Grok 4.6 (medium, fast)
+cursor-grok-4.6-high - Grok 4.6 (high)
+cursor-grok-4.6-high-fast - Grok 4.6 (high, fast)
+cursor-grok-4.6-xhigh - Grok 4.6 (xhigh)
+cursor-grok-4.6-xhigh-fast - Grok 4.6 (xhigh, fast)
+gpt-5.3-codex-low - GPT-5.3 Codex (low)
+gpt-5.3-codex-low-fast - GPT-5.3 Codex (low, fast)
+gpt-5.3-codex - GPT-5.3 Codex (medium)
+gpt-5.3-codex-fast - GPT-5.3 Codex (medium, fast)
+gpt-5.3-codex-high - GPT-5.3 Codex (high)
+gpt-5.3-codex-high-fast - GPT-5.3 Codex (high, fast)
+gpt-5.3-codex-xhigh - GPT-5.3 Codex (xhigh)
+gpt-5.3-codex-xhigh-fast - GPT-5.3 Codex (xhigh, fast)
+EOF
+  exit 0
+fi
+: "${CURSOR_E2E_RECORD:?CURSOR_E2E_RECORD not set}"
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--model" ]; then
+    printf '%s' "$arg" > "$CURSOR_E2E_RECORD"
+    break
+  fi
+  prev="$arg"
+done
+cat > /dev/null
+echo "cursor e2e edit" > cursor-e2e-edit.txt
+exit 0
+STUB
+chmod +x "$CURSOR_E2E_STUB"
+
+# --- 9a. family alias, default (non-fast) lane: --model grok46 --effort low. ---
+CURSOR_E2E_RECORD_A="$TEST_TMP/cursor-e2e-received-a.txt"
+: > "$CURSOR_E2E_RECORD_A"
+OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_A" \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t-cursor-e2e-alias --prompt-file "$PROMPT" \
+  --runner cursor --model grok46 --effort low --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "cursor e2e (family alias, non-fast): exit 0"
+assert_contains "$OUT" '"status": "committed"' "cursor e2e (family alias, non-fast): status committed"
+assert_contains "$OUT" '"runner": "cursor"' "cursor e2e (family alias, non-fast): runner cursor"
+assert_contains "$OUT" '"model": "cursor-grok-4.6-low"' \
+  "cursor e2e (family alias, non-fast): emitted model is the resolved non-fast id"
+assert_eq "cursor-grok-4.6-low" "$(cat "$CURSOR_E2E_RECORD_A" 2>/dev/null)" \
+  "cursor e2e (family alias, non-fast): stub RECEIVED the resolved non-fast id via --model (not -low-fast)"
+
+# --- 9b. --cursor-fast variant of the same alias: --model grok46 --effort low --cursor-fast. ---
+CURSOR_E2E_RECORD_B="$TEST_TMP/cursor-e2e-received-b.txt"
+: > "$CURSOR_E2E_RECORD_B"
+OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_B" \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t-cursor-e2e-alias-fast --prompt-file "$PROMPT" \
+  --runner cursor --model grok46 --effort low --cursor-fast --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "cursor e2e (family alias, --cursor-fast): exit 0"
+assert_contains "$OUT" '"status": "committed"' "cursor e2e (family alias, --cursor-fast): status committed"
+assert_contains "$OUT" '"model": "cursor-grok-4.6-low-fast"' \
+  "cursor e2e (family alias, --cursor-fast): emitted model is the resolved -fast id"
+assert_eq "cursor-grok-4.6-low-fast" "$(cat "$CURSOR_E2E_RECORD_B" 2>/dev/null)" \
+  "cursor e2e (family alias, --cursor-fast): stub RECEIVED the resolved -fast id via --model"
+
+# --- 9c. full-id passthrough (mapper bypassed): --model cursor-grok-4.6-high. ---
+CURSOR_E2E_RECORD_C="$TEST_TMP/cursor-e2e-received-c.txt"
+: > "$CURSOR_E2E_RECORD_C"
+OUT="$(cd "$SBX" && CURSOR_E2E_RECORD="$CURSOR_E2E_RECORD_C" \
+  AUTOPILOT_SESSION_MODE_DIR="$EMPTY_SESSION_MODE_DIR" \
+  "$SCRIPT" --branch t-cursor-e2e-full-id --prompt-file "$PROMPT" \
+  --runner cursor --model cursor-grok-4.6-high --cursor-bin "$CURSOR_E2E_STUB" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "cursor e2e (full-id passthrough): exit 0"
+assert_contains "$OUT" '"status": "committed"' "cursor e2e (full-id passthrough): status committed"
+assert_contains "$OUT" '"model": "cursor-grok-4.6-high"' \
+  "cursor e2e (full-id passthrough): emitted model is the full id, unchanged"
+assert_eq "cursor-grok-4.6-high" "$(cat "$CURSOR_E2E_RECORD_C" 2>/dev/null)" \
+  "cursor e2e (full-id passthrough): stub RECEIVED the full id unchanged (mapper bypassed)"
 
 finalize_test

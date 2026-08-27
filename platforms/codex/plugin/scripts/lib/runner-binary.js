@@ -126,6 +126,10 @@ const TOKEN_TRIM = /^[([{'"`,;]+|[)\]}'"`,;]+$/g;
 // Any C0/C1 control byte surviving VT stripping. A version banner has none.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/;
+// Same class, global — used by receiptSafe() to REPLACE every control byte rather than
+// merely detect one. Kept beside its detector so the two can never drift apart.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS_GLOBAL = /[\u0000-\u001F\u007F-\u009F]/g;
 
 const VERSION_PROBE_TIMEOUT_MS = 20000;
 
@@ -202,6 +206,39 @@ function sanitizeVersionToken(line) {
     .replace(/-+$/, '');
 }
 
+// How many stdout lines past the first are examined. A version banner is a handful of
+// lines; scanning is bounded so a runaway CLI cannot make this loop the expensive part.
+const MAX_VERSION_TAIL_LINES = 20;
+
+/**
+ * Refusal check for stdout lines AFTER the first.
+ *
+ * WHY (depth-0 QC panel, 2026-08-27, reproduced): only the first non-empty stdout line was
+ * validated, so `tool 1.2.3\nError: something failed` minted `tool-1.2.3` for a paid run.
+ * A CLI that prints a version and then announces a failure has not told us its version; it
+ * has told us it is broken.
+ *
+ * This is deliberately the ERROR/DIAGNOSTIC SUBSET of the first-line grammar, not the whole
+ * grammar. Later lines legitimately carry provenance a version line may not — `built from
+ * abc123`, a commit, a build date, a copyright — and those trip the first-line token-count
+ * and length caps without indicating anything wrong. Applying the full grammar here would
+ * refuse healthy runners, and an operator whose working seat aborts for a benign second line
+ * disables the check. (Rule shape confirmed on a heterogeneous consult, codex/gpt-5.6-sol.)
+ *
+ * Returns null when the tail is acceptable, or a reason string.
+ */
+function versionTailRefusalReason(lines) {
+  for (const raw of lines.slice(0, MAX_VERSION_TAIL_LINES)) {
+    const line = stripVersionControlChars(String(raw)).trim();
+    if (line === '') continue;
+    if (CONTROL_CHARS.test(line)) return 'version_output_tail_control_characters';
+    if (ERROR_PREFIX.test(line)) return 'version_output_tail_announces_an_error';
+    if (DIAGNOSTIC_MARKER.test(line)) return 'version_output_tail_is_a_diagnostic';
+    if (DIAGNOSTIC_WORDS.test(line)) return 'version_output_tail_states_a_requirement_or_failure';
+  }
+  return null;
+}
+
 /**
  * Does this stdout line look like a version? Conservative on purpose — every `false`
  * costs a refused (free) seat, every wrong `true` costs a paid, permanently wrong row.
@@ -272,24 +309,66 @@ function resolveRunnerVersion(runner, options = {}) {
       reason: `version_probe_exit_${run.status === null ? 'signal' : run.status}`, stderr,
     };
   }
-  // STDOUT ONLY, first non-empty line.
-  const line = String(run.stdout || '').split('\n').map((s) => s.trim()).find((s) => s !== '') || '';
+  // STDOUT ONLY. The first non-empty line must BE a version...
+  const stdoutLines = String(run.stdout || '').split('\n').map((t) => t.trim());
+  const firstIdx = stdoutLines.findIndex((t) => t !== '');
+  const line = firstIdx === -1 ? '' : stdoutLines[firstIdx];
   const refusal = versionLineRefusalReason(line);
   if (refusal !== null) {
-    return { ok: false, runner, binary, binary_path: binaryPath, version_line: line, reason: refusal, stderr };
+    return {
+      ok: false, runner, binary, binary_path: binaryPath, version_line: line,
+      reason: refusal, stderr, stderr_nonempty: stderr !== '',
+    };
   }
-  return { ok: true, runner, binary, binary_path: binaryPath, version_line: line, token: sanitizeVersionToken(line) };
+  // ...and nothing AFTER it may announce a failure. See versionTailRefusalReason.
+  const tailRefusal = versionTailRefusalReason(firstIdx === -1 ? [] : stdoutLines.slice(firstIdx + 1));
+  if (tailRefusal !== null) {
+    return {
+      ok: false, runner, binary, binary_path: binaryPath, version_line: line,
+      reason: tailRefusal, stderr, stderr_nonempty: stderr !== '',
+    };
+  }
+  // NOTE ON STDERR: a non-empty stderr with exit 0 does NOT refuse. The incident was caused
+  // by READING stderr as the version; refusing to read it closes that hole completely, and
+  // stderr says nothing about whether the positively-validated stdout token is correct.
+  // Every runner on this roster is an npm-installed CLI that routinely prints update
+  // notices, deprecation warnings and telemetry notes there on a healthy run — refusing
+  // those would convert working seats into uncharged aborts with a baffling reason, and the
+  // operator's next move would be to switch the guard off. (Decision confirmed on a
+  // heterogeneous consult, codex/gpt-5.6-sol; the panel explicitly left it to be decided
+  // and reasoned in-file.) It is still REPORTED — `stderr` and `stderr_nonempty` are on
+  // every result — so a later reader can see it was there.
+  return {
+    ok: true, runner, binary, binary_path: binaryPath, version_line: line,
+    token: sanitizeVersionToken(line), stderr, stderr_nonempty: stderr !== '',
+  };
 }
 
 /**
  * Reduce a value to something safe to interpolate into a one-line JSON string field and
  * to read back with a single `read -r` in shell: no control characters (so no newline can
- * forge an extra field or an extra shell line), no `"` or `\` (so no JSON escape can be
- * forged). Used for the probe receipt's `bin` / `bin_version`, which now carry real CLI
- * output rather than a sanitized-to-death token.
+ * forge an extra shell line), no `"` or `\` (so no JSON escape can be forged). Used for
+ * the probe receipt's `bin` / `bin_version`, which carry real CLI output rather than a
+ * sanitized-to-death token.
+ *
+ * EVERY C0/C1 byte is replaced, not just the whitespace-class ones. The earlier form leaned
+ * on `\s+` for this and therefore let BEL(7), SOH(1), BS(8), SO(14), SUB(26), US(31),
+ * NUL(0), DEL(127) and the C1 range through — six of those are not legal JSON string
+ * content, so one such byte in a version banner wrote a permanently unparseable line into
+ * an append-only evidence file. (Depth-0 QC panel, 2026-08-27; reproduced before fixing.)
+ * A control-carrying line is REFUSED as a version, but its refusal receipt is still
+ * written — that receipt is exactly the artifact that has to survive.
+ *
+ * Replaced with a SPACE, not deleted: deletion welds neighbours together
+ * (`1.2.3` + BEL + `build` -> `1.2.3build`), which reads as a real, different version.
+ * A space keeps the receipt honest that a separator was there. The resulting collision
+ * (two different raw outputs -> one receipt string) is accepted and bounded: this field is
+ * human-readable evidence, never an identity. The identity is the separately validated
+ * token, and nothing carrying a control byte can become one.
  */
 function receiptSafe(value) {
   return stripVersionControlChars(String(value == null ? '' : value))
+    .replace(CONTROL_CHARS_GLOBAL, ' ')
     .replace(/["\\]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -305,6 +384,7 @@ module.exports = {
   stripVersionControlChars,
   sanitizeVersionToken,
   versionLineRefusalReason,
+  versionTailRefusalReason,
   resolveRunnerVersion,
 };
 

@@ -52,9 +52,29 @@ Hardening found while self-reviewing the new resolver, on the surface that matte
 these values come from an arbitrary CLI's output. The four resolved fields are read with
 `read -r` rather than `eval`-ed, so a hostile or merely odd `--version` is not a
 code-execution surface; and the receipt's `bin`/`bin_version` pass through `receiptSafe()`
-(control characters, `"` and `\` stripped), because they now carry real CLI output into a
+(every C0/C1 control byte, `"` and `\` stripped), because they now carry real CLI output into a
 printf JSON template and a quote in a version banner would otherwise write an unparseable
 line into an append-only evidence file.
+
+A depth-0 QC panel then found two more, both reproduced before fixing. `receiptSafe()` had
+leaned on `\s+` to remove control characters, so it stripped only TAB/LF/VT/FF/CR — BEL, SOH,
+BS, SO, SUB, US, NUL, DEL and the C1 range survived, and six of those are not legal JSON
+string content. A version banner carrying one wrote a permanently unparseable line into the
+append-only receipt file, and the docstring claiming otherwise made it a false claim as well
+as a defect. Every C0/C1 byte is now replaced with a space — a space, not deletion, because
+deleting welds neighbours into a plausible-looking different version.
+
+And only the FIRST stdout line was validated, so `tool 1.2.3\nError: something failed` still
+minted `tool-1.2.3`. Lines after the first are now scanned too — but with the error/diagnostic
+subset of the grammar, not the whole of it, so benign provenance (`built from abc123`, a
+copyright line) still passes while a failure announcement refuses. A non-empty **stderr** with
+exit 0 deliberately does **not** refuse: the incident was caused by *reading* stderr as the
+version, and refusing to read it closes that completely; stderr says nothing about whether the
+positively-validated stdout token is right, and every roster runner is an npm-installed CLI
+that prints update notices there on a healthy run. It is reported (`stderr`,
+`stderr_nonempty`) rather than acted on, and a test pins the decision so it cannot be flipped
+silently. Rule shape and the stderr call were both confirmed on a heterogeneous consult
+(`codex`/`gpt-5.6-sol`, high).
 
 The regression oracle: `hooks/tests/runner-binary.test.sh` drives PATH stubs and asserts
 that a runner whose version probe emits an error string is **refused**, never recorded.

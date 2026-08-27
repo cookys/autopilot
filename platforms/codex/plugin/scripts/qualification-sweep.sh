@@ -317,7 +317,7 @@ probe_receipt() { # bundle runner model vsrc rc note [attempt]
   #
   # Both are the OBSERVED strings (resolved path, first stdout line) passed through
   # receiptSafe() — not the sanitized identity token, and not raw either: control
-  # characters, `"` and `\` are stripped, because these now carry real CLI output into a
+  # C0/C1 control bytes, `"` and `\` are stripped, because these now carry real CLI output into a
   # printf JSON template and a quote in a version banner would otherwise emit an
   # unparseable line into an append-only evidence file. The identity token itself is
   # RESOLVED_VERSION_TOKEN, which is what the administration receives.
@@ -351,7 +351,7 @@ resolve_runner_version() { # runner -> rc 0 usable
   # Four values, one per line, read with `read -r` — deliberately NOT `eval`. These fields
   # are derived from an arbitrary CLI's output; eval-ing shell assignments built from that
   # would make a hostile (or merely odd) --version a code-execution surface for the sake of
-  # four string variables. receiptSafe() strips control characters, `"` and `\`, so no
+  # four string variables. receiptSafe() strips EVERY C0/C1 control byte, `"` and `\`, so no
   # value can carry a newline that forges an extra line here, or a quote/backslash that
   # forges a field in probe_receipt's JSON template.
   {

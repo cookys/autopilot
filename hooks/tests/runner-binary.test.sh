@@ -173,4 +173,91 @@ SAFE_OUT="$(node -e '
 assert_contains "$SAFE_OUT" "RECEIPT_SAFE_OK" \
   "no quote/backslash/newline/NUL in a version line can forge a receipt field or a shell line: $SAFE_OUT"
 
+# =====================================================================
+# 5. CONTROL-BYTE CLASSES through receiptSafe (depth-0 QC panel, 2026-08-27).
+#    The earlier form leaned on \s+ and so stripped only TAB/LF/VT/FF/CR;
+#    BEL, SOH, BS, SO, SUB, US, NUL, DEL and C1 survived, and six of those
+#    are not legal JSON string content — one such byte in a version banner
+#    wrote a permanently unparseable line into an append-only evidence file.
+#    Section 4's hostile set missed this: it covered quote/backslash/newline/
+#    CR/NUL only, i.e. no non-whitespace control byte.
+# =====================================================================
+CLASSES_OUT="$(node -e '
+  const { receiptSafe } = require(process.argv[1]);
+  // One representative per control class that can appear in real CLI output.
+  const codes = [0,1,7,8,9,10,11,12,13,14,26,27,31,127,133,155];
+  let bad = 0;
+  for (const code of codes) {
+    const safe = receiptSafe("1.2.3" + String.fromCharCode(code) + "forged");
+    const survives = [...safe].some((ch) => {
+      const c = ch.charCodeAt(0);
+      return (c <= 0x1f) || (c >= 0x7f && c <= 0x9f);
+    });
+    if (survives) { bad += 1; console.log("CONTROL_SURVIVES code=" + code + " -> " + JSON.stringify(safe)); }
+    try { JSON.parse("\"" + safe + "\""); }
+    catch (e) { bad += 1; console.log("INVALID_JSON code=" + code); }
+  }
+  console.log(bad === 0 ? "CONTROL_CLASSES_OK" : "CONTROL_CLASSES_BAD=" + bad);
+' "$LIB" 2>&1)"
+assert_contains "$CLASSES_OUT" "CONTROL_CLASSES_OK" \
+  "every C0/C1 control class is stripped and the result is valid JSON string content: $CLASSES_OUT"
+
+# And the receipt line the sweep writes must still parse with such a byte in the version.
+RECEIPT_OUT="$(node -e '
+  const { receiptSafe } = require(process.argv[1]);
+  const raw = "1.2.3" + String.fromCharCode(7) + "forged";
+  const line = "{\"bin\":\"/x/y\",\"bin_version\":\"" + receiptSafe(raw) + "\"}";
+  JSON.parse(line);
+  console.log("RECEIPT_LINE_PARSES " + line);
+' "$LIB" 2>&1)"
+assert_contains "$RECEIPT_OUT" "RECEIPT_LINE_PARSES" \
+  "a BEL in the version line still yields a parseable receipt line: $RECEIPT_OUT"
+
+# =====================================================================
+# 6. STDOUT TAIL + STDERR POLICY (depth-0 QC panel, 2026-08-27).
+#    Only the first stdout line used to be validated, so a version line
+#    followed by an error still minted a token for a paid run.
+#
+#    The stderr decision is deliberate and is asserted here so it cannot be
+#    changed silently: a non-empty stderr with exit 0 does NOT refuse. The
+#    incident was caused by READING stderr as the version; refusing to read
+#    it closes that. Every roster runner is an npm-installed CLI that emits
+#    benign notices there on a healthy run.
+# =====================================================================
+SHAPES_OUT="$(node -e '
+  const m = require(process.argv[1]);
+  const spawn = (out, err, status) => () => ({ stdout: out, stderr: err, status, error: null });
+  const cases = [
+    ["error on a later stdout line", "tool 1.2.3\nError: something failed", "", 0, "refuse"],
+    ["requirement on a later line",  "tool 1.2.3\nrequires Node 18.0",      "", 0, "refuse"],
+    ["stack frame on a later line",  "tool 1.2.3\nat /x/y.js:1:2",          "", 0, "refuse"],
+    ["benign provenance line",       "tool 1.2.3\nbuilt from abc123",       "", 0, "accept"],
+    ["benign copyright line",        "tool 1.2.3\n(c) 2026 Example Corp",   "", 0, "accept"],
+    ["stderr warns, exit 0",         "tool 1.2.3", "WARNING: config not found", 0, "accept"],
+    ["stderr silent, exit 0",        "tool 1.2.3", "",                          0, "accept"],
+  ];
+  let bad = 0;
+  for (const [label, out, err, status, want] of cases) {
+    const r = m.resolveRunnerVersion("codex", { spawn: spawn(out, err, status) });
+    const got = r.ok ? "accept" : "refuse";
+    if (got !== want) { bad += 1; console.log("MISMATCH " + label + " wanted=" + want + " got=" + got + " reason=" + r.reason); }
+  }
+  console.log(bad === 0 ? "SHAPES_OK" : "SHAPES_BAD=" + bad);
+' "$LIB" 2>&1)"
+assert_contains "$SHAPES_OUT" "SHAPES_OK" \
+  "stdout tail refuses failure announcements, allows provenance, and stderr alone never refuses: $SHAPES_OUT"
+
+# The stderr decision is REPORTED even though it does not refuse, so a later reader
+# can see stderr was non-empty on an accepted seat.
+STDERR_FLAG="$(node -e '
+  const m = require(process.argv[1]);
+  const spawn = (out, err) => () => ({ stdout: out, stderr: err, status: 0, error: null });
+  const warned = m.resolveRunnerVersion("codex", { spawn: spawn("tool 1.2.3", "WARNING: x") });
+  const quiet  = m.resolveRunnerVersion("codex", { spawn: spawn("tool 1.2.3", "") });
+  console.log("warned=" + warned.stderr_nonempty + " quiet=" + quiet.stderr_nonempty + " text=" + JSON.stringify(warned.stderr));
+' "$LIB" 2>&1)"
+assert_contains "$STDERR_FLAG" "warned=true quiet=false" \
+  "a non-empty stderr is recorded on the result even though it does not refuse: $STDERR_FLAG"
+assert_contains "$STDERR_FLAG" "WARNING: x" "the stderr text itself is retained for the receipt"
+
 finalize_test

@@ -314,6 +314,13 @@ probe_receipt() { # bundle runner model vsrc rc note [attempt]
   # error sentence as this run's binary identity. RESOLVED_BIN/RESOLVED_BIN_VERSION are
   # set by resolve_runner_version below and default to unresolved placeholders so a
   # receipt written before (or instead of) resolution is honest rather than wrong.
+  #
+  # Both are the OBSERVED strings (resolved path, first stdout line) passed through
+  # receiptSafe() — not the sanitized identity token, and not raw either: control
+  # characters, `"` and `\` are stripped, because these now carry real CLI output into a
+  # printf JSON template and a quote in a version banner would otherwise emit an
+  # unparseable line into an append-only evidence file. The identity token itself is
+  # RESOLVED_VERSION_TOKEN, which is what the administration receives.
   printf '{"attempt":%s,"runner":"%s","model":"%s","bin":"%s","bin_version":"%s","version_source":"%s","probe_rc":%s,"note":"%s","instrument_charged":false,"probed_at":"%s"}\n' \
     "${7:-1}" "$2" "$3" "${RESOLVED_BIN:-unresolved}" \
     "${RESOLVED_BIN_VERSION:-unresolved}" "$4" "$5" "$6" \

@@ -42,6 +42,14 @@ token (`bin` was `command -v cursor` — `n/a` — and `bin_version` was the err
 `--plan` prints the version binary each seat will probe, so the mismatch is visible for
 free before anything is spent.
 
+Hardening found while self-reviewing the new resolver, on the surface that matters most —
+these values come from an arbitrary CLI's output. The four resolved fields are read with
+`read -r` rather than `eval`-ed, so a hostile or merely odd `--version` is not a
+code-execution surface; and the receipt's `bin`/`bin_version` pass through `receiptSafe()`
+(control characters, `"` and `\` stripped), because they now carry real CLI output into a
+printf JSON template and a quote in a version banner would otherwise write an unparseable
+line into an append-only evidence file.
+
 The regression oracle: `hooks/tests/runner-binary.test.sh` drives PATH stubs and asserts
 that a runner whose version probe emits an error string is **refused**, never recorded.
 

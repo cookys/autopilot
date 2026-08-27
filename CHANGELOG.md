@@ -45,6 +45,13 @@ free before anything is spent.
 The regression oracle: `hooks/tests/runner-binary.test.sh` drives PATH stubs and asserts
 that a runner whose version probe emits an error string is **refused**, never recorded.
 
+prose-justification: this release adds **one** prose line net — a row in
+`skills/engine-onboarding/SKILL.md`'s script table for `scripts/lib/runner-binary.js`, which
+CLAUDE.md § "When adding a new script" requires. Measured: `git diff origin/develop --stat --
+skills/ references/` = 1 file, +2/-1. The +5% the gate reports is accumulated drift against the
+v2.34.35 baseline that crosses the threshold on this release rather than growth introduced by it;
+the engine surface is flat (Δengine=-5) because this change is script + test, not skill prose.
+
 ## v2.34.43 — the roster gained roles, and an enum stopped pretending to be a gate
 
 Which heterogeneous engine serves which role is now configuration. `review-loop-config.md`

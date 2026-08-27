@@ -296,6 +296,44 @@ Because the implementer tuple validation is shared, admission is implemented as 
 guard**, not a bare enum widening: `cursor` is accepted for the implementer role and rejected
 for every reviewer-class role and for dual occupancy (§8 Q2), each with a negative test.
 
+> **SUPERSEDED 2026-08-27 by a Board-authorized change (v2.34.43).** The freeze above and the
+> admission matrix it carries are no longer the shipped contract. The Board asked for per-role
+> heterogeneous routing and for cursor to be routable at `review`/`plan`/`consult`/`discuss`
+> *today*, before Phase 5. `resolve-review-loop.sh` was therefore touched ahead of Phase 5, which
+> is a deliberate deviation from this plan, authorized by that ask — not drift.
+>
+> What changed, and why the matrix above cannot simply be re-read as still true:
+>
+> - **The enum layer stopped being the gate.** This plan (and v2.34.42's CHANGELOG) reasoned that
+>   "the schema enum is what makes a runner *assignable*, so it belongs with admission". On a
+>   fresh heterogeneous consult (`codex`/`gpt-5.6-sol`, high) that reasoning was overturned: a
+>   runner enum is a **syntax table** — it already carries runners with no per-role qualification
+>   evidence — and was never capable of expressing a per-role permission. All six sites now carry
+>   `cursor` on both the schema and shell sides.
+> - **Admission became the gate, and it is role-aware in the way this matrix wanted.** A seat
+>   naming a runner in `UNQUALIFIED_RUNNERS` is refused (exit 3) unless
+>   `$AUTOPILOT_QUALIFICATION_OVERRIDE` carries an unexpired entry matching engine + runner +
+>   **role** exactly. So the matrix's "never, this plan" rows are still honoured *by default* —
+>   cursor cannot hold a reviewer-class seat — but they are no longer absolute: an explicit,
+>   recorded, expiring operator override can open one, per role, and is announced as
+>   evidence-free and listed in `override_admitted_seats`. That is the Board's Ruling 1 shape,
+>   not an earned qualification, and nothing downstream may read it as one.
+> - **Dual occupancy is now real.** The rule this plan froze — a roster placing cursor in both an
+>   implementer and a reviewer-class seat is rejected — turned out to have been **implemented
+>   nowhere**: `resolve-review-loop.sh` contained no occurrence of `cursor` at all, so dual
+>   occupancy was rejected only incidentally, because cursor was unspellable in every enum. It is
+>   now an actual tested rule (`allow_same_runner_dual_seat`, default off), scoped to
+>   override-admitted runners and keyed on the **runner** rather than the model family.
+>
+> **Phase 5 is unchanged and still outstanding.** Stage-1 implementer qualification has not run;
+> no live `cursor-agent` model call has been made; KR1/KR2/KR4 receipts are still owed. What
+> Phase 5 must now deliver is a *recorded qualification* that removes `cursor` from
+> `UNQUALIFIED_RUNNERS` for the implementer role — pinned to the qualified model id, exactly as
+> the matrix row says — so that routing it stops needing an override. Until then the honest
+> description is: cursor is shipped, executable, unqualified, and routable only by an explicit
+> operator decision. See `hooks/tests/resolve-review-loop-role-admission.test.sh` for the
+> executable contract.
+
 **Model contract**: both wrappers require an **explicit full `--model` id** for `--runner
 cursor` — there is no cursor default and no family-alias resolution on these rails (the mapper
 and `--cursor-fast` are `dispatch-hetero.sh`-only). A missing or alias `--model` is a

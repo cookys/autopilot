@@ -41,7 +41,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Skills tooling, evals & measurement** — `distill-scan.js` `identifier-scan.js` `distill-consolidate.sh` `distill-sync-setup.sh` `retro-review-loop.js` `lib/retro-loop-metrics.js` `lib/transcript-attribution.js` `measure-task-width.sh` `task-width-fleet.sh` `task-width-ingest.py` `run-eval-batch.sh` `run-skill-opt.sh` `toggle-payload-capture.js` `benchmark-hook-multiplexer.js` `validate-hook-multiplexer-benchmark.js` `run-grok-implementer-ab.sh` `validate-grok-implementer-ab.js` `test-grok-effort.sh`
 
-**Shared JSON & store primitives** — `lib/json-emit.sh` `lib/jsonl-store.js` `lib/extract-json-object.js`
+**Shared JSON & store primitives** — `lib/json-emit.sh` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js`
 
 
 ## When adding a new script

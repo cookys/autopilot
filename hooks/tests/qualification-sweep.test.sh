@@ -151,4 +151,65 @@ assert_exit_code "$NON_IMPL_EXIT" "1" "a non-implementer roster role is refused 
 assert_contains "$NON_IMPL_OUT" "implementer-only" "the refusal says why the sweep is implementer-only"
 assert_not_contains "$NON_IMPL_OUT" "engine-qualify.js reviewer" "no reviewer plan is emitted"
 
+# =====================================================================
+# 8. VERSION-BINARY RESOLUTION (2026-08-27 incident). The sweep used to derive the
+#    --version binary from the runner NAME, special-casing only cc-shim->claude. For
+#    `runner: cursor` that runs the Cursor IDE launcher, whose stderr error sentence —
+#    folded in by `2>&1` and merely character-sanitized — became the --runner-version
+#    identity token of a real, paid administration.
+#
+#    --plan now prints the RESOLVED version binary per seat (map lookup only; no
+#    --version is executed, so determinism above still holds). That is the free,
+#    pre-spend check the incident lacked.
+#
+#    Deep-guard coverage of the refusal itself lives in hooks/tests/runner-binary.test.sh
+#    (PATH stubs). It cannot live here: exercising run_seat's refusal needs --execute,
+#    which the header forbids.
+# =====================================================================
+CURSOR_ROSTER="$TEST_TMP/roster-cursor.json"
+node -e '
+  const fs = require("fs");
+  const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  r.seats = [{ slug: "seat-cursor", runner: "cursor", model: "grok-4.6-fast",
+    family: "xai", version_source: "operator-asserted", endpoint: "-", effort: "high" }];
+  fs.writeFileSync(process.argv[2], JSON.stringify(r, null, 2));
+' "$ROSTER" "$CURSOR_ROSTER"
+CURSOR_PLAN="$("$SCRIPT" --roster "$CURSOR_ROSTER" --plan 2>&1)"
+assert_exit_code "$?" "0" "--plan over a cursor seat exits 0"
+assert_contains "$CURSOR_PLAN" "version_binary: cursor-agent" \
+  "the cursor seat resolves its version binary to cursor-agent (the CLI), not cursor (the IDE launcher)"
+assert_not_contains "$CURSOR_PLAN" "version_binary: cursor
+" "plain 'cursor' is never named as the version binary"
+
+# cc-shim keeps resolving to claude (the one mapping the old inline code got right).
+assert_contains "$PLAN_OUT" "version_binary: claude" "the cc-shim seat resolves to claude"
+assert_contains "$PLAN_OUT" "version_binary: codex" "the codex seat resolves to codex"
+
+# The plan states the fail-closed posture so an operator reading it before spending
+# knows an unusable --version costs nothing.
+assert_contains "$PLAN_OUT" "UNCHARGED" "the plan states that an unusable --version refuses the seat uncharged"
+
+# An UNMAPPED runner is announced as such rather than silently name-derived.
+BOGUS_ROSTER="$TEST_TMP/roster-bogus-runner.json"
+node -e '
+  const fs = require("fs");
+  const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  r.seats = [{ slug: "seat-bogus", runner: "not-a-real-runner", model: "m",
+    family: "f", version_source: "operator-asserted", endpoint: "-", effort: "high" }];
+  fs.writeFileSync(process.argv[2], JSON.stringify(r, null, 2));
+' "$ROSTER" "$BOGUS_ROSTER"
+BOGUS_PLAN="$("$SCRIPT" --roster "$BOGUS_ROSTER" --plan 2>&1)"
+assert_contains "$BOGUS_PLAN" "version_binary: UNMAPPED" \
+  "an unmapped runner is announced as UNMAPPED, never name-derived"
+assert_not_contains "$BOGUS_PLAN" "version_binary: not-a-real-runner" \
+  "an unmapped runner's own name is never used as its version binary"
+
+# The old name-derived derivation must be GONE from the script, not merely bypassed.
+assert_not_contains "$(cat "$SCRIPT")" 'verbin="$runner"' \
+  "the name-derived version binary (verbin=\$runner) is removed from the sweep"
+# Comment lines are excluded: the header explains the old form on purpose, and the fix is
+# that no EXECUTABLE line folds stderr into a version read any more.
+assert_not_contains "$(grep -v '^[[:space:]]*#' "$SCRIPT")" '--version 2>&1' \
+  "no stderr-folding --version read remains in the sweep's executable lines"
+
 finalize_test

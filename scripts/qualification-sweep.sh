@@ -255,6 +255,16 @@ plan_sweep() {
     echo "=== SEAT: $slug ==="
     echo "role=$ROLE runner=$runner model=$model family=$family effort=$effort version_source=$vsrc endpoint=$endpoint"
     echo "bundle: $bundle"
+    # Which binary --execute would actually ask for a version. MAP LOOKUP ONLY — no
+    # --version is run, so --plan stays byte-deterministic and free. Printing it is the
+    # cheap check the 2026-08-27 incident lacked: the operator can SEE that runner=cursor
+    # resolves to cursor-agent (not `cursor`, the IDE launcher) before spending anything.
+    local vbin
+    if vbin="$(node "$REPO_ROOT/scripts/lib/runner-binary.js" binary --runner "$runner" 2>/dev/null)"; then
+      echo "version_binary: $vbin"
+    else
+      echo "version_binary: UNMAPPED - runner '$runner' has no version-binary mapping; --execute would refuse this seat uncharged"
+    fi
     echo
     echo "[stage-0 probe]"
     if [ "$endpoint" = "anthropic-native" ]; then
@@ -268,6 +278,8 @@ plan_sweep() {
     echo "    --timeout 240s --scaffold-tier off"
     echo "  # rc 0 + \"status\": \"committed\" -> probe receipt rc=0 appended to $bundle/probe-receipts.jsonl, proceed"
     echo "  # otherwise -> probe receipt rc=1 appended (instrument_charged:false), SKIP administration (uncharged)"
+    echo "  # BEFORE all of the above: \`$vbin --version\` must exit 0 and print a version-shaped"
+    echo "  #   first stdout line; anything else -> probe receipt rc=4, seat refused UNCHARGED."
     echo
     echo "[administration]"
     echo "  node scripts/engine-qualify.js $ROLE \\"
@@ -290,11 +302,50 @@ plan_sweep() {
 
 # --- execute mode ------------------------------------------------------
 
-probe_receipt() { # bundle runner model vsrc rc note
+probe_receipt() { # bundle runner model vsrc rc note [attempt]
+  # `bin` / `bin_version` record the RESOLVED version binary, never the runner token.
+  # The old form ran `command -v "$runner"` and `"$runner" --version 2>&1`: for
+  # runner=cursor that is the Cursor IDE launcher, so the receipt recorded `n/a` and an
+  # error sentence as this run's binary identity. RESOLVED_BIN/RESOLVED_BIN_VERSION are
+  # set by resolve_runner_version below and default to unresolved placeholders so a
+  # receipt written before (or instead of) resolution is honest rather than wrong.
   printf '{"attempt":%s,"runner":"%s","model":"%s","bin":"%s","bin_version":"%s","version_source":"%s","probe_rc":%s,"note":"%s","instrument_charged":false,"probed_at":"%s"}\n' \
-    "${7:-1}" "$2" "$3" "$(command -v "$2" 2>/dev/null || echo n/a)" \
-    "$("$2" --version 2>&1 | head -1 | tr -cd 'A-Za-z0-9 ().[]:-' )" "$4" "$5" "$6" \
+    "${7:-1}" "$2" "$3" "${RESOLVED_BIN:-unresolved}" \
+    "${RESOLVED_BIN_VERSION:-unresolved}" "$4" "$5" "$6" \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$1/probe-receipts.jsonl"
+}
+
+# Resolve the runner's version identity through the ONE owner of the runner->binary map
+# (scripts/lib/runner-binary.js), failing closed on anything unusable.
+#
+# WHY (2026-08-27): this function used to be four inline lines that derived the version
+# binary from the runner NAME, special-casing only cc-shim->claude. `runner: cursor` runs
+# `cursor-agent`; plain `cursor` is the IDE launcher, whose `--version` error sentence —
+# folded in by `2>&1` and merely character-sanitized — became the `--runner-version`
+# identity token of a real, paid administration. runner_version decides whether
+# qualification evidence still applies later, so that row was authoritative-looking and
+# unmatchable. Same wrong assumption already fixed once in probe-engine-capability.sh
+# (v2.34.42); this copy was independent and unlooked-at.
+#
+# Sets RESOLVED_BIN / RESOLVED_BIN_VERSION / RESOLVED_VERSION_TOKEN / RESOLVED_VERSION_REASON.
+# Returns 0 only when a usable token exists. A non-zero return MUST abort the seat
+# uncharged — never fall back to "unknown" or to a sanitized error string.
+resolve_runner_version() { # runner -> rc 0 usable
+  local runner="$1" json
+  RESOLVED_BIN="unresolved"; RESOLVED_BIN_VERSION="unresolved"
+  RESOLVED_VERSION_TOKEN=""; RESOLVED_VERSION_REASON="resolver_failed"
+  json="$(node "$REPO_ROOT/scripts/lib/runner-binary.js" version --runner "$runner" --json 2>/dev/null)" || true
+  [ -n "$json" ] || return 1
+  eval "$(node -e '
+    const r = JSON.parse(process.argv[1]);
+    const q = (v) => "\x27" + String(v == null ? "" : v).replace(/\x27/g, "\x27\\\x27\x27") + "\x27";
+    process.stdout.write("RESOLVED_BIN=" + q(r.binary_path || r.binary || "unresolved") + "\n");
+    process.stdout.write("RESOLVED_BIN_VERSION=" + q(r.version_line || "unresolved") + "\n");
+    process.stdout.write("RESOLVED_VERSION_TOKEN=" + q(r.ok ? r.token : "") + "\n");
+    process.stdout.write("RESOLVED_VERSION_REASON=" + q(r.ok ? "ok" : (r.reason || "refused")) + "\n");
+  ' "$json")" || return 1
+  [ -n "$RESOLVED_VERSION_TOKEN" ] || return 1
+  return 0
 }
 
 stage0_probe() { # runner model effort -> rc 0 ok
@@ -325,6 +376,18 @@ run_seat() { # slug runner model family vsrc endpoint effort
   local slug="$1" runner="$2" model="$3" family="$4" vsrc="$5" endpoint="$6" effort="$7"
   local bundle="$EVROOT/$slug-qualify"
   mkdir -p "$bundle"
+  # VERSION IDENTITY FIRST — before any credential resolution, before the stage-0 probe.
+  # An unusable --version is an infra abort exactly like a probe miss: uncharged, receipt
+  # retained, seat NOT administered. Doing it first means a refused seat costs nothing at
+  # all (no token read, no dispatch), which is the whole posture: a refused seat is free,
+  # a bogus identity row costs a paid administration plus a permanent lie.
+  if ! resolve_runner_version "$runner"; then
+    probe_receipt "$bundle" "$runner" "$model" "$vsrc" 4 \
+      "runner version unusable ($RESOLVED_VERSION_REASON) - uncharged infra abort"
+    SEAT_FAILURES=$(( SEAT_FAILURES + 1 ))
+    log "SEAT $slug VERSION-REFUSED ($RESOLVED_VERSION_REASON) - seat NOT administered (uncharged)"
+    return
+  fi
   # cc-shim credentials via the canonical resolver (never manual export), ported
   # verbatim from the session-local sweep5.sh (the strongest of the five
   # sources): anthropic-native reads the operator's own Claude Code OAuth
@@ -364,15 +427,12 @@ run_seat() { # slug runner model family vsrc endpoint effort
     [ "$endpoint" != "-" ] && export ANTHROPIC_BASE_URL="$saved_base" ANTHROPIC_AUTH_TOKEN="$saved_tok"
     return
   fi
-  # Administration
-  local rver rtok verbin
-  verbin="$runner"; [ "$runner" = "cc-shim" ] && verbin="claude"
-  rver="$($verbin --version 2>&1 | head -1)"
-  rtok="$(printf %s "$rver" | tr -c 'A-Za-z0-9._:-' '-' | sed -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')"
-  [ -n "$rtok" ] || rtok="unknown"
+  # Administration. The version token was resolved and validated at the TOP of this seat
+  # (resolve_runner_version); an unusable one already aborted uncharged. Nothing is
+  # derived from the runner name here.
   node "$REPO_ROOT/scripts/engine-qualify.js" "$ROLE" \
     --engine "$model" --model "$model" --model-version "$model" \
-    --runner "$runner" --runner-version "$rtok" --family "$family" \
+    --runner "$runner" --runner-version "$RESOLVED_VERSION_TOKEN" --family "$family" \
     --harness-version "$HARNESS_VERSION" --effort "$effort" \
     --prompt-config-hash "$PROMPT_HASH" --semantic-fingerprint "$SEM_HASH" \
     --containment-fingerprint "$CONTAIN_HASH" \

@@ -1,5 +1,50 @@
 # Changelog
 
+## v2.34.44 — the version binary got an owner, and a bad version now refuses the seat
+
+`qualification-sweep.sh` derived the `--runner-version` identity token by assuming the
+version binary is named after the runner, special-casing only `cc-shim` -> `claude`. For
+`runner: cursor` the binary is `cursor-agent`; plain `cursor` is the Cursor IDE launcher.
+It answers `--version` with `Error: No Cursor IDE installation found. …` on **stderr**, the
+sweep folded stderr in with `2>&1`, and the sanitizer only strips characters — so the error
+sentence became the deployment identity of a real, paid administration. `runner_version`
+is what decides whether qualification evidence still applies at Stage 4, so the row looked
+authoritative and could never match anything. Caught by operating the tool; the run was
+killed at 0 of 24 administration dispatches.
+
+Second instance of one root cause: a heterogeneous QC panel had already fixed the same
+wrong assumption in `probe-engine-capability.sh` (v2.34.42). It recurred because the
+mapping had no owner — every call site carried its own copy.
+
+Two layers, both new:
+
+- **The map has one owner.** `scripts/lib/runner-binary.js` holds runner → version-binary
+  for all ten supported runners, each entry recorded against how that runner is actually
+  invoked (`dispatch-hetero.sh` `*_BIN` defaults, `dispatch-review.sh` rails). Identity
+  entries are written out explicitly: `codex: codex` is a checked fact, a fallthrough is
+  an assumption. An unknown runner **refuses** — it never falls through to its own name,
+  which is the bug class itself. `src/readiness/probe.js` consumes the module and drops its
+  private copy; `probe-engine-capability.sh` keeps its case statement (per-runner presence
+  logic, not name mapping, already correct since v2.34.42).
+- **An unusable version aborts the seat, uncharged.** Resolution runs *before* credential
+  resolution and the Stage-0 probe, so a refused seat costs nothing at all. Refused:
+  unknown runner, binary not on PATH, `--version` exiting non-zero, output on stderr only
+  (the two streams are no longer folded), empty output, and anything not version-shaped.
+  "Version-shaped" is a positive grammar — a real version token within the first three
+  whitespace tokens of a short line — not "contains `digit.digit` somewhere"; the loose
+  form still admitted diagnostics like `Cannot start: requires Node 18.0`. ANSI colouring
+  is stripped before validation and before tokenization, so a token can never carry escape
+  parameters. Both tightenings came from a heterogeneous consult (`codex`/`gpt-5.6-sol`,
+  high) on the proposed rule.
+
+Also: probe receipts record the **resolved** binary and its version line, not the runner
+token (`bin` was `command -v cursor` — `n/a` — and `bin_version` was the error sentence);
+`--plan` prints the version binary each seat will probe, so the mismatch is visible for
+free before anything is spent.
+
+The regression oracle: `hooks/tests/runner-binary.test.sh` drives PATH stubs and asserts
+that a runner whose version probe emits an error string is **refused**, never recorded.
+
 ## v2.34.43 — the roster gained roles, and an enum stopped pretending to be a gate
 
 Which heterogeneous engine serves which role is now configuration. `review-loop-config.md`

@@ -12,6 +12,16 @@
 #   bash hooks/tests/run.sh state-checkpoint   # filter (substring match on file)
 #   bash hooks/tests/run.sh --parallel [N]     # parallel L2 (N workers; default nproc)
 #   bash hooks/tests/run.sh --parallel 8 filter
+#
+# Residue reaper: immediately after arg parsing, this runner registers itself
+# as a live suite run and reaps stale ${TMPDIR} residue this suite itself
+# leaks (hetero-* worktrees, autopilot-test-* dirs, hooks-run-parallel.*
+# scratch, *.manifest.json) — see hooks/tests/lib/suite-residue-reap.sh for
+# the incident and the safety invariant. A single `reaper: ...` summary line
+# is always printed; set AUTOPILOT_SUITE_REAP_VERBOSE=1 for the raw JSON
+# envelope too. AUTOPILOT_SUITE_REAP=0 disables the reaper entirely (kill
+# switch). An EXIT/INT/TERM trap also reaps on interrupt so a killed run
+# cleans up after itself.
 
 set -uo pipefail
 
@@ -19,6 +29,51 @@ TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOKS_DIR="$(cd "$TESTS_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
 cd "$REPO_ROOT"
+
+# shellcheck source=../../scripts/lib/prune-tmp-residue.sh
+[ -r "$REPO_ROOT/scripts/lib/prune-tmp-residue.sh" ] && . "$REPO_ROOT/scripts/lib/prune-tmp-residue.sh"
+# shellcheck source=../../scripts/lib/worktree-reap.sh
+[ -r "$REPO_ROOT/scripts/lib/worktree-reap.sh" ] && . "$REPO_ROOT/scripts/lib/worktree-reap.sh"
+# shellcheck source=lib/suite-residue-reap.sh
+[ -r "$TESTS_DIR/lib/suite-residue-reap.sh" ] && . "$TESTS_DIR/lib/suite-residue-reap.sh"
+
+# Global; set by the parallel branch, cleared after its own successful rm -rf.
+# The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
+PARALLEL_TMP=""
+declare -a PARALLEL_CHILD_PIDS=()
+
+__suite_on_exit() {
+  local status=$?
+  if [ -n "$PARALLEL_TMP" ]; then
+    rm -rf "$PARALLEL_TMP"
+  fi
+  if command -v suite_residue_reap >/dev/null 2>&1; then
+    suite_residue_reap >/dev/null 2>&1 || true
+  fi
+  if command -v suite_run_lock_release >/dev/null 2>&1; then
+    suite_run_lock_release || true
+  fi
+  return "$status"
+}
+trap __suite_on_exit EXIT
+
+__suite_on_interrupt() {
+  local sig="$1"
+  local pid
+  for pid in "${PARALLEL_CHILD_PIDS[@]:-}"; do
+    [ -n "$pid" ] && kill "$pid" >/dev/null 2>&1 || true
+  done
+  for pid in "${PARALLEL_CHILD_PIDS[@]:-}"; do
+    [ -n "$pid" ] && wait "$pid" 2>/dev/null || true
+  done
+  if [ "$sig" = "INT" ]; then
+    exit 130
+  else
+    exit 143
+  fi
+}
+trap '__suite_on_interrupt INT' INT
+trap '__suite_on_interrupt TERM' TERM
 
 # ── Argument parsing ──
 # Support, in any order: optional --parallel [N], optional substring FILTER.
@@ -58,6 +113,25 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# ── Residue reaper: pre-run reap + registry lock ──
+if command -v suite_run_lock_acquire >/dev/null 2>&1; then
+  suite_run_lock_acquire
+fi
+if command -v suite_residue_reap >/dev/null 2>&1; then
+  __REAP_JSON="$(suite_residue_reap 2>/dev/null || true)"
+  if [ -n "$__REAP_JSON" ]; then
+    __reap_reaped="$(printf '%s' "$__REAP_JSON" | grep -o '"reaped":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+    __reap_live="$(printf '%s' "$__REAP_JSON" | grep -o '"skipped_live":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+    __reap_unknown="$(printf '%s' "$__REAP_JSON" | grep -o '"skipped_unknown":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+    __reap_foreign="$(printf '%s' "$__REAP_JSON" | grep -o '"skipped_foreign_run":[0-9]*' | head -1 | grep -o '[0-9]*$')"
+    echo "reaper: reaped ${__reap_reaped:-0} stale residue entries (live ${__reap_live:-0}, unknown ${__reap_unknown:-0}, foreign ${__reap_foreign:-0})"
+    if [ "${AUTOPILOT_SUITE_REAP_VERBOSE:-0}" = "1" ]; then
+      echo "reaper: $__REAP_JSON"
+    fi
+  fi
+  unset __REAP_JSON __reap_reaped __reap_live __reap_unknown __reap_foreign
+fi
 
 # Resolve parallel worker count when requested.
 if [ "$PARALLEL" -eq 1 ]; then
@@ -225,9 +299,10 @@ else
     fi
 
     # Temp dir for per-file stdout/stderr buffers + exit codes + done markers.
+    # Global PARALLEL_TMP (declared above argument parsing) is what the
+    # top-level __suite_on_exit trap cleans up if this run is interrupted;
+    # the local `rm -rf` below on the clean-completion path clears it again.
     PARALLEL_TMP="$(mktemp -d "${TMPDIR:-/tmp}/hooks-run-parallel.XXXXXX")"
-    # shellcheck disable=SC2064
-    trap 'rm -rf "$PARALLEL_TMP"' EXIT
 
     start_one() {
       local file="$1"
@@ -241,6 +316,7 @@ else
         # Done marker last so readers only see complete buffers.
         touch "$donef"
       ) &
+      PARALLEL_CHILD_PIDS+=("$!")
     }
 
     print_result() {
@@ -315,7 +391,7 @@ else
     wait 2>/dev/null || true
 
     rm -rf "$PARALLEL_TMP"
-    trap - EXIT
+    PARALLEL_TMP=""
   fi
 
   # Run global-state/timing-sensitive tests only after the parallel pool is fully

@@ -613,6 +613,24 @@ and a cross-family panel are mandatory — enforce with `resolve-review-loop.sh 
 an unsatisfied high-risk gate). This hardens HONEST-but-WEAK implementers only — NOT a malicious
 worker (see the test-integrity isolation BACKLOG).
 
+**Two operating rules the panel itself will not enforce for you** (both learned by hitting them,
+2026-08-27):
+
+- **Pre-check the reviewer payload before you spend a dispatch.** `scripts/check-blind-evidence.sh
+  --payload <spec-file> --json` refuses a payload carrying implementer narrative (blind-evidence rule
+  K1). A spec that tells the panel what the author concluded — "the author decided X, judge it", "a
+  bypass was found and fixed here" — primes exactly what the blind rail exists to prevent, and
+  `dispatch-review.sh` will reject it as `precondition_failed` **after** you have queued the seat.
+  Write the questions without the answers, run the checker, then dispatch. State the open design
+  questions as questions the reviewer must answer *from the diff*, never as decisions to ratify.
+- **Reproduce every finding yourself before forwarding it.** A panel seat reports what it believes it
+  read; depth-0 owns what gets acted on. Reproducing takes minutes and does three things a forward
+  does not: it upgrades a Major to a Critical when the impact is worse than reported, it catches the
+  finding that is simply wrong (a NUL byte in a test fixture misread as a space, claimed to make the
+  suite "permanently red" — the suite was green), and it gives the implementer a command to re-run
+  rather than a claim to interpret. **Reject on the record**, with the evidence, rather than silently
+  dropping — an unadjudicated finding reappears next round.
+
 **The depth-0 qc is DISPATCHED, never the CEO eyeballing the diff inline.** A
 single self-read from the CEO's own context is itself only a first-pass and does
 **not** clear the gate — the value is *independent adversarial coverage*, not a

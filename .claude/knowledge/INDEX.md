@@ -8,6 +8,7 @@
 
 | 日期 | 類別 | 簡述 | 文件 |
 |------|------|------|------|
+| 2026-08-27 | arch | 訂閱不等於便宜:同一個 CLI、同一組登入,指向 first-party 模型走「大方的池」,指向第三方模型走「按 API 價計費的池」,差一個數量級;`auto` 沒有獨立額度(是母池的子項),`-fast` 是進出各 2 倍、只買延遲不省錢;CLI 查不到用量,只有互動模式的 slash command 有 | [vendor-quota-shapes.md](vendor-quota-shapes.md) |
 | 2026-08-25 | arch | 驗證一份「描述環境」的文件要獨立重畫地圖再 diff,不是逐句查證——逐句查不出它少畫了一整條通道;三位審查者全過,且其中一人據以推理的前提本身就是漏掉的那條 | [architecture.md](architecture.md) |
 | 2026-08-25 | arch | 讀斷言不等於測斷言:一席讀了「改鬆會變紅」的註解判 Verified Clean,另一席突變後發現全綠、真實語料 5→2;panel 合成必須 union-on-verified-critical,多數決會壓掉盲點catch | [architecture.md](architecture.md) |
 | 2026-08-25 | arch | 協定的句子攔不住一個 process:depth-0 獨佔 oracle 的規定寫得很清楚,已回傳的 foreman 仍出於盡責自己再跑一輪,15 個並行進程讓整個時間窗紅綠都不可解讀;獨佔要靠鎖不靠散文 | [architecture.md](architecture.md) |

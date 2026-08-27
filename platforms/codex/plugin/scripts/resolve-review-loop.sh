@@ -1684,17 +1684,28 @@ for _pr in $_panel_div_runners; do
     [[ "$_pr" == "$_ir" ]] && _panel_overlap=$((_panel_overlap + 1)) && break
   done
 done
-if [[ "$_panel_total" -gt 0 && "$_panel_overlap" -gt 0 ]]; then
+# PARTIAL overlap is deliberately SILENT. The shipped default panel is
+# `codex, claude-native, agy` — three distinct rails on purpose — so a codex
+# implementer overlaps exactly one of them in the repo's own RECOMMENDED
+# configuration. A warning that fires on the recommended setup is noise, and it
+# trains readers to ignore the channel carrying the real signal. It also
+# demonstrably broke a caller: dispatch-author.sh --strict-contract turned the
+# extra stderr line into an empty result (dispatch-author-contract dropped from
+# 46 assertions to 33 until this was removed). Partial overlap is not invisible
+# either — the pre-existing cross-family control still reports when the panel
+# shares the implementer's FAMILY.
+#
+# TOTAL overlap keeps its teeth: every usable seat on the implementer's own rail
+# means the terminal gate has no runner decorrelation anywhere. Only that sets
+# same_runner_dual_seat, which keeps the field a fact worth putting in a run
+# summary rather than a restatement of the default roster.
+if [[ "$_panel_total" -gt 0 && "$_panel_overlap" -eq "$_panel_total" ]]; then
   SAME_RUNNER_DUAL_SEAT="true"
-  if [[ "$_panel_overlap" -eq "$_panel_total" ]]; then
-    if [[ "$ALLOW_DUAL_SEAT" != "on" ]]; then
-      echo "resolve-review-loop: EVERY qc_panel seat ($_panel_total of $_panel_total) runs on the implementer's own runner — the terminal gate has no runner decorrelation at all. Model families do not help here: one rail can serve several. Add a panel member on a different runner, or set allow_same_runner_dual_seat: on to accept it deliberately." >&2
-      exit 3
-    fi
-    echo "resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and EVERY qc_panel seat runs on the implementer's runner — the terminal gate has no runner decorrelation." >&2
-  else
-    echo "resolve-review-loop: WARNING — qc_panel: $_panel_overlap of $_panel_total seat(s) run on the implementer's own runner. The remaining seat(s) still decorrelate, and union-on-verified-critical means any one of them can block, so this is permitted — but the shared seat's independence is nominal." >&2
+  if [[ "$ALLOW_DUAL_SEAT" != "on" ]]; then
+    echo "resolve-review-loop: EVERY qc_panel seat ($_panel_total of $_panel_total) runs on the implementer's own runner — the terminal gate has no runner decorrelation at all. Model families do not help here: one rail can serve several. Add a panel member on a different runner, or set allow_same_runner_dual_seat: on to accept it deliberately." >&2
+    exit 3
   fi
+  echo "resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and EVERY qc_panel seat runs on the implementer's runner — the terminal gate has no runner decorrelation." >&2
 fi
 
 for _ir in $_impl_runner_tokens; do

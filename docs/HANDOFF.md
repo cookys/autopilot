@@ -1,86 +1,95 @@
 ## 目標
 
-**北極星**(ADR-0001):強模型治理 = 管 outcome/evidence 不管 process。本 session
-(2026-08-23)在 CEO 授權下連出四版並清空所有已觸發的 backlog 條目;結束時 backlog 處於
-罕見的「**全部未觸發**」乾淨態。CEO 授權止於本 session,新 session 重新確認。
+把 Cursor CLI(`cursor-agent`)接成 autopilot 的異質引擎 rail,並讓使用者能逐角色設定
+hetero engine 走哪個引擎。**本 session 已完成並合進 develop**;此交接是為了 clear ctx 後接續
+剩下的 backlog,不是為了接續一項未完成的工作。
 
 ## 現況
 
-- Branch:`develop`,**乾淨**,已推 origin(`a97df694`)。無 stash、無殘枝、單一 worktree。
-- 本 session 出貨四版(全部走 `/l4` foreman + sonnet leaves + depth-0 三席權威 panel):
-  - **v2.34.35** `687f9e56` — strike-decay:四顆日曆牙全拔,資格降級改成犯錯累積(Board 裁示機器化)
-  - **v2.34.36** `323f045f` — official qualification defaults:17 列官方成績單隨 plugin 出貨
-  - **v2.34.37** `9c8daa6c` — fix bundle:真實時鐘 instant + 兩個 flaky 上界改負載相對
-  - **v2.34.38** `a97df694` — test-integrity:anti-gaming 閘第一次看得見本 repo 的 300 個套件
-- Board 兩件積案已裁決(`97c48b0a`):tree-engine graduation **ABORT**(72 天只 2/50 樣本,
-  `board_signoff{decision:abort,active:false}` 已入 tree ledger);fable-skills absorption
-  **NOT-PURSUED**(價值大半已被後續出貨吸收,plan 蓋章保留不刪)。
-- 全套件 275/275、preflight 8/8(ratchet 債已於 `754df354` 以逐條歸因的 prose-justification
-  清償並 refresh baseline)。
-- Task list:#1-#4 全 completed。
+- Branch `develop` @ `b1a14e0c`,**乾淨**,無殘留 worktree、無 stash。
+- **領先 origin/develop 1 個 commit**(`b1a14e0c` 的 knowledge/docs 路由)—— 其餘全部已推。
+- 版本 **v2.34.44**。preflight 8/8、全套件 282/282、gates 全綠。
+- 本 session 出貨(全部走 `/l4` foreman + sonnet leaves + depth-0 跨家族權威 panel):
+  - **v2.34.41** — `dispatch-plan-review.js` 註解裡的 `*/` 讓整支 parse 不了,躺了一天
+  - **plan** `docs/plans/2026-08-26-cursor-cli-adaptor.md` — 3 輪 6 代 hetero review,44 個 blocker 全數裁決修復
+  - **v2.34.42** — cursor rail 本體(plan Phase 1–4)
+  - **v2.34.43** — 逐角色 hetero 路由設定檔 + backlog 清掃
+  - **v2.34.44** — runner→binary 唯一擁有者 + 版本驗不過即拒絕席次
+  - **evidence** `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/` — implementer 資格考 24/24
 
 ## 已決事項(不重議)
 
-- **資格不因日期失效**(v2.34.35):expires 純 advisory;降級唯一路徑 = strike 累積過門檻 →
-  `requalify_required`;唯一出口 = 重考通過開新 epoch(append-only)。ordinary strike 在
-  **SHADOW**(`AUTOPILOT_STRIKE_ENFORCEMENT=enforce` 才上牙),critical registry 立即執法。
-  strike-blocked 席**不可**被 operator override 洗掉。
-- **官方預設不得蓋寫本地證據**(v2.34.36):含誠實 FAILED 列;`--force` 只能重採納先前的
-  official-default。「簽署」實作為 **disclosure 非 attestation**(ADR-0001,零 digest 欄位)。
-- **test-integrity 停在 `warn` 不設 `block`**(v2.34.38):block 會擋掉幾乎每個誠實的測試維護
-  commit 然後被關掉。升級 block 需獨立的準確度紀錄(已立 row)。
-- **閘門修復的驗收方式**:depth-0 必須自己植入作弊實測,不信自述;要求「列舉文法 + 具名
-  未覆蓋類別」而非「修掉回報的 bug」。
-- ADR-0001、rerun-until-green 禁止、TTL advisory —— 照舊。
+- **資格閘不拆,override 顯式且留痕** — Board 裁示,已機器化於 `resolve-review-loop.sh`。
+- **雙席 decorrelation 預設關、可開、開了要警告** — 同上。
+- **cursor 只 earned 了 implementer** — `cursor-grok-4.6-high-fast`,90 天效期自 2026-08-27。
+  `review`/`plan` 維持 `gpt-5.6-sol`/codex(唯一過 reviewer 考的);`consult`/`discuss` 只能 override。
+- **schema runner enum 是語法表,admission 才是閘** — 推翻了本 session 稍早「整批延到 Phase 5」的裁決。
+- **雙席比對用 runner 軸,不用模型家族軸** — 家族軸會擋掉出廠預設,且一條 cursor rail 同時服務
+  grok 與 gpt id,家族軸剛好漏掉裁示點名的情況。
+- **Phase 5 只考了 implementer** — 其餘角色未考,依使用者裁示「設定檔先做」。
 
 ## 下一步
 
-1. **`/next` 重掃**。目前 backlog **58 條全部未觸發**——無事可撿是正常態,不是漏看。
-   最近可能點燃的:`validate-json-schema` 拒絕小數(下個帶浮點的 artifact)、
-   `engine-qualify-impl` 不明紅的歸因半件(下次它跑紅,證據這次會在)。
-2. ~~未歸檔的專案目錄~~ — **已於 `a1aae042` 完成**。四個(含 `2026-08-21-p6d-orchestration-incident`,
-   判定歸檔:矯正專案已歸檔、殘餘工作是有 trigger 的 BACKLOG 條目)全部移入 `_archive/`,
-   INDEX 進行中表清空、零 orphan;live 參照(BACKLOG／CHANGELOG／test-integrity 設定與測試註解)
-   重指、被移動 README 的相對連結重算深度;凍結的 plan doc 依慣例保留原路徑。
-3. **日期覆審**:ordinary-strike 上牙門檻 row **2026-11-22 前必須重讀**,即使什麼都沒發生。
+1. `git push origin develop`(領先 1 個 commit)。
+2. 若要用 cursor 當 implementer,編輯 `.claude/review-loop-config.md`:
+   `implementer_engine: cursor-grok-4.6-high-fast` / `implementer_runner: cursor` / `implementer_effort: high`
+   —— 已 earned,**不需要 override 檔**。
+3. Backlog(無觸發器,依價值排序):
+   - `dispatch-review.sh:146-147,239` 用 `[ -r ] && . … || true` + `command -v` 守 alias 拒絕,
+     lib 讀不到就靜默跳過(fail-open),而 `dispatch-author.sh:111-112` 是無條件 source —— 不對稱。
+   - `discuss_*` 設定欄位**沒有任何 consumer**(已在 schema description 與文件中據實標明)。
+   - parallel suite 的 flake 已查明是 `/tmp` 陳舊 hetero worktree 殘留,非程式碼問題,附證據在 backlog。
+   - GLM 的四條 🔵(e2e stub 只斷言 `--model`、`dispatch-review.test` 缺 nonzero+stdout 組合、
+     `grok46|codex53` 在兩個 wrapper 各自重述而非取自 `cursor_is_enabled_id`)。
+   - `consult`/`discuss` 沒有評量套件 —— 要 earned 就得先有人寫考卷。
 
 ## 驗證方式
 
 ```bash
-AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh   # 8/8 (v2.34.38)
-bash hooks/tests/run.sh --parallel 8                             # 275/275
-bash hooks/tests/check-test-integrity.test.sh                    # 135 assertions
-# 閘門現役實測(注意 base 必須含設定檔,否則會誤判成沒生效):
-H=$(git rev-parse HEAD); sed -i '0,/assert_/{/assert_/d}' hooks/tests/risk-counter.test.sh
-git commit -qam PLANTED && bash scripts/check-test-integrity.sh validate --range ${H}..HEAD
-# 期望:source=base, matched=1, violations=[deleted_line];驗完 git reset --hard -q $H
+AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh   # 8/8
+node scripts/check-js-syntax.js                                   # 549 files
+bash scripts/sync-codex-plugin-skills.sh --check                  # mirror parity
+scripts/resolve-review-loop.sh >/dev/null && echo ok              # roster resolves
+node scripts/engine-scorecard.js seat-status \
+  --engine cursor-grok-4.6-high-fast --runner cursor --role implementer   # qualified
 ```
 
 ## Read-order
 
-1. `/home/cookys/projects/autopilot/docs/BACKLOG.md` — 58 條開放條目;每條的 Trigger 才是
-   重點(白話解析網頁:https://claude.ai/code/artifact/cb60925d-25b4-4bb9-8f00-47d9649f758a)
-2. `/home/cookys/projects/autopilot/references/strike-decay.md` — v2.34.35 的降級契約
-3. `/home/cookys/projects/autopilot/references/qualification-defaults.md` — v2.34.36 的預設值契約
-4. `/home/cookys/projects/autopilot/.claude/test-integrity-config.md` — v2.34.38 的閘門設定 +
-   五類具名未覆蓋缺口
-5. `~/.claude/projects/-home-cookys-projects-autopilot/memory/MEMORY.md` — 本 session 新增三條
+1. `docs/plans/2026-08-26-cursor-cli-adaptor.md` — plan 本體,
+   Review log 記了三輪六代的軌跡與「為何 blocker 數不收斂」。
+2. `references/hetero-dispatch.md` — cursor rail 契約、consult 席次、
+   `--runner` 列表。
+3. `project-config-template/review-loop-config.md` — 新的
+   `consult_*` / `discuss_*` / `allow_same_runner_dual_seat` 欄位與 override 契約。
+4. `docs/plans/evidence/2026-08-27-cursor-grok-46-fast-qualify/README.md`
+   — 資格考結果,含 grok rail 失敗 vs cursor rail 通過的對照與其歸因限制。
 
 ## 陷阱
 
-- **並行 session**:`origin/docs/2026-08-23-coding-harness-consolidation-decision` 是**另一個
-  session** 的在途架構決策(R0 + 三份 attack review),**不要碰、不要合、不要評**。本 session
-  期間它還造成過兩次干擾(未歸屬的 `.opencode` 版本 bump、殘留 sleep 程序)。
-- **test-integrity 設定從 base commit 讀**(防作弊者自帶寬鬆設定):測試 range 的 base 必須
-  含 `.claude/test-integrity-config.md`,否則回 `source: template, matched: 0`,會被誤判成
-  「修了沒生效」。
-- **`.claude/knowledge/` 是已追蹤檔**,但目錄層在 .gitignore —— `git add` 會噴 ignored 警告,
-  實際上已 staged。別被訊息騙去用 `-f`。
-- **qc-gate 只認 `QC-Verdict: PASS` 字彙**,`SHIP-AS-IS` 不吃;且 trailer 必須與
-  `Co-Authored-By` 同末段(舊律,仍有效)。
-- **foreman 停車不自醒**:它等自己的背景子程序時不會被喚醒,只有 depth-0 `SendMessage` 能救。
-  brief 裡要明令「blocking foreground waits only」,否則每次收尾都要人工戳。
-- **CC foreman 的 `owner_absent` 是假象**:`stage-acquire` 跑在瞬時 shell 裡,PID 隨即消失,
-  watcher 判 dead 但 agent 還活著。看 git artifacts,別信這個訊號。
-- 判紅只信 Summary 段;`preflight-release-routing` 裡的六行 `FAIL [slash-entry-probe]` 是
-  嵌套 fixture,該套件本身 9/9 綠 —— 皆前 session 舊律,仍有效。
+**本 session 新發現 — 已路由至 `references/evidence-discipline.md` §17–19,此處僅留指標:**
+一個 assumption 可能有多份獨立副本(修一份不等於修完);fail-closed 守衛裡的上限若截斷不拒絕就是
+帶長度前綴的 bypass;代理指標不是量測(我把 `raw/` 目錄數當成派工數,報錯了一個數字)。
+
+**操作面,未寫成 reference:**
+- `scripts/load-endpoints-env.sh` 必須在 **bash** 裡 source **且呼叫** `autopilot_load_endpoints_env`
+  —— 只 source 會什麼都不載入,且靜默。
+- `cursor-agent` 會**自動更新**(本 session 中途 2026.08.11 → 2026.08.25)。版本綁定的探針證據
+  跨 session 可能已失效,plan §0.1 的探針表就是舊版跑的。
+- 資格考的 `--execute` 花真錢。`--plan` 免費且會印出完整 argv,先跑它。
+
+**繼承自上一份 handoff(2026-08-23),當時未被路由出去,仍有效:**
+- test-integrity 設定**從 base commit 讀**;測試 range 的 base 必須含 `.claude/test-integrity-config.md`,
+  否則回 `source: template, matched: 0`,會被誤判成「修了沒生效」。
+- **qc-gate 只認 `QC-Verdict: PASS` 字彙**,`SHIP-AS-IS` 不吃;trailer 必須與 `Co-Authored-By` 同末段。
+- **foreman 停車不自醒**:等自己的背景子程序時不會被喚醒,只有 depth-0 `SendMessage` 能救
+  (已寫入 `level-front-door.md`)。
+- **CC foreman 的 `owner_absent` 是假象**:`stage-acquire` 跑在瞬時 shell 裡,watcher 判 dead 但
+  agent 還活著。看 git artifacts,別信這個訊號。
+- 判紅**只信 Summary 段**;`preflight-release-routing` 裡的 `FAIL [slash-entry-probe]` 是嵌套 fixture。
+
+**已路由出本檔的內容**(依 `references/knowledge-routing.md` §3):
+`references/evidence-discipline.md` §17–19 + §10 延伸(discipline)、
+`skills/ceo-agent/references/level-front-door.md` §3 兩條 panel 操作規則(discipline)、
+`.claude/knowledge/vendor-quota-shapes.md`(可公開事實,已過揭露閘)、
+`~/.claude/projects/<slug>/memory/`(機器本地:引擎清單與路由決策)。

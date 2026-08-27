@@ -352,6 +352,13 @@ EOF
   exit 0
 fi
 : "${CURSOR_E2E_RECORD:?CURSOR_E2E_RECORD not set}"
+# Record the FULL argv (one arg per line, NUL-safe enough for these fixtures)
+# alongside the --model value. Recording only --model left every other flag on
+# the implementer path unasserted: -p, --trust, --force, --workspace and
+# --output-format could all silently change or disappear and no test would
+# notice, even though each one is load-bearing for the edit-only + wrapper-commit
+# posture this rail depends on.
+printf '%s\n' "$@" > "$CURSOR_E2E_RECORD.argv"
 prev=""
 for arg in "$@"; do
   if [ "$prev" = "--model" ]; then
@@ -380,6 +387,47 @@ assert_contains "$OUT" '"model": "cursor-grok-4.6-low"' \
   "cursor e2e (family alias, non-fast): emitted model is the resolved non-fast id"
 assert_eq "cursor-grok-4.6-low" "$(cat "$CURSOR_E2E_RECORD_A" 2>/dev/null)" \
   "cursor e2e (family alias, non-fast): stub RECEIVED the resolved non-fast id via --model (not -low-fast)"
+
+# --- 9a'. the REST of the implementer argv, which recording only --model left
+# entirely unasserted. Each of these is load-bearing: -p is print/non-interactive
+# mode, --trust + --force keep cursor-agent from prompting in a headless run,
+# --workspace is what anchors edits at the real worktree (P4/P5 — without it the
+# rail would edit somewhere else and the wrapper would commit nothing), and
+# --output-format stream-json is the bound output contract (P13). A silent change
+# to any of them is a silent change to the rail's posture.
+ARGV_A="$(cat "$CURSOR_E2E_RECORD_A.argv" 2>/dev/null)"
+assert_contains "$ARGV_A" "-p" "cursor e2e argv: -p (print / non-interactive)"
+assert_contains "$ARGV_A" "--trust" "cursor e2e argv: --trust (no headless prompt)"
+assert_contains "$ARGV_A" "--force" "cursor e2e argv: --force (no headless prompt)"
+assert_contains "$ARGV_A" "--workspace" "cursor e2e argv: --workspace (edits anchored at the worktree)"
+assert_contains "$ARGV_A" "--output-format" "cursor e2e argv: --output-format present"
+assert_contains "$ARGV_A" "stream-json" "cursor e2e argv: bound to stream-json (P13)"
+# --workspace must name the ISOLATED dispatch worktree, not merely be present
+# with some value, and specifically NOT the caller's repo: the whole edit-only
+# posture depends on cursor-agent editing the throwaway worktree that the wrapper
+# then commits from. An absolute path pointing back at the sandbox repo would mean
+# the rail edits the caller's tree directly.
+WS_LINE="$(awk '/^--workspace$/{getline; print; exit}' "$CURSOR_E2E_RECORD_A.argv" 2>/dev/null)"
+case "$WS_LINE" in
+  /*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+  *) fail "cursor e2e argv: --workspace VALUE must be an absolute path (got: $WS_LINE)" ;;
+esac
+if [ "$WS_LINE" = "$SBX" ]; then
+  fail "cursor e2e argv: --workspace must be the isolated dispatch worktree, NOT the caller repo ($SBX)"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+assert_contains "$WS_LINE" "t-cursor-e2e-alias" "cursor e2e argv: --workspace names THIS dispatch branch worktree"
+# And the flags cursor-agent rejects must never appear (effort is the model-id
+# suffix on this CLI — P12; cursor-agent errors on both of these).
+case "$ARGV_A" in
+  *--reasoning-effort*) fail "cursor e2e argv: --reasoning-effort must never be passed (cursor-agent rejects it; effort is the model-id suffix)" ;;
+  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
+case "$ARGV_A" in
+  *$'\n'--effort$'\n'*) fail "cursor e2e argv: --effort must never be passed (cursor-agent rejects it)" ;;
+  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
 
 # --- 9b. --cursor-fast variant of the same alias: --model grok46 --effort low --cursor-fast. ---
 CURSOR_E2E_RECORD_B="$TEST_TMP/cursor-e2e-received-b.txt"

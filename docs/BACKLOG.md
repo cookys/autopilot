@@ -13,12 +13,13 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 **Discovery**: when starting any work, `grep <topic>` here. Plan-doc-as-roadmap (`docs/plans/2026-05-14-retro-roundup.md`) post-archive 後遷移 entries 也都歸這裡。
 
-## Audit snapshot（2026-08-05，post next-touch-debt-retirement）
+## Audit snapshot（2026-08-28，post lifecycle-hygiene sweep）
 
-- **31 real entries**：2 個 Board decisions、29 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
+- **65 real entries**：2 個 Board decisions、63 個 trigger 尚未成立的 conditional work；`<Topic title>` 範例不計入。
 - Platform capability trigger activation 的 D1 closed claims、D2 agy structured usage、D3 Codex production recovery 與 D4 strict-L5 trust root 已由 depth 0 驗證完成，依 lifecycle hygiene 從 backlog 刪除而非保留完成態條目。
 - 14 個 technical gaps（A01–A14）已由 [`next-touch-debt-retirement`](projects/_archive/2026-08-03-next-touch-debt-retirement/README.md) D1–D8 核銷並自本檔刪除。
-- 29 個 conditional entries 主要是四類：等待仍未出現的外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
+- 14 個 struck-through RESOLVED/SHIPPED entries（2026-08-18 至 2026-08-27 累積）依同一 lifecycle hygiene 規則從本檔刪除（history 留在 CHANGELOG／git）；一個混合條目（`Contract-first escalation and local-repair gates`）因 class (a) 仍未出貨而保留。
+- 63 個 conditional entries 主要是四類：等待仍未出現的外部平台／runner contract、等待 telemetry／事故樣本達門檻、等待新 runner／consumer，以及未來擴大 threat model／自動復原範圍才需要的 hardening。
 
 ---
 
@@ -70,12 +71,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Source**: v2.34.43 depth-0 QC round 2 (depth-0 bisect) + foreman verification runs, 2026-08-27.
 
 
-### ~~North-star per-skill ratchet is red on develop~~ — RESOLVED v2.34.35 post-merge (prose-justification with per-release attribution added to CHANGELOG v2.34.35 §; baseline refreshed via --update-baseline; preflight 8/8)
-- **Trigger**: 下一次任何 release 想要 preflight 8/8;或下一次動這三個 SKILL.md 任一時捎帶。
-- **Context**: preflight-release gate [8] 自 v2.34.35 起紅:`skills/dev-flow/SKILL.md` 713→717、`skills/engine-onboarding/SKILL.md` 203→228、`skills/harness-maintenance/SKILL.md` 58→59 超過 recorded baseline,且對應版段無 `prose-justification:` 行。v2.34.35 ship(strike-decay)驗證於 base `ab10bf08` 同樣紅、該 range 未觸 skills/ —— 兩輪 foreman 均拒絕代人 refresh baseline(「justifying growth I did not cause would launder someone else's drift through my gate」),依證據紀律改立此顯式債務 row。修向:trim 回 baseline,或在成長版本的 CHANGELOG 段補 justification 後 refresh baseline。
-- **Effort**: Fix。
-- **Source**: v2.34.35 pre-integration gates(2026-08-22,run nocon-decay-l4);preflight-release.sh gate [8]。
-
 ### Implementer suite hardening backlog (pre-merge review round-1 cut list)
 - **Trigger**: 下一次動 `evals/impl-eval-*`/`runImplQualification` 時捎帶;或第三場正式施測之前(屆時 Stage-0 機械化與 live-rail smoke 應先落);或 reviewer 再報同類。
 - **Context**: v2.34.34 round-1 review 裁 CUT 的殘項(五個 MUST-FIX 已修:partial-corpus fail-open 雙層拒收、preflight prose-justification、dispatcher_called ETIMEDOUT 歸因、HELP、Stage-0 明文 operator-run):(1) **Stage-0 probe 機械化**(qualifier 內建 receipt writer + frozen-token literal containment + attempt cap 消費;現為 operator-run,程序在 engine-onboarding SKILL.md);(2) §7 未落 fixture 列:runner-config-editor、malicious-git-config(現為 neutralized-not-labeled——`repoHygieneViolations` 不掃 repo-local config)、replacement-ref、add-then-revert canary、dirty-worktree、question-staller、quota-phrase+exit1、parser/output-bomb、runner-crash;(3) §2 live-rail smoke(真 rail + `--runner-bin` deterministic engine + 兩紅控);(4) §6 consumer matrix (b)-(f)(凍結舊 validator 拒新 row 的負向、qualityOf T0 斷言、dispatch-contract/review-loop 分支、非 N/N 控制);(5) capability-evidence.test.sh 的 impl_dispatch 單元覆蓋;(6) TTL 30/31/90/91 邊界測試;(7) `--trials` 精確斷言;(8) cosmetics:`corpus_version` 重複字面(已凍進 event 143 rows)、dead `wrapDispatchBin`、no_verdict stub 上 stdout。
@@ -87,28 +82,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Context**: 2026-08-22 implementer 施測(agy 1.1.17):flash-high 6 案、pro(event 147)2 案、flash-medium(event 152)6 案 envelope FAIL + 2 案 stall——envelope 失敗案**全部**是建新檔任務且同簽名(family-wide、發生率隨 tier 降:medium 6/8+2 stall、high 6/8、pro 2/8);編輯既有檔的家族全過。六案 raw log 皆為 `agy native JSON envelope invalid — response and usage NOT parsed`——wrapper commit 已落(scored_sha 存在)但 agy 輸出信封壞損,rail fail-closed nonzero 路徑觸發。FAIL row(scorecard event 144)依凍結 taxonomy 常駐;修復後屬 fresh evaluation。修向在 agy 上游或 dispatch-hetero 的 agy envelope 解析側,先重現最小案例再動。
 - **Effort**: Fix(重現+定位)/ 上游依賴。
 - **Source**: `docs/plans/evidence/2026-08-22-implementer-qualification-suite/agy-flash-qualify/README.md`。
-
-### ~~`external-lifecycle-witness` 500 ms wall-clock bound flakes under --parallel 8~~ — RESOLVED v2.34.37
-- **Status**: RESOLVED v2.34.37 (2026-08-23). 機制:上界改**負載相對**,斷言沒被刪。新的 `measureBoundedStop(stopFn, boundMs)` 在同一瞬間同時起兩件事——關機本身,與一個名目 500 ms 的 `sleep`——兩者跑在**同一條被餓死的 event loop** 上;通過條件是關機先於那個並發計時器完成。原本的 `Date.now() - startedAt < 500` 是絕對牆鐘上界:關機贏了 race 仍可能量到 >500 ms,因為 loop 在「resolve」與「取時間戳」之間被搶走。同一構造的姊妹斷言 `stop_bounded`(同檔 :424)一併改用同一個 helper —— 同一個缺陷、同一個檔、同一族斷言,只修一半等於留著下次再觸發。兩條都額外吐出 `*_bound_measurement=<elapsed>/<baseline>` 診斷行(每跑必印,綠紅皆印),下次轉紅時自帶數字而不是一句 `not found in output`。**修前重現**:64 個背景 CPU burner 下連跑 5 次 → 3 紅,每一紅都恰好落在 `lease_epipe_stop_bounded`。**修後**:同樣 64 burner 5 跑 → 0 紅;單獨 3 跑全綠(elapsed 18-20 ms / baseline 500-501 ms)。**Planted negative**:把該關機延遲成 3000 ms → 該條照樣轉紅(52 passed, 1 failed),證明保護沒被放掉。
-- **Trigger**(已觸發並完成): 下一次它在 full-suite / CI 跑紅;或下一次動 `hooks/tests/external-lifecycle-witness.test.sh`。
-- **Context**: `lease_epipe_stop_bounded` 斷言 `Date.now() - epipeStartedAt < 500` 是字面 wall-clock 上界,8 路並發下間歇性超時(2026-08-21 v2.34.33 pre-merge R2 全揭露:branch 乾淨三跑 FAIL/FAIL/PASS,單獨跑 PASS×4、develop 基線 PASS;該 ship 對此面零觸碰、兩側測試檔集合逐字節同位 → 判 pre-existing 負載敏感 flake 非回歸)。修向:上界改負載相對或放寬;flaky 紅是「紅字部分為雜訊就不再被讀」的已記錄危害(v2.34.22 教訓),別讓它積累。
-- **Effort**: Fix。
-- **Source**: 2026-08-21 v2.34.33 pre-merge review round-2(autopilot:reviewer);`docs/projects/_archive/2026-08-21-verdict-bytes-preservation/README.md` 處置附記。
-
-### ~~Official qualification defaults~~ — 官方考過的 roster 成績單,consumer 吃預設或自考 — SHIPPED v2.34.36
-- **Status**: SHIPPED v2.34.36 (2026-08-23). 17 官方 administration 以 `references/official-qualification-defaults.json` 隨 plugin 出貨(implementer 143-155 九過四敗、reviewer 139/140/141、verification_author 142),每列帶完整施測環境披露 + evidence pointer;產生走 `scripts/build-qualification-defaults.js`(`--check` byte-compare 擋手改),採用走 `scripts/adopt-qualification-defaults.js`(經 `engine-scorecard.js record` 寫入,連 qualifier-store anchor 一起搬)。「簽署」依 ADR-0001 實作為 DISCLOSURE 而非 attestation;驗證路徑是 re-derivation(自考)。採用列與自考列同 `seat_hash`、同 strike 累積;`requalify_required` 時多一個 advisory `remedy` 指向自考。Plan `docs/plans/2026-08-23-official-qualification-defaults.md`;contract `references/qualification-defaults.md`。
-- **Residual (not shipped)**: brain-seat sittings 不在 v1 預設包內(不是 scorecard 列,是 capability store 的 `owner-brain-seat-v1` 原子紀錄,語意不同)—— 見下方新條目。
-- **Trigger**(已觸發並完成): 下一個 consuming repo 要啟用 hetero roster 而未自行考級時。
-- **Context**: Board 提案 2026-08-21:四份考券 {planner, implementer, reviewer, verification-author} 由 autopilot 官方對常用引擎正式施測,結果以簽署的 scorecard 成績單隨 plugin 出貨為**預設值**;consuming user 啟用某 role 的 hetero 引擎時,由 onboard/engine-onboarding 問一次:「吃官方預設成績單,還是在自己的環境自考?」自考走既有 engine-qualify 流程覆蓋預設。設計要點:(1) 預設成績單要標注施測環境(CLI 版本、transport、日期)—— 官方環境 ≠ 用戶環境,差異披露不隱藏;(2) 降級一律走不信任投票累積,不用日曆(既決);(3) 目前官方已考:gpt-5.6-sol reviewer QUALIFIED(scorecard 141)、glm-5.3 FAILED、MiniMax spike 5/9、brain 兩坐 FAILED —— reviewer role 已有可出貨的第一筆預設;(4) 與「Roster qualification — remaining legs」條目相依:其他 role 的官方施測是該條目的工作,本條目管「預設值的出貨與 consumer 選擇 UX」。
-- **Effort**: L(成績單打包/簽署格式 + onboard 詢問流 + engine-onboarding 接線 + 環境差異披露)
-- **Source**: Board(user)proposal 2026-08-21;evidence `docs/plans/evidence/2026-08-17-roster-qualification/`。
-
-### ~~`engine-qualify-impl.test.js` wall-truncation 斷言是負載敏感 flake —— 機器夠快就轉紅~~ — RESOLVED v2.34.37
-- **Status**: RESOLVED v2.34.37 (2026-08-23). 機制:**觸發**與**斷言**兩端都不再依賴時鐘。(1) kernel 現在回報可觀測事實 `wall_truncated` 與 `started_cases`(`runImplQualification` 兩條 return path 都帶),不必再從 elapsed 反推「有沒有被截斷」;(2) 新增第三個 shrink-only test seam `testTruncateAfterCases: N`,和既有的 `testWallSecondsOverride` / `testReservationOverride` 同一族(只能縮不能放,只有 exported function 進得去),命中**同一個截斷分支**,但用「起跑了幾個 case」計數,因此在任何機器上都確定觸發。fixture 從 `testWallSecondsOverride: 8` + `qualified === false`(等於假設「8 秒跑不完」——那是關於**主機**的斷言不是關於 code 的)改成 `testTruncateAfterCases: 6` + 斷 `wall_truncated === true` / `started_cases === 6` / 分母 `/24` / `capability_score < 1`;另補 `testTruncateAfterCases: 0` 的退化形(no_verdict、無 evidence)與一條反向釘:未截斷的 honest 跑必須回 `wall_truncated=false` / `started_cases=24`(否則把 `wall_truncated` 寫死 true 也會綠)。**Planted negative 兩枚**:把截斷列的分母改回 observed(`6/6` + score 1.0,正是 resolve-scaffold-tier 會讀成完整 N/N 的形狀)→ 紅;把 `wall_truncated` 寫死 false → 紅。**穩定性**:單獨 `node --test` 連跑 3 次全綠(正是本條原本會轉紅的條件)。
-- **Trigger**(已觸發並完成): 下一次它在 full-suite / CI 跑紅;或下一次動 `scripts/engine-qualify.js` 的 wall 截斷路徑(`testWallSecondsOverride`)。
-- **Context**: `scripts/engine-qualify-impl.test.js:361` 用 `testWallSecondsOverride: 8` 跑一次施測,然後斷言 `truncRun.qualified === false` —— 也就是**假設 8 秒內跑不完**。負載夠重時整份 corpus 真的被截斷 ⇒ 綠;機器閒著跑得完 ⇒ `qualified === true` ⇒ 紅。2026-08-23 實測:8 路並行且另有一份 suite 同時在跑 → PASS(275/275);並行競爭較輕的第二次 → FAIL;單獨 `node --test` 跑 → FAIL。`scripts/verify-preexisting.sh 'node --test scripts/engine-qualify-impl.test.js' --base 754df354` 判 **`{"head":"fail","base":"fail","verdict":"PRE_EXISTING"}`** —— 與 v2.34.36 無關,該 ship 對 `engine-qualify-impl.{js,test.js}` 與 `evals/` 零觸碰。修向:把「有被截斷」變成可觀測事實再斷言(例如讓 kernel 回報 `truncated: true`),而不是拿 wall-clock 當代理;和 `lease_epipe_stop_bounded` 同一族 —— 「紅字部分為雜訊就不再被讀」是已記錄危害(v2.34.22 教訓),別讓它積累。
-- **Effort**: Fix。
-- **Source**: 2026-08-23 official-qualification-defaults full-gate(run `official-defaults-l4`);同時由 first-pass 施工與 leaf worker 兩次獨立觀察到。
 
 ### `validate-json-schema.js` 拒絕所有非整數數字 —— 任何帶小數的 JSON 文件都驗不了
 - **Trigger**: 下一個要 schema 驗證的 artifact 帶浮點數;或下一次動 `scripts/validate-json-schema.js` 的 `parseNumber`/`assertJsonValue`。
@@ -134,14 +107,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Context**: v2.34.36 ships official defaults for `implementer` / `reviewer` / `verification_author` — all scorecard rows. Brain-seat sittings are NOT scorecard rows: they are atomic `owner-brain-seat-v1` records in the capability store with their own semantics (forced `brain-seat` scope, no expiry, 3-strike revocation via `engine-capability-state.js brain-status`). Packaging them means a second record shape in the artifact + a second adoption path in `adopt-qualification-defaults.js`, and today all three recorded sittings FAILED (events 3/4/6), so there is nothing routing-useful to ship. Recorded as a deferral with a reason rather than forced into the v1 shape: `references/official-qualification-defaults.recipe.json` `excluded[]`.
 - **Effort**: S(第二種 record shape + 採用路徑)。
 - **Source**: v2.34.36 official-qualification-defaults ship;`references/qualification-defaults.md` § "What this does NOT do"。
-
-### ~~Same-UTC-day evidence receipt reads as not-yet-valid — three QUALIFIED implementer rows have no baseline on administration day~~ — RESOLVED v2.34.37
-- **Status**: RESOLVED v2.34.37 (2026-08-23). 機制:`nowArgToMs` 的**預設時鐘改成真實 instant**(`Date.now()`),不再截到 UTC 午夜;`todayMsUtc()` 整支移除,三個 `parse*Args` 呼叫點統一走 `nowArgToMs(now, false)`(原本只有 `--require-evidence` 才拿真 now)。顯式 `--now` 的**解析**逐字不變:date-only 仍是該日午夜,full timestamp 仍是該 instant,`nowMs` 值一模一樣。唯一保留的日粒度是 `computeExpiryWarning` —— 右手邊 `expires` 契約上就是 date-only,因此用新的 `startOfUtcDayMsOf(nowMs)` 把左右兩邊都留在日粒度。**這一項對帶時間戳的 `--now` 輸出確實有變**(不是「完全不變」):`expires: 2026-08-24` 的列在 `--now 2026-08-24T10:00:00Z` 下,修前 `expiry_warning=true`、修後 `false`,與 `--now 2026-08-24` 一致 —— 方向是消除 date-only 與 full-timestamp 兩種 `--now` 原本就存在的分歧;該欄位為 advisory-only,不參與 admission。釘住的 pass-instant tiebreak(`observedMs > baselineMs` 嚴格大於,`calendar-teeth-negative` tie1)未被觸碰。覆蓋測試:`hooks/tests/calendar-teeth-negative.test.sh` `instant1`(當日稍晚三筆 strike 在**預設時鐘**下 `strikes_since_pass=3 / rejected_strikes=0 / would_requalify`)、`instant2`(當日稍晚簽發的 evidence receipt 在預設時鐘下 `qualified` 且有 baseline;evidence blob 由 `references/official-qualification-defaults.json` 的真實 administration 經 `capability-evidence.js` 自身 compiler 重新戳記、anchor 用 `capabilityEvidenceProducerHash` 重建,所以走的是 `record` 的正規入場路徑)、`instant3/4`(canonical + codex 鏡像都不得再出現截斷時鐘)。兩份 fixture 的 instant 取 `max(UTC 午夜 + 1ms, now - 60s)`,所以在**任何時刻**跑都不會退化成 vacuous。Planted negative 已跑:把截斷改回去 → `instant1/2/3` 三條同時轉紅(24 passed, 3 failed),還原 → 27/27 綠。
-- **Trigger**(已觸發並完成): 下一次動 `engine-scorecard.js` 的 `deriveStatus`/`findSeatBaseline`/`nowArgToMs` 任一;或有人回報「剛考過的 seat 卻是 `no_record`」。
-- **Context**: `nowArgToMs` 預設 `todayMsUtc()`(UTC 午夜截斷)。一列 evidence receipt 的 `issued_at` 若落在同一個 UTC 日的午夜之後(例如 `2026-08-22T08:56Z`),`deriveStatus` 對它算出的 receipt state 不是 `qualified`/`stale`,`findSeatBaseline` 因此挑不到 baseline,`seat-status` 回 `no_record` —— 儘管 store 裡就有一列 QUALIFIED。實測(2026-08-22,真 store,唯讀):events **153 (gpt-5.6-luna)、154 (claude-sonnet-5)、155 (claude-opus-5)** 三列 `seat-status` = `no_record`,同一列加 `--now 2026-08-24` 立刻變 `qualified` / `baseline_event_id=155`;同 corpus 的 143-151(日期較早)全部正常。效果是暫時的(次日 UTC 午夜自癒),但當天的 strike fold 與 `remedy` 路徑等於整段失效。發現於 v2.34.36 official-defaults 施工,**未修**:動的是 admission 語意,超出該 ship 範圍。
-- **同一截斷還讓「當日 strike」變成無聲 no-op**(v2.34.36 first-pass reviewer 實測,比原條目更利):不帶 `--now` 時 `nowMs` 是 UTC 午夜,`foldSeatStrikes` 的 `observedMs <= nowMs` 因此**拒收今天稍晚寫進去的每一筆 strike**。實測:19:49Z 對已採用席位寫三筆 → 預設時鐘 `rejected_strikes: 3 / strikes_since_pass: 0`,同一列 `--now 2026-09-01` → `rejected_strikes: 0 / requalify_required`。`dispatch-contract.js` 從不傳 `--now`,所以 strike 執法在最多 24 小時內靜默失效。兩份新測試都釘 `--now`,因此都沒踩到。修的時候兩面一起修。
-- **Effort**: Fix(`nowArgToMs` 對 receipt 比較改用真實 now 而非 UTC 午夜,或 baseline 比較放寬到日粒度;要帶 planted negative:一列 `issued_at` 在今天稍晚的 row 必須 qualified,以及一筆今天稍晚的 strike 必須被計入)。
-- **Source**: 2026-08-23 official-qualification-defaults 施工實測(run `official-defaults-l4`)。
 
 ### Durable repair-lock — 解鎖路徑先行,鎖才准回來(P6D KR3 的第二階段)
 - **Trigger**: 無狀態拒絕被實測繞過(terminalization 之外的路徑把 BOUNDARY_REJECTED campaign 排水/succession 掉而未修復 —— 例如 host 直驅 reducer 的 no_effect_release);或 engine_terminal_evidence 欄位在真實終局分類點被接線(目前是死欄位)。
@@ -173,18 +138,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S(單項)
 - **Source**: autopilot:reviewer FIX-THEN-SHIP round-1, 2026-08-21;docs/projects/_archive/2026-08-21-panel-progress-view/
 
-### ~~Plan-review has no aggregate progress view~~ — RESOLVED v2.34.31 (panel manifest at every seat transition + `dispatch-status --panels/--panel`; concurrency question DECIDED sequential-with-rationale in docs/plans/2026-08-21-panel-progress-view.md §3)
-- **Trigger**: Next touch of `scripts/dispatch-plan-review.js`, or the next time a panel run has to be babysat by polling `ps`.
-- **Context**: v2.34.21 made each seat observable (`dispatch-author.sh` now emits a run manifest, and plan-review spawns one author per seat), but the PANEL layer still shows nothing: seats run **sequentially**, so wall time is the sum of seats, and the driver writes no output until every seat has returned. A 3-seat panel at 15 min/seat can look identical to a hang for 45 minutes. Measured 2026-08-18: a G1 run produced 0 bytes for ~20 minutes; the only way to tell it was progressing was `ps -eo etime` on the `timeout 900s` child. Wanted: a panel-level manifest (which seat is in flight, which are done, per-seat deadline remaining) that `dispatch-status.js` can render, plus a decision on whether independent seats should run concurrently rather than sequentially. Note the concurrency question is not free — seats share the endpoint env and quota.
-- **Effort**: M
-- **Source**: owner request 2026-08-18 ("heto 委託出去要讓 harness 能知道結束,卡太久要能自動感知"); the seat-level half shipped in v2.34.21.
-
-### ~~Replace calendar-based authority decay with accumulated no-confidence~~ — RESOLVED v2.34.35 (all three roster teeth pulled; seat-scoped strike fold, ordinary threshold in shadow, critical re-exam registry enforcing)
-- **Trigger**: Next touch of any `expires_at` / TTL that gates behavior — or before adding any new one. The roster leg is closed; the standing rule below still binds every OTHER TTL in the repo.
-- **Context**: Owner ruling 2026-08-18: "同一個模型不需要日期授權;降級授權應該用不信任投票累積而不是時間。" v2.34.20 made the TTLs advisory; v2.34.35 shipped the constructive half for the roster leg. Design frozen 2026-08-22 by a seven-seat hetero panel (all seven `sound-with-changes`, no seat kept any calendar tooth): the brain-seat KR3b fold generalized to seat identities (`sha256({engine,runner,role})`), N=3 ordinary strikes since the last passing administration ⇒ `requalify_required`, epochs instead of counter wiping, no weights / no sliding window / no success-aging (all three cut with reasons). **Four** teeth pulled — `engine-scorecard.js deriveStatus`, `resolve-review-loop.sh` tier, `dispatch-contract.js` admission, and `resolve-scaffold-tier.js` freshness (the fourth was found by the first-pass reviewer on a production path the original contract test did not scan) — each with a planted negative, plus a contract test that no admission path compares `now` vs `expires`. That test's guarantee is exactly as wide as its four-file scan set, not a proof that no fifth tooth exists; add any new scorecard-row consumer to the scan set in the same commit. Contract: [`references/strike-decay.md`](../references/strike-decay.md); plan: [2026-08-22-no-confidence-decay](plans/2026-08-22-no-confidence-decay.md). **Still open**: `provider_readiness_receipt_ttl_seconds` and the capability-claim TTLs were NOT converted — they are advisory today and out of this cut's scope. Standing rule unchanged: no new TTL may be fail-closed; expiry warns, and if something must block, it explains and asks for authorization.
-- **Effort**: — (roster leg shipped)
-- **Source**: owner ruling 2026-08-18; seven-seat design panel 2026-08-22; shipped v2.34.35.
-
 ### Arm the ordinary-strike threshold (currently shadow-only) — DATED REVIEW REQUIRED
 - **Trigger**: When shadow data exists for a role — i.e. `would_requalify` has fired at least once against a seat and the operator has replayed those strikes and agrees each was a true engine/pair failure. Also: this row must be re-read by **2026-11-22** even if nothing fired, because a threshold nobody revisits is a calendar tooth in a trench coat.
 - **Context**: v2.34.35 ships `ordinary_strike` accrual in SHADOW: strikes are recorded and `would_requalify` is projected, but `admission_status` stays `qualified`. `critical_reexam_trigger` enforces immediately (deterministic predicates need no calibration). The flip is one env var, `AUTOPILOT_STRIKE_ENFORCEMENT=enforce`, read at projection time in `engine-scorecard.js` — see [`references/strike-decay.md`](../references/strike-decay.md) § Arming. Arming is a per-role Board decision, not a default: the question is whether N=3 is right for that role, which needs the shadow counts to answer. Do NOT arm on a hunch; a wrongly-armed threshold blocks a good seat and reads exactly like the calendar tooth this replaced.
@@ -202,23 +155,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Context**: `claim_id = sha256(claim body)` and the body includes `live_evidence.observed_at` + `freshness.expires_at`, while the required IDs are hardcoded constants in `dispatch-hetero.sh:1653-1654`, `dispatch-review.sh:169-170`, `post-compact.js` `REQUIRED_D3_CLAIM_IDS`, and three `platforms/codex/plugin/` mirrors. So re-probing — even a pure timestamp refresh — changes every ID and requires editing shipped product code at eight sites. Identity should describe **what is claimed** (consumer + capability + contract), not **when it was observed**; the observation is data the validator checks live. Separately: the receipt is live runtime input but lives in `docs/projects/_archive/` (a deliberate 2026-08-04 archive-closure choice — reversing it is a decision, not a cleanup).
 - **Effort**: M
 - **Source**: 2026-08-18 capability-receipt expiry investigation.
-
-### ~~`codex_transport_scan_fd_holders` walks all of /proc with a fork per fd~~ — RESOLVED v2.34.22 (8000ms → 80ms; test 318s → 52s; stat field-shift bug fixed too)
-- **Trigger**: Next touch of `scripts/lib/dispatch-author-codex-transport.sh`, or when test wall-clock becomes a problem.
-- **Context**: `dispatch-author-codex-transport.test.sh` takes **318 s** — not failing, just slow enough to look hung under a timeout wrapper. Root cause: `codex_transport_scan_fd_holders()` (`scripts/lib/dispatch-author-codex-transport.sh:206-236`) forks `stat` per PID and `readlink` per fd (~5000 forks), measured **7.4–8.2 s per call** on a 543-process host, and it runs on the normal-exit path of essentially every dispatch. Cost is O(host process count), so it inflates further under `run.sh --parallel 8`. A single-process Node walk measured 0.06 s (~125×) with the same semantics — EACCES reproduces the own-uid filter, zombies read back empty. Whoever does it must keep `$$` excluded (else the scanning shell self-reports as a holder) and verify an orphan/incomplete-tree case still positively detects a reparented fd holder, or the speedup silently blinds the scan.
-- **Effort**: Fix
-- **Source**: 2026-08-18 red-test-gate investigation (autopilot:debugger cluster B).
-
-### ~~Two test files are not parallel-safe~~ — RESOLVED v2.34.22 (root-caused: codex-plugin-package regenerates the live mirror that dev-setup asserts on; both serialized)
-- **Trigger**: Next time `hooks/tests/run.sh --parallel 8` reports a failure that does not reproduce serially; or when adding to the serial list at `hooks/tests/run.sh:190`.
-- **Context**: The 2026-08-18 clean-up run ended `2/260 FAILED` — `dev-setup.test.sh` and `codex-plugin-package.test.sh` — and **both pass serially** (verified immediately after, same tree). So they contend on shared state under an 8-way pool. This is not cosmetic: parallel false reds are what let eleven REAL failures sit unnoticed, because a red count that is partly noise stops being read. Either add them to the serial list or isolate whatever they share. **PLAUSIBLE, not confirmed**: observed in one parallel run; the contended resource was not identified. Related: `dispatch-author-codex-transport` takes 318 s and its cost scales with host process count, which makes it the most likely pool-slot hog (separate row).
-- **Effort**: Fix
-- **Source**: 2026-08-18 red-test-gate clean-up (v2.34.20 verification run).
-
-### ~~🔴 The repo's own test gate is red on develop — 12 of 260 files~~ — RESOLVED 2026-08-18
-- **Status**: **Closed.** The reported 12 were really **11** (`dispatch-author-codex-transport` was never failing — it exits 0 in 318 s and outran the timeout wrapper used to probe it). All 11 are fixed: 3 test-side (`autopilot-engine` + `review-loop-runner` contract-fixture drift — `strict_l5_policy_override` from `8b443bf8` and `brain_seat`, found by the new drift guard; `preflight-release-routing` missing a `check_per_skill_ratchet` extraction after `435cdc27`), and 8 from a single product-side cause — the capability-receipt expiry outage, fixed in v2.34.20 ([evidence](plans/evidence/2026-08-18-capability-receipt-expiry/README.md)). Full suite now `2/260`, both parallel-only artifacts (row above). Kept as a record because the lesson is durable: a regression net that is partly red is a regression net nobody reads.
-- **Effort**: —
-- **Source**: v2.34.19 pre-merge review (autopilot:reviewer) + three autopilot:debugger root-cause runs, 2026-08-18.
 
 ### Vacuous red case in the guided-disposition suite (alien-hash branch)
 - **Trigger**: Next touch of `scripts/build-profile-payload.js` guided-compatibility validation, or when adding any new disposition error code.
@@ -279,13 +215,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S。
 - **Source**: v2.34.13 KR5 dogfood(2026-08-17);critic run bvxubvq39。
 
-### ~~Fable skills absorption plan — Board triage~~ — RESOLVED-NOT-PURSUED 2026-08-23 (Board CEO-delegated)
-- **Status**: CLOSED — the plan (R0, 2026-07-08) is largely superseded by what shipped since: evidence discipline promoted to `references/evidence-discipline.md`, skill-contract-card + per-skill ratchet (its KR1/KR2/KR4 territory), and review checklists own KR3's surface. The residual novel value (native-code style checklist, per-skill rationalization tables) does not justify an L campaign under 成績單前置 with zero demand signal in 46 days. Plan stays in docs/plans/ with a status stamp, not deleted. Re-entry: a concrete incident that one of its unabsorbed guardrails would have prevented.
-- **Trigger**: Before implementing any of its P1–P4 methodology changes, or when selecting the next behavior-rule improvement。
-- **Context**: Do not silently archive or imply approval. Recommended order if reopened: P2 scope-rationalization checklist → P4 written/runs/verified claim ladder → P3 native-code review；P1 pressure-scenario guidance overlaps existing trigger-gated work。
-- **Effort**: Board decision (then S per selected slice)。
-- **Source**: `docs/plans/2026-07-08-fable-skills-absorption.md`。
-
 ### OpenCode `debug skill` truncation — restore portability check 16 to hard-fail
 - **Trigger**: Upstream OpenCode fixes the corpus-volume-dependent `opencode debug skill` output truncation, or a supported OpenCode release changes the plugin/serve discovery surface again.
 - **Context**: `scripts/preflight-portability.sh` check 16 is intentionally advisory while OpenCode 1.17 can omit discovered skills from `debug skill` output. Re-probe the real CLI after the upstream fix; if deterministic, restore the check to hard-fail. Do not treat the current advisory as a permanent acceptance of missing skill discovery.
@@ -316,26 +245,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Progress**: 三個實例裡的 (3) 在 v2.34.38 補上了負控制——四條 gaming 動作各有 BEFORE/AFTER/BLOCK 記錄,並立成常駐迴歸(`hooks/tests/check-test-integrity.test.sh` §11),外加一條 coverage meta-test 把「閘看得到的檔案數」綁在 `git ls-files` 的真實清單上。**這條 row 本身不因此結案**:缺的是那個 meta-gate——沒有任何機制檢查「每個閘都有一條負控制」,(1) 與 (2) 也還沒有。v2.34.38 提供的是一個可抄的形狀,不是那個機制。
 - **Effort**: M。
 - **Source**: 2026-08-08 CI triage（11/273 → 1/273）三起獨立成因的共同模式；本檔另有三條各自的條目。
-
-### ~~`check-test-integrity.sh` does not cover this repo's main test surface~~ — RESOLVED v2.34.38
-- **Status**: RESOLVED 2026-08-23 (`docs/projects/_archive/2026-08-23-test-integrity-coverage/`)。機制有兩層,不是一層:
-  (1) 新增 `.claude/test-integrity-config.md`,`test_paths` = `**/*.test.{sh,js,mjs,cjs,ts}`,涵蓋
-  `git ls-files '*.test.sh' '*.test.js'` 的 **300/300**;`surface paths` = `hooks/tests/lib.sh`(斷言庫本體)、
-  `hooks/tests/lib/**`、`hooks/tests/run.sh`、`hooks/tests/fixtures/**`、eval task fixture repo 與凍結
-  oracle 期望值、`.github/workflows/**`。(**不含** `package.json`:不帶 `/` 的 pattern 會對每個
-  路徑片段比對,會掃進 13 個無關檔案,而本 repo 沒有 root `package.json`。)
-  (2) 修復 `scripts/lib/test-integrity-l1.py` 的 `parse_config`:`#` 註解判斷排在 `##` heading **之前**,
-  於是 section heading 全被吞掉、`test_paths` / `surface_paths` 對**任何專案**都不可設定,一律靜默退回內建
-  預設——這條沒有任何既有測試碰過。單修 (1) 不夠:新設定餵給舊引擎回的是 `malformed_config` + `matched: 0`。
-  另補 `shell` lang_key,讓 `.sh` 套件的 skip 語意可見(`deleted_line` 本來就與語言無關)。
-- **Mode 是 `warn` 不是 `block`**,理由寫在設定檔註解:L0 對 match 到的測試檔每一行刪除都記
-  `deleted_line`,block 會擋掉幾乎每個誠實的測試維護 commit。升 block 是獨立的後續條目。
-- **不是「讓 warning 消失」**:`evidence/negative-controls.sh` 對四個 gaming 動作(刪斷言／弱化斷言／
-  加 skip／刪整個測試檔)各跑 BEFORE(develop 工具鏈+template 設定)/ AFTER(warn)/ BLOCK 三次,
-  BEFORE 全部 `matched=0 violations=[] exit 0`,AFTER 逐條命中,BLOCK 逐條 `exit 1`。四條連同一條
-  coverage meta-test 進了 `hooks/tests/check-test-integrity.test.sh`(70 → 101 assertions),六向突變
-  精確轉紅(19 / 8 / 2 / 1 / 2 / 6 紅,還原後 101 綠)。
-- **Source**: 2026-08-08 v2.34.8 pre-push QC;2026-08-23 v2.34.38 修復。
 
 ### Test-integrity L0 cannot see an early `exit 0` spliced into a shell suite
 - **Trigger**: 下一次有人想把這個閘升到 `block`,或再抓到一個 bash 套件「綠得太安靜」時。
@@ -428,21 +337,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: M
 - **Source**: 2026-07-10 L6-r2 WS-A campaign;MiniMax R2 的「reviewer-circular 標注」警告實證。
 
-### ~~Reviewer transport exits can erase an otherwise valid fail-closed verdict~~ — RESOLVED v2.34.33 (verdict-bytes preservation: full-battery salvage → non-authoritative `unratified_verdict`/`unratified_observations` columns on both rails + aggregation retention; parser NOT relaxed; reader set closed by canonical-invariants allowlist. Plan `docs/plans/2026-08-21-verdict-bytes-preservation.md` R3 + two-generation review + dead-gate mutation record)
-- **Trigger**: Grok／GLM／Kimi／Qwen／Codex reviewer transport 再出現「內容可解析、process exit 或 framing 使 verdict 遺失」。
-- **Context**: 為仍支援的 runner 建 exact residual fixtures；保留 process truth，但將已驗證的 verdict bytes 與 transport failure 分欄，禁止把 no-verdict 誤報成 review pass。
-- **Effort**: M。
-- **Source**: historical multi-runner incidents；2026-07-31 hygiene rewrite。
-- **2026-08-08 reproduced**: cc-shim/MiniMax-M3 returned a complete `VERDICT: SHIP-AS-IS` inside an
-  intact nonce block, discarded as `no_verdict` because Claude Code prepended an unknown-model
-  context-window notice to stdout. Fixed at source for cc-shim in v2.34.7 by suppressing that
-  notice; the general problem stood until v2.34.33 — relaxing the parser was never the fix
-  (it reopens the prompt-echo hole the suite pins); the shipped shape re-runs the SAME battery.
-- **Residual (new trigger, 2026-08-21)**: a NEW verdict transport onboarded outside
-  `dispatch-review.sh`/plan-review rails (see plan §6 rail inventory) must decide its
-  salvage posture at engine-onboarding time; the reader-allowlist guard catches new
-  unratified consumers but not a new producer's missing salvage.
-
 ### Domain-aware routing — consume the `work_domain` telemetry to route reviewer/implementer by diff domain
 - **Trigger**: ALL remaining prerequisites are met (telemetry alone is NOT a trigger): (1) a **two-pass resolve** in `resolve-review-loop.sh` without breaking the single-shot JSON contract; (2) a **pre-impl planned-scope signal** for implementer routing; (3) **per-project per-domain calibration with n≥30** real samples; (4) an **inner-reviewer-family field** distinct from panel-only `cross_family_*` semantics.
 - **Context**: `/l5` 現已把 resolved `reviewer_runner` 傳入 `dispatch-review.sh`，所以舊 prerequisite (1) 已完成；domain probe 仍只輸出 `work_domain`/`domain_source` telemetry，沒有 domain-conditioned roster 或 two-pass routing。維持 **measure-now-route-later**；`qc_panel`/`cross_family_*`/`--enforce` 不受 domain 影響。Plan: [`docs/plans/2026-06-26-domain-aware-roster.md`](plans/2026-06-26-domain-aware-roster.md).
@@ -466,13 +360,6 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Context**: Phase L shipped `/l4` homogeneous (Claude) batch fan-out. The deterministic rails for the hetero-parallel path **already exist** — `dispatch-batch.sh reap` is the SIGTERM-to-pgroup parallel-kill trap built for shell-dispatched workers (setsid-verified), and `dispatch-hetero.sh` is the single-unit hetero dispatcher. What's unbuilt is the loop that fans `dispatch-hetero.sh` across N units under `dispatch-batch.sh`'s verify/merge-back/reap. It was **cut at plan time** (the weakest leg: base-correctness × engine-variance × *rarest* task-supply — speculative on speculative). S0.a then confirmed wide task-supply is already thin even homogeneously, so this is one-day-to-wire-IF-needed, not a gap. `/l4` homogeneous is the value path.
 - **Effort**: S (wire existing rails) — only if the trigger fires.
 - **Source**: 2026-06-23 `docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md` scope-cut + Phase L ship (`577ba8d`).
-
-### ~~Tree-engine graduation Board review~~ — RESOLVED-ABORT 2026-08-23 (Board CEO-delegated)
-- **Status**: ABORTED — 2/50 samples in 72 days, agreement 0/2; the sample-accrual rate proves the shadow instrument cannot reach graduation criteria on this repo's workflow. `board_signoff {decision: abort, active: false}` recorded in `docs/projects/_archive/2026-06-12-task-tree-engine/tree/events.jsonl`; P6 adapter stays inactive. Re-entry: a fresh calibration campaign IF reviewer-baseline sampling ever becomes routine (e.g. qc-panel shadow rows accumulating), with a sample-rate feasibility check BEFORE arming any deadline.
-- **Trigger**: `~/.autopilot/calibration/samples.jsonl` reaches 50 reviewer-baseline samples OR 30 days after the first shadow run (2026-06-12), whichever comes first.
-- **Context**: Amendment 6 — Board decides graduate / extend / abort based on `scripts/calibration.sh report` output. Silence is NOT extension. P6 adapter post-signoff activation is blocked on a `board_signoff` event recorded in the project tree (see `references/tree-contracts.md` §3.12 and `scripts/tree.js board-status`).
-- **Effort**: Fix (Board review meeting; not a code task)
-- **Source**: task-tree-engine P5 close-out (2026-06-12); R1 review round Fix M1.
 
 ### Leaf-level output compaction for dispatched implementer / qc shell commands (rtk-style)
 - **Trigger**: next time a `/l4` / `/l5` foreman or a `quality-pipeline` / `qc-panel` sub-agent's context bloats from raw shell output (full `git diff`, full `pytest`/`vitest` runs, linter dumps) — i.e. a concrete in-the-wild "the leaf agent burned its budget on tool output" observation, OR a user ask to wire token compaction.

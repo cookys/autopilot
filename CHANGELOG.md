@@ -193,6 +193,15 @@ regardless, since its existing control is family-based and cannot see one rail s
 families. Any overlap warns and sets `same_runner_dual_seat`; only TOTAL overlap, meaning the
 terminal gate has no runner decorrelation anywhere, is refused, and even that is openable.
 
+A scoped re-review of those fixes then caught one more, and it is exactly the class worth
+recording: a ragged panel index carrying a runner but NO engine is unusable — it cannot review
+anything — yet it counted as a panel seat for the diversity ratio. Every engine-bearing seat
+could sit on the implementer's own rail while one orphan runner kept overlap below total,
+downgrading a TOTAL loss of runner decorrelation to a warning. Diversity now counts only
+engine-bearing seats, while admission still walks the union, because an orphan row can still
+NAME an unqualified rail and must be refused on that ground. The two sets are deliberately
+different and both directions are tested.
+
 The same consult ruled that inherited defaults stay in scope, accepting the stated cost: three
 test fixtures that name one runner and inherit the rest now opt in explicitly. They keep the
 opt-in rather than being diversified so their resolved output stays byte-identical — each is

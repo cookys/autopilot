@@ -370,6 +370,48 @@ case "$out_partial" in
   *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
 esac
 
+# ── 6c3. an ORPHAN panel row must not dilute the diversity ratio ───────────
+# Re-review of the round-2 fixes: a ragged index carrying a runner but NO engine
+# is unusable — it cannot review anything — yet it was counted as a panel seat.
+# Every engine-bearing seat could then sit on the implementer's own rail while
+# the orphan kept overlap < total, downgrading a TOTAL loss of runner
+# decorrelation to a mere warning. Diversity now counts engine-bearing seats only.
+CFG_PANEL_ORPHAN="$TEST_TMP/cfg-panel-orphan.md"
+cat > "$CFG_PANEL_ORPHAN" <<'EOF'
+- reviewer_engine: claude-opus
+- reviewer_effort: high
+- reviewer_runner: claude-native
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_effort: high
+- implementer_runner: codex
+- qc_panel: gpt-5.5, gpt-5.6-sol
+- qc_panel_runners: codex, codex, agy
+- qc_panel_efforts: xhigh, high, high
+- qc_panel_endpoints: @none, @none, @none
+EOF
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_ORPHAN" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "an engine-less orphan runner row cannot mask TOTAL panel overlap"
+assert_contains "$out" "(2 of 2)" "diversity counts only the engine-bearing seats"
+
+# ...but the orphan row is still ADMISSION-gated: it can name an unqualified rail
+# even though it cannot review. The two sets are deliberately different.
+CFG_PANEL_ORPHAN_CURSOR="$TEST_TMP/cfg-panel-orphan-cursor.md"
+cat > "$CFG_PANEL_ORPHAN_CURSOR" <<'EOF'
+- reviewer_engine: gpt-5.5
+- reviewer_effort: xhigh
+- reviewer_runner: codex
+- implementer_engine: grok-4.5
+- implementer_effort: high
+- implementer_runner: grok
+- qc_panel: claude-opus, gemini-flash
+- qc_panel_runners: claude-native, agy, cursor
+- qc_panel_efforts: high, high, high
+- qc_panel_endpoints: @none, @none, @none
+EOF
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_ORPHAN_CURSOR" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "an engine-less panel row naming an UNQUALIFIED runner is still refused"
+assert_contains "$out" "qc_panel[2]" "the orphan row is admission-gated by index"
+
 # ── 6d. 🟠 #4 an admission that cannot be RECORDED is not granted ───────────
 # override_admitted_seats is the auditable record Ruling 1 requires. The append
 # used to fall back to the previous array on failure, so an evidence-free

@@ -685,3 +685,28 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
   ("A protocol sentence does not stop a process"); this row is the mechanisation half.
 - **Effort**: S–M
 - **Source**: v2.34.39 `/l4` depth-0 run (2026-08-24)
+
+## 2026-08-28 foreman cost is the polling loop, not the model (revival.3d session 5ca9b104)
+
+Evidence (grok cost split, `revival.3d/NOTE-FOR-FABLE-FOREMAN-COST.md`): 30 opus foremen, 28 of them
+burned more usage than all their sonnet leaves combined (foremen 227M vs leaves 130M). Foreman tool
+mix 3971 Bash / 337 Edit — almost no code; the Bash is `sleep 240` polling + `cat <leaf>.output` fed
+back into the foreman context. Every wake is a full-price inference on a 200–500k prompt. Switching
+the foreman role to sonnet (`model-routing-config.md`, 2026-08-28) only lowers unit price; the loop
+remains.
+
+Two items:
+
+1. **Foreman must not be a polling model.** Waiting has to be inference-free: the canonical foreman
+   for /l4–/l6 should be a `Workflow` script (deterministic fan-out, zero turns while leaves run) or a
+   `run_in_background` + notification wake. Add a gate: a sub-orchestrator transcript with
+   `sleep` in a loop, or `cat`/`tail` of a child output file into its own context, is a red-line
+   violation. Leaves return a schema-typed criteria table; their raw output never enters the
+   foreman prompt.
+2. **Implementer ladder by unit class, not one seat.** `review-loop-config.md` has a single
+   `implementer_engine`. Add `implementer_ladder: gemini-3.7-flash-low → grok-4.6/low → sonnet`
+   with two triggers: contract field `unit_class: mechanical|judgment` picks the starting rung; a
+   red repair round climbs one rung; top rung then enters `awaiting_convergence_adjudication`
+   (existing). `on_engine_unavailable` stays availability-only. Sample: revival.3d AF
+   (wizhall-mega 058 migration) — brief fully pre-resolved, flash-low one-shot, 5 files correct.
+   Adjudication (BLOCKED) stays on opus/fable via `tree:judge`.

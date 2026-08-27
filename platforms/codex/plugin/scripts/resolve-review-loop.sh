@@ -1488,6 +1488,119 @@ process.stdout.write(JSON.stringify(a));
   fi
 fi
 
+# NOTE (first-pass qc 🔴 admission-field-bypass): this block MUST run BEFORE the
+# --field dispatch below. It originally sat just above the JSON emission, which meant
+# `--field reviewer_runner` on an unqualified roster returned "cursor" with exit 0 and no
+# refusal at all — and the documented consult caller in references/hetero-dispatch.md reads
+# the seat with exactly that flag, so the gate was bypassed by its own recipe. Field mode is
+# a read of the SAME resolved roster; it must be refused on the same terms as the JSON.
+# Every input it needs is already computed by here (families at ~692, qc panel arrays ~530).
+# ══ ROLE ADMISSION (Board ruling 2026-08-27) ══════════════════════════════════
+# A seat whose runner is in UNQUALIFIED_RUNNERS is REFUSED unless the operator
+# override file names that exact engine/runner/role and has not expired. Refusal
+# is exit 3, not a warning: unlike the implementer seat — whose admissibility is
+# reported here and ENFORCED downstream by dispatch-contract.js — the
+# reviewer-class, consult and discuss seats have NO mechanical enforcing caller,
+# so a report-only refusal would be the quiet bypass Ruling 1 forbids. The
+# resolver is the enforcer for those seats.
+#
+# The override contract is the SAME file and the SAME shape the implementer
+# admissibility block already consumes (AUTOPILOT_QUALIFICATION_OVERRIDE, schema
+# 1, overrides[] with engine/runner/role/reason/operator/expires) — no new
+# concept, no new file, no new vocabulary.
+OVERRIDE_ADMITTED_JSON="[]"
+SAME_RUNNER_DUAL_SEAT="false"
+
+_seat_roles=()
+_seat_runners=()
+_seat_engines=()
+_add_seat() { _seat_roles+=("$1"); _seat_engines+=("$2"); _seat_runners+=("$3"); }
+
+_add_seat "reviewer" "$REV_ENGINE" "$REV_RUNNER"
+_add_seat "implementer" "$IMPL_ENGINE" "$IMPL_RUNNER"
+[[ "$VER_AUTH_PRESENT" == "true" ]] && _add_seat "verification_author" "$VER_AUTH_ENGINE" "$VER_AUTH_RUNNER"
+[[ -n "$PLAN_REV_RUNNER" ]] && _add_seat "plan_reviewer" "$PLAN_REV_ENGINE" "$PLAN_REV_RUNNER"
+[[ -n "$PLAN_DEEP_RUNNER" ]] && _add_seat "plan_deep_reviewer" "$PLAN_DEEP_ENGINE" "$PLAN_DEEP_RUNNER"
+[[ -n "$CONSULT_RUNNER" ]] && _add_seat "consult" "$CONSULT_ENGINE" "$CONSULT_RUNNER"
+[[ -n "$DISCUSS_RUNNER" ]] && _add_seat "discuss" "$DISCUSS_ENGINE" "$DISCUSS_RUNNER"
+if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
+  for _i in "${!QC_PANEL[@]}"; do
+    _add_seat "qc_panel[$_i]" "${QC_PANEL[$_i]}" "${QC_PANEL_RUNNERS[$_i]}"
+  done
+fi
+
+# A seat is "reviewer-class" when its judgement is the thing being decorrelated
+# from the implementer's work. Everything that is not the implementer seat is.
+_is_unqualified_runner() {
+  local r="$1" u
+  for u in $UNQUALIFIED_RUNNERS; do [[ "$u" == "$r" ]] && return 0; done
+  return 1
+}
+
+_UNQUAL_IMPL_RUNNERS=""    # override-admitted runners sitting in the implementer seat
+_UNQUAL_REVIEW_RUNNERS=""  # ... and in any reviewer-class seat
+for _i in "${!_seat_roles[@]}"; do
+  _role="${_seat_roles[$_i]}"; _eng="${_seat_engines[$_i]}"; _run="${_seat_runners[$_i]}"
+  _is_unqualified_runner "$_run" || continue
+  _ovr="$(AUTOPILOT_QUALIFICATION_OVERRIDE="${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" node -e '
+const fs = require("fs");
+const [engine, runner, role] = process.argv.slice(1);
+const file = process.env.AUTOPILOT_QUALIFICATION_OVERRIDE || "";
+if (!file || !fs.existsSync(file)) process.exit(1);
+let doc = null;
+try { doc = JSON.parse(fs.readFileSync(file, "utf8")); } catch { process.exit(1); }
+if (!doc || doc.schema !== 1 || !Array.isArray(doc.overrides)) process.exit(1);
+const today = new Date().toISOString().slice(0, 10);
+const isCalendarDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)
+  && !Number.isNaN(Date.parse(`${v}T00:00:00.000Z`))
+  && new Date(`${v}T00:00:00.000Z`).toISOString().slice(0, 10) === v;
+// role is matched EXACTLY: an override for the implementer role does not admit
+// the same engine to a reviewer seat. A qc_panel[N] seat matches role "qc_panel".
+const wantRole = role.replace(/\[[0-9]+\]$/, "");
+const m = doc.overrides.find((o) => o && o.engine === engine && o.runner === runner
+  && o.role === wantRole
+  && typeof o.reason === "string" && o.reason.trim()
+  && typeof o.operator === "string" && o.operator.trim()
+  && isCalendarDate(o.expires) && o.expires >= today);
+if (!m) process.exit(1);
+process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}`);
+' "$_eng" "$_run" "$_role" 2>/dev/null)" || _ovr=""
+  if [[ -z "$_ovr" ]]; then
+    echo "resolve-review-loop: ${_role} seat (${_eng}/${_run}) is NOT qualified for any role and has no matching operator override — add an unexpired entry for engine/runner/role '${_role%%[*}' to \$AUTOPILOT_QUALIFICATION_OVERRIDE, or qualify the engine via engine-onboarding. Naming an unqualified runner in a roster is refused, not downgraded." >&2
+    exit 3
+  fi
+  _reason="${_ovr%%$'\x1f'*}"; _rest="${_ovr#*$'\x1f'}"; _expires="${_rest%%$'\x1f'*}"; _operator="${_rest##*$'\x1f'}"
+  echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) runs on an EVIDENCE-FREE operator override (operator: ${_operator}; reason: ${_reason}; expires ${_expires}) — this is a RECORDED OPERATOR DECISION, not earned qualification." >&2
+  OVERRIDE_ADMITTED_JSON="$(node -e '
+let a = []; try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));' "$OVERRIDE_ADMITTED_JSON" "$_role" 2>/dev/null || printf '%s' "$OVERRIDE_ADMITTED_JSON")"
+  if [[ "$_role" == "implementer" ]]; then
+    _UNQUAL_IMPL_RUNNERS="$_UNQUAL_IMPL_RUNNERS $_run"
+  else
+    _UNQUAL_REVIEW_RUNNERS="$_UNQUAL_REVIEW_RUNNERS $_run"
+  fi
+done
+
+# ── dual-seat occupancy ──────────────────────────────────────────────────────
+# Scoped to override-admitted runners on purpose. A blanket same-runner (or
+# same-family) test would reject the SHIPPED TEMPLATE, whose reviewer and
+# implementer are both openai-family and whose `auto` implementer runner resolves
+# to the reviewer's `codex`. The Board's rule is about routing an UNQUALIFIED rail
+# into both halves of a review loop, which is exactly this scope.
+for _ir in $_UNQUAL_IMPL_RUNNERS; do
+  for _rr in $_UNQUAL_REVIEW_RUNNERS; do
+    [[ "$_ir" != "$_rr" ]] && continue
+    if [[ "$ALLOW_DUAL_SEAT" != "on" ]]; then
+      echo "resolve-review-loop: runner '${_ir}' occupies BOTH an implementer seat and a reviewer-class seat while admitted only by operator override. One vendor, one auth and one server-side prompt layer is not decorrelation, even when the two seats name different model families. Set allow_same_runner_dual_seat: on to accept that reduced decorrelation deliberately." >&2
+      exit 3
+    fi
+    SAME_RUNNER_DUAL_SEAT="true"
+    echo "resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner '${_ir}' occupies both an implementer seat and a reviewer-class seat (implementer family: ${IMPL_FAMILY}, reviewer family: ${REV_FAMILY}). The panel's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown." >&2
+  done
+done
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     reviewer_engine) printf '%s\n' "$REV_ENGINE" ;;
@@ -1618,112 +1731,6 @@ if [[ -n "$FIELD" ]]; then
   esac
   exit "$ENFORCE_EXIT"
 fi
-
-# ══ ROLE ADMISSION (Board ruling 2026-08-27) ══════════════════════════════════
-# A seat whose runner is in UNQUALIFIED_RUNNERS is REFUSED unless the operator
-# override file names that exact engine/runner/role and has not expired. Refusal
-# is exit 3, not a warning: unlike the implementer seat — whose admissibility is
-# reported here and ENFORCED downstream by dispatch-contract.js — the
-# reviewer-class, consult and discuss seats have NO mechanical enforcing caller,
-# so a report-only refusal would be the quiet bypass Ruling 1 forbids. The
-# resolver is the enforcer for those seats.
-#
-# The override contract is the SAME file and the SAME shape the implementer
-# admissibility block already consumes (AUTOPILOT_QUALIFICATION_OVERRIDE, schema
-# 1, overrides[] with engine/runner/role/reason/operator/expires) — no new
-# concept, no new file, no new vocabulary.
-OVERRIDE_ADMITTED_JSON="[]"
-SAME_RUNNER_DUAL_SEAT="false"
-
-_seat_roles=()
-_seat_runners=()
-_seat_engines=()
-_add_seat() { _seat_roles+=("$1"); _seat_engines+=("$2"); _seat_runners+=("$3"); }
-
-_add_seat "reviewer" "$REV_ENGINE" "$REV_RUNNER"
-_add_seat "implementer" "$IMPL_ENGINE" "$IMPL_RUNNER"
-[[ "$VER_AUTH_PRESENT" == "true" ]] && _add_seat "verification_author" "$VER_AUTH_ENGINE" "$VER_AUTH_RUNNER"
-[[ -n "$PLAN_REV_RUNNER" ]] && _add_seat "plan_reviewer" "$PLAN_REV_ENGINE" "$PLAN_REV_RUNNER"
-[[ -n "$PLAN_DEEP_RUNNER" ]] && _add_seat "plan_deep_reviewer" "$PLAN_DEEP_ENGINE" "$PLAN_DEEP_RUNNER"
-[[ -n "$CONSULT_RUNNER" ]] && _add_seat "consult" "$CONSULT_ENGINE" "$CONSULT_RUNNER"
-[[ -n "$DISCUSS_RUNNER" ]] && _add_seat "discuss" "$DISCUSS_ENGINE" "$DISCUSS_RUNNER"
-if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
-  for _i in "${!QC_PANEL[@]}"; do
-    _add_seat "qc_panel[$_i]" "${QC_PANEL[$_i]}" "${QC_PANEL_RUNNERS[$_i]}"
-  done
-fi
-
-# A seat is "reviewer-class" when its judgement is the thing being decorrelated
-# from the implementer's work. Everything that is not the implementer seat is.
-_is_unqualified_runner() {
-  local r="$1" u
-  for u in $UNQUALIFIED_RUNNERS; do [[ "$u" == "$r" ]] && return 0; done
-  return 1
-}
-
-_UNQUAL_IMPL_RUNNERS=""    # override-admitted runners sitting in the implementer seat
-_UNQUAL_REVIEW_RUNNERS=""  # ... and in any reviewer-class seat
-for _i in "${!_seat_roles[@]}"; do
-  _role="${_seat_roles[$_i]}"; _eng="${_seat_engines[$_i]}"; _run="${_seat_runners[$_i]}"
-  _is_unqualified_runner "$_run" || continue
-  _ovr="$(AUTOPILOT_QUALIFICATION_OVERRIDE="${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" node -e '
-const fs = require("fs");
-const [engine, runner, role] = process.argv.slice(1);
-const file = process.env.AUTOPILOT_QUALIFICATION_OVERRIDE || "";
-if (!file || !fs.existsSync(file)) process.exit(1);
-let doc = null;
-try { doc = JSON.parse(fs.readFileSync(file, "utf8")); } catch { process.exit(1); }
-if (!doc || doc.schema !== 1 || !Array.isArray(doc.overrides)) process.exit(1);
-const today = new Date().toISOString().slice(0, 10);
-const isCalendarDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)
-  && !Number.isNaN(Date.parse(`${v}T00:00:00.000Z`))
-  && new Date(`${v}T00:00:00.000Z`).toISOString().slice(0, 10) === v;
-// role is matched EXACTLY: an override for the implementer role does not admit
-// the same engine to a reviewer seat. A qc_panel[N] seat matches role "qc_panel".
-const wantRole = role.replace(/\[[0-9]+\]$/, "");
-const m = doc.overrides.find((o) => o && o.engine === engine && o.runner === runner
-  && o.role === wantRole
-  && typeof o.reason === "string" && o.reason.trim()
-  && typeof o.operator === "string" && o.operator.trim()
-  && isCalendarDate(o.expires) && o.expires >= today);
-if (!m) process.exit(1);
-process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}`);
-' "$_eng" "$_run" "$_role" 2>/dev/null)" || _ovr=""
-  if [[ -z "$_ovr" ]]; then
-    echo "resolve-review-loop: ${_role} seat (${_eng}/${_run}) is NOT qualified for any role and has no matching operator override — add an unexpired entry for engine/runner/role '${_role%%[*}' to \$AUTOPILOT_QUALIFICATION_OVERRIDE, or qualify the engine via engine-onboarding. Naming an unqualified runner in a roster is refused, not downgraded." >&2
-    exit 3
-  fi
-  _reason="${_ovr%%$'\x1f'*}"; _rest="${_ovr#*$'\x1f'}"; _expires="${_rest%%$'\x1f'*}"; _operator="${_rest##*$'\x1f'}"
-  echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) runs on an EVIDENCE-FREE operator override (operator: ${_operator}; reason: ${_reason}; expires ${_expires}) — this is a RECORDED OPERATOR DECISION, not earned qualification." >&2
-  OVERRIDE_ADMITTED_JSON="$(node -e '
-let a = []; try { a = JSON.parse(process.argv[1]); } catch { a = []; }
-if (!Array.isArray(a)) a = [];
-a.push(process.argv[2]);
-process.stdout.write(JSON.stringify(a));' "$OVERRIDE_ADMITTED_JSON" "$_role" 2>/dev/null || printf '%s' "$OVERRIDE_ADMITTED_JSON")"
-  if [[ "$_role" == "implementer" ]]; then
-    _UNQUAL_IMPL_RUNNERS="$_UNQUAL_IMPL_RUNNERS $_run"
-  else
-    _UNQUAL_REVIEW_RUNNERS="$_UNQUAL_REVIEW_RUNNERS $_run"
-  fi
-done
-
-# ── dual-seat occupancy ──────────────────────────────────────────────────────
-# Scoped to override-admitted runners on purpose. A blanket same-runner (or
-# same-family) test would reject the SHIPPED TEMPLATE, whose reviewer and
-# implementer are both openai-family and whose `auto` implementer runner resolves
-# to the reviewer's `codex`. The Board's rule is about routing an UNQUALIFIED rail
-# into both halves of a review loop, which is exactly this scope.
-for _ir in $_UNQUAL_IMPL_RUNNERS; do
-  for _rr in $_UNQUAL_REVIEW_RUNNERS; do
-    [[ "$_ir" != "$_rr" ]] && continue
-    if [[ "$ALLOW_DUAL_SEAT" != "on" ]]; then
-      echo "resolve-review-loop: runner '${_ir}' occupies BOTH an implementer seat and a reviewer-class seat while admitted only by operator override. One vendor, one auth and one server-side prompt layer is not decorrelation, even when the two seats name different model families. Set allow_same_runner_dual_seat: on to accept that reduced decorrelation deliberately." >&2
-      exit 3
-    fi
-    SAME_RUNNER_DUAL_SEAT="true"
-    echo "resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner '${_ir}' occupies both an implementer seat and a reviewer-class seat (implementer family: ${IMPL_FAMILY}, reviewer family: ${REV_FAMILY}). The panel's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown." >&2
-  done
-done
 
 FMT_SUFFIX=" }\n"
 ARGS_SUFFIX=()

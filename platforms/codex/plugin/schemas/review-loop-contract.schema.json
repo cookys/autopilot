@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://autopilot.dev/schemas/review-loop-contract.schema.json",
   "title": "resolve-review-loop contract",
-  "description": "Single source of truth for the always-emitted review-loop resolver contract. Every field here is emitted by scripts/resolve-review-loop.sh on a default run AND validated by src/engine/resolve-review-loop.js. src/engine/resolve-review-loop.js DERIVES its REVIEW_LOOP_FIELDS list and its assertOneOf enum tables from this document — do not hand-maintain a second copy. scripts/check-contract-schema.js gates the shell side against it. Conditional/optional keys (reviewer_qualified, fallback_ladder, verify_first, capability_tier, density_scaled, density_source) are emitted only under specific flags and are NOT part of this always-on contract; they are handled separately in the JS validator. x-field-order fixes the canonical REVIEW_LOOP_FIELDS ordering. x-shell-validated marks the enum fields whose allowed-value set the shell resolver enforces via a case statement; x-shell-var names the shell variable whose case arm enforces it (check-contract-schema.js reconciles the per-field arm).",
+  "description": "Single source of truth for the always-emitted review-loop resolver contract. Every field here is emitted by scripts/resolve-review-loop.sh on a default run AND validated by src/engine/resolve-review-loop.js. src/engine/resolve-review-loop.js DERIVES its REVIEW_LOOP_FIELDS list and its assertOneOf enum tables from this document \u2014 do not hand-maintain a second copy. scripts/check-contract-schema.js gates the shell side against it. Conditional/optional keys (reviewer_qualified, fallback_ladder, verify_first, capability_tier, density_scaled, density_source) are emitted only under specific flags and are NOT part of this always-on contract; they are handled separately in the JS validator. x-field-order fixes the canonical REVIEW_LOOP_FIELDS ordering. x-shell-validated marks the enum fields whose allowed-value set the shell resolver enforces via a case statement; x-shell-var names the shell variable whose case arm enforces it (check-contract-schema.js reconciles the per-field arm).",
   "type": "object",
   "x-field-order": [
     "reviewer_engine",
@@ -346,7 +346,7 @@
     },
     "reviewer_effort_low_risk": {
       "type": "string",
-      "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off — fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string."
+      "description": "Effort for reviewer_engine_low_risk: empty or low|medium|high|xhigh|max. Shell coerces garbage to empty (tiering off \u2014 fail-safe reviews with the stronger incumbent). Deliberately NOT x-shell-validated: the parity gate models exact-set enums, and this field's set includes the empty string."
     },
     "on_family_conflict": {
       "type": "string",
@@ -568,7 +568,7 @@
         "admission",
         "strikes_since_pass"
       ],
-      "description": "Brain-seat standing on the P7-governed paths (plan 2026-08-17-brain-seat-exam-suite P4). null = no seat context configured. Candidate seats without standing are refused; the incumbent annotates loudly (Board 2026-08-16 advisory bootstrap semantics); the per-invocation override admits with an EVIDENCE-FREE warning — never a silent third path.",
+      "description": "Brain-seat standing on the P7-governed paths (plan 2026-08-17-brain-seat-exam-suite P4). null = no seat context configured. Candidate seats without standing are refused; the incumbent annotates loudly (Board 2026-08-16 advisory bootstrap semantics); the per-invocation override admits with an EVIDENCE-FREE warning \u2014 never a silent third path.",
       "properties": {
         "seat_class": {
           "enum": [
@@ -632,7 +632,7 @@
     },
     "discuss_engine": {
       "type": "string",
-      "description": "Engine for heterogeneous participation in dialectic/ideation skills (think-tank, brainstorm) — the \"discuss\" role. Empty = no configured discuss seat. NO EXECUTABLE CONSUMER READS THIS YET (see docs/scripts-inventory.md and the run summary): it is a declared seat awaiting a caller, not a live route."
+      "description": "Engine for heterogeneous participation in dialectic/ideation skills (think-tank, brainstorm) \u2014 the \"discuss\" role. Empty = no configured discuss seat. NO EXECUTABLE CONSUMER READS THIS YET (see docs/scripts-inventory.md and the run summary): it is a declared seat awaiting a caller, not a live route."
     },
     "discuss_effort": {
       "type": "string",
@@ -673,18 +673,18 @@
       ],
       "x-shell-validated": true,
       "x-shell-var": "ALLOW_DUAL_SEAT",
-      "description": "Board ruling 2026-08-27. DEFAULT OFF. Governs whether an OVERRIDE-ADMITTED (unqualified) runner may occupy the implementer seat AND a reviewer-class seat (reviewer / verification_author / plan_reviewer / plan_deep_reviewer / consult / discuss / any qc_panel seat) in the same roster. off = the resolver exits 3. on = permitted, with a stderr warning and same_runner_dual_seat: true. The axis is the RUNNER, not the model family: the Board rationale is \"one vendor, one auth, one server-side prompt layer is not decorrelation\", which is a rail property — one runner can serve several model families (cursor hosts both grok and gpt ids), so a family-axis test would MISS exactly the case the ruling names. Scoping to override-admitted runners keeps every already-shipped roster unaffected (the shipped template is same-family and same-effective-runner today and must stay valid)."
+      "description": "Board ruling 2026-08-27, scope corrected by the depth-0 QC panel. DEFAULT OFF. Governs whether one runner may occupy the implementer seat AND a reviewer-class LOOP seat (reviewer / reviewer_low_risk / verification_author / plan_reviewer / plan_deep_reviewer / consult / discuss) in the same roster. off = the resolver exits 3. on = permitted, with a stderr warning and same_runner_dual_seat: true. It applies to QUALIFIED engines too \u2014 the rationale 'one vendor, one auth, one server-side prompt layer is not decorrelation' has no qualified-engine exemption. The axis is the RUNNER, not the model family: one rail can serve several families (a single cursor rail hosts both GPT and Grok ids), so a family test would miss exactly the case the ruling names. Comparison is over the CONFIGURED runner token, and 'auto' is inert \u2014 it delegates the choice rather than asserting a rail, which is what keeps the shipped template (implementer auto, reviewer codex) valid. An inherited built-in default DOES count: a roster naming only implementer_runner: codex collides with the default reviewer codex, because the resolved loop really does put one rail on both sides. The terminal qc_panel is NOT governed by this key \u2014 it is a multi-seat body with union-on-verified-critical aggregation, so it has its own proportionate runner-diversity rule (see same_runner_dual_seat)."
     },
     "same_runner_dual_seat": {
       "type": "boolean",
-      "description": "FACT, not policy: true when an override-admitted runner actually occupies both an implementer seat and a reviewer-class seat in the resolved roster. Only ever true when allow_same_runner_dual_seat is on (off makes the same condition exit 3). Emitted so the run summary can report the reduced decorrelation without re-deriving it."
+      "description": "FACT, not policy: true when one runner actually occupies both the implementer seat and a reviewer-class loop seat, OR when any qc_panel seat runs on the implementer's runner. Emitted so the run summary can report reduced decorrelation without re-deriving it. For LOOP seats the condition is only reachable when allow_same_runner_dual_seat is on (off exits 3). For the qc_panel it is reachable at any setting: partial overlap is a warning (the other seats still decorrelate and any one can block), and only TOTAL overlap \u2014 every panel seat on the implementer's own runner, i.e. no runner decorrelation anywhere in the terminal gate \u2014 exits 3 unless deliberately opened."
     },
     "override_admitted_seats": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Seat roles (e.g. \"reviewer\", \"consult\", \"qc_panel[1]\") whose runner has NO recorded role qualification and was admitted ONLY by a matching AUTOPILOT_QUALIFICATION_OVERRIDE entry. Empty on every qualified roster. This is the recorded-operator-decision surface Board ruling 1 requires — it is NOT evidence of qualification, and nothing downstream may read it as such. ADR-0001: an override is a recorded decision re-derived from the override file on every resolve, never an attestation."
+      "description": "Seat roles (e.g. \"reviewer\", \"consult\", \"qc_panel[1]\") whose runner has NO recorded role qualification and was admitted ONLY by a matching AUTOPILOT_QUALIFICATION_OVERRIDE entry. Empty on every qualified roster. This is the recorded-operator-decision surface Board ruling 1 requires \u2014 it is NOT evidence of qualification, and nothing downstream may read it as such. ADR-0001: an override is a recorded decision re-derived from the override file on every resolve, never an attestation."
     }
   },
   "required": [

@@ -22,14 +22,14 @@ const copilot = report.records.find((record) => record.id === 'copilot-cli');
 console.log(`copilot_reasons_unique=${new Set(copilot.readiness_reasons).size === copilot.readiness_reasons.length}`);
 NODE
 )"
-assert_contains "$PARSED" "total=7" "harness report loads default records"
-assert_contains "$PARSED" "stale=4" "harness report marks old records stale" # expectations track src/harness/capabilities/*.json — update when records refresh
+assert_contains "$PARSED" "total=8" "harness report loads default records"
+assert_contains "$PARSED" "stale=5" "harness report marks old records stale" # expectations track src/harness/capabilities/*.json — update when records refresh
 assert_contains "$PARSED" "verified=4" "harness report counts verified records"
 assert_contains "$PARSED" "warning=2" "harness report counts warning records"
-assert_contains "$PARSED" "unverified=1" "harness report counts unverified records"
+assert_contains "$PARSED" "unverified=2" "harness report counts unverified records"
 assert_contains "$PARSED" "unavailable=0" "harness report counts unavailable records"
-assert_contains "$PARSED" "not_ready=7" "harness report counts records below default H3 readiness"
-assert_contains "$PARSED" "attention=7" "harness report counts stale or not-ready records"
+assert_contains "$PARSED" "not_ready=8" "harness report counts records below default H3 readiness"
+assert_contains "$PARSED" "attention=8" "harness report counts stale or not-ready records"
 assert_contains "$PARSED" "has_codex=true" "harness report includes codex record"
 assert_contains "$PARSED" "codex_level=H2" "harness report preserves harness level"
 assert_contains "$PARSED" "required_level=H3" "harness report defaults readiness to H3"
@@ -38,13 +38,13 @@ assert_contains "$PARSED" "copilot_reasons_unique=true" "harness report emits un
 OUT="$(AUTOPILOT_HARNESS_NOW=2026-08-04T03:00:00.000Z node "$REPO_ROOT/bin/autopilot.js" harness report --stale-after 14d --format warning)"
 EXIT=$?
 assert_eq "0" "$EXIT" "harness warning report exits 0"
-assert_contains "$OUT" "AUTOPILOT_HARNESS_ATTENTION count=7" "warning report includes stale or H3-unready records"
+assert_contains "$OUT" "AUTOPILOT_HARNESS_ATTENTION count=8" "warning report includes stale or H3-unready records"
 assert_contains "$OUT" "required_level=H3" "warning report names required level"
 assert_contains "$OUT" "codex:" "warning report includes fresh H2 codex for H3 readiness"
 assert_contains "$OUT" "level_below_H3" "warning report explains H3 readiness gap"
 assert_contains "$OUT" "claude-code:" "warning report includes unavailable claude"
 assert_contains "$OUT" "copilot-cli:" "warning report includes unverified copilot"
-assert_contains "$OUT" "... 2 more" "warning report truncates long attention list"
+assert_contains "$OUT" "... 3 more" "warning report truncates long attention list"
 
 CUSTOM_DIR="$TEST_TMP/capabilities-ok"
 mkdir -p "$CUSTOM_DIR"

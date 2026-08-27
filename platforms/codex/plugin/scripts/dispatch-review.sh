@@ -1259,8 +1259,20 @@ fi
 
 
 # --- parse verdict (fail-closed and fail-toward-block) ---
-awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" '
-  BEGIN { started=0; ended=0; leading=1 }
+# CHROME BUDGET (first-pass qc 🟠 chrome-battery-bypass): the skipped prefix is
+# bounded. The old locator required the frame at line 1, so the block size cap
+# also bounded the whole response; allowing an UNBOUNDED prefix quietly removed
+# that. A 10MB preamble followed by a small valid block would have been accepted
+# with none of the preamble ever inspected. Real harness chrome is one or two
+# lines (cc-shim prints a single unrecognized-model notice), so this budget is
+# orders of magnitude above any legitimate case and only catches the pathological
+# one. It cannot open a hole: bounding a prefix is strictly more conservative
+# than not bounding it.
+CHROME_MAX_LINES="${AUTOPILOT_REVIEW_CHROME_MAX_LINES:-200}"
+CHROME_MAX_BYTES="${AUTOPILOT_REVIEW_CHROME_MAX_BYTES:-65536}"
+awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
+    -v chrome_max_lines="$CHROME_MAX_LINES" -v chrome_max_bytes="$CHROME_MAX_BYTES" '
+  BEGIN { started=0; ended=0; leading=1; chrome_lines=0; chrome_bytes=0; bail=0 }
   {
     sub(/\r$/, "", $0)
     if (leading) {
@@ -1272,15 +1284,18 @@ awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" '
       # ~1290: this rejects a truncated/echoed frame instead of silently passing
       # it or accepting a fabricated verdict planted further down).
       if (index($0, "AUTOPILOT-REVIEW") || index($0, "AUTOPILOT-END") || index($0, derived)) {
-        exit 7
+        bail=7; exit 7
       }
+      chrome_lines += 1
+      chrome_bytes += length($0) + 1
+      if (chrome_lines > chrome_max_lines || chrome_bytes > chrome_max_bytes) { bail=8; exit 8 }
       next
     }
     if (!started) { next }
-    if ($0 == begin) { exit 3 }
+    if ($0 == begin) { bail=3; exit 3 }
     if (ended) {
       if ($0 !~ /^[[:space:]]*$/) {
-        exit 6
+        bail=6; exit 6
       }
       next
     }
@@ -1291,6 +1306,9 @@ awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" '
     print $0
   }
   END {
+    # A rule-level bail is AUTHORITATIVE: without this guard END rewrites it
+    # (exit 3 -> 5, exit 7/8 -> 2), so the emitted reason names the wrong failure.
+    if (bail) { exit bail }
     if (!started) { exit 2 }
     if (!ended) { exit 5 }
   }
@@ -1303,6 +1321,7 @@ if [ "$PARSE_RC" -ne 0 ]; then
     5) emit_no_verdict "frame began but derived END marker was never found" ;;
     6) emit_no_verdict "trailing non-blank content after the derived END marker" ;;
     7) emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
+    8) emit_no_verdict "leading chrome exceeded the budget (${CHROME_MAX_LINES} lines / ${CHROME_MAX_BYTES} bytes) before any derived BEGIN frame" ;;
     *) emit_no_verdict "response did not start with the expected wrapped block" ;;
   esac
 fi

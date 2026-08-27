@@ -90,10 +90,20 @@ const RUNNER_BINARY_FALLBACK_PATHS = Object.freeze({
 //   0.0.34 (grok) | v22.14.0 (node)
 const VERSION_TOKEN_SHAPE = /^v?\d+\.\d+(?:\.\d+)*(?:[-+.][0-9A-Za-z][0-9A-Za-z.+-]*)?$/;
 
-// The version token must be one of the first N whitespace tokens. `codex-cli 0.31.0` puts
-// it second, `Version: 1.2.3` third; `Cannot start: requires Node 18.0` puts it fifth and
-// is therefore refused. Three is the smallest bound that accepts every plausible banner.
-const VERSION_TOKEN_MAX_POSITION = 3;
+// The version token must be one of the first N whitespace tokens. Every real banner puts
+// it first or second: `2026.08.25-3e8eec8` (1), `codex-cli 0.31.0` (2), `Version: 1.2.3`
+// (2 — the colon attaches to the label). Two, not three: at three, `Requires Node 18.0`
+// is accepted and becomes the token `Requires-Node-18.0` — a short requirement diagnostic
+// minted into a paid identity, which is the exact failure class this module exists to
+// stop. (Found by the first-pass QC panel, codex/gpt-5.6-sol, 2026-08-27; the original
+// fixture missed it because `Cannot start: requires Node 18.0` is refused for a different
+// reason — its version token sits fifth.)
+const VERSION_TOKEN_MAX_POSITION = 2;
+
+// Position alone is not enough: `Node 18.0 required` puts a version token second. A
+// version banner states an identity; these words only appear when a line is instead
+// stating a REQUIREMENT or a FAILURE. Anywhere in the line refuses.
+const DIAGNOSTIC_WORDS = /\b(requires?|required|requiring|needs?|needed|unsupported|unable|cannot|can\x27t|could\s?not|missing|not\s+installed|install|upgrade|update|please|failed|failure|invalid|denied|expired|unknown\s+option|must)\b/i;
 
 // A version banner is a label, not a sentence. Six whitespace tokens is already generous
 // for `2.0.44 (Claude Code)` (3) or `codex-cli 0.31.0` (2).
@@ -211,6 +221,7 @@ function versionLineRefusalReason(line) {
   // refusal reason names what the line actually is. The incident string trips both.
   if (ERROR_PREFIX.test(stripped)) return 'version_looks_like_an_error';
   if (DIAGNOSTIC_MARKER.test(stripped)) return 'version_looks_like_a_diagnostic';
+  if (DIAGNOSTIC_WORDS.test(stripped)) return 'version_states_a_requirement_or_failure';
   if (stripped.length > MAX_VERSION_LINE_LENGTH) {
     return `version_too_long_${stripped.length}_over_${MAX_VERSION_LINE_LENGTH}`;
   }

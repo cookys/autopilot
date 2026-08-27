@@ -36,6 +36,16 @@ module.exports = [
   ['single integer only', 'tool 7', 'refuse'],
   ['error prefix, short', 'Error: boom', 'refuse'],
   ['diagnostic carrying a version', 'Cannot start: requires Node 18.0', 'refuse'],
+
+  // SHORT requirement diagnostics — the hole the first-pass QC panel (codex/gpt-5.6-sol,
+  // 2026-08-27) found. These have a real version token in the first two or three words, so
+  // position and shape alone accept them; `Requires Node 18.0` became `Requires-Node-18.0`.
+  // The `Cannot start:` case above hid this: it is refused because its version sits fifth.
+  ['SHORT requirement, version third', 'Requires Node 18.0', 'refuse'],
+  ['SHORT requirement, version second', 'Node 18.0 required', 'refuse'],
+  ['requirement with a tail', 'requires Node 18.0 or newer', 'refuse'],
+  ['failure stating a version', 'failed to load runtime 2.1', 'refuse'],
+  ['install instruction', 'install cursor-agent 1.2.3', 'refuse'],
   ['stack frame', 'at /home/x/y.js:12:3', 'refuse'],
   ['url with a version-shaped path', 'see https://example.com/1.2 for help', 'refuse'],
   ['usage banner', 'Usage: tool [options] 1.2', 'refuse'],

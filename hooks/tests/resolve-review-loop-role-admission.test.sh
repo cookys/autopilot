@@ -125,6 +125,31 @@ printf '{ "schema": 1, "overrides": [{"engine":"cursor-grok-4.6-high","runner":"
 out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_BARE" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_REV" bash "$SCRIPT" 2>&1)"; rc=$?
 assert_eq "3" "$rc" "an override without reason+operator does not admit the seat"
 
+# ── 3b. --field mode is refused on the SAME terms as JSON mode ────────────
+# First-pass qc 🔴 admission-field-bypass: the admission pass originally ran just
+# before JSON emission, AFTER the --field dispatch had already returned. So
+# `--field reviewer_runner` on an unqualified roster printed "cursor" with exit 0
+# and no refusal at all — and the documented consult caller in
+# references/hetero-dispatch.md reads the seat with exactly that flag, so the gate
+# was bypassed by its own recipe. Field mode is a READ OF THE SAME RESOLVED ROSTER
+# and must be refused identically.
+for fld in reviewer_runner reviewer_engine consult_engine implementer_runner qc_panel; do
+  out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_REV" bash "$SCRIPT" --field "$fld" 2>&1)"; rc=$?
+  assert_eq "3" "$rc" "--field $fld is refused on an unqualified roster (no admission bypass)"
+  case "$out" in
+    *"NOT qualified for any role"*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+    *) fail "--field $fld leaked a value instead of refusing: $out" ;;
+  esac
+done
+
+# ...and a MATCHING override lets field mode through, so the gate is not simply
+# breaking every --field read.
+OVR_FIELD="$TEST_TMP/ovr-field.json"
+mk_override "$OVR_FIELD" reviewer
+val="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_FIELD" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_REV" bash "$SCRIPT" --field reviewer_runner 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "--field with a matching override succeeds"
+assert_eq "cursor" "$val" "--field returns the admitted runner"
+
 # ── 4. a MATCHING override admits, loudly, and is recorded ─────────────────
 OVR_OK="$TEST_TMP/ovr-reviewer.json"
 mk_override "$OVR_OK" reviewer

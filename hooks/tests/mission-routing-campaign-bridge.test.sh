@@ -112,8 +112,8 @@ fs.writeFileSync(path.join(repo, 'src', 'value.txt'), [
 fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
   '- implementer_engine: gpt-5.3-codex-spark',
   '- implementer_runner: codex',
-  '- reviewer_engine: gpt-5.5',
-  '- reviewer_runner: codex',
+  '- reviewer_engine: claude-opus',
+  '- reviewer_runner: claude-native',
   '- reviewer_effort: xhigh',
 ].join('\n') + '\n');
 
@@ -845,8 +845,8 @@ writeJson(path.join(offRepo, '.claude', 'owner-kernel-governance.json'), offGov)
 fs.writeFileSync(path.join(offRepo, '.claude', 'review-loop-config.md'), [
   '- implementer_engine: gpt-5.3-codex-spark',
   '- implementer_runner: codex',
-  '- reviewer_engine: gpt-5.5',
-  '- reviewer_runner: codex',
+  '- reviewer_engine: claude-opus',
+  '- reviewer_runner: claude-native',
   '- reviewer_effort: xhigh',
 ].join('\n') + '\n');
 execFileSync('git', ['-C', offRepo, 'add', '.']);

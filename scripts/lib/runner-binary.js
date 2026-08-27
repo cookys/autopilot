@@ -58,9 +58,13 @@ const RUNNER_VERSION_BINARY = Object.freeze({
   'anthropic-compatible': 'claude',  // not a binary runner (direct HTTP); see the note below
 });
 
-// `kimi` is routinely NOT on bare PATH — dispatch-review.sh falls back to a well-known
-// install path. That fallback is resolution logic, not name mapping, so it stays with the
-// dispatcher; here a kimi that is not on PATH simply refuses (fail closed, correct posture).
+// `kimi` is routinely NOT on bare PATH. dispatch-review.sh resolves it as PATH, then
+// ~/.kimi-code/bin/kimi. This module MIRRORS that order rather than refusing on a PATH
+// miss, for the reason probe-engine-capability.sh gives for its own kimi branch: a probe
+// that resolves the binary differently from the dispatcher reports on a different tool
+// than the one dispatch actually runs. Ownership of the general fallback CHAIN stays with
+// the dispatchers (they also honor an explicit --bin, which this module has no input for);
+// what lives here is only the version-probe mirror of it.
 const RUNNER_BINARY_FALLBACK_PATHS = Object.freeze({
   kimi: ['.kimi-code/bin/kimi'],
 });

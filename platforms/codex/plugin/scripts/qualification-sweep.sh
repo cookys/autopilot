@@ -278,8 +278,13 @@ plan_sweep() {
     echo "    --timeout 240s --scaffold-tier off"
     echo "  # rc 0 + \"status\": \"committed\" -> probe receipt rc=0 appended to $bundle/probe-receipts.jsonl, proceed"
     echo "  # otherwise -> probe receipt rc=1 appended (instrument_charged:false), SKIP administration (uncharged)"
-    echo "  # BEFORE all of the above: \`$vbin --version\` must exit 0 and print a version-shaped"
-    echo "  #   first stdout line; anything else -> probe receipt rc=4, seat refused UNCHARGED."
+    if [ -n "$vbin" ]; then
+      echo "  # BEFORE all of the above: \`$vbin --version\` must exit 0 and print a version-shaped"
+      echo "  #   first stdout line; anything else -> probe receipt rc=4, seat refused UNCHARGED."
+    else
+      echo "  # BEFORE all of the above: the version binary must resolve. It does NOT for this"
+      echo "  #   seat -> probe receipt rc=4, seat refused UNCHARGED. Nothing here is reached."
+    fi
     echo
     echo "[administration]"
     echo "  node scripts/engine-qualify.js $ROLE \\"

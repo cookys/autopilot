@@ -185,16 +185,35 @@ else
   fail "author: happy-path raw_log file '$A3_RAW_LOG' is missing or empty"
 fi
 
-# A4 — fail-closed on non-zero exit. Note: the cursor branch calls die_precondition
-# directly on non-zero rc (a deliberate choice per the branch's own comment — "not
-# runner_failed" — so this rail's non-zero-exit failure surfaces as
-# precondition_failed/exit 2, not the runner_failed/exit 3 other rails use). Assert
-# the actual documented behavior, and that it is never coerced into authored.
+# A4 — fail-closed on non-zero exit FROM THE INVOKED cursor-agent process: parity with
+# every other runner (codex/grok/agy/kimi/etc. all map a non-zero engine exit to
+# runner_failed) — the engine ran and failed, which is a different fact from "we never
+# dispatched", so this is runner_failed/exit 3, not precondition_failed/exit 2.
 OUT="$(env CURSOR_STUB_MODE=nonzero "$AUTHOR_SCRIPT" --runner cursor --model "$FULL_MODEL" --prompt-file "$PROMPT" --bin "$STUB" 2>&1)"; EXIT=$?
-assert_exit_code "$EXIT" "2" "author: non-zero cursor exit fails closed (exit 2, precondition_failed)"
-assert_contains "$OUT" '"status": "precondition_failed"' "author: non-zero cursor exit yields precondition_failed"
+assert_exit_code "$EXIT" "3" "author: non-zero cursor exit fails closed (exit 3, runner_failed)"
+assert_contains "$OUT" '"status": "runner_failed"' "author: non-zero cursor exit yields runner_failed"
 assert_not_contains "$OUT" '"status": "authored"' "author: non-zero cursor exit is never authored"
-assert_contains "$OUT" "no salvage from stderr" "author: non-zero cursor exit message names no-salvage posture"
+assert_not_contains "$OUT" '"status": "precondition_failed"' "author: non-zero cursor exit is never precondition_failed"
+
+# A4b — binary ABSENT is still precondition_failed/exit 2 (proves the fix did not simply
+# relabel every cursor failure to runner_failed — a failure BEFORE cursor-agent is ever
+# invoked stays a precondition).
+OUT="$("$AUTHOR_SCRIPT" --runner cursor --model "$FULL_MODEL" --prompt-file "$PROMPT" --bin "$TEST_TMP/no-such-cursor-agent-binary" 2>&1)"; EXIT=$?
+assert_exit_code "$EXIT" "2" "author: cursor binary absent exits 2 (precondition)"
+assert_contains "$OUT" '"status": "precondition_failed"' "author: cursor binary absent status is precondition_failed"
+assert_contains "$OUT" "cursor binary not found" "author: cursor binary absent message"
+
+# A4c — every entry in _CURSOR_FAMILIES (the single source of truth) is rejected as a
+# bare family alias, precondition_failed/exit 2. Iterated, not named, so this test
+# cannot fall behind the set if a family is added or removed.
+# shellcheck source=../../scripts/lib/cursor-model.sh
+. "$REPO_ROOT/scripts/lib/cursor-model.sh"
+for _family in $_CURSOR_FAMILIES; do
+  OUT="$("$AUTHOR_SCRIPT" --runner cursor --model "$_family" --prompt-file "$PROMPT" --bin "$STUB" 2>&1)"; EXIT=$?
+  assert_exit_code "$EXIT" "2" "author: bare family alias '$_family' exits 2 (precondition)"
+  assert_contains "$OUT" '"status": "precondition_failed"' "author: bare family alias '$_family' status is precondition_failed"
+  assert_contains "$OUT" "family alias" "author: bare family alias '$_family' message names the family-alias reason"
+done
 
 # A5 — fail-closed on empty stdout.
 OUT="$(env CURSOR_STUB_MODE=empty "$AUTHOR_SCRIPT" --runner cursor --model "$FULL_MODEL" --prompt-file "$PROMPT" --bin "$STUB" 2>&1)"; EXIT=$?

@@ -42,8 +42,11 @@
 #   family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
 #   lib/cursor-model.sh) — a missing or bare-alias --model is a precondition failure. No
 #   --reasoning-effort/--effort: effort is encoded in the model id (P12); cursor-agent rejects
-#   both flags with "error: unknown option". A non-zero cursor-agent exit is a precondition
-#   failure here (never salvaged from stderr), never a coerced authored result.
+#   both flags with "error: unknown option". A non-zero exit FROM the invoked cursor-agent
+#   process is runner_failed here (parity with every other runner — codex/grok/agy/kimi/etc.
+#   all map a non-zero engine exit to runner_failed), never a coerced authored result, and
+#   NEVER salvaged from stderr. Only failures BEFORE cursor-agent is invoked (binary missing,
+#   bad/bare-alias --model) are precondition_failed.
 #
 # USAGE:
 #   scripts/dispatch-author.sh --runner codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor --model <name> --prompt-file <file>
@@ -105,6 +108,8 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/dispatch-author-codex-transport.sh"
 # shellcheck source=lib/grok-effort.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/grok-effort.sh"
+# shellcheck source=lib/cursor-model.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/cursor-model.sh"
 
 # Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
 # inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
@@ -692,10 +697,10 @@ case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
 if [[ "$RUNNER" = "cursor" ]]; then
   # No family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
-  # lib/cursor-model.sh) — --model must already be a full cursor-agent model id.
-  case "$MODEL" in
-    grok46|codex53) die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models" ;;
-  esac
+  # lib/cursor-model.sh) — --model must already be a full cursor-agent model id. The
+  # alias set is a single source of truth (lib/cursor-model.sh's _CURSOR_FAMILIES,
+  # via cursor_is_family_alias) rather than restated here as a literal case pattern.
+  cursor_is_family_alias "$MODEL" && die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models"
 fi
 [[ -n "$PROMPT_FILE" && -r "$PROMPT_FILE" ]] || die_precondition "--prompt-file is required and must be readable"
 case "$EFFORT" in low|medium|high|xhigh|max) ;; *) die_precondition "--effort must be low|medium|high|xhigh|max" ;; esac
@@ -996,21 +1001,23 @@ elif [[ "$RUNNER" = "cursor" ]]; then
   # SEPARATE temp files — STDOUT is the sole authored-text source ($RAW_LOG); STDERR is chrome
   # only, never salvaged into an authored result. No --reasoning-effort/--effort: effort is
   # encoded in the model id (P12) — cursor-agent rejects both with "error: unknown option".
-  # A non-zero exit here is a PRECONDITION failure (not runner_failed) — a fail-closed cursor
-  # run never reaches the shared authored/empty_output content checks below.
+  # A non-zero exit FROM THE INVOKED cursor-agent process is runner_failed (parity with every
+  # other runner: codex/grok/agy/kimi/etc. all map a non-zero engine exit to runner_failed via
+  # the shared RUNNER_EXIT check below) — the engine ran and failed, which is a different fact
+  # from "we never dispatched". Preconditions (binary missing, bad --model) are checked BEFORE
+  # this point and still die_precondition. RUNNER_EXIT is left to the shared classification
+  # below (including the timeout case, rc=124, which the codex/grok branches also leave to the
+  # generic RUNNER_EXIT != 0 check rather than special-casing) — CURSOR_ERR is never read into
+  # the result either way, preserving "fail-closed, no salvage from stderr".
   CURSOR_CWD="$(mktemp -d -t dispatch-author-cursorcwd-XXXXXX)"
   CURSOR_ERR="$(mktemp -t dispatch-author-cursor-err-XXXXXX)"
   set +e
   timeout "$TIMEOUT" bash -c 'cd "$1" && exec "$2" -p --trust --mode ask --model "$3" \
     --output-format text < "$4"' \
     _ "$CURSOR_CWD" "$BIN" "$MODEL" "$PROMPT_FILE" > "$RAW_LOG" 2> "$CURSOR_ERR"
-  CURSOR_RC=$?
+  RUNNER_EXIT=$?
   set -e
   rm -rf "$CURSOR_CWD"; CURSOR_CWD=""
-  if [ "$CURSOR_RC" -ne 0 ]; then
-    die_precondition "cursor exited non-zero (rc=$CURSOR_RC$([ "$CURSOR_RC" -eq 124 ] && printf ' TIMEOUT after %s' "$TIMEOUT")) — fail-closed, no salvage from stderr"
-  fi
-  RUNNER_EXIT=0
 elif [[ "$RUNNER" = "kimi" ]]; then
   # The transport lives in `src/runners/kimi.js` (contract-pinned by
   # hooks/tests/dispatch-author-kimi.test.sh); this branch only supplies the

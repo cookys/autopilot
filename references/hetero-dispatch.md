@@ -542,6 +542,44 @@ Full per-runner usage recipes (incl. the cc-shim env setup and which models are 
 The resolver's `family_of()` recognises openai/anthropic/google/xai/minimax/zhipu for the
 decorrelation overlap check.
 
+## The consult seat — configured, not hand-typed
+
+A mid-run heterogeneous second opinion used to be hand-typed `dispatch-review.sh` argv:
+the operator picked a runner, a model and an effort at the keyboard, so the choice was
+invisible to the roster and unreproducible between runs. It is now a **seat** in
+`review-loop-config.md`, resolved like every other:
+
+```bash
+eng="$(scripts/resolve-review-loop.sh --field consult_engine)"
+run="$(scripts/resolve-review-loop.sh --field consult_runner)"
+eff="$(scripts/resolve-review-loop.sh --field consult_effort)"
+ep="$(scripts/resolve-review-loop.sh --field consult_endpoint)"
+[ -n "$eng" ] || { echo "no consult seat configured — hand-typed argv is still legal"; }
+scripts/dispatch-review.sh --runner "$run" --model "$eng" --effort "$eff" \
+  ${ep:+--endpoint "$ep"} --diff-file <question> --spec-file <what to decide>
+```
+
+An EMPTY seat is the default and means exactly what it meant before: pick argv by hand.
+A configured seat means the roster states which engine answers consults, so a run summary
+can name it and a reviewer can check it.
+
+Two properties carry over from the other seats, and both matter here:
+
+- **Qualification still gates it.** Naming a runner with no recorded role qualification
+  (today `cursor`) makes the resolver EXIT 3 unless `$AUTOPILOT_QUALIFICATION_OVERRIDE`
+  carries an unexpired entry for that engine/runner AND `"role": "consult"`. An override
+  for a different role does not admit the consult seat. The admitted seat is announced on
+  stderr and listed in `override_admitted_seats` — a recorded operator decision, never
+  evidence of qualification.
+- **A consult is still ADVICE.** Same trust boundary as the peer-consult channel below:
+  it never substitutes qc@depth-0, artifact verification, or the decorrelated review
+  rails. Routing it through a seat makes the choice reproducible; it does not promote the
+  answer.
+
+The sibling `discuss_*` seat (heterogeneous participation in `think-tank` / `brainstorm`)
+resolves identically but **has no executable consumer yet** — it is declared so a roster
+can state the intent, and no skill reads it today. Do not describe it as live.
+
 ## Peer consult — the codex plugin channel (Claude Code only, capability-gated)
 
 When the official OpenAI codex plugin (`openai/codex-plugin-cc`) is installed AND the

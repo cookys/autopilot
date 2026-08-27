@@ -153,6 +153,17 @@ const valid = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  consult_engine: '',
+  consult_effort: '',
+  consult_runner: '',
+  consult_endpoint: '',
+  discuss_engine: '',
+  discuss_effort: '',
+  discuss_runner: '',
+  discuss_endpoint: '',
+  allow_same_runner_dual_seat: 'off',
+  same_runner_dual_seat: false,
+  override_admitted_seats: [],
 };
 const parsed = parseReviewLoopOutput([
   '{not valid json}',
@@ -236,6 +247,17 @@ const valid = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  consult_engine: '',
+  consult_effort: '',
+  consult_runner: '',
+  consult_endpoint: '',
+  discuss_engine: '',
+  discuss_effort: '',
+  discuss_runner: '',
+  discuss_endpoint: '',
+  allow_same_runner_dual_seat: 'off',
+  same_runner_dual_seat: false,
+  override_admitted_seats: [],
 };
 const parsed = parseReviewLoopOutput([
   'resolver preface',
@@ -338,6 +360,17 @@ const partial = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  consult_engine: '',
+  consult_effort: '',
+  consult_runner: '',
+  consult_endpoint: '',
+  discuss_engine: '',
+  discuss_effort: '',
+  discuss_runner: '',
+  discuss_endpoint: '',
+  allow_same_runner_dual_seat: 'off',
+  same_runner_dual_seat: false,
+  override_admitted_seats: [],
 };
 try {
   parseReviewLoopOutput(JSON.stringify(partial));
@@ -419,6 +452,17 @@ const invalid = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  consult_engine: '',
+  consult_effort: '',
+  consult_runner: '',
+  consult_endpoint: '',
+  discuss_engine: '',
+  discuss_effort: '',
+  discuss_runner: '',
+  discuss_endpoint: '',
+  allow_same_runner_dual_seat: 'off',
+  same_runner_dual_seat: false,
+  override_admitted_seats: [],
 };
 try {
   parseReviewLoopOutput(JSON.stringify(invalid, null, 2));
@@ -500,6 +544,17 @@ const valid = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  consult_engine: '',
+  consult_effort: '',
+  consult_runner: '',
+  consult_endpoint: '',
+  discuss_engine: '',
+  discuss_effort: '',
+  discuss_runner: '',
+  discuss_endpoint: '',
+  allow_same_runner_dual_seat: 'off',
+  same_runner_dual_seat: false,
+  override_admitted_seats: [],
 };
 const parsed = parseReviewLoopOutput(`${JSON.stringify(valid)}\nlog line with {debug braces}`);
 console.log(parsed.reviewer_engine);
@@ -577,6 +632,17 @@ const valid = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  consult_engine: '',
+  consult_effort: '',
+  consult_runner: '',
+  consult_endpoint: '',
+  discuss_engine: '',
+  discuss_effort: '',
+  discuss_runner: '',
+  discuss_endpoint: '',
+  allow_same_runner_dual_seat: 'off',
+  same_runner_dual_seat: false,
+  override_admitted_seats: [],
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":"bad"}`);
@@ -658,6 +724,17 @@ const valid = {
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
   reviewer_fallback_preference_low_risk: [],
+  consult_engine: '',
+  consult_effort: '',
+  consult_runner: '',
+  consult_endpoint: '',
+  discuss_engine: '',
+  discuss_effort: '',
+  discuss_runner: '',
+  discuss_endpoint: '',
+  allow_same_runner_dual_seat: 'off',
+  same_runner_dual_seat: false,
+  override_admitted_seats: [],
 };
 try {
   parseReviewLoopOutput(`${JSON.stringify(valid)}\n{"reviewer_engine":`);

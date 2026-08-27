@@ -143,6 +143,10 @@ _REVIEW_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # Canonical json_escape, so die_precondition can emit VALID JSON for any message.
 # shellcheck source=/dev/null
 [ -r "$_REVIEW_SELF_DIR/lib/json-emit.sh" ] && . "$_REVIEW_SELF_DIR/lib/json-emit.sh" || true
+# cursor_is_family_alias — single source of truth for the cursor family-alias
+# vocabulary (grok46|codex53), used by the --runner cursor precondition below.
+# shellcheck source=/dev/null
+[ -r "$_REVIEW_SELF_DIR/lib/cursor-model.sh" ] && . "$_REVIEW_SELF_DIR/lib/cursor-model.sh" || true
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; TIMEOUT="5m"; BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
 REVIEW_USAGE_JSON="null"
@@ -230,9 +234,11 @@ fi
 if [[ "$RUNNER" = "cursor" ]]; then
   # No family-alias resolution on this rail (that lives only in dispatch-hetero.sh's
   # lib/cursor-model.sh) — --model must already be a full cursor-agent model id.
-  case "$MODEL" in
-    grok46|codex53) die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models" ;;
-  esac
+  # cursor_is_family_alias is the single source of truth for the alias vocabulary
+  # (grok46|codex53) — see lib/cursor-model.sh; do not restate the pattern here.
+  if command -v cursor_is_family_alias >/dev/null 2>&1 && cursor_is_family_alias "$MODEL"; then
+    die_precondition "--model for --runner cursor must be a full cursor-agent model id, not a family alias (got: $MODEL); see cursor-agent --list-models"
+  fi
 fi
 [[ -n "$DIFF_FILE" && -f "$DIFF_FILE" && -r "$DIFF_FILE" ]] || die_precondition "--diff-file is required and must be a readable regular file"
 if [[ -n "$SPEC_FILE" ]]; then
@@ -387,8 +393,14 @@ passive_capture() {
 # ── content-integrity battery + unratified salvage (verdict-bytes preservation) ──
 # validate_review_block is THE battery: the authoritative rail and salvage run the
 # exact same checks over a block file — never a re-listed subset (plan R3 §2). Only
-# the LOCATOR differs: the main rail requires the block at the first non-blank line
-# (positional anti-echo anchor); salvage requires exactly one derived BEGIN in the
+# the LOCATOR differs: the main rail skips leading chrome lines up to the derived
+# BEGIN, but ONLY while a leading line carries no trace of the framing vocabulary
+# (no "AUTOPILOT-REVIEW"/"AUTOPILOT-END" substring, no derived-nonce substring) —
+# a leading line that DOES carry that vocabulary and is not byte-exactly the
+# derived BEGIN is a HARD REJECT, never a skip (anti-echo anchor now on the
+# vocabulary, not on line position: a harness may print one line of chrome before
+# the frame, but a fabricated/truncated/echoed frame is still rejected, not
+# silently skipped or accepted). Salvage requires exactly one derived BEGIN in the
 # capture and takes the first derived END after it (g2-adjudication #8). Returns 0
 # and sets BATTERY_VERDICT/BATTERY_FINDINGS/BATTERY_PROOF, or returns 1 and sets
 # BATTERY_FAIL_REASON. Defined here (before the dispatch section) because the
@@ -1247,17 +1259,21 @@ fi
 
 
 # --- parse verdict (fail-closed and fail-toward-block) ---
-awk -v begin="$BEGIN" -v end="$END" '
+awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" '
   BEGIN { started=0; ended=0; leading=1 }
   {
     sub(/\r$/, "", $0)
-    if (leading && $0 ~ /^[[:space:]]*$/) {
-      next
-    }
     if (leading) {
-      leading=0
-      if ($0 != begin) { exit 2 }
-      started=1
+      if ($0 ~ /^[[:space:]]*$/) { next }
+      if ($0 == begin) { leading=0; started=1; next }
+      # Chrome-skip guard: a leading line may be skipped ONLY if it carries no
+      # trace of the framing vocabulary. If it does — but is not byte-exactly the
+      # derived BEGIN line — that is a HARD REJECT, never a skip (see comment at
+      # ~1290: this rejects a truncated/echoed frame instead of silently passing
+      # it or accepting a fabricated verdict planted further down).
+      if (index($0, "AUTOPILOT-REVIEW") || index($0, "AUTOPILOT-END") || index($0, derived)) {
+        exit 7
+      }
       next
     }
     if (!started) { next }
@@ -1275,19 +1291,26 @@ awk -v begin="$BEGIN" -v end="$END" '
     print $0
   }
   END {
-    if (!started) { exit 4 }
+    if (!started) { exit 2 }
     if (!ended) { exit 5 }
   }
 ' "$PARSE_INPUT" > "$BLOCK_FILE"
 PARSE_RC=$?
 if [ "$PARSE_RC" -ne 0 ]; then
-  emit_no_verdict "response did not start with the expected wrapped block"
+  case "$PARSE_RC" in
+    2) emit_no_verdict "no derived BEGIN frame found in response" ;;
+    3) emit_no_verdict "duplicate derived BEGIN marker found inside capture" ;;
+    5) emit_no_verdict "frame began but derived END marker was never found" ;;
+    6) emit_no_verdict "trailing non-blank content after the derived END marker" ;;
+    7) emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
+    *) emit_no_verdict "response did not start with the expected wrapped block" ;;
+  esac
 fi
 
 # The content battery (size cap, leak scan, VERDICT exactness, FINDINGS,
 # NO-FINDING-PROOF structure + tautology blacklist) lives in validate_review_block
 # — defined next to emit_no_verdict, shared VERBATIM with salvage. Only the locator
-# above (block at first non-blank line) is main-rail-specific.
+# above (vocabulary-guarded chrome skip to the derived BEGIN) is main-rail-specific.
 if ! validate_review_block "$BLOCK_FILE"; then
   emit_no_verdict "$BATTERY_FAIL_REASON"
 fi

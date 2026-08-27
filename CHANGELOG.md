@@ -30,12 +30,18 @@ Two layers, both new:
   resolution and the Stage-0 probe, so a refused seat costs nothing at all. Refused:
   unknown runner, binary not on PATH, `--version` exiting non-zero, output on stderr only
   (the two streams are no longer folded), empty output, and anything not version-shaped.
-  "Version-shaped" is a positive grammar — a real version token within the first three
-  whitespace tokens of a short line — not "contains `digit.digit` somewhere"; the loose
-  form still admitted diagnostics like `Cannot start: requires Node 18.0`. ANSI colouring
-  is stripped before validation and before tokenization, so a token can never carry escape
-  parameters. Both tightenings came from a heterogeneous consult (`codex`/`gpt-5.6-sol`,
-  high) on the proposed rule.
+  "Version-shaped" is a positive grammar — a real version token within the first **two**
+  whitespace tokens of a short line that states no requirement or failure — not "contains
+  `digit.digit` somewhere"; the loose form still admitted diagnostics like `Cannot start:
+  requires Node 18.0`. ANSI colouring is stripped before validation and before
+  tokenization, so a token can never carry escape parameters. The shape and ANSI
+  tightenings came from a heterogeneous consult (`codex`/`gpt-5.6-sol`, high) on the
+  proposed rule; the position bound and the requirement/failure-word rejection came from
+  the first-pass QC panel on the same rail, which found that `Requires Node 18.0` and
+  `Node 18.0 required` still minted tokens — short requirement diagnostics with a genuine
+  version token near the front. The original fixture had hidden that: its `Cannot start:`
+  case is refused for an unrelated reason (its version token sits fifth), so the table
+  looked like it covered requirement diagnostics when it did not.
 
 Also: probe receipts record the **resolved** binary and its version line, not the runner
 token (`bin` was `command -v cursor` — `n/a` — and `bin_version` was the error sentence);

@@ -50,9 +50,62 @@
 # sidecar hooks/tests/lib.sh holds for the lifetime of a running standalone
 # *.test.sh, so a live test's TEST_TMP survives a concurrent suite's reaper
 # even though it is not a dispatch worktree at all.
+#
+# TOCTOU note (fixed 2026-08-28, adversarial QC finding suite-residue-reap-1):
+# `exec {fd}>>lock` (both the worktree-lock creator in dispatch-hetero.sh and
+# the `.autopilot-live.lock` sidecar in hooks/tests/lib.sh) creates the lock
+# FILE before its owner calls flock — an open()-then-flock() gap of a few
+# milliseconds during which the lock file exists but nothing holds it yet. A
+# reaper that treats a bare `flock -n` success on that file as proof of death
+# can win the race and `rm -rf` a worktree/TEST_TMP that is still being born.
+# The fix: reap authorization on any lock-gated path requires flock -n success
+# AND the lock file's mtime to be at least AUTOPILOT_SUITE_REAP_MIN_AGE seconds
+# old (default 60 — the open->flock window is milliseconds, so this closes it
+# with huge margin). An entry whose lock is free but too fresh is neither
+# proven live nor proven dead, so it is counted skipped_unknown, not reaped.
+# The same constant now also gates the aged dead-registry-lock tidy in
+# _srr_other_live_run (previously a separate, unrelated 5s constant).
+#
+# DELIBERATELY NOT CHANGED: age-based pruning of plain hetero-*-log-* files
+# (via prune_tmp_residue below) stays on its own AUTOPILOT_TMP_LOG_RETENTION_DAYS
+# window — no lock exists on a bare log file by which liveness could be judged,
+# a live dispatch keeps appending to it (which keeps refreshing its mtime), and
+# the 3-day default is a deliberate, documented bounded trade (a depth-0 partial
+# overrule of a panel finding that wanted this tightened) — not an oversight.
 
 [ -n "${_AUTOPILOT_SUITE_RESIDUE_REAP_SH:-}" ] && return 0
 _AUTOPILOT_SUITE_RESIDUE_REAP_SH=1
+
+# AUTOPILOT_SUITE_REAP_MIN_AGE — shared staleness threshold (seconds) for every
+# flock-success-implies-dead judgement in this file: the lock-gated rm path
+# below AND the dead-registry-lock tidy in _srr_other_live_run. A single
+# constant so the two call sites cannot silently drift apart again.
+: "${AUTOPILOT_SUITE_REAP_MIN_AGE:=60}"
+if ! [[ "$AUTOPILOT_SUITE_REAP_MIN_AGE" =~ ^[0-9]+$ ]]; then
+  AUTOPILOT_SUITE_REAP_MIN_AGE=60
+fi
+
+# _srr_file_age_secs <path> — prints age in whole seconds on stdout, returns 0.
+# Returns 1 (nothing printed) when mtime is unresolvable — callers must treat
+# that as "not proven old enough" (fail closed), never as "old enough".
+_srr_file_age_secs() {
+  local path="$1" mtime now
+  mtime="$(stat -c %Y -- "$path" 2>/dev/null || stat -f %m -- "$path" 2>/dev/null)"
+  [[ "$mtime" =~ ^[0-9]+$ ]] || return 1
+  now="$(date +%s)"
+  [ "$now" -ge "$mtime" ] || { printf '0'; return 0; }
+  printf '%s' "$((now - mtime))"
+  return 0
+}
+
+# _srr_lock_is_stale <lock-path> — 0 (true) if the lock file's mtime is at
+# least AUTOPILOT_SUITE_REAP_MIN_AGE seconds old; 1 (false) if too fresh OR
+# unresolvable (fail closed — see _srr_file_age_secs).
+_srr_lock_is_stale() {
+  local age
+  age="$(_srr_file_age_secs "$1")" || return 1
+  [ "$age" -ge "$AUTOPILOT_SUITE_REAP_MIN_AGE" ]
+}
 
 _SRR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _SRR_REPO_ROOT="$(cd "$_SRR_SELF_DIR/../../.." && pwd)"
@@ -66,17 +119,39 @@ fi
 
 SUITE_RUN_LOCK_FD=""
 SUITE_RUN_LOCK_PATH=""
+# SUITE_RUN_LOCK_ACQUIRE_FAILED — set by suite_run_lock_acquire: "1" when the
+# open-or-flock actually failed (this run could NOT register itself as live),
+# "0" on success. Finding suite-residue-reap-3: previously the function always
+# returned 0 regardless, so a caller had no way to notice registration failed
+# open (best-effort silently degrading to "invisible to other runs").
+SUITE_RUN_LOCK_ACQUIRE_FAILED=0
 
-# suite_run_lock_acquire — best-effort; always returns 0.
+# suite_run_lock_acquire — best-effort (never aborts the caller); records
+# success/failure in SUITE_RUN_LOCK_ACQUIRE_FAILED and via its own return code
+# (0 acquired, 1 failed) so a caller MAY react, but is not required to.
 suite_run_lock_acquire() {
-  local tmp="${TMPDIR:-/tmp}"
-  [ -d "$tmp" ] || return 0
+  local tmp
+  # Canonicalize once, the same way suite_residue_reap does (finding
+  # suite-residue-reap-7): building the lock path from an unresolved $TMPDIR
+  # while probes elsewhere use realpath means a run under a symlinked /tmp
+  # would register a lock path that its own later suite_residue_reap call
+  # (which realpath's $TMPDIR first) would never look at under its own name,
+  # nor would another run's _srr_other_live_run scan of the canonical dir see
+  # it — a silent under-reap / self-invisibility bug. Fall back to the raw
+  # value only when realpath itself fails (e.g. dir doesn't exist yet).
+  tmp="$(realpath -e "${TMPDIR:-/tmp}" 2>/dev/null)" || tmp="${TMPDIR:-/tmp}"
+  SUITE_RUN_LOCK_ACQUIRE_FAILED=0
+  if [ ! -d "$tmp" ]; then
+    SUITE_RUN_LOCK_ACQUIRE_FAILED=1
+    return 1
+  fi
   local lock="$tmp/.autopilot-suite-run.$$.lock"
   if _wt_open_lock_fd "$lock" 2>/dev/null; then
     local fd="$_WT_SAFE_LOCK_FD"
     if flock -n "$fd" 2>/dev/null; then
       SUITE_RUN_LOCK_FD="$fd"
       SUITE_RUN_LOCK_PATH="$lock"
+      return 0
     else
       # NOTE (see hooks/tests/lib.sh's matching note): a no-command `exec`
       # applies ALL its redirections PERMANENTLY to the calling shell — a
@@ -87,7 +162,8 @@ suite_run_lock_acquire() {
       { exec {fd}>&-; } 2>/dev/null || true
     fi
   fi
-  return 0
+  SUITE_RUN_LOCK_ACQUIRE_FAILED=1
+  return 1
 }
 
 # suite_run_lock_release — best-effort; always returns 0.
@@ -154,7 +230,6 @@ _srr_pattern_match() {
 _srr_other_live_run() {
   local tmp="$1" own="$2" f frc
   local found_live=1
-  local f_mtime f_age f_now
   shopt -s nullglob
   for f in "$tmp"/.autopilot-suite-run.*.lock; do
     [ -e "$f" ] || continue
@@ -173,19 +248,17 @@ _srr_other_live_run() {
       # yet. rm -f'ing it there would delete a live run's own registration,
       # after which a third run would see "no other live run" and could reap
       # that live run's lockless scratch. Only tidy a registry file old
-      # enough that it cannot still be in that gap (5s is generous headroom
-      # over the file-create → flock window); a fresher file is left alone
-      # and, per the caller's contract, NOT counted as live either — it is
-      # simply unknown, not a sighted live run.
-      f_mtime="$(stat -c %Y -- "$f" 2>/dev/null || stat -f %m -- "$f" 2>/dev/null)"
-      if [[ "$f_mtime" =~ ^[0-9]+$ ]]; then
-        f_now="$(date +%s)"
-        f_age=$((f_now - f_mtime))
-        if [ "$f_age" -ge 5 ]; then
-          rm -f -- "$f" 2>/dev/null || true
-        fi
+      # enough that it cannot still be in that gap — gated on the SAME
+      # AUTOPILOT_SUITE_REAP_MIN_AGE constant as the lock-gated rm path below
+      # (finding suite-residue-reap-1: this used to be an independent,
+      # unrelated 5s constant that could drift out of sync with the real
+      # threshold); a fresher file is left alone and, per the caller's
+      # contract, NOT counted as live either — it is simply unknown, not a
+      # sighted live run.
+      if _srr_lock_is_stale "$f"; then
+        rm -f -- "$f" 2>/dev/null || true
       fi
-      # mtime unresolvable: leave the file alone (same as "too fresh").
+      # too fresh or mtime unresolvable: leave the file alone.
     fi
   done
   shopt -u nullglob
@@ -215,13 +288,15 @@ suite_residue_reap() {
     return 0
   fi
 
+  # NOTE (finding suite-residue-reap-3): no upfront single snapshot of
+  # other_live here anymore — a suite registering AFTER a one-time snapshot
+  # used to be invisible to every remaining lockless-deletion decision in this
+  # call. It is instead re-checked fresh (cheap glob) immediately before each
+  # individual lockless deletion, below.
   local other_live=1
-  _srr_other_live_run "$tmp" "${SUITE_RUN_LOCK_PATH:-}"
-  other_live=$?
-  # 0 == true (bash convention) here since _srr_other_live_run returns 0 for live.
 
   local pat entry base dirname_of marker lock live_lock live_rc probe_fd rc
-  local is_hetero lock_gated
+  local is_hetero lock_gated probed_lock did_git_worktree_remove=0
 
   for pat in "${_SRR_PATTERNS[@]}"; do
     while IFS= read -r -d '' entry; do
@@ -255,14 +330,17 @@ suite_residue_reap() {
       fi
 
       if [ "$lock_gated" -eq 0 ]; then
+        probed_lock=""
         if [ -e "$lock" ]; then
           _wt_is_live "$entry"
           live_rc=$?
           probe_fd="${_WT_PROBE_FD:-}"
+          probed_lock="$lock"
         elif [ -e "$live_lock" ]; then
           _srr_probe_generic_lock "$live_lock"
           live_rc=$?
           probe_fd="${_SRR_PROBE_FD:-}"
+          probed_lock="$live_lock"
         else
           # No lock file at all: dispatch-hetero.sh creates the worktree dir
           # (and, for hetero-* basenames, may still be between mktemp and
@@ -284,13 +362,46 @@ suite_residue_reap() {
           skipped_lock_unsupported=$((skipped_lock_unsupported + 1))
           continue
         fi
-        # live_rc == 0: lock acquired, safe to reap; close probe fd after.
+        # live_rc == 0: flock -n succeeded — but that alone is NOT proof of
+        # death (finding suite-residue-reap-1): the true owner may still be
+        # between opening the lock file and calling flock on it. Require the
+        # lock file to also be old enough that it cannot still be in that
+        # open->flock gap before treating it as dead.
+        if ! _srr_lock_is_stale "$probed_lock"; then
+          skipped_unknown=$((skipped_unknown + 1))
+          if [ -n "$probe_fd" ]; then
+            { exec {probe_fd}>&-; } 2>/dev/null || true
+          fi
+          _WT_PROBE_FD=""
+          _SRR_PROBE_FD=""
+          continue
+        fi
+        # live_rc == 0 and lock is stale: safe to reap; close probe fd after.
         if [ "$dry_run" -eq 0 ]; then
-          if rm -rf -- "$entry" 2>/dev/null; then
+          local did_remove=0
+          # finding suite-residue-reap-2: a raw `rm -rf` on a directory that
+          # is a REGISTERED git worktree of this repo leaves a dangling
+          # .git/worktrees/<name> admin entry behind (git never learns the
+          # working directory vanished). Prefer `git worktree remove --force`
+          # for those; fall back to rm -rf when git refuses (corrupt/partial
+          # worktree, or the path was never actually registered).
+          if [ "$is_hetero" -eq 0 ] \
+             && _wt_is_registered_path "$_SRR_REPO_ROOT" "$entry" >/dev/null 2>&1; then
+            if git -C "$_SRR_REPO_ROOT" worktree remove --force -- "$entry" >/dev/null 2>&1; then
+              did_remove=1
+              did_git_worktree_remove=1
+            fi
+          fi
+          if [ "$did_remove" -eq 0 ]; then
+            if rm -rf -- "$entry" 2>/dev/null; then
+              did_remove=1
+            else
+              errors+=("remove failed: $entry")
+            fi
+          fi
+          if [ "$did_remove" -eq 1 ]; then
             reaped=$((reaped + 1))
             [ "${#reaped_paths[@]}" -lt 50 ] && reaped_paths+=("$entry")
-          else
-            errors+=("remove failed: $entry")
           fi
         else
           reaped=$((reaped + 1))
@@ -322,6 +433,13 @@ suite_residue_reap() {
             continue
             ;;
         esac
+        # finding suite-residue-reap-3: re-check fresh, right before THIS
+        # deletion, rather than trusting a single snapshot taken before the
+        # whole enumeration loop started — a suite registering itself as live
+        # partway through this loop must still be able to protect its own
+        # lockless scratch from the remaining candidates.
+        _srr_other_live_run "$tmp" "${SUITE_RUN_LOCK_PATH:-}"
+        other_live=$?
         if [ "$other_live" -eq 0 ]; then
           skipped_foreign_run=$((skipped_foreign_run + 1))
           continue
@@ -341,6 +459,14 @@ suite_residue_reap() {
     done < <(find "$tmp" -maxdepth 1 -mindepth 1 -user "$(id -un 2>/dev/null)" -name "$pat" -print0 2>/dev/null)
   done
 
+  # One `git worktree prune` pass at the end of the reap loop (finding
+  # suite-residue-reap-2), not per-entry: cheap, idempotent, and cleans up any
+  # dangling .git/worktrees/<name> admin entry left by a git-worktree-remove
+  # call above that partially failed, or by an rm -rf fallback.
+  if [ "$did_git_worktree_remove" -eq 1 ] && [ "$dry_run" -eq 0 ]; then
+    git -C "$_SRR_REPO_ROOT" worktree prune >/dev/null 2>&1 || true
+  fi
+
   # Manifests: dispatch-status.js --reap removes only *.manifest.json (not-live
   # AND older than --days). Ledgers (*.ledger.jsonl) and .locks/ are untouched
   # by that call — there can be a live foreman ledger in that directory on
@@ -353,9 +479,22 @@ suite_residue_reap() {
   # this call — it is still reachable next run once it ages past 1 day, and
   # is never a residue-accumulation risk (unlike the unbounded worktree/temp
   # patterns above) because reapRuns' own liveness probe already gates it.
+  # finding suite-residue-reap-5: `[ -d "$manifests_dir" ]` follows symlinks,
+  # so ${TMPDIR}/autopilot-dispatch-runs being replaced with a symlink would
+  # let --reap enumerate-and-delete *.manifest.json anywhere on disk, outside
+  # $tmp entirely. Require it be a real (non-symlink) directory whose realpath
+  # is EXACTLY the canonical-tmp-rooted path (not merely "inside" it — no
+  # subdirectory of that name is ever legitimate here) before ever invoking
+  # dispatch-status.js on it.
   local manifests_dir="$tmp/autopilot-dispatch-runs"
-  if command -v node >/dev/null 2>&1 && [ -d "$manifests_dir" ]; then
-    local ds_args=(--reap --days 1 --dir "$manifests_dir")
+  local manifests_dir_real=""
+  if [ -e "$manifests_dir" ] && [ ! -L "$manifests_dir" ]; then
+    manifests_dir_real="$(realpath -e "$manifests_dir" 2>/dev/null)" || manifests_dir_real=""
+    [ "$manifests_dir_real" = "$manifests_dir" ] || manifests_dir_real=""
+  fi
+  if command -v node >/dev/null 2>&1 && [ -n "$manifests_dir_real" ] \
+     && [ -d "$manifests_dir_real" ]; then
+    local ds_args=(--reap --days 1 --dir "$manifests_dir_real")
     [ "$dry_run" -eq 1 ] && ds_args+=(--dry-run)
     local ds_out=""
     if ds_out="$(node "$_SRR_REPO_ROOT/scripts/dispatch-status.js" "${ds_args[@]}" 2>/dev/null)"; then

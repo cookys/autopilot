@@ -124,6 +124,11 @@ STUB
 # reaper's lockless branch would `rm -rf` a live test's TEST_TMP out from under
 # it. Entirely best-effort: any failure here (no flock, no free fd, etc.)
 # leaves the test running exactly as before this lock was added.
+#
+# This `exec {fd}>>path` creates the lock FILE before the flock a few lines
+# down acquires it — the reaper's age gate on this exact open->flock gap
+# (AUTOPILOT_SUITE_REAP_MIN_AGE, hooks/tests/lib/suite-residue-reap.sh) is
+# what makes this window safe rather than a race the reaper could win.
 __TEST_LIVE_LOCK_PATH="$TEST_TMP/.autopilot-live.lock"
 __TEST_LIVE_LOCK_FD=""
 # NOTE: `exec {fd}>>path` with no command applies ALL its redirections

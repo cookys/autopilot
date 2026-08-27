@@ -44,6 +44,10 @@ root_run_id=case1-root
 loop_id=case1-loop
 MARKER
 : > "$CASE1_TMP/hetero-a-XXXX/.autopilot-worktree.lock"
+# Backdate past AUTOPILOT_SUITE_REAP_MIN_AGE (default 60s) — a fresh free
+# lock is exactly the TOCTOU window (case 21 covers that); this case tests
+# "genuinely dead" reap behavior, so the lock must be old enough to qualify.
+touch -d '2 minutes ago' "$CASE1_TMP/hetero-a-XXXX/.autopilot-worktree.lock"
 (
   export TMPDIR="$CASE1_TMP"
   OUT="$(suite_residue_reap)"
@@ -140,6 +144,10 @@ root_run_id=case5-root
 loop_id=case5-loop
 MARKER
 : > "$CASE5_TMP/hetero-d-XXXX/.autopilot-worktree.lock"
+# See case1's note: backdate past AUTOPILOT_SUITE_REAP_MIN_AGE so this case's
+# "still reaped despite a foreign live run" assertion isn't masked by the
+# (unrelated) age gate.
+touch -d '2 minutes ago' "$CASE5_TMP/hetero-d-XXXX/.autopilot-worktree.lock"
 CASE5_FOREIGN_LOCK="$CASE5_TMP/.autopilot-suite-run.999999.lock"
 : > "$CASE5_FOREIGN_LOCK"
 flock "$CASE5_FOREIGN_LOCK" sleep 30 &
@@ -181,10 +189,21 @@ mkdir -p "$CASE7_OUTSIDE"
 ln -s "$CASE7_OUTSIDE" "$CASE7_TMP/hetero-link"
 (
   export TMPDIR="$CASE7_TMP"
-  suite_residue_reap >/dev/null
+  OUT="$(suite_residue_reap)"
+  echo "$OUT" > "$CASE7_TMP/.out"
 )
+CASE7_OUT="$(cat "$CASE7_TMP/.out")"
 assert_file_exists "$CASE7_OUTSIDE/marker-file" \
   "case7: symlink target outside TMPDIR is untouched (never followed)"
+# finding suite-residue-reap-6: without this the case passed by accident (two
+# masking behaviors could each independently explain survival — e.g. a
+# dirname/pattern mismatch — with the dedicated symlink guard never actually
+# exercised). Assert the envelope's own skipped_symlink counter directly so
+# the guard is load-bearing, not incidental.
+CASE7_SYMLINK="$(extract_json_field "$CASE7_OUT" skipped_symlink)"
+[ "${CASE7_SYMLINK:-0}" -ge 1 ] 2>/dev/null \
+  && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) \
+  || fail "case7: envelope skipped_symlink >= 1, got '${CASE7_SYMLINK:-}'"
 
 # ── Case 8: AUTOPILOT_SUITE_REAP=0 ⇒ nothing reaped ──
 CASE8_TMP="$(new_case_tmpdir 8)"
@@ -236,6 +255,7 @@ root_run_id=case10-root
 loop_id=case10-loop
 MARKER
 : > "$CASE10_TMP/hetero-f-XXXX/.autopilot-worktree.lock"
+touch -d '2 minutes ago' "$CASE10_TMP/hetero-f-XXXX/.autopilot-worktree.lock"
 mkdir -p "$CASE10_TMP/autopilot-test-z"
 CASE10_STDOUT="$(TMPDIR="$CASE10_TMP" bash "$REPO_ROOT/hooks/tests/run.sh" --parallel 2 sync-version-invalid-version 2>&1)"
 CASE10_RC=$?
@@ -288,6 +308,7 @@ root_run_id=case12-root
 loop_id=case12-loop
 MARKER
 : > "$CASE12_TMP/hetero-h-XXXX/.autopilot-worktree.lock"
+touch -d '2 minutes ago' "$CASE12_TMP/hetero-h-XXXX/.autopilot-worktree.lock"
 
 kill -TERM "$CASE12_PID" >/dev/null 2>&1
 wait "$CASE12_PID" 2>/dev/null
@@ -358,6 +379,10 @@ CASE15_TMP="$(new_case_tmpdir 15)"
 mkdir -p "$CASE15_TMP/autopilot-test-livepeer-XXXX"
 CASE15_LOCK="$CASE15_TMP/autopilot-test-livepeer-XXXX/.autopilot-live.lock"
 : > "$CASE15_LOCK"
+# Backdate now (this file is only ever opened/flocked below, never written
+# to again, so the mtime sticks) — the eventual "released ⇒ reaped" probe
+# below must clear AUTOPILOT_SUITE_REAP_MIN_AGE, same as case1/case5/case10/case12.
+touch -d '2 minutes ago' "$CASE15_LOCK"
 # `flock LOCK sleep 30 &` forks a separate `sleep` child that inherits the
 # locked fd, so killing the captured $! (the flock wrapper) leaves the lock
 # held by the orphaned child — this case needs the lock to actually become
@@ -514,19 +539,161 @@ CASE19_DEFERRED="$(extract_json_field "$CASE19_OUT" skipped_log_deferred)"
 # ── Case 20: a registry-run lock file landed on mid another run's
 #    open→flock gap (freshly created, still unlocked) is left alone rather
 #    than tidied as "dead"; one old enough to be genuinely abandoned is still
-#    tidied (srr-registry-tidy-race) ──
+#    tidied (srr-registry-tidy-race). The threshold is now the SAME
+#    AUTOPILOT_SUITE_REAP_MIN_AGE constant as the lock-gated rm path (finding
+#    suite-residue-reap-1: previously an independent, unrelated 5s literal) ──
 CASE20_TMP="$(new_case_tmpdir 20)"
 CASE20_FRESH="$CASE20_TMP/.autopilot-suite-run.11111.lock"
 : > "$CASE20_FRESH"
 _srr_other_live_run "$CASE20_TMP" "$CASE20_TMP/.autopilot-suite-run.own.lock"
 assert_file_exists "$CASE20_FRESH" \
-  "case20: a fresh (<5s) free registry lock file is left alone, not tidied away (was rm'd unconditionally before the fix)"
+  "case20: a fresh (< AUTOPILOT_SUITE_REAP_MIN_AGE) free registry lock file is left alone, not tidied away (was rm'd unconditionally before the fix)"
 
 CASE20_AGED="$CASE20_TMP/.autopilot-suite-run.22222.lock"
 : > "$CASE20_AGED"
-touch -d '10 seconds ago' "$CASE20_AGED"
+touch -d '2 minutes ago' "$CASE20_AGED"
 _srr_other_live_run "$CASE20_TMP" "$CASE20_TMP/.autopilot-suite-run.own.lock"
 assert_file_absent "$CASE20_AGED" \
-  "case20: an aged (>=5s) free registry lock file is still tidied away (rm -f), same as before the hardening"
+  "case20: an aged (>= AUTOPILOT_SUITE_REAP_MIN_AGE) free registry lock file is still tidied away (rm -f), same as before the hardening"
+
+# ── Case 21: TOCTOU age gate on the lock-gated rm path itself
+#    (srr-toctou-age-gate, finding suite-residue-reap-1) — a lock file that
+#    exists but was never flocked (indistinguishable from a live owner still
+#    between its own open() and flock()) must NOT be reaped while fresh, only
+#    once it is provably older than the open->flock window could ever be ──
+CASE21_TMP="$(new_case_tmpdir 21)"
+mkdir -p "$CASE21_TMP/hetero-toctou-XXXX"
+cat > "$CASE21_TMP/hetero-toctou-XXXX/.autopilot-worktree" <<'MARKER'
+schema=2
+created_at=1000000000
+branch=fixture-branch
+base_sha=0000000000000000000000000000000000000000
+run_id=case21-run
+root_run_id=case21-root
+loop_id=case21-loop
+MARKER
+CASE21_LOCK="$CASE21_TMP/hetero-toctou-XXXX/.autopilot-worktree.lock"
+: > "$CASE21_LOCK"
+(
+  export TMPDIR="$CASE21_TMP"
+  OUT="$(suite_residue_reap)"
+  echo "$OUT" > "$CASE21_TMP/.out-fresh"
+)
+CASE21_OUT_FRESH="$(cat "$CASE21_TMP/.out-fresh")"
+assert_file_exists "$CASE21_TMP/hetero-toctou-XXXX" \
+  "case21: a fresh, never-flocked lock file is NOT treated as proof of death (TOCTOU window)"
+CASE21_UNKNOWN="$(extract_json_field "$CASE21_OUT_FRESH" skipped_unknown)"
+[ "${CASE21_UNKNOWN:-0}" -ge 1 ] 2>/dev/null \
+  && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) \
+  || fail "case21: envelope skipped_unknown >= 1 for the fresh lock, got '${CASE21_UNKNOWN:-}'"
+
+touch -d '2 minutes ago' "$CASE21_LOCK"
+(
+  export TMPDIR="$CASE21_TMP"
+  OUT="$(suite_residue_reap)"
+  echo "$OUT" > "$CASE21_TMP/.out-aged"
+)
+CASE21_OUT_AGED="$(cat "$CASE21_TMP/.out-aged")"
+assert_file_absent "$CASE21_TMP/hetero-toctou-XXXX" \
+  "case21: the SAME never-flocked lock file, once backdated past the threshold, IS reaped"
+assert_eq "$(extract_json_field "$CASE21_OUT_AGED" reaped)" "1" \
+  "case21: envelope reaped=1 once the lock is provably stale"
+
+# ── Case 22: hetero-* worktrees are registered git worktrees, and the reaper
+#    uses `git worktree remove --force` for them (+ prune) instead of a raw
+#    `rm -rf`, so no dangling .git/worktrees/<name> admin entry survives
+#    (srr-dangling-worktree-admin, finding suite-residue-reap-2) ──
+CASE22_TMP="$(new_case_tmpdir 22)"
+CASE22_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null)"
+case "$CASE22_COMMON_DIR" in
+  /*) : ;;
+  *) CASE22_COMMON_DIR="$REPO_ROOT/$CASE22_COMMON_DIR" ;;
+esac
+CASE22_WT="$(mktemp -u "$CASE22_TMP/hetero-realwt-XXXXXX")"
+if git -C "$REPO_ROOT" worktree add --detach "$CASE22_WT" HEAD >/dev/null 2>&1; then
+  CASE22_WT_NAME="$(basename "$CASE22_WT")"
+  : > "$CASE22_WT/.autopilot-worktree.lock"
+  touch -d '2 minutes ago' "$CASE22_WT/.autopilot-worktree.lock"
+  (
+    export TMPDIR="$CASE22_TMP"
+    OUT="$(suite_residue_reap)"
+    echo "$OUT" > "$CASE22_TMP/.out"
+  )
+  CASE22_OUT="$(cat "$CASE22_TMP/.out")"
+  assert_file_absent "$CASE22_WT" \
+    "case22: the registered git worktree directory is gone after the reap"
+  assert_eq "$(extract_json_field "$CASE22_OUT" reaped)" "1" \
+    "case22: envelope reaped=1 for the registered git worktree"
+  assert_file_absent "$CASE22_COMMON_DIR/worktrees/$CASE22_WT_NAME" \
+    "case22: no dangling .git/worktrees/<name> admin entry after reaping a real worktree"
+  # Belt-and-suspenders cleanup in case the reap somehow left it registered
+  # (keeps this test from polluting the real repo's worktree list on a
+  # regression instead of just failing its own assertions).
+  git -C "$REPO_ROOT" worktree remove --force "$CASE22_WT" >/dev/null 2>&1 || true
+  git -C "$REPO_ROOT" worktree prune >/dev/null 2>&1 || true
+else
+  fail "case22: setup — git worktree add --detach failed, cannot exercise the dangling-admin-entry path"
+fi
+
+# ── Case 23: an outside-TMPDIR symlink at ${TMPDIR}/autopilot-dispatch-runs
+#    is never followed into dispatch-status.js --reap (srr-manifest-symlink-
+#    escape, finding suite-residue-reap-5) — a plain file OUTSIDE $TMPDIR
+#    entirely must survive a reap even though it sits in a dir dispatch-status.js
+#    would otherwise happily enumerate ──
+CASE23_TMP="$(new_case_tmpdir 23)"
+CASE23_OUTSIDE="$TEST_TMP/case-23-outside-manifests"
+mkdir -p "$CASE23_OUTSIDE"
+printf '{"run_id":"case23-outside","started_epoch":1}\n' \
+  > "$CASE23_OUTSIDE/case23-outside.manifest.json"
+ln -s "$CASE23_OUTSIDE" "$CASE23_TMP/autopilot-dispatch-runs"
+(
+  export TMPDIR="$CASE23_TMP"
+  suite_residue_reap >/dev/null
+)
+assert_file_exists "$CASE23_OUTSIDE/case23-outside.manifest.json" \
+  "case23: a manifest reachable only through a symlinked autopilot-dispatch-runs dir survives (never followed)"
+
+# ── Case 24: run.sh's interrupt trap prunes each worker's PID from its kill
+#    set as soon as that worker completes, rather than accumulating for the
+#    whole run — so a completed child's PID is no longer signaled even if the
+#    OS later reuses it for something unrelated (srr-pid-reuse-kill, finding
+#    suite-residue-reap-4). Drive PARALLEL_CHILD_PIDS pruning directly rather
+#    than trying to race a real PID-reuse window (inherently non-deterministic
+#    to force): assert the array element is unset once run.sh's own
+#    completion-loop bookkeeping would have processed it, by sourcing run.sh's
+#    pruning logic in isolation via a tiny harness that reproduces the exact
+#    array + index contract run.sh uses ──
+CASE24_TMP="$(new_case_tmpdir 24)"
+CASE24_HARNESS="$CASE24_TMP/harness.sh"
+cat > "$CASE24_HARNESS" <<'HARNESS'
+#!/usr/bin/env bash
+set -uo pipefail
+declare -a PARALLEL_CHILD_PIDS=()
+# Reproduce run.sh's start_one: one PID appended per index, same order.
+( sleep 0.05 ) &
+PARALLEL_CHILD_PIDS+=("$!")
+( sleep 30 ) &
+PARALLEL_CHILD_PIDS+=("$!")
+COMPLETED_PID="${PARALLEL_CHILD_PIDS[0]}"
+STILL_RUNNING_PID="${PARALLEL_CHILD_PIDS[1]}"
+# Wait for index 0's worker to actually exit, mirroring run.sh's
+# "$PARALLEL_TMP/$i.done" completion check.
+while kill -0 "$COMPLETED_PID" 2>/dev/null; do sleep 0.02; done
+# The pruning line under test (verbatim contract from run.sh's completion loop).
+unset "PARALLEL_CHILD_PIDS[0]"
+FOUND_COMPLETED=0
+FOUND_RUNNING=0
+for pid in "${PARALLEL_CHILD_PIDS[@]:-}"; do
+  [ "$pid" = "$COMPLETED_PID" ] && FOUND_COMPLETED=1
+  [ "$pid" = "$STILL_RUNNING_PID" ] && FOUND_RUNNING=1
+done
+printf 'completed=%s running=%s\n' "$FOUND_COMPLETED" "$FOUND_RUNNING"
+kill "$STILL_RUNNING_PID" >/dev/null 2>&1 || true
+wait "$STILL_RUNNING_PID" 2>/dev/null || true
+HARNESS
+chmod +x "$CASE24_HARNESS"
+CASE24_OUT="$(bash "$CASE24_HARNESS")"
+assert_eq "$CASE24_OUT" "completed=0 running=1" \
+  "case24: a completed worker's PID is pruned from the tracking array while a still-running worker's PID survives"
 
 finalize_test

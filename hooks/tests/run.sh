@@ -25,6 +25,18 @@
 
 set -uo pipefail
 
+# Job control (finding suite-residue-reap-4): with it OFF (the script default),
+# a `&` background job shares THIS script's own process group — measured via
+# `ps -o pgid` on both the job and $$ — so a killed worker's own children
+# (e.g. an *.test.sh's `git worktree add` subprocess) are NOT in the signaled
+# set and become ORPHANS that keep running after the "interrupted" worker
+# wrapper dies (reproduced: a SIGTERM'd wrapper subshell left its `sleep`
+# grandchild alive and unkilled). With `set -m` ON, each `&` job becomes the
+# leader of its OWN new process group (also measured), so `kill -SIGNAL -$pid`
+# in the interrupt trap below reaches the worker's entire subtree without
+# touching run.sh's own group.
+set -m
+
 TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOKS_DIR="$(cd "$TESTS_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
@@ -60,8 +72,23 @@ trap __suite_on_exit EXIT
 __suite_on_interrupt() {
   local sig="$1"
   local pid
+  # finding suite-residue-reap-4: PARALLEL_CHILD_PIDS is pruned as each worker
+  # completes (see the completion loop below) rather than accumulating for the
+  # whole run, so a PID recorded here is proven to still belong to a tracked
+  # worker of THIS run — never a reused PID some unrelated later process
+  # happens to have picked up after the original worker already exited.
+  #
+  # Forward the RECEIVED signal (INT stays INT, TERM stays TERM) instead of
+  # `kill`'s default SIGTERM regardless of which one arrived, to the worker's
+  # WHOLE process group (`-$pid`, valid because of `set -m` above — each
+  # worker is its own group leader, so this reaches its full subtree without
+  # touching run.sh's own group). Fall back to a plain-PID signal too in case
+  # the group form ever fails to reach anything (belt and suspenders; a
+  # redundant second signal to an already-dying process is harmless).
   for pid in "${PARALLEL_CHILD_PIDS[@]:-}"; do
-    [ -n "$pid" ] && kill "$pid" >/dev/null 2>&1 || true
+    [ -n "$pid" ] || continue
+    kill -s "$sig" -- "-$pid" >/dev/null 2>&1 || true
+    kill -s "$sig" "$pid" >/dev/null 2>&1 || true
   done
   for pid in "${PARALLEL_CHILD_PIDS[@]:-}"; do
     [ -n "$pid" ] && wait "$pid" 2>/dev/null || true
@@ -116,7 +143,14 @@ done
 
 # ── Residue reaper: pre-run reap + registry lock ──
 if command -v suite_run_lock_acquire >/dev/null 2>&1; then
-  suite_run_lock_acquire
+  # finding suite-residue-reap-3: suite_run_lock_acquire now fails closed
+  # (returns 1 / sets SUITE_RUN_LOCK_ACQUIRE_FAILED=1) instead of always
+  # reporting success — surface it so a silent registration failure (this run
+  # is then invisible to any OTHER concurrent run's foreign-run protection)
+  # is at least visible in the run's own output, without making it fatal.
+  if ! suite_run_lock_acquire; then
+    echo "reaper: WARN this run could not register itself as live (best-effort; continuing)" >&2
+  fi
 fi
 if command -v suite_residue_reap >/dev/null 2>&1; then
   __REAP_JSON="$(suite_residue_reap 2>/dev/null || true)"
@@ -367,6 +401,14 @@ else
           print_result "$i"
           finished=$((finished + 1))
           active=$((active - 1))
+          # finding suite-residue-reap-4: prune this worker's PID from the
+          # interrupt trap's kill set as soon as it's known complete.
+          # PARALLEL_CHILD_PIDS[$i] is start_one's PID for file $i (one
+          # start_one call per index, in the same order); leaving it in the
+          # array after this point would let a SIGINT/SIGTERM arriving later
+          # in the run signal whatever unrelated process the OS has since
+          # reused that PID for.
+          unset "PARALLEL_CHILD_PIDS[$i]"
           found=1
           break
         fi
@@ -392,6 +434,10 @@ else
 
     rm -rf "$PARALLEL_TMP"
     PARALLEL_TMP=""
+    # Defense in depth: every index should already be unset by the completion
+    # loop above by this point; clear the array outright so nothing stale can
+    # possibly survive into a later phase of this same run.sh process.
+    PARALLEL_CHILD_PIDS=()
   fi
 
   # Run global-state/timing-sensitive tests only after the parallel pool is fully

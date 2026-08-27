@@ -189,6 +189,38 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 10b. cursor_is_family_alias — the vocabulary SSOT the wrappers derive from.
+# Every member of _CURSOR_FAMILIES must test true (this is the property that
+# makes the wrappers' `grok46|codex53` literal removable); a full model id and
+# an unknown word must test false.
+# ---------------------------------------------------------------------------
+for _fam in $_CURSOR_FAMILIES; do
+  if cursor_is_family_alias "$_fam"; then
+    __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+  else
+    fail "cursor_is_family_alias $_fam → expected true (member of _CURSOR_FAMILIES)"
+  fi
+done
+
+if cursor_is_family_alias "cursor-grok-4.6-high"; then
+  fail "cursor_is_family_alias cursor-grok-4.6-high → expected false (full id, not an alias)"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+
+if cursor_is_family_alias "grok"; then
+  fail "cursor_is_family_alias grok → expected false (prefix of grok46, not equal)"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+
+if cursor_is_family_alias ""; then
+  fail "cursor_is_family_alias '' → expected false"
+else
+  __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # 11. PURITY — cursor_enabled_ids / cursor_is_enabled_id invoke NO binary.
 # Poison PATH with a cursor-agent stub that writes a sentinel file if it is
 # ever invoked; assert the sentinel does not exist after calling both.
@@ -259,7 +291,7 @@ _assert_source_fork_free() {
   esac
 }
 
-for fn in cursor_enabled_ids cursor_is_enabled_id _cursor_model_base; do
+for fn in cursor_enabled_ids cursor_is_enabled_id cursor_is_family_alias _cursor_model_base; do
   _assert_source_fork_free "$fn"
 done
 

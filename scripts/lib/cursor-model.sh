@@ -152,6 +152,23 @@ cursor_is_enabled_id() {
   return 1
 }
 
+# cursor_is_family_alias <s> — exact-match predicate over _CURSOR_FAMILIES,
+# the single source of truth for the family-alias vocabulary. PURE (same
+# discipline as cursor_is_enabled_id: builtins only, no subprocess). Exists so
+# the `--runner cursor` wrappers (dispatch-author.sh, dispatch-review.sh) can
+# reject a bare family alias without RESTATING `grok46|codex53` as a literal
+# case pattern in each file. Those restatements fail closed, so this is a
+# single-source-of-truth fix rather than a bug fix — but a family added to
+# _CURSOR_FAMILIES and not to a wrapper's hardcoded pattern would be silently
+# accepted as a full model id by that wrapper, which is the drift this closes.
+cursor_is_family_alias() {
+  local s="$1" family
+  for family in $_CURSOR_FAMILIES; do
+    [ "$family" = "$s" ] && return 0
+  done
+  return 1
+}
+
 # ---------------------------------------------------------------------------
 # Live inventory validation (cursor_model_for only).
 # ---------------------------------------------------------------------------

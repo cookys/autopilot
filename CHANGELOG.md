@@ -202,10 +202,25 @@ engine-bearing seats, while admission still walks the union, because an orphan r
 NAME an unqualified rail and must be refused on that ground. The two sets are deliberately
 different and both directions are tested.
 
+Implementing that panel rule then produced a second correction, on evidence. The partial-overlap
+WARNING fired on the repo's own RECOMMENDED configuration — the shipped panel is
+`codex, claude-native, agy`, three rails on purpose, so any `codex` implementer overlaps exactly
+one seat — and it demonstrably broke a caller: `dispatch-author.sh --strict-contract` turned the
+extra stderr line into an empty result, dropping `dispatch-author-contract` from 46 assertions to
+33. A warning that fires on the recommended setup is noise that trains readers to ignore the
+channel carrying the real signal. Partial panel overlap is now silent and no longer sets
+`same_runner_dual_seat`; TOTAL overlap keeps its teeth. Panel/implementer overlap is still
+reported at the family level by the pre-existing cross-family control.
+
 The same consult ruled that inherited defaults stay in scope, accepting the stated cost: three
-test fixtures that name one runner and inherit the rest now opt in explicitly. They keep the
-opt-in rather than being diversified so their resolved output stays byte-identical — each is
-about enum acceptance or quota telemetry, not decorrelation.
+test fixtures that name one runner and inherit the rest had to change. A reconcile consult, run
+after the measured cost turned out to be 8 test files rather than the 39 assertions first
+estimated, confirmed ruling (A) stands but refined the remedy: DIVERSIFY the reviewer where
+possible and reserve the blanket opt-in for rosters where same-rail review is intentional. So the
+8 dispatch/campaign/gate fixtures name a decorrelated reviewer (none of them referenced
+`reviewer_engine` or `reviewer_runner` in any assertion, so this is invisible to what they test),
+while the three fixtures that deliberately put one runner in both seats to prove enum acceptance
+keep the explicit opt-in. `dispatch-contract` returns to exactly its base 316 assertions.
 
 Not fixed, recorded for backlog with the panel's agreement: `dispatch-review.sh:146-147,239`
 sources `lib/cursor-model.sh` behind a readability guard and so silently skips the family-alias

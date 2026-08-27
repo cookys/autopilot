@@ -78,7 +78,7 @@ git -C "$MINI" add -A; git -C "$MINI" commit -qm dep
 DEP_SHA=$(git -C "$MINI" rev-parse HEAD)
 printf 'seed2\n' >> "$MINI/seed.txt"
 mkdir -p "$MINI/.claude"
-printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > "$MINI/.claude/review-loop-config.md"
+printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > "$MINI/.claude/review-loop-config.md"
 git -C "$MINI" add -A; git -C "$MINI" commit -qm seed
 BASE_SHA=$(git -C "$MINI" rev-parse HEAD)
 

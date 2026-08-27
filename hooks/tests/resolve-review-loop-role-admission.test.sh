@@ -333,8 +333,16 @@ EOF
 out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_PARTIAL" bash "$SCRIPT" 2>&1 >/dev/null)"
 json="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_PARTIAL" bash "$SCRIPT" 2>/dev/null)"; rc=$?
 assert_eq "0" "$rc" "ONE panel seat on the implementer's runner is PERMITTED (the others still decorrelate)"
-assert_contains "$out" "1 of 3 seat(s) run on the implementer's own runner" "partial panel overlap is warned, with counts"
-assert_contains "$json" '"same_runner_dual_seat": true' "partial panel overlap still reaches the run summary"
+# ...and it is SILENT. The shipped default panel is codex/claude-native/agy, so a
+# codex implementer overlaps one seat in the repo's own RECOMMENDED setup — a
+# warning there is noise, and it demonstrably broke dispatch-author.sh
+# --strict-contract by turning the extra stderr line into an empty result.
+# Partial overlap is still visible through the pre-existing cross-family control.
+case "$out" in
+  *"run on the implementer's own runner"*) fail "partial panel overlap must not emit a runner-overlap warning (it fires on the shipped default panel)" ;;
+  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
+assert_contains "$json" '"same_runner_dual_seat": false' "partial panel overlap is NOT a decorrelation loss worth flagging"
 
 # TOTAL overlap: no runner decorrelation anywhere in the terminal gate.
 CFG_PANEL_TOTAL="$TEST_TMP/cfg-panel-total-overlap.md"

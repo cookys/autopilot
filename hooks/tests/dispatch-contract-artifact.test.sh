@@ -27,7 +27,7 @@ git init -q -b main "$MINI_REPO"
   mkdir -p docs/plans
   printf '## Unit spec\nBody.\n' > docs/plans/spec.md
   mkdir -p .claude
-  printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > .claude/review-loop-config.md
+  printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > .claude/review-loop-config.md
   printf 'keep\n' > keep.txt
   git add .
   git commit -qm "B"

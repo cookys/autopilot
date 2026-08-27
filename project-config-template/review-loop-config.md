@@ -131,9 +131,13 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 > The terminal **`qc_panel` is not governed by this key.** A panel is a multi-seat body
 > (`min_panel_size` 3, `union-on-verified-critical`, majority forbidden), so one seat sharing
 > the implementer's rail still leaves independent seats that can each block alone. The panel has
-> its own proportionate rule instead: any overlap **warns** and sets `same_runner_dual_seat`,
-> and only **total** overlap — every panel seat on the implementer's runner, so the terminal
-> gate has no runner decorrelation at all — is refused unless deliberately opened.
+> its own proportionate rule instead: only **total** overlap — every seat carrying both an
+> engine and a runner sitting on the implementer's rail, so the terminal gate has no runner
+> decorrelation at all — is refused (and that is openable too). **Partial** overlap is silent
+> by design: the shipped panel above spans three rails on purpose, so a `codex` implementer
+> overlaps exactly one seat in the recommended setup, and a warning that fires on the
+> recommended setup is noise. Panel/implementer overlap is still reported at the family level
+> by the pre-existing cross-family control.
 
 > **Preset `all-calibrated`**: Setting `qc_panel` to exactly `all-calibrated` expands to the full, calibrated 5-family reviewer roster. The concrete engine list is maintained inside the resolver script (single source of truth) and covers all families with recorded reviewer calibration/spike evidence.
 

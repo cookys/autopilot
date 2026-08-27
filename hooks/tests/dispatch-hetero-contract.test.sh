@@ -45,7 +45,7 @@ DEP_SHA=$(git -C "$MINI_REPO" rev-parse HEAD)
 
 printf '## Unit spec\n' > "$MINI_REPO/docs/plans/spec.md"
 printf 'Stable body\n' >> "$MINI_REPO/docs/plans/spec.md"
-printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > "$MINI_REPO/.claude/review-loop-config.md"
+printf '# Review Loop Config\n- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > "$MINI_REPO/.claude/review-loop-config.md"
 printf 'Secret\n' > "$MINI_REPO/secret.txt"
 git -C "$MINI_REPO" add -A
 git -C "$MINI_REPO" commit -q -m "B"

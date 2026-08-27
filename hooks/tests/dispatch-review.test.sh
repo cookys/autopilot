@@ -718,6 +718,30 @@ assert_contains "$OUT" '"status": "reviewed"' "harness chrome ahead of a valid b
 assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "harness chrome ahead of a valid block: verdict parsed"
 assert_contains "$OUT" 'does not reverse' "harness chrome ahead of a valid block: findings parsed"
 
+# BUDGET (first-pass qc 🟠 chrome-battery-bypass): the skipped prefix is bounded.
+# The old locator required the frame at line 1, so the block size cap also
+# bounded the whole response; an unbounded prefix removed that, letting a huge
+# preamble ride in front of a small valid block with none of it inspected.
+# Real chrome is one or two lines, so the budget only catches the pathological
+# case — and these two assertions pin BOTH directions: just under the budget
+# still reviews, just over it fails closed. Without the second, the budget could
+# be set to infinity and nothing would notice.
+OUT="$(STUB_MODE=chrome_then_valid AUTOPILOT_REVIEW_CHROME_MAX_LINES=5 \
+  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "0" "$EXIT" "chrome within budget still reviews (exit 0)"
+assert_contains "$OUT" '"status": "reviewed"' "chrome within budget → reviewed"
+
+OUT="$(STUB_MODE=chrome_then_valid AUTOPILOT_REVIEW_CHROME_MAX_LINES=0 \
+  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "chrome OVER budget fails closed (exit 1)"
+assert_contains "$OUT" '"status": "no_verdict"' "chrome over budget → no_verdict"
+assert_contains "$OUT" 'exceeded the budget' "chrome over budget names the budget"
+
+OUT="$(STUB_MODE=chrome_then_valid AUTOPILOT_REVIEW_CHROME_MAX_BYTES=1 \
+  "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "chrome over the BYTE budget fails closed (exit 1)"
+assert_contains "$OUT" 'exceeded the budget' "byte budget also names the budget"
+
 # POSITIVE: multiple leading chrome lines, including one with leading
 # whitespace, still parse.
 OUT="$(STUB_MODE=chrome_multi_then_valid "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
@@ -732,6 +756,11 @@ assert_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "multiple leading chrome lin
 OUT="$(STUB_MODE=truncated_frame_chrome "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "truncated frame as leading chrome exit 1 (fail-closed)"
 assert_contains "$OUT" '"status": "no_verdict"' "truncated frame as leading chrome → no_verdict"
+# The REASON must be the framing-vocabulary rejection, not a generic "no BEGIN
+# frame". awk's END block used to rewrite the rule-level exit code (7 -> 2,
+# 3 -> 5, 8 -> 2), so the parser failed closed but named the wrong failure. This
+# assertion is what pins the code path, not just the outcome.
+assert_contains "$OUT" 'framing vocabulary' "truncated frame names the vocabulary rejection, not a generic missing-frame"
 assert_not_contains "$OUT" '"verdict": "FIX-THEN-SHIP"' "truncated-frame chrome never authorizes a verdict"
 
 # NEGATIVE: the derived BEGIN embedded inside a longer prose line (the echo

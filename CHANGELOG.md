@@ -89,6 +89,60 @@ No live `cursor-agent` model call was made in this release. Cursor remains unqua
 changed is that routing it is now an explicit, recorded, role-scoped operator decision instead
 of an impossibility.
 
+### Found while verifying this release — recorded because they are the point
+
+The CHANGELOG section above was written before the release was verified. Everything below was
+found afterwards, and three of the four are the kind of failure this repo's evidence discipline
+exists to catch, so they belong in the release record rather than in a run summary that scrolls
+away.
+
+- **The L2 integration tier had not run since `de3fbc03`.** `hooks/tests/run.sh` refuses to start
+  that tier if ANY `hooks/tests/*.test.sh` is non-executable, and
+  `dispatch-hetero-cursor-routing.test.sh` was committed at mode `100644`. So the whole tier
+  exited before running a single test — the tests existed, were documented, and were doing
+  nothing. `chmod +x` restores it. Everything below was found in the first real run of that tier.
+
+- **`src/harness/capabilities/cursor.json` was invalid and took `autopilot harness report` down
+  entirely.** It shipped without `expires_at`, which the loader requires, so the command exited 1
+  with `expires_at must be a non-empty string` for every caller — not a stale count, the whole
+  report. Repaired with `expires_at` (+14d, the agy/codex/minimax convention) and
+  `verified_at: null`, mirroring `copilot-cli.json`, the other unverified record. No capability
+  field is promoted; the record still says `unverified` / `H0` about everything.
+
+- **The new admission gate was bypassed by its own documented recipe.** `--field` mode returned
+  before the admission pass ran, so `resolve-review-loop.sh --field reviewer_runner` on an
+  unqualified roster printed `cursor` with exit 0 and no refusal — while JSON mode correctly
+  exited 3. The consult caller this release documents in `references/hetero-dispatch.md` reads
+  its seat with exactly that flag. The gate shipped switched off along the only path anyone was
+  told to use. Found by the first-pass heterogeneous qc review, not by the tests written
+  alongside the gate; the block now runs before the field dispatch, with regression coverage
+  across five field names plus the positive case that a matching override still lets field mode
+  through.
+
+- **`awk`'s `END` block was rewriting the parser's rejection reason.** In awk, a rule-level
+  `exit N` jumps to `END`, and `END`'s own `exit` overrides the status. Three of
+  `dispatch-review.sh`'s five rejection paths therefore reported the wrong cause — a duplicate
+  BEGIN surfaced as "END marker never found", a truncated or echoed frame as "no derived BEGIN
+  frame found". The parser failed closed in every case, so no verdict was ever wrongly accepted;
+  what was broken was the diagnostic, which is the entire value of having distinguishable
+  messages. It survived its own commit because every existing assertion checked the STATUS and
+  none checked the reason.
+
+Two hardenings to the chrome-tolerant parser came out of the same review. The skipped prefix is
+now **bounded** (200 lines / 64KB) — when the frame had to start at line 1 the block size cap
+incidentally bounded the whole response, and an unbounded prefix silently removed that. And the
+prefix is now held to the **same leak rule as the block**: `prompt_framing_leakage` has always
+rejected anchored `diff --git` / `@@` / prompt-skeleton lines inside the block, and a skipped
+prefix escaped that scan entirely, so a leading `diff --git` line the old positional rail
+rejected had become tolerated. Both directions are tested, including that a Markdown quote
+marker cannot launder an echoed hunk header, and that real cc-shim chrome still parses.
+
+Known residual, not fixed: `hooks/tests/dispatch-worktree-lifecycle.test.sh` fails
+intermittently under `run.sh --parallel` while passing standalone and in a serial full run, with
+a rotating set of co-failures. The parallel workload is being executed for the first time since
+`de3fbc03`, which makes resource contention the leading hypothesis, but it is a hypothesis — the
+flake is undiagnosed and is flagged rather than papered over.
+
 prose-justification: the +5% is two documentation surfaces this release deliberately creates.
 `project-config-template/review-loop-config.md` gains the operator-facing explanation of how to
 route an unqualified engine — the override file's exact shape, why an admitted seat is a recorded

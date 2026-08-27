@@ -1286,6 +1286,24 @@ awk -v begin="$BEGIN" -v end="$END" -v derived="$DERIVED" \
       if (index($0, "AUTOPILOT-REVIEW") || index($0, "AUTOPILOT-END") || index($0, derived)) {
         bail=7; exit 7
       }
+      # PROMPT-ECHO guard. validate_review_block runs prompt_framing_leakage over
+      # the extracted BLOCK, so before the chrome skip existed a model echoing the
+      # prompt was caught there (or by the positional anchor). A skipped prefix
+      # escapes that scan entirely, so the SAME anchored patterns are rejected
+      # here — the prefix is held to the leak rule too, not just to a size budget.
+      # Same structural normalization the leak scan uses (a Markdown quote marker
+      # or indentation must not launder an echoed line). Real harness chrome — a
+      # bracketed notice line, a JSON blob — matches none of these.
+      echo_line = $0
+      sub(/^[[:space:]]*>[[:space:]]?/, "", echo_line)
+      sub(/^[[:space:]]+/, "", echo_line)
+      if (echo_line ~ /^diff --git [^[:space:]]+ [^[:space:]]+$/ \
+          || echo_line ~ /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ \
+          || echo_line ~ /^Diff under review:[[:space:]]*$/ \
+          || echo_line ~ /^FINDINGS:[[:space:]]*one finding per line, or the single word none[[:space:]]*$/ \
+          || echo_line ~ /^<one finding per line>[[:space:]]*$/) {
+        bail=9; exit 9
+      }
       chrome_lines += 1
       chrome_bytes += length($0) + 1
       if (chrome_lines > chrome_max_lines || chrome_bytes > chrome_max_bytes) { bail=8; exit 8 }
@@ -1322,6 +1340,7 @@ if [ "$PARSE_RC" -ne 0 ]; then
     6) emit_no_verdict "trailing non-blank content after the derived END marker" ;;
     7) emit_no_verdict "leading chrome contained framing vocabulary without being the exact frame line — rejected, not skipped" ;;
     8) emit_no_verdict "leading chrome exceeded the budget (${CHROME_MAX_LINES} lines / ${CHROME_MAX_BYTES} bytes) before any derived BEGIN frame" ;;
+    9) emit_no_verdict "leading chrome echoed prompt/diff structure — the skipped prefix is held to the same leak rule as the block" ;;
     *) emit_no_verdict "response did not start with the expected wrapped block" ;;
   esac
 fi

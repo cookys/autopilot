@@ -330,6 +330,26 @@ case "$MODE" in
     echo "FINDINGS: the slice does not reverse"
     echo "$END"
     ;;
+  diff_echo_chrome)
+    # A model echoing the DIFF back before emitting its frame. The block-level
+    # leak scan (prompt_framing_leakage) has always rejected these exact anchored
+    # patterns INSIDE the block; a skipped prefix would let them ride in front of
+    # it unexamined. Must be rejected, not skipped.
+    echo 'diff --git a/foo.txt b/foo.txt'
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
+  hunk_echo_chrome)
+    # Same, via a quoted hunk header — the structural normalization must stop a
+    # Markdown quote marker from laundering the echoed line.
+    echo '> @@ -1,2 +1,2 @@'
+    echo "$BEGIN"
+    echo "VERDICT: FIX-THEN-SHIP"
+    echo "FINDINGS: the slice does not reverse"
+    echo "$END"
+    ;;
   truncated_frame_chrome)
     # A REAL truncated frame (two angle brackets, not three) as leading
     # chrome, followed by a complete valid block. Carries framing vocabulary
@@ -741,6 +761,20 @@ OUT="$(STUB_MODE=chrome_then_valid AUTOPILOT_REVIEW_CHROME_MAX_BYTES=1 \
   "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
 assert_eq "1" "$EXIT" "chrome over the BYTE budget fails closed (exit 1)"
 assert_contains "$OUT" 'exceeded the budget' "byte budget also names the budget"
+
+# NEGATIVE: the skipped prefix is held to the SAME leak rule as the block. The
+# block-level scan (prompt_framing_leakage) rejects these anchored prompt/diff
+# patterns; before this guard a skipped prefix escaped that scan entirely, so a
+# leading `diff --git` line — which the old positional rail rejected — was
+# tolerated. Both directions matter: these must fail, real harness chrome must not.
+OUT="$(STUB_MODE=diff_echo_chrome "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "diff-echo as leading chrome fails closed (exit 1)"
+assert_contains "$OUT" '"status": "no_verdict"' "diff-echo as leading chrome → no_verdict"
+assert_contains "$OUT" 'echoed prompt/diff structure' "diff-echo names the leak rule, not the budget"
+
+OUT="$(STUB_MODE=hunk_echo_chrome "$SCRIPT" --runner codex --model gpt-5.5 --diff-file "$DIFF" --bin "$STUB_VERDICT" 2>&1)"; EXIT=$?
+assert_eq "1" "$EXIT" "quoted hunk-header echo as leading chrome fails closed (exit 1)"
+assert_contains "$OUT" 'echoed prompt/diff structure' "a Markdown quote marker does not launder an echoed hunk header"
 
 # POSITIVE: multiple leading chrome lines, including one with leading
 # whitespace, still parse.

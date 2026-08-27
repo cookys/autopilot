@@ -23,7 +23,12 @@ unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE E
 EMPTY_CFG="$TEST_TMP/empty-config.md"
 : > "$EMPTY_CFG"
 CODEX_IMPL_CFG="$TEST_TMP/impl-codex.md"
-printf -- '- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n' > "$CODEX_IMPL_CFG"
+# allow_same_runner_dual_seat: this roster names implementer_runner codex and
+# inherits the built-in reviewer default, which is ALSO codex — a real dual-seat
+# collision under the runner-axis gate. Opting in (rather than diversifying the
+# reviewer) keeps every other resolved value byte-identical, which matters because
+# this fixture is about quota/capability telemetry, not decorrelation.
+printf -- '- implementer_engine: gpt-5.3-codex-spark\n- implementer_runner: codex\n- allow_same_runner_dual_seat: on\n' > "$CODEX_IMPL_CFG"
 
 json_get() { # json key -> raw json value
   local json="$1" key="$2"
@@ -182,7 +187,10 @@ printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- re
 assert_eq "cc-shim" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field implementer_runner)" "cc-shim implementer_runner honored"
 assert_eq "grok" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$NCFG" bash "$SCRIPT" --field reviewer_runner)" "grok reviewer_runner honored"
 QCFG="$TEST_TMP/rl-qoderclicn.md"
-printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n' > "$QCFG"
+# This fixture deliberately puts qoderclicn in BOTH seats to prove the enum accepts
+# it in each — which is now a dual-seat collision. Opt in: the subject is enum
+# acceptance, not decorrelation policy.
+printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n- allow_same_runner_dual_seat: on\n' > "$QCFG"
 assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field implementer_runner)" "qoderclicn implementer_runner honored"
 assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QCFG" bash "$SCRIPT" --field reviewer_runner)" "qoderclicn reviewer_runner honored"
 RCFG="$TEST_TMP/rl-ccshim-rev.md"

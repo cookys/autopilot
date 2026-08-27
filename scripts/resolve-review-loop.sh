@@ -1516,18 +1516,40 @@ _seat_runners=()
 _seat_engines=()
 _add_seat() { _seat_roles+=("$1"); _seat_engines+=("$2"); _seat_runners+=("$3"); }
 
+# EVERY SELECTABLE ENGINE gets a seat row. "Selectable" means the resolver can
+# hand this engine to a dispatcher on some code path — not merely "is the primary
+# tuple". Ruling 1 is per exact engine + runner + ROLE, so an override for one
+# engine must never admit a sibling engine that happens to share the runner.
 _add_seat "reviewer" "$REV_ENGINE" "$REV_RUNNER"
+# depth-0 panel 🔴 #1: the risk-tiered overlay is a SECOND selectable reviewer
+# engine on the same runner, and it was never gated. A roster could carry an
+# override for the primary reviewer engine and put a completely unqualified,
+# unoverridden engine in reviewer_engine_low_risk — which the resolver then
+# emits for every low-risk round. It is the reviewer ROLE (wantRole normalizes
+# the _low_risk suffix away), so the operator writes role "reviewer" and must
+# list EACH engine separately. That is the point: per exact engine.
+[[ -n "$REV_ENGINE_LOW_RISK" ]] && _add_seat "reviewer_low_risk" "$REV_ENGINE_LOW_RISK" "$REV_RUNNER"
 _add_seat "implementer" "$IMPL_ENGINE" "$IMPL_RUNNER"
 [[ "$VER_AUTH_PRESENT" == "true" ]] && _add_seat "verification_author" "$VER_AUTH_ENGINE" "$VER_AUTH_RUNNER"
 [[ -n "$PLAN_REV_RUNNER" ]] && _add_seat "plan_reviewer" "$PLAN_REV_ENGINE" "$PLAN_REV_RUNNER"
 [[ -n "$PLAN_DEEP_RUNNER" ]] && _add_seat "plan_deep_reviewer" "$PLAN_DEEP_ENGINE" "$PLAN_DEEP_RUNNER"
 [[ -n "$CONSULT_RUNNER" ]] && _add_seat "consult" "$CONSULT_ENGINE" "$CONSULT_RUNNER"
 [[ -n "$DISCUSS_RUNNER" ]] && _add_seat "discuss" "$DISCUSS_ENGINE" "$DISCUSS_RUNNER"
-if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
-  for _i in "${!QC_PANEL[@]}"; do
-    _add_seat "qc_panel[$_i]" "${QC_PANEL[$_i]}" "${QC_PANEL_RUNNERS[$_i]}"
-  done
-fi
+# depth-0 panel 🔴 #2: panel seats used to be gated only when
+# QC_PANEL_SEATS_COMPLETE was true, so a cursor seat sitting next to ONE ragged
+# or invalid sibling was skipped entirely and resolved clean. An aggregate
+# validity flag must never be the precondition for a per-seat security check —
+# the incomplete panel is exactly when a bad seat is most likely present. Every
+# PARSED seat is now inspected on its own: walk the union of the engine and
+# runner index sets so a ragged array cannot hide a row, and gate any index that
+# names a runner at all.
+_qc_max=${#QC_PANEL[@]}
+[[ ${#QC_PANEL_RUNNERS[@]} -gt $_qc_max ]] && _qc_max=${#QC_PANEL_RUNNERS[@]}
+for (( _i = 0; _i < _qc_max; _i++ )); do
+  _qc_run="${QC_PANEL_RUNNERS[$_i]:-}"
+  [[ -n "$_qc_run" ]] || continue
+  _add_seat "qc_panel[$_i]" "${QC_PANEL[$_i]:-<unspecified>}" "$_qc_run"
+done
 
 # A seat is "reviewer-class" when its judgement is the thing being decorrelated
 # from the implementer's work. Everything that is not the implementer seat is.
@@ -1537,8 +1559,6 @@ _is_unqualified_runner() {
   return 1
 }
 
-_UNQUAL_IMPL_RUNNERS=""    # override-admitted runners sitting in the implementer seat
-_UNQUAL_REVIEW_RUNNERS=""  # ... and in any reviewer-class seat
 for _i in "${!_seat_roles[@]}"; do
   _role="${_seat_roles[$_i]}"; _eng="${_seat_engines[$_i]}"; _run="${_seat_runners[$_i]}"
   _is_unqualified_runner "$_run" || continue
@@ -1555,8 +1575,12 @@ const isCalendarDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.tes
   && !Number.isNaN(Date.parse(`${v}T00:00:00.000Z`))
   && new Date(`${v}T00:00:00.000Z`).toISOString().slice(0, 10) === v;
 // role is matched EXACTLY: an override for the implementer role does not admit
-// the same engine to a reviewer seat. A qc_panel[N] seat matches role "qc_panel".
-const wantRole = role.replace(/\[[0-9]+\]$/, "");
+// the same engine to a reviewer seat. A qc_panel[N] seat matches role
+// "qc_panel"; the risk-tiered overlay seat "reviewer_low_risk" matches role
+// "reviewer" (it IS the reviewer role, just the low-risk engine of it) — the
+// ENGINE still has to match exactly, which is what stops one override from
+// covering both tiers.
+const wantRole = role.replace(/\[[0-9]+\]$/, "").replace(/_low_risk$/, "");
 const m = doc.overrides.find((o) => o && o.engine === engine && o.runner === runner
   && o.role === wantRole
   && typeof o.reason === "string" && o.reason.trim()
@@ -1571,33 +1595,108 @@ process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}`);
   fi
   _reason="${_ovr%%$'\x1f'*}"; _rest="${_ovr#*$'\x1f'}"; _expires="${_rest%%$'\x1f'*}"; _operator="${_rest##*$'\x1f'}"
   echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) runs on an EVIDENCE-FREE operator override (operator: ${_operator}; reason: ${_reason}; expires ${_expires}) — this is a RECORDED OPERATOR DECISION, not earned qualification." >&2
-  OVERRIDE_ADMITTED_JSON="$(node -e '
-let a = []; try { a = JSON.parse(process.argv[1]); } catch { a = []; }
-if (!Array.isArray(a)) a = [];
+  # depth-0 panel 🟠 #4: the recording is not decoration — Ruling 1 requires an
+  # evidence-free admission to be AUDITABLE, and override_admitted_seats is the
+  # record. Falling back to the previous array on failure would let the admission
+  # succeed while the seat vanished from the record, which is the one outcome the
+  # ruling forbids. Append failure is now fatal: an admission we cannot record is
+  # an admission we do not grant.
+  _next_admitted="$(node -e '
+let a = []; try { a = JSON.parse(process.argv[1]); } catch { process.exit(1); }
+if (!Array.isArray(a)) process.exit(1);
 a.push(process.argv[2]);
-process.stdout.write(JSON.stringify(a));' "$OVERRIDE_ADMITTED_JSON" "$_role" 2>/dev/null || printf '%s' "$OVERRIDE_ADMITTED_JSON")"
-  if [[ "$_role" == "implementer" ]]; then
-    _UNQUAL_IMPL_RUNNERS="$_UNQUAL_IMPL_RUNNERS $_run"
-  else
-    _UNQUAL_REVIEW_RUNNERS="$_UNQUAL_REVIEW_RUNNERS $_run"
+const out = JSON.stringify(a);
+if (!out || out[0] !== "[") process.exit(1);
+process.stdout.write(out);' "$OVERRIDE_ADMITTED_JSON" "$_role" 2>/dev/null)" || _next_admitted=""
+  if [[ -z "$_next_admitted" ]]; then
+    echo "resolve-review-loop: ${_role} seat (${_eng}/${_run}) was override-admitted but the admission could NOT be recorded in override_admitted_seats — refusing. An evidence-free admission that leaves no auditable record is not a recorded operator decision." >&2
+    exit 3
   fi
+  OVERRIDE_ADMITTED_JSON="$_next_admitted"
 done
 
-# ── dual-seat occupancy ──────────────────────────────────────────────────────
-# Scoped to override-admitted runners on purpose. A blanket same-runner (or
-# same-family) test would reject the SHIPPED TEMPLATE, whose reviewer and
-# implementer are both openai-family and whose `auto` implementer runner resolves
-# to the reviewer's `codex`. The Board's rule is about routing an UNQUALIFIED rail
-# into both halves of a review loop, which is exactly this scope.
-for _ir in $_UNQUAL_IMPL_RUNNERS; do
-  for _rr in $_UNQUAL_REVIEW_RUNNERS; do
+# ── dual-seat occupancy (LOOP seats) ─────────────────────────────────────────
+# depth-0 panel 🟠 #3: this used to see only OVERRIDE-ADMITTED runners, so a
+# QUALIFIED runner in both halves of the loop sailed through. The Board's
+# rationale — one vendor, one auth, one server-side prompt layer is not
+# decorrelation — has no qualified-engine exemption: gpt-5.6-sol reviewing
+# gpt-5.6-sol's own work is the same decorrelation loss whether or not both seats
+# are qualified. The test now runs over EVERY seat.
+#
+# THE TRAP, and why this is not just "compare the runners". A naive comparison of
+# RESOLVED runners rejects the shipped template, whose `implementer_runner: auto`
+# resolves to the very `codex` its reviewer seat names — the identical failure
+# mode that disqualified the model-family axis. So the comparison is over the
+# CONFIGURED TOKEN: template `auto` != `codex` does not trip, while an operator
+# who explicitly writes `codex` in both seats does. `auto` is a delegation of the
+# choice, not a statement that both seats share a rail; an operator who wants the
+# gate's opinion on that should name the runner. Pinned by tests over both the
+# shipped template and this repo's own dogfood config.
+# SCOPE: the LOOP seats only. The terminal qc_panel is deliberately NOT subject to
+# this binary gate — hetero consult ruling (E), 2026-08-27. A panel is a
+# multi-seat body with min_panel_size 3 and union-on-verified-critical
+# aggregation (majority forbidden), so ONE seat sharing the implementer's rail
+# still leaves two independent rails, each able to block on its own. Applying a
+# binary fail per member would reject otherwise well-decorrelated panels. The
+# panel instead gets its own proportionate runner-axis governance below — which
+# it needed anyway, because its existing control is FAMILY-based and this whole
+# change exists because one rail can serve several families.
+_impl_runner_tokens=""
+_loop_review_runner_tokens=""
+_panel_runner_tokens=""
+for _i in "${!_seat_roles[@]}"; do
+  case "${_seat_roles[$_i]}" in
+    implementer) _impl_runner_tokens="$_impl_runner_tokens ${_seat_runners[$_i]}" ;;
+    qc_panel\[*) _panel_runner_tokens="$_panel_runner_tokens ${_seat_runners[$_i]}" ;;
+    *) _loop_review_runner_tokens="$_loop_review_runner_tokens ${_seat_runners[$_i]}" ;;
+  esac
+done
+
+# ── qc_panel runner diversity (its OWN governance, not the loop gate) ────────
+# The panel's pre-existing decorrelation control is FAMILY-based
+# (cross_family_required/satisfied, and the "shares the implementer family"
+# warning). That control cannot see the hazard this release is about: ONE rail
+# serving several model families — a single `cursor` rail hosting both GPT and
+# Grok ids shows up as two DIFFERENT families and the family check says nothing.
+# So the panel gets the runner axis too, at a severity that matches how a panel
+# decides: any overlap with the implementer's rail is WARNED and recorded, and
+# only TOTAL overlap — every seat on the implementer's own rail, i.e. zero
+# runner decorrelation anywhere in the terminal gate — is refused, and even that
+# is openable with the same explicit key. One overlapping seat among three
+# remains permissible by design (consult ruling (E)).
+_panel_total=0
+_panel_overlap=0
+for _pr in $_panel_runner_tokens; do
+  _panel_total=$((_panel_total + 1))
+  for _ir in $_impl_runner_tokens; do
+    [[ "$_ir" == "auto" ]] && continue
+    [[ "$_pr" == "$_ir" ]] && _panel_overlap=$((_panel_overlap + 1)) && break
+  done
+done
+if [[ "$_panel_total" -gt 0 && "$_panel_overlap" -gt 0 ]]; then
+  SAME_RUNNER_DUAL_SEAT="true"
+  if [[ "$_panel_overlap" -eq "$_panel_total" ]]; then
+    if [[ "$ALLOW_DUAL_SEAT" != "on" ]]; then
+      echo "resolve-review-loop: EVERY qc_panel seat ($_panel_total of $_panel_total) runs on the implementer's own runner — the terminal gate has no runner decorrelation at all. Model families do not help here: one rail can serve several. Add a panel member on a different runner, or set allow_same_runner_dual_seat: on to accept it deliberately." >&2
+      exit 3
+    fi
+    echo "resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and EVERY qc_panel seat runs on the implementer's runner — the terminal gate has no runner decorrelation." >&2
+  else
+    echo "resolve-review-loop: WARNING — qc_panel: $_panel_overlap of $_panel_total seat(s) run on the implementer's own runner. The remaining seat(s) still decorrelate, and union-on-verified-critical means any one of them can block, so this is permitted — but the shared seat's independence is nominal." >&2
+  fi
+fi
+
+for _ir in $_impl_runner_tokens; do
+  # `auto` is not a rail identity — it is "you pick". It can never collide.
+  [[ "$_ir" == "auto" ]] && continue
+  for _rr in $_loop_review_runner_tokens; do
     [[ "$_ir" != "$_rr" ]] && continue
     if [[ "$ALLOW_DUAL_SEAT" != "on" ]]; then
-      echo "resolve-review-loop: runner '${_ir}' occupies BOTH an implementer seat and a reviewer-class seat while admitted only by operator override. One vendor, one auth and one server-side prompt layer is not decorrelation, even when the two seats name different model families. Set allow_same_runner_dual_seat: on to accept that reduced decorrelation deliberately." >&2
+      echo "resolve-review-loop: runner '${_ir}' is named explicitly in BOTH an implementer seat and a reviewer-class loop seat. One vendor, one auth and one server-side prompt layer is not decorrelation, even when the two seats name different model families or both engines are qualified. Set allow_same_runner_dual_seat: on to accept that reduced decorrelation deliberately." >&2
       exit 3
     fi
     SAME_RUNNER_DUAL_SEAT="true"
-    echo "resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner '${_ir}' occupies both an implementer seat and a reviewer-class seat (implementer family: ${IMPL_FAMILY}, reviewer family: ${REV_FAMILY}). The panel's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown." >&2
+    echo "resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner '${_ir}' occupies both an implementer seat and a reviewer-class loop seat (implementer family: ${IMPL_FAMILY}, reviewer family: ${REV_FAMILY}). The loop's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown." >&2
   done
 done
 

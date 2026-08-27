@@ -164,7 +164,10 @@ assert_contains "$VALIDATE_AC" "parity-ok" "anthropic-compatible validation retu
 
 # Case C2: qoderclicn reviewer/implementer runner enum parity.
 QODER_CFG="$TEST_TMP/review-loop-qoderclicn.md"
-printf -- '- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n' > "$QODER_CFG"
+# Same runner in both seats is a dual-seat collision under the runner-axis gate.
+# This fixture's subject is shell/JS enum PARITY, not decorrelation policy, so it
+# opts in explicitly and keeps every other resolved value byte-identical.
+printf -- '- reviewer_runner: qoderclicn\n- reviewer_engine: Qwen3.8-Max-Preview\n- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- allow_same_runner_dual_seat: on\n' > "$QODER_CFG"
 QODER_ERR="$TEST_TMP/review-loop-qoderclicn.stderr"
 QODER_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$QODER_CFG" "$REPO_ROOT/scripts/resolve-review-loop.sh" 2>"$QODER_ERR")"
 EXIT_QODER=$?

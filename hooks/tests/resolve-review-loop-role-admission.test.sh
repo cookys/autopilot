@@ -178,6 +178,230 @@ assert_eq "0" "$rc" "allow_same_runner_dual_seat: on permits the roster"
 assert_contains "$out" "allow_same_runner_dual_seat is ON" "opened dual-seat still WARNS on stderr"
 assert_contains "$json" '"same_runner_dual_seat": true' "the dual-seat FACT reaches the run summary"
 
+# ══ depth-0 QC panel round 2: four admission bypasses ══════════════════════
+# Each block reproduces the reported bypass and pins the fix in BOTH directions.
+
+# ── 6a. 🔴 #1 every SELECTABLE engine is gated, not just the primary tuple ──
+# reviewer_engine_low_risk is a second selectable reviewer engine on the same
+# runner. It was emitted for every low-risk round while never being gated, so an
+# override for the PRIMARY engine covered a completely different, unqualified
+# engine. Ruling 1 is per exact engine + runner + role.
+CFG_LOW="$TEST_TMP/cfg-lowrisk.md"
+cat > "$CFG_LOW" <<'EOF'
+- reviewer_engine: cursor-grok-4.6-high-fast
+- reviewer_effort: high
+- reviewer_runner: cursor
+- reviewer_engine_low_risk: cursor-grok-4.6-low
+- reviewer_effort_low_risk: low
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_effort: high
+- implementer_runner: auto
+EOF
+
+OVR_PRIMARY_ONLY="$TEST_TMP/ovr-primary-only.json"
+printf '{ "schema": 1, "overrides": [{"engine":"cursor-grok-4.6-high-fast","runner":"cursor","role":"reviewer","reason":"primary tier only","operator":"board","expires":"2099-12-31"}] }\n' > "$OVR_PRIMARY_ONLY"
+out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_PRIMARY_ONLY" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_LOW" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "an override for the PRIMARY reviewer engine does NOT admit the low-risk engine"
+assert_contains "$out" "reviewer_low_risk" "the refusal names the low-risk seat specifically"
+
+# Field mode must refuse it too — the low-risk pair is readable via --field.
+out="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_PRIMARY_ONLY" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_LOW" bash "$SCRIPT" --field reviewer_engine_low_risk 2>&1)"; rc=$?
+assert_eq "3" "$rc" "--field reviewer_engine_low_risk is refused on an ungated low-risk engine"
+
+# POSITIVE: list BOTH engines under role "reviewer" and both tiers admit.
+OVR_BOTH_TIERS="$TEST_TMP/ovr-both-tiers.json"
+printf '{ "schema": 1, "overrides": [{"engine":"cursor-grok-4.6-high-fast","runner":"cursor","role":"reviewer","reason":"primary tier","operator":"board","expires":"2099-12-31"},{"engine":"cursor-grok-4.6-low","runner":"cursor","role":"reviewer","reason":"low-risk tier","operator":"board","expires":"2099-12-31"}] }\n' > "$OVR_BOTH_TIERS"
+json="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_BOTH_TIERS" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_LOW" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "both tiers overridden under role 'reviewer' resolves"
+assert_contains "$json" '"override_admitted_seats": ["reviewer","reviewer_low_risk"]' "both tiers are recorded separately"
+
+# ── 6b. 🔴 #2 a panel seat is gated independently of panel completeness ─────
+# Panel seats used to be inspected only when QC_PANEL_SEATS_COMPLETE was true, so
+# a cursor seat next to ONE ragged sibling was skipped entirely. An aggregate
+# validity flag must never gate a per-seat security check.
+CFG_RAGGED="$TEST_TMP/cfg-panel-ragged.md"
+cat > "$CFG_RAGGED" <<'EOF'
+- reviewer_engine: gpt-5.5
+- reviewer_effort: xhigh
+- reviewer_runner: codex
+- implementer_engine: grok-4.5
+- implementer_effort: high
+- implementer_runner: grok
+- qc_panel: cursor-grok-4.6-high, claude-opus, gemini-flash
+- qc_panel_runners: cursor, claude-native
+- qc_panel_efforts: high, high, high
+- qc_panel_endpoints: @none, @none, @none
+EOF
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_RAGGED" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "a cursor panel seat is refused even when the panel is INCOMPLETE"
+assert_contains "$out" "qc_panel[0]" "the refusal names the specific panel index"
+
+# The ragged panel must not become a hard error on its own — only the unqualified
+# seat is fatal. Without this, the fix could be 'reject every incomplete panel'.
+CFG_RAGGED_OK="$TEST_TMP/cfg-panel-ragged-ok.md"
+cat > "$CFG_RAGGED_OK" <<'EOF'
+- reviewer_engine: gpt-5.5
+- reviewer_effort: xhigh
+- reviewer_runner: codex
+- implementer_engine: grok-4.5
+- implementer_effort: high
+- implementer_runner: grok
+- qc_panel: claude-opus, gemini-flash, gpt-5.5
+- qc_panel_runners: claude-native, agy
+- qc_panel_efforts: high, high, high
+- qc_panel_endpoints: @none, @none, @none
+EOF
+json="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_RAGGED_OK" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "an incomplete panel of QUALIFIED runners still resolves (0)"
+assert_contains "$json" '"qc_panel_seats_complete": false' "...and is still reported incomplete"
+
+# ── 6c. 🟠 #3 dual-seat sees QUALIFIED runners, on the CONFIGURED token ─────
+# The gate used to accumulate only override-admitted runners, so a qualified
+# runner in both halves of the loop sailed through. The Board's rationale has no
+# qualified-engine exemption.
+CFG_DUAL_Q="$TEST_TMP/cfg-dual-qualified.md"
+cat > "$CFG_DUAL_Q" <<'EOF'
+- reviewer_engine: gpt-5.6-sol
+- reviewer_effort: high
+- reviewer_runner: codex
+- implementer_engine: gpt-5.6-sol
+- implementer_effort: high
+- implementer_runner: codex
+EOF
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_DUAL_Q" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "a QUALIFIED runner in both implementer and reviewer seats is refused"
+assert_contains "$out" "named explicitly in BOTH" "the refusal states the explicit-token rule"
+assert_contains "$out" "both engines are qualified" "the refusal says qualification is not an exemption"
+
+CFG_DUAL_Q_ON="$TEST_TMP/cfg-dual-qualified-on.md"
+cp "$CFG_DUAL_Q" "$CFG_DUAL_Q_ON"
+printf -- '- allow_same_runner_dual_seat: on\n' >> "$CFG_DUAL_Q_ON"
+json="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_DUAL_Q_ON" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "the qualified dual-seat roster is accepted when deliberately opened"
+assert_contains "$json" '"same_runner_dual_seat": true' "...and the fact reaches the run summary"
+
+# THE TRAP, pinned. A comparison of RESOLVED runners would reject the shipped
+# template (implementer `auto` resolves to the reviewer's `codex`) — the same
+# failure mode that disqualified the model-family axis. Comparing CONFIGURED
+# tokens keeps `auto` inert. These two assertions are the regression proof
+# depth-0 asked for; without them the gate could tighten into a default-broken
+# resolver and every test above would still pass.
+REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE" bash "$SCRIPT" >/dev/null 2>&1
+assert_eq "0" "$?" "SHIPPED TEMPLATE still resolves (implementer 'auto' must not collide with reviewer 'codex')"
+DOGFOOD="$REPO_ROOT/.claude/review-loop-config.md"
+if [ -r "$DOGFOOD" ]; then
+  REVIEW_LOOP_CONFIG_OVERRIDE="$DOGFOOD" bash "$SCRIPT" >/dev/null 2>&1
+  assert_eq "0" "$?" "this repo's own dogfood roster still resolves"
+else
+  fail "dogfood roster $DOGFOOD is unreadable — the regression proof cannot run"
+fi
+
+# `auto` is inert as a token, not merely tolerated by accident: naming `auto` in
+# the implementer seat next to a reviewer that is also somehow `auto` cannot trip.
+CFG_AUTO="$TEST_TMP/cfg-auto-both.md"
+cat > "$CFG_AUTO" <<'EOF'
+- reviewer_engine: gpt-5.5
+- reviewer_effort: xhigh
+- reviewer_runner: auto
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_effort: high
+- implementer_runner: auto
+EOF
+REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_AUTO" bash "$SCRIPT" >/dev/null 2>&1
+assert_eq "0" "$?" "'auto' in both seats is not a rail collision (it is a delegation, not an identity)"
+
+# ── 6c2. qc_panel is governed on the runner axis, PROPORTIONATELY ──────────
+# Consult ruling (E): the panel is deliberately NOT subject to the binary loop
+# gate. It is a multi-seat body (min_panel_size 3, union-on-verified-critical,
+# majority forbidden), so one seat sharing the implementer's rail still leaves
+# seats that each block alone. But it needs the RUNNER axis, because its
+# pre-existing control is family-based and one rail serves several families.
+# Partial overlap warns; only TOTAL overlap refuses.
+CFG_PANEL_PARTIAL="$TEST_TMP/cfg-panel-partial-overlap.md"
+cat > "$CFG_PANEL_PARTIAL" <<'EOF'
+- reviewer_engine: claude-opus
+- reviewer_effort: high
+- reviewer_runner: claude-native
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_effort: high
+- implementer_runner: codex
+- qc_panel: gpt-5.5, claude-opus, gemini-flash
+- qc_panel_runners: codex, claude-native, agy
+- qc_panel_efforts: xhigh, high, high
+- qc_panel_endpoints: @none, @none, @none
+EOF
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_PARTIAL" bash "$SCRIPT" 2>&1 >/dev/null)"
+json="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_PARTIAL" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "ONE panel seat on the implementer's runner is PERMITTED (the others still decorrelate)"
+assert_contains "$out" "1 of 3 seat(s) run on the implementer's own runner" "partial panel overlap is warned, with counts"
+assert_contains "$json" '"same_runner_dual_seat": true' "partial panel overlap still reaches the run summary"
+
+# TOTAL overlap: no runner decorrelation anywhere in the terminal gate.
+CFG_PANEL_TOTAL="$TEST_TMP/cfg-panel-total-overlap.md"
+cat > "$CFG_PANEL_TOTAL" <<'EOF'
+- reviewer_engine: claude-opus
+- reviewer_effort: high
+- reviewer_runner: claude-native
+- implementer_engine: gpt-5.3-codex-spark
+- implementer_effort: high
+- implementer_runner: codex
+- qc_panel: gpt-5.5, gpt-5.6-sol, gpt-5.3-codex-spark
+- qc_panel_runners: codex, codex, codex
+- qc_panel_efforts: xhigh, high, high
+- qc_panel_endpoints: @none, @none, @none
+EOF
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_TOTAL" bash "$SCRIPT" 2>&1)"; rc=$?
+assert_eq "3" "$rc" "a panel ENTIRELY on the implementer's runner is refused"
+assert_contains "$out" "no runner decorrelation at all" "total panel overlap names the actual loss"
+
+CFG_PANEL_TOTAL_ON="$TEST_TMP/cfg-panel-total-on.md"
+cp "$CFG_PANEL_TOTAL" "$CFG_PANEL_TOTAL_ON"
+printf -- '- allow_same_runner_dual_seat: on\n' >> "$CFG_PANEL_TOTAL_ON"
+json="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_TOTAL_ON" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "total panel overlap is openable with the same explicit key"
+assert_contains "$json" '"same_runner_dual_seat": true' "...and is recorded"
+
+# The panel must NOT be dragged into the binary LOOP gate. CFG_PANEL_PARTIAL above
+# already proves the permitted case; assert the refusal it produced named the PANEL
+# rule and never the loop rule, so a future change cannot quietly merge the two.
+out_partial="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_PANEL_PARTIAL" bash "$SCRIPT" 2>&1 >/dev/null)"
+case "$out_partial" in
+  *"named explicitly in BOTH"*) fail "panel overlap must not trigger the loop-seat refusal message" ;;
+  *) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) ;;
+esac
+
+# ── 6d. 🟠 #4 an admission that cannot be RECORDED is not granted ───────────
+# override_admitted_seats is the auditable record Ruling 1 requires. The append
+# used to fall back to the previous array on failure, so an evidence-free
+# admission could succeed while vanishing from the record. Shim `node` so ONLY
+# the recording call fails (keyed on that script's unique body), and prove the
+# resolver refuses instead of admitting silently.
+REAL_NODE="$(command -v node)"
+[ -n "$REAL_NODE" ] || fail "node not found on PATH — cannot run the recording-failure test"
+SHIM_DIR="$TEST_TMP/nodeshim"
+mkdir -p "$SHIM_DIR"
+cat > "$SHIM_DIR/node" <<EOF
+#!/usr/bin/env bash
+# Fail ONLY the override-recording append, identified by its unique script body.
+if [ "\$1" = "-e" ] && case "\$2" in *"a.push(process.argv[2])"*) true ;; *) false ;; esac; then
+  exit 1
+fi
+exec "$REAL_NODE" "\$@"
+EOF
+chmod +x "$SHIM_DIR/node"
+
+# sanity: the shim is otherwise transparent — the same roster resolves through it
+json="$(PATH="$SHIM_DIR:$PATH" AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_OK" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_REV" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "3" "$rc" "an override-admitted seat whose record cannot be written is REFUSED, not admitted"
+out="$(PATH="$SHIM_DIR:$PATH" AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_OK" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_REV" bash "$SCRIPT" 2>&1 >/dev/null)"
+assert_contains "$out" "could NOT be recorded" "the refusal explains that the record is the point"
+
+# ...and with the shim absent the SAME roster admits, proving the shim is what
+# changed the outcome rather than some unrelated breakage.
+json="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$OVR_OK" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_REV" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "control: without the shim the same roster admits"
+assert_contains "$json" '"override_admitted_seats": ["reviewer"]' "control: and records the seat"
+
 # ── 7. UNQUALIFIED_RUNNERS reconciliation ──────────────────────────────────
 # The resolver's list is an inline seed table. This is the same-commit ritual
 # that stops it going stale: every runner token that IS nameable in a roster and

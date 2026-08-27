@@ -143,6 +143,74 @@ a rotating set of co-failures. The parallel workload is being executed for the f
 `de3fbc03`, which makes resource contention the leading hypothesis, but it is a hypothesis — the
 flake is undiagnosed and is flagged rather than papered over.
 
+### Depth-0 QC panel round 2 — four admission bypasses in the gate itself
+
+The panel FAILED this release on the surface it introduces. All four holes were in the two
+Board rulings this change implements, and all four are now closed with reproductions on
+record. The panel independently corroborated the two design choices — the runner axis, and
+widening all six enums with admission as the gate — so those stand unchanged.
+
+- **🔴 Only the primary reviewer tuple was gated.** `reviewer_engine_low_risk` is a SECOND
+  selectable reviewer engine on the same runner, emitted for every low-risk round, and it
+  never entered the admission inventory. A roster could carry a valid override for the
+  primary engine and put a completely unqualified, unoverridden engine in the low-risk slot.
+  Ruling 1 is per **exact engine + runner + role**, so an override for one engine must never
+  admit a sibling that merely shares the runner. Every selectable engine now gets its own
+  seat row; the low-risk seat resolves to role `reviewer`, so an operator writes that one role
+  and must list each engine separately. Audited the rest of the surface while fixing it:
+  `reviewer_engine_low_risk` was the only ungated engine field, because the fallback-preference
+  lists can only reorder rows that are already `status: "qualified"` in the scorecard.
+
+- **🔴 An aggregate flag was gating a per-seat security check.** Panel seats entered the
+  inventory only when `QC_PANEL_SEATS_COMPLETE` was true, so a cursor panel seat sitting next
+  to ONE ragged sibling was skipped entirely and the roster resolved clean — and an incomplete
+  panel is exactly when a bad seat is most likely present. Every parsed seat is now inspected
+  on its own, walking the union of the engine and runner index sets so a ragged array cannot
+  hide a row. An incomplete panel of qualified runners still resolves; only the unqualified
+  seat is fatal.
+
+- **🟠 The dual-seat gate could only see unqualified runners.** It accumulated override-admitted
+  runners only, so `gpt-5.6-sol` implementing and `gpt-5.6-sol` reviewing its own work passed
+  at the default `off`. The rationale has no qualified-engine exemption. The comparison now runs
+  over every seat, on the **configured runner token** — comparing resolved runners would reject
+  the shipped template, whose `auto` implementer resolves to the reviewer's `codex`, which is
+  the identical failure mode that disqualified the family axis. `auto` is inert; an inherited
+  built-in default is NOT (a roster naming only `implementer_runner: codex` really does put one
+  rail on both sides of the loop, and that path is the most likely way the hazard arrives).
+
+- **🟠 Recording an evidence-free admission was fail-open.** If the append to
+  `override_admitted_seats` failed, it silently kept the previous array — so an admission could
+  succeed while vanishing from the record that makes it auditable. Ruling 1 requires the record,
+  not merely the warning. An admission that cannot be recorded is now refused.
+
+**Scope correction on a hetero consult (`codex`/`gpt-5.6-sol`).** Extending the dual-seat gate
+naively put the terminal `qc_panel` under the same binary rule, which would reject
+well-decorrelated three-seat panels. The panel is a multi-seat body with
+`union-on-verified-critical` aggregation and majority forbidden, so ONE seat sharing the
+implementer's rail still leaves seats that each block alone. The panel is therefore out of the
+loop-seat gate and has its own proportionate runner-axis rule instead — which it needed
+regardless, since its existing control is family-based and cannot see one rail serving several
+families. Any overlap warns and sets `same_runner_dual_seat`; only TOTAL overlap, meaning the
+terminal gate has no runner decorrelation anywhere, is refused, and even that is openable.
+
+The same consult ruled that inherited defaults stay in scope, accepting the stated cost: three
+test fixtures that name one runner and inherit the rest now opt in explicitly. They keep the
+opt-in rather than being diversified so their resolved output stays byte-identical — each is
+about enum acceptance or quota telemetry, not decorrelation.
+
+Not fixed, recorded for backlog with the panel's agreement: `dispatch-review.sh:146-147,239`
+sources `lib/cursor-model.sh` behind a readability guard and so silently skips the family-alias
+precondition if the lib is unreadable, where `dispatch-author.sh` sources it unconditionally —
+a fail-open asymmetry whose downstream failure is still closed; the `-p` argv assertion in the
+routing test is a bare substring where its siblings are line-anchored; no committed negative
+feeds a stale roster JSON; and the js-syntax module-type negative is one-sided.
+
+Also recorded: the intermittent `dispatch-worktree-lifecycle.test.sh` failure under
+`run.sh --parallel` is NOT introduced by this release. Depth-0 bisected it — at the base commit
+the L2 tier could not run at all, and neither that test nor the runner is touched by this diff.
+It is pre-existing code, first observable because this release fixed the mode bug that was
+hiding the entire tier.
+
 prose-justification: the +5% is two documentation surfaces this release deliberately creates.
 `project-config-template/review-loop-config.md` gains the operator-facing explanation of how to
 route an unqualified engine — the override file's exact shape, why an admitted seat is a recorded

@@ -145,4 +145,32 @@ assert_exit_code "$JSON_EXIT" "3" "--json still exits 3 on refusal"
 assert_contains "$JSON_OUT" '"ok":false' "--json reports ok:false on refusal"
 assert_contains "$JSON_OUT" '"binary":"codex"' "--json names the resolved binary"
 
+# =====================================================================
+# 4. receiptSafe — the probe receipt now carries REAL CLI output in `bin` /
+#    `bin_version` (it used to carry `command -v $runner` and a tr-stripped
+#    string). A quote, a backslash or a newline in that output must not be able
+#    to forge a JSON field in probe-receipts.jsonl, nor an extra shell line in
+#    qualification-sweep.sh's `read -r` block.
+# =====================================================================
+SAFE_OUT="$(node -e '
+  const { receiptSafe } = require(process.argv[1]);
+  const hostile = [
+    ["quote", "1.2.3\", \"instrument_charged\": true, \"x\": \"" ],
+    ["backslash", "1.2.3\\\\"],
+    ["newline", "1.2.3\nRESOLVED_VERSION_TOKEN=forged"],
+    ["carriage return", "1.2.3\rforged"],
+    ["null byte", "1.2.3 forged"],
+  ];
+  let bad = 0;
+  for (const [label, raw] of hostile) {
+    const safe = receiptSafe(raw);
+    if (/["\\\\\n\r ]/.test(safe)) { bad += 1; console.log("LEAK " + label + " -> " + JSON.stringify(safe)); }
+    // and the result must still be a valid JSON string value
+    try { JSON.parse("\"" + safe + "\""); } catch (e) { bad += 1; console.log("INVALID_JSON " + label); }
+  }
+  console.log(bad === 0 ? "RECEIPT_SAFE_OK" : "RECEIPT_SAFE_BAD=" + bad);
+' "$LIB" 2>&1)"
+assert_contains "$SAFE_OUT" "RECEIPT_SAFE_OK" \
+  "no quote/backslash/newline/NUL in a version line can forge a receipt field or a shell line: $SAFE_OUT"
+
 finalize_test

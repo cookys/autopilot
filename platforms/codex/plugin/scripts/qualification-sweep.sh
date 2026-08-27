@@ -341,15 +341,29 @@ resolve_runner_version() { # runner -> rc 0 usable
   RESOLVED_VERSION_TOKEN=""; RESOLVED_VERSION_REASON="resolver_failed"
   json="$(node "$REPO_ROOT/scripts/lib/runner-binary.js" version --runner "$runner" --json 2>/dev/null)" || true
   [ -n "$json" ] || return 1
-  eval "$(node -e '
-    const r = JSON.parse(process.argv[1]);
-    const q = (v) => "\x27" + String(v == null ? "" : v).replace(/\x27/g, "\x27\\\x27\x27") + "\x27";
-    process.stdout.write("RESOLVED_BIN=" + q(r.binary_path || r.binary || "unresolved") + "\n");
-    process.stdout.write("RESOLVED_BIN_VERSION=" + q(r.version_line || "unresolved") + "\n");
-    process.stdout.write("RESOLVED_VERSION_TOKEN=" + q(r.ok ? r.token : "") + "\n");
-    process.stdout.write("RESOLVED_VERSION_REASON=" + q(r.ok ? "ok" : (r.reason || "refused")) + "\n");
-  ' "$json")" || return 1
-  [ -n "$RESOLVED_VERSION_TOKEN" ] || return 1
+  # Four values, one per line, read with `read -r` — deliberately NOT `eval`. These fields
+  # are derived from an arbitrary CLI's output; eval-ing shell assignments built from that
+  # would make a hostile (or merely odd) --version a code-execution surface for the sake of
+  # four string variables. receiptSafe() strips control characters, `"` and `\`, so no
+  # value can carry a newline that forges an extra line here, or a quote/backslash that
+  # forges a field in probe_receipt's JSON template.
+  {
+    IFS= read -r RESOLVED_BIN
+    IFS= read -r RESOLVED_BIN_VERSION
+    IFS= read -r RESOLVED_VERSION_TOKEN
+    IFS= read -r RESOLVED_VERSION_REASON
+  } < <(node -e '
+    const { receiptSafe } = require(process.argv[1]);
+    const r = JSON.parse(process.argv[2]);
+    process.stdout.write(receiptSafe(r.binary_path || r.binary || "unresolved") + "\n");
+    process.stdout.write(receiptSafe(r.version_line || "unresolved") + "\n");
+    process.stdout.write(receiptSafe(r.ok ? r.token : "") + "\n");
+    process.stdout.write(receiptSafe(r.ok ? "ok" : (r.reason || "refused")) + "\n");
+  ' "$REPO_ROOT/scripts/lib/runner-binary.js" "$json")
+  [ -n "${RESOLVED_BIN:-}" ] || RESOLVED_BIN="unresolved"
+  [ -n "${RESOLVED_BIN_VERSION:-}" ] || RESOLVED_BIN_VERSION="unresolved"
+  [ -n "${RESOLVED_VERSION_REASON:-}" ] || RESOLVED_VERSION_REASON="resolver_failed"
+  [ -n "${RESOLVED_VERSION_TOKEN:-}" ] || return 1
   return 0
 }
 

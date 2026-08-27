@@ -270,8 +270,23 @@ function resolveRunnerVersion(runner, options = {}) {
   return { ok: true, runner, binary, binary_path: binaryPath, version_line: line, token: sanitizeVersionToken(line) };
 }
 
+/**
+ * Reduce a value to something safe to interpolate into a one-line JSON string field and
+ * to read back with a single `read -r` in shell: no control characters (so no newline can
+ * forge an extra field or an extra shell line), no `"` or `\` (so no JSON escape can be
+ * forged). Used for the probe receipt's `bin` / `bin_version`, which now carry real CLI
+ * output rather than a sanitized-to-death token.
+ */
+function receiptSafe(value) {
+  return stripVersionControlChars(String(value == null ? '' : value))
+    .replace(/["\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 module.exports = {
   RUNNER_VERSION_BINARY,
+  receiptSafe,
   MAX_VERSION_LINE_LENGTH,
   versionBinaryFor,
   knownRunners,

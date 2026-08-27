@@ -48,6 +48,28 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### Suite residue makes `run.sh --parallel` flaky, and nothing reaps it
+
+- **Trigger**: a `--parallel` suite run fails with a rotating set of files that each pass
+  standalone — most often `dispatch-worktree-lifecycle`, `probe-runner-coverage`,
+  `campaign-*`, `dispatch-detach`. Check `/tmp` first.
+- **Context**: the L2 integration tier leaves worktrees and dispatch manifests behind. During
+  v2.34.43 verification `/tmp` had accumulated **82 `hetero-*` worktrees and 627 dispatch run
+  manifests**, and a full parallel run failed 14 of 282 files. After `rm -rf /tmp/autopilot-test-*
+  /tmp/hetero-*` and clearing `/tmp/autopilot-dispatch-runs/`, the same commit ran **282 of 282
+  green**. So the flake is residue-and-contention, not a defect in the named tests. Depth-0
+  bisected the code side independently and confirmed neither `dispatch-worktree-lifecycle` nor
+  `hooks/tests/run.sh` is touched by v2.34.43; the tier had simply been unrunnable since
+  `de3fbc03` (one test file at mode `100644` made `run.sh` refuse the whole tier), so this
+  workload had never actually executed before. The residue was invisible for the same reason.
+  A killed suite run makes it markedly worse — it leaves its worktrees behind with no cleanup.
+- **Effort**: Fix — most likely a pre-run reaper in `hooks/tests/run.sh` (there is already
+  `scripts/lib/prune-tmp-residue.sh` and `reap-dispatch-worktrees.sh` to build on), plus an EXIT
+  trap so an interrupted run cleans up after itself. Confirm the diagnosis first by reproducing:
+  seed `/tmp` with ~80 stale `hetero-*` dirs, run the suite, and check the failure count moves.
+- **Source**: v2.34.43 depth-0 QC round 2 (depth-0 bisect) + foreman verification runs, 2026-08-27.
+
+
 ### ~~North-star per-skill ratchet is red on develop~~ — RESOLVED v2.34.35 post-merge (prose-justification with per-release attribution added to CHANGELOG v2.34.35 §; baseline refreshed via --update-baseline; preflight 8/8)
 - **Trigger**: 下一次任何 release 想要 preflight 8/8;或下一次動這三個 SKILL.md 任一時捎帶。
 - **Context**: preflight-release gate [8] 自 v2.34.35 起紅:`skills/dev-flow/SKILL.md` 713→717、`skills/engine-onboarding/SKILL.md` 203→228、`skills/harness-maintenance/SKILL.md` 58→59 超過 recorded baseline,且對應版段無 `prose-justification:` 行。v2.34.35 ship(strike-decay)驗證於 base `ab10bf08` 同樣紅、該 range 未觸 skills/ —— 兩輪 foreman 均拒絕代人 refresh baseline(「justifying growth I did not cause would launder someone else's drift through my gate」),依證據紀律改立此顯式債務 row。修向:trim 回 baseline,或在成長版本的 CHANGELOG 段補 justification 後 refresh baseline。

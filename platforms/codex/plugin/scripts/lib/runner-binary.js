@@ -103,7 +103,7 @@ const VERSION_TOKEN_MAX_POSITION = 2;
 // Position alone is not enough: `Node 18.0 required` puts a version token second. A
 // version banner states an identity; these words only appear when a line is instead
 // stating a REQUIREMENT or a FAILURE. Anywhere in the line refuses.
-const DIAGNOSTIC_WORDS = /\b(requires?|required|requiring|needs?|needed|unsupported|unable|cannot|can\x27t|could\s?not|missing|not\s+installed|install|upgrade|update|please|failed|failure|invalid|denied|expired|unknown\s+option|must)\b/i;
+const DIAGNOSTIC_WORDS = /\b(requires?|required|requiring|needs?|needed|unsupported|unable|cannot|can't|could\s?not|missing|not\s+installed|install|upgrade|update|please|failed|failure|invalid|denied|expired|unknown\s+option|must)\b/i;
 
 // A version banner is a label, not a sentence. Six whitespace tokens is already generous
 // for `2.0.44 (Claude Code)` (3) or `codex-cli 0.31.0` (2).

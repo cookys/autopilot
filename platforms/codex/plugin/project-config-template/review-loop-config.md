@@ -63,6 +63,15 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - review_diff_scope: full
 - min_panel_size: 3
 - density_scaling: off
+- consult_engine:
+- consult_effort:
+- consult_runner:
+- consult_endpoint:
+- discuss_engine:
+- discuss_effort:
+- discuss_runner:
+- discuss_endpoint:
+- allow_same_runner_dual_seat: off
 
 > **The terminal qc panel** (`qc_panel`) is the authoritative depth-0 gate — a
 > **disjoint-family** panel (OpenAI / Anthropic / Google), distinct from the inner-loop
@@ -76,6 +85,41 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 > pass); **majority vote is forbidden** (it would suppress the single-track blind-spot catch that
 > is the whole reason for a panel).
 >
+> **Per-role heterogeneous routing (2026-08-27).** Every seat above names its own engine,
+> so "which hetero engine serves this role" is configuration, not hand-typed argv. The two
+> seats added in this release are `consult` (a mid-run ad-hoc second opinion, previously
+> hand-typed `dispatch-review.sh` argv) and `discuss` (heterogeneous participation in
+> `think-tank` / `brainstorm`). Both default EMPTY, which is exactly the previous behaviour.
+> `review` and `plan` are NOT new roles — they are the existing `reviewer_*` and
+> `plan_reviewer_*` seats; point those at a different engine rather than declaring a second
+> one, or you get two canonical statements of the same seat.
+>
+> **Routing an UNQUALIFIED engine.** A runner with no recorded role qualification (today:
+> `cursor` — `src/harness/capabilities/cursor.json` is `status: unverified` / `H0`) may be
+> named in any seat, but the resolver **refuses the roster (exit 3)** unless
+> `$AUTOPILOT_QUALIFICATION_OVERRIDE` carries an unexpired entry matching that exact
+> engine / runner / **role**:
+>
+> ```json
+> { "schema": 1, "overrides": [ { "engine": "cursor-grok-4.6-high", "runner": "cursor",
+>   "role": "reviewer", "reason": "why this is acceptable today", "operator": "who decided",
+>   "expires": "2026-12-31" } ] }
+> ```
+>
+> An admitted seat is announced on stderr as an EVIDENCE-FREE operator override and listed
+> in the resolved `override_admitted_seats`. That list records a **decision**, never
+> evidence of qualification — nothing downstream may read it as a scorecard. Being spellable
+> in a runner enum means "the roster can name this token", not "this engine is qualified".
+>
+> **`allow_same_runner_dual_seat`** (default `off`) governs whether such an
+> override-admitted runner may hold the implementer seat AND a reviewer-class seat at once.
+> Off refuses; on permits it, warns on stderr, and sets `same_runner_dual_seat: true` for the
+> run summary. The axis is the **runner**, not the model family: one vendor, one auth and one
+> server-side prompt layer is not decorrelation even when the two seats show different model
+> families (a single `cursor` rail serves both grok and gpt ids). It is scoped to
+> override-admitted runners because a blanket same-runner test would reject this very
+> template, whose `auto` implementer runner resolves to the reviewer's `codex`.
+
 > **Preset `all-calibrated`**: Setting `qc_panel` to exactly `all-calibrated` expands to the full, calibrated 5-family reviewer roster. The concrete engine list is maintained inside the resolver script (single source of truth) and covers all families with recorded reviewer calibration/spike evidence.
 
 ## Field reference
@@ -98,6 +142,9 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `implementer_runner` | dispatch-hetero runner | `auto\|codex\|agy\|grok\|qoderclicn\|cc-shim\|pi` (→ `dispatch-hetero.sh --runner`). `auto` routes `*gpt*`/`*codex*`→codex, `*grok*`/`*composer*`→grok, `*qwen*`/`*qoder*`→fail-loud requiring explicit `qoderclicn`, else agy; **`qoderclicn`, `cc-shim`, and `pi` must be set EXPLICITLY** (see Gotchas) |
 | `reviewer_endpoint` | **named endpoint** for a `cc-shim`/`anthropic-compatible` REVIEWER — resolves creds via `resolve-endpoint.sh` (`AUTOPILOT_ENDPOINT_<NAME>_*`, populated from `~/.autopilot/endpoints.env`). `/l5`/`/l6` passes it as `--endpoint <name>` so you don't hand-type it. Empty = none (raw `ANTHROPIC_BASE_URL`/`AUTH_TOKEN` env, byte-identical to before) | an endpoint name `[A-Za-z0-9_]` (e.g. `glm`, `minimax`), or empty |
 | `implementer_endpoint` | same, for a `cc-shim` IMPLEMENTER (→ `dispatch-hetero.sh --endpoint`). Empty = none | an endpoint name `[A-Za-z0-9_]`, or empty |
+| `consult_engine` / `consult_effort` / `consult_runner` / `consult_endpoint` | the **consult** seat: a mid-run ad-hoc heterogeneous second opinion. Read by callers as `resolve-review-loop.sh --field consult_engine` (etc.) instead of hand-typing `dispatch-review.sh` argv — see `references/hetero-dispatch.md`. Tuple is wholly empty or engine+runner+effort all present | engine name / `low\|medium\|high\|xhigh\|max` / any reviewer runner incl. `cursor` / endpoint name, all optionally empty |
+| `discuss_engine` / `discuss_effort` / `discuss_runner` / `discuss_endpoint` | the **discuss** seat: heterogeneous participation in `think-tank` / `brainstorm`. **Declared but not yet consumed by any executable caller** — the seat exists so a roster can state the intent; no skill reads it today. Same tuple rule | as above |
+| `allow_same_runner_dual_seat` | may an OVERRIDE-ADMITTED (unqualified) runner hold the implementer seat and a reviewer-class seat simultaneously? `off` = resolver exit 3. `on` = permitted, stderr warning, `same_runner_dual_seat: true`. Runner axis, not family axis — see the note above | `off` (default) \| `on` |
 | `on_engine_unavailable` | what to do when a dispatch engine is unavailable (quota exhausted / `precondition_failed`) | `ask\|solo-fallback\|wait-reset` (default `ask`). **Behavior matrix**: `ask` — BOTH engine-quota death and `precondition_failed` stop the run and escalate to the user (no automatic `--solo` inline fallback, no automatic quota-reset wakeup). Fail-closed: the expensive depth-0 session model never silently takes over implementation labor. `solo-fallback` — legacy: `precondition_failed` falls back to `--solo` inline; quota death follows the §1.b auto-wakeup recovery (see `level-front-door.md`). `wait-reset` — quota death follows §1.b auto-wakeup; `precondition_failed` (non-quota) still escalates to the user. **Engine wiring**: when a dispatch dies `engine_unavailable`/`precondition_failed`, `engine implement-review` applies this matrix mechanically and emits an additive `engine_unavailable: {policy, action, error_class}` on its result (`action` ∈ `escalate\|solo-fallback\|wait-reset`; auth/unparseable deaths always `escalate` — waiting can't fix auth) so the orchestrator acts on `action` instead of re-deriving the policy from raw dispatch JSON |
 | `loop_max_rounds` | adversarial-loop convergence cap per phase | integer (default 5) |
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |

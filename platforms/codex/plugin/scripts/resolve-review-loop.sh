@@ -95,10 +95,55 @@ DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT="different"
 DEF_DIFF_SCOPE="full"
 DEF_MIN_PANEL_SIZE="3"
 DEF_ON_ENGINE_UNAVAILABLE="ask"
+# Two seats the roster gained 2026-08-27 (Board: per-role heterogeneous routing).
+# Both default EMPTY = seat unconfigured, which is byte-identical to the previous
+# behaviour for every existing roster: `consult` callers hand-type dispatch-review.sh
+# argv, and `discuss` has no executable consumer at all yet.
+DEF_CONSULT_ENGINE=""
+DEF_CONSULT_EFFORT=""
+DEF_CONSULT_RUNNER=""
+DEF_CONSULT_ENDPOINT=""
+DEF_DISCUSS_ENGINE=""
+DEF_DISCUSS_EFFORT=""
+DEF_DISCUSS_RUNNER=""
+DEF_DISCUSS_ENDPOINT=""
+# Board ruling 2026-08-27: dual-seat occupancy by an UNQUALIFIED (override-admitted)
+# runner is configurable but DEFAULT CLOSED. See the schema description for why the
+# axis is the runner and not the model family.
+DEF_ALLOW_DUAL_SEAT="off"
 # in-loop reviewer family-conflict policy (engine reviewDiff): fallback = walk the
 # cross-family qualified scorecard ladder; block = hard-block (pre-v2.32.25 behavior).
 # Garbage → block (fail-closed: the engine treats anything but "fallback" as block).
 DEF_ON_FAMILY_CONFLICT="fallback"
+
+# ── UNQUALIFIED RUNNERS (role-admission table) ──────────────────────────────
+# A runner listed here is nameable in a roster (its token is in the runner enums)
+# but has NO recorded qualification for ANY role. Naming one in a seat is REFUSED
+# (exit 3) unless AUTOPILOT_QUALIFICATION_OVERRIDE carries a matching, unexpired
+# entry for that engine/runner/role — in which case the seat is admitted, warned
+# about on stderr, and recorded in override_admitted_seats.
+#
+# WHY A DECLARED LIST RATHER THAN A DERIVATION. There is no 1:1 map from runner
+# token to harness capability record: cc-shim, anthropic-compatible, qoderclicn,
+# kimi and pi have no record at all, so "absent record => unqualified" would
+# refuse rosters that ship today, and "absent record => qualified" would mean
+# DELETING cursor.json opens the gate. The list is therefore explicit AND
+# mechanically reconciled: hooks/tests/resolve-review-loop-role-admission.test.sh
+# fails if any runner enum token has a capability record with status "unverified"
+# and is missing from this list. Same inline-seed-table + same-commit-ritual shape
+# as scripts/check-canonical-invariants.sh.
+#
+# Today the set is exactly {cursor}: src/harness/capabilities/cursor.json is
+# status "unverified", tier H0, all eight capability fields "unverified", and
+# Phase 5 (Stage-1 implementer qualification) of the cursor-cli-adaptor plan has
+# not run. copilot-cli is also "unverified" but is not a runner enum token.
+#
+# 🔴 This list is NOT a qualification ledger and membership in a runner enum is
+# NOT evidence of anything. The enum says "spellable"; this table says "needs an
+# operator override to be routed". ADR-0001: an override is a recorded operator
+# decision re-derived from the override file on every resolve — never an
+# attestation, never tamper-evidence.
+UNQUALIFIED_RUNNERS="cursor"
 
 FIELD=""
 SOURCE_TRUST=""
@@ -261,9 +306,9 @@ else
     exit 3
   fi
   case "$VER_AUTH_RUNNER" in
-    codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn) ;;
+    codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|cursor) ;;
     *)
-      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn): $VER_AUTH_RUNNER" >&2
+      echo "resolve-review-loop: invalid verification_author_runner (must be codex|agy|grok|cc-shim|anthropic-compatible|qoderclicn|cursor): $VER_AUTH_RUNNER" >&2
       exit 3
       ;;
   esac
@@ -332,6 +377,15 @@ PLAN_DEEP_ENGINE="$(read_field "$CONFIG" plan_deep_reviewer_engine "")"
 PLAN_DEEP_EFFORT="$(read_field "$CONFIG" plan_deep_reviewer_effort "")"
 PLAN_DEEP_RUNNER="$(read_field "$CONFIG" plan_deep_reviewer_runner "")"
 PLAN_DEEP_ENDPOINT="$(read_field "$CONFIG" plan_deep_reviewer_endpoint "")"
+CONSULT_ENGINE="$(read_field "$CONFIG" consult_engine "$DEF_CONSULT_ENGINE")"
+CONSULT_EFFORT="$(read_field "$CONFIG" consult_effort "$DEF_CONSULT_EFFORT")"
+CONSULT_RUNNER="$(read_field "$CONFIG" consult_runner "$DEF_CONSULT_RUNNER")"
+CONSULT_ENDPOINT="$(read_field "$CONFIG" consult_endpoint "$DEF_CONSULT_ENDPOINT")"
+DISCUSS_ENGINE="$(read_field "$CONFIG" discuss_engine "$DEF_DISCUSS_ENGINE")"
+DISCUSS_EFFORT="$(read_field "$CONFIG" discuss_effort "$DEF_DISCUSS_EFFORT")"
+DISCUSS_RUNNER="$(read_field "$CONFIG" discuss_runner "$DEF_DISCUSS_RUNNER")"
+DISCUSS_ENDPOINT="$(read_field "$CONFIG" discuss_endpoint "$DEF_DISCUSS_ENDPOINT")"
+ALLOW_DUAL_SEAT="$(read_field "$CONFIG" allow_same_runner_dual_seat "$DEF_ALLOW_DUAL_SEAT")"
 PLAN_MAX_GENERATIONS="$(read_field "$CONFIG" plan_review_max_generations "$DEF_PLAN_MAX_GENERATIONS")"
 PLAN_MAX_WALL_SECONDS="$(read_field "$CONFIG" plan_review_max_wall_seconds "$DEF_PLAN_MAX_WALL_SECONDS")"
 PLAN_GROWTH_WARN_RATIO="$(read_field "$CONFIG" plan_review_growth_warn_ratio "$DEF_PLAN_GROWTH_WARN_RATIO")"
@@ -341,11 +395,11 @@ case "$PLAN_REVIEW" in on|off) ;; *)
   echo "resolve-review-loop: invalid plan_review (must be on|off): $PLAN_REVIEW" >&2
   exit 3
 esac
-case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *)
+case "$PLAN_REV_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *)
   echo "resolve-review-loop: invalid plan_reviewer_runner: $PLAN_REV_RUNNER" >&2
   exit 3
 esac
-case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn) ;; *)
+case "$PLAN_DEEP_RUNNER" in ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *)
   echo "resolve-review-loop: invalid plan_deep_reviewer_runner: $PLAN_DEEP_RUNNER" >&2
   exit 3
 esac
@@ -365,6 +419,39 @@ esac
   echo "resolve-review-loop: invalid plan_deep_reviewer_endpoint: $PLAN_DEEP_ENDPOINT" >&2
   exit 3
 }
+# ── consult / discuss seat validation (same tuple discipline as plan_deep_reviewer:
+# wholly empty, or engine+runner+effort all present) ───────────────────────────
+for _seat in consult discuss; do
+  case "$_seat" in
+    consult) _s_eng="$CONSULT_ENGINE"; _s_eff="$CONSULT_EFFORT"; _s_run="$CONSULT_RUNNER"; _s_ep="$CONSULT_ENDPOINT" ;;
+    discuss) _s_eng="$DISCUSS_ENGINE"; _s_eff="$DISCUSS_EFFORT"; _s_run="$DISCUSS_RUNNER"; _s_ep="$DISCUSS_ENDPOINT" ;;
+  esac
+  case "$_s_run" in
+    ''|codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
+    *) echo "resolve-review-loop: invalid ${_seat}_runner: $_s_run" >&2; exit 3 ;;
+  esac
+  case "$_s_eff" in
+    ''|low|medium|high|xhigh|max) ;;
+    *) echo "resolve-review-loop: invalid ${_seat}_effort: $_s_eff" >&2; exit 3 ;;
+  esac
+  [[ -z "$_s_ep" || "$_s_ep" =~ ^[A-Za-z0-9_]+$ ]] || {
+    echo "resolve-review-loop: invalid ${_seat}_endpoint: $_s_ep" >&2; exit 3; }
+  if [[ -n "$_s_eng" || -n "$_s_run" || -n "$_s_eff" || -n "$_s_ep" ]]; then
+    if [[ -z "$_s_eng" || -z "$_s_run" || -z "$_s_eff" ]]; then
+      echo "resolve-review-loop: ${_seat} tuple must be wholly empty or include engine, runner, and effort" >&2
+      exit 3
+    fi
+  fi
+done
+
+case "$ALLOW_DUAL_SEAT" in
+  off|on) ;;
+  *)
+    echo "resolve-review-loop: invalid allow_same_runner_dual_seat (must be off|on): $ALLOW_DUAL_SEAT" >&2
+    exit 3
+    ;;
+esac
+
 if [[ "$PLAN_REVIEW" == "on" && ( -z "$PLAN_REV_ENGINE" || -z "$PLAN_REV_RUNNER" || -z "$PLAN_REV_EFFORT" ) ]]; then
   echo "resolve-review-loop: plan_review=on requires plan_reviewer_engine, plan_reviewer_runner, and plan_reviewer_effort" >&2
   exit 3
@@ -536,7 +623,7 @@ fi
 if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
   for _i in "${!QC_PANEL[@]}"; do
     case "${QC_PANEL_RUNNERS[$_i]}" in
-      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;;
+      codex|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
       *) QC_PANEL_SEATS_COMPLETE="false" ;;
     esac
     case "${QC_PANEL_EFFORTS[$_i]}" in
@@ -567,18 +654,18 @@ fi
 # Runner identity selects the actual transport. Unknown or blank explicit values
 # fail loudly: silently substituting a different runner misattributes the review.
 case "$REV_RUNNER" in
-  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi) ;;
+  codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor) ;;
   *)
-    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi): ${REV_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid reviewer_runner (must be codex|auto|agy|grok|cc-shim|anthropic-compatible|claude-native|qoderclicn|kimi|cursor): ${REV_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac
 case "$REV_EFFORT" in low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
 case "$IMPL_EFFORT" in low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
 case "$IMPL_RUNNER" in
-  auto|codex|agy|grok|cc-shim|pi|qoderclicn) ;;
+  auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor) ;;
   *)
-    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn): ${IMPL_RUNNER:-<empty>}" >&2
+    echo "resolve-review-loop: invalid implementer_runner (must be auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor): ${IMPL_RUNNER:-<empty>}" >&2
     exit 3
     ;;
 esac
@@ -1437,6 +1524,15 @@ if [[ -n "$FIELD" ]]; then
     plan_deep_reviewer_effort) printf '%s\n' "$PLAN_DEEP_EFFORT" ;;
     plan_deep_reviewer_runner) printf '%s\n' "$PLAN_DEEP_RUNNER" ;;
     plan_deep_reviewer_endpoint) printf '%s\n' "$PLAN_DEEP_ENDPOINT" ;;
+    consult_engine) printf '%s\n' "$CONSULT_ENGINE" ;;
+    consult_effort) printf '%s\n' "$CONSULT_EFFORT" ;;
+    consult_runner) printf '%s\n' "$CONSULT_RUNNER" ;;
+    consult_endpoint) printf '%s\n' "$CONSULT_ENDPOINT" ;;
+    discuss_engine) printf '%s\n' "$DISCUSS_ENGINE" ;;
+    discuss_effort) printf '%s\n' "$DISCUSS_EFFORT" ;;
+    discuss_runner) printf '%s\n' "$DISCUSS_RUNNER" ;;
+    discuss_endpoint) printf '%s\n' "$DISCUSS_ENDPOINT" ;;
+    allow_same_runner_dual_seat) printf '%s\n' "$ALLOW_DUAL_SEAT" ;;
     plan_review_max_generations) printf '%s\n' "$PLAN_MAX_GENERATIONS" ;;
     plan_review_max_wall_seconds) printf '%s\n' "$PLAN_MAX_WALL_SECONDS" ;;
     plan_review_growth_warn_ratio) printf '%s\n' "$PLAN_GROWTH_WARN_RATIO" ;;
@@ -1523,6 +1619,112 @@ if [[ -n "$FIELD" ]]; then
   exit "$ENFORCE_EXIT"
 fi
 
+# ══ ROLE ADMISSION (Board ruling 2026-08-27) ══════════════════════════════════
+# A seat whose runner is in UNQUALIFIED_RUNNERS is REFUSED unless the operator
+# override file names that exact engine/runner/role and has not expired. Refusal
+# is exit 3, not a warning: unlike the implementer seat — whose admissibility is
+# reported here and ENFORCED downstream by dispatch-contract.js — the
+# reviewer-class, consult and discuss seats have NO mechanical enforcing caller,
+# so a report-only refusal would be the quiet bypass Ruling 1 forbids. The
+# resolver is the enforcer for those seats.
+#
+# The override contract is the SAME file and the SAME shape the implementer
+# admissibility block already consumes (AUTOPILOT_QUALIFICATION_OVERRIDE, schema
+# 1, overrides[] with engine/runner/role/reason/operator/expires) — no new
+# concept, no new file, no new vocabulary.
+OVERRIDE_ADMITTED_JSON="[]"
+SAME_RUNNER_DUAL_SEAT="false"
+
+_seat_roles=()
+_seat_runners=()
+_seat_engines=()
+_add_seat() { _seat_roles+=("$1"); _seat_engines+=("$2"); _seat_runners+=("$3"); }
+
+_add_seat "reviewer" "$REV_ENGINE" "$REV_RUNNER"
+_add_seat "implementer" "$IMPL_ENGINE" "$IMPL_RUNNER"
+[[ "$VER_AUTH_PRESENT" == "true" ]] && _add_seat "verification_author" "$VER_AUTH_ENGINE" "$VER_AUTH_RUNNER"
+[[ -n "$PLAN_REV_RUNNER" ]] && _add_seat "plan_reviewer" "$PLAN_REV_ENGINE" "$PLAN_REV_RUNNER"
+[[ -n "$PLAN_DEEP_RUNNER" ]] && _add_seat "plan_deep_reviewer" "$PLAN_DEEP_ENGINE" "$PLAN_DEEP_RUNNER"
+[[ -n "$CONSULT_RUNNER" ]] && _add_seat "consult" "$CONSULT_ENGINE" "$CONSULT_RUNNER"
+[[ -n "$DISCUSS_RUNNER" ]] && _add_seat "discuss" "$DISCUSS_ENGINE" "$DISCUSS_RUNNER"
+if [[ "$QC_PANEL_SEATS_COMPLETE" == "true" ]]; then
+  for _i in "${!QC_PANEL[@]}"; do
+    _add_seat "qc_panel[$_i]" "${QC_PANEL[$_i]}" "${QC_PANEL_RUNNERS[$_i]}"
+  done
+fi
+
+# A seat is "reviewer-class" when its judgement is the thing being decorrelated
+# from the implementer's work. Everything that is not the implementer seat is.
+_is_unqualified_runner() {
+  local r="$1" u
+  for u in $UNQUALIFIED_RUNNERS; do [[ "$u" == "$r" ]] && return 0; done
+  return 1
+}
+
+_UNQUAL_IMPL_RUNNERS=""    # override-admitted runners sitting in the implementer seat
+_UNQUAL_REVIEW_RUNNERS=""  # ... and in any reviewer-class seat
+for _i in "${!_seat_roles[@]}"; do
+  _role="${_seat_roles[$_i]}"; _eng="${_seat_engines[$_i]}"; _run="${_seat_runners[$_i]}"
+  _is_unqualified_runner "$_run" || continue
+  _ovr="$(AUTOPILOT_QUALIFICATION_OVERRIDE="${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" node -e '
+const fs = require("fs");
+const [engine, runner, role] = process.argv.slice(1);
+const file = process.env.AUTOPILOT_QUALIFICATION_OVERRIDE || "";
+if (!file || !fs.existsSync(file)) process.exit(1);
+let doc = null;
+try { doc = JSON.parse(fs.readFileSync(file, "utf8")); } catch { process.exit(1); }
+if (!doc || doc.schema !== 1 || !Array.isArray(doc.overrides)) process.exit(1);
+const today = new Date().toISOString().slice(0, 10);
+const isCalendarDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)
+  && !Number.isNaN(Date.parse(`${v}T00:00:00.000Z`))
+  && new Date(`${v}T00:00:00.000Z`).toISOString().slice(0, 10) === v;
+// role is matched EXACTLY: an override for the implementer role does not admit
+// the same engine to a reviewer seat. A qc_panel[N] seat matches role "qc_panel".
+const wantRole = role.replace(/\[[0-9]+\]$/, "");
+const m = doc.overrides.find((o) => o && o.engine === engine && o.runner === runner
+  && o.role === wantRole
+  && typeof o.reason === "string" && o.reason.trim()
+  && typeof o.operator === "string" && o.operator.trim()
+  && isCalendarDate(o.expires) && o.expires >= today);
+if (!m) process.exit(1);
+process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}`);
+' "$_eng" "$_run" "$_role" 2>/dev/null)" || _ovr=""
+  if [[ -z "$_ovr" ]]; then
+    echo "resolve-review-loop: ${_role} seat (${_eng}/${_run}) is NOT qualified for any role and has no matching operator override — add an unexpired entry for engine/runner/role '${_role%%[*}' to \$AUTOPILOT_QUALIFICATION_OVERRIDE, or qualify the engine via engine-onboarding. Naming an unqualified runner in a roster is refused, not downgraded." >&2
+    exit 3
+  fi
+  _reason="${_ovr%%$'\x1f'*}"; _rest="${_ovr#*$'\x1f'}"; _expires="${_rest%%$'\x1f'*}"; _operator="${_rest##*$'\x1f'}"
+  echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) runs on an EVIDENCE-FREE operator override (operator: ${_operator}; reason: ${_reason}; expires ${_expires}) — this is a RECORDED OPERATOR DECISION, not earned qualification." >&2
+  OVERRIDE_ADMITTED_JSON="$(node -e '
+let a = []; try { a = JSON.parse(process.argv[1]); } catch { a = []; }
+if (!Array.isArray(a)) a = [];
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));' "$OVERRIDE_ADMITTED_JSON" "$_role" 2>/dev/null || printf '%s' "$OVERRIDE_ADMITTED_JSON")"
+  if [[ "$_role" == "implementer" ]]; then
+    _UNQUAL_IMPL_RUNNERS="$_UNQUAL_IMPL_RUNNERS $_run"
+  else
+    _UNQUAL_REVIEW_RUNNERS="$_UNQUAL_REVIEW_RUNNERS $_run"
+  fi
+done
+
+# ── dual-seat occupancy ──────────────────────────────────────────────────────
+# Scoped to override-admitted runners on purpose. A blanket same-runner (or
+# same-family) test would reject the SHIPPED TEMPLATE, whose reviewer and
+# implementer are both openai-family and whose `auto` implementer runner resolves
+# to the reviewer's `codex`. The Board's rule is about routing an UNQUALIFIED rail
+# into both halves of a review loop, which is exactly this scope.
+for _ir in $_UNQUAL_IMPL_RUNNERS; do
+  for _rr in $_UNQUAL_REVIEW_RUNNERS; do
+    [[ "$_ir" != "$_rr" ]] && continue
+    if [[ "$ALLOW_DUAL_SEAT" != "on" ]]; then
+      echo "resolve-review-loop: runner '${_ir}' occupies BOTH an implementer seat and a reviewer-class seat while admitted only by operator override. One vendor, one auth and one server-side prompt layer is not decorrelation, even when the two seats name different model families. Set allow_same_runner_dual_seat: on to accept that reduced decorrelation deliberately." >&2
+      exit 3
+    fi
+    SAME_RUNNER_DUAL_SEAT="true"
+    echo "resolve-review-loop: ⚠ allow_same_runner_dual_seat is ON and runner '${_ir}' occupies both an implementer seat and a reviewer-class seat (implementer family: ${IMPL_FAMILY}, reviewer family: ${REV_FAMILY}). The panel's independence is reduced to one vendor/auth/prompt layer regardless of the model families shown." >&2
+  done
+done
+
 FMT_SUFFIX=" }\n"
 ARGS_SUFFIX=()
 READINESS_FMT=', "qc_panel_seats": %s, "qc_panel_seats_complete": %s, "provider_readiness_receipt_ttl_seconds": %s, "provider_readiness_fallback_family_constraint": "%s", "strict_l5_policy_override": "%s", "brain_seat": %s'
@@ -1533,6 +1735,12 @@ READINESS_ARGS=(
   "$PROVIDER_READINESS_FAMILY_CONSTRAINT"
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
   "$BRAIN_SEAT_JSON"
+)
+SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s'
+SEATS_ARGS=(
+  "$(json_escape "$CONSULT_ENGINE")" "$CONSULT_EFFORT" "$CONSULT_RUNNER" "$CONSULT_ENDPOINT"
+  "$(json_escape "$DISCUSS_ENGINE")" "$DISCUSS_EFFORT" "$DISCUSS_RUNNER" "$DISCUSS_ENDPOINT"
+  "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(
@@ -1556,7 +1764,7 @@ if [[ "$DENSITY_SOURCE" != "off" ]]; then
 fi
 
 if [[ "$CHECK_SCORECARD" == "1" ]]; then
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "reviewer_qualified": %s, "fallback_ladder": %s, "fallback_ladder_implementer_family": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${SEATS_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -1565,9 +1773,9 @@ if [[ "$CHECK_SCORECARD" == "1" ]]; then
     "$REVIEWER_QUALIFIED" "$FALLBACK_LADDER_JSON" "$IMPL_FAMILY" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
     "$REV_ENDPOINT" "$(json_escape "$REV_FAMILY")" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
-    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
+    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${SEATS_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 else
-  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${FMT_SUFFIX}" \
+  printf '{ "reviewer_engine": "%s", "reviewer_effort": "%s", "reviewer_runner": "%s", "implementer_engine": "%s", "implementer_effort": "%s", "implementer_runner": "%s", "loop_max_rounds": %s, "loop_convergence_verdict": "%s", "spec_review": "%s", "independent_harness": "%s", "qc_panel": %s, "qc_panel_aggregation": "%s", "review_risk": "%s", "required_review_families": %s, "l1_required": %s, "cross_family_required": %s, "cross_family_satisfied": %s, "review_diff_scope": "%s", "source": "%s", "work_domain": "%s", "domain_source": "%s", "capability_state_source": "%s", "quota_status": "%s", "quota_reset_at": %s, "skill_mode_requested": "%s", "skill_mode_effective": "%s", "capability_warnings": %s, "reviewer_endpoint": "%s", "reviewer_family": "%s", "implementer_endpoint": "%s", "verification_author_present": %s, "verification_author_engine": "%s", "verification_author_runner": "%s", "verification_author_effort": "%s", "verification_author_endpoint": "%s", "verification_author_family": "%s", "implementer_family": "%s", "config_path": "%s", "min_panel_size": %s, "on_engine_unavailable": "%s", "reviewer_engine_low_risk": "%s", "reviewer_effort_low_risk": "%s", "on_family_conflict": "%s", "reviewer_fallback_preference": %s, "reviewer_fallback_preference_low_risk": %s'"${READINESS_FMT}""${PLAN_FMT}""${SEATS_FMT}""${FMT_SUFFIX}" \
     "$(json_escape "$REV_ENGINE")" "$REV_EFFORT" "$REV_RUNNER" \
     "$(json_escape "$IMPL_ENGINE")" "$IMPL_EFFORT" "$IMPL_RUNNER" \
     "$MAX_ROUNDS" "$(json_escape "$CONVERGE")" "$SPEC_REVIEW" "$HARNESS" \
@@ -1575,6 +1783,6 @@ else
     "$REQUIRED_REVIEW_FAMILIES" "$L1_REQUIRED" "$CROSS_FAMILY_REQUIRED" "$CROSS_FAMILY_SATISFIED" "$DIFF_SCOPE" "$SOURCE" "$DWORK_DOMAIN" "$DOMAIN_SOURCE" \
     "$CAP_STATE_SOURCE" "$CAP_QUOTA_STATUS" "$CAP_QUOTA_RESET_AT" "$CAP_SKILL_MODE_REQ" "$CAP_SKILL_MODE_EFF" "$CAP_WARNINGS_JSON" \
     "$REV_ENDPOINT" "$(json_escape "$REV_FAMILY")" "$IMPL_ENDPOINT" "$VER_AUTH_PRESENT" "$(json_escape "$VER_AUTH_ENGINE")" "$(json_escape "$VER_AUTH_RUNNER")" "$(json_escape "$VER_AUTH_EFFORT")" "$(json_escape "$VER_AUTH_ENDPOINT")" "$(json_escape "$VER_AUTH_FAMILY")" "$(json_escape "$IMPL_FAMILY")" "$(json_escape "$CONFIG_PATH")" \
-    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${ARGS_SUFFIX[@]}"
+    "$MIN_PANEL_SIZE" "$(json_escape "$ON_ENGINE_UNAVAILABLE")" "$(json_escape "$REV_ENGINE_LOW_RISK")" "$REV_EFFORT_LOW_RISK" "$ON_FAMILY_CONFLICT" "$REV_FB_PREF_JSON" "$REV_FB_PREF_LOW_JSON" "${READINESS_ARGS[@]}" "${PLAN_ARGS[@]}" "${SEATS_ARGS[@]}" "${ARGS_SUFFIX[@]}"
 fi
 exit "$ENFORCE_EXIT"

@@ -1,5 +1,105 @@
 # Changelog
 
+## v2.34.43 — the roster gained roles, and an enum stopped pretending to be a gate
+
+Which heterogeneous engine serves which role is now configuration. `review-loop-config.md`
+gains a `consult` seat (a mid-run ad-hoc second opinion, previously hand-typed
+`dispatch-review.sh` argv) and a `discuss` seat (hetero participation in `think-tank` /
+`brainstorm`), each an engine/effort/runner/endpoint tuple resolved like every other seat.
+`review` and `plan` were **not** added: they are the existing `reviewer_*` and
+`plan_reviewer_*` seats, and declaring them a second time is the duplication the
+no-second-canonical-statement rule exists to prevent. A separate roster file was considered
+and rejected on a heterogeneous consult (`codex`/`gpt-5.6-sol`, high) — it would restate
+nothing, but it would split one operator-facing roster across two ownership and precedence
+chains that can disagree.
+
+v2.34.42 deferred all six schema `runner` enum sites to Phase 5 on the reasoning that the
+enum is what makes a runner assignable. That reasoning is **corrected here**, on the same
+consult rail: a runner enum is a *syntax* table — "can a roster spell this token" — and it
+already carries runners with no per-role qualification evidence. It was never the gate it
+was being asked to be. All six sites now widen with `cursor`, on both the schema and shell
+sides, and qualification moved to where it can actually express a role:
+
+A seat naming a runner in `UNQUALIFIED_RUNNERS` (today exactly `cursor`, whose capability
+record is `status: unverified` / `H0`) is **refused, exit 3**, unless
+`$AUTOPILOT_QUALIFICATION_OVERRIDE` carries an unexpired entry matching that exact engine,
+runner **and role**. An implementer-role override does not admit a reviewer seat. Admitted
+seats are announced on stderr as evidence-free and listed in `override_admitted_seats` — a
+recorded operator decision, never evidence of qualification, and re-derived from the file on
+every resolve rather than stored as an attestation (ADR-0001). Same override file, same
+shape, same vocabulary the implementer seat has used since `cd3f5f85`.
+
+Exit 3 rather than the implementer seat's report-only posture, deliberately. The implementer
+seat has a mechanical enforcer downstream (`dispatch-contract.js`); the reviewer-class,
+consult and discuss seats have none, and a report nobody acts on is exactly the quiet bypass
+the qualification gate exists to prevent. For those seats the resolver *is* the enforcer.
+
+`UNQUALIFIED_RUNNERS` is a declared list rather than a derivation, because there is no 1:1
+map from runner token to capability record — `cc-shim`, `kimi`, `qoderclicn` and `pi` have no
+record at all, so "absent means unqualified" would refuse rosters that ship today, and
+"absent means qualified" would mean *deleting* `cursor.json` opens the gate. It is instead
+reconciled by test: any runner a roster can name whose capability record says `unverified`
+must appear in the list, and any entry no roster can name is flagged as gating nothing.
+
+`allow_same_runner_dual_seat` (default **off**) governs whether an override-admitted runner
+may hold the implementer seat and a reviewer-class seat at once; off refuses, on permits with
+a stderr warning and `same_runner_dual_seat: true` for the run summary. The axis is the
+**runner**, not the model family, and that is a correction to the consult's own ruling made
+on named evidence: the shipped template already resolves `reviewer_family ==
+implementer_family == openai` and its `auto` implementer runner resolves to the reviewer's
+`codex`, so a family-axis gate would reject the shipped default on day one — and a single
+`cursor` rail serves both grok and gpt ids, so two cursor seats show *different* families and
+a family test would miss precisely the case the rule names. One vendor, one auth and one
+server-side prompt layer is a rail property.
+
+Worth recording, because it was believed otherwise: the "roster placing cursor in both an
+implementer and a reviewer-class seat is rejected" rule frozen in the plan's disposition was
+**never implemented anywhere**. `resolve-review-loop.sh` contained no occurrence of `cursor`
+at all; dual occupancy was rejected only incidentally, because cursor was unspellable in
+every enum. It is now a real, tested rule.
+
+The contract widening propagates fail-closed — `src/engine/resolve-review-loop.js` derives its
+field list from the schema, so any pre-resolved roster JSON missing the eleven new fields is
+now rejected rather than silently defaulted. Callers holding a cached roster must re-resolve.
+
+Also in this release, from the previous run's backlog:
+
+- **A repo-wide `node --check` gate.** v2.34.41 was a block comment that terminated itself and
+  left two files invalid for a day, under a commit calling itself "comment-only" with
+  `QC-Verdict: PASS` from two seats. `check-js-syntax.js` parses every tracked `.js`/`.cjs`/`.mjs`
+  (544 + 4 + 0 today, all clean, empty exclusion list) and fails closed. Module type is delegated
+  to `node --check` rather than reimplementing the `package.json` walk — verified empirically that
+  Node already applies the resolution real Node would. One `sync-manifest` row reaches pre-commit
+  and CI; `preflight-portability.sh` runs *named* rituals via `--only` and does **not** pick a new
+  one up automatically, so it is named there explicitly and an overbroad claim in
+  `docs/scripts-inventory.md` is corrected.
+- **A cursor crash is now `runner_failed`, not `precondition_failed`.** The old mapping told a
+  caller "we never dispatched" when the engine had in fact run and died. The split now falls where
+  the invocation does; fail-closed stderr handling is unchanged.
+- **`dispatch-review.sh` tolerates harness chrome ahead of the wrapped block.** cc-shim prints a
+  notice line first, which cost four of four cc-shim panel seats their reviews in the last run —
+  complete, correctly framed verdicts discarded as `no_verdict` and recovered by hand. A leading
+  line is skipped only if it carries no trace of the framing vocabulary; a line that carries it
+  but is not byte-exactly the derived BEGIN is a hard reject, which is what keeps a real observed
+  truncated frame (two angle brackets, not three) from being silently passed over.
+- `grok46|codex53` is no longer restated in either wrapper; both derive from `_CURSOR_FAMILIES`
+  via `cursor_is_family_alias`.
+
+No live `cursor-agent` model call was made in this release. Cursor remains unqualified; what
+changed is that routing it is now an explicit, recorded, role-scoped operator decision instead
+of an impossibility.
+
+prose-justification: the +5% is two documentation surfaces this release deliberately creates.
+`project-config-template/review-loop-config.md` gains the operator-facing explanation of how to
+route an unqualified engine — the override file's exact shape, why an admitted seat is a recorded
+decision and not evidence, and why the dual-seat axis is the runner rather than the model family —
+plus four Field-reference rows for the new keys. `references/hetero-dispatch.md` gains the consult
+seat's caller recipe, which is what stops a mid-run consult from going back to hand-typed argv, and
+states plainly that `discuss_*` has no executable consumer yet. Both are the config surface itself,
+not commentary on it: a per-role routing control whose refusal path is undocumented is a control
+operators will route around. Engine surface is flat (Δ+1) because the work landed as resolver logic
+and tests rather than new skill text.
+
 ## v2.34.42 — a cursor runner rail, shipped and deliberately unrouted
 
 A new `cursor` runner reaches `dispatch-hetero.sh`, `dispatch-review.sh`, and `dispatch-author.sh`:

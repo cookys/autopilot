@@ -68,7 +68,18 @@
     "plan_review_max_generations",
     "plan_review_max_wall_seconds",
     "plan_review_growth_warn_ratio",
-    "plan_review_growth_stop_ratio"
+    "plan_review_growth_stop_ratio",
+    "consult_engine",
+    "consult_effort",
+    "consult_runner",
+    "consult_endpoint",
+    "discuss_engine",
+    "discuss_effort",
+    "discuss_runner",
+    "discuss_endpoint",
+    "allow_same_runner_dual_seat",
+    "same_runner_dual_seat",
+    "override_admitted_seats"
   ],
   "properties": {
     "reviewer_engine": {
@@ -98,7 +109,8 @@
         "anthropic-compatible",
         "claude-native",
         "qoderclicn",
-        "kimi"
+        "kimi",
+        "cursor"
       ],
       "x-shell-validated": true,
       "x-shell-var": "REV_RUNNER"
@@ -128,7 +140,8 @@
         "grok",
         "cc-shim",
         "pi",
-        "qoderclicn"
+        "qoderclicn",
+        "cursor"
       ],
       "x-shell-validated": true,
       "x-shell-var": "IMPL_RUNNER"
@@ -285,7 +298,8 @@
         "grok",
         "cc-shim",
         "anthropic-compatible",
-        "qoderclicn"
+        "qoderclicn",
+        "cursor"
       ]
     },
     "verification_author_effort": {
@@ -390,7 +404,8 @@
               "anthropic-compatible",
               "claude-native",
               "qoderclicn",
-              "kimi"
+              "kimi",
+              "cursor"
             ]
           },
           "model": {
@@ -477,7 +492,8 @@
         "cc-shim",
         "anthropic-compatible",
         "claude-native",
-        "qoderclicn"
+        "qoderclicn",
+        "cursor"
       ]
     },
     "plan_reviewer_endpoint": {
@@ -508,7 +524,8 @@
         "cc-shim",
         "anthropic-compatible",
         "claude-native",
-        "qoderclicn"
+        "qoderclicn",
+        "cursor"
       ]
     },
     "plan_deep_reviewer_endpoint": {
@@ -540,16 +557,134 @@
       "description": "Non-empty = deliberate, recorded escape from strict /l5 byte-equal policy coverage; the string is the operator's reason and is surfaced on every derivation. Empty = fail-closed (default)."
     },
     "brain_seat": {
-      "type": ["object", "null"],
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
-      "required": ["seat_class", "status", "admission", "strikes_since_pass"],
+      "required": [
+        "seat_class",
+        "status",
+        "admission",
+        "strikes_since_pass"
+      ],
       "description": "Brain-seat standing on the P7-governed paths (plan 2026-08-17-brain-seat-exam-suite P4). null = no seat context configured. Candidate seats without standing are refused; the incumbent annotates loudly (Board 2026-08-16 advisory bootstrap semantics); the per-invocation override admits with an EVIDENCE-FREE warning — never a silent third path.",
       "properties": {
-        "seat_class": { "enum": ["incumbent", "candidate"] },
-        "status": { "type": "string" },
-        "admission": { "enum": ["admitted", "advisory", "refused", "override_admitted"] },
-        "strikes_since_pass": { "type": ["integer", "null"] }
+        "seat_class": {
+          "enum": [
+            "incumbent",
+            "candidate"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "admission": {
+          "enum": [
+            "admitted",
+            "advisory",
+            "refused",
+            "override_admitted"
+          ]
+        },
+        "strikes_since_pass": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
       }
+    },
+    "consult_engine": {
+      "type": "string",
+      "description": "Engine for a mid-run ad-hoc heterogeneous second opinion (the \"consult\" role). Empty = no configured consult seat; the caller hand-types dispatch-review.sh argv as before. Tuple rule: engine/runner/effort are wholly empty or all three present."
+    },
+    "consult_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "consult_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn",
+        "kimi",
+        "cursor"
+      ],
+      "description": "Runner for the consult seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
+    },
+    "consult_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "discuss_engine": {
+      "type": "string",
+      "description": "Engine for heterogeneous participation in dialectic/ideation skills (think-tank, brainstorm) — the \"discuss\" role. Empty = no configured discuss seat. NO EXECUTABLE CONSUMER READS THIS YET (see docs/scripts-inventory.md and the run summary): it is a declared seat awaiting a caller, not a live route."
+    },
+    "discuss_effort": {
+      "type": "string",
+      "enum": [
+        "",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ]
+    },
+    "discuss_runner": {
+      "type": "string",
+      "enum": [
+        "",
+        "codex",
+        "agy",
+        "grok",
+        "cc-shim",
+        "anthropic-compatible",
+        "claude-native",
+        "qoderclicn",
+        "kimi",
+        "cursor"
+      ],
+      "description": "Runner for the discuss seat. Empty when the seat is unconfigured. Deliberately NOT x-shell-validated: check-contract-schema.js models exact-set enums and this set includes the empty string (same reason reviewer_effort_low_risk is excluded). The shell enforces the identical set via its own case arm."
+    },
+    "discuss_endpoint": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]*$"
+    },
+    "allow_same_runner_dual_seat": {
+      "type": "string",
+      "enum": [
+        "off",
+        "on"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "ALLOW_DUAL_SEAT",
+      "description": "Board ruling 2026-08-27. DEFAULT OFF. Governs whether an OVERRIDE-ADMITTED (unqualified) runner may occupy the implementer seat AND a reviewer-class seat (reviewer / verification_author / plan_reviewer / plan_deep_reviewer / consult / discuss / any qc_panel seat) in the same roster. off = the resolver exits 3. on = permitted, with a stderr warning and same_runner_dual_seat: true. The axis is the RUNNER, not the model family: the Board rationale is \"one vendor, one auth, one server-side prompt layer is not decorrelation\", which is a rail property — one runner can serve several model families (cursor hosts both grok and gpt ids), so a family-axis test would MISS exactly the case the ruling names. Scoping to override-admitted runners keeps every already-shipped roster unaffected (the shipped template is same-family and same-effective-runner today and must stay valid)."
+    },
+    "same_runner_dual_seat": {
+      "type": "boolean",
+      "description": "FACT, not policy: true when an override-admitted runner actually occupies both an implementer seat and a reviewer-class seat in the resolved roster. Only ever true when allow_same_runner_dual_seat is on (off makes the same condition exit 3). Emitted so the run summary can report the reduced decorrelation without re-deriving it."
+    },
+    "override_admitted_seats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Seat roles (e.g. \"reviewer\", \"consult\", \"qc_panel[1]\") whose runner has NO recorded role qualification and was admitted ONLY by a matching AUTOPILOT_QUALIFICATION_OVERRIDE entry. Empty on every qualified roster. This is the recorded-operator-decision surface Board ruling 1 requires — it is NOT evidence of qualification, and nothing downstream may read it as such. ADR-0001: an override is a recorded decision re-derived from the override file on every resolve, never an attestation."
     }
   },
   "required": [
@@ -615,7 +750,18 @@
     "plan_review_max_wall_seconds",
     "plan_review_growth_warn_ratio",
     "plan_review_growth_stop_ratio",
-    "strict_l5_policy_override"
+    "strict_l5_policy_override",
+    "consult_engine",
+    "consult_effort",
+    "consult_runner",
+    "consult_endpoint",
+    "discuss_engine",
+    "discuss_effort",
+    "discuss_runner",
+    "discuss_endpoint",
+    "allow_same_runner_dual_seat",
+    "same_runner_dual_seat",
+    "override_admitted_seats"
   ],
   "additionalProperties": true
 }

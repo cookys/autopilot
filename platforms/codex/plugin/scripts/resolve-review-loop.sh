@@ -1545,10 +1545,22 @@ _add_seat "implementer" "$IMPL_ENGINE" "$IMPL_RUNNER"
 # names a runner at all.
 _qc_max=${#QC_PANEL[@]}
 [[ ${#QC_PANEL_RUNNERS[@]} -gt $_qc_max ]] && _qc_max=${#QC_PANEL_RUNNERS[@]}
+# _panel_div_runners drives the runner-DIVERSITY rule below and is deliberately
+# NOT the same set as the admission rows. A ragged index that carries a runner but
+# no engine is an unusable orphan: it cannot review anything. Counting it as a
+# panel seat would let it dilute the overlap ratio — every engine-bearing seat
+# could sit on the implementer's own rail while one orphan runner kept
+# overlap < total, downgrading a TOTAL loss of runner decorrelation to a warning.
+# (Found by re-review of the round-2 fixes; reproduced before fixing.) Admission
+# still walks the union, because an orphan row can still NAME an unqualified rail
+# and must be refused on that ground.
+_panel_div_runners=""
 for (( _i = 0; _i < _qc_max; _i++ )); do
   _qc_run="${QC_PANEL_RUNNERS[$_i]:-}"
   [[ -n "$_qc_run" ]] || continue
-  _add_seat "qc_panel[$_i]" "${QC_PANEL[$_i]:-<unspecified>}" "$_qc_run"
+  _qc_eng="${QC_PANEL[$_i]:-}"
+  _add_seat "qc_panel[$_i]" "${_qc_eng:-<unspecified>}" "$_qc_run"
+  [[ -n "$_qc_eng" ]] && _panel_div_runners="$_panel_div_runners $_qc_run"
 done
 
 # A seat is "reviewer-class" when its judgement is the thing being decorrelated
@@ -1643,11 +1655,10 @@ done
 # change exists because one rail can serve several families.
 _impl_runner_tokens=""
 _loop_review_runner_tokens=""
-_panel_runner_tokens=""
 for _i in "${!_seat_roles[@]}"; do
   case "${_seat_roles[$_i]}" in
     implementer) _impl_runner_tokens="$_impl_runner_tokens ${_seat_runners[$_i]}" ;;
-    qc_panel\[*) _panel_runner_tokens="$_panel_runner_tokens ${_seat_runners[$_i]}" ;;
+    qc_panel\[*) : ;;  # panel diversity uses _panel_div_runners (engine-bearing seats only)
     *) _loop_review_runner_tokens="$_loop_review_runner_tokens ${_seat_runners[$_i]}" ;;
   esac
 done
@@ -1666,7 +1677,7 @@ done
 # remains permissible by design (consult ruling (E)).
 _panel_total=0
 _panel_overlap=0
-for _pr in $_panel_runner_tokens; do
+for _pr in $_panel_div_runners; do
   _panel_total=$((_panel_total + 1))
   for _ir in $_impl_runner_tokens; do
     [[ "$_ir" == "auto" ]] && continue

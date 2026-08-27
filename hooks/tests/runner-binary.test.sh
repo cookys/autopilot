@@ -260,4 +260,83 @@ assert_contains "$STDERR_FLAG" "warned=true quiet=false" \
   "a non-empty stderr is recorded on the result even though it does not refuse: $STDERR_FLAG"
 assert_contains "$STDERR_FLAG" "WARNING: x" "the stderr text itself is retained for the receipt"
 
+# =====================================================================
+# 7. THE TAIL BOUND MUST FAIL CLOSED (depth-0 QC panel, 2026-08-27).
+#
+#    versionTailRefusalReason used to stop after 20 tail lines and accept
+#    whatever it had seen. So the SAME error, at the SAME exit code, minted
+#    a paid identity or refused depending only on its distance from the top:
+#
+#      "tool 1.2.3\nError: ..."                      -> refused   (correct)
+#      "tool 1.2.3" + 22 benign lines + "Error: ..."  -> ACCEPTED  (bypass)
+#
+#    Section 6 covered only an error INSIDE the bound, which is why the
+#    bypass survived it. A bound is fine; a bound that stops looking and
+#    then vouches for what it did not read is the original bug's shape.
+#
+#    Now: every captured line is scanned, and output too long to inspect in
+#    full is REFUSED outright with its own reason.
+# =====================================================================
+BOUND_OUT="$(node -e '
+  const m = require(process.argv[1]);
+  const spawn = (out) => () => ({ stdout: out, stderr: "", status: 0, error: null });
+  const ERR = "Error: something failed";
+  const filler = (n) => Array.from({ length: n }, (_, i) => "built step " + i).join("\n");
+  const cases = [
+    ["error at line 2",              "tool 1.2.3\n" + ERR,                    "refuse"],
+    ["error just inside old bound",  "tool 1.2.3\n" + filler(18) + "\n" + ERR, "refuse"],
+    ["error just past old bound",    "tool 1.2.3\n" + filler(22) + "\n" + ERR, "refuse"],
+    ["error far past old bound",     "tool 1.2.3\n" + filler(150) + "\n" + ERR, "refuse"],
+    ["benign tail inside new bound", "tool 1.2.3\n" + filler(150),            "accept"],
+    ["output past the new bound",    "tool 1.2.3\n" + filler(250),            "refuse"],
+  ];
+  let bad = 0;
+  for (const [label, out, want] of cases) {
+    const r = m.resolveRunnerVersion("codex", { spawn: spawn(out) });
+    const got = r.ok ? "accept" : "refuse";
+    if (got !== want) { bad += 1; console.log("MISMATCH " + label + " wanted=" + want + " got=" + got + " reason=" + r.reason); }
+  }
+  console.log(bad === 0 ? "TAIL_BOUND_OK" : "TAIL_BOUND_BAD=" + bad);
+' "$LIB" 2>&1)"
+assert_contains "$BOUND_OUT" "TAIL_BOUND_OK" \
+  "an error line refuses at ANY distance from the top, and over-long output refuses outright: $BOUND_OUT"
+
+# The two refusals must be DISTINGUISHABLE: "I found an error" is not the same operator
+# situation as "there was more output than I am willing to vouch for".
+REASONS_OUT="$(node -e '
+  const m = require(process.argv[1]);
+  const spawn = (out) => () => ({ stdout: out, stderr: "", status: 0, error: null });
+  const filler = (n) => Array.from({ length: n }, (_, i) => "built step " + i).join("\n");
+  const err  = m.resolveRunnerVersion("codex", { spawn: spawn("tool 1.2.3\n" + filler(22) + "\nError: boom") });
+  const long = m.resolveRunnerVersion("codex", { spawn: spawn("tool 1.2.3\n" + filler(250)) });
+  console.log("err=" + err.reason + " long=" + long.reason + " cap=" + m.MAX_VERSION_OUTPUT_LINES);
+' "$LIB" 2>&1)"
+assert_contains "$REASONS_OUT" "err=version_output_tail_announces_an_error" \
+  "a real error line past the old bound names the error: $REASONS_OUT"
+assert_contains "$REASONS_OUT" "long=version_output_unscannable_" \
+  "over-long output gets its own reason, not an error-shaped one: $REASONS_OUT"
+
+# Every OTHER bound in the module must refuse rather than skip. Audited in the same pass so
+# the next panel does not find these one at a time.
+FAILCLOSED_OUT="$(node -e '
+  const m = require(process.argv[1]);
+  const cases = [
+    ["line over the length cap", "tool 1.2.3 " + "x".repeat(80)],
+    ["line over the token cap",  "a b c d e f g 1.2.3"],
+    ["version token past position 2", "the tool version 1.2.3"],
+  ];
+  let bad = 0;
+  for (const [label, line] of cases) {
+    if (m.versionLineRefusalReason(line) === null) { bad += 1; console.log("FAIL_OPEN " + label); }
+  }
+  // spawn overflow (ENOBUFS) must refuse, not throw and not accept.
+  const boom = () => ({ stdout: "", stderr: "", status: null,
+    error: Object.assign(new Error("ENOBUFS"), { code: "ENOBUFS" }) });
+  const r = m.resolveRunnerVersion("codex", { spawn: boom });
+  if (r.ok) { bad += 1; console.log("FAIL_OPEN spawn maxBuffer overflow"); }
+  console.log(bad === 0 ? "ALL_BOUNDS_FAIL_CLOSED" : "FAIL_OPEN_COUNT=" + bad);
+' "$LIB" 2>&1)"
+assert_contains "$FAILCLOSED_OUT" "ALL_BOUNDS_FAIL_CLOSED" \
+  "every bound in the module refuses rather than silently stopping: $FAILCLOSED_OUT"
+
 finalize_test

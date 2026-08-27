@@ -76,6 +76,22 @@ that prints update notices there on a healthy run. It is reported (`stderr`,
 silently. Rule shape and the stderr call were both confirmed on a heterogeneous consult
 (`codex`/`gpt-5.6-sol`, high).
 
+A third panel pass found that the tail scan's own bound failed OPEN: it stopped after 20
+lines and accepted what it had already seen, so `tool 1.2.3` + 22 benign lines +
+`Error: something failed` minted an identity while the same error at line 2 refused — the
+same error and the same exit code, with only its distance from the top deciding whether the
+guard looked. That is the original bug's shape (a value nobody checked becoming an identity),
+so the unlikeliness of a `--version` printing 20+ lines and then failing is beside the point.
+Every captured line is now scanned, and output longer than 200 lines is refused outright with
+its own reason (`version_output_unscannable_N_over_200`) so "too much output to vouch for"
+stays distinguishable from "an actual error line". The byte bound is now explicit too —
+overflow surfaces as spawnSync `ENOBUFS` and refuses.
+
+The rest of the module's bounds were audited in the same pass rather than one panel at a
+time: the line-length cap, the token-count cap, the version-token position bound and the
+probe timeout all already refuse, and the stderr truncation gates nothing. A test now pins
+that — every bound refuses rather than silently stopping.
+
 The regression oracle: `hooks/tests/runner-binary.test.sh` drives PATH stubs and asserts
 that a runner whose version probe emits an error string is **refused**, never recorded.
 

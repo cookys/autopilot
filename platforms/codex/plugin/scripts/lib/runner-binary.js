@@ -206,9 +206,25 @@ function sanitizeVersionToken(line) {
     .replace(/-+$/, '');
 }
 
-// How many stdout lines past the first are examined. A version banner is a handful of
-// lines; scanning is bounded so a runaway CLI cannot make this loop the expensive part.
-const MAX_VERSION_TAIL_LINES = 20;
+// How many stdout lines this module is willing to consider at all.
+//
+// This is a REFUSE bound, not a skip bound. The previous form stopped scanning after 20
+// tail lines and accepted whatever it had seen, so `tool 1.2.3` + 22 benign lines +
+// `Error: something failed` minted a paid identity while the same error at line 2 refused
+// — the same error, the same exit code, and only its distance from the top deciding whether
+// the guard saw it. That is the original bug's shape exactly: a value nobody checked
+// becoming an identity. (Depth-0 QC panel, 2026-08-27; reproduced.)
+//
+// A bound is still wanted so a runaway CLI cannot make this the expensive step. It just has
+// to fail CLOSED: output longer than this is REFUSED outright rather than partially read.
+// 200 is far past any real `--version` (the longest on this roster is one line) while
+// keeping the scan trivially cheap.
+const MAX_VERSION_OUTPUT_LINES = 200;
+
+// Total bytes accepted from the probe. Overflow surfaces as spawnSync ENOBUFS, which this
+// module turns into a refusal — the byte bound fails closed for the same reason the line
+// bound does.
+const MAX_VERSION_OUTPUT_BYTES = 1024 * 1024;
 
 /**
  * Refusal check for stdout lines AFTER the first.
@@ -228,7 +244,9 @@ const MAX_VERSION_TAIL_LINES = 20;
  * Returns null when the tail is acceptable, or a reason string.
  */
 function versionTailRefusalReason(lines) {
-  for (const raw of lines.slice(0, MAX_VERSION_TAIL_LINES)) {
+  // EVERY line, no slice. The caller refuses over-long output before reaching here, so the
+  // work is bounded by that refusal rather than by silently not looking.
+  for (const raw of lines) {
     const line = stripVersionControlChars(String(raw)).trim();
     if (line === '') continue;
     if (CONTROL_CHARS.test(line)) return 'version_output_tail_control_characters';
@@ -294,10 +312,16 @@ function resolveRunnerVersion(runner, options = {}) {
   const run = spawn(binaryPath, ['--version'], {
     encoding: 'utf8',
     timeout: VERSION_PROBE_TIMEOUT_MS,
+    // Explicit, not inherited: on overflow spawnSync sets error ENOBUFS and we refuse
+    // below, so an enormous `--version` can never be silently truncated into a token.
+    // Stated here so that fail-closed path is intentional rather than a default nobody read.
+    maxBuffer: MAX_VERSION_OUTPUT_BYTES,
     // stdout and stderr stay SEPARATE. Folding them (`2>&1`) is half the original bug:
     // it let a stderr diagnostic be read as the version.
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  // Report-only truncation: stderr never gates anything (see the stderr note below), so
+  // shortening it cannot fail open — it only bounds what a receipt carries.
   const stderr = String(run.stderr || '').trim().slice(0, 400);
   if (run.error) {
     const code = run.error.code === 'ETIMEDOUT' ? 'version_probe_timeout' : 'version_probe_failed';
@@ -311,6 +335,17 @@ function resolveRunnerVersion(runner, options = {}) {
   }
   // STDOUT ONLY. The first non-empty line must BE a version...
   const stdoutLines = String(run.stdout || '').split('\n').map((t) => t.trim());
+  // Refuse BEFORE reading anything out of an output too long to inspect in full. This is
+  // the fail-closed replacement for the old "scan the first 20 tail lines and accept the
+  // rest unseen" bound. A distinct reason so an operator can tell "too much output to
+  // vouch for" apart from "an actual error line".
+  if (stdoutLines.length > MAX_VERSION_OUTPUT_LINES) {
+    return {
+      ok: false, runner, binary, binary_path: binaryPath, version_line: '',
+      reason: `version_output_unscannable_${stdoutLines.length}_over_${MAX_VERSION_OUTPUT_LINES}`,
+      stderr, stderr_nonempty: stderr !== '',
+    };
+  }
   const firstIdx = stdoutLines.findIndex((t) => t !== '');
   const line = firstIdx === -1 ? '' : stdoutLines[firstIdx];
   const refusal = versionLineRefusalReason(line);
@@ -378,6 +413,7 @@ module.exports = {
   RUNNER_VERSION_BINARY,
   receiptSafe,
   MAX_VERSION_LINE_LENGTH,
+  MAX_VERSION_OUTPUT_LINES,
   versionBinaryFor,
   knownRunners,
   resolveBinaryPath,

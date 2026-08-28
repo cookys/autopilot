@@ -127,6 +127,8 @@ function validateReviewLoopConfig(value) {
   assertOneOf(value, 'spec_review', schemaEnum('spec_review'));
   assertOneOf(value, 'plan_review', schemaEnum('plan_review'));
   assertOneOf(value, 'independent_harness', schemaEnum('independent_harness'));
+  assertOneOf(value, 'consult_dispatch', schemaEnum('consult_dispatch'));
+  assertOneOf(value, 'discuss_dispatch', schemaEnum('discuss_dispatch'));
   assertOneOf(value, 'qc_panel_aggregation', schemaEnum('qc_panel_aggregation'));
   assertOneOf(value, 'review_risk', schemaEnum('review_risk'));
   assertOneOf(value, 'review_diff_scope', schemaEnum('review_diff_scope'));

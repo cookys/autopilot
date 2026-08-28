@@ -78,6 +78,8 @@
     "discuss_effort",
     "discuss_runner",
     "discuss_endpoint",
+    "consult_dispatch",
+    "discuss_dispatch",
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
     "override_admitted_seats"
@@ -695,6 +697,26 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9_]*$"
     },
+    "consult_dispatch": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "CONSULT_DISPATCH",
+      "description": "Whether the consult rail (scripts/dispatch-consult.sh) is live. DEFAULT OFF. off = today's behavior exactly — the consult_* seat tuple stays data a caller may read by hand, no new dispatch. on requires a non-empty consult seat tuple (empty seat + on is a misconfiguration) and, once D7 lands, a role-qualification row or matching override for that seat."
+    },
+    "discuss_dispatch": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "x-shell-validated": true,
+      "x-shell-var": "DISCUSS_DISPATCH",
+      "description": "Whether the discuss rail (scripts/dispatch-discuss.js) is live. DEFAULT OFF. off = today's behavior exactly — discuss_* stays declared but not consumed. on requires a non-empty discuss seat tuple and, once D7 lands, a role-qualification row or matching override for that seat."
+    },
     "allow_same_runner_dual_seat": {
       "type": "string",
       "enum": [
@@ -790,6 +812,8 @@
     "discuss_effort",
     "discuss_runner",
     "discuss_endpoint",
+    "consult_dispatch",
+    "discuss_dispatch",
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
     "override_admitted_seats"

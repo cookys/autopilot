@@ -8,6 +8,11 @@
 // enum tables from the schema, so JS-vs-schema can never drift. This gate closes
 // the OTHER side: it proves the SHELL resolver still agrees with the schema.
 //
+//   (0) three-way equality: schema `properties` keys == `x-field-order` == `required`
+//       for the always-on field set (documented exceptions, e.g. `brain_seat`,
+//       excluded). Without this, a field added to x-field-order/properties but left
+//       out of `required` would let the published JSON Schema validate a roster
+//       missing that field, even while every other gate below is green.
 //   (a) field-set parity: the shell's default emitted JSON keys must be exactly
 //       the schema's always-on contract field set (x-field-order). Catches the
 //       on_engine_unavailable-class incident (a field present on one side only).
@@ -43,6 +48,43 @@ function main() {
     fail('schema x-field-order missing or empty');
   }
   const schemaFields = new Set(fieldOrder);
+
+  // (0) three-way equality: properties keys == x-field-order == required, for the
+  // ALWAYS-ON field set (D6 finding [6]). The schema maintains `properties`,
+  // `x-field-order` and `required` independently, so nothing else in this file
+  // catches a field added to x-field-order/properties but left out of `required`
+  // (or vice versa) — every other gate here can be green while the published
+  // JSON Schema still validates a roster missing that field. The ONE documented
+  // exception is a field that is conditionally emitted (present in x-field-order
+  // /properties but deliberately absent from `required`); today that is exactly
+  // `brain_seat` (nullable, emitted only when a brain seat is configured).
+  const ALWAYS_ON_EXCEPTIONS = new Set(['brain_seat']);
+  const properties = schema.properties || {};
+  const propertyKeys = new Set(Object.keys(properties));
+  const requiredFields = Array.isArray(schema.required) ? schema.required : [];
+  const requiredSet = new Set(requiredFields);
+
+  const propsNotInOrder = [...propertyKeys].filter((f) => !schemaFields.has(f));
+  const orderNotInProps = fieldOrder.filter((f) => !propertyKeys.has(f));
+  if (propsNotInOrder.length || orderNotInProps.length) {
+    fail(
+      `schema properties and x-field-order disagree: properties-only=[${propsNotInOrder.join(', ')}] `
+      + `x-field-order-only=[${orderNotInProps.join(', ')}]`,
+    );
+  }
+
+  const alwaysOnFields = fieldOrder.filter((f) => !ALWAYS_ON_EXCEPTIONS.has(f));
+  const alwaysOnMissingFromRequired = alwaysOnFields.filter((f) => !requiredSet.has(f));
+  const requiredNotAlwaysOn = requiredFields.filter(
+    (f) => !schemaFields.has(f) || ALWAYS_ON_EXCEPTIONS.has(f),
+  );
+  if (alwaysOnMissingFromRequired.length || requiredNotAlwaysOn.length) {
+    fail(
+      `schema x-field-order and required disagree for the always-on field set: `
+      + `x-field-order-only=[${alwaysOnMissingFromRequired.join(', ')}] `
+      + `required-only=[${requiredNotAlwaysOn.join(', ')}]`,
+    );
+  }
 
   // (a) field-set parity vs shell default output
   const run = spawnSync(SHELL_PATH, [], {
@@ -112,7 +154,7 @@ function main() {
     }
   }
 
-  console.log(`contract-schema-ok (${fieldOrder.length} fields, field-set + enum parity verified)`);
+  console.log(`contract-schema-ok (${fieldOrder.length} fields, three-way equality + field-set + enum parity verified)`);
   process.exit(0);
 }
 

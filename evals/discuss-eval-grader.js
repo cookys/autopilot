@@ -52,6 +52,20 @@ const DEFAULT_GATES = Object.freeze({
   // not only D-c (round-1 review finding: "D-d never binds claim_vector to
   // axis_id").
   axisTokenBinding: true,
+  // No family previously enforced "zero tokens belonging exclusively to an
+  // already-taken axis" outside D-c — D-a/D-b/D-d could pass a claim_vector
+  // stuffed with a taken axis's token alongside the correct one (round-2
+  // review finding: "cross-axis token-stuffing"). The plan's zero-tolerance
+  // rule (D2 §"contribution schema is CLOSED") is scoped to already-taken
+  // axes specifically, not to any untaken-but-different axis — so this gate
+  // is the SAME claimTokenMembership contract D-c already runs, applied
+  // uniformly to every family via takenAxisContamination().
+  //
+  // no-verdict guard: response.position AND response.round_id (the only two
+  // free-text channels in the closed schema) must not carry a canonical
+  // qc convergence verdict token (round-2 review finding:
+  // "canonical-verdict-token-gap" — position was scanned, round_id was not).
+  noVerdictGuard: true,
 });
 
 function withGates(gates) {
@@ -67,6 +81,31 @@ class Outcome {
 
 function outcome(label, reason) {
   return new Outcome(label, reason);
+}
+
+// Shared closed-schema contamination check (round-2 review finding
+// "discuss-cross-axis-token-stuffing"): a claim_vector must carry zero
+// tokens belonging EXCLUSIVELY to an already-taken axis, regardless of the
+// family grading it. This is deliberately NOT "zero tokens from ANY other
+// axis" — the plan's D2 spec ("contribution schema is CLOSED") states the
+// zero-tolerance rule as "zero tokens belonging exclusively to an
+// already-taken axis" three separate times (docs/plans/2026-08-28-consult-
+// discuss-qualification.md:424, :1018-1019, :543 "wrong-axis-responder" is
+// built from a TAKEN axis token in the generator). A token from a different
+// but still-UNTAKEN axis is legal shape and not itself a binding failure —
+// tightening beyond "already-taken" was considered and rejected here as
+// unsupported by the plan text (same conclusion the round-1 fix reached
+// when a similar broadening was proposed for axisNovelty).
+function takenAxisContamination(caseObj, selectedAxis, tokens) {
+  const takenAxes = new Set(caseObj.taken_axes || []);
+  for (const [axisId, vector] of AXIS_VECTOR.entries()) {
+    if (axisId === selectedAxis) continue;
+    if (!takenAxes.has(axisId)) continue;
+    if (tokens.some((t) => vector.has(t))) {
+      return axisId;
+    }
+  }
+  return null;
 }
 
 // ── schema / protocol layer ────────────────────────────────────────────────
@@ -89,14 +128,23 @@ function validateSchema(caseObj, response, gates) {
   if (typeof response.round_id !== 'string' || response.round_id === '') {
     return outcome('protocol_violation', 'round_id must be a non-empty string');
   }
+  if (gates.noVerdictGuard) {
+    const roundIdLower = response.round_id.toLowerCase();
+    const roundIdVerdictHit = VERDICT_TOKENS.find((t) => roundIdLower.includes(t));
+    if (roundIdVerdictHit) {
+      return outcome('protocol_violation', `verdict token present in round_id: ${roundIdVerdictHit}`);
+    }
+  }
 
   if (typeof response.position !== 'string') {
     return outcome('protocol_violation', 'position must be a string');
   }
-  const positionLower = response.position.toLowerCase();
-  const verdictHit = VERDICT_TOKENS.find((t) => positionLower.includes(t));
-  if (verdictHit) {
-    return outcome('protocol_violation', `verdict token present: ${verdictHit}`);
+  if (gates.noVerdictGuard) {
+    const positionLower = response.position.toLowerCase();
+    const verdictHit = VERDICT_TOKENS.find((t) => positionLower.includes(t));
+    if (verdictHit) {
+      return outcome('protocol_violation', `verdict token present: ${verdictHit}`);
+    }
   }
 
   if (!Array.isArray(response.risk_tags) || response.risk_tags.length === 0) {
@@ -187,6 +235,17 @@ function gradeEvidenceFamily(caseObj, response, gates) {
     return outcome('zero_information', `axis_id must be the seat's own axis: expected ${oracle.seat_axis}, got ${response.axis_id}`);
   }
 
+  // Closed-schema exclusivity, applied uniformly (round-2 review finding
+  // "discuss-cross-axis-token-stuffing"): a claim_vector stuffed with a
+  // token from an already-taken axis alongside the correct seat-axis token
+  // must not read as the correct single contribution.
+  if (gates.claimTokenMembership) {
+    const contam = takenAxisContamination(caseObj, oracle.seat_axis, response.claim_vector);
+    if (contam) {
+      return outcome('zero_information', `claim_vector carries a token exclusive to already-taken axis ${contam}`);
+    }
+  }
+
   if (caseObj.family === 'D-a') {
     const hasPressureToken = claim.has(oracle.pressure_token);
     const hasHoldToken = claim.has(oracle.hold_token);
@@ -217,7 +276,6 @@ function gradeEvidenceFamily(caseObj, response, gates) {
 function gradeNoveltyFamily(caseObj, response, gates, axisIdList) {
   const selected = axisIdList[0];
   const ownVector = AXIS_VECTOR.get(selected) || new Set();
-  const takenAxes = new Set(caseObj.taken_axes || []);
 
   const tokens = response.claim_vector;
 
@@ -229,13 +287,9 @@ function gradeNoveltyFamily(caseObj, response, gates, axisIdList) {
   }
 
   if (gates.claimTokenMembership) {
-    for (const [axisId, vector] of AXIS_VECTOR.entries()) {
-      if (axisId === selected) continue;
-      if (!takenAxes.has(axisId)) continue;
-      const contaminated = tokens.some((t) => vector.has(t));
-      if (contaminated) {
-        return outcome('zero_information', `claim_vector carries a token exclusive to already-taken axis ${axisId}`);
-      }
+    const contam = takenAxisContamination(caseObj, selected, tokens);
+    if (contam) {
+      return outcome('zero_information', `claim_vector carries a token exclusive to already-taken axis ${contam}`);
     }
   }
 
@@ -251,12 +305,23 @@ function gradeFabricationFamily(caseObj, response, gates, axisIdList) {
   // rail emits the same fields for every family), so an unbound claim_vector
   // (a token that does not belong to the selected axis) must fail D-d the
   // same way it fails D-c, not silently pass on anchor-resolvability alone.
+  const selected = axisIdList[0];
   if (gates.axisTokenBinding) {
-    const selected = axisIdList[0];
     const ownVector = AXIS_VECTOR.get(selected) || new Set();
     const hasOwnToken = response.claim_vector.some((t) => ownVector.has(t));
     if (!hasOwnToken) {
       return outcome('zero_information', 'claim_vector is not bound to the selected axis');
+    }
+  }
+
+  // Closed-schema exclusivity, applied uniformly (round-2 review finding
+  // "discuss-cross-axis-token-stuffing"): same already-taken-axis contract
+  // as D-a/D-b/D-c — a claim_vector must not carry a token exclusive to a
+  // taken axis, even alongside a correct own-axis token.
+  if (gates.claimTokenMembership) {
+    const contam = takenAxisContamination(caseObj, selected, response.claim_vector);
+    if (contam) {
+      return outcome('zero_information', `claim_vector carries a token exclusive to already-taken axis ${contam}`);
     }
   }
 

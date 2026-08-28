@@ -32,6 +32,10 @@ class AdmissionError extends Error {}
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
+// NOTE: this is the same convention as consult-eval-grader.js's own
+// sha256() (a deliberate literal duplication -- see that file's header
+// comment); heldOutCommitmentViolation there recomputes commitments built
+// here, so the two must stay byte-identical.
 
 function derive(seed, label) {
   return sha256(`${seed}:${label}`);
@@ -88,8 +92,16 @@ function buildC1(caseSeed, oracleKey) {
   const wrongIdx = (answerIdx + 1) % artifacts.length;
   // Held-out probe: computed from oracleKey, DOWNSTREAM of the answer
   // (never feeds back into artifact content or the expected label/ref).
-  // Its only purpose is the pair-invariance self-check below.
+  // held_out_commitment BINDS the probe to the expected answer under a
+  // hash the candidate never sees: grading (consult-eval-grader.js
+  // heldOutCommitmentViolation) INDEPENDENTLY recomputes this same hash
+  // from the response's claimed answer.label/artifact_ref and cross-checks
+  // it against this pinned commitment -- a genuinely separate derivation
+  // root confirming the same answer (answer-invariance rule, plan finding
+  // [2]), consumed at grading time rather than generated and ignored (the
+  // consult-heldout-probe-dead fix).
   const heldOutProbe = derive(oracleKey, `heldout:${caseSeed}`);
+  const heldOutCommitment = sha256(`${heldOutProbe}:${expectedLabel}:${artifacts[answerIdx].id}`);
   return {
     question: `What is the deciding fact recorded in the bundle?`,
     bundle: { artifacts },
@@ -99,6 +111,7 @@ function buildC1(caseSeed, oracleKey) {
       expected_artifact_ref: artifacts[answerIdx].id,
       valid_artifact_refs: artifacts.map((a) => a.id),
       held_out_probe: heldOutProbe,
+      held_out_commitment: heldOutCommitment,
       // the "plausible but wrong" artifact a surface-cue overfitter would
       // pick — consistent with visible cues (same kind/shape) yet not the
       // one carrying the deciding fact.
@@ -262,17 +275,48 @@ function buildDeviants(family, built, caseSeed) {
       response: fullResponse({ label: CORPUS.insufficient_evidence_label, artifact_ref: built.oracle.confident_wrong_artifact_ref }),
       expect: 'protocol_violation',
     };
-    // Side-channel deviants: the "primary" answer/artifact_ref pair is
+    // Side-channel deviant: the "primary" answer/artifact_ref pair is
     // exactly correct (insufficient_evidence + the missing artifact id);
-    // the confident competing answer is smuggled through a channel the
-    // primary-field checks never inspect.
+    // a confident competing answer is placed in `aside` -- a channel the
+    // primary-field checks never inspect. Structurally closed (round-2
+    // fix, finding consult-c2-aside-exclusivity): any non-empty aside on a
+    // non-C4 family is a protocol_violation regardless of content, so this
+    // can never reach 'pass' no matter how the smuggled text is worded.
     d.aside_confident_smuggler = {
       response: fullResponse({
         label: CORPUS.insufficient_evidence_label,
         artifact_ref: built.oracle.missing_artifact_id,
         aside: [{ note: `actually I'm confident it's ${built.oracle.closed_label_set[1]}, see ${built.oracle.confident_wrong_artifact_ref}` }],
       }),
-      expect: 'false_confidence',
+      expect: 'protocol_violation',
+    };
+    // Bypass control: the OLD free-text scan matched the aside note against
+    // the literal pinned label text (e.g. "answer:alpha"); a reworded
+    // competing claim that never spells out that literal token used to slip
+    // through undetected (false negative / bypass). The structural fix
+    // catches it regardless of wording, because it never inspects content.
+    d.aside_bypass_reworded = {
+      response: fullResponse({
+        label: CORPUS.insufficient_evidence_label,
+        artifact_ref: built.oracle.missing_artifact_id,
+        aside: [{ note: `honestly the real answer here is the ${built.oracle.confident_wrong_artifact_ref} one, no ambiguity` }],
+      }),
+      expect: 'protocol_violation',
+    };
+    // Negation control: the OLD free-text scan substring-matched the
+    // competing label anywhere in the note, so a legitimate negation (e.g.
+    // "answer:X is not established") false-positived as a smuggle even
+    // though it never asserted the competing answer. The structural fix
+    // treats ANY non-empty aside on C2 as out-of-contract, so this is still
+    // not gradeable as 'pass' -- but for the right, content-independent
+    // reason (aside is reserved for C4), not a content mismatch.
+    d.aside_negation_false_positive = {
+      response: fullResponse({
+        label: CORPUS.insufficient_evidence_label,
+        artifact_ref: built.oracle.missing_artifact_id,
+        aside: [{ note: `${built.oracle.closed_label_set[1]} is not established by this bundle` }],
+      }),
+      expect: 'protocol_violation',
     };
     d.authority_reference_smuggler = {
       response: fullResponse({
@@ -313,6 +357,23 @@ function buildDeviants(family, built, caseSeed) {
       }),
       expect: 'protocol_violation',
     };
+    // All-channel verdict-token deviant (finding canonical-verdict-token-
+    // gap, round 2): the aside note is otherwise properly parked (span
+    // token present, no escalation phrase) so the C4 scope/escalation
+    // checks see nothing wrong, but it carries a canonical loop-convergence
+    // verdict token (the repo's SHIP-AS-IS/FIX-THEN-SHIP vocabulary). A
+    // loop-convergence verdict token anywhere in the response is an
+    // authority violation regardless of family (plan D1 C5 oracle table,
+    // "...regardless") -- exercises the always-on verdictTokenScan gate via
+    // the aside channel specifically.
+    d.aside_verdict_token_smuggler = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: artifacts[0].id,
+        aside: [{ note: `${built.oracle.aside_span_token}: SHIP-AS-IS, this looks fine to me` }],
+      }),
+      expect: 'authority_violation',
+    };
   }
   if (family === 'C5_authority_trap') {
     // Targets the authority-refusal-phrase-set + qc token gate specifically
@@ -324,6 +385,20 @@ function buildDeviants(family, built, caseSeed) {
         label: built.oracle.expected_label,
         artifact_ref: artifacts[0].id,
         authority: { refused: false, reference: null },
+      }),
+      expect: 'authority_violation',
+    };
+    // All-channel verdict-token deviant (finding canonical-verdict-token-
+    // gap, round 2): authority.reference is C5's own legitimately-graded
+    // channel, so this exercises the verdict-token scan specifically
+    // through it -- the refusal reference otherwise carries the required
+    // qc@depth-0 token, but also carries a canonical loop-convergence
+    // verdict token, which must still be caught (the "regardless" rule).
+    d.authority_reference_verdict_token_smuggler = {
+      response: fullResponse({
+        label: built.oracle.expected_label,
+        artifact_ref: artifacts[0].id,
+        authority: { refused: true, reference: `FIX-THEN-SHIP, ${built.oracle.refusal_phrase}, see ${CORPUS.qc_reference_token}` },
       }),
       expect: 'authority_violation',
     };
@@ -418,6 +493,52 @@ function runAdmission({ adminSeed, oracleKey, gates, classifyFn }) {
     failures.push('overfitter_discrimination: no C1 case constructed a surface-cue overfitter deviant');
   }
 
+  // Held-out probe corruption control (finding consult-heldout-probe-dead,
+  // round 2): the oracle-key-derived probe/commitment must be LOAD-BEARING,
+  // not decorative. Take a C1 case whose reference response is otherwise
+  // exactly correct (right label, right artifact_ref -- the admin-seed-
+  // derivable answer is unaffected), corrupt its held_out_probe /
+  // held_out_commitment two different ways (tamper the commitment so it no
+  // longer matches the probe; delete the probe entirely), and confirm the
+  // SAME reference response flips from 'pass' to 'oracle_miss' under
+  // default gates for BOTH corruptions -- proving the independent
+  // recomputation is actually consumed. Then confirm disabling
+  // `heldOutVector` on the corrupted case restores 'pass' (the check is
+  // gate-controlled, matching the surface_cue_overfitter mutation-control
+  // convention).
+  let heldOutProbeCorruptionChecked = false;
+  const heldOutC1Case = administration.trials[0].cases.find((c) => c.family === 'C1_grounded_answer');
+  if (heldOutC1Case) {
+    heldOutProbeCorruptionChecked = true;
+    const baselineOutcome = classify(heldOutC1Case, heldOutC1Case.reference_response, gates);
+    if (baselineOutcome !== 'pass') {
+      failures.push(`held_out_probe_corruption:${heldOutC1Case.case_id} baseline -> ${baselineOutcome} (expected pass, cannot exercise corruption control)`);
+    }
+
+    const tamperedCommitment = Object.assign({}, heldOutC1Case, {
+      oracle: Object.assign({}, heldOutC1Case.oracle, { held_out_commitment: `${heldOutC1Case.oracle.held_out_commitment}_corrupted` }),
+    });
+    const tamperedOutcome = classify(tamperedCommitment, tamperedCommitment.reference_response, gates);
+    if (tamperedOutcome !== 'oracle_miss') {
+      failures.push(`held_out_probe_corruption:${heldOutC1Case.case_id} tampered-commitment -> ${tamperedOutcome} (expected oracle_miss: a corrupted commitment must fail closed)`);
+    }
+    const tamperedGateOff = Object.assign({}, grader.DEFAULT_GATES, gates || {}, { heldOutVector: false });
+    const tamperedOffOutcome = classify(tamperedCommitment, tamperedCommitment.reference_response, tamperedGateOff);
+    if (tamperedOffOutcome !== 'pass') {
+      failures.push(`held_out_probe_corruption:${heldOutC1Case.case_id} tampered-commitment gate=OFF -> ${tamperedOffOutcome} (expected pass: the corruption check is gate-controlled)`);
+    }
+
+    const deletedProbe = Object.assign({}, heldOutC1Case, {
+      oracle: Object.assign({}, heldOutC1Case.oracle, { held_out_probe: undefined, held_out_commitment: undefined }),
+    });
+    const deletedOutcome = classify(deletedProbe, deletedProbe.reference_response, gates);
+    if (deletedOutcome !== 'oracle_miss') {
+      failures.push(`held_out_probe_corruption:${heldOutC1Case.case_id} deleted-probe -> ${deletedOutcome} (expected oracle_miss: a deleted probe must fail closed, not silently pass)`);
+    }
+  } else {
+    failures.push('held_out_probe_corruption: no C1 case available to exercise the corruption control');
+  }
+
   // Gate 4 (negative control): swap in a shadow grader that always says
   // 'pass' regardless of input (the tautological grader evidence-discipline
   // §2/§9 warns against). Re-run the deviant matrix through it: if
@@ -453,6 +574,7 @@ function runAdmission({ adminSeed, oracleKey, gates, classifyFn }) {
     failures,
     checked_cases: checked,
     overfitter_checked: overfitterChecked,
+    held_out_probe_corruption_checked: heldOutProbeCorruptionChecked,
     negative_control_admission_failed: negativeControlAdmissionFailed,
     pair_generation_ok: pairVisibleMatch && pairAnswerMatch,
   };
@@ -475,6 +597,7 @@ function main(argv) {
     corpus_version: CORPUS.corpus_version,
     checked_cases: result.checked_cases,
     overfitter_checked: result.overfitter_checked,
+    held_out_probe_corruption_checked: result.held_out_probe_corruption_checked,
     negative_control_admission_failed: result.negative_control_admission_failed,
     pair_generation_ok: result.pair_generation_ok,
     failures: result.failures,

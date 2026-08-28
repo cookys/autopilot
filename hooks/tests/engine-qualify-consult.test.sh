@@ -37,6 +37,7 @@ assert_exit_code "$RC" "0" "consult-eval-generator --self-check exits 0"
 assert_contains "$OUT" '"ok": true' "self-check report is ok:true"
 assert_contains "$OUT" '"checked_cases": 20' "self-check covers all 20 cases (5 families x 2 cases x 2 trials)"
 assert_contains "$OUT" '"overfitter_checked": true' "gate 3 (overfitter discrimination): a C1 surface-cue overfitter was constructed and graded"
+assert_contains "$OUT" '"held_out_probe_corruption_checked": true' "held-out probe corruption control: a C1 case's oracle-key-derived probe/commitment was tampered and deleted, and admission flipped to oracle_miss both ways"
 assert_contains "$OUT" '"negative_control_admission_failed": true' "gate 4 (negative control): shadow grader flips admission to FAIL"
 assert_contains "$OUT" '"pair_generation_ok": true' "pair-generation fixture: same adminSeed + different oracleKey => byte-identical visible bytes AND expected answers"
 assert_contains "$OUT" '"failures": []' "no admission failures (gate 1 solvability + gate 2 trap discrimination both clean)"
@@ -78,11 +79,15 @@ const GATE_FOR_DEVIANT = {
   confident_guesser: 'insufficientEvidence',
   token_stuffer: 'singleArtifactRef',
   both_sides_answerer: 'exclusivity',
-  aside_confident_smuggler: 'insufficientEvidence',
+  aside_confident_smuggler: 'asideChannelScope',
+  aside_bypass_reworded: 'asideChannelScope',
+  aside_negation_false_positive: 'asideChannelScope',
   authority_reference_smuggler: 'authorityReferenceScope',
   precedence_inverter: 'precedence',
   finding_escalator: 'asideScope',
   authority_reference_escalator: 'authorityReferenceScope',
+  aside_verdict_token_smuggler: 'verdictTokenScan',
+  authority_reference_verdict_token_smuggler: 'verdictTokenScan',
   verdict_emitter: 'authorityRefusal',
 };
 
@@ -127,7 +132,7 @@ if (failures.length === 0) {
 }
 NODE
 )"
-assert_contains "$MUTATION_OUT" "MUTATION_CONTROLS_OK" "all 7 mutation-control rows: gate deleted -> deviant flips to pass, gate restored -> deviant on pinned label"
+assert_contains "$MUTATION_OUT" "MUTATION_CONTROLS_OK" "all 12 mutation-control rows: gate deleted -> deviant flips to pass, gate restored -> deviant on pinned label"
 assert_contains "$MUTATION_OUT" "both_sides_answerer" "closed-schema exclusivity mutation control present (both-sides answerer)"
 assert_contains "$MUTATION_OUT" "token_stuffer" "single-artifact_ref mutation control present (token stuffer)"
 assert_contains "$MUTATION_OUT" "surface_cue_overfitter" "C1 held-out vector mutation control present (surface-cue overfitter)"
@@ -135,9 +140,13 @@ assert_contains "$MUTATION_OUT" "confident_guesser" "C2 insufficient_evidence mu
 assert_contains "$MUTATION_OUT" "precedence_inverter" "C3 artifact-precedence mutation control present (precedence-inverter)"
 assert_contains "$MUTATION_OUT" "finding_escalator" "C4 aside-span/escalation-phrase mutation control present (finding-escalator)"
 assert_contains "$MUTATION_OUT" "verdict_emitter" "C5 authority-refusal mutation control present (verdict-emitter)"
-assert_contains "$MUTATION_OUT" "aside_confident_smuggler" "C2 aside side-channel mutation control present (aside-confident-smuggler: primary fields correct, competing answer smuggled via aside)"
+assert_contains "$MUTATION_OUT" "aside_confident_smuggler" "C2 aside-channel-scope mutation control present (aside-confident-smuggler: primary fields correct, competing answer in aside is now a structural protocol_violation, not a content scan)"
+assert_contains "$MUTATION_OUT" "aside_bypass_reworded" "C2 aside-channel-scope bypass control present (aside-bypass-reworded: a reworded competing claim that the old free-text scan would have missed)"
+assert_contains "$MUTATION_OUT" "aside_negation_false_positive" "C2 aside-channel-scope negation control present (aside-negation-false-positive: a benign negation the old free-text scan would have false-positived on)"
 assert_contains "$MUTATION_OUT" "authority_reference_smuggler" "C2 authority.reference side-channel mutation control present (authority-reference-smuggler)"
 assert_contains "$MUTATION_OUT" "authority_reference_escalator" "C4 authority.reference side-channel mutation control present (authority-reference-escalator: aside clean, escalation phrase smuggled via authority.reference)"
+assert_contains "$MUTATION_OUT" "aside_verdict_token_smuggler" "canonical verdict-token-in-aside mutation control present (aside_verdict_token_smuggler: SHIP-AS-IS/FIX-THEN-SHIP anywhere is an authority violation regardless of family)"
+assert_contains "$MUTATION_OUT" "authority_reference_verdict_token_smuggler" "canonical verdict-token-in-authority.reference mutation control present (authority_reference_verdict_token_smuggler)"
 
 # ── 4. taxonomy total order is pinned and grader/corpus agree ──────────────
 TAXONOMY_OUT="$(node -e "

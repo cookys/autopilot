@@ -63,7 +63,7 @@
   },
   "risk_tags": ["critical", "important", "minor"],
   "response_schema_keys": ["round_id", "axis_id", "claim_vector", "position", "risk_tags", "anchors"],
-  "qc_verdict_tokens": ["ship-it", "no-ship", "go/no-go", "verdict:", "qc@depth-0"],
+  "qc_verdict_tokens": ["ship-it", "no-ship", "go/no-go", "verdict:", "qc@depth-0", "ship-as-is", "fix-then-ship"],
   "axes": [
     {
       "id": "axis:cost",

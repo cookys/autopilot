@@ -153,6 +153,14 @@ assert_eq "parity-ok" "$PARITY_OUT" "default-off parity: pre-existing keys byte-
 #     hooks/tests/review-loop-runner.test.sh,
 #     evals/clean/11-review-loop-tier-fields.diff (+ .expected.json + codex mirrors)
 #
+# RECOUNTED 2026-08-28 (round-2 cross-family review, tuple-integrity fix):
+# round-1 (54270a1f) added hooks/tests/fixtures/pre-consult-discuss-resolve-review-loop.sh,
+# a frozen pre-D6 baseline copy of resolve-review-loop.sh whose printf'd JSON
+# construction literally contains the string "reviewer_engine" — it also
+# matches this grep, same false-positive class as the evals diff above (a
+# frozen historical/pinned copy, never itself fed through
+# validateReviewLoopConfig as a live literal). Raw bound moves 6 -> 7.
+#
 # NOTE ON evals/clean/11-review-loop-tier-fields.diff: this file is a FROZEN
 # git-diff snapshot of a 2026 v2.32.23 commit (schema state that predates even
 # consult_engine/discuss_engine), consumed ONLY by scripts/calibration.sh's
@@ -177,7 +185,7 @@ POP_A_RAW_COUNT="$(
     git -C "$REPO_ROOT" grep -l '"reviewer_engine"' -- hooks/ evals/ ":!$SELF" 2>/dev/null; } \
     | sort -u | wc -l | tr -d '[:space:]'
 )"
-assert_eq "6" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 6 files (direct callers + JSON-literal grep)"
+assert_eq "7" "$POP_A_RAW_COUNT" "Population A raw extractor union is pinned at 7 files (direct callers + JSON-literal grep, incl. the round-1 frozen pre-D6 resolver fixture)"
 
 # Per-object parity subset: files whose roster literal is genuinely fed through
 # validateReviewLoopConfig, either directly (JS payload) or via the live
@@ -219,8 +227,13 @@ try {
 assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real validateReviewLoopConfig call site accepts the widened live output"
 
 # ── Population B — shell-resolved partial roster configs (default-off only) ─
+# RECOUNTED 2026-08-28 (round-2, tuple-integrity fix): round-1 (54270a1f) also
+# added hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md, a
+# frozen pre-D6 shipped-template copy whose `- reviewer_engine: ...` line
+# matches this same grep — same frozen-fixture false-positive class as above.
+# Bound moves 26 -> 27.
 POP_B_COUNT="$(git -C "$REPO_ROOT" grep -l 'reviewer_engine:' -- hooks/ ":!$SELF" 2>/dev/null | wc -l | tr -d '[:space:]')"
-assert_eq "26" "$POP_B_COUNT" "Population B file bound is pinned at 26 (git grep -l 'reviewer_engine:' -- hooks/)"
+assert_eq "27" "$POP_B_COUNT" "Population B file bound is pinned at 27 (git grep -l 'reviewer_engine:' -- hooks/, incl. the round-1 frozen pre-D6 template fixture)"
 # Markdown-list-style declaration only (`- consult_dispatch: on`) — NOT a bare
 # substring match, which would also hit Population A's JS object-literal keys
 # (`consult_dispatch: 'off',`, no leading dash) that legitimately reference the
@@ -361,5 +374,89 @@ CODEX_SHELL_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_TEMPLATE" bash "$CODEX_S
 assert_eq "0" "$CODEX_SHELL_EXIT" "codex mirror resolver exits 0 on its own shipped template"
 assert_eq "off" "$(json_get "$CODEX_SHELL_JSON" consult_dispatch)" "codex mirror resolver emits consult_dispatch: off on the shipped template"
 assert_eq "off" "$(json_get "$CODEX_SHELL_JSON" discuss_dispatch)" "codex mirror resolver emits discuss_dispatch: off on the shipped template"
+
+# ── 8. Switch-on requires a non-empty seat tuple (tuple integrity, not D7 ───
+# qualification) — cross-family review finding, round 2, 2026-08-28: both
+# switches previously accepted `on` with a wholly-empty seat tuple, silently
+# no-op'ing an enabled rail. Plan §4 D6: "On + an empty seat tuple ⇒ exit 3".
+ON_EMPTY_CONSULT_CFG="$TEST_TMP/on-empty-consult.md"
+printf -- '- consult_dispatch: on\n' > "$ON_EMPTY_CONSULT_CFG"
+ON_EMPTY_CONSULT_ERR="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_EMPTY_CONSULT_CFG" bash "$SCRIPT" 2>&1 >/dev/null)"
+ON_EMPTY_CONSULT_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_EMPTY_CONSULT_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "3" "$ON_EMPTY_CONSULT_EXIT" "consult_dispatch=on with a wholly-empty consult seat tuple exits 3"
+assert_contains "$ON_EMPTY_CONSULT_ERR" "consult_dispatch=on requires consult_engine, consult_runner, and consult_effort" \
+  "consult_dispatch=on + empty tuple error names the switch and the missing seat fields"
+
+ON_EMPTY_DISCUSS_CFG="$TEST_TMP/on-empty-discuss.md"
+printf -- '- discuss_dispatch: on\n' > "$ON_EMPTY_DISCUSS_CFG"
+ON_EMPTY_DISCUSS_ERR="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_EMPTY_DISCUSS_CFG" bash "$SCRIPT" 2>&1 >/dev/null)"
+ON_EMPTY_DISCUSS_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_EMPTY_DISCUSS_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "3" "$ON_EMPTY_DISCUSS_EXIT" "discuss_dispatch=on with a wholly-empty discuss seat tuple exits 3"
+assert_contains "$ON_EMPTY_DISCUSS_ERR" "discuss_dispatch=on requires discuss_engine, discuss_runner, and discuss_effort" \
+  "discuss_dispatch=on + empty tuple error names the switch and the missing seat fields"
+
+# Partial tuple (engine set, runner/effort still empty) + switch on must also
+# exit 3 — caught earlier by the pre-existing wholly-empty-or-full tuple
+# self-consistency check (line ~437-455), which fires before the new
+# switch-on check is ever reached for a partial (as opposed to wholly-empty)
+# tuple. Different message, same fail-closed outcome — not just the
+# wholly-empty case silently passing.
+ON_PARTIAL_CONSULT_CFG="$TEST_TMP/on-partial-consult.md"
+printf -- '- consult_engine: gpt-5.6\n- consult_dispatch: on\n' > "$ON_PARTIAL_CONSULT_CFG"
+ON_PARTIAL_CONSULT_ERR="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_PARTIAL_CONSULT_CFG" bash "$SCRIPT" 2>&1 >/dev/null)"
+ON_PARTIAL_CONSULT_EXIT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_PARTIAL_CONSULT_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "3" "$ON_PARTIAL_CONSULT_EXIT" "consult_dispatch=on with only consult_engine set (runner/effort empty) exits 3"
+assert_contains "$ON_PARTIAL_CONSULT_ERR" "consult tuple must be wholly empty or include engine, runner, and effort" \
+  "consult_dispatch=on + partial tuple error names the consult tuple integrity requirement"
+
+# ── 9. Switch-on with a fully-populated seat tuple resolves fine at the ────
+# tuple-integrity layer (D7's role-qualification gate does not exist yet in
+# this wave — a complete tuple must not be rejected here for that reason).
+ON_FULL_CONSULT_CFG="$TEST_TMP/on-full-consult.md"
+printf -- '- consult_engine: gpt-5.6\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$ON_FULL_CONSULT_CFG"
+ON_FULL_CONSULT_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_FULL_CONSULT_CFG" bash "$SCRIPT" 2>/dev/null)"; ON_FULL_CONSULT_EXIT=$?
+assert_eq "0" "$ON_FULL_CONSULT_EXIT" "consult_dispatch=on with a fully-populated consult seat tuple does not exit 3 at the tuple-integrity layer"
+assert_eq "on" "$(json_get "$ON_FULL_CONSULT_JSON" consult_dispatch)" "fully-populated consult_dispatch=on resolves with consult_dispatch: on in the output"
+
+ON_FULL_DISCUSS_CFG="$TEST_TMP/on-full-discuss.md"
+printf -- '- discuss_engine: gpt-5.6\n- discuss_runner: codex\n- discuss_effort: high\n- discuss_dispatch: on\n' > "$ON_FULL_DISCUSS_CFG"
+ON_FULL_DISCUSS_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ON_FULL_DISCUSS_CFG" bash "$SCRIPT" 2>/dev/null)"; ON_FULL_DISCUSS_EXIT=$?
+assert_eq "0" "$ON_FULL_DISCUSS_EXIT" "discuss_dispatch=on with a fully-populated discuss seat tuple does not exit 3 at the tuple-integrity layer"
+assert_eq "on" "$(json_get "$ON_FULL_DISCUSS_JSON" discuss_dispatch)" "fully-populated discuss_dispatch=on resolves with discuss_dispatch: on in the output"
+
+# ── 10. JS validator mirrors the same switch-on ⇒ tuple check ──────────────
+export ON_FULL_CONSULT_JSON
+JS_ON_EMPTY_OUT="$(node <<'NODE'
+const path = require('path');
+const { validateReviewLoopConfig } = require(path.join(process.env.REPO_ROOT, 'src', 'engine', 'resolve-review-loop.js'));
+const base = JSON.parse(process.env.ON_FULL_CONSULT_JSON);
+base.consult_dispatch = 'on';
+base.consult_engine = '';
+base.consult_runner = '';
+base.consult_effort = '';
+try {
+  validateReviewLoopConfig(base);
+  console.log('SILENTLY-PASSED');
+} catch (e) {
+  console.log(e.message);
+}
+NODE
+)"
+assert_contains "$JS_ON_EMPTY_OUT" "consult_dispatch=on" "JS validator rejects consult_dispatch=on with an emptied-out consult tuple, naming the switch"
+assert_not_contains "$JS_ON_EMPTY_OUT" "SILENTLY-PASSED" "JS validator never silently accepts consult_dispatch=on with an empty tuple"
+
+JS_ON_FULL_OUT="$(node <<'NODE'
+const path = require('path');
+const { validateReviewLoopConfig } = require(path.join(process.env.REPO_ROOT, 'src', 'engine', 'resolve-review-loop.js'));
+const value = JSON.parse(process.env.ON_FULL_CONSULT_JSON);
+try {
+  validateReviewLoopConfig(value);
+  console.log('validated-ok');
+} catch (e) {
+  console.log('validate-failed:' + e.message);
+}
+NODE
+)"
+assert_eq "validated-ok" "$JS_ON_FULL_OUT" "JS validator accepts the real fully-populated consult_dispatch=on resolver output"
 
 finalize_test

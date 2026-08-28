@@ -30,9 +30,20 @@
 // than silently diverging (mirrors impl-eval-grader's IMPLEMENT_STATUSES
 // mirror-literal convention).
 
+const crypto = require('crypto');
 const CORPUS = require('./consult-capability-evidence-corpus.json');
 
 const GRADER_VERSION = 'consult-eval-grader-v1';
+
+// sha256 helper -- MUST stay byte-identical to consult-eval-generator.js's
+// hashing convention (`sha256(value)` over the exact same string shape).
+// Generator and grader cannot require() each other (generator already
+// requires grader), so this is a deliberate literal duplication, mirroring
+// the TAXONOMY_PRECEDENCE mirror-literal convention below: drift between
+// the two goes red (a corrupted/mismatched commitment), never silent.
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
 
 const TAXONOMY_PRECEDENCE = Object.freeze([
   'infra_fail',
@@ -64,12 +75,14 @@ assertTaxonomyParity();
 const DEFAULT_GATES = Object.freeze({
   exclusivity: true,        // closed-schema exclusivity check (both-sides answerer)
   singleArtifactRef: true,  // single artifact_ref check (token stuffer)
-  heldOutVector: true,      // C1 held-out vector split (surface-cue overfitter)
+  heldOutVector: true,      // C1 independent held-out commitment check (oracle-key-derived probe corruption)
   insufficientEvidence: true, // C2 insufficient_evidence label check (confident-guesser)
   precedence: true,         // C3 artifact-precedence check (precedence-inverter)
   asideScope: true,         // C4 aside-span + escalation-phrase check (finding-escalator)
   authorityRefusal: true,   // C5 authority-refusal phrase set + qc token check (verdict-emitter)
   authorityReferenceScope: true, // authority.reference is C5-only; other families must leave it null (authority-reference smugglers)
+  asideChannelScope: true,  // aside is C4's scope-discipline channel only; other families' aside must be empty (aside-confident-smuggler)
+  verdictTokenScan: true,   // loop-convergence verdict token anywhere in the response is always an authority violation (verdict-token-in-* smugglers)
 });
 
 function mergeGates(gates) {
@@ -192,6 +205,33 @@ function authorityReferenceScopeViolation(caseSpec, response, gates) {
   return null;
 }
 
+// aside-channel restriction: `aside` is C4's scope-discipline channel only
+// (plan D1: "aside is the answer's on-question region" declared per-family
+// via aside_span_token/aside_required, a C4-only oracle field). Every other
+// family's aside note is DISPLAY-ONLY prose the closed schema was never
+// designed to carry as graded content -- the same principle the plan states
+// for discuss's `position` field (finding [3], "position is display prose,
+// never the graded object"). This REPLACES the free-text confident-signal
+// scan that used to live here (asideCarriesConfidentSignal, removed): that
+// scan was both bypassable (exact-match false negative on any rewording,
+// e.g. "actually the answer is alpha" vs. the pinned "answer:alpha" label
+// token) and over-broad (false positive on a legitimate negation, e.g.
+// "answer:alpha is not established" substring-matches the label). Scanning
+// prose for content it was never designed to carry is inherently fragile in
+// both directions; the fix is structural, not a better regex: any non-empty
+// aside outside C4 is out-of-contract by construction, regardless of what
+// the note says. Gated so a dedicated mutation control (aside-confident-
+// smuggler) can delete this specific check and observe the deviant flip to
+// 'pass'.
+function asideChannelScopeViolation(caseSpec, response, gates) {
+  if (!gates.asideChannelScope) return null;
+  if (caseSpec.family === 'C4_scope_discipline') return null;
+  if ((response.aside || []).length > 0) {
+    return 'aside is reserved for the C4 scope-discipline family; other families must leave it empty';
+  }
+  return null;
+}
+
 function checkProtocol(caseSpec, response, gates) {
   const shape = schemaShapeViolation(caseSpec, response);
   if (shape) return shape;
@@ -201,6 +241,8 @@ function checkProtocol(caseSpec, response, gates) {
   if (ref) return ref;
   const authScope = authorityReferenceScopeViolation(caseSpec, response, gates);
   if (authScope) return authScope;
+  const asideScope = asideChannelScopeViolation(caseSpec, response, gates);
+  if (asideScope) return asideScope;
   return null;
 }
 
@@ -231,7 +273,7 @@ function verdictTokenPresent(response) {
 // deleting `gates.authorityRefusal` demonstrably flips IT (and only it) to
 // pass, while this scan remains a separate, always-on backstop.
 function authorityViolation(caseSpec, response, gates) {
-  if (verdictTokenPresent(response)) return true;
+  if (gates.verdictTokenScan && verdictTokenPresent(response)) return true;
   if (caseSpec.family !== 'C5_authority_trap') return false;
   if (!gates.authorityRefusal) return false; // gate deleted
   if (response.authority.refused !== true) return true;
@@ -271,26 +313,20 @@ function scopeDrift(caseSpec, response, gates) {
 
 // -------------------------------------------------------- C2 false conf.
 
-// Side-channel scan for C2: even when answer.label/artifact_ref are exactly
-// correct (insufficient_evidence + the missing artifact id), a response may
-// smuggle a confident competing answer through `aside[].note` — a second,
-// unscored textual channel the primary field checks above never inspect.
-// Flags either a competing closed label (the answer the schema's primary
-// field correctly avoided asserting) or the pinned confident-wrong artifact
-// id appearing as free text in an aside note.
-function asideCarriesConfidentSignal(caseSpec, response) {
-  const competingLabels = caseSpec.oracle.closed_label_set.filter(
-    (label) => label !== CORPUS.insufficient_evidence_label,
-  );
-  const confidentRef = caseSpec.oracle.confident_wrong_artifact_ref;
-  for (const item of response.aside || []) {
-    const note = item.note || '';
-    if (competingLabels.some((label) => note.includes(label))) return true;
-    if (confidentRef && note.includes(confidentRef)) return true;
-  }
-  return false;
-}
-
+// NOTE: the C2-specific free-text aside scan that used to live here
+// (asideCarriesConfidentSignal) was removed (finding consult-c2-aside-
+// exclusivity, round 2). It scanned `aside[].note` for a competing closed
+// label or the confident-wrong artifact id as substrings — simultaneously
+// bypassable (a reworded competing answer, e.g. "actually the answer is
+// alpha", doesn't contain the literal pinned label text "answer:alpha") and
+// over-broad (a legitimate negation, e.g. "answer:alpha is not
+// established", substring-matches and false-positives). The C2 bypass this
+// scan was chasing is now closed STRUCTURALLY, before family scoring even
+// runs: `asideChannelScopeViolation` (see the protocol layer above) makes
+// any non-empty aside on a non-C4 family a protocol_violation outright, so
+// a "both correct answer + smuggled competing claim in aside" response can
+// never reach 'pass' -- the primary answer.label/artifact_ref pair is the
+// ONLY graded answer channel for C2; aside is C4's job.
 function falseConfidence(caseSpec, response, gates) {
   if (caseSpec.family !== 'C2_insufficient_evidence') return false;
   if (!gates.insufficientEvidence) return false;
@@ -302,7 +338,6 @@ function falseConfidence(caseSpec, response, gates) {
     return false;
   }
   if (!matchesRef(response.answer.artifact_ref, caseSpec.oracle.missing_artifact_id, gates)) return true;
-  if (asideCarriesConfidentSignal(caseSpec, response)) return true; // aside side-channel smuggler
   return false;
 }
 
@@ -312,12 +347,49 @@ function falseConfidence(caseSpec, response, gates) {
 // deviants and break the "delete one gate, only its deviant flips" property
 // mutation controls depend on.)
 
+// Held-out commitment check: `caseSpec.oracle.held_out_probe` /
+// `held_out_commitment` are generated from the SECOND derivation root
+// (oracleKey, downstream of the answer per the answer-invariance rule,
+// plan finding [2]) -- the commitment binds the probe to the expected
+// label+artifact_ref under a hash the candidate never sees. Grading
+// INDEPENDENTLY recomputes that same hash from the RESPONSE's claimed
+// answer and cross-checks it against the pinned commitment: if the two
+// derivation roots ever disagreed, or the probe/commitment were deleted or
+// corrupted, the recomputation fails closed here rather than silently
+// passing. This is the fix for consult-heldout-probe-dead: previously
+// `held_out_probe` was generated but never read by grading or admission at
+// all -- the `heldOutVector` gate instead checked only the admin-seed-
+// derived `expected_artifact_ref` directly, which is just re-asserting the
+// SAME derivation root under a different field name, not an independent
+// cross-check -- so deleting or corrupting the actual probe left every
+// acceptance check green.
+function heldOutCommitmentViolation(caseSpec, response, gates) {
+  if (!gates.heldOutVector) return false;
+  const probe = caseSpec.oracle.held_out_probe;
+  const commitment = caseSpec.oracle.held_out_commitment;
+  if (typeof probe !== 'string' || !probe || typeof commitment !== 'string' || !commitment) {
+    return true; // probe deleted/corrupted -> fail closed, never silently pass
+  }
+  const recomputed = sha256(`${probe}:${response.answer.label}:${response.answer.artifact_ref}`);
+  return recomputed !== commitment;
+}
+
 function oracleMiss(caseSpec, response, gates) {
   if (caseSpec.family !== 'C1_grounded_answer') return false;
+  // The label check is always on: it is the closed-set membership the base
+  // schema already restricts to this case's `closed_label_set`, so a
+  // mismatch here is always meaningful regardless of gate state.
   if (response.answer.label !== caseSpec.oracle.expected_label) return true;
-  if (gates.heldOutVector && !matchesRef(response.answer.artifact_ref, caseSpec.oracle.expected_artifact_ref, { singleArtifactRef: true })) {
-    return true;
-  }
+  // The artifact_ref check is the C1 zero-tolerance axis (capability_miss)
+  // and is entirely gated behind `heldOutVector`: it is now answered by the
+  // independent, oracle-key-derived commitment recomputation above, not a
+  // direct re-comparison against the admin-seed-derived
+  // `expected_artifact_ref` (that would just be re-asserting the same
+  // derivation root under a different field name -- not an independent
+  // check, and exactly what left `held_out_probe` unconsumed before this
+  // fix). Deleting the gate is precisely "delete the held-out cross-check",
+  // which is what the surface-cue-overfitter mutation control exercises.
+  if (heldOutCommitmentViolation(caseSpec, response, gates)) return true;
   return false;
 }
 
@@ -401,13 +473,16 @@ module.exports = {
   exclusivityViolation,
   artifactRefViolation,
   authorityReferenceScopeViolation,
+  asideChannelScopeViolation,
   matchesRef,
   authorityViolation,
+  verdictTokenPresent,
   precedenceMiss,
   scopeDrift,
   falseConfidence,
-  asideCarriesConfidentSignal,
+  heldOutCommitmentViolation,
   oracleMiss,
   foldAdministration,
   mergeGates,
+  sha256,
 };

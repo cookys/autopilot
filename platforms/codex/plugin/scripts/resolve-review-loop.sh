@@ -480,6 +480,19 @@ case "$DISCUSS_DISPATCH" in
     ;;
 esac
 
+# consult_dispatch/discuss_dispatch=on with an empty seat tuple is a
+# misconfiguration, never a silent no-op (plan §4 D6, evidence-discipline §14).
+# Tuple-presence only — the switch-on QUALIFICATION gate over role evidence is
+# D7 and out of scope here.
+if [[ "$CONSULT_DISPATCH" == "on" && ( -z "$CONSULT_ENGINE" || -z "$CONSULT_RUNNER" || -z "$CONSULT_EFFORT" ) ]]; then
+  echo "resolve-review-loop: consult_dispatch=on requires consult_engine, consult_runner, and consult_effort" >&2
+  exit 3
+fi
+if [[ "$DISCUSS_DISPATCH" == "on" && ( -z "$DISCUSS_ENGINE" || -z "$DISCUSS_RUNNER" || -z "$DISCUSS_EFFORT" ) ]]; then
+  echo "resolve-review-loop: discuss_dispatch=on requires discuss_engine, discuss_runner, and discuss_effort" >&2
+  exit 3
+fi
+
 if [[ "$PLAN_REVIEW" == "on" && ( -z "$PLAN_REV_ENGINE" || -z "$PLAN_REV_RUNNER" || -z "$PLAN_REV_EFFORT" ) ]]; then
   echo "resolve-review-loop: plan_review=on requires plan_reviewer_engine, plan_reviewer_runner, and plan_reviewer_effort" >&2
   exit 3

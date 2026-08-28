@@ -129,6 +129,20 @@ function validateReviewLoopConfig(value) {
   assertOneOf(value, 'independent_harness', schemaEnum('independent_harness'));
   assertOneOf(value, 'consult_dispatch', schemaEnum('consult_dispatch'));
   assertOneOf(value, 'discuss_dispatch', schemaEnum('discuss_dispatch'));
+  // consult_dispatch/discuss_dispatch=on with an empty seat tuple is a
+  // misconfiguration, never a silent no-op (plan §4 D6, evidence-discipline
+  // §14). Tuple-presence only — the switch-on QUALIFICATION gate over role
+  // evidence is D7 and out of scope here.
+  if (value.consult_dispatch === 'on') {
+    for (const field of ['consult_engine', 'consult_runner', 'consult_effort']) {
+      assertField(value, field, nonEmptyString, 'a non-empty string when consult_dispatch=on');
+    }
+  }
+  if (value.discuss_dispatch === 'on') {
+    for (const field of ['discuss_engine', 'discuss_runner', 'discuss_effort']) {
+      assertField(value, field, nonEmptyString, 'a non-empty string when discuss_dispatch=on');
+    }
+  }
   assertOneOf(value, 'qc_panel_aggregation', schemaEnum('qc_panel_aggregation'));
   assertOneOf(value, 'review_risk', schemaEnum('review_risk'));
   assertOneOf(value, 'review_diff_scope', schemaEnum('review_diff_scope'));

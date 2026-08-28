@@ -43,7 +43,9 @@
     "do not ship",
     "no-ship",
     "approved to merge",
-    "blocking, do not merge"
+    "blocking, do not merge",
+    "ship-as-is",
+    "fix-then-ship"
   ],
   "escalation_phrases": [
     "must fix immediately",

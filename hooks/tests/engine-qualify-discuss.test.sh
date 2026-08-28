@@ -113,7 +113,7 @@ v=$(printf '%s' "$mutation" | node -e 'const d=JSON.parse(require("fs").readFile
 if [ "$v" != "true" ]; then
   printf '%s\n' "$mutation" | node -e 'const d=JSON.parse(require("fs").readFileSync(0,"utf8"));d.failures.forEach((f)=>console.error(" - " + f))' >&2
 fi
-assert_eq "$v" "true" "mutation controls: every D4 row (evidence-span, axis-novelty, anchor-existence, axis_id cardinality, claim_vector binding, claim-token membership, anchor-resolvability, D-a/D-b own-axis binding, D-a stance exclusivity, D-d claim-token binding) — gate deleted flips its deviant to pass, gate restored lands it back on its pinned label"
+assert_eq "$v" "true" "mutation controls: every D4 row (evidence-span, axis-novelty, anchor-existence, axis_id cardinality, claim_vector binding, claim-token membership, anchor-resolvability, D-a/D-b own-axis binding, D-a stance exclusivity, D-d claim-token binding, cross-axis token-stuffing membership on D-a/D-b/D-d, no-verdict guard) — gate deleted flips its deviant to pass, gate restored lands it back on its pinned label"
 
 # Named per-row assertions (so a single silently-broken row cannot hide
 # inside the aggregate boolean above).
@@ -130,6 +130,10 @@ for row in \
   "D-b:wrong-axis-label:zero_information" \
   "D-a:contradictory-stance:evidence_blindness" \
   "D-d:off-axis-claim:zero_information" \
+  "D-a:mixed-vector:zero_information" \
+  "D-b:mixed-vector:zero_information" \
+  "D-d:mixed-vector:zero_information" \
+  "D-c:verdict-in-position:protocol_violation" \
 ; do
   fam="${row%%:*}"; rest="${row#*:}"; dev="${rest%%:*}"; expected="${rest#*:}"
   got=$(node -e '

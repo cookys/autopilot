@@ -521,6 +521,25 @@ per-user quota (usrquota) and silently broke every harness Bash call on the mach
   prune`. Unmarked dirs and unparseable manifests are never deleted. Complements (not
   replaces) `dispatch-hetero.sh --gc`, which stays the config-gated worktree-only reaper.
 
+## Implementer ladder (unit class + red repair)
+
+A project may set `implementer_ladder` in `.claude/review-loop-config.md` as a comma list of
+`engine/effort@runner` rungs (each runner must be a valid `implementer_runner`). When the field is
+absent the resolver emits `implementer_ladder: []` and dispatch keeps using the three
+`implementer_engine` / `implementer_effort` / `implementer_runner` fields.
+
+When the ladder is present:
+
+- campaign contract `unit_class: mechanical` starts at rung 0; omitted or `judgment` starts at
+  rung 1 (a one-rung ladder always uses that rung)
+- repair generation `r` (0-based, first dispatch is 0) uses `min(start + r, top)`
+- hitting the top rung and going red again is existing `awaiting_convergence_adjudication`, not a
+  new state
+- `on_engine_unavailable` stays the availability axis and is not reused for this climb
+
+The engine records the dispatched tuple plus `implementer_ladder_rung` on the
+`dispatch_implementation` ledger row.
+
 ## Wired engines (runners) — how to pick one
 
 `--runner` (or `implementer_runner`/`reviewer_runner` in `.claude/review-loop-config.md`):

@@ -48,6 +48,8 @@ cd "$REPO_ROOT"
 [ -r "$REPO_ROOT/scripts/lib/worktree-reap.sh" ] && . "$REPO_ROOT/scripts/lib/worktree-reap.sh"
 # shellcheck source=lib/suite-residue-reap.sh
 [ -r "$TESTS_DIR/lib/suite-residue-reap.sh" ] && . "$TESTS_DIR/lib/suite-residue-reap.sh"
+# shellcheck source=lib/suite-oracle-lock.sh
+[ -r "$TESTS_DIR/lib/suite-oracle-lock.sh" ] && . "$TESTS_DIR/lib/suite-oracle-lock.sh"
 
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
@@ -64,6 +66,9 @@ __suite_on_exit() {
   fi
   if command -v suite_run_lock_release >/dev/null 2>&1; then
     suite_run_lock_release || true
+  fi
+  if command -v suite_oracle_lock_release >/dev/null 2>&1; then
+    suite_oracle_lock_release || true
   fi
   return "$status"
 }
@@ -140,6 +145,26 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+# ── Execution-oracle lock: refuse a second concurrent "full parallel suite" ──
+# (docs/BACKLOG.md "Depth-0's exclusive ownership of the execution oracle is
+# prose, not a lock"). Gated on --parallel specifically — that is the action
+# named in the backlog entry and the one the incident actually collided on
+# (a returned foreman armed its own `--parallel` run while depth-0 was
+# already running one). Unlike the residue-reap registry lock above (which is
+# best-effort and per-PID), this is a hard refusal: a held lock means STOP,
+# not "continue and hope". AUTOPILOT_SUITE_ORACLE_LOCK=0 opts out.
+if [ "$PARALLEL" -eq 1 ] && command -v suite_oracle_lock_acquire >/dev/null 2>&1; then
+  if ! suite_oracle_lock_acquire; then
+    # Refusal message (naming the holder's run id) already printed to
+    # stderr by suite_oracle_lock_acquire; SUITE_ORACLE_LOCK_REFUSAL_MSG=""
+    # means it fail-opened (rc 2, unsupported) rather than refused (rc 1) —
+    # only rc 1 (refusal) is fatal.
+    if [ -n "$SUITE_ORACLE_LOCK_REFUSAL_MSG" ]; then
+      exit 1
+    fi
+  fi
+fi
 
 # ── Residue reaper: pre-run reap + registry lock ──
 if command -v suite_run_lock_acquire >/dev/null 2>&1; then

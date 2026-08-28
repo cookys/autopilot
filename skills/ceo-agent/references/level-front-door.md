@@ -190,6 +190,18 @@ REACTING too fast, not from seeing too little):
    NEVER grab a stage the foreman holds a lease on — escalate to the user if
    genuinely wedged (`run-ledger.sh resume` is the recovery path, and only
    after the foreman is confirmed dead).
+
+   HONEST BOUNDARY (LIVENESS): a `CONDITION ... dead reason=owner_absent` line
+   means only that the recorded lease PID has exited — for a CC-native
+   foreman that is the EXPECTED shape seconds after every `stage-acquire`
+   (the acquiring shell records its own PID and exits immediately; the
+   foreman keeps running as a separate agent turn, not as that shell's
+   child), not evidence the foreman died. The line self-flags this
+   (`note=pid_liveness_unreliable_for_cc_native`) — treat `dead` as
+   "confirmed foreman dead" only for a runner whose owning process stays
+   resident for the stage (a long-lived CLI/daemon runner), and for a
+   CC-native foreman fall back to git activity / `dispatch-status.js` before
+   escalating to `run-ledger.sh resume`.
 5. **Advisory directive channel (Phase 2 — nudge, never seize).** Depth-0 may
    queue a one-way *advisory* nudge to a running stage's lease holder — it does
    NOT auto-kill, does NOT grab the lease, and never overrides the holder's

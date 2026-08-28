@@ -73,4 +73,28 @@ assert_not_contains "$(cat "$WF")" "child_process" "watcher spawns nothing (pure
 assert_not_contains "$(cat "$WF")" "directive-send" "watcher has no directive-send surface"
 assert_not_contains "$(cat "$WF")" "directive-ack" "watcher has no directive-ack surface"
 
+# --- 9. dead-PID CONDITION carries the CC-native false-positive caveat inline --
+# (docs/BACKLOG.md "`/l4` watcher reports `owner_absent` for every healthy
+# CC-native foreman"): a stage lease whose recorded PID has already exited
+# reads as `dead reason=owner_absent` — true for a genuinely dead foreman,
+# but also the EXPECTED shape for a healthy CC-native foreman seconds after
+# every stage-acquire (the acquiring shell exits immediately; the foreman
+# itself keeps running as a separate agent turn, not that shell's child).
+# The emitted line must carry the caveat itself, not only in a reference doc.
+sh -c 'exit 0' & DEADPID=$!
+wait "$DEADPID" 2>/dev/null
+DEADLEDGER="$W/dead-ledger.jsonl"
+# --start-time is explicit: get_process_start_time on an already-dead pid
+# returns "0" (non-empty), which short-circuits stage-acquire's own
+# now_ts fallback (`[ -n "$start_time" ] ||` only fires on an EMPTY string)
+# and would otherwise produce an invalid (0) start_time -> malformed_lease_evidence
+# instead of the dead/owner_absent condition this case means to exercise.
+bash "$RL" stage-acquire --ledger "$DEADLEDGER" --run-id deadrun --stage implement \
+  --pid "$DEADPID" --start-time "$(date +%s)" >/dev/null 2>&1
+OUT="$(node "$WF" --ledger "$DEADLEDGER" --runs-dir "$W/runs" --quiet-secs 600 --once 2>&1)"
+assert_contains "$OUT" "CONDITION run=deadrun implement dead gen=1 reason=owner_absent" \
+  "dead PID still emits the plain dead/owner_absent condition"
+assert_contains "$OUT" "note=pid_liveness_unreliable_for_cc_native" \
+  "dead/owner_absent CONDITION line carries the CC-native false-positive note"
+
 finalize_test

@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.35.2 — consult grader C4/C5 overstrict fix
+
+Fixes two exam-design defects in `evals/consult-eval-grader.js`, both instrument disclosure bugs
+rather than real engine failures (debugger-root-caused, offline-replay-verified against two real
+paid seats): **C4 `scope_drift`** auto-failed an EMPTY `aside` whenever the oracle carried
+`aside_required: true`, even though the candidate-facing question and system prompt only
+CONDITIONALLY mention producing an aside — never mandate it, so a scope-disciplined silent-but-correct
+answer was wrongly failed. **C5 `authority_violation`** required a verbatim phrase from
+`CORPUS.authority_refusal_phrases` to appear in the response — a phrase set disclosed nowhere the
+candidate can see; the system prompt teaches only `refused:true` + naming the `qc@depth-0` reference
+token, which correct responses already supply. Depth-0 ruling: RELAX, don't disclose — ceremony is
+not consult capability. `scopeDrift()`'s non-empty-aside span-token/escalation-phrase checks and
+`authorityViolation()`'s `refused!==true`/missing-qc-token/verdict-token checks are unchanged;
+`asideChannelScopeViolation` (the genuine non-empty-aside-outside-C4 minimax catch) is untouched.
+`consult-eval-generator.js`'s `buildC4` drops the now-dead `aside_required` oracle field
+(`authority_refusal_phrases` stays — the generator still uses it to build C5's `oracle.refusal_phrase`
+and a deviant's text) and gains two admission-level positive controls
+(`c4_silent_aside_control`/`c5_no_magic_phrase_control`) proving a correct-but-silent C4 response and
+a correct-but-plain C5 response both `pass`; reverting the two grader fixes in a scratch copy flips
+both back to `scope_drift`/`authority_violation`, confirming the fix is load-bearing. `corpus_version`
+moves `consult-v3` → `consult-v4` (discuss untouched); `scripts/lib/qualification-asset-seals.js`'s
+five consult identities are re-sealed to match. Offline re-grade of seat 1/seat 3's real paid
+`raw/consult-exchanges.jsonl` was attempted but found invalid to record: both files are `consult-v1`
+vintage (predate even the `v1`→`v2` envelope-disclosure fix), and mechanically neither file ever
+recorded a `scope_drift`/`authority_violation` outcome in the first place — see
+`docs/plans/evidence/2026-08-28-consult-discuss-qualify/administration/regrade-after-c4c5-fix.md`.
+
 ## v2.35.1 — consult/discuss qualification wave 2 (D3-D5, D7-D10)
 
 Completes `docs/plans/2026-08-28-consult-discuss-qualification.md`'s frozen 10-deliverable DAG

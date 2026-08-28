@@ -71,11 +71,11 @@ AUTHOR_BIN="${AUTOPILOT_DISPATCH_AUTHOR_BIN:-$SCRIPT_DIR/dispatch-author.sh}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --question-file) QUESTION_FILE="${2:-}"; shift 2 ;;
-    --artifact) ARTIFACTS+=("${2:-}"); shift 2 ;;
-    --repo-root) REPO_ROOT="${2:-}"; shift 2 ;;
-    --timeout) TIMEOUT="${2:-}"; shift 2 ;;
-    --dispatch-author-bin) AUTHOR_BIN="${2:-}"; shift 2 ;;
+    --question-file) [ $# -ge 2 ] || { echo "dispatch-consult: missing value for $1" >&2; exit 2; }; QUESTION_FILE="$2"; shift 2 ;;
+    --artifact) [ $# -ge 2 ] || { echo "dispatch-consult: missing value for $1" >&2; exit 2; }; ARTIFACTS+=("$2"); shift 2 ;;
+    --repo-root) [ $# -ge 2 ] || { echo "dispatch-consult: missing value for $1" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
+    --timeout) [ $# -ge 2 ] || { echo "dispatch-consult: missing value for $1" >&2; exit 2; }; TIMEOUT="$2"; shift 2 ;;
+    --dispatch-author-bin) [ $# -ge 2 ] || { echo "dispatch-consult: missing value for $1" >&2; exit 2; }; AUTHOR_BIN="$2"; shift 2 ;;
     -h|--help) sed -n '2,50p' "$0"; exit 0 ;;
     *) echo "dispatch-consult: unknown arg: $1" >&2; exit 2 ;;
   esac

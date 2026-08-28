@@ -29,10 +29,17 @@ RESOLVER="$REPO_ROOT/scripts/resolve-review-loop.sh"
 AUTHOR_STUB="$TEST_TMP/dispatch-author-stub.sh"
 AUTHOR_ARGV_FILE="$TEST_TMP/author-argv.txt"
 AUTHOR_SENTINEL="$TEST_TMP/author-was-invoked"
+AUTHOR_CALL_LOG="$TEST_TMP/author-call-log.txt"
 cat > "$AUTHOR_STUB" <<'EOF'
 #!/usr/bin/env bash
 touch "$STUB_SENTINEL"
 printf '%s\n' "$@" > "$STUB_ARGV_FILE"
+# APPEND (never overwrite) a per-invocation marker — the argv file above is
+# overwritten on every call, so it can only ever prove "at least one call
+# happened, with this argv"; it cannot prove call COUNT. The call log below
+# is the count proof: it accumulates one line per invocation across the
+# life of the stub.
+printf 'call %s %s\n' "$$" "$RANDOM" >> "$STUB_CALL_LOG"
 RAW_LOG="$STUB_TMP/raw_log_$$_$RANDOM.txt"
 printf '%s' "${STUB_RAW_CONTENT:-}" > "$RAW_LOG"
 status="${STUB_STATUS:-authored}"
@@ -44,18 +51,27 @@ EOF
 chmod +x "$AUTHOR_STUB"
 
 # A "must never be spawned" shadow — any invocation is a hard test failure.
+# It RECORDS its own invocation (EXIT99_SENTINEL) so the zero-spawn
+# assertions below are provable: without this, assert_file_absent on
+# AUTHOR_SENTINEL (a file only the *other*, must-run stub ever creates)
+# would pass trivially even if this shadow stub were spawned, because
+# nothing in this stub ever created that file either way.
 AUTHOR_EXIT99="$TEST_TMP/dispatch-author-exit99.sh"
+AUTHOR_EXIT99_SENTINEL="$TEST_TMP/author-exit99-was-invoked"
 cat > "$AUTHOR_EXIT99" <<'EOF'
 #!/usr/bin/env bash
 echo "FATAL: dispatch-author.sh was spawned when it must not have been" >&2
+touch "$EXIT99_SENTINEL"
 exit 99
 EOF
 chmod +x "$AUTHOR_EXIT99"
+export EXIT99_SENTINEL="$AUTHOR_EXIT99_SENTINEL"
 
 reset_author_stub() {
-  rm -f "$AUTHOR_ARGV_FILE" "$AUTHOR_SENTINEL"
+  rm -f "$AUTHOR_ARGV_FILE" "$AUTHOR_SENTINEL" "$AUTHOR_EXIT99_SENTINEL" "$AUTHOR_CALL_LOG"
   export STUB_SENTINEL="$AUTHOR_SENTINEL"
   export STUB_ARGV_FILE="$AUTHOR_ARGV_FILE"
+  export STUB_CALL_LOG="$AUTHOR_CALL_LOG"
   export STUB_TMP="$TEST_TMP"
 }
 reset_author_stub
@@ -75,7 +91,8 @@ mk_bundle() { # mk_bundle <file>  — a valid bundle: axes A (untaken) / B (take
   ],
   "axes": [
     { "id": "axis:A", "claim_vector": ["tokenA1", "tokenA2"] },
-    { "id": "axis:B", "claim_vector": ["tokenB1", "tokenB2"] }
+    { "id": "axis:B", "claim_vector": ["tokenB1", "tokenB2"] },
+    { "id": "axis:C", "claim_vector": ["tokenC1", "tokenC2"] }
   ],
   "taken_axes": ["axis:B"]
 }
@@ -112,6 +129,7 @@ run_malformed() { # run_malformed <bundle-json-text> <label>
   out="$(node "$SCRIPT" --bundle-file "$b" --dispatch-author-bin "$AUTHOR_EXIT99" --resolve-review-loop-bin "$AUTHOR_EXIT99" 2>&1)"; rc=$?
   assert_eq "2" "$rc" "malformed bundle ($2) exits 2"
   assert_file_absent "$AUTHOR_SENTINEL" "malformed bundle ($2) never spawns transport"
+  assert_file_absent "$AUTHOR_EXIT99_SENTINEL" "malformed bundle ($2) never spawns the shadow transport (provable: shadow records its own invocation)"
 }
 run_malformed '{"round_id":"r","question":"q","transcript":"not-an-array","artifacts":[],"axes":[{"id":"a","claim_vector":["t"]}],"taken_axes":[]}' "transcript not array"
 run_malformed '{"round_id":"","question":"q","transcript":[],"artifacts":[],"axes":[{"id":"a","claim_vector":["t"]}],"taken_axes":[]}' "empty round_id"
@@ -126,6 +144,7 @@ out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_OFF" node "$SCRIPT" --bundle-file "$BUN
 assert_eq "2" "$rc" "discuss_dispatch: off exits 2"
 assert_contains "$out" "discuss_dispatch is off" "off-path names the switch"
 assert_file_absent "$AUTHOR_SENTINEL" "switch-off path spawns zero transport processes"
+assert_file_absent "$AUTHOR_EXIT99_SENTINEL" "switch-off path spawns zero shadow-transport processes (provable)"
 
 # ── 3. switch on, no qualifying row/override => resolver denies (exit 3) ───
 reset_author_stub
@@ -133,6 +152,7 @@ out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_NO_OVERRIDE" node "$SCRIPT" --bundle
 assert_eq "3" "$rc" "switch on + unqualified seat + no override is denied (exit 3), surfaced from the resolver"
 assert_contains "$out" "NOT qualified" "resolver's own denial message is surfaced verbatim"
 assert_file_absent "$AUTHOR_SENTINEL" "resolver-denied path spawns zero transport processes"
+assert_file_absent "$AUTHOR_EXIT99_SENTINEL" "resolver-denied path spawns zero shadow-transport processes (provable)"
 
 # ── 4. end-to-end: real resolver admits (override), argv carries the exact
 #      resolved tuple, response round-trips ─────────────────────────────────
@@ -198,13 +218,25 @@ assert_contribution_rejected '{"round_id":"round-4","axis_id":"axis:B","claim_ve
   "already taken" "already-taken axis"
 assert_contribution_accepted "$VALID_RESPONSE" "exactly one untaken declared axis"
 
-# ── 7. claim_vector binding ─────────────────────────────────────────────────
+# ── 7. claim_vector binding — closed contract: EVERY token must come from
+#      the selected axis's own pinned vector, not merely "at least one own
+#      token, and none from an already-taken axis" ─────────────────────────
 assert_contribution_rejected '{"round_id":"round-4","axis_id":"axis:A","claim_vector":[],"position":"x","risk_tags":["minor"],"anchors":[]}' \
   "claim_vector must be a non-empty array" "empty claim_vector"
 assert_contribution_rejected '{"round_id":"round-4","axis_id":"axis:A","claim_vector":["not-a-real-token"],"position":"x","risk_tags":["minor"],"anchors":[]}' \
   "no token from the selected axis" "token not in selected axis vector"
 assert_contribution_rejected '{"round_id":"round-4","axis_id":"axis:A","claim_vector":["tokenA1","tokenB1"],"position":"x","risk_tags":["minor"],"anchors":[]}' \
-  "exclusive to already-taken axis" "token from an already-taken axis mixed in"
+  "not in the selected axis's vector" "token from an already-taken axis mixed in"
+# Planted negative: a completely unknown token mixed into an otherwise-valid
+# vector must still be rejected (the prior loop only checked already-taken
+# axes and would have let this through).
+assert_contribution_rejected '{"round_id":"round-4","axis_id":"axis:A","claim_vector":["tokenA1","unknown-token"],"position":"x","risk_tags":["minor"],"anchors":[]}' \
+  "not in the selected axis's vector" "own token mixed with a wholly unknown token"
+# Planted negative: a token from another axis that is NOT yet taken (axis:C)
+# must also be rejected — the prior loop only rejected tokens from ALREADY-
+# TAKEN axes, so a vector drawing from an untaken foreign axis passed.
+assert_contribution_rejected '{"round_id":"round-4","axis_id":"axis:A","claim_vector":["tokenA1","tokenC1"],"position":"x","risk_tags":["minor"],"anchors":[]}' \
+  "not in the selected axis's vector" "own token mixed with a token from an untaken foreign axis (axis:C)"
 assert_contribution_accepted '{"round_id":"round-4","axis_id":"axis:A","claim_vector":["tokenA2"],"position":"x","risk_tags":["minor"],"anchors":[]}' \
   "single valid token from the selected axis"
 
@@ -246,16 +278,19 @@ assert_contribution_rejected '{"round_id":"round-4","axis_id":"axis:A","claim_ve
   "missing key(s)" "missing key rejected"
 
 # ── 13. single-contribution semantics: one dispatch call, one stub
-#      invocation — the stub's own record proves no loop happened ─────────
+#      invocation — the stub's own APPEND-ONLY call log proves the count.
+#      (AUTHOR_ARGV_FILE is overwritten per-call, so it can only prove "at
+#      least one call with this argv", never a call COUNT — a caller that
+#      looped N times and only checked the last-written argv would still
+#      look like exactly one call. AUTHOR_CALL_LOG accumulates one line per
+#      invocation across the stub's lifetime, so its line count is a real,
+#      binding count proof.) ────────────────────────────────────────────────
 reset_author_stub
 export STUB_STATUS="authored"; export STUB_EXIT="0"
 export STUB_RAW_CONTENT="$VALID_RESPONSE"
 AUTOPILOT_QUALIFICATION_OVERRIDE="$OVERRIDE_FILE" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON_NO_OVERRIDE" node "$SCRIPT" --bundle-file "$BUNDLE" --dispatch-author-bin "$AUTHOR_STUB" >/dev/null 2>&1
-INVOCATIONS="$(wc -l < "$AUTHOR_ARGV_FILE" | tr -d ' ')"
-# argv is written as one arg per line; --runner alone appears exactly once
-# if dispatch-author.sh (the stub) was invoked exactly once.
-RUNNER_COUNT="$(grep -c '^--runner$' "$AUTHOR_ARGV_FILE")"
-assert_eq "1" "$RUNNER_COUNT" "exactly one dispatch call (single-contribution, not a chat loop)"
+CALL_COUNT_STUB="$( [ -f "$AUTHOR_CALL_LOG" ] && wc -l < "$AUTHOR_CALL_LOG" | tr -d ' ' || echo 0 )"
+assert_eq "1" "$CALL_COUNT_STUB" "exactly one dispatch call (single-contribution, not a chat loop) — proven by an append-only invocation log, not the last-write-wins argv snapshot"
 
 # ── 14. node --check + repo syntax gate ─────────────────────────────────────
 node --check "$SCRIPT" 2>&1

@@ -1245,6 +1245,27 @@ rejects(
   '(e) a discuss trial over the zero-tolerance sycophantic-capitulation floor cannot be promoted',
 );
 
+// (k) bidirectional role<->methodology pin, the REVERSE direction (adversarial
+// QC finding): the generic 'role_eval' methodology whitelist in
+// enforcePromotion admits ANY role, so a role=consult (or role=discuss) row
+// carrying plain 'role_eval' evidence must be rejected rather than falling
+// through to the generic reviewer-corpus threshold branch and qualifying the
+// seat without the specialized consult_panel/discuss_rounds exam. The
+// forward direction (consult_panel/discuss_rounds evidence can only ever
+// qualify their own role) is already covered by enforceConsultPromotion /
+// enforceDiscussPromotion above; this closes the "and vice versa" half the
+// old comment claimed but the code didn't implement.
+rejects(
+  () => compileCapabilityEvidence(qualifiedInput({ role: 'consult', identity: consultIdentity })),
+  /the consult role requires consult_panel methodology evidence/,
+  '(k) role=consult with generic role_eval methodology is rejected, not silently qualified via the generic threshold branch',
+);
+rejects(
+  () => compileCapabilityEvidence(qualifiedInput({ role: 'discuss', identity: discussIdentity })),
+  /the discuss role requires discuss_rounds methodology evidence/,
+  '(k) role=discuss with generic role_eval methodology is rejected, not silently qualified via the generic threshold branch',
+);
+
 // (i) barrel + normalizer separation, and the re-collapse negative (finding
 // [5]): CAPABILITY_ROLE_IDS/normalizeCapabilityRole from the src/engine barrel
 // accept consult/discuss; ROLE_IDS/normalizeRole from the SAME barrel reject

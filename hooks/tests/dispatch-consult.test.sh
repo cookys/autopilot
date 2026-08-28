@@ -55,6 +55,18 @@ assert_eq "2" "$NOARG_EXIT" "missing --question-file exits 2"
 assert_shadow_not_invoked "missing --question-file never spawns the transport binary"
 rm -f "$SHADOW_MARKER"
 
+# ── 2b. Trailing flag with no value ⇒ usage refusal (exit 2), never a hang.
+# `shift 2` with only one positional arg left (no `set -e`) would otherwise
+# error without shifting and spin the arg-parse loop forever on the same
+# flag — guard with `[ $# -ge 2 ] || die ...` before the shift. `timeout`
+# bounds the assertion itself so a regression fails the test instead of
+# hanging the suite.
+TRAILING_OUT="$(timeout 10s "$SCRIPT" --artifact "$ART" --question-file "$Q" --timeout 2>&1)"; TRAILING_EXIT=$?
+assert_eq "2" "$TRAILING_EXIT" "trailing --timeout with no value exits 2 (never hangs)"
+assert_contains "$TRAILING_OUT" "missing value for --timeout" "trailing-flag message names the offending flag"
+assert_shadow_not_invoked "trailing flag with no value never spawns the transport binary"
+rm -f "$SHADOW_MARKER"
+
 # ── Fixtures shared by the switch-on cases below ────────────────────────────
 ON_CFG="$TEST_TMP/on.md"
 printf -- '- consult_engine: gpt-5.6\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$ON_CFG"

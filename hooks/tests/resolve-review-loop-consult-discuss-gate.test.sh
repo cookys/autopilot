@@ -279,22 +279,79 @@ assert_eq "3" "$RC_XI" "(xi) forgery (no evidence block at all, hand-typed pass)
 # ═══════════════════════════════════════════════════════════════════════════
 # (xii) a row whose qualification-evidence anchor is MISSING, and one whose
 # anchor is MISMATCHED => exit 3 each.
-# ═══════════════════════════════════════════════════════════════════════════
+#
+# Adversarial-QC finding: piping the corrupted row through `engine-scorecard.js
+# record` is NON-BINDING evidence. validateRecordRow's own embedded-evidence
+# branch calls the exact same verifyEvidenceStoreAnchor() the read-time strict
+# path (seat-status --require-evidence) calls — so `record` rejects the write
+# and the row never lands in scorecard.jsonl at all. The resolver's exit 3
+# then proves only "no row" (indistinguishable from cases ii/iii), never that
+# the STRICT READ path independently caught the anchor defect. Fix: write the
+# corrupted row directly into the store bytes (bypassing `record` /
+# validateRecordRow entirely), assert the row is actually present in the
+# store, THEN assert the strict read rejects it with the anchor-specific
+# error — the only way to bind this to read-time verification.
+write_raw_scorecard_row() { # <row-json> -> appends with an explicit event_id, no validation
+  local row="$1"
+  printf '%s' "$row" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);r.event_id=1;process.stdout.write(JSON.stringify(r)+"\n");})' \
+    >> "$ENGINE_SCORECARD_DIR/scorecard.jsonl"
+}
+
 fresh_stores "case-xii-missing"
 ROW_XII_MISSING="$(node "$FIXTURE_JS" consult --engine eng-xii-missing --runner cc-shim)"
 ROW_XII_NOANCHOR="$(printf '%s' "$ROW_XII_MISSING" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);delete r.evidence_store;process.stdout.write(JSON.stringify(r));})')"
-printf '%s\n' "$ROW_XII_NOANCHOR" | node "$REPO_ROOT/scripts/engine-scorecard.js" record >/dev/null 2>&1
+write_raw_scorecard_row "$ROW_XII_NOANCHOR"
+assert_contains "$(cat "$ENGINE_SCORECARD_DIR/scorecard.jsonl")" '"engine":"eng-xii-missing"' \
+  "(xii) missing-anchor row is genuinely PRESENT in the store (proves the read path, not row-absence, produces the refusal)"
 CFG_XII_MISSING="$(mk_cfg consult eng-xii-missing cc-shim high on)"
+ERR_XII_MISSING="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XII_MISSING" bash "$SCRIPT" 2>&1 >/dev/null)"
 RC_XII_MISSING="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XII_MISSING" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
 assert_eq "3" "$RC_XII_MISSING" "(xii) missing evidence_store anchor refuses"
+assert_contains "$ERR_XII_MISSING" "lacks a qualifier store anchor" "(xii) missing-anchor refusal names the specific strict-read anchor failure"
 
 fresh_stores "case-xii-mismatch"
 ROW_XII_MISMATCH_SRC="$(node "$FIXTURE_JS" consult --engine eng-xii-mismatch --runner cc-shim)"
 ROW_XII_MISMATCH="$(printf '%s' "$ROW_XII_MISMATCH_SRC" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);r.evidence_store.transcript_hash="0".repeat(64);process.stdout.write(JSON.stringify(r));})')"
-printf '%s\n' "$ROW_XII_MISMATCH" | node "$REPO_ROOT/scripts/engine-scorecard.js" record >/dev/null 2>&1
+write_raw_scorecard_row "$ROW_XII_MISMATCH"
+assert_contains "$(cat "$ENGINE_SCORECARD_DIR/scorecard.jsonl")" '"engine":"eng-xii-mismatch"' \
+  "(xii) mismatched-anchor row is genuinely PRESENT in the store (proves the read path, not row-absence, produces the refusal)"
 CFG_XII_MISMATCH="$(mk_cfg consult eng-xii-mismatch cc-shim high on)"
+ERR_XII_MISMATCH="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XII_MISMATCH" bash "$SCRIPT" 2>&1 >/dev/null)"
 RC_XII_MISMATCH="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XII_MISMATCH" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
 assert_eq "3" "$RC_XII_MISMATCH" "(xii) mismatched evidence_store anchor (wrong transcript_hash) refuses"
+assert_contains "$ERR_XII_MISMATCH" "anchor is missing or mismatched" "(xii) mismatch refusal names the specific strict-read anchor-binding failure"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# (xii-c) a row with a SYNTACTICALLY VALID `evidence` block (genuinely
+# compiles, anchor intact and correctly bound) that fails one of
+# validateRecordRow's DEEPER field-binding checks — a scorecard field that
+# must mirror its own evidence but doesn't (e.g. corpus_version).
+#
+# Adversarial-QC finding [7]: case (xi)'s forged row carries no `evidence`
+# key at all, so it is dropped at `if (!clone.evidence) continue;` in
+# computeSeatProjectionStrict — BEFORE validateRecordRow's evidence-block
+# checks ever matter to the outcome. That made validateRecordRow(clone)
+# itself a no-op for that case: deleting the call entirely still leaves case
+# (xi) green (row has no evidence -> still skipped by the `!clone.evidence`
+# check alone). This case closes that gap: it has a real `evidence` block
+# (so it does NOT get dropped by `!clone.evidence`) and a real, correctly-
+# bound `evidence_store` anchor (so it is NOT case xii's anchor failure) —
+# the ONLY thing wrong with it is a field-binding mismatch that only
+# validateRecordRow's deeper checks (not the anchor check, not the
+# `!clone.evidence` skip) can catch. Written directly into the store,
+# bypassing `record`, same technique as case (xii).
+# ═══════════════════════════════════════════════════════════════════════════
+fresh_stores "case-xii-c-field-binding"
+ROW_XIIC_SRC="$(node "$FIXTURE_JS" consult --engine eng-xiic --runner cc-shim)"
+ROW_XIIC_BAD_BINDING="$(printf '%s' "$ROW_XIIC_SRC" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);r.corpus_version="tampered-corpus-version-mismatch";process.stdout.write(JSON.stringify(r));})')"
+write_raw_scorecard_row "$ROW_XIIC_BAD_BINDING"
+assert_contains "$(cat "$ENGINE_SCORECARD_DIR/scorecard.jsonl")" '"engine":"eng-xiic"' \
+  "(xii-c) field-binding-mismatch row is genuinely PRESENT in the store (proves the read path, not row-absence, produces the refusal)"
+CFG_XIIC="$(mk_cfg consult eng-xiic cc-shim high on)"
+ERR_XIIC="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XIIC" bash "$SCRIPT" 2>&1 >/dev/null)"
+RC_XIIC="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XIIC" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "3" "$RC_XIIC" "(xii-c) a valid-evidence row with a tampered corpus_version field binding refuses"
+assert_contains "$ERR_XIIC" "corpus_version does not match capability evidence" "(xii-c) refusal names the specific field-binding failure validateRecordRow's deeper check caught"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # (xiii) a malformed line UNRELATED to the candidate seat => exit 3 under
@@ -337,6 +394,35 @@ CFG_XIVB_OFF="$(mk_cfg consult eng-xiv-b cc-shim high off)"
 RC_XIVB_OFF="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XIVB_OFF" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
 assert_eq "0" "$RC_XIVB_OFF" "(xiv) SAME unreadable qualification-evidence store, switch OFF: resolve still succeeds"
 chmod 644 "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# (xiv-fifo) adversarial-QC finding [8]: the two "no store read at all" OFF-
+# path assertions above (RC_XIVA_OFF / RC_XIVB_OFF) are asserted only as
+# exit-0-despite-chmod-000-store. A regression that adds a swallowed read
+# (try/catch around a permission-denied open, result discarded either way)
+# would still exit 0 there — invisible. Bind it: replace the store file with
+# a named pipe (no writer ever attaches). A blocking read() against a FIFO
+# with no writer HANGS — so ONLY the absence of any read attempt lets this
+# complete promptly; any read (even one whose result is later discarded)
+# hangs until `timeout` kills it, flipping the exit code away from a fast 0.
+# ═══════════════════════════════════════════════════════════════════════════
+fresh_stores "case-xiv-scorecard-off-fifo"
+mk_row consult eng-xiv-fifo-a cc-shim
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl"
+mkfifo "$ENGINE_SCORECARD_DIR/scorecard.jsonl"
+CFG_XIVA_FIFO_OFF="$(mk_cfg consult eng-xiv-fifo-a cc-shim high off)"
+RC_XIVA_FIFO_OFF="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XIVA_FIFO_OFF" timeout 5s bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "0" "$RC_XIVA_FIFO_OFF" "(xiv-fifo) switch OFF over a scorecard store that would HANG any real read completes promptly (proves zero read attempts, not just a swallowed error)"
+rm -f "$ENGINE_SCORECARD_DIR/scorecard.jsonl"
+
+fresh_stores "case-xiv-capability-off-fifo"
+mk_row consult eng-xiv-fifo-b cc-shim
+rm -f "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+mkfifo "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
+CFG_XIVB_FIFO_OFF="$(mk_cfg consult eng-xiv-fifo-b cc-shim high off)"
+RC_XIVB_FIFO_OFF="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XIVB_FIFO_OFF" timeout 5s bash "$SCRIPT" >/dev/null 2>&1; echo $?)"
+assert_eq "0" "$RC_XIVB_FIFO_OFF" "(xiv-fifo) switch OFF over a qualification-evidence store that would HANG any real read completes promptly (proves zero read attempts, not just a swallowed error)"
+rm -f "$ENGINE_CAPABILITY_DIR/qualification-evidence.jsonl"
 
 fresh_stores "case-xiv-strikes-unreadable"
 mk_row consult eng-xiv-c cc-shim

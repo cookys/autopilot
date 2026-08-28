@@ -299,7 +299,16 @@ function buildPromptFile(bundle) {
     'Never include a ship/no-ship verdict token, in any field, in any form.',
   ];
   const promptPath = path.join(os.tmpdir(), `dispatch-discuss-prompt-${crypto.randomBytes(6).toString('hex')}.txt`);
-  fs.writeFileSync(promptPath, promptLines.join('\n'), 'utf8');
+  // Exclusive create with owner-only mode (0600) — the prompt file can carry
+  // transcript/artifact content and must not be world-readable in a shared
+  // /tmp, and 'wx' also guarantees we never write through a pre-existing
+  // (possibly attacker-planted) path at this random name.
+  const fd = fs.openSync(promptPath, 'wx', 0o600);
+  try {
+    fs.writeSync(fd, promptLines.join('\n'), null, 'utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
   return promptPath;
 }
 
@@ -444,12 +453,16 @@ function validateContribution(response, bundle, ctx) {
   const hasOwnToken = response.claim_vector.some((t) => selectedVector.has(t));
   if (!hasOwnToken) return 'claim_vector carries no token from the selected axis';
 
-  for (const [axisId, vector] of ctx.axisVector.entries()) {
-    if (axisId === response.axis_id) continue;
-    if (!takenAxes.has(axisId)) continue;
-    if (response.claim_vector.some((t) => vector.has(t))) {
-      return `claim_vector carries a token exclusive to already-taken axis ${axisId}`;
-    }
+  // Closed contract: EVERY claim_vector token must come from the selected
+  // axis's own pinned vector — not merely "at least one own token, and no
+  // token from an already-taken axis". A vector mixing in a token from
+  // another UNTAKEN axis, or an unknown token entirely, must be rejected
+  // here too (adversarial-QC finding: the prior loop only checked taken
+  // axes, so ["tokenA1", "unknown"] or ["tokenA1", "<untaken-axis-token>"]
+  // both passed).
+  const foreignToken = response.claim_vector.find((t) => !selectedVector.has(t));
+  if (foreignToken !== undefined) {
+    return `claim_vector carries a token not in the selected axis's vector: ${foreignToken}`;
   }
 
   return null;

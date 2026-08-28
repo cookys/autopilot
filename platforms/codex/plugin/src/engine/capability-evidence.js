@@ -952,6 +952,21 @@ function enforcePromotion(record) {
       'EVIDENCE_PROMOTION_DENIED',
     );
   }
+  // Reverse of the pairing enforceConsultPromotion/enforceDiscussPromotion
+  // already pin below (consult_panel/discuss_rounds -> their own role only):
+  // the generic 'role_eval' methodology whitelist above admits ANY role, so
+  // without this check a role=consult (or role=discuss) row carrying plain
+  // 'role_eval' evidence would fall through to the generic reviewer-corpus
+  // threshold branch at the bottom of this function and qualify the seat
+  // without ever running the specialized consult/discuss exam
+  // (adversarial-QC finding: the doc comment above enforceConsultPromotion
+  // claimed "and vice versa" pinning that this direction didn't implement).
+  if (record.role === 'consult' && record.methodology.kind !== CONSULT_METHODOLOGY_KIND) {
+    evidenceError('the consult role requires consult_panel methodology evidence', 'EVIDENCE_PROMOTION_DENIED');
+  }
+  if (record.role === 'discuss' && record.methodology.kind !== DISCUSS_METHODOLOGY_KIND) {
+    evidenceError('the discuss role requires discuss_rounds methodology evidence', 'EVIDENCE_PROMOTION_DENIED');
+  }
   if (record.methodology.kind === BRAIN_METHODOLOGY_KIND) {
     enforceBrainPromotion(record);
     return;

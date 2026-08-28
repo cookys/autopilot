@@ -53,10 +53,31 @@ const {
 } = require('../evals/va-eval-grader');
 const implGenerator = require('../evals/impl-eval-generator');
 const implGrader = require('../evals/impl-eval-grader');
-const consultGenerator = require('../evals/consult-eval-generator');
-const discussGenerator = require('../evals/discuss-eval-generator');
-const consultGrader = require('../evals/consult-eval-grader');
-const discussGrader = require('../evals/discuss-eval-grader');
+// Sealed consult/discuss modules (generator + grader) are LOADED LAZILY —
+// see loadSealedConsultDiscussModules below — never require()d at module
+// top level. Hetero review finding [seal-before-load]: these files are the
+// exact byte-pinned assets checkAssetSeals() verifies; requiring them at
+// import time would execute a DRIFTED module's top-level code before any
+// hash comparison ever ran, defeating the seal check's entire purpose. Every
+// call site (the --plan case-plan builders AND the live kernel) loads them
+// only AFTER its own seal-verification call has already thrown on drift.
+let _consultGeneratorModule = null;
+let _discussGeneratorModule = null;
+let _consultGraderModule = null;
+let _discussGraderModule = null;
+function loadSealedConsultDiscussModules(role) {
+  if (role === 'consult') {
+    if (!_consultGeneratorModule) _consultGeneratorModule = require('../evals/consult-eval-generator');
+    if (!_consultGraderModule) _consultGraderModule = require('../evals/consult-eval-grader');
+    return { generator: _consultGeneratorModule, grader: _consultGraderModule };
+  }
+  if (role === 'discuss') {
+    if (!_discussGeneratorModule) _discussGeneratorModule = require('../evals/discuss-eval-generator');
+    if (!_discussGraderModule) _discussGraderModule = require('../evals/discuss-eval-grader');
+    return { generator: _discussGeneratorModule, grader: _discussGraderModule };
+  }
+  throw new Error(`loadSealedConsultDiscussModules: unsupported role '${role}'`);
+}
 // D7 (plan 2026-08-28-consult-discuss-qualification.md) — the ONE frozen
 // applicability-scope derivation. resolve-review-loop.sh's D7 gate derives
 // its scope from this same module (`write-scope`); a live administration
@@ -3363,7 +3384,7 @@ function planSeed(label, generatorHash) {
   return byteHash(`engine-qualify:plan-seed:${label}:${generatorHash}`);
 }
 
-function buildConsultCasePlan(identities) {
+function buildConsultCasePlan(identities, consultGenerator) {
   const adminSeed = planSeed('consult-admin', identities.generator);
   const oracleKey = planSeed('consult-oracle', identities.generator);
   const admission = consultGenerator.runAdmission({ adminSeed, oracleKey });
@@ -3386,7 +3407,7 @@ function buildConsultCasePlan(identities) {
   };
 }
 
-function buildDiscussCasePlan() {
+function buildDiscussCasePlan(discussGenerator) {
   const cases = discussGenerator.buildAdministration();
   const gateReport = discussGenerator.runAdmissionGates(cases);
   if (!gateReport.pass) {
@@ -3600,9 +3621,16 @@ function runConsultDiscussQualification(options) {
     );
   }
 
-  const generator = role === 'consult' ? consultGenerator : discussGenerator;
-  const grader = role === 'consult' ? consultGrader : discussGrader;
+  // Lazy load AFTER checkAssetSeals() has already thrown on any drift above
+  // (finding [seal-before-load]) — a drifted generator/grader's top-level
+  // code must never execute, not even to read CORPUS off it.
+  const { generator, grader } = loadSealedConsultDiscussModules(role);
   const CORPUS = generator.CORPUS;
+  // The RECORDED evidence binds ALL FIVE frozen identities via one digest
+  // (hetero review finding [evidence-asset-binding]) — never just the
+  // corpus manifest's own hash, which left generator/grader/rubric/seal
+  // drift invisible to a reader of the row after the fact.
+  const sealedSetHash = qualificationAssetSeals.sealedSetHash(role);
 
   if (options.trials !== CORPUS.budget.trials_per_administration) {
     throw new Error(
@@ -3811,7 +3839,7 @@ function runConsultDiscussQualification(options) {
     const base = {
       trial_id: `trial-${trial.trial}`,
       observed_at: issuedAt,
-      corpus_manifest_hash: staticAssets.corpus_hash,
+      corpus_manifest_hash: sealedSetHash,
       cases_total: trial.cases.length,
       cases_passed: count('pass'),
       ...perOutcomeCounts,
@@ -3848,7 +3876,7 @@ function runConsultDiscussQualification(options) {
     name: role === 'consult' ? 'consult-panel-v1' : 'discuss-rounds-v1',
     version: '1.0.0',
     corpus_version: `${CORPUS.corpus_version}.${generator.GENERATOR_VERSION}`,
-    corpus_manifest_hash: staticAssets.corpus_hash,
+    corpus_manifest_hash: sealedSetHash,
     thresholds,
     basis: null,
   };
@@ -3868,6 +3896,13 @@ function runConsultDiscussQualification(options) {
     revocation: null,
     supersedes: null,
   });
+  // Record-path guard (hetero review finding [evidence-asset-binding]):
+  // recompute the sealed-set hash fresh from the CURRENTLY pinned assets and
+  // refuse to persist a row whose binding does not match — independent of
+  // (and stronger than) capability-evidence.js's own trial-vs-methodology
+  // internal-consistency check, which only proves the row is self-coherent,
+  // never that it is fresh against what is pinned on this host right now.
+  qualificationAssetSeals.assertSealedEvidenceBinding(role, evidence);
   const storeConfig = resolveEvidenceStore(options.store);
   let evidenceStoreRecord;
   try {
@@ -3980,9 +4015,13 @@ function runDiscussQualification(options) {
 
 function runPlanDryRun(options) {
   const identities = qualificationAssetSeals.frozenIdentities(options.role);
+  // Lazy load AFTER frozenIdentities() has already thrown on any seal drift
+  // (finding [seal-before-load]) — a drifted generator's top-level code must
+  // never execute, not even for a --plan dry-run.
+  const { generator } = loadSealedConsultDiscussModules(options.role);
   const casePlan = options.role === 'consult'
-    ? buildConsultCasePlan(identities)
-    : buildDiscussCasePlan();
+    ? buildConsultCasePlan(identities, generator)
+    : buildDiscussCasePlan(generator);
   const output = {
     schema_version: 1,
     role: options.role,

@@ -227,6 +227,53 @@ function frozenIdentities(role) {
   }
 }
 
+// sealedSetHash(role) — ONE canonical digest binding ALL FIVE frozen
+// identities (generator, grader, corpus, rubric, seal) together (hetero
+// review finding [evidence-asset-binding], 2026-08-28: the persisted
+// evidence previously bound only the corpus manifest's own hash into
+// methodology.corpus_manifest_hash — generator/grader/rubric/seal drift was
+// invisible to anything reading the RECORDED row back, even though `--plan`
+// and every live invocation already verify all five before running).
+// Consumed as evidence methodology.corpus_manifest_hash for consult/discuss
+// specifically (scripts/engine-qualify.js) instead of the bare corpus hash —
+// a single opaque digest is sufficient because assertSealedEvidenceBinding
+// below recomputes it FRESH from the currently pinned assets and refuses a
+// mismatch; adding five new fields to the shared methodology schema
+// (src/engine/capability-evidence.js) would ripple into every OTHER
+// methodology kind's record shape for no additional tamper-evidence.
+function sealedSetHash(role) {
+  const identities = verifyPinnedEvaluationAssets(role)
+  return crypto.createHash('sha256').update(JSON.stringify({
+    generator: identities.generator_hash,
+    grader: identities.grader_hash,
+    corpus: identities.corpus_hash,
+    rubric: identities.rubric_hash,
+    seal: identities.seal_hash,
+  })).digest('hex')
+}
+
+// assertSealedEvidenceBinding(role, evidence) — the RECORD-PATH guard
+// (hetero review finding [evidence-asset-binding]): recomputes the sealed-
+// set hash from the CURRENTLY PINNED assets and refuses to persist/accept
+// an evidence row whose methodology.corpus_manifest_hash does not match it.
+// This is independent of (and stronger than) src/engine/capability-
+// evidence.js's own trial-vs-methodology internal-consistency check — that
+// check only proves the row is internally coherent, never that its binding
+// is FRESH against what is pinned on THIS host right now. Call this
+// immediately before appendQualifierEvidence (or any other record-path
+// write) for consult/discuss evidence.
+function assertSealedEvidenceBinding(role, evidence) {
+  const expected = sealedSetHash(role)
+  const actual = evidence && evidence.methodology && evidence.methodology.corpus_manifest_hash
+  if (actual !== expected) {
+    throw new Error(
+      `${role} evidence sealed-set binding mismatch: methodology.corpus_manifest_hash `
+      + `(${actual}) does not match the current pinned sealed-set hash (${expected}) — `
+      + 'refusing to record (a stale or forged binding must never be treated as fresh evidence)'
+    )
+  }
+}
+
 module.exports = {
   PATHS,
   EXPECTED,
@@ -235,4 +282,6 @@ module.exports = {
   verifyPinnedDiscussEvaluationAssets,
   checkAssetSeals,
   frozenIdentities,
+  sealedSetHash,
+  assertSealedEvidenceBinding,
 }

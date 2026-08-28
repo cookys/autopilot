@@ -497,9 +497,12 @@ for r in $DECLARED; do
 done
 
 # ── 8. Scoped exception: a role-qualified row does not delist globally ─────
-# BACKLOG `UNQUALIFIED_RUNNERS reconciliation tension once a listed runner
-# earns a consult/discuss qualification` (docs/plans/2026-08-28-consult-
-# discuss-qualification.md §6 R9, §8 ruling 7). The loop above reconciles
+# Plan docs/plans/2026-08-28-consult-discuss-qualification.md §6 R9, §8
+# ruling 7 (the BACKLOG entry this fixture was tracked under —
+# `UNQUALIFIED_RUNNERS reconciliation tension once a listed runner earns a
+# consult/discuss qualification` — was RETIRED by commit 136439ae once this
+# fixture landed; history lives in that commit message and in the plan
+# sections above, not in docs/BACKLOG.md). The loop above reconciles
 # UNQUALIFIED_RUNNERS against a HARNESS capability record (src/harness/
 # capabilities/*.json `status`) — a per-RUNNER bit that says nothing about
 # any one ROLE. Once a listed runner earns a real per-{engine,runner,role}

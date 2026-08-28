@@ -232,3 +232,38 @@ No paid administration is executed as part of this task. This proposal is a docu
 to act on when it chooses to authorize spend; producing it involved only the two `--plan` dry-runs
 above (which do not call any provider or engine) and reading the local scorecard file for candidate
 selection.
+
+## Board decision — 2026-08-28 (authorization)
+
+**Decision**: administration **AUTHORIZED**, batch A (full batch + conditional seats).
+
+**Authorized seats**:
+
+| # | Engine | Runner | Role | Cases | Notes |
+|---|---|---|---|---|---|
+| 1 | `gpt-5.6-sol` | `codex` | consult | 20 | |
+| 2 | `gpt-5.6-sol` | `codex` | discuss | 16 | |
+| 3 | `MiniMax-M3` | `cc-shim` | consult | 20 | |
+| 4 | `GLM-5.3` | `cc-shim` | consult | 20 | |
+| 5 | `Qwen3.8-Max` | `qoderclicn` | consult | 20 | |
+| 6 | `Gemini 3.7 Flash (High)` | `agy` | discuss | 16 | Upgraded from the proposal's `Gemini 3.5 Flash (High)` row by Board instruction. `agy` updated to 1.1.22; envelope repro is 2/2 clean at the worst tier. The exam doubles as a fresh evaluation of the upgrade. Abort this seat on envelope recurrence. |
+| 7 | CONDITIONAL: kimi k3 (engine id per Stage-0 probe) | `kimi` | consult | 20 | Gated on Stage-0 transport probe GREEN. |
+| 8 | CONDITIONAL: `cursor-grok-4.6-high-fast` | `cursor` | consult | 20 | Gated on (a) the R9 reconciliation-test scope fix landing, AND (b) the stranded 2026-08-27 implementer row being re-derived into the canonical store. |
+
+Total up to **152 cases**.
+
+**Preconditions ordered by the Board**:
+
+1. **Live-administration wiring deliverable.** The KR8 deferral in `engine-qualify.js` is lifted
+   ONLY behind an explicit spend flag. The rail is built stub-tested with no paid calls, and
+   hetero-reviewed before merge.
+2. **Per-seat abort rule.** Rail/envelope failures abort that seat's remaining cases. A transport
+   failure must never be recorded as engine capability evidence.
+3. **Production record path.** Results are recorded via the production record path into the
+   canonical stores, with evidence anchors.
+
+**Excluded from this batch**:
+
+- **grok CLI rail** — event-149 rail-attributed failure unrepaired.
+- **Claude-family seats** — a native path already exists; heterogeneity is the roster's point.
+- **All discuss seats beyond sol + Gemini** — consumer demand doesn't justify them yet.

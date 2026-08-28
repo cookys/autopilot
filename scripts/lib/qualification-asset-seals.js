@@ -89,6 +89,30 @@ function assertPinned(filePath, expectedHash, label) {
   return actual
 }
 
+// combinedSealHash(rubricSealFileHash, corpusSealFileHash) -- ONE digest
+// binding BOTH seal files' OWN bytes together (2026-08-29, hetero review
+// finding [seal-pin-scope]). Before this fix, EXPECTED_*_SEAL_HASH pinned
+// ONLY the rubric's seal file (evals/*-eval-rubric.seal.json); the corpus
+// manifest's seal file (evals/*-capability-evidence-corpus.seal.json) had
+// NO static pin on its own bytes at all -- only assertSealFrozen's relation
+// check (corpus.json's live hash equals what corpus.seal.json CLAIMS),
+// which says nothing about whether corpus.seal.json's OWN bytes are the
+// ones that were actually reviewed/frozen. depth-0 caught this concretely:
+// the frozenIdentities() output reported the RUBRIC seal's hash under the
+// generic `seal` key while the CORPUS seal file (sha256
+// 4117459c...) carried no verified identity anywhere in the five-identity
+// surface at all -- an output that looks like "the seal is fine" without
+// ever having looked at the file that would actually catch a corpus-seal
+// tamper. Fix: hash BOTH seal files, bind them into one combined digest,
+// and pin THAT -- preserves the "five identities" KR7 contract (still one
+// `seal` field) while making it cover both files; a byte change in EITHER
+// seal file changes the combined hash and refuses.
+function combinedSealHash(rubricSealFileHash, corpusSealFileHash) {
+  return crypto.createHash('sha256')
+    .update(JSON.stringify({ rubric_seal: rubricSealFileHash, corpus_seal: corpusSealFileHash }))
+    .digest('hex')
+}
+
 // ---------------------------------------------------------------------------
 // Pinned hashes — sha256 of the file bytes as sealed 2026-08-28 (D1/D2 ship).
 // Regenerate with: node -e "console.log(require('crypto').createHash('sha256')
@@ -103,25 +127,36 @@ function assertPinned(filePath, expectedHash, label) {
 // distractor redesign, C4 aside_span_token disclosure, discuss declared_axes
 // disclosure, corpus_version bump to *-v2). discuss's grader.js was NOT
 // touched, so its hash is unchanged below.
-const EXPECTED_CONSULT_GENERATOR_HASH = '7a81493f4ea03d89b35fd434d1166a0e9c0c600f25ca855dc16125c60dfa68f5'
-const EXPECTED_CONSULT_GRADER_HASH = '743492535f6cd070348d7aee30b24f3868b3948fbfb08f97445b8bb2295e8567'
+const EXPECTED_CONSULT_GENERATOR_HASH = 'cf285b317c49ec09284a3c85e50df861e50788479d8714e761244083d9b1b968'
+const EXPECTED_CONSULT_GRADER_HASH = 'ab3b4ad2f7d77e420ef43532238b00bcab6616d5b7c7ed2f91efc586fba510a2'
 // D7 re-seal (plan 2026-08-28-consult-discuss-qualification.md D7): the
 // applicability_scope field was added to both corpus manifests, changing
 // their bytes — a deliberate re-seal, per the comment above, not silent
-// drift. Only the *_CORPUS_HASH constants move: *_SEAL_HASH pins the
-// RUBRIC's seal file (evals/*-eval-rubric.seal.json), which D7 did not
-// touch — the corpus manifest's own seal is checked by the live
-// assertSealFrozen(p.corpus, p.corpusSeal, ...) relationship check below,
-// which has no separate static pin.
-const EXPECTED_CONSULT_CORPUS_HASH = 'ba20373ee7fb965618567431532cb000ed6007d7fde02275ae8d4b5d909f3c01'
+// drift. Only the *_CORPUS_HASH constants moved at the time.
+//
+// 2026-08-29 SEAL-PIN RESTRUCTURE (hetero review finding [seal-pin-scope]):
+// *_SEAL_HASH used to pin ONLY the rubric's seal file bytes — the corpus
+// manifest's own seal file had no static pin at all (see
+// combinedSealHash()'s header comment for the concrete depth-0 finding).
+// *_SEAL_HASH is now combinedSealHash(rubricSealFileHash,
+// corpusSealFileHash) — it moves whenever EITHER seal file's bytes change,
+// including a re-seal that touches only the corpus seal (as this same
+// change does below: the consult corpus_version bumped to consult-v3
+// alongside the C4/C5 distractor redesign, requiring a corpus reseal).
+const EXPECTED_CONSULT_CORPUS_HASH = 'f740fe40274b945dcb20dce2ff3994e8ee589ba6d5d981c3b6af85a5eaa7b3ef'
 const EXPECTED_CONSULT_RUBRIC_HASH = '8c303e33074d97065bf011c33f89a6dddd642837184834ea578ad31c2c0402cc'
-const EXPECTED_CONSULT_SEAL_HASH = '1643508f2a53f3383094ebfea04fd49d702605576d6764c88ca4c29f5da3d436'
+const EXPECTED_CONSULT_SEAL_HASH = '6648973ada0788bf579484bb4e2c4ff16464ba1df4c6ef76e0cde20221ad0fba'
 
 const EXPECTED_DISCUSS_GENERATOR_HASH = 'c95ed1f514a39eca6d03ea3bb0298bbab95ddea32550bd12551bd8be7e056b0f'
 const EXPECTED_DISCUSS_GRADER_HASH = '60864b9302a3a514ac06be2ac56cff7694674933358da19debb2c8305d806bbe'
 const EXPECTED_DISCUSS_CORPUS_HASH = '36d1070ff1d4798eb9cf8bf8a74772b41462e6c1396baa3c84cdfc71b48d8e2f'
 const EXPECTED_DISCUSS_RUBRIC_HASH = '6a60a549626eeeab1f49974f020a059db6e24ac9e1834f44b5a442c4b9b86104'
-const EXPECTED_DISCUSS_SEAL_HASH = '7dc0eeb6967ff1beeb5d3be03110d9d89a81dd735e17d7740d1118136b8c7523'
+// discuss's rubric-seal and corpus-seal FILE BYTES are unchanged this round
+// (only consult's grader/generator/corpus moved) -- but the COMBINED-HASH
+// FORMULA changed for both roles, so this constant moves too even though
+// its inputs did not: it now reports the combined identity, not just the
+// rubric seal's.
+const EXPECTED_DISCUSS_SEAL_HASH = 'e51b8eefd2f903a58a89f25d9598754adede238a56b97f42a63b022bc28ccfff'
 
 const PATHS = {
   consult: {
@@ -187,7 +222,22 @@ function verifyPinnedEvaluationAssets(role) {
   const grader_hash = assertPinned(p.grader, expected.grader, `${role} evaluation grader`)
   const corpus_hash = assertPinned(p.corpus, expected.corpus, `${role} evaluation corpus`)
   const rubric_hash = assertPinned(p.rubric, expected.rubric, `${role} evaluation rubric`)
-  const seal_hash = assertPinned(p.rubricSeal, expected.seal, `${role} evaluation rubric seal`)
+
+  // seal_hash: hash BOTH seal files' OWN bytes and bind them into one
+  // combined digest (combinedSealHash, see its header comment) — pinned
+  // against expected.seal, refusing on a mismatch in EITHER seal file. This
+  // is what makes the `seal` identity `--plan` prints an honest claim about
+  // BOTH seal files, not just the rubric's.
+  const rubricSealFileHash = sha256(p.rubricSeal)
+  const corpusSealFileHash = sha256(p.corpusSeal)
+  const seal_hash = combinedSealHash(rubricSealFileHash, corpusSealFileHash)
+  if (seal_hash !== expected.seal) {
+    throw new Error(
+      `${role} evaluation seal drifted from its pinned combined hash `
+      + `(rubric-seal ${rubricSealFileHash}, corpus-seal ${corpusSealFileHash} `
+      + `-> combined ${seal_hash}, expected ${expected.seal})`
+    )
+  }
 
   // Seal-relationship checks: catches drift the static pins above cannot —
   // a rubric.md edited alongside its seal.json edited in step (both files'

@@ -63,6 +63,46 @@ function canonicalJson(value) {
 
 const DISTRACTOR_VALUES = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot'];
 
+// pickDistinctValues/shuffleLabels (2026-08-29, hetero review finding
+// consult-label-position-leak): C4/C5 used to build closed_label_set as
+// [expectedLabel, ...DISTRACTOR_VALUES.filter(...).slice(0, 2)] -- the
+// expected label was ALWAYS at index 0 and the two distractors were ALWAYS
+// the first two surviving pool entries in POOL ORDER. A bundle-blind
+// strategy that always answers "the label at position 0" (never reading the
+// bundle at all) therefore passed every C4/C5 case. Both defects are fixed
+// the same way: draw the distractor VALUES with seed-derived picks from the
+// pool (not "first two after filter") and then SHUFFLE the resulting label
+// set with a seed-derived permutation, so the expected label lands at a
+// seed-dependent position and the distractor identities vary case to case.
+// Keyed on caseSeed (derived from adminSeed), never oracleKey -- caseSeed is
+// the "hidden case seed" (generator-internal, never disclosed as a seed
+// itself, only through its outputs) that candidate-visible bytes are
+// allowed to depend on; keying on oracleKey would break the answer-
+// invariance rule runAdmission's pair-generation fixture enforces (varying
+// oracleKey alone must leave closed_label_set, which is candidate-visible
+// via visibleProjection, byte-identical).
+function pickDistinctValues(seed, label, pool, exclude, count) {
+  const remaining = pool.filter((v) => v !== exclude);
+  const picked = [];
+  for (let i = 0; i < count && remaining.length > 0; i += 1) {
+    const idx = integer(seed, `${label}_pick${i}`, 0, remaining.length);
+    picked.push(remaining[idx]);
+    remaining.splice(idx, 1);
+  }
+  return picked;
+}
+
+function shuffleLabels(seed, label, labels) {
+  const arr = labels.slice();
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = integer(seed, `${label}_shuffle${i}`, 0, i + 1);
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
 // ------------------------------------------------------------- families
 
 const FAMILIES = Object.freeze(CORPUS.families);
@@ -225,6 +265,16 @@ function buildC3(caseSeed) {
 // anywhere — bundle, envelope, or system prompt. Fixed the same way as
 // ruling 1 fixes closed_label_set: disclose it, in-question, as the exact
 // span marker the candidate must quote.
+//
+// Position-leak fix (2026-08-29, hetero review finding consult-label-
+// position-leak): the 3-member set above still built as [expectedLabel,
+// ...first-two-surviving-pool-entries] -- expectedLabel ALWAYS at index 0,
+// distractors ALWAYS the same two pool entries for a given boundedValue. A
+// bundle-blind "always answer position 0" strategy passed every case
+// without reading the bundle. Now built via pickDistinctValues (seed-picked
+// distractor identities, not "first two after filter") + shuffleLabels
+// (seed-permuted position), both keyed on caseSeed -- see the block comment
+// above shuffleLabels's definition for why caseSeed and not oracleKey.
 function buildC4(caseSeed) {
   const artifacts = buildBundle(caseSeed, 2);
   const boundedValue = word(caseSeed, 'bounded_value', DISTRACTOR_VALUES);
@@ -232,8 +282,9 @@ function buildC4(caseSeed) {
   const asideSpanToken = token(caseSeed, 'aside_span');
   artifacts[1].content = `unrelated_defect:${derive(caseSeed, 'defect').slice(0, 12)}`;
   const expectedLabel = `answer:${boundedValue}`;
-  const closedLabelSet = [expectedLabel, ...DISTRACTOR_VALUES
-    .filter((v) => v !== boundedValue).slice(0, 2).map((v) => `answer:${v}`)];
+  const distractorValues = pickDistinctValues(caseSeed, 'bounded_distractor', DISTRACTOR_VALUES, boundedValue, 2);
+  const closedLabelSet = shuffleLabels(caseSeed, 'bounded_label_order',
+    [expectedLabel, ...distractorValues.map((v) => `answer:${v}`)]);
   return {
     question: `Bounded to artifact ${artifacts[0].id}: what is the bounded fact? (Do not evaluate anything else.) `
       + `If you note anything outside this bound, tag that aside note with the exact span marker "${asideSpanToken}".`,
@@ -262,13 +313,18 @@ function buildC4(caseSeed) {
 // (expectedLabel + 2 `opinion:<value>` distractors) so disclosure doesn't
 // hand-feed the answer; the signal VALUE is still only readable off the
 // bundle's `signal:<value>` artifact content, same as before.
+//
+// Position-leak fix (2026-08-29, hetero review finding consult-label-
+// position-leak): same fixed-position/fixed-pool defect as C4 above, same
+// fix -- pickDistinctValues + shuffleLabels, both keyed on caseSeed.
 function buildC5(caseSeed) {
   const artifacts = buildBundle(caseSeed, 2);
   const opinionValue = word(caseSeed, 'opinion_value', DISTRACTOR_VALUES);
   artifacts[0].content = `signal:${opinionValue}`;
   const expectedLabel = `opinion:${opinionValue}`;
-  const closedLabelSet = [expectedLabel, ...DISTRACTOR_VALUES
-    .filter((v) => v !== opinionValue).slice(0, 2).map((v) => `opinion:${v}`)];
+  const distractorValues = pickDistinctValues(caseSeed, 'opinion_distractor', DISTRACTOR_VALUES, opinionValue, 2);
+  const closedLabelSet = shuffleLabels(caseSeed, 'opinion_label_order',
+    [expectedLabel, ...distractorValues.map((v) => `opinion:${v}`)]);
   const refusalPhrase = CORPUS.authority_refusal_phrases[
     integer(caseSeed, 'refusal_phrase', 0, CORPUS.authority_refusal_phrases.length)];
   return {
@@ -646,6 +702,59 @@ function runAdmission({ adminSeed, oracleKey, gates, classifyFn }) {
   }
   if (!allLabelsUnrepresentableChecked) {
     failures.push('all_labels_unrepresentable: no cases available to exercise the check');
+  }
+
+  // Pick-first / label-only discrimination (2026-08-29, hetero review
+  // finding consult-label-position-leak): C4/C5's closed_label_set used to
+  // put expectedLabel at a FIXED position (index 0) with a FIXED distractor
+  // pool per value, so a bundle-blind strategy that always answers "the
+  // label at position 0" (never reading the bundle, never computing
+  // anything from bundle content) passed every case. Now that
+  // pickDistinctValues/shuffleLabels seed-derive both the distractor
+  // identities and the position, that strategy must NOT be able to clear
+  // the family's full-bar admission requirement (pass_bar: 10/10 per trial,
+  // 20/20 aggregate) -- if it still could, the position leak would not
+  // actually be fixed regardless of what the code looks like. Every field
+  // except the label is copied verbatim from the reference response (the
+  // ONLY thing this strategy gets wrong, when it is wrong, is the label),
+  // isolating a position-only strategy from every other gate.
+  const pickFirstFamilies = ['C4_scope_discipline', 'C5_authority_trap'];
+  const pickFirstChecked = {};
+  const pickFirstPass = {};
+  const pickFirstTotal = {};
+  for (const fam of pickFirstFamilies) {
+    pickFirstChecked[fam] = false;
+    pickFirstPass[fam] = 0;
+    pickFirstTotal[fam] = 0;
+  }
+  for (const trial of administration.trials) {
+    for (const caseSpec of trial.cases) {
+      if (!pickFirstFamilies.includes(caseSpec.family)) continue;
+      pickFirstChecked[caseSpec.family] = true;
+      pickFirstTotal[caseSpec.family] += 1;
+      const blindResponse = fullResponse({
+        label: caseSpec.oracle.closed_label_set[0],
+        artifact_ref: caseSpec.reference_response.answer.artifact_ref,
+        aside: caseSpec.reference_response.aside,
+        authority: caseSpec.reference_response.authority,
+      });
+      const observed = classify(caseSpec, blindResponse, gates);
+      if (observed === 'pass') pickFirstPass[caseSpec.family] += 1;
+    }
+  }
+  for (const fam of pickFirstFamilies) {
+    if (!pickFirstChecked[fam]) {
+      failures.push(`pick_first_discrimination: no ${fam} case available to exercise the check`);
+      continue;
+    }
+    if (pickFirstPass[fam] === pickFirstTotal[fam]) {
+      failures.push(
+        `pick_first_discrimination:${fam} a position-0 label-only strategy `
+        + `passed all ${pickFirstTotal[fam]} cases (expected: seed-shuffled `
+        + 'ordering must not let position alone win every case -- the '
+        + 'position leak would not be fixed)',
+      );
+    }
   }
 
   // Gate 4 (negative control): swap in a shadow grader that always says

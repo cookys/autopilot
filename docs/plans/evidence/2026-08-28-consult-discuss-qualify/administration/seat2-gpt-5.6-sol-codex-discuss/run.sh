@@ -50,8 +50,8 @@ RUNNER_VERSION="$(node -e "process.stdout.write(JSON.parse(process.argv[1]).toke
 # --- frozen identity fingerprints (derived by derive-hashes.js; see ../DERIVATION.md) ---
 PROMPT_CONFIG_HASH="fb843a7adee3dd3d8a937af8117053e2d48d571523216d72ef7ae6da937adb49"
 SEMANTIC_FINGERPRINT="c934ce0412bd0497951db5981ae00847745160f01fb954f7eebcd71c1d8bb5ba"
-CONTAINMENT_FINGERPRINT="441227738a06e9214c72bbadbb238aa349b42b964b923da2d7a90904d55d4cf4"
-HARNESS_VERSION="qrp:44122773"   # sha256(qualification-review-provider.js) short blob, see DERIVATION.md
+CONTAINMENT_FINGERPRINT="9e25bea8fb433ca99c1a3b4c7d54431ad8e2b3e51ce70082462d553de09275c6"
+HARNESS_VERSION="qrp:9e25bea8"   # sha256(qualification-review-provider.js) short blob, see DERIVATION.md
 
 # --- transport env (forwarded into the QRP child via --provider-env; CODEX_HOME
 # rides the harness-native redirect var since the broker forces HOME to a fresh

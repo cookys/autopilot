@@ -628,6 +628,26 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     // child's inability to run tools or touch the filesystem is then enforced
     // by the forced `permissions.deny` blocklist merged into the cloned
     // QRP_CLI_HOME below (verified: deny rules win over this flag).
+    //
+    // FAIL CLOSED (2026-08-29, hetero review finding [deny-not-total]): the
+    // deny-merge below only runs INSIDE the `if (process.env.QRP_CLI_HOME)`
+    // clone step -- QRP_CLI_HOME was optional everywhere else in this
+    // function, so an agy invocation with QRP_CLI_HOME unset would spawn
+    // flag-armed (tool confirmation resolvable) with NO deny list at all,
+    // silently losing the containment hunk 2 exists for. Every real agy
+    // seat's run.sh always sets QRP_CLI_HOME (agy has no other way to reach
+    // credentials -- see the QRP_CLI_HOME comment below), so this refusal
+    // should never fire in production; it exists so a future caller that
+    // forgets to set it gets a loud refusal here instead of a silently
+    // uncontained spawn.
+    if (!process.env.QRP_CLI_HOME) {
+      throw new Error(
+        'agy requires QRP_CLI_HOME: the --dangerously-skip-permissions flag is '
+        + 'safe only in combination with the forced permissions.deny merge into '
+        + 'the cloned QRP_CLI_HOME, and there is no clone to merge into without it '
+        + '-- refusing to spawn agy flag-armed and uncontained',
+      );
+    }
     args = ['-p', prompt, '--model', model, '--dangerously-skip-permissions'];
   } else if (kind === 'kimi') {
     // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
@@ -720,6 +740,36 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
       settings.permissions.deny = Array.from(new Set([...existingDeny, ...REQUIRED_DENY]));
       fs.mkdirSync(settingsDir, { recursive: true });
       fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+      // FAIL CLOSED (2026-08-29, hetero review finding [deny-not-total]):
+      // read the just-written file back and verify the deny union actually
+      // landed before spawn ever runs -- belt-and-suspenders against a write
+      // that silently didn't persist (odd FS/permission edge case) or a
+      // future edit that changes the write above without updating what it's
+      // supposed to contain. This never trusts the in-memory `settings`
+      // object it just wrote; it re-reads from disk, the same place agy
+      // itself will read from.
+      let writtenSettings;
+      try {
+        writtenSettings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      } catch (err) {
+        throw new Error(
+          `agy containment verification failed: could not read back ${settingsPath} `
+          + `after writing it (${err.message}) — refusing to spawn agy flag-armed `
+          + 'with unverified containment',
+        );
+      }
+      const writtenDeny = Array.isArray(writtenSettings.permissions && writtenSettings.permissions.deny)
+        ? writtenSettings.permissions.deny
+        : [];
+      const missingDeny = REQUIRED_DENY.filter((rule) => !writtenDeny.includes(rule));
+      if (missingDeny.length > 0) {
+        throw new Error(
+          `agy containment verification failed: ${settingsPath} is missing deny `
+          + `rule(s) [${missingDeny.join(', ')}] after the force-merge — refusing `
+          + 'to spawn agy flag-armed with unverified containment',
+        );
+      }
     }
   }
   const childEnv = cloneHome

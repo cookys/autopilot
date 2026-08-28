@@ -821,9 +821,16 @@ function roleOnlyRequest(role, content = 'x') {
 // QRP_CLI_HOME, so the exam child still cannot run tools or touch the
 // filesystem (verified offline against agy 1.1.22: deny wins over the flag).
 {
-  // (a) argv assertion: the agy branch gains the flag.
+  // (a) argv assertion: the agy branch gains the flag. QRP_CLI_HOME is now
+  // REQUIRED for agy (fail-closed fix, finding [deny-not-total] below), so
+  // this test seeds a minimal template rather than reaching agy without one.
+  const template = path.join(tempRoot, 'agy-argv-clihome-template');
+  fs.mkdirSync(template, { recursive: true });
   const { captured } = runProvider({
-    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude },
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude,
+      QRP_CLI_HOME: template,
+    },
     request: reviewerRequest(),
     stubOutput: REVIEWER_MODEL_OUTPUT,
   });
@@ -836,7 +843,8 @@ function roleOnlyRequest(role, content = 'x') {
     'agy argv still carries --model');
 }
 {
-  // (a) negative: the OTHER kinds must NOT gain the flag.
+  // (a) negative: the OTHER kinds must NOT gain the flag (and, unlike agy,
+  // must NOT require QRP_CLI_HOME either -- this run deliberately omits it).
   for (const [kind, bin] of [['codex', stubCodex], ['claude', stubClaude], ['kimi', stubClaude]]) {
     const { captured } = runProvider({
       env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: kind, QRP_CLI_BIN: bin },
@@ -847,6 +855,21 @@ function roleOnlyRequest(role, content = 'x') {
     check(!captured.argv.includes('--dangerously-skip-permissions'),
       `${kind} argv must NOT gain --dangerously-skip-permissions (agy-only containment)`);
   }
+}
+{
+  // FAIL CLOSED (2026-08-29, hetero review finding [deny-not-total]): the
+  // deny-merge only happens inside the QRP_CLI_HOME clone step, so agy
+  // WITHOUT QRP_CLI_HOME used to spawn flag-armed with NO deny in place at
+  // all. agy must now refuse BEFORE spawn when QRP_CLI_HOME is unset — proven
+  // here by the stub never even getting invoked (no capture file written).
+  const { child, captured } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(child.status, 1, 'agy without QRP_CLI_HOME fails the case');
+  check(/QRP_CLI_HOME/.test(child.stderr), 'the refusal names QRP_CLI_HOME as the missing requirement');
+  check(captured === null, 'agy without QRP_CLI_HOME never reaches spawn (no deny-in-place, no invocation)');
 }
 {
   // (b) clone settings assertion: the forced deny union lands in the CLONE's

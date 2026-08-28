@@ -48,26 +48,28 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
-### Suite residue makes `run.sh --parallel` flaky, and nothing reaps it
+### `probe-runner-coverage` parallel-only flake — fork-pressure suspected, residue ruled out
 
-- **Trigger**: a `--parallel` suite run fails with a rotating set of files that each pass
-  standalone — most often `dispatch-worktree-lifecycle`, `probe-runner-coverage`,
-  `campaign-*`, `dispatch-detach`. Check `/tmp` first.
-- **Context**: the L2 integration tier leaves worktrees and dispatch manifests behind. During
-  v2.34.43 verification `/tmp` had accumulated **82 `hetero-*` worktrees and 627 dispatch run
-  manifests**, and a full parallel run failed 14 of 282 files. After `rm -rf /tmp/autopilot-test-*
-  /tmp/hetero-*` and clearing `/tmp/autopilot-dispatch-runs/`, the same commit ran **282 of 282
-  green**. So the flake is residue-and-contention, not a defect in the named tests. Depth-0
-  bisected the code side independently and confirmed neither `dispatch-worktree-lifecycle` nor
-  `hooks/tests/run.sh` is touched by v2.34.43; the tier had simply been unrunnable since
-  `de3fbc03` (one test file at mode `100644` made `run.sh` refuse the whole tier), so this
-  workload had never actually executed before. The residue was invisible for the same reason.
-  A killed suite run makes it markedly worse — it leaves its worktrees behind with no cleanup.
-- **Effort**: Fix — most likely a pre-run reaper in `hooks/tests/run.sh` (there is already
-  `scripts/lib/prune-tmp-residue.sh` and `reap-dispatch-worktrees.sh` to build on), plus an EXIT
-  trap so an interrupted run cleans up after itself. Confirm the diagnosis first by reproducing:
-  seed `/tmp` with ~80 stale `hetero-*` dirs, run the suite, and check the failure count moves.
-- **Source**: v2.34.43 depth-0 QC round 2 (depth-0 bisect) + foreman verification runs, 2026-08-27.
+- **Trigger**: next time it reds in a `--parallel` run (it passes standalone).
+- **Context**: 2026-08-28 suite-reaper reproduction split the old diagnosis — the residue leak
+  was real (deterministic ~7+2+6 entries/run, now reaped by
+  `hooks/tests/lib/suite-residue-reap.sh`), but seeding 110+ stale entries did NOT move the
+  failure count (clean 4/283 vs seeded 3/283, no `/tmp` quota pressure on this host: 858G free,
+  2% inodes); the one recurring flaky file was `probe-runner-coverage`, which failed on the
+  CLEAN run — a pure file-parsing test, so residue cannot be its cause; 32-way fork pressure is
+  the live suspect.
+- **Effort**: Fix.
+- **Source**: fix/suite-residue-reaper QC round, depth-0 panel + foreman reproduction logs, 2026-08-28.
+
+### Suite reaper — symlinked-TMPDIR hosts fall back to rm -rf (git-worktree-remove path never engages)
+
+- **Trigger**: first report of dangling `.git/worktrees` entries on a host with symlinked `/tmp`
+  (e.g. macOS).
+- **Context**: `_wt_is_registered_path` exact-string-compares realpath'd entry vs git's raw
+  recorded path, so on symlinked TMPDIR the git remove path silently never engages (same
+  behavior as pre-fix, not unsafe, just incomplete).
+- **Effort**: S.
+- **Source**: depth-0 qc panel 🔵, 2026-08-28.
 
 
 ### ~~North-star per-skill ratchet is red on develop~~ — RESOLVED v2.34.35 post-merge (prose-justification with per-release attribution added to CHANGELOG v2.34.35 §; baseline refreshed via --update-baseline; preflight 8/8)

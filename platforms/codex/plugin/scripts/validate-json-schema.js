@@ -78,6 +78,17 @@ function assertJsonValue(value, path, active = new Set()) {
     if (!Number.isFinite(value)) {
       numberError(`${path} contains a number that is not finite (NaN/Infinity are not valid JSON)`);
     }
+    // -0 is the one finite double whose canonical JSON serialization
+    // (JSON.stringify(-0) === '0') drops information a caller may have set
+    // deliberately (sign). Number.isSafeInteger(-0) is true and the literal
+    // "-0" contains no '.'/'e'/'E', so neither the safe-integer nor the
+    // fractional branch above catches it — reject it explicitly here so an
+    // in-memory value built with -0 (not sourced from `parseNumber`, which
+    // has its own -0 guard below) cannot slip past this lossless-round-trip
+    // check.
+    if (Object.is(value, -0)) {
+      numberError(`${path} contains -0, whose canonical JSON serialization ("0") loses the sign`);
+    }
     return;
   }
   if (typeof value !== 'object') {
@@ -179,8 +190,19 @@ function preflightJsonSource(source, label) {
       if (!Number.isFinite(value) || JSON.stringify(value) !== literal) {
         numberError(`${label} uses unsupported lossy numeric literal "${literal}"`);
       }
-    } else if (!Number.isSafeInteger(Number(literal))) {
-      numberError(`${label} uses unsupported lossy numeric literal "${literal}"`);
+    } else {
+      // Integer literal (no '.'/'e'/'E'): the same round-trip byte-compare
+      // catches both magnitude loss (an unsafe integer like
+      // "9007199254740993" reparses to a different double) AND sign loss —
+      // "-0" parses to the double -0, whose canonical re-serialization is
+      // "0" (JSON.stringify(-0) === '0'), so Number.isSafeInteger(-0) alone
+      // (true, since -0 is an integer) would silently accept a literal that
+      // does not round-trip losslessly. The byte-compare rejects it the same
+      // way it rejects any other lossy literal.
+      const value = Number(literal);
+      if (!Number.isSafeInteger(value) || JSON.stringify(value) !== literal) {
+        numberError(`${label} uses unsupported lossy numeric literal "${literal}"`);
+      }
     }
     index += literal.length;
   }

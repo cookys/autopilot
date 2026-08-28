@@ -612,9 +612,23 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
   }
   if (kind === 'agy') {
     // NO --effort: every model in agy's roster rejects it (see header note); the
-    // effort partition lives in the model name. NO --dangerously-skip-permissions:
-    // the exam child must not be able to run tools or touch the filesystem.
-    args = ['-p', prompt, '--model', model];
+    // effort partition lives in the model name.
+    //
+    // --dangerously-skip-permissions IS REQUIRED here, and it is safe only in
+    // combination with the deny-list force-merge below. Root cause (debugger,
+    // reproduced offline against agy 1.1.22, 2026-08-29): in headless `-p` mode
+    // agy cannot prompt for tool confirmation, so it SOFT-DENIES any tool
+    // request and exits 0 with EMPTY stdout — agy's own log records this as
+    // `tool_confirmation_manager.go "Print mode: soft-denying tool
+    // confirmation"`. The discuss/consult system prompts reliably make the
+    // model reach for a tool, so every headless case died this way (seat 6,
+    // 16/16 `provider_process_failed`). Neither --sandbox nor --mode plan
+    // change this soft-deny path. Passing --dangerously-skip-permissions gives
+    // agy a resolvable decision instead of an unpromptable one; the exam
+    // child's inability to run tools or touch the filesystem is then enforced
+    // by the forced `permissions.deny` blocklist merged into the cloned
+    // QRP_CLI_HOME below (verified: deny rules win over this flag).
+    args = ['-p', prompt, '--model', model, '--dangerously-skip-permissions'];
   } else if (kind === 'kimi') {
     // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
     // No effort flag exists for kimi (thinking is a boolean in config.toml).
@@ -669,6 +683,44 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
     }
     cloneHome = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-clihome-'));
     fs.cpSync(template, cloneHome, { recursive: true, dereference: false });
+    if (kind === 'agy') {
+      // Containment for --dangerously-skip-permissions above: force-merge a
+      // tool deny-list into THIS CLONE's settings before agy ever spawns, so
+      // the harness contract (exam child cannot run tools or touch the
+      // filesystem) is enforced by agy's own permission engine rather than by
+      // operator memory. Verified 2026-08-29 against agy 1.1.22: deny rules
+      // take precedence over --dangerously-skip-permissions — a
+      // command(hostname) request under this merged config returns
+      // "Permission denied ... Matches user-configured deny rule", not real
+      // output. This belongs on the clone (not the template) because the
+      // template is operator-seeded and reused across cases; forcing it here
+      // means every clone gets the deny list even if the seed forgot it.
+      //
+      // CAVEAT: this list is the tool vocabulary agy 1.1.22 exposes. A future
+      // agy version that adds a tool name outside this list regresses silently
+      // to soft-deny-shaped-as-allow for that tool — re-probe the tool
+      // vocabulary on every agy version bump, don't assume this list is still
+      // exhaustive.
+      const REQUIRED_DENY = [
+        'command(*)', 'write_file(*)', 'edit_file(*)',
+        'read_file(*)', 'web_search(*)', 'web_fetch(*)',
+      ];
+      const settingsDir = path.join(cloneHome, '.gemini', 'antigravity-cli');
+      const settingsPath = path.join(settingsDir, 'settings.json');
+      let settings = {};
+      try {
+        settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      } catch { /* no pre-existing settings (or unreadable) — start fresh */ }
+      if (!settings.permissions || typeof settings.permissions !== 'object') {
+        settings.permissions = {};
+      }
+      const existingDeny = Array.isArray(settings.permissions.deny)
+        ? settings.permissions.deny
+        : [];
+      settings.permissions.deny = Array.from(new Set([...existingDeny, ...REQUIRED_DENY]));
+      fs.mkdirSync(settingsDir, { recursive: true });
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    }
   }
   const childEnv = cloneHome
     ? { ...process.env, HOME: cloneHome }
@@ -719,7 +771,14 @@ function callCli(kind, bin, model, effort, timeoutMs, prompt) {
         text = Buffer.concat(stdout).toString('utf8');
       }
       if (!text.trim()) {
-        finish(new Error(`${kind} CLI produced no output`));
+        // Zero-exit + empty stdout is exactly the agy headless soft-deny shape
+        // (see the kind === 'agy' arg-build comment above), and the nonzero-exit
+        // branch above already surfaces stderr — this branch used to discard it,
+        // which is why seat 6's evidence carried only the generic "produced no
+        // output" message instead of the actual soft-deny diagnosis. Append it.
+        const detail = Buffer.concat(stderr).toString('utf8').slice(0, 300);
+        const suffix = detail ? `: ${detail}` : '';
+        finish(new Error(`${kind} CLI produced no output${suffix}`));
         return;
       }
       finish(null, { text, resolvedModel: model });

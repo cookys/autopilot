@@ -64,9 +64,9 @@ disclosure fix — see below)
 | discuss | `fb843a7adee3dd3d8a937af8117053e2d48d571523216d72ef7ae6da937adb49` | `c934ce0412bd0497951db5981ae00847745160f01fb954f7eebcd71c1d8bb5ba` |
 
 `containment_fingerprint` (shared, both roles — same transport file):
-`4c839d055442a0797ff772b31264720f0fa0d63539b7f7936319e36d127c43a7`
+`441227738a06e9214c72bbadbb238aa349b42b964b923da2d7a90904d55d4cf4`
 
-`--harness-version qrp:4c839d05` used in every run.sh is this same
+`--harness-version qrp:44122773` used in every run.sh is this same
 `containment_fingerprint`'s first 8 hex chars, prefixed `qrp:` (the transport
 identifier convention `dispatch-hetero:<short-blob>` uses elsewhere, adapted
 for the `qualification-review-provider.js` transport since these seats never
@@ -92,6 +92,36 @@ the new envelope fields explicitly), which is why `containment_fingerprint`
 moved. The failed `raw/consult-exchanges.jsonl` / `discuss-exchanges.jsonl`
 files below predate this fix and must not be read as evidence against the
 current corpus/generator/grader.
+
+**`containment_fingerprint` changed AGAIN (2026-08-29, same day, transport
+fix — not the envelope-disclosure fix above)**: seat 6's live discuss
+administration (`seat6-gemini-3.7-flash-high-agy-discuss/raw/discuss-exchanges.jsonl`)
+failed 16/16 with `transport_ok:false, "case broker failed:
+provider_process_failed"` even after the envelope fix landed. Root-caused
+(debugger, reproduced offline against agy 1.1.22): in headless `-p` mode agy
+cannot prompt for tool confirmation, so it SOFT-DENIES any tool request and
+exits 0 with EMPTY stdout (agy's own log: `tool_confirmation_manager.go
+"Print mode: soft-denying tool confirmation"`) — the discuss system prompt
+reliably makes the model reach for a tool, so every headless case died this
+way. Neither `--sandbox` nor `--mode plan` change this. Fix in
+`scripts/qualification-review-provider.js` `callCli()`: the `kind === 'agy'`
+branch now passes `--dangerously-skip-permissions` (giving agy a resolvable
+decision instead of an unpromptable one), safe ONLY because the per-case
+cloned `QRP_CLI_HOME`'s `.gemini/antigravity-cli/settings.json` now gets a
+force-merged `permissions.deny` blocklist (`command(*)`, `write_file(*)`,
+`edit_file(*)`, `read_file(*)`, `web_search(*)`, `web_fetch(*)`) — verified
+offline that deny rules win over the flag (a `command(hostname)` request
+under this merged config returns "Permission denied ... Matches
+user-configured deny rule", not real output). A third hunk also appends
+captured stderr to the empty-stdout error message, so a future transport
+failure surfaces its diagnosis instead of the generic message seat 6's
+evidence carried. This is a Claude-authored code fix, stub-tested only (see
+`scripts/qualification-review-provider.test.js` section 11) — no live/paid
+provider call was made to produce this fingerprint; a depth-0 operator runs
+the live containment probe (and, if it passes, the actual seat 6 `--execute`
+re-administration) after merge. The failed `raw/discuss-exchanges.jsonl`
+predates this fix too and must not be read as evidence against the current
+transport.
 
 **Important honesty note**: `engine-qualify.js` does **not** cross-check
 `--prompt-config-hash`/`--semantic-fingerprint`/`--containment-fingerprint`

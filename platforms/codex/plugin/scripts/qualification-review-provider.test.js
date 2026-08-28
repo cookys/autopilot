@@ -118,9 +118,19 @@ const stubClaude = path.join(tempRoot, 'stub-claude');
 fs.writeFileSync(stubClaude, `#!/usr/bin/env node
 'use strict';
 const fs = require('fs');
+const path = require('path');
 const stdin = fs.readFileSync(0, 'utf8');
+// Capture the clone's forced-deny settings.json (if any) BEFORE this process
+// exits — callCli removes the clone only after the child settles, but reading
+// it from inside the child is the only vantage that predates that removal.
+let settingsJson = null;
+try {
+  settingsJson = fs.readFileSync(
+    path.join(process.env.HOME || '', '.gemini', 'antigravity-cli', 'settings.json'), 'utf8',
+  );
+} catch { /* no settings written (non-agy kinds, or no clone) */ }
 fs.writeFileSync(process.env.STUB_CAPTURE, JSON.stringify({
-  argv: process.argv.slice(2), env: process.env, stdin,
+  argv: process.argv.slice(2), env: process.env, stdin, settingsJson,
 }));
 if (process.env.STUB_SPAWN_ORPHAN) {
   // A detached descendant in its OWN process group that INHERITS stdout: it
@@ -147,6 +157,7 @@ if (process.env.STUB_SLEEP_MS) {
 // exits right after stdout.write would silently drop the tail of its answer.
 if (process.env.STUB_OUTPUT_FILE) fs.writeSync(1, fs.readFileSync(process.env.STUB_OUTPUT_FILE));
 else if (process.env.STUB_OUTPUT !== undefined) fs.writeSync(1, process.env.STUB_OUTPUT);
+if (process.env.STUB_STDERR !== undefined) fs.writeSync(2, process.env.STUB_STDERR);
 process.exit(Number(process.env.STUB_EXIT || 0));
 `, { mode: 0o755 });
 
@@ -799,6 +810,109 @@ function roleOnlyRequest(role, content = 'x') {
   const { output } = parseResponse(child);
   equal(output.findings[0].note.length, 400_000,
     'the answer arrives byte-complete after the deadline deferred to flush');
+}
+
+// ── 11. agy transport: --dangerously-skip-permissions + forced deny containment ─
+// Why: headless `-p` mode agy cannot prompt for tool confirmation, so it
+// SOFT-DENIES any tool request and exits 0 with EMPTY stdout — seat 6's live
+// administration died this way 16/16 (`provider_process_failed`, generic
+// message, no diagnosis). The fix passes --dangerously-skip-permissions ONLY in
+// combination with a forced permissions.deny merge into the cloned
+// QRP_CLI_HOME, so the exam child still cannot run tools or touch the
+// filesystem (verified offline against agy 1.1.22: deny wins over the flag).
+{
+  // (a) argv assertion: the agy branch gains the flag.
+  const { captured } = runProvider({
+    env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  check(captured !== null, 'agy stub captured the invocation');
+  check(captured.argv.includes('--dangerously-skip-permissions'),
+    'agy argv includes --dangerously-skip-permissions');
+  equal(captured.argv[0], '-p', 'agy still opens with -p (prompt travels as its own argv value)');
+  const modelIdx = captured.argv.indexOf('--model');
+  check(modelIdx !== -1 && captured.argv[modelIdx + 1] === 'fake-model-exact',
+    'agy argv still carries --model');
+}
+{
+  // (a) negative: the OTHER kinds must NOT gain the flag.
+  for (const [kind, bin] of [['codex', stubCodex], ['claude', stubClaude], ['kimi', stubClaude]]) {
+    const { captured } = runProvider({
+      env: { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: kind, QRP_CLI_BIN: bin },
+      request: reviewerRequest(),
+      stubOutput: REVIEWER_MODEL_OUTPUT,
+    });
+    check(captured !== null, `${kind} stub captured the invocation`);
+    check(!captured.argv.includes('--dangerously-skip-permissions'),
+      `${kind} argv must NOT gain --dangerously-skip-permissions (agy-only containment)`);
+  }
+}
+{
+  // (b) clone settings assertion: the forced deny union lands in the CLONE's
+  // settings.json, and a pre-existing deny entry (operator-seeded) survives the
+  // merge rather than being clobbered.
+  const template = path.join(tempRoot, 'agy-clihome-template');
+  const settingsDir = path.join(template, '.gemini', 'antigravity-cli');
+  fs.mkdirSync(settingsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(settingsDir, 'settings.json'),
+    JSON.stringify({ permissions: { deny: ['custom(pre-existing)'] } }),
+  );
+  const { captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude,
+      QRP_CLI_HOME: template,
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  check(captured !== null && captured.settingsJson !== null,
+    'the clone carries a settings.json the stub could read');
+  const settings = JSON.parse(captured.settingsJson);
+  const deny = settings.permissions && settings.permissions.deny;
+  check(Array.isArray(deny), 'clone settings.json declares permissions.deny');
+  for (const rule of [
+    'command(*)', 'write_file(*)', 'edit_file(*)',
+    'read_file(*)', 'web_search(*)', 'web_fetch(*)',
+  ]) {
+    check(deny.includes(rule), `forced deny union includes ${rule}`);
+  }
+  check(deny.includes('custom(pre-existing)'),
+    'the pre-existing operator-seeded deny entry survives the force-merge');
+}
+{
+  // (b) negative control: non-agy kinds must NOT get the settings.json write —
+  // this containment is agy-specific, not a general QRP_CLI_HOME side effect.
+  const template = path.join(tempRoot, 'claude-clihome-template');
+  fs.mkdirSync(template, { recursive: true });
+  const { captured } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      QRP_CLI_HOME: template,
+    },
+    request: reviewerRequest(),
+    stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  check(captured !== null && captured.settingsJson === null,
+    'non-agy kinds get no forced settings.json in the clone');
+}
+{
+  // (c) no-output path: a stub exiting 0 with empty stdout but non-empty stderr
+  // must surface that stderr in the error message — the empty-stdout branch used
+  // to discard it, which is why seat 6's evidence carried only a generic message.
+  const { child } = runProvider({
+    env: {
+      QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'claude', QRP_CLI_BIN: stubClaude,
+      STUB_STDERR: 'Print mode: soft-denying tool confirmation',
+    },
+    request: reviewerRequest(),
+    stubOutput: '',
+  });
+  equal(child.status, 1, 'zero-exit + empty stdout still fails the case');
+  check(/produced no output/.test(child.stderr), 'the no-output message is still present');
+  check(child.stderr.includes('Print mode: soft-denying tool confirmation'),
+    'the captured stderr diagnosis is appended to the no-output error');
 }
 
 // ── QRP_CLI_HOME redirects ONLY the harness child's HOME ───────────────────────

@@ -49,6 +49,26 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### `UNQUALIFIED_RUNNERS` reconciliation tension once a listed runner earns a consult/discuss qualification
+
+- **Trigger**: a listed runner (today only `cursor`) is administered and passes a real `consult` or
+  `discuss` role-qualification exam (`scripts/engine-qualify.js consult|discuss`), producing a
+  recorded, non-demoted qualification row for that `{engine, runner}` pair.
+- **Context**: `scripts/resolve-review-loop.sh`'s `UNQUALIFIED_RUNNERS="cursor"` list (`:146`) is
+  declarative and reconciled by a test asserting: any roster-nameable runner holding an
+  `unverified` capability record must be listed, and any listed entry no roster can name is flagged
+  as blocking nothing. A real consult/discuss qualification pass makes "unverified" (list
+  membership) and "qualified for this role" (evidence store) simultaneously true for the same
+  runner, and the reconciliation test's premise gets murky — the list stops being a clean proxy for
+  "has no role evidence at all." `docs/plans/2026-08-28-consult-discuss-qualification.md` §6 R9
+  names this tension explicitly and §8 ruling 7 rules list-membership changes **out of scope** for
+  that plan: nothing in it removes `cursor` from `UNQUALIFIED_RUNNERS`, and an exam pass does not do
+  so automatically. This entry is the deferred follow-up the ruling points at.
+- **Effort**: S (likely a scoped-exception clause in the reconciliation test plus a role-aware read
+  of the list, not a redesign)
+- **Source**: `docs/plans/2026-08-28-consult-discuss-qualification.md` §6 R9, §8 ruling 7 (D10,
+  2026-08-28)
+
 ### Foreman model is hardcoded as `opus` in /l4–/l6 prose; routing config already overrides it
 
 - **Trigger**: any consuming project sets `tree:sub-orchestrator` in `.claude/model-routing-config.md`

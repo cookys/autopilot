@@ -87,5 +87,11 @@
   "pass_bar": {
     "per_trial": "10/10",
     "aggregate": "20/20"
+  },
+  "applicability_scope": {
+    "task_classes": ["consult"],
+    "domains": ["cross-cutting"],
+    "languages": ["en"],
+    "tool_surface": ["read_only"]
   }
 }

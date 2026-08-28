@@ -99,13 +99,21 @@ function assertPinned(filePath, expectedHash, label) {
 
 const EXPECTED_CONSULT_GENERATOR_HASH = 'fddf7f4f579f3dfbcafc00b623931b46d270739ddf1df12842ad44c07b82a411'
 const EXPECTED_CONSULT_GRADER_HASH = 'aa5e80426b1ffa92abb0d5b90b86e3f2ec12746f3841873b1fd333e0cdc81cd0'
-const EXPECTED_CONSULT_CORPUS_HASH = '2d9b5dd89c73cb9519276d83c146d94eb23e01ee82b6b9ac6a48401e1a82b8a6'
+// D7 re-seal (plan 2026-08-28-consult-discuss-qualification.md D7): the
+// applicability_scope field was added to both corpus manifests, changing
+// their bytes — a deliberate re-seal, per the comment above, not silent
+// drift. Only the *_CORPUS_HASH constants move: *_SEAL_HASH pins the
+// RUBRIC's seal file (evals/*-eval-rubric.seal.json), which D7 did not
+// touch — the corpus manifest's own seal is checked by the live
+// assertSealFrozen(p.corpus, p.corpusSeal, ...) relationship check below,
+// which has no separate static pin.
+const EXPECTED_CONSULT_CORPUS_HASH = 'd34452f3cd29c3218b22e1fe667feae6107d0ff2cc2ab8358e42c1835fdb0730'
 const EXPECTED_CONSULT_RUBRIC_HASH = '8c303e33074d97065bf011c33f89a6dddd642837184834ea578ad31c2c0402cc'
 const EXPECTED_CONSULT_SEAL_HASH = '1643508f2a53f3383094ebfea04fd49d702605576d6764c88ca4c29f5da3d436'
 
 const EXPECTED_DISCUSS_GENERATOR_HASH = '7c90708c7110c270b48fd1d3c0c563d61504ad4d9f7d8ea93d96fc1713342bbd'
 const EXPECTED_DISCUSS_GRADER_HASH = '60864b9302a3a514ac06be2ac56cff7694674933358da19debb2c8305d806bbe'
-const EXPECTED_DISCUSS_CORPUS_HASH = '7aa7f68782147943249ce72b2d89ae7b625d9e354016d1b5e492d5c1c96b8235'
+const EXPECTED_DISCUSS_CORPUS_HASH = 'f2dbb2a7c259503e1a086e38e5cf44775bfc110ac13e7bdd737bac3dc3da6889'
 const EXPECTED_DISCUSS_RUBRIC_HASH = '6a60a549626eeeab1f49974f020a059db6e24ac9e1834f44b5a442c4b9b86104'
 const EXPECTED_DISCUSS_SEAL_HASH = '7dc0eeb6967ff1beeb5d3be03110d9d89a81dd735e17d7740d1118136b8c7523'
 

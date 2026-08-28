@@ -122,6 +122,7 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js ladder --role <reviewer|implementer|owner> [--implementer-family <family>] [--now <ISO-date>] [--require-evidence] [--scope-file <path>]\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
   node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--now <ISO-date>]\n\
+    [--require-evidence --scope-file <path> [--identity-file <path>]]\n\
 \n  --file <path>  Read one JSON row from this file.\n\
   --role is required for current/report/ladder/seat-status.\n\
   --key accepts capability (default) or cost.\n\
@@ -139,6 +140,11 @@ const HELP_TEXT = `Usage:\n\
     strike_threshold/strike_policy_version/rejected_strikes, plus seat_hash and the\n\
     baseline (baseline_event_id/baseline_qualified_at). Calendar dates never gate admission;\n\
     AUTOPILOT_STRIKE_ENFORCEMENT=enforce arms ordinary-strike requalification (shadow by default).\n\
+    seat-status --require-evidence (D7, plan 2026-08-28-consult-discuss-qualification.md) runs\n\
+    the STRICT evidence-validating path: strict store parse, validateRecordRow forgery/anchor\n\
+    checks, and applicability-scope match against the caller-supplied --scope-file — never the\n\
+    row's own scope. Absent/unreadable scorecard or qualification-evidence stores refuse; an\n\
+    absent strikes.jsonl is a valid empty history, a present-but-unreadable one refuses.\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -1828,6 +1834,9 @@ function parseSeatStatusArgs(args) {
   let runner = null;
   let role = null;
   let now;
+  let requireEvidence = false;
+  let scope = null;
+  let identity = null;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -1853,6 +1862,22 @@ function parseSeatStatusArgs(args) {
       now = args[++i];
       continue;
     }
+    // D7 (plan 2026-08-28-consult-discuss-qualification.md): the strict
+    // evidence-validating read path. Reuses `current`'s --require-evidence
+    // contract byte-for-byte (including its "requires --scope-file" rule)
+    // rather than inventing a second vocabulary.
+    if (arg === '--require-evidence') {
+      requireEvidence = true;
+      continue;
+    }
+    if (arg === '--scope-file' || arg === '--identity-file') {
+      if (i + 1 >= args.length) failUsage(`${arg} requires a value`);
+      const parsed = readEvidenceQueryFile(args[++i], arg.slice(2));
+      if (arg === '--scope-file') scope = parsed;
+      else identity = parsed;
+      requireEvidence = true;
+      continue;
+    }
     failUsage(`unknown option: ${arg}`);
   }
 
@@ -1871,14 +1896,155 @@ function parseSeatStatusArgs(args) {
   const roleToken = seatToken(canonicalRole);
   if (!roleToken) failUsage(`invalid --role token '${canonicalRole}'`);
 
+  if (requireEvidence && !scope) {
+    failUsage('--require-evidence or --identity-file requires --scope-file');
+  }
+
   const nowMs = nowArgToMs(now);
 
-  return { engine: engineTok, runner: runnerToken, role: roleToken, nowMs };
+  return {
+    engine: engineTok, runner: runnerToken, role: roleToken, nowMs, requireEvidence, scope, identity,
+  };
+}
+
+// D7's strict evidence-validating admission read (plan §"D7 — the switch-on
+// qualification gate"). Consumed by resolve-review-loop.sh's consult/discuss
+// gate ONLY — `current --require-evidence` stays the general-purpose report
+// path and is unchanged. In this order:
+//   1. strict scorecard parse (readStoreRows(_, strict=true)) — any
+//      malformed line anywhere in the store is a hard failure, never a
+//      silent skip (case xiii);
+//   2. the scorecard AND qualification-evidence stores must both exist and
+//      be readable (case ix / xiv) — the strike store is the ONLY store
+//      whose ABSENCE is a valid empty history (repair [0]);
+//   3. validateRecordRow on each row matching this exact {engine,runner,role}
+//      — a well-formed-JSON forgery is rejected here (case xi), and (for
+//      internal_eval evidence) verifyEvidenceStoreAnchor rejects a missing
+//      or mismatched anchor (case xii);
+//   4. the frozen applicability scope, resolver-derived and passed in as
+//      `scope` — a row applicable to a DIFFERENT scope never becomes a
+//      baseline (case xviii);
+//   5. strike standing, read HONESTLY from the shipped projection (finding
+//      [1] PARTIAL OVERRULE — shadow admits with a warning, enforce and
+//      critical_trigger both refuse; see references/strike-decay.md).
+function requireReadableFile(filePath, label) {
+  if (!fs.existsSync(filePath)) {
+    failValidation(`${label} is absent: ${filePath}`);
+  }
+  try {
+    fs.accessSync(filePath, fs.constants.R_OK);
+  } catch {
+    failValidation(`${label} is unreadable: ${filePath}`);
+  }
+}
+
+function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identity) {
+  requireReadableFile(SCORECARD_FILE, 'scorecard store');
+  requireReadableFile(CAPABILITY_EVIDENCE_FILE, 'qualification-evidence store');
+
+  const seatHashValue = seatIdentityHash(engine, runner, role);
+  // Strict parse: throws hard on ANY malformed line, not just this seat's own.
+  const allRows = readStoreRows(false, true);
+  // readCapabilityEvidenceRows() is unconditionally fail-closed on malformed
+  // lines / bad wrapper shape / producer mismatch already (no strict flag to
+  // pass) — it is the strict path for that store by construction.
+  readCapabilityEvidenceRows();
+
+  let best = null;
+  for (const row of allRows) {
+    if (!row || typeof row !== 'object') continue;
+    if (row.engine !== engine || row.runner !== runner) continue;
+    const storedRole = normalizeCapabilityRole(row.role, { allowLegacy: true });
+    if (storedRole !== role) continue;
+
+    // validateRecordRow is the forgery/anchor gate: a hand-authored,
+    // schema-plausible row that fails field validation, evidence binding, or
+    // (for internal_eval evidence) qualifier-store anchoring calls
+    // failValidation and exits — this candidate seat's row set is not
+    // "excluded and moved on from", the whole read refuses. That is
+    // deliberate: a bad row claiming THIS exact seat is a red flag, not
+    // noise to skip past.
+    const clone = { ...row };
+    validateRecordRow(clone);
+    if (!clone.evidence) continue; // this strict path only trusts evidence-backed rows
+
+    // The applicability-scope contract: `scope` is ALWAYS the caller's
+    // resolver-derived, frozen production scope — never read from the row
+    // itself and never caller-widened. A row that does not apply to it is
+    // not a baseline candidate (case xviii).
+    const receipt = buildCapabilityEvidenceReceipt(clone.evidence, {
+      role,
+      scope,
+      identity: identity || clone.evidence.identity,
+      evaluation_time: new Date(nowMs).toISOString(),
+    });
+    if (!receipt.applicability.applicable) continue;
+
+    const status = deriveStatus(clone, nowMs, receipt);
+    if (status !== 'qualified') continue;
+    const qMs = toDateMs(clone.qualified_at);
+    if (qMs === null) continue;
+    const eid = toEventId(clone.event_id) || 0;
+    if (!best || qMs > best.qMs || (qMs === best.qMs && eid > best.eid)) {
+      const instantMs = baselineInstantMs(clone, clone.evidence);
+      best = {
+        qMs,
+        eid,
+        qualified_at: clone.qualified_at,
+        event_id: eid,
+        expires: clone.expires,
+        instantMs: instantMs === null ? qMs : instantMs,
+      };
+    }
+  }
+
+  const projection = {
+    admission_status: best ? 'qualified' : 'no_record',
+    expiry_warning: best ? computeExpiryWarning(best.expires, nowMs) : false,
+    strikes_since_pass: 0,
+    critical_trigger: false,
+    would_requalify: false,
+    strike_threshold: ORDINARY_STRIKE_THRESHOLD,
+    strike_policy_version: STRIKE_POLICY_VERSION,
+    rejected_strikes: 0,
+  };
+
+  if (best) {
+    // Strike store: absent = valid empty history (repair [0], no atomic-
+    // create machinery); present-but-unreadable fails closed (case xiv).
+    const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
+    if (fs.existsSync(strikesFile)) requireReadableFile(strikesFile, 'strikes store');
+    const fold = foldSeatStrikes(seatHashValue, best.instantMs, nowMs);
+    projection.strikes_since_pass = fold.strikesSincePass;
+    projection.critical_trigger = fold.criticalTrigger;
+    projection.rejected_strikes = fold.rejected;
+    projection.would_requalify = projection.strikes_since_pass >= ORDINARY_STRIKE_THRESHOLD;
+    // Finding [1] PARTIAL OVERRULE: read the shipped projection honestly,
+    // never hard-arm it. critical_trigger always refuses; ordinary strikes
+    // at threshold only refuse under AUTOPILOT_STRIKE_ENFORCEMENT=enforce —
+    // under shadow (default) the seat still admits, and the CALLER (the
+    // resolver) is responsible for surfacing would_requalify on stderr.
+    if (projection.critical_trigger
+        || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {
+      projection.admission_status = 'requalify_required';
+    }
+  }
+
+  return {
+    seat_hash: seatHashValue,
+    baseline_event_id: best ? best.event_id : null,
+    baseline_qualified_at: best ? best.qualified_at : null,
+    projection,
+  };
 }
 
 function cmdSeatStatus(args) {
-  const { engine, runner, role, nowMs } = parseSeatStatusArgs(args);
-  const result = computeSeatProjection(engine, runner, role, nowMs);
+  const {
+    engine, runner, role, nowMs, requireEvidence, scope, identity,
+  } = parseSeatStatusArgs(args);
+  const result = requireEvidence
+    ? computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identity)
+    : computeSeatProjection(engine, runner, role, nowMs);
   process.stdout.write(`${JSON.stringify({
     ...result.projection,
     seat_hash: result.seat_hash,

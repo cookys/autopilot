@@ -85,5 +85,11 @@
       "id": "axis:security",
       "claim_vector": ["attack-surface", "exposure-window", "auth-boundary", "secret-handling"]
     }
-  ]
+  ],
+  "applicability_scope": {
+    "task_classes": ["discuss"],
+    "domains": ["cross-cutting"],
+    "languages": ["en"],
+    "tool_surface": ["read_only"]
+  }
 }

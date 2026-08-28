@@ -111,8 +111,9 @@ DEF_DISCUSS_ENDPOINT=""
 # RAIL is live (scripts/dispatch-consult.sh / dispatch-discuss.js), independent of
 # whether the seat tuple above is configured. DEFAULT OFF on both — off is today's
 # behavior byte-for-byte: the seat stays data a caller may read by hand, no new
-# dispatch, no new refusal. The switch-on qualification gate (role evidence /
-# override enforcement) is D7 and is NOT implemented by this field plumbing.
+# dispatch, no new refusal. The switch-ON qualification gate (role evidence /
+# override enforcement) is implemented further below (D7, "the keystone") —
+# this field plumbing only defines/reads the switch itself.
 DEF_CONSULT_DISPATCH="off"
 DEF_DISCUSS_DISPATCH="off"
 # Board ruling 2026-08-27: dual-seat occupancy by an UNQUALIFIED (override-admitted)
@@ -463,8 +464,8 @@ case "$ALLOW_DUAL_SEAT" in
     ;;
 esac
 
-# consult_dispatch / discuss_dispatch (D6 field plumbing only — the switch-on
-# qualification gate over role evidence/overrides is D7, not implemented here).
+# consult_dispatch / discuss_dispatch (D6 field validation; the switch-ON
+# qualification gate over role evidence/overrides lives further below, D7).
 case "$CONSULT_DISPATCH" in
   off|on) ;;
   *)
@@ -482,8 +483,8 @@ esac
 
 # consult_dispatch/discuss_dispatch=on with an empty seat tuple is a
 # misconfiguration, never a silent no-op (plan §4 D6, evidence-discipline §14).
-# Tuple-presence only — the switch-on QUALIFICATION gate over role evidence is
-# D7 and out of scope here.
+# Tuple-presence only here — the switch-on QUALIFICATION gate over role
+# evidence (D7) runs later, once the seat rows exist below.
 if [[ "$CONSULT_DISPATCH" == "on" && ( -z "$CONSULT_ENGINE" || -z "$CONSULT_RUNNER" || -z "$CONSULT_EFFORT" ) ]]; then
   echo "resolve-review-loop: consult_dispatch=on requires consult_engine, consult_runner, and consult_effort" >&2
   exit 3
@@ -1656,9 +1657,132 @@ _is_unqualified_runner() {
   return 1
 }
 
+# ── D7: the switch-on qualification gate (plan 2026-08-28-consult-discuss-
+# qualification.md D7, "the keystone") ─────────────────────────────────────
+# When consult_dispatch/discuss_dispatch is "on", that role's seat must
+# additionally satisfy ONE of: (a) a recorded, non-demoted role-qualification
+# row for the exact {engine,runner,role}, or (b) an unexpired operator
+# override — same file/shape/vocabulary the block below already consumes.
+# This is STRICTLY ADDITIONAL and INERT when the switch is off: a consult/
+# discuss seat only enters this gate at all when its own switch is "on";
+# every other seat (and every consult/discuss seat with its switch off)
+# keeps exactly today's UNQUALIFIED_RUNNERS-only behavior below, unchanged.
+#
+# The listed-runner clause: when the switch is on, a matching qualification
+# row ALSO satisfies the existing listed-runner (UNQUALIFIED_RUNNERS)
+# admission check for that same seat — otherwise a genuinely-qualified
+# cursor seat would still be refused for lack of an override, making an exam
+# pass decorative for the one runner the gate already refuses (plan D7,
+# cases xv/xvi).
+_consult_discuss_switch_on() {
+  local role="$1"
+  [[ "$role" == "consult" && "$CONSULT_DISPATCH" == "on" ]] && return 0
+  [[ "$role" == "discuss" && "$DISCUSS_DISPATCH" == "on" ]] && return 0
+  return 1
+}
+
+# Returns via globals: _QUALROW_RESULT ("admit" | "no-row" | "scope-fail")
+# and _QUALROW_JSON (the seat-status projection, when _QUALROW_RESULT=admit).
+# "scope-fail" is a HARD refusal — the frozen applicability-scope manifest
+# could not be derived — and is never treated as "no row found": the gate
+# never silently skips the scope check (plan D7, case xix).
+_try_qualification_row() {
+  local role="$1" eng="$2" run="$3"
+  _QUALROW_RESULT="no-row"
+  _QUALROW_JSON=""
+  local scope_file err_file
+  scope_file="$(mktemp "${TMPDIR:-/tmp}/qual-scope.XXXXXX")" || { _QUALROW_RESULT="scope-fail"; return; }
+  err_file="${scope_file}.err"
+  # D7's gate DERIVES the applicability scope itself, from the same frozen
+  # corpus-manifest constant the qualifier's own emitted evidence derives
+  # from — it never reads an operator-supplied --scorecard-scope-file (case
+  # xx: a caller-supplied, wider scope must never change this decision).
+  if ! node "$SCRIPT_DIR/lib/qualification-applicability-scope.js" write-scope --role "$role" --out "$scope_file" 2>"$err_file"; then
+    echo "resolve-review-loop: ${role} seat (${eng}/${run}) applicability-scope manifest could not be derived — $(cat "$err_file" 2>/dev/null) — refusing" >&2
+    rm -f "$scope_file" "$err_file"
+    _QUALROW_RESULT="scope-fail"
+    return
+  fi
+  local seat_json rc err_text
+  seat_json="$(node "$SCRIPT_DIR/engine-scorecard.js" seat-status \
+    --engine "$eng" --runner "$run" --role "$role" \
+    --require-evidence --scope-file "$scope_file" 2>"$err_file")"
+  rc=$?
+  err_text="$(cat "$err_file" 2>/dev/null)"
+  rm -f "$scope_file" "$err_file"
+  if [[ $rc -ne 0 ]]; then
+    # Strict-path refusal (absent/unreadable/malformed store, forged row,
+    # missing/mismatched anchor — plan D7 cases ix-xiv): never a qualifying
+    # row. Not fatal by itself here — falls through to the override-only
+    # path below, exactly like "no evidence at all".
+    [[ -n "$err_text" ]] && echo "resolve-review-loop: ${role} seat (${eng}/${run}) strict qualification-evidence read failed: ${err_text}" >&2
+    return
+  fi
+  local admission
+  admission="$(printf '%s' "$seat_json" | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(j.admission_status||"");}catch{}})' 2>/dev/null || true)"
+  if [[ "$admission" != "qualified" ]]; then
+    # no_record (case ii/iii/xviii — different role, no row, or scope
+    # mismatch) or requalify_required (case vii — demoted standing,
+    # critical_trigger, or enforced strike threshold): falls through.
+    return
+  fi
+  # Advisory warnings that never change the admission decision: calendar
+  # expiry on the ROW is advisory-only (case vi), and a shadow-mode
+  # would_requalify is deliberate Board policy, not a hole (finding [1]
+  # PARTIAL OVERRULE) — surfaced on stderr either way.
+  local warn
+  warn="$(printf '%s' "$seat_json" | node -e '
+let s = "";
+process.stdin.on("data", (d) => { s += d; });
+process.stdin.on("end", () => {
+  let j;
+  try { j = JSON.parse(s); } catch { process.exit(0); }
+  const lines = [];
+  if (j.expiry_warning) lines.push("qualification row is past its calendar expiry — advisory only, standing is not demoted, admitting");
+  if (j.would_requalify) lines.push(`would_requalify (strikes_since_pass=${j.strikes_since_pass}/${j.strike_threshold}) — shadow-mode admission is deliberate Board policy (references/strike-decay.md), not a hole`);
+  process.stdout.write(lines.join(""));
+});' 2>/dev/null || true)"
+  if [[ -n "$warn" ]]; then
+    IFS=$'\x1f' read -r -a _warn_lines <<<"$warn"
+    for _w in "${_warn_lines[@]}"; do
+      [[ -n "$_w" ]] && echo "resolve-review-loop: ⚠ ${role} seat (${eng}/${run}): ${_w}" >&2
+    done
+  fi
+  _QUALROW_RESULT="admit"
+  _QUALROW_JSON="$seat_json"
+}
+
+QUALROW_ADMITTED_JSON="[]"
+
 for _i in "${!_seat_roles[@]}"; do
   _role="${_seat_roles[$_i]}"; _eng="${_seat_engines[$_i]}"; _run="${_seat_runners[$_i]}"
-  _is_unqualified_runner "$_run" || continue
+  _cd_switch_role="${_role%%[*}"
+  if _consult_discuss_switch_on "$_cd_switch_role"; then
+    _try_qualification_row "$_cd_switch_role" "$_eng" "$_run"
+    if [[ "$_QUALROW_RESULT" == "scope-fail" ]]; then
+      # Fail-closed, not skip (plan D7): a manifest that cannot be derived
+      # refuses the whole gate — even an operator override cannot rescue a
+      # structurally broken scope contract.
+      exit 3
+    fi
+    if [[ "$_QUALROW_RESULT" == "admit" ]]; then
+      QUALROW_ADMITTED_JSON="$(node -e '
+let a = []; try { a = JSON.parse(process.argv[1]); } catch { process.exit(1); }
+if (!Array.isArray(a)) process.exit(1);
+a.push(process.argv[2]);
+process.stdout.write(JSON.stringify(a));' "$QUALROW_ADMITTED_JSON" "$_role" 2>/dev/null)" || {
+        echo "resolve-review-loop: ${_role} seat (${_eng}/${_run}) was row-admitted but could not be recorded — refusing" >&2
+        exit 3
+      }
+      continue
+    fi
+    # No qualifying row: this seat now ALSO requires the override-only check
+    # below, regardless of whether its runner is in UNQUALIFIED_RUNNERS —
+    # that is the vacuum D7 closes (plan §0a): "switch on, no evidence, no
+    # override" refuses for EVERY runner, not only cursor (case ii).
+  else
+    _is_unqualified_runner "$_run" || continue
+  fi
   _ovr="$(AUTOPILOT_QUALIFICATION_OVERRIDE="${AUTOPILOT_QUALIFICATION_OVERRIDE:-}" node -e '
 const fs = require("fs");
 const [engine, runner, role] = process.argv.slice(1);

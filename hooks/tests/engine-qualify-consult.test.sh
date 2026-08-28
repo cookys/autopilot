@@ -250,4 +250,23 @@ DISPATCH_TIMEOUT_RC=0
 $SCRIPT "${CONSULT_PLAN_ARGS[@]}" --dispatch-timeout 60s >/dev/null 2>&1 || DISPATCH_TIMEOUT_RC=$?
 assert_exit_code "$DISPATCH_TIMEOUT_RC" "2" "consult rejects --dispatch-timeout (not live-rail)"
 
+# No --execute: the loud refusal remains, now naming the flag + authorization.
+NOEXEC_OUT="$($SCRIPT "${CONSULT_PLAN_ARGS[@]/--plan/}" 2>&1)"
+NOEXEC_RC=$?
+assert_exit_code "$NOEXEC_RC" "2" "consult without --plan/--execute refuses (usage error)"
+assert_contains "$NOEXEC_OUT" "--execute" "refusal names the --execute flag"
+assert_contains "$NOEXEC_OUT" "PROPOSAL.md" "refusal cites the administration proposal doc"
+assert_contains "$NOEXEC_OUT" "Board decision" "refusal cites the Board authorization"
+
+# ── 7. LIVE administration wiring (D3, Board-authorized 2026-08-28) ────────
+# Stub transport ONLY — scripts/engine-qualify-consult.test.js covers the
+# full green/red/transport-vs-content/seal-drift/truncation matrix in-process
+# (it needs the shrink-only test seams, which parseArgs deliberately never
+# exposes). This is the acceptance surface for that suite.
+LIVE_OUT="$(node "$REPO_ROOT/scripts/engine-qualify-consult.test.js" 2>&1)"
+LIVE_RC=$?
+assert_exit_code "$LIVE_RC" "0" "consult live-administration suite passes"
+assert_contains "$LIVE_OUT" "34 assertions passed" \
+  "green 20/20 qualifies with the D5 consult_panel methodology; one wrong-content case fails without qualifying; a crashed provider classifies as provider_unavailable, distinct from a content-quality failure in the SAME run; a case with a mismatched provider identity fails closed; --execute is required and refuses by name; --panel-cmd is refused for lacking identity binding; a wall-truncated run reports the full 20-case denominator, never a shrunken one; a corrupted generator refuses via seal drift before any provider call"
+
 finalize_test

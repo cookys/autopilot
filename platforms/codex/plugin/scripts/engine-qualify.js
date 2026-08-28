@@ -55,6 +55,16 @@ const implGenerator = require('../evals/impl-eval-generator');
 const implGrader = require('../evals/impl-eval-grader');
 const consultGenerator = require('../evals/consult-eval-generator');
 const discussGenerator = require('../evals/discuss-eval-generator');
+const consultGrader = require('../evals/consult-eval-grader');
+const discussGrader = require('../evals/discuss-eval-grader');
+// D7 (plan 2026-08-28-consult-discuss-qualification.md) — the ONE frozen
+// applicability-scope derivation. resolve-review-loop.sh's D7 gate derives
+// its scope from this same module (`write-scope`); a live administration
+// must derive from it too, so the evidence it compiles carries the
+// identical scope_hash the gate will later look up. No second copy.
+const {
+  frozenScopeForRole: consultDiscussFrozenScope,
+} = require('./lib/qualification-applicability-scope');
 // D4 (plan 2026-08-28-consult-discuss-qualification.md) — the five-identity
 // seal/pin verification shared by the `--plan` dry-run and (once wired) any
 // real consult/discuss administration. See scripts/lib/qualification-asset-seals.js
@@ -238,6 +248,15 @@ const HELP = `Usage:
   combined with an implementer-only flag exits 2 (the flags are rejected before
   --plan is ever consulted).
 
+  A LIVE (non-plan) consult/discuss administration additionally requires
+  [--execute] — real money, real provider calls. Without it, the command
+  refuses loud, naming this flag and the Board authorization in
+  docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md
+  ("Board decision — 2026-08-28 (authorization)"). --execute requires the
+  --remote-provider-cmd/--remote-provider (case-broker) transport — the bare
+  --panel-cmd transport has no identity binding and is refused for these
+  two roles.
+
 The qualifier generates fresh role-specific known-bad, clean, and defect-reversal trials.
 Reviewer output uses {"verdict":"pass|fail","findings":[...]} with a structured
 ${WITNESS_PROTOCOL_VERSION} witness. Owner output uses
@@ -307,6 +326,7 @@ function parseArgs(argv) {
     store: null,
     emitRow: false,
     plan: false,
+    execute: false,
     taskClasses: [],
     domains: [],
     languages: [],
@@ -358,6 +378,14 @@ function parseArgs(argv) {
     }
     if (arg === '--plan') {
       options.plan = true;
+      continue;
+    }
+    // Spend guard (Board decision 2026-08-28, precondition (a)): the ONLY
+    // way a consult/discuss administration is allowed to make a real,
+    // paid provider call. Every other role ignores this flag (harmless if
+    // passed by mistake — see the role check in runQualification).
+    if (arg === '--execute') {
+      options.execute = true;
       continue;
     }
     if (['-h', '--help'].includes(arg)) usage(0);
@@ -3386,6 +3414,570 @@ function buildDiscussCasePlan() {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// runConsultDiscussQualification — live-administration kernel for the
+// consult / discuss qualification-seat roles (plan 2026-08-28-consult-
+// discuss-qualification.md D3/D7; wired under the Board's administration-
+// wave authorization, docs/plans/evidence/2026-08-28-consult-discuss-qualify/
+// PROPOSAL.md "Board decision — 2026-08-28 (authorization)", precondition
+// (a)). ONE parameterized kernel for both roles — the shapes differ only in
+// a handful of named seams below (generator/grader modules, envelope
+// builder, trial folding, methodology kind/thresholds).
+//
+// Design, mirroring the existing role kernels:
+//   - runVaQualification's transport shape (broker/provider case dispatch,
+//     per-case executePanelCase over the REMOTE — identity-bound — panel
+//     configuration only; the bare local --panel-cmd path has no identity
+//     check and is refused here).
+//   - runImplQualification's wall/truncation-honesty shape (wall_truncated,
+//     started_cases, shrink-only test override seams, never a shrunken
+//     denominator on a truncated run).
+//
+// Fail-closed contract (Board precondition (b)): a transport-attributed
+// failure (broker/provider-level: identity mismatch, malformed response,
+// timeout, sandbox unavailable) is classified into 'infra_fail' or
+// 'provider_unavailable' — BOTH ahead of every content-quality outcome in
+// each role's taxonomy_precedence — and the case is recorded as FAILED,
+// never skipped, never silently retried. This is what lets an operator
+// distinguish "the seat answered a case wrong" from "the rail didn't reach
+// the seat" without either one masquerading as the other.
+// ─────────────────────────────────────────────────────────────────────────
+
+const CONSULT_DISCUSS_RESPONSE_MAX_BYTES = 65_536;
+const CONSULT_DISCUSS_DEFAULT_WALL_SECONDS = 1800;
+
+// Case-broker BrokerError `.code` values that originate on the PROVIDER
+// side (the paid engine's own adapter/process/response) versus the BROKER/
+// sandbox side (host-local infrastructure). Mirrors each grader's own
+// `infra_fail` / `provider_unavailable` split (evals/consult-eval-grader.js,
+// evals/discuss-eval-grader.js headers) — this is the single place that
+// maps a raw broker error string onto that split, so both roles agree.
+const CONSULT_DISCUSS_PROVIDER_SIDE_CODES = [
+  'provider_identity_mismatch',
+  'provider_timeout',
+  'provider_output_too_large',
+  'provider_process_failed',
+  'malformed_provider_response',
+];
+
+function classifyConsultDiscussTransportFailure(errorMessage) {
+  const message = String(errorMessage || '');
+  if (CONSULT_DISCUSS_PROVIDER_SIDE_CODES.some((code) => message.includes(code))) {
+    return 'provider_unavailable';
+  }
+  return 'infra_fail';
+}
+
+function parseConsultDiscussCaseResponse(stdout) {
+  const text = String(stdout || '');
+  if (Buffer.byteLength(text, 'utf8') > CONSULT_DISCUSS_RESPONSE_MAX_BYTES) return null;
+  const extracted = extractJsonObject(text);
+  if (!extracted) return null;
+  try {
+    const parsed = JSON.parse(extracted);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  } catch { /* fall through */ }
+  return null;
+}
+
+function buildConsultCaseEnvelope(caseSpec) {
+  return JSON.stringify({
+    case_id: caseSpec.case_id,
+    question: caseSpec.question,
+    bundle: caseSpec.bundle,
+  });
+}
+
+function buildDiscussCaseEnvelope(caseSpec) {
+  return JSON.stringify({
+    case_id: caseSpec.case_id,
+    transcript: caseSpec.transcript,
+    bundle: caseSpec.bundle,
+  });
+}
+
+// discuss's generator (evals/discuss-eval-generator.js `buildAdministration()`)
+// is a fully deterministic flat enumeration of `cases_per_administration`
+// cases (no seed — the same 16 cases every time; D2's construct, unlike
+// consult's seeded corpus). Chunk it into trials of `cases_per_trial` in
+// generation order, matching each case's own `-tN-cM` case_id encoding.
+function chunkDiscussTrials(cases, corpus) {
+  const perTrial = corpus.budget.cases_per_trial;
+  const trials = [];
+  for (let index = 0; index < corpus.budget.trials_per_administration; index += 1) {
+    trials.push({
+      trial: index + 1,
+      cases: cases.slice(index * perTrial, (index + 1) * perTrial),
+    });
+  }
+  return trials;
+}
+
+// discuss-eval-grader.js ships per-case grading (`gradeContribution`) only —
+// D1/D2's split deliberately left administration-level folding to "a future
+// live administration (D3, out of scope here)" (consult-eval-grader.js's own
+// header says the same of consult, but ALSO ships `foldAdministration` since
+// its admission-gate self-check needed one already; discuss's self-check
+// folds ad hoc instead, so this kernel is discuss's first caller needing
+// the shape). Mirrors consult-eval-grader.js's foldAdministration precisely
+// (per-trial AND aggregate must clear their own bar — plan §4 D2, 8/8 per
+// trial, 16/16 aggregate), reading budget/thresholds from the same sealed
+// corpus manifest discussGrader.CORPUS carries — no duplicated corpus data.
+function foldDiscussAdministration(trials, corpus) {
+  const counts = {
+    sycophantic_capitulations: 0,
+    evidence_blindness: 0,
+    zero_information: 0,
+    fabricated_anchors: 0,
+    protocol_violations: 0,
+  };
+  const countKeyByOutcome = {
+    sycophantic_capitulation: 'sycophantic_capitulations',
+    evidence_blindness: 'evidence_blindness',
+    zero_information: 'zero_information',
+    fabricated_anchor: 'fabricated_anchors',
+    protocol_violation: 'protocol_violations',
+  };
+  const familyLines = {};
+  let total = 0;
+  let passed = 0;
+  for (const trial of trials) {
+    for (const item of trial.cases) {
+      total += 1;
+      const line = familyLines[item.family] || { cases: 0, passes: 0 };
+      line.cases += 1;
+      if (item.outcome === 'pass') { passed += 1; line.passes += 1; }
+      const countKey = countKeyByOutcome[item.outcome];
+      if (countKey) counts[countKey] += 1;
+      familyLines[item.family] = line;
+    }
+  }
+  const budget = corpus.budget;
+  const complete = trials.length === budget.trials_per_administration
+    && trials.every((trial) => trial.cases.length === budget.cases_per_trial)
+    && total === budget.cases_per_administration;
+  const perTrialQualified = trials.every((trial) => {
+    const trialPassed = trial.cases.filter((c) => c.outcome === 'pass').length;
+    return trialPassed === trial.cases.length;
+  });
+  const t = corpus.thresholds;
+  const qualified = complete
+    && perTrialQualified
+    && passed === total
+    && counts.sycophantic_capitulations <= t.max_sycophantic_capitulations
+    && counts.evidence_blindness <= t.max_evidence_blindness
+    && counts.zero_information <= t.max_zero_information
+    && counts.fabricated_anchors <= t.max_fabricated_anchors
+    && counts.protocol_violations <= t.max_protocol_violations;
+  return {
+    qualified, complete, total, passed, counts, family_lines: familyLines,
+    corpus_pass: `${passed}/${total}`,
+  };
+}
+
+function runConsultDiscussQualification(options) {
+  const role = options.role;
+  if (role !== 'consult' && role !== 'discuss') {
+    throw new Error(`runConsultDiscussQualification: unsupported role '${role}'`);
+  }
+
+  // 1. Seal verification FIRST, every invocation (KR7/D4) — refuses (throws)
+  // on ANY drift in the five frozen identities before anything else runs,
+  // including before the spend guard: a drifted asset must never even get
+  // to the "did you mean to spend money" question.
+  const staticAssets = qualificationAssetSeals.checkAssetSeals(role);
+
+  // 2. Spend guard (Board precondition (a)). Without --execute, the loud
+  // KR8-style refusal remains — now naming the flag and the authorization.
+  if (!options.execute) {
+    throw new Error(
+      `${role} live administration (non-\`--plan\`) requires --execute — `
+      + 'this refuses by default because it spends real money against a paid '
+      + 'engine. Administration for this role/runner pair must be authorized: '
+      + 'see docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md '
+      + '"Board decision — 2026-08-28 (authorization)" for the authorized seats '
+      + 'and preconditions before passing --execute.',
+    );
+  }
+
+  const generator = role === 'consult' ? consultGenerator : discussGenerator;
+  const grader = role === 'consult' ? consultGrader : discussGrader;
+  const CORPUS = generator.CORPUS;
+
+  if (options.trials !== CORPUS.budget.trials_per_administration) {
+    throw new Error(
+      `${role} qualification requires exactly ${CORPUS.budget.trials_per_administration} trials`,
+    );
+  }
+
+  // 3. Transport: MUST be the case-broker (remote/identity-bound) path.
+  // The bare --panel-cmd (local) path runs an arbitrary trusted-host
+  // command directly with no identity binding at all — acceptable for
+  // reviewer/owner's host-observed witness oracle, not acceptable here
+  // (Board precondition (b) presupposes identity-bound dispatch).
+  const panelConfig = snapshotPanelConfiguration({ ...options, role });
+  if (panelConfig.transport !== 'remote') {
+    throw new Error(
+      `${role} administration requires the case-broker transport `
+      + '(--remote-provider-cmd/--remote-provider) for identity binding — '
+      + '--panel-cmd has no identity check and is refused for this role',
+    );
+  }
+
+  const started = Date.now();
+  const issuedAt = timestamp();
+  const runNonce = process.env.AUTOPILOT_QUALIFY_SEED
+    ? byteHash(`${role}-seed:${process.env.AUTOPILOT_QUALIFY_SEED}`)
+    : crypto.randomBytes(32).toString('hex');
+
+  let administration;
+  if (role === 'consult') {
+    // Two derivation roots, mirroring runImplQualification (G2-F4): the
+    // admin seed drives every candidate-visible byte, the oracle key drives
+    // the held-out verification probe only — see consult-eval-generator.js
+    // header for the full contract.
+    const adminSeed = byteHash(`consult-admin:${runNonce}:${staticAssets.generator_hash}`);
+    const oracleKey = byteHash(`consult-oracle-key:${runNonce}:${staticAssets.corpus_hash}`);
+    administration = generator.generateAdministration(adminSeed, oracleKey);
+  } else {
+    // discuss's construct is unseeded (deterministic enumeration) — see
+    // chunkDiscussTrials's comment.
+    administration = { trials: chunkDiscussTrials(generator.buildAdministration(), CORPUS) };
+  }
+
+  const buildEnvelope = role === 'consult' ? buildConsultCaseEnvelope : buildDiscussCaseEnvelope;
+
+  // Shrink-only test seams (same family as runImplQualification's): reachable
+  // ONLY via the exported function (parseArgs never sets them), and Math.min
+  // guarantees they can never widen the corpus budget.
+  const wallSecondsCap = Math.min(
+    Number.isFinite(options.wallSeconds) && options.wallSeconds > 0
+      ? options.wallSeconds : CONSULT_DISCUSS_DEFAULT_WALL_SECONDS,
+    Number.isFinite(options.testWallSecondsOverride)
+      ? options.testWallSecondsOverride : Infinity,
+  );
+  const truncateAfterCases = Number.isInteger(options.testTruncateAfterCases)
+    && options.testTruncateAfterCases >= 0
+    ? options.testTruncateAfterCases
+    : null;
+  const wallDeadline = started + wallSecondsCap * 1000;
+
+  let wallTruncated = false;
+  let startedCases = 0;
+  const trialResults = [];
+  const rawExchanges = [];
+  for (const trial of administration.trials) {
+    const cases = [];
+    for (const caseSpec of trial.cases) {
+      if (Date.now() >= wallDeadline
+          || (truncateAfterCases !== null && startedCases >= truncateAfterCases)) {
+        // Wall exhaustion is COMPLETED with started cases already recorded
+        // (mirrors runImplQualification): remaining unstarted cases are
+        // simply absent, never a no-verdict abort. Fail-closed: an unrun
+        // capability case cannot pass, and folding below refuses to call
+        // a truncated administration qualified.
+        wallTruncated = true;
+        break;
+      }
+      startedCases += 1;
+      const envelope = buildEnvelope(caseSpec);
+      const execution = executePanelCase(panelConfig, envelope);
+      let outcome;
+      let responseParsed = null;
+      let transportError = null;
+      if (!execution.ok) {
+        // Transport-attributed failure (Board precondition (b)): recorded
+        // as a FAILED case, classified distinctly from content-quality
+        // outcomes, never skipped, never treated as engine capability.
+        transportError = execution.error;
+        outcome = classifyConsultDiscussTransportFailure(execution.error);
+      } else {
+        responseParsed = parseConsultDiscussCaseResponse(execution.stdout);
+        outcome = role === 'consult'
+          ? grader.classify(caseSpec, responseParsed, undefined)
+          : grader.gradeContribution(caseSpec, responseParsed, undefined).label;
+      }
+      rawExchanges.push({
+        trial: trial.trial,
+        case_id: caseSpec.case_id,
+        family: caseSpec.family,
+        envelope,
+        transport_ok: execution.ok,
+        transport_error: transportError,
+        response: responseParsed,
+        outcome,
+      });
+      cases.push({ family: caseSpec.family, case_id: caseSpec.case_id, outcome });
+    }
+    trialResults.push({ trial: trial.trial, cases });
+    if (wallTruncated) break;
+  }
+
+  if (options.rawDir) {
+    fs.mkdirSync(options.rawDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(options.rawDir, `${role}-exchanges.jsonl`),
+      `${rawExchanges.map((row) => JSON.stringify(row)).join('\n')}\n`,
+      { mode: 0o600 },
+    );
+  }
+
+  const baseVerdict = {
+    engine: options.engine,
+    model: options.model,
+    runner: options.runner,
+    role,
+  };
+  const oracleMeta = {
+    methodology_version: `${CORPUS.corpus_version}.${generator.GENERATOR_VERSION}`,
+    corpus_manifest_hash: staticAssets.corpus_hash,
+    generator_hash: staticAssets.generator_hash,
+    grader_hash: staticAssets.grader_hash,
+    transport: panelConfig.transport,
+  };
+
+  // Degenerate abort: nothing started at all (e.g. the wall/truncate seam
+  // fires before the very first case). No evidence, no scorecard row —
+  // matches runImplQualification's infra_abort shape.
+  const scoredTrials = trialResults.filter((trial) => trial.cases.length > 0);
+  if (scoredTrials.length === 0) {
+    return deepFreeze({
+      schema_version: 1,
+      run_nonce: runNonce,
+      oracle: oracleMeta,
+      qualified: false,
+      wall_truncated: wallTruncated,
+      started_cases: startedCases,
+      evidence: null,
+      row: { status: 'no_verdict', administration_outcome: 'infra_abort', evidence: null },
+      verdict: {
+        ...baseVerdict,
+        administration_outcome: 'infra_abort',
+        reason: 'administration ended infra_abort — no cases started, no verdict',
+      },
+    });
+  }
+
+  const folded = role === 'consult'
+    ? grader.foldAdministration(scoredTrials)
+    : foldDiscussAdministration(scoredTrials, CORPUS);
+  const state = folded.qualified ? 'qualified' : 'degraded';
+
+  // D7: the SAME frozen applicability-scope derivation the switch-on gate
+  // uses — never a caller-supplied scope, never a second copy.
+  const scope = consultDiscussFrozenScope(role);
+  const identity = {
+    identity: options.model,
+    model_alias: options.engine,
+    model_version: options.modelVersion,
+    family: options.family,
+    runner: options.runner,
+    runner_version: options.runnerVersion,
+    harness_version: options.harnessVersion,
+    effort: options.effort,
+    prompt_config_hash: options.promptConfigHash,
+    semantic_fingerprint: options.semanticFingerprint,
+    containment_fingerprint: options.containmentFingerprint,
+    identity_resolved: true,
+  };
+
+  const outcomeCountKeys = role === 'consult'
+    ? {
+      false_confidence: 'false_confidence',
+      precedence_miss: 'precedence_misses',
+      authority_violation: 'authority_violations',
+      scope_drift: 'scope_drift',
+      oracle_miss: 'oracle_misses',
+      protocol_violation: 'protocol_violations',
+    }
+    : {
+      sycophantic_capitulation: 'sycophantic_capitulations',
+      evidence_blindness: 'evidence_blindness',
+      zero_information: 'zero_information',
+      fabricated_anchor: 'fabricated_anchors',
+      protocol_violation: 'protocol_violations',
+    };
+  const trials = scoredTrials.map((trial) => {
+    const count = (outcome) => trial.cases.filter((c) => c.outcome === outcome).length;
+    const perOutcomeCounts = {};
+    for (const [outcomeName, field] of Object.entries(outcomeCountKeys)) {
+      perOutcomeCounts[field] = count(outcomeName);
+    }
+    const streamHash = sha256(canonicalJson(
+      rawExchanges
+        .filter((row) => row.trial === trial.trial)
+        .map((row) => ({ case_id: row.case_id, outcome: row.outcome })),
+    ));
+    const base = {
+      trial_id: `trial-${trial.trial}`,
+      observed_at: issuedAt,
+      corpus_manifest_hash: staticAssets.corpus_hash,
+      cases_total: trial.cases.length,
+      cases_passed: count('pass'),
+      ...perOutcomeCounts,
+    };
+    return role === 'consult'
+      ? { ...base, response_stream_hash: streamHash }
+      : { ...base, transcript_stream_hash: streamHash };
+  });
+
+  const expiresAt = new Date(
+    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
+  ).toISOString();
+
+  const thresholds = role === 'consult'
+    ? {
+      min_trials: CORPUS.budget.trials_per_administration,
+      max_false_confidence: CORPUS.thresholds.max_false_confidence,
+      max_precedence_misses: CORPUS.thresholds.max_precedence_misses,
+      max_authority_violations: CORPUS.thresholds.max_authority_violations,
+      max_scope_drift: CORPUS.thresholds.max_scope_drift,
+      max_oracle_misses: CORPUS.thresholds.max_oracle_misses,
+      max_protocol_violations: CORPUS.thresholds.max_protocol_violations,
+    }
+    : {
+      min_trials: CORPUS.budget.trials_per_administration,
+      max_sycophantic_capitulations: CORPUS.thresholds.max_sycophantic_capitulations,
+      max_evidence_blindness: CORPUS.thresholds.max_evidence_blindness,
+      max_zero_information: CORPUS.thresholds.max_zero_information,
+      max_fabricated_anchors: CORPUS.thresholds.max_fabricated_anchors,
+      max_protocol_violations: CORPUS.thresholds.max_protocol_violations,
+    };
+  const methodology = {
+    kind: role === 'consult' ? 'consult_panel' : 'discuss_rounds',
+    name: role === 'consult' ? 'consult-panel-v1' : 'discuss-rounds-v1',
+    version: '1.0.0',
+    corpus_version: `${CORPUS.corpus_version}.${generator.GENERATOR_VERSION}`,
+    corpus_manifest_hash: staticAssets.corpus_hash,
+    thresholds,
+    basis: null,
+  };
+  const evidence = compileCapabilityEvidence({
+    schema_version: 1,
+    source: 'internal_eval',
+    source_ref: `engine-qualify:${role}-v1`,
+    state,
+    role,
+    scope,
+    identity,
+    issued_at: issuedAt,
+    observed_at: issuedAt,
+    expires_at: expiresAt,
+    methodology,
+    trials,
+    revocation: null,
+    supersedes: null,
+  });
+  const storeConfig = resolveEvidenceStore(options.store);
+  let evidenceStoreRecord;
+  try {
+    evidenceStoreRecord = appendQualifierEvidence(storeConfig, evidence);
+  } catch (error) {
+    throw new Error(`cannot persist qualifier evidence: ${error.message}`);
+  }
+
+  const totals = (key) => trials.reduce((sum, t) => sum + t[key], 0);
+  const qualified = folded.qualified;
+  // Truncation/wall honesty (impl kernel's convention): a truncated
+  // administration must never present a shrunken denominator to a
+  // downstream consumer — use the FULL corpus denominator whenever the
+  // fold is incomplete, exactly like runImplQualification's corpus_pass.
+  const fullTotal = CORPUS.budget.cases_per_administration;
+  const quality = role === 'consult'
+    ? {
+      corpus_pass: folded.complete ? folded.corpus_pass : `${folded.passed}/${fullTotal}`,
+      false_confidence: totals('false_confidence'),
+      precedence_misses: totals('precedence_misses'),
+      authority_violations: totals('authority_violations'),
+      scope_drift: totals('scope_drift'),
+      oracle_misses: totals('oracle_misses'),
+      protocol_violations: totals('protocol_violations'),
+      repeated_trials: options.trials,
+    }
+    : {
+      corpus_pass: folded.complete ? folded.corpus_pass : `${folded.passed}/${fullTotal}`,
+      sycophantic_capitulations: totals('sycophantic_capitulations'),
+      evidence_blindness: totals('evidence_blindness'),
+      zero_information: totals('zero_information'),
+      fabricated_anchors: totals('fabricated_anchors'),
+      protocol_violations: totals('protocol_violations'),
+      repeated_trials: options.trials,
+    };
+  const row = {
+    engine: options.engine,
+    model: options.model,
+    runner: options.runner,
+    family: options.family,
+    role,
+    model_version: options.modelVersion,
+    version_source: options.versionSource,
+    corpus_version: methodology.corpus_version,
+    harness_version: options.harnessVersion,
+    runner_version: options.runnerVersion,
+    prompt_config_hash: options.promptConfigHash,
+    effort: options.effort,
+    date: issuedAt.slice(0, 10),
+    quality,
+    capability_score: totals('cases_total') === 0
+      ? 0
+      : totals('cases_passed') / totals('cases_total'),
+    cost: {
+      source: 'unknown',
+      usd_per_mtok_input: 0,
+      usd_per_mtok_output: 0,
+      sample_tokens: 0,
+    },
+    latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
+    status: qualified ? 'qualified' : (folded.complete ? 'failed' : 'no_verdict'),
+    qualified_at: issuedAt.slice(0, 10),
+    expires: expiresAt.slice(0, 10),
+    evidence_store: {
+      event_id: evidenceStoreRecord.event_id,
+      producer: evidenceStoreRecord.producer,
+      transcript_hash: evidenceStoreRecord.transcript_hash,
+    },
+    evidence,
+  };
+  const failures = [];
+  for (const trial of scoredTrials) {
+    for (const c of trial.cases) {
+      if (c.outcome !== 'pass') failures.push(`trial-${trial.trial}: ${c.case_id} ${c.outcome}`);
+    }
+  }
+  if (wallTruncated) failures.push(`administration wall-truncated after ${startedCases} started cases`);
+  const verdict = {
+    ...baseVerdict,
+    qualified,
+    evidence_id: evidence.evidence_id,
+    evidence_state: evidence.state,
+    scope_hash: evidence.scope_hash,
+    identity_hash: evidence.identity_hash,
+    trial_set_hash: evidence.trial_set_hash,
+    evidence_store_event_id: evidenceStoreRecord.event_id,
+    evidence_store_transcript_hash: evidenceStoreRecord.transcript_hash,
+    reason: qualified ? 'passed' : failures.join('; '),
+  };
+  return deepFreeze({
+    schema_version: 1,
+    run_nonce: runNonce,
+    oracle: oracleMeta,
+    qualified,
+    wall_truncated: wallTruncated,
+    started_cases: startedCases,
+    evidence,
+    row,
+    verdict,
+  });
+}
+
+function runConsultQualification(options) {
+  return runConsultDiscussQualification({ ...options, role: 'consult' });
+}
+
+function runDiscussQualification(options) {
+  return runConsultDiscussQualification({ ...options, role: 'discuss' });
+}
+
 function runPlanDryRun(options) {
   const identities = qualificationAssetSeals.frozenIdentities(options.role);
   const casePlan = options.role === 'consult'
@@ -3414,18 +4006,12 @@ function runQualification(options) {
   const role = options.role || 'reviewer';
   if (options.plan) return runPlanDryRun(options);
   if (role === 'consult' || role === 'discuss') {
-    // Real (non-`--plan`) consult/discuss administration is DEFERRED — see
-    // this deliverable's final report for the citation. KR8 forbids real-
-    // money administration in this project, and D3's acceptance criteria
-    // (plan §"D3", lines ~446-495) require only `--plan` and the broker/
-    // provider transport identity-binding tests, not a live administration
-    // run. Failing loud here (not silently) so a real invocation attempt is
-    // never mistaken for a supported path.
-    throw new Error(
-      `${role} qualification administration (non-\`--plan\`) is not yet wired — `
-      + 'see docs/plans/2026-08-28-consult-discuss-qualification.md D3/D7 and '
-      + 'this deliverable\'s final report for the deferral citation',
-    );
+    // Live administration wiring (Board authorization 2026-08-28, see
+    // docs/plans/evidence/2026-08-28-consult-discuss-qualify/PROPOSAL.md
+    // "Board decision — 2026-08-28 (authorization)"). The kernel itself
+    // enforces the --execute spend guard, seal verification, and the
+    // identity-bound transport requirement — see runConsultDiscussQualification.
+    return runConsultDiscussQualification(options);
   }
   if (role === 'brain') return runBrainQualification(options);
   if (role === 'verification_author') return runVaQualification(options);
@@ -3820,6 +4406,9 @@ module.exports = {
   createSessionRoleCapabilityVerifier,
   ownerRuleViolations,
   runBrainQualification,
+  runConsultDiscussQualification,
+  runConsultQualification,
+  runDiscussQualification,
   runImplQualification,
   runQualification,
   runVaQualification,

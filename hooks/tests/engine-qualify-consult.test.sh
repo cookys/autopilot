@@ -3,13 +3,10 @@
 #
 # consult exam suite acceptance (plan: docs/plans/2026-08-28-consult-discuss-
 # qualification.md, D1). Tests the generator/grader/corpus/rubric assets
-# DIRECTLY (self-check + library calls) rather than through
-# `scripts/engine-qualify.sh consult --plan`, because that dry-run flag is
-# D3 — a sibling deliverable in the same wave, not yet wired at the time
-# this file was authored. When D3 lands, add a companion assertion that
-# `scripts/engine-qualify.sh consult --plan` also exits 0 and prints the
-# five frozen identities; this file's generator/grader self-checks remain
-# the underlying acceptance surface either way (plan D1 "Acceptance").
+# DIRECTLY (self-check + library calls) — this remains the underlying
+# acceptance surface for D1 "Acceptance". Section 6 below is the D3
+# companion: `scripts/engine-qualify.sh consult --plan` exits 0, prints the
+# five frozen identities and the case plan, and makes no provider call.
 . "$(dirname "$0")/lib.sh"
 
 GEN="$REPO_ROOT/evals/consult-eval-generator.js"
@@ -178,5 +175,79 @@ console.log(grader.classify(c5, malformed, {}));
 NODE
 )"
 assert_eq "$PROTOCOL_ORDER_OUT" "protocol_violation" "closed-schema violation outranks authority_violation in the total order (protocol graded before family scoring)"
+
+# ── 6. D3: `scripts/engine-qualify.sh consult --plan` dry-run ──────────────
+# The companion assertion this file's header comment asked for once D3
+# landed. --plan exits 0, prints the five frozen identities and the case
+# plan, makes NO provider call (proven via a --panel-cmd that exits 99 if
+# ever invoked), is byte-identical across repeated runs, and combined with
+# an implementer-only flag exits 2.
+SCRIPT="$REPO_ROOT/scripts/engine-qualify.sh"
+NEVER_CALL="$TEST_TMP/consult-never-call.sh"
+cat >"$NEVER_CALL" <<'SH'
+#!/usr/bin/env bash
+exit 99
+SH
+chmod +x "$NEVER_CALL"
+
+HASH_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+HASH_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+HASH_C="$(printf 'consult-plan-containment' | sha256sum | cut -d' ' -f1)"
+CONSULT_PLAN_ARGS=(
+  consult
+  --plan
+  --engine eng-consult
+  --model eng-consult-exact
+  --model-version 2026-08-28
+  --runner cc-shim
+  --runner-version 1.0.0
+  --family openai
+  --harness-version consult-harness-v1
+  --effort high
+  --prompt-config-hash "$HASH_A"
+  --semantic-fingerprint "$HASH_B"
+  --containment-fingerprint "$HASH_C"
+  --task-class code_review
+  --domain repository
+  --language en
+  --tool diff_read
+  --panel-cmd "$NEVER_CALL"
+)
+
+PLAN_OUT="$($SCRIPT "${CONSULT_PLAN_ARGS[@]}" 2>&1)"
+PLAN_RC=$?
+assert_exit_code "$PLAN_RC" "0" "consult --plan exits 0"
+assert_contains "$PLAN_OUT" '"role": "consult"' "consult --plan prints the requested role"
+assert_contains "$PLAN_OUT" '"generator":' "consult --plan prints the generator identity"
+assert_contains "$PLAN_OUT" '"grader":' "consult --plan prints the grader identity"
+assert_contains "$PLAN_OUT" '"corpus":' "consult --plan prints the corpus identity"
+assert_contains "$PLAN_OUT" '"rubric":' "consult --plan prints the rubric identity"
+assert_contains "$PLAN_OUT" '"seal":' "consult --plan prints the seal identity"
+assert_contains "$PLAN_OUT" '"case_plan":' "consult --plan prints the case plan"
+assert_contains "$PLAN_OUT" '"C1_grounded_answer-t0-c0"' "consult --plan case plan names real case ids"
+assert_not_contains "$PLAN_OUT" '"authority_status"' "consult --plan output is a plan document, not a qualification verdict"
+
+PLAN_OUT2="$($SCRIPT "${CONSULT_PLAN_ARGS[@]}" 2>&1)"
+assert_eq "$PLAN_OUT" "$PLAN_OUT2" "consult --plan produces byte-identical stdout on a second run with an identical seed envelope"
+
+IMPL_FLAG_OUT="$($SCRIPT "${CONSULT_PLAN_ARGS[@]}" --dispatch-bin /bin/true 2>&1)"
+IMPL_FLAG_RC=$?
+assert_exit_code "$IMPL_FLAG_RC" "2" "consult --plan combined with an implementer-only flag exits 2"
+
+# --expires-days: flat 30-day cap for consult (30 accepted, 31 rejected).
+EXPIRES_30_RC=0
+$SCRIPT "${CONSULT_PLAN_ARGS[@]}" --expires-days 30 >/dev/null 2>&1 || EXPIRES_30_RC=$?
+assert_exit_code "$EXPIRES_30_RC" "0" "consult --expires-days 30 is accepted"
+EXPIRES_31_RC=0
+$SCRIPT "${CONSULT_PLAN_ARGS[@]}" --expires-days 31 >/dev/null 2>&1 || EXPIRES_31_RC=$?
+assert_exit_code "$EXPIRES_31_RC" "2" "consult --expires-days 31 is rejected (flat 30-day cap)"
+
+# Live-rail flags are rejected outright for consult (never live-rail).
+RUNNER_BIN_RC=0
+$SCRIPT "${CONSULT_PLAN_ARGS[@]}" --runner-bin /bin/true >/dev/null 2>&1 || RUNNER_BIN_RC=$?
+assert_exit_code "$RUNNER_BIN_RC" "2" "consult rejects --runner-bin (not live-rail)"
+DISPATCH_TIMEOUT_RC=0
+$SCRIPT "${CONSULT_PLAN_ARGS[@]}" --dispatch-timeout 60s >/dev/null 2>&1 || DISPATCH_TIMEOUT_RC=$?
+assert_exit_code "$DISPATCH_TIMEOUT_RC" "2" "consult rejects --dispatch-timeout (not live-rail)"
 
 finalize_test

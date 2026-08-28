@@ -1008,8 +1008,342 @@ try {
   fs.rmSync(duplicateRoot, { recursive: true, force: true });
 }
 
+// --- D5 consumer matrix: consult_panel / discuss_rounds --------------------
+// plan 2026-08-28-consult-discuss-qualification.md D5, rows (a)-(j). Rows (g)
+// and (j)'s schema-level half are already covered above/in
+// hooks/tests/execution-profile.test.sh; row (j)'s CONSTRUCTION-level half
+// (task-authority effect permissions / role-execution-grant) lives in
+// hooks/tests/execution-profile.test.sh. Row (d) (resolve-review-loop.sh
+// --check-scorecard consuming this exact row) is D7 scope, not D5 — D7 must
+// not hand-write its own row.
+const consultMethodology = {
+  kind: 'consult_panel',
+  name: 'consult-panel-v1',
+  version: '1.0.0',
+  corpus_version: 'consult-panel-v1',
+  corpus_manifest_hash: digest('consult-corpus'),
+  thresholds: {
+    min_trials: 2,
+    max_false_confidence: 0,
+    max_precedence_misses: 0,
+    max_authority_violations: 0,
+    max_scope_drift: 0,
+    max_oracle_misses: 0,
+    max_protocol_violations: 0,
+  },
+  basis: null,
+};
+function consultTrial(id, observedAt, overrides = {}) {
+  return {
+    trial_id: id,
+    observed_at: observedAt,
+    corpus_manifest_hash: consultMethodology.corpus_manifest_hash,
+    cases_total: 10,
+    cases_passed: 10,
+    false_confidence: 0,
+    precedence_misses: 0,
+    authority_violations: 0,
+    scope_drift: 0,
+    oracle_misses: 0,
+    protocol_violations: 0,
+    response_stream_hash: digest(`consult-response-${id}`),
+    ...overrides,
+  };
+}
+const consultIdentity = { ...identity, identity: 'test-consult-v1', model_alias: 'test-consult' };
+function consultQualifiedInput(overrides = {}) {
+  return {
+    schema_version: 1,
+    source: 'internal_eval',
+    source_ref: 'engine-qualify:consult',
+    state: 'qualified',
+    role: 'consult',
+    scope,
+    identity: consultIdentity,
+    issued_at: '2026-08-28T02:00:00.000Z',
+    observed_at: '2026-08-28T01:30:00.000Z',
+    expires_at: '2026-09-27T02:00:00.000Z',
+    methodology: consultMethodology,
+    trials: [
+      consultTrial('trial-1', '2026-08-28T01:00:00.000Z'),
+      consultTrial('trial-2', '2026-08-28T01:30:00.000Z'),
+    ],
+    revocation: null,
+    supersedes: null,
+    ...overrides,
+  };
+}
+
+const discussMethodology = {
+  kind: 'discuss_rounds',
+  name: 'discuss-rounds-v1',
+  version: '1.0.0',
+  corpus_version: 'discuss-rounds-v1',
+  corpus_manifest_hash: digest('discuss-corpus'),
+  thresholds: {
+    min_trials: 2,
+    max_sycophantic_capitulations: 0,
+    max_evidence_blindness: 0,
+    max_zero_information: 0,
+    max_fabricated_anchors: 0,
+    max_protocol_violations: 0,
+  },
+  basis: null,
+};
+function discussTrial(id, observedAt, overrides = {}) {
+  return {
+    trial_id: id,
+    observed_at: observedAt,
+    corpus_manifest_hash: discussMethodology.corpus_manifest_hash,
+    cases_total: 8,
+    cases_passed: 8,
+    sycophantic_capitulations: 0,
+    evidence_blindness: 0,
+    zero_information: 0,
+    fabricated_anchors: 0,
+    protocol_violations: 0,
+    transcript_stream_hash: digest(`discuss-transcript-${id}`),
+    ...overrides,
+  };
+}
+const discussIdentity = { ...identity, identity: 'test-discuss-v1', model_alias: 'test-discuss' };
+function discussQualifiedInput(overrides = {}) {
+  return {
+    schema_version: 1,
+    source: 'internal_eval',
+    source_ref: 'engine-qualify:discuss',
+    state: 'qualified',
+    role: 'discuss',
+    scope,
+    identity: discussIdentity,
+    issued_at: '2026-08-28T02:00:00.000Z',
+    observed_at: '2026-08-28T01:30:00.000Z',
+    expires_at: '2026-09-27T02:00:00.000Z',
+    methodology: discussMethodology,
+    trials: [
+      discussTrial('trial-1', '2026-08-28T01:00:00.000Z'),
+      discussTrial('trial-2', '2026-08-28T01:30:00.000Z'),
+    ],
+    revocation: null,
+    supersedes: null,
+    ...overrides,
+  };
+}
+
+const consultQualified = compileCapabilityEvidence(consultQualifiedInput());
+const discussQualified = compileCapabilityEvidence(discussQualifiedInput());
+check(consultQualified.role === 'consult' && consultQualified.trials.length === 2, 'consult_panel qualified evidence compiles with the consult role and repeated trials');
+check(discussQualified.role === 'discuss' && discussQualified.trials.length === 2, 'discuss_rounds qualified evidence compiles with the discuss role and repeated trials');
+check(
+  validateJsonSchema(evidenceSchema, consultQualified).valid === true,
+  'consult_panel evidence matches the D5-widened JSON schema',
+);
+check(
+  validateJsonSchema(evidenceSchema, discussQualified).valid === true,
+  'discuss_rounds evidence matches the D5-widened JSON schema',
+);
+
+// (a) pre-existing role_eval evidence still validates byte-for-byte under the
+// D5-widened schema (additive, back-compatible) — reload proves the file on
+// disk, not an in-memory object frozen before the widening.
+{
+  const reloadedSchema = JSON.parse(fs.readFileSync(
+    path.join(root, 'schemas', 'capability-evidence.schema.json'),
+    'utf8',
+  ));
+  check(
+    validateJsonSchema(reloadedSchema, qualified).valid === true,
+    '(a) pre-existing role_eval evidence still validates under the D5-widened schema, reloaded from disk',
+  );
+}
+
+// (b) a FROZEN copy of the pre-D5 validator (the D3/D4 tip) must REJECT a new
+// consult_panel/discuss_rounds row — the bidirectional pin (evidence-discipline
+// §13): before D5 shipped, such a row was correctly impossible to compile.
+{
+  const FROZEN_TIP_SHA = 'bdffb703';
+  const frozenSrc = spawnSync(
+    'git',
+    ['show', `${FROZEN_TIP_SHA}:src/engine/capability-evidence.js`],
+    { cwd: root, encoding: 'utf8' },
+  );
+  check(
+    frozenSrc.status === 0 && frozenSrc.stdout.length > 0,
+    '(b) frozen pre-D5 capability-evidence.js source retrieved from git history',
+  );
+  const frozenDir = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-frozen-capev-'));
+  try {
+    fs.mkdirSync(path.join(frozenDir, 'src', 'engine', 'owner-kernel'), { recursive: true });
+    fs.writeFileSync(
+      path.join(frozenDir, 'src', 'engine', 'capability-evidence.js'),
+      frozenSrc.stdout,
+    );
+    // roles.js and owner-kernel/* are UNCHANGED by D5 (D3 already widened roles.js);
+    // copying the live tree's copies is copying byte-identical dependencies, not
+    // smuggling D5 behavior into the frozen module under test.
+    fs.copyFileSync(
+      path.join(root, 'src', 'engine', 'roles.js'),
+      path.join(frozenDir, 'src', 'engine', 'roles.js'),
+    );
+    for (const entry of fs.readdirSync(path.join(root, 'src', 'engine', 'owner-kernel'))) {
+      fs.copyFileSync(
+        path.join(root, 'src', 'engine', 'owner-kernel', entry),
+        path.join(frozenDir, 'src', 'engine', 'owner-kernel', entry),
+      );
+    }
+    const frozenModulePath = path.join(frozenDir, 'src', 'engine', 'capability-evidence.js');
+    const frozenModule = require(frozenModulePath);
+    rejects(
+      () => frozenModule.compileCapabilityEvidence(consultQualifiedInput()),
+      /must be one of/,
+      "(b) the frozen pre-D5 validator REJECTS a consult_panel row",
+    );
+    rejects(
+      () => frozenModule.compileCapabilityEvidence(discussQualifiedInput()),
+      /must be one of/,
+      "(b) the frozen pre-D5 validator REJECTS a discuss_rounds row",
+    );
+  } finally {
+    fs.rmSync(frozenDir, { recursive: true, force: true });
+  }
+}
+
+// (e) a malformed / non-full-corpus trial cannot be QUALIFIED (promotion floor
+// denies it outright) but the SAME data compiles fine at a lower tier
+// (provisional) — a malformed row does not vanish, it lands one tier down.
+rejects(
+  () => compileCapabilityEvidence(consultQualifiedInput({
+    trials: [
+      consultTrial('trial-1', '2026-08-28T01:00:00.000Z', { cases_passed: 9 }),
+      consultTrial('trial-2', '2026-08-28T01:30:00.000Z'),
+    ],
+  })),
+  /requires every case to pass/,
+  '(e) a non-10/10 consult trial cannot be promoted to qualified',
+);
+{
+  const lowerTier = compileCapabilityEvidence(consultQualifiedInput({
+    state: 'provisional',
+    trials: [
+      consultTrial('trial-1', '2026-08-28T01:00:00.000Z', { cases_passed: 9 }),
+      consultTrial('trial-2', '2026-08-28T01:30:00.000Z'),
+    ],
+  }));
+  check(
+    lowerTier.state === 'provisional',
+    '(e) the same non-10/10 trial data compiles fine at the provisional (lower) tier',
+  );
+}
+rejects(
+  () => compileCapabilityEvidence(discussQualifiedInput({
+    trials: [
+      discussTrial('trial-1', '2026-08-28T01:00:00.000Z', { sycophantic_capitulations: 1 }),
+      discussTrial('trial-2', '2026-08-28T01:30:00.000Z'),
+    ],
+  })),
+  /sycophantic-capitulation floor was not met/,
+  '(e) a discuss trial over the zero-tolerance sycophantic-capitulation floor cannot be promoted',
+);
+
+// (i) barrel + normalizer separation, and the re-collapse negative (finding
+// [5]): CAPABILITY_ROLE_IDS/normalizeCapabilityRole from the src/engine barrel
+// accept consult/discuss; ROLE_IDS/normalizeRole from the SAME barrel reject
+// them. A future edit that silently re-aliases the two sets back together
+// fails here first.
+{
+  // The barrel (src/engine/index.js) exposes CAPABILITY_ROLE_IDS/
+  // normalizeCapabilityRole (repointed, per finding [5]) but deliberately does
+  // NOT re-export ROLE_IDS/normalizeRole — those stay reachable only from
+  // src/engine/roles.js directly, which is itself the module the barrel's
+  // CAPABILITY_* names are repointed FROM. Comparing the two here is exactly
+  // the "same underlying roles module, two different views" check the
+  // re-collapse negative needs.
+  const engineBarrel = require(path.join(root, 'src', 'engine'));
+  const rolesModule = require(path.join(root, 'src', 'engine', 'roles'));
+  check(
+    JSON.stringify(engineBarrel.CAPABILITY_ROLE_IDS) !== JSON.stringify(rolesModule.ROLE_IDS),
+    '(i) CAPABILITY_ROLE_IDS !== ROLE_IDS (the re-collapse negative)',
+  );
+  check(
+    engineBarrel.CAPABILITY_ROLE_IDS.includes('consult') && engineBarrel.CAPABILITY_ROLE_IDS.includes('discuss'),
+    '(i) barrel CAPABILITY_ROLE_IDS contains both qualification-seat roles',
+  );
+  check(
+    !rolesModule.ROLE_IDS.includes('consult') && !rolesModule.ROLE_IDS.includes('discuss'),
+    '(i) ROLE_IDS excludes both qualification-seat roles',
+  );
+  check(
+    engineBarrel.normalizeCapabilityRole('consult') === 'consult'
+    && engineBarrel.normalizeCapabilityRole('discuss') === 'discuss',
+    '(i) barrel normalizeCapabilityRole ACCEPTS consult/discuss',
+  );
+  check(
+    rolesModule.normalizeRole('consult') === null && rolesModule.normalizeRole('discuss') === null,
+    '(i) normalizeRole (same roles module) REJECTS consult/discuss — the two normalizers disagree',
+  );
+}
+// resolve-scaffold-tier.js is asserted UNCHANGED: consult is still not a
+// scaffold-tier role. It imports normalizeRole (execution-only) from
+// engine-scorecard.js, which stays byte-identical per the D3 commit message —
+// grep-pinning the import here fails loudly if a future edit repoints it at
+// normalizeCapabilityRole instead.
+{
+  const scaffoldTierSrc = fs.readFileSync(path.join(root, 'scripts', 'resolve-scaffold-tier.js'), 'utf8');
+  check(
+    !/normalizeCapabilityRole/.test(scaffoldTierSrc),
+    'resolve-scaffold-tier.js does not import normalizeCapabilityRole — scaffold-tier admission stays execution-only',
+  );
+}
+
+// (h) adopter parity (finding [7]): VALID_ROLES in adopt-qualification-defaults.js
+// is DERIVED from CAPABILITY_ROLE_IDS, not a fourth hand-listed copy — adding a
+// role to CAPABILITY_ROLE_IDS without touching the adopter makes it adoptable.
+// A grep-pinned negative: if a future edit re-lists the roles by hand here, this
+// fails rather than silently drifting the same way engine-scorecard.js's
+// pre-D3 hardcoding did.
+{
+  const adopterSrc = fs.readFileSync(path.join(root, 'scripts', 'adopt-qualification-defaults.js'), 'utf8');
+  check(
+    /VALID_ROLES\s*=\s*new Set\(CAPABILITY_ROLE_IDS\)/.test(adopterSrc),
+    '(h) adopt-qualification-defaults.js VALID_ROLES is derived from CAPABILITY_ROLE_IDS, not re-listed',
+  );
+  const { CAPABILITY_ROLE_IDS: adopterRoleIds } = require(path.join(root, 'src', 'engine', 'roles'));
+  check(
+    adopterRoleIds.includes('consult') && adopterRoleIds.includes('discuss'),
+    '(h) the role set the adopter derives from already carries both qualification-seat roles',
+  );
+}
+
 process.stdout.write(`PASS [capability-evidence] ${passed} assertions\n`);
 NODE
 
 assert_exit_code "$NODE_STATUS" "0" "capability evidence contract passes all assertions"
+
+# --- (c) + (f): role-registry end-to-end through the REAL CLI --------------
+# plan D5 rows (c) ("engine-scorecard.js reads the row's quality block") and
+# (f) ("role-registry end-to-end: record -> current -> seat-status succeeds
+# for both roles"). ENGINE_SCORECARD_DIR/ENGINE_CAPABILITY_DIR are already
+# isolated into $TEST_TMP by lib.sh.
+SCORECARD_CLI="$REPO_ROOT/scripts/engine-scorecard.js"
+for ROLE in consult discuss; do
+  if [ "$ROLE" = "consult" ]; then BAR="20/20"; else BAR="16/16"; fi
+  ROW_JSON=$(cat <<EOF
+{"engine":"test-$ROLE-engine","runner":"test-runner","family":"test-family","role":"$ROLE","model_version":"1.0","version_source":"operator-asserted","corpus_version":"$ROLE-panel-v1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-08-28","quality":{"corpus_pass":"$BAR","protocol_violations":0},"capability_score":1.0,"cost":{"source":"unknown"},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-08-28","expires":"2099-01-01"}
+EOF
+)
+  RECORD_OUT=$(echo "$ROW_JSON" | node "$SCORECARD_CLI" record 2>&1); RECORD_RC=$?
+  assert_exit_code "$RECORD_RC" "0" "(f) engine-scorecard.js record accepts a role=$ROLE row end-to-end ($RECORD_OUT)"
+  # (c) engine-scorecard.js READS the row's quality block: record round-trips it
+  # back unmodified (the CLI's untrusted-telemetry `current` projection never
+  # surfaces `quality` for ANY role — reviewer/implementer included — so the
+  # read-path proof point is record's own echo, not a `current` field).
+  assert_contains "$RECORD_OUT" "\"corpus_pass\":\"$BAR\"" "(c) engine-scorecard.js record reads and round-trips the row's quality block for role=$ROLE"
+
+  CURRENT_OUT=$(node "$SCORECARD_CLI" current --role "$ROLE" --now 2026-08-29 2>&1)
+  assert_contains "$CURRENT_OUT" "\"role\":\"$ROLE\"" "(f) current --role $ROLE returns the recorded seat (role-registry end-to-end)"
+
+  SEAT_OUT=$(node "$SCORECARD_CLI" seat-status --engine "test-$ROLE-engine" --runner test-runner --role "$ROLE" --now 2026-08-29 2>&1)
+  assert_contains "$SEAT_OUT" "\"admission_status\"" "(f) seat-status succeeds end-to-end for role=$ROLE"
+done
+
 finalize_test

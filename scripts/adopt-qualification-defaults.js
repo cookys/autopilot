@@ -362,14 +362,15 @@ function cmdAdopt(opts) {
   const adopted = [];
   for (const entry of entries) {
     const row = { ...entry.row };
-    // F3: the artifact carries capability_score as a lossless decimal STRING so
-    // its committed bytes clear validate-json-schema.js's integer-only numeric
-    // preflight. The store's own contract is numeric, so convert back here -
-    // String(x) -> Number(x) round-trips exactly.
-    if (typeof row.capability_score === 'string') {
-      const n = Number(row.capability_score);
-      if (!Number.isFinite(n)) fail(`${entry.default_id}: capability_score '${row.capability_score}' is not a number`);
-      row.capability_score = n;
+    // F3, later reopened: validate-json-schema.js used to reject every
+    // non-integer numeric literal, so an earlier cut shipped capability_score
+    // as a lossless decimal STRING and converted it back to a number here.
+    // The validator now accepts a non-integer literal whenever it round-trips
+    // losslessly, so the artifact carries capability_score as a real JSON
+    // number again and no conversion is needed — just fail closed if some
+    // artifact still hands this a non-finite or non-numeric value.
+    if (typeof row.capability_score !== 'number' || !Number.isFinite(row.capability_score)) {
+      fail(`${entry.default_id}: capability_score '${JSON.stringify(row.capability_score)}' is not a finite number`);
     }
     // F6: an adopted row's version_source names HOW THIS ROW GOT HERE, and it
     // got here by adoption. The original administration's value is preserved in

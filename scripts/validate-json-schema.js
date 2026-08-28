@@ -67,8 +67,16 @@ function inputError(message) {
 function assertJsonValue(value, path, active = new Set()) {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number') {
-    if (!Number.isSafeInteger(value)) {
-      numberError(`${path} contains a number that is not a lossless safe integer`);
+    // A finite JS double round-trips losslessly through JSON.stringify/JSON.parse
+    // by spec (ECMA-262 Number::toString is the unique shortest decimal that
+    // reparses to the exact same double) — that guarantee does not depend on
+    // the value being a "safe integer". The precision-loss risk lives entirely
+    // at the *source-text* boundary (a decimal literal parsed into a double
+    // for the first time), which `parseNumber` below gates before any value
+    // ever reaches this function via `readJson`. NaN/Infinity are the only
+    // finite-JSON-incompatible doubles, so they're what's rejected here.
+    if (!Number.isFinite(value)) {
+      numberError(`${path} contains a number that is not finite (NaN/Infinity are not valid JSON)`);
     }
     return;
   }
@@ -157,7 +165,21 @@ function preflightJsonSource(source, label) {
     );
     if (!match) fail('invalid number');
     const literal = match[0];
-    if (/[.eE]/u.test(literal) || !Number.isSafeInteger(Number(literal))) {
+    if (/[.eE]/u.test(literal)) {
+      // Non-integer literal: accept iff it round-trips losslessly — parse to a
+      // double, canonically re-serialize (JSON.stringify uses the same
+      // shortest-round-trip-decimal algorithm as the spec's Number::toString),
+      // and require a byte-for-byte match against the original literal. A
+      // literal whose exact decimal value cannot be recovered from its parsed
+      // double (imprecise long decimals, exponents overflowing to Infinity,
+      // reformatted exponents/trailing zeros) fails this compare and is
+      // rejected with the same explicit UNSUPPORTED_JSON_NUMBER error as
+      // before — the lossless guarantee is preserved, not dropped.
+      const value = Number(literal);
+      if (!Number.isFinite(value) || JSON.stringify(value) !== literal) {
+        numberError(`${label} uses unsupported lossy numeric literal "${literal}"`);
+      }
+    } else if (!Number.isSafeInteger(Number(literal))) {
       numberError(`${label} uses unsupported lossy numeric literal "${literal}"`);
     }
     index += literal.length;
@@ -309,6 +331,7 @@ function assertSchemaNode(
         'array',
         'string',
         'integer',
+        'number',
         'boolean',
         'null',
       ].includes(type))) {

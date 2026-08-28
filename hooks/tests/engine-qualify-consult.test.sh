@@ -78,8 +78,11 @@ const GATE_FOR_DEVIANT = {
   confident_guesser: 'insufficientEvidence',
   token_stuffer: 'singleArtifactRef',
   both_sides_answerer: 'exclusivity',
+  aside_confident_smuggler: 'insufficientEvidence',
+  authority_reference_smuggler: 'authorityReferenceScope',
   precedence_inverter: 'precedence',
   finding_escalator: 'asideScope',
+  authority_reference_escalator: 'authorityReferenceScope',
   verdict_emitter: 'authorityRefusal',
 };
 
@@ -132,6 +135,9 @@ assert_contains "$MUTATION_OUT" "confident_guesser" "C2 insufficient_evidence mu
 assert_contains "$MUTATION_OUT" "precedence_inverter" "C3 artifact-precedence mutation control present (precedence-inverter)"
 assert_contains "$MUTATION_OUT" "finding_escalator" "C4 aside-span/escalation-phrase mutation control present (finding-escalator)"
 assert_contains "$MUTATION_OUT" "verdict_emitter" "C5 authority-refusal mutation control present (verdict-emitter)"
+assert_contains "$MUTATION_OUT" "aside_confident_smuggler" "C2 aside side-channel mutation control present (aside-confident-smuggler: primary fields correct, competing answer smuggled via aside)"
+assert_contains "$MUTATION_OUT" "authority_reference_smuggler" "C2 authority.reference side-channel mutation control present (authority-reference-smuggler)"
+assert_contains "$MUTATION_OUT" "authority_reference_escalator" "C4 authority.reference side-channel mutation control present (authority-reference-escalator: aside clean, escalation phrase smuggled via authority.reference)"
 
 # ── 4. taxonomy total order is pinned and grader/corpus agree ──────────────
 TAXONOMY_OUT="$(node -e "

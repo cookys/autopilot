@@ -39,38 +39,67 @@ NODE
   unset JSON_VALUE
 }
 
-# ── fixture: origin/develop's PRE-D6 resolver + shipped template ───────────
+# ── fixture: PRE-D6 resolver + shipped template, from a PINNED commit ──────
 # resolve-review-loop.sh shells out to sibling scripts by $SCRIPT_DIR-relative
 # path (e.g. engine-capability-state.js for brain_seat status) — copying ONLY
 # the lib/ files it directly sources would leave those siblings missing,
 # making brain_seat/capability_warnings resolve through the "probe
 # unavailable" fallback instead of the real probe and manufacturing a fake
 # parity failure that has nothing to do with D6. Copy the WHOLE scripts/ tree
-# (confirmed unchanged vs origin/develop except resolve-review-loop.sh itself
-# — git status shows no other script file modified) so every sibling is
-# present and identical to what the NEW resolver uses, then overwrite just
-# resolve-review-loop.sh with the genuine origin/develop content. This
-# isolates the comparison to exactly the one file D6 changed.
-OLD_ROOT="$TEST_TMP/origin-develop"
+# (confirmed unchanged vs the pre-D6 baseline except resolve-review-loop.sh
+# itself — git status shows no other script file modified) so every sibling
+# is present and identical to what the NEW resolver uses, then overwrite just
+# resolve-review-loop.sh with the genuine pre-D6 content. This isolates the
+# comparison to exactly the one file D6 changed.
+#
+# The pre-D6 baseline is NOT re-derived from `origin/develop` on every run —
+# that ref is moving: once this branch merges, origin/develop itself carries
+# D6, and a post-merge re-run of this test would diff the new resolver
+# against itself, silently testing nothing (cross-family review finding,
+# 2026-08-28). It is also not fetch-guaranteed in a shallow checkout, and the
+# prior `git show ... 2>/dev/null` swallowed any such failure, letting an
+# empty "old" file diff falsely clean or falsely fail. Instead, the baseline
+# is a pair of golden fixture files checked in alongside this test, generated
+# ONCE from the actual pre-D6 commit and frozen permanently:
+#   git show 308529c15dadb9689689adf3db366a81a048ffaa:scripts/resolve-review-loop.sh \
+#     > hooks/tests/fixtures/pre-consult-discuss-resolve-review-loop.sh
+#   git show 308529c15dadb9689689adf3db366a81a048ffaa:project-config-template/review-loop-config.md \
+#     > hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md
+# 308529c15dadb9689689adf3db366a81a048ffaa is this branch's parent commit
+# immediately before D6 landed (95bf81bf~1), which at authorship time also
+# equals `git merge-base origin/develop HEAD` — i.e. the frozen fork point,
+# not a moving branch tip.
+OLD_FIXTURE_SCRIPT="$REPO_ROOT/hooks/tests/fixtures/pre-consult-discuss-resolve-review-loop.sh"
+OLD_FIXTURE_TEMPLATE="$REPO_ROOT/hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md"
+if [ ! -s "$OLD_FIXTURE_SCRIPT" ]; then
+  echo "FATAL: pinned pre-D6 baseline fixture missing or empty: $OLD_FIXTURE_SCRIPT" >&2
+  exit 1
+fi
+if [ ! -s "$OLD_FIXTURE_TEMPLATE" ]; then
+  echo "FATAL: pinned pre-D6 baseline fixture missing or empty: $OLD_FIXTURE_TEMPLATE" >&2
+  exit 1
+fi
+
+OLD_ROOT="$TEST_TMP/pre-d6-baseline"
 mkdir -p "$OLD_ROOT"
 cp -R "$REPO_ROOT/scripts" "$OLD_ROOT/scripts"
 cp -R "$REPO_ROOT/src" "$OLD_ROOT/src"
-git -C "$REPO_ROOT" show origin/develop:scripts/resolve-review-loop.sh > "$OLD_ROOT/scripts/resolve-review-loop.sh" 2>/dev/null
+cp "$OLD_FIXTURE_SCRIPT" "$OLD_ROOT/scripts/resolve-review-loop.sh"
 chmod +x "$OLD_ROOT/scripts/resolve-review-loop.sh"
-git -C "$REPO_ROOT" show origin/develop:project-config-template/review-loop-config.md > "$OLD_ROOT/old-template.md" 2>/dev/null
+cp "$OLD_FIXTURE_TEMPLATE" "$OLD_ROOT/old-template.md"
 OLD_SCRIPT="$OLD_ROOT/scripts/resolve-review-loop.sh"
 OLD_TEMPLATE="$OLD_ROOT/old-template.md"
 
-assert_file_exists "$OLD_SCRIPT" "origin/develop resolve-review-loop.sh extracted for parity baseline"
-assert_file_exists "$OLD_TEMPLATE" "origin/develop shipped template extracted for parity baseline"
+assert_file_exists "$OLD_SCRIPT" "pinned pre-D6 resolve-review-loop.sh staged for parity baseline"
+assert_file_exists "$OLD_TEMPLATE" "pinned pre-D6 shipped template staged for parity baseline"
 
 OLD_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$OLD_TEMPLATE" bash "$OLD_SCRIPT" 2>/dev/null)"; OLD_EXIT=$?
 NEW_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$SHIPPED_TEMPLATE" bash "$SCRIPT" 2>/dev/null)"; NEW_EXIT=$?
-assert_eq "0" "$OLD_EXIT" "origin/develop resolver exits 0 on the old shipped template"
+assert_eq "0" "$OLD_EXIT" "pinned pre-D6 resolver exits 0 on the old shipped template"
 assert_eq "0" "$NEW_EXIT" "this branch's resolver exits 0 on the shipped template"
 
 # For the byte-for-byte KEY/VALUE parity comparison (1-3), resolve the OLD
-# (origin/develop) resolver against the SAME physical config file as the NEW
+# (pinned pre-D6) resolver against the SAME physical config file as the NEW
 # resolver — the current branch's shipped template. The old resolver has no
 # case arm for consult_dispatch/discuss_dispatch, so it silently ignores those
 # two extra lines exactly as it would for any field it doesn't know about;
@@ -229,7 +258,7 @@ assert_eq "0" "$CONTRACT_SCHEMA_EXIT" "check-contract-schema.js exits 0 on canon
 assert_contains "$CONTRACT_SCHEMA_OUT" "three-way equality" "check-contract-schema.js runs the three-way equality assertion"
 
 # ── 5. Migration negative ───────────────────────────────────────────────────
-# A pre-widening roster JSON (resolved by origin/develop's OWN resolver against
+# A pre-widening roster JSON (resolved by the pinned pre-D6 commit's OWN resolver against
 # its own template — genuinely lacks consult_dispatch/discuss_dispatch) fed to
 # the NEW src/engine/resolve-review-loop.js must fail loudly naming the
 # missing field, never a silent pass, never a default-filled success.

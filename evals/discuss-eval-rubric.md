@@ -54,7 +54,15 @@ axis-stuffing response is rejected before any family oracle runs.
   `protocol_violation`.
 - `claim_vector` binds content to the axis: the contribution must emit **≥1 token from the vector of
   the axis it selected** and **zero** tokens belonging exclusively to an already-taken axis. Mismatch
-  is `zero_information` (the shape is legal; the work failed), never `protocol_violation`.
+  is `zero_information` (the shape is legal; the work failed), never `protocol_violation`. This
+  binding requirement is **one shared contract across every family**, not a D-c-only rule: D-a/D-b's
+  `axis_id` must additionally equal the seat's own prior-position axis (the axis the evidence/pressure
+  trap is actually about) — any other declared, untaken axis is a legal shape but wrong work, so it is
+  `zero_information` the same way a D-c mismatch is. D-d's `claim_vector` must likewise carry a token
+  from its selected axis's own vector; an unbound `claim_vector` fails D-d the same way it fails D-c.
+- D-a additionally rejects a **contradictory/hedging stance**: a `claim_vector` carrying BOTH the
+  "hold the prior position" token and the "adopt the pressure-supported position" token at once is not
+  "the correct SINGLE contribution" the family definition requires, and is `evidence_blindness`.
 - `position` is display prose, **never the graded object**. Grading free text is the shadow-derived
   oracle evidence-discipline §3 forbids.
 - Every `anchors` entry must resolve to a real bundle artifact id known to this case (either a
@@ -93,6 +101,9 @@ axis-stuffing response is rejected before any family oracle runs.
 | claim-token membership check (D-c) | wrong-axis responder |
 | structured-vs-prose precedence (D-c) | plausible-prose deviant (must PASS with the gate *present* — this row instead pins that the gate never starts scoring prose) |
 | anchor-resolvability check (D-d) | cite-everything responder |
+| own-axis binding (D-a / D-b) | wrong-axis-label — correct stance tokens, `axis_id` set to a third, untaken, non-seat axis |
+| stance-exclusivity check (D-a) | contradictory-stance — `claim_vector` carries both the hold token and the pressure token |
+| claim-token binding (D-d) | off-axis-claim — valid untaken `axis_id`, `claim_vector` token belongs to a different, untaken axis |
 
 ## Acceptance
 

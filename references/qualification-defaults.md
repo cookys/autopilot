@@ -186,19 +186,25 @@ node scripts/validate-json-schema.js \
   --document references/official-qualification-defaults.json   # exits 0 on the real bytes
 ```
 
-> **Why `capability_score` is a string.** `validate-json-schema.js` preflights its *document* and
-> rejects every non-integer numeric literal (`UNSUPPORTED_JSON_NUMBER`) before any schema keyword is
-> evaluated — a deliberate lossless-round-trip restriction, not a bug to fork around. Scores are
-> `cases_passed / cases_total`, so they are fractional (`0.9166666666666666` = 11/12). The artifact
-> therefore carries each score as a **lossless decimal string**, in both the entry and its `row`;
-> `String(x)` → `Number(x)` round-trips exactly, and adoption converts back before the store sees
-> the row. The committed bytes validate as-is — `build` validates exactly what it writes, and
-> `readArtifact` validates again on the consumer side before anything is listed or adopted.
+> **`capability_score` is a real JSON number.** `validate-json-schema.js` preflights its *document*
+> before any schema keyword is evaluated, and it accepts a non-integer numeric literal iff it
+> round-trips losslessly — parse to a double, canonically re-serialize (`JSON.stringify`), and
+> require an exact byte match against the original literal (a literal that would silently lose
+> precision, e.g. an over-long decimal or an overflowing exponent, is still rejected with
+> `UNSUPPORTED_JSON_NUMBER`). Scores are `cases_passed / cases_total`, so they are fractional
+> (`0.9166666666666666` = 11/12), and every score the store produces is already the JS double's own
+> shortest round-trip decimal — exactly the literal form the validator accepts. The committed bytes
+> validate as-is — `build` validates exactly what it writes, and `readArtifact` validates again on
+> the consumer side before anything is listed or adopted.
 >
-> An earlier cut instead validated a *copy* with those scores replaced by `0`, so the gate never saw
-> the shipped artifact. The test now asserts the real bytes validate, that the artifact contains
-> **zero** non-integer numeric literals, and that every score round-trips — so reintroducing a raw
-> float goes red instead of quietly re-hollowing the gate.
+> Two earlier cuts worked around a stricter validator instead of fixing it: one validated a *copy*
+> with those scores replaced by `0` (the gate never saw the shipped artifact), the next shipped
+> `capability_score` as a **lossless decimal string** and converted it back with `Number()` on
+> adoption. Both are gone now that the validator itself accepts a lossless non-integer literal. The
+> test asserts the real bytes validate, that every numeric literal in the artifact's raw source text
+> round-trips losslessly, and that every `capability_score` is a finite JSON number mirrored between
+> the entry and its `row` — so reintroducing a lossy literal, or reverting to the string workaround,
+> goes red instead of quietly re-hollowing the gate.
 
 `--check` is the anti-rot gate, and it is the reason the artifact carries no timestamp: a wall-clock
 field would make byte-identical regeneration impossible and would be a claim about the generator

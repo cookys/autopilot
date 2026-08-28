@@ -134,24 +134,25 @@ function canonicalJson(value) {
   return JSON.stringify(canonicalize(value));
 }
 
-// F3 (depth-0 panel): scripts/validate-json-schema.js preflights its document
-// and rejects EVERY non-integer numeric literal before any schema keyword runs.
-// `capability_score` is the only fractional number the store produces
-// (cases_passed/cases_total), and an earlier cut "handled" that by validating a
-// COPY with those scores replaced by 0 — a gate that never saw the shipped
-// bytes. Instead the artifact now carries the score as a lossless DECIMAL
-// STRING: String(0.9166666666666666) round-trips exactly through Number(), so
-// nothing is lost, the committed bytes validate as-is, and adoption converts
-// back to a number before `record` sees the row.
+// F3 (depth-0 panel), later reopened: scripts/validate-json-schema.js used to
+// reject EVERY non-integer numeric literal before any schema keyword ran, so
+// `capability_score` (the store's only fractional field — cases_passed /
+// cases_total) could not travel as a JSON number at all. That cut worked
+// around it by shipping the score as a lossless DECIMAL STRING instead. The
+// validator itself now accepts a non-integer numeric literal whenever it
+// round-trips losslessly (parse → canonical re-serialize → exact byte match;
+// see validate-json-schema.js `parseNumber`), which is exactly the guarantee
+// this function already enforced by hand — so the score ships as a real JSON
+// number again and the string workaround is retired.
 //
 // Fail closed on a non-finite score rather than emitting null: capability_score
 // is in engine-scorecard.js REQUIRED_FIELDS, so a row without one is malformed
 // at the source and must not be packaged as an official default.
-function decimalString(value, label) {
+function losslessNumber(value, label) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     fail(`${label} is not a finite number (${JSON.stringify(value)}) — refusing to package a default with no usable capability_score`);
   }
-  return String(value);
+  return value;
 }
 
 function sha256(text) {
@@ -285,7 +286,7 @@ function buildEntry(row, recipeEntry, repoRoot, capabilityRows) {
   // validation still passes on the other side.
   const shippedRow = { ...row };
   delete shippedRow.event_id;
-  shippedRow.capability_score = decimalString(
+  shippedRow.capability_score = losslessNumber(
     row.capability_score, `event ${eventId} row.capability_score`,
   );
 
@@ -320,7 +321,7 @@ function buildEntry(row, recipeEntry, repoRoot, capabilityRows) {
     seat_hash: seatHash(row.engine, row.runner, row.role),
     administration: disclosure,
     quality: row.quality === undefined ? null : row.quality,
-    capability_score: decimalString(row.capability_score, `event ${eventId} capability_score`),
+    capability_score: losslessNumber(row.capability_score, `event ${eventId} capability_score`),
     evidence_pointers: {
       official_event_id: eventId,
       evidence_bundle: bundleRel,
@@ -448,13 +449,14 @@ function parseArgs(argv) {
 //
 // These are the EXACT bytes that get written and committed — no normalized
 // copy. An earlier cut handed the validator a document with fractional
-// capability_score values replaced by 0, because
-// scripts/validate-json-schema.js rejects every non-integer numeric literal in
-// its document preflight. That made the gate hollow: it never saw the shipped
-// artifact. The scores are decimal STRINGS now (see decimalString above), so
-// the committed bytes contain no non-integer numeric literal and validate
-// directly. If a future field reintroduces one, this gate goes red instead of
-// quietly validating something else.
+// capability_score values replaced by 0, then a later one shipped them as
+// decimal STRINGS, because scripts/validate-json-schema.js rejected every
+// non-integer numeric literal in its document preflight. Now that the
+// validator accepts a non-integer literal whenever it round-trips losslessly
+// (see `losslessNumber` above), capability_score ships as a real JSON number
+// and the committed bytes still validate directly — no normalized copy, no
+// string workaround. If a future field reintroduces a lossy literal, this
+// gate goes red instead of quietly validating something else.
 function validateAgainstSchema(derived, opts) {
   const schemaPath = path.join(opts.repoRoot, 'schemas', 'official-qualification-defaults.schema.json');
   const validator = path.join(SCRIPT_DIR, 'validate-json-schema.js');

@@ -67,8 +67,27 @@ function inputError(message) {
 function assertJsonValue(value, path, active = new Set()) {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number') {
-    if (!Number.isSafeInteger(value)) {
-      numberError(`${path} contains a number that is not a lossless safe integer`);
+    // A finite JS double round-trips losslessly through JSON.stringify/JSON.parse
+    // by spec (ECMA-262 Number::toString is the unique shortest decimal that
+    // reparses to the exact same double) — that guarantee does not depend on
+    // the value being a "safe integer". The precision-loss risk lives entirely
+    // at the *source-text* boundary (a decimal literal parsed into a double
+    // for the first time), which `parseNumber` below gates before any value
+    // ever reaches this function via `readJson`. NaN/Infinity are the only
+    // finite-JSON-incompatible doubles, so they're what's rejected here.
+    if (!Number.isFinite(value)) {
+      numberError(`${path} contains a number that is not finite (NaN/Infinity are not valid JSON)`);
+    }
+    // -0 is the one finite double whose canonical JSON serialization
+    // (JSON.stringify(-0) === '0') drops information a caller may have set
+    // deliberately (sign). Number.isSafeInteger(-0) is true and the literal
+    // "-0" contains no '.'/'e'/'E', so neither the safe-integer nor the
+    // fractional branch above catches it — reject it explicitly here so an
+    // in-memory value built with -0 (not sourced from `parseNumber`, which
+    // has its own -0 guard below) cannot slip past this lossless-round-trip
+    // check.
+    if (Object.is(value, -0)) {
+      numberError(`${path} contains -0, whose canonical JSON serialization ("0") loses the sign`);
     }
     return;
   }
@@ -157,8 +176,33 @@ function preflightJsonSource(source, label) {
     );
     if (!match) fail('invalid number');
     const literal = match[0];
-    if (/[.eE]/u.test(literal) || !Number.isSafeInteger(Number(literal))) {
-      numberError(`${label} uses unsupported lossy numeric literal "${literal}"`);
+    if (/[.eE]/u.test(literal)) {
+      // Non-integer literal: accept iff it round-trips losslessly — parse to a
+      // double, canonically re-serialize (JSON.stringify uses the same
+      // shortest-round-trip-decimal algorithm as the spec's Number::toString),
+      // and require a byte-for-byte match against the original literal. A
+      // literal whose exact decimal value cannot be recovered from its parsed
+      // double (imprecise long decimals, exponents overflowing to Infinity,
+      // reformatted exponents/trailing zeros) fails this compare and is
+      // rejected with the same explicit UNSUPPORTED_JSON_NUMBER error as
+      // before — the lossless guarantee is preserved, not dropped.
+      const value = Number(literal);
+      if (!Number.isFinite(value) || JSON.stringify(value) !== literal) {
+        numberError(`${label} uses unsupported lossy numeric literal "${literal}"`);
+      }
+    } else {
+      // Integer literal (no '.'/'e'/'E'): the same round-trip byte-compare
+      // catches both magnitude loss (an unsafe integer like
+      // "9007199254740993" reparses to a different double) AND sign loss —
+      // "-0" parses to the double -0, whose canonical re-serialization is
+      // "0" (JSON.stringify(-0) === '0'), so Number.isSafeInteger(-0) alone
+      // (true, since -0 is an integer) would silently accept a literal that
+      // does not round-trip losslessly. The byte-compare rejects it the same
+      // way it rejects any other lossy literal.
+      const value = Number(literal);
+      if (!Number.isSafeInteger(value) || JSON.stringify(value) !== literal) {
+        numberError(`${label} uses unsupported lossy numeric literal "${literal}"`);
+      }
     }
     index += literal.length;
   }
@@ -309,6 +353,7 @@ function assertSchemaNode(
         'array',
         'string',
         'integer',
+        'number',
         'boolean',
         'null',
       ].includes(type))) {

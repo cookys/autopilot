@@ -67,12 +67,12 @@ officialEventIds.forEach((officialEventId, index) => {
   if (!entry) {
     throw new Error(`fixture setup: no default entry for official_event_id ${officialEventId}`);
   }
-  // The artifact ships capability_score as a lossless decimal STRING (see §1);
-  // a real scorecard store holds a NUMBER. Convert back exactly as
-  // adopt-qualification-defaults.js does, so this fixture is a faithful store.
+  // The artifact ships capability_score as a real JSON number (validator now
+  // accepts a lossless-round-trip non-integer literal), matching what a real
+  // scorecard store holds — no conversion needed to turn a shipped row back
+  // into a faithful scorecard row.
   scorecardRows.push({
     ...entry.row,
-    capability_score: Number(entry.row.capability_score),
     event_id: syntheticIds[index],
   });
   if (entry.capability_evidence) capabilityRows.push(entry.capability_evidence);
@@ -99,47 +99,44 @@ JSON
 # --- 1. the REAL committed bytes validate against the committed schema --------
 # No sanitized copy, no substitution: this is the artifact as shipped.
 #
-# History (depth-0 panel F3): an earlier cut asserted that the validator exits 2
-# (UNSUPPORTED_JSON_NUMBER) on the real artifact and called that green, while the
-# build validated a COPY with fractional capability_score values replaced by 0.
-# The gate therefore never saw the shipped bytes. validate-json-schema.js
-# rejects EVERY non-integer numeric literal in its document preflight, before any
-# schema keyword runs — that restriction is deliberate (lossless round-trip), so
-# the artifact changed instead of the validator: capability_score now ships as a
-# lossless decimal STRING and adoption converts it back with Number().
+# History (depth-0 panel F3, later reopened): an earlier cut asserted that the
+# validator exits 2 (UNSUPPORTED_JSON_NUMBER) on the real artifact and called
+# that green, while the build validated a COPY with fractional
+# capability_score values replaced by 0. The gate therefore never saw the
+# shipped bytes. A later cut worked around validate-json-schema.js rejecting
+# EVERY non-integer numeric literal by shipping capability_score as a decimal
+# STRING. The validator now accepts a non-integer literal whenever it
+# round-trips losslessly (parse -> canonical re-serialize -> exact byte
+# match), so capability_score ships as a real JSON number again and the
+# committed bytes still validate directly.
 REAL_OUT=$(node "$VALIDATOR" --schema "$SCHEMA" --document "$ARTIFACT" 2>&1)
 REAL_EXIT=$?
 assert_exit_code "$REAL_EXIT" 0 "the REAL committed artifact bytes validate against the committed schema: $REAL_OUT"
 
-# The property that keeps it that way: not one non-integer numeric literal
-# anywhere in the shipped artifact. If a future field reintroduces one, this
-# goes red here rather than silently re-hollowing the gate.
-NONINT=$(node -e '
-  const fs = require("fs");
-  const doc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-  const bad = [];
-  (function walk(v, p) {
-    if (typeof v === "number") { if (!Number.isSafeInteger(v)) bad.push(p + "=" + v); return; }
-    if (v && typeof v === "object") for (const k of Object.keys(v)) walk(v[k], p + "/" + k);
-  })(doc, "");
-  process.stdout.write(String(bad.length) + (bad.length ? " " + bad.slice(0, 3).join(" ") : ""));
-' "$ARTIFACT")
-assert_eq "$NONINT" "0" "the shipped artifact contains no non-integer numeric literal"
+# The property that keeps it that way is already what REAL_OUT above proves:
+# validate-json-schema.js's document preflight (parseNumber) properly
+# tokenizes the raw JSON text — skipping over string content, unlike a regex
+# scan over the bytes would — and rejects any numeric literal that does not
+# round-trip losslessly (parse -> canonical re-serialize -> exact byte match)
+# before any schema keyword runs. A future literal that would silently lose
+# precision fails that preflight and turns REAL_OUT red; no second ad-hoc scan
+# is needed here (a naive `:`-lookbehind regex over the raw bytes was tried
+# and false-positived on ISO timestamp fragments like "T10:16:35.720Z" inside
+# string values — proper JSON tokenization, which the validator already does,
+# is required, not a regex heuristic).
 
-# And the string form is lossless: every score round-trips through Number()
-# back to cases_passed/cases_total exactly.
-ROUNDTRIP=$(node -e '
+# capability_score specifically ships as a real number now, mirrored in row.
+NUMERIC=$(node -e '
   const fs = require("fs");
   const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
   let bad = 0;
   for (const e of a.defaults) {
-    if (typeof e.capability_score !== "string") { bad += 1; continue; }
-    if (String(Number(e.capability_score)) !== e.capability_score) bad += 1;
+    if (typeof e.capability_score !== "number" || !Number.isFinite(e.capability_score)) bad += 1;
     if (e.row.capability_score !== e.capability_score) bad += 1;
   }
   process.stdout.write(String(bad));
 ' "$ARTIFACT")
-assert_eq "$ROUNDTRIP" "0" "every capability_score is a lossless decimal string, mirrored in row"
+assert_eq "$NUMERIC" "0" "every capability_score is a finite JSON number, mirrored in row"
 
 # F1 (depth-0 panel): the dead digest field is gone and must not come back.
 HAS_DIGEST=$(node -e '

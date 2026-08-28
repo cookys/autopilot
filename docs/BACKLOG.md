@@ -49,6 +49,33 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 
 ## Active entries
 
+### Foreman model is hardcoded as `opus` in /l4–/l6 prose; routing config already overrides it
+
+- **Trigger**: any consuming project sets `tree:sub-orchestrator` in `.claude/model-routing-config.md`
+  (revival.3d did on 2026-08-28: `sub-orchestrator → sonnet`, `judge → haiku`), or a cost audit shows
+  the foreman dominating spend.
+- **Context**: `skills/l6/SKILL.md`, `skills/ceo-agent/references/level-front-door.md` (§"Dispatching
+  the foreman", Amendment 11 note) and `skills/l4/SKILL.md` state "foreman / sub-orchestrator = `opus`"
+  as a rule, while `scripts/resolve-dispatch.sh --tree --role sub-orchestrator` correctly honours the
+  project override (`source:"project"`). Evidence from revival.3d session `5ca9b104` (grok cost split,
+  one day, ~25 lines): opus foremen 7,929 turns ≈ $1,081 (62% of spend), sonnet leaves 23%, the
+  Fable depth-0 16%. Foreman work was ≥90% protocol execution (dispatch leaf, run probe, wait, run
+  gates, write run doc); the 3–5 judgment points per line were criteria-driven and caught by
+  pre-registered criteria, not by model tier. Owner decision: "smart at decision points, not in the
+  supervision loop" — foreman = cheapest model that follows the protocol, judge reads the four-state
+  criteria table, only BLOCKED escalates to depth-0.
+  Three things to fix: (1) reword the three docs so `opus` is the *default* not the *rule*, and
+  point to the routing override; (2) `hooks/dispatch-model-guard` (opt-in, Tier B) must read
+  `resolve-dispatch.sh` output rather than assert `opus` for `sub-orchestrator`, else enabling it
+  will reject a legitimate `sonnet` foreman; (3) offer a deterministic foreman shape — a Workflow
+  script (`implement → verify-author → gates → harness → criteria table → escalate on BLOCKED`) —
+  as the documented alternative to a model-driven foreman loop, since most foreman turns are
+  deterministic.
+- **Effort**: S (docs + hook read path) · L for (3) if shipped as a bundled workflow
+- **Source**: revival.3d `15edf5e7` (routing override), `NOTE-FOR-FABLE-QUOTA.md` (grok cost split),
+  revival.3d `docs/governance/dispatch.md`
+
+
 ### Suite residue makes `run.sh --parallel` flaky, and nothing reaps it
 
 - **Trigger**: a `--parallel` suite run fails with a rotating set of files that each pass
@@ -545,3 +572,28 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
   ("A protocol sentence does not stop a process"); this row is the mechanisation half.
 - **Effort**: S–M
 - **Source**: v2.34.39 `/l4` depth-0 run (2026-08-24)
+
+## 2026-08-28 foreman cost is the polling loop, not the model (revival.3d session 5ca9b104)
+
+Evidence (grok cost split, `revival.3d/NOTE-FOR-FABLE-FOREMAN-COST.md`): 30 opus foremen, 28 of them
+burned more usage than all their sonnet leaves combined (foremen 227M vs leaves 130M). Foreman tool
+mix 3971 Bash / 337 Edit — almost no code; the Bash is `sleep 240` polling + `cat <leaf>.output` fed
+back into the foreman context. Every wake is a full-price inference on a 200–500k prompt. Switching
+the foreman role to sonnet (`model-routing-config.md`, 2026-08-28) only lowers unit price; the loop
+remains.
+
+Two items:
+
+1. **Foreman must not be a polling model.** Waiting has to be inference-free: the canonical foreman
+   for /l4–/l6 should be a `Workflow` script (deterministic fan-out, zero turns while leaves run) or a
+   `run_in_background` + notification wake. Add a gate: a sub-orchestrator transcript with
+   `sleep` in a loop, or `cat`/`tail` of a child output file into its own context, is a red-line
+   violation. Leaves return a schema-typed criteria table; their raw output never enters the
+   foreman prompt. → plan 2026-08-28 (`docs/plans/2026-08-28-foreman-no-polling.md`).
+2. **Implementer ladder by unit class, not one seat.** `review-loop-config.md` has a single
+   `implementer_engine`. Add `implementer_ladder: gemini-3.7-flash-low → grok-4.6/low → sonnet`
+   with two triggers: contract field `unit_class: mechanical|judgment` picks the starting rung; a
+   red repair round climbs one rung; top rung then enters `awaiting_convergence_adjudication`
+   (existing). `on_engine_unavailable` stays availability-only. Sample: revival.3d AF
+   (wizhall-mega 058 migration) — brief fully pre-resolved, flash-low one-shot, 5 files correct.
+   Adjudication (BLOCKED) stays on opus/fable via `tree:judge`.

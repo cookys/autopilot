@@ -70,6 +70,7 @@ Hard rules:
   foreman returns `precondition_failed`).
 - Only admitted graph nodes become implementation tasks. Plan phase headings, modules, tests,
   review seats, and retries stay inside the owning deliverable.
+- 工頭等 leaf 只能用 `run_in_background`／子 Agent 的 task-notification 喚醒並結束回合；禁止 `sleep` 迴圈、禁止 `cat`/`tail` leaf output 進自己 context（只收 schema 判準表）、禁止用 Monitor 等 leaf；工頭 Bash 上限 40 次。
 
 **Capability profile (shadow):** `/l4` fixes foreman topology only. When the host supplies a current
 verified envelope/grant/profile payload, forward it unchanged; never infer guidance density from

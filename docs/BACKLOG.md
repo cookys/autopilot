@@ -600,3 +600,10 @@ Two items:
    (existing). `on_engine_unavailable` stays availability-only. Sample: revival.3d AF
    (wizhall-mega 058 migration) — brief fully pre-resolved, flash-low one-shot, 5 files correct.
    Adjudication (BLOCKED) stays on opus/fable via `tree:judge`.
+
+- **check-foreman-polling bash_cap=40 ground truth (2026-08-28, peer aimax395)**: a real /l4 foreman
+  that runs the hetero review loop scored sleep_loop=0 / leaf_output_reads=0 / bash=126 — the two
+  toxic patterns absent, red only on bash_cap, because endpoint load / roster / test execution all
+  go through Bash. Tune: make the cap configurable per level, or exclude Bash calls that invoke
+  autopilot's own scripts (`dispatch-review.sh`, `resolve-review-loop.sh`, `node --test`) from the
+  count. Keep sleep_loop and leaf_output_read as the hard reds.

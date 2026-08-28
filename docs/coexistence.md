@@ -100,3 +100,13 @@ Autopilot coexists with the official OpenAI codex plugin on Claude Code hosts:
 | Stop-time gate | `.githooks/pre-push` qc-gate (QC-Verdict trailer) | optional stop-review-gate hook | Keep the plugin's gate DISABLED — one authoritative gate, not two |
 | Write/labor | `dispatch-hetero.sh` (worktree + cgroup + artifact verify) | `rescue --write` (sandbox posture unverified) | Labor stays on autopilot rails until the plugin's write path is spiked |
 | Repo hygiene | — | plugin install writes `.claude/settings.json` in cwd | gitignored since v2.31.19+ (`.claude/settings.json`) |
+
+## Agent Call Coexistence
+
+Agent Call is an optional transport for already-running persistent local sessions. Autopilot keeps lifecycle and ownership policy; it does not absorb Agent Call's harness adapters.
+
+- Claude↔Claude uses native `ListAgents` / `SendMessage` when the exact target is available.
+- Other persistent local peers use `autopilot:agent-call`, which calls the separately installed `agent-call` CLI.
+- A failed persistent-peer send is terminal for that route. It never falls through to `Task`, a foreman, `dispatch-hetero.sh`, or another worker-spawning rail.
+- New temporary implementers/reviewers continue to use Autopilot orchestration; Agent Call does not schedule them.
+- Project skills retain ownership, conflict, merge, review, and evidence rules, but should not copy tmux registration or injection recipes.

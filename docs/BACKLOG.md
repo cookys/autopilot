@@ -68,6 +68,16 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
   of the list, not a redesign)
 - **Source**: `docs/plans/2026-08-28-consult-discuss-qualification.md` §6 R9, §8 ruling 7 (D10,
   2026-08-28)
+### `dispatch-review` raw-log deviation 採信判準必要但不充分 —— 回音的 prompt 樣板可冒充 verdict
+- **Trigger**: 下一次 depth-0 依 P5 判準（2026-07-31）以 raw-log deviation 採信一個 `no_verdict` 席次時；或為 `dispatch-review.sh` 加任何 verdict 解析路徑時。
+- **Context**: P5 立的採信條件是「verdict block 完整、nonce 匹配、block 閉合」。2026-08-08 codepower 的 qc panel 出現一個**同時滿足這三條、但內容是被回音的 prompt 樣板**的案例：`gpt-5.6-sol@codex` 在額度耗盡前只吐出 `VERDICT: SHIP-AS-IS or FIX-THEN-SHIP` / `FINDINGS: one finding per line, or the single word none` —— 那是提示裡的格式說明，不是答案；nonce 之所以兩端匹配，是因為 nonce 本來就寫在 prompt 裡。259 bytes、閉合、匹配，depth-0 差一步就把空回讀成 SHIP。三條判準無法區分「模型回答了」與「模型把題目抄回來了」。**建議補第四條：block 內容必須與 prompt 樣板實質不同**（例如樣板行的字面比對、或要求 FINDINGS 之外至少一個非樣板 token）。同一 run 另有一個相鄰案例可作對照：`MiniMax-M3` 的 block 內容是真的（4 條具體 MUST-FIX），只因多印一行未填的 `NO-FINDING-PROOF:` 樣板而被 parser 判 `no_verdict` —— **一個該擋沒擋、一個不該擋卻擋了**，兩者都指向「以樣板殘留為訊號」這個維度尚未被建模。
+- **Effort**: S
+- **Source**: codepower `f65f29a7` qc panel 裁決 §4b；raw log `/tmp/dispatch-review-log-WPI98b`（sol）與 `-WO5A1B`（MiniMax）
+### Contract-first escalation and local-repair gates — P6D incident follow-up
+- **Trigger**: An owner-approved corrective project is opened from the 2026-08-21 P6D incident record; before that project may claim completion, all three controls must have planted negative cases that demonstrate they can block (a) unjustified heavy dispatch for an acceptance-oracle task, (b) a staged manifest outside the declared allowlist, and (c) successor/pipeline escalation before one local artifact-repair attempt.
+- **Context**: A bounded six-file/three-command consumer task was routed through strict L5 Mission governance. Its first candidate passed every functional verification but included two dependency symlinks; Codex then replaced a minute-scale amend with terminalization, successor adoption, governance churn, and full rerun. Fable 5 ruled this was two decision failures rather than a Git-only mistake. The corrective project should implement the smallest enforceable protocol from the incident: dispatch justification when a complete acceptance oracle already exists; pre-commit staged-manifest comparison against a machine-readable task allowlist; and a failure-response state machine that requires one local artifact repair before workflow-level expansion. Status-report budgeting is a controller interaction rule and must not be inflated into unrelated product machinery without separate evidence. Do not encode P6D's six paths or a blanket symlink ban as global policy.
+- **Effort**: L (dispatch admission + commit manifest gate + failure-response transition contract + negative controls)
+- **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026-08-21-p6d-orchestration-incident/README.md), including the quoted Fable 5 independent judgment.
 
 ### Foreman model is hardcoded as `opus` in /l4–/l6 prose; routing config already overrides it
 
@@ -526,6 +536,25 @@ observed evidence/incident thresholds, a new consumer, or an explicitly expanded
 - **Effort**: S（re-estimate under the new ticket contract）
 - **Source**: depth-0-adjudication-760b
 
+<!-- autopilot-follow-up:8f70c159902a5d75d701b775ac9378f53ec4e9380a2534cab6674bf06083d475 -->
+### Shared sealed zero-diff validator
+- **Trigger**: When the zero-diff schema next changes or a fourth production consumer is introduced.
+- **Context**: Move sealed zero-diff receipt validation into one deterministic shared helper consumed by shell, Engine, and runner boundaries.
+- **Effort**: S（re-estimate under the new ticket contract）
+- **Source**: depth-0-adjudication-760b
+## engine implement-review：verify_pass=false 非阻塞、可在 reviewer SHIP 下收斂
+- **Context**: 2026-07-24 codepower /l6 P0a run（foreman-p0a-1784819842）兩度實測：U3 與 qc-fix round 的全部 verify_round 皆 `verify_pass:false`，loop 仍以 reviewer SHIP-AS-IS 收斂並回報 committed。實際缺陷（AppSurface class TS2322、AppButton disabled bg、8 個測試紅）全靠 foreman 自驗第二層攔下。root cause 候選：verify-first wiring 只在 roster 發 `verify_first:true` 時 gating，未發時 verify 結果純 telemetry。**Fix 方向**：loop 收斂條件改為 `reviewer SHIP ∧ (verify_pass ∨ verify 缺席原因白名單)`，verify 紅=強制 rework round；至少在 run summary 對 `verify_pass:false + converged` 發 WARNING。
+- **Trigger**: 下次動 engine implement-review 收斂邏輯或 resolve-review-loop verify 欄位時。
+
+## engine implement-review：campaign-contract fresh 路徑 Work Order 自鎖（codepower /l6 P4 實測）
+- **Context**: 2026-07-31 codepower P4 foreman（p4-foreman-20260731）：`engine implement-review --campaign-contract` 在 `dispatch_implementation` 確定性回 `continuation admission: reconcile receipt is required`，`leaf_runs.total=0`。根因 `src/engine/autopilot-engine.js` ~3494-3541（blame 全屬 `d151f202` Work Order v2）：campaign contract ⇒ durable ⇒ `createWorkOrder=true`，`hasActiveRootWorkOrders` 枚舉到自建/殘留 nonterminal controller WO ⇒ `missionActive` ⇒ `requireReconcile` ⇒ fresh campaign 被要求 PostCompact reconcile receipt。八項合法解法窮盡（含 3 個全新 campaign id、乾淨 `AUTOPILOT_DISPATCH_RUNS_DIR`、`compaction-rehydrate reconcile` 鑄 receipt → `durable campaign already exists` → `campaign resume` → `campaign_state_lease_open` 死巷）。**無 work-order list/dispose CLI 可清殘留**。當次以 pin v2.32.57-era（`349e2420`）engine 繞過續跑。
+- **Fix 方向**: (a) fresh-create 路徑排除自建 WO 於枚舉外或同 run 自動鑄 receipt；(b) 提供 work-order 檢視/處置 CLI；(c) `campaign_state_lease_open` 的 lease 釋放路徑。
+- **Trigger**: 下次動 continuation admission / Work Order lifecycle 時。
+
+## codex live-spend probe 必須 `--model` 指定 roster implementer（per-model quota pools 假綠燈）
+- **Context**: 2026-07-31 codepower P4 U2 實測：probe 用 codex CLI 預設模型（gpt-5.5）回 PROBE_OK，實際 dispatch 的 `gpt-5.3-codex-spark` 池已 rate_limited → dispatch 跑 342s 中斷、產物 broken-by-construction（registry 註冊了 4 個不存在的 loader）。`status --help` 明寫 quota 是 per-MODEL pools——不帶 `--model` 的 probe 驗不到 dispatch 會用的池。既有 capability 成功先例（2026-07-30 16:00 foreman-p15b）同樣未帶 `--model`，此洞是繼承性的。
+- **Fix 方向**: probe SOP 與 capability 記錄格式強制 `--model <roster implementer_engine>`；engine dispatch 前的 preflight 亦同。
+- **Trigger**: 下次動 live-spend probe / capability 記錄 / engine preflight 時。
 ### HETO task-return detection can miss completed work
 - **Trigger**: A second reproducible case where a completed HETO task produces no return event/notification, or before another HETO return-consumer is added.
 - **Context**: The controller can remain waiting when HETO has completed a dispatched task but the return detector does not fire; inspect event names, buffering/flush, timeout, and terminal-state reconciliation without treating silence as success.

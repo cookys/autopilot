@@ -2,13 +2,13 @@
 
 > Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
 
-The full catalog of all 28 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
+The full catalog of all 29 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
 
 ---
 
 ## The Solution
 
-Autopilot ships **28 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
+Autopilot ships **29 skills** covering lifecycle orchestration, strategic intelligence, methodology, quality gates, persistent-peer coordination, and cross-harness maintenance. Works standalone; coexists with the optional `superpowers` plugin (see [Superpowers Coexistence](coexistence.md)).
 
 The catalog is layered by how central a skill is to the daily loop — **core** (the seven you touch on almost every task), **delegation** (the CEO autonomy ladder), and **pioneer** (specialized / lower-frequency capabilities, each with its own owner scenario). Layering is presentation only: every skill is equally installed and invocable.
 
@@ -50,6 +50,7 @@ The catalog is layered by how central a skill is to the daily loop — **core** 
 | **audit** | Systematic comparison between implementations | — (no equivalent) |
 | **test-strategy** | Test pyramid, baseline 守則, failure investigation funnel — **not** TDD (orthogonal scope) | `superpowers:test-driven-development` (coding loop, complementary not equivalent) |
 | **team** | Team allocation decisions: when to組隊, role selection, dependency analysis | `superpowers:dispatching-parallel-agents` (dispatch mechanism — the verb to autopilot:team's noun) |
+| **agent-call** | Exact-target messaging to an already-running persistent peer. Prefers Claude native messaging when available; otherwise calls the separately installed Agent Call CLI and fails closed without spawning a worker | Agent Call (transport; optional external install) |
 | **profiling** | Evidence-first performance profiling (only methodology entry point in the ecosystem) | — (no superpowers equivalent) |
 
 ---

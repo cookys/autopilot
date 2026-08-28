@@ -1348,6 +1348,36 @@ fs.writeFileSync(path.join(tmp, 'unknown-input.json'), `${JSON.stringify(
   2,
 )}\n`);
 
+// Consumer-matrix row (j) (plan 2026-08-28-consult-discuss-qualification.md D5):
+// consult/discuss are qualification-seat roles (§2.6/§8 namespace ruling), never
+// execution roles. Real CONSTRUCTION paths — not just schema — must reject them,
+// or the namespace split is declarative rather than structural.
+// Consumer-matrix row (j) (plan 2026-08-28-consult-discuss-qualification.md D5):
+// consult/discuss are qualification-seat roles (§2.6/§8 namespace ruling), never
+// execution roles. Real CONSTRUCTION paths - not just schema - must reject them,
+// or the namespace split is declarative rather than structural.
+for (const bogusRole of ['consult', 'discuss']) {
+  const perturbedTask = clone(taskInput);
+  perturbedTask.effectPermissions.effects[0].roles = [
+    ...perturbedTask.effectPermissions.effects[0].roles,
+    bogusRole,
+  ];
+  assert.throws(
+    () => freezeTaskAuthorityEnvelope({
+      ...perturbedTask,
+      policy: resolved.policy,
+      policyHash: resolved.policy_hash,
+    }),
+    /roles must be one of/,
+    `task-authority effect-permission construction REJECTS the qualification-seat role '${bogusRole}'`,
+  );
+  assert.throws(
+    () => resolveRoleExecutionGrant({ ...grantInput, envelope, role: bogusRole }),
+    /role must be one of/,
+    `role-execution-grant construction REJECTS the qualification-seat role '${bogusRole}'`,
+  );
+}
+
 console.log(`task_authority_id=${envelope.task_authority_id}`);
 console.log(`grant_id=${grant.grant_id}`);
 console.log(`matrix_cases=${matrixCases}`);
